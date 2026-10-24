@@ -1034,6 +1034,73 @@ Decision 通过：
 
 旧 run 标记 STALE 或禁止应用。
 
+### 18.3 Response Release Contract
+
+Decision 校验通过后，Response 仍然是新的模型输出，不能因为 Decision 合法就自动放行。
+
+每个 `ai_run` 在 Response 阶段记录：
+
+```text
+release_mode          STREAM_SAFE / BUFFERED_REVIEW / BLOCKED
+case_version
+context_revision
+consent_version
+policy_version
+package_version
+allowed_response_intents
+allowed_audience
+```
+
+#### STREAM_SAFE
+
+只允许：
+
+- 普通共情；
+- 已批准知识的低风险解释；
+- 当前 Decision 指定的澄清/追问；
+- 不改变业务状态的导航信息。
+
+每个可释放单元必须检查：
+
+- intent 仍在白名单；
+- 不夹带未允许的行动建议；
+- 不把 Hypothesis 表达成 Fact；
+- 不泄露 audience 无权获知的来源/内容；
+- 不引用当前 RAG allow-set 之外的专业依据。
+
+#### BUFFERED_REVIEW
+
+以下默认完整生成并完成必要检查后再释放：
+
+- 正式方案；
+- 实质方案调整；
+- 敏感跨成员披露；
+- 高影响专业解释；
+- 安全/转介内容；
+- Domain Policy 指定的其他高影响输出。
+
+#### 流式中断
+
+Stream 每次释放前重新检查：
+
+```text
+run status
+case/context revision
+consent version
+policy/package state
+safety state
+```
+
+发生授权撤回、主线切换、关键纠错、Safety 变化或 Package/Policy 停用时：
+
+1. 原 run → `INTERRUPTED` 或 `STALE`；
+2. 服务端立即停止发送旧 stream；
+3. 客户端收到真实终态；
+4. 已经发送的内容不能伪称“已撤回”；
+5. 新内容必须基于最新上下文重新运行。
+
+SSE / WebSocket / 轮询最终结果都必须走同一 Release Contract，不能让某个出口绕过校验。
+
 ---
 
 ## 19. Model Gateway
@@ -1325,6 +1392,72 @@ FEEDBACK_RECEIVED
 
 > 不生成虚构状态。
 
+### 26.1 Dispatch Gate
+
+每次实际外呼前，统一检查：
+
+```text
+notification_intent_id
+recipient
+purpose
+current consent
+case status
+plan version
+schedule revision
+safety state
+recipient timezone
+quiet-hours policy
+contact-frequency policy
+channel capability
+existing feedback
+existing in-flight / UNKNOWN attempts
+```
+
+不满足条件时：
+
+- 可延期则重新计算合法 `due_at`；
+- 已撤回/关闭/已有反馈则取消；
+- 缺渠道或资格则 BLOCKED；
+- 不通过换渠道绕过频率或安静时段。
+
+具体安静时段和频率来自产品策略/用户设置配置，不散落硬编码。
+
+### 26.2 外部副作用状态机
+
+稳定标识：
+
+```text
+notification_intent_id
+attempt_id
+provider_request_ref?
+```
+
+状态：
+
+```text
+CREATED
+→ DISPATCHING
+→ PROVIDER_ACCEPTED
+   / PROVIDER_REJECTED
+   / RETRYABLE_FAILURE
+   / OUTCOME_UNKNOWN
+```
+
+自动重试只允许：
+
+1. 可以证明请求尚未发给供应商；或
+2. 供应商存在已验证的幂等/查询机制，可确认重试不会制造第二次副作用。
+
+以下进入 `OUTCOME_UNKNOWN`，禁止 pg-boss 自动盲重试：
+
+- 供应商可能已经接受但响应丢失；
+- 外部请求已发出后 Worker 在本地记账前退出；
+- 网络超时且无法确认供应商状态。
+
+两个 Worker 并发处理同一 Intent 时，通过业务唯一约束/短事务占用保证只能有一个进入 `DISPATCHING`。
+
+`PROVIDER_ACCEPTED` 只表示平台接受请求，不等于 delivery/read/feedback。
+
 ---
 
 ## 27. Safety 实现
@@ -1463,6 +1596,33 @@ GET  /api/v1/data-requests/:id/download
 
 不建设完整 CRM。
 
+### 28.9 U01—U14 页面/任务验收合同
+
+页面可以视觉合并，但以下用户任务及状态不可省略。
+
+| 任务 | 核心动作/数据 | 必须覆盖的非理想状态 | 恢复入口 |
+|---|---|---|---|
+| U01 服务/登录 | service info、真实开放状态、微信登录 | 未开放、登录失败、账号被撤销 | 重试登录/返回公开服务说明 |
+| U02 授权 | purpose/scope/consent version | 拒绝可选授权、撤回、必要授权缺失 | 调整授权，不把可选项强制化 |
+| U03 家庭资料 | Family/Person/来源 | 未知年龄、关系不确定、无孩子账号 | 保存 unknown/家长转述 |
+| U04 Case 总览 | status/phase/blockers/next action | WAITING/PAUSED/LOST/SAFETY/CLOSED | 只显示当前允许动作 |
+| U05 交流 | message/run/Decision/Response | AI失败、STALE、INTERRUPTED、离线 | 恢复同一 run 或基于原消息重试 |
+| U06 理解/目标 | assertions/conflicts/Goal | 说法冲突、目标不合理、信息不足 | 纠错/补证/修改目标 |
+| U07 方案 | PlanVersion/dependencies/validation | 规则失败、依赖失效、拒绝家庭合约 | 普通 ACTION_PLAN / 新版本 |
+| U08 任务/反馈 | Task/Checkin | PARTIAL/NOT_EXECUTED/PAUSED/新担忧 | 保存真实反馈，不强制“完成” |
+| U09 复盘 | Review/Outcome candidate | 改善与保护条件冲突、UNKNOWN/WORSENED | 继续/调整/重新评估 |
+| U10 维护/历史 | maintenance/close/recurrence | 未达结案条件、复发 | 保留旧案并创建关联新案 |
+| U11 提醒 | Schedule/Notification capability | 无授权、安静时段、渠道失败/UNKNOWN | 主动返回或合法延期 |
+| U12 资料权利 | correct/export/delete | 无权字段、处理中、部分失败 | 查看真实 request 状态 |
+| U13 安全/转介 | Safety Hold/referral | 无真实资源、仅建议未衔接 | 静态安全出口/真实状态 |
+| U14 孩子参与 | invite/accept/decline/withdraw | 邀请过期、拒绝、撤回、越权 | 家长可行路径继续；权限立即更新 |
+
+所有页面均验证：
+
+> loading / empty / waiting / failure / no-permission / stale-conflict / retry-or-recovery
+
+前端隐藏按钮不能替代服务端 Authorization 和 Domain Policy。
+
 ---
 
 ## 29. 关键事务
@@ -1512,8 +1672,28 @@ GET  /api/v1/data-requests/:id/download
 - future Notification 禁止；
 - 相关 Derived Memory invalidate；
 - 相关 AI run stale；
+- 通过 `artifact_dependencies` 定位受影响的 Goal / ACTIVE Plan / Task；
+- 受影响对象 → `NEEDS_REVIEW`，阻止对应未来执行和提醒；
+- 不依赖该授权的任务继续有效；
 - enqueue cleanup/rebuild；
 - audit。
+
+撤回不删除“过去曾经发生过的业务历史”，但已经失去合法用途的数据不能继续作为当前建议或任务的有效依据。
+
+### 29.4 事实更正 / 来源失效
+
+当 Assertion / Observation 被更正、删除或失效：
+
+1. 新版本保存，旧版本保留 superseded 关系；
+2. Derived Memory 失效并进入重建；
+3. 查询 `artifact_dependencies`；
+4. 依赖旧版本的 Goal / Plan / Task 标记 `NEEDS_REVIEW`；
+5. 对可能造成不适用行动的 ACTIVE Plan，立即抑制受影响任务和未来提醒；
+6. 使用当前有效证据和 Policy 重新验证；
+7. 有实质变化时创建新 Plan Version，并重新由适当主体确认；
+8. 无依赖关系的任务不受影响。
+
+不能因为“Memory 已经重建”就自动认为旧 Plan 仍然有效。
 
 ---
 
