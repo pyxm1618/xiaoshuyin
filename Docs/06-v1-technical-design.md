@@ -42,7 +42,7 @@ V1 不实现：
 - 其他完整专业场景；
 - 相似案例推荐；
 - 风险预测模型；
-- 实时语音；
+- 语音/录音输入、ASR及实时语音；
 - 实时家庭调停；
 - 支付；
 - 机构平台。
@@ -233,6 +233,41 @@ Case Status、Phase、Outcome、Closure、Referral：
 
 > 分开存储，不能互相推导。
 
+### 6.6 状态转换合同
+
+状态枚举只定义“有哪些状态”，以下合同定义“什么条件下才允许改变状态”。所有状态变更必须通过 Domain Command；模型只能提出候选动作。
+
+| 当前状态/阶段 | 命令或事件 | 允许主体 | 必需证据与前置条件 | 目标状态 | 任务/通知副作用 | 必须审计 |
+|---|---|---|---|---|---|---|
+| OPEN / ASSESSMENT | `WaitForInformation` | 家长请求或 Domain Policy | 必要信息清单非空；缺口来源明确；不是仅因可选提醒缺失 | WAITING，phase 保持 ASSESSMENT，reason=INFORMATION | 取消不再适用的到期推进；保留主动返回入口 | 缺口、Policy version、actor |
+| WAITING / 任意 phase | `ResumeAfterInformation` | 有权参与者触发，Domain Command 应用 | 必要 blocker 已实际清除；重新检查授权、Safety、Package | OPEN，恢复原 phase | 重新计算后续 Schedule，不补发过期提醒 | 清除证据、旧/新版本 |
+| OPEN/WAITING | `PauseCase` | 家长主账号；Safety 可单独中断 | 明确暂停请求或当前交付条件要求 | PAUSED，保留原 phase | 普通未来 Schedule 暂停；已外发消息无法撤回 | 原因、actor、schedule revision |
+| PAUSED | `ResumeCase` | 家长主账号 | 当前授权有效；Safety 非开放风险；Plan/Policy/Package 仍适用；必要 blocker 清除 | OPEN 或 WAITING；phase 恢复 | 重新生成当前有效未来 Schedule | 恢复检查结果 |
+| OPEN/WAITING | `MarkLostContact` | 有权工作人员/规则服务，禁止 AI 直接执行 | 至少两个已约定反馈节点无反馈；至少一次真实、已授权联系尝试；不能仅因渠道失败/无许可/一次未回复 | LOST_CONTACT | 停止普通自动联系，保留用户主动返回入口 | 节点、联系尝试、排除条件 |
+| LOST_CONTACT | `UserReturned` | 用户行为触发 | 新输入已保存并完成 Safety；重新核对当前 Consent / Policy / Plan | OPEN 或 WAITING | 旧提醒不补发；生成新 Schedule | 返回时间、恢复依据 |
+| 任意未关闭状态 | `EnterSafetyHold` | Safety Policy / 有权服务 | 命中确定性风险规则或经审核的风险判断 | SAFETY_HOLD | 立即抑制普通生成、普通任务推进和普通提醒；保留静态安全出口 | 风险证据、规则版本 |
+| SAFETY_HOLD | `ResolveRisk` | Safety Policy 指定的有权角色；AI和普通运营无权 | 规定的复核证据已取得；处置记录完整；恢复条件明确；当前授权重新核对 | WAITING，保留原业务 phase | 不自动恢复旧任务；重新校验后再建立新 Schedule | reviewer、证据、Safety Policy、恢复位置 |
+| OPEN/WAITING/PAUSED/LOST_CONTACT | `CloseCase(STABLE_IMPROVEMENT)` | 家长确认 + Domain Policy | 有正式 Review；Outcome=IMPROVED；观察窗口完成；关键保护条件未恶化；无开放 Safety；证据可追溯 | CLOSED | 取消普通未来 Schedule；保留维护历史 | Review、Outcome、确认 |
+| OPEN/WAITING/PAUSED | `CloseCase(NO_INTERVENTION_NEEDED)` | 家长确认 + Domain Policy | Assessment 明确支持无需当前干预，不以“没反馈”替代 | CLOSED | 取消普通未来 Schedule | Assessment、依据 |
+| 任意非 SAFETY_HOLD 未关闭状态 | `CloseCase(USER_WITHDREW)` | 家长主账号 | 明确退出请求；记录当前 Outcome，缺证据时=UNKNOWN | CLOSED | 取消普通未来 Schedule | 退出请求、Outcome |
+| OPEN/WAITING/PAUSED | `CloseCase(OUT_OF_SCOPE)` | Domain Policy + 家长知情 | 适用性判断明确超出 V1；提供真实边界/可用支持 | CLOSED | 取消普通未来 Schedule | eligibility 结果 |
+| OPEN/WAITING/PAUSED/SAFETY_HOLD | `CloseCase(EXTERNAL_HANDOFF_COMPLETE)` | 有权主体 | Referral 必须有 CONNECTED 的实际衔接证据；点击链接或“已建议”不够 | CLOSED | 停止普通内部推进 | referral evidence |
+| CLOSED | `CreateRecurrence` | 家长主账号 | 新问题/复发重新进入；重新核对当前资料与授权 | 创建新的关联 Case；旧 Case 不变 | 新 Schedule 只属于新 Case | previous_case_id、原因 |
+
+Referral 独立使用：
+
+```text
+PROPOSED --用户明确接受--> ACCEPTED
+ACCEPTED --发生真实联系尝试--> CONTACTED
+CONTACTED --取得实际衔接证据--> CONNECTED
+任意阶段 --用户明确拒绝--> DECLINED
+CONTACTED --真实、合规尝试后仍无法联系--> UNREACHABLE
+```
+
+“平台链接被点击”“通知发送成功”“工作人员创建了工单”都不能直接升级为 `CONNECTED`。
+
+专业判断所需的具体时长、改善阈值或临床条件由正式 Domain Policy/专业审核定义；本技术设计不编造医学阈值。
+
 ---
 
 ## 7. V1 数据模型
@@ -293,7 +328,17 @@ tasks
 checkins
 reviews
 outcomes
+artifact_dependencies
 ```
+
+`artifact_dependencies` 保存 Goal / Plan / Task 对以下对象的版本化依赖：
+
+- assertion / observation；
+- consent purpose/version；
+- policy version；
+- package version。
+
+它用于在事实更正、授权撤回或规则停用后精确定位受影响的 ACTIVE 对象，而不是无差别暂停全部 Case。
 
 ### 7.4 专业内容
 
@@ -332,16 +377,148 @@ pg-boss 使用自己的数据库表：
 
 > 不再自研 `jobs + lease + fencing token` 队列表。
 
-### 7.8 AI 与质量
+### 7.8 AI、质量与试点计量
 
 ```text
 ai_runs
 model_routing_versions
 business_audit_events
 data_requests
+cost_ledger_entries
+trial_report_snapshots
 ```
 
+`cost_ledger_entries` 至少表达：
+
+```text
+family_id
+case_id
+cost_kind          MODEL / CLOUD / NOTIFICATION / HUMAN
+amount
+currency
+cost_status        KNOWN / ESTIMATED / UNKNOWN
+price_version
+source_ref
+occurred_at
+```
+
+`trial_report_snapshots` 是可重建的最小统计投影，不保存新的家庭正文；按 04 的 Family / Case / Outcome / 退出 / 失访 / 删除影响口径生成。
+
 Phoenix 管 Trace / Eval，不作为业务表。
+
+### 7.9 核心业务对象合同
+
+下面字段是开发和验收必须满足的业务合同，不要求为每个字段单独建表。
+
+#### Goal
+
+至少包含：
+
+```text
+case_id
+baseline_refs
+target_description
+observation_window
+protective_conditions
+parent_actions
+participant_evidence
+confirmation_actor
+confirmation_at
+dependency_refs
+```
+
+缺少基线、观察窗口、保护条件或家长自身行动时，不允许把候选 Goal 标记为 CONFIRMED。
+
+#### PlanVersion
+
+至少包含：
+
+```text
+goal_id / goal_version
+rationale
+tasks[]
+followup_policy
+review_conditions
+adjust_conditions
+stop_conditions
+plan_format       ACTION_PLAN / FAMILY_AGREEMENT
+dependency_refs
+validation_result
+parent_confirmation
+```
+
+`FAMILY_AGREEMENT` 是可选形式。用户拒绝家庭合约时，必须允许继续形成 `ACTION_PLAN`，不能把拒签当成拒绝服务。
+
+#### Task
+
+至少包含：
+
+```text
+plan_version_id
+owner_person_id
+action
+trigger_or_cadence
+observation_method
+support_or_barrier_plan
+state
+due_at?
+dependency_refs
+```
+
+Task state：
+
+```text
+PENDING
+IN_PROGRESS
+PARTIAL
+COMPLETED
+NOT_EXECUTED
+PAUSED
+CANCELLED
+NEEDS_REVIEW
+```
+
+`PARTIAL` 与 `NOT_EXECUTED` 必须分别保存，不能只用完成百分比推断原因。
+
+#### Checkin
+
+至少包含：
+
+```text
+client_submission_id
+plan_version_id
+task_id?
+node_id
+submitted_by
+execution_state
+barriers
+observed_changes
+new_concerns
+source_refs
+submitted_at
+```
+
+没有反馈时保持 UNKNOWN，不能生成“默认无变化”。
+
+#### Review
+
+至少包含：
+
+```text
+case_id
+plan_version_id
+baseline_refs
+checkin_refs
+protective_condition_observations
+benefit_observations
+adverse_observations
+outcome_candidate
+uncertainty
+next_action
+reviewer_source
+```
+
+例如“屏幕时间下降，但睡眠或冲突明显恶化”时，Domain Policy 必须阻止仅凭屏幕时长把 Outcome 自动写成 IMPROVED。
 
 ---
 
