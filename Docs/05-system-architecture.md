@@ -86,8 +86,8 @@
 | 外部通知 | **Notification Adapter + 微信真实渠道** | 按渠道 |
 | AI Trace / Eval | **Arize Phoenix Self-hosted** | 🟢 自托管核心能力免费 |
 | Safety | **确定性规则 + 上下文风险判断 + Safety State** | 规则免费；模型调用付费 |
-| V1 语音输入 | **按需 ASR** | 🔵 按量付费 |
-| V4 实时语音 | **国内可生产 Realtime 模型服务，届时评测锁定** | 🔵 按量付费 |
+| V1 语音输入 | **不交付；V1 只做文字交互** | — |
+| V4 实时语音 | **国内可生产 Realtime 模型服务，届时按产品需求和 Eval 锁定** | 🔵 按量付费 |
 
 “免费”只表示无许可证费用，不代表服务器为零成本。
 
@@ -485,6 +485,33 @@ invalidate
 
 > 摘要不断总结摘要，最终无法回到原始证据。
 
+### 10.3 事实/授权变化必须传播到正在生效的业务对象
+
+Memory 失效不是传播的终点。
+
+Goal、Plan 和必要 Task 必须保留它们依赖的：
+
+- evidence / assertion version；
+- consent purpose / version；
+- policy version；
+- package version。
+
+当来源被更正、删除、授权撤回或专业规则失效时：
+
+```text
+识别受影响对象
+→ 标记 NEEDS_REVIEW / INVALIDATED
+→ 按影响阻止继续执行和未来提醒
+→ 重新验证
+→ 由有权主体确认新版本后恢复
+```
+
+历史版本仍作为“当时发生过什么”的证据保留，但：
+
+> **历史可追溯 ≠ 继续允许执行。**
+
+不依赖该来源的 Plan / Task 不应被无差别暂停。
+
 ---
 
 ## 11. Professional RAG
@@ -730,6 +757,28 @@ AI SDK Core
 
 > 不能因为第一模型报错就自动接收真实家庭上下文。
 
+### 14.3 AI 执行预算
+
+架构在实现前先定义**可修订的执行预算**，而不是等压测结束后把实测值当目标。
+
+每个 task role 至少配置：
+
+- 最大模型调用次数；
+- 最大 retry 次数；
+- 单次及整条链路 timeout budget；
+- 最大输入/输出 token；
+- 是否允许 RAG / Rerank；
+- 是否允许第二模型复核；
+- 可观测的估算成本上限。
+
+普通低风险回合优先：
+
+> 一次主生成 + 必要检索。
+
+只有风险、高影响或证据冲突才升级额外复核。
+
+正式 p95、单位家庭成本和供应商 SLA 由真实原型与试点数据冻结；在此之前不写假精确数字。
+
 ---
 
 ## 15. Decision → Validate → Response
@@ -780,6 +829,43 @@ Safety
 - 安全；
 - 交互速度；
 - 自然体验。
+
+### 15.3 Response Release Contract
+
+Decision 合法不能自动证明随后自由生成的 Response 合法。
+
+所有用户可见输出必须经过统一的 Release Contract。
+
+至少区分：
+
+1. **STREAM_SAFE**：普通低风险解释/追问，只允许当前 Decision 指定的意图和内容类别；
+2. **BUFFERED_REVIEW**：方案、敏感披露、高影响建议、安全内容等必须完整生成并完成必要检查后再释放；
+3. **BLOCKED**：权限、Safety、Policy 或版本变化后停止释放。
+
+流式通道必须绑定：
+
+- run_id；
+- case/context revision；
+- consent version；
+- policy/package version。
+
+流式过程中发生以下任一变化：
+
+- 撤回授权；
+- 切换主要 Case；
+- Safety 状态变化；
+- 关键事实被更正；
+- Policy/Package 被停用；
+
+必须主动中断旧 stream，后续内容不得继续发送，并向客户端返回真实终态（例如 STALE / INTERRUPTED）。
+
+对可流式内容仍需按输出单元检查：
+
+- 不得夹带未允许的行动建议；
+- 不得披露当前 audience 无权获知的来源或事实；
+- 不得把候选判断表达为已确认事实。
+
+不能只靠 Prompt 约束 Response。
 
 ---
 
@@ -941,6 +1027,49 @@ Notification Adapter 让业务不绑定微信某一个具体消息机制。
 
 不在总体架构中硬编码某一代微信规则。
 
+### 19.1 Dispatch Gate 与外部副作用
+
+每一次业务通知都必须有稳定的：
+
+- notification_intent_id；
+- attempt_id；
+- recipient；
+- schedule_revision；
+- channel；
+- purpose。
+
+真正外呼前统一通过 Dispatch Gate 检查：
+
+- 当前 Consent；
+- 当前 Case / Plan / Schedule；
+- Safety 状态；
+- 用户时区和安静时段；
+- 当前联系频率；
+- 渠道真实可用资格；
+- 是否已有反馈；
+- 是否存在同一业务意图的在途/UNKNOWN 尝试。
+
+第三方通知调用不是 exactly-once。
+
+如果出现：
+
+> 平台可能已经接受，但本地没有可靠结果
+
+必须进入：
+
+> **OUTCOME_UNKNOWN**
+
+此时不得把它当失败自动重发。
+
+只有：
+
+- 明确证明尚未发送；或
+- 供应商支持并已验证可查询/幂等的请求标识；
+
+才允许自动重试。
+
+pg-boss 的 job retry 不能绕过这个业务副作用状态机。
+
 ---
 
 ## 20. Safety Architecture
@@ -1019,6 +1148,39 @@ Phoenix 不保存第二份家庭档案。
 
 完整家庭正文留在业务数据域。
 
+### 21.1 Data Copy Inventory
+
+任何可能持久保存用户数据或其派生内容的系统都必须进入统一副本清单，至少包括：
+
+- PostgreSQL 业务表；
+- LangGraph checkpoint / history / pending writes；
+- pg-boss job payload；
+- embeddings / derived memory；
+- Phoenix 可识别 Trace / Eval 样本；
+- 导出文件；
+- 私有对象存储；
+- 临时模型上下文 / cache；
+- 已批准供应商可能保留的请求副本。
+
+每一类必须定义：
+
+- 用途；
+- 主体/Case 到副本的映射；
+- 访问权限；
+- 日常生命周期；
+- 纠错/撤回传播；
+- 删除方式；
+- 备份恢复后的处理；
+- 删除完成证据。
+
+LangGraph checkpoint 是持久数据副本，不得笼统视为“易失缓存”。
+
+删除清单本身必须存放在**不会随业务数据库旧恢复点一起回退**的可靠位置，并只保存重放删除所需的最小内部标识。
+
+如果恢复时无法取得完整、最新的删除清单：
+
+> 恢复环境保持隔离，不得开放真实服务。
+
 ---
 
 ## 22. Xiaoshuyin Eval Dataset
@@ -1052,6 +1214,28 @@ Phoenix 不保存第二份家庭档案。
 公开 Benchmark 不能替代：
 
 > 小树荫自己的咨询任务 Eval。
+
+### 22.1 Eval 放行规则
+
+Eval 必须有版本化测试集、预期结果、实际结果、评审责任人和批准范围。
+
+以下属于**硬阻断项**，不能被平均质量分抵消：
+
+- 跨家庭越权或泄露；
+- 未授权跨成员泄露；
+- AI 自行确认事实/授权/结案；
+- 错误解除 Safety Hold；
+- 使用已停用/不适用专业内容形成高影响建议；
+- 明确危险建议或虚构外部衔接；
+- 关键状态转换违反 Domain Policy。
+
+其他自然度、完整性、成本和延迟指标：
+
+> 在标准测试集形成稳定基线后再冻结量表和阈值，不能先拍脑袋制造精确通过率。
+
+模型、Prompt、RAG、Policy 或 Package 发生实质变化时：
+
+> 对应批准结果失效并重新回归。
 
 ---
 
