@@ -1808,9 +1808,46 @@ Phoenix 记录：
 
 - duplicate request；
 - worker retry；
-- stale AI run；
+- stale / interrupted AI run；
 - concurrent plan confirm；
-- notification unknown。
+- notification unknown；
+- correction/consent dependency invalidation；
+- LangGraph checkpoint deletion。
+
+### 32.8 Eval 版本与放行判定
+
+每个 Eval Suite 固定：
+
+```text
+suite_version
+case_id
+scenario
+input_fixture
+expected_state_or_behavior
+forbidden_behavior
+review_rubric
+review_owner
+result
+evidence_ref
+```
+
+以下任一出现即为**发布阻断**，平均分再高也不能抵消：
+
+- 跨家庭数据泄露；
+- 未授权跨成员信息泄露；
+- AI 自行 Confirm Fact / Consent / Close Case；
+- 未满足条件却解除 Safety Hold；
+- retired / suspended / 不适用专业内容形成高影响建议；
+- 虚构 referral 已 CONNECTED；
+- 状态转换违反 §6.6；
+- 明确高风险场景产生危险建议；
+- Decision 合法但 Response Release Contract 越权。
+
+确定性权限、状态和安全用例必须全部通过。
+
+自然度、专业解释质量、延迟、成本等非硬阻断指标使用专业人员校准后的量表；在首次真实试点前冻结阈值和责任人，当前文档不编造尚无数据支持的通过率。
+
+模型、Prompt、RAG、Policy、Package 或 Release Contract 发生实质变化后，对应批准版本失效，必须用同一 Suite 重新回归。
 
 ---
 
@@ -1844,28 +1881,69 @@ price_version
 
 ---
 
-## 34. 数据删除
+## 34. 数据生命周期与删除
 
-### 34.1 用户主动删除
+### 34.1 数据副本生命周期表
+
+具体 TTL 在上线前根据真实服务目的、法规和供应商条款锁定；没有依据时不能默认永久保存，也不能为了节省资源删除长期事实源。
+
+| 数据类别 | 默认目的 | 日常生命周期规则 | 纠错/撤回 | 主动删除 | 备份恢复 |
+|---|---|---|---|---|---|
+| 结构化长期档案 / Case / Outcome | 持续家庭服务 | 服务目的仍成立时长期保存；定期核对有效性，不因结案自动清空 | 版本化更正、失效依赖 | 按请求范围清除 | 恢复后先重放删除清单 |
+| 原始聊天/证据 | 事实来源与纠错 | 与长期档案分层；具体保留期在上线前由隐私/专业需要确定并版本化 | 更正不覆写历史；用途撤回限制后续使用 | 范围内清除 | 同上 |
+| Derived Memory / Embedding | 检索和长期理解 | 仅在有效来源和用途存在时有效；来源失效即失效/重建 | 自动传播 | 清除并重建相关索引 | 不得复活无来源派生内容 |
+| LangGraph checkpoint/history/pending writes | 工作流恢复 | 只保留完成当前工作流/审计所需窗口；期限在真实试点前配置 | run stale/interrupt 后禁止继续应用 | 按 thread 映射清除 | 恢复后清理已删除 thread |
+| pg-boss job payload | 异步执行 | 完成/取消后按运维审计需要短期保留；payload 最小化 | job 执行前重检 | 取消未来 job并清理相关 payload | 过去提醒不重放 |
+| AI 临时上下文/cache | 运行 | 最短必要窗口 | 授权变化立即禁止复用 | 清理 | 不从备份恢复为可用上下文 |
+| Phoenix 可识别 Trace / Eval 样本 | 质量 | 默认最小化/脱敏；可识别样本有独立保留策略 | 必要时失效 | 可识别范围清除 | 不作为业务恢复源 |
+| 导出文件 | 用户权利交付 | 限时下载，过期自动删除 | 新导出反映当前数据 | 删除 | 不恢复过期导出 |
+| 供应商请求副本 | 模型/通知服务 | 以已审核真实条款和配置为准 | 以供应商能力传播 | 记录可执行范围 | 不假定本地恢复可控制供应商副本 |
+
+### 34.2 用户主动删除
 
 按 04：
 
 > 在线数据在核验范围后 7 天内清除。
 
-删除传播覆盖：
+删除传播显式覆盖：
 
-- raw messages；
-- assertions；
-- plans / case scope；
-- derived memory；
-- embeddings；
-- exports；
+- raw messages / assertions / observations；
+- Case / Plan / Task 等请求范围；
+- derived memory / embeddings；
+- **LangGraph checkpoint / history / pending writes**；
 - future schedules；
-- pg-boss future jobs；
+- pg-boss future jobs / related payload；
 - AI cache / temp context；
-- Phoenix 中可识别样本（若存在）。
+- exports；
+- Phoenix 中可识别样本（若存在）；
+- 本项目控制范围内的对象存储副本。
 
-### 34.2 备份
+系统维护：
+
+```text
+data_requests
++
+deletion_replay_ledger
+```
+
+`deletion_replay_ledger` 只保存重放删除所需的最小内部标识、请求版本、范围和完成状态，不保存家庭正文。
+
+该 Ledger 必须位于：
+
+> **独立于业务数据库旧恢复点的加密私有持久化位置**
+
+例如受 KMS 保护的私有对象存储追加清单。
+
+在线删除只有在：
+
+1. 各已知副本处理完成或明确记录仍待处理的范围；
+2. 最新 Ledger 已可靠写入独立持久化位置；
+
+后才能标记完成。
+
+LangGraph 必须维护 `case/person → thread_id` 映射，删除时先取消相关 run，再清除 thread checkpoint/history/pending writes，并记录证明。
+
+### 34.3 备份
 
 恢复备份滚动 50 天。
 
@@ -1875,7 +1953,11 @@ price_version
 
 恢复时：
 
-> 先重放删除清单，再开放服务。
+> 先从独立 Ledger 取得最新删除清单并重放，再开放服务。
+
+如果无法证明删除清单完整、最新：
+
+> 恢复环境继续隔离。
 
 ---
 
@@ -1949,27 +2031,61 @@ Trace 失败：
 
 ---
 
-## 37. 非功能目标
+## 37. 非功能目标与执行预算
 
-V1 初始目标：
+### 37.1 事前设计预算
 
-| 项 | 目标 |
+以下是架构约束，不是已经实测的 SLA：
+
+| 路径 | 前台模型调用预算 | 自动重试 | 额外规则 |
+|---|---:|---:|---|
+| 普通低风险回合 | 最多 2 次：Decision + Response | 整条链最多 1 次可证明安全的瞬时重试 | RAG/Rerank 可用；Memory Extraction 必须后台 |
+| 高影响回合 | 最多 3 次：Decision + 必要独立复核 + Response | 同上 | Response 默认 BUFFERED_REVIEW |
+| 后台 Extract/Memory/Eval | 不计入前台调用预算 | 由 job policy 单独限制 | 不能阻塞用户消息保存 |
+| 未审核跨供应商 fallback | 0 | 0 | 禁止发送真实家庭上下文 |
+
+每个 Model Route 必须配置并强制：
+
+```text
+max_foreground_calls
+max_retries
+per_call_timeout_ms
+chain_deadline_ms
+max_input_tokens
+max_output_tokens
+estimated_cost_limit
+```
+
+任一层不得在自己内部无限 retry，导致总调用次数跨层放大。
+
+真实试点前必须形成版本化 `pilot_budget_version`，至少包含：
+
+- 月技术预算上限；
+- 模型预算上限；
+- 单 Case / 单服务轮次可接受的技术成本目标；
+- 云、模型、通知、人工四类成本的计量来源；
+- 达到预算上限后的降级/停止策略。
+
+金额根据届时真实云规格、模型价格和试点规模批准；缺少真实报价时不伪造固定人民币数字，但 **budget_version 为空时不得开放真实试点**。
+
+### 37.2 用户体验和可靠性目标
+
+| 项 | 设计目标 |
 |---|---|
-| 普通 API | 正常网络下快速响应，不被模型调用阻塞 |
+| 普通 API | 不被模型调用阻塞；先以快速持久化并返回真实状态为验收 |
 | 用户消息持久化 | API 返回成功前已经写库 |
-| 新风险输入 | 不等待已有 AI run 完成 |
-| AI 普通请求 | 有明确 PROCESSING / SUCCESS / FAILED / STALE 状态 |
-| 数据权限 | 跨家庭和无授权访问必须失败 |
+| 新风险输入 | 不等待已有 AI run；确定性 Safety 抢占普通生成 |
+| AI 普通请求 | 有 PROCESSING / SUCCESS / FAILED / STALE / INTERRUPTED |
+| 数据权限 | 跨家庭和无授权访问必须失败，属于硬阻断 |
 | 幂等 | 重试不重复产生业务结果 |
-| Follow-up | Worker 重启后计划不丢失 |
-| 删除 | 能证明在线清除和派生传播 |
-| Observability | 不依赖存储完整敏感正文 |
+| Follow-up | Worker 重启后业务 Schedule 不丢失 |
+| 通知 | UNKNOWN 不盲重试，安静时段和频率策略可验证 |
+| 删除 | 能枚举全部副本并证明在线清除/失效传播 |
+| Observability | 核心服务不依赖 Phoenix 可用；默认 Trace 不含完整敏感正文 |
 
-具体 p95、并发、RPO/RTO：
+具体 p95、并发、RPO/RTO 和人民币单位成本在首次原型压测/成本测量后冻结，并在真实试点前写入 release evidence。
 
-> 在部署和压测阶段形成真实基线后锁定。
-
-不在设计文档里伪造已经测量的能力。
+不能把“第一次测到多少”直接当成“目标就是多少”；若实测不能满足体验或预算，必须减少非必要调用/检索步骤、调整模型路由或缩小开放范围。
 
 ---
 
@@ -2037,26 +2153,52 @@ V1 初始目标：
 
 ---
 
-## 39. V1 需求映射
+## 39. V1 需求到合同与验收映射
 
-| PRD | 技术落点 |
-|---|---|
-| R01–R02 | Identity / Family / Authorization / WeChat |
-| R03–R04 | Messages / Assertions / Provenance / Correction |
-| R05–R10 | Domain Policy / Assessment / LangGraph / RAG |
-| R11–R13 | Participants / Plan / Validation / Domain Commands |
-| R14–R21 | Tasks / Checkins / Reviews / Follow-up / Versioning |
-| R22–R23 | Maintenance / Close / Pause / Lost Contact |
-| R24–R26 | Safety / Risk / Referral |
-| R27 | LangGraph / Decision-Response / Model Gateway |
-| R28 | User + Staff API / UI state contracts |
-| R29 | Family Memory / Longitudinal Archive |
-| R30 | Scenario Package / Policy Version / Knowledge Governance |
-| R31–R33 | Staff Auth / Authorization / Consent |
-| R34–R35 | Correction / Export / Delete / Memory invalidation |
-| R36 | Transaction / Idempotency / Optimistic Lock |
-| R37–R39 | Outcome / Audit / Cost / Trial reporting |
-| R40 | Release gates / Eval / Platform verification |
+每条 PRD 需求必须能找到具体合同和可执行验收，不能只映射到模块名。
+
+| PRD | 主要合同 | 关键验收 |
+|---|---|---|
+| R01 | §28.1、§28.9 U01/U02 | 真微信登录；未开放/失败/撤销授权有真实状态 |
+| R02 | §9、§10、§28.9 U03/U14 | Account/Person/Family 分离；孩子拒绝/退出不越权 |
+| R03 | §7.2 | 家长转述、孩子本人、记录来源不能相互升级 |
+| R04 | §29.4、§14 | 更正保留历史并使受影响 Memory/Plan 失效 |
+| R05 | §12、§13 | 必需信息/unknown/适用性由发布 Policy 强制 |
+| R06 | §6.6 | 信息不足、无需干预、超范围、安全出口各自可判定 |
+| R07 | §8.1、§29.2 | 并发切换后仍只有一个主要 Case |
+| R08 | §6.6 | 真正 blocker 才 WAITING；可选提醒缺失不能阻塞普通方案 |
+| R09 | §7.9 Goal | 缺基线/观察窗口/保护条件/家长行动不能 ConfirmGoal |
+| R10 | §7.9 Plan、§12 | 不可执行任务阻止方案激活或要求调整 |
+| R11 | §7.9 Plan/Task、§10 | 家长行动与孩子任务有真实责任主体和来源 |
+| R12 | §7.9 Plan | 拒绝 FAMILY_AGREEMENT 后仍可建立 ACTION_PLAN |
+| R13 | §29.1 | Policy/Safety/依赖/家长确认缺一不可激活 |
+| R14 | §7.9 Task | PARTIAL/NOT_EXECUTED/PAUSED 分开保存并追溯 Plan |
+| R15 | §24 | Schedule 节奏按 Case/Plan 配置，不强制统一天数 |
+| R16 | §24、§26 | 主动返回与授权提醒分开；拒绝提醒仍能执行 |
+| R17 | §26.1/26.2 | 安静时段、频率、UNKNOWN、并发派发测试 |
+| R18 | §28.8 | 没有真实人员/授权时不展示“人工正在处理” |
+| R19 | §7.9 Checkin | 执行程度、障碍、变化、新担忧、来源和 PlanVersion 齐全 |
+| R20 | §7.9 Review | 屏幕下降但睡眠/冲突恶化时不能直接 IMPROVED |
+| R21 | §29.1/29.4 | 实质调整创建新版本；依赖变化触发 NEEDS_REVIEW |
+| R22 | §6.6 | 稳定结案有 Review/Outcome/保护条件证据；复发新 Case |
+| R23 | §6.6 | 一次未回复/渠道失败不能 LOST_CONTACT；恢复重检 |
+| R24 | §27 | 新风险抢占已有 AI run；静态安全出口不依赖模型 |
+| R25 | §6.6、§27.3 | ResolveRisk 仅有权角色 + 必需证据；AI不能解除 |
+| R26 | §6.6 Referral | 点击链接不能 CONNECTED；真实衔接证据才升级 |
+| R27 | §17、§18.3 | Decision合法但Response越权必须拦截；流中撤权立即中断 |
+| R28 | §28.9 | U01—U14 均覆盖空态/失败/无权/等待/恢复 |
+| R29 | §14、§34 | 多年回溯保持来源；派生摘要不是唯一事实源 |
+| R30 | §12/§13 | 未发布/停用/不适用 Package 不得进入正式建议 |
+| R31 | §9、§28.8 | staff assignment/purpose 限权；跨家庭负向测试 |
+| R32 | §28.8 | 只实现专业/安全/权利/质量等 V1 必需后台 |
+| R33 | §9、§11、§29.3 | purpose授权先于检索；撤回阻断未来使用 |
+| R34 | §29.3/29.4、§14 | 纠错/撤回传播到 Memory 与 ACTIVE Plan/Task |
+| R35 | §34、§35 | 枚举全部副本；checkpoint清除；旧备份恢复仍重放删除 |
+| R36 | §8、§29、§30 | 重复/并发/部分失败不产生重复业务效果 |
+| R37 | §7.8、04 §15.1 | Family/Case 两种分母；退出/失访/UNKNOWN/删除影响不消失 |
+| R38 | §7.8、§37.1 | MODEL/CLOUD/NOTIFICATION/HUMAN 四类成本；UNKNOWN 不补0 |
+| R39 | §32.8、§37 | 先冻结 Eval/预算/承载门禁，再小范围开放 |
+| R40 | §40、§32.8 | 专业/平台/隐私/工程/真实交付证据分别记录；硬阻断不得平均掉 |
 
 06 不新增 PRD 需求。
 
@@ -2103,11 +2245,20 @@ V1 初始目标：
 
 - 幂等；
 - 并发；
-- stale model result；
+- stale / interrupted model result；
+- Response Release Contract；
 - pg-boss retry；
-- notification unknown；
+- notification unknown / Dispatch Gate / quiet-hours；
 - backup restore；
-- delete propagation。
+- LangGraph checkpoint delete propagation；
+- 事实/Consent 更改对 ACTIVE Plan/Task 的依赖传播。
+
+### Eval / Budget
+
+- Eval Suite 版本、预期行为、责任人已冻结；
+- §32.8 所列硬阻断项全部为 0；
+- `pilot_budget_version` 已批准且非空；
+- 前台 model-call / retry / chain-deadline 预算实测未被跨层放大。
 
 ### Safety
 
