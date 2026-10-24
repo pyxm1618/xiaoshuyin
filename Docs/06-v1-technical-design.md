@@ -170,7 +170,9 @@ Phoenix 单独自托管，但：
 12. 派生 Memory 能追到原始来源。
 13. 重复任务不能产生重复业务结果。
 14. LangGraph checkpoint 不能覆盖当前业务事实。
-15. 任何模型供应商都不能成为不可替换的领域依赖。
+15. 只有当前 `primary` Case 可以进入/恢复普通执行、激活新 Plan 或生成普通 Follow-up Schedule；非 primary Case 只允许历史查看、纠错和不改变主线的补充反馈。
+16. `SAFETY_HOLD` 不能被普通暂停、主线切换或恢复命令覆盖；必须通过 Safety Policy 规定的解除流程。
+17. 任何模型供应商都不能成为不可替换的领域依赖。
 
 ---
 
@@ -242,7 +244,7 @@ Case Status、Phase、Outcome、Closure、Referral：
 | OPEN / ASSESSMENT | `WaitForInformation` | 家长请求或 Domain Policy | 必要信息清单非空；缺口来源明确；不是仅因可选提醒缺失 | WAITING，phase 保持 ASSESSMENT，reason=INFORMATION | 取消不再适用的到期推进；保留主动返回入口 | 缺口、Policy version、actor |
 | WAITING / 任意 phase | `ResumeAfterInformation` | 有权参与者触发，Domain Command 应用 | 必要 blocker 已实际清除；重新检查授权、Safety、Package | OPEN，恢复原 phase | 重新计算后续 Schedule，不补发过期提醒 | 清除证据、旧/新版本 |
 | OPEN/WAITING | `PauseCase` | 家长主账号；Safety 可单独中断 | 明确暂停请求或当前交付条件要求 | PAUSED，保留原 phase | 普通未来 Schedule 暂停；已外发消息无法撤回 | 原因、actor、schedule revision |
-| PAUSED | `ResumeCase` | 家长主账号 | 当前授权有效；Safety 非开放风险；Plan/Policy/Package 仍适用；必要 blocker 清除 | OPEN 或 WAITING；phase 恢复 | 重新生成当前有效未来 Schedule | 恢复检查结果 |
+| PAUSED | `ResumeCase` | 家长主账号 | **该 Case 必须仍是当前 primary**；当前授权有效；Safety 非开放风险；Plan/Policy/Package 仍适用；必要 blocker 清除 | OPEN 或 WAITING；phase 恢复 | 重新生成当前有效未来 Schedule | primary 检查、恢复检查结果 |
 | OPEN/WAITING | `MarkLostContact` | 有权工作人员/规则服务，禁止 AI 直接执行 | 至少两个已约定反馈节点无反馈；至少一次真实、已授权联系尝试；不能仅因渠道失败/无许可/一次未回复 | LOST_CONTACT | 停止普通自动联系，保留用户主动返回入口 | 节点、联系尝试、排除条件 |
 | LOST_CONTACT | `UserReturned` | 用户行为触发 | 新输入已保存并完成 Safety；重新核对当前 Consent / Policy / Plan | OPEN 或 WAITING | 旧提醒不补发；生成新 Schedule | 返回时间、恢复依据 |
 | 任意未关闭状态 | `EnterSafetyHold` | Safety Policy / 有权服务 | 命中确定性风险规则或经审核的风险判断 | SAFETY_HOLD | 立即抑制普通生成、普通任务推进和普通提醒；保留静态安全出口 | 风险证据、规则版本 |
@@ -267,6 +269,68 @@ CONTACTED --真实、合规尝试后仍无法联系--> UNREACHABLE
 “平台链接被点击”“通知发送成功”“工作人员创建了工单”都不能直接升级为 `CONNECTED`。
 
 专业判断所需的具体时长、改善阈值或临床条件由正式 Domain Policy/专业审核定义；本技术设计不编造医学阈值。
+
+#### 6.6.1 primary 与 Safety 的统一守门
+
+所有会启动或恢复普通执行的命令在 Domain Command 入口统一检查：
+
+```text
+case.is_primary == true
+AND case.status != SAFETY_HOLD
+AND no blocking risk_event remains open
+```
+
+适用于：
+
+- `ResumeCase`；
+- `ConfirmGoal` 后进入下一正式阶段；
+- `ActivatePlan`；
+- `CompleteReview` 后继续执行/进入维护；
+- 创建或恢复普通 Follow-up Schedule。
+
+如果 Case 不是当前 primary：
+
+> 返回 `PRIMARY_SWITCH_REQUIRED`，不能直接恢复执行。
+
+用户仍可对历史 Case：
+
+- 查看；
+- 纠错；
+- 导出；
+- 提交不改变当前主线的补充事实/历史反馈。
+
+如果当前 primary 处于 `SAFETY_HOLD` 或存在仍开放且阻断普通流程的 Risk Event：
+
+> 普通 `SwitchPrimaryCase`、`PauseCase`、`ResumeCase`、`ActivatePlan` 均拒绝执行并返回 `SAFETY_HOLD_ACTIVE`。
+
+V1 不通过“把风险 Case 切走”来恢复普通服务。风险解除仍只能走 `ResolveRisk`；风险历史和 Risk Event 不因后续主线变化被删除或隐藏。
+
+### 6.7 正常 Phase 转换合同
+
+Case Status 解决“服务是否正在推进”，Phase 解决“正常业务推进到了哪一步”。两者都必须由 Domain Command 改变。
+
+| 当前 Phase | 命令 | 允许主体 | 必需证据 / 前置条件 | 目标 Phase | 任务 / Schedule 副作用 | 失败分支 |
+|---|---|---|---|---|---|---|
+| INTAKE | `StartAssessment` | 家长触发，Domain Command 应用 | 当前 Case 为 primary；必要身份/服务用途授权有效；至少一条可追溯问题陈述；Safety 未阻断 | ASSESSMENT | 不自动创建干预任务 | 缺必要信息 → 留在 INTAKE；风险 → SAFETY_HOLD |
+| ASSESSMENT | `ConfirmProblemUnderstanding` | 家长确认 + Domain Policy | 当前问题理解、关键已知/未知、来源冲突和适用性已展示；必要证据满足或明确进入 WAITING | GOALS | 关闭仅用于 Assessment 的临时节点；不生成执行提醒 | 信息不足 → WAITING/ASSESSMENT；超范围 → 正确退出 |
+| GOALS | `ConfirmGoal` | 家长主账号 | §7.9 Goal 合同完整；基线、观察窗口、保护条件、家长行动已确认；Case 为 primary；Safety 未阻断 | PLANNING | 不自动激活 Plan | Goal 不合格 → 留在 GOALS |
+| PLANNING | `ActivatePlan` | 家长主账号确认 + Domain Policy | §29.1 全部条件满足；PlanVersion 校验通过；依赖有效；Case 为 primary | EXECUTION | 创建当前 Plan 对应 Task 与 Follow-up Schedule | 不可执行/依赖失效 → 留在 PLANNING 或 WAITING |
+| EXECUTION | `OpenReview` | 到达 Review 节点或家长主动触发 | 至少存在可记录的执行/反馈信息，或明确到达约定复盘节点；Case 为 primary | REVIEW | 暂停会与复盘冲突的自动推进；保留已提交 Checkin | 信息不足 → REVIEW 中记录 UNKNOWN 或 WAITING，不伪造结果 |
+| REVIEW | `CompleteReview(CONTINUE)` | 家长确认 + Domain Policy | Review 合同完整；没有必须重做 Assessment/Plan 的新证据；Safety 未阻断 | EXECUTION | 仅重建仍有效的后续 Schedule | 依赖失效 → PLANNING/WAITING |
+| REVIEW | `CompleteReview(ADJUST_PLAN)` | 家长确认 + Domain Policy | 现有 Plan 需要实质修改；原因和依赖明确 | PLANNING | 当前 Plan 的未来执行/提醒停止，创建候选新 PlanVersion | 未确认新方案前不得继续旧的受影响行动 |
+| REVIEW | `CompleteReview(REASSESS)` | 家长确认 + Domain Policy | 主要问题理解出现实质变化、证据冲突扩大或新主因需要重新判断 | ASSESSMENT | 暂停当前 Plan 的受影响任务和 Schedule | 若 Safety 风险 → SAFETY_HOLD |
+| REVIEW | `EnterMaintenance` | 家长确认 + Domain Policy | Outcome 至少支持改善趋势；观察条件满足；关键保护条件未恶化；不满足稳定结案但适合低强度观察 | MAINTENANCE | 结束常规高频执行节点；只保留维护期任务/复盘 Schedule | UNKNOWN/WORSENED/保护条件恶化 → 不得进入维护 |
+| MAINTENANCE | `MaintenanceReview(CONTINUE)` | 家长确认 + Domain Policy | 维护条件仍满足；无新主要问题/风险 | MAINTENANCE | 仅生成维护期低频 Schedule | 信息不足 → WAITING；风险 → SAFETY_HOLD |
+| MAINTENANCE | `MaintenanceReview(RELAPSE_OR_WORSEN)` | 家长确认 + Domain Policy | 出现复发、恶化或保护条件失效，且仍属于当前 Case 的连续问题 | ASSESSMENT 或 PLANNING，由 Policy 根据证据缺口决定 | 停止原维护 Schedule；后续任务重新校验 | 若应视为新一轮复发并关闭旧 Case，则走 `CreateRecurrence` |
+| MAINTENANCE | `CloseCase(STABLE_IMPROVEMENT)` | 家长确认 + Domain Policy | 同 §6.6 稳定结案证据 | CLOSED | 取消未来普通 Schedule | 条件不足 → 继续 MAINTENANCE/REVIEW |
+
+统一规则：
+
+- `UNKNOWN`、`WORSENED` 或关键保护条件恶化时，不能直接进入 MAINTENANCE 或稳定结案；
+- 任何 Phase 推进遇到缺少必要证据，可进入 `WAITING`，但必须保留原 Phase 和 blocker；
+- 从 `WAITING` 恢复后回到原 Phase，不跨阶段跳跃；
+- Phase 变化和对应 Schedule 变更必须处于同一业务事务/Outbox 边界；
+- 非 primary Case 不能通过 Phase 命令重新启动第二条普通执行主线。
 
 ---
 
@@ -1650,18 +1714,40 @@ GET  /api/v1/data-requests/:id/download
 
 ### 29.2 主问题切换
 
-同一事务：
+普通 `SwitchPrimaryCase` 的前置条件：
 
-- lock Family；
-- 当前主 Case → PAUSED；
-- 新 Case → primary；
-- 递增 schedule revision；
-- 取消旧未来 schedule；
-- 写原因和 Audit。
+1. lock Family；
+2. 重新读取当前 primary 和目标 Case；
+3. **当前 primary 不得处于 `SAFETY_HOLD`，且不得存在阻断普通流程的开放 Risk Event**；
+4. 目标 Case 不得为 CLOSED；
+5. 当前授权和目标 Case 的可访问性通过；
+6. 若目标 Case 原为 PAUSED/WAITING，不在本事务中自动恢复其执行状态。
+
+如果第 3 条不满足：
+
+> 返回 `SAFETY_HOLD_ACTIVE`；当前 Case 状态、primary 指针、Schedule 均保持不变。
+
+V1 不支持用普通主线切换迁移或规避开放风险。只有先按 Safety Policy 完成 `ResolveRisk`，才可重新发起普通主线切换。
+
+通过前置条件后，同一 Family 事务：
+
+- 当前主 Case 若为 OPEN/WAITING → PAUSED，**但绝不覆盖 SAFETY_HOLD**；
+- 递增旧主线 `schedule_revision`；
+- 取消旧主线未来普通 Schedule；
+- 目标 Case → primary；
+- 目标 Case 保持原有 status/phase，不自动从 PAUSED/WAITING 变 OPEN；
+- 写切换原因、旧/新 primary、Risk precheck 结果和 Audit；
+- 写 Outbox 供后续合法 Schedule 重建。
+
+如果用户希望恢复目标 Case 的普通执行：
+
+> 切换事务成功后，再显式调用 `ResumeCase`；此时 §6.6.1 会重新检查它已经是 primary、无 Safety 阻断且 Plan/Policy/Consent 仍有效。
 
 任何失败：
 
-> 不允许两个主要 Case。
+> 整体回滚，不允许两个 primary，也不允许旧主线 Schedule 被部分取消。
+
+并发 `ResumeCase` / `SwitchPrimaryCase` 通过 Family lock + Case version 保证最终最多只有一条可执行普通主线。
 
 ### 29.3 Consent 撤回
 
@@ -1934,12 +2020,32 @@ deletion_replay_ledger
 
 例如受 KMS 保护的私有对象存储追加清单。
 
-在线删除只有在：
+删除请求状态：
 
-1. 各已知副本处理完成或明确记录仍待处理的范围；
-2. 最新 Ledger 已可靠写入独立持久化位置；
+```text
+PENDING
+IN_PROGRESS
+PARTIAL
+FAILED
+COMPLETE
+```
 
-后才能标记完成。
+其中 `COMPLETE` 只能在以下条件**同时满足**时写入：
+
+1. 请求范围内所有**本项目控制的在线副本**均已实际清除或不可逆失效，并取得对应删除证明；
+2. 不存在仍待处理的本项目在线副本；
+3. 最新 `deletion_replay_ledger` 已可靠写入独立持久化位置。
+
+如果导出文件、LangGraph checkpoint、对象存储副本、业务表、派生 Memory/Embedding 等任一应删除在线副本清理失败：
+
+> 请求保持 `PENDING` / `PARTIAL` / `FAILED`，并向用户/运营显示真实待处理范围；不能因为已经写入 Ledger 就标记 `COMPLETE`。
+
+以下与“在线删除完成”分开报告：
+
+- 仍处于 50 天滚动周期内、但已被禁止用于业务恢复的备份副本；
+- 项目无法直接控制、只能按已审核供应商条款处理的外部供应商副本。
+
+它们不能用来掩盖本项目在线副本尚未删除。
 
 LangGraph 必须维护 `case/person → thread_id` 映射，删除时先取消相关 run，再清除 thread checkpoint/history/pending writes，并记录证明。
 
@@ -2165,8 +2271,8 @@ estimated_cost_limit
 | R04 | §29.4、§14 | 更正保留历史并使受影响 Memory/Plan 失效 |
 | R05 | §12、§13 | 必需信息/unknown/适用性由发布 Policy 强制 |
 | R06 | §6.6 | 信息不足、无需干预、超范围、安全出口各自可判定 |
-| R07 | §8.1、§29.2 | 并发切换后仍只有一个主要 Case |
-| R08 | §6.6 | 真正 blocker 才 WAITING；可选提醒缺失不能阻塞普通方案 |
+| R07 | §5、§6.6.1、§8.1、§29.2 | 非 primary 不能 Resume/执行；并发切换后仍只有一个 primary 和一条普通执行主线 |
+| R08 | §6.6、§6.7 | 任意正常 Phase 缺必要证据可 WAITING 并保留原 Phase；可选提醒缺失不能阻塞普通方案 |
 | R09 | §7.9 Goal | 缺基线/观察窗口/保护条件/家长行动不能 ConfirmGoal |
 | R10 | §7.9 Plan、§12 | 不可执行任务阻止方案激活或要求调整 |
 | R11 | §7.9 Plan/Task、§10 | 家长行动与孩子任务有真实责任主体和来源 |
@@ -2180,10 +2286,10 @@ estimated_cost_limit
 | R19 | §7.9 Checkin | 执行程度、障碍、变化、新担忧、来源和 PlanVersion 齐全 |
 | R20 | §7.9 Review | 屏幕下降但睡眠/冲突恶化时不能直接 IMPROVED |
 | R21 | §29.1/29.4 | 实质调整创建新版本；依赖变化触发 NEEDS_REVIEW |
-| R22 | §6.6 | 稳定结案有 Review/Outcome/保护条件证据；复发新 Case |
-| R23 | §6.6 | 一次未回复/渠道失败不能 LOST_CONTACT；恢复重检 |
-| R24 | §27 | 新风险抢占已有 AI run；静态安全出口不依赖模型 |
-| R25 | §6.6、§27.3 | ResolveRisk 仅有权角色 + 必需证据；AI不能解除 |
+| R22 | §6.6、§6.7 | 维护进入/继续/退出和稳定结案均有证据合同；复发不覆盖旧历史 |
+| R23 | §6.6、§6.6.1、§29.2 | 一次未回复/渠道失败不能 LOST_CONTACT；非 primary 恢复必须先显式主线切换 |
+| R24 | §6.6.1、§27、§29.2 | 新风险抢占已有 AI run；SAFETY_HOLD 不能被普通主线切换/暂停覆盖 |
+| R25 | §6.6、§6.6.1、§27.3、§29.2 | ResolveRisk 是唯一普通解除入口；SwitchPrimaryCase 不能覆盖开放 Hold |
 | R26 | §6.6 Referral | 点击链接不能 CONNECTED；真实衔接证据才升级 |
 | R27 | §17、§18.3 | Decision合法但Response越权必须拦截；流中撤权立即中断 |
 | R28 | §28.9 | U01—U14 均覆盖空态/失败/无权/等待/恢复 |
@@ -2193,7 +2299,7 @@ estimated_cost_limit
 | R32 | §28.8 | 只实现专业/安全/权利/质量等 V1 必需后台 |
 | R33 | §9、§11、§29.3 | purpose授权先于检索；撤回阻断未来使用 |
 | R34 | §29.3/29.4、§14 | 纠错/撤回传播到 Memory 与 ACTIVE Plan/Task |
-| R35 | §34、§35 | 枚举全部副本；checkpoint清除；旧备份恢复仍重放删除 |
+| R35 | §34、§35 | 在线副本全部删除并有证明后才 COMPLETE；checkpoint清除；旧备份恢复仍重放删除 |
 | R36 | §8、§29、§30 | 重复/并发/部分失败不产生重复业务效果 |
 | R37 | §7.8、04 §15.1 | Family/Case 两种分母；退出/失访/UNKNOWN/删除影响不消失 |
 | R38 | §7.8、§37.1 | MODEL/CLOUD/NOTIFICATION/HUMAN 四类成本；UNKNOWN 不补0 |
