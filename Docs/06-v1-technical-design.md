@@ -2,8 +2,8 @@
 
 > 文档性质：**V1 具体实现设计**
 >
-> 版本：v1.1  
-> 更新日期：2026-10-24
+> 版本：v2.0 — 对齐 04 canonical V1  
+> 更新日期：2026-10-27
 >
 > 唯一产品需求依据：
 > - [04-v1-product-requirements.md](04-v1-product-requirements.md)
@@ -12,17 +12,54 @@
 > - [05-system-architecture.md](05-system-architecture.md)
 >
 > **本文只实现 V1。V2—V5 的能力即使已在总体架构中预留，也不在本文提前开发。**
+>
+> **04 是 V1 唯一产品事实源。本文不得重新解释、压缩或替换 04 的 V1-C01—C36、V1-D00—D42、V1-X01—X14、U01—U20 或 Digital Use A1001—A5002。发生冲突时先修订本文，不能在代码里静默选择 06。**
 
 ---
 
+
 ## 1. V1 实现目标
 
-V1 要交付：
+V1 要交付的不是“一个通用 AI 咨询框架”，而是：
 
-> 家长通过微信小程序发起儿童青少年数字使用问题，在安全、授权和专业规则约束下，完成问题判断、目标、方案、执行、持续跟踪、复盘、调整、维护和真实出口；必要家庭资料可以多年连续使用。
+> **在三层产品结构上完整实现 04 的第一个真实纵向切片：Common Problem-Solving Core + Digital Use Scene + Production Foundation。**
 
-V1 还必须支持：
+家庭用户通过现有微信小程序“小树英助手”发起儿童青少年数字使用问题，在安全、授权、专业规则和真实数据约束下，完整走过：
 
+~~~text
+INTAKE
+→ ASSESSMENT
+→ PROBLEM_FORMULATION
+→ GOALS
+→ PLANNING
+→ EXECUTION
+→ REVIEW
+→ MAINTENANCE
+→ CLOSED
+~~~
+
+Digital Use Scene 不是抽象的 “assessment → plan”。V1 必须忠实实现 04 第二层的 canonical flow：
+
+~~~text
+A1001 / 01002 / 01003
+→ A2001 / A2002 / 01005 / 01006 / 01004 / 01000
+→ A2003—A2010
+→ 两条可并行主线
+   ① A3000—A3113：家庭手机使用联盟 / 目标清单
+   ② A4001—A4012：手机使用合约
+→ A5001：家庭联盟 / 目标清单效果评估
+→ A5002：手机使用合约效果评估
+~~~
+
+其中原文节点编号、前置条件、分支、用户输入、输出、记录、并行关系、时间线和帮助入口均由 04 决定。技术层只负责可靠承载，不得重新编排。
+
+V1 同时必须支持：
+
+- Problem Formulation 作为 Goal 前的正式业务对象和正式阶段；
+- Intervention 作为 Scene 的一等专业资产，不由模型临时发明；
+- 家庭联盟与手机合约两条主线按 04 并行推进；
+- 目标清单、逐目标可行性、任务进度、帮助；
+- 手机合约模板、4 个示范、A4003 角色扮演、合约草案/正式版本/更新、FAQ；
 - 孩子按需有限参与；
 - 不同来源陈述分开；
 - 长期家庭档案；
@@ -30,24 +67,27 @@ V1 还必须支持：
 - 安全中断；
 - 正确转介；
 - 模型失败；
-- 长期任务；
-- 通知结果未知；
+- 长期任务和主动返回；
+- 真实通知能力与 UNKNOWN；
 - 并发和重复提交；
-- 删除与恢复。
+- 查看、更正、导出、删除与备份恢复后的删除重放；
+- Maintenance、Closure、Recurrence。
 
 V1 不实现：
 
 - 完整家庭私人空间；
-- 多个主要问题并行；
-- 其他完整专业场景；
+- 多个主要问题并行推进；
+- 第二个完整专业 Scene；
 - 相似案例推荐；
 - 风险预测模型；
-- 语音/录音输入、ASR及实时语音；
+- 语音/录音输入、ASR 及实时语音；
 - 实时家庭调停；
 - 支付；
 - 机构平台。
 
----
+**完成定义：**
+
+> 只有 04 的 U01—U20、V1-C / V1-D / V1-X，以及 Digital Use A1001—A5002 在真实微信端、真实后端、真实权限、真实计划执行和真实 Review 中闭环，V1 才算实现。
 
 ## 2. V1 最终技术栈
 
@@ -75,25 +115,52 @@ V1 不实现：
 
 ---
 
+
 ## 3. 代码组织
 
 推荐：
 
-```text
+~~~text
 apps/
   miniprogram/            微信小程序
-  operations/             内部运营端
+  operations/             V1 最小内部运营端
   server/
     api/                   Fastify API
     worker/                pg-boss / 后台 Worker
 
 packages/
   contracts/              API Schema / Zod / 共享类型
-  domain/                 领域对象、Commands、不变量
+  domain/                 Case / Formulation / Goal / Plan / Commands / 不变量
   authorization/          Authorization / Consent
   safety/                 Safety Policy / Risk State
   scenes/
-    digital-use/          V1 Scene Specification / Domain Policy
+    digital-use/
+      evidence.ts
+      eligibility.ts
+      exclusions.ts
+      assessment.ts
+      formulation.ts
+      goals.ts
+      node-registry.ts     A/010xx 节点与原始 source_node_code
+      routing.ts           原流程分支和并行关系
+      interventions/
+        family-alliance.ts
+        target-list.ts
+        communication.ts
+        phone-use-contract.ts
+        execution-support.ts
+      plan.ts
+      follow-up.ts
+      review.ts
+      maintenance.ts
+      closure.ts
+      safety.ts
+      schemas/
+        assessment.ts
+        target-list.ts
+        contract.ts
+        roleplay.ts
+        reviews.ts
   ai/
     graph/                 LangGraph
     context/               Context Builder
@@ -101,7 +168,7 @@ packages/
     providers/             AI SDK provider 配置
     schemas/               Decision / Response Schema
   memory/                 Family Memory / provenance / rebuild
-  rag/                    chunk / search / rerank
+  rag/                    chunk / pg_jieba / pgvector / RRF / rerank
   notifications/          Notification Adapter
   integrations/           微信、模型、对象存储等
   observability/          Phoenix / metrics / audit hooks
@@ -111,14 +178,19 @@ db/
 
 tests/
   domain/
+  scenes/digital-use/
   integration/
   e2e/
   ai-eval/
-```
+~~~
 
-不为每个模块建立独立微服务。
+约束：
 
----
+- 不为每个 A/010xx 节点建立微服务；
+- 不把每个节点都变成 LangGraph Node；
+- 不把原手机流程硬编码进 Common Core；
+- 节点路由属于 Digital Use Scene Package；通用生命周期与事实合同属于 Common Core；
+- 不为 V2 场景提前建第二套实现。
 
 ## 4. 部署形态
 
@@ -152,195 +224,180 @@ Phoenix 单独自托管，但：
 
 ---
 
+
 ## 5. 领域不变量
 
 实现必须保证：
 
-1. Account、Person、Family 分开。
-2. 一个家庭最多一个当前主要未结 Case。
-3. Statement、Observation、Fact、Hypothesis 分开。
+1. Account、Person、Family、CaseParticipant 分开。
+2. 一个家庭最多一个当前主要未结 Case 执行主线；其他候选 Case/问题可保留。
+3. Statement、Observation、Fact、Hypothesis 分开，均保留来源、发生时间、记录时间、确认/冲突/有效性。
 4. 家长转述不能自动升级为孩子本人事实。
-5. UNKNOWN、NOT_COLLECTED、DECLINED 分开。
-6. AI 没有业务状态最终写权限。
-7. Plan 激活必须经过规则校验和家长确认。
-8. Safety Hold 优先于普通流程。
-9. 结果、关闭原因、转介状态分开。
-10. Follow-up Schedule 是业务真相，Queue 不是。
-11. Consent 撤回必须影响后续模型、检索、通知和派生 Memory。
-12. 派生 Memory 能追到原始来源。
-13. 重复任务不能产生重复业务结果。
-14. LangGraph checkpoint 不能覆盖当前业务事实。
-15. 只有当前 `primary` Case 可以进入/恢复普通执行、激活新 Plan 或生成普通 Follow-up Schedule；非 primary Case 只允许历史查看、纠错和不改变主线的补充反馈。
-16. `SAFETY_HOLD` 不能被普通暂停、主线切换或恢复命令覆盖；必须通过 Safety Policy 规定的解除流程。
-17. 任何模型供应商都不能成为不可替换的领域依赖。
+5. KNOWN / UNKNOWN / NOT_COLLECTED / DECLINED / N/A / CONFLICTING / EXPIRED 等真实状态不能被补成确定值。
+6. ASSESSMENT 之后必须进入 PROBLEM_FORMULATION；未经 Problem Formulation 不得直接 Confirm Goal。
+7. Problem Formulation 必须可纠正、补充、不同意、暂不确认；变更必须版本化并传播到依赖对象。
+8. Intervention 是 Scene 的一等专业资产；模型只能在已发布、适用的 Intervention 中提出候选组合。
+9. Digital Use 的两条主线和 A1001—A5002 路由由 04 决定；Common Core 和 LangGraph 不得重排。
+10. AI 没有业务事实、Consent、Problem Formulation 确认、Goal 确认、Plan 激活、Contract 双方确认、Closure 或解除 Safety 的最终写权限。
+11. Plan 激活必须经过 Domain Policy、依赖检查、Safety 和有权用户确认。
+12. Safety Hold 优先于普通流程。
+13. Outcome、Closure Reason、Referral Status 分开。
+14. Follow-up Schedule 是业务真相，pg-boss Job 不是。
+15. Consent 撤回必须影响后续模型、检索、通知、派生 Memory 和依赖它的 Formulation / Goal / Plan / Task。
+16. 派生 Memory 必须能追到原始来源。
+17. 重复提交、Worker retry 和并发不能产生重复业务结果。
+18. LangGraph checkpoint 不能覆盖当前业务事实。
+19. 只有当前 primary Case 可以进入/恢复普通执行、激活新 Plan 或创建普通 Follow-up Schedule。
+20. SAFETY_HOLD 不能被普通暂停、主线切换或恢复命令覆盖。
+21. 通知 SENT 不等于 DELIVERED，更不等于执行或改善。
+22. A5001 与 A5002 必须保留两个 review scope，不能在数据层合并成无法区分的泛化 Review。
+23. 手机合约版本不得原地覆盖；A4012 必须生成新版本并保留 supersedes 链。
+24. A4003 角色扮演输出是练习/参考 Artifact，不得被写成孩子本人意见。
+25. 原始专业内容即使存在争议，也不能由开发者或模型静默改写；生产是否启用由已审核的 Policy / Knowledge Version 决定。
+26. 任何模型供应商都不能成为不可替换的领域依赖。
 
----
 
 ## 6. 业务状态
 
 ### 6.1 Case Status
 
-```text
+~~~text
 OPEN
 WAITING
 PAUSED
 LOST_CONTACT
 SAFETY_HOLD
 CLOSED
-```
+~~~
 
 ### 6.2 Phase
 
-```text
+必须与 04 完全一致：
+
+~~~text
 INTAKE
 ASSESSMENT
+PROBLEM_FORMULATION
 GOALS
 PLANNING
 EXECUTION
 REVIEW
 MAINTENANCE
-```
+CLOSED
+~~~
+
+Phase 表示正常问题解决进行到哪里；Case Status 表示当前服务是否可推进。二者分开存储。
+
+例如：
+
+~~~text
+status = PAUSED
+phase  = EXECUTION
+~~~
+
+表示“原来在执行阶段，但服务当前暂停”。
 
 ### 6.3 Outcome
 
-```text
+~~~text
 IMPROVED
 NO_CHANGE
 WORSENED
 UNKNOWN
-```
+~~~
 
 ### 6.4 Closure Reason
 
-```text
+~~~text
 STABLE_IMPROVEMENT
 NO_INTERVENTION_NEEDED
 USER_WITHDREW
 OUT_OF_SCOPE
 EXTERNAL_HANDOFF_COMPLETE
-```
+~~~
 
 ### 6.5 Referral
 
-```text
+~~~text
 PROPOSED
 ACCEPTED
 CONTACTED
 CONNECTED
 DECLINED
 UNREACHABLE
-```
+~~~
 
 Case Status、Phase、Outcome、Closure、Referral：
 
 > 分开存储，不能互相推导。
 
-### 6.6 状态转换合同
+### 6.6 Case Status 转换合同
 
-状态枚举只定义“有哪些状态”，以下合同定义“什么条件下才允许改变状态”。所有状态变更必须通过 Domain Command；模型只能提出候选动作。
+所有状态变更必须通过 Domain Command；模型只能提出候选动作。
 
-| 当前状态/阶段 | 命令或事件 | 允许主体 | 必需证据与前置条件 | 目标状态 | 任务/通知副作用 | 必须审计 |
-|---|---|---|---|---|---|---|
-| OPEN / ASSESSMENT | `WaitForInformation` | 家长请求或 Domain Policy | 必要信息清单非空；缺口来源明确；不是仅因可选提醒缺失 | WAITING，phase 保持 ASSESSMENT，reason=INFORMATION | 取消不再适用的到期推进；保留主动返回入口 | 缺口、Policy version、actor |
-| WAITING / 任意 phase | `ResumeAfterInformation` | 有权参与者触发，Domain Command 应用 | 必要 blocker 已实际清除；重新检查授权、Safety、Package | OPEN，恢复原 phase | 重新计算后续 Schedule，不补发过期提醒 | 清除证据、旧/新版本 |
-| OPEN/WAITING | `PauseCase` | 家长主账号；Safety 可单独中断 | 明确暂停请求或当前交付条件要求 | PAUSED，保留原 phase | 普通未来 Schedule 暂停；已外发消息无法撤回 | 原因、actor、schedule revision |
-| PAUSED | `ResumeCase` | 家长主账号 | **该 Case 必须仍是当前 primary**；当前授权有效；Safety 非开放风险；Plan/Policy/Package 仍适用；必要 blocker 清除 | OPEN 或 WAITING；phase 恢复 | 重新生成当前有效未来 Schedule | primary 检查、恢复检查结果 |
-| OPEN/WAITING | `MarkLostContact` | 有权工作人员/规则服务，禁止 AI 直接执行 | 至少两个已约定反馈节点无反馈；至少一次真实、已授权联系尝试；不能仅因渠道失败/无许可/一次未回复 | LOST_CONTACT | 停止普通自动联系，保留用户主动返回入口 | 节点、联系尝试、排除条件 |
-| LOST_CONTACT | `UserReturned` | 用户行为触发 | 新输入已保存并完成 Safety；重新核对当前 Consent / Policy / Plan | OPEN 或 WAITING | 旧提醒不补发；生成新 Schedule | 返回时间、恢复依据 |
-| 任意未关闭状态 | `EnterSafetyHold` | Safety Policy / 有权服务 | 命中确定性风险规则或经审核的风险判断 | SAFETY_HOLD | 立即抑制普通生成、普通任务推进和普通提醒；保留静态安全出口 | 风险证据、规则版本 |
-| SAFETY_HOLD | `ResolveRisk` | Safety Policy 指定的有权角色；AI和普通运营无权 | 规定的复核证据已取得；处置记录完整；恢复条件明确；当前授权重新核对 | WAITING，保留原业务 phase | 不自动恢复旧任务；重新校验后再建立新 Schedule | reviewer、证据、Safety Policy、恢复位置 |
-| OPEN/WAITING/PAUSED/LOST_CONTACT | `CloseCase(STABLE_IMPROVEMENT)` | 家长确认 + Domain Policy | 有正式 Review；Outcome=IMPROVED；观察窗口完成；关键保护条件未恶化；无开放 Safety；证据可追溯 | CLOSED | 取消普通未来 Schedule；保留维护历史 | Review、Outcome、确认 |
-| OPEN/WAITING/PAUSED | `CloseCase(NO_INTERVENTION_NEEDED)` | 家长确认 + Domain Policy | Assessment 明确支持无需当前干预，不以“没反馈”替代 | CLOSED | 取消普通未来 Schedule | Assessment、依据 |
-| 任意非 SAFETY_HOLD 未关闭状态 | `CloseCase(USER_WITHDREW)` | 家长主账号 | 明确退出请求；记录当前 Outcome，缺证据时=UNKNOWN | CLOSED | 取消普通未来 Schedule | 退出请求、Outcome |
-| OPEN/WAITING/PAUSED | `CloseCase(OUT_OF_SCOPE)` | Domain Policy + 家长知情 | 适用性判断明确超出 V1；提供真实边界/可用支持 | CLOSED | 取消普通未来 Schedule | eligibility 结果 |
-| OPEN/WAITING/PAUSED/SAFETY_HOLD | `CloseCase(EXTERNAL_HANDOFF_COMPLETE)` | 有权主体 | Referral 必须有 CONNECTED 的实际衔接证据；点击链接或“已建议”不够 | CLOSED | 停止普通内部推进 | referral evidence |
-| CLOSED | `CreateRecurrence` | 家长主账号 | 新问题/复发重新进入；重新核对当前资料与授权 | 创建新的关联 Case；旧 Case 不变 | 新 Schedule 只属于新 Case | previous_case_id、原因 |
+| 当前状态 | 命令或事件 | 必需条件 | 目标状态 | 关键副作用 |
+|---|---|---|---|---|
+| OPEN | WaitForInformation | 必要 blocker 非空 | WAITING | 保留原 phase；停止不适用推进 |
+| WAITING | ResumeAfterInformation | blocker 实际清除，重新检查 Authorization / Safety / Package | OPEN | 回到原 phase；重新计算有效 schedule |
+| OPEN/WAITING | PauseCase | 有权用户明确请求或交付条件要求 | PAUSED | 暂停普通未来 schedule |
+| PAUSED | ResumeCase | primary、授权、Safety、Policy、Plan 均重新有效 | OPEN/WAITING | 不补发过期提醒 |
+| OPEN/WAITING | MarkLostContact | 至少两个约定反馈节点无反馈 + 至少一次真实授权联系尝试 | LOST_CONTACT | 停止普通自动联系；保留主动返回 |
+| LOST_CONTACT | UserReturned | 新输入已保存并重新 Safety / Consent 校验 | OPEN/WAITING | 创建新的有效 schedule |
+| 任意未关闭 | EnterSafetyHold | Safety Policy 命中 | SAFETY_HOLD | 抑制普通生成、任务推进和提醒 |
+| SAFETY_HOLD | ResolveRisk | 规定复核证据和有权角色完成 | WAITING | 不自动恢复旧任务 |
+| 允许关闭状态 | CloseCase(...) | 对应 Closure 合同满足 | CLOSED | phase 同时置 CLOSED；取消未来普通 schedule |
+| CLOSED | CreateRecurrence | 用户发起复发/新一轮且重新检查授权 | 新关联 Case | 旧 Case 保持不可变历史 |
 
-Referral 独立使用：
+LOST_CONTACT 不能由“一次不回复”“通知失败”“用户没有通知授权”推断。
 
-```text
-PROPOSED --用户明确接受--> ACCEPTED
-ACCEPTED --发生真实联系尝试--> CONTACTED
-CONTACTED --取得实际衔接证据--> CONNECTED
-任意阶段 --用户明确拒绝--> DECLINED
-CONTACTED --真实、合规尝试后仍无法联系--> UNREACHABLE
-```
+Referral 独立流转：
 
-“平台链接被点击”“通知发送成功”“工作人员创建了工单”都不能直接升级为 `CONNECTED`。
+~~~text
+PROPOSED --用户接受--> ACCEPTED
+ACCEPTED --真实联系尝试--> CONTACTED
+CONTACTED --有实际衔接证据--> CONNECTED
+任意阶段 --用户拒绝--> DECLINED
+CONTACTED --真实合规尝试仍失败--> UNREACHABLE
+~~~
 
-专业判断所需的具体时长、改善阈值或临床条件由正式 Domain Policy/专业审核定义；本技术设计不编造医学阈值。
-
-#### 6.6.1 primary 与 Safety 的统一守门
-
-所有会启动或恢复普通执行的命令在 Domain Command 入口统一检查：
-
-```text
-case.is_primary == true
-AND case.status != SAFETY_HOLD
-AND no blocking risk_event remains open
-```
-
-适用于：
-
-- `ResumeCase`；
-- `ConfirmGoal` 后进入下一正式阶段；
-- `ActivatePlan`；
-- `CompleteReview` 后继续执行/进入维护；
-- 创建或恢复普通 Follow-up Schedule。
-
-如果 Case 不是当前 primary：
-
-> 返回 `PRIMARY_SWITCH_REQUIRED`，不能直接恢复执行。
-
-用户仍可对历史 Case：
-
-- 查看；
-- 纠错；
-- 导出；
-- 提交不改变当前主线的补充事实/历史反馈。
-
-如果当前 primary 处于 `SAFETY_HOLD` 或存在仍开放且阻断普通流程的 Risk Event：
-
-> 普通 `SwitchPrimaryCase`、`PauseCase`、`ResumeCase`、`ActivatePlan` 均拒绝执行并返回 `SAFETY_HOLD_ACTIVE`。
-
-V1 不通过“把风险 Case 切走”来恢复普通服务。风险解除仍只能走 `ResolveRisk`；风险历史和 Risk Event 不因后续主线变化被删除或隐藏。
+点击链接、发送通知、创建工单均不能直接升级为 CONNECTED。
 
 ### 6.7 正常 Phase 转换合同
 
-Case Status 解决“服务是否正在推进”，Phase 解决“正常业务推进到了哪一步”。两者都必须由 Domain Command 改变。
-
-| 当前 Phase | 命令 | 允许主体 | 必需证据 / 前置条件 | 目标 Phase | 任务 / Schedule 副作用 | 失败分支 |
-|---|---|---|---|---|---|---|
-| INTAKE | `StartAssessment` | 家长触发，Domain Command 应用 | 当前 Case 为 primary；必要身份/服务用途授权有效；至少一条可追溯问题陈述；Safety 未阻断 | ASSESSMENT | 不自动创建干预任务 | 缺必要信息 → 留在 INTAKE；风险 → SAFETY_HOLD |
-| ASSESSMENT | `ConfirmProblemUnderstanding` | 家长确认 + Domain Policy | 当前问题理解、关键已知/未知、来源冲突和适用性已展示；必要证据满足或明确进入 WAITING | GOALS | 关闭仅用于 Assessment 的临时节点；不生成执行提醒 | 信息不足 → WAITING/ASSESSMENT；超范围 → 正确退出 |
-| GOALS | `ConfirmGoal` | 家长主账号 | §7.9 Goal 合同完整；基线、观察窗口、保护条件、家长行动已确认；Case 为 primary；Safety 未阻断 | PLANNING | 不自动激活 Plan | Goal 不合格 → 留在 GOALS |
-| PLANNING | `ActivatePlan` | 家长主账号确认 + Domain Policy | §29.1 全部条件满足；PlanVersion 校验通过；依赖有效；Case 为 primary | EXECUTION | 创建当前 Plan 对应 Task 与 Follow-up Schedule | 不可执行/依赖失效 → 留在 PLANNING 或 WAITING |
-| EXECUTION | `OpenReview` | 到达 Review 节点或家长主动触发 | 至少存在可记录的执行/反馈信息，或明确到达约定复盘节点；Case 为 primary | REVIEW | 暂停会与复盘冲突的自动推进；保留已提交 Checkin | 信息不足 → REVIEW 中记录 UNKNOWN 或 WAITING，不伪造结果 |
-| REVIEW | `CompleteReview(CONTINUE)` | 家长确认 + Domain Policy | Review 合同完整；没有必须重做 Assessment/Plan 的新证据；Safety 未阻断 | EXECUTION | 仅重建仍有效的后续 Schedule | 依赖失效 → PLANNING/WAITING |
-| REVIEW | `CompleteReview(ADJUST_PLAN)` | 家长确认 + Domain Policy | 现有 Plan 需要实质修改；原因和依赖明确 | PLANNING | 当前 Plan 的未来执行/提醒停止，创建候选新 PlanVersion | 未确认新方案前不得继续旧的受影响行动 |
-| REVIEW | `CompleteReview(REASSESS)` | 家长确认 + Domain Policy | 主要问题理解出现实质变化、证据冲突扩大或新主因需要重新判断 | ASSESSMENT | 暂停当前 Plan 的受影响任务和 Schedule | 若 Safety 风险 → SAFETY_HOLD |
-| REVIEW | `EnterMaintenance` | 家长确认 + Domain Policy | Outcome 至少支持改善趋势；观察条件满足；关键保护条件未恶化；不满足稳定结案但适合低强度观察 | MAINTENANCE | 结束常规高频执行节点；只保留维护期任务/复盘 Schedule | UNKNOWN/WORSENED/保护条件恶化 → 不得进入维护 |
-| MAINTENANCE | `MaintenanceReview(CONTINUE)` | 家长确认 + Domain Policy | 维护条件仍满足；无新主要问题/风险 | MAINTENANCE | 仅生成维护期低频 Schedule | 信息不足 → WAITING；风险 → SAFETY_HOLD |
-| MAINTENANCE | `MaintenanceReview(RELAPSE_OR_WORSEN)` | 家长确认 + Domain Policy | 出现复发、恶化或保护条件失效，且仍属于当前 Case 的连续问题 | ASSESSMENT 或 PLANNING，由 Policy 根据证据缺口决定 | 停止原维护 Schedule；后续任务重新校验 | 若应视为新一轮复发并关闭旧 Case，则走 `CreateRecurrence` |
-| MAINTENANCE | `CloseCase(STABLE_IMPROVEMENT)` | 家长确认 + Domain Policy | 同 §6.6 稳定结案证据 | CLOSED | 取消未来普通 Schedule | 条件不足 → 继续 MAINTENANCE/REVIEW |
+| 当前 Phase | 命令 | 核心前置条件 | 目标 Phase |
+|---|---|---|---|
+| INTAKE | StartAssessment | primary；必要授权；至少一条可追溯问题陈述；Safety 未阻断 | ASSESSMENT |
+| ASSESSMENT | PresentProblemFormulation | Assessment 已达到当前可形成判断的最小证据；冲突/未知明确 | PROBLEM_FORMULATION |
+| PROBLEM_FORMULATION | ConfirmProblemFormulation | 用户已看到 formulation；可纠正/补充/不同意；必要信息足够；scene fit 仍成立 | GOALS |
+| PROBLEM_FORMULATION | ReassessFromFormulation | 用户纠正、冲突或替代解释要求重新判断 | ASSESSMENT |
+| GOALS | ConfirmGoal | Goal 合同完整；Safety 未阻断 | PLANNING |
+| PLANNING | ActivatePlan | Formulation / Goal / Intervention / Plan 依赖有效；家长确认 | EXECUTION |
+| EXECUTION | OpenReview | 到达 review 节点或主动触发；允许 UNKNOWN | REVIEW |
+| REVIEW | CompleteReview(CONTINUE) | Review 完整且不需改 Plan | EXECUTION |
+| REVIEW | CompleteReview(ADJUST_PLAN) | 实质调整有依据 | PLANNING |
+| REVIEW | CompleteReview(REASSESS) | 主要问题理解出现实质变化 | ASSESSMENT |
+| REVIEW | EnterMaintenance | 改善趋势和保护条件支持低强度观察 | MAINTENANCE |
+| MAINTENANCE | MaintenanceReview(CONTINUE) | 维护条件仍满足 | MAINTENANCE |
+| MAINTENANCE | MaintenanceReview(RELAPSE_OR_WORSEN) | 复发/恶化/保护条件失效 | ASSESSMENT 或 PLANNING，由 Policy 决定 |
+| MAINTENANCE | CloseCase(STABLE_IMPROVEMENT) | 稳定改善证据、观察窗口、保护条件、用户确认 | CLOSED |
 
 统一规则：
 
-- `UNKNOWN`、`WORSENED` 或关键保护条件恶化时，不能直接进入 MAINTENANCE 或稳定结案；
-- 任何 Phase 推进遇到缺少必要证据，可进入 `WAITING`，但必须保留原 Phase 和 blocker；
-- 从 `WAITING` 恢复后回到原 Phase，不跨阶段跳跃；
-- Phase 变化和对应 Schedule 变更必须处于同一业务事务/Outbox 边界；
-- 非 primary Case 不能通过 Phase 命令重新启动第二条普通执行主线。
+- 从 ASSESSMENT 到 GOALS **不得跳过 PROBLEM_FORMULATION**；
+- UNKNOWN、WORSENED 或保护条件恶化不能直接进入 MAINTENANCE / STABLE_IMPROVEMENT；
+- WAITING 保存原 phase；恢复后回到原 phase；
+- Phase 变化与对应 schedule / outbox 变更位于同一业务事务边界；
+- primary 与 Safety 统一守门适用于 Resume、Confirm Formulation、Confirm Goal、Activate Plan、Review 后继续推进；
+- Digital Use 内部 A/010xx 节点推进不等同于全局 Phase；节点路由由 Scene Package 管理。
 
----
 
 ## 7. V1 数据模型
 
-V1 只物理建设真正需要的表。
+V1 只物理建设真正需要的表。A/010xx 是 Scene Node，不按“一个节点一张表”设计。
 
 ### 7.1 身份与授权
 
-```text
+~~~text
 accounts
 persons
 families
@@ -348,26 +405,24 @@ family_members
 consent_records
 case_participants
 staff_assignments
-```
+~~~
 
-### 7.2 个案与证据
+### 7.2 Case、证据与 Problem Formulation
 
-```text
+~~~text
 cases
 case_events
 dialogue_messages
 assertions
 observations
-```
+problem_formulations
+scene_node_states
+~~~
 
-`assertions` 使用：
+assertions 至少表达：
 
-```text
-kind:
-  STATEMENT
-  FACT
-  HYPOTHESIS
-
+~~~text
+kind: STATEMENT / FACT / HYPOTHESIS
 source_kind
 subject_person_id
 source_person_id
@@ -379,159 +434,142 @@ valid_until
 confirmation_status
 supersedes_id
 conflict_group_id
-```
+~~~
 
-如果后续发现 Fact/Hypothesis 查询和约束已经明显不同，再拆表。
+problem_formulations 至少表达：
 
-### 7.3 方案与执行
+~~~text
+case_id
+version
+status              DRAFT / PRESENTED / CONFIRMED / DISPUTED / NEEDS_REVIEW / SUPERSEDED
+primary_problem
+key_factors
+evidence_refs[]
+unknowns[]
+conflicts[]
+scene_fit
+alternative_explanations[]
+reassessment_conditions[]
+exit_conditions[]
+user_response
+confirmed_by?
+confirmed_at?
+dependency_refs[]
+~~~
 
-```text
+scene_node_states 用来忠实承载 04 的 A/010xx 流程：
+
+~~~text
+case_id
+scene_package_version
+node_code            // 内部规范化字符串，例如 A2010；必须保留前导 0 的 01002
+source_node_code     // 原文显示值，例如 "A 2010"
+status               LOCKED / AVAILABLE / IN_PROGRESS / COMPLETED / SKIPPED / BLOCKED
+branch_reason_codes[]
+input_refs[]
+output_refs[]
+entered_at
+completed_at?
+revision
+~~~
+
+只允许做字符层面的编号规范化（如去除 A 与数字之间的空格）；**不得重编号、合并或修正原业务节点**。例如原文存在的 A3033 仍按原编号保留。
+
+### 7.3 Goal、Intervention、Plan 与执行
+
+~~~text
 goals
+intervention_instances
 plan_versions
 tasks
 checkins
 reviews
 outcomes
 artifact_dependencies
-```
+~~~
 
-`artifact_dependencies` 保存 Goal / Plan / Task 对以下对象的版本化依赖：
+InterventionInstance 至少表达：
 
-- assertion / observation；
-- consent purpose/version；
-- policy version；
-- package version。
-
-它用于在事实更正、授权撤回或规则停用后精确定位受影响的 ACTIVE 对象，而不是无差别暂停全部 Case。
-
-### 7.4 专业内容
-
-```text
-scenario_packages
-knowledge_items
-policy_versions
-knowledge_embeddings
-```
-
-### 7.5 长期 Memory
-
-```text
-derived_memories
-memory_source_links
-```
-
-### 7.6 安全与转介
-
-```text
-risk_events
-referrals
-support_resources
-```
-
-### 7.7 长期运行
-
-```text
-case_followup_schedules
-notifications
-notification_attempts
-outbox_events
-```
-
-pg-boss 使用自己的数据库表：
-
-> 不再自研 `jobs + lease + fencing token` 队列表。
-
-### 7.8 AI、质量与试点计量
-
-```text
-ai_runs
-model_routing_versions
-business_audit_events
-data_requests
-cost_ledger_entries
-trial_report_snapshots
-```
-
-`cost_ledger_entries` 至少表达：
-
-```text
-family_id
+~~~text
 case_id
-cost_kind          MODEL / CLOUD / NOTIFICATION / HUMAN
-amount
-currency
-cost_status        KNOWN / ESTIMATED / UNKNOWN
-price_version
-source_ref
-occurred_at
-```
+scene_id
+intervention_code
+stream_code
+scene_package_version
+rationale
+eligibility_result
+status               PROPOSED / SELECTED / ACTIVE / PAUSED / COMPLETED / DECLINED / SUPERSEDED
+dependency_refs[]
+~~~
 
-`trial_report_snapshots` 是可重建的最小统计投影，不保存新的家庭正文；按 04 的 Family / Case / Outcome / 退出 / 失访 / 删除影响口径生成。
+Digital Use 的两个 stream_code：
 
-Phoenix 管 Trace / Eval，不作为业务表。
+~~~text
+FAMILY_ALLIANCE       // A3000—A3113
+PHONE_USE_CONTRACT    // A4001—A4012
+~~~
 
-### 7.9 核心业务对象合同
+target-list、communication、execution-support 是对应 stream 内的专业 Intervention/Component，不得被错误实现成与两条主线平级的第三条强制流程。
 
-下面字段是开发和验收必须满足的业务合同，不要求为每个字段单独建表。
+Goal 至少包含：
 
-#### Goal
-
-至少包含：
-
-```text
+~~~text
 case_id
-baseline_refs
+problem_formulation_version_id
+baseline_refs[]
 target_description
+observation_method
 observation_window
-protective_conditions
-parent_actions
-participant_evidence
+protective_conditions[]
+parent_actions[]
+participant_evidence[]
+review_point
 confirmation_actor
 confirmation_at
-dependency_refs
-```
+dependency_refs[]
+~~~
 
-缺少基线、观察窗口、保护条件或家长自身行动时，不允许把候选 Goal 标记为 CONFIRMED。
+PlanVersion 至少包含：
 
-#### PlanVersion
-
-至少包含：
-
-```text
+~~~text
+case_id
+problem_formulation_version_id
 goal_id / goal_version
+intervention_instance_ids[]
 rationale
 tasks[]
 followup_policy
 review_conditions
 adjust_conditions
-stop_conditions
-plan_format       ACTION_PLAN / FAMILY_AGREEMENT
+pause_conditions
+safety_conditions
+plan_format
 dependency_refs
 validation_result
 parent_confirmation
-```
+status
+~~~
 
-`FAMILY_AGREEMENT` 是可选形式。用户拒绝家庭合约时，必须允许继续形成 `ACTION_PLAN`，不能把拒签当成拒绝服务。
+Plan 必须能解释“为什么是这些 Intervention”，不能只有任务列表。
 
-#### Task
+Task 至少包含：
 
-至少包含：
-
-```text
+~~~text
 plan_version_id
 owner_person_id
 action
 trigger_or_cadence
+required_collaborators[]
 observation_method
 support_or_barrier_plan
 state
 due_at?
-dependency_refs
-```
+dependency_refs[]
+~~~
 
 Task state：
 
-```text
+~~~text
 PENDING
 IN_PROGRESS
 PARTIAL
@@ -540,19 +578,15 @@ NOT_EXECUTED
 PAUSED
 CANCELLED
 NEEDS_REVIEW
-```
+~~~
 
-`PARTIAL` 与 `NOT_EXECUTED` 必须分别保存，不能只用完成百分比推断原因。
+Checkin 至少包含：
 
-#### Checkin
-
-至少包含：
-
-```text
+~~~text
 client_submission_id
 plan_version_id
 task_id?
-node_id
+scene_node_code?
 submitted_by
 execution_state
 barriers
@@ -560,17 +594,16 @@ observed_changes
 new_concerns
 source_refs
 submitted_at
-```
+~~~
 
-没有反馈时保持 UNKNOWN，不能生成“默认无变化”。
+没有反馈保持 UNKNOWN。
 
-#### Review
+Review 至少包含：
 
-至少包含：
-
-```text
+~~~text
 case_id
-plan_version_id
+plan_version_id?
+review_scope
 baseline_refs
 checkin_refs
 protective_condition_observations
@@ -580,11 +613,165 @@ outcome_candidate
 uncertainty
 next_action
 reviewer_source
-```
+~~~
 
-例如“屏幕时间下降，但睡眠或冲突明显恶化”时，Domain Policy 必须阻止仅凭屏幕时长把 Outcome 自动写成 IMPROVED。
+Digital Use 必须支持两个独立 review_scope：
 
----
+~~~text
+FAMILY_ALLIANCE_TARGET_LIST   // A5001
+PHONE_USE_CONTRACT            // A5002
+~~~
+
+可以另有 CASE_OVERALL 用于 Common Core 总复盘，但不得用它吞掉 A5001/A5002。
+
+### 7.4 Digital Use 专属结构化 Artifact
+
+只为 04 明确要求且需要版本/协作语义的对象建结构化存储：
+
+~~~text
+digital_use_target_items
+digital_use_contract_versions
+roleplay_sessions
+roleplay_turns
+~~~
+
+digital_use_target_items 承载 A3002 与 A3010—A3113：
+
+~~~text
+case_id
+target_code
+selected
+goal_text
+feasibility_payload
+task_refs[]
+progress_state
+help_history_refs[]
+revision
+~~~
+
+target_code 使用 04 原始目标体系；可行性 payload 至少保留：
+
+- 具体化 / 量化；
+- 需求；
+- 动机 / 获益；
+- 能力 / 可能性；
+- 挑战 / 阻力。
+
+digital_use_contract_versions 承载 A4002、A4005—A4012：
+
+~~~text
+case_id
+version
+status              DRAFT / PENDING_CONFIRMATION / ACTIVE / SUPERSEDED / PAUSED
+parties
+purpose
+phone_use_rules
+execution_period
+parent_support_measures
+supervision_measures
+incentives
+breach_responsibilities
+source_template_version
+parent_confirmation
+child_confirmation? // 仅有真实本人来源时存在
+supersedes_id?
+dependency_refs[]
+~~~
+
+规则：
+
+- A4010 激活正式合约版本；A4012 创建新版本，不原地覆盖；
+- 家长不能替孩子制造“孩子已确认”的事实；
+- 原附件 4 个示范属于 versioned professional example assets，不写进家庭事实；
+- FAQ 属于专业内容 / support policy，不复制成家庭事实。
+
+roleplay_sessions / roleplay_turns 承载 A4003。角色扮演中用户扮演孩子、AI 扮演家长；输出必须标记为 SIMULATION，不得进入孩子本人 Statement。
+
+### 7.5 专业内容
+
+~~~text
+scenario_packages
+knowledge_items
+policy_versions
+knowledge_embeddings
+professional_examples
+~~~
+
+scenario_packages 发布版本必须能锁定：
+
+- node registry；
+- routing rules；
+- assessment / formulation / goal / intervention / plan / review / maintenance / closure / safety policies；
+- contract template schema；
+- contract examples；
+- FAQ/support content；
+- knowledge version set。
+
+### 7.6 长期 Memory
+
+~~~text
+derived_memories
+memory_source_links
+~~~
+
+Memory 不能成为唯一事实源；Correction / Consent 变化必须使受影响派生内容失效并重建。
+
+### 7.7 安全与转介
+
+~~~text
+risk_events
+referrals
+support_resources
+~~~
+
+### 7.8 长期运行
+
+~~~text
+case_followup_schedules
+notifications
+notification_attempts
+outbox_events
+~~~
+
+pg-boss 使用自己的数据库表，不再自研第二套 Job Lease 系统。
+
+### 7.9 AI、质量与试点计量
+
+~~~text
+ai_runs
+model_routing_versions
+business_audit_events
+data_requests
+cost_ledger_entries
+trial_report_snapshots
+~~~
+
+cost_ledger_entries 至少表达 MODEL / CLOUD / NOTIFICATION / HUMAN，无法确认时 cost_status=UNKNOWN，不能补 0。
+
+trial_report_snapshots 只保存可重建统计投影，不复制新的家庭正文。
+
+Phoenix 管 Trace / Eval，不作为业务事实表。
+
+### 7.10 依赖传播
+
+artifact_dependencies 至少覆盖：
+
+- Problem Formulation；
+- Goal；
+- InterventionInstance；
+- PlanVersion；
+- Task；
+- Digital Use Contract Version；
+
+其依赖来源包括：
+
+- assertion / observation；
+- consent purpose/version；
+- policy version；
+- package version；
+- professional content version。
+
+事实更正、来源失效、Consent 撤回、Policy/Package 停用后，只使真实受影响对象进入 NEEDS_REVIEW / invalidate，不无差别暂停整个家庭。
 
 ## 8. 数据库关键约束
 
@@ -742,44 +929,187 @@ validity
 
 ---
 
-## 12. Domain Policy 实现
 
-V1 数字使用场景：
+## 12. Domain Policy 与 Digital Use Scene 实现
 
-```text
+### 12.1 Scene Package 结构
+
+V1 Digital Use 必须按 05 和 04 组织为：
+
+~~~text
 packages/scenes/digital-use/
   evidence.ts
   eligibility.ts
+  exclusions.ts
   assessment.ts
-  goal.ts
+  formulation.ts
+  goals.ts
+  node-registry.ts
+  routing.ts
+  interventions/
+    family-alliance.ts
+    target-list.ts
+    communication.ts
+    phone-use-contract.ts
+    execution-support.ts
   plan.ts
+  follow-up.ts
   review.ts
+  maintenance.ts
   closure.ts
   safety.ts
-```
+  schemas/
+~~~
 
-每个 Policy 必须：
+每个 Policy/专业资产必须：
 
 - 版本化；
 - 可测试；
+- 可发布/停用；
 - 不依赖自由模型输出才能生效；
-- 能说明缺什么；
-- 能返回允许动作；
-- 能返回禁止动作。
+- 能返回 missing evidence / blockers / allowed actions / reason codes；
+- 能追溯到审核版本。
 
-示例：
+### 12.2 Node Registry：忠实保存 A1001—A5002
 
-```ts
+node-registry.ts 是 04 原始流程的技术索引，不是新的产品设计。
+
+每个节点至少定义：
+
+~~~ts
+type SceneNodeSpec = {
+  nodeCode: string
+  sourceNodeCode: string
+  phase: CasePhase
+  stream?: "FAMILY_ALLIANCE" | "PHONE_USE_CONTRACT"
+  prerequisites: NodePredicate[]
+  inputSchema?: SchemaRef
+  outputSchema?: SchemaRef
+  allowedNext: string[]
+  canRunInParallelWith?: string[]
+  recordContract: RecordContract
+  policyRefs: string[]
+}
+~~~
+
+必须覆盖 04 中实际存在的：
+
+- A1001、01002、01003；
+- A2001、A1000、A2002、01005、01006、01004、01000；
+- A2003、A2004、A2005、A2006、A2007、A2008、A2009、A2010；
+- A3000、A3001、A3002；
+- A3010—A3113 中 04 实际列出的所有节点编号；
+- A4001—A4012；
+- A5001、A5002。
+
+不得用范围循环凭空生成原文不存在的编号；以 04 的实际 node registry 为准。
+
+### 12.3 Routing：主流程与分支
+
+routing.ts 必须把 04 的“前置条件 → 用户输入/判断 → 下一节点”编码成确定性、可测试规则。
+
+原则：
+
+- 模型可以解析自然语言为候选结构化输入；
+- 分支结果由规则校验后确定；
+- 原文明确的 YES/NO、测试通过、用户拒绝、返回主页、进入其他评估等分支全部保留；
+- 原文明确“可并行”的 A3001 与 A3002/目标可行性评估必须允许并行；
+- A3000—A3113 与 A4001—A4012 是两条并行 Intervention Stream；
+- A5001 与 A5002 分别复盘两条主线；
+- UI 可以合并页面，routing 不得因此丢节点语义。
+
+### 12.4 Problem Formulation 与 Intervention Gate
+
+Digital Use Assessment 完成到可形成判断时：
+
+1. 汇总 Evidence / Unknown / Conflict；
+2. 生成候选 Problem Formulation；
+3. Domain Policy 校验 scene fit、替代解释和退出条件；
+4. 向用户展示；
+5. 用户可纠正、补充、不同意、暂不确认；
+6. 只有满足 04 合同并经允许确认后进入 GOALS。
+
+Intervention 选择必须记录：
+
+- 为什么选择；
+- 适用证据；
+- 不适用/阻断条件；
+- 所属 stream；
+- 当前版本；
+- 用户选择或拒绝；
+- 对 Plan 的依赖。
+
+模型不得从 RAG 文本中临时创造一个未发布 Intervention 并直接激活。
+
+### 12.5 Digital Use 原流程到技术对象映射
+
+| 原流程 | 技术承载 | 不能丢失 |
+|---|---|---|
+| A1001 / 01002 / 01003 | scene_node_states + assertions/observations + assessment policy | 原选项、标签、来源、下一节点 |
+| A2001 / A2002 / 01005 / 01006 | routing + eligibility/exclusions + Case exit/reassessment | 无需干预/进一步评估/其他主问题/严重情绪或冲突分流 |
+| 01004 / 01000 | consent + supplemental assessment artifact | 知情同意、拒绝、反馈、返回场景 |
+| A2003 | structured assessment + assertions | 期待时长、理由、过去方法、效果、困难、A200401 |
+| A2004 | node response + routing | 是否愿与孩子共同确定；原 YES/NO 语义 |
+| A2005 / A2006 / A2008 / A2009 | routing + professional content + intervention proposal | 愿意/不愿意、内在动机、家庭联盟说明、潜在亲子问题 |
+| A2007 / A2010 | timeline artifact + follow-up draft + generated document | 用户时间、时间线、方案总结、后续入口 |
+| A3000 | FAMILY_ALLIANCE intervention + self-assessment artifact | 原则、自评、可重复评估、不阻断下一环节 |
+| A3001 | FAMILY_ALLIANCE communication component | 沟通准备及其并行关系 |
+| A3002 | digital_use_target_items | 选择/确认/提交/管理/评估/记录/重新选择 |
+| A3010—A3113 实际节点 | target item + feasibility + Task/Checkin + support artifact | 各目标原节点、可行性维度、进度、帮助 |
+| A4001 | contract preparation node + quiz responses | 5 题、全部答对 Gate、错题解释与记录 |
+| A4002 | contract template + professional_examples | 原模板字段 + 4 个完整示范 |
+| A4003 | roleplay_sessions / turns | 用户扮孩子、AI 扮家长、多轮、评分、选择、保存参考 |
+| A4004 | tool catalog artifact | 工具用途、选择、可再次进入 |
+| A4005 | contract draft component | 与孩子共同确定使用时长、保存结果 |
+| A4006 | contract draft + supervision log | 年龄参考、共同商量、执行日志 |
+| A4007 | contract draft component | 激励原则、案例、保存 |
+| A4008 | contract draft component | 违约责任原则、案例、保存 |
+| A4009 | parent self-regulation artifact | 方法、工具、文档/清单 |
+| A4010 | digital_use_contract_versions | 共同输入、正式版本、文档、进入执行 |
+| A4011 | execution + checkins + FAQ/support policy + follow-up | 执行支持、常见问题、真实提醒 |
+| A4012 | new contract version | 时间段结束或新问题触发更新；supersedes |
+| A5001 | reviews(review_scope=FAMILY_ALLIANCE_TARGET_LIST) | 单独效果评估 |
+| A5002 | reviews(review_scope=PHONE_USE_CONTRACT) | 单独效果评估 |
+
+### 12.6 手机合约详细子规格
+
+04 内嵌的《手机使用合约模版》是 A4001—A4012 的正式子规格。
+
+contract schema 至少固定：
+
+- 合约双方；
+- 制订目的；
+- 手机使用细则；
+- 执行周期；
+- 家长配合措施；
+- 监督措施；
+- 激励措施；
+- 违约责任。
+
+4 个示范和 FAQ 作为 versioned professional content 加载；它们不是家庭事实，也不允许模型把示范中的具体惩罚/时长自动复制给用户。
+
+未经正式专业审核的争议内容：
+
+- 可以保留在 source/reference；
+- 可以用于开发 fidelity 测试；
+- 生产建议是否可用必须由发布的 Policy / Knowledge Version 决定；
+- 开发者不能自行删掉节点或改变流程来“修正”专业内容。
+
+### 12.7 PolicyResult
+
+~~~ts
 type PolicyResult = {
   allowed: boolean
   missingEvidence: string[]
   blockers: string[]
   allowedActions: string[]
   reasonCodes: string[]
+  policyVersion: string
+  contentVersionRefs: string[]
 }
-```
+~~~
 
----
+RAG 不承担上述 Gate。
 
 ## 13. Professional RAG
 
@@ -934,13 +1264,14 @@ invalidate derived memory
 
 ---
 
+
 ## 15. LangGraph V1 设计
 
-LangGraph 只保存最小 AI 工作状态。
+LangGraph 只保存最小 AI 工作状态，不保存长期业务真相。
 
 建议 State：
 
-```ts
+~~~ts
 type ConsultationState = {
   caseId: string
   familyId: string
@@ -948,71 +1279,58 @@ type ConsultationState = {
   purpose: string
 
   domainPhase: string
-  currentTask: string
+  sceneId: "digital-use"
+  currentSceneNodeCode?: string
+  activeStreamCodes?: string[]
 
   missingEvidence: string[]
   allowedActions: string[]
 
+  problemFormulationVersionId?: string
   decision?: DecisionEnvelope
   responseStatus?: string
 
   inputRevision: number
   policyVersion: string
+  scenePackageVersion: string
 }
-```
+~~~
 
-不把完整：
+不把完整 Family、Plan、Messages、Consent、Contract、Target List 长期复制进 Graph State；每次从 PostgreSQL 当前版本读取。
 
-- Family；
-- Plan；
-- Messages；
-- Consent；
-
-长期复制进 Graph State。
-
-这些每次从业务库重新读取。
+LangGraph 不负责 A1001—A5002 的业务真相。scene_node_states + routing.ts 才负责“当前原流程走到哪里”。
 
 ---
 
 ## 16. LangGraph 节点
 
-V1 核心节点：
+V1 核心 AI 编排节点：
 
-```text
+~~~text
 load_current_state
-
 authorize
-
 safety_precheck
-
-load_domain_policy
-
+load_scene_node_and_policy
 load_memory
-
 retrieve_professional_knowledge
-
 build_context
-
 generate_decision
-
 validate_decision
-
 generate_response
-
 persist_allowed_results
-
 schedule_async_followups
-```
+~~~
 
-业务阶段变化由：
+对于需要 AI 的动作（例如自然语言提取、Problem Formulation 草案、A4003 角色扮演、执行障碍支持）复用同一套编排，不为每个 A/010xx 单独建 LangGraph 节点。
 
-> Domain Command
+业务状态和 Scene Node 的正式变化由 Domain Command / Scene Service 完成。
 
-完成。
+LangGraph：
 
-LangGraph 不直接 UPDATE cases。
-
----
+- 不直接 UPDATE cases；
+- 不直接 Confirm Formulation / Goal / Plan / Contract；
+- 不直接解除 Safety；
+- 不因为模型输出一个 next_node 就越过 routing.ts。
 
 ## 17. Decision Envelope
 
@@ -1317,22 +1635,49 @@ escalate_risk
 
 ---
 
+
 ## 23. Domain Commands
 
-真正修改业务状态：
+真正修改业务状态的命令至少包括：
 
-```text
-ConfirmFact
+~~~text
+StartAssessment
+RecordSceneNodeResponse
+PresentProblemFormulation
+ConfirmProblemFormulation
+DisputeProblemFormulation
 ConfirmGoal
+SelectIntervention
+DeclineIntervention
 ActivatePlan
 RecordExecution
+OpenReview
 CompleteReview
+EnterMaintenance
+
+SaveDigitalUseTargetItem
+SaveContractDraft
+ConfirmContractVersion
+SupersedeContractVersion
+SaveRoleplayResult
+
+WaitForInformation
 PauseCase
 ResumeCase
 SwitchPrimaryCase
+MarkLostContact
 CloseCase
+CreateRecurrence
 ResolveRisk
-```
+~~~
+
+说明：
+
+- 不要求 A1001—A5002 每个节点拥有一个独立 Command 类；RecordSceneNodeResponse + Scene Policy 可承载普通节点输入；
+- 涉及正式业务确认、版本激活、跨阶段推进或有重要副作用的动作必须有显式 Command；
+- A4003 Roleplay 保存的是 SIMULATION Artifact；
+- A4010 / A4012 合约激活和更新必须有显式版本命令；
+- A5001 / A5002 的 CompleteReview 必须携带不同 review_scope。
 
 模型只能：
 
@@ -1340,9 +1685,7 @@ ResolveRisk
 
 不能：
 
-> force。
-
----
+> force / confirm on behalf of user。
 
 ## 24. Follow-up Schedule
 
@@ -1562,11 +1905,14 @@ CREATED
 
 ---
 
+
 ## 28. API 设计
+
+API 以业务能力为单位，不为每个 A/010xx 建独立 HTTP endpoint。节点级输入通过 Scene API + schema registry 处理。
 
 ### 28.1 身份与家庭
 
-```text
+~~~text
 POST /api/v1/auth/wechat
 POST /api/v1/auth/logout
 GET  /api/v1/me
@@ -1574,62 +1920,106 @@ GET  /api/v1/me
 POST /api/v1/families
 GET  /api/v1/families/current
 PATCH /api/v1/families/:id/members/:personId
-```
+~~~
 
 ### 28.2 Consent
 
-```text
+~~~text
 GET  /api/v1/consents
 POST /api/v1/consents
 POST /api/v1/consents/:id/revoke
-```
+~~~
 
-### 28.3 Case
+### 28.3 Case / Scene / Problem Formulation
 
-```text
+~~~text
 POST /api/v1/cases
 GET  /api/v1/cases
 GET  /api/v1/cases/:id
 
-POST /api/v1/cases/:id/messages
-POST /api/v1/cases/:id/assessments
+GET  /api/v1/cases/:id/scene
+GET  /api/v1/cases/:id/scene/nodes/:nodeCode
+POST /api/v1/cases/:id/scene/nodes/:nodeCode/responses
+
+GET  /api/v1/cases/:id/problem-formulations/current
+POST /api/v1/cases/:id/problem-formulations/:version/confirm
+POST /api/v1/cases/:id/problem-formulations/:version/dispute
+POST /api/v1/cases/:id/problem-formulations/:version/corrections
+
 POST /api/v1/cases/:id/goals
+GET  /api/v1/cases/:id/interventions
+POST /api/v1/cases/:id/interventions/:code/select
+POST /api/v1/cases/:id/interventions/:code/decline
 
 POST /api/v1/cases/:id/pause
 POST /api/v1/cases/:id/resume
 POST /api/v1/cases/:id/switch-primary
 POST /api/v1/cases/:id/close
 POST /api/v1/cases/:id/recurrences
-```
+~~~
+
+Scene Node response 必须由 node-registry 对 nodeCode、schema、当前可达性和 actor 权限做服务端校验。
 
 ### 28.4 Plan / Execution / Review
 
-```text
+~~~text
 POST /api/v1/cases/:id/plans/propose
 GET  /api/v1/plans/:id
 POST /api/v1/plans/:id/confirm
 
+GET  /api/v1/cases/:id/tasks
 POST /api/v1/cases/:id/checkins
 POST /api/v1/cases/:id/reviews
+GET  /api/v1/cases/:id/reviews
 GET  /api/v1/cases/:id/followups
-```
+~~~
 
-### 28.5 AI
+Review API 必须返回 review_scope，A5001 / A5002 不可混淆。
 
-```text
+### 28.5 Digital Use：目标清单
+
+~~~text
+GET   /api/v1/cases/:id/digital-use/targets
+POST  /api/v1/cases/:id/digital-use/targets
+PATCH /api/v1/cases/:id/digital-use/targets/:targetCode
+POST  /api/v1/cases/:id/digital-use/targets/:targetCode/checkins
+GET   /api/v1/cases/:id/digital-use/targets/:targetCode/support
+~~~
+
+### 28.6 Digital Use：手机合约与角色扮演
+
+~~~text
+GET  /api/v1/cases/:id/digital-use/contract/template
+GET  /api/v1/cases/:id/digital-use/contract/examples
+GET  /api/v1/cases/:id/digital-use/contract/current
+POST /api/v1/cases/:id/digital-use/contract/drafts
+PATCH /api/v1/cases/:id/digital-use/contract/drafts/:version
+POST /api/v1/cases/:id/digital-use/contract/:version/confirm
+POST /api/v1/cases/:id/digital-use/contract/:version/revise
+GET  /api/v1/cases/:id/digital-use/contract/faq
+
+POST /api/v1/cases/:id/digital-use/roleplays
+POST /api/v1/cases/:id/digital-use/roleplays/:sessionId/turns
+POST /api/v1/cases/:id/digital-use/roleplays/:sessionId/rate
+POST /api/v1/cases/:id/digital-use/roleplays/:sessionId/select
+~~~
+
+合约确认必须区分确认主体。没有孩子本人账号/有效来源时不能伪造 child_confirmation。
+
+### 28.7 AI
+
+~~~text
 GET  /api/v1/ai-runs/:id
 POST /api/v1/ai-runs/:id/cancel
 POST /api/v1/ai-runs/:id/retry
 GET  /api/v1/ai-runs/:id/stream
-```
+~~~
 
-stream endpoint：
+stream endpoint 只释放当前策略允许的 Response。
 
-> 只释放当前策略允许的 Response 内容。
+### 28.8 孩子参与
 
-### 28.6 孩子参与
-
-```text
+~~~text
 POST /api/v1/cases/:id/participation-invites
 GET  /api/v1/participation-invites/:token
 POST /api/v1/participation-invites/:token/accept
@@ -1637,151 +2027,165 @@ POST /api/v1/participations/:id/decline
 POST /api/v1/participations/:id/withdraw
 GET  /api/v1/participations/:id
 POST /api/v1/participations/:id/responses
-```
+~~~
 
-### 28.7 数据权利
+### 28.9 数据权利
 
-```text
+~~~text
 POST /api/v1/data-requests
 GET  /api/v1/data-requests/:id
 GET  /api/v1/data-requests/:id/download
-```
+POST /api/v1/data-corrections
+~~~
 
-### 28.8 Staff
+### 28.10 Staff
 
 只实现 V1 必需：
 
-- knowledge；
+- professional content / policy review；
 - safety；
 - data request；
-- assigned case；
+- assigned exceptional case；
 - quality review；
-- support resource。
+- support resource；
+- service-open / cost observation。
 
 不建设完整 CRM。
 
-### 28.9 U01—U14 页面/任务验收合同
+### 28.11 U01—U20 页面 / 任务验收合同
 
-页面可以视觉合并，但以下用户任务及状态不可省略。
+页面可以视觉合并，但业务能力不可省略。
 
-| 任务 | 核心动作/数据 | 必须覆盖的非理想状态 | 恢复入口 |
-|---|---|---|---|
-| U01 服务/登录 | service info、真实开放状态、微信登录 | 未开放、登录失败、账号被撤销 | 重试登录/返回公开服务说明 |
-| U02 授权 | purpose/scope/consent version | 拒绝可选授权、撤回、必要授权缺失 | 调整授权，不把可选项强制化 |
-| U03 家庭资料 | Family/Person/来源 | 未知年龄、关系不确定、无孩子账号 | 保存 unknown/家长转述 |
-| U04 Case 总览 | status/phase/blockers/next action | WAITING/PAUSED/LOST/SAFETY/CLOSED | 只显示当前允许动作 |
-| U05 交流 | message/run/Decision/Response | AI失败、STALE、INTERRUPTED、离线 | 恢复同一 run 或基于原消息重试 |
-| U06 理解/目标 | assertions/conflicts/Goal | 说法冲突、目标不合理、信息不足 | 纠错/补证/修改目标 |
-| U07 方案 | PlanVersion/dependencies/validation | 规则失败、依赖失效、拒绝家庭合约 | 普通 ACTION_PLAN / 新版本 |
-| U08 任务/反馈 | Task/Checkin | PARTIAL/NOT_EXECUTED/PAUSED/新担忧 | 保存真实反馈，不强制“完成” |
-| U09 复盘 | Review/Outcome candidate | 改善与保护条件冲突、UNKNOWN/WORSENED | 继续/调整/重新评估 |
-| U10 维护/历史 | maintenance/close/recurrence | 未达结案条件、复发 | 保留旧案并创建关联新案 |
-| U11 提醒 | Schedule/Notification capability | 无授权、安静时段、渠道失败/UNKNOWN | 主动返回或合法延期 |
-| U12 资料权利 | correct/export/delete | 无权字段、处理中、部分失败 | 查看真实 request 状态 |
-| U13 安全/转介 | Safety Hold/referral | 无真实资源、仅建议未衔接 | 静态安全出口/真实状态 |
-| U14 孩子参与 | invite/accept/decline/withdraw | 邀请过期、拒绝、撤回、越权 | 家长可行路径继续；权限立即更新 |
+| 任务 | 核心实现 | 必须覆盖的非理想状态 |
+|---|---|---|
+| U01 服务/登录 | service state + 微信登录 | 未开放、登录失败 |
+| U02 授权 | purpose/scope/version | 可选拒绝、撤回、必要授权缺失 |
+| U03 家庭资料 | Family/Person/source | 未知、转述、无孩子账号 |
+| U04 Case 总览 | status/phase/current node/blockers | WAITING/PAUSED/LOST/SAFETY/CLOSED |
+| U05 Digital Use Assessment | Scene node engine A1001… | 信息不足、冲突、分流、退出 |
+| U06 Problem Formulation | versioned formulation | 纠正、补充、不同意、暂不确认 |
+| U07 Goal | Goal contract | 基线/观察/保护条件不足 |
+| U08 Intervention | intervention instances + rationale | 不适用、拒绝、两主线状态 |
+| U09 Plan Version | versioned plan | DRAFT/PENDING/ACTIVE/SUPERSEDED/PAUSED |
+| U10 家庭/家长行动 | Task + family-alliance stream | 部分执行、家人不配合 |
+| U11 孩子参与 | invite / limited participation | 拒绝、撤回、过期、越权 |
+| U12 共同规则/Action Plan | contract/action plan | 拒签仍可走可行路径、版本更新 |
+| U13 执行反馈 | Checkin | PARTIAL/NOT_EXECUTED/UNKNOWN |
+| U14 障碍支持/沟通练习 | support + A4003 roleplay | 模拟不得冒充孩子意见 |
+| U15 Review | Review + A5001/A5002 | CONTINUE/ADJUST/REASSESS/WAIT/PAUSE/MAINTENANCE/EXIT |
+| U16 Maintenance/Closure/History | lifecycle + history | 未达结案、复发、UNKNOWN |
+| U17 提醒/联系授权 | Schedule + Notification | 无许可、quiet hours、发送失败/UNKNOWN |
+| U18 查看/更正/导出/删除 | data rights | 无权、处理中、部分失败、恢复删除重放 |
+| U19 Safety/Referral | risk/referral | 无真实资源、仅建议未连接、Safety Hold |
+| U20 历史恢复/复发 | history + recurrence | 旧案不可覆盖，新案重新授权/评估 |
 
 所有页面均验证：
 
-> loading / empty / waiting / failure / no-permission / stale-conflict / retry-or-recovery
+> loading / empty / waiting / failure / no-permission / stale-conflict / retry-or-recovery。
 
-前端隐藏按钮不能替代服务端 Authorization 和 Domain Policy。
+前端隐藏按钮不能替代服务端 Authorization、Domain Policy 和 Scene Routing。
 
----
 
 ## 29. 关键事务
 
-### 29.1 激活 Plan
+### 29.1 Confirm Problem Formulation
 
 同一事务：
 
 1. authorize；
 2. lock / version check Case；
-3. 检查 Goal；
-4. 检查 Plan hash；
-5. Domain Policy；
-6. Safety；
-7. 家长确认；
-8. ACTIVE 新 Plan；
-9. SUPERSEDE 旧 Plan；
-10. 创建 Follow-up Schedule；
-11. 写 Audit；
-12. 写 Outbox。
+3. Case 为 primary，phase=PROBLEM_FORMULATION；
+4. Safety 无阻断；
+5. formulation version 仍是 current；
+6. 依赖证据/Consent/Policy 未失效；
+7. 保存用户确认/纠正/争议；
+8. 只有 CONFIRMED 且 Domain Policy 允许时 phase → GOALS；
+9. 写 Audit / Outbox。
 
-事务成功以后才：
+不能由模型自己执行 ConfirmProblemFormulation。
 
-> 对外表示方案已生效。
+### 29.2 激活 Plan
 
-### 29.2 主问题切换
+同一事务：
 
-普通 `SwitchPrimaryCase` 的前置条件：
+1. authorize；
+2. lock / version check Case；
+3. current Problem Formulation 已确认且有效；
+4. Goal 已确认；
+5. InterventionInstance 均为已发布/适用/允许状态；
+6. 检查 Plan hash / dependencies；
+7. Domain Policy；
+8. Safety；
+9. 家长确认；
+10. ACTIVE 新 Plan；
+11. SUPERSEDE 旧 Plan；
+12. 创建 Follow-up Schedule；
+13. Audit / Outbox。
+
+事务成功后才对外表示方案已生效。
+
+### 29.3 手机合约版本确认 / 更新
+
+A4010 ConfirmContractVersion：
+
+1. 校验 Case / actor / Scene Node 可达；
+2. 校验模板 schema；
+3. 保存双方实际提供的内容和来源；
+4. 不允许家长伪造 child_confirmation；
+5. 当前 draft → ACTIVE；
+6. 旧 ACTIVE → SUPERSEDED；
+7. 更新 A4010 node output；
+8. 创建 A4011 执行入口与适用 Follow-up；
+9. Audit / Outbox。
+
+A4012 SupersedeContractVersion：
+
+- 以当前版本复制出新 DRAFT；
+- 记录更新原因（周期结束 / 新问题 / 双方协商）；
+- 双方重新确认后才 ACTIVE；
+- 旧版本永久保留，不原地 UPDATE 成新内容。
+
+### 29.4 主问题切换
+
+普通 SwitchPrimaryCase 前置：
 
 1. lock Family；
 2. 重新读取当前 primary 和目标 Case；
-3. **当前 primary 不得处于 `SAFETY_HOLD`，且不得存在阻断普通流程的开放 Risk Event**；
-4. 目标 Case 不得为 CLOSED；
-5. 当前授权和目标 Case 的可访问性通过；
-6. 若目标 Case 原为 PAUSED/WAITING，不在本事务中自动恢复其执行状态。
+3. 当前 primary 不得 SAFETY_HOLD，且无阻断风险；
+4. 目标 Case 不得 CLOSED；
+5. Authorization 通过；
+6. 目标 Case 原 status/phase 不在切换事务中自动恢复。
 
-如果第 3 条不满足：
+同一事务保证最多一个 primary；旧主线未来普通 Schedule 取消；写切换原因、旧/新 primary、Audit、Outbox。
 
-> 返回 `SAFETY_HOLD_ACTIVE`；当前 Case 状态、primary 指针、Schedule 均保持不变。
-
-V1 不支持用普通主线切换迁移或规避开放风险。只有先按 Safety Policy 完成 `ResolveRisk`，才可重新发起普通主线切换。
-
-通过前置条件后，同一 Family 事务：
-
-- 当前主 Case 若为 OPEN/WAITING → PAUSED，**但绝不覆盖 SAFETY_HOLD**；
-- 递增旧主线 `schedule_revision`；
-- 取消旧主线未来普通 Schedule；
-- 目标 Case → primary；
-- 目标 Case 保持原有 status/phase，不自动从 PAUSED/WAITING 变 OPEN；
-- 写切换原因、旧/新 primary、Risk precheck 结果和 Audit；
-- 写 Outbox 供后续合法 Schedule 重建。
-
-如果用户希望恢复目标 Case 的普通执行：
-
-> 切换事务成功后，再显式调用 `ResumeCase`；此时 §6.6.1 会重新检查它已经是 primary、无 Safety 阻断且 Plan/Policy/Consent 仍有效。
-
-任何失败：
-
-> 整体回滚，不允许两个 primary，也不允许旧主线 Schedule 被部分取消。
-
-并发 `ResumeCase` / `SwitchPrimaryCase` 通过 Family lock + Case version 保证最终最多只有一条可执行普通主线。
-
-### 29.3 Consent 撤回
+### 29.5 Consent 撤回
 
 同一业务动作：
 
 - 新 Consent version；
-- future access 禁止；
-- future Notification 禁止；
+- future access / notification 禁止；
 - 相关 Derived Memory invalidate；
 - 相关 AI run stale；
-- 通过 `artifact_dependencies` 定位受影响的 Goal / ACTIVE Plan / Task；
-- 受影响对象 → `NEEDS_REVIEW`，阻止对应未来执行和提醒；
-- 不依赖该授权的任务继续有效；
+- artifact_dependencies 定位受影响的 Formulation / Goal / Intervention / Plan / Task / Contract；
+- 受影响对象 → NEEDS_REVIEW 或 invalidate；
+- 抑制对应未来执行和提醒；
 - enqueue cleanup/rebuild；
 - audit。
 
-撤回不删除“过去曾经发生过的业务历史”，但已经失去合法用途的数据不能继续作为当前建议或任务的有效依据。
+### 29.6 事实更正 / 来源失效
 
-### 29.4 事实更正 / 来源失效
+Assertion / Observation 被更正、删除或失效：
 
-当 Assertion / Observation 被更正、删除或失效：
+1. 新版本保存，旧版本保留 superseded；
+2. Derived Memory 失效；
+3. 查询 artifact_dependencies；
+4. 受影响 Formulation / Goal / Intervention / Plan / Task / Contract → NEEDS_REVIEW；
+5. 立即抑制可能不适用的行动与提醒；
+6. 使用当前证据和 Policy 重新验证；
+7. 有实质变化时创建新版本并由适当主体重新确认；
+8. 无依赖对象不受影响。
 
-1. 新版本保存，旧版本保留 superseded 关系；
-2. Derived Memory 失效并进入重建；
-3. 查询 `artifact_dependencies`；
-4. 依赖旧版本的 Goal / Plan / Task 标记 `NEEDS_REVIEW`；
-5. 对可能造成不适用行动的 ACTIVE Plan，立即抑制受影响任务和未来提醒；
-6. 使用当前有效证据和 Policy 重新验证；
-7. 有实质变化时创建新 Plan Version，并重新由适当主体确认；
-8. 无依赖关系的任务不受影响。
-
-不能因为“Memory 已经重建”就自动认为旧 Plan 仍然有效。
-
----
+Memory 重建成功不等于旧 Plan/Contract 自动恢复有效。
 
 ## 30. 并发与 stale result
 
@@ -1838,50 +2242,81 @@ Phoenix 记录：
 
 ---
 
+
 ## 32. Xiaoshuyin Eval
 
 测试集分为：
 
-### 32.1 Domain
+### 32.1 Common Domain
 
 - 缺信息；
 - 无需干预；
 - 主问题不是数字使用；
-- 家长目标不合理；
+- Problem Formulation 可纠正/不同意；
+- Goal 不合格；
+- Plan 不可执行；
 - 执行失败；
-- 恶化；
-- 退出。
+- Review 恶化/UNKNOWN；
+- Maintenance / Closure；
+- 退出 / 失联 / 复发。
 
-### 32.2 Provenance
+### 32.2 Digital Use Flow Fidelity
+
+至少覆盖：
+
+- A1001 / 01002 / 01003 输入与标签；
+- A2001/A2002/01005/01006 各分流；
+- 01004 知情同意拒绝与接受；
+- A2003→A2004→A2005/A2006 的原分支；
+- A2007/A2010 时间线；
+- A3001 与 A3002 可并行；
+- 目标清单选择、可行性、进度、帮助；
+- A4001 五题 Gate；
+- A4002 四个示范可访问；
+- A4003 多轮角色扮演且不污染孩子事实；
+- A4005—A4009 合约组件；
+- A4010 正式版本；
+- A4012 supersede；
+- 孩子拒签时仍可走家庭联盟；
+- A5001 与 A5002 分开；
+- UI 合并后 node routing 仍不丢语义。
+
+### 32.3 Provenance
 
 - 家长与孩子陈述冲突；
 - 转述；
 - 更正；
-- UNKNOWN。
+- UNKNOWN；
+- Roleplay simulation 不成为孩子 Statement。
 
-### 32.3 Privacy
+### 32.4 Privacy
 
 - 跨家庭；
 - 跨成员；
 - Purpose-bound derived context；
-- Consent 撤回。
+- Consent 撤回；
+- Contract participant confirmation source。
 
-### 32.4 Safety
+### 32.5 Safety
 
 - 明确风险；
 - 隐晦风险；
+- 执行途中出现风险；
 - 旧风险恢复；
-- 模型漏判。
+- 模型漏判；
+- Safety Hold 无法被普通节点路由绕过。
 
-### 32.5 RAG
+### 32.6 RAG / Professional Content
 
 - 专业知识召回；
 - 错误阶段；
 - 错误年龄；
-- retired knowledge；
-- rerank。
+- retired / suspended content；
+- rerank；
+- 未审核争议内容不能因存在于 source/reference 就自动成为生产建议；
+- 4 个合同示范只作示范，不被模型机械复制。
 
-### 32.6 Memory
+### 32.7 Memory
 
 - 两个月；
 - 两年；
@@ -1890,23 +2325,31 @@ Phoenix 记录：
 - 删除；
 - 摘要漂移。
 
-### 32.7 Reliability
+### 32.8 Reliability
 
 - duplicate request；
 - worker retry；
 - stale / interrupted AI run；
-- concurrent plan confirm；
+- concurrent formulation/plan/contract confirm；
 - notification unknown；
 - correction/consent dependency invalidation；
-- LangGraph checkpoint deletion。
+- LangGraph checkpoint deletion；
+- Scene Node 重复提交；
+- A300x / A400x 并行推进不互相覆盖。
 
-### 32.8 Eval 版本与放行判定
+### 32.9 04 验收案例
+
+04 的 Case A—J 全部进入固定回归集，不允许只用通用单元测试替代。
+
+### 32.10 Eval 版本与放行判定
 
 每个 Eval Suite 固定：
 
-```text
+~~~text
 suite_version
 case_id
+requirement_ids[]
+scene_node_codes[]
 scenario
 input_fixture
 expected_state_or_behavior
@@ -1915,27 +2358,24 @@ review_rubric
 review_owner
 result
 evidence_ref
-```
+~~~
 
-以下任一出现即为**发布阻断**，平均分再高也不能抵消：
+以下任一出现即为发布阻断：
 
-- 跨家庭数据泄露；
-- 未授权跨成员信息泄露；
-- AI 自行 Confirm Fact / Consent / Close Case；
+- 跨家庭或未授权跨成员泄露；
+- AI 自行 Confirm Fact / Formulation / Consent / Goal / Plan / Contract / Close Case；
+- 跳过 PROBLEM_FORMULATION；
+- Scene routing 违反 04；
+- A5001/A5002 被错误合并；
 - 未满足条件却解除 Safety Hold；
 - retired / suspended / 不适用专业内容形成高影响建议；
-- 虚构 referral 已 CONNECTED；
-- 状态转换违反 §6.6；
+- 虚构 referral CONNECTED；
 - 明确高风险场景产生危险建议；
-- Decision 合法但 Response Release Contract 越权。
+- Response Release Contract 越权。
 
-确定性权限、状态和安全用例必须全部通过。
+确定性权限、状态、Scene routing 和安全用例必须全部通过。
 
-自然度、专业解释质量、延迟、成本等非硬阻断指标使用专业人员校准后的量表；在首次真实试点前冻结阈值和责任人，当前文档不编造尚无数据支持的通过率。
-
-模型、Prompt、RAG、Policy、Package 或 Release Contract 发生实质变化后，对应批准版本失效，必须用同一 Suite 重新回归。
-
----
+模型、Prompt、RAG、Policy、Package、Node Registry、Routing 或 Release Contract 有实质变化后，对应批准版本失效，必须回归。
 
 ## 33. 模型评测指标
 
@@ -2195,35 +2635,53 @@ estimated_cost_limit
 
 ---
 
+
 ## 38. V1 实施顺序
 
-### Phase 1：领域地基
+### Phase 1：Common Core 地基
 
-- Account / Person / Family；
-- Case；
-- Consent；
-- Authorization；
-- Domain Policy；
-- Audit；
-- 状态与并发。
+- Account / Person / Family / Participant；
+- Case Status / Phase；
+- Statement / Observation / Fact / Hypothesis；
+- Problem Formulation；
+- Consent / Authorization；
+- Domain Commands；
+- Audit / Outbox；
+- 幂等、版本和并发。
 
-### Phase 2：专业和 AI
+### Phase 2：Digital Use Scene 忠实实现
 
-- digital-use package；
+- scene package / node-registry / routing；
+- A1001—A2010；
+- FAMILY_ALLIANCE stream：A3000—A3113 实际节点；
+- PHONE_USE_CONTRACT stream：A4001—A4012；
+- target list / feasibility；
+- contract template / 4 examples / FAQ；
+- roleplay；
+- A5001 / A5002；
+- Digital Use Scene 单元和路由测试。
+
+**这一阶段结束时，原流程必须可以在不接真实模型的确定性测试夹具下走通。**
+
+### Phase 3：专业知识与 AI
+
 - pg_jieba；
 - pgvector；
 - Embedding；
+- RRF；
 - Rerank；
 - Context Builder；
 - LangGraph；
 - Model Gateway；
-- AI SDK；
+- Vercel AI SDK；
+- Problem Formulation / support / roleplay 等 AI 能力；
 - Decision / Response；
 - Eval。
 
-### Phase 3：执行闭环
+### Phase 4：执行闭环
 
 - Goal；
+- InterventionInstance；
 - Plan；
 - Task；
 - Checkin；
@@ -2233,7 +2691,7 @@ estimated_cost_limit
 - pg-boss；
 - Notification Adapter。
 
-### Phase 4：长期和安全
+### Phase 5：长期、安全与权利
 
 - Family Memory；
 - memory_source_links；
@@ -2241,12 +2699,16 @@ estimated_cost_limit
 - Safety；
 - Referral；
 - Phoenix；
-- deletion / restore。
+- correction / export / deletion / restore；
+- Maintenance / Closure / Recurrence。
 
-### Phase 5：真实小范围验证
+### Phase 6：真实小范围验证
 
-只有：
+只有以下全部通过才进入真实家庭：
 
+- 04 的 U01—U20；
+- V1-C / V1-D / V1-X mapping；
+- Digital Use A1001—A5002 fidelity；
 - 专业包；
 - 模型；
 - 平台；
@@ -2254,158 +2716,234 @@ estimated_cost_limit
 - 删除；
 - 安全；
 - 通知；
-
-各自通过真实验证后，才进入真实家庭小范围试点。
-
----
+- 真实成本和试点统计。
 
 ## 39. V1 需求到合同与验收映射
 
-每条 PRD 需求必须能找到具体合同和可执行验收，不能只映射到模块名。
+从本版开始，04 的 canonical requirement namespace 是唯一映射键：
 
-| PRD | 主要合同 | 关键验收 |
+- V1-C01—V1-C36：Common Core；
+- V1-D00—V1-D42：Digital Use Scene；
+- V1-X01—V1-X14：真实交付与验证。
+
+旧 R01—R40 **废止为 canonical mapping key**，只保留在 Git 历史中，不再指导开发。
+
+每条 04 需求必须能找到具体技术合同和可执行验收：
+
+| PRD | 主要技术合同 | 关键验收 |
 |---|---|---|
-| R01 | §28.1、§28.9 U01/U02 | 真微信登录；未开放/失败/撤销授权有真实状态 |
-| R02 | §9、§10、§28.9 U03/U14 | Account/Person/Family 分离；孩子拒绝/退出不越权 |
-| R03 | §7.2 | 家长转述、孩子本人、记录来源不能相互升级 |
-| R04 | §29.4、§14 | 更正保留历史并使受影响 Memory/Plan 失效 |
-| R05 | §12、§13 | 必需信息/unknown/适用性由发布 Policy 强制 |
-| R06 | §6.6 | 信息不足、无需干预、超范围、安全出口各自可判定 |
-| R07 | §5、§6.6.1、§8.1、§29.2 | 非 primary 不能 Resume/执行；并发切换后仍只有一个 primary 和一条普通执行主线 |
-| R08 | §6.6、§6.7 | 任意正常 Phase 缺必要证据可 WAITING 并保留原 Phase；可选提醒缺失不能阻塞普通方案 |
-| R09 | §7.9 Goal | 缺基线/观察窗口/保护条件/家长行动不能 ConfirmGoal |
-| R10 | §7.9 Plan、§12 | 不可执行任务阻止方案激活或要求调整 |
-| R11 | §7.9 Plan/Task、§10 | 家长行动与孩子任务有真实责任主体和来源 |
-| R12 | §7.9 Plan | 拒绝 FAMILY_AGREEMENT 后仍可建立 ACTION_PLAN |
-| R13 | §29.1 | Policy/Safety/依赖/家长确认缺一不可激活 |
-| R14 | §7.9 Task | PARTIAL/NOT_EXECUTED/PAUSED 分开保存并追溯 Plan |
-| R15 | §24 | Schedule 节奏按 Case/Plan 配置，不强制统一天数 |
-| R16 | §24、§26 | 主动返回与授权提醒分开；拒绝提醒仍能执行 |
-| R17 | §26.1/26.2 | 安静时段、频率、UNKNOWN、并发派发测试 |
-| R18 | §28.8 | 没有真实人员/授权时不展示“人工正在处理” |
-| R19 | §7.9 Checkin | 执行程度、障碍、变化、新担忧、来源和 PlanVersion 齐全 |
-| R20 | §7.9 Review | 屏幕下降但睡眠/冲突恶化时不能直接 IMPROVED |
-| R21 | §29.1/29.4 | 实质调整创建新版本；依赖变化触发 NEEDS_REVIEW |
-| R22 | §6.6、§6.7 | 维护进入/继续/退出和稳定结案均有证据合同；复发不覆盖旧历史 |
-| R23 | §6.6、§6.6.1、§29.2 | 一次未回复/渠道失败不能 LOST_CONTACT；非 primary 恢复必须先显式主线切换 |
-| R24 | §6.6.1、§27、§29.2 | 新风险抢占已有 AI run；SAFETY_HOLD 不能被普通主线切换/暂停覆盖 |
-| R25 | §6.6、§6.6.1、§27.3、§29.2 | ResolveRisk 是唯一普通解除入口；SwitchPrimaryCase 不能覆盖开放 Hold |
-| R26 | §6.6 Referral | 点击链接不能 CONNECTED；真实衔接证据才升级 |
-| R27 | §17、§18.3 | Decision合法但Response越权必须拦截；流中撤权立即中断 |
-| R28 | §28.9 | U01—U14 均覆盖空态/失败/无权/等待/恢复 |
-| R29 | §14、§34 | 多年回溯保持来源；派生摘要不是唯一事实源 |
-| R30 | §12/§13 | 未发布/停用/不适用 Package 不得进入正式建议 |
-| R31 | §9、§28.8 | staff assignment/purpose 限权；跨家庭负向测试 |
-| R32 | §28.8 | 只实现专业/安全/权利/质量等 V1 必需后台 |
-| R33 | §9、§11、§29.3 | purpose授权先于检索；撤回阻断未来使用 |
-| R34 | §29.3/29.4、§14 | 纠错/撤回传播到 Memory 与 ACTIVE Plan/Task |
-| R35 | §34、§35 | 在线副本全部删除并有证明后才 COMPLETE；checkpoint清除；旧备份恢复仍重放删除 |
-| R36 | §8、§29、§30 | 重复/并发/部分失败不产生重复业务效果 |
-| R37 | §7.8、04 §15.1 | Family/Case 两种分母；退出/失访/UNKNOWN/删除影响不消失 |
-| R38 | §7.8、§37.1 | MODEL/CLOUD/NOTIFICATION/HUMAN 四类成本；UNKNOWN 不补0 |
-| R39 | §32.8、§37 | 先冻结 Eval/预算/承载门禁，再小范围开放 |
-| R40 | §40、§32.8 | 专业/平台/隐私/工程/真实交付证据分别记录；硬阻断不得平均掉 |
+| V1-C01 | §5/§6/§29.4 | 并发创建/切换后最多一个 primary 普通执行主线 |
+| V1-C02 | §7.2/§32.3 | 来源、冲突、UNKNOWN 等不可升级或补值 |
+| V1-C03 | §7.2/§32.3 | 来源、冲突、UNKNOWN 等不可升级或补值 |
+| V1-C04 | §6.7/§7.2/§29.1 | ASSESSMENT 必须进入 PROBLEM_FORMULATION，不能直达 GOALS |
+| V1-C05 | §7.3 Goal | 缺基线/观察/保护/家长行动不得确认 |
+| V1-C06 | §7.3 PlanVersion/§29.2 | Intervention 理由、任务、follow-up/review/版本状态齐全 |
+| V1-C07 | §7.3 PlanVersion/§29.2 | Intervention 理由、任务、follow-up/review/版本状态齐全 |
+| V1-C08 | §7.3 Task/Checkin | PARTIAL/NOT_EXECUTED/障碍/变化/来源真实保存 |
+| V1-C09 | §7.3 Task/Checkin | PARTIAL/NOT_EXECUTED/障碍/变化/来源真实保存 |
+| V1-C10 | §7.3 Review/§6.7 | Review 比较基线/执行/结果并支持规定 next actions |
+| V1-C11 | §7.3 Review/§6.7 | Review 比较基线/执行/结果并支持规定 next actions |
+| V1-C12 | §7.3/§29.2 | 实质 Plan 调整创建新版本，不原地覆盖 |
+| V1-C13 | §6.3—6.5/§28.11 U16/U20 | Outcome/Closure/Referral 分离；复发创建关联新 Case |
+| V1-C14 | §6.3—6.5/§28.11 U16/U20 | Outcome/Closure/Referral 分离；复发创建关联新 Case |
+| V1-C15 | §24—§26/§28.11 U17 | 每个 ACTIVE Plan 有下一节点；授权提醒分离；发送不等于改善 |
+| V1-C16 | §24—§26/§28.11 U17 | 每个 ACTIVE Plan 有下一节点；授权提醒分离；发送不等于改善 |
+| V1-C17 | §24—§26/§28.11 U17 | 每个 ACTIVE Plan 有下一节点；授权提醒分离；发送不等于改善 |
+| V1-C18 | §6.6/§24 | 暂停/恢复/退出真实；失联需真实联系证据 |
+| V1-C19 | §6.6/§24 | 暂停/恢复/退出真实；失联需真实联系证据 |
+| V1-C20 | §7.1/§9—§11 | Account/Person/Participant/Visibility/Purpose/Consent 服务端隔离 |
+| V1-C21 | §7.1/§9—§11 | Account/Person/Participant/Visibility/Purpose/Consent 服务端隔离 |
+| V1-C22 | §7.10/§14/§29.5—29.6 | 更正传播；多年历史保留来源/版本/有效性 |
+| V1-C23 | §7.10/§14/§29.5—29.6 | 更正传播；多年历史保留来源/版本/有效性 |
+| V1-C24 | §5/§23 | AI 无最终业务确认权 |
+| V1-C25 | §6.6/§27 | Safety 任意阶段抢占；Referral 真实状态 |
+| V1-C26 | §6.6/§27 | Safety 任意阶段抢占；Referral 真实状态 |
+| V1-C27 | §30/§36 | 模型/网络/通知失败真实；重试/并发不重复 |
+| V1-C28 | §30/§36 | 模型/网络/通知失败真实；重试/并发不重复 |
+| V1-C29 | §28.11 | U01—U20 与非理想状态全部 E2E |
+| V1-C30 | §3/§12 | Common Core 与 Digital Use Scene 边界测试 |
+| V1-C31 | §28.9/§29.5—29.6/§34—35 | 查看更正导出删除；7/50 删除合同和恢复重放 |
+| V1-C32 | §28.9/§29.5—29.6/§34—35 | 查看更正导出删除；7/50 删除合同和恢复重放 |
+| V1-C33 | §28.9/§29.5—29.6/§34—35 | 查看更正导出删除；7/50 删除合同和恢复重放 |
+| V1-C34 | §28.10/§40 | 后台和人工仅真实能力，无假专家/空队列 |
+| V1-C35 | §28.10/§40 | 后台和人工仅真实能力，无假专家/空队列 |
+| V1-C36 | §2/§4/§40 Platform | 现有微信小程序为家庭主端，不另建家庭 Web |
+| V1-D00 | §12.2—12.5 | Node Registry / Routing 与 04 逐节点 snapshot 对比 |
+| V1-D01 | §12.2/§12.5 | A1001/01002/01003 选项、标签、流转测试 |
+| V1-D02 | §12.3/§12.5 | A2001/A2002/01005/01006 分流测试 |
+| V1-D03 | §12.5/§28.3 | 01004/01000 Consent、测评、反馈、返回 |
+| V1-D04 | §12.5/§7.2 | A2003 与 A200401 字段完整 |
+| V1-D05 | §12.3/§12.5 | A2004 YES/NO 原路由 |
+| V1-D06 | §12.3/§12.5 | A2005/A2006/A2008/A2009 分支 |
+| V1-D07 | §12.5/§24 | A2007 时间线、A2010 文档和提醒依据 |
+| V1-D08 | §7.3/§12.3 | FAMILY_ALLIANCE 与 PHONE_USE_CONTRACT 并行 stream |
+| V1-D09 | §12.5 | A3000 不阻断；A3001 与 A3002/可行性可并行 |
+| V1-D10 | §12.5 | A3000 不阻断；A3001 与 A3002/可行性可并行 |
+| V1-D11 | §7.4/§28.5 | A3002 选择/管理/评估/重新选择 |
+| V1-D12 | §7.4/§12.5 | A301x—A311x 实际节点、原目标、五维可行性 |
+| V1-D13 | §7.4/§12.5 | A301x—A311x 实际节点、原目标、五维可行性 |
+| V1-D14 | §7.4/§12.5 | A301x—A311x 实际节点、原目标、五维可行性 |
+| V1-D15 | §12.5 | A4001 五题、全对 Gate、错题记录 |
+| V1-D16 | §12.6/§28.6 | A4002 模板可访问 |
+| V1-D17 | §7.4/§28.6/§32.3 | A4003 多轮角色扮演/评分/选择且不污染事实 |
+| V1-D18 | §12.5 | A4004 工具目录可反复进入 |
+| V1-D19 | §7.4/§12.5 | A4005—A4009 各组件、日志/文档保存 |
+| V1-D20 | §7.4/§12.5 | A4005—A4009 各组件、日志/文档保存 |
+| V1-D21 | §7.4/§12.5 | A4005—A4009 各组件、日志/文档保存 |
+| V1-D22 | §7.4/§12.5 | A4005—A4009 各组件、日志/文档保存 |
+| V1-D23 | §7.4/§12.5 | A4005—A4009 各组件、日志/文档保存 |
+| V1-D24 | §7.4/§29.3 | A4010 正式合约版本、确认、执行入口 |
+| V1-D25 | §12.6/§24—26 | A4011 FAQ/support/执行/提醒 |
+| V1-D26 | §7.4/§29.3 | A4012 两触发、supersedes、不覆盖 |
+| V1-D27 | §7.3 Review/§12.5 | A5001/A5002 独立 scope，不被 CASE_OVERALL 吞并 |
+| V1-D28 | §7.3 Review/§12.5 | A5001/A5002 独立 scope，不被 CASE_OVERALL 吞并 |
+| V1-D29 | §7.3 Review/§12.5 | A5001/A5002 独立 scope，不被 CASE_OVERALL 吞并 |
+| V1-D30 | §12.2—12.5/§24 | 时间线/主动进入/推送/帮助/Artifact；并行关系 |
+| V1-D31 | §12.2—12.5/§24 | 时间线/主动进入/推送/帮助/Artifact；并行关系 |
+| V1-D32 | §5/§12 | 争议内容不静默改；UI 可合并但节点语义不丢；04 优先 |
+| V1-D33 | §5/§12 | 争议内容不静默改；UI 可合并但节点语义不丢；04 优先 |
+| V1-D34 | §5/§12 | 争议内容不静默改；UI 可合并但节点语义不丢；04 优先 |
+| V1-D35 | §12.6 | 合约原附件/镜像作为正式 sub-spec 版本来源 |
+| V1-D36 | §7.4/§12.6 | 八类模板字段与双方真实确认 |
+| V1-D37 | §7.4/§12.6 | 八类模板字段与双方真实确认 |
+| V1-D38 | §12.6/§32.6 | 4 个示范、FAQ 完整可用且不机械复制 |
+| V1-D39 | §12.6/§32.6 | 4 个示范、FAQ 完整可用且不机械复制 |
+| V1-D40 | §12.3/§32.2 | 拒签合约仍可继续 FAMILY_ALLIANCE |
+| V1-D41 | §29.3 | 双方同意更新产生新 Contract Version |
+| V1-D42 | §12.6/§40 Professional | 原文保留；生产启用由审核 Policy/Content Version 决定 |
+| V1-X01 | §12/§40 Professional | Digital Use Policy/Safety 有审核版本和证据 |
+| V1-X02 | §28/§40 Platform | 微信登录/邀请/提醒在真实平台验证 |
+| V1-X03 | §6/§38/§40 | 完整 Case 从 Intake 到 Maintenance/Closure E2E |
+| V1-X04 | §32.1—32.5 | 所有非理想/退出/Safety/模型与通知失败路径固定回归 |
+| V1-X05 | §7.2/§32.3 | 来源冲突保持冲突 |
+| V1-X06 | §29—30/§32.8 | Plan/Contract 调整、并发/重试不覆盖不重复 |
+| V1-X07 | §14/§32.7 | 两年/五年受控时钟、历史版本和有效性 |
+| V1-X08 | §7.9/§37/§40 | 试点分母保留 UNKNOWN/退出/恶化/失访/转介 |
+| V1-X09 | §38/§40 | Common Core + Digital Use Scene 同时通过 |
+| V1-X10 | §3/§12/05 §25 V2 | 第二 Scene 主要新增 Scene 专业资产，复用 Core |
+| V1-X11 | §7.9/§37 | MODEL/CLOUD/NOTIFICATION/HUMAN 成本，UNKNOWN 不补0 |
+| V1-X12 | §40 | 小范围真实家庭后再扩，不用固定数量宣告成功 |
+| V1-X13 | §28.9/§34—35/§40 | 更正/导出/删除/backup restore 删除重放实演 |
+| V1-X14 | §28.10/§40 | 后台/人工/专业流程只验真实存在能力 |
 
-06 不新增 PRD 需求。
+规则：
 
-如果实现过程中发现：
+1. 代码、测试、PR 描述优先引用 V1-C / V1-D / V1-X；
+2. 新实现如果无法指出对应 requirement ID，不得以“技术优化”为由改变 04 行为；
+3. 若发现需求真的无法可靠实现，回到 04 显式修订，而不是在 06 或代码中静默降级；
+4. PRD mapping 变更必须与对应技术合同、测试同时更新。
 
-> 某个 V1 产品能力无法可靠实现，
-
-必须回到 04 修订，而不是在代码里静默删除需求。
-
----
 
 ## 40. V1 上线门槛
 
 真实家庭上线前至少确认：
 
+### Product / Flow Fidelity
+
+- 04 的 U01—U20 全部有真实入口、非理想状态和恢复路径；
+- V1-C01—C36、V1-D00—D42、V1-X01—X14 全部有测试证据；
+- A1001—A5002 node registry 与 04 snapshot 一致；
+- 原分支和并行关系 E2E 通过；
+- PROBLEM_FORMULATION 不可跳过；
+- A3000—A3113 / A4001—A4012 两条主线可并行；
+- A5001 / A5002 分开；
+- 合约模板、4 个示范、FAQ、A4003 roleplay 可用；
+- 拒签合约不阻断家庭联盟路径。
+
 ### Professional
 
 - digital-use package 已正式审核；
 - Safety Policy 已审核；
+- 生产启用的专业规则/FAQ/示范/支持内容有批准版本；
+- source/reference 中未审核争议内容不会自动进入生产建议；
 - 支持资源已核验。
 
 ### Models
 
 - 实际 model ID 已通过 Xiaoshuyin Eval；
 - 数据条款、地域和费用确认；
-- Structured Output / Tool Calling 实测通过。
+- Structured Output / Tool Calling 实测通过；
+- Model Gateway fallback 不改变业务 Gate。
 
 ### RAG
 
 - 专业知识来源可追溯；
 - hard filter 正确；
-- 中文检索 Eval 通过；
-- retired knowledge 不可召回。
+- pg_jieba + pgvector + RRF + rerank 中文检索 Eval 通过；
+- retired / suspended knowledge 不可用于正式建议。
 
-### Authorization
+### Authorization / Data Rights
 
 - 家庭隔离；
 - 孩子有限权限；
 - Purpose-bound data；
 - staff 最小权限；
-- Consent 撤回。
+- Consent 撤回传播；
+- 查看/更正/导出/删除真实演练；
+- 在线删除 7 天合同和 50 天备份删除重放测试。
 
 ### Reliability
 
 - 幂等；
 - 并发；
 - stale / interrupted model result；
+- Problem Formulation / Plan / Contract version concurrency；
 - Response Release Contract；
 - pg-boss retry；
 - notification unknown / Dispatch Gate / quiet-hours；
 - backup restore；
 - LangGraph checkpoint delete propagation；
-- 事实/Consent 更改对 ACTIVE Plan/Task 的依赖传播。
+- 事实/Consent/Policy 更改对依赖对象的传播。
 
 ### Eval / Budget
 
-- Eval Suite 版本、预期行为、责任人已冻结；
-- §32.8 所列硬阻断项全部为 0；
-- `pilot_budget_version` 已批准且非空；
+- Eval Suite 版本、expected/forbidden behavior、责任人已冻结；
+- §32 所列硬阻断项全部为 0；
+- 04 Case A—J 全部通过；
+- pilot_budget_version 已批准且非空；
+- MODEL / CLOUD / NOTIFICATION / HUMAN 成本真实记录，UNKNOWN 不补 0；
 - 前台 model-call / retry / chain-deadline 预算实测未被跨层放大。
 
-### Safety
+### Safety / Referral
 
-- 明确风险；
-- 模糊风险；
-- AI故障下安全入口；
-- Safety Hold 无法被普通模型解除。
+- 明确和模糊风险；
+- 执行途中风险；
+- AI 故障下静态安全出口；
+- Safety Hold 无法被普通模型、主线切换或 Scene routing 解除；
+- Referral 点击/发送不冒充 CONNECTED。
 
 ### Platform
 
 - 微信登录；
 - 实际通知能力；
+- 孩子邀请实际能力；
 - 实际小程序发布条件；
-- 真实云环境。
+- 真实云环境；
+- 最小内部后台只展示真实具备的人工/审核能力。
 
-未验证：
+未验证就记录 UNVERIFIED / UNKNOWN，不把 Demo 成功写成生产已就绪。
 
-> 就记录未验证。
-
-不把 Demo 成功写成生产已就绪。
-
----
 
 ## 41. 最终实现原则
 
 V1 实现必须始终保持：
 
-```text
-产品需求
+~~~text
+04 产品需求
 ↓
-Domain Policy / Authorization
+Common Core + Digital Use Scene Package
+↓
+Authorization / Consent
+↓
+Domain Policy + Scene Routing
 ↓
 LangGraph
 ↓
 Context Builder
 ↓
-RAG / Family Memory
+Professional RAG + Family Memory
 ↓
-Model Gateway
-↓
-AI SDK
+Model Gateway + Vercel AI SDK
 ↓
 模型
 ↓
@@ -2425,17 +2963,26 @@ pg-boss
 ↓
 真实 Notification
 ↓
-真实 Feedback / Outcome
-```
+真实 Feedback / A5001-A5002 Review / Outcome
+~~~
 
 最重要的边界：
 
+> **04 决定产品行为；06 只能实现，不能改写。**
+
 > **PostgreSQL 决定系统事实。**
 
-> **Domain Policy 决定专业硬边界。**
+> **Scene Node Registry / Routing 决定 A1001—A5002 的确定性流程。**
+
+> **Domain Policy 决定专业硬边界和 Intervention 适用性。**
 
 > **Authorization 决定数据边界。**
 
-> **LangGraph 决定 AI 流程。**
+> **LangGraph 决定 AI 编排，不决定业务事实和原流程路由。**
 
-> **模型负责推理和表达，但不拥有业务最终权力。**
+> **RAG 解释“为什么/怎么做”，不能代替专业 Gate。**
+
+> **模型负责推理和表达，但不拥有事实、Formulation、Consent、Goal、Plan、Contract、Safety 或 Closure 的最终权力。**
+
+> **V1 不因未来扩展而提前重建平台；先把 Digital Use 纵向切片完整做对，再用第二 Scene 验证复用。**
+
