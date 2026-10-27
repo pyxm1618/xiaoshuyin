@@ -95,8 +95,9 @@ V1 不实现：
 |---|---|
 | 用户端 | 原生微信小程序 TypeScript / WXML / WXSS |
 | 运营端 | React + Vite |
-| 服务端 | TypeScript / Node.js + Fastify |
+| 服务端 | TypeScript / Node.js（V1 baseline >= 22.12）+ Fastify |
 | AI 编排 | LangGraph JS |
+| LangGraph 持久化 | 官方 PostgreSQL Checkpointer（@langchain/langgraph-checkpoint-postgres / PostgresSaver） |
 | 模型调用 | 自研 Model Gateway + Vercel AI SDK Core |
 | 数据库 | 阿里云 RDS PostgreSQL |
 | 向量 | pgvector |
@@ -221,6 +222,44 @@ API 与 Worker 可以先运行在同一台云服务器的不同进程/容器中�
 Phoenix 单独自托管，但：
 
 > 不保存完整家庭正文作为长期观测数据。
+
+### 4.1 Runtime baseline
+
+V1 服务端运行环境必须满足所有选定生产依赖的最低要求。
+
+本版基线：
+
+~~~text
+Node.js >= 22.12
+~~~
+
+实际部署固定到受支持的 Node.js LTS 小版本，并在 CI / container image / production 中保持一致；不能出现开发环境 Node 版本高于生产、或使用低于 pg-boss 支持下限的运行时。
+
+### 4.2 PostgreSQL extension bootstrap / readiness
+
+V1 依赖的数据库能力不是“代码里引用包名就算具备”。环境启动前必须做 readiness：
+
+1. 目标 RDS PostgreSQL 版本和实例规格已确认；
+2. pgvector 可用并成功创建；
+3. pg_jieba 可用；
+4. RDS 参数组已按该扩展要求配置 shared_preload_libraries；
+5. 参数变更需要重启时，重启后再次验证；
+6. migration/readiness 实际执行 CREATE EXTENSION 或等价受管操作；
+7. 专业词典初始化/版本记录完成；
+8. API / Worker 在上述 readiness 未通过时不得把 RAG 标记为 READY。
+
+至少记录：
+
+~~~text
+postgres_version
+extension_name
+extension_version
+readiness_status
+checked_at
+evidence_ref
+~~~
+
+开发、Staging、Production 使用同一套 readiness contract；不能只在本地“能跑”就推断 RDS 已支持。
 
 ---
 
@@ -1294,6 +1333,155 @@ invalidate derived memory
 
 > 但不能成为唯一证据链。
 
+### 14.5 Memory Extraction / Rebuild 异步合同
+
+Memory Extraction **不能阻塞用户当前业务提交或当前回复**。
+
+对可能产生长期记忆的正式事件，例如：
+
+- message persisted；
+- assessment response committed；
+- scene node output committed；
+- checkin committed；
+- review completed；
+- contract / plan version activated；
+
+业务事务只做：
+
+~~~text
+保存正式业务事实
++
+写 Outbox Event
+~~~
+
+Outbox Consumer 再幂等创建 pg-boss job：
+
+~~~text
+source business event
+→ outbox
+→ pg-boss
+→ memory_extract route
+→ candidate derived memory
+→ validate provenance / purpose / visibility
+→ derived_memories
+→ memory_source_links
+→ embedding
+~~~
+
+要求：
+
+- job key 至少绑定 source event / source version，重复执行不产生重复 Memory；
+- memory_extract 只能基于当前仍有效且当前 Purpose 可用的来源；
+- 生成结果先保留来源链接，再允许进入可检索 Memory；
+- Memory job 失败、超时或模型不可用，**不能回滚已经成功的 Message / Assessment / Checkin / Review**；
+- 失败进入可重试后台状态，不向用户伪装“长期记忆已经更新”；
+- Correction / deletion / Consent change / source invalidation 触发 invalidate → outbox → memory rebuild；
+- rebuild 必须从当前有效原始/结构化来源重新生成，不能用旧 Derived Memory 作为唯一输入；
+- embedding 更新与 Memory 版本绑定，旧 embedding 失效后不得继续被召回。
+
+---
+
+## 14A. Context Builder 实现合同
+
+Context Builder 是 V1 Agent Runtime 的正式组件，不是“把能找到的数据都塞进 Prompt”。
+
+每次模型调用必须按以下顺序构建：
+
+~~~text
+1. actor / family / case / purpose
+2. Authorization & Consent 结果
+3. current Safety state
+4. current Case + phase + current Scene Node
+5. current Domain Policy / Scene Package version
+6. 当前任务真正需要的结构化事实
+7. 当前 Purpose 允许的 Family Memory
+8. 必要的 Recent Conversation window
+9. 当前适用的 Professional RAG context
+10. 当前允许调用的 Tools
+11. System / response policy
+~~~
+
+### 14A.1 权限边界
+
+Authorization 必须发生在：
+
+- Family Memory 检索前；
+- Recent Conversation 取数前；
+- Professional RAG 涉及受限内容的检索前；
+- Context 组装前。
+
+Context Builder 不接收“整个 Family 对象然后靠 Prompt 隐藏”。
+
+### 14A.2 Source priority
+
+发生冲突时，Context 中的权威顺序是：
+
+~~~text
+Current PostgreSQL Domain Facts / current versions
+> current Policy / Consent / Safety
+> current structured evidence
+> derived Family Memory
+> recent conversational phrasing
+~~~
+
+Derived Memory 不能覆盖当前 Fact / Conflict / UNKNOWN，也不能让已失效历史重新变成当前事实。
+
+### 14A.3 Recent Conversation
+
+Recent Conversation 只用于：
+
+- 保持自然多轮连续性；
+- 理解当前指代；
+- 避免重复追问。
+
+它不是长期事实源。
+
+窗口大小按 token budget 和任务需要动态取，不要求固定“最近 N 条”；超出预算时优先保留当前任务相关消息和有来源的结构化事实。
+
+### 14A.4 Token budget / trimming
+
+每个 Model Route 定义：
+
+~~~text
+max_context_tokens
+reserved_output_tokens
+memory_budget
+rag_budget
+recent_conversation_budget
+~~~
+
+Context 超预算时按以下顺序处理：
+
+1. 删除重复/低相关最近对话；
+2. 缩减低相关 Derived Memory；
+3. 缩减低相关 RAG chunk；
+4. 保留当前 Case / Scene Node / Policy / Safety / Consent / 关键事实；
+5. 仍无法满足则返回 CONTEXT_TOO_LARGE 或要求缩小任务，不允许悄悄丢失安全或业务 Gate。
+
+### 14A.5 ai_run provenance
+
+每次调用至少记录：
+
+~~~text
+case_version
+context_revision
+scene_node_code
+purpose
+consent_version
+policy_version
+scene_package_version
+memory_ids[]
+knowledge_ids[]
+recent_message_ids[]
+allowed_tools[]
+model_route_version
+prompt_version
+~~~
+
+这样可以回答：
+
+> 这次模型为什么会看到这些内容、又为什么没有看到另外一些内容。
+
 ---
 
 
@@ -1331,6 +1519,86 @@ type ConsultationState = {
 不把完整 Family、Plan、Messages、Consent、Contract、Target List 长期复制进 Graph State；每次从 PostgreSQL 当前版本读取。
 
 LangGraph 不负责 A1001—A5002 的业务真相。scene_node_states + routing.ts 才负责“当前原流程走到哪里”。
+
+### 15.1 PostgreSQL Checkpointer
+
+V1 生产环境固定使用：
+
+~~~text
+@langchain/langgraph-checkpoint-postgres
+PostgresSaver
+~~~
+
+不允许生产环境以 MemorySaver / 进程内存替代持久化 Checkpointer。
+
+Checkpoint 可以与业务库使用同一 RDS PostgreSQL 实例，但必须逻辑隔离（独立 schema / 官方 saver 管理的表）；其数据性质是：
+
+> **AI workflow recovery state，不是业务事实。**
+
+首次环境初始化必须执行官方 saver 所要求的 setup / migration，并纳入环境 readiness。
+
+### 15.2 Thread identity / mapping
+
+系统维护稳定映射：
+
+~~~text
+case_id
+actor_id / participant scope
+purpose
+thread_id
+checkpoint_ns
+created_at
+closed_at?
+~~~
+
+建议由应用侧 langgraph_thread_bindings 记录映射，不从 LangGraph 内部表反向猜 Case。
+
+规则：
+
+- 同一个 Case 可以因 actor/purpose 不同拥有不同 thread；
+- thread_id 不能充当 Case ID；
+- 删除、撤回、Case 关闭和数据权利请求可通过该映射枚举相关 checkpoint；
+- checkpoint 中只保存恢复 AI workflow 所必需的最小 State。
+
+### 15.3 Resume contract
+
+任何 interrupt / resume / worker recovery 后，执行顺序必须是：
+
+~~~text
+load checkpoint
+→ reload current Case
+→ reload current Scene Node
+→ authorize current actor/purpose
+→ reload current Consent
+→ reload current Safety
+→ reload current Policy / Package versions
+→ compare context revision
+→ continue or mark STALE
+~~~
+
+如果 checkpoint 与当前 Domain State 冲突：
+
+> **Domain State 胜出。**
+
+旧 checkpoint 不得恢复：
+
+- 已撤回 Consent；
+- 已 supersede Plan / Contract；
+- 已失效 Memory；
+- 已关闭/切换的 Case；
+- 与当前版本不一致的 Safety / Policy 状态。
+
+### 15.4 Checkpoint lifecycle
+
+Checkpoint / history / pending writes 进入 Data Copy Inventory。
+
+必须支持：
+
+- 正常 workflow 完结后的保留策略；
+- Case/Person 到 thread 的枚举；
+- 用户删除时 cancel run + 删除对应 checkpoint/history/pending writes；
+- backup restore 后按 deletion replay ledger 再清理；
+- checkpoint 删除失败时 Data Request 不得标 COMPLETE。
 
 ---
 
