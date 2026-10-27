@@ -417,6 +417,7 @@ assertions
 observations
 problem_formulations
 scene_node_states
+scene_artifacts
 ~~~
 
 assertions 至少表达：
@@ -474,6 +475,19 @@ revision
 ~~~
 
 只允许做字符层面的编号规范化（如去除 A 与数字之间的空格）；**不得重编号、合并或修正原业务节点**。例如原文存在的 A3033 仍按原编号保留。
+
+scene_artifacts 用于保存不是核心事实表、但 04 明确要求用户可查看/保存/回到的场景产物，例如：
+
+- A2007 时间线；
+- A2010 方案总结文档；
+- A3000 家庭联盟自评；
+- A4004 工具选择；
+- A4005 笔记；
+- A4006 日志；
+- A4009 家长自我调节清单；
+- A4010 可查看的合约文档。
+
+至少保存 artifact_type、schema_version、source_node_code、content/data、owner/visibility、source_refs、created_at；不得只存在于聊天文本里。
 
 ### 7.3 Goal、Intervention、Plan 与执行
 
@@ -685,7 +699,7 @@ dependency_refs[]
 - 原附件 4 个示范属于 versioned professional example assets，不写进家庭事实；
 - FAQ 属于专业内容 / support policy，不复制成家庭事实。
 
-roleplay_sessions / roleplay_turns 承载 A4003。角色扮演中用户扮演孩子、AI 扮演家长；输出必须标记为 SIMULATION，不得进入孩子本人 Statement。
+roleplay_sessions / roleplay_turns 承载 A4003。至少记录 session、每轮输入/输出、用户评分、selected_result、使用的 professional/prompt version。角色扮演中用户扮演孩子、AI 扮演家长；输出必须标记为 SIMULATION，不得进入孩子本人 Statement。
 
 ### 7.5 专业内容
 
@@ -779,57 +793,75 @@ artifact_dependencies 至少覆盖：
 
 数据库保证：
 
-> 一个家庭最多一个当前主要未结 Case。
+> 一个家庭最多一个当前主要未结 Case 执行主线。
 
-不能只靠前端。
+不能只靠前端或 LangGraph。
 
-### 8.2 Plan 不可原地覆盖
+### 8.2 Formulation / Plan / Contract 不可原地覆盖
 
-```text
+以下对象采用追加版本或 supersedes 关系：
+
+~~~text
+problem_formulations
 plan_versions
-```
+digital_use_contract_versions
+~~~
 
-只追加版本。
+正式新版本生效后：
 
-新方案确认后：
+- 新版本成为 current / ACTIVE；
+- 旧版本保留为 SUPERSEDED；
+- Audit 和 dependency_refs 继续可追溯。
 
-- 新版本 ACTIVE；
-- 旧版本 SUPERSEDED。
+Correction 不是 UPDATE 掉历史。
 
-### 8.3 幂等
+### 8.3 Scene Node 唯一性与重放
+
+同一：
+
+~~~text
+case_id
++ scene_package_version
++ node_code
+~~~
+
+只有一个当前 scene_node_state 聚合。
+
+节点提交通过 client_submission_id / command idempotency 防止重复产生两份业务输出；允许保存多次 attempt / event，但 current state 必须确定。
+
+### 8.4 A5001 / A5002 Review Scope
+
+数据库约束 review_scope 为受控枚举；Digital Use 完整流程至少要求：
+
+~~~text
+FAMILY_ALLIANCE_TARGET_LIST
+PHONE_USE_CONTRACT
+CASE_OVERALL
+~~~
+
+A5001 / A5002 不得因唯一键或“每 Case 只有一个 Review”设计互相覆盖。
+
+### 8.5 幂等
 
 关键命令使用：
 
-```text
+~~~text
 actor_id
 +
 command_type
 +
 idempotency_key
-```
+~~~
 
-重复相同请求：
+重复相同请求返回原结果；同 key 不同 payload 返回 409。
 
-> 返回原结果。
+### 8.6 乐观锁
 
-同一个 key 不同请求：
+Case / ProblemFormulation / Plan / Contract 等关键聚合使用 version。
 
-> 409 conflict。
-
-### 8.4 乐观锁
-
-Case / Plan 等关键聚合使用：
-
-> version。
-
-高影响修改要求客户端携带：
-
-> If-Match / expected version。
-
-旧版本请求不能覆盖新状态。
+高影响修改要求客户端携带 expected version / If-Match；旧版本请求不能覆盖新状态。
 
 ---
-
 ## 9. Authorization & Consent
 
 每次读写统一调用：
@@ -1936,6 +1968,8 @@ POST /api/v1/consents/:id/revoke
 POST /api/v1/cases
 GET  /api/v1/cases
 GET  /api/v1/cases/:id
+POST /api/v1/cases/:id/messages
+POST /api/v1/cases/:id/assessments
 
 GET  /api/v1/cases/:id/scene
 GET  /api/v1/cases/:id/scene/nodes/:nodeCode
