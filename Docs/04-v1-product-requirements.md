@@ -442,6 +442,59 @@ Problem Formulation 必须允许用户：
 
 ---
 
+## 2.7A Psychological / Behavioral Intervention Contract
+
+V1 中凡是会主动改变儿童青少年的行为、情绪调节、动机、家庭互动、睡眠/作息、执行习惯或家长回应方式的正式 Intervention，都不能只是一段建议文字或一次模型生成。
+
+它必须有一份可审核、可版本化、可执行、可复盘的：
+
+> **Psychological / Behavioral Intervention Contract（心理 / 行为干预合同）。**
+
+这个合同不是要求产品冒充医疗诊断或心理治疗，而是保证每一个进入正式 Plan 的专业干预都有清楚的理论/机制、适用边界、执行步骤和退出条件。
+
+每个正式 Intervention 至少必须定义：
+
+- `intervention_code` 与版本；
+- `target_problem_or_mechanism`：它针对什么问题、行为模式、情绪过程、动机机制或家庭互动机制；
+- `formulation_dependencies`：它依赖 Problem Formulation 中哪些已确认/仍不确定的信息；
+- `supporting_evidence_refs`：为什么当前家庭可以考虑它，依据来自哪些 Observation / Statement / Fact / Review；
+- `applicable_conditions`：什么情况下适用；
+- `exclusion_or_contraindication_conditions`：什么情况下不应继续使用，或必须优先重新 Assessment / Safety / Referral；
+- `age_and_development_scope`：适用年龄和发展阶段边界；
+- `rationale`：为什么预期这个 Intervention 可能帮助当前问题；
+- `intervention_steps`：家长、孩子及其他参与者分别需要做什么，不能只写抽象原则；
+- `participation_and_consent_requirements`：哪些步骤需要孩子本人真实参与、同意或反馈，哪些可以由家长先执行；
+- `baseline_and_observation`：开始前基线、执行中观察什么、怎样记录；
+- `expected_observable_change`：预期观察到什么变化，而不是只写“改善”；
+- `burden_and_barriers`：执行负担、常见阻力以及遇到阻力时怎么办；
+- `adverse_or_worsening_signals`：什么变化说明可能产生副作用、冲突升级或问题恶化；
+- `review_window_and_criteria`：什么时候复盘，用什么证据判断 CONTINUE / ADJUST / REASSESS；
+- `stop_reassess_safety_referral_conditions`：什么情况下停止、重新评估、进入 Safety 或 Referral；
+- `allowed_combinations_and_conflicts`：与其他 Intervention 是否可并行、互斥或有先后要求；
+- `professional_source`、`review_status`、`reviewed_by_role`、`reviewed_at`、`version`。
+
+正式 Plan 中引用的 Intervention 必须引用一个当前 `PUBLISHED / APPROVED` 的 Contract 版本。
+
+AI 可以：
+
+- 根据当前 Formulation 和允许的 Intervention 提出候选；
+- 解释 Intervention；
+- 帮助用户把步骤具体化；
+- 讨论执行障碍；
+- 根据真实反馈提出 Review 候选。
+
+AI 不能：
+
+- 临时发明一个没有发布 Contract 的心理/行为干预并直接进入正式 Plan；
+- 因为 RAG 搜到一段心理学文字就绕过适用条件、年龄边界、排除条件或 Safety；
+- 把一个家庭的历史经验自动升级为普遍专业规则；
+- 用“某某疗法”名称替代实际步骤、适用条件和复盘标准；
+- 在没有真实证据时宣称某种心理机制已经被证实。
+
+Digital Use Scene 中的内在动机、情绪调节、睡眠/作息、拖延/时间管理、家庭关系、家长一致性、奖励/激励、监督与家长自我调节等内容，只要进入正式 Intervention / Plan，都必须受本合同约束。
+
+---
+
 ## 2.8 Task 与 Execution
 
 Task 不是抽象建议。
@@ -4981,6 +5034,7 @@ X 很多育儿/家庭教育原则是模糊笼统的，家长即使理解了，�
 | V1-D40 | 原规格明确“手机合约并不适合所有孩子”；孩子不愿采用合约方式时，应保留转回家庭联盟方式的原业务分支，不得把签约设为唯一解决路径。 |
 | V1-D41 | 原规格明确合约内容可以在双方同意条件下修改；A4012 必须保留版本更新与双方重新确认语义。 |
 | V1-D42 | 原规格中模板、示范和 FAQ 内任何存在专业争议的具体条款，当前先按原文保留并可追溯；未经产品明确决定，不得由开发者或 AI 自行删改。 |
+| V1-D43 | Digital Use Scene 必须维护完整、机器可验证的 Node Manifest，逐节点冻结 04 中全部 A/010xx 节点的原编号、前置条件、输入/判断、输出、记录、允许下一节点、并行关系、时间/主动进入/帮助入口与 Policy 引用；不得只用 A301x—A311x 等范围描述替代完整清单。Manifest 必须能与本节 canonical flow 做自动完整性和差异校验。 |
 
 ---
 
@@ -5338,6 +5392,7 @@ V1 只建设真实交付必需的内部能力：
 | V1-C34 | V1 内部后台只覆盖专业内容、Safety、权利请求、质量、真实人工事项、开放和成本观察。 |
 | V1-C35 | 人工流程只能在真实具备人员、职责和承接条件时启用，不得虚构专家审核或即时人工服务。 |
 | V1-C36 | V1 家庭用户主端为现有微信小程序“小树英助手”，不为了架构完整额外建设独立家庭 Web 产品。 |
+| V1-C37 | 任何会主动改变行为、情绪调节、动机、家庭互动、睡眠/作息、执行习惯或家长回应方式的正式 Intervention，必须有已审核、版本化的 Psychological / Behavioral Intervention Contract，覆盖目标机制、Formulation/证据依赖、适用/排除条件、年龄范围、具体步骤、参与要求、基线与观察、预期变化、负担/阻力、不良信号、Review、停止/重评/Safety/Referral 条件、组合冲突、专业来源与审核版本；AI 与 RAG 均不得绕过该合同。 |
 
 ---
 
