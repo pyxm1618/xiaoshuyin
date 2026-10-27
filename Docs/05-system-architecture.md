@@ -67,6 +67,7 @@
 | 家庭端 | **原生微信小程序** | 平台规则决定 |
 | 内部运营端 | **React + Vite** | 🟢 免费开源 |
 | AI 工作流编排 | **LangGraph JS** | 🟢 免费开源 |
+| LangGraph 持久化 | **PostgreSQL Checkpointer（生产使用官方 PostgreSQL saver；不作为业务事实源）** | 基础设施内 |
 | 模型调用运行层 | **Vercel AI SDK Core** | 🟢 免费开源 |
 | 模型业务路由 | **自研轻量 Model Gateway** | 🟢 自研 |
 | 核心业务数据库 | **阿里云 RDS PostgreSQL** | 🔵 云资源付费 |
@@ -322,6 +323,12 @@ langgraph.*
 恢复旧 LangGraph thread 时：
 
 > 必须重新读取最新 Case、Consent、Safety 和 Policy。
+
+V1 生产持久化使用：
+
+> **LangGraph 官方 PostgreSQL Checkpointer。**
+
+Checkpoint 与业务表可以位于同一 PostgreSQL 实例，但必须逻辑隔离；Checkpoint 只保存可恢复的 AI workflow state。Case / Plan / Consent / Safety / Scene Node 等正式状态仍以 Domain Tables 为准。
 
 不能让旧 checkpoint 恢复已经撤销的权限或过期业务事实。
 
