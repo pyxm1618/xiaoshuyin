@@ -557,11 +557,11 @@ review_conditions
 adjust_conditions
 pause_conditions
 safety_conditions
-plan_format
+plan_format          ACTION_PLAN / FAMILY_AGREEMENT
 dependency_refs
 validation_result
 parent_confirmation
-status
+status               DRAFT / PENDING_CONFIRMATION / ACTIVE / SUPERSEDED / PAUSED
 ~~~
 
 Plan 必须能解释“为什么是这些 Intervention”，不能只有任务列表。
