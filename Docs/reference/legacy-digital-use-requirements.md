@@ -2,6 +2,8 @@
 
 > 来源：用户提供的原始 `沉迷手机_需求文档.docx`。
 >
+> 原始 DOCX 仓库路径：`Docs/reference/沉迷手机_需求文档.docx`。
+>
 > 原始 DOCX SHA-256：`b81d28907acab6f0b307638468c4285417b322b698026924b8d7c2d1250cc324`。
 >
 > 用途：作为 V1 Digital Use Scene 的历史原始事实源，供与 `Docs/04-v1-product-requirements.md` 随时逐项对照。
