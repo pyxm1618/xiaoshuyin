@@ -13,7 +13,7 @@
 >
 > **本文只实现 V1。V2—V5 的能力即使已在总体架构中预留，也不在本文提前开发。**
 >
-> **04 是 V1 唯一产品事实源。本文不得重新解释、压缩或替换 04 的 V1-C01—C36、V1-D00—D42、V1-X01—X14、U01—U20 或 Digital Use A1001—A5002。发生冲突时先修订本文，不能在代码里静默选择 06。**
+> **04 是 V1 唯一产品事实源。本文不得重新解释、压缩或替换 04 的 V1-C01—C37、V1-D00—D43、V1-X01—X14、U01—U20 或 Digital Use A1001—A5002。发生冲突时先修订本文，不能在代码里静默选择 06。**
 
 ---
 
@@ -549,6 +549,8 @@ scene_id
 intervention_code
 stream_code
 scene_package_version
+intervention_definition_id
+intervention_definition_version
 rationale
 eligibility_result
 status               PROPOSED / SELECTED / ACTIVE / PAUSED / COMPLETED / DECLINED / SUPERSEDED
@@ -748,17 +750,60 @@ knowledge_items
 policy_versions
 knowledge_embeddings
 professional_examples
+intervention_definitions
 ~~~
+
+`intervention_definitions` 是 04 §2.7A Psychological / Behavioral Intervention Contract 的机器可执行版本。至少表达：
+
+~~~text
+id
+scene_id
+intervention_code
+version
+target_problem_or_mechanism
+formulation_dependencies[]
+supporting_evidence_requirements[]
+applicable_conditions[]
+exclusion_or_contraindication_conditions[]
+age_and_development_scope
+rationale
+intervention_steps[]
+participation_and_consent_requirements[]
+baseline_and_observation
+expected_observable_change[]
+burden_and_barriers[]
+adverse_or_worsening_signals[]
+review_window_and_criteria
+stop_reassess_safety_referral_conditions[]
+allowed_combinations[]
+conflicting_interventions[]
+professional_source_refs[]
+review_status
+reviewed_by_role
+reviewed_at
+published_at?
+retired_at?
+~~~
+
+规则：
+
+- `intervention_instances` 必须绑定具体 `intervention_definition_id + version`，不能只保存一个自由文本 `intervention_code`；
+- 只有当前允许的 `PUBLISHED / APPROVED` 定义可以创建新的正式 InterventionInstance 或进入新 Plan；
+- 定义退役不改写历史 Plan，但如果退役原因影响当前安全/适用性，依赖传播必须使受影响的 ACTIVE Plan / Intervention 进入 `NEEDS_REVIEW`；
+- Digital Use 中内在动机、情绪调节、睡眠/作息、时间管理/拖延、家庭关系、家长一致性、激励/监督、家长自我调节等，只要进入正式 Plan，都必须有对应定义；
+- “CBT / MI / 行为激活 / 家庭干预”等名称本身不能代替具体机制、步骤、边界和复盘标准。
 
 scenario_packages 发布版本必须能锁定：
 
 - node registry；
 - routing rules；
 - assessment / formulation / goal / intervention / plan / review / maintenance / closure / safety policies；
+- Psychological / Behavioral Intervention Contract definitions 及其批准版本；
 - contract template schema；
 - contract examples；
 - FAQ/support content；
-- knowledge version set。
+- knowledge version set；
+- intervention definition version set。
 
 ### 7.6 长期 Memory
 
@@ -1075,6 +1120,56 @@ type SceneNodeSpec = {
 
 不得用范围循环凭空生成原文不存在的编号；以 04 的实际 node registry 为准。
 
+#### 12.2A Checked-in Full Node Manifest
+
+仅在文档里写“A3010—A3113 实际节点”不足以作为开发交付。V1 必须有一个完整、逐节点、机器可验证的 Manifest：
+
+~~~text
+packages/scenes/digital-use/node-manifest.ts
+~~~
+
+同时维护一个用于 CI / Review 的规范化快照：
+
+~~~text
+tests/fixtures/digital-use/04-node-manifest.snapshot.json
+~~~
+
+04 第二层 canonical flow 仍是业务事实源；snapshot 是其机器可验证投影，不成为第二套产品需求。更新 04 节点、分支、记录或并行语义时，必须在同一 PR 中显式更新 Manifest / snapshot，并让差异可审阅。
+
+Manifest **必须逐条列出实际节点**，不得使用 `A301x`、`A30xx`、区间循环或运行时猜测代替完整清单。每条至少包含：
+
+~~~ts
+type DigitalUseNodeManifestEntry = {
+  nodeCode: string
+  sourceNodeCode: string
+  phase: CasePhase
+  stream?: "FAMILY_ALLIANCE" | "PHONE_USE_CONTRACT"
+  prerequisites: NodePredicate[]
+  inputSchema?: SchemaRef
+  userDecisionSchema?: SchemaRef
+  interactionSpecRef?: string
+  outputSchema?: SchemaRef
+  recordContract: RecordContract
+  allowedNext: Array<{ nodeCode: string; reasonCode: string }>
+  canRunInParallelWith: string[]
+  entryMode: Array<"ROUTED" | "USER_INITIATED" | "SCHEDULED">
+  helpOrReentryRefs: string[]
+  policyRefs: string[]
+}
+~~~
+
+CI 至少执行：
+
+1. **completeness**：04 snapshot 中每个 A/010xx 节点恰好存在一次，Manifest 不缺、不多；
+2. **source-code fidelity**：`sourceNodeCode` 保留原编号，前导 0 不丢失，规范化映射可逆；
+3. **field fidelity**：前置条件、输入/判断、输出、记录、时间/主动进入/帮助语义均有结构化承载或明确 spec ref；
+4. **routing integrity**：每个 `allowedNext` 指向存在节点或显式 terminal route；所有 04 明确分支都有 reason code，不允许隐藏 default branch；
+5. **parallel fidelity**：04 明确可并行的关系必须在 Manifest 中存在，不能被实现层串行化；
+6. **reachability**：从合法入口可到达的节点与 04 一致，不出现无依据跳过、孤儿节点或死路；
+7. **snapshot diff gate**：Manifest / routing / node registry 的实质变化必须产生可审阅 snapshot diff，并触发 Digital Use 全量回归。
+
+生产运行时不解析 Markdown 来决定路由；运行时只使用已发布的 Scene Package / Manifest。Markdown → snapshot 的提取或人工校准只属于开发/验证工具链。
+
 ### 12.3 Routing：主流程与分支
 
 routing.ts 必须把 04 的“前置条件 → 用户输入/判断 → 下一节点”编码成确定性、可测试规则。
@@ -1181,6 +1276,56 @@ type PolicyResult = {
 ~~~
 
 RAG 不承担上述 Gate。
+
+### 12.8 Psychological / Behavioral Intervention Gate
+
+04 §2.7A 的干预合同在技术层由 `intervention_definitions + Domain Policy + InterventionInstance` 共同承载。
+
+正式提出/选择/激活 Intervention 时，必须按顺序校验：
+
+~~~text
+current Problem Formulation / evidence
+→ intervention definition exists
+→ review_status = APPROVED/PUBLISHED
+→ scene/package/version allowed
+→ age/development scope
+→ formulation dependencies satisfied or explicitly UNKNOWN-safe
+→ applicable conditions
+→ exclusion / contraindication conditions
+→ participation / consent requirements
+→ combination / conflict rules
+→ current Safety state
+→ create/propose InterventionInstance
+→ Plan activation gate
+~~~
+
+建议使用明确结果：
+
+~~~ts
+type InterventionEligibilityResult = {
+  allowed: boolean
+  interventionDefinitionId: string
+  interventionVersion: string
+  evidenceRefs: string[]
+  unmetFormulationDependencies: string[]
+  exclusionHits: string[]
+  participationRequirements: string[]
+  combinationConflicts: string[]
+  adverseSignalsToMonitor: string[]
+  reviewCriteriaRef: string
+  reasonCodes: string[]
+}
+~~~
+
+硬规则：
+
+- RAG 只提供专业上下文，不能创造或激活未发布的 Intervention；
+- LLM 只能提出候选，不得覆盖 eligibility result；
+- 缺少关键 Formulation 依赖时，应补 Assessment / 保持 UNKNOWN，而不是由模型补值；
+- 命中 exclusion / contraindication / Safety 条件时必须阻断普通 Plan activation；
+- 执行中出现定义内的 adverse/worsening signal，Review 必须能够转为 `ADJUST_PLAN / REASSESS / SAFETY_HOLD / REFERRAL`；
+- Intervention 定义实质变化必须新建版本并重新专业审核，不能静默修改已被历史 Plan 引用的版本；
+- Eval 必须验证“专业名称正确但条件/步骤错误”同样判失败，不能只检查回答听起来是否专业。
 
 ## 13. Professional RAG
 
@@ -2582,6 +2727,7 @@ Phoenix 记录：
 - 孩子拒签时仍可走家庭联盟；
 - A5001 与 A5002 分开；
 - UI 合并后 node routing 仍不丢语义。
+- Full Node Manifest 与 04 snapshot 节点集合、原编号、分支、记录和并行关系一致；缺节点、多节点、隐藏 default branch、无效 next target 均失败。
 
 ### 32.3 Provenance
 
@@ -2642,6 +2788,20 @@ Phoenix 记录：
 ### 32.9 04 验收案例
 
 04 的 Case A—J 全部进入固定回归集，不允许只用通用单元测试替代。
+
+### 32.9A Psychological / Behavioral Intervention Contract
+
+至少覆盖：
+
+- 未发布/未审核 Intervention 不能进入正式 Plan；
+- 年龄/发展阶段不匹配时必须阻断或改走其他已批准方案；
+- 缺关键 Formulation 依赖时保持 UNKNOWN / 补评估，模型不能补值；
+- 命中 exclusion / contraindication 时普通 activation 被阻断；
+- RAG 召回未发布内容不能绕过 Domain Policy；
+- 两个 Intervention 存在组合冲突时不能同时激活；
+- adverse/worsening signal 能触发 Review → ADJUST / REASSESS / SAFETY / REFERRAL；
+- Intervention 版本更新不会静默改写历史 Plan，必要时正确传播 NEEDS_REVIEW；
+- AI 使用某心理学流派/方法名称但实际步骤、条件、复盘标准与批准 Contract 不一致时判失败。
 
 ### 32.10 Eval 版本与放行判定
 
@@ -2954,6 +3114,7 @@ estimated_cost_limit
 ### Phase 2：Digital Use Scene 忠实实现
 
 - scene package / node-registry / routing；
+- checked-in Full Node Manifest + 04 canonical snapshot + completeness/routing CI；
 - A1001—A2010；
 - FAMILY_ALLIANCE stream：A3000—A3113 实际节点；
 - PHONE_USE_CONTRACT stream：A4001—A4012；
@@ -2967,6 +3128,7 @@ estimated_cost_limit
 
 ### Phase 3：专业知识与 AI
 
+- Psychological / Behavioral Intervention Contract + reviewed `intervention_definitions`；
 - pg_jieba；
 - pgvector；
 - Embedding；
@@ -3024,8 +3186,8 @@ estimated_cost_limit
 
 从本版开始，04 的 canonical requirement namespace 是唯一映射键：
 
-- V1-C01—V1-C36：Common Core；
-- V1-D00—V1-D42：Digital Use Scene；
+- V1-C01—V1-C37：Common Core；
+- V1-D00—V1-D43：Digital Use Scene；
 - V1-X01—V1-X14：真实交付与验证。
 
 旧 R01—R40 **废止为 canonical mapping key**，只保留在 Git 历史中，不再指导开发。
@@ -3070,6 +3232,7 @@ estimated_cost_limit
 | V1-C34 | §28.10/§40 | 后台和人工仅真实能力，无假专家/空队列 |
 | V1-C35 | §28.10/§40 | 后台和人工仅真实能力，无假专家/空队列 |
 | V1-C36 | §2/§4/§40 Platform | 现有微信小程序为家庭主端，不另建家庭 Web |
+| V1-C37 | §7.3/§7.5/§12.8/§32.9A | 正式 Intervention 必须绑定已审核版本；适用/排除/年龄/Formulation/不良信号/复盘/停止条件均可执行、可追溯，AI/RAG 不能绕过 |
 | V1-D00 | §12.2—12.5 | Node Registry / Routing 与 04 逐节点 snapshot 对比 |
 | V1-D01 | §12.2/§12.5 | A1001/01002/01003 选项、标签、流转测试 |
 | V1-D02 | §12.3/§12.5 | A2001/A2002/01005/01006 分流测试 |
@@ -3113,6 +3276,7 @@ estimated_cost_limit
 | V1-D40 | §12.3/§32.2 | 拒签合约仍可继续 FAMILY_ALLIANCE |
 | V1-D41 | §29.3 | 双方同意更新产生新 Contract Version |
 | V1-D42 | §12.6/§40 Professional | 原文保留；生产启用由审核 Policy/Content Version 决定 |
+| V1-D43 | §12.2A/§32.2/§40 Product | checked-in Full Node Manifest 与 04 canonical snapshot 完整一致；无缺失/多余/隐藏分支/无效 next target，并由 CI + 全量回归阻断漂移 |
 | V1-X01 | §12/§40 Professional | Digital Use Policy/Safety 有审核版本和证据 |
 | V1-X02 | §28/§40 Platform | 微信登录/邀请/提醒在真实平台验证 |
 | V1-X03 | §6/§38/§40 | 完整 Case 从 Intake 到 Maintenance/Closure E2E |
@@ -3143,8 +3307,9 @@ estimated_cost_limit
 ### Product / Flow Fidelity
 
 - 04 的 U01—U20 全部有真实入口、非理想状态和恢复路径；
-- V1-C01—C36、V1-D00—D42、V1-X01—X14 全部有测试证据；
+- V1-C01—C37、V1-D00—D43、V1-X01—X14 全部有测试证据；
 - A1001—A5002 node registry 与 04 snapshot 一致；
+- checked-in Full Node Manifest 与 04 canonical snapshot 完整一致，completeness / routing integrity / reachability CI 全通过；
 - 原分支和并行关系 E2E 通过；
 - PROBLEM_FORMULATION 不可跳过；
 - A3000—A3113 / A4001—A4012 两条主线可并行；
@@ -3155,6 +3320,7 @@ estimated_cost_limit
 ### Professional
 
 - digital-use package 已正式审核；
+- 所有可进入正式 Plan 的 Intervention 都绑定已审核、已发布的 Psychological / Behavioral Intervention Contract 版本；
 - Safety Policy 已审核；
 - 生产启用的专业规则/FAQ/示范/支持内容有批准版本；
 - source/reference 中未审核争议内容不会自动进入生产建议；
