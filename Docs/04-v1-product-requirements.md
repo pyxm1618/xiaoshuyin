@@ -11,7 +11,8 @@
 > - `03-product-vision-roadmap.md`
 >
 > 原始 Digital Use Scene 对照附件：
-> - `Docs/reference/legacy-digital-use-requirements.md`
+> - `Docs/reference/沉迷手机_需求文档.docx` — 用户提供的原始附件本体
+> - `Docs/reference/legacy-digital-use-requirements.md` — 便于 GitHub 逐行对照的 Markdown 镜像
 >
 > 相关技术文档（本轮不修改）：
 > - `05-system-architecture.md`
