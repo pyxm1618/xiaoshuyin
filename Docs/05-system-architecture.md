@@ -3,7 +3,7 @@
 > 文档性质：**覆盖 V1—V5 与暂定终局的总体技术架构**
 >
 > 版本：v1.1  
-> 更新日期：2026-10-24
+> 更新日期：2026-10-27
 >
 > 上位约束：
 > - [01-project-definition.md](01-project-definition.md)
@@ -67,6 +67,7 @@
 | 家庭端 | **原生微信小程序** | 平台规则决定 |
 | 内部运营端 | **React + Vite** | 🟢 免费开源 |
 | AI 工作流编排 | **LangGraph JS** | 🟢 免费开源 |
+| LangGraph 持久化 | **PostgreSQL Checkpointer（生产使用官方 PostgreSQL saver；不作为业务事实源）** | 基础设施内 |
 | 模型调用运行层 | **Vercel AI SDK Core** | 🟢 免费开源 |
 | 模型业务路由 | **自研轻量 Model Gateway** | 🟢 自研 |
 | 核心业务数据库 | **阿里云 RDS PostgreSQL** | 🔵 云资源付费 |
@@ -323,6 +324,12 @@ langgraph.*
 
 > 必须重新读取最新 Case、Consent、Safety 和 Policy。
 
+V1 生产持久化使用：
+
+> **LangGraph 官方 PostgreSQL Checkpointer。**
+
+Checkpoint 与业务表可以位于同一 PostgreSQL 实例，但必须逻辑隔离；Checkpoint 只保存可恢复的 AI workflow state。Case / Plan / Consent / Safety / Scene Node 等正式状态仍以 Domain Tables 为准。
+
 不能让旧 checkpoint 恢复已经撤销的权限或过期业务事实。
 
 ---
@@ -335,7 +342,7 @@ langgraph.*
 
 # TypeScript Domain Policy Layer
 
-每个正式场景拥有 Scene Specification，例如：
+每个正式场景拥有 Scene Specification。Scene 不是只有 assessment / goal / plan；**Problem Formulation 与 Intervention 是一等业务概念**。V1 Digital Use 的最低结构为：
 
 ```text
 scenes/
@@ -344,12 +351,29 @@ scenes/
     eligibility
     exclusions
     assessment
-    goal
+    formulation
+    goals
+    interventions/
+      family-alliance
+      target-list
+      communication
+      phone-use-contract
+      execution-support
     plan
+    follow-up
     review
+    maintenance
     closure
     safety
 ```
+
+其中：
+
+- Common Core 定义可复用的 Case / Formulation / Goal / Plan / Task / Execution / Follow-up / Review / Maintenance / Closure 能力；
+- Scene Specification 定义“这个具体问题如何判断、用什么干预、如何走完自己的专业流程”；
+- V1 Digital Use Scene 的 A1001—A5002 原流程由 04 定义，05 不重新改写其节点顺序和业务含义；
+- Intervention 不是 RAG 文本标签，也不是模型自由生成的策略名称，而是可版本化、可审核、可测试的 Scene 专业资产；
+- RAG 提供解释和知识依据，不能替代 Intervention / Domain Policy 的正式规则。
 
 Domain Policy 回答：
 
@@ -1295,11 +1319,12 @@ V1 推荐：
 
 ### V1
 
-建设长期地基：
+建设长期地基，并完整实现第一个正式 Scene：
 
-- Case；
-- Authorization；
+- Common Case / Problem Formulation / Goal / Plan / Task / Execution / Follow-up / Review / Maintenance / Closure；
+- Authorization / Consent；
 - Domain Policy；
+- **Digital Use Scene Specification 与一等 Intervention 资产**；
 - Family Memory；
 - Hybrid RAG；
 - LangGraph；
@@ -1311,6 +1336,8 @@ V1 推荐：
 - Phoenix；
 - Eval。
 
+V1 的“完成”不是通用平台搭好，而是 04 定义的 Digital Use A1001—A5002 能在上述底座上真实闭环。
+
 ### V2
 
 增加：
@@ -1319,12 +1346,14 @@ V1 推荐：
 
 主要新增：
 
-- Scene Specification；
-- Domain Policy；
+- 新 Scene 的 evidence / eligibility / assessment / formulation；
+- 新 Scene 的 Intervention 资产；
+- goal / plan / follow-up / review / maintenance / closure 专业规则；
 - 专业知识；
+- Domain Policy；
 - Eval cases。
 
-底层不重建。
+Common Core 与 V1 已验证的底层能力原则上复用，不因为增加新 Scene 重建平台。
 
 ### V3
 
