@@ -2,8 +2,8 @@
 
 > 文档性质：**V1 具体实现设计**
 >
-> 版本：v2.0 — 对齐 04 canonical V1  
-> 更新日期：2026-10-27
+> 版本：v2.1 — 对齐 04 canonical V1 与单一 Manifest 实现版  
+> 更新日期：2026-11-03
 >
 > 唯一产品需求依据：
 > - [04-v1-product-requirements.md](04-v1-product-requirements.md)
@@ -13,7 +13,7 @@
 >
 > **本文只实现 V1。V2—V5 的能力即使已在总体架构中预留，也不在本文提前开发。**
 >
-> **04 是 V1 唯一产品事实源。本文不得重新解释、压缩或替换 04 的 V1-C01—C37、V1-D00—D43、V1-X01—X14、U01—U20 或 Digital Use A1001—A5002。发生冲突时先修订本文，不能在代码里静默选择 06。**
+> **04 是 V1 唯一产品事实源。本文不得重新解释、压缩或替换 04 的 V1-C01—C37、V1-D00—D43、V1-X01—X14、U01—U20 或 Digital Use A1001—A5002。发生冲突时先修订本文，不能在代码里静默选择 06。04 已融合的 Digital Use 原流程、模板、示范和 FAQ 当前统一视为已批准 V1 基线；06 不再为这些内容额外维护“待审核 / 待确认 / 争议内容”状态。**
 
 ---
 
@@ -142,8 +142,8 @@ packages/
       assessment.ts
       formulation.ts
       goals.ts
-      node-registry.ts     A/010xx 节点与原始 source_node_code
-      routing.ts           原流程分支和并行关系
+      node-manifest.ts     A/010xx 节点的单一代码侧机器化投影
+      routing.ts           只消费 Manifest，承载原流程分支和并行关系
       interventions/
         family-alliance.ts
         target-list.ts
@@ -292,7 +292,7 @@ evidence_ref
 22. A5001 与 A5002 必须保留两个 review scope，不能在数据层合并成无法区分的泛化 Review。
 23. 手机合约版本不得原地覆盖；A4012 必须生成新版本并保留 supersedes 链。
 24. A4003 角色扮演输出是练习/参考 Artifact，不得被写成孩子本人意见。
-25. 原始专业内容即使存在争议，也不能由开发者或模型静默改写；生产是否启用由已审核的 Policy / Knowledge Version 决定。
+25. 04 已融合的原始专业内容视为当前已批准 V1 基线；开发者或模型不得静默改写，生产运行必须绑定与 04 当前版本对应的已发布 Policy / Knowledge Version。
 26. 任何模型供应商都不能成为不可替换的领域依赖。
 
 
@@ -1060,7 +1060,7 @@ packages/scenes/digital-use/
   assessment.ts
   formulation.ts
   goals.ts
-  node-registry.ts
+  node-manifest.ts
   routing.ts
   interventions/
     family-alliance.ts
@@ -1086,29 +1086,18 @@ packages/scenes/digital-use/
 - 能返回 missing evidence / blockers / allowed actions / reason codes；
 - 能追溯到审核版本。
 
-### 12.2 Node Registry：忠实保存 A1001—A5002
+### 12.2 Full Node Manifest：A1001—A5002 的单一代码侧事实源
 
-node-registry.ts 是 04 原始流程的技术索引，不是新的产品设计。
+`node-manifest.ts` 是 04 canonical flow 在代码侧的**唯一机器化投影**，不是新的产品设计，也不再并行维护另一份 `node-registry.ts`。
 
-每个节点至少定义：
+运行时：
 
-~~~ts
-type SceneNodeSpec = {
-  nodeCode: string
-  sourceNodeCode: string
-  phase: CasePhase
-  stream?: "FAMILY_ALLIANCE" | "PHONE_USE_CONTRACT"
-  prerequisites: NodePredicate[]
-  inputSchema?: SchemaRef
-  outputSchema?: SchemaRef
-  allowedNext: string[]
-  canRunInParallelWith?: string[]
-  recordContract: RecordContract
-  policyRefs: string[]
-}
-~~~
+- `routing.ts` 从 Manifest 读取节点、前置条件、允许下一节点和并行关系；
+- Scene API 从 Manifest 读取当前节点 schema、可达性和 actor 约束；
+- CI / Eval 从 Manifest 读取完整节点集合；
+- 不允许在 routing、API 或其他文件里再手写第二套节点定义。
 
-必须覆盖 04 中实际存在的：
+Manifest 必须覆盖 04 中实际存在的：
 
 - A1001、01002、01003；
 - A2001、A1000、A2002、01005、01006、01004、01000；
@@ -1118,25 +1107,9 @@ type SceneNodeSpec = {
 - A4001—A4012；
 - A5001、A5002。
 
-不得用范围循环凭空生成原文不存在的编号；以 04 的实际 node registry 为准。
+不得用范围循环凭空生成原文不存在的编号；以 04 的实际节点为准。
 
-#### 12.2A Checked-in Full Node Manifest
-
-仅在文档里写“A3010—A3113 实际节点”不足以作为开发交付。V1 必须有一个完整、逐节点、机器可验证的 Manifest：
-
-~~~text
-packages/scenes/digital-use/node-manifest.ts
-~~~
-
-同时维护一个用于 CI / Review 的规范化快照：
-
-~~~text
-tests/fixtures/digital-use/04-node-manifest.snapshot.json
-~~~
-
-04 第二层 canonical flow 仍是业务事实源；snapshot 是其机器可验证投影，不成为第二套产品需求。更新 04 节点、分支、记录或并行语义时，必须在同一 PR 中显式更新 Manifest / snapshot，并让差异可审阅。
-
-Manifest **必须逐条列出实际节点**，不得使用 `A301x`、`A30xx`、区间循环或运行时猜测代替完整清单。每条至少包含：
+每条至少包含：
 
 ~~~ts
 type DigitalUseNodeManifestEntry = {
@@ -1158,6 +1131,26 @@ type DigitalUseNodeManifestEntry = {
 }
 ~~~
 
+### 12.2A 04 Snapshot 与 CI 差异门禁
+
+用于 CI / Review 的规范化快照保留为：
+
+~~~text
+tests/fixtures/digital-use/04-node-manifest.snapshot.json
+~~~
+
+它的角色只有一个：
+
+> **把 04 当前 canonical flow 固定成可比较的测试夹具，用于证明代码侧 Manifest 没有漂移。**
+
+边界必须明确：
+
+- 04 仍是产品事实源；
+- `node-manifest.ts` 是唯一代码侧节点事实源；
+- snapshot 只用于测试和 Review，不参与生产运行；
+- 不得同时维护 `node-registry.ts` 与 `node-manifest.ts` 两份运行时定义；
+- 只有 04 实质变更时，snapshot 才随同变更；普通实现重构不得改 snapshot 来“让测试通过”。
+
 CI 至少执行：
 
 1. **completeness**：04 snapshot 中每个 A/010xx 节点恰好存在一次，Manifest 不缺、不多；
@@ -1166,9 +1159,9 @@ CI 至少执行：
 4. **routing integrity**：每个 `allowedNext` 指向存在节点或显式 terminal route；所有 04 明确分支都有 reason code，不允许隐藏 default branch；
 5. **parallel fidelity**：04 明确可并行的关系必须在 Manifest 中存在，不能被实现层串行化；
 6. **reachability**：从合法入口可到达的节点与 04 一致，不出现无依据跳过、孤儿节点或死路；
-7. **snapshot diff gate**：Manifest / routing / node registry 的实质变化必须产生可审阅 snapshot diff，并触发 Digital Use 全量回归。
+7. **snapshot diff gate**：Manifest / routing 的实质变化必须产生可审阅差异并触发 Digital Use 全量回归。
 
-生产运行时不解析 Markdown 来决定路由；运行时只使用已发布的 Scene Package / Manifest。Markdown → snapshot 的提取或人工校准只属于开发/验证工具链。
+生产运行时不解析 Markdown 来决定路由；运行时只使用已发布的 Scene Package / Manifest。
 
 ### 12.3 Routing：主流程与分支
 
@@ -1254,12 +1247,12 @@ contract schema 至少固定：
 
 4 个示范和 FAQ 作为 versioned professional content 加载；它们不是家庭事实，也不允许模型把示范中的具体惩罚/时长自动复制给用户。
 
-未经正式专业审核的争议内容：
+04 中已融合的模板、4 个示范和 FAQ 当前统一视为已批准 V1 基线：
 
-- 可以保留在 source/reference；
-- 可以用于开发 fidelity 测试；
-- 生产建议是否可用必须由发布的 Policy / Knowledge Version 决定；
-- 开发者不能自行删掉节点或改变流程来“修正”专业内容。
+- source/reference 仅用于原始出处和版本追溯，不构成第二套需求；
+- 生产运行绑定与 04 当前版本对应的 Published Policy / Knowledge Version；
+- 开发者和模型不得自行删改节点、条款、示范或 FAQ 来重新判断其专业有效性；
+- 后续如产品主动修订专业内容，必须新建版本并同步 04、对应 Policy / Knowledge 与回归测试。
 
 ### 12.7 PolicyResult
 
@@ -2405,7 +2398,7 @@ POST /api/v1/cases/:id/close
 POST /api/v1/cases/:id/recurrences
 ~~~
 
-Scene Node response 必须由 node-registry 对 nodeCode、schema、当前可达性和 actor 权限做服务端校验。
+Scene Node response 必须由 node-manifest 对 nodeCode、schema、当前可达性和 actor 权限做服务端校验。
 
 ### 28.4 Plan / Execution / Review
 
@@ -2761,7 +2754,7 @@ Phoenix 记录：
 - 错误年龄；
 - retired / suspended content；
 - rerank；
-- 未审核争议内容不能因存在于 source/reference 就自动成为生产建议；
+- source/reference 不能覆盖 04 当前已批准基线；生产建议只能使用与 04 当前版本一致的 Published Policy / Knowledge；
 - 4 个合同示范只作示范，不被模型机械复制。
 
 ### 32.7 Memory
@@ -2793,7 +2786,7 @@ Phoenix 记录：
 
 至少覆盖：
 
-- 未发布/未审核 Intervention 不能进入正式 Plan；
+- 未发布或不属于 04 当前已批准版本的 Intervention 不能进入正式 Plan；
 - 年龄/发展阶段不匹配时必须阻断或改走其他已批准方案；
 - 缺关键 Formulation 依赖时保持 UNKNOWN / 补评估，模型不能补值；
 - 命中 exclusion / contraindication 时普通 activation 被阻断；
@@ -2837,7 +2830,7 @@ evidence_ref
 
 确定性权限、状态、Scene routing 和安全用例必须全部通过。
 
-模型、Prompt、RAG、Policy、Package、Node Registry、Routing 或 Release Contract 有实质变化后，对应批准版本失效，必须回归。
+模型、Prompt、RAG、Policy、Package、Node Manifest、Routing 或 Release Contract 有实质变化后，对应批准版本失效，必须回归。
 
 ## 33. 模型评测指标
 
@@ -3107,14 +3100,15 @@ estimated_cost_limit
 - Statement / Observation / Fact / Hypothesis；
 - Problem Formulation；
 - Consent / Authorization；
+- **Safety State / SAFETY_HOLD 不变量 / 确定性 precheck 接口 / Domain Command guard；**
 - Domain Commands；
 - Audit / Outbox；
 - 幂等、版本和并发。
 
 ### Phase 2：Digital Use Scene 忠实实现
 
-- scene package / node-registry / routing；
-- checked-in Full Node Manifest + 04 canonical snapshot + completeness/routing CI；
+- scene package / single `node-manifest.ts` / routing；
+- 04 canonical snapshot + Manifest completeness/routing CI；
 - A1001—A2010；
 - FAMILY_ALLIANCE stream：A3000—A3113 实际节点；
 - PHONE_USE_CONTRACT stream：A4001—A4012；
@@ -3155,12 +3149,12 @@ estimated_cost_limit
 - pg-boss；
 - Notification Adapter。
 
-### Phase 5：长期、安全与权利
+### Phase 5：长期、安全运营与权利
 
 - Family Memory；
 - memory_source_links；
 - Purpose-bound context；
-- Safety；
+- Safety 专业内容、支持资源与运营处理流程；
 - Referral；
 - Phoenix；
 - correction / export / deletion / restore；
@@ -3233,7 +3227,7 @@ estimated_cost_limit
 | V1-C35 | §28.10/§40 | 后台和人工仅真实能力，无假专家/空队列 |
 | V1-C36 | §2/§4/§40 Platform | 现有微信小程序为家庭主端，不另建家庭 Web |
 | V1-C37 | §7.3/§7.5/§12.8/§32.9A | 正式 Intervention 必须绑定已审核版本；适用/排除/年龄/Formulation/不良信号/复盘/停止条件均可执行、可追溯，AI/RAG 不能绕过 |
-| V1-D00 | §12.2—12.5 | Node Registry / Routing 与 04 逐节点 snapshot 对比 |
+| V1-D00 | §12.2—12.5 | Node Manifest / Routing 与 04 逐节点 snapshot 对比 |
 | V1-D01 | §12.2/§12.5 | A1001/01002/01003 选项、标签、流转测试 |
 | V1-D02 | §12.3/§12.5 | A2001/A2002/01005/01006 分流测试 |
 | V1-D03 | §12.5/§28.3 | 01004/01000 Consent、测评、反馈、返回 |
@@ -3265,9 +3259,9 @@ estimated_cost_limit
 | V1-D29 | §7.3 Review/§12.5 | A5001/A5002 独立 scope，不被 CASE_OVERALL 吞并 |
 | V1-D30 | §12.2—12.5/§24 | 时间线/主动进入/推送/帮助/Artifact；并行关系 |
 | V1-D31 | §12.2—12.5/§24 | 时间线/主动进入/推送/帮助/Artifact；并行关系 |
-| V1-D32 | §5/§12 | 争议内容不静默改；UI 可合并但节点语义不丢；04 优先 |
-| V1-D33 | §5/§12 | 争议内容不静默改；UI 可合并但节点语义不丢；04 优先 |
-| V1-D34 | §5/§12 | 争议内容不静默改；UI 可合并但节点语义不丢；04 优先 |
+| V1-D32 | §5/§12 | 04 当前已批准内容不静默改；UI 可合并但节点语义不丢；04 优先 |
+| V1-D33 | §5/§12 | 04 当前已批准内容不静默改；UI 可合并但节点语义不丢；04 优先 |
+| V1-D34 | §5/§12 | 04 当前已批准内容不静默改；UI 可合并但节点语义不丢；04 优先 |
 | V1-D35 | §12.6 | 合约原附件/镜像作为正式 sub-spec 版本来源 |
 | V1-D36 | §7.4/§12.6 | 八类模板字段与双方真实确认 |
 | V1-D37 | §7.4/§12.6 | 八类模板字段与双方真实确认 |
@@ -3308,7 +3302,7 @@ estimated_cost_limit
 
 - 04 的 U01—U20 全部有真实入口、非理想状态和恢复路径；
 - V1-C01—C37、V1-D00—D43、V1-X01—X14 全部有测试证据；
-- A1001—A5002 node registry 与 04 snapshot 一致；
+- A1001—A5002 node manifest 与 04 snapshot 一致；
 - checked-in Full Node Manifest 与 04 canonical snapshot 完整一致，completeness / routing integrity / reachability CI 全通过；
 - 原分支和并行关系 E2E 通过；
 - PROBLEM_FORMULATION 不可跳过；
@@ -3323,7 +3317,7 @@ estimated_cost_limit
 - 所有可进入正式 Plan 的 Intervention 都绑定已审核、已发布的 Psychological / Behavioral Intervention Contract 版本；
 - Safety Policy 已审核；
 - 生产启用的专业规则/FAQ/示范/支持内容有批准版本；
-- source/reference 中未审核争议内容不会自动进入生产建议；
+- source/reference 只作追溯，不得覆盖 04 当前已批准版本；
 - 支持资源已核验。
 
 ### Models
@@ -3440,7 +3434,7 @@ pg-boss
 
 > **PostgreSQL 决定系统事实。**
 
-> **Scene Node Registry / Routing 决定 A1001—A5002 的确定性流程。**
+> **Scene Node Manifest / Routing 决定 A1001—A5002 的确定性流程。**
 
 > **Domain Policy 决定专业硬边界和 Intervention 适用性。**
 
