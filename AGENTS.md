@@ -93,3 +93,7 @@ If implementation reveals that an approved requirement or architecture decision 
 - change the authoritative document explicitly first;
 - update affected spec/plan/tasks/tests afterward;
 - never back-propagate an implementation convenience into the requirements silently.
+
+`Docs/**` is enforced, not merely requested. Any change under `Docs/**` fails the `Spec Governance` check by default. An intended document change requires the `approved-docs-change` pull request label, applied by a human after reviewing the document diff. Agents MUST NOT add that label themselves, and the label does not excuse the change from review or from the validator.
+
+Feature work never edits `Docs/**` as a side effect. If a slice appears to need a requirement change, report the conflict and stop.
