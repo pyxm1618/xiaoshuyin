@@ -7,6 +7,8 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerMeRoutes } from './routes/me.js';
 import { registerFamilyRoutes } from './routes/families.js';
 import { registerMemberRoutes } from './routes/members.js';
+import { registerComplianceRoutes } from './routes/compliance.js';
+import { registerConsentRoutes } from './routes/consents.js';
 import { FakeWechatProvider } from './auth/wechat-provider.js';
 
 export async function buildApp() {
@@ -44,6 +46,8 @@ export async function buildApp() {
   registerMeRoutes(app, pool);
   registerFamilyRoutes(app, pool);
   registerMemberRoutes(app, pool);
+  registerComplianceRoutes(app, pool);
+  registerConsentRoutes(app, pool);
 
   return app;
 }
