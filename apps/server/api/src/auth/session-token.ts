@@ -39,8 +39,8 @@ export function verifyToken(
     // Check expiration
     if (Date.now() / 1000 > payload.exp) return null;
 
-    // Check epoch (logout invalidates)
-    if (payload.epoch !== currentEpoch) return null;
+    // Check epoch (logout invalidates); -1 means skip epoch check
+    if (currentEpoch !== -1 && payload.epoch !== currentEpoch) return null;
 
     return payload;
   } catch {

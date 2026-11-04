@@ -71,8 +71,8 @@ export const WechatLoginResponse = z.object({
 
 export const CreateFamilyRequest = z.object({
   displayName: z.string().min(1).max(60).optional(),
-  ageBand: z.literal('ADULT'),
-  ageBandSource: z.literal('SELF_STATEMENT'),
+  ageBand: z.enum(['ADULT', 'MINOR_14_17', 'UNDER_14', 'UNKNOWN']),
+  ageBandSource: z.string(),
   profileValues: z.array(ProvenanceValueInput).optional(),
   idempotencyKey: z.string().min(8).max(128),
 });
