@@ -148,6 +148,8 @@
 - 绑定是**原子对**：只允许 `(bound_person_id, bound_at) = (NULL,NULL) → (personId, serverTimestamp)` 一次。已绑定后两者都不可再改（含只改 `bound_at`、清空任一字段）；`CHECK` 保证不同时为空/非空，`BEFORE UPDATE` 触发器保证不可篡改。
 - `person_compliance_profiles` 的 `guardian_person_id` 取自 consent 的 `guardian_person_id`，不接受请求体另行指定（防止“同意人 A、guardian 写 B”）。
 - `guardian_consent_version` 取自 consent 的 `version`；`guardian_consent_record_id` 取其 `id`。
+- **provider 与来源必须由服务端对齐**：`ageBandSource` 只允许 `GUARDIAN_RELAY` / `GUARDIAN_OBSERVATION`（否则 422 `AGE_BAND_SOURCE_NOT_ALLOWED`）；写入 `person_compliance_profiles.verified_source` 的就是该值，`person_profile_values.provided_by_person_id`（若有）固定为 `consent.guardian_person_id`。客户端声明为 `SELF_STATEMENT` 或 `OTHER_MEMBER_RELAY` 一律拒绝，不得改写。
+- 因此 `verified_source` 与“这次 guardian 声明”一一对应，不需要新增字段记录声明类型。
 
 **为什么绑定放在建档命令里而不是同意命令里**：同意成立时孩子还不存在（consent-first）。若在同意时预生成一个 Person id 并绑定，就等于在建档前创建了 Person 身份锚点，逼近“先建档”的边界。绑定与建档同事务是更窄的耦合。
 
@@ -254,3 +256,5 @@ assertMinorProcessingAllowed(
 | A-19 | GRANTED→REVOKED→GRANTED 三行在真实约束下共存：GRANTED 缺 request → CHECK violation；REVOKED 带 request → CHECK violation；同一 request 第二条 GRANTED → unique violation | database |
 | A-20 | 绑定对不可篡改：`(NULL,NULL)→(P,t)` 成功；改 person 失败；**只改 `bound_at` 失败**；清空任一字段失败；`(NULL,NULL)→(P,NULL)` 失败 | database |
 | A-21 | 撤回端点只有 `POST /api/v1/consents/{id}/revoke`；`/compliance/guardian-consents/*` 不提供 revoke | contract |
+| A-22 | UNDER_14 consent-first 建档只接受 `GUARDIAN_RELAY` / `GUARDIAN_OBSERVATION`；`SELF_STATEMENT` / `OTHER_MEMBER_RELAY` → 422 `AGE_BAND_SOURCE_NOT_ALLOWED` 且无写入；落库 `verified_source` 等于该值、provider 等于 consent.guardian_person_id | integration + database |
+| A-23 | `POST /families` 的 `ageBandSource` 非 `SELF_STATEMENT` → 422，且不产生 Family / membership / profile | integration |

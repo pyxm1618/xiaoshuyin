@@ -262,12 +262,13 @@ age_band 只存 `person_compliance_profiles.age_band`，来源存同行 `verifie
 
 **Decision**
 
-统一 403 + 零字段泄漏；映射集中在 `toHttpError(reason)` 一处。
+针对**已指定的目标对象**统一 403 + 零字段泄漏；映射集中在 `toHttpError(reason)` 一处。“完全没有当前家庭”是空态，单独用 404（见下）。
 
 **Rationale**
 
 - spec 明确 A-2 未决：“正式文档只要求失败，未规定 NOT_FOUND 与 DENIED 是否对外一致”。
 - 选择 403 而不是 404：本 Slice 的拒绝原因需要可诊断（`NOT_FAMILY_MANAGER` 与 `NOT_FAMILY_MEMBER` 对客户端恢复路径不同），同时两者都**不携带目标对象字段**，因此不存在数据泄漏。
+- 但“已认证且尚无任何 Family”不是拒绝，而是正常初始态：它没有可比对的目标对象，也不会构成存在性预言机，因此用 404 `CURRENT_FAMILY_NOT_FOUND`；若也用 403，客户端无法区分“还没建家庭”和“无权访问某个家庭”。
 - 把映射收敛到一个函数，使 Owner 后续改判为 404 掩盖时是单点改动，不会污染业务代码。
 
 **Alternatives considered**
@@ -312,6 +313,26 @@ age_band 只存 `person_compliance_profiles.age_band`，来源存同行 `verifie
 
 1. 真实调用微信接口 → 需要 appid/secret 与真实用户 code，本 Slice 无法在 CI 复现，且会把 secret 引入仓库风险，否决。
 2. 不做登录端 → FR-002 无法满足，否决。
+
+---
+
+## R-15 来源可接受性按路径约束，而不是按人约束
+
+**Decision**
+
+两条创建路径对 `ageBandSource` 有额外约束：`POST /families` 只接受 `SELF_STATEMENT`（actor 对自身年龄的声明）；`POST /families/:id/members` 且 `ageBand=UNDER_14` 只接受 `GUARDIAN_RELAY` / `GUARDIAN_OBSERVATION`，provider 由服务端固定为 consent.guardian_person_id。
+
+**Rationale**
+
+- 这两条路径的信息来源是**结构上确定的**：前者是本人声明，后者是监护人在 consent-first 流程中的声明（此刻孩子尚不存在，不可能由本人或其它成员提供）。
+- 若允许客户端在 UNDER_14 路径上选 `SELF_STATEMENT`，就会写出一条“孩子陈述了自己年龄”的假证据，直接违反 §2.2 与 §5 不变量 4。
+- 约束只作用在**创建路径**，不外推成“某类人不能有某来源”：无 Account 的 Person 依然可以有 `SELF_STATEMENT`（FR-004），有 Account 也不自动等于本人陈述。这样既守住来源真实性，又不把 provenance 变成身份推断。
+
+**Alternatives considered**
+
+1. 只按 4 类白名单校验、不区分路径 → 允许写出不存在的提供者，否决。
+2. 规定“UNDER_14 一律不得 SELF_STATEMENT” → 过度绝对：它把路径约束说成了身份约束，且无法覆盖未来孩子自己登录陈述的场景，否决。
+3. 在 consent 表上新增 `declared_age_band_source` 列 → 与 `verified_source` 重复，且不解决“客户端能否改写”的问题，否决。
 
 ---
 

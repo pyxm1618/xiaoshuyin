@@ -75,6 +75,11 @@ curl -sX POST localhost:8787/api/v1/auth/wechat \
 
 TOKEN=$(jq -r .sessionToken /tmp/login.json)
 
+# ①-2 尚无家庭时：当前家庭是“空态”，不是“无权”
+curl -s -o /tmp/current.json -w '%{http_code}\n' \
+  localhost:8787/api/v1/families/current -H "authorization: Bearer $TOKEN"
+# 期望 404，code=CURRENT_FAMILY_NOT_FOUND，响应不含任何 family 字段
+
 # ② 建家庭（复用登录时已建立的 Person；不新建 Person）
 curl -sX POST localhost:8787/api/v1/families \
   -H "authorization: Bearer $TOKEN" \
@@ -96,7 +101,8 @@ curl -s localhost:8787/api/v1/me -H "authorization: Bearer $TOKEN" | jq
 **期望**：
 
 - ① `person` **非空**（登录即建立 Account 与对应 Person），但其 `profile` 尚未写入（年龄未声明）。
-- ② 201，`isManager: true`；Person 数量不变（复用登录时的 Person），ADULT profile 已写入。
+- ①-2 **404 `CURRENT_FAMILY_NOT_FOUND`**：这是“已登录但还没有家庭”的正常初始态；一旦存在目标家庭但 actor 不是其成员，才是 **403 `NOT_FAMILY_MEMBER`**。两者都不返回任何 family 字段。
+- ② 201，`isManager: true`；Person 数量不变（复用登录时的 Person），ADULT profile 已写入。创建者的 `ageBandSource` 必须是 `SELF_STATEMENT`（对自身年龄的声明）；传其它值 → 422 `AGE_BAND_SOURCE_NOT_ALLOWED` 且无写入。
 - ③ account 有值，person 非空，`profile.ageBand = ADULT`，`values` 含一条 `DISPLAY_NAME`；响应中**不出现** `wechat_openid`。
 - 重复 ② 同一 `Idempotency-Key` → 返回同一家庭，`memberCount` 不增加；同 key 改 payload → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
 
@@ -175,6 +181,7 @@ curl -sX POST localhost:8787/api/v1/consents/$(jq -r .id /tmp/consent.json)/revo
 - ② 403 `GUARDIAN_CONSENT_REQUIRED`，且之后查库：`persons` 与 `person_compliance_profiles` 中不存在该未成年人。
 - ③ 201，`decision: GRANTED`，`version: 1`，`boundPersonId: null`。
 - ④ 201，`profile.ageBand = UNDER_14`，`guardianConsentVersion = 1`，`guardianPersonId` = 家长本人。
+  该路径的 `ageBandSource` 只能是 `GUARDIAN_RELAY` / `GUARDIAN_OBSERVATION`，落库 `verified_source` 即该值；传 `SELF_STATEMENT` 或 `OTHER_MEMBER_RELAY` → 422 `AGE_BAND_SOURCE_NOT_ALLOWED`，且不创建 Person / profile。
   服务端内部顺序必须是：校验/锁定 consent → 预生成 personId → 插 membership → 插 Person → 绑定 `bound_person_id` → 插 profile；把绑定提到 Person 之前会因即时外键失败。
 - ⑤ 200，`decision: REVOKED`，`version: 2`，`supersedesId` = ③ 的 GRANTED 记录，`onboardingRequestId` 为 **null**（撤回不是新的 onboarding）；此后 `assertMinorProcessingAllowed(childPersonId)` 返回 BLOCK。
   库里此刻应有三行可追溯：`GRANTED v1(request A)` → `REVOKED v2(request NULL)`；重新同意会产生新的 request B 与 `GRANTED v3`，不会复用 request A。

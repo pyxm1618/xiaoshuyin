@@ -191,6 +191,8 @@
 
 **为什么创建者必须是 ADULT**：§1.5 与 §9 把管理主体定义为“创建 Family 的登录 adult”。因此 `POST /families` 要求 `ageBand = ADULT`（连同 `ageBandSource` 一起显式提交，不由服务端推断）；`MINOR_14_17` / `UNDER_14` / `UNKNOWN` / 缺失一律 403 `FAMILY_MANAGER_MUST_BE_ADULT`。UNKNOWN 不得按成人放行（FR-009）。
 
+**创建者 age_band 的来源固定为 `SELF_STATEMENT`**：这是登录 adult 对**自身**年龄的声明，提供者就是 actor 自己。请求若给出其它来源（`GUARDIAN_*` / `OTHER_MEMBER_RELAY`）→ 422 `AGE_BAND_SOURCE_NOT_ALLOWED`，不落任何写入。`persons` 侧不接受客户端传入的 provider，服务端固定为 `actor.personId`。
+
 **该判定属于命令体，不属于 `authorize()`**：登录后 actor 只有 Person、**没有 compliance profile**，profile 是在 `POST /families` 事务内、membership 之后才写入的。若把 `profile.age_band = ADULT` 写进授权前置，所有首次建家庭都会被拒，并诱使实现提前插入一条无 membership 的 profile（违反 `person_compliance_profiles` 的 `WITH CHECK`）。因此 `FAMILY_CREATE` 的授权要求只有“已认证 actor + 已有 Person”，年龄校验在命令体内完成（详见 `contracts/authorization-and-rls.md` §2.3.1）。
 
 **Person 生命周期：登录建立 Person，建家庭只补齐 adult 合规信息**（spec US1 原文：“微信登录时系统建立 Account 与对应 Person”）：
@@ -325,7 +327,9 @@ consent_records
 
 建档事务（POST /families/:id/members）：
 1. 锁定并验证 consent（FOR UPDATE）：GRANTED / 未绑定 / guardian=actor /
-   account / family / notice / expiry 全部有效
+   account / family / notice / expiry 全部有效；
+   并校验 `ageBandSource ∈ {GUARDIAN_RELAY, GUARDIAN_OBSERVATION}`，否则 422
+   `AGE_BAND_SOURCE_NOT_ALLOWED`（provider 由服务端固定为 consent.guardian_person_id）
 2. 服务端预生成 personId = uuidv7()
 3. INSERT family_members（利用 DEFERRABLE 的 person_id，Person 尚未存在）
 4. INSERT persons（account_id = NULL）
@@ -359,6 +363,9 @@ CHECK (age_band <> 'UNDER_14'
 CHECK (minor_mode = (age_band IN ('MINOR_14_17','UNDER_14')))
 CHECK (guardian_person_id IS NULL OR guardian_person_id <> person_id)
 CHECK (age_band = 'UNDER_14' OR guardian_consent_record_id IS NULL)
+-- UNDER_14 的首个 age_band 只能来自 guardian 声明（CHK023 的结构兜底）
+CHECK (age_band <> 'UNDER_14'
+       OR verified_source IN ('GUARDIAN_RELAY','GUARDIAN_OBSERVATION'))
 ```
 
 #### D-3.6 验证路径（gate）
@@ -432,6 +439,18 @@ person_profile_values
 - age_band 的唯一载体是 `person_compliance_profiles`，来源载体是同行的 `verified_source`（同样使用 §2.2 枚举）。
 - `person_profile_values.attribute` 的 enum **不含** `AGE_BAND`，从结构上排除第二载体（测试断言）。
 - 结果仍满足 FR-003：称呼与年龄段各有独立来源、互不覆盖；`persons` 上没有任何来源列。
+
+**来源可接受性按“路径”约束，而不是按“人”约束**（CHK023 收口）：
+
+| 路径 | age_band | 允许的 `ageBandSource` | provider 由谁决定 |
+|---|---|---|---|
+| `POST /families`（actor 建自己的家庭） | 必须 `ADULT` | 仅 `SELF_STATEMENT` | 服务端固定 = actor.personId |
+| `POST /families/:id/members`，`ageBand = UNDER_14` | `UNDER_14` | 仅 `GUARDIAN_RELAY` 或 `GUARDIAN_OBSERVATION` | 服务端固定 = 该 consent 的 `guardian_person_id`（必须等于 actor） |
+| `POST /families/:id/members`，其它 band | `ADULT` / `MINOR_14_17` / `UNKNOWN` | 4 类白名单均可用，按真实提供方式选择 | 客户端可给，服务端校验其为本家庭成员 |
+
+为什么 UNDER_14 的首个 band 只允许 guardian-origin：该 Person 尚未存在、流程由 adult / guardian 发起、`declared_age_band` 属于取得同意所严格必要的**成人/监护人声明**。因此正式 child profile 的初始 `age_band` 来源必须与这次 guardian 声明对应，客户端不得改写成 `SELF_STATEMENT`（孩子不在场）或 `OTHER_MEMBER_RELAY`（同意主体不是他）。
+
+**该约束不推广成“人是某类就不能有某来源”**：除上述两条创建路径外，provenance 仍按每条信息真实的提供方式判定；无 Account 的 Person 仍可有 `SELF_STATEMENT`（FR-004 不变）。
 
 **本 Slice 只有一个 attribute，且不为此新增字段**：U03 的最小人物资料只包含「称呼」。per-value provenance 由两组**真实事实**验证，而不是靠造一个只为测试存在的资料维度：
 
@@ -595,7 +614,7 @@ withRlsTransaction({ familyId, accountId, personId, purpose }, fn)
 - `POST /api/v1/families/:id/members` —— 建成员（U03 需要，§28.1 未枚举路由）。
 - `POST /api/v1/compliance/guardian-consents/requests` —— 最小 onboarding 请求。
 
-`/families/current`、`/consents`、`/compliance/guardian-consents/requests` 的路径不含 `family_id`，因此单事务内先以 identity 上下文解析 actor 自己的 membership，再切到 family 上下文；多行时显式 409，不静默取第一个（细节见 `contracts/authorization-and-rls.md` §4.4）。
+`/families/current`、`/consents`、`/compliance/guardian-consents/requests` 的路径不含 `family_id`，因此单事务内先以 identity 上下文解析 actor 自己的 membership，再切到 family 上下文；多行时显式 409，不静默取第一个。**actor 尚无任何 Family 时**：`/families/current` 与 `/compliance/guardian-consents/requests` 返回 404 `CURRENT_FAMILY_NOT_FOUND`，`/consents` 返回 200 空列表（集合端点），均与 403 `NOT_FAMILY_MEMBER` 区分（细节见 `contracts/authorization-and-rls.md` §4.4）。
 
 **`POST /auth/wechat` 的职责**：首次登录在同一事务内建立 Account **与** 当前登录者 Person（spec US1），响应同时返回 `account` 与 `person`；`person.profile` 此时为空（年龄尚未声明），在 `POST /families` 时补齐 ADULT profile。`POST /families` 不创建 Person。
 
@@ -606,7 +625,8 @@ withRlsTransaction({ familyId, accountId, personId, purpose }, fn)
 - 统一错误体：`{ "code": string, "message": string, "details"?: object }`。
 - 家庭 / 成员类拒绝**一律 403**，响应体不含目标对象任何字段；不存在与无权对外表现一致（避免存在性预言机）。
 - 对应 spec A-2：正式文档未规定 NOT_FOUND / DENIED 是否统一。本 Plan 选择“统一 403 + 零字段泄漏”，映射集中在单一 `toHttpError(reason)`；若 Owner 后续决定改 404 掩盖，只改这一处，不构成新的产品语义。
-- 错误码：`UNAUTHENTICATED`(401)、`FORBIDDEN`/`NOT_FAMILY_MEMBER`/`NOT_FAMILY_MANAGER`/`FAMILY_MANAGER_MUST_BE_ADULT`/`AGE_BAND_UNKNOWN`/`GUARDIAN_CONSENT_REQUIRED`/`GUARDIAN_CONSENT_REVOKED`/`GUARDIAN_CONSENT_ALREADY_BOUND`/`GUARDIAN_CONSENT_EXPIRED`/`GUARDIAN_CONSENT_NOTICE_MISMATCH`(403)、`VALIDATION_ERROR`(422)、`IDEMPOTENCY_PAYLOAD_MISMATCH`/`FAMILY_ALREADY_OWNED`/`MEMBER_ALREADY_EXISTS`(409)。
+- **“没有当前家庭”不等于“无权访问某个家庭”**（CHK045 收口）：已认证但 actor 尚无任何 Family → **404 `CURRENT_FAMILY_NOT_FOUND`**，响应不含任何 Family 字段；已解析到目标 Family 但 actor 无 membership → 仍 **403 `NOT_FAMILY_MEMBER`**，并继续零字段泄漏。跨家庭访问统一 403 的既有规则不变。
+- 错误码：`UNAUTHENTICATED`(401)、`FORBIDDEN`/`NOT_FAMILY_MEMBER`/`NOT_FAMILY_MANAGER`/`FAMILY_MANAGER_MUST_BE_ADULT`/`AGE_BAND_UNKNOWN`/`GUARDIAN_CONSENT_REQUIRED`/`GUARDIAN_CONSENT_REVOKED`/`NOT_GUARDIAN`/`GUARDIAN_CONSENT_ALREADY_BOUND`/`GUARDIAN_CONSENT_EXPIRED`/`GUARDIAN_CONSENT_NOTICE_MISMATCH`(403)、`CURRENT_FAMILY_NOT_FOUND`(404)、`VALIDATION_ERROR`/`AGE_BAND_SOURCE_NOT_ALLOWED`(422)、`IDEMPOTENCY_PAYLOAD_MISMATCH`/`FAMILY_ALREADY_OWNED`/`MEMBER_ALREADY_EXISTS`(409)。
 
 #### D-6.3 关键命令与幂等
 
@@ -759,6 +779,8 @@ tests/
 | FR-002 / U01（微信登录建立 Account **与 Person**） | integration（fake provider） | `bun run vitest run tests/integration/auth.test.ts` | 首次登录同一事务内建 Account 与绑定该账号的 Person（`account_id` 非空、`profile` 为空）；同 openid 重复登录不产生第二个 Account / Person；logout 后旧 token 401 |
 | FR-002 平台真实性 | **NOT VERIFIED（本 Slice）** | — | 明确记录：真实 code2session 属 §40 Platform 门槛，本 Slice 只验适配器契约 |
 | FR-005 / 场景 2 / US1（建家庭 + 管理主体 + 幂等） | integration | `bun run vitest run tests/integration/families.test.ts` | **actor 登录后尚无 compliance profile，首次建家庭仍成功**（`FAMILY_CREATE` 不依赖 profile）；家庭建立；**复用登录时已存在的 Person，不新建 Person**（人数量不变）；创建者 Person 属于该家庭；ADULT profile 写入；`isManager=true`；同 key 重放不产生第二个家庭 / 成员；同 key 不同 payload → 409；`ageBand != ADULT` → 403 `FAMILY_MANAGER_MUST_BE_ADULT` 且无任何写入 |
+| age_band 来源可接受性（CHK023） | unit + integration | `bun run vitest run tests/domain/age-band-source.test.ts tests/integration/members.test.ts` | `POST /families` 的 `ageBandSource` 只接受 `SELF_STATEMENT`，其它值 → 422 `AGE_BAND_SOURCE_NOT_ALLOWED` 且无写入；`POST /families/:id/members` 且 `ageBand=UNDER_14` 只接受 `GUARDIAN_RELAY`/`GUARDIAN_OBSERVATION`，`SELF_STATEMENT`/`OTHER_MEMBER_RELAY` → 422；落库的 `provided_by_person_id` 由服务端固定（creator=self；under-14=consent.guardian_person_id），客户端伪造值被忽略或拒绝 |
+| “尚无家庭”空态（CHK045） | integration | `bun run vitest run tests/integration/families.test.ts` | 已认证且无任何 Family：`GET /families/current` → 404 `CURRENT_FAMILY_NOT_FOUND`、`POST /compliance/guardian-consents/requests` → 404，响应不含任何 Family 字段；已解析到某 Family 但非其成员 → 403 `NOT_FAMILY_MEMBER`（两者可区分） |
 | FR-016 / 场景 14 / SC-007（Account ↔ Person 1:1） | database | `bun run vitest run tests/db/constraints.test.ts` | 两个方向写入均抛 unique violation，真实错误输出被断言 |
 | FR-017 / 场景 11、12 / SC-006（多对多 + 唯一 membership） | database（fixture） | `bun run vitest run tests/db/cardinality.test.ts` | 同 Person 两条不同 family membership 成功；同 (family, person) 第二条被拒；`persons` 无 `family_id` 列 |
 | FR-003 / FR-004 / 场景 3 / SC-008（per-value provenance） | unit + integration | `bun run vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts` | 同一 `DISPLAY_NAME` 的多来源并存不被覆盖、同源替换产生 SUPERSEDED；`age_band` 来源独立记录在 `person_compliance_profiles.verified_source`（不同载体各有来源）；`persons` 无 `source_kind` 列；无 Account 的 Person 允许 `SELF_STATEMENT`；`profile_attribute` 枚举只含 `DISPLAY_NAME`（无任何为测试新造的字段） |
@@ -770,6 +792,9 @@ tests/
 | 绑定对不可篡改（D-3.3.1） | database | `bun run vitest run tests/db/consent-binding.test.ts` | ① `(NULL,NULL)→(P,t)` 成功；② 改 `bound_person_id` → `CONSENT_BINDING_IS_IMMUTABLE`；③ **只改 `bound_at`** → 同错误；④ 清空任一字段 → 同错误；⑤ `(NULL,NULL)→(P,NULL)` → `CONSENT_BINDING_PARTIAL` |
 | FR-009 / 场景 10 / SC-004（UNKNOWN 不按成人） | unit | `bun run vitest run tests/domain/age-band.test.ts` | UNKNOWN → BLOCK/`AGE_BAND_UNKNOWN`；永不进入 ADULT 分支；`NOT_COLLECTED` 不是 age_band 合法值 |
 | FR-011 / 场景 7、8、9（授权与伪造 ID） | integration + database | `bun run vitest run tests/integration/authorization.test.ts tests/db/rls.test.ts` | 跨家庭读取 403 且响应无目标字段；伪造 `family_id` 不获得访问；非创建者成员新增成员 403 `NOT_FAMILY_MANAGER`；绕过应用以 app 角色直连查询返回 0 行 |
+| FR-006a / guardian-but-not-member | integration（fixture） | `bun run vitest run tests/integration/authorization-dimensions.test.ts` | fixture 预置「某未成年 Person 的 guardian」但该 actor 不是目标 Family 成员：`GET /families/current`、家庭级读取、`POST /families/:id/members` 全部被拒（无 membership 时不获得家庭访问），证明 guardian 关系不构成家庭权限 |
+| FR-006b / member-but-not-guardian | integration（fixture） | `bun run vitest run tests/integration/authorization-dimensions.test.ts` | fixture 预置「目标 Family 成员」但不是某未成年 Person 的 guardian：`POST /compliance/guardian-consents`（grant）与 revoke 被拒（`NOT_GUARDIAN` 语义），证明 membership 不产生 guardian 权限 |
+| FR-007 / Compliance Profile（band × minor_mode × 来源） | integration + database | `bun run vitest run tests/integration/profiles.test.ts tests/db/consent-structure.test.ts` | ADULT → `minor_mode=false`；MINOR_14_17 → `minor_mode=true`；UNDER_14 → `minor_mode=true` 且 guardian 与 consent 版本非空；UNKNOWN → 门禁 BLOCK 且不进入 ADULT 分支；`verified_source` 实际落库且等于该路径允许的来源值（UNDER_14 为 guardian-origin）；`minor_mode` 与 band 不一致的写入被 CHECK 拒绝 |
 | FR-012 / FR-015 / 验收最后一组（RLS 与主键） | database | `bun run vitest run tests/db/rls.test.ts` | `pg_class.relrowsecurity=true`、`relforcerowsecurity=true`；`rolbypassrls=false`；owner ≠ app；三个 GUC 全未设时查询 0 行；identity 上下文只返回自身 person；`uuidv7()` 为列默认值 |
 | FR-013（事务上下文） | integration | `bun run vitest run tests/integration/rls-transaction.test.ts` | 事务外设置上下文后查询 0 行；`set_family_context` 对非成员抛 42501；连接池复用下上下文不泄漏到下一请求 |
 | FR-014 / SC-005（幂等） | integration | `bun run vitest run tests/integration/idempotency.test.ts` | 并发 20 次同 key → 记录数不变；同 key 不同 payload → 409 |

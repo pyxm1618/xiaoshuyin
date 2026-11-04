@@ -34,6 +34,24 @@
 
 ---
 
+### 2.1 按路径的来源可接受性（CHK023）
+
+来源是否可用，取决于**这条信息是怎么来的**，而不是“这个人属于哪一类”。两个创建路径因此有额外约束：
+
+| 路径 | `age_band` | 允许的 `ageBandSource` | provider |
+|---|---|---|---|
+| `POST /families`（actor 建自己的家庭） | `ADULT` | 仅 `SELF_STATEMENT` | 服务端固定 = actor |
+| `POST /families/:id/members`，`ageBand=UNDER_14` | `UNDER_14` | 仅 `GUARDIAN_RELAY` / `GUARDIAN_OBSERVATION` | 服务端固定 = consent.guardian_person_id |
+| `POST /families/:id/members`，其它 band | `ADULT` / `MINOR_14_17` / `UNKNOWN` | 4 类白名单，按真实提供方式 | 客户端可给（须为本家庭成员） |
+
+违反 → 422 `AGE_BAND_SOURCE_NOT_ALLOWED`，不落任何写入。
+
+**为什么 UNDER_14 不能用 `SELF_STATEMENT`**：该 Person 尚未存在（consent-first），流程由 adult / guardian 发起，`declared_age_band` 是取得同意所严格必要的**监护人声明**。孩子既不在场，也不是这次同意的给予者，因此把首个 band 标成本人陈述是不真实的；`OTHER_MEMBER_RELAY` 同理（同意主体不是该成员）。
+
+**这条规则不外推**：除上述两个创建路径外，provenance 仍按每条信息真实的提供方式判定。无 Account 的 Person 依然可以有 `SELF_STATEMENT`（FR-004），有 Account 也不自动等于本人陈述。
+
+---
+
 ## 3. 写入规则（确定性）
 
 对每个 `(personId, attribute, source)` 的写入：

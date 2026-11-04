@@ -437,6 +437,12 @@ CREATE TABLE person_compliance_profiles (
     age_band = 'UNDER_14' OR guardian_consent_record_id IS NULL
   ),
 
+  -- UNDER_14 的首个 age_band 只能由 guardian 声明提供（与 CHK023 的路径约束一致）
+  CONSTRAINT pcp_under14_guardian_source CHECK (
+    age_band <> 'UNDER_14'
+    OR verified_source IN ('GUARDIAN_RELAY', 'GUARDIAN_OBSERVATION')
+  ),
+
   CONSTRAINT pcp_consent_version_pair CHECK (
     (guardian_consent_record_id IS NULL) = (guardian_consent_version IS NULL)
   )
@@ -854,6 +860,7 @@ CREATE POLICY ppv_scope ON person_profile_values
 | `profile_attribute` 不含 `AGE_BAND` | D-4（单一载体） |
 | `pcp_under14_requires_consent` | FR-008(a)、场景 4、D-3.5 |
 | `pcp_minor_mode_matches_band` | FR-007 / §7.7A |
+| `pcp_under14_guardian_source` | FR-003 / FR-004（来源真实性，CHK023） |
 | `consent_records` 不可变触发器 | FR-010、V1-C39 证据强度 |
 | `consent_request_binding` | FR-010（GRANTED 可追溯 / REVOKED 非 onboarding） |
 | `consent_granted_request_key` | FR-010（一次 onboarding 只产出一条 GRANTED） |

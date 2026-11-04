@@ -95,12 +95,15 @@ UNSUPPORTED_PURPOSE     purpose 不在本 Slice 枚举
 FAMILY_CONTEXT_REQUIRED 家庭级 action 但 family 为 null
 NOT_FAMILY_MEMBER       membership 不存在
 NOT_FAMILY_MANAGER      family.created_by_person_id != actor.personId
+NOT_GUARDIAN            guardian 类动作但 actor != 该未成年人的 guardian_person_id
 AGE_BAND_UNKNOWN        依赖年龄的判定遇到 UNKNOWN
 GUARDIAN_CONSENT_REQUIRED / GUARDIAN_CONSENT_REVOKED
 AUTHORIZATION_ERROR     内部异常（兜底，永不放行）
 ```
 
 `FAMILY_MANAGER_MUST_BE_ADULT` **不在**上表：它由 `POST /families` 的命令体前置校验产生（请求未显式声明 ADULT），不是授权判定结果。见 §2.3.1。
+
+`CURRENT_FAMILY_NOT_FOUND` 也不在上表：它不是 `authorize()` 的判定结果，而是在**解析当前家庭**这一步产生（actor 尚无任何 Family，见 §4.4）。HTTP 映射仍集中在 §3。
 
 ### 2.5 fail-closed 规则（强制）
 
@@ -133,6 +136,8 @@ toHttpError(reason): { status, code }
 | `NO_ACTOR` | 401 | `UNAUTHENTICATED` |
 | `NOT_FAMILY_MEMBER` | 403 | `NOT_FAMILY_MEMBER` |
 | `NOT_FAMILY_MANAGER` | 403 | `NOT_FAMILY_MANAGER` |
+| `NOT_GUARDIAN` | 403 | `NOT_GUARDIAN` |
+| `CURRENT_FAMILY_NOT_FOUND` | 404 | `CURRENT_FAMILY_NOT_FOUND` |
 | `FAMILY_MANAGER_MUST_BE_ADULT` | 403 | `FAMILY_MANAGER_MUST_BE_ADULT` |
 | `AGE_BAND_UNKNOWN` | 403 | `AGE_BAND_UNKNOWN` |
 | `GUARDIAN_CONSENT_REQUIRED` | 403 | `GUARDIAN_CONSENT_REQUIRED` |
@@ -223,18 +228,34 @@ C. withFamilyCreationTransaction({ accountId, personId, newFamilyId, displayName
 
 ### 4.4 需要“先解析当前家庭”的端点
 
-`/families/current`、`/consents`、`/compliance/guardian-consents/requests` 的路径里没有 `family_id`（§28.1 / §28.2 的契约就是这样），因此单事务内分两步：
+`/families/current`、`/consents`、`/compliance/guardian-consents/requests` 的路径里没有 `family_id`（§28.1 / §28.2 的契约就是这样），因此单事务内分两步解析：
 
 ```text
 1. set_identity_context(accountId, 'FAMILY_MANAGEMENT' | 'GUARDIAN_CONSENT')
 2. SELECT family_id FROM family_members WHERE person_id = app_person_id()   -- self 分支可见
-   └ 0 行 → 403 NOT_FAMILY_MEMBER
+   ├ 0 行 → actor 尚无任何 Family → 空态，不是无权（见下表）
+   ├ 1 行 → 该 family
    └ 多行 → V1 不提供多家庭切换，取 created_by_person_id = actor 的那一个；
             若仍多行则视为数据异常，返回 409 而不是猜测
 3. authorize()（含 manager 判定）
 4. set_family_context(familyId, personId, purpose)
 5. 读取目标数据
 ```
+
+**“没有当前 Family” ≠ “无权访问某个 Family”**（CHK045 收口）：
+
+| 情形 | 对外结果 | 语义 |
+|---|---|---|
+| 已认证，actor 尚无任何 Family | **404 `CURRENT_FAMILY_NOT_FOUND`**，响应不含任何 Family 字段 | 正常初始态；客户端据此进入“创建家庭”引导 |
+| 已解析到目标 Family，但 actor 无 membership（伪造 `family_id`、跨家庭） | **403 `NOT_FAMILY_MEMBER`**，零目标字段泄漏 | 无权；与“不存在”对外不可区分 |
+
+按端点：
+
+| 端点 | 无 Family 时 | 理由 |
+|---|---|---|
+| `GET /families/current` | 404 `CURRENT_FAMILY_NOT_FOUND` | 单资源端点，没有就是没有 |
+| `GET /consents` | 200 `{ "items": [] }` | 集合端点，零条同意是真实结果，不伪造错误 |
+| `POST /compliance/guardian-consents/requests` | 404 `CURRENT_FAMILY_NOT_FOUND` | 没有家庭就不存在可发起同意的对象 |
 
 第 2 步只暴露 actor **自己的** membership 行（策略 `person_id = app_person_id()`），不泄漏其他成员或其他家庭。多家庭场景在 V1 只存在于 fixture（spec 场景 11），产品层不提供选择能力，因此“多行”分支必须是显式失败，不能静默取第一个。
 
