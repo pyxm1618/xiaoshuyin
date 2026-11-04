@@ -69,10 +69,13 @@ jobs:
           bun-version: latest
       - run: bun install
       - name: Bootstrap roles
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d xiaoshuyin_test \
-            -f db/init/01-roles.sql
+        run: bash db/init/01-roles.sh
         env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: xiaoshuyin_test
           POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
           POSTGRES_APP_PASSWORD: ci_app_pw
       - name: Run migrations
@@ -108,10 +111,13 @@ jobs:
           bun-version: latest
       - run: bun install
       - name: Bootstrap roles
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -d xiaoshuyin_test \
-            -f db/init/01-roles.sql
+        run: bash db/init/01-roles.sh
         env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: xiaoshuyin_test
           POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
           POSTGRES_APP_PASSWORD: ci_app_pw
       - name: Run migrations
@@ -122,3 +128,20 @@ jobs:
         run: bunx vitest run
         env:
           DATABASE_URL: postgres://xiaoshuyin_app:ci_app_pw@localhost:5432/xiaoshuyin_test
+
+  contract:
+    name: Contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: OpenAPI generate + check
+        run: |
+          bun run openapi:generate
+          bun run openapi:check

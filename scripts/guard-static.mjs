@@ -123,6 +123,7 @@ scanDir(ROOT, (file) => {
   const content = readFileSync(file, 'utf-8');
   content.split('\n').forEach((line, i) => {
     if (isComment(line)) return;
+    if (/^\s*import\s/.test(line)) return; // skip import statements
     for (const table of FAMILY_TABLES) {
       const regex = new RegExp(`\\b${table}\\b`, 'i');
       if (regex.test(line) && /(?:FROM|INTO|UPDATE|JOIN|TABLE)\s+/i.test(line)) {
@@ -145,6 +146,7 @@ scanDir(ROOT, (file) => {
         relPath.startsWith('tests/') ||
         relPath.startsWith('scripts/') ||
         relPath.includes('/auth/') ||
+        /(^|\/)auth\.(ts|js)$/.test(relPath) || // auth module files
         relPath.includes('env') ||
         relPath.endsWith('.yaml') ||
         relPath.endsWith('.yml') ||
@@ -156,7 +158,8 @@ scanDir(ROOT, (file) => {
     }
     // 5b: non-auth commands/routes must not access accounts table
     if ((relPath.includes('/commands/') || relPath.includes('/routes/')) &&
-        !relPath.includes('/auth/')) {
+        !relPath.includes('/auth/') &&
+        !/(^|\/)auth\.(ts|js)$/.test(relPath)) {
       if (/\baccounts\b/.test(line) && /(?:FROM|INTO|UPDATE|SELECT)\s+/i.test(line)) {
         addViolation('R5-accounts-narrow-access', relPath, i + 1,
           'Non-auth commands/routes must not directly access accounts table');

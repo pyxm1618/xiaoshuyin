@@ -7,5 +7,5 @@ dist/
 tests/evidence/*.log
 tests/evidence/quickstart.md
 tests/evidence/converge.md
-packages/generated/
 .workbuddy/
+.openapi-gen-temp.mjs
