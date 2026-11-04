@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '26.13.0'
+
+jobs:
+  static:
+    name: Static Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Static guard
+        run: bun run guard:static
+
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Run unit tests
+        run: bunx vitest run tests/domain
+
+  db-migrate:
+    name: DB Migration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xiaoshuyin_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Bootstrap roles
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d xiaoshuyin_test \
+            -f db/init/01-roles.sql
+        env:
+          POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
+          POSTGRES_APP_PASSWORD: ci_app_pw
+      - name: Run migrations
+        run: bun run db:migrate
+        env:
+          MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:ci_migrator_pw@localhost:5432/xiaoshuyin_test
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [static, db-migrate]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xiaoshuyin_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Bootstrap roles
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -d xiaoshuyin_test \
+            -f db/init/01-roles.sql
+        env:
+          POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
+          POSTGRES_APP_PASSWORD: ci_app_pw
+      - name: Run migrations
+        run: bun run db:migrate
+        env:
+          MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:ci_migrator_pw@localhost:5432/xiaoshuyin_test
+      - name: Run all tests
+        run: bunx vitest run
+        env:
+          DATABASE_URL: postgres://xiaoshuyin_app:ci_app_pw@localhost:5432/xiaoshuyin_test

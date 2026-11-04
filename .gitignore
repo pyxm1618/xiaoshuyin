@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.local
+.DS_Store
+tests/evidence/*.log
+tests/evidence/quickstart.md
+tests/evidence/converge.md
+packages/generated/
+.workbuddy/

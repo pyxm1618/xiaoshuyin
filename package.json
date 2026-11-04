@@ -1,0 +1,28 @@
+{
+  "name": "xiaoshuyin",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "26.13.0"
+  },
+  "workspaces": [
+    "apps/server/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "cd apps/server/api && bun run dev",
+    "typecheck": "tsc -p tsconfig.base.json --noEmit && bun run --recursive typecheck",
+    "test": "vitest",
+    "guard:static": "node scripts/guard-static.mjs",
+    "db:migrate": "node scripts/db-migrate.mjs",
+    "db:evidence": "node scripts/db-evidence.mjs",
+    "openapi:generate": "node scripts/openapi-generate.mjs",
+    "openapi:check": "node scripts/openapi-check.mjs",
+    "coverage:audit": "node scripts/coverage-audit.mjs",
+    "verify-all": "node scripts/verify-all.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
