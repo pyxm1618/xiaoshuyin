@@ -653,7 +653,9 @@ idempotency_keys(actor_account_id, command_type, idempotency_key) UNIQUE
 ```text
 01 角色 bootstrap（Compose init / CI，非业务 migration）
 02 CREATE TYPE：age_band / provenance_source / profile_attribute /
-                consent_decision / consent_request_status / consent_purpose
+                profile_value_status / consent_decision /
+                consent_request_status / consent_purpose / account_status
+                （共 8 个，与 data-model §1 完全一致）
 03 accounts
 04 persons（account_id UNIQUE、created_by_account_id）
 05 families（created_by_person_id UNIQUE）

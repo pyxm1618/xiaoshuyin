@@ -110,6 +110,7 @@
 | 2026-11-04 | Closeout：“尚无家庭”空态改为 404 `CURRENT_FAMILY_NOT_FOUND`，与 403 `NOT_FAMILY_MEMBER` 区分 | CHK045 |
 | 2026-11-04 | Closeout：补 FR-006a / FR-006b 具名验证与 FR-007 profile 矩阵验证 | CHK054, CHK058 |
 | 2026-11-04 | 全量复核：61/61 满足，0 FAIL，0 WARNING，全部勾选 | 全部 |
+| 2026-11-04 | Analyze closeout：Acceptance Scenario 1 删除陈旧「若已建立」，与 US1 / FR-002 / OpenAPI 对齐；CHK006–CHK011（身份生命周期）与 CHK054（验证可追溯）定向复核仍 PASS | CHK006–CHK011、CHK054 |
 
 ---
 

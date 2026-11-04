@@ -139,7 +139,7 @@
 
 ## Acceptance Scenarios
 
-1. **Given** 一个已微信登录的家长账号，**When** 请求当前身份，**Then** 返回其 Account 与关联 Person（若已建立），且不返回其他家庭成员资料。**Upstream**: U01、§28.1
+1. **Given** 一个已微信登录的家长账号，**When** 请求当前身份，**Then** 返回其 Account 与关联 Person，且不返回其他家庭成员资料（微信登录完成后 Person 必然已建立，见 US1）。**Upstream**: U01、§28.1
 2. **Given** 一位家长，**When** 创建家庭，**Then** 家庭被创建，该家长的 Person 属于该家庭并成为 V1 当前的管理主体；不推断该家长是任何未成年人的 guardian；同一请求重复提交不产生第二个家庭或第二个成员关系。**Upstream**: U03、V1-C20、§1.5、§28.1、§9、§5 不变量 17
 3. **Given** 该 Family 的创建者（V1 当前管理主体），**When** 为其家庭新增一个没有账号的成员，并为实际记录的每条资料值分别标注来源（如称呼来源 = 家长转述、年龄段来源 = 家长观察），**Then** 该 Person 被创建、account 为空、每条资料的来源可单独追溯且互不覆盖，未提供的属性保持未知状态而不是被填默认值；age_band 未提供时只能落在 §7.7A 的 UNKNOWN，不得写成 NOT_COLLECTED；系统中不存在 Person 级单一来源字段。**Upstream**: U03、V1-C03、§1.5、§2.2、§5 不变量 4、§7.7A
 4. **Given** 一位成人 / 监护人声明其代表的孩子不满 14 周岁且尚无有效监护人同意，**When** 进入该未成年人的 onboarding，**Then** 系统只允许最小化 consent onboarding：可以处理完成监护身份确认、必要告知与取得同意所严格必要的信息；不得创建正式 child Person、不得建立该未成年人的 compliance profile、不得采集 Assessment / Case / Digital Use / AI 所需资料；该未成年人的后续个人信息处理返回阻断。**Upstream**: V1-C39、§5 不变量 27、§10、§19A.2、§7.7A
