@@ -125,7 +125,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
 
   it('should have consent_records_guard trigger', async () => {
     const { rows } = await client.query(`
-      SELECT triggername FROM pg_trigger
+      SELECT tgname FROM pg_trigger
       WHERE tgname = 'consent_records_guard'
         AND NOT tgisinternal
     `);

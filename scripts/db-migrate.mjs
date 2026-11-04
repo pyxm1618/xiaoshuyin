@@ -96,13 +96,12 @@ async function main() {
 async function verifyAppRoleNoDdl(client) {
   const { rows } = await client.query(`
     SELECT
-      has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') as can_create_schema,
-      has_table_privilege('xiaoshuyin_app', 'schema_migrations', 'CREATE') as can_create_table
+      has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') as can_create_in_schema
   `);
 
   const r = rows[0];
-  if (r.can_create_schema || r.can_create_table) {
-    console.error('WARNING: app role has DDL permissions it should not have');
+  if (r.can_create_in_schema) {
+    console.error('WARNING: app role has schema CREATE permission it should not have');
     process.exit(1);
   } else {
     console.log('Verified: app role has no DDL permissions.');

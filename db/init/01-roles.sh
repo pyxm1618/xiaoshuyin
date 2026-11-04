@@ -11,6 +11,11 @@ set -euo pipefail
 
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   -c "CREATE ROLE xiaoshuyin_migrator LOGIN NOBYPASSRLS PASSWORD '${POSTGRES_MIGRATOR_PASSWORD}'" \
-  -c "CREATE ROLE xiaoshuyin_app LOGIN NOBYPASSRLS PASSWORD '${POSTGRES_APP_PASSWORD}'"
+  -c "CREATE ROLE xiaoshuyin_app LOGIN NOBYPASSRLS PASSWORD '${POSTGRES_APP_PASSWORD}'" \
+  -c "GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO xiaoshuyin_migrator" \
+  -c "GRANT CONNECT ON DATABASE ${POSTGRES_DB} TO xiaoshuyin_app" \
+  -c "GRANT CREATE, USAGE ON SCHEMA public TO xiaoshuyin_migrator" \
+  -c "GRANT USAGE ON SCHEMA public TO xiaoshuyin_app" \
+  -c "GRANT CREATE ON DATABASE ${POSTGRES_DB} TO xiaoshuyin_migrator"
 
-echo "Roles created: xiaoshuyin_migrator, xiaoshuyin_app (both NOBYPASSRLS)"
+echo "Roles created: xiaoshuyin_migrator (owner), xiaoshuyin_app (NOBYPASSRLS)"
