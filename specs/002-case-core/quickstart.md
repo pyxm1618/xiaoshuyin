@@ -1,0 +1,353 @@
+# Quickstart — 002-case-core（Plan 验证指南）
+
+**Slice**: `specs/002-case-core`
+**Phase**: Phase 1（`Docs/V1技术设计.md` §38）
+**状态**: Plan 阶段产物。此文档描述**实现完成后**如何验证本 Slice；当前分支尚无 Case 实现代码，因此本文所有命令在 Plan 阶段**均未执行**，不得作为已通过的证据。
+
+> 本指南只给验证路径，不给实现代码、migration 内容或完整测试套件。
+> 契约细节见 `contracts/cases-api.openapi.yaml`、`contracts/authorization-rls-and-idempotency.md`、`contracts/case-events-and-business-audit.md`。
+> 列级设计见 `data-model.md`。
+
+---
+
+## 0. 前置条件
+
+| 项 | 要求 | 来源 |
+|---|---|---|
+| Node.js | `26.13.0`（exact） | §4.1 |
+| 包管理器 | 仓库约定 `bun` | 项目约定 |
+| PostgreSQL | `18`，原生 `uuidv7()` | §2 / §7.0 |
+| Docker | Stage A Compose（PG18 + api） | §4 Stage A |
+| 环境变量 | `DATABASE_URL`（app 角色）、`MIGRATION_DATABASE_URL`（migrator 角色）、`SESSION_SECRET` | Slice 1 Plan |
+| Slice 1 | 已合并到 main，final schema / RLS / 幂等 / 审计 green | Plan §0.2 G1—G10 |
+
+```bash
+# 角色与数据库由 Compose init 建立，Stage A 使用 PostgreSQL 18
+docker compose -f docker-compose.stage-a.yml up -d postgres
+```
+
+**禁止**：把 secret 写进 repo、镜像或文档；`docker compose down -v` 会销毁本地数据，仅用于一次性环境。
+
+---
+
+## 1. 发布前 Gate（Implement Gate）
+
+在写任何 Case 代码前，先逐项现场验证 Slice 1：
+
+```bash
+# G1/G2：Slice 1 已合并 & Slice 2 已基于最终 main 同步
+git merge-base --is-ancestor <slice1-final-head> origin/main
+git log --oneline origin/main..HEAD
+
+# G3：真实 schema
+psql "$MIGRATION_DATABASE_URL" -c "\d families" -c "\d family_members" \
+  -c "\d business_audit_events" -c "\d idempotency_keys"
+
+# G6—G8：Slice 1 测试
+bunx vitest run tests/domain tests/db tests/integration/auth.test.ts \
+  tests/integration/families.test.ts tests/integration/members.test.ts
+
+# G10：CI 与 converge（以真实 workflow / report 为准）
+```
+
+任一失败：`BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`；不得私建替代基础设施。
+
+---
+
+## 2. 迁移与结构验证
+
+```bash
+# 2.1 应用 reviewed migration（migrator 角色）
+bun run db:migrate
+
+# 2.2 结构 / RLS / 并发
+bunx vitest run tests/db/cases-schema.test.ts
+bunx vitest run tests/db/cases-rls.test.ts
+bunx vitest run tests/db/cases-primary-concurrency.test.ts
+```
+
+期望（每条都必须是真实查询输出）：
+
+| 检查 | 期望 |
+|---|---|
+| `cases` / `case_events` 存在 | 两表均由 `xiaoshuyin_migrator` 拥有 |
+| `pg_class.relrowsecurity` / `relforcerowsecurity` | 两表均为 `true` / `true` |
+| `pg_roles.rolbypassrls`（`xiaoshuyin_app`） | `false` |
+| `case_status` enum 取值与顺序 | `OPEN, WAITING, PAUSED, LOST_CONTACT, SAFETY_HOLD, CLOSED` |
+| `case_phase` enum 取值与顺序 | `INTAKE, ASSESSMENT, PROBLEM_FORMULATION, GOALS, PLANNING, EXECUTION, REVIEW, MAINTENANCE, CLOSED` |
+| `cases` 列集合 | 恰为 `id, family_id, created_by_person_id, status, phase, is_primary, version, created_at, updated_at`；不含 title / summary / description / problem_description |
+| `cases_one_primary_open_per_family` | partial unique index 存在，谓词为 `is_primary AND status <> 'CLOSED'` |
+| `case_events` 列集合 | 恰为 `id, family_id, case_id, actor_account_id, event_type, metadata, occurred_at` |
+| `case_events` 复合 FK | 指向 `cases (id, family_id)` |
+| `case_events` 权限 | `xiaoshuyin_app` 只有 `SELECT, INSERT`（无 UPDATE / DELETE） |
+| `business_audit_events` CHECK | 含 `CASE_CREATED` / `CASE` |
+| `idempotency_keys` CHECK | 含 `CASE_CREATE` |
+| 无上下文直连 | `SELECT count(*) FROM cases` = 0；`INSERT` 被拒 |
+| Family A 上下文查 Family B Case | 0 行 |
+| 越界表 / 路由 | 不存在 `case_participants` / `assertions` / `observations` / `problem_formulations` / `scene_*` / Safety / Plan / Task / Notification |
+
+---
+
+## 3. 端到端主路径（手工 / curl）
+
+启动：
+
+```bash
+bun run dev:api     # 默认 http://localhost:8787
+```
+
+### 3.1 准备：登录并建立 Family
+
+```bash
+# 登录（测试环境 fake provider）
+curl -sX POST localhost:8787/api/v1/auth/wechat \
+  -H 'content-type: application/json' \
+  -d '{"code":"test-parent-a"}' | tee /tmp/login.json
+
+TOKEN=$(jq -r .sessionToken /tmp/login.json)
+
+# 建立 Family（Slice 1；含 ADULT 声明与幂等键）
+curl -sX POST localhost:8787/api/v1/families \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"displayName":"A家","ageBand":"ADULT","ageBandSource":"SELF_STATEMENT","idempotencyKey":"family-create-001"}'
+```
+
+### 3.2 创建第一个 Case（primary = true）
+
+```bash
+curl -s -D /tmp/create1.headers -o /tmp/create1.json \
+  -X POST localhost:8787/api/v1/cases \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"idempotencyKey":"case-create-0001"}'
+
+jq . /tmp/create1.json
+```
+
+期望：
+
+```json
+{
+  "id": "<uuid>",
+  "status": "OPEN",
+  "phase": "INTAKE",
+  "primary": true,
+  "version": 1,
+  "createdAt": "<ISO-8601>",
+  "updatedAt": "<ISO-8601>"
+}
+```
+
+HTTP `201`；响应中不含 `familyId`、creator、title、description、任何内容字段。
+
+### 3.3 创建第二个 Case（候选）
+
+```bash
+curl -s -X POST localhost:8787/api/v1/cases \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"idempotencyKey":"case-create-0002"}' | jq .
+```
+
+期望：`primary = false`，`status = OPEN`，`phase = INTAKE`，`version = 1`；旧 Case 不变。
+
+### 3.4 列表
+
+```bash
+curl -s localhost:8787/api/v1/cases -H "authorization: Bearer $TOKEN" | jq .
+```
+
+期望：
+
+```json
+{
+  "items": [
+    { "id": "<case-1>", "status": "OPEN", "phase": "INTAKE", "primary": true,  "version": 1, "createdAt": "...", "updatedAt": "..." },
+    { "id": "<case-2>", "status": "OPEN", "phase": "INTAKE", "primary": false, "version": 1, "createdAt": "...", "updatedAt": "..." }
+  ]
+}
+```
+
+- primary 唯一可识别；
+- 排序 `primary DESC, createdAt ASC, id ASC`；
+- 不返回其他 Family 的 Case。
+
+### 3.5 详情
+
+```bash
+CASE_ID=$(jq -r .id /tmp/create1.json)
+curl -s localhost:8787/api/v1/cases/$CASE_ID -H "authorization: Bearer $TOKEN" | jq .
+```
+
+期望：`status` 与 `phase` 两个独立字段，不合并、不互相推导。
+
+### 3.6 空 Family
+
+对一个尚未创建 Case 的 Family 调用列表：
+
+```bash
+curl -s localhost:8787/api/v1/cases -H "authorization: Bearer $TOKEN" | jq .
+```
+
+期望：`{ "items": [] }`，HTTP 200；不存在 placeholder / 默认 Case。
+
+---
+
+## 4. 负路径
+
+### 4.1 客户端越权字段
+
+```bash
+curl -s -o /tmp/bad.json -w '%{http_code}\n' \
+  -X POST localhost:8787/api/v1/cases \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"idempotencyKey":"case-create-bad-1","status":"CLOSED","primary":true}'
+```
+
+期望：`422`，`code = VALIDATION_ERROR`；无 Case 写入。
+
+### 4.2 详情反枚举（跨 Family / 不存在）
+
+用 Family B 的 `case_id`、或用不存在的 UUID，分别请求：
+
+```bash
+curl -s -o /tmp/notfound.json -w '%{http_code}\n' \
+  localhost:8787/api/v1/cases/$FAMILY_B_CASE_ID -H "authorization: Bearer $TOKEN"
+curl -s -o /tmp/notfound2.json -w '%{http_code}\n' \
+  localhost:8787/api/v1/cases/00000000-0000-7000-8000-000000000000 -H "authorization: Bearer $TOKEN"
+```
+
+期望：均为 `404`，响应体均为：
+
+```json
+{ "code": "CASE_NOT_FOUND", "message": "Case not found" }
+```
+
+两者逐字节一致；不含 Family ID、status、phase、primary、creator 或任何 Case 字段。
+
+### 4.3 非管理主体
+
+用 Family A 的普通成员 / 非管理主体 guardian 身份：
+
+```bash
+# 创建
+curl -s -o /tmp/deny-create.json -w '%{http_code}\n' \
+  -X POST localhost:8787/api/v1/cases \
+  -H "authorization: Bearer $MEMBER_TOKEN" \
+  -H 'content-type: application/json' -d '{"idempotencyKey":"case-create-deny-1"}'
+
+# 列表
+curl -s -o /tmp/deny-list.json -w '%{http_code}\n' \
+  localhost:8787/api/v1/cases -H "authorization: Bearer $MEMBER_TOKEN"
+
+# 详情
+curl -s -o /tmp/deny-detail.json -w '%{http_code}\n' \
+  localhost:8787/api/v1/cases/$CASE_ID -H "authorization: Bearer $MEMBER_TOKEN"
+```
+
+期望：
+- 创建 / 列表：`403` + `CASE_ACCESS_DENIED`，无 Case 数据；
+- 详情：`404` + `CASE_NOT_FOUND`，无 Case 字段。
+
+普通 membership 与 guardian relationship 均不授予 Case 访问。
+
+---
+
+## 5. 幂等
+
+```bash
+# 5.1 同 key 同 payload：重放
+curl -s -X POST localhost:8787/api/v1/cases \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"idempotencyKey":"case-create-0001"}' | jq -r .id
+```
+
+期望：返回**原 Case ID**；再查 `cases` / `case_events` / `business_audit_events` 行数不变。
+
+```bash
+# 5.2 同 key 不同 payload：409
+# 通过切换 Family 上下文制造不同 familyId（同一 token 不适用时，用不同 Family 的 manager token）
+curl -s -o /tmp/mismatch.json -w '%{http_code}\n' \
+  -X POST localhost:8787/api/v1/cases \
+  -H "authorization: Bearer $FAMILY_B_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"idempotencyKey":"case-create-0001"}'
+```
+
+期望：`409` + `IDEMPOTENCY_PAYLOAD_MISMATCH`；原 Case 不变，无新事件 / 审计。
+
+> 实现必须保证：幂等 lookup / 占位 / 回填都在 `withRlsTransaction` 内，不得照抄 Slice 1 `families.ts` 的无上下文 `pool.query`。
+
+---
+
+## 6. 并发（真实数据库连接）
+
+用测试而非 curl 验证（`tests/db/cases-primary-concurrency.test.ts`）：
+
+- 同一 Family、两个不同幂等键、两个并发连接；
+- 断言：
+  - 两条 Case 都落库；
+  - `SELECT count(*) FROM cases WHERE family_id=$1 AND is_primary AND status <> 'CLOSED'` = 1；
+  - 一行为 `primary=true`，另一行为 `false`；
+  - `case_events` / `business_audit_events` 各 2 条（两个 Case 各 1 条）；
+  - 重复运行仍成立。
+
+---
+
+## 7. 读不写审计（D7）
+
+```bash
+# 记录读取前行数
+BEFORE_EVENTS=$(psql "$MIGRATION_DATABASE_URL" -tAc "SELECT count(*) FROM case_events")
+BEFORE_AUDITS=$(psql "$MIGRATION_DATABASE_URL" -tAc "SELECT count(*) FROM business_audit_events")
+
+# 读取
+curl -s localhost:8787/api/v1/cases -H "authorization: Bearer $TOKEN" > /dev/null
+curl -s localhost:8787/api/v1/cases/$CASE_ID -H "authorization: Bearer $TOKEN" > /dev/null
+
+# 记录读取后行数
+AFTER_EVENTS=$(psql "$MIGRATION_DATABASE_URL" -tAc "SELECT count(*) FROM case_events")
+AFTER_AUDITS=$(psql "$MIGRATION_DATABASE_URL" -tAc "SELECT count(*) FROM business_audit_events")
+
+echo "$BEFORE_EVENTS/$AFTER_EVENTS $BEFORE_AUDITS/$AFTER_AUDITS"
+```
+
+期望：前后相等；不存在 `CASE_VIEWED` / `CASE_LISTED` 事件类型。
+
+---
+
+## 8. 静态守卫与回归
+
+```bash
+bun run typecheck
+bun run guard:static
+bunx vitest run tests/domain
+bunx vitest run tests/db tests/integration
+```
+
+期望：
+- `guard-static: PASS (0 violations)`；
+- 无 `drizzle-kit push`、无 secret literal、无越界目录；
+- Slice 1 既有测试仍 green（只允许按新增表做「增量对齐」，不得削弱断言）。
+
+---
+
+## 9. 完整证据清单
+
+| 证据 | 产出 |
+|---|---|
+| 迁移输出 | `db:migrate` 的 APPLY / SKIP 与 “Migration complete” |
+| 结构 / RLS | `cases-schema` / `cases-rls` 测试的真实断言输出 |
+| 并发不变量 | `cases-primary-concurrency` 的聚合查询结果 |
+| 授权 / 反枚举 | `cases-authorization` / `cases-read` 的 HTTP 状态与响应体 |
+| 幂等 | `cases-idempotency` 的行数前后对比 |
+| 事件 / 审计 | `case_events` / `business_audit_events` 按 `case_id` / `resource_id` 的计数 |
+| 读不写审计 | 第 7 节前后计数 |
+| Scope | 表 / 路由 / 列 introspection 输出 |
+| CI | `.github/workflows/ci.yml` 全 job green |
+| Converge | converge 报告无未解决 gap |
+
+任一证据缺失或环境不可运行：报告 `BLOCKED` / `NOT VERIFIED`，不得以“设计已完成”代替证据。
