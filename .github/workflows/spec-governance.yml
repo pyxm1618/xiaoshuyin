@@ -1,0 +1,53 @@
+name: Spec Governance
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches:
+      - "chore/**"
+      - "feat/**"
+      - "fix/**"
+
+permissions:
+  contents: read
+
+jobs:
+  governance:
+    name: Spec Governance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history is required to diff a pull request against its base.
+          fetch-depth: 0
+
+      - name: Setup Node.js 26
+        uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+
+      # Default outcome for any docs change: FAIL.
+      # A human applies the `approved-docs-change` label when the document change
+      # is intended; the label admits the change to normal review and never
+      # disables the checks below. On push runs the approval label is not part of
+      # the event payload, so the gate reports in audit mode and the pull_request
+      # run stays authoritative.
+      - name: Docs immutability gate
+        env:
+          DOCS_GUARD_MODE: ${{ github.event_name == 'pull_request' && 'enforce' || 'audit' }}
+          DOCS_GUARD_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || 'origin/main' }}
+          PR_LABELS: ${{ github.event_name == 'pull_request' && join(github.event.pull_request.labels.*.name, ',') || '' }}
+        run: |
+          node .specify/scripts/check-docs-guard.mjs \
+            --mode "$DOCS_GUARD_MODE" \
+            --base "$DOCS_GUARD_BASE" \
+            --head HEAD \
+            --labels "$PR_LABELS"
+
+      - name: Validate governance artifacts and feature traceability
+        run: node .specify/scripts/validate-governance.mjs
+
+      - name: Governance self-test
+        run: node .specify/scripts/tests/run-governance-tests.mjs
