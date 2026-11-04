@@ -41,10 +41,10 @@
 
 目标：migrator / app 双角色物理分离、口令只经环境注入、reviewed migration、空库可重复建立。**不得**读取或记录真实口令。
 
-- [ ] T009 [REQ:§4.3;§9.1;plan:D-5.3] 建 `docker-compose.stage-a.yml`（PostgreSQL 18 + api）与 `db/init/01-roles.sql`：以超级用户创建 `xiaoshuyin_migrator`（owner）与 `xiaoshuyin_app`（NOBYPASSRLS），口令从 `POSTGRES_MIGRATOR_PASSWORD` / `POSTGRES_APP_PASSWORD` 环境注入，SQL 中不出现任何口令值（依赖 T001） [VERIFY:`docker compose -f docker-compose.stage-a.yml up -d postgres` 后 `psql` 查询到两角色且 `rolbypassrls=false`]
-- [ ] T010 [REQ:§9.1;FR-012] 迁移执行入口 `scripts/db-migrate.mjs`：以 migrator 连接、按文件名顺序应用 `db/migrations/*.sql`、记录 `schema_migrations`，并在结束时校验 app 角色无 DDL 权限（依赖 T009） [VERIFY:`bun run db:migrate` 成功；app 角色执行 `CREATE TABLE` 被拒（权限错误输出被断言）]
-- [ ] T011 [REQ:§7.0;plan:Rollback] **test-first 红灯**：写失败契约测试 `tests/db/migration-repro.test.ts`，定义最终期望——完整 migration 可从空 PostgreSQL 18 建立、第二次 apply 为 no-op、前后对象集合一致、最终集合含 8 enum / 10 tables / RLS 函数 / 9 policy / consent 触发器（依赖 T010） [VERIFY:测试文件成功建立；`bun run vitest run tests/db/migration-repro.test.ts` 运行并**按预期失败（RED）**，失败原因是业务 schema 尚未完成；保留失败输出；**不得把 RED 冒充 PASS**；转绿时点为 Phase 3 完成后，最终由 T067 复核]
-- [ ] T012 [REQ:FR-012;§9.1] **test-first 红灯**：写失败契约测试 `tests/db/roles.test.ts`，定义最终要求——app role `NOBYPASSRLS`、业务表 owner = `xiaoshuyin_migrator`、app 对最终 10 张表只有最小 DML、无 `CREATE`/`TRUNCATE`、8 enum `USAGE` 正确（依赖 T010） [VERIFY:测试文件成功建立；`bun run vitest run tests/db/roles.test.ts` 运行并**按预期失败（RED）**，失败原因是表尚未建立；保留失败输出；**不得把 RED 冒充 PASS**；转绿时点为 T028（GRANT）之后，最终由 T067 复核]
+- [x] T009 [REQ:§4.3;§9.1;plan:D-5.3] 建 `docker-compose.stage-a.yml`（PostgreSQL 18 + api）与 `db/init/01-roles.sh`：以超级用户创建 `xiaoshuyin_migrator`（owner）与 `xiaoshuyin_app`（NOBYPASSRLS），口令从 `POSTGRES_MIGRATOR_PASSWORD` / `POSTGRES_APP_PASSWORD` 环境注入，SQL 中不出现任何口令值（依赖 T001） [VERIFY:`docker compose -f docker-compose.stage-a.yml up -d postgres` 后 `psql` 查询到两角色且 `rolbypassrls=false`]
+- [x] T010 [REQ:§9.1;FR-012] 迁移执行入口 `scripts/db-migrate.mjs`：以 migrator 连接、按文件名顺序应用 `db/migrations/*.sql`、记录 `schema_migrations`，并在结束时校验 app 角色无 DDL 权限（依赖 T009） [VERIFY:`bun run db:migrate` 成功；app 角色执行 `CREATE TABLE` 被拒（权限错误输出被断言）]
+- [x] T011 [REQ:§7.0;plan:Rollback] **test-first 红灯**：写失败契约测试 `tests/db/migration-repro.test.ts`，定义最终期望——完整 migration 可从空 PostgreSQL 18 建立、第二次 apply 为 no-op、前后对象集合一致、最终集合含 8 enum / 10 tables / RLS 函数 / 9 policy / consent 触发器（依赖 T010） [VERIFY:测试文件成功建立；`bun run vitest run tests/db/migration-repro.test.ts` 运行并**按预期失败（RED）**，失败原因是业务 schema 尚未完成；保留失败输出；**不得把 RED 冒充 PASS**；转绿时点为 Phase 3 完成后，最终由 T067 复核]
+- [x] T012 [REQ:FR-012;§9.1] **test-first 红灯**：写失败契约测试 `tests/db/roles.test.ts`，定义最终要求——app role `NOBYPASSRLS`、业务表 owner = `xiaoshuyin_migrator`、app 对最终 10 张表只有最小 DML、无 `CREATE`/`TRUNCATE`、8 enum `USAGE` 正确（依赖 T010） [VERIFY:测试文件成功建立；`bun run vitest run tests/db/roles.test.ts` 运行并**按预期失败（RED）**，失败原因是表尚未建立；保留失败输出；**不得把 RED 冒充 PASS**；转绿时点为 T028（GRANT）之后，最终由 T067 复核]
 ---
 
 ## Phase 3 — Core Schema（同一份 reviewed migration，串行）
