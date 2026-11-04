@@ -20,7 +20,8 @@ info:
     一律 422（strict schema，显式拒绝而不是静默忽略）。
 
     幂等键 `idempotencyKey` 位于 JSON 请求体，与 Slice 1 代码侧 Zod 事实源
-    （`packages/contracts/src/schemas.ts`）一致；理由见 `plan.md` D-5 与 `research.md` R-3。
+    （`packages/contracts/src/schemas.ts`）一致；理由见 `plan.md` D-5、Frozen Technical Decision R1
+    与 `research.md` R-3。
 
 servers:
   - url: http://localhost:8787
@@ -52,8 +53,14 @@ paths:
         同一事务内原子写入 Case、`case_event`（CASE_CREATED）、
         `business_audit_event`（CASE_CREATED / CASE）与幂等响应快照。
 
-        幂等：相同 key + 相同 payload 返回原 201 响应，不新建 Case、不追加事件/审计；
-        相同 key + 不同 payload 返回 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
+        幂等：相同 key + 相同 canonical payload 返回原 201 响应，不新建 Case、不追加事件/审计；
+        shared idempotency 合同对相同 scope key + 不同 canonical payload hash 仍映射
+        `409 IDEMPOTENCY_PAYLOAD_MISMATCH`。
+
+        可达性说明：当前请求体除 `idempotencyKey` 外没有可变业务字段，去掉幂等键后
+        canonical body 恒为 `{}`，因此本 Slice 的 public HTTP API **不存在可达的
+        different-payload 请求**；409 合同保留在 shared idempotency 基础设施层验证，
+        不得通过切换 actor（会改变 scope）或新增无业务意义字段伪造该场景。
 
         授权：仅当前目标 Family 的 V1 管理主体（创建该 Family 的 adult Person）。
         普通 membership、guardian relationship、已知 case_id 均不构成访问资格。
@@ -184,7 +191,9 @@ components:
           maxLength: 128
           description: |
             §8.5 关键命令幂等键。scope = (actor_account_id, CASE_CREATE, idempotencyKey)。
-            相同 key + 相同 payload 返回原结果；相同 key + 不同 payload → 409。
+            相同 key + 相同 canonical payload 返回原结果；shared idempotency 合同对
+            相同 scope key + 不同 canonical payload hash 映射为 409（当前请求体形状下
+            public HTTP 层不可达）。`familyId` 由服务端上下文解析，客户端不得提交。
 
     CaseResponse:
       type: object
@@ -314,6 +323,10 @@ components:
       description: |
         相同 actor + CASE_CREATE + idempotencyKey，但 canonical payload hash 不同。
         不修改原 Case、不追加事件/审计。
+
+        当前 Slice 的请求体只有 `idempotencyKey`，canonical body 恒为 `{}`，
+        因此本响应在 public HTTP 层**不可达**；合同保留并在 shared idempotency
+        domain / repository contract 层验证。
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

@@ -14,35 +14,37 @@
 
 | 项 | 值 |
 |---|---|
-| `origin/main` | `120fee22bd5939f35b9713efc21dd2af4384421d`（PR #7 之后） |
-| Slice 1 只读 Head（`feat/001-family-identity-core`，主 worktree） | `f6257cbfa591464b57173258da712a606408a993` |
-| Slice 1 完成度 | 51 / 72 tasks 勾选；Consent 后半段、跨家庭授权终验、幂等全量行为、RLS 终验、final OpenAPI / converge / CI closeout 未完成 |
-| Slice 1 工作树状态 | 存在未提交的 Consent 路由与集成测试（`apps/server/api/src/routes/consents.ts`、`tests/integration/consent-*.test.ts`），**Plan 不依赖这些未提交文件** |
+| `origin/main` | `120fee22bd5939f35b9713efc21dd2af4384421d`（PR #7 之后；closeout 时重新 fetch 确认） |
+| Slice 1 只读 Head（`feat/001-family-identity-core`，主 worktree） | `74a31eb24060f2805b3b33cbfeacd5d1676730b1`（与 `origin/feat/001-family-identity-core` 同步） |
+| Slice 1 完成度 | 60 / 72 tasks 勾选；US3 consent-first flow 已提交；跨家庭授权终验、幂等全量行为、RLS 终验、final OpenAPI / converge / CI closeout 仍未完成 |
+| Slice 1 工作树状态 | clean（无未提交文件） |
 | Slice 2 原始 Head | `72ce35b9e41315c31fb2e2efdd7aca623a917dba` |
 | Slice 2 分支 | `feat/002-case-core`（worktree `/Users/milushangdi/Projects/xiaoshuyin-002-case-core`） |
-| 冻结 Spec | `specs/002-case-core/spec.md`（本轮不得修改） |
+| 冻结 Spec | `specs/002-case-core/spec.md`（已冻结；本轮 closeout 仅做 Q3「CASE_CREATE 幂等 mismatch 可达性」最小澄清） |
 
 ### 0.2 Spec 阶段可以提前完成，Implement 不可以
 
 本 Slice 的 Plan / Checklist / Tasks / Analyze 可以基于 Slice 1 的**冻结设计**提前完成。
-但 **Slice 1 “设计存在” ≠ “实现已冻结”**。进入 Implement 前必须重新验证下列 10 项；任一不满足即：
+但 **Slice 1 “设计存在” ≠ “实现已冻结”**。进入 Implement 前必须重新验证下列 11 项；任一不满足即：
 
 > **BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY**
 
 | # | Gate 项 | 验证方式（Implement 前现场执行） |
 |---|---|---|
 | G1 | Slice 1 已正式合并到 main | `git merge-base --is-ancestor <slice1-final-head> origin/main` |
-| G2 | Slice 2 分支已基于最终 Slice 1 main 同步 | `git log --oneline origin/main..HEAD` 无 Slice 1 代码差异；`git rebase origin/main` 无冲突 |
+| G2 | Slice 2 分支已包含最终 Slice 1 main | `git fetch origin`；`git checkout feat/002-case-core`；`git merge origin/main`；`git merge-base --is-ancestor origin/main HEAD` 必须成功。**禁止 rebase / force push**：本分支已包含已 push 的 Specify / Clarify / Plan commit，改写历史不可接受。若 merge 冲突：正常解决 → 重跑 governance / tests → 普通 push |
 | G3 | Slice 1 final schema / migration 与本 Plan 假设一致 | 逐项核对 `families.created_by_person_id`、`family_members` UNIQUE、`business_audit_events` / `idempotency_keys` 列与 CHECK 真实存在；`schema_migrations` 记录一致 |
 | G4 | `authorize()` final shape 可增量扩 Case | 行动作表 / Purpose / `case` 维度可扩展；现有 Family / Consent 行为测试 green |
 | G5 | `withRlsTransaction` final implementation 可复用 | 函数签名仍为 `(pool, {familyId, accountId, personId, purpose}, fn)`，事务内 `set_config(..., true)` |
-| G6 | `idempotency_keys` final behavior 全绿 | 同 key 同 payload → 原结果；同 key 异 payload → 409；`idempotency_keys` 身份级 RLS 生效；**lookup / insert / replay 均在 identity 上下文事务内** |
+| G6 | `idempotency_keys` final behavior 全绿 | 同 key 同 payload → 原结果；同 key 异 payload → 409（shared contract 行为，不是 CASE_CREATE HTTP 场景）；`idempotency_keys` 身份级 RLS 生效；**lookup / insert / replay 均在 identity 上下文事务内** |
 | G7 | `business_audit_events` final structure 全绿 | `event_type` / `resource_type` 为 reviewed CHECK；family 级 RLS；追加语义可用 |
 | G8 | RLS / roles / cross-family tests 全绿 | `relrowsecurity` / `relforcerowsecurity`、`rolbypassrls=false`、owner 非 app、无上下文零行、跨家庭零行 |
 | G9 | OpenAPI / generated contract 基线已稳定 | `packages/contracts` Zod 为代码侧单事实源，OpenAPI 可由其生成且 `openapi:check` 无意外 diff；幂等键 transport 在 OpenAPI 与 runtime 已一致 |
 | G10 | Slice 1 final CI + independent converge PASS | CI 全部 job green；converge 报告无未解决 gap |
+| G11 | Current Family 解析具备确定性、已审核语义 | 现场验证 Slice 1 final 的 current-family 解析（`GET /api/v1/families/current` 或等价正式入口）：对属于 ≥2 Family 的 actor，重复请求得到一致且可解释的结果；不得依赖无 `ORDER BY` 的 `rows[0]`。若仍存在未定义的多 Family current 选择行为且真实影响 Slice 2 → `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`。Slice 2 不负责 Family switching，不得私自修复 |
 
 **Gate 失败处理**：停止，报告 `BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`，列出失败项与现场输出。
+**Current Family 专项**：若 G11 失败，报告 `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`；Slice 2 不得在 current Family 结果可能因无序查询而随机变化的基础上进入 Implement。
 **禁止**：为了继续而私建替代 Family / Consent / RLS / 幂等 / 审计基础设施；禁止在 Slice 2 分支重设计 Slice 1 冻结基线。
 
 ### 0.3 已知 Slice 1 真实形状与偏差（只读盘点结论）
@@ -58,7 +60,7 @@
 | `authorize()` 纯函数；`case: null` 硬编码；`MANAGER_ACTIONS` 分支为 placeholder `ALLOW`；manager 判定由 caller 用 `isFamilyManager()` 完成 | Slice 2 增量扩展 `case` 维度与 Case actions；**不创建 `authorizeCase()`** |
 | `packages/contracts/src/schemas.ts` 是 Zod 代码侧事实源；幂等键为请求体字段 `idempotencyKey` | Case 契约沿用 body 字段；OpenAPI 手写 header `Idempotency-Key` 与 runtime 不一致，属 G9 待收敛项 |
 | `apps/server/api/src/routes/families.ts` 的幂等 lookup 在**无 identity 上下文**的 `pool.query` 中执行 | 这是 Slice 1 未完成项（G6）；Slice 2 **禁止照抄**，Case 幂等读写必须在 `withRlsTransaction` 内 |
-| `GET /families/current` 当前取 `rows[0]`，未实现多 Family 显式 409 | Case 端点沿用 Slice 1 final current-family 语义；G2/G3 时以 final 实现为准，不自定义第二套 Family 错误码 |
+| `GET /families/current` 当前对多 Family actor 无条件取 `rows[0]`，无 `ORDER BY`，也未定义多 Family 选择语义 | Case 端点沿用 Slice 1 final current-family 语义；**G11 必须证明其确定性**，若仍为未定义行为 → `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`；Slice 2 不自定义第二套 Family 错误码，也不实现 Family switching |
 | `package.json` 引用 `db:evidence` / `openapi:generate` / `openapi:check` / `coverage:audit` / `verify-all`，但仓库仅有 `db-migrate.mjs`、`guard-static.mjs` | Verification Plan 只使用真实存在的命令；缺失脚本在 G10 由 Slice 1 final 补齐，否则阻塞证据链 |
 
 ---
@@ -283,7 +285,7 @@ db/migrations/<next-after-slice1>_case_core.sql ← 新增 reviewed migration
 |---|---|
 | 同 Family，两个不同 key，均合法 | 一个 201 primary=true；一个 201 primary=false；均落库、均有 event/audit |
 | 同 Family，同 key，相同 payload | 一个业务结果；另一个 REPLAY 原响应；不新增 Case/event/audit |
-| 同 Family，同 key，不同 payload | 一个成功；另一个 `409 IDEMPOTENCY_PAYLOAD_MISMATCH` |
+| 同 Family，同 key，不同 payload | 仅 shared contract 语义：一个成功；另一个 `MISMATCH → 409`。当前 CASE_CREATE 请求体无第二种合法 payload，该行不由 HTTP 触发 |
 | Family 已有 primary 未结 Case | 新 Case 一律 candidate |
 | 数据库索引冲突（异常） | 回滚 + `500 INTERNAL_ERROR`；不产生部分写入 |
 
@@ -316,7 +318,7 @@ idempotency 占位（INSERT ... ON CONFLICT DO NOTHING）
 0. 认证：Bearer token → actor {accountId, personId}；缺失 → 401 UNAUTHENTICATED
 1. 解析当前目标 Family（identity 上下文事务，复用 Slice 1 语义）
    0 行 → 404 CURRENT_FAMILY_NOT_FOUND（Slice 1 错误码，不定义第二套）
-   >1 行 → 沿用 Slice 1 final 多 Family 语义（当前实现取首行；G2/G3 对齐）
+   >1 行 → 沿用 Slice 1 final 的确定性 current-family 语义；G11 未通过时禁止 Implement
 2. withRlsTransaction({familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT'})
 3. 读取 families.created_by_person_id（RLS 已限定当前 Family）
 4. authorize({actor, product:'V1', family:{familyId, createdByPersonId}, case:null,
@@ -357,6 +359,7 @@ idempotency 占位（INSERT ... ON CONFLICT DO NOTHING）
 3. Slice 1 手写 OpenAPI 中的 `Idempotency-Key` header 与 runtime 不一致，是 Slice 1 final closeout（G9）待收敛项；**Slice 2 不复制这个偏差**，也不因此创造第二套 transport。
 
 **Gate 约束**：若 Slice 1 final 基线最终统一为 header，则在 Implement 前触发 contract re-alignment，更新本 Plan 与 OpenAPI 后继续；不得两套同时存在。
+**冻结状态**：本选择为 Frozen Technical Decision **R1**，Implement AI 不得临场重新选择；若 Slice 1 final G9 改为 header，Slice 2 必须先返回 Plan Review 更新契约。
 
 #### 5.2 Canonical payload hash
 
@@ -369,7 +372,7 @@ request_hash = sha256(canonicalJson({
 
 - `canonicalJson`（排序键、无空白）与 `hashPayload` 复用 `packages/domain/src/idempotency.ts`。
 - **当前 `body` 规范化结果恒为 `{}`**（本 Slice 请求体只有 `idempotencyKey`）。
-- **familyId 必须进入 hash**：它不属于 idempotency scope，但会改变业务结果的归属。若不进 hash，同一 key 可在不同 Family 之间回放，属于跨家庭数据泄漏（违反 FR-010 / V1-C21）。
+- **familyId 是 canonical command context，不是客户端提交字段**：它不属于 idempotency scope，但会改变业务结果的归属。若不进 hash，同一 key 可在不同 Family 之间回放，属于跨家庭数据泄漏（违反 FR-010 / V1-C21）；若允许客户端提交 `familyId`，则会伪造上下文。客户端提交 `familyId` 仍按 strict schema 返回 422。
 - **actor / command_type 不重复进入 hash**：`idempotency_keys` 的唯一键已经是 `(actor_account_id, command_type, idempotency_key)`，重复混入没有额外区分力，只会让 payload 语义与 scope 语义耦合。该理由必须在实现注释中写明。
 - **请求体必须经过 Zod strict 解析后再 hash**：未知字段直接 422，不进入 hash；因此不存在「同语义不同序」误判。
 - 未来若 hash 输入语义需要变化，必须通过新 `command_type` 或显式迁移处理，不得静默改算法。
@@ -379,8 +382,10 @@ request_hash = sha256(canonicalJson({
 | 情形 | 行为 |
 |---|---|
 | 相同 key + 相同 hash | 返回已存 `response_status`（201）与 `response_body`；不新建 Case；不追加 `case_event` / `business_audit_event`；不增加任何行 |
-| 相同 key + 不同 hash | `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不修改原 Case、不写任何新行 |
+| 相同 key + 不同 hash | `MISMATCH` → `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不修改原 Case、不写任何新行 |
 | 不同 key | 各自独立执行业务（受 primary 串行化约束） |
+
+**Mismatch 可达性（当前命令形状，冻结澄清）**：`POST /api/v1/cases` 的唯一合法业务 body 是 `{idempotencyKey}`；去掉幂等键后 `body = {}`。因此本 Slice 的 **public HTTP API 不存在第二种合法业务 payload**，`409 IDEMPOTENCY_PAYLOAD_MISMATCH` 在 HTTP 层不可达。该分支仍必须在 **shared idempotency domain / repository contract 层**实现并验证（same scope key + different `request_hash` → `MISMATCH` → 409 映射），但**不得**通过切换 actor（会改变 scope）、伪造 Family 上下文或新增无业务意义字段制造假场景；也不得为了测试可达而扩大 public 请求体。
 
 **占位模式**：`INSERT ... ON CONFLICT DO NOTHING RETURNING id` 先占位（`response_status=0`、`response_body='{}'`，同事务内回填）。
 并发同 key 时，第二个事务在唯一索引冲突上等待第一个提交/回滚：提交 → 第二个读到已提交行 → REPLAY；回滚 → 第二个插入成功并执行。占位值在事务外不可见，不会泄露。
@@ -485,14 +490,14 @@ request_hash = sha256(canonicalJson({
 - 请求体（strict，`additionalProperties: false`）：`{ "idempotencyKey": string(8..128) }`。
 - 客户端提交 `familyId` / `createdByPersonId` / `status` / `phase` / `primary` / `version` / `title` / `description` 等任何字段 → `422 VALIDATION_ERROR`（显式拒绝，不静默忽略）。
 - 成功：`201` + `CaseResponse`（identity context 的 Case 容器）。
-- 错误：`401 UNAUTHENTICATED`、`403 CASE_ACCESS_DENIED`、`404 CURRENT_FAMILY_NOT_FOUND`、`409 IDEMPOTENCY_PAYLOAD_MISMATCH`、`422 VALIDATION_ERROR`、`500 INTERNAL_ERROR`。
+- 错误：`401 UNAUTHENTICATED`、`403 CASE_ACCESS_DENIED`、`404 CURRENT_FAMILY_NOT_FOUND`、`409 IDEMPOTENCY_PAYLOAD_MISMATCH`（合同保留；当前请求体形状下 HTTP 层不可达，见 D-5.3）、`422 VALIDATION_ERROR`、`500 INTERNAL_ERROR`。
 
 #### 9.2 `GET /api/v1/cases`
 
 - 成功：`200 { "items": CaseResponse[] }`（沿用 Slice 1 集合端点 `items` 命名）。
 - 排序：`primary DESC, created_at ASC, id ASC`（确定性）。
 - 空 Family：`200 { "items": [] }`，不伪造占位 Case。
-- 分页：**本 Slice 不实现**。理由：正式需求（U04 / §28.3）未给出分页约束；单 Family Case 数量小；返回全部才能无条件保证 primary 可唯一识别。记录为可逆的技术选择（Open Review Item）。
+- 分页：**本 Slice 不实现**（Frozen Technical Decision **R2**）。理由：正式需求（U04 / §28.3）未给出分页约束；单 Family Case 数量小；返回全部才能无条件保证 primary 可唯一识别。
 - 错误：`401`、`403 CASE_ACCESS_DENIED`、`404 CURRENT_FAMILY_NOT_FOUND`。
 
 #### 9.3 `GET /api/v1/cases/:id`
@@ -611,7 +616,7 @@ request_hash = sha256(canonicalJson({
 
 ```text
 specs/002-case-core/
-  spec.md                                  # 冻结，不改
+  spec.md                                  # 冻结（closeout 仅做 Q3 幂等可达性最小澄清）
   plan.md                                  # 本文件
   research.md                              # Phase 0
   data-model.md                            # Phase 1
@@ -661,11 +666,12 @@ tests/integration/cases-scope.test.ts      # 新增
 | FR-005 / FR-018（无 transition / 越界路由） | route enumeration + DB introspection | `bunx vitest run tests/integration/cases-scope.test.ts` | 路由表恰为 3 条 Case 端点；不存在 `/cases/current`、pause、resume、switch-primary、close、recurrences、messages、assessments、participants |
 | FR-006 / FR-007 / SC-001 / SC-002（单 primary、首个 primary、候选保留） | DB + integration | `bunx vitest run tests/integration/cases-create.test.ts` | 串行创建：第 1 个 true，后续 false；全部可读取；无 Plan / Task / Notification 副作用 |
 | 并发 primary 不变量（场景 3 / SC-002） | 真实 PG 多连接并发 | `bunx vitest run tests/db/cases-primary-concurrency.test.ts` | 两个不同 key 并发创建后，`primary=true AND status<>'CLOSED'` 计数 = 1；两个 Case 均存在；重复运行仍成立 |
-| 同 key 并发（场景 10 / SC-006） | 并发 integration | `bunx vitest run tests/integration/cases-idempotency.test.ts` | 只产生 1 个 Case、1 组 event、1 组 audit；另一个 REPLAY 原响应 |
+| 同 key 并发（场景 10 / SC-006） | 并发 integration | `bunx vitest run tests/integration/cases-idempotency.test.ts` | 只产生 1 个 Case、1 组 event、1 组 audit；其余为 REPLAY 原响应；不存在第二个业务结果 |
 | FR-008 / FR-009 / FR-024（manager allow / member deny / guardian deny） | integration | `bunx vitest run tests/integration/cases-authorization.test.ts` | manager：create/list 201/200；member / guardian：create/list `403 CASE_ACCESS_DENIED`；detail `404 CASE_NOT_FOUND`；均无 Case 数据 |
 | FR-010 / FR-023 / SC-004（跨家庭 + 详情 404 anti-enumeration） | integration + DB | `bunx vitest run tests/integration/cases-read.test.ts` | Family A 读 Family B Case → `404 CASE_NOT_FOUND`，响应体无任何 Case 字段；Family A 的 RLS 上下文直查 Family B Case → 0 行 |
 | FR-011 / §9.1（RLS ENABLE/FORCE、无上下文、错误 Family、runtime role） | DB 结构 + 直连查询 | `bunx vitest run tests/db/cases-rls.test.ts` | `relrowsecurity=true`、`relforcerowsecurity=true`；无上下文 SELECT 0 行、INSERT 被拒；错误 family 0 行；`rolbypassrls=false`；owner 为 migrator |
-| FR-012 / FR-013 / SC-009（幂等、version 初始值） | integration + domain | `bunx vitest run tests/domain/case-authorization.test.ts tests/integration/cases-idempotency.test.ts` | 同 key 同 payload 返回原 201 body；异 payload 409；`version=1` 且无更新路径改变它 |
+| FR-012 / FR-013 / SC-009（HTTP 可达幂等、version 初始值） | integration + domain | `bunx vitest run tests/domain/case-authorization.test.ts tests/integration/cases-idempotency.test.ts` | 同 key 同 canonical payload（含并发）返回原 201 body 且只有一个业务结果；`version=1` 且无更新路径改变它 |
+| FR-012 / §8.5（shared idempotency mismatch contract） | domain + repository/service contract | `bunx vitest run tests/domain/idempotency-hash.test.ts` 与 `tests/integration/cases-idempotency.test.ts` 的 repository/service contract 用例 | 相同 scope key + 不同 `request_hash` → `MISMATCH` → 映射 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原 Case/结果、不写新行。**不得声称 public HTTP API 存在可达的 different-payload 请求**；不得用换 actor（scope 改变）制造假 mismatch |
 | FR-014 / SC-007（Case + event + audit 原子） | integration + DB | `bunx vitest run tests/integration/cases-create.test.ts` | 成功创建后各存在 1 条 `CASE_CREATED`；构造事件 / 审计写入失败时 Case 不落库（回滚证据） |
 | FR-015 / 场景 13（客户端不能指定业务字段） | integration | `bunx vitest run tests/integration/cases-create.test.ts` | 携带 status / phase / primary / version / creator / familyId / title → 422；DB 仍为服务端值 |
 | FR-016 / FR-017 / SC-010（列表识别 primary、详情独立 status/phase） | integration | `bunx vitest run tests/integration/cases-read.test.ts` | 列表返回 `items`，primary 唯一可识别，每项含 phase/status/version；详情两字段独立；不存在 `/cases/current` |
@@ -702,17 +708,19 @@ tests/integration/cases-scope.test.ts      # 新增
 
 ---
 
-## Open Review Items（仅技术可逆选择）
+## Frozen Technical Decisions
 
-| # | 选择 | 备选 | 可逆性 |
+以下 R1–R5 已在 Plan Review 中做出选择并**冻结**；它们不是 Implement AI 可以自由重新选择的事项。
+
+| # | 冻结选择 | 理由 | 变更条件 |
 |---|---|---|---|
-| R-1 | 幂等键为 JSON body 字段 `idempotencyKey` | 改为 `Idempotency-Key` header | 可逆：单点修改 Zod schema + OpenAPI + 路由读取；需与 Slice 1 G9 收敛同步 |
-| R-2 | Case 列表不分页，返回全部 `items` | 增加 `limit` / `cursor` | 可逆：新增可选参数，不破坏现有响应；正式需求未要求分页 |
-| R-3 | API 用 `primary` 布尔字段 | 改为 `isPrimary`（与 `isManager` 风格一致） | 可逆：契约字段重命名，需同步 Zod / OpenAPI / 客户端 |
-| R-4 | `case_events` append-only 用「只授予 SELECT/INSERT」 | 增加 `BEFORE UPDATE/DELETE` trigger | 可逆：新增 trigger 属 reviewed migration；当前权限层已足够 |
-| R-5 | Case 详情在 Family 未解析时沿用 `CURRENT_FAMILY_NOT_FOUND` | 统一为 `CASE_NOT_FOUND` | 可逆：单点错误映射；当前选择遵循 FR-024「不定义第二套 Family 错误码」 |
+| **R1** | 幂等键为 JSON body 字段 `idempotencyKey` | Slice 1 runtime / Zod 单事实源如此；不创造第二套 transport | 若 Slice 1 final G9 最终改为 `Idempotency-Key` header，Slice 2 MUST 先返回 Plan Review 更新契约，不得 Implement 临场改变 |
+| **R2** | Case 列表不分页，返回全部 `items` | U04 / §28.3 未给分页约束；返回全部才能无条件保证 primary 可识别 | 需要正式分页需求时才变更 |
+| **R3** | API 字段 `primary`；DB 列 `is_primary` | `primary` 是 SQL 保留字；API 术语与 spec / 上游一致 | 契约字段重命名需显式评审 |
+| **R4** | `case_events` append-only 由运行角色只授予 `SELECT / INSERT`，当前不加 trigger | 权限层阻断早于 trigger；runtime 无 UPDATE / DELETE 能力 | 需要防御 owner 误操作时再评审 |
+| **R5** | Family 未解析时沿用 Slice 1 final `CURRENT_FAMILY_NOT_FOUND` 等正式 Family 语义 | FR-024 不得定义第二套 Family 错误码 | 上游 Family 语义变化时同步更新 |
 
-以上均为技术选择，不改变 spec 的产品语义；不得作为未解决产品问题的替代。
+以上为冻结技术决策，不改变 spec 的产品语义；不得作为未解决产品问题的替代。
 
 ---
 
@@ -720,4 +728,4 @@ tests/integration/cases-scope.test.ts      # 新增
 
 **NONE**
 
-本 Plan 无产品级歧义。Slice 1 的实现依赖按 `## 0. Slice 2 Implement Gate` 在 Implement 前重新验证；Gate 失败时报告 `BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`，而不是在本 Plan 中私建替代基础设施。
+本 Plan 无产品级歧义。Slice 1 的实现依赖按 `## 0. Slice 2 Implement Gate` 在 Implement 前重新验证；Gate 失败时报告 `BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`，而不是在本 Plan 中私建替代基础设施。若 G11 失败（current Family 多 Family 选择仍不确定），报告 `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`，由 Slice 1 修复，Slice 2 不私自修。

@@ -168,8 +168,9 @@ CLOSED
 - 同一张表；**不新建第二张幂等表**。
 - 所有 lookup / 占位 / 回填 / replay 都在 `withRlsTransaction` 内执行；该表 RLS 为 `actor_account_id = app_account_id()`（Slice 1），无 identity 上下文时 0 行 / 拒写。
 - 占位：首次插入使用 `response_status = 0`、`response_body = '{}'`，同一事务内回填真实响应。
-- `request_hash` 组成见 `research.md` R-4。
-- 相同 key + 相同 hash → 返回原 `response_status` / `response_body`；相同 key + 不同 hash → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
+- `request_hash` 组成见 `research.md` R-4：`{ familyId, body }`。`familyId` 是服务端已验证的 canonical command context，不是客户端提交字段（客户端提交 → 422）。
+- 相同 key + 相同 hash → 返回原 `response_status` / `response_body`；相同 key + 不同 hash → `MISMATCH` → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
+- 当前 public 请求体只有 `idempotencyKey`，`body` 恒为 `{}`，因此 HTTP 层不存在第二种合法 business payload；mismatch 分支在 shared idempotency domain / repository contract 层验证，不在 HTTP 层伪造。
 
 ### 5.4 扩展方式
 

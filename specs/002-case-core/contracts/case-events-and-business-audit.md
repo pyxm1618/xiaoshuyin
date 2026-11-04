@@ -100,7 +100,7 @@
 |---|---|---|
 | 首次创建成功 | +1 行 `CASE_CREATED` | +1 行 `CASE_CREATED` |
 | 同 key 同 payload 重放 | 不增加 | 不增加 |
-| 同 key 不同 payload（409） | 不增加 | 不增加 |
+| MISMATCH（shared contract；当前 CASE_CREATE 请求体形状下 HTTP 不可达） | 不增加 | 不增加 |
 | 业务事务失败 | 回滚，不留下 | 回滚，不留下 |
 | 并发两个不同 key | 各 +1 行；对应两个不同 Case | 各 +1 行 |
 | GET / list / detail | 不增加（D7） | 不增加（D7） |

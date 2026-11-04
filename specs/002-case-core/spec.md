@@ -62,6 +62,7 @@
 
 - **Q1 — 单 Case 详情与 Family 级操作的 NOT_FOUND / DENIED 语义** → **RESOLVED（D6）**：`GET /api/v1/cases/:id` 对「Case ID 不存在 / Case 属于其他 Family / actor 无访问资格」统一返回 `404 CASE_NOT_FOUND`，响应不包含 Case 是否真实存在、Family ID、status、phase、primary、creator 或任何其它 Case 字段。`GET /api/v1/cases` 与 `POST /api/v1/cases` 在「当前目标 Family 已合法解析但 actor 不是该 Family 的 V1 管理主体」时返回 `403 CASE_ACCESS_DENIED`，不返回 Family 内 Case 数据，也不创建 Case。API 层统一 404 不得削弱数据库 RLS：无上下文仍为 SELECT 0 rows / write denied，错误 Family 上下文仍为 0 rows / denied。
 - **Q2 — Case read audit** → **RESOLVED（D7）**：Slice 2 不实现 Case read audit。`GET /api/v1/cases` 与 `GET /api/v1/cases/:id` 不因读取创建 `case_event` 或 `business_audit_event`；普通 read 不得因为审计写入失败而改变读取结果。Case 创建仍在同一业务事务内产生 `Case + case_event + business_audit_event + idempotency result`。未来如正式的数据权利 / 安全审计需求要求访问日志，由对应 Slice 明确设计，不得在 Case Core 偷建第二套 access-log 语义。
+- **Q3 — `CASE_CREATE` 的 different-payload 409 在 public API 的可达性** → **RESOLVED（本次最小澄清）**：当前 `POST /api/v1/cases` 的唯一合法业务请求体为 `{"idempotencyKey": "..."}`；去掉幂等键后 canonical body 恒为 `{}`，因此当前命令形状下**不存在第二种合法业务 payload**。public API 必须验证的行为是：同一 `actor + CASE_CREATE + idempotencyKey` 重放时返回原 Case、不新建 Case、不追加 `case_event`、不追加 `business_audit_event`；并发同 key 只产生一个 business result，其余为 replay。§8.5 的「same scope key + different canonical payload hash → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`」合同**仍然保留**，但该分支必须在 shared idempotency domain / repository contract 层验证：不得伪造一个不可能存在的 HTTP 场景，不得通过切换 actor（会改变 scope）制造假 mismatch，也不得为了测试可达而新增无业务意义字段。
 
 其余 Owner Decisions D1–D5 已确认，本轮不重新打开。
 
@@ -86,7 +87,7 @@
 15. **当前 primary Case 的读取语义**：由 `GET /api/v1/cases` 的同一数据源表达；不得新增 `/cases/current` 之类的第二真相源，也不得把 primary 复制到另一张表（U04、§28.3）。
 16. **Case 级家庭隔离**：应用层授权判定 + 数据库 RLS 双层防线；`case_id` / `family_id` 只作为待验证参数（§9、§9.1、V1-C21）。
 17. **Case RLS**：`cases` 与 `case_events` 必须启用并强制 RLS，无上下文默认拒绝（§9.1）。
-18. **Case 创建幂等**：`CASE_CREATE` 属于关键命令，遵循 §8.5 合同；相同幂等键 + 相同 payload 返回原结果，不同 payload 返回 409。
+18. **Case 创建幂等**：`CASE_CREATE` 属于关键命令，遵循 §8.5 合同；相同幂等键 + 相同 canonical payload（含并发同 key）返回原结果且只有一个业务结果；shared idempotency 合同对「相同 scope key + 不同 canonical payload hash」仍返回 409。本 Slice 的 public `POST /api/v1/cases` 请求体除 `idempotencyKey` 外无可变业务字段，因此 HTTP 层不存在可达的合法 different-payload 请求（见 Clarifications Q3）。
 19. **Case 创建留痕**：创建 Case 必须在同一业务事务内产生 `case_event` 与 `business_audit_event`，不得出现“Case 已存在但无创建证据”的中间状态（§7.8、§7.9、§38）。普通读取不产生这两类记录，也不依赖审计写入成功（D7）。
 20. **U04 服务端能力**：能读取当前主要 Case 及其阶段；无 Case 时返回真实的空结果，不伪造默认 Case（U04）。
 
@@ -163,7 +164,7 @@
 7. **Given** 数据库连接没有任何 `app.family_id` / 身份上下文，**When** 查询 `cases` 或 `case_events`，**Then** 返回零行；写入被拒绝，而不是默认放行。**Upstream**: §9.1
 8. **Given** 一个 Family 中不是该 Family 创建者的普通成员，**When** 尝试创建、列出或读取该 Family 的 Case，**Then** 服务端拒绝：创建 / 列表返回 `403 CASE_ACCESS_DENIED` 且不返回 Case 数据；单 Case 详情返回 `404 CASE_NOT_FOUND` 且不泄露 Case 是否存在；普通 membership 不自动推导 Case 管理访问。**Upstream**: §9、D2、D6、V1-C21
 9. **Given** 一个对某未成年人具有 guardian relationship、但不是目标 Family 创建者的 actor，**When** 尝试访问该 Family 的 Case，**Then** 创建 / 列表返回 `403 CASE_ACCESS_DENIED`，单 Case 详情返回 `404 CASE_NOT_FOUND`；guardian relationship 不替代 Case access。**Upstream**: §9、D2、D6
-10. **Given** 同一个 `CASE_CREATE` 幂等键与相同 payload 已被处理，**When** 客户端重试相同请求，**Then** 返回原 Case 结果，不创建第二条 Case，不追加第二组 `case_event` / `business_audit_event`，也不产生第二个业务结果；**Given** 相同幂等键但 payload 不同，**When** 再次提交，**Then** 返回 409，不修改原 Case。**Upstream**: §8.5、V1-C28
+10. **Given** 同一个 `CASE_CREATE` 幂等键与相同 canonical payload 已被处理，**When** 客户端重试相同请求（含并发同 key），**Then** 只有一个业务结果：返回原 Case，不创建第二条 Case，不追加第二组 `case_event` / `business_audit_event`。**Given** shared idempotency 合同收到「相同 scope key + 不同 canonical payload hash」，**Then** 返回 MISMATCH 并映射为 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`，不修改原 Case。本 Slice 的 public `POST /api/v1/cases` 请求体除 `idempotencyKey` 外无可变业务字段，因此该 MISMATCH 分支在共享幂等基础设施层验证，不在 HTTP 层伪造。**Upstream**: §8.5、V1-C28
 11. **Given** 一次成功的 Case 创建，**When** 检查领域历史与审计，**Then** 存在与该 Case 对应的 `case_event` 与 `business_audit_event`，且 Case 落库、事件与幂等重放快照构成同一业务事务的结果；不得出现 Case 已存在但无创建证据的持久状态。**Upstream**: §7.8、§7.9、§38
 12. **Given** 本 Slice 的数据库结构与路由清单，**When** 做结构 / 路由断言，**Then** 不存在 `case_participants`、`assertions`、`observations`、`problem_formulations`、`scene_node_states`、`scene_artifacts`、`dialogue_messages`、Safety / Plan / Task / Notification 等越界表；不存在 pause / resume / switch-primary / close / recurrences / messages / assessments / participants 等越界路由或空壳实现。**Upstream**: §7.2、§28.3、Out of Scope
 13. **Given** 一个创建请求携带 `status`、`phase`、`primary`、`version`、创建者或任何 Case 内容字段，**When** 请求被处理，**Then** 客户端提供的这些值不能决定业务结果；创建结果只能是 `OPEN + INTAKE`，primary 由服务端依据当前 Family 状态判定，创建者由已验证 actor 决定，version 由服务端初始化。**Upstream**: §6.1、§6.2、§8.1、§8.6、§9、§28.3
@@ -182,6 +183,7 @@
 - **未来状态不可达**：即使数据库可以表达 §6.1 / §6.2 的完整词汇，本 Slice 也不存在任何可达路径把 Case 改成 `WAITING` / `PAUSED` / `CLOSED` 或 `ASSESSMENT` 等状态；不得创建“演示用”的转换接口。
 - **未来副作用不得伪造**：创建候选 Case 不得触发 Plan、Task、Follow-up、Notification、AI run、Memory 或 Safety 副作用；这些对象在本 Slice 不存在。
 - **客户端越权字段**：客户端不得指定 status、phase、primary、version、creator、family 归属后的迁移或任何内容字段；这些值不能改变业务结果。
+- **幂等 mismatch 可达性**：本 Slice 的 `POST /api/v1/cases` 请求体除 `idempotencyKey` 外没有可变业务字段，因此 public API 不存在合法的第二种业务 payload，`409 IDEMPOTENCY_PAYLOAD_MISMATCH` 在 HTTP 层不可达。不得通过切换 actor（会改变幂等 scope）、伪造 Family 上下文或新增无业务意义字段制造 mismatch；§8.5 的 mismatch→409 合同仍在 shared idempotency 基础设施层保持并验证。
 - **事务失败**：幂等记录、Case、`case_event`、`business_audit_event` 任一写入失败时，整个业务事务失败并返回真实错误；不得出现部分成功的“假成功”。
 - **对外 404 / 403 语义**：单 Case 详情将「不存在 / 跨 Family / 无访问资格」统一为 `404 CASE_NOT_FOUND`，不得通过状态码或响应体差异泄露某个 Case ID 是否存在；当前 Family 已合法解析但 actor 非管理主体的集合 / 创建操作返回 `403 CASE_ACCESS_DENIED`。两种语义 MUST NOT 互相替代，也 MUST NOT 削弱 RLS 的零行 / 拒绝行为（D6、FR-023、FR-024）。
 - **读审计**：本 Slice 不对 `GET /api/v1/cases` 与 `GET /api/v1/cases/:id` 写入 `case_event` 或 `business_audit_event`；读取结果 MUST NOT 因审计写入而改变。未来若正式的数据权利 / 安全审计需求要求访问日志，由对应 Slice 明确设计，不得在 Case Core 引入第二套 access-log 语义（D7、FR-025）。
@@ -199,7 +201,7 @@
 - **FR-009** [UPSTREAM: §9 / D2] 普通 Family membership MUST NOT 自动推导 Case 管理访问；guardian relationship MUST NOT 替代 Case access；MUST NOT 创建 Case role、RBAC、Visibility Matrix 或 Participant 权限 DSL。
 - **FR-010** [UPSTREAM: §9 / §9.1 / V1-C21] 客户端传入的 `case_id` / `family_id` MUST 只作为待验证参数；Case MUST 属于当前目标 Family，ID 存在 MUST NOT 构成访问依据；跨家庭访问 MUST 在应用层与数据库层都失败，且不得泄露目标 Case 字段。
 - **FR-011** [UPSTREAM: §9.1] `cases` 与 `case_events` MUST 启用并强制 RLS；运行账号 MUST NOT 为 table owner、MUST NOT 具备 BYPASSRLS；无上下文 MUST 默认拒绝而不是放行。所有家庭级读写 MUST 通过统一的 `withRlsTransaction` 语义设置当前目标 Family 上下文后执行。
-- **FR-012** [UPSTREAM: §8.5 / D5] `CASE_CREATE` MUST 遵循 `actor_id + command_type + idempotency_key` 幂等合同：相同键 + 相同 payload MUST 返回原结果且不重复写入；相同键 + 不同 payload MUST 返回 409。
+- **FR-012** [UPSTREAM: §8.5 / D5] `CASE_CREATE` MUST 遵循 `actor_id + command_type + idempotency_key` 幂等合同：相同键 + 相同 canonical payload MUST 返回原结果且不重复写入，并发同 key MUST 只有一个业务结果。§8.5 的「相同 scope key + 不同 canonical payload hash → 409」合同 MUST 在 shared idempotency domain / repository contract 层保持并验证。当前 `POST /api/v1/cases` 的唯一合法业务请求体为 `{idempotencyKey}`，去掉幂等键后没有其它可变业务字段，因此本 Slice 的 HTTP 层不存在可达的合法 different-payload 请求；MUST NOT 通过切换 actor（改变 scope）或新增无业务意义字段伪造该分支。canonical command context MAY 包含服务端已验证的当前目标 Family ID（用于防止未来跨 Family 回放），但客户端 MUST NOT 提交 `familyId`。
 - **FR-013** [UPSTREAM: §8.6] `cases` MUST 携带 `version` 作为乐观并发基础；创建时 MUST 从确定初始版本开始并在读取中返回；本 Slice MUST NOT 新增任何修改 Case 的命令，也不得伪造后续版本的 If-Match / 更新语义。
 - **FR-014** [UPSTREAM: §7.8 / §7.9 / §38] 每次成功创建 Case MUST 在同一业务事务内产生对应的 `case_event` 与 `business_audit_event`；幂等重放 MUST NOT 追加第二组创建事件或审计事件；`case_events` MUST 作为领域历史与审计保留，MUST NOT 通过覆盖或删除历史事件来伪造当前状态。
 - **FR-015** [UPSTREAM: §28.3 / D4] `POST /api/v1/cases` MUST 只创建 Case 容器，MUST NOT 接受或保存 title、summary、problem_description、description 或任何 evidence-like 自由文本；MUST NOT 接受客户端指定的 status、phase、primary、version、creator 或 Family 迁移。
@@ -298,7 +300,7 @@ Case 的领域历史与审计。逻辑约束：
 - **SC-003**: 创建的 Case 全部为 `OPEN + INTAKE`；`status` 与 `phase` 是两个独立返回 / 存储字段，不存在组合枚举、互相推导或单一字段替代。
 - **SC-004**: Family A 的管理主体无法读取 Family B 的 Case；单 Case 详情返回 `404 CASE_NOT_FOUND` 且不泄露字段或存在性；在 Family A 的 RLS 上下文直连查询 Family B Case 返回零行；无任何 RLS 上下文时 `cases` / `case_events` 查询返回零行。
 - **SC-005**: 普通 Family membership 与 guardian relationship 均不能单独获得 Case 创建 / 列表 / 读取权限；拒绝由服务端执行：创建 / 列表在目标 Family 已解析但非管理主体时返回 `403 CASE_ACCESS_DENIED`，单 Case 详情返回 `404 CASE_NOT_FOUND`。
-- **SC-006**: `CASE_CREATE` 相同幂等键 + 相同 payload 返回原 Case 结果且记录数不变，不追加第二组创建事件 / 审计；相同键 + 不同 payload 返回 409 且不修改原 Case。
+- **SC-006**: `CASE_CREATE` 相同幂等键 + 相同 canonical payload（含并发同 key）只产生一个 Case 结果，记录数不变，不追加第二组创建事件 / 审计；shared idempotency 合同对「相同 scope key + 不同 canonical payload hash」返回 MISMATCH 并映射为 409，且不修改原 Case。本 Slice 的 public HTTP 请求体没有第二种合法业务 payload，因此不要求也不允许构造 HTTP 层 different-payload 场景。
 - **SC-007**: 每个成功创建的 Case 都有对应的 `case_event` 与 `business_audit_event`；不存在 Case 已持久化但无创建证据的状态，也不存在部分写入；普通读取不产生 `case_event` / `business_audit_event`，读取结果不依赖审计写入。
 - **SC-008**: 数据库结构与路由清单中不存在本 Spec 排除的 Case Participant、Evidence、Problem Formulation、Safety、Plan、Task、Notification 等表、路由、占位实现或抽象。
 - **SC-009**: 每个 Case 的 `version` 在创建后可读取且为确定初始值；本 Slice 没有任何更新 Case 的 API 改变该版本。
@@ -317,7 +319,8 @@ Case 的领域历史与审计。逻辑约束：
 | 无 RLS 上下文默认拒绝（场景 7、SC-004） | database | 未设置 `app.family_id` 时 `SELECT` 返回 0 行、`INSERT` 被拒绝的实测输出 |
 | 非管理主体 / guardian 拒绝（场景 8、9、SC-005） | integration | 普通成员与 guardian（非创建者）的创建 / 列表请求返回 `403 CASE_ACCESS_DENIED` 且不返回 Case 数据；单 Case 详情请求返回 `404 CASE_NOT_FOUND`；均不依赖前端隐藏 |
 | Case 404 / 403 固定语义（场景 6、8、9、SC-004、SC-005、FR-023、FR-024） | integration | 详情对「不存在 ID / 跨 Family / 同 Family 无资格」三类输入均返回 `404 CASE_NOT_FOUND`，且响应体一致、无任何 Case 字段或存在性提示；列表 / 创建在 Family 已解析但非管理主体时返回 `403 CASE_ACCESS_DENIED` 且无 Case 数据 |
-| 创建幂等（场景 10、SC-006） | integration | 相同键 + 相同 payload 重试后 Case 计数不变、返回原 ID，且 `case_events` / `business_audit_events` 行数不增加；相同键 + 不同 payload 返回 409 且原 Case 不变 |
+| 创建幂等 HTTP 可达行为（场景 10、SC-006） | integration | 相同键 + 相同 canonical payload 重试（含并发同 key）后 Case 计数不变、返回原 ID，且 `case_events` / `business_audit_events` 行数不增加；只有一个业务结果 |
+| 共享幂等 mismatch 合同（场景 10、SC-006、§8.5） | domain / repository contract | 相同 scope key + 不同 `request_hash` 时返回 MISMATCH 并映射为 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`，不改原结果；证据来自共享幂等基础设施层，**不得声称 public HTTP API 存在可达的 different-payload 请求** |
 | 创建事件与审计（场景 11、SC-007） | integration + database | 成功创建后 `case_events` 与 `business_audit_events` 各存在对应创建记录；构造事件写入失败时 Case 不落库（事务回滚证据） |
 | 读取不写审计（场景 16、SC-007、FR-025） | integration + database | 读取前后 `case_events` / `business_audit_events` 行数不变；读取路径不触发审计写入；不存在读取访问日志表 / 事件类型 |
 | 越界 schema / API 不存在（场景 12、SC-008） | database introspection + route enumeration | 目录 / 路由清单断言不存在排除对象；执行真实的 schema 与路由枚举输出 |

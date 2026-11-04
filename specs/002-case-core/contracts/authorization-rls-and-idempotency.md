@@ -120,9 +120,10 @@ actor_account_id + command_type='CASE_CREATE' + idempotency_key
 ```
 
 - 复用 `idempotency_keys`；不新建第二张表。
-- `idempotency_key`：JSON body `idempotencyKey`，8–128 字符。
+- `idempotency_key`：JSON body `idempotencyKey`，8–128 字符（Frozen Technical Decision **R1**）。
 - 同一张表的 RLS：`actor_account_id = app_account_id()`；无 identity 上下文 0 行 / 拒写。
 - lookup / 占位 / 回填 / replay 全部在 `withRlsTransaction` 内。
+- **scope 不含 family**：切换 Family 必须换 actor 视角才成立；`familyId` 只通过 canonical hash 参与一致性判定（见 5.2），不作为 scope 的一部分。
 
 ### 5.2 Canonical payload hash
 
@@ -135,11 +136,13 @@ request_hash = sha256(canonicalJson({
 
 | 输入 | 是否进入 hash | 理由 |
 |---|---|---|
-| `familyId` | 是 | 不属于 scope；决定结果归属；不进入会跨 Family 回放 |
+| `familyId`（服务端已验证的当前目标 Family） | 是 | 不属于 scope；决定结果归属；不进入会跨 Family 回放。它是 canonical command context，**不是客户端提交字段**；客户端提交 `familyId` → 422 |
 | `idempotencyKey` | 否 | 已在 scope 中 |
 | `actor_account_id` | 否 | 已在 scope 中 |
 | `command_type` | 否 | 已在 scope 中 |
-| 请求体其他字段 | 是（当前为空 `{}`） | 保持「同 key 不同 payload → 409」语义 |
+| 请求体其他字段 | 是（当前恒为空 `{}`） | 保持「同 key 不同 payload → 409」语义 |
+
+**可达性（冻结澄清）**：当前 public `POST /api/v1/cases` 唯一合法业务 body 是 `{idempotencyKey}`；去掉幂等键后 `body = {}`，`familyId` 由服务端上下文提供。因此 HTTP 层**不存在第二种合法 business payload**，mismatch 分支在 HTTP 层不可达；该分支在 shared idempotency domain / repository contract 层验证。
 
 ### 5.3 决策表
 
@@ -148,6 +151,11 @@ request_hash = sha256(canonicalJson({
 | 无 | — | `EXECUTE`（首次，占位后执行业务） |
 | 有 | 相同 | `REPLAY`：返回原 status / body；不写新 Case / event / audit |
 | 有 | 不同 | `MISMATCH`：409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；不修改原 Case |
+
+**验证分层（必须遵守）**
+- HTTP integration：只验证 same key replay、concurrent same key、Case/event/audit 不重复。
+- shared idempotency contract（domain / repository-service）：验证 same scope key + different `request_hash` → `MISMATCH` → 409 映射。
+- **禁止**声称 public HTTP API 存在可达的合法 different-payload 请求；**禁止**用换 actor（scope 改变）制造 mismatch。
 
 ### 5.4 占位与回填
 
@@ -215,5 +223,6 @@ request_hash = sha256(canonicalJson({
 | authorize 规则 2.2 | `tests/domain/case-authorization.test.ts` |
 | 归属与 404 / 403 语义 | `tests/integration/cases-authorization.test.ts`、`tests/integration/cases-read.test.ts` |
 | RLS 4.2 | `tests/db/cases-rls.test.ts` |
-| 幂等 5.3 / 5.4 | `tests/integration/cases-idempotency.test.ts` |
+| 幂等 5.3 / 5.4（HTTP 可达行为） | `tests/integration/cases-idempotency.test.ts`（replay + 并发同 key） |
+| 幂等 MISMATCH 合同（shared layer） | `tests/domain/idempotency-hash.test.ts` + repository/service contract 用例；**不是** HTTP 可达场景 |
 | 事务序列 6 | `tests/integration/cases-create.test.ts`、`tests/db/cases-primary-concurrency.test.ts` |

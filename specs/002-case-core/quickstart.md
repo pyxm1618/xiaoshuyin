@@ -19,7 +19,7 @@
 | PostgreSQL | `18`，原生 `uuidv7()` | §2 / §7.0 |
 | Docker | Stage A Compose（PG18 + api） | §4 Stage A |
 | 环境变量 | `DATABASE_URL`（app 角色）、`MIGRATION_DATABASE_URL`（migrator 角色）、`SESSION_SECRET` | Slice 1 Plan |
-| Slice 1 | 已合并到 main，final schema / RLS / 幂等 / 审计 green | Plan §0.2 G1—G10 |
+| Slice 1 | 已合并到 main，final schema / RLS / 幂等 / 审计 green；current Family 解析具备确定性语义（G11） | Plan §0.2 G1—G11 |
 
 ```bash
 # 角色与数据库由 Compose init 建立，Stage A 使用 PostgreSQL 18
@@ -35,9 +35,11 @@ docker compose -f docker-compose.stage-a.yml up -d postgres
 在写任何 Case 代码前，先逐项现场验证 Slice 1：
 
 ```bash
-# G1/G2：Slice 1 已合并 & Slice 2 已基于最终 main 同步
-git merge-base --is-ancestor <slice1-final-head> origin/main
-git log --oneline origin/main..HEAD
+# G1/G2：Slice 1 已合并；Slice 2 与最终 main 正常 merge（禁止 rebase / force push）
+git fetch origin
+git checkout feat/002-case-core
+git merge origin/main
+git merge-base --is-ancestor origin/main HEAD   # 必须成功
 
 # G3：真实 schema
 psql "$MIGRATION_DATABASE_URL" -c "\d families" -c "\d family_members" \
@@ -48,9 +50,16 @@ bunx vitest run tests/domain tests/db tests/integration/auth.test.ts \
   tests/integration/families.test.ts tests/integration/members.test.ts
 
 # G10：CI 与 converge（以真实 workflow / report 为准）
+
+# G11：current Family 解析具备确定性
+# 构造属于 >=2 Family 的 actor，重复调用 GET /api/v1/families/current，
+# 断言每次结果一致且可解释；不得依赖无 ORDER BY 的 rows[0]。
 ```
 
-任一失败：`BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`；不得私建替代基础设施。
+> **G2 冲突处理**：正常解决冲突后重跑 governance / tests，然后**普通 push**；不得 rebase，不得 force push。
+> **G11 失败**：报告 `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`，由 Slice 1 修复；Slice 2 不实现 Family switching。
+
+任一其它失败：`BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`；不得私建替代基础设施。
 
 ---
 
@@ -257,8 +266,9 @@ curl -s -o /tmp/deny-detail.json -w '%{http_code}\n' \
 
 ## 5. 幂等
 
+### 5.1 同 key 同 payload：重放
+
 ```bash
-# 5.1 同 key 同 payload：重放
 curl -s -X POST localhost:8787/api/v1/cases \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
@@ -266,18 +276,23 @@ curl -s -X POST localhost:8787/api/v1/cases \
 ```
 
 期望：返回**原 Case ID**；再查 `cases` / `case_events` / `business_audit_events` 行数不变。
+并发同 key（见第 6 节）也必须只有一个业务结果，其余为 replay。
 
-```bash
-# 5.2 同 key 不同 payload：409
-# 通过切换 Family 上下文制造不同 familyId（同一 token 不适用时，用不同 Family 的 manager token）
-curl -s -o /tmp/mismatch.json -w '%{http_code}\n' \
-  -X POST localhost:8787/api/v1/cases \
-  -H "authorization: Bearer $FAMILY_B_TOKEN" \
-  -H 'content-type: application/json' \
-  -d '{"idempotencyKey":"case-create-0001"}'
-```
+### 5.2 同 key 不同 payload：shared contract，非 HTTP
 
-期望：`409` + `IDEMPOTENCY_PAYLOAD_MISMATCH`；原 Case 不变，无新事件 / 审计。
+本 Slice 的 `POST /api/v1/cases` 唯一合法业务 body 是 `{"idempotencyKey":"..."}`；
+去掉幂等键后 `body = {}`，因此 **不存在第二种合法业务 payload**，
+public HTTP API 无法真实触发 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`。
+
+**禁止的测试写法**：
+- 用另一个 Family 的 manager token 复用相同 key 制造 “mismatch”——actor 变化导致 scope 变化，这不是 payload mismatch；
+- 为了测试可达而新增无业务意义字段或放开 strict schema。
+
+**正确验证位置**：shared idempotency domain / repository contract 测试
+（`tests/domain/idempotency-hash.test.ts` 与 repository/service contract 用例）。
+
+断言：同一 scope key + 不同 `request_hash` → `MISMATCH` → 映射 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；
+不修改原 Case、不写新事件 / 审计。
 
 > 实现必须保证：幂等 lookup / 占位 / 回填都在 `withRlsTransaction` 内，不得照抄 Slice 1 `families.ts` 的无上下文 `pool.query`。
 
@@ -343,7 +358,8 @@ bunx vitest run tests/db tests/integration
 | 结构 / RLS | `cases-schema` / `cases-rls` 测试的真实断言输出 |
 | 并发不变量 | `cases-primary-concurrency` 的聚合查询结果 |
 | 授权 / 反枚举 | `cases-authorization` / `cases-read` 的 HTTP 状态与响应体 |
-| 幂等 | `cases-idempotency` 的行数前后对比 |
+| 幂等（HTTP 可达） | `cases-idempotency` 的 replay / 并发同 key 行数前后对比 |
+| 幂等 mismatch（shared contract） | domain / repository contract 用例：same scope + different `request_hash` → MISMATCH → 409 映射；**不声称 HTTP 可达** |
 | 事件 / 审计 | `case_events` / `business_audit_events` 按 `case_id` / `resource_id` 的计数 |
 | 读不写审计 | 第 7 节前后计数 |
 | Scope | 表 / 路由 / 列 introspection 输出 |

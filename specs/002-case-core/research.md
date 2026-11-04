@@ -5,7 +5,7 @@
 **结论**: 所有技术未知项已在 Plan 内解决；无 `NEEDS CLARIFICATION`，无产品级 Open Question。
 
 > 本文只记录**技术选择**与理由。任何产品语义问题必须回到 `spec.md` / `Docs/**`，不得在此决定。
-> 所有调研基于 Slice 1 `feat/001-family-identity-core` 的只读真实实现（Head `f6257cb`），不代表 Slice 1 已最终冻结。
+> 所有调研基于 Slice 1 `feat/001-family-identity-core` 的只读真实实现（closeout 复核 Head `74a31eb`，60/72 tasks）；不代表 Slice 1 已最终冻结。
 
 ---
 
@@ -60,6 +60,8 @@
 3. Slice 1 手写 OpenAPI 中的 `Idempotency-Key` header 与 runtime / Zod 不一致，是 Slice 1 final closeout 的待收敛项（Implement Gate G9）；Slice 2 不复制该偏差。
 4. 若 Slice 1 final 统一改为 header，Slice 2 在 Implement Gate 重新对齐本 Plan 与 OpenAPI；不允许两套并存。
 
+**冻结状态**：本决策为 Plan 的 Frozen Technical Decision **R1**。Implement AI 不得临场重新选择；若 Slice 1 final G9 最终改为 header，Slice 2 必须先返回 Plan Review 更新契约。
+
 **Alternatives considered**
 - header `Idempotency-Key`：更符合 HTTP 惯例，但与 Slice 1 代码侧事实源不一致，会造成同一仓库两套机制。
 - query 参数：不适合幂等语义，且易被日志/缓存污染。
@@ -76,9 +78,14 @@ body = Zod strict 解析后的请求体去掉 idempotencyKey（当前恒为 {}�
 
 **Rationale**
 - `familyId` **必须**进入 hash：它不属于 idempotency scope，但决定业务结果归属；不进入会导致同一 key 跨 Family 回放，产生跨家庭数据泄漏（FR-010 / V1-C21）。
+- `familyId` 是**服务端 canonical command context**，不是客户端提交字段；客户端提交 `familyId` 仍按 strict schema 返回 422。这样既保留 Family 归属的 hash 语义，又不允许伪造上下文。
 - `actor_account_id` / `command_type` **不**进入 hash：它们已是 `idempotency_keys` 唯一键 `(actor_account_id, command_type, idempotency_key)` 的组成部分，重复混入没有额外区分力，只会把 scope 语义与 payload 语义耦合。
 - `body` 进入 hash：保持「同 key 不同 payload → 409」的通用语义；当前 body 为空，但 hash 结构不因 body 为空而退化——`familyId` 仍保证不同 Family 的请求被区分。
 - 使用 Zod strict 解析后的对象：未知字段直接 422，不进入 hash，避免「字段顺序不同 → hash 不同」的误判；`canonicalJson` 已按 key 排序。
+
+**可达性澄清（closeout）**
+本 Slice 的 public `POST /api/v1/cases` 只接受 `{idempotencyKey}`；去掉幂等键后 `body = {}`，`familyId` 又只能由服务端上下文提供。因此 public HTTP API **不存在第二种合法业务 payload**，`MISMATCH → 409` 在 HTTP 层不可达。
+该分支仍在 shared idempotency domain / repository contract 层实现并验证；不得通过切换 actor（会改变 scope）、伪造 Family 上下文或新增无业务意义字段制造假场景。
 
 **Alternatives considered**
 - 只 hash `{}`：同 key 可跨 Family 回放，禁止。
@@ -230,7 +237,7 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 - 对 `business_audit_events.event_type` / `resource_type`、`idempotency_keys.command_type` 使用 `DROP CONSTRAINT` + `ADD CONSTRAINT` 扩展白名单；实现前读取 `pg_constraint` 确认真实约束名。
 
 **Rationale**
-- Slice 1 尚未合并，migration 序号可能变化；Plan 写死序号会在 rebase 后产生错误。
+- Slice 1 尚未合并，migration 序号可能变化；Plan 写死序号会与 Slice 1 final 实际编号脱节。
 - Slice 1 的 CHECK 是内联匿名约束，PostgreSQL 默认命名为 `<table>_<column>_check`，但若 Slice 1 final 调整列定义或重复约束，名称可能不同；因此必须现场确认。
 - reviewed migration 是唯一变更路径；`drizzle-kit push` 禁止。
 
@@ -290,7 +297,7 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 
 **Alternatives considered**
 - 返回 `familyId` / `createdByPersonId`：增加响应面，无正式需求支撑。
-- 返回 `isPrimary`：与存储列名一致，但与 spec / 上游术语 `primary` 不一致；列为 Open Review Item R-3。
+- 返回 `isPrimary`：与存储列名一致，但与 spec / 上游术语 `primary` 不一致；列为 Plan Frozen Technical Decision **R3**。
 
 ---
 
@@ -302,8 +309,8 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 |---|---|---|
 | `families.ts` 的幂等 lookup 在无 identity 上下文的 `pool.query` 中执行 | `apps/server/api/src/routes/families.ts:36` | Case 幂等禁止照抄；必须在 `withRlsTransaction` 内 |
 | 幂等响应写入在业务事务**之外**的独立 `withIdentityTransaction` | `families.ts:106`、`members.ts:173` | 违反「同一业务事务原子」；Case 不照抄 |
-| OpenAPI 声明 `Idempotency-Key` header，runtime / Zod 用 body `idempotencyKey` | `contracts/identity-family-api.openapi.yaml:411` vs `packages/contracts/src/schemas.ts:77` | G9 需收敛；Case 选择 body（R-3） |
-| `/families/current` 取 `rows[0]`，未实现多 Family 409 | `families.ts:137-150` vs Slice 1 plan D-6.1 | Case 的 current family 解析沿用 final 实现 |
+| OpenAPI 声明 `Idempotency-Key` header，runtime / Zod 用 body `idempotencyKey` | `contracts/identity-family-api.openapi.yaml:411` vs `packages/contracts/src/schemas.ts:77` | G9 需收敛；Case 选择 body（Plan R1 / research R-3） |
+| `/families/current` 对多 Family actor 取 `rows[0]`，无 `ORDER BY`，未实现确定性的多 Family 选择语义 | `families.ts:137-150` vs Slice 1 plan D-6.1 | Case 的 current family 解析沿用 final 实现；**G11 必须证明确定性**。若 final 仍存在未定义行为 → `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`；Slice 2 不实现 Family switching |
 | `authorize()` 的 MANAGER_ACTIONS 分支为 placeholder `ALLOW` | `authorize.ts:94-101` | Case 动作必须传 `createdByPersonId` 并真实判定 |
 | `package.json` 引用不存在脚本（`db:evidence` / `openapi:generate` / `openapi:check` / `coverage:audit` / `verify-all`） | `package.json` vs `scripts/` | Verification Plan 只用真实命令；G10 补齐 |
 
@@ -312,4 +319,5 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 ## 结论
 
 Phase 0 无未解决问题。所有决策均可追溯到 `Docs/**` 或 Slice 1 冻结契约；没有新增产品语义，没有引入未批准依赖。
+closeout 仅澄清了「`CASE_CREATE` 的 HTTP different-payload mismatch 在当前命令形状下不可达」，并在 shared idempotency contract 层保留 §8.5 的 MISMATCH→409 合同；这属于验证可达性收口，不取消 §8.5。
 进入 Phase 1 的产物：`data-model.md`、`contracts/**`、`quickstart.md`。
