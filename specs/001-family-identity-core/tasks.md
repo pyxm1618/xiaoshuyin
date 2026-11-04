@@ -27,7 +27,7 @@
 
 目标：只建立本 Slice 真正需要的工程底座（Node 26 / TS / ESM / Fastify 5 / PG18 / Drizzle / Zod / Vitest / OpenAPI）。不创建 AI、RAG、memory、scenes、Case、小程序、运营端、Notification 任何目录或空壳。
 
-- [ ] T001 [P] [REQ:§4.1;plan:Technical-Baseline] 建立 bun workspace 根工程：`package.json`（workspaces: apps/*、packages/*）、`tsconfig.base.json`（ESM + NodeNext + strict）、`.gitignore`、`engines.node=26.13.0`（依赖 T000 无） [VERIFY:`bun install` 成功且 `bunx tsc -p tsconfig.base.json --noEmit` 通过]
+- [ ] T001 [P] [REQ:§4.1;plan:Technical-Baseline] 建立 bun workspace 根工程：`package.json`（workspaces: apps/*、packages/*）、`tsconfig.base.json`（ESM + NodeNext + strict）、`.gitignore`、`engines.node=26.13.0`（无依赖） [VERIFY:`bun install` 成功且 `bunx tsc -p tsconfig.base.json --noEmit` 通过]
 - [ ] T002 [P] [REQ:§4.1;§3] 建立服务端骨架 `apps/server/api/src/app.ts`、`server.ts`、`plugins/config.ts`（Fastify 5 + ESM + 结构化 logger），仅暴露 `GET /healthz`（依赖 T001） [VERIFY:`bun run dev:api` 启动后 `curl -s localhost:8787/healthz` 返回 200]
 - [ ] T003 [P] [REQ:plan:Project-Structure] 建立四个包骨架 `packages/contracts`、`packages/domain`、`packages/authorization`、`packages/compliance`（各含 `src/index.ts` + tsconfig，无业务实现）（依赖 T001） [VERIFY:`bun run typecheck` 通过且四包可被 apps 引用]
 - [ ] T004 [P] [REQ:§32;plan:Technical-Baseline] 配置 Vitest：`vitest.config.ts`、`tests/setup/env.ts`（读取 `DATABASE_URL` / 不接受缺失）、测试目录 `tests/{domain,integration,db,fixtures}`（依赖 T001） [VERIFY:`bun run test -- --run` 执行 0 个用例且退出码 0]
@@ -162,49 +162,54 @@
 
 ## Dependencies & Execution Order
 
-```text
-T001 ─┬─ T002 ────────────────┐
-      ├─ T003 ─┬─ T007        │
-      ├─ T004  ├─ T029 ─ T030 ┤
-      ├─ T005  └─ T037        │
-      └─ T006 ────────────────┤
-T009 ─ T010 ─┬─ T011          │
-             ├─ T012          │
-             └─ T013 ─ T014 ─ T015 ─ T016 ─┬─ T017 ─ T018 ─ T019 ─ T020 ─ T021 ─ T022
-                                            ├─ T023
-                                            └─ T014 ─ T024
-T017 ─ T025 ─ T026 ─ T027 ─ T028
-T025 ─ T041 ─ T042 ─ T043 ─ T044
-T042 + T041 ─ T045 ─ T046 ─┬─ T047 ─ T048 ─ T049 ─ T050
-                            │                    └─ T051（另需 T064）
-                            └─ T052 ─ T053 ─ T054 ─ T055 ─ T056 ─ T057 ─ T058 ─ T059 ─ T060
-T060 ─ T061 ─ T062
-T024 + T026 ─ T064
-T046/050/055/059 ─ T065
-T030 + T060 ─ T066
-T012 + T063 ─ T067 ─ T068 ─┬─ T069 ─ T070
-                           └─ T071 ─ T072
-```
+下表是**逐任务依赖边**（`T### ← 依赖`），与每个任务正文的 `（依赖 T###）` 逐条一致，用于校验无前向依赖、无环。
 
-- 无环：所有边方向为「基础 → 依赖 → 验证」。
-- Phase 3 全串行由同一 migration 文件决定；把它拆成并行任务会产生合并冲突与顺序漂移。
-- `[P]` 仅出现在不同包/不同文件、且前置已完成的任务上（T001–T007、T029–T040）。
+| Phase | 边 |
+|---|---|
+| 1 | T001 ← ∅；T002 ← T001；T003 ← T001；T004 ← T001；T005 ← T001；T006 ← T001；T007 ← T003；T008 ← T001–T007 |
+| 2 | T009 ← T001；T010 ← T009；T011 ← T010；T012 ← T010 |
+| 3 | T013 ← T010；T014 ← T013；T015 ← T014；T016 ← T015；T017 ← T016；T018 ← T016；T019 ← T018；T020 ← T019；T021 ← T020；T022 ← T021；T023 ← T016；T024 ← T014；T025 ← T017；T026 ← T025；T027 ← T026；T028 ← T027 |
+| 4 | T029 ← T003；T030 ← T029；T031 ← T004；T032 ← T031；T033 ← T004；T034 ← T033；T035 ← T004；T036 ← T035；T037 ← T003；T038 ← T029；T039 ← T007；T040 ← T003 |
+| 5 | T041 ← T025；T042 ← T039、T041；T043 ← T042；T044 ← T043；T045 ← T042；T046 ← T045 |
+| 6 | T047 ← T046；T048 ← T034、T047；T049 ← T048；T050 ← T049；T051 ← T046、T048 |
+| 7 | T052 ← T046；T053 ← T037、T052；T054 ← T053；T055 ← T054；T056 ← T055；T057 ← T056；T058 ← T057；T059 ← T058；T060 ← T038、T059 |
+| 8 | T061 ← T060；T062 ← T061；T063 ← T027；T064 ← T024、T026 |
+| 9 | T065 ← T046、T050、T055、T059；T066 ← T030、T060；T067 ← T012、T063；T068 ← T061–T067；T069 ← T068；T070 ← T068；T071 ← T008、T068；T072 ← T069–T071 |
+
+**一致性结论**：72 条边全部 `依赖 id < 任务 id`（无前向依赖）；边集构成 DAG（无环）；T051 只依赖 T046 与 T048，**不依赖 T064**（T064 只依赖 T024 与 T026）；UNDER_14 guardian-origin 来源规则由 **T057** 承担。
+
+关键约束：
+
+- Phase 3 全串行由**同一份 reviewed migration** 决定；把它拆成并行任务会产生合并冲突与顺序漂移。
+- 同一路由 / 同一测试文件 / 同一命令文件的任务不并行（US1–US3 各自链内串行）。
+- `[P]` 含义：**前置依赖全部完成后**，与当前同批次其它 `[P]` 任务（不同文件、无互依赖）可并行；`[P]` 不表示可以忽略自身依赖。本轮 14 个 `[P]`：T001–T007、T029、T031、T033、T035、T037、T039、T040。
+- 未标 `[P]` 的任务不作并行声明：即便文件不冲突，本表也按串行调度；Implement 若要并发它们，须先补 `[P]` 并复核依赖。
 
 ## Parallelization（供 Implement 使用）
 
 | 批次 | 任务 | 前置 |
 |---|---|---|
-| A | T001 ∥ T003 ∥ T004 ∥ T005 ∥ T006 | 无 |
-| A' | T002 ∥ T007 | T001 / T003 |
-| B | T008 → T009 → T010 → T011 ∥ T012 | A 完成 |
-| C | T013 → T028（串行，单 migration） | B 完成 |
-| D | T029 ∥ T031 ∥ T033 ∥ T035 ∥ T037 ∥ T039 ∥ T040 | C 完成（T029 仅需 T003） |
-| D' | T030、T038（依赖 T029）、T032（依赖 T031）、T034（依赖 T033）、T036（依赖 T035） | 同批 |
-| E | US1 串行 → US2 串行 → US3 串行；US2 与 US3 在 T046 完成后可并行（同一路由/命令文件内的任务不并行） | D 完成 |
-| F | T061 ∥ T063 ∥ T064 ∥ T065 ∥ T066 | E 相关端点完成 |
-| G | T067 → T068 → T069 → T070 → T071 → T072 | F 完成 |
+| A0 | T001 | 无 |
+| A1 | T002 ∥ T003 ∥ T004 ∥ T005 ∥ T006（均 `[P]`） | T001 |
+| A2 | T007（`[P]`） | T003 |
+| A3 | T008 | T001–T007 |
+| B0 | T009（串行；未标 `[P]`，文件与 A 批不冲突） | T001 |
+| B1 | T010 | T009 |
+| B2 | T011、T012（串行调度，前置 T010） | T010 |
+| C | T013 → T028（**全串行**，单 migration） | T010 |
+| D0 | T029 ∥ T031 ∥ T033 ∥ T035 ∥ T037 ∥ T039 ∥ T040（均 `[P]`） | C 完成（T029/T037/T040 仅需 T003，但与 C 同批不并行改 migration） |
+| D1 | T030 → T032 → T034 → T036 → T038（各自依赖 T029 / T031 / T033 / T035 / T029） | D0 |
+| E0 | T041 → T042 → T043 → T044 | T025、T039 |
+| E1 | T045 → T046 | T042 |
+| E2（US2 链） | T047 → T048 → T049 → T050；T051（← T046、T048） | T046、T034 |
+| E3（US3 链） | T052 → T053 → T054 → T055 → T056 → T057 → T058 → T059 → T060 | T046、T037、T038 |
+| F0 | T063、T064（串行；未标 `[P]`，前置 C，可与 E 批交错调度） | T027 / T024、T026 |
+| F1 | T061 → T062 | T060 |
+| F2 | T065（← T046/T050/T055/T059）、T066（← T030/T060） | E2/E3 相关端点 |
+| G | T067 → T068 → T069、T070 → T071 → T072 | T012、T063 + F 全部 |
 
-> 强依赖不标 `[P]`：同一 migration（Phase 3）、同一路由文件（同 Story 内）、同一测试文件（同一 suite）均串行。
+- **US2 与 US3**：共同前置（T046、D 批）满足后，两条链的文件不冲突，允许并发推进；但两链内各任务互为前置，必须按链内串行。因链内任务未标 `[P]`，本表不作并行声明；如需并发，请先为相应任务补 `[P]`。
+- **T051 与 T064**：两者无依赖关系（T051 只依赖 T046、T048；T064 只依赖 T024、T026），分属 E2 与 F0，可独立调度。
 
 ## Coverage
 
