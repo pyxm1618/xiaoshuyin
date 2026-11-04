@@ -206,15 +206,17 @@ B. withRlsTransaction({ familyId, accountId, personId, purpose })
    用途：全部家庭级读写（除成立家庭本身）
 
 C. withFamilyCreationTransaction({ accountId, personId, newFamilyId, displayName })
+   顺序：existing Person → Family → membership → ADULT profile → values → audit
    BEGIN → app.set_identity_context(accountId, 'FAMILY_MANAGEMENT')
          → app.create_family(newFamilyId, personId, displayName)  ← 设上下文 + 插 families
-         → fn  ← 插 membership → person → profile → values → audit
+         → fn  ← 插 membership → 插 ADULT profile → values → audit
          → COMMIT
    用途：仅 POST /families
+   约束：Person 已由首次 POST /auth/wechat 建立；本命令**不得**再创建 Person
 ```
 
 - `set_family_context` 的 membership 校验发生在 `set_config` **之后**，因此该 EXISTS 查询本身受 RLS 约束，只能看到目标家庭的行。
-- `create_family` 是唯一没有 membership 前置的入口（新家庭尚无 membership）。它被 `families.WITH CHECK` 锁死为“只能给自己建家庭”，且同事务内必须插 membership，否则后续写入全部失败。记入 `plan.md` R-10。
+- `create_family` 是唯一没有 membership 前置的入口（新家庭尚无 membership）。它被 `families.WITH CHECK` 锁死为“只能给自己建家庭”，且同事务内必须插 membership，否则后续写入全部失败。记入 `plan.md` R-8。
 - 禁止：事务外 `SET LOCAL` 后从连接池查询；`sql.raw` 拼接 family/person/purpose；在事务外缓存或复用上下文；连接用完不重置（依赖 `set_config(..., true)` 的事务级作用域，天然随事务结束失效）。
 
 **信任边界（明确记录，不夸大）**：`set_config` 是内置函数，任何持有 app 角色的连接都能直接调用。GUC 型 RLS 的前提是“应用在 `authorize()` 之后诚实设置上下文”；它防的是查询遗漏，不是恶意应用。§9.1 的定位原文即“防止查询遗漏导致跨家庭泄漏的第二道硬防线”。

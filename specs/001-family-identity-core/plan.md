@@ -824,5 +824,5 @@ tests/
 **本轮已撤销的旧条目**（记录以保持追溯，不再是 Open Item）：
 
 - 原 R-4 `RELATION_DESCRIPTOR`：为证明 provenance 而新增无正式需求的资料字段，已按审核意见删除，且不设替代字段。
-- 原 R-7 `POST /families` 同时建立创建者 Person：与 spec US1「登录时建立 Account 与对应 Person」冲突，已改为登录建立 Person。
+- 原 R-7（创建者 Person 的建立时机）：已撤销；Person 由首次登录建立，符合 spec US1「登录时建立 Account 与对应 Person」。
 - 原 R-5 中 `idempotency_keys` 无 RLS：已改为身份级 RLS。
