@@ -92,19 +92,23 @@ Person 在**首次微信登录**时建立（`POST /auth/wechat` 同一事务内�
 
 **Decision**
 
-`consent_records` 的业务列（guardian / purpose / decision / version / notice / evidence / decided_at / supersedes）**不可更新**；`bound_person_id` 只允许 `NULL → 值` 一次，`bound_at` 同时写入；由 `BEFORE UPDATE` 触发器强制，任何其它变更抛异常。撤回 = 追加 `decision='REVOKED'` 的新版本行。
+`consent_records` 的业务列（guardian / purpose / decision / version / notice / evidence / decided_at / supersedes / onboarding_request_id）**不可更新**；`(bound_person_id, bound_at)` 作为一对只允许 `(NULL,NULL) → (personId, serverTimestamp)` 一次，此后两者都不可变；由 `BEFORE UPDATE` 触发器 + `CHECK` 共同强制。撤回 = 追加 `decision='REVOKED'` 的新版本行，且该行 `onboarding_request_id IS NULL`。
 
 **Rationale**
 
 - V1-C39 要求“可验证的监护人同意证据”。可验证的前提是证据本身不可被静默改写。
 - 撤回必须是新版本（FR-010），不能把原 GRANTED 行改成 REVOKED——否则“曾经同意过”这一事实就消失了。
-- `bound_person_id` 的一次性绑定是必要例外：同意成立时孩子尚不存在（consent-first），只能事后绑定；把绑定限制为“只能发生一次、不可改绑”即可在不改写决策的前提下完成关联。
+- 绑定是必要例外：同意成立时孩子尚不存在（consent-first），只能事后把同意关联到 Person；把绑定限制为“成对写入、只能发生一次、不可改绑、不可改时间”即可在不改写决策的前提下完成关联。
+- `bound_at` 必须与 `bound_person_id` 一起锁定：只保护 person 的话，事后改时间仍能伪造“何时绑定”的证据；只靠 `CHECK ((person IS NULL) = (at IS NULL))` 也不够，因为它对“两个都已非空后单独改时间”没有约束力。
+- `onboarding_request_id` 必须可空且只对非 NULL 建唯一索引：撤回不是新的 onboarding，既不能复用原 request（撞唯一），也不能强行要求 request（NOT NULL violation）；否则撤回路径不可执行。
 - 触发器而不是仅靠仓储层：证据完整性属于数据不变量，不应依赖某一条代码路径的自觉（§III 确定性、§VII 数据边界不可绕过）。
 
 **Alternatives considered**
 
 1. 全表 append-only，绑定也走新行 → 会产生“未绑定同意”与“绑定副本”两行，语义重复且版本号含义混乱，否决。
 2. 允许 UPDATE 任意列 + 应用层保证 → 无法阻止直接 SQL 或未来 bug，否决。
+3. `onboarding_request_id` 保持 `NOT NULL UNIQUE`，撤回时复用原 request → 第二条行撞唯一索引，撤回不可执行，否决。
+4. 撤回时把原 GRANTED 行改成 REVOKED（不新增行）→ 丢失“曾经同意过”的事实，违反 FR-010，否决。
 3. 用事件溯源（consent_events + 投影表）→ 属通用平台，spec 明确排除，否决。
 
 ---

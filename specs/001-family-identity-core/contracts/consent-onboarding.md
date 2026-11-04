@@ -42,7 +42,7 @@
         │  C. 撤回（版本链）                            │
         └──────────────────────────────────────────────┘
    POST /consents/:id/revoke
-   → 追加 REVOKED(version+1, supersedes=当前)
+   → 追加 REVOKED(version+1, onboarding_request_id=NULL, supersedes=当前)
    → profile 指针前移
    → assertMinorProcessingAllowed → BLOCK
                     │
@@ -99,7 +99,7 @@
 | C6 | 请求体 `noticeVersion` = request 的 `notice_version` = 当前生效告知版本 | 应用 + `notices.ts` |
 | C7 | 请求体 `accepted` 严格等于 `true` | Zod（`const: true`） |
 | C8 | `notice_hash` 与 `notices.ts` 计算值一致 | 应用校验 |
-| C9 | 该 request 尚无 consent 行 | `UNIQUE(onboarding_request_id)` |
+| C9 | 该 request 尚未产出过 GRANTED 行 | partial `UNIQUE(onboarding_request_id) WHERE onboarding_request_id IS NOT NULL` |
 
 任一不满足 → 拒绝，且**不写入任何 consent 行**。
 
@@ -145,7 +145,7 @@
 **为什么不能先建 profile**：第 ⑥ 步在 ⑤ 之前会违反 `pcp_under14_requires_consent`。
 **为什么不能先建 profile 于 ③ 之前**：profile 的 `WITH CHECK` 依赖 membership 存在。
 
-- 绑定一次性：触发器拒绝 `bound_person_id` 从非空改为其它值。
+- 绑定是**原子对**：只允许 `(bound_person_id, bound_at) = (NULL,NULL) → (personId, serverTimestamp)` 一次。已绑定后两者都不可再改（含只改 `bound_at`、清空任一字段）；`CHECK` 保证不同时为空/非空，`BEFORE UPDATE` 触发器保证不可篡改。
 - `person_compliance_profiles` 的 `guardian_person_id` 取自 consent 的 `guardian_person_id`，不接受请求体另行指定（防止“同意人 A、guardian 写 B”）。
 - `guardian_consent_version` 取自 consent 的 `version`；`guardian_consent_record_id` 取其 `id`。
 
@@ -160,6 +160,7 @@
 执行（单事务）：
   SELECT … FROM person_compliance_profiles WHERE person_id = $subject FOR UPDATE
   INSERT consent_records (decision='REVOKED', version = current+1,
+                          onboarding_request_id = NULL,   -- 撤回不是新的 onboarding
                           supersedes_id = current, bound_person_id = subject,
                           bound_at = now(), notice_* = 当前告知, evidence = 撤回证据)
   UPDATE person_compliance_profiles
@@ -169,9 +170,28 @@
 ```
 
 - 不删除任何历史行（证据保留优先于状态整洁）。
+
+### 6.1 版本链在真实约束下的形态
+
+```text
+v1 GRANTED  onboarding_request_id = A     bound_person_id = P  bound_at = t1  supersedes = NULL
+v2 REVOKED  onboarding_request_id = NULL  bound_person_id = P  bound_at = t2  supersedes = v1
+v3 GRANTED  onboarding_request_id = B     bound_person_id = P  bound_at = t3  supersedes = v2
+```
+
+| 约束 | 作用 | v1 / v2 / v3 |
+|---|---|---|
+| `consent_request_binding` | GRANTED 必有 request；REVOKED 必无 | ✓ / ✓ / ✓ |
+| `consent_granted_request_key`（partial unique，仅非 NULL） | 一个 request 只产出一条 GRANTED | ✓ / 不参与 / ✓ |
+| `consent_subject_version_key`（`bound_person_id,purpose,version`） | 版本号不重复 | ✓ / ✓ / ✓ |
+
+REVOKED 行**必须**在这里写成 `bound_person_id = P`：撤回针对的是已经存在的未成年人，`consent_binding_consistency` 要求两个字段同时非空。它不复用 request A，因此不会撞 partial unique。
+
+v3（重新同意的 GRANTED）在 INSERT 时即可带 `bound_person_id = P` / `bound_at = t3`——未成年人已存在，不需要再 UPDATE 绑定；触发器只约束 UPDATE。
 - 不回删 Person、Profile、Profile Values、membership。
 - 撤回后 `assertMinorProcessingAllowed()` 立即 BLOCK；不存在“宽限期”。
 - 重复撤回同一版本 → 409（新版本必须基于当前版本，`version` 唯一索引会拒绝重复）。
+- **REVOKED 行不带 `onboarding_request_id`**：撤回不是新的 onboarding。见 §6.1。
 - §29.5 的依赖传播（Derived Memory / AI run / Formulation / Plan / Task）在本 Slice 无对象可传播，**不实现也不声明**。
 
 ---
@@ -219,7 +239,7 @@ assertMinorProcessingAllowed(
 | A-4 | 直接 SQL 插入 `UNDER_14` 且 consent 为空的 profile → CHECK violation | database |
 | A-5 | 同意成立后建档成功，profile 四个 consent 字段与 consent 行一致 | integration |
 | A-6 | 同一 consent 二次绑定 → 409，且不产生第二个 Person | integration |
-| A-7 | 撤回产生 version+1 且 `supersedes_id` 指向原版本 | integration |
+| A-7 | 撤回产生 version+1、`supersedes_id` 指向原版本、且 `onboarding_request_id IS NULL` | integration |
 | A-8 | 撤回后门禁立即 BLOCK，Person / 历史行仍存在 | integration |
 | A-9 | 撤回写入 `business_audit_events` | integration |
 | A-10 | `UNKNOWN` 永不进入 ADULT 分支 | unit |
@@ -231,3 +251,6 @@ assertMinorProcessingAllowed(
 | A-16 | 先绑定后建 Person 的事务（错误顺序）必须失败：直接把 `bound_person_id` 指向不存在的 Person → FK violation | database |
 | A-17 | 绑定发生在 Person 插入之后、profile 之前：正确顺序的集成测试通过，且 profile 的 `guardian_consent_record_id` 指向已绑定行 | integration |
 | A-18 | 同意 `decided_at` 早于 child Person 的 `created_at`（consent-first 的时间证据） | integration |
+| A-19 | GRANTED→REVOKED→GRANTED 三行在真实约束下共存：GRANTED 缺 request → CHECK violation；REVOKED 带 request → CHECK violation；同一 request 第二条 GRANTED → unique violation | database |
+| A-20 | 绑定对不可篡改：`(NULL,NULL)→(P,t)` 成功；改 person 失败；**只改 `bound_at` 失败**；清空任一字段失败；`(NULL,NULL)→(P,NULL)` 失败 | database |
+| A-21 | 撤回端点只有 `POST /api/v1/consents/{id}/revoke`；`/compliance/guardian-consents/*` 不提供 revoke | contract |

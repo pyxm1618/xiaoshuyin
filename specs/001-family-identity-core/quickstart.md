@@ -176,7 +176,9 @@ curl -sX POST localhost:8787/api/v1/consents/$(jq -r .id /tmp/consent.json)/revo
 - ③ 201，`decision: GRANTED`，`version: 1`，`boundPersonId: null`。
 - ④ 201，`profile.ageBand = UNDER_14`，`guardianConsentVersion = 1`，`guardianPersonId` = 家长本人。
   服务端内部顺序必须是：校验/锁定 consent → 预生成 personId → 插 membership → 插 Person → 绑定 `bound_person_id` → 插 profile；把绑定提到 Person 之前会因即时外键失败。
-- ⑤ 200，`decision: REVOKED`，`version: 2`，`supersedesId` = ①③ 的记录；此后 `assertMinorProcessingAllowed(childPersonId)` 返回 BLOCK。
+- ⑤ 200，`decision: REVOKED`，`version: 2`，`supersedesId` = ③ 的 GRANTED 记录，`onboardingRequestId` 为 **null**（撤回不是新的 onboarding）；此后 `assertMinorProcessingAllowed(childPersonId)` 返回 BLOCK。
+  库里此刻应有三行可追溯：`GRANTED v1(request A)` → `REVOKED v2(request NULL)`；重新同意会产生新的 request B 与 `GRANTED v3`，不会复用 request A。
+  绑定对 `(boundPersonId, boundAt)` 在 v1 上只能由 NULL 变一次；事后单独改 `boundAt` 会被触发器拒绝（`CONSENT_BINDING_IS_IMMUTABLE`）。
 
 ### 2.4 跨家庭隔离
 

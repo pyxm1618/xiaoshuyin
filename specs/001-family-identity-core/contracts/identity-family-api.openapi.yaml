@@ -674,7 +674,12 @@ components:
         decision: { type: string, enum: [GRANTED, REVOKED] }
         version: { type: integer, minimum: 1 }
         guardianPersonId: { type: string, format: uuid }
+        onboardingRequestId:
+          type: [string, "null"]
+          format: uuid
+          description: GRANTED 为产生该同意的 onboarding 请求；REVOKED 为 null（撤回不是新的 onboarding）
         boundPersonId: { type: [string, "null"], format: uuid }
+        boundAt: { type: [string, "null"], format: date-time }
         noticeVersion: { type: string }
         noticeHash: { type: string }
         policyVersion: { type: string }

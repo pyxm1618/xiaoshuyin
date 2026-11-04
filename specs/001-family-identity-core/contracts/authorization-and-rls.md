@@ -54,14 +54,36 @@ type AuthorizeResult =
 | Action | 最少要求 | 额外要求 |
 |---|---|---|
 | `IDENTITY_SELF_READ` | 已认证 actor | `resource.type = SELF` 且 `personId = actor.personId` |
-| `FAMILY_CREATE` | 已认证 actor + 已有 Person | `profile.age_band = ADULT` |
+| `FAMILY_CREATE` | 已认证 actor + 已有 Person | **无**（年龄/合规前置由命令体确定性校验，见 §2.3.1） |
 | `FAMILY_READ` | membership | — |
 | `MEMBER_CREATE` | membership + **manager** | — |
 | `MEMBER_UPDATE` | membership + **manager** | 目标 person 属于该 family |
-| `GUARDIAN_CONSENT_REQUEST` | membership + **manager** | actor 自身 `age_band = ADULT` |
+| `GUARDIAN_CONSENT_REQUEST` | membership + **manager** | actor 自身 `age_band = ADULT`（此时 profile 必然已存在） |
 | `GUARDIAN_CONSENT_GRANT` | membership | actor 是该请求的 `guardian_person_id` |
 | `GUARDIAN_CONSENT_REVOKE` | membership | actor 等于该 consent 的 `guardian_person_id` |
 | `MINOR_PROCESSING` | — | 由 `assertMinorProcessingAllowed()` 判定（见 `consent-onboarding.md`） |
+
+#### 2.3.1 为什么 `FAMILY_CREATE` 不能在授权层校验 `age_band = ADULT`
+
+时序事实（`plan.md` D-2 / US1）：
+
+```text
+POST /auth/wechat  → Account + Person（此时**没有** compliance profile）
+POST /families     → 提交 ageBand=ADULT + ageBandSource
+                   → Family → membership → **ADULT profile** → values → audit
+```
+
+profile 是在 `POST /families` 事务内、membership 之后才写入的。因此在 `authorize()` 阶段读 `profile.age_band` 对首次建家庭**永远不存在**——把它写成授权前置会让所有合法的首次建家庭被拒，并诱使实现提前插入一条无 membership 的 profile（违反 `person_compliance_profiles` 的 `WITH CHECK`）。
+
+**职责划分**：
+
+| 层 | 负责 | 不负责 |
+|---|---|---|
+| `authorize(FAMILY_CREATE)` | 已认证 actor；`actor.personId` 存在；无既有 Family ownership 冲突（`UNIQUE(created_by_person_id)` 最终裁决） | 年龄、profile 是否存在 |
+| `POST /families` 命令体 | 请求必须显式 `ageBand = ADULT`；`ageBandSource` 必须在写入白名单内；`MINOR_14_17 / UNDER_14 / UNKNOWN / 缺失` 一律 403 `FAMILY_MANAGER_MUST_BE_ADULT` | 家庭级 membership（尚不存在） |
+| 数据库 | `families.created_by_person_id` 即时外键 + **`UNIQUE`**；`persons.WITH CHECK` 的 self 分支 | 年龄语义 |
+
+`FAMILY_MANAGER_MUST_BE_ADULT` 因此是**命令体的确定性业务前置错误码**，不是 `authorize()` 的 DenyReason；它不出现在 §2.4 的封闭集合里。
 
 ### 2.4 DenyReason（封闭集合）
 
@@ -73,11 +95,12 @@ UNSUPPORTED_PURPOSE     purpose 不在本 Slice 枚举
 FAMILY_CONTEXT_REQUIRED 家庭级 action 但 family 为 null
 NOT_FAMILY_MEMBER       membership 不存在
 NOT_FAMILY_MANAGER      family.created_by_person_id != actor.personId
-FAMILY_MANAGER_MUST_BE_ADULT  actor 的 age_band != ADULT
 AGE_BAND_UNKNOWN        依赖年龄的判定遇到 UNKNOWN
 GUARDIAN_CONSENT_REQUIRED / GUARDIAN_CONSENT_REVOKED
 AUTHORIZATION_ERROR     内部异常（兜底，永不放行）
 ```
+
+`FAMILY_MANAGER_MUST_BE_ADULT` **不在**上表：它由 `POST /families` 的命令体前置校验产生（请求未显式声明 ADULT），不是授权判定结果。见 §2.3.1。
 
 ### 2.5 fail-closed 规则（强制）
 

@@ -224,9 +224,9 @@ CREATE INDEX gcr_guardian_idx ON guardian_consent_requests (guardian_person_id);
 | `purpose` | `consent_purpose` | `NOT NULL` | 本 Slice 只允许 UNDER_14 监护人同意 |
 | `decision` | `consent_decision` | `NOT NULL` | |
 | `version` | `integer` | `NOT NULL`, `CHECK (version >= 1)` | 同一 subject + purpose 单调递增 |
-| `onboarding_request_id` | `uuid` | `NOT NULL`, `UNIQUE`, FK → `guardian_consent_requests(id)` | 一次请求恰产出一行 |
-| `bound_person_id` | `uuid` | NULL, FK → `persons(id)` | 被同意的未成年人；一次性绑定 |
-| `bound_at` | `timestamptz` | NULL | |
+| `onboarding_request_id` | `uuid` | **NULL**, FK → `guardian_consent_requests(id)`, partial `UNIQUE` | `GRANTED` 必填（该同意由哪次 onboarding 产生）／`REVOKED` 必须为 `NULL`（撤回不是新的 onboarding） |
+| `bound_person_id` | `uuid` | NULL, FK → `persons(id)` | 被同意的未成年人；与 `bound_at` **成对**、一次性绑定 |
+| `bound_at` | `timestamptz` | NULL, 与 `bound_person_id` 同空同非空 | 服务端绑定时间；绑定后不可再改 |
 | `notice_version` | `text` | `NOT NULL` | |
 | `notice_hash` | `text` | `NOT NULL`, `CHECK (notice_hash ~ '^[0-9a-f]{64}$')` | |
 | `policy_version` | `text` | `NOT NULL` | |
@@ -243,7 +243,7 @@ CREATE TABLE consent_records (
   purpose                consent_purpose NOT NULL,
   decision               consent_decision NOT NULL,
   version                integer NOT NULL CHECK (version >= 1),
-  onboarding_request_id  uuid NOT NULL UNIQUE
+  onboarding_request_id  uuid
                            REFERENCES guardian_consent_requests(id) ON DELETE RESTRICT,
   bound_person_id        uuid REFERENCES persons(id) ON DELETE RESTRICT,
   bound_at               timestamptz,
@@ -259,8 +259,19 @@ CREATE TABLE consent_records (
   CONSTRAINT consent_no_self_supersede CHECK (supersedes_id IS NULL OR supersedes_id <> id),
   CONSTRAINT consent_subject_not_guardian CHECK (
     bound_person_id IS NULL OR bound_person_id <> guardian_person_id
+  ),
+
+  -- GRANTED 必须能追溯到产生它的 onboarding request；REVOKED 不是 onboarding，必须为空
+  CONSTRAINT consent_request_binding CHECK (
+    (decision = 'GRANTED' AND onboarding_request_id IS NOT NULL)
+    OR (decision = 'REVOKED' AND onboarding_request_id IS NULL)
   )
 );
+
+-- 一次 onboarding 请求最多产出一条 GRANTED 记录（REVOKED 行不参与）
+CREATE UNIQUE INDEX consent_granted_request_key
+  ON consent_records (onboarding_request_id)
+  WHERE onboarding_request_id IS NOT NULL;
 
 -- 同一未成年人 + 同一 purpose 的版本号唯一（未绑定行为 NULL，不受此约束）
 CREATE UNIQUE INDEX consent_subject_version_key
@@ -306,9 +317,17 @@ BEGIN
   THEN
     RAISE EXCEPTION 'CONSENT_RECORD_IMMUTABLE' USING ERRCODE = '23514';
   END IF;
-  IF OLD.bound_person_id IS NOT NULL
-     AND NEW.bound_person_id IS DISTINCT FROM OLD.bound_person_id THEN
-    RAISE EXCEPTION 'CONSENT_BINDING_IS_IMMUTABLE' USING ERRCODE = '23514';
+  -- 绑定是一个原子对：只允许 (NULL, NULL) → (personId, serverTimestamp) 一次
+  IF OLD.bound_person_id IS NULL AND OLD.bound_at IS NULL THEN
+    IF (NEW.bound_person_id IS NULL) <> (NEW.bound_at IS NULL) THEN
+      RAISE EXCEPTION 'CONSENT_BINDING_PARTIAL' USING ERRCODE = '23514';
+    END IF;
+  ELSE
+    -- 已绑定后：两个字段都不允许再变（含只改 bound_at、清空任一字段）
+    IF NEW.bound_person_id IS DISTINCT FROM OLD.bound_person_id
+    OR NEW.bound_at        IS DISTINCT FROM OLD.bound_at THEN
+      RAISE EXCEPTION 'CONSENT_BINDING_IS_IMMUTABLE' USING ERRCODE = '23514';
+    END IF;
   END IF;
   RETURN NEW;
 END $$;
@@ -346,6 +365,29 @@ CREATE TRIGGER consent_records_guard
 ```
 
 顺序不可调换：第 5 步早于第 4 步会违反外键；第 6 步早于第 3 步会违反 profile 的 `WITH CHECK`；第 6 步早于第 5 步会违反 `pcp_under14_requires_consent`。三者共同保证“**同意先成立，Person 后创建，绑定只能发生在 Person 行存在之后**”。
+
+**版本链（GRANTED → REVOKED → GRANTED）必须能在真实约束下成立**
+
+```text
+v1  GRANTED   onboarding_request_id = A    bound_person_id = P    supersedes_id = NULL
+v2  REVOKED   onboarding_request_id = NULL bound_person_id = P    supersedes_id = v1
+v3  GRANTED   onboarding_request_id = B    bound_person_id = P    supersedes_id = v2
+
+request A: status GRANTED（一次性使用，不再产生第二条 GRANTED）
+request B: 重新同意时新建的 onboarding request
+```
+
+三条约束同时满足：
+
+| 约束 | v1 | v2 | v3 |
+|---|---|---|---|
+| `consent_request_binding`（GRANTED 必有 request / REVOKED 必为 NULL） | ✓ | ✓ | ✓ |
+| `consent_granted_request_key`（request 唯一，仅对非 NULL 建索引） | ✓ | 不参与（NULL） | ✓ |
+| `consent_subject_version_key`（`bound_person_id, purpose, version` 唯一） | ✓ | ✓ | ✓ |
+
+**为什么 REVOKED 不带 request**：撤回不是一次新的 onboarding，它不需要重新告知或重新取得同意，只是对既有同意的撤销。把原 request 复用到 REVOKED 行会与 partial unique index 冲突；写成 NOT NULL 又会强迫撤回伪造一次 onboarding。二者都会让撤回路径不可执行。
+
+**v3 的绑定时机**：重新同意时未成年人已存在，`GRANTED v3` 在 INSERT 时即可写入 `bound_person_id` / `bound_at`（两者同非空），不需要再走一次 UPDATE；触发器只约束 UPDATE，`CHECK` 仍保证成对。
 
 ---
 
@@ -552,7 +594,7 @@ persons  1 ──── 0..1 person_compliance_profiles
 persons  1 ──── *    person_profile_values
 consent_records 1 ── 0..1 person_compliance_profiles (guardian_consent_record_id)
 consent_records 1 ── 0..* consent_records           (supersedes_id)
-guardian_consent_requests 1 ── 1 consent_records     (UNIQUE onboarding_request_id)
+guardian_consent_requests 1 ── 0..1 consent_records  (partial UNIQUE onboarding_request_id，仅 GRANTED)
 families 1 ──── *    business_audit_events
 ```
 
@@ -813,7 +855,10 @@ CREATE POLICY ppv_scope ON person_profile_values
 | `pcp_under14_requires_consent` | FR-008(a)、场景 4、D-3.5 |
 | `pcp_minor_mode_matches_band` | FR-007 / §7.7A |
 | `consent_records` 不可变触发器 | FR-010、V1-C39 证据强度 |
+| `consent_request_binding` | FR-010（GRANTED 可追溯 / REVOKED 非 onboarding） |
+| `consent_granted_request_key` | FR-010（一次 onboarding 只产出一条 GRANTED） |
 | `consent_subject_version_key` | FR-010、并发下版本唯一 |
+| `consent_binding_consistency` + 触发器 | FR-010、V1-C39 证据不可篡改（person 与 at 成对锁定） |
 | `families.created_by_person_id UNIQUE` | R-2（单家庭自有，不影响 Person 作为成员加入多个 Family） |
 | `idempotency_scope_key` | FR-014、SC-005 |
 | `idempotency_keys` 身份级 RLS | FR-012、FR-014（跨账号重放阻断） |

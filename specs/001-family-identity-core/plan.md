@@ -189,7 +189,9 @@
 
 **为什么不用 `family_members.is_creator` 布尔位**：§7.1 规定 `family_members` 只表达“Person 属于哪个 Family”。把授权属性放进成员行，正是 spec FR-006 与 Clarifications Q3 / R-2a 否掉的“成员授权属性”。放在 Family 聚合上，语义是“这个家庭是谁建的”，不是“这个人在家里是什么角色”。
 
-**为什么创建者必须是 ADULT**：§1.5 与 §9 把管理主体定义为“创建 Family 的登录 adult”。因此 `POST /families` 要求 `ageBand = ADULT`（连同 `ageBandSource` 一起显式提交，不由服务端推断）；`MINOR_14_17` / `UNDER_14` / `UNKNOWN` 一律 403 `FAMILY_MANAGER_MUST_BE_ADULT`。UNKNOWN 不得按成人放行（FR-009）。
+**为什么创建者必须是 ADULT**：§1.5 与 §9 把管理主体定义为“创建 Family 的登录 adult”。因此 `POST /families` 要求 `ageBand = ADULT`（连同 `ageBandSource` 一起显式提交，不由服务端推断）；`MINOR_14_17` / `UNDER_14` / `UNKNOWN` / 缺失一律 403 `FAMILY_MANAGER_MUST_BE_ADULT`。UNKNOWN 不得按成人放行（FR-009）。
+
+**该判定属于命令体，不属于 `authorize()`**：登录后 actor 只有 Person、**没有 compliance profile**，profile 是在 `POST /families` 事务内、membership 之后才写入的。若把 `profile.age_band = ADULT` 写进授权前置，所有首次建家庭都会被拒，并诱使实现提前插入一条无 membership 的 profile（违反 `person_compliance_profiles` 的 `WITH CHECK`）。因此 `FAMILY_CREATE` 的授权要求只有“已认证 actor + 已有 Person”，年龄校验在命令体内完成（详见 `contracts/authorization-and-rls.md` §2.3.1）。
 
 **Person 生命周期：登录建立 Person，建家庭只补齐 adult 合规信息**（spec US1 原文：“微信登录时系统建立 Account 与对应 Person”）：
 
@@ -279,9 +281,10 @@ consent_records
 - purpose               UNDER_14_GUARDIAN_CONSENT
 - decision              GRANTED / REVOKED
 - version               1,2,3…（同一 subject + purpose 单调递增）
-- onboarding_request_id 该版本对应的 onboarding 请求（唯一）
+- onboarding_request_id? GRANTED 必填（产生该同意的 onboarding 请求，partial UNIQUE）
+                        REVOKED 必须为 NULL（撤回不是新的 onboarding）
 - bound_person_id?      被同意的未成年人（同意成立时为空，建档时一次性绑定）
-- bound_at?             绑定时间
+- bound_at?             绑定时间；与 bound_person_id 成对原子（见 D-3.3.1）
 - notice_version / notice_hash / policy_version
 - evidence              jsonb：{channel, accepted_text_hash, client_ip_hash?, user_agent_hash?, declared_age_band}
 - decided_at            服务端时间
@@ -296,7 +299,22 @@ consent_records
 4. **何时同意**：`decided_at` 用服务端时间，不接受客户端时间。
 5. **对谁同意**：`purpose` 固定为 `UNDER_14_GUARDIAN_CONSENT`，范围只覆盖“该监护人所代表的这名未成年人”，不扩到 §28.2 完整 purpose/scope 矩阵。
 6. **最小化**：不采集孩子任何资料；IP / UA 只存 HMAC 摘要，不存原值。
-7. **不可抵赖**：`consent_records` 业务列不可更新；`bound_person_id` 只允许 NULL → 值一次（触发器强制），版本链只追加。
+7. **不可抵赖**：`consent_records` 业务列不可更新；`bound_person_id` / `bound_at` 作为**一对**只允许 `(NULL,NULL) → (personId, serverTimestamp)` 一次（CHECK + 触发器共同强制），版本链只追加。
+
+#### D-3.3.1 绑定对的原子性
+
+绑定状态只有两个合法形态：`(NULL, NULL)` 与 `(personId, t)`。
+
+| 更新 | 结果 |
+|---|---|
+| `(NULL,NULL) → (P,t)` | 允许（唯一一次绑定） |
+| `(P,t) → (P,t)` | 允许（no-op） |
+| `(P,t) → (Q,t)` | 拒绝 `CONSENT_BINDING_IS_IMMUTABLE` |
+| `(P,t) → (P,t')` | 拒绝 `CONSENT_BINDING_IS_IMMUTABLE`（**只改时间也不行**） |
+| `(P,t) → (NULL,NULL)` | 拒绝 `CONSENT_BINDING_IS_IMMUTABLE` |
+| `(NULL,NULL) → (P,NULL)` | 拒绝 `CONSENT_BINDING_PARTIAL` |
+
+`CHECK ((bound_person_id IS NULL) = (bound_at IS NULL))` 只保证“不同时为空/非空”，**不足以**阻止事后单独改时间；真正的不可篡改由 `BEFORE UPDATE` 触发器负责。
 
 #### D-3.4 如何关联到未成年 Person（FK 顺序）
 
@@ -364,7 +382,18 @@ age_band = UNDER_14           → 读 guardian_consent_record_id 指向的行
 
 #### D-3.7 撤回
 
-- `POST /compliance/guardian-consents/:id/revoke` 在事务内：锁 profile 行（`FOR UPDATE`）→ 追加 `decision='REVOKED'`、`version = current+1`、`supersedes_id = current record` → 把 `profile.guardian_consent_version/id` 指向新版本 → 写 audit。
+**唯一撤回端点**：`POST /api/v1/consents/:id/revoke`（与 OpenAPI 契约一致）。guardian-consent onboarding 的创建/授予仍走 `/api/v1/compliance/guardian-consents...`；两者职责不混用，不提供第二条 revoke 路由。
+
+- 事务内：锁 profile 行（`FOR UPDATE`）→ 追加 `decision='REVOKED'`、`version = current+1`、`onboarding_request_id = NULL`、`bound_person_id = 该未成年人`、`bound_at = now()`、`supersedes_id = current record` → 把 `profile.guardian_consent_version/id` 指向新版本 → 写 audit。
+- **REVOKED 不带 onboarding_request_id**：撤回不是一次新的 onboarding，不需要重新告知/重新取得同意。复用原 request id 会撞 `consent_granted_request_key`（partial unique），写成 NOT NULL 又会强迫撤回伪造一次 onboarding。
+- 版本链必须能在真实约束下成立：
+
+  ```text
+  v1 GRANTED  request=A     bound=P  supersedes=NULL   ← 建档时绑定
+  v2 REVOKED  request=NULL  bound=P  supersedes=v1
+  v3 GRANTED  request=B     bound=P  supersedes=v2      ← 重新同意
+  ```
+
 - 不回删 Person、不回删历史 consent、不回删 profile；`assertMinorProcessingAllowed` 立即 BLOCK。
 - 重新进入处理必须取新同意：新 onboarding 请求（`subject_person_id` 指向已存在的未成年人）→ 新 GRANTED 版本 → profile 指针前移。
 
@@ -610,7 +639,9 @@ idempotency_keys(actor_account_id, command_type, idempotency_key) UNIQUE
 05 families（created_by_person_id UNIQUE）
 06 family_members（UNIQUE(family_id,person_id)；person_id FK DEFERRABLE）
 07 guardian_consent_requests
-08 consent_records（UNIQUE(onboarding_request_id)；partial UNIQUE(bound_person_id,purpose,version)）
+08 consent_records（CHECK: GRANTED→request 非空 / REVOKED→request 为空；
+                 partial UNIQUE(onboarding_request_id) WHERE NOT NULL；
+                 partial UNIQUE(bound_person_id,purpose,version)；绑定对 CHECK）
 09 person_compliance_profiles（含 UNDER_14 consent CHECK）
 10 person_profile_values
 11 business_audit_events
@@ -727,14 +758,16 @@ tests/
 | FR-001 / 场景 1（Account / Person 分离，`GET /me`） | integration | `bun run vitest run tests/integration/me.test.ts` | 200；返回 account 与自身 person（登录后必存在）；响应无其他成员字段；openid 不出现 |
 | FR-002 / U01（微信登录建立 Account **与 Person**） | integration（fake provider） | `bun run vitest run tests/integration/auth.test.ts` | 首次登录同一事务内建 Account 与绑定该账号的 Person（`account_id` 非空、`profile` 为空）；同 openid 重复登录不产生第二个 Account / Person；logout 后旧 token 401 |
 | FR-002 平台真实性 | **NOT VERIFIED（本 Slice）** | — | 明确记录：真实 code2session 属 §40 Platform 门槛，本 Slice 只验适配器契约 |
-| FR-005 / 场景 2 / US1（建家庭 + 管理主体 + 幂等） | integration | `bun run vitest run tests/integration/families.test.ts` | 家庭建立；**复用登录时已存在的 Person，不新建 Person**（人数量不变）；创建者 Person 属于该家庭；ADULT profile 写入；`isManager=true`；同 key 重放不产生第二个家庭 / 成员；同 key 不同 payload → 409 |
+| FR-005 / 场景 2 / US1（建家庭 + 管理主体 + 幂等） | integration | `bun run vitest run tests/integration/families.test.ts` | **actor 登录后尚无 compliance profile，首次建家庭仍成功**（`FAMILY_CREATE` 不依赖 profile）；家庭建立；**复用登录时已存在的 Person，不新建 Person**（人数量不变）；创建者 Person 属于该家庭；ADULT profile 写入；`isManager=true`；同 key 重放不产生第二个家庭 / 成员；同 key 不同 payload → 409；`ageBand != ADULT` → 403 `FAMILY_MANAGER_MUST_BE_ADULT` 且无任何写入 |
 | FR-016 / 场景 14 / SC-007（Account ↔ Person 1:1） | database | `bun run vitest run tests/db/constraints.test.ts` | 两个方向写入均抛 unique violation，真实错误输出被断言 |
 | FR-017 / 场景 11、12 / SC-006（多对多 + 唯一 membership） | database（fixture） | `bun run vitest run tests/db/cardinality.test.ts` | 同 Person 两条不同 family membership 成功；同 (family, person) 第二条被拒；`persons` 无 `family_id` 列 |
 | FR-003 / FR-004 / 场景 3 / SC-008（per-value provenance） | unit + integration | `bun run vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts` | 同一 `DISPLAY_NAME` 的多来源并存不被覆盖、同源替换产生 SUPERSEDED；`age_band` 来源独立记录在 `person_compliance_profiles.verified_source`（不同载体各有来源）；`persons` 无 `source_kind` 列；无 Account 的 Person 允许 `SELF_STATEMENT`；`profile_attribute` 枚举只含 `DISPLAY_NAME`（无任何为测试新造的字段） |
 | FR-008 (a)(b) / 场景 4 / SC-003①（同意前不建正式 child） | integration + database | `bun run vitest run tests/integration/consent-first.test.ts` | 无 `guardianConsentId` 建 UNDER_14 成员 → 403 `GUARDIAN_CONSENT_REQUIRED`；`persons` 与 `person_compliance_profiles` 均无该未成年人行；onboarding 请求本身可创建（不自锁） |
 | D-3.5（结构约束） | database | `bun run vitest run tests/db/consent-structure.test.ts` | 直接 SQL 插入 `age_band='UNDER_14'` 且 consent 为 NULL 的 profile → CHECK violation |
 | FR-008 (c) / 场景 5 / SC-003③（同意后建档） | integration | `bun run vitest run tests/integration/consent-first.test.ts` | 同意成立后创建成功；profile 的 `age_band=UNDER_14`、`guardian_person_id`、`guardian_consent_version`、`guardian_consent_record_id` 与 consent 一致 |
-| FR-010 / 场景 6 / SC-003④（撤回） | integration + database | `bun run vitest run tests/integration/consent-revoke.test.ts` | 新增 REVOKED 版本（version+1，supersedes 指向原版本）；profile 指针前移；`assertMinorProcessingAllowed` 立即 BLOCK；audit 行存在；历史行未被删除 |
+| FR-010 / 场景 6 / SC-003④（撤回） | integration + database | `bun run vitest run tests/integration/consent-revoke.test.ts` | 新增 REVOKED 版本（version+1，`onboarding_request_id IS NULL`，supersedes 指向原版本）；profile 指针前移；`assertMinorProcessingAllowed` 立即 BLOCK；audit 行存在；历史行未被删除 |
+| FR-010 / 版本链结构（GRANTED→REVOKED→GRANTED） | database | `bun run vitest run tests/db/consent-chain.test.ts` | v1 GRANTED(request A) / v2 REVOKED(NULL) / v3 GRANTED(request B) 三行可同时存在且满足 `consent_request_binding`、`consent_granted_request_key`、`consent_subject_version_key`；GRANTED 缺 request → CHECK violation；REVOKED 带 request → CHECK violation；同一 request 第二条 GRANTED → unique violation |
+| 绑定对不可篡改（D-3.3.1） | database | `bun run vitest run tests/db/consent-binding.test.ts` | ① `(NULL,NULL)→(P,t)` 成功；② 改 `bound_person_id` → `CONSENT_BINDING_IS_IMMUTABLE`；③ **只改 `bound_at`** → 同错误；④ 清空任一字段 → 同错误；⑤ `(NULL,NULL)→(P,NULL)` → `CONSENT_BINDING_PARTIAL` |
 | FR-009 / 场景 10 / SC-004（UNKNOWN 不按成人） | unit | `bun run vitest run tests/domain/age-band.test.ts` | UNKNOWN → BLOCK/`AGE_BAND_UNKNOWN`；永不进入 ADULT 分支；`NOT_COLLECTED` 不是 age_band 合法值 |
 | FR-011 / 场景 7、8、9（授权与伪造 ID） | integration + database | `bun run vitest run tests/integration/authorization.test.ts tests/db/rls.test.ts` | 跨家庭读取 403 且响应无目标字段；伪造 `family_id` 不获得访问；非创建者成员新增成员 403 `NOT_FAMILY_MANAGER`；绕过应用以 app 角色直连查询返回 0 行 |
 | FR-012 / FR-015 / 验收最后一组（RLS 与主键） | database | `bun run vitest run tests/db/rls.test.ts` | `pg_class.relrowsecurity=true`、`relforcerowsecurity=true`；`rolbypassrls=false`；owner ≠ app；三个 GUC 全未设时查询 0 行；identity 上下文只返回自身 person；`uuidv7()` 为列默认值 |
