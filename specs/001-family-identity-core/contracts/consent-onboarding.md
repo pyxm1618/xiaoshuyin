@@ -26,9 +26,16 @@
         │  B. 正式 child 建档（唯一放行点）              │
         └──────────────────────────────────────────────┘
    POST /families/:id/members (ageBand=UNDER_14, guardianConsentId)
-   → 事务内：校验 consent → 绑定 bound_person_id → 建 Person
-              → 建 membership → 建 profile（UNDER_14 + consent 指针）
-              → 写 profile values → 写 audit
+   → 事务内（FK 顺序固定）：
+     ① 锁定并校验 consent（GRANTED / 未绑定 / guardian / family / notice / expiry）
+     ② 预生成 personId = uuidv7()
+     ③ INSERT membership（DEFERRABLE 的 person_id，Person 尚不存在）
+     ④ INSERT Person（account_id = NULL）
+     ⑤ UPDATE consent_records SET bound_person_id = personId, bound_at = now()
+        （0 行 → 409 GUARDIAN_CONSENT_ALREADY_BOUND）
+     ⑥ INSERT profile（UNDER_14 + guardian + consent 指针）
+     ⑦ INSERT profile values
+     ⑧ INSERT audit
                     │
                     ▼
         ┌──────────────────────────────────────────────┐
@@ -44,28 +51,37 @@
         → 新 GRANTED 版本 → profile 指针前移 → 放行
 ```
 
-**A 阶段不产生 Person、不产生 Profile、不产生任何孩子 PII。** 这是 FR-008(a)/(b) 的执行方式。
+**A 阶段不产生 Person、不产生 Profile，也不保存任何孩子资料。** 首次 onboarding 时 `subject_person_id = NULL`；只有“对已存在未成年人重新同意”才会使用该列做关联（见 §2）。这是 FR-008(a)/(b) 的执行方式。
+
+**关键时序**：同意在 A 阶段成立（早于 Person）；但 `bound_person_id` 是即时外键，绑定只能在 B 阶段 Person 行插入之后执行。两个约束同时成立才是正确实现。
 
 ---
 
 ## 2. 允许 / 禁止的字段（A 阶段）
 
-| 允许 | 为什么严格必要 |
-|---|---|
-| `guardian_person_id` | 同意必须可归属 |
-| `declared_age_band = UNDER_14` | 不判定适用流程就无法知道需要监护人同意 |
-| `notice_version` + `notice_hash` | 同意只能对已告知内容成立，必须可证明告知了什么 |
-| `policy_version` | 政策版本可追溯 |
-| `status` / `expires_at` / 时间戳 | 一次性、可过期、可审计 |
-| `family_id` | 隔离作用域 |
+| 允许 | 适用情形 | 为什么严格必要 |
+|---|---|---|
+| `guardian_person_id` | 全部 | 同意必须可归属 |
+| `declared_age_band = UNDER_14` | 全部 | 不判定适用流程就无法知道需要监护人同意 |
+| `notice_version` + `notice_hash` | 全部 | 同意只能对已告知内容成立，必须可证明告知了什么 |
+| `policy_version` | 全部 | 政策版本可追溯 |
+| `status` / `expires_at` / 时间戳 | 全部 | 一次性、可过期、可审计 |
+| `family_id` | 全部 | 隔离作用域 |
+| `subject_person_id` | **仅重新同意** | 指向已完成同意的那个未成年人；是关联键，不是资料载体 |
 
-| 禁止 | 理由 |
+| 禁止（两种情形都不允许） | 理由 |
 |---|---|
 | 孩子姓名 / 昵称 / 称呼 | 一旦出现，该行即成为正式档案，违反 consent-first |
 | 出生日期 / 精确年龄 | 同上；只允许 band |
 | 关系描述、性别、学校、年级 | 属后续业务资料，不得提前采集 |
 | Assessment / Case / Digital Use / AI 输入 | §19A.2 明令禁止“为以后方便”预先采集 |
 | 原始 IP / UA | 只存 HMAC 摘要 |
+
+**精确边界（不得写成绝对表述）**：
+
+- 首次 onboarding：`subject_person_id IS NULL`，表中不存在任何指向未成年人的列，也不存在任何孩子资料列。
+- 重新同意：`subject_person_id` 是唯一指向未成年人的列；它只表达“对谁重新同意”，不得承载任何资料。
+- 因此测试断言的对象是**列集合恰好等于上述清单**（且 `subject_person_id` 是唯一 child reference），而不是“本表没有任何 child identifier”。
 
 **执行方式**：以上“禁止”不是规范条文，而是**列不存在**。`guardian_consent_requests` 的列集合被测试断言锁定；新增列必须改 migration 并通过 review。
 
@@ -109,15 +125,25 @@
 
 ## 5. 绑定（同意 → 未成年 Person）
 
+`bound_person_id` 是即时外键，因此**绑定必须发生在 Person 行插入之后**；而同意本身必须在 Person 之前就已成立。两者同时满足的唯一顺序：
+
 ```text
-前置：consent.decision = GRANTED
-      consent.guardian_person_id = actor.personId
-      consent.family_id = 目标家庭
-      consent.bound_person_id IS NULL
-执行：UPDATE consent_records SET bound_person_id = <new person>, bound_at = now()
-      WHERE id = $consentId AND bound_person_id IS NULL
-      （0 行受影响 → 409 GUARDIAN_CONSENT_ALREADY_BOUND）
+① SELECT … FROM consent_records WHERE id = $consentId FOR UPDATE
+   前置：decision = GRANTED、guardian_person_id = actor.personId、family 匹配、
+        notice 匹配、未过期、bound_person_id IS NULL
+② personId := uuidv7()
+③ INSERT family_members (family_id, person_id = personId)
+   —— family_members.person_id 为 DEFERRABLE，Person 尚不存在也可先插
+④ INSERT persons (id = personId, account_id = NULL, created_by_account_id = actor)
+⑤ UPDATE consent_records SET bound_person_id = personId, bound_at = now()
+   WHERE id = $consentId AND bound_person_id IS NULL
+   —— 0 行受影响 → 409 GUARDIAN_CONSENT_ALREADY_BOUND
+⑥ INSERT person_compliance_profiles（UNDER_14 + guardian + consent 指针）
 ```
+
+**为什么不能先绑**：第 ⑤ 步在 ④ 之前会立即违反 `consent_records_bound_person_id_fkey`。
+**为什么不能先建 profile**：第 ⑥ 步在 ⑤ 之前会违反 `pcp_under14_requires_consent`。
+**为什么不能先建 profile 于 ③ 之前**：profile 的 `WITH CHECK` 依赖 membership 存在。
 
 - 绑定一次性：触发器拒绝 `bound_person_id` 从非空改为其它值。
 - `person_compliance_profiles` 的 `guardian_person_id` 取自 consent 的 `guardian_person_id`，不接受请求体另行指定（防止“同意人 A、guardian 写 B”）。
@@ -198,7 +224,10 @@ assertMinorProcessingAllowed(
 | A-9 | 撤回写入 `business_audit_events` | integration |
 | A-10 | `UNKNOWN` 永不进入 ADULT 分支 | unit |
 | A-11 | `NOT_COLLECTED` 无法写入 `age_band`（enum 拒绝） | database |
-| A-12 | onboarding 表无任何孩子 PII 列（列集合断言） | database |
+| A-12 | onboarding 表列集合**恰好等于**契约所列清单；`subject_person_id` 是唯一指向未成年人的列；不存在姓名/生日/称呼/关系等资料列（首次为 NULL，重新同意时为该 Person id） | database |
 | A-13 | `consent_records` 业务列 UPDATE → 触发器拒绝 | database |
 | A-14 | 过期 request 无法用于同意 | integration |
 | A-15 | 重新同意（`existingSubjectPersonId`）后门禁恢复 ALLOW | integration |
+| A-16 | 先绑定后建 Person 的事务（错误顺序）必须失败：直接把 `bound_person_id` 指向不存在的 Person → FK violation | database |
+| A-17 | 绑定发生在 Person 插入之后、profile 之前：正确顺序的集成测试通过，且 profile 的 `guardian_consent_record_id` 指向已绑定行 | integration |
+| A-18 | 同意 `decided_at` 早于 child Person 的 `created_at`（consent-first 的时间证据） | integration |

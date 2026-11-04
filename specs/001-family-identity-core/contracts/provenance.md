@@ -66,16 +66,15 @@
 
 | 属性 | 中文 | 载体 | 说明 |
 |---|---|---|---|
-| `DISPLAY_NAME` | 称呼 | `person_profile_values` | 自由文本，≤120 字符 |
-| `RELATION_DESCRIPTOR` | 与家庭的关系描述 | `person_profile_values` | 自由文本，≤120 字符；**不是角色** |
+| `DISPLAY_NAME` | 称呼 | `person_profile_values` | 自由文本，≤120 字符；本 Slice 唯一资料维度 |
 | （`AGE_BAND`） | 年龄段 | `person_compliance_profiles.age_band` | **不在** `person_profile_values`；来源为同行 `verified_source` |
 
-**`RELATION_DESCRIPTOR` 的边界**（必须由测试保证）：
+**只有一个 attribute，且不为此新增字段**：本 Slice 实际采集的人物资料只有「称呼」（U03 最小家庭与人物资料）。per-value provenance 由两组**真实事实**验证：
 
-- 它是描述性文本（如「大女儿」「配偶」），不参与 `authorize()` 的任何分支。
-- 它不参与 guardian 判定。
-- 它不是 `family_members` 的角色，也不得被用来推导成员管理权限。
-- 它可以是自由文本，因此无法成为权限判定的稳定输入——这正是它安全的原因。
+1. 同一 `DISPLAY_NAME` 的多来源并存 / 同源替换（同一张表内，来源不同即并存）；
+2. `age_band` 的来源由 `person_compliance_profiles.verified_source` 独立承载（另一张表、另一个来源值）。
+
+两者共同证明「来源属于具体资料值，不同资料载体可以拥有独立 provenance」。**禁止**为了证明模型成立而新增没有正式需求的业务字段；也不得用另一个新字段替代已删除的 `RELATION_DESCRIPTOR`。
 
 **为什么 `AGE_BAND` 不在值表里**：§7.7A 已把 `age_band` 与 `verified_source` 固定在同一行；两处存同一事实必然漂移。`profile_attribute` enum 不含 `AGE_BAND`，使第二载体在类型层不存在。
 
@@ -121,9 +120,10 @@
 | P-1 | 两条不同来源的 `DISPLAY_NAME` 同时为 `RECORDED`，互不覆盖 | unit + integration |
 | P-2 | 同来源二次写入 → 第一条变 `SUPERSEDED`，`supersedes_id` 指向它 | unit |
 | P-3 | `persons` 表无 `source_kind` / `source` 列 | database（information_schema） |
-| P-4 | `profile_attribute` enum 不含 `AGE_BAND` | database（pg_enum） |
+| P-4 | `profile_attribute` enum 恰为 `{DISPLAY_NAME}`：不含 `AGE_BAND`，也不含任何为测试新造的属性 | database（pg_enum） |
 | P-5 | 8 类来源写入 4 类允许、4 类拒绝 | integration |
 | P-6 | 无 Account 的 Person 允许 `SELF_STATEMENT` | integration |
 | P-7 | `provided_by_person_id` 指向非本家庭成员 → 拒绝 | integration |
 | P-8 | `observed_at` 缺省存 NULL，不被补成 `now()` | database |
-| P-9 | `RELATION_DESCRIPTOR` 不参与 `authorize()`：把值改成任意文本后授权结果不变 | unit |
+| P-9 | 不同资料载体各自有独立来源：`DISPLAY_NAME`（person_profile_values）与 `age_band`（profile.verified_source）可分别为 `GUARDIAN_RELAY` / `GUARDIAN_OBSERVATION`，互不影响 | unit + integration |
+| P-10 | `person_profile_values` 不接受 `AGE_BAND` 写入（enum 拒绝），确保 age_band 只有一个载体 | database |

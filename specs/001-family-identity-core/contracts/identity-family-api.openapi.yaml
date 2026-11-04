@@ -30,10 +30,13 @@ paths:
     post:
       tags: [auth]
       operationId: loginWithWechat
-      summary: 微信登录，建立或复用 Account
+      summary: 微信登录，建立或复用 Account 与当前登录者 Person
       description: |
-        首次登录创建 Account；同一 openid 重复登录复用同一 Account，不产生第二个。
-        不创建 Person（Person 由 `POST /families` 在建立家庭时一并建立，见 plan D-2）。
+        首次登录在同一事务内建立 Account **与** 绑定该账号的 Person（spec US1：
+        「微信登录时系统建立 Account 与对应 Person」）。同一 openid 重复登录复用同一
+        Account / Person，不产生第二个。
+        此时 Person 还没有 compliance profile（年龄尚未声明），profile 在
+        `POST /families` 确认 adult 年龄时写入。
         本 Slice 的 code2session 为适配器契约验证，真实平台调用 NOT VERIFIED（§40 Platform 门槛）。
       requestBody:
         required: true
@@ -77,7 +80,7 @@ paths:
       operationId: getMe
       summary: 返回当前登录身份及其关联 Person
       description: |
-        只返回 account 与自身 person（或 null），不返回任何其他家庭成员资料（场景 1）。
+        只返回 account 与自身 person（登录时已建立，因此必存在），不返回任何其他家庭成员资料（场景 1）。
         `wechat_openid` 永不出现在响应中。
       security: [{ bearerAuth: [] }]
       responses:
@@ -95,8 +98,10 @@ paths:
       operationId: createFamily
       summary: 建立家庭；创建者成为 V1 当前管理主体
       description: |
-        若创建者尚无 Person，则原子建立 Person + ADULT profile + membership + profile values；
-        已有 Person 则复用。`ageBand` 必须为 ADULT（§9 管理主体定义）。
+        使用**登录时已建立**的 actor Person，不再创建第二个 Person。
+        本命令完成：显式确认 `ageBand = ADULT`（含 `ageBandSource`）、建立 Family、
+        建立 creator membership、写入 ADULT compliance profile 与 profile values。
+        `ageBand` 必须为 ADULT（§9 管理主体定义）。
         不因「创建家庭」推断创建者是任何未成年人的 guardian（§7.7A）。
       security: [{ bearerAuth: [] }]
       parameters:
@@ -186,7 +191,7 @@ paths:
       operationId: updateMemberProfile
       summary: 追加/替换成员资料值（仅管理主体）
       description: |
-        只允许 `DISPLAY_NAME` 与 `RELATION_DESCRIPTOR`。
+        只允许 `DISPLAY_NAME`（本 Slice 唯一资料维度）。
         同 `source` 的旧值置 SUPERSEDED；不同 `source` 并存为 RECORDED（来源冲突保留）。
         `ageBand` 在本 Slice **不可变更**（不提供改龄能力，避免绕过 consent-first）。
       security: [{ bearerAuth: [] }]
@@ -458,7 +463,8 @@ components:
 
     ProfileAttribute:
       type: string
-      enum: [DISPLAY_NAME, RELATION_DESCRIPTOR]
+      description: 本 Slice 唯一的资料维度；不为测试新增无正式需求的属性
+      enum: [DISPLAY_NAME]
 
     ProvenanceValueInput:
       type: object
@@ -524,9 +530,8 @@ components:
         sessionToken: { type: string }
         expiresAt: { type: string, format: date-time }
         person:
-          oneOf:
-            - { $ref: "#/components/schemas/PersonSummary" }
-            - { type: "null" }
+          allOf: [{ $ref: "#/components/schemas/PersonSummary" }]
+          description: 登录即建立；此时 `profile` 尚未写入（年龄未声明）
 
     MeResponse:
       type: object
@@ -542,9 +547,8 @@ components:
             createdAt: { type: string, format: date-time }
             status: { type: string, enum: [ACTIVE, DISABLED] }
         person:
-          oneOf:
-            - { $ref: "#/components/schemas/PersonSummary" }
-            - { type: "null" }
+          allOf: [{ $ref: "#/components/schemas/PersonSummary" }]
+          description: 登录时已建立，因此必存在
 
     CreatorInput:
       type: object
@@ -557,7 +561,7 @@ components:
         ageBandSource: { $ref: "#/components/schemas/WritableSource" }
         values:
           type: array
-          maxItems: 2
+          maxItems: 1
           items: { $ref: "#/components/schemas/ProvenanceValueInput" }
 
     CreateFamilyRequest:
@@ -590,7 +594,7 @@ components:
         ageBandSource: { $ref: "#/components/schemas/WritableSource" }
         values:
           type: array
-          maxItems: 2
+          maxItems: 1
           items: { $ref: "#/components/schemas/ProvenanceValueInput" }
         guardianConsentId:
           type: string
@@ -605,7 +609,7 @@ components:
         values:
           type: array
           minItems: 1
-          maxItems: 2
+          maxItems: 1
           items: { $ref: "#/components/schemas/ProvenanceValueInput" }
 
     MemberResponse:

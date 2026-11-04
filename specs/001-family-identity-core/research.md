@@ -12,7 +12,7 @@
 
 **Decision**
 
-`family_members` 的 policy 只引用 GUC（`family_id = app_family_id() OR person_id = app_person_id()`），不引用自身或其它表；跨家庭成员资格由**家庭上下文入口** `app.set_family_context(family_id, person_id, purpose)` 在设置 GUC 之后用 `EXISTS(family_members …)` 校验，不成立即 `RAISE EXCEPTION`（SQLSTATE 42501）。另有两条窄入口：`app.set_identity_context(account, purpose)`（无 family 上下文的自助读）与 `app.create_family(...)`（成立家庭时 membership 尚不存在）。
+`family_members` 的 policy 只引用 GUC（`family_id = app_family_id() OR person_id = app_person_id()`），不引用自身或其它表；跨家庭成员资格由**家庭上下文入口** `app.set_family_context(family_id, person_id, purpose)` 在设置 GUC 之后用 `EXISTS(family_members …)` 校验，不成立即 `RAISE EXCEPTION`（SQLSTATE 42501）。另有三个窄入口：`app.set_account_context(account, purpose)`（首次登录建 Person 前）、`app.set_identity_context(account, purpose)`（无 family 上下文的自助读与幂等键）、`app.create_family(...)`（成立家庭时 membership 尚不存在）。
 
 **Rationale**
 
@@ -31,27 +31,38 @@
 
 ---
 
-## R-02 `persons` 的 INSERT 如何在 RLS 下被 membership 约束
+## R-02 Person 的建立时机与 RLS / 外键下的插入顺序
 
 **Decision**
 
-`POST /families` 按 **Person（自己）→ Family → membership** 插入，`POST /families/:id/members` 按 **membership → Person → profile** 插入；`family_members.person_id` 的外键声明为 `DEFERRABLE INITIALLY DEFERRED`（提交时校验）。
+Person 在**首次微信登录**时建立（`POST /auth/wechat` 同一事务内建 Account + 绑定该账号的 Person），`POST /families` 复用该 Person 不再新建。三条写入路径的顺序固定：
+
+| 命令 | 顺序 |
+|---|---|
+| `POST /auth/wechat`（首次） | Account → `set_account_context` → Person（`account_id` 非空） |
+| `POST /families` | Person 已存在 → `create_family` → membership → profile(ADULT) → values → audit |
+| `POST /families/:id/members` | membership → Person（`account_id IS NULL`）→ 绑定 consent → profile → values → audit |
+
+`family_members.person_id` 声明为 `DEFERRABLE INITIALLY DEFERRED`（提交时校验）；`families.created_by_person_id` 与 `consent_records.bound_person_id` 保持即时校验。
 
 **Rationale**
 
-- 建家庭时 `families.created_by_person_id` 是即时外键，Person 必须先存在；而 Person 的 `WITH CHECK` 需要一个分支允许“创建绑定到当前账号的自己的 Person”（`account_id = app_account_id()`），否则无法起步。
-- 建成员时成员的 `account_id IS NULL`，无法走 self 分支，只能先插 membership（RLS `WITH CHECK` 依赖它），再插 Person；此时 Person 外键必须可延迟。
-- 两条顺序各有唯一合理解，强行统一会让其中一个命令要么放弃 RLS 校验、要么放弃即时外键。
-- 可延迟外键是 PostgreSQL 标准能力，不引入依赖、不改变表语义；`uuidv7()` 仍是唯一主键来源（§7.0），只是从列默认值改为命令内显式取值，基线不变。
-- 两种顺序都不会留下“无 membership 的孤儿 Person”：建家庭路径在提交前必须插 membership（后续 profile 的 `WITH CHECK` 依赖它），建成员路径本身就是 membership 先行。
+- spec US1 原文是“微信登录时系统建立 Account 与对应 Person”，因此 Person 必须早于任何 Family 存在；把 Person 建在 `POST /families` 会直接违反该验收。
+- 登录时 Person 的 `account_id` 非空，正好命中 `persons.WITH CHECK` 的唯一 self 分支 `account_id = app_account_id()`，无需 membership 即可写入。
+- 建家庭时 `families.created_by_person_id` 是即时外键，Person 已存在，因此无需延迟该外键；profile 的 `WITH CHECK` 依赖 membership，所以 membership 必须先于 profile。
+- 建成员时成员的 `account_id IS NULL`，无法走 self 分支，只能先插 membership 再插 Person；此时 Person 外键必须可延迟。
+- 三条顺序各有唯一合理解，强行统一会让某条命令要么放弃 RLS 校验、要么放弃即时外键。
+- 可延迟外键是 PostgreSQL 标准能力，不引入依赖、不改变表语义；`uuidv7()` 仍是唯一主键来源（§7.0）。
+- 三条路径都不会留下“无 membership 的孤儿 Person”：建家庭要求 membership 先于 profile，建成员本身就是 membership 先行。
 
 **Alternatives considered**
 
-1. 统一“先 Person 后 membership” + 宽松 `WITH CHECK` → 可产生不可见孤儿行，否决。
-2. 统一“先 membership 后 Person” → 建家庭时 `families.created_by_person_id` 指向尚不存在的 Person，除非让该外键也可延迟；而延迟 creator 外键会让“家庭创建者必须真实存在”从即时约束退化为提交时约束，收益不抵复杂度，否决。
-3. 单条 CTE 同时插入两张表 → `WITH CHECK` 仍按语句顺序求值，且 `INSERT … RETURNING` 与 RLS 组合可读性差，否决。
-4. 用 `BEFORE INSERT` 触发器代为插入 membership → 触发器内插入同样受 RLS 约束，且把业务写入藏进触发器，否决。
-5. 给 `persons` 加 `family_id` → 直接违反 §7.1“不得单家庭绑定”，否决。
+1. 登录只建 Account、在 `POST /families` 建 Person → 与 spec US1 冲突，且 `GET /me` 在首次登录后返回 null person，否决（本轮修正项）。
+2. 统一“先 Person 后 membership” + 宽松 `WITH CHECK` → 可产生不可见孤儿行，否决。
+3. 统一“先 membership 后 Person” → 登录时尚无 Family，无法先插 membership，否决。
+4. 单条 CTE 同时插入两张表 → `WITH CHECK` 仍按语句顺序求值，且 `INSERT … RETURNING` 与 RLS 组合可读性差，否决。
+5. 用 `BEFORE INSERT` 触发器代为插入 membership → 触发器内插入同样受 RLS 约束，且把业务写入藏进触发器，否决。
+6. 给 `persons` 加 `family_id` → 直接违反 §7.1“不得单家庭绑定”，否决。
 
 ---
 
@@ -59,13 +70,13 @@
 
 **Decision**
 
-新建 `guardian_consent_requests` 表，只存：监护人 Person、`declared_age_band`（恒为 `UNDER_14`）、`notice_version` / `notice_hash`、`status`、`expires_at`、`family_id`。**不含任何孩子 PII**。表 id 同时作为客户端持有的不透明绑定 token。
+新建 `guardian_consent_requests` 表，只存：监护人 Person、`declared_age_band`（恒为 `UNDER_14`）、`notice_version` / `notice_hash`、`status`、`expires_at`、`family_id`，以及仅在“对已存在未成年人重新同意”时使用的 `subject_person_id`。**首次 onboarding 时 `subject_person_id` 为 NULL，且表中不存在任何孩子资料列**（姓名 / 生日 / 称呼 / 关系 / Assessment / Case / Digital Use / AI 数据）。表 id 同时作为客户端持有的不透明绑定 token。
 
 **Rationale**
 
 - §7.7A 明确把该表达交给 Plan：“该最小状态的技术表达（表、键、token / session 或等价形式）由后续实现 Plan 决定；本文不预先建表”。
 - 需要“表”而不是纯客户端 token，因为：① 告知版本与 hash 必须由服务端留存，否则无法证明“告知了什么”；② 过期与状态必须服务端可判定；③ 绑定必须一次性且可审计。
-- 不含 PII 是硬约束：如果这张表存了孩子姓名/生日，它就成了“正式 Person 档案”，FR-008(a) 立刻被违反。**用列的存在性来证明合规**，比用流程说明更可靠。
+- **PII 边界要分情形说**：首次同意的情形下不可能也不允许出现孩子资料，否则它就成了“正式 Person 档案”，FR-008(a) 立刻被违反；但重新同意必须能指向那个已存在的未成年人，因此 `subject_person_id` 是“完成重新同意所严格必要的关联”，不是资料载体。绝对化表述（“本表没有任何 child identifier 列”）会与这一列自相矛盾，故不使用。
 - `expires_at = created_at + 24h` 且无后台清理任务：过期在读取时判定（`status='PENDING' AND now() > expires_at` → 视为 `EXPIRED`），不引入 pg-boss（Phase 1 本 Slice 无异步）。
 
 **Alternatives considered**
@@ -109,12 +120,13 @@
 - 单列 + `UNIQUE` 同时约束两个方向：列本身保证 Person 最多一个 Account；唯一索引保证 Account 最多被一个 Person 引用。
 - 双向列（两边各放一个 FK）会产生两个可独立写入的事实源，需要额外约束或触发器才能防止 A→B 与 B→A 不一致。
 - 不构成循环外键，migration 顺序简单。
+- 与登录流程契合：同一事务内先插 Account，再插带 `account_id` 的 Person，一次写入即可满足两个方向的约束，无需回填。
 
 **Alternatives considered**
 
 1. 双向 FK → 一致性靠约定，否决。
 2. 独立 `account_person_links` 关联表 → 对 1:1 属过度建模，且 `UNIQUE` 双列仍需额外约束，否决。
-3. 把 `person_id` 放 `accounts` → 登录时 Person 尚不存在，需要先建空 Person 或事后回填；与 US1“登录 + 建家庭”顺序冲突，否决。
+3. 把 `person_id` 放 `accounts` → 需要先建 Account 再 UPDATE 回填 person_id（或先建 Person 再建 Account），多一条可失败路径，且构成与 `persons.created_by_account_id` 的循环外键；单列方案不需要，否决。
 
 ---
 
@@ -198,23 +210,27 @@ age_band 只存 `person_compliance_profiles.age_band`，来源存同行 `verifie
 
 ---
 
-## R-10 幂等在并发下的正确性
+## R-10 幂等在并发下的正确性与隔离
 
 **Decision**
 
-`INSERT … ON CONFLICT (actor_account_id, command_type, idempotency_key) DO NOTHING RETURNING id`，未插入则 `SELECT … FOR SHARE` 既有行并比对 `request_hash`。
+`INSERT … ON CONFLICT (actor_account_id, command_type, idempotency_key) DO NOTHING RETURNING id`，未插入则 `SELECT … FOR SHARE` 既有行并比对 `request_hash`。`idempotency_keys` 同时启用 `ENABLE` + `FORCE` RLS，策略 `actor_account_id = app_account_id()`；lookup / insert / replay 全部在已建立 identity 上下文的事务内执行。
 
 **Rationale**
 
 - PostgreSQL 的唯一索引在并发插入时会阻塞后来者，直到先提交/回滚。因此“未插入”意味着**前者已提交**，此时读到的行是完整行（含 response 快照），不需要轮询或等待。
 - 不需要 `outbox`、不需要分布式锁、不需要进程内缓存（§4.0A 禁止把进程内锁当业务真相）。
 - 同 key 不同 payload 用 `request_hash` 判定，满足 §8.5 的 409 要求，而不是静默返回旧结果。
+- **为什么必须加 RLS**：该表的 `response_body` 是完整响应快照，可能含 Family / Person / Member / Consent 字段。若只靠“仓储记得写 `WHERE actor_account_id`”，任何一次遗漏或新代码路径都会造成跨账号数据回放。GUC 型策略让这种遗漏变成 0 行，而不是泄漏。
+- 为什么不是家庭级 RLS：幂等键属于**账号**动作（§8.5 的 `actor_id`），创建家庭时 family 尚不存在，家庭级策略会让首次写入无法完成。
 
 **Alternatives considered**
 
 1. 先查后插 → 并发窗口内会双写，否决。
 2. `pg_advisory_lock` → 额外锁协议，且需连接级管理，否决。
 3. 只靠业务唯一约束（如 `UNIQUE(created_by_person_id)`）→ 能防重复实体，但无法返回“原结果”，也无法区分“同 key 不同 payload”，否决。
+4. 不加 RLS，仅靠仓储自律 → 一次漏写 WHERE 即跨账号回放，否决（本轮修正项）。
+5. 加家庭级 RLS → 建家庭时无 family 上下文，首次写入不可能完成，否决。
 
 ---
 
@@ -297,4 +313,4 @@ age_band 只存 `person_compliance_profiles.age_band`，来源存同行 `verifie
 
 ## 未解决项
 
-无 NEEDS CLARIFICATION 残留。所有 Plan 层判断已收敛为 `plan.md` 的 D-1—D-6 与 Open Review Items R-1—R-9；无上游冲突需要回到 `Docs/**` 修订。
+无 NEEDS CLARIFICATION 残留。所有 Plan 层判断已收敛为 `plan.md` 的 D-1—D-6 与 Open Review Items R-1—R-8；无上游冲突需要回到 `Docs/**` 修订。

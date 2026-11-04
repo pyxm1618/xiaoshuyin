@@ -136,36 +136,44 @@ toHttpError(reason): { status, code }
 | `persons` | ENABLE + FORCE | `account_id = app_account_id()` **OR** `id = app_person_id()` **OR** membership | `account_id = app_account_id()` **OR** membership |
 | `person_compliance_profiles` | ENABLE + FORCE | `person_id = app_person_id()` **OR** membership | membership |
 | `person_profile_values` | ENABLE + FORCE | 同上 | membership |
+| `idempotency_keys` | ENABLE + FORCE | `actor_account_id = app_account_id()` | 同左 |
 | `accounts` | 无 | 非家庭作用域（见 §4.5） | — |
-| `idempotency_keys` | 无 | 非家庭作用域（见 §4.5） | — |
 
 `membership` = `EXISTS (SELECT 1 FROM family_members fm WHERE fm.person_id = <本表主体> AND fm.family_id = app_family_id())`。
 
 **为什么需要 self 分支**：`GET /me`、`GET /compliance/profile`、`GET /families/current` 必须在“尚未建立 family 上下文”时读到自己的数据。只有 membership 一个分支时，首次登录后这些合法自助读会被 RLS 挡成 0 行——那是误杀，不是隔离。self 分支是**列与已验签身份的比对**（`account_id = app_account_id()`、`id = app_person_id()`），不是应用层自证。
 
-**写入的 self 分支只有一个**：`persons.WITH CHECK` 允许 `account_id = app_account_id()`，即只能创建绑定到当前账号的自己的 Person。它不能创建 `account_id IS NULL` 的成员（必须走 membership 分支），也不能把 Person 绑到别人的账号。`person_compliance_profiles` / `person_profile_values` / `family_members` 的 `WITH CHECK` 仍只认 membership 与 family 上下文——self 上下文对它们只读。
+**写入的 self 分支只有一个**：`persons.WITH CHECK` 允许 `account_id = app_account_id()`，即只能创建绑定到当前账号的自己的 Person——这正是**首次登录建立 Person** 的路径。它不能创建 `account_id IS NULL` 的成员（必须走 membership 分支），也不能把 Person 绑到别人的账号。`person_compliance_profiles` / `person_profile_values` / `family_members` 的 `WITH CHECK` 仍只认 membership 与 family 上下文。
 
-**两条插入顺序**（各有原因，不能统一）：
+**`idempotency_keys` 必须身份级 RLS**：其 `response_body` 是重放快照，可能含 Family / Person / Member / Consent 字段。只靠仓储写 `WHERE actor_account_id` 不足以阻止跨账号回放；策略 `actor_account_id = app_account_id()` 让遗漏退化为 0 行。key 的 lookup / insert / replay 都必须在 identity 上下文事务内。不用家庭级策略，因为创建家庭时 family 尚不存在。
+
+**三条写入顺序**（各有原因，不能统一）：
 
 | 命令 | 顺序 | 原因 |
 |---|---|---|
-| `POST /families` | Person（自己）→ Family → membership → profile | `families.created_by_person_id` 是即时外键 |
-| `POST /families/:id/members` | membership → Person（无账号）→ profile | 成员 `account_id IS NULL`，无法走 self 分支 |
+| `POST /auth/wechat`（首次） | Account → `set_account_context` → Person（`account_id` 非空） | Person 只能凭 `account_id = app_account_id()` 写入 |
+| `POST /families` | Person 已存在 → Family → membership → profile | `families.created_by_person_id` 是即时外键；profile 需要 membership |
+| `POST /families/:id/members` | membership → Person（`account_id IS NULL`）→ 绑定 consent → profile | 成员无法走 self 分支；consent 绑定必须在 Person 行存在后 |
 
-因此 `family_members.person_id` 为 `DEFERRABLE INITIALLY DEFERRED`，`families.created_by_person_id` 为即时校验。
+因此 `family_members.person_id` 为 `DEFERRABLE INITIALLY DEFERRED`；`families.created_by_person_id` 与 `consent_records.bound_person_id` 为即时校验。
 
 ### 4.2 三条不可违反的性质
 
-1. **无任何上下文即空集**：三个 GUC 全未设置时所有谓词求值为 `NULL` → 0 行。默认拒绝，不是默认放行。
+1. **无任何上下文即空集**：三个 GUC 全未设置时所有谓词求值为 `NULL` → 0 行。默认拒绝，不是默认放行。`idempotency_keys` 同理。
 2. **无自引用递归**：`family_members` 的 `USING` 只引用 GUC，不引用自身；`families` 引用 `family_members`，反向不存在。任何把 `family_members` 写进自身 policy 的写法都会触发 `infinite recursion detected in policy`，属禁止实现。
 3. **`app.family_id` 是请求的目标家庭，不由 `app.person_id` 反推**：多 Family Person 在 fixture 下同时拥有两条 membership，两条互不共享上下文（spec 场景 11、Edge「多 Family 上下文」）。
 
-### 4.3 上下文建立（三个入口）
+### 4.3 上下文建立（四个入口）
 
 ```text
+A0. withAccountTransaction({ accountId, purpose })
+    BEGIN → app.set_account_context(accountId, 'SELF_IDENTITY')
+          → INSERT persons（仅首次登录）→ COMMIT
+    用途：POST /auth/wechat 首次登录（Person 尚未存在）
+
 A. withIdentityTransaction({ accountId, purpose })
    BEGIN → app.set_identity_context(accountId, purpose) → fn → COMMIT
-   用途：GET /me、GET /compliance/profile、登录后解析 self person
+   用途：GET /me、GET /compliance/profile、幂等键读写、解析 self person
    设置：app.account_id、app.purpose（命中时另设 app.person_id）
 
 B. withRlsTransaction({ familyId, accountId, personId, purpose })
@@ -205,14 +213,15 @@ C. withFamilyCreationTransaction({ accountId, personId, newFamilyId, displayName
 
 第 2 步只暴露 actor **自己的** membership 行（策略 `person_id = app_person_id()`），不泄漏其他成员或其他家庭。多家庭场景在 V1 只存在于 fixture（spec 场景 11），产品层不提供选择能力，因此“多行”分支必须是显式失败，不能静默取第一个。
 
-### 4.5 两张无 RLS 的表
+### 4.5 唯一没有 RLS 的表
 
-`accounts` 与 `idempotency_keys` 不是家庭作用域对象，且登录必须在**无家庭上下文**时可用（否则 `POST /auth/wechat` 无法读 Account）。补偿控制：
+`accounts` 不是家庭作用域对象，且登录必须在**无任何上下文**时可用（否则 `POST /auth/wechat` 无法在 code2session 之后读/建 Account）。补偿控制：
 
-- `accounts` 只允许经 `auth` 模块的窄查询访问（`WHERE wechat_openid = $1` / `WHERE id = $1`），无通用列表查询。
-- `idempotency_keys` 只按 `(actor_account_id, command_type, idempotency_key)` 精确读写。
+- 只允许经 `auth` 模块的窄查询访问（`WHERE wechat_openid = $1` / `WHERE id = $1`），无通用列表查询。
 - 集成测试断言：任何家庭级响应都不包含 `wechat_openid` 或跨账号数据。
-- 该边界记入 `plan.md` Open Review Item R-5，供审核显式接受或否决。
+- 该边界记入 `plan.md` Open Review Item R-4，供审核显式接受或否决。
+
+`idempotency_keys` **不再是例外**：它有自己的身份级策略（§4.1），因为它保存的 `response_body` 可能包含家庭数据。
 
 ---
 
@@ -238,6 +247,10 @@ xiaoshuyin_app       非 owner / NOBYPASSRLS / 最小 DML
 | E-9 | `set_identity_context(accountA, …)` 后 `SELECT count(*) FROM persons` | `1`，且 `id` = accountA 绑定的 person |
 | E-10 | `set_identity_context(accountA, …)` 后 `SELECT count(*) FROM persons WHERE id = <accountB 的 person>` | `0` |
 | E-11 | 仅 identity 上下文尝试 `INSERT INTO person_profile_values` | 被 `WITH CHECK` 拒绝 |
+| E-12 | `SELECT relrowsecurity, relforcerowsecurity FROM pg_class WHERE relname='idempotency_keys'` | `true, true` |
+| E-13 | 账号 A 的 identity 上下文下 `SELECT count(*) FROM idempotency_keys`（库中已有 A、B 各一条） | `1` |
+| E-14 | 账号 A 的上下文下按账号 B 的 key 回放 | `0` 行，响应不含 B 的 `response_body` |
+| E-15 | 无 identity 上下文插入幂等键 | 被 `WITH CHECK` 拒绝 |
 
 ---
 

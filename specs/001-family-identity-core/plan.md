@@ -44,7 +44,7 @@
 本 Slice 是仓库第一次落代码，交付 Phase 1 身份地基的**最小可验证纵切**：
 
 1. 模块化单体骨架（`apps/server/api` + `packages/{contracts,domain,authorization,compliance}` + `db/{schema,migrations,rls}` + `tests/*`），技术栈严格等于 §2 / §4.1 冻结版本。
-2. 10 张表（9 张业务表 + 幂等表）、8 个 PG enum、7 个函数（4 个上下文 getter + 3 个上下文入口）、1 个触发器、8 条 policy（每表一条 `FOR ALL`）、migrator / app 双角色、ENABLE + FORCE RLS 与 `withRlsTransaction`。
+2. 10 张表（9 张业务表 + 幂等表）、8 个 PG enum、9 个函数（4 个上下文 getter + 4 个上下文入口 + 1 个触发器函数）、1 个触发器、9 条 policy（每表一条 `FOR ALL`）、migrator / app 双角色、除 `accounts` 外全部 ENABLE + FORCE RLS，以及 `withRlsTransaction`。
 3. 13 个 HTTP 端点（§28.1 / §28.2 契约面 + 由 §7.7A 显式委托 Plan 决定的 consent onboarding 端点；`POST /consents` 明确不实现，见 D-6.1）。
 4. 单一 `authorize()`，判定输入是 §9 的形状，本 Slice 只实现两个互相独立的维度：**Family membership** 与 **Compliance guardian relationship**；未实现维度一律 fail-closed。
 5. UNDER_14 consent-first 是**结构约束**而非流程约定：`person_compliance_profiles` 上的 CHECK 使“UNDER_14 profile 必须持有 guardian consent 记录”在数据库层无法违反，因此在有效同意成立前无法写出正式 child Person 的合规状态。
@@ -160,7 +160,7 @@
 
 - `families(id, display_name?, created_by_person_id NOT NULL REFERENCES persons, created_at, updated_at)`。
 - `created_by_person_id` 是 §9“管理主体”的物理落点（见 D-2），不是成员角色。
-- `UNIQUE (created_by_person_id)`：同一 Person 只拥有一个 Family。理由见 Open Review Item R-2。
+- `UNIQUE (created_by_person_id)`：同一 Person 只能**拥有**一个 Family。该约束只作用于“拥有/创建”，**不限制一个 Person 作为 member 属于多个 Family**——那由 `family_members` 表达，并在 fixture 级验收（场景 11）。理由见 Open Review Item R-2。
 
 #### Account
 
@@ -189,9 +189,29 @@
 
 **为什么不用 `family_members.is_creator` 布尔位**：§7.1 规定 `family_members` 只表达“Person 属于哪个 Family”。把授权属性放进成员行，正是 spec FR-006 与 Clarifications Q3 / R-2a 否掉的“成员授权属性”。放在 Family 聚合上，语义是“这个家庭是谁建的”，不是“这个人在家里是什么角色”。
 
-**为什么创建者必须是 ADULT**：§1.5 与 §9 把管理主体定义为“创建 Family 的登录 adult”。因此 `POST /families` 建立创建者 Person 时要求 `ageBand = ADULT`；`MINOR_14_17` / `UNDER_14` / `UNKNOWN` 一律 403 `FAMILY_MANAGER_MUST_BE_ADULT`。UNKNOWN 不得按成人放行（FR-009）。
+**为什么创建者必须是 ADULT**：§1.5 与 §9 把管理主体定义为“创建 Family 的登录 adult”。因此 `POST /families` 要求 `ageBand = ADULT`（连同 `ageBandSource` 一起显式提交，不由服务端推断）；`MINOR_14_17` / `UNDER_14` / `UNKNOWN` 一律 403 `FAMILY_MANAGER_MUST_BE_ADULT`。UNKNOWN 不得按成人放行（FR-009）。
 
-**为什么创建者 Person 与 Family 同一次命令建立**：spec US1 的 Independent Test 明确要求“仅用登录 + 建家庭两个动作即可完成”。因此 `POST /families` 在创建者尚无 Person 时原子地建立 Person（含 ADULT profile 与 membership）。另一候选（先 `POST /me/person` 再 `POST /families`）需要第三个动作，与 US1 冲突，已弃用。若账号已绑定 Person（V1 中只可能由本命令建立，因此必然已拥有家庭），则由 `UNIQUE(created_by_person_id)` 拒绝，返回 409 `FAMILY_ALREADY_OWNED`。
+**Person 生命周期：登录建立 Person，建家庭只补齐 adult 合规信息**（spec US1 原文：“微信登录时系统建立 Account 与对应 Person”）：
+
+```text
+POST /auth/wechat（首次）
+  → 建立 Account
+  → 在同一事务内建立该账号的 Person（persons.account_id = account.id）
+  → 返回 account + person（不含 profile：年龄尚未声明）
+
+POST /families
+  → 使用**已存在**的 actor Person（不再新建 Person）
+  → 显式确认 ageBand = ADULT + ageBandSource
+  → 建立 Family（created_by_person_id = actor Person）
+  → 建立 creator membership
+  → 建立 ADULT compliance profile（verified_source = ageBandSource）
+  → 写入 DISPLAY_NAME 等 profile values（逐值来源）
+  → audit
+```
+
+因此“登录 + 建家庭两个动作即可完成”仍然成立，且 Person 在任何 Family 之前就已存在。`POST /families` **不创建任何第二个 Person**；若该账号已拥有 Family，`UNIQUE(created_by_person_id)` 会拒绝，返回 409 `FAMILY_ALREADY_OWNED`。
+
+“建家庭”不推导 guardian：`families` 上没有 guardian 字段，创建者的 guardian 身份只能来自某未成年 Person 的 compliance profile（§7.7A）。
 
 ---
 
@@ -219,6 +239,7 @@ guardian_consent_requests
 - id                 uuid  ← 同时作为客户端持有的不透明绑定 token
 - family_id          当前目标家庭（隔离作用域）
 - guardian_person_id 发起同意的成年 Person
+- subject_person_id? 仅“对已存在未成年人重新同意”时指向该 Person（首次流程为 NULL）
 - declared_age_band  只允许 UNDER_14（本流程专属）
 - notice_version     已展示的告知版本
 - notice_hash        已展示告知正文的 sha256
@@ -227,7 +248,14 @@ guardian_consent_requests
 - created_at / completed_at?
 ```
 
-**该表不含任何孩子 PII**：没有姓名、没有出生日期、没有称呼、没有 Assessment / Case / Digital Use / AI 所需资料。整行只表达“某成年监护人声明其代表的未成年人属于 UNDER_14，且已看到某版本告知”。
+**PII 边界必须分情形表述**（不能笼统说“没有任何孩子标识”）：
+
+| 情形 | `subject_person_id` | 允许承载 | 禁止 |
+|---|---|---|---|
+| 首次 UNDER_14 onboarding，尚无 child Person | `NULL` | 监护人身份、声明 band、告知版本/hash、过期时间、状态 | 姓名、生日、称呼、关系描述、Assessment / Case / Digital Use / AI 数据 |
+| 已存在未成年人的重新同意 | 该 Person id | 同一组最小状态 + **仅用于关联**的 subject id | 以重新同意为理由新增任何其它孩子资料；该列不是资料载体 |
+
+`subject_person_id` 是完成重新同意所严格必要的关联，不构成“提前采集”。因此结构断言的对象不是“本表无 child identifier 列”，而是“列集合恰好等于上述清单；`subject_person_id` 是唯一指向未成年人的列；不存在任何孩子资料列”。
 
 | 字段 | 为什么严格必要 |
 |---|---|
@@ -270,13 +298,31 @@ consent_records
 6. **最小化**：不采集孩子任何资料；IP / UA 只存 HMAC 摘要，不存原值。
 7. **不可抵赖**：`consent_records` 业务列不可更新；`bound_person_id` 只允许 NULL → 值一次（触发器强制），版本链只追加。
 
-#### D-3.4 如何关联到未成年 Person
+#### D-3.4 如何关联到未成年 Person（FK 顺序）
 
-关联方向是“profile 指向 consent”，不是“consent 反向改写”：
+关联方向是“profile 指向 consent”，不是“consent 反向改写”。但 `bound_person_id` 是**即时外键**，所以不可能先把同意绑到一个还不存在的 Person：
 
-- `person_compliance_profiles.guardian_consent_record_id` + `guardian_consent_version` 指向当前有效那一版。
-- 建档命令在一个事务内：校验 consent（`decision=GRANTED`、`guardian_person_id=actor`、`bound_person_id IS NULL`、`family_id` 匹配）→ 写 `bound_person_id` / `bound_at` → 建 Person（含指向该 consent 的 profile）→ 建 membership → 写 profile values → 写 audit。
-- 若该 consent 已被绑定 → 409 `GUARDIAN_CONSENT_ALREADY_BOUND`，不会产生第二个孩子。
+```text
+前置：consent 已 GRANTED 且 bound_person_id IS NULL（同意早于 Person 成立）
+
+建档事务（POST /families/:id/members）：
+1. 锁定并验证 consent（FOR UPDATE）：GRANTED / 未绑定 / guardian=actor /
+   account / family / notice / expiry 全部有效
+2. 服务端预生成 personId = uuidv7()
+3. INSERT family_members（利用 DEFERRABLE 的 person_id，Person 尚未存在）
+4. INSERT persons（account_id = NULL）
+5. UPDATE consent_records SET bound_person_id = personId, bound_at = now()
+   WHERE id = $consentId AND bound_person_id IS NULL
+   —— 0 行受影响 → 409 GUARDIAN_CONSENT_ALREADY_BOUND
+6. INSERT person_compliance_profiles（UNDER_14 + guardian + consent 指针）
+7. INSERT person_profile_values
+8. INSERT business_audit_events
+```
+
+**必须同时成立的两件事**：① 同意的成立时间（`decided_at`）早于 Person 创建；② 绑定（写 `bound_person_id`）晚于 Person 行存在。任何“先绑定再建 Person”的写法都会违反外键，任何“先建 profile 再绑定”的写法都会违反 `pcp_under14_requires_consent`。
+
+- `person_compliance_profiles.guardian_consent_record_id` + `guardian_consent_version` 指向当前有效那一版；`guardian_person_id` 取自 consent 行，不接受请求体另行指定。
+- 若该 consent 已被绑定 → 409，不会产生第二个孩子。
 
 #### D-3.5 结构约束（本 Plan 最关键的一条）
 
@@ -332,7 +378,7 @@ age_band = UNDER_14           → 读 guardian_consent_record_id 指向的行
 person_profile_values
 - id                    uuid
 - person_id             资料属于谁
-- attribute             DISPLAY_NAME / RELATION_DESCRIPTOR（PG enum，本 Slice 封闭集合）
+- attribute             DISPLAY_NAME（PG enum，本 Slice 唯一属性）
 - value_text            资料值
 - source_kind           §2.2 的 8 类来源（PG enum）
 - provided_by_person_id 谁提供（人物类来源必填）
@@ -356,9 +402,14 @@ person_profile_values
 
 - age_band 的唯一载体是 `person_compliance_profiles`，来源载体是同行的 `verified_source`（同样使用 §2.2 枚举）。
 - `person_profile_values.attribute` 的 enum **不含** `AGE_BAND`，从结构上排除第二载体（测试断言）。
-- 结果仍满足 FR-003：称呼 / 关系描述 / 年龄段各有独立来源、互不覆盖；`persons` 上没有任何来源列。
+- 结果仍满足 FR-003：称呼与年龄段各有独立来源、互不覆盖；`persons` 上没有任何来源列。
 
-**为什么有 `RELATION_DESCRIPTOR`**：spec 场景 3 与 Acceptance Evidence 要求验证“不同资料可以携带不同来源”。只有单一 attribute 时该断言不可测，也不足以证明模型不是 Person 级单值。关系描述是 §1.5“维护基础家庭资料”范围内的最小第二字段。它**是自由文本描述，不是角色**：`authorize()` 不读它，guardian 判定不读它，测试显式断言它不参与任何授权分支（Open Review Item R-4）。
+**本 Slice 只有一个 attribute，且不为此新增字段**：U03 的最小人物资料只包含「称呼」。per-value provenance 由两组**真实事实**验证，而不是靠造一个只为测试存在的资料维度：
+
+1. 同一 `DISPLAY_NAME` 的多来源并存 / 同源替换（同一张表内）；
+2. `age_band` 的来源由 `person_compliance_profiles.verified_source` 独立承载（另一张表、另一个来源值）。
+
+两者共同证明「来源属于具体资料值；不同资料载体可以拥有独立 provenance」。**禁止**为了证明模型成立而新增没有正式需求的业务字段；也不得用另一个新字段替代原来的 `RELATION_DESCRIPTOR`。
 
 ---
 
@@ -413,7 +464,7 @@ xiaoshuyin_app       非 owner；NOBYPASSRLS；最小 DML 权限
 
 #### D-5.4 RLS
 
-对所有家庭 / 人物作用域表：`ENABLE` + `FORCE ROW LEVEL SECURITY`。
+除 `accounts` 外，全部 9 张表 `ENABLE` + `FORCE ROW LEVEL SECURITY`（8 张家庭/人物作用域 + `idempotency_keys` 的身份级策略）。
 
 先说明一个必须解决的约束，否则设计不成立：**`GET /me`、`GET /compliance/profile`、`GET /families/current` 必须能在“尚无可用家庭上下文”时读到自己的数据**。若所有 person 作用域策略只依赖 `app.family_id` + membership，这三个端点在首次登录后（尚无 membership）会返回 0 行，即 RLS 把合法自助读也挡掉。因此策略是 membership 与 self 的**并集**，两者都由数据库列比对得出，不由应用层声明。
 
@@ -427,10 +478,13 @@ xiaoshuyin_app       非 owner；NOBYPASSRLS；最小 DML 权限
 | `persons` | `account_id = app_account_id()` **OR** `id = app_person_id()` **OR** membership(app_family_id()) | `account_id = app_account_id()` **OR** membership(app_family_id()) |
 | `person_compliance_profiles` | `person_id = app_person_id()` **OR** membership(app_family_id()) | membership(app_family_id()) |
 | `person_profile_values` | 同 `person_compliance_profiles` | membership(app_family_id()) |
+| `idempotency_keys` | `actor_account_id = app_account_id()` | 同左 |
 
 其中 `membership(x)` 一律展开为 `EXISTS (SELECT 1 FROM family_members fm WHERE fm.person_id = <本表主体> AND fm.family_id = x)`；`families` 的 OR 分支为 `EXISTS (SELECT 1 FROM family_members fm WHERE fm.family_id = families.id AND fm.person_id = app_person_id())`。
 
 `app_family_id()` / `app_person_id()` / `app_account_id()` = `NULLIF(current_setting('app.<x>', true), '')::uuid`。无上下文 → 谓词为 NULL → 0 行（默认拒绝）。
+
+**`idempotency_keys` 必须是身份级 RLS，不能靠仓储自律**：该表保存 `response_body` 重放快照，内容可能包含 Family / Person / Member / Consent 的响应字段。一条漏写 `WHERE actor_account_id = …` 的查询就会跨账号回放他人数据。因此 `ENABLE` + `FORCE`，策略 `actor_account_id = app_account_id()`；key 的 lookup / insert / replay 全部在已建立 identity 上下文的事务内执行；无 identity 上下文时读 0 行、写被拒。
 
 **为什么 self 分支用列比对而不是 GUC 自证**：
 
@@ -440,55 +494,59 @@ xiaoshuyin_app       非 owner；NOBYPASSRLS；最小 DML 权限
 
 **递归风险处理**：`family_members` 的 `USING` 只引用 GUC，不引用自身；`families` 的 OR 分支引用 `family_members`，而 `family_members` 不引用 `families`，因此链条单向终止，不产生 `infinite recursion detected in policy`。任何“把 family_members 写进自身策略”的写法都属禁止实现。
 
-**`persons` / `person_compliance_profiles` / `person_profile_values` 的 INSERT 检查**：`persons` 的 `WITH CHECK` 有唯一一个 self 分支——`account_id = app_account_id()`，即“只能创建绑定到当前账号的自己的 Person”；其余两张表的 `WITH CHECK` 只认 membership。因此两条命令的插入顺序不同：
+**三条写入路径与各自的顺序**（`persons` 的 `WITH CHECK` 有唯一一个 self 分支 `account_id = app_account_id()`；其余表的写入只认 membership / family 上下文 / account）：
 
-| 命令 | 顺序 | 原因 |
-|---|---|---|
-| `POST /families` | Person（自己）→ Family → membership → profile → values → audit | `families.created_by_person_id` 是即时外键，Person 必须先存在 |
-| `POST /families/:id/members` | membership → Person（无账号）→ profile → values → audit | 成员 `account_id IS NULL`，无法走 self 分支，只能靠已存在 membership 通过 `WITH CHECK` |
+| 命令 | 上下文 | 顺序 | 原因 |
+|---|---|---|---|
+| `POST /auth/wechat`（首次） | identity（仅 account） | Account → `set_account_context` → Person（`account_id` 非空） | Person 只能凭 `account_id = app_account_id()` 写入；此时还没有 profile |
+| `POST /families` | identity → family | Person 已存在 → `create_family` → membership → profile(ADULT) → values → audit | `families.created_by_person_id` 是即时外键；profile 的 `WITH CHECK` 要求 membership 先存在 |
+| `POST /families/:id/members` | family | membership → Person（`account_id IS NULL`）→ 绑定 consent → profile → values → audit | 成员的 Person 无法走 self 分支，只能靠已存在 membership；consent 绑定必须在 Person 行存在之后 |
 
-`family_members.person_id` 因此声明为 `DEFERRABLE INITIALLY DEFERRED`（提交时校验），`families.created_by_person_id` 保持即时校验。这样两种顺序都不会留下“无 membership 的孤儿 Person”；Person 的 id 在插入前已知，命令用 `SELECT uuidv7()` 预取（仍满足 §7.0 的 `uuidv7()` 基线）。
+`family_members.person_id` 因此声明为 `DEFERRABLE INITIALLY DEFERRED`（提交时校验）；`families.created_by_person_id` 与 `consent_records.bound_person_id` 保持即时校验。这样三条路径都不会留下“无 membership 的孤儿 Person”；需要提前知道 id 的命令用 `SELECT uuidv7()` 预取（仍满足 §7.0 的 `uuidv7()` 基线）。
 
-`accounts` / `idempotency_keys` **不加 RLS**：它们不属于家庭作用域，登录必须在无任何上下文时可用。补偿控制：`accounts` 只允许经 `auth` 模块的窄查询访问（`WHERE wechat_openid = $1`），测试断言其不参与任何家庭响应序列化。见 Open Review Item R-5。
+`accounts` **不加 RLS**：它不是家庭作用域，且登录必须在无任何上下文时可用。补偿控制：只允许经 `auth` 模块的窄查询访问（`WHERE wechat_openid = $1`），测试断言其不参与任何家庭响应序列化。见 Open Review Item R-4。
 
 #### D-5.5 事务上下文
 
-三个入口，各自只做一件窄事；业务代码不得直接 `set_config`。
+四个入口，各自只做一件窄事；业务代码不得直接 `set_config`。
 
 ```ts
-// ① 身份自助：无 family 上下文
-withIdentityTransaction({ accountId, purpose }, fn)
-  → BEGIN
-  → SELECT app.set_identity_context($accountId, $purpose)
-  → fn(tx)
+// ① 登录：Account 之后、Person 之前只设账号上下文
+withAccountTransaction({ accountId, purpose }, fn)
+  → BEGIN → app.set_account_context(accountId, 'SELF_IDENTITY')
+  → INSERT persons (account_id = accountId)      // 仅首次登录；Person 在登录时建立
+  → COMMIT
 
-// ② 家庭作用域：最常见路径
-withRlsTransaction({ familyId, accountId, personId, purpose }, fn)
-  → BEGIN
-  → SELECT app.set_identity_context($accountId, $purpose)   -- 解析并锁定自身 person
-  → SELECT app.set_family_context($familyId, $personId, $purpose)
-  → fn(tx)
-
-// ③ 家庭创建引导：家庭与 membership 都还不存在
+// ② 家庭创建：Person 已存在，Family 与 membership 尚不存在
 withFamilyCreationTransaction({ accountId, personId, newFamilyId, displayName }, fn)
   → BEGIN
-  → SELECT app.set_identity_context($accountId, 'FAMILY_MANAGEMENT')  -- 设 app.account_id
-  → INSERT persons（id = $personId, account_id = $accountId）          -- persons.WITH CHECK 的 self 分支
-  → SELECT app.create_family($newFamilyId, $personId, $displayName)    -- 设 family 上下文 + 插入 families
-  → fn(tx)   -- 插 membership → profile → values → audit
+  → app.set_identity_context(accountId, 'FAMILY_MANAGEMENT')
+  → app.create_family(newFamilyId, personId, displayName)   // 设 family 上下文 + 插 Family
+  → fn(tx)   // 插 membership → profile(ADULT) → values → audit
+  → COMMIT
+
+// ③ 家庭作用域：最常见路径
+withRlsTransaction({ familyId, accountId, personId, purpose }, fn)
+  → BEGIN
+  → app.set_identity_context(accountId, purpose)             // 解析自身 person
+  → app.set_family_context(familyId, personId, purpose)      // 校验 membership
+  → fn(tx)
+  → COMMIT
 ```
 
-三个函数的职责边界：
+四个入口的职责边界：
 
-| 函数 | 设置 | 数据库侧校验 |
+| 入口 | 设置 | 数据库侧校验 |
 |---|---|---|
-| `app.set_identity_context(account, purpose)` | `app.account_id`、`app.purpose`；若 `persons.account_id = account` 命中则同时设 `app.person_id` | 无（该函数只声明“我是哪个已验签账号”；可见性由策略的列比对决定） |
+| `app.set_account_context(account, purpose)` | `app.account_id`、`app.purpose` | 参数非空（否则 42501） |
+| `app.set_identity_context(account, purpose)` | 账号上下文 + 命中时设 `app.person_id` | 无额外校验；可见性由策略的列比对决定 |
 | `app.set_family_context(family, person, purpose)` | `app.family_id`、`app.person_id`、`app.purpose` | `EXISTS(family_members WHERE family_id=$1 AND person_id=$2)` 不成立 → `RAISE 42501 FAMILY_MEMBERSHIP_REQUIRED` |
-| `app.create_family(familyId, creatorPersonId, displayName)` | 同上 + `app.family_id` | `INSERT INTO families` 本身受 `WITH CHECK (id = app_family_id() AND created_by_person_id = app_person_id())` 约束 |
+| `app.create_family(familyId, creatorPersonId, displayName)` | 同上 + `app.family_id` | `INSERT INTO families` 受 `WITH CHECK (id = app_family_id() AND created_by_person_id = app_person_id())` 约束 |
 
 - `set_identity_context` 内解析 person 的那条 SELECT 受 `persons` 策略约束（`account_id = app_account_id()` 分支），只能取到本账号绑定的那一行（`UNIQUE(account_id)` 保证 ≤1）。
 - `set_family_context` 的 membership 校验发生在 `set_config` **之后**，因此该 EXISTS 查询本身受 RLS 约束，只能看到目标家庭的行，既不会跨家庭探测，也不会自我递归。
-- `create_family` 是唯一没有 membership 前置的入口，因为新家庭尚无 membership。它不构成新的绕过面：`INSERT` 被 `created_by_person_id = app_person_id()` 锁死为“只能给自己建家庭”，且同事务内必须插 membership（`family_members.WITH CHECK` 强制 `family_id = app_family_id()`），否则后续写入全部失败。该例外记入 Open Review Item R-10。- 关于信任边界（必须明确写在实现注释里）：**`set_config` 是内置函数，任何持有 app 角色的连接都能直接调用**。因此 GUC 型 RLS 的前提是“应用在 `authorize()` 之后诚实地设置上下文”；RLS 防的是**查询遗漏**（忘写 WHERE、JOIN 漏表），不是防恶意应用。§9.1 对这个定位的原文是“防止查询遗漏导致跨家庭泄漏的第二道硬防线”，本设计保持一致，不夸大。
+- `create_family` 是唯一没有 membership 前置的入口，因为新家庭尚无 membership。它不构成新的绕过面：`INSERT` 被 `created_by_person_id = app_person_id()` 锁死为“只能给自己建家庭”，且同事务内必须插 membership（`family_members.WITH CHECK` 强制 `family_id = app_family_id()`），否则后续 profile 写入失败。该例外记入 Open Review Item R-8。
+- 关于信任边界（必须明确写在实现注释里）：**`set_config` 是内置函数，任何持有 app 角色的连接都能直接调用**。因此 GUC 型 RLS 的前提是“应用在 `authorize()` 之后诚实地设置上下文”；RLS 防的是**查询遗漏**（忘写 WHERE、JOIN 漏表），不是防恶意应用。§9.1 对这个定位的原文是“防止查询遗漏导致跨家庭泄漏的第二道硬防线”，本设计保持一致，不夸大。
 
 §9.1 原文禁止项全部保留：事务外 `SET LOCAL` 后再从连接池查询、`sql.raw` 拼接 family/person/purpose、owner / BYPASSRLS 运行时角色、因 RLS 存在而跳过 `authorize()`。
 
@@ -509,6 +567,8 @@ withFamilyCreationTransaction({ accountId, personId, newFamilyId, displayName },
 - `POST /api/v1/compliance/guardian-consents/requests` —— 最小 onboarding 请求。
 
 `/families/current`、`/consents`、`/compliance/guardian-consents/requests` 的路径不含 `family_id`，因此单事务内先以 identity 上下文解析 actor 自己的 membership，再切到 family 上下文；多行时显式 409，不静默取第一个（细节见 `contracts/authorization-and-rls.md` §4.4）。
+
+**`POST /auth/wechat` 的职责**：首次登录在同一事务内建立 Account **与** 当前登录者 Person（spec US1），响应同时返回 `account` 与 `person`；`person.profile` 此时为空（年龄尚未声明），在 `POST /families` 时补齐 ADULT profile。`POST /families` 不创建 Person。
 
 完整路径、请求 / 响应 schema、状态码、错误码见 `contracts/identity-family-api.openapi.yaml`。
 
@@ -557,9 +617,10 @@ idempotency_keys(actor_account_id, command_type, idempotency_key) UNIQUE
 12 idempotency_keys
 13 其余索引与 CHECK
 14 函数：app_family_id() / app_person_id() / app_account_id() / app_current_purpose()
-        + app.set_identity_context() / app.set_family_context() / app.create_family()
+        + app.set_account_context() / app.set_identity_context()
+        + app.set_family_context() / app.create_family()
 15 ENABLE + FORCE RLS + 每表 policy（USING + WITH CHECK）
-16 触发器：consent_records 不可变列保护
+16 触发器函数 consent_records_guard_update() + 触发器 consent_records 不可变列保护
 17 GRANT 给 xiaoshuyin_app（最小 DML + enum USAGE）
 ```
 
@@ -581,7 +642,7 @@ idempotency_keys(actor_account_id, command_type, idempotency_key) UNIQUE
 
 ### Data and Migration Impact
 
-- 新增 10 张表、8 个 enum、7 个函数、1 个触发器、8 条 policy、若干唯一 / 部分唯一索引与 CHECK。
+- 新增 10 张表、8 个 enum、9 个函数（含触发器函数）、1 个触发器、9 条 policy、若干唯一 / 部分唯一索引与 CHECK。
 - 无数据迁移、无回填、无跨表复制；Greenfield，无停机窗口。
 - 无 pgvector / pg_jieba / pg-boss 依赖（§4.2 RAG readiness 不在本 Slice）。
 
@@ -663,13 +724,13 @@ tests/
 
 | Requirement / Acceptance | Test or evidence | Command / environment | Expected result |
 |---|---|---|---|
-| FR-001 / 场景 1（Account / Person 分离，`GET /me`） | integration | `bun run vitest run tests/integration/me.test.ts` | 200；返回 account 与自身 person（或 null）；响应无其他成员字段；openid 不出现 |
-| FR-002 / U01（微信登录建立 Account） | integration（fake provider） | `bun run vitest run tests/integration/auth.test.ts` | 首次登录建 Account；同 openid 重复登录不产生第二个 Account；logout 后旧 token 401 |
+| FR-001 / 场景 1（Account / Person 分离，`GET /me`） | integration | `bun run vitest run tests/integration/me.test.ts` | 200；返回 account 与自身 person（登录后必存在）；响应无其他成员字段；openid 不出现 |
+| FR-002 / U01（微信登录建立 Account **与 Person**） | integration（fake provider） | `bun run vitest run tests/integration/auth.test.ts` | 首次登录同一事务内建 Account 与绑定该账号的 Person（`account_id` 非空、`profile` 为空）；同 openid 重复登录不产生第二个 Account / Person；logout 后旧 token 401 |
 | FR-002 平台真实性 | **NOT VERIFIED（本 Slice）** | — | 明确记录：真实 code2session 属 §40 Platform 门槛，本 Slice 只验适配器契约 |
-| FR-005 / 场景 2 / US1（建家庭 + 管理主体 + 幂等） | integration | `bun run vitest run tests/integration/families.test.ts` | 家庭建立；创建者 Person 属于该家庭；`isManager=true`；同 key 重放不产生第二个家庭 / 成员；同 key 不同 payload → 409 |
+| FR-005 / 场景 2 / US1（建家庭 + 管理主体 + 幂等） | integration | `bun run vitest run tests/integration/families.test.ts` | 家庭建立；**复用登录时已存在的 Person，不新建 Person**（人数量不变）；创建者 Person 属于该家庭；ADULT profile 写入；`isManager=true`；同 key 重放不产生第二个家庭 / 成员；同 key 不同 payload → 409 |
 | FR-016 / 场景 14 / SC-007（Account ↔ Person 1:1） | database | `bun run vitest run tests/db/constraints.test.ts` | 两个方向写入均抛 unique violation，真实错误输出被断言 |
 | FR-017 / 场景 11、12 / SC-006（多对多 + 唯一 membership） | database（fixture） | `bun run vitest run tests/db/cardinality.test.ts` | 同 Person 两条不同 family membership 成功；同 (family, person) 第二条被拒；`persons` 无 `family_id` 列 |
-| FR-003 / FR-004 / 场景 3 / SC-008（per-value provenance） | unit + integration | `bun run vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts` | 两条资料来源独立可追溯；异源并存不被覆盖；同源替换产生 SUPERSEDED；`persons` 无 `source_kind` 列；无 Account 的 Person 允许 `SELF_STATEMENT` |
+| FR-003 / FR-004 / 场景 3 / SC-008（per-value provenance） | unit + integration | `bun run vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts` | 同一 `DISPLAY_NAME` 的多来源并存不被覆盖、同源替换产生 SUPERSEDED；`age_band` 来源独立记录在 `person_compliance_profiles.verified_source`（不同载体各有来源）；`persons` 无 `source_kind` 列；无 Account 的 Person 允许 `SELF_STATEMENT`；`profile_attribute` 枚举只含 `DISPLAY_NAME`（无任何为测试新造的字段） |
 | FR-008 (a)(b) / 场景 4 / SC-003①（同意前不建正式 child） | integration + database | `bun run vitest run tests/integration/consent-first.test.ts` | 无 `guardianConsentId` 建 UNDER_14 成员 → 403 `GUARDIAN_CONSENT_REQUIRED`；`persons` 与 `person_compliance_profiles` 均无该未成年人行；onboarding 请求本身可创建（不自锁） |
 | D-3.5（结构约束） | database | `bun run vitest run tests/db/consent-structure.test.ts` | 直接 SQL 插入 `age_band='UNDER_14'` 且 consent 为 NULL 的 profile → CHECK violation |
 | FR-008 (c) / 场景 5 / SC-003③（同意后建档） | integration | `bun run vitest run tests/integration/consent-first.test.ts` | 同意成立后创建成功；profile 的 `age_band=UNDER_14`、`guardian_person_id`、`guardian_consent_version`、`guardian_consent_record_id` 与 consent 一致 |
@@ -679,6 +740,7 @@ tests/
 | FR-012 / FR-015 / 验收最后一组（RLS 与主键） | database | `bun run vitest run tests/db/rls.test.ts` | `pg_class.relrowsecurity=true`、`relforcerowsecurity=true`；`rolbypassrls=false`；owner ≠ app；三个 GUC 全未设时查询 0 行；identity 上下文只返回自身 person；`uuidv7()` 为列默认值 |
 | FR-013（事务上下文） | integration | `bun run vitest run tests/integration/rls-transaction.test.ts` | 事务外设置上下文后查询 0 行；`set_family_context` 对非成员抛 42501；连接池复用下上下文不泄漏到下一请求 |
 | FR-014 / SC-005（幂等） | integration | `bun run vitest run tests/integration/idempotency.test.ts` | 并发 20 次同 key → 记录数不变；同 key 不同 payload → 409 |
+| 幂等表跨账号隔离 | database | `bun run vitest run tests/db/idempotency-rls.test.ts` | `idempotency_keys` 的 `relrowsecurity/relforcerowsecurity = true`；账号 A 的 identity 上下文下 `SELECT count(*)` 只见 A 的行；以 B 的 key 回放 → 0 行且不返回 `response_body`；无 identity 上下文 → 0 行 / 写入被拒 |
 | 全部 OpenAPI 合同 | contract | `bun run openapi:check` | OpenAPI 可生成；generated client 无未预期 diff |
 | 治理（不修改受保护文件） | governance | `node .specify/scripts/validate-governance.mjs`；`node .specify/scripts/tests/run-governance-tests.mjs`；`git diff --name-only origin/main...HEAD` | 两者 PASS；diff 不含 `Docs/**`、`spec.md`、`.specify/memory/**` |
 
@@ -714,16 +776,20 @@ tests/
 | # | 事项 | 本 Plan 的选择 | 若不接受的影响 |
 |---|---|---|---|
 | R-1 | §28.1 未枚举 `POST /families/:id/members`，但 U03 / FR-005 要求建成员能力 | 在 `families/:id/members` 已批准契约面内补齐创建路由 | 需 Owner 指定替代路由；不影响数据模型 |
-| R-2 | 同一 Person 只能拥有一个 Family（`UNIQUE(created_by_person_id)`） | 采纳；依据 §28.1 只有 `/families/current` 单数语义 + Out of Scope 排除多家庭切换 | 若允许多个自有家庭，需先定义“当前家庭”选择规则，否则数据不可达 |
+| R-2 | 同一 Person 只能**拥有**一个 Family（`UNIQUE(created_by_person_id)`） | 采纳；依据 §28.1 只有 `/families/current` 单数语义 + Out of Scope 排除多家庭切换。该约束**只限制“拥有/创建”**，不限制一个 Person 作为 member 属于多个 Family（多对多仍由 `family_members` 表达，并在 fixture 级验收） | 若允许多个自有家庭，需先定义“当前家庭”选择规则，否则数据不可达 |
 | R-3 | 来源枚举取 §2.2 全 8 类，本 Slice 只允许写入 4 类 | 采纳，避免后续无意义 migration | 若要求 enum 只含 4 值，需新增一次 migration |
-| R-4 | 新增 `RELATION_DESCRIPTOR` 作为第二资料值以验证 per-value provenance | 采纳，并显式声明它不是角色、不参与授权 | 若不新增资料维度，“不同资料不同来源”只能靠 age_band，测试覆盖变弱 |
-| R-5 | `accounts` / `idempotency_keys` 不加 RLS（非家庭作用域） | 采纳；登录必须无家庭上下文可用，用窄仓储 + 测试约束补偿 | 若要求全表 RLS，需设计登录前的上下文机制 |
-| R-6 | `business_audit_events` 进入本 Slice（spec 撤回条款明确含 audit） | 采纳，只为本 Slice 事件建最小列 | 若不建，FR-010“留痕”只能靠 consent 版本链，撤回审计缺失 |
-| R-7 | `POST /families` 同时建立创建者 Person（US1 要求两个动作完成） | 采纳 | 若拆成独立端点，US1 Independent Test 不成立 |
-| R-8 | 对外统一 403 + 零字段泄漏（A-2 仍未决） | 采纳；映射集中在 `toHttpError()` | Owner 若改 404 掩盖，只改一处，不触数据模型 |
-| R-9 | §28.2 的 `POST /consents` 本 Slice 不实现 | 采纳；通用同意入口属「完整 Consent 平台」，out of scope；监护人同意只保留单一写入路径 | 若要求实现，需先定义 purpose/scope 矩阵，否则等于提前做完整 Consent 平台 |
-| R-10 | `app.create_family()` 是唯一不校验 membership 的上下文入口（新家庭尚无 membership） | 采纳；INSERT 被 `created_by_person_id = app_person_id()` 锁死，且同事务必须插 membership，否则后续写入失败 | 若要彻底消除该入口，需要先有 membership 再建 family，会引入循环依赖 |
+| R-4 | `accounts` 不加 RLS（`idempotency_keys` 已改为身份级 RLS，不再属此项） | 采纳；登录必须无任何上下文可用，用窄仓储 + 测试约束补偿 | 若要求 `accounts` 也 RLS，需设计登录前的账号上下文机制（会与 code2session 前置校验冲突） |
+| R-5 | `business_audit_events` 进入本 Slice（spec 撤回条款明确含 audit） | 采纳，只为本 Slice 事件建最小列 | 若不建，FR-010“留痕”只能靠 consent 版本链，撤回审计缺失 |
+| R-6 | 对外统一 403 + 零字段泄漏（A-2 仍未决） | 采纳；映射集中在 `toHttpError()` | Owner 若改 404 掩盖，只改一处，不触数据模型 |
+| R-7 | §28.2 的 `POST /consents` 本 Slice 不实现 | 采纳；通用同意入口属「完整 Consent 平台」，out of scope；监护人同意只保留单一写入路径 | 若要求实现，需先定义 purpose/scope 矩阵，否则等于提前做完整 Consent 平台 |
+| R-8 | `app.create_family()` 是唯一不校验 membership 的上下文入口（新家庭尚无 membership） | 采纳；INSERT 被 `created_by_person_id = app_person_id()` 锁死，且同事务必须插 membership，否则后续 profile 写入失败 | 若要彻底消除该入口，需要先有 membership 再建 family，会引入循环依赖 |
 
 **Residual blockers: NONE。**
 
-未发现必须回到 `Docs/**` 修订才能继续的冲突。上文 R-1—R-9 均为 Plan 层可逆选择，均有明确回退路径。
+未发现必须回到 `Docs/**` 修订才能继续的冲突。上文 R-1—R-8 均为 Plan 层可逆选择，均有明确回退路径。
+
+**本轮已撤销的旧条目**（记录以保持追溯，不再是 Open Item）：
+
+- 原 R-4 `RELATION_DESCRIPTOR`：为证明 provenance 而新增无正式需求的资料字段，已按审核意见删除，且不设替代字段。
+- 原 R-7 `POST /families` 同时建立创建者 Person：与 spec US1「登录时建立 Account 与对应 Person」冲突，已改为登录建立 Person。
+- 原 R-5 中 `idempotency_keys` 无 RLS：已改为身份级 RLS。

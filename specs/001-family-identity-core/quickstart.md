@@ -42,17 +42,18 @@ bun run vitest run tests/db/cardinality.test.ts
 
 | 检查 | 期望 |
 |---|---|
-| `pg_class.relrowsecurity` / `relforcerowsecurity`（8 张作用域表） | 全部 `true` / `true` |
+| `pg_class.relrowsecurity` / `relforcerowsecurity`（9 张表：8 张家庭/人物作用域 + `idempotency_keys`） | 全部 `true` / `true`；唯一没有 RLS 的是 `accounts` |
 | `pg_roles.rolbypassrls`（`xiaoshuyin_app`） | `false` |
 | 业务表 owner | `xiaoshuyin_migrator` |
 | `persons` 列集合 | 不含 `family_id`、`source_kind` |
 | `family_members` 列集合 | 不含任何 role/creator/guardian 列 |
-| `profile_attribute` enum | 恰为 `{DISPLAY_NAME, RELATION_DESCRIPTOR}` |
+| `profile_attribute` enum | 恰为 `{DISPLAY_NAME}`（不含 `AGE_BAND`，也不含任何为测试新造的属性） |
 | `age_band` enum | 恰为 `{ADULT, MINOR_14_17, UNDER_14, UNKNOWN}` |
-| `guardian_consent_requests` 列集合 | 不含任何孩子 PII 列 |
+| `guardian_consent_requests` 列集合 | 恰为契约所列清单；`subject_person_id` 是唯一指向未成年人的列；无姓名/生日/称呼/关系等资料列 |
 | `uuidv7()` | 是 9 张表的 `id` 默认值（`person_compliance_profiles` 以 `person_id` 为主键，无独立 `id`） |
 | 越权直连查询（三个 GUC 全未设） | `0` 行 |
 | identity 上下文（仅 `app.account_id`）查询 `persons` | 只返回本账号绑定的那 1 行；查他人 person 为 `0` 行 |
+| `idempotency_keys` 跨账号隔离 | 账号 A 上下文只见 A 的 key；按 B 的 key 查为 `0` 行；无上下文写入被拒 |
 
 ---
 
@@ -74,7 +75,7 @@ curl -sX POST localhost:8787/api/v1/auth/wechat \
 
 TOKEN=$(jq -r .sessionToken /tmp/login.json)
 
-# ② 建家庭（创建者 Person 同时建立）
+# ② 建家庭（复用登录时已建立的 Person；不新建 Person）
 curl -sX POST localhost:8787/api/v1/families \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
@@ -94,8 +95,8 @@ curl -s localhost:8787/api/v1/me -H "authorization: Bearer $TOKEN" | jq
 
 **期望**：
 
-- ① `person: null`（登录只建 Account）。
-- ② 201，`isManager: true`。
+- ① `person` **非空**（登录即建立 Account 与对应 Person），但其 `profile` 尚未写入（年龄未声明）。
+- ② 201，`isManager: true`；Person 数量不变（复用登录时的 Person），ADULT profile 已写入。
 - ③ account 有值，person 非空，`profile.ageBand = ADULT`，`values` 含一条 `DISPLAY_NAME`；响应中**不出现** `wechat_openid`。
 - 重复 ② 同一 `Idempotency-Key` → 返回同一家庭，`memberCount` 不增加；同 key 改 payload → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
 
@@ -109,8 +110,7 @@ curl -sX POST localhost:8787/api/v1/families/$FAMILY_ID/members \
         "ageBand":"MINOR_14_17",
         "ageBandSource":"GUARDIAN_OBSERVATION",
         "values":[
-          {"attribute":"DISPLAY_NAME","value":"小雨","source":"GUARDIAN_RELAY"},
-          {"attribute":"RELATION_DESCRIPTOR","value":"大女儿","source":"GUARDIAN_OBSERVATION"}
+          {"attribute":"DISPLAY_NAME","value":"小雨","source":"GUARDIAN_RELAY"}
         ]
       }' | jq
 ```
@@ -171,10 +171,11 @@ curl -sX POST localhost:8787/api/v1/consents/$(jq -r .id /tmp/consent.json)/revo
 
 **期望**：
 
-- ① 201，返回 `requestId` / `noticeVersion` / `noticeHash` / `expiresAt`；**响应与库中都没有孩子姓名**。
+- ① 201，返回 `requestId` / `noticeVersion` / `noticeHash` / `expiresAt`；该行 `subject_person_id IS NULL`，且**响应与库中都没有孩子姓名 / 生日 / 称呼**。
 - ② 403 `GUARDIAN_CONSENT_REQUIRED`，且之后查库：`persons` 与 `person_compliance_profiles` 中不存在该未成年人。
 - ③ 201，`decision: GRANTED`，`version: 1`，`boundPersonId: null`。
 - ④ 201，`profile.ageBand = UNDER_14`，`guardianConsentVersion = 1`，`guardianPersonId` = 家长本人。
+  服务端内部顺序必须是：校验/锁定 consent → 预生成 personId → 插 membership → 插 Person → 绑定 `bound_person_id` → 插 profile；把绑定提到 Person 之前会因即时外键失败。
 - ⑤ 200，`decision: REVOKED`，`version: 2`，`supersedesId` = ①③ 的记录；此后 `assertMinorProcessingAllowed(childPersonId)` 返回 BLOCK。
 
 ### 2.4 跨家庭隔离
@@ -254,8 +255,11 @@ node .specify/scripts/check-docs-guard.mjs --mode enforce --base origin/main --h
 ## 6. 失败排查顺序
 
 1. **403 / 0 行**：先查是否走了 `withRlsTransaction`；再查 `app.set_family_context` 是否成功（非成员会抛 42501）。
-2. **建成员 500**：多为 `persons` INSERT 的 `WITH CHECK` 失败——检查是否先插 membership（可延迟外键要求顺序）。
-3. **同意 403 `NOTICE_VERSION_MISMATCH`**：`notices.ts` 与请求的 `noticeVersion` 不一致；hash 由代码计算，不是库里的历史值。
-4. **撤回 409**：说明该 consent 不是 profile 当前指向的版本；必须撤回当前版本。
-5. **幂等 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`**：同 key 复用了不同 payload；换 key 或复原 payload。
-6. **连接池串上下文**：99% 是事务外 `SET LOCAL`；改为 `withRlsTransaction`。
+2. **登录后 `person` 为空**：说明首次登录没有在 Account 之后插 Person。登录必须走 `withAccountTransaction`（`set_account_context` → INSERT persons），Person 由登录建立，不由建家庭建立。
+3. **建成员 500**：多为 `persons` INSERT 的 `WITH CHECK` 失败——检查是否先插 membership（可延迟外键要求顺序）。
+4. **建 UNDER_14 成员外键失败**：顺序错了。必须“校验 consent → 预生成 personId → 插 membership → 插 Person → 绑定 `bound_person_id` → 插 profile”；先绑定会撞 `bound_person_id` 的即时外键。
+5. **同意 403 `NOTICE_VERSION_MISMATCH`**：`notices.ts` 与请求的 `noticeVersion` 不一致；hash 由代码计算，不是库里的历史值。
+6. **撤回 409**：说明该 consent 不是 profile 当前指向的版本；必须撤回当前版本。
+7. **幂等 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`**：同 key 复用了不同 payload；换 key 或复原 payload。
+8. **幂等键 0 行 / 写入被拒**：`idempotency_keys` 有身份级 RLS，key 的 lookup / insert / replay 必须在 `set_identity_context` 之后执行。
+9. **连接池串上下文**：99% 是事务外 `SET LOCAL`；改为 `withRlsTransaction`。
