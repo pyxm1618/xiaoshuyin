@@ -168,7 +168,7 @@
 - **FR-003** [UPSTREAM: U03 / §2.2 / §5 不变量 4] 系统 MUST 记录并区分 Person 资料的正式来源类型，至少覆盖本人陈述 / 家长观察 / 家长转述 / 其他成员转述；MUST NOT 压缩为「本人 vs 转述」二值；转述 MUST NOT 升级为本人确认。
 - **FR-004** [UPSTREAM: U03] 系统 MUST 允许存在不关联任何 Account 的 Person（无孩子账号）；此类 Person 的资料只能来自他方转述或观察，不得标记为本人陈述。
 - **FR-005** [UPSTREAM: §1.5 / §28.1 / §9 / §7.7A] 系统 MUST 允许家长创建 Family，创建者在其后属于该 Family 并成为 V1 当前的管理主体；MUST NOT 由「创建家庭」推导出创建者是任何未成年人的 guardian——guardian 关系 MUST 由该未成年 Person 的 compliance profile 单独表达。
-- **FR-006** [UPSTREAM: §9 / §7.1 / §7.7A / §10] 系统 MUST 把「家庭关系」（membership）、「Case 参与关系」、「Compliance 监护关系」作为 `authorize()` 的三类独立输入；MUST NOT 把它们压成单一角色字段。§7.1 明确 V1 不引入 guardian / non-guardian 角色枚举、通用角色 DSL 与 RBAC，本 Slice MUST NOT 自行发明成员角色。
+- **FR-006** [UPSTREAM: §9 / §7.1 / §7.7A] 本 Slice MUST 实现并验证两类彼此独立的判定输入：(1) **Family membership** —— 家庭级访问由 actor 在当前目标 Family 的 membership 决定；(2) **Compliance guardian relationship** —— 由未成年 Person 的 compliance profile 决定，MUST NOT 被当作 family role，也 MUST NOT 替代 membership。二者 MUST NOT 被压成单一角色字段。§7.1 明确 V1 不引入 guardian / non-guardian 角色枚举、通用角色 DSL 与 RBAC，本 Slice MUST NOT 自行发明成员角色。**Case 参与关系是未来 Case Slice 的独立 authorization dimension**：本 Slice MUST NOT 实现它、MUST NOT 创建 `case_participants`，也不得为其预建抽象、接口、角色系统或 schema。
 - **FR-007** [UPSTREAM: V1-C39 / §7.7A] 系统 MUST 在服务端保存每个 Person 的 age_band（ADULT / MINOR_14_17 / UNDER_14 / UNKNOWN）、未成年人模式、guardian 引用与监护人同意版本，并能追溯其来源。
 - **FR-008** [UPSTREAM: V1-C39 / §5 不变量 27 / §10] age_band = UNDER_14 且无有效监护人同意时，系统 MUST 阻断对该 Person 的后续个人信息处理（至少包含 AI 交互、孩子端进入及依赖该 Person 的派生内容生成）；MUST NOT 阻断为取得该同意而必须建立 age_band / guardian 引用 / 同意记录的操作。
 - **FR-009** [UPSTREAM: V1-C03 / §7.7A] age_band = UNKNOWN 时系统 MUST NOT 按 ADULT 处理；依赖年龄的处理 MUST 显式拒绝或要求补充。MUST NOT 把 NOT_COLLECTED / DECLINED / N/A / CONFLICTING / EXPIRED 写成 age_band 的取值。
@@ -256,7 +256,7 @@ No requirement may be invented to make implementation easier.
 
 | 原表述 | 问题 | 本轮处理 | 依据 |
 |---|---|---|---|
-| guardian / non-guardian 两级参与身份（原 FR-006） | 当时上游没有成员角色枚举；`family_members` 只有表名 | 改为「家庭关系 / Case 参与关系 / 监护关系」三类独立输入；§7.1 现已明确不引入角色枚举与 RBAC | §7.1、§9、产品需求 §1.5 |
+| guardian / non-guardian 两级参与身份（原 FR-006） | 当时上游没有成员角色枚举；`family_members` 只有表名 | 改为「Family membership / guardian relationship」两类本 Slice 实现；Case 参与关系只记为未来 Case Slice 的独立维度，本 Slice 不实现；§7.1 现已明确不引入角色枚举与 RBAC | §7.1、§9、产品需求 §1.5 |
 | 来源 = 本人 / 监护人转述（原 FR-003、场景 3） | 正式来源类型至少 8 类，含家长观察、其他成员转述、设备数据、工作人员、AI 假设 | 改为「至少覆盖本人陈述 / 家长观察 / 家长转述 / 其他成员转述」，禁止压成二值 | 产品需求 §2.2 |
 | persons 可关联 0..1 Account | 曾因基数未写回而降级为假设 | 上游已写回：Account ↔ Person 1:1、Person → Account 0..1，升为 FR-016 | 产品需求 §1.5、技术设计 §7.1 |
 | 未提供属性保持 UNKNOWN / NOT_COLLECTED | age_band 枚举只有 4 值，不含 NOT_COLLECTED | 明确 UNKNOWN 属 age_band 取值，其余通用状态不得顶替 | §7.7A、§5 不变量 5 |
