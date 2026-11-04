@@ -44,7 +44,7 @@
 本 Slice 是仓库第一次落代码，交付 Phase 1 身份地基的**最小可验证纵切**：
 
 1. 模块化单体骨架（`apps/server/api` + `packages/{contracts,domain,authorization,compliance}` + `db/{schema,migrations,rls}` + `tests/*`），技术栈严格等于 §2 / §4.1 冻结版本。
-2. 10 张表（9 张业务表 + 幂等表）、8 个 PG enum、4 个函数、1 个触发器、8 条 policy（每表一条 `FOR ALL`）、migrator / app 双角色、ENABLE + FORCE RLS 与 `withRlsTransaction`。
+2. 10 张表（9 张业务表 + 幂等表）、8 个 PG enum、7 个函数（4 个上下文 getter + 3 个上下文入口）、1 个触发器、8 条 policy（每表一条 `FOR ALL`）、migrator / app 双角色、ENABLE + FORCE RLS 与 `withRlsTransaction`。
 3. 13 个 HTTP 端点（§28.1 / §28.2 契约面 + 由 §7.7A 显式委托 Plan 决定的 consent onboarding 端点；`POST /consents` 明确不实现，见 D-6.1）。
 4. 单一 `authorize()`，判定输入是 §9 的形状，本 Slice 只实现两个互相独立的维度：**Family membership** 与 **Compliance guardian relationship**；未实现维度一律 fail-closed。
 5. UNDER_14 consent-first 是**结构约束**而非流程约定：`person_compliance_profiles` 上的 CHECK 使“UNDER_14 profile 必须持有 guardian consent 记录”在数据库层无法违反，因此在有效同意成立前无法写出正式 child Person 的合规状态。
@@ -556,7 +556,8 @@ idempotency_keys(actor_account_id, command_type, idempotency_key) UNIQUE
 11 business_audit_events
 12 idempotency_keys
 13 其余索引与 CHECK
-14 函数：app_family_id() / app_person_id() / app_current_purpose() / app.set_family_context()
+14 函数：app_family_id() / app_person_id() / app_account_id() / app_current_purpose()
+        + app.set_identity_context() / app.set_family_context() / app.create_family()
 15 ENABLE + FORCE RLS + 每表 policy（USING + WITH CHECK）
 16 触发器：consent_records 不可变列保护
 17 GRANT 给 xiaoshuyin_app（最小 DML + enum USAGE）
@@ -580,7 +581,7 @@ idempotency_keys(actor_account_id, command_type, idempotency_key) UNIQUE
 
 ### Data and Migration Impact
 
-- 新增 10 张表、8 个 enum、4 个函数、1 个触发器、8 条 policy、若干唯一 / 部分唯一索引与 CHECK。
+- 新增 10 张表、8 个 enum、7 个函数、1 个触发器、8 条 policy、若干唯一 / 部分唯一索引与 CHECK。
 - 无数据迁移、无回填、无跨表复制；Greenfield，无停机窗口。
 - 无 pgvector / pg_jieba / pg-boss 依赖（§4.2 RAG readiness 不在本 Slice）。
 
