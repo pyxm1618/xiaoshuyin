@@ -73,18 +73,18 @@
 
 目标：Zod 契约、OpenAPI 生成、纯规则（不含 I/O）。本 Phase 的 `[P]` 任务分属不同包，互不改同一文件。
 
-- [ ] T029 [P] [REQ:§27A;§28.1;§28.2] 在 `packages/contracts/src/` 定义全部请求/响应/错误 Zod schema（13 个 operation 的 payload、`Error{code,message,details?}`、`ProvenanceValueInput`、`AgeBand`、`WritableSource`、`ProfileAttribute`），作为唯一事实源（依赖 T003） [VERIFY:`bun run typecheck` 通过；`tests/domain/contracts.test.ts` 断言 `ProfileAttribute` 仅 `DISPLAY_NAME`、`WritableSource` 仅四类]
-- [ ] T030 [REQ:§27A] 搭建 OpenAPI 生成链（**不在此验证 13 operations**）：`@fastify/swagger` 输出 OpenAPI、`openapi-typescript` 生成 `packages/generated/openapi.d.ts`、新增 `bun run openapi:generate` 与 `bun run openapi:check`（比对无漂移机制）；生成产物可重复生成、无非确定性漂移；并在 `openapi:check` 真实就绪后把 `contract` job 加入 `.github/workflows/ci.yml`（依赖 T029、T008） [VERIFY:`bun run openapi:generate` 与 `bun run openapi:check` 可执行且二次生成无 diff，当前已注册路由（含 `/healthz`）能生成；CI 出现真实 `contract` job；**13 operations 由 T066 验证**]
-- [ ] T031 [P] [REQ:FR-009;§7.7A] 先写失败单测 `tests/domain/age-band.test.ts`：`PROFILE_MISSING`→BLOCK、`UNKNOWN`→BLOCK、`ADULT`→ALLOW、`MINOR_14_17`→ALLOW+minorMode、`UNDER_14` 有/无有效 consent 的放行与阻断、`NOT_COLLECTED` 非法（依赖 T004） [VERIFY:测试先红，记录失败输出作为证据]
-- [ ] T032 [REQ:FR-007;FR-009;plan:D-3.6] 实现 `packages/compliance/src/age-gate.ts`：`assertMinorProcessingAllowed(personId)` 按 D-3.6 顺序短路，纯读、无副作用（依赖 T031） [VERIFY:`bun run vitest run tests/domain/age-band.test.ts` 转绿]
-- [ ] T033 [P] [REQ:FR-003;FR-004;plan:D-4] 先写失败单测 `tests/domain/provenance.test.ts`：同源替换→`SUPERSEDED`+`supersedes_id`、异源并存、`observed_at` 缺省 NULL、来源可接受性（creator 仅 SELF_STATEMENT；UNDER_14 仅 guardian-origin）（依赖 T004） [VERIFY:测试先红，记录失败输出]
-- [ ] T034 [REQ:FR-003;FR-004;plan:D-4] 实现 `packages/domain/src/provenance.ts`：追加/替换纯函数 + 路径级来源校验（返回 `AGE_BAND_SOURCE_NOT_ALLOWED` 判定），不引入新字段（依赖 T033） [VERIFY:`bun run vitest run tests/domain/provenance.test.ts` 转绿]
-- [ ] T035 [P] [REQ:FR-006;FR-011;plan:D-5.2] 先写失败单测 `tests/domain/authorization.test.ts`：动作/purpose 封闭、未知输入 DENY、`case!==null`→`UNSUPPORTED_DIMENSION`、manager 纯函数、guardian 与 membership 互不替代（依赖 T004） [VERIFY:测试先红，记录失败输出]
-- [ ] T036 [REQ:FR-006;FR-011;plan:D-5.2] 实现 `packages/authorization/src/authorize.ts`：闭集动作表 + fail-closed + `basis.manager` 计算，异常兜底 `AUTHORIZATION_ERROR`（依赖 T035） [VERIFY:`bun run vitest run tests/domain/authorization.test.ts` 转绿]
-- [ ] T037 [P] [REQ:FR-008(b);§28.2] 实现 `packages/compliance/src/notices.ts`：版本化告知正文 + `notice_version` + `notice_hash`（sha256），并提供 `GET /compliance/notices` 所需目录（依赖 T003） [VERIFY:`tests/domain/notices.test.ts` 断言同一版本 hash 稳定、未知版本报错]
-- [ ] T038 [REQ:plan:D-6.2;contracts:§3] 实现 `apps/server/api/src/plugins/error-handler.ts` 的 `toHttpError()` 单一映射（401/403/404/409/422），拒绝体永不含目标对象字段（依赖 T029） [VERIFY:`tests/domain/error-map.test.ts` 断言每个 code→status 唯一映射]
-- [ ] T039 [P] [REQ:U01;plan:D-1] 实现 `apps/server/api/src/auth/session-token.ts`：`node:crypto` HMAC-SHA256 自签/验签，payload 含 `accountId`/`epoch`/`exp`，与 `accounts.session_epoch` 对齐（依赖 T007） [VERIFY:`tests/domain/session-token.test.ts` 断言篡改、过期、epoch 失效均被拒]
-- [ ] T040 [P] [REQ:§8.5;FR-014] 实现 `packages/domain/src/idempotency.ts`：`canonical_json` + `sha256` + 三态决策（replay / 409 / execute），纯函数（依赖 T003） [VERIFY:`tests/domain/idempotency-hash.test.ts` 断言键序无关、同 payload 同 hash、异 payload 不同 hash]
+- [x] T029 [P] [REQ:§27A;§28.1;§28.2] 在 `packages/contracts/src/` 定义全部请求/响应/错误 Zod schema（13 个 operation 的 payload、`Error{code,message,details?}`、`ProvenanceValueInput`、`AgeBand`、`WritableSource`、`ProfileAttribute`），作为唯一事实源（依赖 T003） [VERIFY:`bun run typecheck` 通过；`tests/domain/contracts.test.ts` 断言 `ProfileAttribute` 仅 `DISPLAY_NAME`、`WritableSource` 仅四类]
+- [x] T030 [REQ:§27A] 搭建 OpenAPI 生成链（**不在此验证 13 operations**）：`@fastify/swagger` 输出 OpenAPI、`openapi-typescript` 生成 `packages/generated/openapi.d.ts`、新增 `bun run openapi:generate` 与 `bun run openapi:check`（比对无漂移机制）；生成产物可重复生成、无非确定性漂移；并在 `openapi:check` 真实就绪后把 `contract` job 加入 `.github/workflows/ci.yml`（依赖 T029、T008） [VERIFY:`bun run openapi:generate` 与 `bun run openapi:check` 可执行且二次生成无 diff，当前已注册路由（含 `/healthz`）能生成；CI 出现真实 `contract` job；**13 operations 由 T066 验证**]
+- [x] T031 [P] [REQ:FR-009;§7.7A] 先写失败单测 `tests/domain/age-band.test.ts`：`PROFILE_MISSING`→BLOCK、`UNKNOWN`→BLOCK、`ADULT`→ALLOW、`MINOR_14_17`→ALLOW+minorMode、`UNDER_14` 有/无有效 consent 的放行与阻断、`NOT_COLLECTED` 非法（依赖 T004） [VERIFY:测试先红，记录失败输出作为证据]
+- [x] T032 [REQ:FR-007;FR-009;plan:D-3.6] 实现 `packages/compliance/src/age-gate.ts`：`assertMinorProcessingAllowed(personId)` 按 D-3.6 顺序短路，纯读、无副作用（依赖 T031） [VERIFY:`bun run vitest run tests/domain/age-band.test.ts` 转绿]
+- [x] T033 [P] [REQ:FR-003;FR-004;plan:D-4] 先写失败单测 `tests/domain/provenance.test.ts`：同源替换→`SUPERSEDED`+`supersedes_id`、异源并存、`observed_at` 缺省 NULL、来源可接受性（creator 仅 SELF_STATEMENT；UNDER_14 仅 guardian-origin）（依赖 T004） [VERIFY:测试先红，记录失败输出]
+- [x] T034 [REQ:FR-003;FR-004;plan:D-4] 实现 `packages/domain/src/provenance.ts`：追加/替换纯函数 + 路径级来源校验（返回 `AGE_BAND_SOURCE_NOT_ALLOWED` 判定），不引入新字段（依赖 T033） [VERIFY:`bun run vitest run tests/domain/provenance.test.ts` 转绿]
+- [x] T035 [P] [REQ:FR-006;FR-011;plan:D-5.2] 先写失败单测 `tests/domain/authorization.test.ts`：动作/purpose 封闭、未知输入 DENY、`case!==null`→`UNSUPPORTED_DIMENSION`、manager 纯函数、guardian 与 membership 互不替代（依赖 T004） [VERIFY:测试先红，记录失败输出]
+- [x] T036 [REQ:FR-006;FR-011;plan:D-5.2] 实现 `packages/authorization/src/authorize.ts`：闭集动作表 + fail-closed + `basis.manager` 计算，异常兜底 `AUTHORIZATION_ERROR`（依赖 T035） [VERIFY:`bun run vitest run tests/domain/authorization.test.ts` 转绿]
+- [x] T037 [P] [REQ:FR-008(b);§28.2] 实现 `packages/compliance/src/notices.ts`：版本化告知正文 + `notice_version` + `notice_hash`（sha256），并提供 `GET /compliance/notices` 所需目录（依赖 T003） [VERIFY:`tests/domain/notices.test.ts` 断言同一版本 hash 稳定、未知版本报错]
+- [x] T038 [REQ:plan:D-6.2;contracts:§3] 实现 `apps/server/api/src/plugins/error-handler.ts` 的 `toHttpError()` 单一映射（401/403/404/409/422），拒绝体永不含目标对象字段（依赖 T029） [VERIFY:`tests/domain/error-map.test.ts` 断言每个 code→status 唯一映射]
+- [x] T039 [P] [REQ:U01;plan:D-1] 实现 `apps/server/api/src/auth/session-token.ts`：`node:crypto` HMAC-SHA256 自签/验签，payload 含 `accountId`/`epoch`/`exp`，与 `accounts.session_epoch` 对齐（依赖 T007） [VERIFY:`tests/domain/session-token.test.ts` 断言篡改、过期、epoch 失效均被拒]
+- [x] T040 [P] [REQ:§8.5;FR-014] 实现 `packages/domain/src/idempotency.ts`：`canonical_json` + `sha256` + 三态决策（replay / 409 / execute），纯函数（依赖 T003） [VERIFY:`tests/domain/idempotency-hash.test.ts` 断言键序无关、同 payload 同 hash、异 payload 不同 hash]
 
 ---
 
@@ -93,12 +93,12 @@
 **Story goal**: 登录即得 Account + Person；建家庭复用该 Person，写入 ADULT profile 与管理主体关系。
 **Independent test**: 仅用登录 + 建家庭两个动作即可断言身份可取回、家庭存在、`isManager=true`、Person 数量不变。
 
-- [ ] T041 [REQ:FR-013;plan:D-5.5] 实现事务封装 `apps/server/api/src/db/tx.ts`：`withAccountTransaction` / `withIdentityTransaction` / `withRlsTransaction` / `withFamilyCreationTransaction`，全部经参数化 `set_config(..., true)`，禁止事务外设上下文（依赖 T025） [VERIFY:`tests/integration/rls-transaction.test.ts` 断言事务外设上下文后查询 0 行、连接池复用不串上下文]
-- [ ] T042 [US1] [REQ:U01;FR-002;plan:D-2] 先写失败集成测试 `tests/integration/auth.test.ts`：首次登录同事务建 Account + Person（`account_id` 非空、`profile` 为空）、重复登录不新增、logout 后旧 token 401（依赖 T041、T039） [VERIFY:测试先红，记录失败输出]
-- [ ] T043 [US1] [REQ:U01;FR-002;plan:D-2] 实现登录/登出于 `apps/server/api/src/routes/auth.ts` + `apps/server/api/src/auth/wechat-provider.ts`：`POST /api/v1/auth/wechat`（code→openid→Account→Person）、`POST /api/v1/auth/logout`（`session_epoch+1`），`WechatAuthProvider` 端口 + 确定性 fake（依赖 T042） [VERIFY:`bun run vitest run tests/integration/auth.test.ts` 转绿]
-- [ ] T044 [US1] [REQ:U01;FR-001;§28.1] 在 `apps/server/api/src/routes/me.ts` 实现 `GET /api/v1/me`：identity 上下文返回 account + 自身 person（含 profile/values，无则不返回），响应不含 `wechat_openid` 与他人字段（依赖 T043） [VERIFY:`tests/integration/me.test.ts` 断言 200 结构与敏感字段缺席]
-- [ ] T045 [US1] [REQ:U03;FR-005;plan:D-2] 先写失败集成测试 `tests/integration/families.test.ts`：登录后无家庭时 `GET /families/current`→404 `CURRENT_FAMILY_NOT_FOUND`；建家庭后 201 且 `isManager=true`、Person 数量不变、ADULT profile 写入；`ageBand≠ADULT`→403 无写入；`ageBandSource≠SELF_STATEMENT`→422 无写入（依赖 T042） [VERIFY:测试先红，记录失败输出]
-- [ ] T046 [US1] [REQ:FR-005;plan:D-2;D-6.2] 在 `apps/server/api/src/routes/families.ts` + `src/commands/family-create.ts` 实现建家庭与当前家庭：`POST /api/v1/families`（现有 Person → Family → membership → ADULT profile → values → audit，幂等）、`GET /api/v1/families/current`（404 空态 vs 403 非成员）（依赖 T045） [VERIFY:`bun run vitest run tests/integration/families.test.ts` 转绿]
+- [x] T041 [REQ:FR-013;plan:D-5.5] 实现事务封装 `apps/server/api/src/db/tx.ts`：`withAccountTransaction` / `withIdentityTransaction` / `withRlsTransaction` / `withFamilyCreationTransaction`，全部经参数化 `set_config(..., true)`，禁止事务外设上下文（依赖 T025） [VERIFY:`tests/integration/rls-transaction.test.ts` 断言事务外设上下文后查询 0 行、连接池复用不串上下文]
+- [x] T042 [US1] [REQ:U01;FR-002;plan:D-2] 先写失败集成测试 `tests/integration/auth.test.ts`：首次登录同事务建 Account + Person（`account_id` 非空、`profile` 为空）、重复登录不新增、logout 后旧 token 401（依赖 T041、T039） [VERIFY:测试先红，记录失败输出]
+- [x] T043 [US1] [REQ:U01;FR-002;plan:D-2] 实现登录/登出于 `apps/server/api/src/routes/auth.ts` + `apps/server/api/src/auth/wechat-provider.ts`：`POST /api/v1/auth/wechat`（code→openid→Account→Person）、`POST /api/v1/auth/logout`（`session_epoch+1`），`WechatAuthProvider` 端口 + 确定性 fake（依赖 T042） [VERIFY:`bun run vitest run tests/integration/auth.test.ts` 转绿]
+- [x] T044 [US1] [REQ:U01;FR-001;§28.1] 在 `apps/server/api/src/routes/me.ts` 实现 `GET /api/v1/me`：identity 上下文返回 account + 自身 person（含 profile/values，无则不返回），响应不含 `wechat_openid` 与他人字段（依赖 T043） [VERIFY:`tests/integration/me.test.ts` 断言 200 结构与敏感字段缺席]
+- [x] T045 [US1] [REQ:U03;FR-005;plan:D-2] 先写失败集成测试 `tests/integration/families.test.ts`：登录后无家庭时 `GET /families/current`→404 `CURRENT_FAMILY_NOT_FOUND`；建家庭后 201 且 `isManager=true`、Person 数量不变、ADULT profile 写入；`ageBand≠ADULT`→403 无写入；`ageBandSource≠SELF_STATEMENT`→422 无写入（依赖 T042） [VERIFY:测试先红，记录失败输出]
+- [x] T046 [US1] [REQ:FR-005;plan:D-2;D-6.2] 在 `apps/server/api/src/routes/families.ts` + `src/commands/family-create.ts` 实现建家庭与当前家庭：`POST /api/v1/families`（现有 Person → Family → membership → ADULT profile → values → audit，幂等）、`GET /api/v1/families/current`（404 空态 vs 403 非成员）（依赖 T045） [VERIFY:`bun run vitest run tests/integration/families.test.ts` 转绿]
 
 ---
 
@@ -107,11 +107,11 @@
 **Story goal**: 管理主体可新增无 Account 成员，每条资料值各自带来源，未知保持未知。
 **Independent test**: 新建成员后 `accountBound=false`、逐值来源可追溯、异源并存、`persons` 无来源列。
 
-- [ ] T047 [US2] [REQ:U03;FR-003;FR-004] 先写失败集成测试 `tests/integration/members.test.ts`：新增成员（`ageBand=MINOR_14_17`）成功且 `account_id IS NULL`、只写白名单内来源、异源并存不被覆盖、同源替换写 `supersedes_id`、`observedAt` 缺省为 NULL（依赖 T046） [VERIFY:测试先红，记录失败输出]
-- [ ] T048 [US2] [REQ:FR-003;plan:D-4] 在 `apps/server/api/src/routes/members.ts` + `src/commands/member-create.ts` 实现 `POST /api/v1/families/:id/members`（非 UNDER_14 路径）：membership → Person → profile → values → audit，逐值写来源并校验 provider 为本家庭成员（依赖 T047、T034） [VERIFY:`bun run vitest run tests/integration/members.test.ts` 中转绿（成员创建相关用例）]
-- [ ] T049 [US2] [REQ:FR-003;plan:D-4] 先写失败集成测试 `tests/integration/members.test.ts`：`PATCH /api/v1/families/:id/members/:personId` 同源替换 vs 异源并存、跨家庭/非 manager 被拒（依赖 T048） [VERIFY:测试先红，记录失败输出]
-- [ ] T050 [US2] [REQ:FR-003;FR-005] 在 `apps/server/api/src/routes/members.ts` + `src/commands/member-update.ts` 实现 `PATCH /api/v1/families/:id/members/:personId`：仅 `DISPLAY_NAME`，manager-only，追加式写入（依赖 T049） [VERIFY:`bun run vitest run tests/integration/members.test.ts` 全绿]
-- [ ] T051 [US2] [REQ:FR-003;FR-004;plan:D-4] 在 `apps/server/api/src/commands/family-create.ts` 与 `src/commands/member-create.ts` 中强制执行来源规则（覆盖 `POST /families` 与非 UNDER_14 成员创建）：creator 仅 `SELF_STATEMENT`、provider 固定为 actor；成员按真实提供方式取白名单来源且 provider 须为本家庭成员；违反 → 422 `AGE_BAND_SOURCE_NOT_ALLOWED`（UNDER_14 分支由 T057 强制）（依赖 T046、T048） [VERIFY:`tests/integration/age-band-source.test.ts` 断言 creator 与普通成员的非法来源组合均 422 且无写入]
+- [x] T047 [US2] [REQ:U03;FR-003;FR-004] 先写失败集成测试 `tests/integration/members.test.ts`：新增成员（`ageBand=MINOR_14_17`）成功且 `account_id IS NULL`、只写白名单内来源、异源并存不被覆盖、同源替换写 `supersedes_id`、`observedAt` 缺省为 NULL（依赖 T046） [VERIFY:测试先红，记录失败输出]
+- [x] T048 [US2] [REQ:FR-003;plan:D-4] 在 `apps/server/api/src/routes/members.ts` + `src/commands/member-create.ts` 实现 `POST /api/v1/families/:id/members`（非 UNDER_14 路径）：membership → Person → profile → values → audit，逐值写来源并校验 provider 为本家庭成员（依赖 T047、T034） [VERIFY:`bun run vitest run tests/integration/members.test.ts` 中转绿（成员创建相关用例）]
+- [x] T049 [US2] [REQ:FR-003;plan:D-4] 先写失败集成测试 `tests/integration/members.test.ts`：`PATCH /api/v1/families/:id/members/:personId` 同源替换 vs 异源并存、跨家庭/非 manager 被拒（依赖 T048） [VERIFY:测试先红，记录失败输出]
+- [x] T050 [US2] [REQ:FR-003;FR-005] 在 `apps/server/api/src/routes/members.ts` + `src/commands/member-update.ts` 实现 `PATCH /api/v1/families/:id/members/:personId`：仅 `DISPLAY_NAME`，manager-only，追加式写入（依赖 T049） [VERIFY:`bun run vitest run tests/integration/members.test.ts` 全绿]
+- [x] T051 [US2] [REQ:FR-003;FR-004;plan:D-4] 在 `apps/server/api/src/commands/family-create.ts` 与 `src/commands/member-create.ts` 中强制执行来源规则（覆盖 `POST /families` 与非 UNDER_14 成员创建）：creator 仅 `SELF_STATEMENT`、provider 固定为 actor；成员按真实提供方式取白名单来源且 provider 须为本家庭成员；违反 → 422 `AGE_BAND_SOURCE_NOT_ALLOWED`（UNDER_14 分支由 T057 强制）（依赖 T046、T048） [VERIFY:`tests/integration/age-band-source.test.ts` 断言 creator 与普通成员的非法来源组合均 422 且无写入]
 
 ---
 
