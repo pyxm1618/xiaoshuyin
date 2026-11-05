@@ -91,10 +91,11 @@ observations
 2. **Q2**：未知、未收集、拒绝、不适用只作为 Observation value availability；occurred time、confirmation、validity、conflict 分开表达。不存在万能 `epistemic_state`。
 3. **Q3**：Message 使用 shared `idempotency_keys`，`command_type=CASE_MESSAGE_CREATE`，沿用 body `idempotencyKey`；hash = verified `familyId + caseId + raw content`。
 4. Message 写入自动 Assertion 数量恒为 0。
-5. 内部生产能力按 `recordStatement`、`recordHypothesis`、`recordObservation` 明确拆分；不存在 `recordFact`、`promoteToFact`、`createEvidence(anything)`。
-6. 三表都持有 `family_id + case_id`；Person refs 通过 Family membership composite FK 做 DB 最后防线。
-7. RLS 只做 Family isolation；业务授权仍由 application/domain。
-8. 不为 Message/Evidence 增加镜像 `case_event`；只复用 `business_audit_events` 做最小审计，且 metadata 不复制正文。
+5. 内部能力按 `recordStatement`、`recordHypothesis`、`recordObservation` 明确拆分；不存在 `recordFact`、`promoteToFact`、`createEvidence(anything)`。其中 `recordHypothesis` 仅保留为 future-facing domain capability contract，本 Slice production runtime 没有可达 AI caller。
+6. `assertions` 的 runtime INSERT 有数据库最后防线：`family_id = app_family_id() AND kind <> 'FACT'`。因此 domain helper 被绕过时，`xiaoshuyin_app` 仍不能直接 INSERT FACT；test-only FACT fixture 只能走隔离 privileged context。
+7. 三表都持有 `family_id + case_id`；Person refs 通过 Family membership composite FK 做 DB 最后防线。
+8. RLS 默认承担 Family isolation，并在 `assertions INSERT` 上额外承担 FACT capability guard；manager/Case/guardian 等业务授权仍由 application/domain。
+9. 不为 Message/Evidence 增加镜像 `case_event`；只复用 `business_audit_events` 做最小审计，且 metadata 不复制正文。
 
 ---
 
@@ -287,6 +288,40 @@ createAssertion(kind)
 
 数据库 `assertion_kind` 与 domain union 仍包含 FACT。测试用 schema introspection / pure domain validation / test-only privileged fixture 证明 FACT 可表达；fixture 不从 production package export，也不建立 HTTP route。
 
+**数据库最后防线**：
+
+```text
+xiaoshuyin_app INSERT assertions
+WITH CHECK (
+  family_id = app_family_id()
+  AND kind <> 'FACT'
+)
+```
+
+- 正确 Family RLS context 也不能让 runtime app role 写入 FACT；
+- `STATEMENT` / `HYPOTHESIS` 在其它授权、provenance、FK、CHECK 均满足时仍可 INSERT；
+- test-only FACT row 只能由隔离的 migrator/test privileged context 创建，不能借 production runtime role、production repository 或临时 HTTP API；
+- future 正式 Fact Confirmation Slice 若要开放 FACT，必须显式修改该数据库 policy / contract，并经过自身 Spec/Plan/Review；不得把本门禁静默放宽。
+
+### D-4A Provenance source admissibility matrix
+
+Slice 3 **直接复用** Slice 1 `provenance_source` 8 值 enum，不复制、不删值、不重新定义其含义。下面冻结的是“本 Slice production writer 的允许子集”，不是新的 taxonomy。
+
+| source_kind | 当前 Slice production | writer | source_person_id | subject/source relationship | 额外 authorization / validation | 原因 |
+|---|---|---|---|---|---|---|
+| `SELF_STATEMENT` | 允许 | `recordStatement` | required | `subject_person_id` required；`source_person_id = subject_person_id` | subject/source 必须是当前目标 Family 合法 Person ref；Case writer authorization 仍须通过 | Slice 1“本人陈述”语义；不能把别人的陈述伪装成 self |
+| `GUARDIAN_OBSERVATION` | 允许 | `recordObservation` only | required | subject required；source ≠ subject；source 必须是 subject 的真实 guardian | source/subject 都必须是当前 Family 合法 Person ref；guardian relation 必须存在，但 guardian relation 本身不授予 Family/Case access | “家长观察”在本 Slice 映射为 Observation，不允许 Statement writer 猜测使用 |
+| `GUARDIAN_RELAY` | 允许 | `recordStatement` only | required | subject required；source ≠ subject；source 必须是 subject 的真实 guardian | 同上；必须验证 guardian relation，且不能用 guardian 绕过 Family/Case authorization | “家长转述”是对他人陈述的 relay |
+| `OTHER_MEMBER_RELAY` | 允许 | `recordStatement` only | required | subject required；source ≠ subject；source 与 subject 都必须是当前 Family member | Case writer authorization + 两个 Person composite refs；不要求 guardian relation | Slice 1“其他成员转述”语义 |
+| `MANUAL_DEVICE_DATA` | 禁用 | none | forbidden | N/A | current validator/repository fail closed | 本 Slice 不实现 Digital Use / device ingestion；enum 存在不代表当前能力 |
+| `STAFF_RECORD` | 禁用 | none | forbidden | N/A | current validator/repository fail closed | 本 Slice 无 staff workflow / staff writer |
+| `AI_HYPOTHESIS` | 禁用 | none（`recordHypothesis` 仅为 future-facing contract，不是当前 runtime caller） | forbidden | N/A | current Slice 没有 AI caller；当前 production composition 对该 source kind fail closed | 防止内部调用者伪造“AI 已生成” provenance；未来 AI Slice 必须正式扩 admissibility |
+| `SOURCE_CONFIRMED` | 禁用 | none | forbidden | N/A | current validator/repository fail closed | 本 Slice 没有 Fact/Confirmation workflow，不能借 enum 暗中创造确认路径 |
+
+“允许”只表示对应窄 domain writer 在**已授权 Case/Family context** 下可以接受该 provenance；它不会新增 public route。Message POST 仍只保存 raw message，自动 Assertion 数仍为 0。
+
+`recordHypothesis` 的类型专用 contract 保留，但 Slice 3 当前没有任何 production-admissible hypothesis provenance/caller；实现不得把 `AI_HYPOTHESIS` 当成“因为 enum 存在所以可写”。未来正式 Slice 扩展时必须显式修改本矩阵与验证测试。
+
 ### D-5 Person Reference Authorization / Security
 
 Message public path只允许 Slice 2 final 已批准的 Case management actor path。普通 membership、guardian、知道 caseId/personId 均不增加 Evidence 权限。
@@ -454,7 +489,8 @@ Supersedes：
 - same Family + same Case composite FK；
 - no self；
 - runtime 不 UPDATE `supersedes_id`；
-- 新 row 只引用已存在旧 row，因此 append-only contract 下无明显 cycle；
+- 新 row 只引用已存在旧 row，且 runtime 不允许 UPDATE 旧 row 的 `supersedes_id`；因此正常 production path 通过 append-only direction 结构性阻止 cycle；
+- verification 只需证明 self-reference reject、old-row `supersedes_id` mutation reject、正常 production path 无法形成 cycle；**不新增 graph traversal / cycle detector**；
 - old row 永久保留。
 
 Conflict：
@@ -474,7 +510,14 @@ Conflict：
 - 不接受 familyId/actorId/sourcePersonId/subjectPersonId/recordedAt/assertionKind；
 - response 不回显 content；
 - 无 GET/PATCH/DELETE messages；
-- 无 `/assertions`、`/observations`、`/evidence`。
+- 无 `/assertions`、`/observations`、`/evidence`；
+- error code 由 schema 机械固定，而不是只写在 prose/example：
+  - 401 → `UNAUTHENTICATED`
+  - 404 → `oneOf(CURRENT_FAMILY_NOT_FOUND, CASE_NOT_FOUND)`
+  - 409 → `IDEMPOTENCY_PAYLOAD_MISMATCH`
+  - 422 → `VALIDATION_ERROR`
+  - 500 → `INTERNAL_ERROR`
+- 401/500 复用现有错误 taxonomy；404 复用 Slice 1 Family + Slice 2 Case anti-enumeration 语义，不定义第二套错误码。
 
 ---
 
@@ -537,13 +580,13 @@ packages/generated/
 | FR-001/002 | DB/domain structure | Assertion kinds 恰 3；Observation 独立；无 OBSERVATION kind |
 | FR-005 | Observation round-trip | UNKNOWN/NOT_COLLECTED/DECLINED/NOT_APPLICABLE 保持；0/false 保持真实 |
 | FR-003 | time tests | unknown occurred = state UNKNOWN + NULL；recorded_at server-owned |
-| FR-004/016 | provenance | guardian→child source/subject 分离 |
+| FR-004/016 | provenance matrix | 8 个既有 source_kind 全覆盖；前 4 类 writer/source-person/relationship 规则机械验证；设备/staff/AI/SOURCE_CONFIRMED 当前 production fail closed |
 | FR-006 | conflict | 多来源同 group；无 winner/FACT side effect |
-| FR-007 | supersedes | old row 保留；same Case/Family；self/cycle attempt rejected |
-| FR-008 | capability audit | FACT type存在；production exports/routes 无 FACT write/confirm/promote |
+| FR-007 | supersedes | old row 保留；same Case/Family；self-reference reject；旧 row supersedes mutation denied；append-only production path 无法成环，无 graph detector |
+| FR-008 | FACT capability + DB guard | FACT type存在；production exports/routes 无 FACT write/confirm/promote；`xiaoshuyin_app` + 正确 Family context INSERT FACT → DB reject；STATEMENT/HYPOTHESIS 在其它校验通过时可写 |
 | FR-009 | message integration | raw message + audit + idem；auto Assertion count=0 |
-| FR-010/011/021 | auth/RLS/person ref | wrong Family/Case/Person fail closed，无 leakage |
-| FR-013/015 | OpenAPI route enumeration | 只新增 message POST，无 generic CRUD |
+| FR-010/011/021 | auth/RLS/person ref | wrong Family/Case/Person fail closed，无 leakage；guardian relation 不授予 Family/Case access |
+| FR-013/015 | OpenAPI route/error contract | 只新增 message POST，无 generic CRUD；401/404/409/422/500 的 `code` 可由 schema 机械校验 |
 | FR-017 | concurrency/idempotency | replay original；mismatch 409；并发同 key 仅一条 message/audit |
 | Audit | DB integration | metadata 无正文/PII；case_events 不镜像 |
 | Gate | pre-Implement evidence | 依赖未满足即固定 BLOCKED |
@@ -559,8 +602,8 @@ packages/generated/
 1. Gate 通过后读取 `db/migrations/`，取 Slice 1/2 final 后真实下一个编号。
 2. 不修改旧 migration。
 3. 先读取 `pg_constraint`，确认 audit / idempotency CHECK 名称。
-4. 顺序：CREATE enums → dialogue_messages → assertions → observations → indexes/FKs/checks → ENABLE/FORCE RLS → policies → grants → 扩 audit CHECK → 扩 idempotency command CHECK。
-5. runtime app role 非 owner、NOBYPASSRLS。
+4. 顺序：CREATE enums → dialogue_messages → assertions → observations → indexes/FKs/checks → ENABLE/FORCE RLS → policies（含 assertions INSERT 的 `kind <> 'FACT'` hard guard）→ grants → 扩 audit CHECK → 扩 idempotency command CHECK。
+5. runtime app role 非 owner、NOBYPASSRLS；privileged FACT fixture 仅存在于隔离 test/migration context，不复用 production runtime role。
 6. empty DB replay 与 existing DB upgrade 都必须通过。
 7. 三表 RLS introspection 必须 true/true。
 8. 禁止 `drizzle-kit push`。

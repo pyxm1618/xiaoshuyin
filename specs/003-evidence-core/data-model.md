@@ -100,7 +100,8 @@ conflict_group_id uuid NULL
 Checks：
 - KNOWN occurred time ↔ occurred_at non-null；UNKNOWN ↔ NULL。
 - `valid_until > valid_from` when both non-null。
-- person-origin source kinds要求 source_person_id non-null。
+- Slice 1 既有 person-origin source kinds 明确为 `SELF_STATEMENT`、`GUARDIAN_OBSERVATION`、`GUARDIAN_RELAY`、`OTHER_MEMBER_RELAY`；这些值要求 `source_person_id` non-null。
+- 当前 Slice production 对 `MANUAL_DEVICE_DATA`、`STAFF_RECORD`、`AI_HYPOTHESIS`、`SOURCE_CONFIRMED` 全部 fail closed；对应当前 writer contract 中 `source_person_id` 也 forbidden。完整 writer/relationship matrix 见 `contracts/evidence-domain.md`。
 - source_message_id non-null时 source_person_id 也 non-null；repository验证 source person 与 message source 一致。
 
 ## 5. `assertions`
@@ -127,6 +128,15 @@ FK：
 Indexes：case+recorded、case+subject、source_message、conflict_group、supersedes、valid_until。
 
 FACT 结构上可表达；production domain 不提供 caller-selectable kind writer。
+
+数据库最后防线：runtime app role 对 `assertions` 的 INSERT policy 必须包含：
+
+```text
+family_id = app_family_id()
+AND kind <> 'FACT'
+```
+
+因此即使内部代码绕过 domain helper、直接使用 runtime DB client，`kind='FACT'` 仍由 PostgreSQL 拒绝。STATEMENT/HYPOTHESIS 在其它校验通过时可写。FACT test fixture 只能使用隔离的 migrator/test privileged context；future Fact Confirmation Slice 若要开放 FACT，必须显式修改该 policy/contract。
 
 ## 6. `observations`
 
@@ -174,7 +184,7 @@ Runtime privilege：`UPDATE(conflict_group_id)` only。
 
 ## 8. Supersedes / currentness
 
-Assertion只 supersede Assertion；Observation只 supersede Observation。旧 row不 UPDATE/DELETE。
+Assertion只 supersede Assertion；Observation只 supersede Observation。旧 row不 UPDATE/DELETE，尤其 runtime 不得 UPDATE 已有 row 的 `supersedes_id`。新 row 只指向已存在旧 row，因此 append-only insert direction + no supersedes UPDATE 结构性阻止正常 production path 形成 cycle；只需验证 self-reference reject、旧 row supersedes mutation reject 与 production path 无法成环，不设计 graph cycle detector。
 
 Currentness 至少考虑：
 
@@ -195,21 +205,30 @@ ENABLE ROW LEVEL SECURITY;
 FORCE ROW LEVEL SECURITY;
 ```
 
-Policy：
+Policies 按命令分开规划：
 
 ```text
-USING      family_id = app_family_id()
-WITH CHECK family_id = app_family_id()
+SELECT / allowed UPDATE:
+  USING family_id = app_family_id()
+
+dialogue_messages / observations INSERT:
+  WITH CHECK family_id = app_family_id()
+
+assertions INSERT:
+  WITH CHECK (
+    family_id = app_family_id()
+    AND kind <> 'FACT'
+  )
 ```
 
-RLS 不做 manager/Participant/guardian/Purpose/FACT confirmation。
+最后一条是 Q5 的数据库 capability guard，不是 FACT confirmation workflow。RLS 仍不判断 manager/Participant/guardian/Purpose，也不把任何 row “确认成 FACT”；application/domain authorization 仍先行。
 
 ## 10. Runtime grants
 
 | table | SELECT | INSERT | UPDATE | DELETE |
 |---|---:|---:|---:|---:|
 | dialogue_messages | yes | yes | no | no |
-| assertions | yes | yes | conflict_group_id only | no |
+| assertions | yes | yes — 但 INSERT RLS 硬拒绝 `kind='FACT'` | conflict_group_id only | no |
 | observations | yes | yes | conflict_group_id only | no |
 
 ## 11. Business audit extension

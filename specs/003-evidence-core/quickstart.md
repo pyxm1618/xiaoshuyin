@@ -31,6 +31,7 @@ BLOCKED — SLICE 3 IMPLEMENTATION DEPENDENCY
 - assertion kind 恰 STATEMENT/FACT/HYPOTHESIS；
 - observations 独立；
 - 三表 ENABLE+FORCE RLS；
+- `assertions` runtime INSERT policy = current Family + `kind <> 'FACT'`；
 - runtime role 非 owner / NOBYPASSRLS；
 - Case/Family composite FKs；
 - Family/Person composite FKs；
@@ -102,7 +103,19 @@ internal/domain/DB tests：
 - Evidence Core 不创建 Person；
 - source_message 与 evidence family/case/source person 必须一致。
 
-## 6. Observation states
+## 6. Provenance admissibility
+
+逐项验证现有 8 个 `provenance_source`：
+
+- SELF_STATEMENT → `recordStatement`，source=subject；
+- GUARDIAN_OBSERVATION → `recordObservation` only，guardian source→subject relation 必须真实；
+- GUARDIAN_RELAY → `recordStatement` only，guardian source→subject relation 必须真实；
+- OTHER_MEMBER_RELAY → `recordStatement` only，source/subject 都是当前 Family member 且 source≠subject；
+- MANUAL_DEVICE_DATA / STAFF_RECORD / AI_HYPOTHESIS / SOURCE_CONFIRMED → current production fail closed；
+- guardian relation 本身不能获得 Family/Case access；
+- `recordHypothesis` 不构成当前 AI runtime path。
+
+## 7. Observation states
 
 逐一 round-trip：
 - KNOWN text；
@@ -115,7 +128,7 @@ internal/domain/DB tests：
 
 断言未知状态无 value；0/false 不被转换成 unknown。
 
-## 7. Occurred / recorded time
+## 8. Occurred / recorded time
 
 - occurred KNOWN + timestamp 成功；
 - occurred UNKNOWN + NULL 成功；
@@ -123,7 +136,7 @@ internal/domain/DB tests：
 - recorded_at caller 不可提交且由 server产生；
 - 不用 recorded_at 代填 occurred_at。
 
-## 8. Conflict
+## 9. Conflict
 
 构造两个来源相冲突：
 - 两条都保留；
@@ -133,24 +146,29 @@ internal/domain/DB tests：
 - group 不可迁移；
 - 可跨 Assertion/Observation。
 
-## 9. Supersedes
+## 10. Supersedes
 
 - 新 row 指向旧 row；
 - old row仍存在；
 - self-reference拒绝；
 - cross-Case/cross-Family supersedes拒绝；
-- content/provenance 不原地覆盖。
+- 旧 row 的 `supersedes_id` UPDATE 被拒绝；
+- content/provenance 不原地覆盖；
+- 仅靠 append-only `new → existing old` + no supersedes UPDATE 即证明 production path 无法形成 cycle；不要求 graph cycle detector。
 
-## 10. FACT reachability
+## 11. FACT reachability
 
 机械验证：
 - DB enum包含 FACT；
 - domain union包含 FACT；
+- `xiaoshuyin_app` + 正确 Family RLS context + `INSERT assertions(kind='FACT')` → DB reject；
+- 同一 runtime role 下 STATEMENT/HYPOTHESIS 在其它 validations 通过时 → allowed；
 - production exports/routes 不含 recordFact/createFact/confirmFact/promoteToFact/createAssertion(kind)；
-- test-only fixture 不被 production import graph 引用；
-- public route list 无 assertions/observations/evidence。
+- test-only FACT fixture 只能使用隔离 privileged test/migrator context，且不被 production import graph 引用；
+- public route list 无 assertions/observations/evidence；
+- future Fact Confirmation Slice 若开放 FACT，必须显式变更 DB policy/contract。
 
-## 11. OpenAPI
+## 12. OpenAPI
 
 未来生成并检查：
 
@@ -161,7 +179,17 @@ bun run openapi:check
 
 断言只新增 `POST /api/v1/cases/{id}/messages`；request strict；无 generic Evidence CRUD；response 不回显 content。
 
-## 12. Final future verification
+并对错误 schema 做机械校验：
+
+- 401 → `UNAUTHENTICATED`
+- 404 → `oneOf(CURRENT_FAMILY_NOT_FOUND, CASE_NOT_FOUND)`
+- 409 → `IDEMPOTENCY_PAYLOAD_MISMATCH`
+- 422 → `VALIDATION_ERROR`
+- 500 → `INTERNAL_ERROR`
+
+不得只靠 description/example 约定 code。
+
+## 13. Final future verification
 
 未来 Implement 完成后：
 

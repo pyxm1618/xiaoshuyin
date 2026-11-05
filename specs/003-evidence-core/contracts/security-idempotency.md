@@ -19,13 +19,22 @@ Internal Evidence write 也必须携带已授权 Family/Case context；当前无
 
 ### RLS
 
-RLS 只做 Family isolation：
+默认 RLS 负责 Family isolation：
 
 ```text
 family_id = app_family_id()
 ```
 
-RLS 不能替代 manager/Case/Purpose/Person-reference business authorization。
+但 `assertions INSERT` 还有 Q5 要求的数据库最后防线：
+
+```text
+WITH CHECK (
+  family_id = app_family_id()
+  AND kind <> 'FACT'
+)
+```
+
+因此 `xiaoshuyin_app` 即使 Family context 正确也不能直接 INSERT FACT。这个 guard 不替代 manager/Case/Purpose/Person-reference business authorization，也不实现 Fact confirmation；future Fact Confirmation Slice 必须显式修改 policy/contract 才能开放。
 
 ## 2. Person reference validation
 
@@ -165,6 +174,8 @@ COMMIT
 BEGIN in authorized family/case context
 → revalidate Case/Family
 → validate subject/source Person refs
+→ validate provenance source against the frozen 8-row Slice 3 admissibility matrix
+→ validate guardian/source/subject relationship where required
 → validate source message
 → validate time/value/validity/supersedes
 → optional conflict-group annotation
