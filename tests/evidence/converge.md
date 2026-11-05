@@ -248,7 +248,9 @@ FR-002 平台真实性按 Plan 明确标为 **NOT VERIFIED**，未伪造通过�
 
 - 实现与冻结规格之间**无剩余 gap**；上述 6 项均为已记录、可解释的偏差或 Plan 明确排除项。
 - `FR-002 平台真实性` 不属于本 Slice 验收范围，按 Plan 保留 NOT VERIFIED，不写成已通过。
-- CI 五个 job 的最终状态由 T071 在 Final Head 上单独验收（最终交付报告给出 run 链接），
-  本文件不引用旧 run 冒充最终结果。
+- **CI**：代码最终 Head `1e6b117`（`feat/001-family-identity-core`）的 GitHub Actions run **`41960284795`** 中
+  **Static Checks / Unit Tests / DB Migration / Integration Tests / Contract 五个 job 全部 SUCCESS**；
+  Spec Governance run `41960284706` SUCCESS。该 Head 之后仅提交 `tasks.md` 勾选状态与本文件的 run 记录，
+  不改变任何实现、测试或验证结论。
 
 **收敛结论：Implement 阶段可交付 Independent Converge。**

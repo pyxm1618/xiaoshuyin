@@ -152,8 +152,8 @@
 - [x] T068 [REQ:plan:Verification-Plan] 全量回归：用 `scripts/verify-all.mjs` 按 plan §Verification Plan 的 26 条命令逐条运行，输出归档到 `tests/evidence/verify-all.log`（依赖 T061–T067） [VERIFY:`bun run test -- --run` 全绿；`bun run guard:static` 输出归档（含 accounts 窄访问与范围守卫）；逐条命令输出归档为证据]
 - [x] T069 [REQ:FR-001—FR-017;SC-001—SC-008] 覆盖审计 `scripts/coverage-audit.mjs`：把 17 条 FR / 8 条 SC 映射到测试文件，缺任一条即失败（依赖 T068） [VERIFY:`bun run coverage:audit` 输出 17/17 与 8/8，无 missing]
 - [x] T070 [REQ:quickstart:§2] 手工路径验证：按 `quickstart.md` §2 跑登录→建家庭→成员→consent→撤回→跨家庭六段，真实响应记录到 `tests/evidence/quickstart.md`（依赖 T068） [VERIFY:六段状态码与响应字段与 quickstart 期望一致，记录归档]
-- [ ] T071 [REQ:§40;plan:Verification-Plan] 在 `.github/workflows/ci.yml` 上使 `static`、`unit`、`db-migrate`、`integration`、`contract` 五个 job 在 feature branch 全部真实通过（`contract` job 必须真实存在，**不得 placeholder / 假成功**）（依赖 T008、T030、T068） [VERIFY:GitHub Actions run 五 job 全 success，链接归档]
-- [ ] T072 [REQ:constitution:VI;§41] 收敛检查：重读 `spec.md` FR/SC 与 `contracts/**`，逐条对照实现与测试，记录到 `tests/evidence/converge.md`；并运行治理 `node .specify/scripts/validate-governance.mjs`、`node .specify/scripts/tests/run-governance-tests.mjs` 与 `git diff --name-only origin/main...HEAD`，记录受保护 source-of-truth 是否有预期外改动（本轮 Analyze closeout 对 `spec.md` 的 1 行修正属预期内，须在证据中可解释）（依赖 T069–T071） [VERIFY:converge 记录含 governance PASS、self-test 10/10、受保护文件 diff 说明，且 no remaining gap 或列出缺口转回上游]
+- [x] T071 [REQ:§40;plan:Verification-Plan] 在 `.github/workflows/ci.yml` 上使 `static`、`unit`、`db-migrate`、`integration`、`contract` 五个 job 在 feature branch 全部真实通过（`contract` job 必须真实存在，**不得 placeholder / 假成功**）（依赖 T008、T030、T068） [VERIFY:GitHub Actions run 五 job 全 success，链接归档]
+- [x] T072 [REQ:constitution:VI;§41] 收敛检查：重读 `spec.md` FR/SC 与 `contracts/**`，逐条对照实现与测试，记录到 `tests/evidence/converge.md`；并运行治理 `node .specify/scripts/validate-governance.mjs`、`node .specify/scripts/tests/run-governance-tests.mjs` 与 `git diff --name-only origin/main...HEAD`，记录受保护 source-of-truth 是否有预期外改动（本轮 Analyze closeout 对 `spec.md` 的 1 行修正属预期内，须在证据中可解释）（依赖 T069–T071） [VERIFY:converge 记录含 governance PASS、self-test 10/10、受保护文件 diff 说明，且 no remaining gap 或列出缺口转回上游]
 
 ---
 
