@@ -12,7 +12,8 @@ import {
 import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { getNoticeHash } from '@xiaoshuyin/compliance';
-import { getFamilyIdByPersonId, hashPayload, isFamilyMember } from '@xiaoshuyin/domain';
+import { hashPayload, isFamilyMember } from '@xiaoshuyin/domain';
+import { requireCurrentFamily } from '../family-context.js';
 import {
   insertConsentRequest,
   getConsentRequestForUpdate,
@@ -23,13 +24,6 @@ import {
   updateComplianceProfileConsent,
 } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
-
-function notFoundFamily() {
-  return Object.assign(new Error('Current family not found'), {
-    statusCode: 404,
-    code: 'CURRENT_FAMILY_NOT_FOUND',
-  });
-}
 
 export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
   // POST /api/v1/compliance/guardian-consents/requests
@@ -61,11 +55,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
           commandType: 'GUARDIAN_CONSENT_REQUEST',
           idempotencyKey,
           requestHash,
-          resolveFamilyId: async (tx) => {
-            const familyId = await getFamilyIdByPersonId(tx, personId);
-            if (!familyId) throw notFoundFamily();
-            return familyId;
-          },
+          resolveFamilyId: async (tx) => requireCurrentFamily(tx, personId),
         },
         async (tx) => {
           const noticeHash = getNoticeHash(noticeVersion);
@@ -75,8 +65,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
             });
           }
 
-          const familyId = await getFamilyIdByPersonId(tx, personId);
-          if (!familyId) throw notFoundFamily();
+          const familyId = await requireCurrentFamily(tx, personId);
 
           const result = await insertConsentRequest(
             tx, familyId, personId, subjectPersonId ?? null, noticeVersion, noticeHash
@@ -136,11 +125,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
           commandType: 'GUARDIAN_CONSENT_GRANT',
           idempotencyKey,
           requestHash,
-          resolveFamilyId: async (tx) => {
-            const familyId = await getFamilyIdByPersonId(tx, personId);
-            if (!familyId) throw notFoundFamily();
-            return familyId;
-          },
+          resolveFamilyId: async (tx) => requireCurrentFamily(tx, personId),
         },
         async (tx) => {
           const expectedHash = getNoticeHash(noticeVersion);
@@ -150,8 +135,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
             });
           }
 
-          const familyId = await getFamilyIdByPersonId(tx, personId);
-          if (!familyId) throw notFoundFamily();
+          const familyId = await requireCurrentFamily(tx, personId);
 
           const request = await getConsentRequestForUpdate(tx, consentRequestId);
           if (!request) {
