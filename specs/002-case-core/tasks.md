@@ -115,7 +115,7 @@
 - [ ] T056 [REQ:FR-016;FR-017;FR-023;plan:D-9.2/D-9.3] 在 `apps/server/api/src/routes/cases.ts` 实现 `GET /api/v1/cases` 与 `GET /api/v1/cases/:id`：`CASE_LIST` / `CASE_READ` 授权；仍在 `withRlsTransaction` 内只读；detail 对不存在 / 跨 Family / 无资格统一 `404 CASE_NOT_FOUND`，响应体逐字节一致、无 `details`、无任何 Case 字段；不写 `case_events` / `business_audit_events`（依赖 T052） [VERIFY:`bun run typecheck`；`rg "GET /api/v1/cases|CASE_READ|CASE_NOT_FOUND" apps/server/api/src/routes/cases.ts`]
 - [ ] T057 [REQ:FR-016;R2;R3] 在 `packages/domain/src/cases.ts` 的 `listCases` 固定 `ORDER BY is_primary DESC, created_at ASC, id ASC`；空结果返回空数组；不伪造 placeholder / 默认 Case；不实现分页参数（依赖 T056） [VERIFY:`rg "ORDER BY is_primary DESC, created_at ASC, id ASC" packages/domain/src/cases.ts`；`bunx vitest run tests/integration/cases-read.test.ts` 排序与空集合用例通过]
 - [ ] T058 [REQ:FR-017;SC-010;场景5] 运行 read 与 detail 授权用例转绿：`tests/integration/cases-read.test.ts` 全绿；`tests/integration/cases-authorization.test.ts` 的 detail 分组（含场景 A 404）通过（依赖 T055、T056、T057、T054） [VERIFY:`bunx vitest run tests/integration/cases-read.test.ts tests/integration/cases-authorization.test.ts` 全绿，保留状态码与响应体输出]
-- [ ] T059 [REQ:FR-025;D7;SC-007] 新增 `tests/integration/cases-read-no-audit.test.ts`：调用 `GET /api/v1/cases` 与 `GET /api/v1/cases/:id` 前后，`case_events` 与 `business_audit_events` 行数不变；不存在 `CASE_VIEWED` / `CASE_LISTED` / `CASE_ACCESSED` 事件；不新建 access-log 表（依赖 T056） [VERIFY:`bunx vitest run tests/integration/cases-read-no-audit.test.ts` 通过；输出 before/after 计数相等]
+- [ ] T059 [REQ:FR-025;D7;SC-007] 新增 `tests/integration/cases-read-no-audit.test.ts`：调用 `GET /api/v1/cases` 与 `GET /api/v1/cases/:id` 前后，`case_events` 与 `business_audit_events` 行数不变；不存在 `CASE_VIEWED` / `CASE_LISTED` / `CASE_ACCESSED` 事件；不新建 access-log 表（依赖 T056） [VERIFY:先写测试并运行，记录 before/after 计数；若读取写审计则判定 T056 实现缺陷并修复；最终测试通过且计数相等]
 
 ---
 
@@ -129,7 +129,7 @@
 
 ## Phase 8 — Idempotency & Primary Concurrency（真实数据库连接）
 
-- [ ] T063 [P] [REQ:FR-012;SC-006;场景10] 新增 `tests/integration/cases-idempotency.test.ts`：same key + same canonical payload replay 返回原 `201` body / 原 Case ID；concurrent same key（真实多连接）只产生 1 个 Case、1 组 `case_event`、1 组 `business_audit_event`，其余为 REPLAY；Case / event / audit 行数不变；不测试 HTTP same key + different legal body（当前不存在第二种合法 payload）（依赖 T052、T053） [VERIFY:先运行确认 RED / 覆盖缺口；实现后 `bunx vitest run tests/integration/cases-idempotency.test.ts` 全绿]
+- [ ] T063 [P] [REQ:FR-012;SC-006;场景10] 新增 `tests/integration/cases-idempotency.test.ts`：same key + same canonical payload replay 返回原 `201` body / 原 Case ID；concurrent same key（真实多连接）只产生 1 个 Case、1 组 `case_event`、1 组 `business_audit_event`，其余为 REPLAY；Case / event / audit 行数不变；不测试 HTTP same key + different legal body（当前不存在第二种合法 payload）（依赖 T052、T053） [VERIFY:先写测试并运行并记录实际结果；若发现重放 / 并发缺口，保留失败输出并从 T049、T052 修复；最终 `bunx vitest run tests/integration/cases-idempotency.test.ts` 全绿]
 - [ ] T064 [REQ:FR-012;plan:D-5.4] 验证 HTTP 幂等实现：幂等 lookup / 占位 / 回填全部在 `withRlsTransaction` 内，不照抄 `families.ts` 的无上下文 `pool.query` 或事务外回填；若发现偏差，回到 T049 / T052 修复后再验证（依赖 T063） [VERIFY:`bunx vitest run tests/integration/cases-idempotency.test.ts` 输出 Case=1、case_event=1、business_audit_event=1、idempotency_keys=1]
 - [ ] T065 [REQ:FR-012;§8.5;CHK041] 验证 shared mismatch 合同：same scope key + different `request_hash` → `MISMATCH` → 映射 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不修改原 Case、不写新事件 / 审计；不得换 actor（会改变 scope）、不得伪造 Family、不得新增无意义 body 字段（依赖 T028、T046、T049） [VERIFY:`bunx vitest run tests/domain/idempotency-hash.test.ts` 与 repository/service contract 用例通过；输出 mismatch 分支]
 - [ ] T066 [REQ:FR-006;FR-007;SC-002;场景3] 运行 `tests/db/cases-primary-concurrency.test.ts` 转绿：同 Family、两个不同幂等键、两个并发连接 → 两 Case 均成功、一 `primary=true` 一 `false`、`is_primary AND status <> 'CLOSED'` 计数 = 1、事件 / 审计各 2 条（依赖 T024、T042、T052） [VERIFY:`bunx vitest run tests/db/cases-primary-concurrency.test.ts` 通过；输出聚合 count=1；重复运行 3 次结果一致]
@@ -140,7 +140,7 @@
 
 ## Phase 9 — Event / Audit / Scope Guard / Existing Test Alignment
 
-- [ ] T069 [REQ:FR-014;FR-021;SC-007;CHK063] 新增 `tests/integration/cases-audit.test.ts`：成功创建后 `case_events` 与 `business_audit_events` 各恰好 1 条 `CASE_CREATED`，`resource_type=CASE`、`resource_id=caseId`；`case_events.metadata` key 集合恰为 `{primary, version}`，无 title / description / 正文 / PII；构造 event / audit 写入失败（事务内注入非法 metadata 或 event_type）时 Case 不落库（回滚证据）（依赖 T054） [VERIFY:`bunx vitest run tests/integration/cases-audit.test.ts` 通过；输出两表 counts 与回滚后 `cases` count=0]
+- [ ] T069 [REQ:FR-014;FR-021;SC-007;CHK063] 新增 `tests/integration/cases-audit.test.ts`：成功创建后 `case_events` 与 `business_audit_events` 各恰好 1 条 `CASE_CREATED`，`resource_type=CASE`、`resource_id=caseId`；`case_events.metadata` key 集合恰为 `{primary, version}`，无 title / description / 正文 / PII；构造 event / audit 写入失败（事务内注入非法 metadata 或 event_type）时 Case 不落库（回滚证据）（依赖 T054） [VERIFY:先写测试并运行；若 event / audit 缺失或 metadata 形状不符，保留失败输出并从 T048、T052 修复；最终测试通过，输出两表 counts 与回滚后 `cases` count=0]
 - [ ] T070 [REQ:FR-005;FR-018;FR-020;SC-008;场景12] 运行 `tests/integration/cases-scope.test.ts` 转绿：Case 路由恰为 3 条；不存在 `/cases/current`、pause、resume、switch-primary、close、recurrences、messages、assessments、participants；DB 无越界表；`cases` 无禁止列；`event_type` 仅 `CASE_CREATED`（依赖 T031、T053、T056） [VERIFY:`bunx vitest run tests/integration/cases-scope.test.ts` 通过；输出路由清单与越界查询为空]
 - [ ] T071 [P] [REQ:FR-020;SC-008;guard:R4/R6] 在现有 `scripts/guard-static.mjs` 内最小扩展：`FAMILY_TABLES` 加入 `cases`、`case_events`；R6 scope guard 的 forbidden table regex 加入 `case_participants`、`assertions`、`observations`、`problem_formulations`、`scene_node_states`、`scene_artifacts`、`dialogue_messages`、`safety_states`、`plan_versions`、`notifications`；**不新建第二套 scope checker**（依赖 T020） [VERIFY:`bun run guard:static` 输出 `PASS (0 violations)`]
 - [ ] T072 [REQ:FR-020;SC-008] 验证 guard 真的生效：临时注入一个违规样例（`db` 下 `CREATE TABLE assertions` 或 `apps/` 下 `FROM cases`），`bun run guard:static` 必须 exit 1；移除样例后恢复 exit 0；不得提交违规样例（依赖 T071） [VERIFY:注入后 exit 1 输出 rule 与文件行号；移除后 `PASS (0 violations)`]
@@ -334,7 +334,7 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 
 ## TDD Map
 
-| 类别 | RED（先写失败测试） | GREEN（实现后转绿） | Final（全量证据） |
+| 类别 | RED / 先行测试 | GREEN（实现后转绿） | Final（全量证据） |
 |---|---|---|---|
 | schema / enum / 禁止列 | T021 | T032–T042 | T074、T081 |
 | RLS / roles / append-only | T022、T025、T026 | T038–T042、T073 | T062、T081 |
@@ -342,13 +342,14 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 | primary 并发 | T024 | T035、T047、T052 | T066–T068 |
 | authorization | T029 | T044 | T050、T060、T061 |
 | contracts | T030 | T045 | T078、T080 |
-| CASE_CREATE idempotency | T028、T063 | T046、T049、T052 | T064、T065 |
+| CASE_CREATE idempotency | T028（严格 RED）、T063（先行测试） | T046、T049、T052 | T064、T065 |
 | create / list / detail | T051、T055 | T052、T056、T057 | T054、T058 |
-| read-no-audit | T059 | T056 | T083 |
-| event / audit | T069 | T048、T052 | T081 |
+| read-no-audit | T059（先行测试） | T056 | T083 |
+| event / audit | T069（先行测试） | T048、T052 | T081 |
 | scope guard | T031 | T070、T071 | T072、T074 |
 | OpenAPI | T078 | T075–T077 | T079、T080 |
 
+> 严格 RED（首次运行必须失败）：T021–T031、T050、T051、T055。T059、T063、T069 是在实现链中“先写测试再验证边界”的先行测试；若首次运行即绿，必须保留输出并说明为何不是 RED（例如读取路径本就不写审计），不得把已绿测试伪造成 RED。
 > 禁止“先实现全部功能，最后统一补测试”。任何行为实现任务都必须有前置 RED 任务；RED 输出必须保留，且失败原因必须是目标产物尚不存在。
 
 ---
