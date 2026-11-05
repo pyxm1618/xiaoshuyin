@@ -1,0 +1,112 @@
+openapi: 3.1.0
+info:
+  title: Xiaoshuyin Evidence Core Message Contract
+  version: 0.1.0-plan
+  description: >-
+    Plan-stage contract for Slice 003. The only new public route in this Slice is
+    POST /api/v1/cases/{id}/messages. Message write stores raw dialogue only and
+    creates zero Assertions automatically.
+paths:
+  /api/v1/cases/{id}/messages:
+    post:
+      operationId: createCaseMessage
+      summary: Record one raw dialogue message for an authorized Case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCaseMessageRequest'
+      responses:
+        '201':
+          description: Message recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseMessageResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Current Family unavailable, or target Case is not externally distinguishable from unavailable/unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Idempotency key reused with a different canonical request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Strict request validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    CreateCaseMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - content
+        - idempotencyKey
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 8000
+          description: Exact raw message. Server validation also rejects whitespace-only values.
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+    CaseMessageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - caseId
+        - recordedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        recordedAt:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
