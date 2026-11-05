@@ -80,19 +80,13 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             throw Object.assign(new Error('Not manager'), { statusCode: 403, code: 'NOT_FAMILY_MANAGER' });
           }
 
-          // Pre-generate personId
-          const newPersonId = crypto.randomUUID();
-
-          // Insert membership (deferrable FK)
-          await insertFamilyMember(tx, familyId, newPersonId);
-
-          // Insert person (account_id = NULL for members)
-          await insertPerson(tx, newPersonId, null, accountId);
-
-          // Insert compliance profile
           const isUnder14 = ageBand === 'UNDER_14';
           const minorMode = ageBand === 'MINOR_14_17' || ageBand === 'UNDER_14';
 
+          // consent-first (quickstart §2.3 / D-3): lock + validate the consent
+          // BEFORE any child Person or Compliance Profile is created.
+          let lockedConsentId: string | null = null;
+          let lockedGuardianPersonId: string | null = null;
           if (isUnder14) {
             if (!guardianConsentId) {
               throw Object.assign(new Error('Consent required'), { statusCode: 403, code: 'GUARDIAN_CONSENT_REQUIRED' });
@@ -110,13 +104,26 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             if (consent.bound_person_id !== null) {
               throw Object.assign(new Error('Already bound'), { statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_BOUND' });
             }
+            lockedConsentId = guardianConsentId;
+            lockedGuardianPersonId = consent.guardian_person_id;
+          }
 
-            // Bind consent
-            await bindConsentToPerson(tx, guardianConsentId, newPersonId);
+          // Pre-generate personId
+          const newPersonId = crypto.randomUUID();
+
+          // Insert membership (deferrable FK)
+          await insertFamilyMember(tx, familyId, newPersonId);
+
+          // Insert person (account_id = NULL for members)
+          await insertPerson(tx, newPersonId, null, accountId);
+
+          if (lockedConsentId && lockedGuardianPersonId) {
+            // Bind consent AFTER the Person exists (immediate FK on bound_person_id)
+            await bindConsentToPerson(tx, lockedConsentId, newPersonId);
 
             await insertComplianceProfile(
               tx, newPersonId, ageBand, minorMode, ageBandSource,
-              consent.guardian_person_id, guardianConsentId, 1
+              lockedGuardianPersonId, lockedConsentId, 1
             );
           } else {
             await insertComplianceProfile(tx, newPersonId, ageBand, minorMode, ageBandSource);
