@@ -86,3 +86,61 @@ export function checkSourceAcceptability(
   if (!allowed.includes(ageBandSource)) return 'AGE_BAND_SOURCE_NOT_ALLOWED';
   return null;
 }
+
+/**
+ * Provider resolution for a single profile-value write.
+ *
+ * contracts/provenance.md:
+ *  - SELF_STATEMENT: provider MUST be the subject Person (FR-004: unrelated to Account)
+ *  - GUARDIAN_* / OTHER_MEMBER_RELAY: provider MUST be a Person with membership
+ *    in that family (anti-impersonation)
+ *  - UNDER_14 creation: provider is PINNED to consent.guardian_person_id
+ *
+ * Returns the provider to persist, or the frozen error code
+ * `AGE_BAND_SOURCE_NOT_ALLOWED` (422) when the client tried to forge it.
+ */
+const WRITABLE_SOURCES: ProvenanceSource[] = [
+  'SELF_STATEMENT', 'GUARDIAN_OBSERVATION', 'GUARDIAN_RELAY', 'OTHER_MEMBER_RELAY',
+];
+
+export type ProviderResolution =
+  | { kind: 'FIXED'; provider: string }
+  | { kind: 'CANDIDATE'; provider: string }
+  | { kind: 'INVALID' };
+
+export function resolveProvenanceProvider(args: {
+  sourceKind: ProvenanceSource;
+  /** the Person the value is about */
+  subjectPersonId: string;
+  /** the Person recording the value (always a member of the target family) */
+  actorPersonId: string;
+  providedByPersonId?: string | null;
+  /** set when the contract pins the provider (UNDER_14 → consent.guardian_person_id) */
+  pinnedProvider?: string | null;
+}): ProviderResolution {
+  const { sourceKind, subjectPersonId, actorPersonId, providedByPersonId, pinnedProvider } = args;
+
+  if (!WRITABLE_SOURCES.includes(sourceKind)) return { kind: 'INVALID' };
+
+  // Contract-pinned provider (UNDER_14): never silently rewritten.
+  if (pinnedProvider) {
+    if (providedByPersonId && providedByPersonId !== pinnedProvider) {
+      return { kind: 'INVALID' };
+    }
+    return { kind: 'FIXED', provider: pinnedProvider };
+  }
+
+  if (sourceKind === 'SELF_STATEMENT') {
+    if (providedByPersonId && providedByPersonId !== subjectPersonId) {
+      return { kind: 'INVALID' };
+    }
+    return { kind: 'FIXED', provider: subjectPersonId };
+  }
+
+  // Relay / observation: an explicit provider must belong to the family.
+  if (providedByPersonId) {
+    return { kind: 'CANDIDATE', provider: providedByPersonId };
+  }
+  // Default: the Person recording the value (already a family member).
+  return { kind: 'FIXED', provider: actorPersonId };
+}

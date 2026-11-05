@@ -30,7 +30,8 @@ export async function insertConsentRequest(
 
 export async function getConsentRequestForUpdate(tx: Tx, id: string) {
   const { rows } = await tx.query(
-    `SELECT id, status, expires_at, notice_version, notice_hash, guardian_person_id
+    `SELECT id, status, expires_at, notice_version, notice_hash, guardian_person_id,
+            subject_person_id, family_id
      FROM guardian_consent_requests WHERE id = $1 FOR UPDATE`,
     [id]
   );
@@ -60,6 +61,38 @@ export async function getConsentRecordById(tx: Tx, id: string) {
   const { rows } = await tx.query(
     `SELECT id, guardian_person_id, decision, bound_person_id, notice_hash
      FROM consent_records WHERE id = $1 FOR UPDATE`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+// ── Processing gate (read-only, contracts/consent-onboarding.md §7) ──
+
+export async function getComplianceProfileForGate(tx: Tx, personId: string) {
+  const { rows } = await tx.query(
+    `SELECT age_band, minor_mode, verified_source,
+            guardian_person_id, guardian_consent_record_id, guardian_consent_version
+     FROM person_compliance_profiles WHERE person_id = $1`,
+    [personId]
+  );
+  return rows[0] ?? null;
+}
+
+/** Same read, but takes a row lock — used when advancing the consent pointer. */
+export async function getComplianceProfileForUpdate(tx: Tx, personId: string) {
+  const { rows } = await tx.query(
+    `SELECT age_band, minor_mode, verified_source,
+            guardian_person_id, guardian_consent_record_id, guardian_consent_version
+     FROM person_compliance_profiles WHERE person_id = $1 FOR UPDATE`,
+    [personId]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getConsentRecordForGate(tx: Tx, id: string) {
+  const { rows } = await tx.query(
+    `SELECT id, decision, bound_person_id, notice_hash, guardian_person_id
+     FROM consent_records WHERE id = $1`,
     [id]
   );
   return rows[0] ?? null;

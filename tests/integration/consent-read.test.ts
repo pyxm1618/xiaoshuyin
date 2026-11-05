@@ -1,6 +1,6 @@
 /**
  * Consent read integration tests (T060).
- * GET /api/v1/consents (no family → 200 empty list)
+ * GET /api/v1/consents (no family → 200 { items: [] }, frozen OpenAPI shape)
  * GET /api/v1/compliance/profile
  * GET /api/v1/compliance/notices
  */
@@ -63,10 +63,11 @@ describe('Consent Read Integration (T060)', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual([]);
+    // Frozen OpenAPI contract: collection endpoint returns { "items": [...] }
+    expect(res.json()).toEqual({ items: [] });
   });
 
-  it('T060: GET /consents with family returns list', async () => {
+  it('T060: GET /consents with family returns { items: [...] }', async () => {
     const { token } = await setupManagerAndFamily('t060a');
 
     // Create a consent request first
@@ -86,7 +87,9 @@ describe('Consent Read Integration (T060)', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(res.statusCode).toBe(200);
-    expect(Array.isArray(res.json())).toBe(true);
+    const body = res.json();
+    expect(body).toHaveProperty('items');
+    expect(Array.isArray(body.items)).toBe(true);
   });
 
   it('T060: GET /compliance/profile returns profile', async () => {

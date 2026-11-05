@@ -10,10 +10,13 @@ import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
   hashPayload,
+  checkSourceAcceptability,
+  resolveProvenanceProvider,
   insertFamilyMember,
   insertProfileValue,
   insertAuditEvent,
   getCurrentFamily,
+  isFamilyMember,
 } from '@xiaoshuyin/domain';
 import { insertComplianceProfile } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
@@ -51,11 +54,12 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
           createFamily: { newFamilyId, displayName: displayName ?? null },
         },
         async (tx) => {
-          // Validate ageBandSource: creator must use SELF_STATEMENT
-          if (ageBandSource !== 'SELF_STATEMENT') {
-            throw Object.assign(new Error('Creator must use SELF_STATEMENT'), {
-              statusCode: 422,
-              code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
+          // Creator MUST be ADULT + SELF_STATEMENT (CHK023 / T046).
+          const sourceError = checkSourceAcceptability('FAMILY_CREATE', ageBand, ageBandSource);
+          if (sourceError) {
+            throw Object.assign(new Error(sourceError), {
+              statusCode: toHttpError(sourceError).statusCode,
+              code: sourceError,
             });
           }
 
@@ -64,9 +68,31 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
 
           if (profileValues) {
             for (const pv of profileValues) {
+              // Subject of the creator's own values is the creator themself.
+              const resolution = resolveProvenanceProvider({
+                sourceKind: pv.sourceKind,
+                subjectPersonId: personId,
+                actorPersonId: personId,
+                providedByPersonId: pv.providedByPersonId ?? null,
+              });
+              if (resolution.kind === 'INVALID') {
+                throw Object.assign(new Error('Provenance provider not allowed'), {
+                  statusCode: 422,
+                  code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
+                });
+              }
+              if (resolution.kind === 'CANDIDATE') {
+                const inFamily = await isFamilyMember(tx, newFamilyId, resolution.provider);
+                if (!inFamily) {
+                  throw Object.assign(new Error('Provenance provider is not a family member'), {
+                    statusCode: 422,
+                    code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
+                  });
+                }
+              }
               await insertProfileValue(
                 tx, personId, pv.attribute, pv.valueText,
-                pv.sourceKind, personId, accountId
+                pv.sourceKind, resolution.provider, accountId
               );
             }
           }

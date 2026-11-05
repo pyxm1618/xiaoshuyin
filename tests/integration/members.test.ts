@@ -11,6 +11,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
+import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
 
 // Superuser pool for verification queries (bypasses RLS)
 let verifyPool: pg.Pool;
@@ -497,5 +498,85 @@ describe('Members Integration (T047 + T049)', () => {
     });
     expect(res.statusCode).toBe(422);
     expect(res.json().code).toBe('AGE_BAND_SOURCE_NOT_ALLOWED');
+  });
+
+  // ──────────────────────────────────────────────
+  // T057: UNDER_14 provider is pinned to consent.guardian_person_id
+  // ──────────────────────────────────────────────
+
+  async function grantConsentFor(token: string, label: string) {
+    const reqRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/compliance/guardian-consents/requests',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { noticeVersion: 'v1', idempotencyKey: `cr-${label}-${Date.now()}` },
+    });
+    const grantRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/compliance/guardian-consents',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        consentRequestId: reqRes.json().id,
+        accepted: true,
+        noticeVersion: 'v1',
+        noticeHash: getCurrentNoticeHash(),
+        idempotencyKey: `cg-${label}-${Date.now()}`,
+      },
+    });
+    expect(grantRes.statusCode).toBe(201);
+    return grantRes.json();
+  }
+
+  it('T057: UNDER_14 provider != consent.guardian_person_id → 422', async () => {
+    const { token, familyId } = await setupManagerAndFamily('t057a');
+    const consent = await grantConsentFor(token, 't057a');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/families/${familyId}/members`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        ageBand: 'UNDER_14',
+        ageBandSource: 'GUARDIAN_RELAY',
+        guardianConsentId: consent.id,
+        profileValues: [
+          {
+            attribute: 'DISPLAY_NAME',
+            valueText: '小树',
+            sourceKind: 'GUARDIAN_RELAY',
+            providedByPersonId: '00000000-0000-4000-8000-000000000096', // not the guardian
+          },
+        ],
+        idempotencyKey: `mem-t057a-${Date.now()}`,
+      },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('AGE_BAND_SOURCE_NOT_ALLOWED');
+  });
+
+  it('T057: UNDER_14 provider == consent.guardian_person_id → 201', async () => {
+    const { token, personId, familyId } = await setupManagerAndFamily('t057b');
+    const consent = await grantConsentFor(token, 't057b');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/families/${familyId}/members`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        ageBand: 'UNDER_14',
+        ageBandSource: 'GUARDIAN_RELAY',
+        guardianConsentId: consent.id,
+        profileValues: [
+          {
+            attribute: 'DISPLAY_NAME',
+            valueText: '小树',
+            sourceKind: 'GUARDIAN_RELAY',
+            providedByPersonId: personId, // the guardian
+          },
+        ],
+        idempotencyKey: `mem-t057b-${Date.now()}`,
+      },
+    });
+    expect(res.statusCode).toBe(201);
   });
 });

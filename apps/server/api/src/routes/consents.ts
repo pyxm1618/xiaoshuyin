@@ -152,7 +152,8 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
       (tx) => getFamilyIdByPersonId(tx, personId)
     );
     if (!familyId) {
-      return reply.status(200).send([]);
+      // Frozen OpenAPI contract: collection endpoint → { "items": [...] }
+      return reply.status(200).send({ items: [] });
     }
 
     try {
@@ -162,16 +163,16 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
         (tx) => getConsentsByFamily(tx, familyId)
       );
 
-      return reply.status(200).send(
-        result.map((r: any) => ({
+      return reply.status(200).send({
+        items: result.map((r: any) => ({
           id: r.id,
           decision: r.decision,
           version: r.version,
           noticeVersion: r.notice_version,
           decidedAt: r.decided_at,
           boundPersonId: r.bound_person_id,
-        }))
-      );
+        })),
+      });
     } catch (err: any) {
       if (err.statusCode) {
         return reply.status(err.statusCode).send({ code: err.code, message: err.message });

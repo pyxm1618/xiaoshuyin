@@ -11,6 +11,7 @@ import { toHttpError } from '../plugins/error-handler.js';
 import {
   hashPayload,
   checkSourceAcceptability,
+  resolveProvenanceProvider,
   getFamilyById,
   insertFamilyMember,
   insertPerson,
@@ -21,11 +22,95 @@ import {
   isFamilyMember,
 } from '@xiaoshuyin/domain';
 import {
+  assertMinorProcessingAllowed,
+  getCurrentNoticeHash,
   getConsentRecordById,
+  getComplianceProfileForGate,
+  getConsentRecordForGate,
   bindConsentToPerson,
   insertComplianceProfile,
 } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
+
+/**
+ * Resolve + validate the provenance provider for one profile-value write.
+ * Violations → 422 AGE_BAND_SOURCE_NOT_ALLOWED (frozen provenance contract).
+ */
+async function resolveProviderForValue(
+  tx: pg.PoolClient,
+  familyId: string,
+  args: {
+    sourceKind: 'SELF_STATEMENT' | 'GUARDIAN_OBSERVATION' | 'GUARDIAN_RELAY' | 'OTHER_MEMBER_RELAY' | 'MANUAL_DEVICE_DATA' | 'STAFF_RECORD' | 'AI_HYPOTHESIS' | 'SOURCE_CONFIRMED';
+    subjectPersonId: string;
+    actorPersonId: string;
+    providedByPersonId?: string | null;
+    pinnedProvider?: string | null;
+  }
+): Promise<string> {
+  const resolution = resolveProvenanceProvider(args);
+  if (resolution.kind === 'INVALID') {
+    throw Object.assign(new Error('Provenance provider not allowed'), {
+      statusCode: 422, code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
+    });
+  }
+  if (resolution.kind === 'CANDIDATE') {
+    const inFamily = await isFamilyMember(tx, familyId, resolution.provider);
+    if (!inFamily) {
+      throw Object.assign(new Error('Provenance provider is not a family member'), {
+        statusCode: 422, code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
+      });
+    }
+  }
+  return resolution.provider;
+}
+
+/**
+ * Run the frozen processing gate against a Person.
+ * `assertMinorProcessingAllowed` is a pure sync function; the profile/consent
+ * rows are fetched first so the gate itself stays read-only.
+ */
+async function runProcessingGate(
+  tx: pg.PoolClient,
+  personId: string
+): Promise<{ decision: 'ALLOW'; minorMode: boolean } | { decision: 'BLOCK'; reason: string }> {
+  const row = await getComplianceProfileForGate(tx, personId);
+  const profile = row
+    ? {
+        ageBand: row.age_band as 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN',
+        minorMode: row.minor_mode as boolean,
+        guardianPersonId: (row.guardian_person_id ?? null) as string | null,
+        guardianConsentRecordId: (row.guardian_consent_record_id ?? null) as string | null,
+        guardianConsentVersion: (row.guardian_consent_version ?? null) as number | null,
+        verifiedSource: row.verified_source as string,
+      }
+    : null;
+
+  let consent: {
+    id: string;
+    decision: 'GRANTED' | 'REVOKED';
+    boundPersonId: string | null;
+    noticeHash: string;
+    guardianPersonId: string;
+  } | null = null;
+  if (profile?.guardianConsentRecordId) {
+    const c = await getConsentRecordForGate(tx, profile.guardianConsentRecordId);
+    consent = c
+      ? {
+          id: c.id,
+          decision: c.decision,
+          boundPersonId: c.bound_person_id,
+          noticeHash: c.notice_hash,
+          guardianPersonId: c.guardian_person_id,
+        }
+      : null;
+  }
+
+  return assertMinorProcessingAllowed(personId, {
+    getProfile: () => profile,
+    getConsentRecord: () => consent,
+    getCurrentNoticeHash,
+  });
+}
 
 export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
   // POST /api/v1/families/:id/members
@@ -129,12 +214,20 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             await insertComplianceProfile(tx, newPersonId, ageBand, minorMode, ageBandSource);
           }
 
-          // Insert profile values with provenance
+          // Insert profile values with provenance.
+          // UNDER_14: provider is PINNED to consent.guardian_person_id.
           if (profileValues) {
             for (const pv of profileValues) {
+              const provider = await resolveProviderForValue(tx, familyId, {
+                sourceKind: pv.sourceKind,
+                subjectPersonId: newPersonId,
+                actorPersonId: personId,
+                providedByPersonId: pv.providedByPersonId ?? null,
+                pinnedProvider: lockedGuardianPersonId,
+              });
               await insertProfileValue(
                 tx, newPersonId, pv.attribute, pv.valueText,
-                pv.sourceKind, pv.providedByPersonId ?? personId, accountId
+                pv.sourceKind, provider, accountId
               );
             }
           }
@@ -226,9 +319,27 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             throw Object.assign(new Error('Target not in family'), { statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND' });
           }
 
+          // Processing gate (contracts/consent-onboarding.md §7): must run BEFORE
+          // any profile-value write. An UNDER_14 Person whose current consent
+          // pointer is no longer GRANTED must not be processed any further.
+          const gateResult = await runProcessingGate(tx, targetPersonId);
+          if (gateResult.decision === 'BLOCK') {
+            throw Object.assign(new Error(gateResult.reason), {
+              statusCode: toHttpError(gateResult.reason).statusCode,
+              code: gateResult.reason,
+            });
+          }
+
           // Update profile values (append with supersede)
           for (const pv of profileValues) {
             const existing = await getProfileValuesBySource(tx, targetPersonId, pv.attribute, pv.sourceKind);
+
+            const provider = await resolveProviderForValue(tx, familyId, {
+              sourceKind: pv.sourceKind,
+              subjectPersonId: targetPersonId,
+              actorPersonId: personId,
+              providedByPersonId: pv.providedByPersonId ?? null,
+            });
 
             // Supersede old values
             for (const ex of existing) {
@@ -238,7 +349,7 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             // Insert new value
             await insertProfileValue(
               tx, targetPersonId, pv.attribute, pv.valueText,
-              pv.sourceKind, pv.providedByPersonId ?? personId, accountId,
+              pv.sourceKind, provider, accountId,
               existing[0]?.id ?? null
             );
           }

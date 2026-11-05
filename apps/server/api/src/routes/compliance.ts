@@ -18,6 +18,9 @@ import {
   getConsentRequestForUpdate,
   updateConsentRequestGranted,
   insertConsentRecord,
+  getComplianceProfileForUpdate,
+  getConsentRecordForUpdate,
+  updateComplianceProfileConsent,
 } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
 
@@ -178,14 +181,55 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
             });
           }
 
+          // Re-consent vs first onboarding (contracts/consent-onboarding.md §6.1):
+          // v1 GRANTED(A, unbound) → v2 REVOKED(supersedes v1) → v3 GRANTED(B, bound P, supersedes v2)
+          let newVersion = 1;
+          let supersedesId: string | null = null;
+          let boundPersonId: string | null = null;
+          let boundAt: Date | null = null;
+
+          if (request.subject_person_id) {
+            const profile = await getComplianceProfileForUpdate(tx, request.subject_person_id);
+            const existingConsentId = profile?.guardian_consent_record_id ?? null;
+            if (profile && profile.age_band === 'UNDER_14' && existingConsentId) {
+              const current = await getConsentRecordForUpdate(tx, existingConsentId);
+              if (!current) {
+                throw Object.assign(new Error('Consent chain broken'), {
+                  statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
+                });
+              }
+              // The chain can only continue once the current version is REVOKED.
+              if (current.decision !== 'REVOKED') {
+                throw Object.assign(new Error('Current consent is still active'), {
+                  statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
+                });
+              }
+              if (current.guardian_person_id !== personId || profile.guardian_person_id !== personId) {
+                throw Object.assign(new Error('Not the guardian of this subject'), {
+                  statusCode: 403, code: 'NOT_GUARDIAN',
+                });
+              }
+              newVersion = current.version + 1;
+              supersedesId = current.id;
+              boundPersonId = request.subject_person_id;
+              boundAt = new Date();
+            }
+          }
+
           await updateConsentRequestGranted(tx, consentRequestId);
 
           const record = await insertConsentRecord(
             tx, familyId, personId, accountId,
-            'GRANTED', 1, consentRequestId, null, null,
+            'GRANTED', newVersion, consentRequestId, boundPersonId, boundAt,
             noticeVersion, noticeHash, 'v1',
-            JSON.stringify({ accepted: true, timestamp: new Date().toISOString() })
+            JSON.stringify({ accepted: true, timestamp: new Date().toISOString() }),
+            supersedesId
           );
+
+          // Advance the compliance pointer for a re-consent (subject already exists).
+          if (boundPersonId) {
+            await updateComplianceProfileConsent(tx, boundPersonId, record.id, newVersion);
+          }
 
           return {
             status: 201,
