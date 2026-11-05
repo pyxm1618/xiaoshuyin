@@ -34,6 +34,21 @@
 
 **Dependency note**: Slice 3 的实现阶段依赖 Slice 1 已合并的 Identity / Family / Consent / Authorization / RLS 基线，以及 Slice 2 已合并的 Case / Case RLS / Case ownership 基线。当前允许独立完成 Spec / Clarify / Plan / Checklist / Tasks / Analyze；未满足实现门禁前不得进入 Implement。
 
+## Clarifications
+
+### Session 2026-11-05
+
+- **Q1 — message 是否同步自动生成 Statement？ → RESOLVED — NO。** `POST /api/v1/cases/:id/messages` 只原子保存原始 message 与其 provenance / idempotency 结果；一条自然语言 message 可能包含多个陈述、问题、情绪表达或无可提取事实，不能把整段文本机械等同为一个 Statement。Slice 3 提供内部 Evidence 写入合同，使后续 Assessment / bounded extraction 能引用 `source_message_id` 创建一个或多个 Assertion；本 Slice 不接 AI，也不自动创建 FACT/HYPOTHESIS。依据：V1-C02、V1-C24、§7.2、§23、§28.3。
+- **Q2 — Observation 是否并入 assertions？ → RESOLVED — NO。** `observations` 保持独立表 / 独立领域类型；`assertions.kind` 封闭为 `STATEMENT | FACT | HYPOTHESIS`。不新建 `evidence_items` 超级表，也不把 Observation 伪装成 Assertion kind。来源、subject/source/time/validity 等共同维度可以通过共享类型/校验复用，但数据库事实源仍按 §7.2 分表。依据：§5 不变量 3、§7.2。
+- **Q3 — UNKNOWN / NOT_COLLECTED / DECLINED / N/A / CONFLICT 是否做成所有 Evidence 共用单一状态列？ → RESOLVED — NO UNIVERSAL STATE COLUMN。** 这些是真实业务状态，不是一个可随意套到所有实体上的统一 enum。Slice 3 必须保证：不得把未知/拒绝/不适用补成确定值；Assertion 用 confirmation/conflict/validity 语义，Observation/未来 collection result 用适合其数据形态的 typed state。Plan 可以定义最小 typed representation，但不得造一个万能 `epistemic_state` 取代不同实体语义，也不得用“缺行 = UNKNOWN”掩盖本应显式记录的收集结果。依据：V1-C03、§5 不变量 5。
+- **Q4 — FACT 在 Slice 3 是否提供 public 创建/确认入口？ → RESOLVED — NO PUBLIC FACT WRITE PATH。** 本 Slice 必须在 schema/domain 层正确表达 FACT，供未来已批准的确认流程使用；但当前没有被 §28 批准的 generic Fact API，也没有 Problem Formulation / participant confirmation flow，因此不得为“让 FACT 可写”发明 endpoint。AI / extractor 也无权写 confirmed FACT。依据：V1-C24、§23、§28.3。
+- **Q5 — HYPOTHESIS 在 Slice 3 是否由 AI 产生？ → RESOLVED — NO AI RUNTIME。** schema/domain 支持 HYPOTHESIS；测试可通过确定性 fixture / repository contract 验证语义。真实 AI hypothesis 产生留到 Phase 3 AI slice，不为验证表结构提前接模型。依据：§38 Phase 3、V1-C24。
+- **Q6 — message 写入是否需要幂等？ → RESOLVED — YES, REUSE SHARED IDEMPOTENCY。** 用户消息属于会持久化正文的写入；V1-C28 要求重复提交/网络重试不能制造重复业务结果。Plan 必须复用现有 `idempotency_keys` 与 `actor + command_type + idempotency_key` 合同，不新建第二套 dedupe 表/算法。命令类型与 canonical payload 由 Plan 冻结。依据：V1-C28、§8.5、Slice 1/2 shared idempotency contract。
+- **Q7 — 当前谁能调用 message / Evidence 写入？ → RESOLVED — 仅复用现有 Case manager path。** 在 Participant Slice 交付前，本 Slice 不推断孩子/其他成员权限；HTTP message path 只允许当前已合法解析 Family 的 V1 管理主体，并复用 Slice 2 Case authorization / RLS 语义。不得因 guardian relationship、membership 或知道 case_id 自动获得 Case 内容权限。依据：V1-C20/C21、§9–§10、Slice 2 authorization contract。
+- **Q8 — Purpose 是否新增新的 Evidence purpose？ → RESOLVED — NO NEW PURPOSE IN THIS SLICE。** 先复用 Slice 2 已冻结的 Case 管理 purpose 入口；完整 Purpose / Visibility / Participant 矩阵由对应后续 Slice 明确设计。未知 purpose 继续 fail closed。不得为了 Evidence Core 提前扩展权限 DSL。依据：§9–§11、Slice 2 frozen boundary。
+- **Q9 — 更正传播做到哪里？ → RESOLVED — EVIDENCE LAYER ONLY。** 本 Slice 交付 Evidence 的 supersedes / validity / conflict 历史与可追溯性；因为 Problem Formulation / Goal / Plan / Memory 尚不存在，不宣称完成 §7.10 / §29.6 的完整依赖传播。后续对象出现后再接 artifact_dependencies / NEEDS_REVIEW。依据：V1-C22/C23、§7.10、§29.6。
+- **Q10 — Participant 是否因 Slice 1 曾写“defer to Case slice”而必须塞进 Slice 3？ → RESOLVED — NO。** Slice 2 已明确把 Participant 排除，且 V1 产品允许家长独立开始、孩子按需要参与。Slice 3 只建证据地基；Participant 仍作为 Phase 1 独立后续 slice，接入前不得开放孩子端 Evidence 权限。该裁剪不改变 Participant 的 Phase 1 归属。依据：产品需求 §1.2、技术设计 §10、Slice 2 frozen Out of Scope。
+
 ## Scope
 
 ### In Scope
@@ -223,8 +238,4 @@
 
 ### Open Questions
 
-1. `observations` 的最小列级结构如何与 `assertions` 共用 provenance，而又不复制一套会漂移的来源模型？需要在 Plan 阶段由正式文档约束下确定。
-2. UNKNOWN / NOT_COLLECTED / DECLINED / N/A / CONFLICT 的数据库表达是统一 typed state、按 Evidence 类型分别表达，还是其它等价结构？不得在未分析前猜测。
-3. `POST /cases/:id/messages` 是否属于关键命令并强制使用既有 idempotency key；若 §8.5 / 现有 shared contract 已足够，Plan 应复用，不得新建第二套。
-4. message 写入是否必须同步创建 STATEMENT，还是只保存原始 message、由后续确定性/AI extraction path 产生 Assertion？正式文档当前只固定“message 与 assertions 都存在”，需要 Clarify 阶段解析，不得自行假定。
-5. FACT 的合法创建/确认入口应是什么最小 domain contract？必须满足“AI 不能最终确认”，但不得为了本 Slice发明新的 public API。
+- **None blocking after Clarify.** Observation 的列级 schema、message canonical payload、shared idempotency command type 与内部 Evidence repository 形状属于 Plan 技术设计事项；不得改变上述已冻结语义。
