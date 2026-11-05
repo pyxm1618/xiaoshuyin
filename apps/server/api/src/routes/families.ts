@@ -15,9 +15,9 @@ import {
   insertFamilyMember,
   insertProfileValue,
   insertAuditEvent,
-  getCurrentFamily,
   isFamilyMember,
 } from '@xiaoshuyin/domain';
+import { resolveCurrentFamily } from '../family-context.js';
 import { insertComplianceProfile } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
 
@@ -133,16 +133,23 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const family = await withIdentityTransaction(
+    const resolution = await withIdentityTransaction(
       pool,
       { accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => getCurrentFamily(tx, personId)
+      (tx) => resolveCurrentFamily(tx, personId)
     );
 
-    if (!family) {
+    if (resolution.status === 'NONE') {
       const err = toHttpError('CURRENT_FAMILY_NOT_FOUND');
       return reply.status(err.statusCode).send(err);
     }
+
+    if (resolution.status === 'AMBIGUOUS') {
+      const err = toHttpError('CURRENT_FAMILY_AMBIGUOUS');
+      return reply.status(err.statusCode).send(err);
+    }
+
+    const family = resolution.family;
 
     return reply.status(200).send({
       id: family.id,
