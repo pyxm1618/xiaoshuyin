@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import { createAdminPool } from '../setup/db.js';
 
 // Superuser pool for verification queries (bypasses RLS)
 let verifyPool: pg.Pool;
@@ -25,10 +26,7 @@ describe('Members Integration (T047 + T049)', () => {
     app = await buildApp();
     await app.ready();
     // Use postgres superuser for verification (bypass RLS)
-    verifyPool = new pg.Pool({
-      connectionString: 'postgres://postgres:postgres@localhost:5433/xiaoshuyin_test',
-      max: 5,
-    });
+    verifyPool = createAdminPool();
   });
 
   afterAll(async () => {

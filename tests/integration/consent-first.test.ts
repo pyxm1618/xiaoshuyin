@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import { createAdminPool } from '../setup/db.js';
 import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
 
 let verifyPool: pg.Pool;
@@ -23,10 +24,7 @@ describe('Consent-First Integration (T056)', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    verifyPool = new pg.Pool({
-      connectionString: 'postgres://postgres:postgres@localhost:5433/xiaoshuyin_test',
-      max: 5,
-    });
+    verifyPool = createAdminPool();
   });
 
   afterAll(async () => {
