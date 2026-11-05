@@ -38,7 +38,7 @@
 
 ### In Scope
 
-1. **`dialogue_messages` 作为原始 Case 输入载体**：保存用户实际提交的 Case 内原始消息及服务端来源/时间信息，使后续结构化 Evidence 能追溯到原始输入。
+1. **`dialogue_messages` 作为原始 Case 输入载体**：保存用户实际提交的 Case 内原始消息及服务端来源/时间信息，使后续结构化 Evidence 能追溯到原始输入。message 写入只保存 raw message，不自动创建任何 Assertion；同一 message 后续可以对应 0..N 条由已批准业务流程产生的 Assertions。
 2. **`assertions` 作为结构化断言载体**，且 `kind` 只表达已批准的：
    - `STATEMENT`
    - `FACT`
@@ -92,11 +92,11 @@
 
 作为当前 Family 的合法管理主体，我可以在已有 Case 中提交一条问题描述。系统保存原始 message，并明确记录该输入来自当前 actor，而不是直接把文本当作“客观事实”。
 
-**Independent Test**: 向合法 Case 提交 message；断言保存 message 的 Case、actor/source、服务端 recorded_at；不存在自动 FACT 写入。
+**Independent Test**: 向合法 Case 提交 message；断言保存 message 的 Case、actor/source、服务端 recorded_at；自动创建的 Assertion 数量为 0。
 
 ### User Story 2 — 家长关于孩子的陈述保持“家长陈述” (Priority: P1)
 
-家长说“孩子每天玩六小时”时，系统必须先保存为“家长关于孩子的 Statement”及其来源，而不是孩子本人确认的事实。
+家长说“孩子每天玩六小时”时，raw message 先按原始输入保存；当后续已批准的结构化 Evidence 流程形成对应 Assertion 时，该 Assertion 必须保持为“家长关于孩子的 Statement”及其来源，而不是孩子本人确认的事实。
 
 **Independent Test**: 写入一条 subject=child、source=guardian 的 Statement；断言 source_person 与 subject_person 不相同仍合法，且 kind 保持 STATEMENT。
 
@@ -126,7 +126,7 @@
 
 ## Acceptance Scenarios
 
-1. **Given** 当前 Family 的合法 Case，**When** actor 提交 Case message，**Then** 原始 message 被保存且 source/actor/recorded time 可追溯；不自动创建 FACT。
+1. **Given** 当前 Family 的合法 Case，**When** actor 提交 Case message，**Then** 原始 message 被保存且 source/actor/recorded time 可追溯；message write 不自动创建 STATEMENT、FACT、HYPOTHESIS 或任何其它 Assertion。
 2. **Given** guardian 代表孩子描述一个行为，**When** 写入结构化 Statement，**Then** `subject_person_id = child`、`source_person_id = guardian` 可同时存在，且记录仍是 STATEMENT。
 3. **Given** 两个来源对同一事项给出冲突信息，**When** 两条 Evidence 被记录，**Then** 两条都保留并关联冲突，不存在隐式 winner。
 4. **Given** Evidence 状态为 UNKNOWN / NOT_COLLECTED / DECLINED / N/A，**When** 保存和读取，**Then** 状态逐项保持，未被转为 0 / false / 空值的业务确定语义。
@@ -144,6 +144,8 @@
 
 - **source_person 与 subject_person 不同**：合法，且必须保留真实来源；不得自动复制成 subject 本人声明。
 - **source message 不存在**：若该 Evidence 类型声明依赖 message provenance，写入必须失败；不得静默置空后当作完整 provenance。
+- **message 与 Assertion**：message 是 raw source，不因写入动作本身自动变成 STATEMENT / FACT / HYPOTHESIS；后续已批准流程可以从一条 message 形成 0..N 条 Assertions，并保留 provenance。
+- **FACT 当前可达性**：Slice 3 不提供 public、AI/extractor 或任意内部 caller 可直接完成的正式 FACT 创建/确认路径；内部 Evidence 能力不得被当作绕过业务确认语义的万能 FACT 写入口。
 - **occurred_at 未知**：保持 UNKNOWN / 未知表达；不得用 recorded_at 伪装为事件发生时间。
 - **recorded_at**：必须由服务端产生，不接受客户端伪造。
 - **冲突未解决**：保持 CONFLICT / conflict group；不得因为“最新一条”覆盖冲突。
@@ -163,8 +165,8 @@
 - **FR-005** [UPSTREAM: V1-C03] Evidence 收集 MUST 能表达 UNKNOWN / NOT_COLLECTED / DECLINED / N/A / CONFLICT 或等价的批准真实状态，并 MUST NOT 通过默认值制造确定性。
 - **FR-006** [UPSTREAM: V1-C02 / V1-X05 / §32.3] 冲突 Evidence MUST 同时保留来源与内容，并可关联同一 conflict group / 等价结构；系统 MUST NOT 自动选择 winner。
 - **FR-007** [UPSTREAM: V1-C23 / §7.2] Evidence MUST 支持 validity 与 supersedes 历史；新记录 MUST NOT 原地覆盖删除旧记录的来源/时间/历史语义。
-- **FR-008** [UPSTREAM: V1-C24 / §5 / §23] 系统 MUST NOT 因模型、规则置信度、来源数量或最新时间自动把 STATEMENT/HYPOTHESIS 升级成 FACT；任何正式 Fact 写入都必须经过确定性、可审计的合法路径。
-- **FR-009** [UPSTREAM: U05 / §28.3] 系统 MUST 支持批准的 `POST /api/v1/cases/:id/messages` 入口保存当前 Case 原始用户 message；该端点 MUST NOT 自动实现 Digital Use Assessment、Scene routing 或 Problem Formulation。
+- **FR-008** [UPSTREAM: V1-C24 / §5 / §23] 系统 MUST NOT 因模型、规则置信度、来源数量或最新时间自动把 STATEMENT/HYPOTHESIS 升级成 FACT。当前 Slice MUST NOT 提供可达的正式 FACT 创建/确认路径给 public client、AI/extractor 或任意内部 caller；FACT 仍作为已批准领域语义保留。未来 Slice 若引入正式 Fact 写入/确认能力，MUST 经过确定性、可审计且具备合法业务确认语义的路径。
+- **FR-009** [UPSTREAM: U05 / §28.3] 系统 MUST 支持批准的 `POST /api/v1/cases/:id/messages` 入口保存当前 Case 原始用户 message；该端点 MUST NOT 因 message 写入自动创建任何 Assertion，也 MUST NOT 自动实现 Digital Use Assessment、Scene routing 或 Problem Formulation。
 - **FR-010** [UPSTREAM: V1-C21 / §9–§11] Evidence 的写入与读取 MUST 经过服务端 Authorization / Purpose 判断，不得依赖前端隐藏或 Prompt。
 - **FR-011** [UPSTREAM: V1-C21 / §9.1] Evidence family isolation MUST 有 RLS 最后防线；错误 Family 上下文不能读取或写入另一 Family 的 Evidence。
 - **FR-012** [UPSTREAM: V1-C30] Evidence domain contract MUST 保持 Scene-agnostic，不出现 Digital Use 节点编号、手机专属字段或 Scene-specific business rules。
@@ -195,7 +197,7 @@
 - **SC-004**: UNKNOWN / NOT_COLLECTED / DECLINED / N/A / CONFLICT 的 round-trip 测试全部保持原语义，无默认补值。
 - **SC-005**: supersedes / validity 测试证明旧记录仍存在且新旧当前性可区分。
 - **SC-006**: 跨 Family integration + direct DB RLS 测试均证明 Evidence 不泄漏。
-- **SC-007**: message endpoint 只保存原始 message / 最小来源信息，不自动创建 FACT、Formulation、Scene State、Plan 或 AI run。
+- **SC-007**: message endpoint 只保存原始 message / 最小来源信息；每次 message write 自动创建的 Assertion 数量为 0，不自动创建 Formulation、Scene State、Plan 或 AI run。
 - **SC-008**: route/schema audit 证明没有本 Slice 明确排除的 public endpoint / future placeholder。
 - **SC-009**: provenance regression 覆盖 §32.3 当前可落地的 guardian/child conflict、relay、UNKNOWN 与更正最小链路。
 - **SC-010**: Implement Gate 在 Slice 1/2 未满足时返回 BLOCKED；不得绕过依赖提前写实现。
@@ -209,7 +211,8 @@
 | Unknown states | domain + database round-trip | UNKNOWN / NOT_COLLECTED / DECLINED / N/A / CONFLICT 不被 0/false/null 语义替代 |
 | Conflict | integration | 两条来源 + conflict group 均保留；无自动 Fact winner |
 | Validity / supersession | database + domain | supersedes 链可追溯；旧行不删除；当前有效性可判定 |
-| Message endpoint | OpenAPI + integration | 仅 approved POST route；strict request；合法 Case 成功；越权失败；无自动 downstream artifacts |
+| Message endpoint | OpenAPI + integration | 仅 approved POST route；合法 Case message 保存成功；message write 自动 Assertion 数量 = 0；越权失败；无自动 downstream artifacts |
+| FACT reachability | domain + route/capability audit | FACT 语义仍存在；当前 Slice 无 public / AI-extractor / arbitrary internal caller 的正式 FACT 创建或确认路径；直接或隐式升级尝试被拒绝 |
 | Authorization / RLS | integration + database | wrong-family HTTP 无泄漏；app role wrong context SELECT 0 / write denied |
 | No AI fact promotion | domain tests | HYPOTHESIS / STATEMENT 无合法确认依据时无法变 FACT |
 | Scope | route + schema enumeration | 无 assessment / formulation / scene / participant / generic evidence CRUD / AI placeholder |
@@ -222,13 +225,31 @@
 
 - Slice 1 的身份、Consent、Authorization、RLS、provenance 基线与 Slice 2 的 Case / Case ownership 将在本 Slice Implement 前作为已合并依赖存在。
 - 本 Slice 可以在不接 AI、不实现 Digital Use Scene 的情况下，以 domain/database/integration tests 完整验证 Evidence Core。
-- `POST /api/v1/cases/:id/messages` 是本 Slice 唯一需要交付的新增 public route；其它 Evidence 写入先通过内部 domain/repository contract 为后续 Slice 服务。
+- `POST /api/v1/cases/:id/messages` 是本 Slice 唯一需要交付的新增 public route；其它 Evidence 写入先通过内部 domain/repository contract 为后续 Slice 服务，但该内部能力不构成当前 Slice 的正式 FACT 创建/确认入口。
 - Problem Formulation、Assessment、Participant、Safety 与 AI 都会在后续独立 Slice 中接入本 Evidence Core，而不是在本 Slice 预造 placeholder。
 
-### Open Questions
+## Clarifications
 
-1. `observations` 的最小列级结构如何与 `assertions` 共用 provenance，而又不复制一套会漂移的来源模型？需要在 Plan 阶段由正式文档约束下确定。
-2. UNKNOWN / NOT_COLLECTED / DECLINED / N/A / CONFLICT 的数据库表达是统一 typed state、按 Evidence 类型分别表达，还是其它等价结构？不得在未分析前猜测。
-3. `POST /cases/:id/messages` 是否属于关键命令并强制使用既有 idempotency key；若 §8.5 / 现有 shared contract 已足够，Plan 应复用，不得新建第二套。
-4. message 写入是否必须同步创建 STATEMENT，还是只保存原始 message、由后续确定性/AI extraction path 产生 Assertion？正式文档当前只固定“message 与 assertions 都存在”，需要 Clarify 阶段解析，不得自行假定。
-5. FACT 的合法创建/确认入口应是什么最小 domain contract？必须满足“AI 不能最终确认”，但不得为了本 Slice发明新的 public API。
+### Q4 — RESOLVED — Message → Statement
+
+- message write **只保存 raw message**；不得因为写入 `dialogue_messages` 就同步自动创建 STATEMENT、FACT、HYPOTHESIS 或任何其它 Assertion。
+- 一条 message 可以对应 **0..N 条 Assertions**；message 本身不是 Assertion，也永远不能直接当作 Fact。
+- 后续 Assertion 只能由后续已批准、具备明确业务语义的确定性流程 / Assessment / bounded extraction path 产生，并继续保留原 message provenance；本 Slice 不引入 AI extraction。
+- 因此不存在 `message = Statement` 的 1:1 隐式绑定，也不得为了实现方便制造该绑定。
+
+### Q5 — RESOLVED — FACT Write / Confirmation
+
+- 当前 Slice **不允许 public client 直接创建 FACT**。
+- 当前 Slice **不允许 AI / automated extractor 直接创建或确认 FACT**；AI/extractor 至多在未来批准流程中提出候选，不拥有最终事实确认权。
+- 当前 Slice **不允许任意内部 caller 直接把 STATEMENT 改成 FACT**，也不得把内部 Evidence contract 当作绕过业务确认语义的万能 FACT API。
+- FACT 必须继续作为 `assertions.kind` 的正式领域语义存在，为未来有明确授权、确认语义和审计边界的业务流程预留。
+- 当前 Slice **不需要、也不提供**一个真实可达的正式 FACT 创建/确认路径；未来 Participant / Assessment / Confirmation 等正式流程可在后续 Slice 按批准语义接入。
+- 当前 Slice 的验证应同时证明两点：FACT 语义仍被模型/领域合同表达；但当前 public route、AI/extractor 与任意未获正式确认语义的内部 caller 均不能创建或确认 FACT。
+
+**Product / business Clarification blockers: NONE**
+
+### Plan-level Technical Questions
+
+1. **Q1 — PLAN-LEVEL — NOT A CLARIFY BLOCKER**: `observations` 的最小列级结构如何与 `assertions` 共用 provenance，而又不复制一套会漂移的来源模型？
+2. **Q2 — PLAN-LEVEL — NOT A CLARIFY BLOCKER**: UNKNOWN / NOT_COLLECTED / DECLINED / N/A / CONFLICT 的数据库表达是统一 typed state、按 Evidence 类型分别表达，还是其它等价结构？
+3. **Q3 — PLAN-LEVEL — NOT A CLARIFY BLOCKER**: `POST /cases/:id/messages` 的幂等 scope / transport / shared idempotency 实现如何落地？Plan 必须复用既有 contract，不得新建第二套。
