@@ -84,8 +84,9 @@ body = Zod strict 解析后的请求体去掉 idempotencyKey（当前恒为 {}�
 - 使用 Zod strict 解析后的对象：未知字段直接 422，不进入 hash，避免「字段顺序不同 → hash 不同」的误判；`canonicalJson` 已按 key 排序。
 
 **可达性澄清（closeout）**
-本 Slice 的 public `POST /api/v1/cases` 只接受 `{idempotencyKey}`；去掉幂等键后 `body = {}`，`familyId` 又只能由服务端上下文提供。因此 public HTTP API **不存在第二种合法业务 payload**，`MISMATCH → 409` 在 HTTP 层不可达。
+在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，本 Slice 的 public `POST /api/v1/cases` 只接受 `{idempotencyKey}`；去掉幂等键后 `body = {}`，`familyId` 又只能由服务端 current Family 解析唯一确定。因此 public HTTP API 在该 command shape 下**不存在第二种合法业务 payload**，`MISMATCH → 409` 在 HTTP 层不可达。
 该分支仍在 shared idempotency domain / repository contract 层实现并验证；不得通过切换 actor（会改变 scope）、伪造 Family 上下文或新增无业务意义字段制造假场景。
+canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未来若正式语义允许同一 actor 在多个 Family 执行 `CASE_CREATE`，相同 scope key + 不同 `familyId` 会得到不同 hash 并正确进入 mismatch；这不是当前 public HTTP 测试场景，也不得删除 `familyId` hash。
 
 **Alternatives considered**
 - 只 hash `{}`：同 key 可跨 Family 回放，禁止。
@@ -201,11 +202,15 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 
 **Rationale**
 - 直接表达 spec 的「当前 primary 未结 Case」定义（`未结 = status != CLOSED`）。
-- 允许未来 CLOSED 的 primary 保留（历史），不阻止 recurrence / 历史读取。
+- 部分索引只保证“当前未结 primary 不重复”；它不把历史 CLOSED 行解释为 API 的 current primary。
 - `boolean` 与 enum 比较均为 immutable，可作为 partial index 谓词。
 
+**当前 primary 语义（CHK034，冻结）**
+`is_primary = true` 表示“当前 primary assignment”，不是“历史上曾经当过 primary”。本 Slice 所有 Case 只能 `OPEN`，因此最多一个 true；`GET /api/v1/cases` 中 `primary = true` 唯一表示当前 primary。
+未来 `CloseCase` / `SwitchPrimaryCase` / recurrence / replacement 若使某 Case 不再是当前 primary，对应未来 Slice 必须在自己的事务合同内清除或转移旧 primary 的 `is_primary`；历史事实由 `case_events` / 历史记录表达，不靠长期保留 `is_primary = true`。本 Slice 不实现转换，只记录未来合同。
+
 **Alternatives considered**
-- `UNIQUE (family_id) WHERE is_primary`：会禁止未来 CLOSED 的 primary 与新的 primary 并存，与「历史保留」冲突。
+- `UNIQUE (family_id) WHERE is_primary`：会把“历史 CLOSED 行可保留 is_primary”变成硬冲突；本 Slice 的 API 语义要求未来转换清除旧 primary，partial predicate 仍是更稳妥的数据库安全网。
 - 触发器维护单 primary：触发器更难审计，且并发下仍需锁；索引更简单可靠。
 
 ---
@@ -219,6 +224,7 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 - 保证事件的 `family_id` 与 Case 归属一致，即使应用层写错参数也无法跨 Family 挂事件。
 - 纯声明式约束，无触发器、无应用层约定。
 - 与 RLS 形成两层：RLS 限制「只能看到 / 写当前 Family」，复合 FK 限制「事件必须与 Case 同 Family」。
+- migration 必须先建立 `cases` 的 `UNIQUE (id, family_id)`，再创建该复合 FK；否则 PostgreSQL 找不到被引用唯一键。
 
 **Alternatives considered**
 - 只靠 RLS：应用层若传错 `family_id` 但 Case 属于另一 Family，RLS 会在当前 Family 上下文下拒绝 Case 查询，但事件仍可能被写入错误 Family；复合 FK 更硬。
@@ -229,15 +235,18 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 
 ---
 
-## R-12 迁移编号与既有 CHECK 扩展
+## R-12 迁移编号、顺序与既有 CHECK 扩展
 
 **Decision**
 - 不修改 `001_initial_schema.sql`。
 - 新增 `db/migrations/<next-after-slice1-final>_case_core.sql`，序号在 Implement Gate 后按 Slice 1 final 实际 migration 解析。
+- migration 内严格按「enum → `cases` → `cases` 自身约束（含 `UNIQUE (id, family_id)`）→ `cases` 索引 → `case_events` + 复合 FK / metadata CHECK → RLS / policy → GRANT → 既有 CHECK 扩展」顺序执行。
 - 对 `business_audit_events.event_type` / `resource_type`、`idempotency_keys.command_type` 使用 `DROP CONSTRAINT` + `ADD CONSTRAINT` 扩展白名单；实现前读取 `pg_constraint` 确认真实约束名。
 
 **Rationale**
 - Slice 1 尚未合并，migration 序号可能变化；Plan 写死序号会与 Slice 1 final 实际编号脱节。
+- 复合 FK `case_events (case_id, family_id) → cases (id, family_id)` 要求被引用唯一键 `cases UNIQUE (id, family_id)` **先存在**；若先建 `case_events`，migration 会失败。
+- `case_events.metadata` 的 `case_events_metadata_shape_check` 必须与建表同批建立；`metadata` 不设默认值，避免空对象通过。
 - Slice 1 的 CHECK 是内联匿名约束，PostgreSQL 默认命名为 `<table>_<column>_check`，但若 Slice 1 final 调整列定义或重复约束，名称可能不同；因此必须现场确认。
 - reviewed migration 是唯一变更路径；`drizzle-kit push` 禁止。
 
@@ -319,5 +328,9 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 ## 结论
 
 Phase 0 无未解决问题。所有决策均可追溯到 `Docs/**` 或 Slice 1 冻结契约；没有新增产品语义，没有引入未批准依赖。
-closeout 仅澄清了「`CASE_CREATE` 的 HTTP different-payload mismatch 在当前命令形状下不可达」，并在 shared idempotency contract 层保留 §8.5 的 MISMATCH→409 合同；这属于验证可达性收口，不取消 §8.5。
+Slice 2 closeout 已收口以下技术项：
+- CHK043：`CASE_CREATE` 的 HTTP different-payload mismatch 在「同一 actor + 同一 current Family canonical context」下不可达；shared idempotency contract 保留 §8.5 MISMATCH→409，`familyId` hash 不删除。
+- CHK034：`is_primary = true` 冻结为“当前 primary assignment”，未来 Close / switch-primary 必须在自身事务内清除 / 转移；历史由 `case_events` 表达。
+- CHK068：`case_events.metadata` 由 `case_events_metadata_shape_check` 强制 key 集合恰为 `{primary, version}`，无默认值。
+- CHK084：migration 顺序固定为 enum → `cases` → `cases` 自身约束（含 `UNIQUE (id, family_id)`）→ `cases` 索引 → `case_events` 复合 FK / metadata CHECK → RLS / policy → GRANT → 既有 CHECK 扩展。
 进入 Phase 1 的产物：`data-model.md`、`contracts/**`、`quickstart.md`。

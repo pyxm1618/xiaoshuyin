@@ -87,7 +87,9 @@ bunx vitest run tests/db/cases-primary-concurrency.test.ts
 | `cases` 列集合 | 恰为 `id, family_id, created_by_person_id, status, phase, is_primary, version, created_at, updated_at`；不含 title / summary / description / problem_description |
 | `cases_one_primary_open_per_family` | partial unique index 存在，谓词为 `is_primary AND status <> 'CLOSED'` |
 | `case_events` 列集合 | 恰为 `id, family_id, case_id, actor_account_id, event_type, metadata, occurred_at` |
+| `cases` 唯一键 | `UNIQUE (id, family_id)` 存在（复合 FK 的被引用唯一键，必须先于 `case_events` 创建） |
 | `case_events` 复合 FK | 指向 `cases (id, family_id)` |
+| `case_events.metadata` CHECK | `case_events_metadata_shape_check` 存在；key 集合恰为 `{primary, version}`；额外 key / 正文 / PII 写入被拒绝 |
 | `case_events` 权限 | `xiaoshuyin_app` 只有 `SELECT, INSERT`（无 UPDATE / DELETE） |
 | `business_audit_events` CHECK | 含 `CASE_CREATED` / `CASE` |
 | `idempotency_keys` CHECK | 含 `CASE_CREATE` |
@@ -215,7 +217,7 @@ curl -s -o /tmp/bad.json -w '%{http_code}\n' \
   -d '{"idempotencyKey":"case-create-bad-1","status":"CLOSED","primary":true}'
 ```
 
-期望：`422`，`code = VALIDATION_ERROR`；无 Case 写入。
+期望：`422`，`code = VALIDATION_ERROR`；**零业务写入**：`cases`、`case_events`、`business_audit_events`、`idempotency_keys` 均无新增，不得忽略非法字段后用服务端值创建。
 
 ### 4.2 详情反枚举（跨 Family / 不存在）
 
@@ -236,29 +238,45 @@ curl -s -o /tmp/notfound2.json -w '%{http_code}\n' \
 
 两者逐字节一致；不含 Family ID、status、phase、primary、creator 或任何 Case 字段。
 
-### 4.3 非管理主体
+### 4.3 非管理主体（场景 9A / 9B 分开验证）
 
-用 Family A 的普通成员 / 非管理主体 guardian 身份：
+#### 4.3.1 场景 9A — guardian + Family 成员，但不是管理主体
+
+actor 必须是目标 Family 的合法 `family_member`，current Family 已成功解析为该 Family；同时具备 guardian relationship，但不是 `families.created_by_person_id`。
+
+用该身份：
 
 ```bash
 # 创建
 curl -s -o /tmp/deny-create.json -w '%{http_code}\n' \
   -X POST localhost:8787/api/v1/cases \
-  -H "authorization: Bearer $MEMBER_TOKEN" \
+  -H "authorization: Bearer $GUARDIAN_MEMBER_TOKEN" \
   -H 'content-type: application/json' -d '{"idempotencyKey":"case-create-deny-1"}'
 
 # 列表
 curl -s -o /tmp/deny-list.json -w '%{http_code}\n' \
-  localhost:8787/api/v1/cases -H "authorization: Bearer $MEMBER_TOKEN"
+  localhost:8787/api/v1/cases -H "authorization: Bearer $GUARDIAN_MEMBER_TOKEN"
 
 # 详情
 curl -s -o /tmp/deny-detail.json -w '%{http_code}\n' \
-  localhost:8787/api/v1/cases/$CASE_ID -H "authorization: Bearer $MEMBER_TOKEN"
+  localhost:8787/api/v1/cases/$CASE_ID -H "authorization: Bearer $GUARDIAN_MEMBER_TOKEN"
 ```
 
 期望：
-- 创建 / 列表：`403` + `CASE_ACCESS_DENIED`，无 Case 数据；
+- 创建 / 列表：`403` + `CASE_ACCESS_DENIED`，无 Case 数据、无 Case 写入；
 - 详情：`404` + `CASE_NOT_FOUND`，无 Case 字段。
+
+guardian relationship 不因叠加 Family membership 而获得 Case 管理权。
+
+#### 4.3.2 场景 9B — guardian 但不是目标 Family 成员
+
+actor 仅有 guardian relationship，不是目标 Family 的 `family_member`。此时 current Family 未合法解析为目标 Family，**不得**调用 Case 层 403 / 404 断言。
+
+期望：
+- 沿用 Slice 1 Family 授权 / current-family 语义（如 `CURRENT_FAMILY_NOT_FOUND`）；
+- 响应不含任何 Case 字段；
+- 不出现 `CASE_ACCESS_DENIED` / `CASE_NOT_FOUND` 映射；
+- 该场景不用于验证 Case manager 权限，也不得新增第二套 Family 错误码。
 
 普通 membership 与 guardian relationship 均不授予 Case 访问。
 
@@ -281,8 +299,13 @@ curl -s -X POST localhost:8787/api/v1/cases \
 ### 5.2 同 key 不同 payload：shared contract，非 HTTP
 
 本 Slice 的 `POST /api/v1/cases` 唯一合法业务 body 是 `{"idempotencyKey":"..."}`；
-去掉幂等键后 `body = {}`，因此 **不存在第二种合法业务 payload**，
-public HTTP API 无法真实触发 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`。
+在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，
+去掉幂等键后 `body = {}`，`familyId` 又由服务端 current Family 唯一解析，因此
+**不存在第二种合法业务 payload**，public HTTP API 无法真实触发 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`。
+
+canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。
+未来若正式语义允许同一 actor 在多个 Family 执行 `CASE_CREATE`，相同 scope key + 不同 `familyId`
+会得到不同 hash 并正确进入 mismatch；这不是当前 public HTTP 测试场景，不得删除 `familyId` hash。
 
 **禁止的测试写法**：
 - 用另一个 Family 的 manager token 复用相同 key 制造 “mismatch”——actor 变化导致 scope 变化，这不是 payload mismatch；
@@ -361,6 +384,7 @@ bunx vitest run tests/db tests/integration
 | 幂等（HTTP 可达） | `cases-idempotency` 的 replay / 并发同 key 行数前后对比 |
 | 幂等 mismatch（shared contract） | domain / repository contract 用例：same scope + different `request_hash` → MISMATCH → 409 映射；**不声称 HTTP 可达** |
 | 事件 / 审计 | `case_events` / `business_audit_events` 按 `case_id` / `resource_id` 的计数 |
+| metadata 形状 | `case_events.metadata` key 集合恰为 `{primary, version}`；无 title / description / 正文 / 用户输入 / PII；额外 key 的直连 DB 写入被 `case_events_metadata_shape_check` 拒绝（23514） |
 | 读不写审计 | 第 7 节前后计数 |
 | Scope | 表 / 路由 / 列 introspection 输出 |
 | CI | `.github/workflows/ci.yml` 全 job green |

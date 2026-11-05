@@ -40,8 +40,10 @@
 | `family_id` | 当前目标 Family（服务端上下文，客户端不可指定） |
 | `case_id` | 新建 Case 的 id |
 | `actor_account_id` | 已验证 actor 的 account |
-| `metadata` | `{ "primary": <boolean>, "version": <integer> }` |
+| `metadata` | `{ "primary": <boolean>, "version": <integer> }`（DB CHECK 强制 key 集合恰为 `primary` / `version`） |
 | `occurred_at` | 服务端事务时间 |
+
+**`metadata` 形状不变量**：`case_events_metadata_shape_check` 要求 JSON object 且 key 集合**恰好**为 `{primary, version}`；`primary` 为 boolean，`version` 为 integer-compatible number 且 `>= 1`；`metadata` 无默认值。任何额外 key、正文、用户输入或 PII 都会在数据库层被拒绝，而不是只靠应用约定。
 
 ### 2.2 禁止内容
 
@@ -105,7 +107,7 @@
 | 并发两个不同 key | 各 +1 行；对应两个不同 Case | 各 +1 行 |
 | GET / list / detail | 不增加（D7） | 不增加（D7） |
 
-**证据要求**：读取前后对两表执行 `count(*)`，断言行数不变；创建后按 `resource_id` / `case_id` 断言各恰好 1 行。
+**证据要求**：读取前后对两表执行 `count(*)`，断言行数不变；创建后按 `resource_id` / `case_id` 断言各恰好 1 行；并断言 `case_events.metadata` key 集合恰为 `{primary, version}`，直接 DB 写入额外 key / 正文 / PII 被 `case_events_metadata_shape_check` 拒绝。
 
 ---
 

@@ -74,6 +74,8 @@
 | actor 是否是 Family 成员 | `set_family_context` 的 membership 校验（Slice 1） |
 | ID 存在是否等于有权访问 | 不等于；先授权，再查询；查询返回 0 行即 404 |
 
+**前提顺序（场景 9A / 9B）**：只有当 current Family 已合法解析（actor 是该 Family 的 `family_member`）时，才进入 Case 授权分支。actor 仅有 guardian relationship 但不是目标 Family 成员时，Family 上下文未合法成立，必须在解析阶段沿用 Slice 1 Family 语义；不得进入 `authorize()` 的 Case 分支，也不得映射为 `CASE_ACCESS_DENIED` / `CASE_NOT_FOUND`。
+
 ---
 
 ## 4. RLS 契约
@@ -142,7 +144,9 @@ request_hash = sha256(canonicalJson({
 | `command_type` | 否 | 已在 scope 中 |
 | 请求体其他字段 | 是（当前恒为空 `{}`） | 保持「同 key 不同 payload → 409」语义 |
 
-**可达性（冻结澄清）**：当前 public `POST /api/v1/cases` 唯一合法业务 body 是 `{idempotencyKey}`；去掉幂等键后 `body = {}`，`familyId` 由服务端上下文提供。因此 HTTP 层**不存在第二种合法 business payload**，mismatch 分支在 HTTP 层不可达；该分支在 shared idempotency domain / repository contract 层验证。
+**可达性（冻结澄清）**：在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，public `POST /api/v1/cases` 唯一合法业务 body 是 `{idempotencyKey}`；去掉幂等键后 `body = {}`，`familyId` 由服务端 current Family 解析唯一确定。因此当前 public HTTP command shape **不存在第二种合法 business payload**，mismatch 分支在 HTTP 层不可达；该分支在 shared idempotency domain / repository contract 层验证。
+
+canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未来若正式语义允许同一 actor 在多个 Family 执行 `CASE_CREATE`，相同 scope key + 不同 `familyId` 会得到不同 hash 并正确进入 mismatch；这不是当前 public HTTP 测试场景，不得删除 `familyId` hash。
 
 ### 5.3 决策表
 
@@ -202,15 +206,16 @@ request_hash = sha256(canonicalJson({
 |---|---:|---|---|
 | `UNAUTHENTICATED` | 401 | 缺少 / 无效 token | `{code,message}` |
 | `CASE_ACCESS_DENIED` | 403 | Family 已解析，actor 非管理主体（list / create） | 无 Case 数据 |
-| `CURRENT_FAMILY_NOT_FOUND` | 404 | 当前 Family 未解析（Slice 1 语义） | 无 Case 数据 |
+| `CURRENT_FAMILY_NOT_FOUND` | 404 | 当前 Family 未解析（Slice 1 语义；包括 actor 不是目标 Family 成员 / 仅有 guardian relationship） | 无 Case 数据 |
 | `CASE_NOT_FOUND` | 404 | 详情：不存在 / 跨 Family / 无资格（Family 已解析） | 逐字节一致，无 Case 字段 |
 | `IDEMPOTENCY_PAYLOAD_MISMATCH` | 409 | 同 key 不同 hash | 不改原 Case |
-| `VALIDATION_ERROR` | 422 | strict schema 失败（含越权字段） | 无业务写入 |
+| `VALIDATION_ERROR` | 422 | strict schema 失败（含越权字段） | **零业务写入**：Case / `case_event` / `business_audit_event` / 新幂等结果均无新增 |
 | `INTERNAL_ERROR` | 500 | 未预期错误 / 不变量破坏 | 不伪装成功 |
 
 **禁止**
 - 用 403 代替详情的 404（违反 D6）。
 - 用 404 代替 list / create 的 403（违反 D6 / FR-024）。
+- 把 guardian 但不是目标 Family 成员的场景转换为 `CASE_ACCESS_DENIED` / `CASE_NOT_FOUND`；该场景必须沿用 Slice 1 Family 语义，也不得用于验证 Case manager 权限。
 - 用 200 / 201 掩盖失败。
 - 在 404 / 403 响应中放入 Case 字段、Family 字段、`details` 或存在性提示。
 

@@ -238,11 +238,29 @@ db/migrations/<next-after-slice1>_case_core.sql ← 新增 reviewed migration
 | case ref | `case_id` | `uuid NOT NULL` |
 | actor | `actor_account_id` | `uuid NOT NULL FK accounts(id) ON DELETE RESTRICT` |
 | event type | `event_type` | `text NOT NULL CHECK (event_type IN ('CASE_CREATED'))` |
-| metadata | `metadata` | `jsonb NOT NULL DEFAULT '{}'`；只放 `{primary, version}` |
+| metadata | `metadata` | `jsonb NOT NULL`；`CHECK` 要求 JSON object 且 key 恰为 `{primary, version}`；无默认值，必须显式写入 |
 | occurred | `occurred_at` | `timestamptz NOT NULL DEFAULT now()` |
 
 **Composite FK**：`(case_id, family_id) REFERENCES cases(id, family_id)`，要求 `cases` 有 `UNIQUE (id, family_id)`。
 这条数据库不变量保证事件不可能挂到别的 Family 的 Case 上——即使应用层写错 `family_id`，FK 也会拒绝。
+
+**`metadata` 形状约束（可执行，不是应用层约定）**：reviewed migration 必须为 `case_events.metadata` 建立约束 `case_events_metadata_shape_check`，语义等价于：
+
+```text
+jsonb_typeof(metadata) = 'object'
+AND metadata ? 'primary'
+AND metadata ? 'version'
+AND metadata - 'primary' - 'version' = '{}'::jsonb
+AND jsonb_typeof(metadata -> 'primary') = 'boolean'
+AND jsonb_typeof(metadata -> 'version') = 'number'
+AND (metadata ->> 'version')::numeric = trunc((metadata ->> 'version')::numeric)
+AND (metadata ->> 'version')::numeric >= 1
+```
+
+- 前四项保证 key 集合**恰好**为 `{primary, version}`，拒绝任何额外 key（包括 title / description / 正文 / 用户输入 / PII 字段）。
+- `primary` 必须是 boolean；`version` 必须是 integer-compatible number 且 `>= 1`。
+- `metadata` **不设默认值**：缺 key、空对象或多余 key 都直接违反 CHECK，创建代码必须显式写入两个字段。
+- 不引入通用 JSON Schema engine、不建 metadata framework；只使用 PostgreSQL 原生 CHECK。
 
 **append-only**：`xiaoshuyin_app` 对 `case_events` 只授予 `SELECT, INSERT`，不授予 `UPDATE, DELETE`。
 不使用 trigger 兜底，因为最小权限已从权限层阻断；migrator 属于 DDL 角色，不属于 runtime。
@@ -262,6 +280,15 @@ db/migrations/<next-after-slice1>_case_core.sql ← 新增 reviewed migration
 > 同一 Family 最多一个 `is_primary = true AND status <> 'CLOSED'` 的 Case。
 
 并满足：两个合法、不同幂等键的并发 create 请求，在「Family 当前无 Case」时**都应确定性完成**：一个成为 primary，一个成为 candidate；不得失败、不得两个 primary。
+
+#### 3.1.1 当前 primary 与历史 primary（冻结语义）
+
+> `is_primary = true` 表示“当前 primary assignment”，不是“历史上曾经当过 primary”。
+
+- 本 Slice 所有 Case 只能 `OPEN`，因此一个 Family 最多一个 `is_primary = true`；`GET /api/v1/cases` 中 `primary = true` **唯一表示当前 primary**。
+- 未来 `CloseCase` / `SwitchPrimaryCase` / recurrence / replacement 若使某 Case 不再是当前 primary，对应未来 Slice 必须在**自己的事务合同**内清除或转移旧 primary 的 `is_primary`；历史事实由领域事件 / 历史记录表达，不靠长期保留 `is_primary = true`。
+- 本 Slice 不实现任何转换、不新增 transition、不改变 primary 字段语义；此处只记录未来合同，防止把 partial unique index 的历史兼容能力误读为 API 的 `primary` 语义。
+- 未来 Slice 必须先更新本冻结语义与 Contract，再实现清除 / 转移；不得在完成转换后仍让历史 Case 以 `primary = true` 对外暴露。
 
 #### 3.2 三层机制
 
@@ -285,7 +312,7 @@ db/migrations/<next-after-slice1>_case_core.sql ← 新增 reviewed migration
 |---|---|
 | 同 Family，两个不同 key，均合法 | 一个 201 primary=true；一个 201 primary=false；均落库、均有 event/audit |
 | 同 Family，同 key，相同 payload | 一个业务结果；另一个 REPLAY 原响应；不新增 Case/event/audit |
-| 同 Family，同 key，不同 payload | 仅 shared contract 语义：一个成功；另一个 `MISMATCH → 409`。当前 CASE_CREATE 请求体无第二种合法 payload，该行不由 HTTP 触发 |
+| 同 Family，同 key，不同 payload | 仅 shared contract 语义：一个成功；另一个 `MISMATCH → 409`。在**同一 actor + 同一 current Family canonical context** 下，当前 CASE_CREATE 请求体无第二种合法 payload，该行不由 public HTTP 触发 |
 | Family 已有 primary 未结 Case | 新 Case 一律 candidate |
 | 数据库索引冲突（异常） | 回滚 + `500 INTERNAL_ERROR`；不产生部分写入 |
 
@@ -385,7 +412,15 @@ request_hash = sha256(canonicalJson({
 | 相同 key + 不同 hash | `MISMATCH` → `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不修改原 Case、不写任何新行 |
 | 不同 key | 各自独立执行业务（受 primary 串行化约束） |
 
-**Mismatch 可达性（当前命令形状，冻结澄清）**：`POST /api/v1/cases` 的唯一合法业务 body 是 `{idempotencyKey}`；去掉幂等键后 `body = {}`。因此本 Slice 的 **public HTTP API 不存在第二种合法业务 payload**，`409 IDEMPOTENCY_PAYLOAD_MISMATCH` 在 HTTP 层不可达。该分支仍必须在 **shared idempotency domain / repository contract 层**实现并验证（same scope key + different `request_hash` → `MISMATCH` → 409 映射），但**不得**通过切换 actor（会改变 scope）、伪造 Family 上下文或新增无业务意义字段制造假场景；也不得为了测试可达而扩大 public 请求体。
+**Mismatch 可达性（当前命令形状，冻结澄清）**：在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，`POST /api/v1/cases` 除 `idempotencyKey` 外无合法可变业务 payload；去掉幂等键后 `body = {}`，canonical context 中的 `familyId` 又由服务端当前 Family 解析唯一确定。因此本 Slice 的 **public HTTP API 不存在第二种合法业务 payload**，`409 IDEMPOTENCY_PAYLOAD_MISMATCH` 在当前 public HTTP command shape 中不可达。该分支仍必须在 **shared idempotency domain / repository contract 层**实现并验证（same scope key + different `request_hash` → `MISMATCH` → 409 映射），但**不得**通过切换 actor（会改变 scope）、伪造 Family 上下文或新增无业务意义字段制造假场景；也不得为了测试可达而扩大 public 请求体。
+
+**canonical hash 仍完整保留**：
+
+```text
+{ familyId: verifiedCurrentFamilyId, body: {} }
+```
+
+未来若正式语义允许同一 actor 在多个 Family 执行 `CASE_CREATE`（例如显式 Family context），相同 scope key + 不同 `familyId` 会得到不同 hash 并**正确进入 MISMATCH**。这不是当前 public HTTP 测试场景，也不得删除 `familyId` hash；它是防止同一 key 跨 Family 回放的必需组成（D-5.2 / R-4）。
 
 **占位模式**：`INSERT ... ON CONFLICT DO NOTHING RETURNING id` 先占位（`response_status=0`、`response_body='{}'`，同事务内回填）。
 并发同 key 时，第二个事务在唯一索引冲突上等待第一个提交/回滚：提交 → 第二个读到已提交行 → REPLAY；回滚 → 第二个插入成功并执行。占位值在事务外不可见，不会泄露。
@@ -436,13 +471,15 @@ request_hash = sha256(canonicalJson({
 
 | 情形 | 端点 | 响应 |
 |---|---|---|
-| 非管理主体（Family 已解析） | `POST /cases`、`GET /cases` | `403 {"code":"CASE_ACCESS_DENIED","message":"Case access denied"}` |
-| 非管理主体（Family 已解析） | `GET /cases/:id` | `404 {"code":"CASE_NOT_FOUND","message":"Case not found"}` |
+| 非管理主体（Family 已解析，含 guardian 同时是该 Family 成员） | `POST /cases`、`GET /cases` | `403 {"code":"CASE_ACCESS_DENIED","message":"Case access denied"}` |
+| 非管理主体（Family 已解析，含 guardian 同时是该 Family 成员） | `GET /cases/:id` | `404 {"code":"CASE_NOT_FOUND","message":"Case not found"}`；不泄露 Case 是否存在 |
 | Case 不存在 / 跨 Family / 无访问资格（Family 已解析） | `GET /cases/:id` | 同上，**响应体逐字节一致**，无 `details` |
 | Actor 尚无任何 Family | 三个端点 | 沿用 Slice 1 `404 CURRENT_FAMILY_NOT_FOUND`，不带 Case 字段 |
-| 目标 Family 未合法解析 | 三个端点 | 沿用 Slice 1 Family 授权失败语义，不定义第二套 Family 错误码 |
+| Actor 不是目标 Family 成员（包括仅有 guardian relationship） | 三个端点 | current Family 无法合法解析为目标 Family；沿用 Slice 1 Family 授权 / current-family 失败语义，不返回 Case 数据，**不得**转换为 `CASE_ACCESS_DENIED` / `CASE_NOT_FOUND`，不得定义第二套 Family 错误码 |
+| 目标 Family 未合法解析（其它 Slice 1 失败情形） | 三个端点 | 沿用 Slice 1 Family 授权失败语义，不定义第二套 Family 错误码 |
 
 说明：详情端点对「Family 已解析但非管理主体」选择 404 而非 403，是 D6 的明确要求；该 404 不削弱 RLS（RLS 仍零行 / 拒写）。
+补充（场景 9A / 9B）：guardian 同时是目标 Family 成员时走上述 403 / 404 Case 语义；guardian 但不是目标 Family 成员时，current Family 未合法解析，必须在进入 Case 授权分支前沿用 Slice 1 Family 语义，不得转换为 Case 层 403 / 404，也不得用于验证 Case manager 权限。
 
 ---
 
@@ -488,9 +525,9 @@ request_hash = sha256(canonicalJson({
 
 - 认证：Bearer。
 - 请求体（strict，`additionalProperties: false`）：`{ "idempotencyKey": string(8..128) }`。
-- 客户端提交 `familyId` / `createdByPersonId` / `status` / `phase` / `primary` / `version` / `title` / `description` 等任何字段 → `422 VALIDATION_ERROR`（显式拒绝，不静默忽略）。
+- 客户端提交 `familyId` / `createdByPersonId` / `status` / `phase` / `primary` / `version` / `title` / `description` 等任何未声明字段 → `422 VALIDATION_ERROR`（显式拒绝，不静默忽略），且**零业务写入**：不创建 Case、不写 `case_event`、不写 `business_audit_event`、不留新的业务幂等结果。
 - 成功：`201` + `CaseResponse`（identity context 的 Case 容器）。
-- 错误：`401 UNAUTHENTICATED`、`403 CASE_ACCESS_DENIED`、`404 CURRENT_FAMILY_NOT_FOUND`、`409 IDEMPOTENCY_PAYLOAD_MISMATCH`（合同保留；当前请求体形状下 HTTP 层不可达，见 D-5.3）、`422 VALIDATION_ERROR`、`500 INTERNAL_ERROR`。
+- 错误：`401 UNAUTHENTICATED`、`403 CASE_ACCESS_DENIED`、`404 CURRENT_FAMILY_NOT_FOUND`、`409 IDEMPOTENCY_PAYLOAD_MISMATCH`（合同保留；在同一 actor + 同一 current Family canonical context 的当前请求体形状下 public HTTP 层不可达，见 D-5.3）、`422 VALIDATION_ERROR`、`500 INTERNAL_ERROR`。
 
 #### 9.2 `GET /api/v1/cases`
 
@@ -544,7 +581,8 @@ request_hash = sha256(canonicalJson({
 | 变更方式 | 只能通过 reviewed migration file；禁止 `drizzle-kit push` |
 | 执行角色 | `xiaoshuyin_migrator`（table owner）；runtime 仍为 `xiaoshuyin_app` |
 | 既有 CHECK 扩展 | 对 `business_audit_events.event_type` / `resource_type`、`idempotency_keys.command_type` 采用 `DROP CONSTRAINT` + `ADD CONSTRAINT` 的 reviewed SQL；实现前读取 `pg_constraint` 确认真实约束名（内联匿名 CHECK 的默认名可能随 Slice 1 final 变化） |
-| migration 内容顺序 | 1) 新增 enum → 2) `cases` → 3) `case_events` + 复合 FK → 4) 索引（含 partial unique）→ 5) ENABLE/FORCE RLS + policies → 6) GRANT → 7) 既有表 CHECK 扩展 |
+| migration 内容顺序 | 严格按下列可执行顺序；**被引用的唯一键必须先于复合 FK 存在**：<br>1) `CREATE TYPE case_status` / `case_phase`<br>2) `CREATE TABLE cases`<br>3) `cases` 自身约束：PK、`UNIQUE (id, family_id)`、`version >= 1`、family / creator FK<br>4) `cases` 索引：`cases_one_primary_open_per_family` partial unique、列表 / 状态索引<br>5) `CREATE TABLE case_events`：family FK、actor FK、复合 FK `(case_id, family_id) REFERENCES cases(id, family_id)`、`event_type` CHECK<br>6) `case_events` 索引 / `metadata` shape CHECK<br>7) `cases` / `case_events` ENABLE + FORCE RLS<br>8) policies（`cases` / `case_events`）<br>9) GRANT（表 `SELECT, INSERT`；enum `USAGE`）<br>10) 扩展 `business_audit_events` / `idempotency_keys` 既有 CHECK 白名单 |
+| migration 顺序理由 | `case_events` 的复合 FK 需要 `cases` 的 `UNIQUE (id, family_id)` 作为被引用唯一键；若先建 `case_events` 再建该唯一约束，按字面执行会失败。因此 migration 必须把 `cases` 自身约束（含 `UNIQUE (id, family_id)`）放在第 3 步、`case_events` 放在第 5 步。RLS / policy 在两张表都建好后再启用，避免中间态；既有 CHECK 扩展仍最后执行。 |
 | 回滚 | 本 Slice 无数据回填；回滚 = 删除新表 / 新 enum / 新 policy / 新索引 + 还原两个 CHECK 白名单（实现阶段提供 down 步骤说明，不自动执行） |
 
 **为什么 CHECK 扩展放在最后**：新表与 RLS 先就位，避免在扩展白名单与建表之间出现「可写入但无表」或「有表但不可写」的中间态；整个 migration 在一个事务中执行（`db-migrate.mjs` 已保证）。
@@ -578,8 +616,9 @@ request_hash = sha256(canonicalJson({
 
 ## Data and Migration Impact
 
-- 新增 2 张表（`cases` / `case_events`）、2 个 enum（`case_status` / `case_phase`）、1 个 partial unique index、2 个普通索引、2 条 policy、若干 GRANT。
-- 新增 1 个复合外键 `case_events (case_id, family_id) → cases (id, family_id)`，因此 `cases` 需要 `UNIQUE (id, family_id)`。
+- 新增 2 张表（`cases` / `case_events`）、2 个 enum（`case_status` / `case_phase`）、1 个 partial unique index、4 个普通索引、2 条 policy、若干 GRANT。
+- 新增 1 个复合外键 `case_events (case_id, family_id) → cases (id, family_id)`，因此 `cases` 需要 `UNIQUE (id, family_id)`；migration 必须先建立该唯一约束，再创建 `case_events` 复合外键。
+- `case_events.metadata` 新增 `case_events_metadata_shape_check`：JSON object 且 key 恰为 `{primary, version}`，拒绝正文 / PII / 额外 key；无默认值。
 - 既有表变更：`business_audit_events` 两个 CHECK 白名单扩值；`idempotency_keys` 一个 CHECK 白名单扩值。无列变更、无数据回填。
 - 不修改 001 migration；不新增第二套幂等表或审计平台。
 - 无 pgvector / pg_jieba / pg-boss / Drizzle push。
@@ -667,13 +706,14 @@ tests/integration/cases-scope.test.ts      # 新增
 | FR-006 / FR-007 / SC-001 / SC-002（单 primary、首个 primary、候选保留） | DB + integration | `bunx vitest run tests/integration/cases-create.test.ts` | 串行创建：第 1 个 true，后续 false；全部可读取；无 Plan / Task / Notification 副作用 |
 | 并发 primary 不变量（场景 3 / SC-002） | 真实 PG 多连接并发 | `bunx vitest run tests/db/cases-primary-concurrency.test.ts` | 两个不同 key 并发创建后，`primary=true AND status<>'CLOSED'` 计数 = 1；两个 Case 均存在；重复运行仍成立 |
 | 同 key 并发（场景 10 / SC-006） | 并发 integration | `bunx vitest run tests/integration/cases-idempotency.test.ts` | 只产生 1 个 Case、1 组 event、1 组 audit；其余为 REPLAY 原响应；不存在第二个业务结果 |
-| FR-008 / FR-009 / FR-024（manager allow / member deny / guardian deny） | integration | `bunx vitest run tests/integration/cases-authorization.test.ts` | manager：create/list 201/200；member / guardian：create/list `403 CASE_ACCESS_DENIED`；detail `404 CASE_NOT_FOUND`；均无 Case 数据 |
+| FR-008 / FR-009 / FR-024 / 场景 8 / 场景 9A / 场景 9B（manager allow / member deny / guardian deny） | integration | `bunx vitest run tests/integration/cases-authorization.test.ts tests/integration/cases-read.test.ts` | **manager**：create/list 201/200；**普通 Family 成员、guardian + Family 成员但非 manager**：create/list `403 CASE_ACCESS_DENIED`，detail `404 CASE_NOT_FOUND`，均无 Case 数据；**guardian 但不是目标 Family 成员**：current Family 未合法解析，沿用 Slice 1 Family 语义（如 `CURRENT_FAMILY_NOT_FOUND`），响应不含 Case 字段，**不出现** `CASE_ACCESS_DENIED` / `CASE_NOT_FOUND` |
 | FR-010 / FR-023 / SC-004（跨家庭 + 详情 404 anti-enumeration） | integration + DB | `bunx vitest run tests/integration/cases-read.test.ts` | Family A 读 Family B Case → `404 CASE_NOT_FOUND`，响应体无任何 Case 字段；Family A 的 RLS 上下文直查 Family B Case → 0 行 |
 | FR-011 / §9.1（RLS ENABLE/FORCE、无上下文、错误 Family、runtime role） | DB 结构 + 直连查询 | `bunx vitest run tests/db/cases-rls.test.ts` | `relrowsecurity=true`、`relforcerowsecurity=true`；无上下文 SELECT 0 行、INSERT 被拒；错误 family 0 行；`rolbypassrls=false`；owner 为 migrator |
 | FR-012 / FR-013 / SC-009（HTTP 可达幂等、version 初始值） | integration + domain | `bunx vitest run tests/domain/case-authorization.test.ts tests/integration/cases-idempotency.test.ts` | 同 key 同 canonical payload（含并发）返回原 201 body 且只有一个业务结果；`version=1` 且无更新路径改变它 |
 | FR-012 / §8.5（shared idempotency mismatch contract） | domain + repository/service contract | `bunx vitest run tests/domain/idempotency-hash.test.ts` 与 `tests/integration/cases-idempotency.test.ts` 的 repository/service contract 用例 | 相同 scope key + 不同 `request_hash` → `MISMATCH` → 映射 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原 Case/结果、不写新行。**不得声称 public HTTP API 存在可达的 different-payload 请求**；不得用换 actor（scope 改变）制造假 mismatch |
 | FR-014 / SC-007（Case + event + audit 原子） | integration + DB | `bunx vitest run tests/integration/cases-create.test.ts` | 成功创建后各存在 1 条 `CASE_CREATED`；构造事件 / 审计写入失败时 Case 不落库（回滚证据） |
-| FR-015 / 场景 13（客户端不能指定业务字段） | integration | `bunx vitest run tests/integration/cases-create.test.ts` | 携带 status / phase / primary / version / creator / familyId / title → 422；DB 仍为服务端值 |
+| CHK068（`case_events.metadata` 可证明不含正文 / PII） | integration + database constraint | `bunx vitest run tests/db/cases-schema.test.ts tests/integration/cases-create.test.ts` | 实际 `CASE_CREATED` 行的 metadata key 集合**恰好**为 `{primary, version}`，无 title / description / family 正文 / 用户输入 / PII；`case_events_metadata_shape_check` 存在；直接 DB 写入额外 key、非 object、非 boolean `primary`、非 integer-compatible `version` 均被 CHECK 拒绝（SQLSTATE 23514） |
+| FR-015 / 场景 13（客户端不能指定业务字段） | integration + database | `bunx vitest run tests/integration/cases-create.test.ts` | 携带 status / phase / primary / version / creator / familyId / title 等任何未声明字段 → `422 VALIDATION_ERROR`；**零业务写入**：`cases`、`case_events`、`business_audit_events`、`idempotency_keys` 均无新增；DB 不存在“忽略非法字段后用服务端值创建”的行 |
 | FR-016 / FR-017 / SC-010（列表识别 primary、详情独立 status/phase） | integration | `bunx vitest run tests/integration/cases-read.test.ts` | 列表返回 `items`，primary 唯一可识别，每项含 phase/status/version；详情两字段独立；不存在 `/cases/current` |
 | FR-019 / FR-020 / FR-021 / FR-022（真实失败、无越界对象、候选无副作用、空结果） | integration + introspection | `bunx vitest run tests/integration/cases-read.test.ts tests/integration/cases-scope.test.ts` | 空 Family → `200 {items: []}`；无 placeholder；无 Plan / Task / Follow-up / Notification 表或路由 |
 | FR-025 / D7（读不写审计） | integration + DB | `bunx vitest run tests/integration/cases-read.test.ts` | 读取前后 `case_events` / `business_audit_events` 行数不变；不存在 read-audit 事件类型 |

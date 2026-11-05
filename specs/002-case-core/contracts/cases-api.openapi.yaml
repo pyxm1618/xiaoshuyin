@@ -48,7 +48,9 @@ paths:
         - `family_id` = 当前目标 Family
 
         客户端不能指定上述任何值，也不能提交 title / summary / description /
-        problem_description / 任何 evidence-like 文本。
+        problem_description / 任何 evidence-like 文本。任何未声明字段都会导致
+        `422 VALIDATION_ERROR`，且**零业务写入**：不创建 Case、不写 case_event、
+        不写 business_audit_event、不留新的业务幂等结果。
 
         同一事务内原子写入 Case、`case_event`（CASE_CREATED）、
         `business_audit_event`（CASE_CREATED / CASE）与幂等响应快照。
@@ -57,10 +59,13 @@ paths:
         shared idempotency 合同对相同 scope key + 不同 canonical payload hash 仍映射
         `409 IDEMPOTENCY_PAYLOAD_MISMATCH`。
 
-        可达性说明：当前请求体除 `idempotencyKey` 外没有可变业务字段，去掉幂等键后
-        canonical body 恒为 `{}`，因此本 Slice 的 public HTTP API **不存在可达的
-        different-payload 请求**；409 合同保留在 shared idempotency 基础设施层验证，
+        可达性说明：在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context**
+        下，当前请求体除 `idempotencyKey` 外没有可变业务字段，去掉幂等键后 canonical body
+        恒为 `{}`，`familyId` 又由服务端 current Family 唯一解析，因此本 Slice 的 public HTTP API
+        **不存在可达的 different-payload 请求**；409 合同保留在 shared idempotency 基础设施层验证，
         不得通过切换 actor（会改变 scope）或新增无业务意义字段伪造该场景。
+        canonical hash 仍保留 `{ familyId, body }`；未来若正式语义允许同一 actor 在多个 Family
+        执行 CASE_CREATE，相同 scope key + 不同 `familyId` 会得到不同 hash 并正确进入 mismatch。
 
         授权：仅当前目标 Family 的 V1 管理主体（创建该 Family 的 adult Person）。
         普通 membership、guardian relationship、已知 case_id 均不构成访问资格。
@@ -150,13 +155,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
-          description: |
-            Family 已解析时统一 `CASE_NOT_FOUND`（不存在 / 跨 Family / 无访问资格）；
-            Family 未解析时为 `CURRENT_FAMILY_NOT_FOUND`（Slice 1 语义）。
-            两种响应均不含任何 Case 字段。
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
+          $ref: "#/components/responses/CaseNotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -183,7 +182,8 @@ components:
       description: |
         严格 schema（`additionalProperties: false`）。任何未声明字段（含 familyId、
         status、phase、primary、version、creator、title、description 等）都会导致
-        422 VALIDATION_ERROR，而不是被静默忽略。
+        422 VALIDATION_ERROR，且零业务写入（Case / case_event / business_audit_event /
+        新幂等结果均无新增），而不是被静默忽略。
       properties:
         idempotencyKey:
           type: string
@@ -192,8 +192,10 @@ components:
           description: |
             §8.5 关键命令幂等键。scope = (actor_account_id, CASE_CREATE, idempotencyKey)。
             相同 key + 相同 canonical payload 返回原结果；shared idempotency 合同对
-            相同 scope key + 不同 canonical payload hash 映射为 409（当前请求体形状下
-            public HTTP 层不可达）。`familyId` 由服务端上下文解析，客户端不得提交。
+            相同 scope key + 不同 canonical payload hash 映射为 409。在当前 V1 管理语义 +
+            同一 actor + 同一 current Family canonical context 下，请求体形状使 public HTTP
+            层不存在可达的 different-payload 请求；`familyId` 由服务端 current Family 解析，
+            客户端不得提交。canonical hash 仍保留 `{ familyId, body }`，不得删除。
 
     CaseResponse:
       type: object
@@ -215,6 +217,10 @@ components:
           description: |
             是否为当前家庭的主要 Case。首个成功创建的 Case 为 true；已有当前 primary
             未结 Case 时后续 Case 为 false（候选）。客户端不可指定。
+            `primary = true` 仅表示“当前 primary assignment”，不是“历史上曾经当过
+            primary”；未来 Close / switch-primary 等 Slice 必须在自身事务内清除或转移
+            旧 primary 的 is_primary，历史事实由领域事件表达。本 Slice 所有 Case 只能
+            OPEN，因此最多一个 primary = true。
         version:
           type: integer
           minimum: 1
@@ -238,7 +244,8 @@ components:
           type: array
           description: |
             当前家庭的 Case 集合，按 `primary DESC, createdAt ASC, id ASC` 排序。
-            本 Slice 不分页。
+            本 Slice 不分页。`primary = true` 唯一表示当前 primary；历史 primary 不得
+            以 `primary = true` 暴露（未来转换 Slice 必须在自身事务内清除 / 转移 is_primary）。
           items: { $ref: "#/components/schemas/CaseResponse" }
 
     CaseStatus:
@@ -277,6 +284,42 @@ components:
           type: object
           additionalProperties: true
 
+    CaseAccessDeniedError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: 403 错误体；`code` 由结构固定为 `CASE_ACCESS_DENIED`，不依赖 example。
+      properties:
+        code:
+          type: string
+          enum: [CASE_ACCESS_DENIED]
+        message:
+          type: string
+
+    CaseNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: 详情 404 的 Case 错误体；`code` 由结构固定为 `CASE_NOT_FOUND`，不依赖 example。
+      properties:
+        code:
+          type: string
+          enum: [CASE_NOT_FOUND]
+        message:
+          type: string
+
+    CurrentFamilyNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: Slice 1 Family 错误体；`code` 由结构固定为 `CURRENT_FAMILY_NOT_FOUND`。
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_NOT_FOUND]
+        message:
+          type: string
+
   responses:
     Unauthenticated:
       description: 缺少或无效的 session token。
@@ -287,33 +330,47 @@ components:
 
     CaseAccessDenied:
       description: |
-        当前目标 Family 已合法解析，但 actor 不是该 Family 的 V1 管理主体。
+        当前目标 Family 已合法解析，但 actor 不是该 Family 的 V1 管理主体
+        （包括 guardian 同时是该 Family 成员的情形）。
         不返回 Family 内任何 Case 数据，也不创建 Case。
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/Error" }
+          schema: { $ref: "#/components/schemas/CaseAccessDeniedError" }
           example: { code: CASE_ACCESS_DENIED, message: Case access denied }
 
     CurrentFamilyNotFound:
       description: |
-        当前目标 Family 未能合法解析（例如 actor 尚无任何 Family）。
+        当前目标 Family 未能合法解析（例如 actor 尚无任何 Family，或 actor 不是目标
+        Family 成员 / 仅有 guardian relationship）。
         沿用 Slice 1 的 Family 语义，不定义第二套 Family 错误码；响应不含 Case 字段。
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/Error" }
+          schema: { $ref: "#/components/schemas/CurrentFamilyNotFoundError" }
           example: { code: CURRENT_FAMILY_NOT_FOUND, message: CURRENT_FAMILY_NOT_FOUND }
 
     CaseNotFound:
       description: |
-        Case 不存在 / 属于其他 Family / actor 无访问资格（Family 已解析）。
-        三种情形响应体一致，不泄露存在性。
+        Case 详情 404。两种合法语义由结构约束：
+        - Family 已解析 → `code = CASE_NOT_FOUND`（Case 不存在 / 跨 Family / 无访问资格，三者响应体一致）；
+        - Family 未解析 → `code = CURRENT_FAMILY_NOT_FOUND`（沿用 Slice 1 Family 语义）。
+        两种响应均不含任何 Case 字段，不泄露存在性。
       content:
         application/json:
-          schema: { $ref: "#/components/schemas/Error" }
-          example: { code: CASE_NOT_FOUND, message: Case not found }
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/CaseNotFoundError"
+              - $ref: "#/components/schemas/CurrentFamilyNotFoundError"
+          examples:
+            caseNotFound:
+              value: { code: CASE_NOT_FOUND, message: Case not found }
+            currentFamilyNotFound:
+              value: { code: CURRENT_FAMILY_NOT_FOUND, message: CURRENT_FAMILY_NOT_FOUND }
 
     ValidationError:
-      description: 请求体不符合 strict schema（含任何未声明字段）。
+      description: |
+        请求体不符合 strict schema（含任何未声明字段）。
+        零业务写入：不创建 Case、不写 case_event、不写 business_audit_event、
+        不留新的业务幂等结果。
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
@@ -324,9 +381,12 @@ components:
         相同 actor + CASE_CREATE + idempotencyKey，但 canonical payload hash 不同。
         不修改原 Case、不追加事件/审计。
 
-        当前 Slice 的请求体只有 `idempotencyKey`，canonical body 恒为 `{}`，
-        因此本响应在 public HTTP 层**不可达**；合同保留并在 shared idempotency
-        domain / repository contract 层验证。
+        当前 Slice 在同一 actor + 同一 current Family canonical context 下，请求体只有
+        `idempotencyKey`，canonical body 恒为 `{}`，`familyId` 又由服务端 current Family
+        唯一解析，因此本响应在当前 public HTTP command shape 下**不可达**；合同保留并在
+        shared idempotency domain / repository contract 层验证。
+        canonical hash 仍保留 `{ familyId, body }`：未来若同一 actor 可在多个 Family 执行
+        CASE_CREATE，不同 `familyId` 会产生不同 hash 并正确进入本分支。
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

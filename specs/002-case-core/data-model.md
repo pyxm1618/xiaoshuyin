@@ -75,6 +75,13 @@ CLOSED
 | `cases_family_fk` | `FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE RESTRICT` | 归属完整性 |
 | `cases_creator_fk` | `FOREIGN KEY (created_by_person_id) REFERENCES persons(id) ON DELETE RESTRICT` | 创建者完整性 |
 
+**`is_primary` 冻结语义（CHK034）**：`is_primary = true` 表示“当前 primary assignment”，不是“历史上曾经当过 primary”。
+
+- 本 Slice 所有 Case 只能 `OPEN`，因此一个 Family 最多一个 `is_primary = true`；`GET /api/v1/cases` 中 `primary = true` **唯一表示当前 primary**。
+- `cases_one_primary_open_per_family` 只保证“当前未结 primary 不重复”，不把历史 CLOSED 行自动解释为 API 的 current primary。
+- 未来 `CloseCase` / `SwitchPrimaryCase` / recurrence / replacement 若使某 Case 不再是当前 primary，对应未来 Slice 必须在**自己的事务合同**内清除或转移旧 primary 的 `is_primary`；历史事实由 `case_events` / 历史记录表达，不靠长期保留 `is_primary = true`。
+- 本 Slice 不实现转换、不新增 transition；未来 Slice 必须先更新本语义与 API 契约，再实现转换。
+
 ### 2.3 明确不存在的列（结构断言）
 
 `title`、`summary`、`description`、`problem_description`、`problem_summary`、任何 evidence-like 自由文本、`visibility`、`case_role`、`participant_id`、`deleted_at`（本 Slice 无删除路径）。
@@ -94,7 +101,7 @@ CLOSED
 | `case_id` | `uuid` | `NOT NULL` | 引用真实 Case |
 | `actor_account_id` | `uuid` | `NOT NULL`，FK → `accounts(id)` `ON DELETE RESTRICT` | 发起 actor（与 `business_audit_events` 一致；§8.5 的 actor 为 Account） |
 | `event_type` | `text` | `NOT NULL`，`CHECK (event_type IN ('CASE_CREATED'))` | 本 Slice 封闭事件集合 |
-| `metadata` | `jsonb` | `NOT NULL DEFAULT '{}'` | 只允许 `{ "primary": boolean, "version": integer }`；不含正文 / PII |
+| `metadata` | `jsonb` | `NOT NULL`，`CHECK` 要求 JSON object 且 key 恰为 `{ "primary": boolean, "version": integer-compatible }`；无默认值 | 只允许 `{ "primary": boolean, "version": integer }`；不含正文 / PII |
 | `occurred_at` | `timestamptz` | `NOT NULL DEFAULT now()` | 服务端时间 |
 
 ### 3.2 约束与索引
@@ -105,6 +112,26 @@ CLOSED
 | `case_events_actor_fk` | `FOREIGN KEY (actor_account_id) REFERENCES accounts(id) ON DELETE RESTRICT` | actor 完整性 |
 | `case_events_case_time_idx` | `INDEX (case_id, occurred_at ASC)` | 按 Case 追溯领域历史 |
 | `case_events_family_time_idx` | `INDEX (family_id, occurred_at ASC)` | 家庭作用域审计 |
+
+**`metadata` 形状 CHECK（可执行不变量，CHK068）**：`case_events_metadata_shape_check` 语义等价于：
+
+```sql
+CHECK (
+  jsonb_typeof(metadata) = 'object'
+  AND metadata ? 'primary'
+  AND metadata ? 'version'
+  AND metadata - 'primary' - 'version' = '{}'::jsonb
+  AND jsonb_typeof(metadata -> 'primary') = 'boolean'
+  AND jsonb_typeof(metadata -> 'version') = 'number'
+  AND (metadata ->> 'version')::numeric = trunc((metadata ->> 'version')::numeric)
+  AND (metadata ->> 'version')::numeric >= 1
+)
+```
+
+- 第 1–4 项保证 JSON object 的 key 集合**恰好**为 `{primary, version}`；任何额外 key（title / description / 正文 / 用户输入 / PII）都会被拒绝。
+- `primary` 必须是 boolean；`version` 必须是 integer-compatible number 且 `>= 1`。
+- `metadata` **不设默认值**：缺 key、空对象或多余 key 均直接违反 CHECK；创建代码必须显式写入。
+- 不引入通用 JSON Schema engine 或 metadata framework；只使用 PostgreSQL 原生 CHECK。
 
 ### 3.3 append-only
 
@@ -170,7 +197,8 @@ CLOSED
 - 占位：首次插入使用 `response_status = 0`、`response_body = '{}'`，同一事务内回填真实响应。
 - `request_hash` 组成见 `research.md` R-4：`{ familyId, body }`。`familyId` 是服务端已验证的 canonical command context，不是客户端提交字段（客户端提交 → 422）。
 - 相同 key + 相同 hash → 返回原 `response_status` / `response_body`；相同 key + 不同 hash → `MISMATCH` → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
-- 当前 public 请求体只有 `idempotencyKey`，`body` 恒为 `{}`，因此 HTTP 层不存在第二种合法 business payload；mismatch 分支在 shared idempotency domain / repository contract 层验证，不在 HTTP 层伪造。
+- 在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，public 请求体只有 `idempotencyKey`，`body` 恒为 `{}`；因此当前 public HTTP command shape 不存在第二种合法 business payload，mismatch 分支在 shared idempotency domain / repository contract 层验证，不在 HTTP 层伪造。
+- canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`；未来若正式语义允许同一 actor 在多个 Family 执行 `CASE_CREATE`，相同 scope key + 不同 `familyId` 会得到不同 hash 并正确进入 mismatch。不得删除 `familyId` hash。
 
 ### 5.4 扩展方式
 
@@ -276,20 +304,20 @@ idempotency 占位
 
 ## 10. Migration 内容清单（不含序号）
 
-按此顺序写入新的 reviewed migration：
+按此顺序写入新的 reviewed migration（**被引用的唯一键必须先于复合 FK 存在**）：
 
-1. `CREATE TYPE case_status`
-2. `CREATE TYPE case_phase`
-3. `CREATE TABLE cases`（含列 CHECK、FK）
-4. `CREATE UNIQUE INDEX cases_one_primary_open_per_family`
-5. `CREATE UNIQUE INDEX cases_id_family_key`（或 UNIQUE 约束）
-6. `CREATE TABLE case_events`（含复合 FK、事件类型 CHECK）
-7. `CREATE INDEX`：列表、Case 时间线、Family 时间线
-8. `ALTER TABLE cases ENABLE/FORCE ROW LEVEL SECURITY` + policy
-9. `ALTER TABLE case_events ENABLE/FORCE ROW LEVEL SECURITY` + policy
-10. `GRANT`：`cases` / `case_events` 的 `SELECT, INSERT`；enum `USAGE`
-11. 扩展 `business_audit_events.event_type` / `resource_type` CHECK
-12. 扩展 `idempotency_keys.command_type` CHECK
+1. `CREATE TYPE case_status`、`CREATE TYPE case_phase`
+2. `CREATE TABLE cases`
+3. `cases` 自身约束：`PRIMARY KEY (id)`、`UNIQUE (id, family_id)`、`CHECK (version >= 1)`、family / creator FK
+4. `cases` 索引：`cases_one_primary_open_per_family` partial unique、`cases_family_list_idx`、`cases_family_status_idx`
+5. `CREATE TABLE case_events`：family FK、actor FK、复合 FK `(case_id, family_id) REFERENCES cases (id, family_id)`、`event_type` CHECK
+6. `case_events` 索引：`case_events_case_time_idx`、`case_events_family_time_idx`；`case_events_metadata_shape_check`
+7. `ALTER TABLE cases` / `ALTER TABLE case_events` `ENABLE` + `FORCE ROW LEVEL SECURITY`
+8. policies：`cases_family_scope`、`case_events_family_scope`
+9. `GRANT`：`cases` / `case_events` 的 `SELECT, INSERT`；enum `USAGE`
+10. 扩展 `business_audit_events.event_type` / `resource_type` CHECK，以及 `idempotency_keys.command_type` CHECK
+
+**顺序约束**：第 3 步的 `UNIQUE (id, family_id)` 是第 5 步复合 FK 的被引用唯一键；若把 `case_events` 放在它之前，PostgreSQL 会因找不到被引用唯一约束而失败。RLS / policy 在第 2–6 步结构完成后启用，既有 CHECK 扩展仍最后执行。
 
 **禁止**
 - 修改 `001_initial_schema.sql`
