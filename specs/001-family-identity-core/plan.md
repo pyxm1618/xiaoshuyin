@@ -614,7 +614,7 @@ withRlsTransaction({ familyId, accountId, personId, purpose }, fn)
 - `POST /api/v1/families/:id/members` —— 建成员（U03 需要，§28.1 未枚举路由）。
 - `POST /api/v1/compliance/guardian-consents/requests` —— 最小 onboarding 请求。
 
-`/families/current`、`/consents`、`/compliance/guardian-consents/requests` 的路径不含 `family_id`，因此单事务内先以 identity 上下文解析 actor 自己的 membership，再切到 family 上下文；多行时显式 409，不静默取第一个。**actor 尚无任何 Family 时**：`/families/current` 与 `/compliance/guardian-consents/requests` 返回 404 `CURRENT_FAMILY_NOT_FOUND`，`/consents` 返回 200 空列表（集合端点），均与 403 `NOT_FAMILY_MEMBER` 区分（细节见 `contracts/authorization-and-rls.md` §4.4）。
+`/families/current`、`/consents`、`/compliance/guardian-consents/requests` 的路径不含 `family_id`，因此单事务内先以 identity 上下文解析 actor 自己的 membership，再切到 family 上下文；多行时按 current-family 解析规则判定，无法唯一确定 → `409 CURRENT_FAMILY_AMBIGUOUS`，不静默取第一个（禁止 `rows[0]` / `ORDER BY ... LIMIT 1`）。**actor 尚无任何 Family 时**：`/families/current` 与 `/compliance/guardian-consents/requests` 返回 404 `CURRENT_FAMILY_NOT_FOUND`，`/consents` 返回 200 空列表（集合端点），均与 403 `NOT_FAMILY_MEMBER` 区分（细节见 `contracts/authorization-and-rls.md` §4.4）。
 
 **`POST /auth/wechat` 的职责**：首次登录在同一事务内建立 Account **与** 当前登录者 Person（spec US1），响应同时返回 `account` 与 `person`；`person.profile` 此时为空（年龄尚未声明），在 `POST /families` 时补齐 ADULT profile。`POST /families` 不创建 Person。
 
@@ -626,7 +626,7 @@ withRlsTransaction({ familyId, accountId, personId, purpose }, fn)
 - 家庭 / 成员类拒绝**一律 403**，响应体不含目标对象任何字段；不存在与无权对外表现一致（避免存在性预言机）。
 - 对应 spec A-2：正式文档未规定 NOT_FOUND / DENIED 是否统一。本 Plan 选择“统一 403 + 零字段泄漏”，映射集中在单一 `toHttpError(reason)`；若 Owner 后续决定改 404 掩盖，只改这一处，不构成新的产品语义。
 - **“没有当前家庭”不等于“无权访问某个家庭”**（CHK045 收口）：已认证但 actor 尚无任何 Family → **404 `CURRENT_FAMILY_NOT_FOUND`**，响应不含任何 Family 字段；已解析到目标 Family 但 actor 无 membership → 仍 **403 `NOT_FAMILY_MEMBER`**，并继续零字段泄漏。跨家庭访问统一 403 的既有规则不变。
-- 错误码：`UNAUTHENTICATED`(401)、`FORBIDDEN`/`NOT_FAMILY_MEMBER`/`NOT_FAMILY_MANAGER`/`FAMILY_MANAGER_MUST_BE_ADULT`/`AGE_BAND_UNKNOWN`/`GUARDIAN_CONSENT_REQUIRED`/`GUARDIAN_CONSENT_REVOKED`/`NOT_GUARDIAN`/`GUARDIAN_CONSENT_ALREADY_BOUND`/`GUARDIAN_CONSENT_EXPIRED`/`GUARDIAN_CONSENT_NOTICE_MISMATCH`(403)、`CURRENT_FAMILY_NOT_FOUND`(404)、`VALIDATION_ERROR`/`AGE_BAND_SOURCE_NOT_ALLOWED`(422)、`IDEMPOTENCY_PAYLOAD_MISMATCH`/`FAMILY_ALREADY_OWNED`/`MEMBER_ALREADY_EXISTS`(409)。
+- 错误码：`UNAUTHENTICATED`(401)、`FORBIDDEN`/`NOT_FAMILY_MEMBER`/`NOT_FAMILY_MANAGER`/`FAMILY_MANAGER_MUST_BE_ADULT`/`AGE_BAND_UNKNOWN`/`GUARDIAN_CONSENT_REQUIRED`/`GUARDIAN_CONSENT_REVOKED`/`NOT_GUARDIAN`/`GUARDIAN_CONSENT_ALREADY_BOUND`/`GUARDIAN_CONSENT_EXPIRED`/`GUARDIAN_CONSENT_NOTICE_MISMATCH`(403)、`CURRENT_FAMILY_NOT_FOUND`(404)、`CURRENT_FAMILY_AMBIGUOUS`(409)、`VALIDATION_ERROR`/`AGE_BAND_SOURCE_NOT_ALLOWED`(422)、`IDEMPOTENCY_PAYLOAD_MISMATCH`/`FAMILY_ALREADY_OWNED`/`MEMBER_ALREADY_EXISTS`(409)。
 
 #### D-6.3 关键命令与幂等
 

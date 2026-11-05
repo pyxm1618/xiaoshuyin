@@ -105,6 +105,8 @@ AUTHORIZATION_ERROR     内部异常（兜底，永不放行）
 
 `CURRENT_FAMILY_NOT_FOUND` 也不在上表：它不是 `authorize()` 的判定结果，而是在**解析当前家庭**这一步产生（actor 尚无任何 Family，见 §4.4）。HTTP 映射仍集中在 §3。
 
+`CURRENT_FAMILY_AMBIGUOUS` 同理：它不是 `authorize()` 的判定结果，而是在**解析当前家庭**时，actor 存在多个 membership 且按 §4.4 规则仍无法唯一确定当前 Family 时产生。HTTP 映射为 409，仍集中在 §3。
+
 ### 2.5 fail-closed 规则（强制）
 
 1. `case !== null` → `UNSUPPORTED_DIMENSION`。**不得**接受后忽略。
@@ -138,6 +140,7 @@ toHttpError(reason): { status, code }
 | `NOT_FAMILY_MANAGER` | 403 | `NOT_FAMILY_MANAGER` |
 | `NOT_GUARDIAN` | 403 | `NOT_GUARDIAN` |
 | `CURRENT_FAMILY_NOT_FOUND` | 404 | `CURRENT_FAMILY_NOT_FOUND` |
+| `CURRENT_FAMILY_AMBIGUOUS` | 409 | `CURRENT_FAMILY_AMBIGUOUS` |
 | `FAMILY_MANAGER_MUST_BE_ADULT` | 403 | `FAMILY_MANAGER_MUST_BE_ADULT` |
 | `AGE_BAND_UNKNOWN` | 403 | `AGE_BAND_UNKNOWN` |
 | `GUARDIAN_CONSENT_REQUIRED` | 403 | `GUARDIAN_CONSENT_REQUIRED` |
@@ -232,15 +235,28 @@ C. withFamilyCreationTransaction({ accountId, personId, newFamilyId, displayName
 
 ```text
 1. set_identity_context(accountId, 'FAMILY_MANAGEMENT' | 'GUARDIAN_CONSENT')
-2. SELECT family_id FROM family_members WHERE person_id = app_person_id()   -- self 分支可见
-   ├ 0 行 → actor 尚无任何 Family → 空态，不是无权（见下表）
+2. SELECT f.id, f.created_by_person_id
+   FROM families f
+   JOIN family_members fm ON fm.family_id = f.id
+   WHERE fm.person_id = app_person_id()   -- self 分支可见
+   ├ 0 行 → NONE：actor 尚无任何 Family → 空态，不是无权（见下表）
    ├ 1 行 → 该 family
-   └ 多行 → V1 不提供多家庭切换，取 created_by_person_id = actor 的那一个；
-            若仍多行则视为数据异常，返回 409 而不是猜测
+   └ 多行 → V1 不提供多家庭切换：
+            若候选集中恰有 1 行 created_by_person_id = actor → 该 family；
+            否则（0 个或多个 owned 行）→ AMBIGUOUS → 409 CURRENT_FAMILY_AMBIGUOUS
+            禁止 rows[0]；禁止 ORDER BY ... LIMIT 1 等排序猜测
 3. authorize()（含 manager 判定）
 4. set_family_context(familyId, personId, purpose)
 5. 读取目标数据
 ```
+
+**语义边界（强制）**：
+
+- “一个 Person 属于多个 Family”本身**不是**错误；只有无法唯一解析 current Family 时才返回 `CURRENT_FAMILY_AMBIGUOUS`。
+- `membership = 1` 时直接返回该 Family，**不要求** `created_by_person_id = actor`。
+- `membership > 1` 且恰有一个 actor-owned Family 时返回该 Family，不返回歧义。
+- `membership > 1` 且没有唯一 actor-owned Family（0 个，或 schema 异常下的多个）时返回 409。
+- 409 响应体只含 `code` / `message`，**不得**携带候选 Family 的任何字段。
 
 **“没有当前 Family” ≠ “无权访问某个 Family”**（CHK045 收口）：
 
@@ -251,13 +267,15 @@ C. withFamilyCreationTransaction({ accountId, personId, newFamilyId, displayName
 
 按端点：
 
-| 端点 | 无 Family 时 | 理由 |
-|---|---|---|
-| `GET /families/current` | 404 `CURRENT_FAMILY_NOT_FOUND` | 单资源端点，没有就是没有 |
-| `GET /consents` | 200 `{ "items": [] }` | 集合端点，零条同意是真实结果，不伪造错误 |
-| `POST /compliance/guardian-consents/requests` | 404 `CURRENT_FAMILY_NOT_FOUND` | 没有家庭就不存在可发起同意的对象 |
+| 端点 | 无 Family 时 | 多 membership 且无法唯一解析时 | 理由 |
+|---|---|---|---|
+| `GET /families/current` | 404 `CURRENT_FAMILY_NOT_FOUND` | 409 `CURRENT_FAMILY_AMBIGUOUS` | 单资源端点，没有就是没有；无法唯一确定则显式失败 |
+| `GET /consents` | 200 `{ "items": [] }` | 409 `CURRENT_FAMILY_AMBIGUOUS` | 集合端点，零条同意是真实结果，不伪造错误；歧义不是空集 |
+| `POST /compliance/guardian-consents/requests` | 404 `CURRENT_FAMILY_NOT_FOUND` | 409 `CURRENT_FAMILY_AMBIGUOUS` | 没有家庭就不存在可发起同意的对象；无法确定家庭则不得写入 |
+| `POST /compliance/guardian-consents` | 404 `CURRENT_FAMILY_NOT_FOUND` | 409 `CURRENT_FAMILY_AMBIGUOUS` | grant 同样先解析 current Family |
+| `POST /consents/:id/revoke` | 404 `CURRENT_FAMILY_NOT_FOUND` | 409 `CURRENT_FAMILY_AMBIGUOUS` | revoke 同样先解析 current Family |
 
-第 2 步只暴露 actor **自己的** membership 行（策略 `person_id = app_person_id()`），不泄漏其他成员或其他家庭。多家庭场景在 V1 只存在于 fixture（spec 场景 11），产品层不提供选择能力，因此“多行”分支必须是显式失败，不能静默取第一个。
+第 2 步只暴露 actor **自己的** membership 行（策略 `person_id = app_person_id()`），不泄漏其他成员或其他家庭。多家庭场景在 V1 只存在于 fixture（spec 场景 11），产品层不提供选择能力，因此“多行”分支必须是显式失败，不能静默取第一个，也不能通过排序猜测。
 
 ### 4.5 唯一没有 RLS 的表
 

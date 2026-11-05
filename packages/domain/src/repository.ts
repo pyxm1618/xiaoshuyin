@@ -48,14 +48,52 @@ export async function getAccountById(tx: Tx, accountId: string) {
 
 // ── Family ──────────────────────────────────────────────────
 
-export async function getFamilyIdByPersonId(tx: Tx, personId: string): Promise<string | null> {
-  const { rows } = await tx.query(
-    `SELECT f.id FROM families f
+export interface CurrentFamilyRow {
+  id: string;
+  display_name: string | null;
+  created_by_person_id: string;
+  created_at: Date;
+}
+
+export type CurrentFamilyResolution =
+  | { status: 'NONE' }
+  | { status: 'RESOLVED'; family: CurrentFamilyRow }
+  | { status: 'AMBIGUOUS' };
+
+/**
+ * Deterministic current-family resolution (contracts/authorization-and-rls.md §4.4).
+ *
+ *   membership = 0                          → NONE
+ *   membership = 1                          → that family (ownership is irrelevant)
+ *   membership > 1 + exactly 1 actor-owned  → that owned family
+ *   membership > 1 + otherwise              → AMBIGUOUS (caller must return 409)
+ *
+ * Selection is rule-based only. There is deliberately no ORDER BY / LIMIT:
+ * row order must never manufacture "current family" semantics.
+ */
+export async function resolveCurrentFamily(
+  tx: Tx,
+  personId: string
+): Promise<CurrentFamilyResolution> {
+  const { rows } = await tx.query<CurrentFamilyRow>(
+    `SELECT f.id, f.display_name, f.created_by_person_id, f.created_at
+     FROM families f
      JOIN family_members fm ON fm.family_id = f.id
      WHERE fm.person_id = $1`,
     [personId]
   );
-  return rows[0]?.id ?? null;
+
+  const [first] = rows;
+  if (!first) return { status: 'NONE' };
+  if (rows.length === 1) return { status: 'RESOLVED', family: first };
+
+  const owned = rows.filter((row) => row.created_by_person_id === personId);
+  const [ownedFamily] = owned;
+  if (owned.length === 1 && ownedFamily) {
+    return { status: 'RESOLVED', family: ownedFamily };
+  }
+
+  return { status: 'AMBIGUOUS' };
 }
 
 export async function getFamilyById(tx: Tx, familyId: string) {
@@ -66,16 +104,6 @@ export async function getFamilyById(tx: Tx, familyId: string) {
   return rows[0] ?? null;
 }
 
-export async function getCurrentFamily(tx: Tx, personId: string) {
-  const { rows } = await tx.query(
-    `SELECT f.id, f.display_name, f.created_by_person_id, f.created_at
-     FROM families f
-     JOIN family_members fm ON fm.family_id = f.id
-     WHERE fm.person_id = $1`,
-    [personId]
-  );
-  return rows[0] ?? null;
-}
 
 // ── Family Member ───────────────────────────────────────────
 

@@ -10,7 +10,8 @@ import { withRlsTransaction, withIdentityTransaction } from '../db/tx.js';
 import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { getCatalog } from '@xiaoshuyin/compliance';
-import { getFamilyIdByPersonId, insertAuditEvent, hashPayload } from '@xiaoshuyin/domain';
+import { insertAuditEvent, hashPayload } from '@xiaoshuyin/domain';
+import { resolveCurrentFamily, requireCurrentFamily } from '../family-context.js';
 import {
   getConsentRecordForUpdate,
   insertConsentRecord,
@@ -19,13 +20,6 @@ import {
   getComplianceProfile,
 } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
-
-function notFoundFamily() {
-  return Object.assign(new Error('Current family not found'), {
-    statusCode: 404,
-    code: 'CURRENT_FAMILY_NOT_FOUND',
-  });
-}
 
 export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
   // POST /api/v1/consents/:id/revoke
@@ -58,15 +52,10 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
           commandType: 'GUARDIAN_CONSENT_REVOKE',
           idempotencyKey,
           requestHash,
-          resolveFamilyId: async (tx) => {
-            const familyId = await getFamilyIdByPersonId(tx, personId);
-            if (!familyId) throw notFoundFamily();
-            return familyId;
-          },
+          resolveFamilyId: async (tx) => requireCurrentFamily(tx, personId),
         },
         async (tx) => {
-          const familyId = await getFamilyIdByPersonId(tx, personId);
-          if (!familyId) throw notFoundFamily();
+          const familyId = await requireCurrentFamily(tx, personId);
 
           const consent = await getConsentRecordForUpdate(tx, consentId);
           if (!consent) {
@@ -146,15 +135,20 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const familyId = await withIdentityTransaction(
+    const resolution = await withIdentityTransaction(
       pool,
       { accountId: accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => getFamilyIdByPersonId(tx, personId)
+      (tx) => resolveCurrentFamily(tx, personId)
     );
-    if (!familyId) {
+    if (resolution.status === 'NONE') {
       // Frozen OpenAPI contract: collection endpoint → { "items": [...] }
       return reply.status(200).send({ items: [] });
     }
+    if (resolution.status === 'AMBIGUOUS') {
+      const err = toHttpError('CURRENT_FAMILY_AMBIGUOUS');
+      return reply.status(err.statusCode).send(err);
+    }
+    const familyId = resolution.family.id;
 
     try {
       const result = await withRlsTransaction(
