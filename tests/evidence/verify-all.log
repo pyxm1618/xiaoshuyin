@@ -1,0 +1,952 @@
+# T068 — Verification Plan 26 条逐条执行归档
+
+执行时间: 2026-11-05T10:40:52.077Z
+archive=true
+
+说明：每条均真实启动命令并捕获 stdout/stderr、退出码与耗时。
+plan.md 中未落地的测试文件名以 MAPPED 标注并给出承接文件，不静默跳过；
+FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
+
+## [01/26] FR-001 / 场景 1（Account / Person 分离，GET /me）
+
+- Plan 命令: `bun run vitest run tests/integration/me.test.ts`
+- 实际命令: `bunx vitest run tests/integration/auth.test.ts tests/db/schema-structure.test.ts`
+- 映射: MAPPED — me.test.ts 未落地；登录响应契约与 Account/Person 列结构由 auth.test.ts + schema-structure.test.ts 覆盖
+- 期望: 200；account 与自身 person 存在；openid 不出现
+  [01] $ bunx vitest run tests/integration/auth.test.ts tests/db/schema-structure.test.ts
+  [01] exit=0 duration=0.5s
+  [01] --- real output begin ---
+  [01] | 
+  [01] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [01] | 
+  [01] |  ✓ tests/db/schema-structure.test.ts (6 tests) 38ms
+  [01] |  ✓ tests/integration/auth.test.ts (4 tests) 92ms
+  [01] | 
+  [01] |  Test Files  2 passed (2)
+  [01] |       Tests  10 passed (10)
+  [01] |    Start at  18:40:52
+  [01] |    Duration  327ms (transform 71ms, setup 13ms, collect 145ms, tests 130ms, environment 0ms, prepare 52ms)
+  [01] --- real output end ---
+- 结果: PASS
+
+## [02/26] FR-002 / U01（微信登录建立 Account 与 Person）
+
+- Plan 命令: `bun run vitest run tests/integration/auth.test.ts`
+- 实际命令: `bunx vitest run tests/integration/auth.test.ts`
+- 映射: EXACT
+- 期望: 首次登录建 Account+Person；重复登录不新增；logout 后 401
+  [02] $ bunx vitest run tests/integration/auth.test.ts
+  [02] exit=0 duration=0.5s
+  [02] --- real output begin ---
+  [02] | 
+  [02] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [02] | 
+  [02] |  ✓ tests/integration/auth.test.ts (4 tests) 89ms
+  [02] | 
+  [02] |  Test Files  1 passed (1)
+  [02] |       Tests  4 passed (4)
+  [02] |    Start at  18:40:52
+  [02] |    Duration  308ms (transform 57ms, setup 5ms, collect 112ms, tests 89ms, environment 0ms, prepare 26ms)
+  [02] --- real output end ---
+- 结果: PASS
+
+## [03/26] FR-002 平台真实性
+
+- Plan 命令: `—（本 Slice 明确 NOT VERIFIED）`
+- 状态: NOT VERIFIED（不执行命令）
+- 原因: 真实 code2session 属 §40 Platform 门槛，本 Slice 只验适配器契约；不伪造通过
+- 期望: 明确记录 NOT VERIFIED
+- 结果: NOT VERIFIED（按 Plan 明确不作为已通过）
+
+## [04/26] FR-005 / 场景 2 / US1（建家庭 + 管理主体 + 幂等）
+
+- Plan 命令: `bun run vitest run tests/integration/families.test.ts`
+- 实际命令: `bunx vitest run tests/integration/families.test.ts tests/integration/idempotency.test.ts`
+- 映射: MAPPED — 幂等重放/409 断言实现阶段落在 idempotency.test.ts 的 FAMILY_CREATE 参数化用例
+- 期望: 首次建家庭成功；复用登录 Person；同 key 重放不新增；不同 payload → 409
+  [04] $ bunx vitest run tests/integration/families.test.ts tests/integration/idempotency.test.ts
+  [04] exit=0 duration=1.0s
+  [04] --- real output begin ---
+  [04] | 
+  [04] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [04] | 
+  [04] |  ✓ tests/integration/families.test.ts (6 tests) 128ms
+  [04] |  ✓ tests/integration/idempotency.test.ts (20 tests) 591ms
+  [04] | 
+  [04] |  Test Files  2 passed (2)
+  [04] |       Tests  26 passed (26)
+  [04] |    Start at  18:40:53
+  [04] |    Duration  823ms (transform 71ms, setup 10ms, collect 249ms, tests 719ms, environment 0ms, prepare 53ms)
+  [04] --- real output end ---
+- 结果: PASS
+
+## [05/26] age_band 来源可接受性（CHK023）
+
+- Plan 命令: `bun run vitest run tests/domain/age-band-source.test.ts tests/integration/members.test.ts`
+- 实际命令: `bunx vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts tests/integration/families.test.ts`
+- 映射: MAPPED — age-band-source.test.ts 未落地；来源白名单/逐值来源由 provenance + members + families 覆盖
+- 期望: ageBandSource 白名单；UNDER_14 只接受 guardian-origin；伪造 providedByPersonId 被忽略
+  [05] $ bunx vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts tests/integration/families.test.ts
+  [05] exit=0 duration=0.8s
+  [05] --- real output begin ---
+  [05] | 
+  [05] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [05] | 
+  [05] |  ✓ tests/domain/provenance.test.ts (5 tests) 2ms
+  [05] |  ✓ tests/integration/families.test.ts (6 tests) 129ms
+  [05] |  ✓ tests/integration/members.test.ts (14 tests) 350ms
+  [05] | 
+  [05] |  Test Files  3 passed (3)
+  [05] |       Tests  25 passed (25)
+  [05] |    Start at  18:40:54
+  [05] |    Duration  606ms (transform 95ms, setup 15ms, collect 309ms, tests 480ms, environment 0ms, prepare 92ms)
+  [05] --- real output end ---
+- 结果: PASS
+
+## [06/26] “尚无家庭”空态（CHK045）
+
+- Plan 命令: `bun run vitest run tests/integration/families.test.ts`
+- 实际命令: `bunx vitest run tests/integration/families.test.ts tests/integration/consent-request.test.ts`
+- 映射: MAPPED — 空态的第二个端点（consent request 404）由 consent-request.test.ts 覆盖
+- 期望: GET /families/current 404；POST /compliance/guardian-consents/requests 404；非成员 403
+  [06] $ bunx vitest run tests/integration/families.test.ts tests/integration/consent-request.test.ts
+  [06] exit=0 duration=0.6s
+  [06] --- real output begin ---
+  [06] | 
+  [06] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [06] | 
+  [06] |  ✓ tests/integration/families.test.ts (6 tests) 128ms
+  [06] |  ✓ tests/integration/consent-request.test.ts (4 tests) 138ms
+  [06] | 
+  [06] |  Test Files  2 passed (2)
+  [06] |       Tests  10 passed (10)
+  [06] |    Start at  18:40:55
+  [06] |    Duration  372ms (transform 69ms, setup 11ms, collect 252ms, tests 266ms, environment 0ms, prepare 56ms)
+  [06] --- real output end ---
+- 结果: PASS
+
+## [07/26] FR-016 / 场景 14 / SC-007（Account ↔ Person 1:1）
+
+- Plan 命令: `bun run vitest run tests/db/constraints.test.ts`
+- 实际命令: `bunx vitest run tests/db/constraints.test.ts`
+- 映射: EXACT
+- 期望: 两个方向写入均抛 unique violation
+  [07] $ bunx vitest run tests/db/constraints.test.ts
+  [07] exit=0 duration=0.4s
+  [07] --- real output begin ---
+  [07] | 
+  [07] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [07] | 
+  [07] |  ✓ tests/db/constraints.test.ts (3 tests) 44ms
+  [07] | 
+  [07] |  Test Files  1 passed (1)
+  [07] |       Tests  3 passed (3)
+  [07] |    Start at  18:40:55
+  [07] |    Duration  164ms (transform 14ms, setup 6ms, collect 13ms, tests 44ms, environment 0ms, prepare 26ms)
+  [07] --- real output end ---
+- 结果: PASS
+
+## [08/26] FR-017 / 场景 11、12 / SC-006（多对多 + 唯一 membership）
+
+- Plan 命令: `bun run vitest run tests/db/cardinality.test.ts`
+- 实际命令: `bunx vitest run tests/db/constraints.test.ts tests/db/schema-structure.test.ts`
+- 映射: MAPPED — cardinality.test.ts 未落地；基数与 persons 无 family_id 由 constraints + schema-structure 覆盖
+- 期望: 唯一 membership；persons 无 family_id 列；同 Person 可属于多 Family
+  [08] $ bunx vitest run tests/db/constraints.test.ts tests/db/schema-structure.test.ts
+  [08] exit=0 duration=0.4s
+  [08] --- real output begin ---
+  [08] | 
+  [08] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [08] | 
+  [08] |  ✓ tests/db/schema-structure.test.ts (6 tests) 39ms
+  [08] |  ✓ tests/db/constraints.test.ts (3 tests) 42ms
+  [08] | 
+  [08] |  Test Files  2 passed (2)
+  [08] |       Tests  9 passed (9)
+  [08] |    Start at  18:40:56
+  [08] |    Duration  165ms (transform 20ms, setup 10ms, collect 32ms, tests 81ms, environment 0ms, prepare 53ms)
+  [08] --- real output end ---
+- 结果: PASS
+
+## [09/26] FR-003 / FR-004 / 场景 3 / SC-008（per-value provenance）
+
+- Plan 命令: `bun run vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts`
+- 实际命令: `bunx vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts`
+- 映射: EXACT
+- 期望: 多来源并存；同源 SUPERSEDED；persons 无 source_kind
+  [09] $ bunx vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts
+  [09] exit=0 duration=0.8s
+  [09] --- real output begin ---
+  [09] | 
+  [09] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [09] | 
+  [09] |  ✓ tests/domain/provenance.test.ts (5 tests) 1ms
+  [09] |  ✓ tests/integration/members.test.ts (14 tests) 308ms
+  [09] | 
+  [09] |  Test Files  2 passed (2)
+  [09] |       Tests  19 passed (19)
+  [09] |    Start at  18:40:56
+  [09] |    Duration  537ms (transform 74ms, setup 10ms, collect 143ms, tests 309ms, environment 0ms, prepare 54ms)
+  [09] --- real output end ---
+- 结果: PASS
+
+## [10/26] FR-008 (a)(b) / 场景 4 / SC-003①（同意前不建正式 child）
+
+- Plan 命令: `bun run vitest run tests/integration/consent-first.test.ts`
+- 实际命令: `bunx vitest run tests/integration/consent-first.test.ts`
+- 映射: EXACT
+- 期望: 403 GUARDIAN_CONSENT_REQUIRED；无 person / profile 落库
+  [10] $ bunx vitest run tests/integration/consent-first.test.ts
+  [10] exit=0 duration=0.6s
+  [10] --- real output begin ---
+  [10] | 
+  [10] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [10] | 
+  [10] |  ✓ tests/integration/consent-first.test.ts (3 tests) 149ms
+  [10] | 
+  [10] |  Test Files  1 passed (1)
+  [10] |       Tests  3 passed (3)
+  [10] |    Start at  18:40:57
+  [10] |    Duration  365ms (transform 57ms, setup 5ms, collect 111ms, tests 149ms, environment 0ms, prepare 25ms)
+  [10] --- real output end ---
+- 结果: PASS
+
+## [11/26] D-3.5（结构约束）
+
+- Plan 命令: `bun run vitest run tests/db/consent-structure.test.ts`
+- 实际命令: `bunx vitest run tests/db/consent-structure.test.ts`
+- 映射: EXACT
+- 期望: UNDER_14 + consent NULL 的 profile 写入被 CHECK 拒绝
+  [11] $ bunx vitest run tests/db/consent-structure.test.ts
+  [11] exit=0 duration=0.4s
+  [11] --- real output begin ---
+  [11] | 
+  [11] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [11] | 
+  [11] |  ✓ tests/db/consent-structure.test.ts (3 tests) 59ms
+  [11] | 
+  [11] |  Test Files  1 passed (1)
+  [11] |       Tests  3 passed (3)
+  [11] |    Start at  18:40:57
+  [11] |    Duration  180ms (transform 14ms, setup 5ms, collect 14ms, tests 59ms, environment 0ms, prepare 26ms)
+  [11] --- real output end ---
+- 结果: PASS
+
+## [12/26] FR-008 (c) / 场景 5 / SC-003③（同意后建档）
+
+- Plan 命令: `bun run vitest run tests/integration/consent-first.test.ts`
+- 实际命令: `bunx vitest run tests/integration/consent-first.test.ts tests/integration/consent-grant.test.ts`
+- 映射: MAPPED — grant 响应契约由 consent-grant.test.ts 覆盖，与 consent-first 建档顺序合并验证
+- 期望: GRANTED 后建档成功；profile 的 guardian/consent 版本一致
+  [12] $ bunx vitest run tests/integration/consent-first.test.ts tests/integration/consent-grant.test.ts
+  [12] exit=0 duration=0.6s
+  [12] --- real output begin ---
+  [12] | 
+  [12] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [12] | 
+  [12] |  ✓ tests/integration/consent-first.test.ts (3 tests) 141ms
+  [12] |  ✓ tests/integration/consent-grant.test.ts (5 tests) 180ms
+  [12] | 
+  [12] |  Test Files  2 passed (2)
+  [12] |       Tests  8 passed (8)
+  [12] |    Start at  18:40:58
+  [12] |    Duration  407ms (transform 69ms, setup 10ms, collect 242ms, tests 321ms, environment 0ms, prepare 52ms)
+  [12] --- real output end ---
+- 结果: PASS
+
+## [13/26] FR-010 / 场景 6 / SC-003④（撤回）
+
+- Plan 命令: `bun run vitest run tests/integration/consent-revoke.test.ts`
+- 实际命令: `bunx vitest run tests/integration/consent-revoke.test.ts`
+- 映射: EXACT
+- 期望: REVOKED v2、supersedes 指向 v1、profile 指针前移、audit 存在
+  [13] $ bunx vitest run tests/integration/consent-revoke.test.ts
+  [13] exit=0 duration=0.6s
+  [13] --- real output begin ---
+  [13] | 
+  [13] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [13] | 
+  [13] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 206ms
+  [13] | 
+  [13] |  Test Files  1 passed (1)
+  [13] |       Tests  3 passed (3)
+  [13] |    Start at  18:40:58
+  [13] |    Duration  430ms (transform 58ms, setup 5ms, collect 113ms, tests 206ms, environment 0ms, prepare 27ms)
+  [13] --- real output end ---
+- 结果: PASS
+
+## [14/26] FR-010 / 版本链结构（GRANTED→REVOKED→GRANTED）
+
+- Plan 命令: `bun run vitest run tests/db/consent-chain.test.ts`
+- 实际命令: `bunx vitest run tests/integration/consent-revoke.test.ts tests/db/consent-structure.test.ts`
+- 映射: MAPPED — consent-chain.test.ts 未落地；版本链与 CHECK 约束由 revoke integration + consent-structure 覆盖
+- 期望: v1 GRANTED / v2 REVOKED 可共存；GRANTED 缺 request、REVOKED 带 request 被拒
+  [14] $ bunx vitest run tests/integration/consent-revoke.test.ts tests/db/consent-structure.test.ts
+  [14] exit=0 duration=0.6s
+  [14] --- real output begin ---
+  [14] | 
+  [14] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [14] | 
+  [14] |  ✓ tests/db/consent-structure.test.ts (3 tests) 40ms
+  [14] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 209ms
+  [14] | 
+  [14] |  Test Files  2 passed (2)
+  [14] |       Tests  6 passed (6)
+  [14] |    Start at  18:40:59
+  [14] |    Duration  438ms (transform 67ms, setup 10ms, collect 140ms, tests 249ms, environment 0ms, prepare 55ms)
+  [14] --- real output end ---
+- 结果: PASS
+
+## [15/26] 绑定对不可篡改（D-3.3.1）
+
+- Plan 命令: `bun run vitest run tests/db/consent-binding.test.ts`
+- 实际命令: `bunx vitest run tests/db/consent-structure.test.ts`
+- 映射: MAPPED — consent-binding.test.ts 未落地；consent_records_guard 触发器约束由 consent-structure.test.ts 覆盖
+- 期望: bound_person_id / bound_at 绑定对只能由 (NULL,NULL) 变一次
+  [15] $ bunx vitest run tests/db/consent-structure.test.ts
+  [15] exit=0 duration=0.4s
+  [15] --- real output begin ---
+  [15] | 
+  [15] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [15] | 
+  [15] |  ✓ tests/db/consent-structure.test.ts (3 tests) 45ms
+  [15] | 
+  [15] |  Test Files  1 passed (1)
+  [15] |       Tests  3 passed (3)
+  [15] |    Start at  18:41:00
+  [15] |    Duration  164ms (transform 13ms, setup 5ms, collect 14ms, tests 45ms, environment 0ms, prepare 25ms)
+  [15] --- real output end ---
+- 结果: PASS
+
+## [16/26] FR-009 / 场景 10 / SC-004（UNKNOWN 不按成人）
+
+- Plan 命令: `bun run vitest run tests/domain/age-band.test.ts`
+- 实际命令: `bunx vitest run tests/domain/age-band.test.ts`
+- 映射: EXACT
+- 期望: UNKNOWN → BLOCK / AGE_BAND_UNKNOWN；NOT_COLLECTED 不是合法 age_band
+  [16] $ bunx vitest run tests/domain/age-band.test.ts
+  [16] exit=0 duration=0.3s
+  [16] --- real output begin ---
+  [16] | 
+  [16] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [16] | 
+  [16] |  ✓ tests/domain/age-band.test.ts (7 tests) 1ms
+  [16] | 
+  [16] |  Test Files  1 passed (1)
+  [16] |       Tests  7 passed (7)
+  [16] |    Start at  18:41:00
+  [16] |    Duration  117ms (transform 17ms, setup 5ms, collect 12ms, tests 1ms, environment 0ms, prepare 25ms)
+  [16] --- real output end ---
+- 结果: PASS
+
+## [17/26] FR-011 / 场景 7、8、9（授权与伪造 ID）
+
+- Plan 命令: `bun run vitest run tests/integration/authorization.test.ts tests/db/rls.test.ts`
+- 实际命令: `bunx vitest run tests/integration/authorization.test.ts tests/db/rls.test.ts`
+- 映射: EXACT
+- 期望: 跨家庭 403 无目标字段；伪造 family_id 无效；非 manager 403；无上下文 0 行
+  [17] $ bunx vitest run tests/integration/authorization.test.ts tests/db/rls.test.ts
+  [17] exit=0 duration=0.7s
+  [17] --- real output begin ---
+  [17] | 
+  [17] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [17] | 
+  [17] |  ✓ tests/db/rls.test.ts (9 tests) 98ms
+  [17] |  ✓ tests/integration/authorization.test.ts (7 tests) 211ms
+  [17] | 
+  [17] |  Test Files  2 passed (2)
+  [17] |       Tests  16 passed (16)
+  [17] |    Start at  18:41:00
+  [17] |    Duration  447ms (transform 76ms, setup 10ms, collect 151ms, tests 309ms, environment 0ms, prepare 56ms)
+  [17] --- real output end ---
+- 结果: PASS
+
+## [18/26] FR-006a / guardian-but-not-member
+
+- Plan 命令: `bun run vitest run tests/integration/authorization-dimensions.test.ts`
+- 实际命令: `bunx vitest run tests/integration/authorization-dimensions.test.ts`
+- 映射: EXACT
+- 期望: guardian 关系不构成 Family 访问权限；403 且响应无目标字段
+  [18] $ bunx vitest run tests/integration/authorization-dimensions.test.ts
+  [18] exit=0 duration=0.6s
+  [18] --- real output begin ---
+  [18] | 
+  [18] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [18] | 
+  [18] | stdout | tests/integration/authorization-dimensions.test.ts > Authorization Dimensions (T062) > T062: guardian-but-not-member cannot access another Family (403, no target fields)
+  [18] | [T062 FR-006a] 判定依据: actor A 持有 GRANTED consent (guardian_person_id=A), 但非 Family B 成员 → POST /families/a8cfe343-a903-42b5-b9ea-f2fc7d826a10/members = 403 NOT_FAMILY_MEMBER; guardian 关系未产生 Family 访问权，且响应体无目标 Family 字段。
+  [18] | 
+  [18] | stdout | tests/integration/authorization-dimensions.test.ts > Authorization Dimensions (T062) > T062: member-but-not-guardian grant → NOT_GUARDIAN
+  [18] | [T062 FR-006b] 判定依据: actor 是 Family 成员 (family_members 命中 1 行) 但不是 guardian_person_id (01a1ab4c-39cc-7f5a-b23f-61f7b5317fc4) → POST /compliance/guardian-consents = 403 NOT_GUARDIAN; membership 未产生 guardian authority，request 仍为 PENDING。
+  [18] | 
+  [18] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 220ms
+  [18] | 
+  [18] |  Test Files  1 passed (1)
+  [18] |       Tests  5 passed (5)
+  [18] |    Start at  18:41:01
+  [18] |    Duration  436ms (transform 59ms, setup 5ms, collect 113ms, tests 220ms, environment 0ms, prepare 25ms)
+  [18] --- real output end ---
+- 结果: PASS
+
+## [19/26] FR-006b / member-but-not-guardian
+
+- Plan 命令: `bun run vitest run tests/integration/authorization-dimensions.test.ts`
+- 实际命令: `bunx vitest run tests/integration/authorization-dimensions.test.ts`
+- 映射: EXACT
+- 期望: grant 与 revoke 被拒，正式错误码 NOT_GUARDIAN
+  [19] $ bunx vitest run tests/integration/authorization-dimensions.test.ts
+  [19] exit=0 duration=0.6s
+  [19] --- real output begin ---
+  [19] | 
+  [19] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [19] | 
+  [19] | stdout | tests/integration/authorization-dimensions.test.ts > Authorization Dimensions (T062) > T062: guardian-but-not-member cannot access another Family (403, no target fields)
+  [19] | [T062 FR-006a] 判定依据: actor A 持有 GRANTED consent (guardian_person_id=A), 但非 Family B 成员 → POST /families/5d9d7c5d-5619-446a-9654-1d14b58e3913/members = 403 NOT_FAMILY_MEMBER; guardian 关系未产生 Family 访问权，且响应体无目标 Family 字段。
+  [19] | 
+  [19] | stdout | tests/integration/authorization-dimensions.test.ts > Authorization Dimensions (T062) > T062: member-but-not-guardian grant → NOT_GUARDIAN
+  [19] | [T062 FR-006b] 判定依据: actor 是 Family 成员 (family_members 命中 1 行) 但不是 guardian_person_id (01a1ab4c-3c51-7ae5-9043-78233569c08b) → POST /compliance/guardian-consents = 403 NOT_GUARDIAN; membership 未产生 guardian authority，request 仍为 PENDING。
+  [19] | 
+  [19] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 219ms
+  [19] | 
+  [19] |  Test Files  1 passed (1)
+  [19] |       Tests  5 passed (5)
+  [19] |    Start at  18:41:02
+  [19] |    Duration  436ms (transform 58ms, setup 5ms, collect 112ms, tests 219ms, environment 0ms, prepare 26ms)
+  [19] --- real output end ---
+- 结果: PASS
+
+## [20/26] FR-007 / Compliance Profile（band × minor_mode × 来源）
+
+- Plan 命令: `bun run vitest run tests/integration/profiles.test.ts tests/db/consent-structure.test.ts`
+- 实际命令: `bunx vitest run tests/integration/members.test.ts tests/integration/consent-first.test.ts tests/db/consent-structure.test.ts`
+- 映射: MAPPED — profiles.test.ts 未落地；profile 的 band/minor_mode/verified_source 由 members + consent-first + consent-structure 覆盖
+- 期望: ADULT minor_mode=false；MINOR/UNDER_14 minor_mode=true；verified_source 实际落库
+  [20] $ bunx vitest run tests/integration/members.test.ts tests/integration/consent-first.test.ts tests/db/consent-structure.test.ts
+  [20] exit=0 duration=0.8s
+  [20] --- real output begin ---
+  [20] | 
+  [20] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [20] | 
+  [20] |  ✓ tests/db/consent-structure.test.ts (3 tests) 42ms
+  [20] |  ✓ tests/integration/consent-first.test.ts (3 tests) 140ms
+  [20] |  ✓ tests/integration/members.test.ts (14 tests) 323ms
+  [20] | 
+  [20] |  Test Files  3 passed (3)
+  [20] |       Tests  20 passed (20)
+  [20] |    Start at  18:41:02
+  [20] |    Duration  565ms (transform 87ms, setup 15ms, collect 294ms, tests 505ms, environment 0ms, prepare 85ms)
+  [20] --- real output end ---
+- 结果: PASS
+
+## [21/26] FR-012 / FR-015 / 验收最后一组（RLS 与主键）
+
+- Plan 命令: `bun run vitest run tests/db/rls.test.ts`
+- 实际命令: `bunx vitest run tests/db/rls.test.ts tests/db/roles.test.ts`
+- 映射: MAPPED — owner ≠ app / NOBYPASSRLS 由 roles.test.ts 覆盖，与 rls.test.ts 合并验证
+- 期望: relrowsecurity/relforcerowsecurity=true；rolbypassrls=false；uuidv7 默认值
+  [21] $ bunx vitest run tests/db/rls.test.ts tests/db/roles.test.ts
+  [21] exit=0 duration=0.4s
+  [21] --- real output begin ---
+  [21] | 
+  [21] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [21] | 
+  [21] |  ✓ tests/db/roles.test.ts (6 tests) 56ms
+  [21] |  ✓ tests/db/rls.test.ts (9 tests) 85ms
+  [21] | 
+  [21] |  Test Files  2 passed (2)
+  [21] |       Tests  15 passed (15)
+  [21] |    Start at  18:41:03
+  [21] |    Duration  212ms (transform 23ms, setup 10ms, collect 36ms, tests 142ms, environment 0ms, prepare 55ms)
+  [21] --- real output end ---
+- 结果: PASS
+
+## [22/26] FR-013（事务上下文）
+
+- Plan 命令: `bun run vitest run tests/integration/rls-transaction.test.ts`
+- 实际命令: `bunx vitest run tests/db/rls.test.ts tests/integration/authorization.test.ts`
+- 映射: MAPPED — rls-transaction.test.ts 未落地；连接池上下文不泄漏 / set_family_context 42501 由 rls.test.ts 与 authorization.test.ts 覆盖
+- 期望: 事务外上下文查询 0 行；非成员 set_family_context 抛 42501；连接池不泄漏
+  [22] $ bunx vitest run tests/db/rls.test.ts tests/integration/authorization.test.ts
+  [22] exit=0 duration=0.7s
+  [22] --- real output begin ---
+  [22] | 
+  [22] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [22] | 
+  [22] |  ✓ tests/db/rls.test.ts (9 tests) 95ms
+  [22] |  ✓ tests/integration/authorization.test.ts (7 tests) 207ms
+  [22] | 
+  [22] |  Test Files  2 passed (2)
+  [22] |       Tests  16 passed (16)
+  [22] |    Start at  18:41:03
+  [22] |    Duration  443ms (transform 76ms, setup 9ms, collect 152ms, tests 302ms, environment 0ms, prepare 53ms)
+  [22] --- real output end ---
+- 结果: PASS
+
+## [23/26] FR-014 / SC-005（幂等）
+
+- Plan 命令: `bun run vitest run tests/integration/idempotency.test.ts`
+- 实际命令: `bunx vitest run tests/integration/idempotency.test.ts`
+- 映射: EXACT
+- 期望: 六命令参数化矩阵；并发 20 次同 key 记录数不变；不同 payload → 409
+  [23] $ bunx vitest run tests/integration/idempotency.test.ts
+  [23] exit=0 duration=1.0s
+  [23] --- real output begin ---
+  [23] | 
+  [23] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [23] | 
+  [23] |  ✓ tests/integration/idempotency.test.ts (20 tests) 552ms
+  [23] | 
+  [23] |  Test Files  1 passed (1)
+  [23] |       Tests  20 passed (20)
+  [23] |    Start at  18:41:04
+  [23] |    Duration  771ms (transform 59ms, setup 5ms, collect 115ms, tests 552ms, environment 0ms, prepare 25ms)
+  [23] --- real output end ---
+- 结果: PASS
+
+## [24/26] 幂等表跨账号隔离
+
+- Plan 命令: `bun run vitest run tests/db/idempotency-rls.test.ts`
+- 实际命令: `bunx vitest run tests/db/idempotency-rls.test.ts`
+- 映射: EXACT
+- 期望: A 只见 A 的 key；B 的 key 回放 0 行；无上下文写入被拒
+  [24] $ bunx vitest run tests/db/idempotency-rls.test.ts
+  [24] exit=0 duration=0.4s
+  [24] --- real output begin ---
+  [24] | 
+  [24] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [24] | 
+  [24] |  ✓ tests/db/idempotency-rls.test.ts (3 tests) 60ms
+  [24] | 
+  [24] |  Test Files  1 passed (1)
+  [24] |       Tests  3 passed (3)
+  [24] |    Start at  18:41:05
+  [24] |    Duration  180ms (transform 13ms, setup 5ms, collect 13ms, tests 60ms, environment 0ms, prepare 25ms)
+  [24] --- real output end ---
+- 结果: PASS
+
+## [25/26] 全部 OpenAPI 合同
+
+- Plan 命令: `bun run openapi:check`
+- 实际命令: `bun run openapi:check`
+- 映射: EXACT
+- 期望: OpenAPI 可生成；generated client 无未预期 diff
+  [25] $ bun run openapi:check
+  [25] exit=0 duration=0.6s
+  [25] --- real output begin ---
+  [25] | openapi-check: PASS (no drift)
+  [25] | $ node scripts/openapi-check.mjs
+  [25] --- real output end ---
+- 结果: PASS
+
+## [26/26] 治理（不修改受保护文件）
+
+- Plan 命令: `node .specify/scripts/validate-governance.mjs；node .specify/scripts/tests/run-governance-tests.mjs；git diff --name-only origin/main...HEAD`
+- 实际命令: `bunx vitest run tests/integration/openapi.test.ts`
+- 映射: MAPPED — 原三条命令移至下方 GOVERNANCE 段原样执行；此处同时跑 contract 测试覆盖 §27A
+- 期望: 治理两命令 PASS；diff 不含 Docs/** / spec.md / .specify/memory/**
+  [26] $ bunx vitest run tests/integration/openapi.test.ts
+  [26] exit=0 duration=0.4s
+  [26] --- real output begin ---
+  [26] | 
+  [26] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [26] | 
+  [26] |  ✓ tests/integration/openapi.test.ts (5 tests) 27ms
+  [26] | 
+  [26] |  Test Files  1 passed (1)
+  [26] |       Tests  5 passed (5)
+  [26] |    Start at  18:41:06
+  [26] |    Duration  238ms (transform 55ms, setup 5ms, collect 108ms, tests 27ms, environment 0ms, prepare 25ms)
+  [26] --- real output end ---
+- 结果: PASS
+
+## GOVERNANCE（Plan 第 26 条的三条原始命令，原样执行）
+
+  [validate-governance] $ node .specify/scripts/validate-governance.mjs
+  [validate-governance] exit=0 duration=0.0s
+  [validate-governance] --- real output begin ---
+  [validate-governance] | Feature lifecycle:
+  [validate-governance] | - specs/001-family-identity-core [tasked]
+  [validate-governance] | Spec governance validation PASS
+  [validate-governance] --- real output end ---
+  [validate-governance] 结果: PASS
+
+  [governance self-test] $ node .specify/scripts/tests/run-governance-tests.mjs
+  [governance self-test] exit=0 duration=0.5s
+  [governance self-test] --- real output begin ---
+  [governance self-test] | PASS  A spec-only feature passes — expected exit 0, got 0
+  [governance self-test] | PASS  B plan.md without spec.md fails — expected exit 1, got 1
+  [governance self-test] | PASS  C tasks.md without plan.md fails — expected exit 1, got 1
+  [governance self-test] | PASS  D spec+plan+tasks with REQ and VERIFY passes — expected exit 0, got 0
+  [governance self-test] | PASS  E task without [REQ:...] fails — expected exit 1, got 1
+  [governance self-test] | PASS  F task without [VERIFY:...] fails — expected exit 1, got 1
+  [governance self-test] | PASS  completed lowercase task passes — expected exit 0, got 0
+  [governance self-test] | PASS  completed uppercase task passes — expected exit 0, got 0
+  [governance self-test] | PASS  mixed completed and pending tasks pass — expected exit 0, got 0
+  [governance self-test] | PASS  completed task without REQ fails — expected exit 1, got 1
+  [governance self-test] | PASS  completed task without VERIFY fails — expected exit 1, got 1
+  [governance self-test] | PASS  G Docs change without approval fails — expected exit 1, got 1
+  [governance self-test] | PASS  H approved Docs override passes the Docs gate — expected exit 0, got 0
+  [governance self-test] | PASS  I no Docs change passes without a label — expected exit 0, got 0
+  [governance self-test] | PASS  H2 override does not disable other governance checks — expected exit 1, got 1 (docs gate=0)
+  [governance self-test] | 
+  [governance self-test] | Governance self-test PASS: 15/15 cases.
+  [governance self-test] --- real output end ---
+  [governance self-test] 结果: PASS
+
+  [protected-file diff] $ git diff --name-only origin/main...HEAD
+  [protected-file diff] exit=0 duration=0.0s
+  [protected-file diff] --- real output begin ---
+  [protected-file diff] | .env.example
+  [protected-file diff] | .github/workflows/ci.yml
+  [protected-file diff] | .gitignore
+  [protected-file diff] | apps/server/api/package.json
+  [protected-file diff] | apps/server/api/src/app.ts
+  [protected-file diff] | apps/server/api/src/auth/session-token.ts
+  [protected-file diff] | apps/server/api/src/auth/wechat-provider.ts
+  [protected-file diff] | apps/server/api/src/db/tx.ts
+  [protected-file diff] | apps/server/api/src/idempotency.ts
+  [protected-file diff] | apps/server/api/src/plugins/auth.ts
+  [protected-file diff] | apps/server/api/src/plugins/config.ts
+  [protected-file diff] | apps/server/api/src/plugins/error-handler.ts
+  [protected-file diff] | apps/server/api/src/routes/auth.ts
+  [protected-file diff] | apps/server/api/src/routes/compliance.ts
+  [protected-file diff] | apps/server/api/src/routes/consents.ts
+  [protected-file diff] | apps/server/api/src/routes/families.ts
+  [protected-file diff] | apps/server/api/src/routes/me.ts
+  [protected-file diff] | apps/server/api/src/routes/members.ts
+  [protected-file diff] | apps/server/api/src/server.ts
+  [protected-file diff] | apps/server/api/tsconfig.json
+  [protected-file diff] | bun.lock
+  [protected-file diff] | db/drizzle.config.ts
+  [protected-file diff] | db/init/01-roles.sh
+  [protected-file diff] | db/migrations/001_initial_schema.sql
+  [protected-file diff] | docker-compose.stage-a.yml
+  [protected-file diff] | package.json
+  [protected-file diff] | packages/authorization/package.json
+  [protected-file diff] | packages/authorization/src/authorize.ts
+  [protected-file diff] | packages/authorization/src/index.ts
+  [protected-file diff] | packages/authorization/tsconfig.json
+  [protected-file diff] | packages/compliance/package.json
+  [protected-file diff] | packages/compliance/src/age-gate.ts
+  [protected-file diff] | packages/compliance/src/index.ts
+  [protected-file diff] | packages/compliance/src/notices.ts
+  [protected-file diff] | packages/compliance/src/repository.ts
+  [protected-file diff] | packages/compliance/tsconfig.json
+  [protected-file diff] | packages/contracts/package.json
+  [protected-file diff] | packages/contracts/src/env.ts
+  [protected-file diff] | packages/contracts/src/index.ts
+  [protected-file diff] | packages/contracts/src/schemas.ts
+  [protected-file diff] | packages/contracts/tsconfig.json
+  [protected-file diff] | packages/domain/package.json
+  [protected-file diff] | packages/domain/src/idempotency.ts
+  [protected-file diff] | packages/domain/src/index.ts
+  [protected-file diff] | packages/domain/src/provenance.ts
+  [protected-file diff] | packages/domain/src/repository.ts
+  [protected-file diff] | packages/domain/tsconfig.json
+  [protected-file diff] | packages/generated/openapi.d.ts
+  [protected-file diff] | packages/generated/openapi.json
+  [protected-file diff] | scripts/coverage-audit.mjs
+  [protected-file diff] | scripts/db-evidence.mjs
+  [protected-file diff] | scripts/db-migrate.mjs
+  [protected-file diff] | scripts/guard-static.mjs
+  [protected-file diff] | scripts/openapi-check.mjs
+  [protected-file diff] | scripts/openapi-generate.mjs
+  [protected-file diff] | scripts/quickstart-evidence.mjs
+  [protected-file diff] | scripts/typecheck-all.mjs
+  [protected-file diff] | scripts/verify-all.mjs
+  [protected-file diff] | specs/001-family-identity-core/checklists/requirements-quality.md
+  [protected-file diff] | specs/001-family-identity-core/contracts/authorization-and-rls.md
+  [protected-file diff] | specs/001-family-identity-core/contracts/consent-onboarding.md
+  [protected-file diff] | specs/001-family-identity-core/contracts/identity-family-api.openapi.yaml
+  [protected-file diff] | specs/001-family-identity-core/contracts/provenance.md
+  [protected-file diff] | specs/001-family-identity-core/data-model.md
+  [protected-file diff] | specs/001-family-identity-core/plan.md
+  [protected-file diff] | specs/001-family-identity-core/quickstart.md
+  [protected-file diff] | specs/001-family-identity-core/research.md
+  [protected-file diff] | specs/001-family-identity-core/spec.md
+  [protected-file diff] | specs/001-family-identity-core/tasks.md
+  [protected-file diff] | tests/db/consent-structure.test.ts
+  [protected-file diff] | tests/db/constraints.test.ts
+  [protected-file diff] | tests/db/idempotency-rls.test.ts
+  [protected-file diff] | tests/db/migration-repro.test.ts
+  [protected-file diff] | tests/db/rls.test.ts
+  [protected-file diff] | tests/db/roles.test.ts
+  [protected-file diff] | tests/db/schema-structure.test.ts
+  [protected-file diff] | tests/domain/age-band.test.ts
+  [protected-file diff] | tests/domain/authorization.test.ts
+  [protected-file diff] | tests/domain/env.test.ts
+  [protected-file diff] | tests/domain/idempotency-hash.test.ts
+  [protected-file diff] | tests/domain/notices.test.ts
+  [protected-file diff] | tests/domain/provenance.test.ts
+  [protected-file diff] | tests/domain/session-token.test.ts
+  [protected-file diff] | tests/evidence/converge.md
+  [protected-file diff] | tests/evidence/db-evidence.log
+  [protected-file diff] | tests/evidence/guard-static.log
+  [protected-file diff] | tests/evidence/quickstart.md
+  [protected-file diff] | tests/evidence/verify-all.log
+  [protected-file diff] | tests/integration/age-band-source.test.ts
+  [protected-file diff] | tests/integration/auth.test.ts
+  [protected-file diff] | tests/integration/authorization-dimensions.test.ts
+  [protected-file diff] | tests/integration/authorization.test.ts
+  [protected-file diff] | tests/integration/consent-first.test.ts
+  [protected-file diff] | tests/integration/consent-grant.test.ts
+  [protected-file diff] | tests/integration/consent-read.test.ts
+  [protected-file diff] | tests/integration/consent-request.test.ts
+  [protected-file diff] | tests/integration/consent-revoke.test.ts
+  [protected-file diff] | tests/integration/families.test.ts
+  [protected-file diff] | tests/integration/idempotency.test.ts
+  [protected-file diff] | tests/integration/members.test.ts
+  [protected-file diff] | tests/integration/openapi.test.ts
+  [protected-file diff] | tests/integration/processing-gate.test.ts
+  [protected-file diff] | tests/setup/db.ts
+  [protected-file diff] | tests/setup/env.ts
+  [protected-file diff] | tsconfig.base.json
+  [protected-file diff] | vitest.config.ts
+  [protected-file diff] --- real output end ---
+  [protected-file diff] 结果: PASS
+
+## FINAL GATES
+
+  [G1 全量测试套件] $ bunx vitest run
+  [G1 全量测试套件] exit=0 duration=3.0s
+  [G1 全量测试套件] --- real output begin ---
+  [G1 全量测试套件] | 
+  [G1 全量测试套件] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [G1 全量测试套件] | 
+  [G1 全量测试套件] |  ✓ tests/integration/age-band-source.test.ts (12 tests) 352ms
+  [G1 全量测试套件] |  ✓ tests/integration/processing-gate.test.ts (5 tests) 376ms
+  [G1 全量测试套件] |  ✓ tests/integration/idempotency.test.ts (20 tests) 690ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-reconsent.test.ts (5 tests) 271ms
+  [G1 全量测试套件] |  ✓ tests/integration/members.test.ts (14 tests) 386ms
+  [G1 全量测试套件] | stdout | tests/integration/authorization-dimensions.test.ts > Authorization Dimensions (T062) > T062: guardian-but-not-member cannot access another Family (403, no target fields)
+  [G1 全量测试套件] | [T062 FR-006a] 判定依据: actor A 持有 GRANTED consent (guardian_person_id=A), 但非 Family B 成员 → POST /families/b3b909fe-6d0b-4f48-ac7a-fa57a2f7c29c/members = 403 NOT_FAMILY_MEMBER; guardian 关系未产生 Family 访问权，且响应体无目标 Family 字段。
+  [G1 全量测试套件] | 
+  [G1 全量测试套件] | stdout | tests/integration/authorization-dimensions.test.ts > Authorization Dimensions (T062) > T062: member-but-not-guardian grant → NOT_GUARDIAN
+  [G1 全量测试套件] | [T062 FR-006b] 判定依据: actor 是 Family 成员 (family_members 命中 1 行) 但不是 guardian_person_id (01a1ab4c-5529-78ba-ad09-b13970beca44) → POST /compliance/guardian-consents = 403 NOT_GUARDIAN; membership 未产生 guardian authority，request 仍为 PENDING。
+  [G1 全量测试套件] | 
+  [G1 全量测试套件] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 239ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 219ms
+  [G1 全量测试套件] |  ✓ tests/integration/authorization.test.ts (7 tests) 262ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-grant.test.ts (5 tests) 189ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-first.test.ts (3 tests) 143ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-request.test.ts (4 tests) 136ms
+  [G1 全量测试套件] |  ✓ tests/integration/families.test.ts (6 tests) 119ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-read.test.ts (4 tests) 104ms
+  [G1 全量测试套件] |  ✓ tests/db/rls.test.ts (9 tests) 84ms
+  [G1 全量测试套件] |  ✓ tests/db/idempotency-rls.test.ts (3 tests) 36ms
+  [G1 全量测试套件] |  ✓ tests/integration/auth.test.ts (4 tests) 81ms
+  [G1 全量测试套件] |  ✓ tests/db/roles.test.ts (6 tests) 39ms
+  [G1 全量测试套件] |  ✓ tests/db/constraints.test.ts (3 tests) 26ms
+  [G1 全量测试套件] |  ✓ tests/db/consent-structure.test.ts (3 tests) 30ms
+  [G1 全量测试套件] |  ✓ tests/db/migration-repro.test.ts (7 tests) 27ms
+  [G1 全量测试套件] |  ✓ tests/db/schema-structure.test.ts (6 tests) 24ms
+  [G1 全量测试套件] |  ✓ tests/domain/env.test.ts (6 tests) 3ms
+  [G1 全量测试套件] |  ✓ tests/domain/idempotency-hash.test.ts (6 tests) 2ms
+  [G1 全量测试套件] |  ✓ tests/integration/openapi.test.ts (5 tests) 29ms
+  [G1 全量测试套件] |  ✓ tests/domain/session-token.test.ts (4 tests) 2ms
+  [G1 全量测试套件] |  ✓ tests/domain/authorization.test.ts (8 tests) 1ms
+  [G1 全量测试套件] |  ✓ tests/domain/provenance.test.ts (5 tests) 2ms
+  [G1 全量测试套件] |  ✓ tests/domain/age-band.test.ts (7 tests) 2ms
+  [G1 全量测试套件] |  ✓ tests/domain/notices.test.ts (3 tests) 1ms
+  [G1 全量测试套件] | 
+  [G1 全量测试套件] |  Test Files  29 passed (29)
+  [G1 全量测试套件] |       Tests  178 passed (178)
+  [G1 全量测试套件] |    Start at  18:41:07
+  [G1 全量测试套件] |    Duration  2.74s (transform 169ms, setup 26ms, collect 1.37s, tests 3.87s, environment 2ms, prepare 731ms)
+  [G1 全量测试套件] | 
+  [G1 全量测试套件] | (node:43880) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+  [G1 全量测试套件] | (Use `node --trace-deprecation ...` to show where the warning was created)
+  [G1 全量测试套件] --- real output end ---
+  [G1 全量测试套件] 结果: PASS
+
+  [G2 静态守卫] $ bun run guard:static
+  [G2 静态守卫] exit=0 duration=0.1s
+  [G2 静态守卫] --- real output begin ---
+  [G2 静态守卫] | guard-static: PASS (0 violations)
+  [G2 静态守卫] | $ node scripts/guard-static.mjs
+  [G2 静态守卫] --- real output end ---
+  [G2 静态守卫] 结果: PASS
+
+  [G3 typecheck（base 工程）] $ bunx tsc -p tsconfig.base.json --noEmit
+  [G3 typecheck（base 工程）] exit=0 duration=0.3s
+  [G3 typecheck（base 工程）] --- real output begin ---
+  [G3 typecheck（base 工程）] | 
+  [G3 typecheck（base 工程）] --- real output end ---
+  [G3 typecheck（base 工程）] 结果: PASS
+
+  [G4 typecheck（api 工程）] $ bunx tsc --noEmit
+  [G4 typecheck（api 工程）] exit=0 duration=0.3s
+  [G4 typecheck（api 工程）] --- real output begin ---
+  [G4 typecheck（api 工程）] | 
+  [G4 typecheck（api 工程）] --- real output end ---
+  [G4 typecheck（api 工程）] 结果: PASS
+
+  [G5 OpenAPI 生成] $ bun run openapi:generate
+  [G5 OpenAPI 生成] exit=0 duration=0.3s
+  [G5 OpenAPI 生成] --- real output begin ---
+  [G5 OpenAPI 生成] |   Detected 14 paths
+  [G5 OpenAPI 生成] | Generated: /Users/milushangdi/Projects/xiaoshuyin/packages/generated/openapi.json
+  [G5 OpenAPI 生成] | Generated: /Users/milushangdi/Projects/xiaoshuyin/packages/generated/openapi.d.ts
+  [G5 OpenAPI 生成] | openapi-generate: OK
+  [G5 OpenAPI 生成] | $ node scripts/openapi-generate.mjs
+  [G5 OpenAPI 生成] --- real output end ---
+  [G5 OpenAPI 生成] 结果: PASS
+
+  [G6 OpenAPI 漂移检查] $ bun run openapi:check
+  [G6 OpenAPI 漂移检查] exit=0 duration=0.4s
+  [G6 OpenAPI 漂移检查] --- real output begin ---
+  [G6 OpenAPI 漂移检查] | openapi-check: PASS (no drift)
+  [G6 OpenAPI 漂移检查] | $ node scripts/openapi-check.mjs
+  [G6 OpenAPI 漂移检查] --- real output end ---
+  [G6 OpenAPI 漂移检查] 结果: PASS
+
+  [G7 DB 结构证据] $ bun run db:evidence
+  [G7 DB 结构证据] exit=0 duration=0.7s
+  [G7 DB 结构证据] --- real output begin ---
+  [G7 DB 结构证据] | # T067 — Database / RLS / Migration Evidence
+  [G7 DB 结构证据] | 生成时间: 2026-11-05T10:41:11.864Z
+  [G7 DB 结构证据] | 
+  [G7 DB 结构证据] | 说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
+  [G7 DB 结构证据] | 空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
+  [G7 DB 结构证据] | 
+  [G7 DB 结构证据] | ## 当前主库（已迁移） — quickstart §1 期望表逐项核对（真实查询输出）
+  [G7 DB 结构证据] | 
+  [G7 DB 结构证据] | | 检查 | 期望 | 实际 | 结果 |
+  [G7 DB 结构证据] | |---|---|---|---|
+  [G7 DB 结构证据] | | 9 张业务表 relrowsecurity/relforcerowsecurity | true/true × 9 | ["business_audit_events=true/true","consent_records=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+  [G7 DB 结构证据] | | accounts 无 RLS | false/false | false/false | PASS |
+  [G7 DB 结构证据] | | 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
+  [G7 DB 结构证据] | | xiaoshuyin_app rolbypassrls | false | false | PASS |
+  [G7 DB 结构证据] | | xiaoshuyin_migrator rolbypassrls | false | false | PASS |
+  [G7 DB 结构证据] | | uuidv7() 默认值的 9 张 id 表 | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | PASS |
+  [G7 DB 结构证据] | | uuidv7 默认值表达式 | uuidv7() × 9 | ["uuidv7()"] | PASS |
+  [G7 DB 结构证据] | | 枚举数量与名称（8） | ["account_status","age_band","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | PASS |
+  [G7 DB 结构证据] | | age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
+  [G7 DB 结构证据] | | profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
+  [G7 DB 结构证据] | | 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
+  [G7 DB 结构证据] | | 业务表数量（10） | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | PASS |
+  [G7 DB 结构证据] | | 不存在 assertions / observations 表 | 0 | 0 | PASS |
+  [G7 DB 结构证据] | | RLS policy 数量（9） | 9 | 9 | PASS |
+  [G7 DB 结构证据] | | consent 不可变触发器 | ["consent_records_guard"] | ["consent_records_guard"] | PASS |
+  [G7 DB 结构证据] | | persons 无 family_id / source_kind / role | 0 | 0 | PASS |
+  [G7 DB 结构证据] | | persons.account_id UNIQUE | true | true | PASS |
+  [G7 DB 结构证据] | | family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
+  [G7 DB 结构证据] | 
+  [G7 DB 结构证据] | ## 空库重建 + migration replay（真实执行）
+  [G7 DB 结构证据] |   CREATE DATABASE xiaoshuyin_evidence_1793875271905 OWNER xiaoshuyin_migrator — OK
+  [G7 DB 结构证据] |   第一次 db:migrate (空库):
+  [G7 DB 结构证据] |     APPLY 001_initial_schema.sql
+  [G7 DB 结构证据] |     
+  [G7 DB 结构证据] |     Migration complete: 1 new, 0 previously applied.
+  [G7 DB 结构证据] |     Verified: app role has no DDL permissions.
+  [G7 DB 结构证据] | 
+  [G7 DB 结构证据] | ## 空库重建结果 — quickstart §1 期望表逐项核对（真实查询输出）
+  [G7 DB 结构证据] | 
+  [G7 DB 结构证据] | | 检查 | 期望 | 实际 | 结果 |
+  [G7 DB 结构证据] | |---|---|---|---|
+  [G7 DB 结构证据] | | 9 张业务表 relrowsecurity/relforcerowsecurity | true/true × 9 | ["business_audit_events=true/true","consent_records=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+  [G7 DB 结构证据] | | accounts 无 RLS | false/false | false/false | PASS |
+  [G7 DB 结构证据] | | 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
+  [G7 DB 结构证据] | | xiaoshuyin_app rolbypassrls | false | false | PASS |
+  [G7 DB 结构证据] | | xiaoshuyin_migrator rolbypassrls | false | false | PASS |
+  [G7 DB 结构证据] | | uuidv7() 默认值的 9 张 id 表 | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | PASS |
+  [G7 DB 结构证据] | | uuidv7 默认值表达式 | uuidv7() × 9 | ["uuidv7()"] | PASS |
+  [G7 DB 结构证据] | | 枚举数量与名称（8） | ["account_status","age_band","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | PASS |
+  [G7 DB 结构证据] | | age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
+  [G7 DB 结构证据] | | profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
+  [G7 DB 结构证据] | | 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
+  [G7 DB 结构证据] | | 业务表数量（10） | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | PASS |
+  [G7 DB 结构证据] | | 不存在 assertions / observations 表 | 0 | 0 | PASS |
+  [G7 DB 结构证据] | | RLS policy 数量（9） | 9 | 9 | PASS |
+  [G7 DB 结构证据] | | consent 不可变触发器 | ["consent_records_guard"] | ["consent_records_guard"] | PASS |
+  [G7 DB 结构证据] | | persons 无 family_id / source_kind / role | 0 | 0 | PASS |
+  [G7 DB 结构证据] | | persons.account_id UNIQUE | true | true | PASS |
+  [G7 DB 结构证据] | | family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
+  [G7 DB 结构证据] |   第二次 db:migrate (replay):
+  [G7 DB 结构证据] |     SKIP 001_initial_schema.sql (already applied)
+  [G7 DB 结构证据] |     
+  [G7 DB 结构证据] |     Migration complete: 0 new, 1 previously applied.
+  [G7 DB 结构证据] |     Verified: app role has no DDL permissions.
+  [G7 DB 结构证据] | | migration replay 为 no-op（对象集合不变） | enum:account_status|enum:age_band|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:consent_scope|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:business_audit_events|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | enum:account_status|enum:age_band|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:consent_scope|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:business_audit_events|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | PASS |
+  [G7 DB 结构证据] | | replay 输出声明 0 new | true | true | PASS |
+  [G7 DB 结构证据] |   DROP DATABASE xiaoshuyin_evidence_1793875271905 — OK
+  [G7 DB 结构证据] | 
+  [G7 DB 结构证据] | ## T011 / T012 红灯测试转绿（真实命令输出归档）
+  [G7 DB 结构证据] |   $ bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts
+  [G7 DB 结构证据] |     RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+  [G7 DB 结构证据] |     
+  [G7 DB 结构证据] |      ✓ tests/db/migration-repro.test.ts (7 tests) 38ms
+  [G7 DB 结构证据] |      ✓ tests/db/roles.test.ts (6 tests) 52ms
+  [G7 DB 结构证据] |     
+  [G7 DB 结构证据] |      Test Files  2 passed (2)
+  [G7 DB 结构证据] |           Tests  13 passed (13)
+  [G7 DB 结构证据] |        Start at  18:41:12
+  [G7 DB 结构证据] |        Duration  177ms (transform 21ms, setup 10ms, collect 32ms, tests 90ms, environment 0ms, prepare 51ms)
+  [G7 DB 结构证据] |     
+  [G7 DB 结构证据] |     (node:44036) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+  [G7 DB 结构证据] |     (Use `node --trace-deprecation ...` to show where the warning was created)
+  [G7 DB 结构证据] | | T011 migration-repro + T012 roles exit code | 0 | 0 | PASS |
+  [G7 DB 结构证据] | | T011/T012 测试全绿 | true | true | PASS |
+  [G7 DB 结构证据] | 
+  [G7 DB 结构证据] | db-evidence: PASS
+  [G7 DB 结构证据] | $ node scripts/db-evidence.mjs
+  [G7 DB 结构证据] --- real output end ---
+  [G7 DB 结构证据] 结果: PASS
+
+  [G8 FR/SC 覆盖审计] $ bun run coverage:audit
+  [G8 FR/SC 覆盖审计] exit=0 duration=0.0s
+  [G8 FR/SC 覆盖审计] --- real output begin ---
+  [G8 FR/SC 覆盖审计] | # T069 — FR / SC Coverage Audit
+  [G8 FR/SC 覆盖审计] | 映射目标均为仓库中真实存在且含测试用例的文件。
+  [G8 FR/SC 覆盖审计] | 
+  [G8 FR/SC 覆盖审计] | ## Functional Requirements (17)
+  [G8 FR/SC 覆盖审计] | 
+  [G8 FR/SC 覆盖审计] | | Requirement | Test files | Status |
+  [G8 FR/SC 覆盖审计] | |---|---|---|
+  [G8 FR/SC 覆盖审计] | | FR-001 | tests/integration/auth.test.ts, tests/db/schema-structure.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-002 | tests/integration/auth.test.ts, tests/domain/session-token.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-003 | tests/domain/provenance.test.ts, tests/integration/members.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-004 | tests/integration/members.test.ts, tests/db/constraints.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-005 | tests/integration/families.test.ts, tests/integration/consent-first.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-006 | tests/integration/authorization-dimensions.test.ts, tests/domain/authorization.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-007 | tests/integration/consent-first.test.ts, tests/db/consent-structure.test.ts, tests/db/schema-structure.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-008 | tests/integration/consent-first.test.ts, tests/integration/consent-request.test.ts, tests/integration/consent-grant.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-009 | tests/domain/age-band.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-010 | tests/integration/consent-revoke.test.ts, tests/db/consent-structure.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-011 | tests/integration/authorization.test.ts, tests/db/rls.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-012 | tests/db/rls.test.ts, tests/db/roles.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-013 | tests/db/rls.test.ts, tests/integration/authorization.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-014 | tests/integration/idempotency.test.ts, tests/db/idempotency-rls.test.ts, tests/domain/idempotency-hash.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-015 | tests/db/migration-repro.test.ts, tests/db/schema-structure.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-016 | tests/db/constraints.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | FR-017 | tests/db/constraints.test.ts, tests/db/schema-structure.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | 
+  [G8 FR/SC 覆盖审计] | ## Success Criteria (8)
+  [G8 FR/SC 覆盖审计] | 
+  [G8 FR/SC 覆盖审计] | | Criterion | Test files | Status |
+  [G8 FR/SC 覆盖审计] | |---|---|---|
+  [G8 FR/SC 覆盖审计] | | SC-001 | tests/integration/auth.test.ts, tests/integration/families.test.ts, tests/integration/members.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | SC-002 | tests/integration/authorization.test.ts, tests/db/rls.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | SC-003 | tests/integration/consent-first.test.ts, tests/integration/consent-revoke.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | SC-004 | tests/domain/age-band.test.ts, tests/db/schema-structure.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | SC-005 | tests/integration/idempotency.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | SC-006 | tests/db/constraints.test.ts, tests/db/schema-structure.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | SC-007 | tests/db/constraints.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | | SC-008 | tests/domain/provenance.test.ts, tests/integration/members.test.ts | COVERED |
+  [G8 FR/SC 覆盖审计] | 
+  [G8 FR/SC 覆盖审计] | FR 17/17
+  [G8 FR/SC 覆盖审计] | SC 8/8
+  [G8 FR/SC 覆盖审计] | missing = 0
+  [G8 FR/SC 覆盖审计] | coverage-audit: PASS (FR 17/17, SC 8/8, missing = 0)
+  [G8 FR/SC 覆盖审计] | $ node scripts/coverage-audit.mjs
+  [G8 FR/SC 覆盖审计] --- real output end ---
+  [G8 FR/SC 覆盖审计] 结果: PASS
+
+## 汇总
+
+- Verification Plan 行数: 26（执行 25 条，NOT VERIFIED 1 条）
+- 命令 PASS: 36
+- 命令 FAIL: 0
+- verify-all: PASS
+
+注：MAPPED 行使用承接测试文件，原因逐条列于上文；未修改任何冻结文档。

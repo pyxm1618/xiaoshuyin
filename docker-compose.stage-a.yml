@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:-postgres}
+      POSTGRES_DB: xiaoshuyin
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/server/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://xiaoshuyin_app:${POSTGRES_APP_PASSWORD}@postgres:5432/xiaoshuyin
+      MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:${POSTGRES_MIGRATOR_PASSWORD}@postgres:5432/xiaoshuyin
+      SESSION_SECRET: ${SESSION_SECRET}
+      EVIDENCE_HASH_PEPPER: ${EVIDENCE_HASH_PEPPER}
+      WECHAT_APP_ID: ${WECHAT_APP_ID}
+      WECHAT_APP_SECRET: ${WECHAT_APP_SECRET}
+    ports:
+      - "8787:8787"
+
+volumes:
+  pgdata:
