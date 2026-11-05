@@ -11,7 +11,7 @@
   ],
   "scripts": {
     "dev:api": "cd apps/server/api && bun run dev",
-    "typecheck": "tsc -p tsconfig.base.json --noEmit && bun run --recursive typecheck",
+    "typecheck": "node scripts/typecheck-all.mjs",
     "test": "vitest",
     "guard:static": "node scripts/guard-static.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",

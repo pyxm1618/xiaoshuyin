@@ -248,9 +248,54 @@ FR-002 平台真实性按 Plan 明确标为 **NOT VERIFIED**，未伪造通过�
 
 - 实现与冻结规格之间**无剩余 gap**；上述 6 项均为已记录、可解释的偏差或 Plan 明确排除项。
 - `FR-002 平台真实性` 不属于本 Slice 验收范围，按 Plan 保留 NOT VERIFIED，不写成已通过。
-- **CI**：代码最终 Head `1e6b117`（`feat/001-family-identity-core`）的 GitHub Actions run **`41960284795`** 中
-  **Static Checks / Unit Tests / DB Migration / Integration Tests / Contract 五个 job 全部 SUCCESS**；
-  Spec Governance run `41960284706` SUCCESS。该 Head 之后仅提交 `tasks.md` 勾选状态与本文件的 run 记录，
-  不改变任何实现、测试或验证结论。
 
-**收敛结论：Implement 阶段可交付 Independent Converge。**
+---
+
+## 14. Independent Converge Round 1 FAIL → Implement Remediation
+
+**Round 1 判定（保留，不抹除）**：`INDEPENDENT CONVERGE FAIL — RETURN TO IMPLEMENT`
+基线 `bb400eb2455437591d2644e729e11854491cc03e`。Review 确认 6 个缺口（1 CRITICAL / 4 HIGH / 1 MEDIUM）：
+
+| # | 级别 | Round 1 缺口 | 违反 |
+|---|---|---|---|
+| 1 | CRITICAL | revoke consent 后仍可写 UNDER_14 profile values（PATCH 无 processing gate） | V1-C39、FR-010、T058/T059、consent-onboarding §7 门禁 |
+| 2 | HIGH | re-consent 新开 v1，而非接续 v3 版本链 | consent-onboarding §6.1 |
+| 3 | HIGH | provenance provider 可由客户端伪造（`pv.providedByPersonId ?? personId`） | contracts/provenance.md、T051/T057 |
+| 4 | HIGH | Family creator 未强制 `ageBand=ADULT`（request 与 DB 不一致） | T046、plan D-2、CHK023 |
+| 5 | HIGH | root `typecheck` 自递归（`--recursive` 含 root 自身） | 本地无法完整执行 typecheck |
+| 6 | MEDIUM | `GET /consents` 返回裸数组，非冻结 OpenAPI 的 `{ "items": [...] }` | identity-family-api.openapi.yaml |
+
+**修复证据（本轮）**
+
+| # | 修复 | 验证 |
+|---|---|---|
+| 1 | `routes/members.ts` PATCH 在任何 profile-value 写入前调用冻结门禁 `assertMinorProcessingAllowed`（读 profile + consent pointer 后纯函数判定）；BLOCK 时直接抛出冻结 GateReason，不 supersede / 不 insert / 不写成功 audit。`error-handler.ts` 补入冻结 GateReason 的 403 映射 | `tests/integration/processing-gate.test.ts` 3/3：GRANTED→PATCH 成功；revoke→PATCH 403 `GUARDIAN_CONSENT_REVOKED` 且 values/audit 行完全不变；re-consent v3 后恢复 200 |
+| 2 | `routes/compliance.ts` grant 分支按 §6.1 接续版本链：request 带 `subject_person_id` 且该 Person 为 UNDER_14 且存在 consent pointer 时，锁 profile + 当前 consent，校验当前版本必须是 `REVOKED`、actor 是当前 guardian，`newVersion = current.version + 1`、`supersedes_id = current.id`、INSERT 即带 `bound_person_id=P` / `bound_at=now`，并推进 profile pointer；subject 不存在则走首次 v1。`getConsentRequestForUpdate` 增取 `subject_person_id`/`family_id`，新增 `getComplianceProfileForUpdate` | `tests/integration/consent-revoke.test.ts` 3/3：v1 GRANTED(supersedes NULL) / v2 REVOKED(supersedes v1, request NULL) / v3 GRANTED(supersedes v2, request B, bound P)；三行 `bound_person_id` 同一 P；pointer=v3；本家庭成员数不变；gate 恢复 ALLOW |
+| 3 | `packages/domain/src/provenance.ts` 新增纯函数 `resolveProvenanceProvider`：SELF_STATEMENT→provider 必须等于 subject；relay/observation→显式 provider 必须是本家庭成员；UNDER_14 创建→固定 `consent.guardian_person_id` 且拒绝显式不同值；默认 actor 仅用于 relay 且 actor 本身是成员。三个入口（POST member / PATCH member / family creator）统一走该解析器，违规 → 422 `AGE_BAND_SOURCE_NOT_ALLOWED`（T051/T057 任务正文指定的正式错误码） | `tests/integration/age-band-source.test.ts` 7/7（creator 伪造/越界 provider 422、member 伪造 SELF_STATEMENT 与越界 relay 422、合法家庭 provider 201、无 Account 成人 SELF_STATEMENT 201）+ `tests/integration/members.test.ts` 14/14（UNDER_14 provider≠guardian 422、=guardian 201） |
+| 4 | `routes/families.ts` 改用 `checkSourceAcceptability('FAMILY_CREATE', ageBand, ageBandSource)`，`ageBand !== 'ADULT'` → 403 `FAMILY_MANAGER_MUST_BE_ADULT`，与 request/DB 一致；失败事务零残留 | `tests/integration/families.test.ts` 6/6：MINOR_14_17 / UNDER_14 creator → 403 `FAMILY_MANAGER_MUST_BE_ADULT`，且 family / family_members / profile / value / audit 计数均无新增；ADULT+SELF_STATEMENT → 201 |
+| 5 | root `package.json` 的 `typecheck` 改为 `node scripts/typecheck-all.mjs`：先跑 root tsbase，再遍历 `apps/server/*` + `packages/*` 中带 `typecheck` script 的 workspace 各跑一次，不回调 root，确定性 exit；不引入新依赖 | `bun run typecheck` **单次完成 exit 0**（root + 5 个 workspace 逐个执行，无递归） |
+| 6 | `routes/consents.ts` `GET /api/v1/consents` 统一返回 `{ "items": [...] }`（无家庭 → `{ "items": [] }`），与冻结 OpenAPI 一致；冻结契约未修改 | `tests/integration/consent-read.test.ts` 4/4：`toEqual({ items: [] })`、`body.items` 为数组 |
+
+**本轮全量验证**
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS（exit 0，单次完成） |
+| `bun run guard:static` | PASS (0 violations) |
+| `bun run openapi:generate` / `openapi:check` | PASS（14 paths，no drift；`packages/generated/*` 无变化） |
+| `bun run vitest run` | **28 files / 166 tests 全部 PASS** |
+| `bun run db:evidence` | PASS（结构/RLS/空库重建/replay/T011-T012 13/13） |
+| `bun run coverage:audit` | PASS（FR 17/17、SC 8/8、missing = 0） |
+| `bun run verify-all` | 见 `tests/evidence/verify-all.log` 汇总段 |
+| `node .specify/scripts/validate-governance.mjs` | PASS |
+| `node .specify/scripts/tests/run-governance-tests.mjs` | PASS 15/15 |
+| 重点专项（7 个 suite 独立执行） | consent-revoke 3/3、consent-first 3/3、members 14/14、families 6/6、consent-read 4/4、age-band-source 7/7、processing-gate 3/3 |
+
+**TDD 记录**：先改 `consent-revoke.test.ts` 的错误断言 `new chain starts at v1` 为冻结 v3 预期并跑出 RED（`expected 1 to be 3`），再实现版本链接续；其余 5 项同样先写冻结预期跑出 RED（共 10 个失败：4 provider / 2 GET consents / 2 ADULT / 2 gate），最小实现后转 GREEN。
+
+**任务状态**：T046、T051、T057、T058、T059、T060、T068、T072 已按 Review 要求重置为 `[ ]` 后逐项重验并重新 `[x]`，当前 `tasks.md` = **72/72**。
+
+---
+
+**收敛结论：Implement Remediation 已修复 Independent Converge Round 1 的全部 6 项缺口，可交付 Independent Converge Round 2。**
+
