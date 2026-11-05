@@ -56,6 +56,7 @@
 13. **批准的 message 写入口**：交付 `POST /api/v1/cases/:id/messages` 的通用 Common Core 契约，用于保存原始 Case message；不得借此实现 Digital Use Assessment 或 Scene routing。
 14. **内部 Evidence 写入合同**：为后续 Assessment / AI bounded extraction / Problem Formulation 提供确定性的 domain/repository contract，但本 Slice 不新增未经批准的通用 public Evidence CRUD API。
 15. **可验证 Provenance**：必须能机械证明“家长转述 ≠ 孩子本人事实”“冲突保持冲突”“UNKNOWN 不被补值”“旧 Evidence 可被 supersede 但不消失”。
+16. **Person reference 安全边界**：当 Evidence 的 `subject_person_id` / `source_person_id` 不为空时，服务端必须验证该 Person reference 对当前目标 Family / Case 是合法、可授权使用的；仅凭 Person UUID 存在不得构成合法引用。V1 当前不设计跨 Family sharing，因此不得让 Family A 的 Evidence 引用仅属于 Family B 的 Person。guardian relationship 本身不授予 Family access，也不构成例外；若不存在其它正式批准的跨成员使用依据，不得自动允许其作为当前 Family Evidence 的 source / subject reference。本 Slice 不绕过 Slice 1 已冻结的 Person / guardian consent / compliance 前置条件，也不得为了记录 Evidence 私自创建或引用尚未合法建立的 child Person。具体数据库约束、repository 查询与 authorization 实现方式留给 Plan。
 
 ### Out of Scope
 
@@ -137,6 +138,7 @@
 10. **Given** 当前 Slice 的 schema，**When** 做结构断言，**Then** `observations` 与 `assertions` 分开，`assertions.kind` 不含 OBSERVATION。
 11. **Given** 一条 AI / automated extractor 提出的候选（未来调用方），**When** 没有用户/规则允许的确认动作，**Then** Evidence Core 只能保存为适当候选/HYPOTHESIS 或拒绝，不能自行确认成 FACT。
 12. **Given** Slice 1/2 尚未合并 main，**When** 本 Slice 进入设计阶段，**Then** Spec/Plan/Tasks 可以完成；**When** 尝试进入 Implement，**Then** gate 必须 BLOCK。
+13. **Given** Case 属于 Family A、Person B 只属于 Family B，且 actor 即使知道 Person B UUID，**When** 尝试将 `subject_person_id = Person B` 或 `source_person_id = Person B` 写入 Family A 的 Evidence，**Then** 写入必须失败、不产生 Evidence、不泄露 Person B 的敏感信息，且不得仅因 UUID 存在就视为合法引用；具体 HTTP/domain 错误码由后续 Plan 在已有错误语义下确定。
 
 ## Edge, Failure, and Unknown States
 
@@ -174,6 +176,7 @@
 - **FR-018** [UPSTREAM: V1-C20 / V1-C21] 当前 Slice 不开放 Participant Evidence 权限；只有已批准的现有 actor path 可进入，未来孩子端权限由 Participant Slice 明确设计。
 - **FR-019** [UPSTREAM: §7.2 / §32.3] `dialogue_messages` MUST 是 Evidence 来源而不是 Fact 真相源；删除/修改 message 不得通过“直接改文本”静默重写已派生 Evidence 历史。
 - **FR-020** [UPSTREAM: AGENTS / Constitution] Slice 3 的 Implement MUST 在 Slice 1/2 对应依赖合并并通过 required gates 后才能开始；设计阶段不得借“未来依赖”写业务实现。
+- **FR-021** [UPSTREAM: V1-C21 / §9–§11 / Slice 1 frozen identity boundary] 当 Evidence 的 `subject_person_id` / `source_person_id` 不为空时，服务端 MUST 验证该 Person reference 对当前目标 Family / Case 合法且已获授权使用；Person UUID 存在本身 MUST NOT 构成合法引用，Family A 的 Evidence MUST NOT 引用仅属于 Family B 的 Person。guardian relationship MUST NOT 被视为跨 Family access 的隐式授权或例外。本 Slice MUST NOT 绕过 Slice 1 已冻结的 Person / guardian consent / compliance 前置条件，也 MUST NOT 为记录 Evidence 私自创建或引用尚未合法建立的 child Person。具体 FK、trigger、repository、SQL、RLS policy 与错误码实现由后续 Plan 决定。
 
 ## Key Entities
 
@@ -210,6 +213,7 @@
 | Authorization / RLS | integration + database | wrong-family HTTP 无泄漏；app role wrong context SELECT 0 / write denied |
 | No AI fact promotion | domain tests | HYPOTHESIS / STATEMENT 无合法确认依据时无法变 FACT |
 | Scope | route + schema enumeration | 无 assessment / formulation / scene / participant / generic evidence CRUD / AI placeholder |
+| Person reference authorization | domain + integration/security | Family A Evidence 对仅属于 Family B 的 Person UUID，无论用于 subject 还是 source 均拒绝写入；Evidence 产生数为 0；不泄露该 Person 敏感信息；UUID 存在与 guardian relationship 均不自动授予跨 Family 引用权 |
 | Dependency gate | governance evidence | Slice 1/2 未合并时 Implement 明确 BLOCKED |
 
 ## Assumptions and Open Questions
