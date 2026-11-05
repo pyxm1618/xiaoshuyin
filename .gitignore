@@ -5,7 +5,8 @@ dist/
 .env.local
 .DS_Store
 tests/evidence/*.log
-tests/evidence/quickstart.md
-tests/evidence/converge.md
+!tests/evidence/db-evidence.log
+!tests/evidence/guard-static.log
+!tests/evidence/verify-all.log
 .workbuddy/
 .openapi-gen-temp.mjs

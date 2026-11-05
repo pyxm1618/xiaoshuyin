@@ -30,7 +30,7 @@ export async function insertConsentRequest(
 
 export async function getConsentRequestForUpdate(tx: Tx, id: string) {
   const { rows } = await tx.query(
-    `SELECT id, status, expires_at, notice_version, notice_hash
+    `SELECT id, status, expires_at, notice_version, notice_hash, guardian_person_id
      FROM guardian_consent_requests WHERE id = $1 FOR UPDATE`,
     [id]
   );

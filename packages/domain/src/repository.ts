@@ -177,6 +177,24 @@ export async function insertAuditEvent(
 
 // ── Idempotency Keys ────────────────────────────────────────
 
+/**
+ * Transaction-scoped advisory lock over (actor, command, key).
+ * Serializes concurrent same-key requests BEFORE the idempotency lookup,
+ * so at most one transaction can create business objects for a given key.
+ * Released automatically at COMMIT / ROLLBACK.
+ */
+export async function lockIdempotencyKey(
+  tx: Tx,
+  actorAccountId: string,
+  commandType: string,
+  idempotencyKey: string
+): Promise<void> {
+  await tx.query(
+    'SELECT pg_advisory_xact_lock(hashtextextended($1, 0::bigint))',
+    [`${actorAccountId}:${commandType}:${idempotencyKey}`]
+  );
+}
+
 export async function getIdempotencyKey(
   tx: Tx,
   actorAccountId: string,

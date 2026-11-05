@@ -1,0 +1,86 @@
+# T067 — Database / RLS / Migration Evidence
+生成时间: 2026-11-05T02:32:08.993Z
+
+说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
+空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
+
+## 当前主库（已迁移） — quickstart §1 期望表逐项核对（真实查询输出）
+
+| 检查 | 期望 | 实际 | 结果 |
+|---|---|---|---|
+| 9 张业务表 relrowsecurity/relforcerowsecurity | true/true × 9 | ["business_audit_events=true/true","consent_records=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+| accounts 无 RLS | false/false | false/false | PASS |
+| 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
+| xiaoshuyin_app rolbypassrls | false | false | PASS |
+| xiaoshuyin_migrator rolbypassrls | false | false | PASS |
+| uuidv7() 默认值的 9 张 id 表 | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | PASS |
+| uuidv7 默认值表达式 | uuidv7() × 9 | ["uuidv7()"] | PASS |
+| 枚举数量与名称（8） | ["account_status","age_band","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | PASS |
+| age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
+| profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
+| 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
+| 业务表数量（10） | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | PASS |
+| 不存在 assertions / observations 表 | 0 | 0 | PASS |
+| RLS policy 数量（9） | 9 | 9 | PASS |
+| consent 不可变触发器 | ["consent_records_guard"] | ["consent_records_guard"] | PASS |
+| persons 无 family_id / source_kind / role | 0 | 0 | PASS |
+| persons.account_id UNIQUE | true | true | PASS |
+| family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
+
+## 空库重建 + migration replay（真实执行）
+  CREATE DATABASE xiaoshuyin_evidence_1793845929023 OWNER xiaoshuyin_migrator — OK
+  第一次 db:migrate (空库):
+    APPLY 001_initial_schema.sql
+    
+    Migration complete: 1 new, 0 previously applied.
+    Verified: app role has no DDL permissions.
+
+## 空库重建结果 — quickstart §1 期望表逐项核对（真实查询输出）
+
+| 检查 | 期望 | 实际 | 结果 |
+|---|---|---|---|
+| 9 张业务表 relrowsecurity/relforcerowsecurity | true/true × 9 | ["business_audit_events=true/true","consent_records=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+| accounts 无 RLS | false/false | false/false | PASS |
+| 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
+| xiaoshuyin_app rolbypassrls | false | false | PASS |
+| xiaoshuyin_migrator rolbypassrls | false | false | PASS |
+| uuidv7() 默认值的 9 张 id 表 | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | PASS |
+| uuidv7 默认值表达式 | uuidv7() × 9 | ["uuidv7()"] | PASS |
+| 枚举数量与名称（8） | ["account_status","age_band","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | PASS |
+| age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
+| profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
+| 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
+| 业务表数量（10） | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | ["accounts","business_audit_events","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | PASS |
+| 不存在 assertions / observations 表 | 0 | 0 | PASS |
+| RLS policy 数量（9） | 9 | 9 | PASS |
+| consent 不可变触发器 | ["consent_records_guard"] | ["consent_records_guard"] | PASS |
+| persons 无 family_id / source_kind / role | 0 | 0 | PASS |
+| persons.account_id UNIQUE | true | true | PASS |
+| family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
+  第二次 db:migrate (replay):
+    SKIP 001_initial_schema.sql (already applied)
+    
+    Migration complete: 0 new, 1 previously applied.
+    Verified: app role has no DDL permissions.
+| migration replay 为 no-op（对象集合不变） | enum:account_status|enum:age_band|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:consent_scope|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:business_audit_events|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | enum:account_status|enum:age_band|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:consent_scope|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:business_audit_events|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | PASS |
+| replay 输出声明 0 new | true | true | PASS |
+  DROP DATABASE xiaoshuyin_evidence_1793845929023 — OK
+
+## T011 / T012 红灯测试转绿（真实命令输出归档）
+  $ bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts
+    RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin
+    
+     ✓ tests/db/migration-repro.test.ts (7 tests) 28ms
+     ✓ tests/db/roles.test.ts (6 tests) 42ms
+    
+     Test Files  2 passed (2)
+          Tests  13 passed (13)
+       Start at  10:32:13
+       Duration  15.15s (transform 343ms, setup 238ms, collect 2.47s, tests 70ms, environment 0ms, prepare 3.99s)
+    
+    (node:11940) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+| T011 migration-repro + T012 roles exit code | 0 | 0 | PASS |
+| T011/T012 测试全绿 | true | true | PASS |
+
+db-evidence: PASS

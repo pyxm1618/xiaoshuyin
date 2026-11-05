@@ -5,15 +5,14 @@
 
 import type { FastifyInstance } from 'fastify';
 import { CreateFamilyRequest } from '@xiaoshuyin/contracts';
-import { withFamilyCreationTransaction, withIdentityTransaction } from '../db/tx.js';
+import { withIdentityTransaction } from '../db/tx.js';
+import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
   hashPayload,
   insertFamilyMember,
   insertProfileValue,
   insertAuditEvent,
-  getIdempotencyKey,
-  insertIdempotencyKey,
   getCurrentFamily,
 } from '@xiaoshuyin/domain';
 import { insertComplianceProfile } from '@xiaoshuyin/compliance';
@@ -22,7 +21,9 @@ import type pg from 'pg';
 export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.post('/api/v1/families', async (req, reply) => {
     const actor = req.actor;
-    if (!actor?.accountId || !actor?.personId) {
+    const accountId = actor?.accountId;
+    const personId = actor?.personId;
+    if (!accountId || !personId) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
@@ -33,79 +34,62 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const { displayName, ageBandSource, profileValues, idempotencyKey } = parsed.data;
-
-    // Validate ageBandSource: creator must use SELF_STATEMENT
-    if (ageBandSource !== 'SELF_STATEMENT') {
-      const err = toHttpError('AGE_BAND_SOURCE_NOT_ALLOWED', 'Creator must use SELF_STATEMENT');
-      return reply.status(err.statusCode).send(err);
-    }
-
-    // Check idempotency
-    const requestHash = hashPayload({ displayName, ageBandSource, profileValues });
-    const existing = await withIdentityTransaction(
-      pool,
-      { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => getIdempotencyKey(tx, actor.accountId, 'FAMILY_CREATE', idempotencyKey)
-    );
-
-    if (existing) {
-      if (existing.request_hash === requestHash) {
-        return reply.status(existing.response_status).send(existing.response_body);
-      }
-      const err = toHttpError('IDEMPOTENCY_PAYLOAD_MISMATCH');
-      return reply.status(err.statusCode).send(err);
-    }
-
+    const { displayName, ageBand, ageBandSource, profileValues, idempotencyKey } = parsed.data;
+    const requestHash = hashPayload({ displayName, ageBand, ageBandSource, profileValues });
     const newFamilyId = crypto.randomUUID();
 
     try {
-      const result = await withFamilyCreationTransaction(
+      const outcome = await runIdempotentCommand(
         pool,
         {
-          accountId: actor.accountId,
-          personId: actor.personId,
-          newFamilyId,
-          displayName: displayName ?? null,
+          accountId,
+          personId,
+          purpose: 'FAMILY_MANAGEMENT',
+          commandType: 'FAMILY_CREATE',
+          idempotencyKey,
+          requestHash,
+          createFamily: { newFamilyId, displayName: displayName ?? null },
         },
         async (tx) => {
-          await insertFamilyMember(tx, newFamilyId, actor.personId);
-          await insertComplianceProfile(tx, actor.personId, 'ADULT', false, 'SELF_STATEMENT');
+          // Validate ageBandSource: creator must use SELF_STATEMENT
+          if (ageBandSource !== 'SELF_STATEMENT') {
+            throw Object.assign(new Error('Creator must use SELF_STATEMENT'), {
+              statusCode: 422,
+              code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
+            });
+          }
+
+          await insertFamilyMember(tx, newFamilyId, personId);
+          await insertComplianceProfile(tx, personId, 'ADULT', false, 'SELF_STATEMENT');
 
           if (profileValues) {
             for (const pv of profileValues) {
               await insertProfileValue(
-                tx, actor.personId, pv.attribute, pv.valueText,
-                pv.sourceKind, actor.personId, actor.accountId
+                tx, personId, pv.attribute, pv.valueText,
+                pv.sourceKind, personId, accountId
               );
             }
           }
 
-          await insertAuditEvent(tx, newFamilyId, actor.accountId, 'FAMILY_CREATED', 'FAMILY', newFamilyId);
+          await insertAuditEvent(tx, newFamilyId, accountId, 'FAMILY_CREATED', 'FAMILY', newFamilyId);
 
-          return { familyId: newFamilyId };
+          return {
+            status: 201,
+            body: {
+              id: newFamilyId,
+              displayName: displayName ?? null,
+              isManager: true,
+              createdAt: new Date().toISOString(),
+            },
+          };
         }
       );
 
-      const responseBody = {
-        id: result.familyId,
-        displayName: displayName ?? null,
-        isManager: true,
-        createdAt: new Date().toISOString(),
-      };
-
-      await withIdentityTransaction(
-        pool,
-        { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
-        (tx) =>
-          insertIdempotencyKey(
-            tx, actor.accountId, 'FAMILY_CREATE', idempotencyKey,
-            requestHash, 201, JSON.stringify(responseBody)
-          )
-      );
-
-      return reply.status(201).send(responseBody);
+      return sendCommandOutcome(reply, outcome);
     } catch (err: any) {
+      if (err.statusCode) {
+        return reply.status(err.statusCode).send({ code: err.code, message: err.message });
+      }
       if (err.code === '23505') {
         const e = toHttpError('FAMILY_ALREADY_OWNED');
         return reply.status(e.statusCode).send(e);
@@ -116,15 +100,17 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   app.get('/api/v1/families/current', async (req, reply) => {
     const actor = req.actor;
-    if (!actor?.accountId || !actor?.personId) {
+    const accountId = actor?.accountId;
+    const personId = actor?.personId;
+    if (!accountId || !personId) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
 
     const family = await withIdentityTransaction(
       pool,
-      { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => getCurrentFamily(tx, actor.personId)
+      { accountId, purpose: 'SELF_IDENTITY' },
+      (tx) => getCurrentFamily(tx, personId)
     );
 
     if (!family) {
@@ -135,7 +121,7 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
     return reply.status(200).send({
       id: family.id,
       displayName: family.display_name,
-      isManager: family.created_by_person_id === actor.personId,
+      isManager: family.created_by_person_id === personId,
       createdAt: family.created_at,
     });
   });

@@ -6,7 +6,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { CreateMemberRequest, UpdateMemberRequest } from '@xiaoshuyin/contracts';
-import { withRlsTransaction, withIdentityTransaction } from '../db/tx.js';
+import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
   hashPayload,
@@ -18,8 +18,6 @@ import {
   supersedeProfileValue,
   getProfileValuesBySource,
   insertAuditEvent,
-  getIdempotencyKey,
-  insertIdempotencyKey,
   isFamilyMember,
 } from '@xiaoshuyin/domain';
 import {
@@ -33,7 +31,9 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
   // POST /api/v1/families/:id/members
   app.post('/api/v1/families/:id/members', async (req, reply) => {
     const actor = req.actor;
-    if (!actor?.accountId || !actor?.personId) {
+    const accountId = actor?.accountId;
+    const personId = actor?.personId;
+    if (!accountId || !personId) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
@@ -46,53 +46,48 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
     }
 
     const { ageBand, ageBandSource, profileValues, guardianConsentId, idempotencyKey } = parsed.data;
-
-    // Source acceptability check
-    const path = ageBand === 'UNDER_14' ? 'MEMBER_CREATE_UNDER_14' : 'MEMBER_CREATE_OTHER';
-    const sourceError = checkSourceAcceptability(path, ageBand, ageBandSource);
-    if (sourceError) {
-      const err = toHttpError(sourceError);
-      return reply.status(err.statusCode).send(err);
-    }
-
-    // Check idempotency
-    const requestHash = hashPayload({ ageBand, ageBandSource, profileValues, guardianConsentId });
-    const existing = await withIdentityTransaction(
-      pool,
-      { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => getIdempotencyKey(tx, actor.accountId, 'MEMBER_CREATE', idempotencyKey)
-    );
-
-    if (existing) {
-      if (existing.request_hash === requestHash) {
-        return reply.status(existing.response_status).send(existing.response_body);
-      }
-      const err = toHttpError('IDEMPOTENCY_PAYLOAD_MISMATCH');
-      return reply.status(err.statusCode).send(err);
-    }
+    const requestHash = hashPayload({ familyId, ageBand, ageBandSource, profileValues, guardianConsentId });
 
     try {
-      const result = await withRlsTransaction(
+      const outcome = await runIdempotentCommand(
         pool,
-        { familyId, accountId: actor.accountId, personId: actor.personId, purpose: 'FAMILY_MANAGEMENT' },
+        {
+          accountId,
+          personId,
+          purpose: 'FAMILY_MANAGEMENT',
+          commandType: 'MEMBER_CREATE',
+          idempotencyKey,
+          requestHash,
+          resolveFamilyId: async () => familyId,
+        },
         async (tx) => {
+          // Source acceptability check
+          const path = ageBand === 'UNDER_14' ? 'MEMBER_CREATE_UNDER_14' : 'MEMBER_CREATE_OTHER';
+          const sourceError = checkSourceAcceptability(path, ageBand, ageBandSource);
+          if (sourceError) {
+            throw Object.assign(new Error(sourceError), {
+              statusCode: toHttpError(sourceError).statusCode,
+              code: sourceError,
+            });
+          }
+
           // Check manager permission
           const family = await getFamilyById(tx, familyId);
           if (!family) {
             throw Object.assign(new Error('Family not found'), { statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND' });
           }
-          if (family.created_by_person_id !== actor.personId) {
+          if (family.created_by_person_id !== personId) {
             throw Object.assign(new Error('Not manager'), { statusCode: 403, code: 'NOT_FAMILY_MANAGER' });
           }
 
           // Pre-generate personId
-          const personId = crypto.randomUUID();
+          const newPersonId = crypto.randomUUID();
 
           // Insert membership (deferrable FK)
-          await insertFamilyMember(tx, familyId, personId);
+          await insertFamilyMember(tx, familyId, newPersonId);
 
           // Insert person (account_id = NULL for members)
-          await insertPerson(tx, personId, null, actor.accountId);
+          await insertPerson(tx, newPersonId, null, accountId);
 
           // Insert compliance profile
           const isUnder14 = ageBand === 'UNDER_14';
@@ -107,65 +102,61 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             if (!consent || consent.decision !== 'GRANTED') {
               throw Object.assign(new Error('Invalid consent'), { statusCode: 403, code: 'GUARDIAN_CONSENT_REQUIRED' });
             }
+            if (consent.guardian_person_id !== personId) {
+              throw Object.assign(new Error('Not the guardian of this consent'), {
+                statusCode: 403, code: 'NOT_GUARDIAN',
+              });
+            }
             if (consent.bound_person_id !== null) {
               throw Object.assign(new Error('Already bound'), { statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_BOUND' });
             }
 
             // Bind consent
-            await bindConsentToPerson(tx, guardianConsentId, personId);
+            await bindConsentToPerson(tx, guardianConsentId, newPersonId);
 
             await insertComplianceProfile(
-              tx, personId, ageBand, minorMode, ageBandSource,
+              tx, newPersonId, ageBand, minorMode, ageBandSource,
               consent.guardian_person_id, guardianConsentId, 1
             );
           } else {
-            await insertComplianceProfile(tx, personId, ageBand, minorMode, ageBandSource);
+            await insertComplianceProfile(tx, newPersonId, ageBand, minorMode, ageBandSource);
           }
 
           // Insert profile values with provenance
           if (profileValues) {
             for (const pv of profileValues) {
               await insertProfileValue(
-                tx, personId, pv.attribute, pv.valueText,
-                pv.sourceKind, pv.providedByPersonId ?? actor.personId, actor.accountId
+                tx, newPersonId, pv.attribute, pv.valueText,
+                pv.sourceKind, pv.providedByPersonId ?? personId, accountId
               );
             }
           }
 
           // Audit
-          await insertAuditEvent(tx, familyId, actor.accountId, 'MEMBER_CREATED', 'PERSON', personId);
+          await insertAuditEvent(tx, familyId, accountId, 'MEMBER_CREATED', 'PERSON', newPersonId);
 
-          return { personId };
+          return {
+            status: 201,
+            body: {
+              personId: newPersonId,
+              accountBound: false,
+              profile: {
+                ageBand,
+                minorMode,
+                verifiedSource: ageBandSource,
+              },
+              values: (profileValues ?? []).map((pv) => ({
+                attribute: pv.attribute,
+                valueText: pv.valueText,
+                sourceKind: pv.sourceKind,
+                status: 'RECORDED',
+              })),
+            },
+          };
         }
       );
 
-      const responseBody = {
-        personId: result.personId,
-        accountBound: false,
-        profile: {
-          ageBand,
-          minorMode: ageBand === 'MINOR_14_17' || ageBand === 'UNDER_14',
-          verifiedSource: ageBandSource,
-        },
-        values: (profileValues ?? []).map((pv) => ({
-          attribute: pv.attribute,
-          valueText: pv.valueText,
-          sourceKind: pv.sourceKind,
-          status: 'RECORDED',
-        })),
-      };
-
-      await withIdentityTransaction(
-        pool,
-        { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
-        (tx) =>
-          insertIdempotencyKey(
-            tx, actor.accountId, 'MEMBER_CREATE', idempotencyKey,
-            requestHash, 201, JSON.stringify(responseBody)
-          )
-      );
-
-      return reply.status(201).send(responseBody);
+      return sendCommandOutcome(reply, outcome);
     } catch (err: any) {
       if (err.statusCode) {
         return reply.status(err.statusCode).send({ code: err.code, message: err.message });
@@ -185,7 +176,9 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
   // PATCH /api/v1/families/:id/members/:personId
   app.patch('/api/v1/families/:id/members/:personId', async (req, reply) => {
     const actor = req.actor;
-    if (!actor?.accountId || !actor?.personId) {
+    const accountId = actor?.accountId;
+    const personId = actor?.personId;
+    if (!accountId || !personId) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
@@ -199,15 +192,24 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
     }
 
     const { profileValues, idempotencyKey } = parsed.data;
+    const requestHash = hashPayload({ familyId, targetPersonId, profileValues });
 
     try {
-      await withRlsTransaction(
+      const outcome = await runIdempotentCommand(
         pool,
-        { familyId, accountId: actor.accountId, personId: actor.personId, purpose: 'FAMILY_MANAGEMENT' },
+        {
+          accountId,
+          personId,
+          purpose: 'FAMILY_MANAGEMENT',
+          commandType: 'MEMBER_UPDATE',
+          idempotencyKey,
+          requestHash,
+          resolveFamilyId: async () => familyId,
+        },
         async (tx) => {
           // Check manager
           const family = await getFamilyById(tx, familyId);
-          if (!family || family.created_by_person_id !== actor.personId) {
+          if (!family || family.created_by_person_id !== personId) {
             throw Object.assign(new Error('Not manager'), { statusCode: 403, code: 'NOT_FAMILY_MANAGER' });
           }
 
@@ -229,17 +231,19 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             // Insert new value
             await insertProfileValue(
               tx, targetPersonId, pv.attribute, pv.valueText,
-              pv.sourceKind, pv.providedByPersonId ?? actor.personId, actor.accountId,
+              pv.sourceKind, pv.providedByPersonId ?? personId, accountId,
               existing[0]?.id ?? null
             );
           }
 
           // Audit
-          await insertAuditEvent(tx, familyId, actor.accountId, 'MEMBER_PROFILE_VALUE_RECORDED', 'PERSON', targetPersonId);
+          await insertAuditEvent(tx, familyId, accountId, 'MEMBER_PROFILE_VALUE_RECORDED', 'PERSON', targetPersonId);
+
+          return { status: 200, body: { success: true } };
         }
       );
 
-      return reply.status(200).send({ success: true });
+      return sendCommandOutcome(reply, outcome);
     } catch (err: any) {
       if (err.statusCode) {
         return reply.status(err.statusCode).send({ code: err.code, message: err.message });

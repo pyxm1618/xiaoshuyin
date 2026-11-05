@@ -7,9 +7,10 @@
 import type { FastifyInstance } from 'fastify';
 import { RevokeConsentRequest } from '@xiaoshuyin/contracts';
 import { withRlsTransaction, withIdentityTransaction } from '../db/tx.js';
+import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { getCatalog } from '@xiaoshuyin/compliance';
-import { getFamilyIdByPersonId, insertAuditEvent } from '@xiaoshuyin/domain';
+import { getFamilyIdByPersonId, insertAuditEvent, hashPayload } from '@xiaoshuyin/domain';
 import {
   getConsentRecordForUpdate,
   insertConsentRecord,
@@ -19,11 +20,20 @@ import {
 } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
 
+function notFoundFamily() {
+  return Object.assign(new Error('Current family not found'), {
+    statusCode: 404,
+    code: 'CURRENT_FAMILY_NOT_FOUND',
+  });
+}
+
 export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
   // POST /api/v1/consents/:id/revoke
   app.post('/api/v1/consents/:id/revoke', async (req, reply) => {
     const actor = req.actor;
-    if (!actor?.accountId || !actor?.personId) {
+    const accountId = actor?.accountId;
+    const personId = actor?.personId;
+    if (!accountId || !personId) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
@@ -35,38 +45,49 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const familyId = await withIdentityTransaction(
-      pool,
-      { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => getFamilyIdByPersonId(tx, actor.personId)
-    );
-    if (!familyId) {
-      const err = toHttpError('CURRENT_FAMILY_NOT_FOUND');
-      return reply.status(err.statusCode).send(err);
-    }
+    const { idempotencyKey } = parsed.data;
+    const requestHash = hashPayload({ consentId });
 
     try {
-      const result = await withRlsTransaction(
+      const outcome = await runIdempotentCommand(
         pool,
-        { familyId, accountId: actor.accountId, personId: actor.personId, purpose: 'FAMILY_MANAGEMENT' },
+        {
+          accountId: accountId,
+          personId: personId,
+          purpose: 'FAMILY_MANAGEMENT',
+          commandType: 'GUARDIAN_CONSENT_REVOKE',
+          idempotencyKey,
+          requestHash,
+          resolveFamilyId: async (tx) => {
+            const familyId = await getFamilyIdByPersonId(tx, personId);
+            if (!familyId) throw notFoundFamily();
+            return familyId;
+          },
+        },
         async (tx) => {
+          const familyId = await getFamilyIdByPersonId(tx, personId);
+          if (!familyId) throw notFoundFamily();
+
           const consent = await getConsentRecordForUpdate(tx, consentId);
           if (!consent) {
             throw Object.assign(new Error('Consent not found'), {
-              statusCode: 404,
-              code: 'CURRENT_FAMILY_NOT_FOUND',
+              statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND',
             });
           }
           if (consent.family_id !== familyId) {
             throw Object.assign(new Error('Not in family'), {
-              statusCode: 403,
-              code: 'NOT_FAMILY_MEMBER',
+              statusCode: 403, code: 'NOT_FAMILY_MEMBER',
+            });
+          }
+          // Guardian authority is a separate dimension from family membership.
+          if (consent.guardian_person_id !== personId) {
+            throw Object.assign(new Error('Not the guardian of this consent'), {
+              statusCode: 403, code: 'NOT_GUARDIAN',
             });
           }
           if (consent.decision === 'REVOKED') {
             throw Object.assign(new Error('Already revoked'), {
-              statusCode: 409,
-              code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
+              statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
             });
           }
 
@@ -86,20 +107,23 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
           }
 
           // Audit
-          await insertAuditEvent(tx, familyId, actor.accountId, 'CONSENT_REVOKED', 'CONSENT', newConsent.id);
+          await insertAuditEvent(tx, familyId, accountId, 'CONSENT_REVOKED', 'CONSENT', newConsent.id);
 
-          return newConsent;
+          return {
+            status: 200,
+            body: {
+              id: newConsent.id,
+              decision: newConsent.decision,
+              version: newConsent.version,
+              noticeVersion: newConsent.notice_version,
+              decidedAt: newConsent.decided_at,
+              boundPersonId: newConsent.bound_person_id,
+            },
+          };
         }
       );
 
-      return reply.status(200).send({
-        id: result.id,
-        decision: result.decision,
-        version: result.version,
-        noticeVersion: result.notice_version,
-        decidedAt: result.decided_at,
-        boundPersonId: result.bound_person_id,
-      });
+      return sendCommandOutcome(reply, outcome);
     } catch (err: any) {
       if (err.statusCode) {
         return reply.status(err.statusCode).send({ code: err.code, message: err.message });
@@ -115,15 +139,17 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
   // GET /api/v1/consents
   app.get('/api/v1/consents', async (req, reply) => {
     const actor = req.actor;
-    if (!actor?.accountId || !actor?.personId) {
+    const accountId = actor?.accountId;
+    const personId = actor?.personId;
+    if (!accountId || !personId) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
 
     const familyId = await withIdentityTransaction(
       pool,
-      { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => getFamilyIdByPersonId(tx, actor.personId)
+      { accountId: accountId, purpose: 'SELF_IDENTITY' },
+      (tx) => getFamilyIdByPersonId(tx, personId)
     );
     if (!familyId) {
       return reply.status(200).send([]);
@@ -132,7 +158,7 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
     try {
       const result = await withRlsTransaction(
         pool,
-        { familyId, accountId: actor.accountId, personId: actor.personId, purpose: 'FAMILY_MANAGEMENT' },
+        { familyId, accountId: accountId, personId: personId, purpose: 'FAMILY_MANAGEMENT' },
         (tx) => getConsentsByFamily(tx, familyId)
       );
 
@@ -157,7 +183,9 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
   // GET /api/v1/compliance/profile
   app.get('/api/v1/compliance/profile', async (req, reply) => {
     const actor = req.actor;
-    if (!actor?.accountId || !actor?.personId) {
+    const accountId = actor?.accountId;
+    const personId = actor?.personId;
+    if (!accountId || !personId) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
@@ -165,8 +193,8 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
     try {
       const result = await withIdentityTransaction(
         pool,
-        { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
-        (tx) => getComplianceProfile(tx, actor.personId)
+        { accountId: accountId, purpose: 'SELF_IDENTITY' },
+        (tx) => getComplianceProfile(tx, personId)
       );
 
       if (!result) {
