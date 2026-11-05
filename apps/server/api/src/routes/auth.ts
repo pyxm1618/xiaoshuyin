@@ -55,6 +55,10 @@ export function registerAuthRoutes(
         );
         epoch = updated[0].session_epoch;
 
+        // Set account context for RLS before querying persons
+        await client.query(`SELECT set_config('app.account_id', $1, true)`, [accountId]);
+        await client.query(`SELECT set_config('app.purpose', 'SELF_IDENTITY', true)`);
+
         // Find existing person
         const { rows: persons } = await client.query(
           'SELECT id FROM persons WHERE account_id = $1',
