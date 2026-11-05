@@ -97,7 +97,7 @@
 - **UI**：不做微信小程序页面、运营后台 UI（§28A）。
 - **数据权利完整工作流**：不设计完整数据删除 / 权利流程（U18、§28.9、§34—§35）；退出只保证权限停止与历史保留。
 - **完整 Authorization 平台**：不建 Case role、RBAC、Visibility Matrix、Purpose / Consent 完整矩阵、family member 角色枚举（§7.1、§9 明确不引入）。
-- **跨家庭 Participant**：不设计外部 / 跨 Family Participant（见 FR-004、Open Question OQ-7）。
+- **跨家庭 Participant**：V1 中**冻结为禁止**：Participant 只能引用目标 Family 内合法存在的 Person；不设计外部 / 跨 Family Participant（见 FR-004）。如果未来正式需求确实需要 external participant，MUST 先修改 authoritative `Docs/**`，再扩 Feature；这不是 Clarify 可以自行放开的能力。
 - **V2—V5 capabilities** not required by this slice.
 
 ### Non-Goals
@@ -225,7 +225,7 @@
 - **FR-026** [UPSTREAM: §28.8] 本 Slice 批准的 public surface 限于 Participant Core：`POST /api/v1/cases/:id/participation-invites`、`GET /api/v1/participation-invites/:token`、`POST /api/v1/participation-invites/:token/accept`、`POST /api/v1/participations/:id/decline`、`POST /api/v1/participations/:id/withdraw`、`GET /api/v1/participations/:id`。MUST NOT 暴露 `POST /api/v1/participations/:id/responses` 或任何越界 / 占位路由。
 - **FR-027** [UPSTREAM: §28.8 / §28.3] `GET /api/v1/participations/:id` MUST 只返回参与关系自身的最小状态，MUST NOT 成为隐式 Case read，也 MUST NOT 返回任何 Case 业务对象或跨成员数据。其最小 payload 与是否必要留 Clarify（见 OQ-5）。
 - **FR-028** [UPSTREAM: §28.8 / §9] 本 Slice MUST NOT 定义通用、万能的 participant response blob；未来「本人反馈」归属具体业务对象（Assessment / Problem Formulation / Goal / Plan / Review / Scene Node），由其对应 Slice 建立并重新校验权限。
-- **FR-029** [UPSTREAM: §1.2 / §10] 一个 Case MAY 存在多个 Participant（不同 Person）；参与关系以 (Case, Person) 为单位。同一 Person 在同一 Case MUST NOT 存在重复活跃参与。具体参与基数上限与多参与者交互语义若上游未定，留 Clarify。
+- **FR-029** [UPSTREAM: §1.2 / §10] 一个 Case MAY 存在多个 Participant（不同 Person）：Case → 0..N Participant Persons；参与关系以 (Case, Person) 为单位。同一 Person 在同一 Case MUST NOT 存在重复活跃参与。多 Participant 之间的交互 / 可见性 / 协作语义留 Clarify（见 OQ-7）。
 - **FR-030** [UPSTREAM: AGENTS / Constitution III / §38] 本 Slice 的 Implement MUST 在 Slice 1 与 Slice 2 达到「Implement complete → Independent Converge PASS → merged main」后方可开始。本 Spec（Specify 阶段）可以基于 Slice 1 / 2 的冻结设计提前定义，但 MUST NOT 把「设计存在」当成「代码已真实可用」，MUST NOT 执行 Implement Gate。Slice 3 是否为硬 Implement 依赖由实际证据依赖决定（见 Dependency Assumptions）。
 - **FR-031** [UPSTREAM: §5 不变量 17 / V1-C27] 创建邀请、接受、拒绝、退出 MUST 返回真实状态：无权、未找到、冲突、幂等重放、数据库拒绝均不得伪装成成功；失败时 MUST NOT 留下部分写入的参与 / 邀请 / 审计记录。
 
@@ -326,8 +326,27 @@ Case 级参与关系。逻辑约束（不是 DDL）：
 
 ### 硬 Implement 依赖（未来 Implement 前必须满足）
 
-- **Slice 1 `001-family-identity-core`**：Identity / Family / `family_members` / Consent / Compliance / `authorize()` / RLS / 幂等 / `business_audit_events` 基础已 Implement complete → Independent Converge PASS → merged main。参与关系依赖 Person、Family 归属、guardian / consent 前置与最小授权地基。
-- **Slice 2 `002-case-core`**：Case Core 已 Implement complete → Independent Converge PASS → merged main。参与是 Case 作用域对象，没有合法 `cases` 就不存在合法参与记录；同时复用其 Case 管理主体语义与 Case 授权 / RLS。
+> 本节表达的是**未来进入 Implement 时必须先满足的条件**，不是对当前仓库状态的陈述。截至本轮 Specify Closeout，Slice 1（`e60213f708b6e350c351ccaece207a209f3301f3`）与 Slice 2（`999295d04e90cc39ace3ef09b1d16b9d2752bfd6`）均**尚未**达到下述条件，也未 merge 到 `main`。这些 SHA 只是本轮审核证据，**不属于 frozen dependency**；实现时必须重新读取当时 final merged `main`。
+
+- **Slice 1 `001-family-identity-core`**：未来进入 Slice 4 Implement 前，Slice 1 MUST 已达到：
+
+  ```text
+  Implement complete
+  → Independent Converge PASS
+  → merged main
+  ```
+
+  届时 Slice 4 依赖其提供：Person、Family、`family_members`、guardian / consent、Compliance、`authorize()`、RLS、幂等、`business_audit_events`。
+
+- **Slice 2 `002-case-core`**：未来进入 Slice 4 Implement 前，Slice 2 MUST 已达到：
+
+  ```text
+  Implement complete
+  → Independent Converge PASS
+  → merged main
+  ```
+
+  届时 Slice 4 依赖其提供：Case、Case manager authorization、Case RLS、anti-enumeration、Case lifecycle 基础。
 
 ### 非硬依赖（不得按编号自动建立）
 
@@ -380,10 +399,9 @@ Slice 1 / 2 / 3 只作为**design dependency**（冻结设计语义）与只读 
 | OQ-1 | 邀请与参与是**一个对象**（`case_participants` 自身带 `INVITED` 状态，accept 后转活跃）还是**两个业务对象**（invite 与 participation 分开，仅 accept 后才创建 Participant）？ | 这是产品 / 领域语义，决定「谁在 accept 前已存在参与事实」以及 decline / withdraw 的作用对象 | §7.1 只给 `case_participants` 表名；§28.8 同时存在 `participation-invites/:token` 与 `/participations/:id` 两套资源 |
 | OQ-2 | 孩子 decline 是**拒绝邀请**（invite 终态）还是**创建一个 DECLINED 参与历史**（participation 终态）？ | 决定拒绝事实落在哪个领域对象，影响未来审计 / 历史检索语义 | U11 要求保留「拒绝」；§5 不变量 5 要求真实状态保留；§28.8 只有 `/participations/:id/decline` |
 | OQ-3 | withdraw 之后是**保留终态 Participant row**，还是**另建参与历史 / 事件**表达？ | 决定历史承载对象；本文只冻结「历史不可丢」 | §1.2 / U11 要求中途退出；§5 不变量 5 |
-| OQ-4 | 邀请失效 / 过期是否需要**正式状态表达**，以及具体 TTL 数值是多少？ | 正式文档要求覆盖「过期」，但未给状态枚举与任何 TTL 数值 | U11 明确含「过期」；正式文档无 TTL 依据 |
+| OQ-4 | 邀请**过期**如何成为正式的领域终态；是否需要显式的产品 TTL；若正式 Docs 未给出 TTL 值，Clarify 是否需要为 V1 做出产品决定。（具体 DB `expires_at` 等属 Plan；正式需求已要求「过期」验收，本问题不再讨论「是否需要支持过期」） | 决定过期的领域终态语义与 TTL 归属；正式文档要求覆盖「过期」，但未给状态枚举与任何 TTL 数值 | U11 明确含「过期」；正式文档无 TTL 依据 |
 | OQ-5 | `GET /api/v1/participations/:id` 是否真的属于当前最小核心，以及它最小能返回什么（如何防止变成隐式 Case read）？ | 决定 public surface 边界与最小 payload 语义 | §28.8 列出该端点；§10 / V1-C20 要求 Participant 无全 Case 可见 |
 | OQ-6 | 接受邀请时「必要绑定确认」的产品交互边界：目标 Person 无 Account 时，是否允许在同一接受流程内完成 Account 创建 + 绑定，是否需要额外的目标身份确认步骤？ | 影响参与入口的可完成性与安全边界（不属于纯 DB 机制） | §10 流程含「必要绑定确认」；§1.5 允许 Person 无 Account |
-| OQ-7 | 是否允许**外部 / 非目标 Family 成员**成为 Participant？本文按 §1.5 / §10 冻结为 **NO**（只允许已合法存在于目标 Family 的 Person），若上游确认需要外部参与，必须先改正式文档再扩 Slice | 属产品范围判断；本文按现有文档取最保守解释 | §1.5（V1 不提供跨家庭能力）、§10（有限 Case Participant） |
-| OQ-8 | 一个 Case 是否允许**多个 Participant**，以及多参与者的交互语义（本文冻结 (Case, Person) 唯一、允许多 Person，但不定义他们之间的协作语义） | 决定参与基数与多参与者产品语义 | §1.2「不要求爸爸、妈妈、孩子或祖父母全部注册」；§7.1 `case_participants` 为关系表 |
+| OQ-7 | 当一个 Case 已合法存在**多个 Participant**（不同 Person）时，他们彼此之间的**交互 / 可见性 / 协作语义**是什么？（Participant A 是否知道 Participant B 存在；是否允许 Participant 间直接共享；是否存在共同内容；哪些未来业务对象支持多参与者协作；是否需要 participant-to-participant visibility） | 决定多参与者产品语义；本 Slice 只冻结「Case → 0..N Participant Persons」与「(Case, Person) 不得重复 active participation」，不定义参与者之间的协作 | §1.2「不要求爸爸、妈妈、孩子或祖父母全部注册」；§7.1 `case_participants` 为关系表 |
 
 **Residual blockers**: NONE（本 Spec 可完成；上述歧义不阻断 Specify，留 Clarify）。
