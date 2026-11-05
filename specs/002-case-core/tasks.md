@@ -7,6 +7,13 @@
 **Docs baseline**: `Docs/V1产品需求.md` v3.3、`Docs/V1技术设计.md` v3.8
 **阶段**: **Tasks only**。本文件只把已冻结的 Spec / Plan 拆成可执行任务图；**不进入 Analyze / Implement**，不修改业务代码、migration、tests、Spec、Plan、Contracts、Checklist 或 `Docs/**`。
 
+> **两种语境，不得混用（重要）**
+> - **本轮 = Tasks authoring**：只编辑本文件。本轮要求 `Docs/**`、Spec / Plan / Research / Data Model / Contracts / Checklist、业务代码、migration、测试代码的 diff 均为 0。该要求**只约束本轮**，不是 T085 的验收条件。
+> - **T001–T087 = 未来 Implement 执行**：这些任务描述另一个 AI 在 Implement 阶段如何操作。届时业务代码、新 migration、tests、generated OpenAPI / types、`guard-static` 合法增量、本文件的 checkbox `[x]` 与 completion / evidence 状态**都是预期存在的改动**。T085 只要求这些改动**可追溯到具体 Task**，不要求 diff = 0。
+> - **阶段顺序**：Specify → Clarify → Plan → Checklist → Tasks → **Analyze** → Implement → **独立 Converge**。Analyze 在 Implement **之前**；T087 是 Implement 的终点，其输出移交给一个**全新的独立 AI** 做 Converge / final review / CI verification。
+> - **本轮结束状态**：`SLICE 2 TASKS FINAL — READY FOR ANALYZE`（见文末）。
+> - **Implement 结束状态**：`IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`（由 T087 输出）。
+
 > **任务格式**：`- [ ] T### [P] [REQ:<上游 ID / 章节>] <动作、文件/目录、前置依赖、完成条件> [VERIFY:<真实命令或证据>]`
 > `[P]` 仅表示：在所列前置全部完成后，与同批次其它 `[P]` 任务无文件冲突、无未完成依赖，可并行执行。
 > 每个任务必须同时具备 `[REQ:...]` 与 `[VERIFY:...]`；缺少任一项即无效。
@@ -36,6 +43,8 @@
 ## Phase 1 — Baseline Alignment（Gate 通过后，只读对齐，不重新设计 Slice 1）
 
 目标：确认最终 migration 编号、既有 CHECK 真实约束名、contracts / authorize / error handler / current Family / CI 脚本的真实形状，并确定 Case 数据访问边界。只做必要 baseline alignment。
+
+> **Implement base 记录**：进入 Phase 1 之前（T013 执行前），Implement AI 必须记录 `IMPLEMENT_BASE_SHA=$(git rev-parse HEAD)` 并归档到 T085 证据链。T085 的所有 diff 分类都以该 SHA 为基线，**不以 `origin/main` 为基线，也不要求 diff 为 0**。
 
 - [ ] T013 [REQ:plan:D-11;FR-002] 确定 Slice 2 reviewed migration 文件名与编号：读取 `db/migrations/`，按 Slice 1 final 实际编号取下一个序号，命名为 `<next-after-slice1-final>_case_core.sql`；不修改 `001_initial_schema.sql`（依赖 T012） [VERIFY:`ls db/migrations` 输出；目标文件名在仓库中不存在；`git diff --name-only origin/main -- db/migrations/001_initial_schema.sql` 为空]
 - [ ] T014 [P] [REQ:plan:D-11;data-model:§4.3/§5.4] 读取 `pg_constraint` 确认 `business_audit_events.event_type`、`business_audit_events.resource_type`、`idempotency_keys.command_type` 的真实约束名；不得假设默认名（依赖 T012） [VERIFY:`SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid IN ('business_audit_events'::regclass,'idempotency_keys'::regclass)` 输出真实名字]
@@ -153,22 +162,28 @@
 
 - [ ] T075 [REQ:§27A;FR-015;FR-016;FR-017] 为 `apps/server/api/src/routes/cases.ts` 三个端点声明 `schema`（body / response / params），复用 `packages/contracts` 的 Zod schema 与 `fastify-type-provider-zod`；不改变既有路由 validator 行为；422 仍映射 `VALIDATION_ERROR` 且零业务写入（依赖 T053） [VERIFY:`bun run typecheck`；`bunx vitest run tests/integration/cases-create.test.ts` 的 422 用例仍绿]
 - [ ] T076 [REQ:§27A;plan:D-9] 更新 `scripts/openapi-generate.mjs` 的临时 spec 脚本，import 并注册 `registerCaseRoutes(app, pool)`；不改变既有路由注册（依赖 T075） [VERIFY:`rg "registerCaseRoutes" scripts/openapi-generate.mjs`；`bun run openapi:generate` 不报 not connected]
-- [ ] T077 [REQ:§27A] 运行 `bun run openapi:generate`，生成 / 更新 `packages/generated/openapi.json` 与 `packages/generated/openapi.d.ts`；**不得 hand-edit generated artifact**；不得把生成物当第二真相源（依赖 T076） [VERIFY:`bun run openapi:generate` 输出 3 条 Case paths 与 Case schemas；`git diff --name-only` 仅显示两个生成物]
+- [ ] T077 [REQ:§27A] 运行 `bun run openapi:generate` 生成 / 更新 `packages/generated/openapi.json` 与 `packages/generated/openapi.d.ts`；**不得 hand-edit generated artifact**；不得把生成物当第二真相源。验证必须**路径限定**（只检视 `packages/generated/`，不得用全分支 `git diff --name-only` 判断）且**可重复**：记录两文件 hash 后再次运行同一 generator，hash 必须完全一致；Case 3 operations 必须真实进入 generated output（依赖 T076） [VERIFY:`git diff --name-only -- packages/generated/` 只能出现 `openapi.json` / `openapi.d.ts` 两个 generator 管理文件（本次生成未改变文件时允许为空，此时以两次生成 hash 一致为准）；首次生成后 `shasum -a 256 packages/generated/openapi.json packages/generated/openapi.d.ts` 记录值，再次 `bun run openapi:generate` 后重新计算且完全一致；第二次生成后 `git status --short -- packages/generated/` 无残留；`bun run openapi:check` PASS；generated output 含 createCase / listCases / getCase 三个 Case operation]
 - [ ] T078 [P] [REQ:FR-018;CHK077;§28.3] 新增 `tests/integration/openapi-cases.test.ts`：Case operation 恰为 3（`createCase` / `listCases` / `getCase`）；`/api/v1/cases` 有 POST / GET，`/api/v1/cases/{id}` 有 GET；错误响应结构引用 `CaseNotFound` / `CaseAccessDenied` / `CurrentFamilyNotFound`；`code` 为 literal / enum 可机械验证；不存在 `/cases/current` 等越界路径（依赖 T077） [VERIFY:`bunx vitest run tests/integration/openapi-cases.test.ts` 通过，输出 `3/3`]
 - [ ] T079 [REQ:§27A;plan:G9] 运行 `bun run openapi:check`：无 drift，二次生成无 diff（依赖 T078） [VERIFY:`bun run openapi:check` 输出 `PASS (no drift)`]
 - [ ] T080 [REQ:CHK077;plan:D-9] 将生成 OpenAPI 与 `specs/002-case-core/contracts/cases-api.openapi.yaml` 做结构比对：3 operations、`CreateCaseRequest` strict、`CaseResponse` 7 字段、错误结构；若不一致 → `BLOCKED — CONTRACT DRIFT`，**不得修改 specs 契约**或 hand-edit generated artifact（依赖 T079） [VERIFY:比对脚本或测试输出；差异清单为空；否则停止并报告]
 
 ---
 
-## Phase 11 — Final Verification & Converge Evidence
+## Phase 11 — Implement Final Verification & Implementation Convergence Evidence
+
+> **语境**：本 Phase 是**未来 Implement 执行完 T001–T080 之后**的收尾，不是本轮 Tasks authoring。
+> - T081–T084：最终验证（全量回归、coverage、quickstart、CI）。
+> - T085：**Implement final governance**——保护 frozen upstream，并证明 implementation diff 可解释（不是要求 diff = 0）。
+> - T086：**Implementation Convergence Evidence**——Implement AI 自己的自检，**不是**独立 Converge。
+> - T087：**Implement Final Handoff**——输出固定文案后立即停止，移交全新独立 AI。
 
 - [ ] T081 [REQ:plan:Verification-Plan;constitution:VI] 全量回归：`bun run typecheck`、`bun run guard:static`、`bunx vitest run tests/domain`、`bunx vitest run tests/db`、`bunx vitest run tests/integration`、`bun run openapi:check`、空库 `bun run db:migrate` replay；逐条检查输出（依赖 T042、T054、T058、T064、T067、T069、T072、T079） [VERIFY:全部命令退出 0；无跳过 / 无 expected-fail；输出归档]
 - [ ] T082 [REQ:FR-001–FR-025;SC-001–SC-011;Acceptance 1–16] Coverage 审计：逐条确认 25 条 FR、11 条 SC、16 个 Acceptance 均有至少一个测试文件与用例；缺口必须为 0；不得用“设计已存在”代替测试（依赖 T081） [VERIFY:审计输出 `FR 25/25`、`SC 11/11`、`Acceptance 16/16`；missing 列表为空]
 - [ ] T083 [REQ:quickstart:§2–§7] 按 `quickstart.md` 真实执行关键路径：migration、创建首个 / 第二个 Case、列表、详情、422 越权字段、404 反枚举、场景 A / B、幂等 replay、并发、读不写审计；记录真实响应（依赖 T081） [VERIFY:状态码与响应字段逐项匹配 quickstart 期望；记录归档]
 - [ ] T084 [REQ:plan:G10;§40] CI 全 job green：`static`、`unit`、`db-migrate`、`integration`、`contract` 在 feature branch 全部真实 success，不得 placeholder / 假成功（依赖 T081） [VERIFY:GitHub Actions run 链接，5/5 success]
-- [ ] T085 [REQ:constitution:V/VI;AGENTS:§7] 治理验证：`node .specify/scripts/validate-governance.mjs`、`node .specify/scripts/tests/run-governance-tests.mjs`；确认 `002-case-core` 进入 tasked 状态、`Docs` diff = 0、spec / plan / research / data-model / contracts / quickstart / checklist diff = 0、business code / migration / tests 无本 Tasks 阶段改动（依赖 T081） [VERIFY:两条命令 PASS；`git diff --name-only origin/main...HEAD -- Docs specs/002-case-core/spec.md specs/002-case-core/plan.md specs/002-case-core/research.md specs/002-case-core/data-model.md specs/002-case-core/contracts specs/002-case-core/quickstart.md specs/002-case-core/checklists` 仅含 `tasks.md`]
-- [ ] T086 [REQ:constitution:VI;plan:Verification-Plan] Converge 证据：重读 `spec.md` FR / SC / Acceptance 与 `contracts/**`，记录 scope、contracts、tests、RLS、concurrency、idempotency、CI、no remaining gap；记录受保护文件 diff 与业务代码 / migration / tests 的预期变化（依赖 T082–T085） [VERIFY:converge 记录含上述各项与真实输出；no remaining gap 或列出缺口并停止转回上游]
-- [ ] T087 [REQ:AGENTS:§3;constitution:VI] 最终判定：确认无 remaining gap、无未解决 blocker；输出 `SLICE 2 TASKS READY FOR ANALYZE` 后停止，**不得进入 Analyze / Implement**（依赖 T086） [VERIFY:最终报告与 `git status --short`；不得出现 Analyze / Implement 产物]
+- [ ] T085 [REQ:constitution:V/VI;AGENTS:§7] **Implement final governance（不是 Tasks 生成阶段的验证）**：此时 T001–T084 已完成，业务代码 / 新 migration / tests / generated OpenAPI / generated types / `guard-static` 合法增量 / 本文件 checkbox 与 evidence 都属于**预期 diff**，T085 **不要求这些 diff 为 0**。① **Frozen upstream 未被擅改**：`Docs/**`、`AGENTS.md`、`.specify/memory/constitution.md`、`spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/**`、`quickstart.md`、`checklists/requirements-quality.md` 相对 `IMPLEMENT_BASE_SHA` 无语义修改，除非经过明确的上游回退与重新审核；② `tasks.md` 仅允许 `[ ] → [x]`、completion / evidence 状态与必要的执行证据引用，不得借 checkbox 更新改变 requirement / design；③ **Implementation diff 必须 explainable 而非 zero**：`git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD` 的每一项都必须能追溯到 T001–T084 中至少一个明确 Task，并分类为 expected implementation changes / expected generated artifacts / expected tests 与 evidence / unexpected；不得存在 unexplained file、scope creep、future Slice placeholder、Docs semantic drift、为让测试通过而删除既有断言（依赖 T081） [VERIFY:`node .specify/scripts/validate-governance.mjs` 与 `node .specify/scripts/tests/run-governance-tests.mjs` 均 PASS；`git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD -- Docs AGENTS.md .specify/memory/constitution.md specs/002-case-core/spec.md specs/002-case-core/plan.md specs/002-case-core/research.md specs/002-case-core/data-model.md specs/002-case-core/contracts specs/002-case-core/quickstart.md specs/002-case-core/checklists` 输出为空；`git diff "$IMPLEMENT_BASE_SHA"...HEAD -- specs/002-case-core/tasks.md` 仅含 checkbox 与 completion / evidence 行变更、无 requirement / design 语义改动；`git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD` 全量清单按四类归档并输出计数，unexpected 计数 = 0]
+- [ ] T086 [REQ:constitution:VI;plan:Verification-Plan] **Implementation Convergence Evidence（Implement AI 自检，不是最终独立 Converge）**：由 Implement AI 整理 requirement coverage、scope、contracts、tests、RLS、concurrency、idempotency、CI、remaining gaps 的对照证据；重读 `spec.md` 的 FR / SC / Acceptance 与 `contracts/**` 逐项比对，记录 frozen upstream 未改与 implementation diff 的分类结果；本任务不得替代独立 Converge review，不得据此宣布可 merge（依赖 T082–T085） [VERIFY:自检记录含上述各项与真实命令输出；`git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD` 的四类计数归档；remaining gaps 为空，或逐项列出并转 BLOCKED]
+- [ ] T087 [REQ:AGENTS:§3;constitution:VI] **Implement Final Handoff（Implement 阶段终点）**：仅当 T001–T086 全部完成、G1–G11 PASS、全部测试 PASS、migration replay PASS、OpenAPI check PASS、CI 全 job PASS、governance PASS、coverage FR 25/25 与 SC 11/11 与 Acceptance 16/16、remaining gap = 0 时，输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE` 并停止；存在任一未解决问题则输出 `BLOCKED` 并报告具体 Task 与证据。**停止边界**：不得自行充当独立 Converge reviewer、不得自行宣布可 merge、不得 merge 到 main、不得重新进入 Analyze、不得修改冻结需求以消除 gap；下一步必须交给一个全新的独立 AI 执行 Converge / final review / CI verification（依赖 T086） [VERIFY:最终报告含 T001–T086 逐项完成状态、G1–G11 PASS、测试 / migration / OpenAPI / CI / governance / coverage 证据、remaining gap = 0；`git status --short` 无未提交残留；输出固定文案 IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE；无 merge / Analyze / Implement 后续动作]
 
 ---
 
@@ -187,13 +202,14 @@
 | H | Phase 8 idempotency / concurrency | T063 可 `[P]`；T064–T068 串行（同一行为验证链） |
 | I | Phase 9 event / audit / scope | T069、T070、T072–T074 串行验证；T071 可 `[P]`（独立脚本） |
 | J | Phase 10 OpenAPI | T075–T077 串行；T078 可 `[P]`；T079–T080 串行 |
-| K | Phase 11 final | T081 → T082–T085 → T086 → T087 |
+| K | Phase 11 Implement final verification | **全串行**：T081 → T082–T085 → T086（Implement 自检）→ T087（Handoff，输出后停止并移交独立 Converge） |
 
 ---
 
 ## Dependency Graph
 
 下表是逐任务依赖边（`T### ← 依赖`），与任务正文的 `（依赖 T###）` 一致；用于校验无前向依赖、无环、无不可能前置。
+Phase 11 中 T086 是 Implement 自检、T087 是 Implement handoff，均属于**未来 Implement 执行阶段**；本轮 Tasks authoring 不执行它们，依赖图仅用于未来执行校验。
 
 | Phase | 边 |
 |---|---|
@@ -392,6 +408,20 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 
 ## Completion Contract
 
+### 本轮：Tasks authoring（当前执行）
+
+本轮只产出本文件，**不执行 T001–T087**。完成条件：
+
+1. T001–T087 连续、编号唯一、每条具备 `[REQ:...]` 与 `[VERIFY:...]`；
+2. 依赖图无环、无前向依赖、无不可能前置；关键路径有效；
+3. `node .specify/scripts/validate-governance.mjs` PASS，`node .specify/scripts/tests/run-governance-tests.mjs` 10/10；
+4. 相对本轮基线，`Docs/**`、Spec / Plan / Research / Data Model / Contracts / Checklist、业务代码、migration、测试代码 diff = 0，仅本文件改动。
+
+满足后输出 `SLICE 2 TASKS FINAL — READY FOR ANALYZE` 并停止。
+**该 diff = 0 只约束本轮 Tasks authoring，不得写进 T085；T085 属于未来 Implement 阶段，要求 implementation diff 可解释而非为零。**
+
+### 未来：Implement 执行（另一个 AI 运行 T001–T087）
+
 一个任务只有满足下列全部条件才算完成：
 
 1. 其声明的实现 / 测试 / migration 产物存在；
@@ -400,8 +430,9 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 4. 没有为了变绿而削弱测试、fixture、CHECK、RLS、GRANT 或需求；
 5. 偏离已记录；若改变意图，必须先回到上游文档。
 
-Feature 未完成，直到 `analyze` 通过、CI 全绿、且 converge 报告无剩余缺口。
+Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087 判定均无剩余缺口，且 T087 输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`。
+此后 Implement AI **必须停止**：独立 Converge / final review / CI verification 由全新 AI 执行，merge 是另一项独立决定。
 
-**本文件完成后停止。** 不得进入 Analyze / Implement。
+**本文件（Tasks authoring）完成后停止。** 本轮不得进入 Analyze / Implement。
 
-`SLICE 2 TASKS READY FOR ANALYZE`
+`SLICE 2 TASKS FINAL — READY FOR ANALYZE`
