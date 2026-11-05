@@ -138,8 +138,23 @@ consent 以 `FOR UPDATE` 锁定并校验（含 `NOT_GUARDIAN`、已绑定检查�
 
 不变量：`guardian identity → minimal onboarding → GRANTED consent → formal child Person → Compliance Profile`。
 无同意建 UNDER_14 → 403 `GUARDIAN_CONSENT_REQUIRED` 且库中无该未成年人 Person/profile。
-版本语义：v1 `GRANTED` 不可变；revoke 新增 v2 `REVOKED`（`supersedes_id=v1`、`onboarding_request_id NULL`）；
-regrant 开启新 v1 chain。`tests/evidence/quickstart.md` 段 5 有真实 `consent_records` 两行输出。
+**版本语义（当前唯一最终语义）**：
+
+```text
+v1 GRANTED   (request A, bound_person_id → P, supersedes NULL)
+→ v2 REVOKED (supersedes v1, onboarding_request_id NULL, bound P)
+→ v3 GRANTED (request B, bound P, supersedes v2, pointer → v3)
+```
+
+三条链的 `bound_person_id` 最终都指向同一 Person P；compliance pointer 推进到 v3；Person 数不增加；
+processing gate 恢复 ALLOW。证据：`tests/integration/consent-revoke.test.ts`、
+`tests/integration/consent-reconsent.test.ts`、`tests/integration/processing-gate.test.ts`、
+`tests/evidence/quickstart.md` 段 5。
+
+> **Historical — superseded by Independent Review remediation**
+> 本文件早期正文曾写「regrant 开启新 v1 chain」。那是 Round 1 之前实现的**当时状态**
+> （grant 固定 `version = 1`、`supersedes_id = NULL`），已被 Independent Converge Round 1 判为缺口，
+> 并在 remediation 中改为上述冻结 v1→v2→v3 链。该旧结论**不再是当前事实**，保留仅为审计历史。
 
 ---
 
@@ -236,11 +251,16 @@ FR-002 平台真实性按 Plan 明确标为 **NOT VERIFIED**，未伪造通过�
 5. **收敛阶段顺序修正**：`members.ts` 的 UNDER_14 事务内语句顺序调整为冻结的
    `lock consent → validate → … → bind consent → profile`（见 §5）；不改 API / 响应体 / 错误码 / schema。
 6. **FR-002 平台真实性**：按 Plan 与 quickstart §5 明确 **NOT VERIFIED**（真实 `code2session` 属 §40 Platform 门槛）。
-7. **本地 `bun run typecheck` 的递归自调用**：根 `package.json` 的 `typecheck` 脚本调用 `bun run --recursive typecheck`，
-   而 `--recursive` 会把根包自身也纳入遍历，形成自递归（本机 bun 1.3.14 下被 SIGTERM/137 终止）。
-   **正式门禁不受影响**：CI Static Checks job 的 Typecheck 步骤在该命令上真实 PASS（run `41956158657` 五 job 全绿）；
-   本地等价验证为 `tsc -p tsconfig.base.json --noEmit` + `apps/server/api` 下 `tsc --noEmit`，两者均 PASS
-   （verify-all G3 / G4 真实输出）。本轮未改动根脚本，以免影响已绿的 CI 命令。
+7. **本地 `bun run typecheck` 的递归自调用 — Historical — superseded by Independent Review remediation**
+   - **当时状态**：根 `package.json` 的 `typecheck` 脚本是
+     `tsc -p tsconfig.base.json --noEmit && bun run --recursive typecheck`；`--recursive` 会把根包自身
+     也纳入遍历，形成自递归（本机 bun 1.3.14 下被 SIGTERM/137 终止）。当时以 CI Static Checks
+     （run `41956158657` 五 job 全绿）与分步 `tsc` 等价验证作为门禁。
+   - **后续 remediation**：Round 1 remediation 已把根脚本改为 `node scripts/typecheck-all.mjs`
+     （先 root tsbase，再遍历 `apps/server/*` + `packages/*` 各跑一次、不回调 root、确定性 exit、
+     不引入新依赖）。CI `Static Checks` 继续直接调用同一个正式命令。
+   - **当前状态**：`bun run typecheck` **单次完成、exit 0、无递归**（见 §14 与本轮验证表）。
+     上面「未改动根脚本 / 本地无法完整执行」的说法是历史描述，不再是当前事实。
 
 ---
 
@@ -297,5 +317,104 @@ FR-002 平台真实性按 Plan 明确标为 **NOT VERIFIED**，未伪造通过�
 
 ---
 
-**收敛结论：Implement Remediation 已修复 Independent Converge Round 1 的全部 6 项缺口，可交付 Independent Converge Round 2。**
+> **Historical — superseded by Independent Converge Round 2**
+> 上一行「Implement Remediation 已修复 Round 1 全部 6 项缺口，可交付 Round 2」是 §14 结尾的**当时结论**。
+> Independent Converge Round 2 随后判定 `FAIL — RETURN TO IMPLEMENT`（2 OPEN + 1 新 HIGH + 1 evidence MEDIUM
+> + 1 workspace artifact），因此该结论不再是最终事实。保留仅为审计历史，见 §15。
 
+---
+
+## 15. Independent Converge Round 2 FAIL → Implement Remediation（历史记录）
+
+**Round 2 判定（保留，不抹除）**：`INDEPENDENT CONVERGE FAIL — RETURN TO IMPLEMENT`
+基线 `e60213f708b6e350c351ccaece207a209f3301f3`。本轮只处理 Reviewer 确认的 2 OPEN + 1 新 HIGH + 1 evidence MEDIUM + 1 本地 artifact，未扩散、未修改任何冻结 Source of Truth。
+
+| # | 级别 | Round 2 缺口 | 违反 |
+|---|---|---|---|
+| 1 | CRITICAL（OPEN） | processing gate 用无锁 `getComplianceProfileForGate`，TOCTOU：revoke 200 返回后旧 GRANTED PATCH 仍可提交 | V1-C39 / FR-010 / consent-onboarding §7 |
+| 2 | HIGH（OPEN） | `resolveProvenanceProvider` 的 pinned 分支绕过 source 校验：UNDER_14 创建接受 `SELF_STATEMENT` / `OTHER_MEMBER_RELAY` | contracts/provenance.md |
+| 3 | HIGH（新） | `subject_person_id != NULL` 时预条件不全满足却回退 Mode A，偷偷创建未绑定 v1 | consent-onboarding §6.1 |
+| 4 | MEDIUM（evidence） | `converge.md` 旧正文仍写「regrant 开启新 v1 chain」与「typecheck 自递归未修」，与本文件 remediation 结论自相矛盾 | §VI 证据真实性 |
+| 5 | workspace artifact | `.arts/settings.json`（`{"clawMode.mode":"claw"}`）为 Round 2 审计工具产生的 untracked 本地 artifact | 工作区清洁 |
+
+**修复证据（本轮）**
+
+| # | 修复 | 验证 |
+|---|---|---|
+| 1 | `routes/members.ts` 的 `runProcessingGate` 改用 `getComplianceProfileForUpdate`（`FOR UPDATE`），锁保持到命令事务 commit；consent row 仍为无锁读。**锁顺序一致性**：`person_compliance_profiles` 是唯一序列化原语，processing 命令只持该行锁、绝不阻塞在 `consent_records` 上；revoke 是唯一同时持两锁的命令（先 consent 后 profile），因此不可能形成等待环。未给 PATCH 增加 consent `FOR UPDATE`，未调整 revoke，未引入分布式锁/新依赖 | `tests/integration/processing-gate.test.ts` 新增确定性并发回归：用 `person_profile_values` 行锁作 barrier 把真实 PATCH 停在事务中，`pg_stat_activity.wait_event_type='Lock'` 断言 revoke 确实阻塞；Scenario A（revoke 等待 in-flight PATCH，PATCH 写入先于 revoke 返回）+ Scenario B（revoke 先行 → PATCH 重读 pointer → 403 `GUARDIAN_CONSENT_REVOKED`，无新 value / 无 supersede / 无成功 audit）。明确断言「revoke 不得在 PATCH in-flight 时返回 200」 |
+| 2 | `packages/domain/src/provenance.ts` 的 pinned 分支改为：先判断 `sourceKind ∈ {GUARDIAN_RELAY, GUARDIAN_OBSERVATION}`（否则 `INVALID`），再校验显式 `providedByPersonId === pinnedProvider`，最后才 `FIXED provider = pinnedProvider`；不静默改写非法来源 | `tests/integration/age-band-source.test.ts` 12/12：GUARDIAN_RELAY / GUARDIAN_OBSERVATION + **真 guardian** provider → 201；SELF_STATEMENT / OTHER_MEMBER_RELAY + 真 guardian → 422 `AGE_BAND_SOURCE_NOT_ALLOWED`；guardian source + fake provider → 422；失败时按 family 作用域断言 no Person / no membership / no profile / no value / consent 未被误绑定 |
+| 3 | `routes/compliance.ts` 明确区分 Mode A（`subject_person_id IS NULL`）与 Mode B（非 NULL）。Mode B 依次校验 10 项：family scope、profile 存在、UNDER_14、pointer 存在、current record 存在、`decision=REVOKED`、current `bound_person_id=subject`、current guardian=actor、profile guardian=actor、request guardian=actor。任一不满足即抛错（用现有 `VALIDATION_ERROR` / `NOT_GUARDIAN` / `GUARDIAN_CONSENT_ALREADY_GRANTED`，未造新 code），**绝不回退 Mode A**；错误发生在 `updateConsentRequestGranted` 之前，故不建 record / 不完成 request / 不动 pointer。consent 读改用无锁 `getConsentRecordForGate` 以保持锁顺序一致 | 新增 `tests/integration/consent-reconsent.test.ts` 5/5：成人 creator 作 subject → 422、幽灵 subject 被 FK 拒绝且无泄漏、越 family subject → 422、current 仍 GRANTED → 409 且无新版本、Mode A 未绑定 v1 → revoke v2 → Mode B v3（1/2/3 版本链、supersedes、bound 同一 P）。三者均断言 request 保持 `PENDING`、无新 consent record、响应不回显 subject id |
+| 4 | §5 与 §12 的旧结论分别加上 `Historical — superseded by Independent Review remediation` 标记，写明**当时状态 / 后续 remediation / 当前状态**；§5 当前唯一版本语义改为 `v1 GRANTED → v2 REVOKED → v3 GRANTED`；typecheck 当前状态改为「`bun run typecheck` 单次完成 exit 0」 | 本文件 §5 / §12 / §14 历史均保留，未删除任何 Round 1 或 Round 2 失败记录 |
+| 5 | 确认 `.arts/settings.json` 非 git tracked、无项目代码引用（`clawMode` 无命中）、为本地工具产物后直接删除；未 commit、未因此改业务代码、未给整个 `.arts` 新增 gitignore | `git status --short` 删除后为空 |
+
+**TDD 记录（本轮）**：先写 5 组冻结预期并跑出真实 RED —— ① 并发 stale-read（`expected false to be true`，revoke 在 PATCH in-flight 时未被阻塞）② UNDER_14 SELF_STATEMENT + 真 guardian（`expected 201 to be 422`）③ UNDER_14 OTHER_MEMBER_RELAY + 真 guardian（`expected 201 to be 422`）④ 真 no-account ADULT fixture（原测试误用 `MINOR_14_17`，改为 `ADULT` 并断言 `account_id IS NULL` / `age_band=ADULT` / provider=subject）⑤ 成人 subject re-consent（`expected 201 to be 422`）。实现后 22/22 → GREEN；修复期间另定位并解决 `getConsentRecordForGate` 未取 `version` 导致 `NaN` → 500 的真实缺陷。
+
+**专项验证（6 个 suite 独立执行）**：processing-gate 5/5、age-band-source 12/12、consent-revoke 3/3、consent-grant 5/5、members 14/14、consent-reconsent 5/5。
+
+**本轮全量验证（当前 Head 真实执行）**
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS（exit 0，单次完成、无递归） |
+| `bun run guard:static` | PASS (0 violations) |
+| `bun run openapi:check` | PASS (no drift，14 paths；冻结契约未改) |
+| `bun run vitest run` | **29 files / 178 tests 全部 PASS，exit 0，零 skipped** |
+| `bun run db:evidence` | PASS（结构/RLS/空库重建/replay/T011-T012 13/13） |
+| `bun run coverage:audit` | PASS（FR 17/17、SC 8/8、missing = 0） |
+| `bun run verify-all` | **未收口**：见下方「验证阻塞」；单独执行 `validate-governance` PASS、`run-governance-tests` PASS 15/15、`bun run vitest run` 29/178 PASS，但归档脚本内该治理子命令被宿主沙箱拦截 |
+| `node .specify/scripts/validate-governance.mjs` | PASS |
+| `node .specify/scripts/tests/run-governance-tests.mjs` | PASS 15/15（单独执行） |
+
+**验证基础设施调整（非业务修复、非扩散）**：本机 10 核下 vitest 无界 fork 会同时创建
+10 个 Fastify app + 各自 `pg.Pool(max:10)`，打满本地 PostgreSQL 18 的 `max_connections=100`，
+三次复现 `beforeAll` hook timeout / `ECONNREFUSED 127.0.0.1:5433` / 大量 skipped suites
+（并曾使 `xiaoshuyin-pg18` 容器退出，已恢复）。为让官方命令 `bun run vitest run` 确定性跑完
+且**不把任何 timeout 当 PASS**，在 `vitest.config.ts` 增加 `maxWorkers: 3`
+（CI runner 核数本就低于此值，行为一致）。该改动只限制并行 fork 数：
+**未改任何测试断言、预期输出、fixture、业务实现或冻结文档**；调整后所有 29 个 suite / 178 个用例
+真实执行并全部通过，collect 由 1338s 降至 448s。
+配套的 `scripts/verify-all.mjs` 单命令超时由 300000ms 调到 600000ms：受限并发下 G1 全量约需 320s，
+原上限会以 `spawnSync ETIMEDOUT / exit 143` 中途杀掉（首次归档因此出现 1 条 FAIL）。
+**未把该 timeout 当作 PASS**：调整上限后重新完整执行，G1 全量 `exit=0 / 29 files / 178 tests` 已通过。
+但该次归档仍有 1 条 FAIL：见下方「验证阻塞」。
+这两处都只影响验证运行参数，不改任何测试断言、预期输出或业务语义。
+
+**验证阻塞（如实记录，未抹除）**：`node scripts/verify-all.mjs --archive` 的 GOVERNANCE 段中
+`run-governance-tests.mjs` 子进程返回 `exit=1`，真实错误为宿主安全 shim 的
+`EPERM: operation not permitted, unlink '/var/folders/.../xiaoshuyin-gov-*/ .specify/memory/constitution.md'`
+（临时 fixture 清理被 `node-safe-delete-shim` 拦截），**与仓库代码/测试断言无关**；同一命令在
+Bash 中单独执行为 PASS 15/15。随后 Bash 通道本身被宿主
+`sandbox-exec: data object length 67229 exceeds maximum (65535)` 完全阻塞
+（主会话 / 子代理 / 沙箱与非沙箱均同一错误），因此无法重跑归档、执行两批 commit / push 或确认 Final Head CI。
+`tests/evidence/verify-all.log` 当前为 `35 PASS / 1 FAIL`，**不得当作已通过证据**。
+
+**任务状态（当前，未收口）**：T057、T058、T059、T068、T072 仍为 `[ ]`（`tasks.md` = **67 / 72**）。
+按 Review §19，只有上表全部验证真正 PASS 后才逐项设回 `[x]`；当前 `verify-all` 未收口，
+故保持开放，不制造 72/72 假完成。
+
+---
+
+## 16. 原环境阻塞时的结论（历史记录，已由 §17 取代）
+
+**代码状态**：Independent Converge Round 2 的 4 个 code/evidence finding 已全部修复并 RED→GREEN，
+workspace artifact 已清理；冻结 Source of Truth 未改动；Round 1 / Round 2 失败历史完整保留在 §14 / §15。
+`bun run vitest run` 29/178、typecheck、guard、openapi、db-evidence、coverage、governance 均真实 PASS。
+
+**但本轮尚未收口**：`verify-all` 归档仍为 35 PASS / 1 FAIL（宿主安全 shim 拦截，见上文），
+Bash 通道被宿主 `sandbox-exec` 错误完全阻塞，无法重跑归档 / commit / push / 确认 Final Head CI，
+5 个 Task 仍为 `[ ]`。按 §23 条件，**不得输出 `IMPLEMENT REMEDIATION COMPLETE`**，状态为 **BLOCKED**。
+
+**下一步（环境恢复后执行）**：重跑 `node scripts/verify-all.mjs --archive` 得到 36 PASS / 0 FAIL →
+逐项把 T057/T058/T059/T068/T072 设回 `[x]` → 两批 commit → `git push origin feat/001-family-identity-core`
+→ 确认同一 Final Head 六项 checks 全 SUCCESS → 再宣布完成。
+
+
+
+## 17. Final Closeout 本地验证（2026-11-05）
+
+保留 §15–16 的当时失败和阻塞历史；其 35/1、67/72 与阻塞结论不再描述本次本地验证状态。
+本地 PostgreSQL 18.6 的测试数据库可用，迁移检查通过；原首条失败命令重新执行为 10/10 PASS。
+T057 的时间顺序断言由 `<=` 收紧为要求的 `<`，专项测试 3/3 PASS。
+之后重新执行 `node scripts/verify-all.mjs --archive`：36 PASS / 0 FAIL，完整套件 29 files / 178 tests，0 skipped；详细输出见 `verify-all.log`。其中真实微信平台验证仍为 NOT VERIFIED。
+逐项核对 T057（严格顺序及专项 PASS）、T058（§14 的 RED 记录）、T059（撤回专项 PASS）、T068（完整归档 PASS）、T072（收敛记录、治理验证及受保护文件说明），任务状态为 72/72。
+Final Head CI 是独立外部证据，须以提交后的 GitHub Actions 结果为准；此处不预先声明通过。

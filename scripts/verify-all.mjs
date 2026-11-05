@@ -40,7 +40,9 @@ function runCommand(exec, args) {
     encoding: 'utf8',
     env: process.env,
     maxBuffer: 16 * 1024 * 1024,
-    timeout: 300000,
+    // The full suite runs with bounded forks (vitest.config.ts maxWorkers) and
+    // needs ~5-6 minutes; 300s killed it with ETIMEDOUT/143 mid-run.
+    timeout: 600000,
   });
   const output = `${r.stdout ?? ''}${r.stderr ?? ''}`;
   const code = r.status === null ? 124 : r.status;

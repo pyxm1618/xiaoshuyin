@@ -1,6 +1,6 @@
 # T070 — quickstart.md §2 端到端主路径（真实请求记录）
 
-执行时间: 2026-11-05T07:11:50.972Z
+执行时间: 2026-11-05T09:34:42.061Z
 
 说明：通过 Fastify `app.inject` 调用真实路由（与 integration 测试同一套 handler / auth hook / RLS 事务 / PostgreSQL）；
 每个状态码与响应字段均来自实际响应，数据库断言来自真实 SQL 查询；token 仅显示前缀。
@@ -19,7 +19,7 @@ content-type: application/json
 
 ```json
 {
-  "code": "qs-parent-a-1793862711082"
+  "code": "qs-parent-a-1793871282163"
 }
 ```
 
@@ -30,8 +30,8 @@ content-type: application/json
 ```json
 {
   "statusCode": 201,
-  "accountId": "01a1aa8c-b77f-7519-ac05-1f7d4c76a9a2",
-  "personId": "01a1aa8c-b780-7d9c-8715-7637fcc327c0",
+  "accountId": "01a1ab0f-802a-7644-874c-0d742a064f27",
+  "personId": "01a1ab0f-802c-7355-ac74-77f2dab2dac0",
   "personProfile": null,
   "token": "eyJhY2NvdW50…(150 chars)",
   "wechatOpenidPresent": false
@@ -40,7 +40,7 @@ content-type: application/json
 
 **quickstart 预期**: 200/201；person 非空、profile 尚未写入；响应不出现 wechat_openid
 
-**实际**: 实际 201；Account 01a1aa8c-b77f-7519-ac05-1f7d4c76a9a2 与 Person 01a1aa8c-b780-7d9c-8715-7637fcc327c0 由登录建立，profile=null，响应不含 wechat_openid
+**实际**: 实际 201；Account 01a1ab0f-802a-7644-874c-0d742a064f27 与 Person 01a1ab0f-802c-7355-ac74-77f2dab2dac0 由登录建立，profile=null，响应不含 wechat_openid
 
 **判定**: PASS
 
@@ -58,7 +58,7 @@ content-type: application/json
   "displayName": "A 家",
   "ageBand": "ADULT",
   "ageBandSource": "SELF_STATEMENT",
-  "idempotencyKey": "qs-fam-1793862711082"
+  "idempotencyKey": "qs-fam-1793871282163"
 }
 ```
 
@@ -74,19 +74,19 @@ content-type: application/json
   },
   "createFamily": {
     "status": 201,
-    "id": "a076974f-de00-4251-92ad-266b76c422cf",
+    "id": "e81c28b0-d20c-466d-94be-cfee4b4744d5",
     "isManager": true
   },
   "me": {
     "status": 200,
     "body": {
       "account": {
-        "id": "01a1aa8c-b77f-7519-ac05-1f7d4c76a9a2",
-        "createdAt": "2026-11-05T07:11:51.165Z",
+        "id": "01a1ab0f-802a-7644-874c-0d742a064f27",
+        "createdAt": "2026-11-05T09:34:42.216Z",
         "lastLoginAt": null
       },
       "person": {
-        "id": "01a1aa8c-b780-7d9c-8715-7637fcc327c0",
+        "id": "01a1ab0f-802c-7355-ac74-77f2dab2dac0",
         "profile": {
           "ageBand": "ADULT",
           "minorMode": false,
@@ -118,7 +118,7 @@ content-type: application/json
 **真实请求**
 
 ```http
-POST /api/v1/families/a076974f-de00-4251-92ad-266b76c422cf/members
+POST /api/v1/families/e81c28b0-d20c-466d-94be-cfee4b4744d5/members
 content-type: application/json
 ```
 
@@ -133,7 +133,7 @@ content-type: application/json
       "sourceKind": "GUARDIAN_RELAY"
     }
   ],
-  "idempotencyKey": "qs-mem-1793862711082"
+  "idempotencyKey": "qs-mem-1793871282163"
 }
 ```
 
@@ -145,7 +145,7 @@ content-type: application/json
 {
   "createMember": {
     "status": 201,
-    "personId": "6984b8a6-eb51-47a6-a1f6-80a75490f1f9",
+    "personId": "b0281890-02f4-420c-8fa3-03d04d533f33",
     "accountBound": false
   },
   "patchSecondSource": {
@@ -182,7 +182,7 @@ content-type: application/json
 ```json
 {
   "noticeVersion": "v1",
-  "idempotencyKey": "qs-req-1793862711082"
+  "idempotencyKey": "qs-req-1793871282163"
 }
 ```
 
@@ -198,9 +198,9 @@ content-type: application/json
   },
   "onboardingRequest": {
     "status": 201,
-    "id": "01a1aa8c-b7b6-731b-9089-9f48424b503e",
+    "id": "01a1ab0f-8064-7632-881b-f84443ce9067",
     "statusField": "PENDING",
-    "expiresAt": "2026-11-06T07:11:51.219Z"
+    "expiresAt": "2026-11-06T09:34:42.274Z"
   },
   "withoutConsent": {
     "status": 403,
@@ -209,30 +209,30 @@ content-type: application/json
   },
   "grant": {
     "status": 201,
-    "id": "01a1aa8c-b7c2-7404-9f02-fa2c79709e10",
+    "id": "01a1ab0f-8072-723d-9dde-e9e55e94ab26",
     "decision": "GRANTED",
     "version": 1,
     "boundPersonId": null
   },
   "childCreated": {
     "status": 201,
-    "personId": "b1b912f0-fa93-4992-940f-6f74258b5873",
+    "personId": "3b4e0557-1703-4051-8277-6a61956feeaf",
     "ageBand": "UNDER_14"
   },
   "childProfileInDb": {
     "age_band": "UNDER_14",
     "minor_mode": true,
     "verified_source": "GUARDIAN_RELAY",
-    "guardian_person_id": "01a1aa8c-b780-7d9c-8715-7637fcc327c0",
+    "guardian_person_id": "01a1ab0f-802c-7355-ac74-77f2dab2dac0",
     "guardian_consent_version": 1,
-    "guardian_consent_record_id": "01a1aa8c-b7c2-7404-9f02-fa2c79709e10"
+    "guardian_consent_record_id": "01a1ab0f-8072-723d-9dde-e9e55e94ab26"
   }
 }
 ```
 
 **quickstart 预期**: request 201 且无儿童资料；无 guardianConsentId 建 UNDER_14 → 403 且不建 Person/profile；grant 201 GRANTED v1；带 consent 建档 201，profile.ageBand=UNDER_14、guardian 与 consent 版本一致
 
-**实际**: 实际：request 201；无同意建档 403/GUARDIAN_CONSENT_REQUIRED（family_members 仍 2 行）；grant 201/GRANTED v1；建档 201，profile={"age_band":"UNDER_14","minor_mode":true,"verified_source":"GUARDIAN_RELAY","guardian_person_id":"01a1aa8c-b780-7d9c-8715-7637fcc327c0","guardian_consent_version":1,"guardian_consent_record_id":"01a1aa8c-b7c2-7404-9f02-fa2c79709e10"}
+**实际**: 实际：request 201；无同意建档 403/GUARDIAN_CONSENT_REQUIRED（family_members 仍 2 行）；grant 201/GRANTED v1；建档 201，profile={"age_band":"UNDER_14","minor_mode":true,"verified_source":"GUARDIAN_RELAY","guardian_person_id":"01a1ab0f-802c-7355-ac74-77f2dab2dac0","guardian_consent_version":1,"guardian_consent_record_id":"01a1ab0f-8072-723d-9dde-e9e55e94ab26"}
 
 **判定**: PASS
 
@@ -241,13 +241,13 @@ content-type: application/json
 **真实请求**
 
 ```http
-POST /api/v1/consents/01a1aa8c-b7c2-7404-9f02-fa2c79709e10/revoke
+POST /api/v1/consents/01a1ab0f-8072-723d-9dde-e9e55e94ab26/revoke
 content-type: application/json
 ```
 
 ```json
 {
-  "idempotencyKey": "qs-revoke-1793862711082"
+  "idempotencyKey": "qs-revoke-1793871282163"
 }
 ```
 
@@ -259,7 +259,7 @@ content-type: application/json
 {
   "revoke": {
     "status": 200,
-    "id": "01a1aa8c-b7d3-7807-8d49-ea3544da128e",
+    "id": "01a1ab0f-8084-76b1-8848-1ba4064ba3ac",
     "decision": "REVOKED",
     "version": 2
   },
@@ -267,20 +267,20 @@ content-type: application/json
     {
       "decision": "GRANTED",
       "version": 1,
-      "onboarding_request_id": "01a1aa8c-b7b6-731b-9089-9f48424b503e",
+      "onboarding_request_id": "01a1ab0f-8064-7632-881b-f84443ce9067",
       "supersedes_id": null,
-      "bound_person_id": "b1b912f0-fa93-4992-940f-6f74258b5873"
+      "bound_person_id": "3b4e0557-1703-4051-8277-6a61956feeaf"
     },
     {
       "decision": "REVOKED",
       "version": 2,
       "onboarding_request_id": null,
-      "supersedes_id": "01a1aa8c-b7c2-7404-9f02-fa2c79709e10",
-      "bound_person_id": "b1b912f0-fa93-4992-940f-6f74258b5873"
+      "supersedes_id": "01a1ab0f-8072-723d-9dde-e9e55e94ab26",
+      "bound_person_id": "3b4e0557-1703-4051-8277-6a61956feeaf"
     }
   ],
   "profilePointer": {
-    "guardian_consent_record_id": "01a1aa8c-b7d3-7807-8d49-ea3544da128e",
+    "guardian_consent_record_id": "01a1ab0f-8084-76b1-8848-1ba4064ba3ac",
     "guardian_consent_version": 2
   }
 }
@@ -297,7 +297,7 @@ content-type: application/json
 **真实请求**
 
 ```http
-PATCH /api/v1/families/a076974f-de00-4251-92ad-266b76c422cf/members/6984b8a6-eb51-47a6-a1f6-80a75490f1f9
+PATCH /api/v1/families/e81c28b0-d20c-466d-94be-cfee4b4744d5/members/b0281890-02f4-420c-8fa3-03d04d533f33
 content-type: application/json
 ```
 
@@ -310,7 +310,7 @@ content-type: application/json
       "sourceKind": "GUARDIAN_RELAY"
     }
   ],
-  "idempotencyKey": "qs-cross-1793862711082"
+  "idempotencyKey": "qs-cross-1793871282163"
 }
 ```
 
@@ -323,7 +323,7 @@ content-type: application/json
   "secondActorLogin": 201,
   "secondFamily": {
     "status": 201,
-    "id": "d012953c-7a61-4f93-939b-5c4b9d497140"
+    "id": "2c1fac76-70f5-475e-b720-1a15ea7ac59d"
   },
   "crossFamilyPatch": {
     "status": 403,
