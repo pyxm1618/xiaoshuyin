@@ -91,7 +91,7 @@ if (fs.existsSync(specsRoot)) {
       if (!hasPlan) errors.push(`${dir}: tasks.md exists but plan.md is missing (Spec Kit lifecycle violation)`);
 
       const text = read(path.join(dir, "tasks.md"));
-      const taskLines = text.split(/\r?\n/).filter((line) => /^- \[ \] T\d{3,}\b/.test(line));
+      const taskLines = text.split(/\r?\n/).filter((line) => /^- \[(?: |x|X)\] T\d{3,}\b/.test(line));
       if (taskLines.length === 0) errors.push(`${dir}/tasks.md: no implementation task lines found`);
       for (const line of taskLines) {
         if (!/\[REQ:[^\]]+\]/.test(line)) errors.push(`${dir}/tasks.md: task missing [REQ:...] -> ${line}`);
