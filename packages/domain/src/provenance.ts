@@ -120,15 +120,21 @@ export function resolveProvenanceProvider(args: {
 }): ProviderResolution {
   const { sourceKind, subjectPersonId, actorPersonId, providedByPersonId, pinnedProvider } = args;
 
-  if (!WRITABLE_SOURCES.includes(sourceKind)) return { kind: 'INVALID' };
-
-  // Contract-pinned provider (UNDER_14): never silently rewritten.
+  // Contract-pinned provider (UNDER_14 creation). The pin is NOT a bypass for
+  // source validation: a pinned provider implies guardian-origin information, so
+  // only GUARDIAN_RELAY / GUARDIAN_OBSERVATION are acceptable. SELF_STATEMENT
+  // and OTHER_MEMBER_RELAY are rejected rather than silently rewritten.
   if (pinnedProvider) {
+    if (sourceKind !== 'GUARDIAN_RELAY' && sourceKind !== 'GUARDIAN_OBSERVATION') {
+      return { kind: 'INVALID' };
+    }
     if (providedByPersonId && providedByPersonId !== pinnedProvider) {
       return { kind: 'INVALID' };
     }
     return { kind: 'FIXED', provider: pinnedProvider };
   }
+
+  if (!WRITABLE_SOURCES.includes(sourceKind)) return { kind: 'INVALID' };
 
   if (sourceKind === 'SELF_STATEMENT') {
     if (providedByPersonId && providedByPersonId !== subjectPersonId) {

@@ -25,7 +25,7 @@ import {
   assertMinorProcessingAllowed,
   getCurrentNoticeHash,
   getConsentRecordById,
-  getComplianceProfileForGate,
+  getComplianceProfileForUpdate,
   getConsentRecordForGate,
   bindConsentToPerson,
   insertComplianceProfile,
@@ -68,12 +68,21 @@ async function resolveProviderForValue(
  * Run the frozen processing gate against a Person.
  * `assertMinorProcessingAllowed` is a pure sync function; the profile/consent
  * rows are fetched first so the gate itself stays read-only.
+ *
+ * Concurrency (Round 2 CRITICAL): the profile row is read FOR UPDATE and the
+ * lock is held until the command's transaction commits. That is the single
+ * serialization primitive shared with consent revocation — revoke's pointer
+ * advance (`UPDATE person_compliance_profiles`) must wait for it, so a PATCH
+ * that already observed the old GRANTED state can never commit after a revoke
+ * has returned. The consent row is read WITHOUT a lock on purpose: processing
+ * commands must never block on `consent_records`, otherwise they would form an
+ * opposite lock order with revoke (which locks consent first, then profile).
  */
 async function runProcessingGate(
   tx: pg.PoolClient,
   personId: string
 ): Promise<{ decision: 'ALLOW'; minorMode: boolean } | { decision: 'BLOCK'; reason: string }> {
-  const row = await getComplianceProfileForGate(tx, personId);
+  const row = await getComplianceProfileForUpdate(tx, personId);
   const profile = row
     ? {
         ageBand: row.age_band as 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN',

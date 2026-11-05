@@ -9,7 +9,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import { createAdminPool } from '../setup/db.js';
+import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
+
+let verifyPool: pg.Pool;
 
 describe('Provenance Provider Validation (T051)', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -17,9 +22,11 @@ describe('Provenance Provider Validation (T051)', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
+    verifyPool = createAdminPool();
   });
 
   afterAll(async () => {
+    await verifyPool.end();
     await app.close();
   });
 
@@ -49,13 +56,18 @@ describe('Provenance Provider Validation (T051)', () => {
     return res.json().id as string;
   }
 
-  async function addMember(token: string, familyId: string, label: string) {
+  async function addMember(
+    token: string,
+    familyId: string,
+    label: string,
+    ageBand: 'ADULT' | 'MINOR_14_17' = 'MINOR_14_17'
+  ) {
     const res = await app.inject({
       method: 'POST',
       url: `/api/v1/families/${familyId}/members`,
       headers: { authorization: `Bearer ${token}` },
       payload: {
-        ageBand: 'MINOR_14_17',
+        ageBand,
         ageBandSource: 'GUARDIAN_OBSERVATION',
         idempotencyKey: `mem-pv-${label}-${Date.now()}`,
       },
@@ -187,11 +199,25 @@ describe('Provenance Provider Validation (T051)', () => {
     expect(res.statusCode).toBe(201);
   });
 
-  it('no-account adult SELF_STATEMENT about self → 201', async () => {
-    // A member without an account may still record SELF_STATEMENT about themself.
+  it('no-account ADULT SELF_STATEMENT about self → 201', async () => {
+    // FR-004: a Person without an Account may still record SELF_STATEMENT about
+    // themself. This must be a genuine ADULT (not a MINOR fixture mislabelled).
     const { token } = await login('noacct-self');
     const familyId = await createFamily(token, 'noacct-self');
-    const memberPersonId = await addMember(token, familyId, 'noacct-self');
+    const memberPersonId = await addMember(token, familyId, 'noacct-self', 'ADULT');
+
+    // Prove the fixture really is an ADULT without an account.
+    const { rows: personRows } = await verifyPool.query(
+      'SELECT account_id FROM persons WHERE id = $1',
+      [memberPersonId]
+    );
+    expect(personRows.length).toBe(1);
+    expect(personRows[0].account_id).toBeNull();
+    const { rows: profileRows } = await verifyPool.query(
+      'SELECT age_band FROM person_compliance_profiles WHERE person_id = $1',
+      [memberPersonId]
+    );
+    expect(profileRows[0].age_band).toBe('ADULT');
 
     const res = await app.inject({
       method: 'PATCH',
@@ -210,5 +236,214 @@ describe('Provenance Provider Validation (T051)', () => {
       },
     });
     expect(res.statusCode).toBe(200);
+
+    // The value landed with the subject Person as its provider (not the actor).
+    const { rows: valueRows } = await verifyPool.query(
+      `SELECT value_text, provided_by_person_id FROM person_profile_values
+       WHERE person_id = $1 AND status = 'RECORDED'`,
+      [memberPersonId]
+    );
+    expect(valueRows.length).toBe(1);
+    expect(valueRows[0].value_text).toBe('小雨');
+    expect(valueRows[0].provided_by_person_id).toBe(memberPersonId);
+  });
+
+  // ── UNDER_14 create: per-value sourceKind is restricted to guardian origin ──
+
+  async function grantConsentFor(token: string, label: string) {
+    const reqRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/compliance/guardian-consents/requests',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { noticeVersion: 'v1', idempotencyKey: `cr-${label}-${Date.now()}` },
+    });
+    const grantRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/compliance/guardian-consents',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        consentRequestId: reqRes.json().id,
+        accepted: true,
+        noticeVersion: 'v1',
+        noticeHash: await getCurrentNoticeHash(),
+        idempotencyKey: `cg-${label}-${Date.now()}`,
+      },
+    });
+    expect(grantRes.statusCode).toBe(201);
+    return grantRes.json();
+  }
+
+  function postUnder14WithValues(
+    token: string,
+    familyId: string,
+    label: string,
+    consentId: string,
+    values: unknown[]
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: `/api/v1/families/${familyId}/members`,
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        ageBand: 'UNDER_14',
+        ageBandSource: 'GUARDIAN_RELAY',
+        guardianConsentId: consentId,
+        profileValues: values,
+        idempotencyKey: `mem-u14-${label}-${Date.now()}`,
+      },
+    });
+  }
+
+  async function countFamilyScoped(familyId: string) {
+    const q = async (sql: string) => {
+      const { rows } = await verifyPool.query(sql, [familyId]);
+      return rows[0].cnt as number;
+    };
+    return {
+      memberships: await q('SELECT count(*)::int AS cnt FROM family_members WHERE family_id = $1'),
+      profiles: await q(
+        `SELECT count(*)::int AS cnt FROM person_compliance_profiles cp
+         JOIN family_members fm ON fm.person_id = cp.person_id WHERE fm.family_id = $1`
+      ),
+      values: await q(
+        `SELECT count(*)::int AS cnt FROM person_profile_values v
+         JOIN family_members fm ON fm.person_id = v.person_id WHERE fm.family_id = $1`
+      ),
+    };
+  }
+
+  async function expectUnder14Rejected(
+    label: string,
+    values: unknown[],
+    expectedCode: string
+  ) {
+    const { token, personId } = await login(`u14-${label}`);
+    const familyId = await createFamily(token, `u14-${label}`);
+    const consent = await grantConsentFor(token, `u14-${label}`);
+
+    const before = await countFamilyScoped(familyId);
+
+    const res = await postUnder14WithValues(token, familyId, label, consent.id, values);
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe(expectedCode);
+
+    // Failure must leave no residue at all (scoped to this family).
+    const after = await countFamilyScoped(familyId);
+    expect(after.memberships).toBe(before.memberships);
+    expect(after.profiles).toBe(before.profiles);
+    expect(after.values).toBe(before.values);
+    // The consent must NOT have been bound to any Person.
+    const { rows: boundRows } = await verifyPool.query(
+      'SELECT bound_person_id FROM consent_records WHERE id = $1',
+      [consent.id]
+    );
+    expect(boundRows[0].bound_person_id).toBeNull();
+    return personId;
+  }
+
+  it('UNDER_14 create + GUARDIAN_RELAY + guardian provider → 201', async () => {
+    const { token, personId } = await login('u14-relay-ok');
+    const familyId = await createFamily(token, 'u14-relay-ok');
+    const consent = await grantConsentFor(token, 'u14-relay-ok');
+    const res = await postUnder14WithValues(token, familyId, 'relay-ok', consent.id, [
+      {
+        attribute: 'DISPLAY_NAME',
+        valueText: '小树',
+        sourceKind: 'GUARDIAN_RELAY',
+        providedByPersonId: personId,
+      },
+    ]);
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('UNDER_14 create + GUARDIAN_OBSERVATION + guardian provider → 201', async () => {
+    const { token, personId } = await login('u14-obs-ok');
+    const familyId = await createFamily(token, 'u14-obs-ok');
+    const consent = await grantConsentFor(token, 'u14-obs-ok');
+    const res = await postUnder14WithValues(token, familyId, 'obs-ok', consent.id, [
+      {
+        attribute: 'DISPLAY_NAME',
+        valueText: '小树',
+        sourceKind: 'GUARDIAN_OBSERVATION',
+        providedByPersonId: personId,
+      },
+    ]);
+    expect(res.statusCode).toBe(201);
+  });
+
+  it('UNDER_14 create + SELF_STATEMENT + guardian provider → 422', async () => {
+    // The provider IS the guardian, but SELF_STATEMENT is not a guardian-origin
+    // source — the pinned-provider branch must not bypass source validation.
+    const { token, personId } = await login('u14-self');
+    const familyId = await createFamily(token, 'u14-self');
+    const consent = await grantConsentFor(token, 'u14-self');
+    const before = await countFamilyScoped(familyId);
+
+    const res = await postUnder14WithValues(token, familyId, 'self', consent.id, [
+      {
+        attribute: 'DISPLAY_NAME',
+        valueText: '小树',
+        sourceKind: 'SELF_STATEMENT',
+        providedByPersonId: personId,
+      },
+    ]);
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('AGE_BAND_SOURCE_NOT_ALLOWED');
+
+    const after = await countFamilyScoped(familyId);
+    expect(after.memberships).toBe(before.memberships);
+    expect(after.profiles).toBe(before.profiles);
+    expect(after.values).toBe(before.values);
+    const { rows: boundRows } = await verifyPool.query(
+      'SELECT bound_person_id FROM consent_records WHERE id = $1',
+      [consent.id]
+    );
+    expect(boundRows[0].bound_person_id).toBeNull();
+  });
+
+  it('UNDER_14 create + OTHER_MEMBER_RELAY + guardian provider → 422', async () => {
+    // Same: provider is the guardian, but OTHER_MEMBER_RELAY is not guardian origin.
+    const { token, personId } = await login('u14-other');
+    const familyId = await createFamily(token, 'u14-other');
+    const consent = await grantConsentFor(token, 'u14-other');
+    const before = await countFamilyScoped(familyId);
+
+    const res = await postUnder14WithValues(token, familyId, 'other', consent.id, [
+      {
+        attribute: 'DISPLAY_NAME',
+        valueText: '小树',
+        sourceKind: 'OTHER_MEMBER_RELAY',
+        providedByPersonId: personId,
+      },
+    ]);
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('AGE_BAND_SOURCE_NOT_ALLOWED');
+
+    const after = await countFamilyScoped(familyId);
+    expect(after.memberships).toBe(before.memberships);
+    expect(after.profiles).toBe(before.profiles);
+    expect(after.values).toBe(before.values);
+    const { rows: boundRows } = await verifyPool.query(
+      'SELECT bound_person_id FROM consent_records WHERE id = $1',
+      [consent.id]
+    );
+    expect(boundRows[0].bound_person_id).toBeNull();
+  });
+
+  it('UNDER_14 create + guardian source + fake provider → 422', async () => {
+    const { token, personId } = await login('u14-fake');
+    await expectUnder14Rejected(
+      'fake',
+      [
+        {
+          attribute: 'DISPLAY_NAME',
+          valueText: '小树',
+          sourceKind: 'GUARDIAN_RELAY',
+          providedByPersonId: '00000000-0000-4000-8000-000000000093',
+        },
+      ],
+      'AGE_BAND_SOURCE_NOT_ALLOWED'
+    );
+    expect(personId).toBeTruthy();
   });
 });

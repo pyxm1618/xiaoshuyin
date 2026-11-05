@@ -91,7 +91,7 @@ export async function getComplianceProfileForUpdate(tx: Tx, personId: string) {
 
 export async function getConsentRecordForGate(tx: Tx, id: string) {
   const { rows } = await tx.query(
-    `SELECT id, decision, bound_person_id, notice_hash, guardian_person_id
+    `SELECT id, version, decision, bound_person_id, notice_hash, guardian_person_id
      FROM consent_records WHERE id = $1`,
     [id]
   );

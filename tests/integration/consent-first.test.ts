@@ -204,6 +204,6 @@ describe('Consent-First Integration (T056)', () => {
       [consent.id, body.personId]
     );
     expect(new Date(timeRows[0].consent_time).getTime())
-      .toBeLessThanOrEqual(new Date(timeRows[0].person_time).getTime());
+      .toBeLessThan(new Date(timeRows[0].person_time).getTime());
   });
 });
