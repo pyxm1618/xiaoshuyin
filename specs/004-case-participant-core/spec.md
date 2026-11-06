@@ -491,7 +491,7 @@ Slice 4 Clarify **MUST NOT 声明任何具体 TTL 数值**（如 24h / 72h / 7d�
 - 其他 actor（含非目标接受者、跨 Family、跨 Case）MUST 被拒绝，且不泄露参与是否存在。
 - 具体 payload 字段名 / envelope / list 语义属 Plan。
 
-#### OQ-6 — Existing Person / Account 绑定 → BLOCKED — UPSTREAM IDENTITY CONTRACT REVIEW REQUIRED
+#### OQ-6 — Existing Person / Account 绑定 → RESOLVED（merged 005 identity contract）
 
 **最终决定**：OQ-6 **RESOLVED**。PR #11 的 `005-invited-identity-binding-contract` 已完成独立合同审核、获得 `approved-docs-change`、通过治理与 CI，并 merge 到 `main`。Slice 4 现在只消费该 authoritative identity seam，**不重新定义 identity proof**。
 
