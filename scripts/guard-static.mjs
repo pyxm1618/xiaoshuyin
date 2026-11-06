@@ -172,12 +172,29 @@ scanDir(ROOT, (file) => {
 // ─── Rule 6: Scope guard ───
 // Out-of-scope tables for Slice 2 (Case Core). Their presence in a migration
 // or schema file means scope creep, not a future-proofing decision.
+// The list is additive: every table that was forbidden before stays forbidden.
 const FORBIDDEN_TABLES = [
   'case_participants', 'participation_invites', 'assertions', 'observations',
   'problem_formulations', 'scene_node_states', 'scene_artifacts',
   'dialogue_messages', 'safety_states', 'plan_versions', 'notifications',
   'notification_attempts', 'ai_runs', 'checkins', 'reviews',
 ];
+
+// Detect the table regardless of the SQL/DDL form:
+//   CREATE TABLE assertions (...)
+//   CREATE TABLE IF NOT EXISTS public.case_participants (...)
+//   CREATE UNLOGGED TABLE "case_participants" (...)
+//   pgTable('case_participants', ...)
+// plus a bare mention of case_participants (the pre-existing rule).
+const FORBIDDEN_TABLE_NAME = FORBIDDEN_TABLES.map((t) => t.replace(/_/g, '[_]')).join('|');
+const FORBIDDEN_CREATE_TABLE = new RegExp(
+  `CREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:[A-Za-z_][A-Za-z0-9_]*\\s*\\.\\s*)?["'\`]?(${FORBIDDEN_TABLE_NAME})["'\`]?`,
+  'i'
+);
+const FORBIDDEN_PGTABLE = new RegExp(
+  `pgTable\\(\\s*["'\`](${FORBIDDEN_TABLE_NAME})["'\`]`,
+  'i'
+);
 
 const FORBIDDEN_PATHS = [
   'apps/miniprogram',
@@ -200,10 +217,21 @@ scanDir(join(ROOT, 'db'), (file) => {
   const relPath = getRelPath(file);
   const content = readFileSync(file, 'utf-8');
   content.split('\n').forEach((line, i) => {
-    const tableMatch = line.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?([a-z_]+)["']?/i);
-    if (tableMatch && FORBIDDEN_TABLES.includes(tableMatch[1].toLowerCase())) {
+    const created = line.match(FORBIDDEN_CREATE_TABLE);
+    if (created) {
       addViolation('R6-scope-guard', relPath, i + 1,
-        `Forbidden out-of-scope table: ${tableMatch[1]}`);
+        `Forbidden out-of-scope table definition: ${created[1]}`);
+      return;
+    }
+    const pgTable = line.match(FORBIDDEN_PGTABLE);
+    if (pgTable) {
+      addViolation('R6-scope-guard', relPath, i + 1,
+        `Forbidden out-of-scope table declared via pgTable: ${pgTable[1]}`);
+      return;
+    }
+    if (/\bcase_participants\b/i.test(line)) {
+      addViolation('R6-scope-guard', relPath, i + 1,
+        'Forbidden out-of-scope table reference: case_participants');
     }
   });
 });
