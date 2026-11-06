@@ -15,8 +15,12 @@ import { createAdminPool } from '../setup/db.js';
 let verifyPool: pg.Pool;
 
 const FAULT_FN = 'cv1_fault_raise';
-const EVENT_TRIGGER = 'cv1_fault_case_events';
-const AUDIT_TRIGGER = 'cv1_fault_business_audit_events';
+// Trigger names carry a per-run suffix so two runs can never collide, and the
+// trigger is scoped to one Family (WHEN clause) so parallel suites that write
+// case_events / business_audit_events for other Families are unaffected.
+const RUN_SUFFIX = process.pid.toString(36) + Math.random().toString(36).slice(2, 8);
+const EVENT_TRIGGER = `cv1_fault_case_events_${RUN_SUFFIX}`;
+const AUDIT_TRIGGER = `cv1_fault_business_audit_events_${RUN_SUFFIX}`;
 
 describe('Case create rollback (A13)', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
@@ -43,10 +47,10 @@ describe('Case create rollback (A13)', () => {
     await owner.query(`DROP FUNCTION IF EXISTS ${FAULT_FN}()`).catch(() => {});
   }
 
-  async function installFault(table: 'case_events' | 'business_audit_events') {
+  async function installFault(table: 'case_events' | 'business_audit_events', familyId: string) {
     await dropFaults();
     await owner.query(`
-      CREATE FUNCTION ${FAULT_FN}() RETURNS trigger LANGUAGE plpgsql AS $$
+      CREATE OR REPLACE FUNCTION ${FAULT_FN}() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
         RAISE EXCEPTION 'CV1_INJECTED_FAULT';
       END $$;
@@ -54,7 +58,8 @@ describe('Case create rollback (A13)', () => {
     const trigger = table === 'case_events' ? EVENT_TRIGGER : AUDIT_TRIGGER;
     await owner.query(`
       CREATE TRIGGER ${trigger} BEFORE INSERT ON ${table}
-      FOR EACH ROW EXECUTE FUNCTION ${FAULT_FN}();
+      FOR EACH ROW WHEN (NEW.family_id = '${familyId}'::uuid)
+      EXECUTE FUNCTION ${FAULT_FN}();
     `);
   }
 
@@ -101,7 +106,7 @@ describe('Case create rollback (A13)', () => {
   for (const table of ['case_events', 'business_audit_events'] as const) {
     it(`${table} insert failure rolls the whole command back`, async () => {
       const { token, familyId, accountId } = await setup(table);
-      await installFault(table);
+      await installFault(table, familyId);
 
       try {
         const res = await app.inject({
