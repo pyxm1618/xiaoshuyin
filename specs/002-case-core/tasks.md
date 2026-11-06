@@ -478,6 +478,7 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 | `bun run coverage:audit` | 002：**FR 25/25、SC 11/11、Acceptance 18/18、missing 0**；001：FR 17/17、SC 8/8 |
 | `node .specify/scripts/validate-governance.mjs` | PASS |
 | `node .specify/scripts/tests/run-governance-tests.mjs` | PASS 15/15 |
+| GitHub Actions run `42149827542`（`feat/002-case-core`） | **5/5 success**：Static Checks / Unit Tests / DB Migration / Integration Tests / Contract |
 
 ### 关键行为证据
 
