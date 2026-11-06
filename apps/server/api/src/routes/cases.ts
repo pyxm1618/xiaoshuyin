@@ -286,7 +286,9 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
         }
         return reply.status(outcome.status).send(outcome.body);
       } catch (err: any) {
-        if (err?.statusCode) {
+        // 4xx keep their frozen contract body; anything 5xx is rethrown so the
+        // single generic INTERNAL_ERROR contract in errorHandler answers.
+        if (err?.statusCode && err.statusCode < 500) {
           return reply.status(err.statusCode).send({ code: err.code, message: err.message });
         }
         throw err;
@@ -360,7 +362,9 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
         );
         return reply.status(200).send(result);
       } catch (err: any) {
-        if (err?.statusCode) {
+        // 4xx keep their frozen contract body; anything 5xx is rethrown so the
+        // single generic INTERNAL_ERROR contract in errorHandler answers.
+        if (err?.statusCode && err.statusCode < 500) {
           return reply.status(err.statusCode).send({ code: err.code, message: err.message });
         }
         throw err;
@@ -442,7 +446,9 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
         );
         return reply.status(200).send(row);
       } catch (err: any) {
-        if (err?.statusCode) {
+        // 4xx keep their frozen contract body; anything 5xx is rethrown so the
+        // single generic INTERNAL_ERROR contract in errorHandler answers.
+        if (err?.statusCode && err.statusCode < 500) {
           return reply.status(err.statusCode).send({ code: err.code, message: err.message });
         }
         throw err;

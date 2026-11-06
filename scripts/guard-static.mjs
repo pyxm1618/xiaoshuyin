@@ -171,10 +171,7 @@ scanDir(ROOT, (file) => {
 
 // ─── Rule 6: Scope guard ───
 // Forbidden out-of-scope tables (specs/002-case-core/data-model.md §8).
-// The list is additive: every table forbidden before stays forbidden, and the
-// full Slice 2 exclusion vocabulary is covered — including `tasks`,
-// `case_followup_schedules`, `goals`, `intervention_instances`, `data_requests`
-// and the `memory_*` family.
+// The list is additive: every table forbidden before stays forbidden.
 const FORBIDDEN_TABLE_PATTERNS = [
   'case_participants',
   'participation_invites',
@@ -198,20 +195,121 @@ const FORBIDDEN_TABLE_PATTERNS = [
   'memory_[a-z0-9_]*',
   'data_requests',
 ];
-
-// Matches the table name as a SQL identifier: bare, quoted, schema-qualified
-// ("public"."observations"), with or without IF NOT EXISTS / UNLOGGED.
 const FORBIDDEN_TABLE_NAME = FORBIDDEN_TABLE_PATTERNS.join('|');
+
+// A quoted or bare SQL identifier, optionally quoted schema-qualified.
 const SQL_IDENT = '["\'`]?[A-Za-z_][A-Za-z0-9_]*["\'`]?';
+
+// Whole-file DDL match: PostgreSQL allows the keywords, the schema qualifier
+// and the table name to be separated by newlines, tabs and comments, so the
+// regex must run on normalized content with `\s+` separators.
 const FORBIDDEN_CREATE_TABLE = new RegExp(
-  `CREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?` +
+  `\\bCREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?` +
     `(?:${SQL_IDENT}\\s*\\.\\s*)?["'\`]?(${FORBIDDEN_TABLE_NAME})["'\`]?`,
-  'i'
+  'gi'
 );
 const FORBIDDEN_PGTABLE = new RegExp(
-  `pgTable\\(\\s*["'\`](${FORBIDDEN_TABLE_NAME})["'\`]`,
-  'i'
+  `pgTable\\s*\\(\\s*["'\`](${FORBIDDEN_TABLE_NAME})["'\`]`,
+  'gi'
 );
+
+/**
+ * Replace SQL comments with whitespace while preserving newlines and string
+ * literals / quoted identifiers, so multi-line DDL is matched as one statement.
+ * Newlines are kept so the reported line number stays meaningful.
+ */
+function normalizeSql(content) {
+  let out = '';
+  let i = 0;
+  let inBlockComment = false;
+  let inLineComment = false;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  while (i < content.length) {
+    const ch = content[i];
+    const next = content[i + 1];
+
+    if (inBlockComment) {
+      if (ch === '*' && next === '/') {
+        inBlockComment = false;
+        out += '  ';
+        i += 2;
+      } else {
+        out += ch === '\n' ? '\n' : ' ';
+        i += 1;
+      }
+      continue;
+    }
+    if (inLineComment) {
+      if (ch === '\n') {
+        inLineComment = false;
+        out += '\n';
+      } else {
+        out += ' ';
+      }
+      i += 1;
+      continue;
+    }
+    if (inSingleQuote) {
+      if (ch === "'" && next === "'") {
+        out += "''";
+        i += 2;
+        continue;
+      }
+      if (ch === "'") inSingleQuote = false;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (inDoubleQuote) {
+      if (ch === '"' && next === '"') {
+        out += '""';
+        i += 2;
+        continue;
+      }
+      if (ch === '"') inDoubleQuote = false;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      inBlockComment = true;
+      out += '  ';
+      i += 2;
+      continue;
+    }
+    if (ch === '-' && next === '-') {
+      inLineComment = true;
+      out += '  ';
+      i += 2;
+      continue;
+    }
+    if (ch === "'") {
+      inSingleQuote = true;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inDoubleQuote = true;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
+function lineOf(text, index) {
+  let line = 1;
+  for (let i = 0; i < index && i < text.length; i += 1) {
+    if (text[i] === '\n') line += 1;
+  }
+  return line;
+}
 
 const FORBIDDEN_PATHS = [
   'apps/miniprogram',
@@ -232,25 +330,23 @@ for (const p of FORBIDDEN_PATHS) {
 
 scanDir(join(ROOT, 'db'), (file) => {
   const relPath = getRelPath(file);
-  const content = readFileSync(file, 'utf-8');
-  content.split('\n').forEach((line, i) => {
-    const created = line.match(FORBIDDEN_CREATE_TABLE);
-    if (created) {
-      addViolation('R6-scope-guard', relPath, i + 1,
-        `Forbidden out-of-scope table definition: ${created[1]}`);
-      return;
-    }
-    const pgTable = line.match(FORBIDDEN_PGTABLE);
-    if (pgTable) {
-      addViolation('R6-scope-guard', relPath, i + 1,
-        `Forbidden out-of-scope table declared via pgTable: ${pgTable[1]}`);
-      return;
-    }
-    if (/\bcase_participants\b/i.test(line)) {
-      addViolation('R6-scope-guard', relPath, i + 1,
-        'Forbidden out-of-scope table reference: case_participants');
-    }
-  });
+  const raw = readFileSync(file, 'utf-8');
+  const normalized = normalizeSql(raw);
+
+  for (const match of normalized.matchAll(FORBIDDEN_CREATE_TABLE)) {
+    addViolation('R6-scope-guard', relPath, lineOf(normalized, match.index ?? 0),
+      `Forbidden out-of-scope table definition: ${match[1]}`);
+  }
+  for (const match of normalized.matchAll(FORBIDDEN_PGTABLE)) {
+    addViolation('R6-scope-guard', relPath, lineOf(normalized, match.index ?? 0),
+      `Forbidden out-of-scope table declared via pgTable: ${match[1]}`);
+  }
+  // Unchanged pre-existing rule: a bare reference to the participant table.
+  const bare = /\bcase_participants\b/i.exec(raw);
+  if (bare) {
+    addViolation('R6-scope-guard', relPath, lineOf(raw, bare.index),
+      'Forbidden out-of-scope table reference: case_participants');
+  }
 });
 
 // ─── Report ───
