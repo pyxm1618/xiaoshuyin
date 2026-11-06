@@ -17,6 +17,17 @@
 
 ---
 
+## 1A. Downstream Contract Boundary — 005 / V1-C44（additive）
+
+本文件不因受邀身份绑定合同而改变任何 policy、GUC 或事务入口。仅记录边界：
+
+- 首次登录的 `persons.WITH CHECK` self 分支（`account_id = app_account_id()`）只用于普通首次登录建立自己的 Person；MUST NOT 被复用于「绑定一个已经存在的 Person」。
+- 受邀既有 Person 的首次绑定由 005 / V1-C44 的 invitation-aware capability 定义；其 pending authentication context 不是家庭作用域身份，不得设置 `app.family_id`，也不得凭它读取家庭数据。
+- 该能力需要独立的双确认与 binding attempt 语义；具体 RLS / transaction / 状态表达属后续 Plan，本文件不新增 policy、不改 SQL。
+- `authorize()` 的动作表、`DenyReason` 封闭集合与 §3 状态码映射不因该能力扩展；绑定成功后的家庭 / Case / Consent 访问仍按既有 `authorize()` 独立判定。
+
+---
+
 ## 2. `authorize()` 契约
 
 ### 2.1 输入（形状 = §9）

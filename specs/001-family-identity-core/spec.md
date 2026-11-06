@@ -43,6 +43,17 @@
 
 **范围裁剪说明（为什么本 Slice 不含 Participant）**：`Docs/V1技术设计.md` §7.1 将 `case_participants` 与 `cases` 分列于各自表组，§10 明确「孩子参与采用有限 Case Participant」，§28.8 的参与端点全部挂在 `/cases/:id/...` 之下。也就是说 Participant 在正式文档中是 **Case 作用域对象**，没有 `cases` 就不存在合法的 participant 记录。而 `cases` 会立即带入 Case Status / Phase 契约（§6.1—6.7、§8.1「一个家庭最多一个当前主要未结 Case」），属于本 Slice 明确排除的范围。因此本 Slice 交付 Participant 成立所依赖的**前置条件**：Person、家庭成员关系（§9 的「家庭关系」判定输入）与服务端可见范围判定；`case_participants` 与其邀请流程留给 Case 切片。此裁剪属切片边界决定，已按 Clarifications Q1 结案为 **RESOLVED — DEFER TO CASE SLICE**。
 
+## Downstream Contract Reconciliation — 005 / V1-C44（2026-11-06，additive）
+
+本 Slice 的合同面不因下游 `specs/005-invited-identity-binding-contract` 而改变。仅记录边界：
+
+- 普通 `POST /api/v1/auth/wechat` 行为不变：new openid → Account + Person；existing openid → 复用既有 Account / Person。
+- Account ↔ Person 仍为 1:1；Person → Account 仍为 0..1。
+- UNDER_14 consent-first 不变：有效监护人同意先于正式 child Person / Compliance Profile。
+- Family isolation、`authorize()` + RLS 双层、guardian 独立于 membership 均不变。
+- 「受邀既有 Person、Account = none」的首次身份绑定由 V1-C44 与 005 合同定义，属独立 additive capability；本 Slice 不实现该 seam，也不提供任何「登录并绑定既有 Person」的入口。
+- 本 Slice 的 FR-001—FR-017 不被改写；005 只引用 FR-002 / FR-016 的既有基数与普通登录语义。
+
 ## Clarifications
 
 ### Session 2026-11-04

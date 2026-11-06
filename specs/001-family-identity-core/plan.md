@@ -37,6 +37,8 @@
 
 **未在本 Plan 中出现的上游对象**（`cases`、`case_participants`、`assertions`、`observations`、Digital Use、AI/RAG、`staff_assignments`、`data_requests`、Notification）保持 spec 的 Out of Scope，不被本 Plan 的 schema、API 或抽象“预留”。
 
+**Downstream Contract Reference（2026-11-06，additive）**：`specs/005-invited-identity-binding-contract` / V1-C44 定义「受邀既有 Person、Account = none」的首次身份绑定。本 Plan 的 D-1 / D-2 / D-3 / D-5 / D-6 均不为其预留 schema、endpoint 或事务入口；普通 `POST /api/v1/auth/wechat` 仍是唯一首次登录入口，Account↔Person 1:1、Person→Account 0..1 与 UNDER_14 consent-first 不变。该能力实现时必须重新 Plan，不得回写本 Plan 已有决策。
+
 ---
 
 ## Summary
