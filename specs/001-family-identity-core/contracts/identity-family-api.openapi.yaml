@@ -1,0 +1,778 @@
+openapi: 3.1.0
+info:
+  title: Xiaoshuyin V1 — Identity & Family Core API
+  version: 0.1.0-plan
+  description: |
+    Slice 001-family-identity-core 的接口契约（Plan 阶段产物，未实现）。
+
+    上游：`Docs/V1技术设计.md` §28.1（auth / me / families / members）、
+    §28.2（consents / guardian-consents / compliance profile / notices）、
+    §27A（Zod 单事实源 → OpenAPI → generated client）。
+
+    本 Slice 刻意不实现 `POST /api/v1/consents`：该端点是 §28.2 的通用同意入口，
+    属「完整 Consent 平台」（purpose/scope 矩阵、单独同意分类），spec 明确 out of scope。
+    监护人同意在本 Slice 只有一条写入路径：`POST /api/v1/compliance/guardian-consents`。
+    两条写入路径会为同一事实制造两个真相源，故不实现。
+
+servers:
+  - url: http://localhost:8787
+    description: Stage A local
+
+tags:
+  - name: auth
+  - name: identity
+  - name: family
+  - name: consent
+  - name: compliance
+
+paths:
+  /api/v1/auth/wechat:
+    post:
+      tags: [auth]
+      operationId: loginWithWechat
+      summary: 微信登录，建立或复用 Account 与当前登录者 Person
+      description: |
+        首次登录在同一事务内建立 Account **与** 绑定该账号的 Person（spec US1：
+        「微信登录时系统建立 Account 与对应 Person」）。同一 openid 重复登录复用同一
+        Account / Person，不产生第二个。
+        此时 Person 还没有 compliance profile（年龄尚未声明），profile 在
+        `POST /families` 确认 adult 年龄时写入。
+        本 Slice 的 code2session 为适配器契约验证，真实平台调用 NOT VERIFIED（§40 Platform 门槛）。
+
+        **下游边界（005 / V1-C44，contract remediation round 1，additive）**：本端点只接收 `{ code }`；对 new openid
+        无法判断其是否对应某个既有 Person，因此本端点不承担、也不可能承担「识别并阻断所有 Case C」的保证。
+        Invitation flow routing invariant 属邀请流程本身：用户从 participation invitation 进入 Case C 时，
+        必须先 route 到 invitation-aware identity bootstrap，不得先调用本端点。
+        该能力由独立 invitation-aware identity-binding 合同定义：Case B 复用既有 Account 不重新绑定；Case C 才走
+        bootstrap，second-party confirmation = target confirmation + candidate recognition，且不得创建第二个 Person。
+        若 candidate 已通过本端点建立 A↔P2，之后打开 P1 邀请，invited binding MUST reject，保持 A↔P2 与 P1 不变。
+        本端点语义、请求与响应不因该能力改变；不得通过 `mode=invite` 或隐藏参数把两条路径合并。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: 登出并使已签发 token 全部失效
+      description: 递增 `accounts.session_epoch`，此前签发的所有 token 立即 401。
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: 已登出 }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/v1/me:
+    get:
+      tags: [identity]
+      operationId: getMe
+      summary: 返回当前登录身份及其关联 Person
+      description: |
+        只返回 account 与自身 person（登录时已建立，因此必存在），不返回任何其他家庭成员资料（场景 1）。
+        `wechat_openid` 永不出现在响应中。
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: 当前身份
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MeResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  /api/v1/families:
+    post:
+      tags: [family]
+      operationId: createFamily
+      summary: 建立家庭；创建者成为 V1 当前管理主体
+      description: |
+        使用**登录时已建立**的 actor Person，不再创建第二个 Person。
+        本命令完成：显式确认 `ageBand = ADULT`（含 `ageBandSource`）、建立 Family、
+        建立 creator membership、写入 ADULT compliance profile 与 profile values。
+        `ageBand` 必须为 ADULT（§9 管理主体定义）。
+        不因「创建家庭」推断创建者是任何未成年人的 guardian（§7.7A）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateFamilyRequest" }
+      responses:
+        "201":
+          description: 家庭已建立
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FamilyResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`FAMILY_ALREADY_OWNED` 或 `IDEMPOTENCY_PAYLOAD_MISMATCH`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/families/current:
+    get:
+      tags: [family]
+      operationId: getCurrentFamily
+      summary: 当前家庭
+      description: |
+        只返回 actor 在其成员关系范围内的家庭。`isManager` 由
+        `family.created_by_person_id == actor.personId` 即时计算，不是存储的角色。
+
+        **空态与无权区分**：已认证但尚无任何 Family → 404 `CURRENT_FAMILY_NOT_FOUND`
+        （正常初始态，客户端据此进入“创建家庭”引导）；已解析到目标 Family 但非其成员
+        → 403 `NOT_FAMILY_MEMBER`。两者响应均不含任何 Family 字段。
+
+        **多 membership 且无法唯一解析**：actor 存在多个 Family membership，且按已冻结的
+        current-family 解析规则仍无法唯一确定当前 Family → 409 `CURRENT_FAMILY_AMBIGUOUS`。
+        「一个 Person 属于多个 Family」本身不是错误。响应不含任何 Family 字段。
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: 当前家庭
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FamilyResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/CurrentFamilyNotFound"
+        "409":
+          $ref: "#/components/responses/CurrentFamilyAmbiguous"
+
+  /api/v1/families/{id}/members:
+    post:
+      tags: [family]
+      operationId: createMember
+      summary: 新增无账号成员（仅管理主体）
+      description: |
+        建立 Person（无 account）+ membership + compliance profile + 逐值来源。
+        若 `ageBand = UNDER_14`，必须携带 `guardianConsentId`；同意未成立时
+        不创建任何 Person / profile，返回 403 `GUARDIAN_CONSENT_REQUIRED`。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/FamilyIdPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMemberRequest" }
+      responses:
+        "201":
+          description: 成员已建立
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`MEMBER_ALREADY_EXISTS` / `GUARDIAN_CONSENT_ALREADY_BOUND` / `IDEMPOTENCY_PAYLOAD_MISMATCH`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/families/{id}/members/{personId}:
+    patch:
+      tags: [family]
+      operationId: updateMemberProfile
+      summary: 追加/替换成员资料值（仅管理主体）
+      description: |
+        只允许 `DISPLAY_NAME`（本 Slice 唯一资料维度）。
+        同 `source` 的旧值置 SUPERSEDED；不同 `source` 并存为 RECORDED（来源冲突保留）。
+        `ageBand` 在本 Slice **不可变更**（不提供改龄能力，避免绕过 consent-first）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/FamilyIdPath"
+        - $ref: "#/components/parameters/PersonIdPath"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMemberRequest" }
+      responses:
+        "200":
+          description: 已更新
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: "`IDEMPOTENCY_PAYLOAD_MISMATCH`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/consents:
+    get:
+      tags: [consent]
+      operationId: listConsents
+      summary: 列出当前家庭范围内的同意记录
+      description: |
+        集合端点：actor 尚无任何 Family 时返回 200 `{ "items": [] }`——零条同意是真实结果，
+        不伪造 404，也不与“无权”混同。actor 存在多个 membership 且无法唯一解析当前
+        Family → 409 `CURRENT_FAMILY_AMBIGUOUS`，不得返回空列表或任一家庭的数据。
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: 同意记录（版本链全部返回，按 decidedAt 倒序）
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/ConsentRecord" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/CurrentFamilyAmbiguous"
+
+  /api/v1/consents/{id}/revoke:
+    post:
+      tags: [consent]
+      operationId: revokeConsent
+      summary: 撤回监护人同意（产生新版本）
+      description: |
+        追加 `REVOKED` 版本（version + 1，supersedes 指向原版本），把 profile 指针前移；
+        历史记录不删除。此后 `assertMinorProcessingAllowed` 立即阻断。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason:
+                  type: string
+                  maxLength: 200
+      responses:
+        "200":
+          description: 已撤回
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsentRecord" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/ConflictWithCurrentFamilyAmbiguity"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/compliance/profile:
+    get:
+      tags: [compliance]
+      operationId: getOwnComplianceProfile
+      summary: 读取自己的 Compliance Profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: 自己的 profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ComplianceProfile" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/compliance/notices:
+    get:
+      tags: [compliance]
+      operationId: listComplianceNotices
+      summary: 告知目录（版本化）
+      description: 告知正文由 `packages/compliance/notices.ts` 版本化持有；响应含 version 与 hash，供同意时校验。
+      responses:
+        "200":
+          description: 告知目录
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notices]
+                properties:
+                  notices:
+                    type: array
+                    items: { $ref: "#/components/schemas/Notice" }
+
+  /api/v1/compliance/guardian-consents/requests:
+    post:
+      tags: [consent]
+      operationId: createGuardianConsentRequest
+      summary: 发起最小化 guardian consent onboarding
+      description: |
+        只记录监护人身份、声明的年龄段、已展示告知版本/hash 与过期时间。
+        **不记录孩子任何资料**（无姓名/生日/称呼）。该行不是 Person，也不是 Compliance Profile。
+        过期后不可用于同意（无后台任务，读取时判定）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateConsentRequestRequest" }
+      responses:
+        "201":
+          description: onboarding 已发起
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsentRequestResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/CurrentFamilyNotFound"
+        "409":
+          $ref: "#/components/responses/ConflictWithCurrentFamilyAmbiguity"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/v1/compliance/guardian-consents:
+    post:
+      tags: [consent]
+      operationId: grantGuardianConsent
+      summary: 提交监护人同意（唯一写入路径）
+      description: |
+        必须显式 `accepted: true`；必须携带与服务端一致的 `noticeVersion`。
+        成功即产生不可变 GRANTED 证据行；此时 subject 尚未绑定（consent-first）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GrantConsentRequest" }
+      responses:
+        "201":
+          description: 同意已成立
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsentRecord" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          description: |
+            `GUARDIAN_CONSENT_EXPIRED` / `GUARDIAN_CONSENT_NOTICE_MISMATCH` / `NOT_FAMILY_MEMBER`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          $ref: "#/components/responses/ConflictWithCurrentFamilyAmbiguity"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-session-token
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 关键命令幂等键（§8.5）。同 key 不同 payload → 409。
+      schema: { type: string, minLength: 8, maxLength: 128 }
+    FamilyIdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PersonIdPath:
+      name: personId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthenticated:
+      description: "`UNAUTHENTICATED`"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: |
+        `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` / `NOT_GUARDIAN` /
+        `FAMILY_MANAGER_MUST_BE_ADULT` / `AGE_BAND_UNKNOWN` /
+        `GUARDIAN_CONSENT_REQUIRED` / `GUARDIAN_CONSENT_REVOKED`
+        响应不携带目标对象的任何字段（spec A-2）。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: "`IDEMPOTENCY_PAYLOAD_MISMATCH` / `MEMBER_ALREADY_EXISTS` / `GUARDIAN_CONSENT_ALREADY_BOUND`"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ConflictWithCurrentFamilyAmbiguity:
+      description: |
+        `CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH` / `MEMBER_ALREADY_EXISTS` /
+        `GUARDIAN_CONSENT_ALREADY_BOUND`
+        当 actor 存在多个 Family membership 且无法唯一解析当前 Family 时返回
+        `CURRENT_FAMILY_AMBIGUOUS`；其余冲突语义不变。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    CurrentFamilyAmbiguous:
+      description: |
+        `CURRENT_FAMILY_AMBIGUOUS`：actor 存在多个 Family membership，按已冻结的
+        current-family 解析规则仍无法唯一确定当前 Family。
+        「一个 Person 属于多个 Family」本身不是错误。响应不含任何 Family 字段。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: "`VALIDATION_ERROR` / `AGE_BAND_SOURCE_NOT_ALLOWED`（Zod 校验失败）"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    CurrentFamilyNotFound:
+      description: |
+        `CURRENT_FAMILY_NOT_FOUND`：已认证但 actor 尚无任何 Family（正常初始态，
+        不是无权）。响应不含任何 Family 字段。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+
+    AgeBand:
+      type: string
+      enum: [ADULT, MINOR_14_17, UNDER_14, UNKNOWN]
+
+    WritableSource:
+      type: string
+      description: 本 Slice 允许写入的来源（§2.2 的子集）
+      enum: [SELF_STATEMENT, GUARDIAN_OBSERVATION, GUARDIAN_RELAY, OTHER_MEMBER_RELAY]
+
+    ProfileAttribute:
+      type: string
+      description: 本 Slice 唯一的资料维度；不为测试新增无正式需求的属性
+      enum: [DISPLAY_NAME]
+
+    ProvenanceValueInput:
+      type: object
+      additionalProperties: false
+      required: [attribute, value, source]
+      properties:
+        attribute: { $ref: "#/components/schemas/ProfileAttribute" }
+        value: { type: string, minLength: 1, maxLength: 120 }
+        source: { $ref: "#/components/schemas/WritableSource" }
+        providedByPersonId:
+          type: string
+          format: uuid
+          description: |
+            提供者；`SELF_STATEMENT` 时等于本人，`GUARDIAN_*` 时等于监护人。
+            创建类命令中该字段由服务端按路径固定（creator=self；UNDER_14=consent.guardian_person_id），
+            客户端传入伪造值会被拒绝或忽略；来源类型本身从不由「是否有 Account」推断。
+        observedAt: { type: string, format: date-time }
+
+    ProfileValue:
+      type: object
+      additionalProperties: false
+      required: [id, attribute, value, source, recordedAt, status]
+      properties:
+        id: { type: string, format: uuid }
+        attribute: { $ref: "#/components/schemas/ProfileAttribute" }
+        value: { type: string }
+        source: { $ref: "#/components/schemas/WritableSource" }
+        providedByPersonId: { type: [string, "null"], format: uuid }
+        observedAt: { type: [string, "null"], format: date-time }
+        recordedAt: { type: string, format: date-time }
+        status: { type: string, enum: [RECORDED, SUPERSEDED, RETRACTED] }
+        supersedesId: { type: [string, "null"], format: uuid }
+
+    ComplianceProfileSummary:
+      type: object
+      additionalProperties: false
+      required: [ageBand, minorMode, verifiedSource]
+      properties:
+        ageBand: { $ref: "#/components/schemas/AgeBand" }
+        minorMode: { type: boolean }
+        guardianPersonId: { type: [string, "null"], format: uuid }
+        guardianConsentVersion: { type: [integer, "null"] }
+        verifiedSource: { type: string }
+        effectiveAt: { type: string, format: date-time }
+
+    PersonSummary:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        accountBound: { type: boolean }
+        profile: { $ref: "#/components/schemas/ComplianceProfileSummary" }
+        values:
+          type: array
+          description: 只有 RECORDED 的资料值；同一 attribute 多来源时全部返回（不合并、不择优）
+          items: { $ref: "#/components/schemas/ProfileValue" }
+
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required: [accountId, sessionToken, expiresAt, person]
+      properties:
+        accountId: { type: string, format: uuid }
+        sessionToken: { type: string }
+        expiresAt: { type: string, format: date-time }
+        person:
+          allOf: [{ $ref: "#/components/schemas/PersonSummary" }]
+          description: 登录即建立；此时 `profile` 尚未写入（年龄未声明）
+
+    MeResponse:
+      type: object
+      additionalProperties: false
+      required: [account, person]
+      properties:
+        account:
+          type: object
+          additionalProperties: false
+          required: [id, createdAt, status]
+          properties:
+            id: { type: string, format: uuid }
+            createdAt: { type: string, format: date-time }
+            status: { type: string, enum: [ACTIVE, DISABLED] }
+        person:
+          allOf: [{ $ref: "#/components/schemas/PersonSummary" }]
+          description: 登录时已建立，因此必存在
+
+    CreatorInput:
+      type: object
+      additionalProperties: false
+      required: [ageBand, ageBandSource]
+      properties:
+        ageBand:
+          allOf: [{ $ref: "#/components/schemas/AgeBand" }]
+          description: 必须为 ADULT；其余取值一律 403
+        ageBandSource:
+          allOf: [{ $ref: "#/components/schemas/WritableSource" }]
+          description: |
+            创建者对**自身**年龄的声明，必须为 `SELF_STATEMENT`；其它值 → 422
+            `AGE_BAND_SOURCE_NOT_ALLOWED`。落库 provider 由服务端固定为 actor.personId。
+        values:
+          type: array
+          maxItems: 1
+          items: { $ref: "#/components/schemas/ProvenanceValueInput" }
+
+    CreateFamilyRequest:
+      type: object
+      additionalProperties: false
+      required: [creator]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 60 }
+        creator: { $ref: "#/components/schemas/CreatorInput" }
+
+    FamilyResponse:
+      type: object
+      additionalProperties: false
+      required: [id, isManager, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: [string, "null"] }
+        createdAt: { type: string, format: date-time }
+        isManager:
+          type: boolean
+          description: 由 created_by_person_id 即时计算；不是存储的角色
+        memberCount: { type: integer, minimum: 1 }
+
+    CreateMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [ageBand, ageBandSource]
+      properties:
+        ageBand: { $ref: "#/components/schemas/AgeBand" }
+        ageBandSource:
+          allOf: [{ $ref: "#/components/schemas/WritableSource" }]
+          description: |
+            `ageBand=UNDER_14`（consent-first 建档）时只允许 `GUARDIAN_RELAY` 或
+            `GUARDIAN_OBSERVATION`，其它值 → 422 `AGE_BAND_SOURCE_NOT_ALLOWED`；
+            provider 由服务端固定为 consent.guardian_person_id。
+            其它 band 按信息真实提供方式选择 4 类白名单之一。
+        values:
+          type: array
+          maxItems: 1
+          items: { $ref: "#/components/schemas/ProvenanceValueInput" }
+        guardianConsentId:
+          type: string
+          format: uuid
+          description: "`ageBand=UNDER_14` 时必填；必须为未绑定的 GRANTED 记录且 guardian 为当前 actor"
+
+    UpdateMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [values]
+      properties:
+        values:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items: { $ref: "#/components/schemas/ProvenanceValueInput" }
+
+    MemberResponse:
+      type: object
+      additionalProperties: false
+      required: [personId, familyId, profile, values]
+      properties:
+        personId: { type: string, format: uuid }
+        familyId: { type: string, format: uuid }
+        accountBound: { type: boolean }
+        profile: { $ref: "#/components/schemas/ComplianceProfileSummary" }
+        values:
+          type: array
+          items: { $ref: "#/components/schemas/ProfileValue" }
+
+    CreateConsentRequestRequest:
+      type: object
+      additionalProperties: false
+      required: [declaredAgeBand, noticeVersion, channel]
+      properties:
+        declaredAgeBand:
+          type: string
+          enum: [UNDER_14]
+        noticeVersion: { type: string, minLength: 1, maxLength: 64 }
+        channel: { type: string, enum: [MINIPROGRAM, TEST] }
+        existingSubjectPersonId:
+          type: string
+          format: uuid
+          description: 仅对已存在未成年人重新取得同意时提供
+
+    ConsentRequestResponse:
+      type: object
+      additionalProperties: false
+      required: [requestId, declaredAgeBand, noticeVersion, noticeHash, expiresAt, status]
+      properties:
+        requestId: { type: string, format: uuid }
+        declaredAgeBand: { type: string, enum: [UNDER_14] }
+        noticeVersion: { type: string }
+        noticeHash: { type: string }
+        expiresAt: { type: string, format: date-time }
+        status: { type: string, enum: [PENDING, GRANTED, EXPIRED, ABANDONED] }
+
+    GrantConsentRequest:
+      type: object
+      additionalProperties: false
+      required: [onboardingRequestId, noticeVersion, accepted]
+      properties:
+        onboardingRequestId: { type: string, format: uuid }
+        noticeVersion: { type: string, minLength: 1, maxLength: 64 }
+        accepted:
+          type: boolean
+          const: true
+          description: 必须显式为 true；缺省或 false 都不构成同意
+
+    ConsentRecord:
+      type: object
+      additionalProperties: false
+      required: [id, purpose, decision, version, decidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        purpose: { type: string, enum: [UNDER_14_GUARDIAN_CONSENT] }
+        decision: { type: string, enum: [GRANTED, REVOKED] }
+        version: { type: integer, minimum: 1 }
+        guardianPersonId: { type: string, format: uuid }
+        onboardingRequestId:
+          type: [string, "null"]
+          format: uuid
+          description: GRANTED 为产生该同意的 onboarding 请求；REVOKED 为 null（撤回不是新的 onboarding）
+        boundPersonId: { type: [string, "null"], format: uuid }
+        boundAt: { type: [string, "null"], format: date-time }
+        noticeVersion: { type: string }
+        noticeHash: { type: string }
+        policyVersion: { type: string }
+        decidedAt: { type: string, format: date-time }
+        supersedesId: { type: [string, "null"], format: uuid }
+
+    ComplianceProfile:
+      type: object
+      additionalProperties: false
+      required: [personId, ageBand, minorMode, verifiedSource, effectiveAt]
+      properties:
+        personId: { type: string, format: uuid }
+        ageBand: { $ref: "#/components/schemas/AgeBand" }
+        minorMode: { type: boolean }
+        guardianPersonId: { type: [string, "null"], format: uuid }
+        guardianConsentVersion: { type: [integer, "null"] }
+        guardianConsentRecordId: { type: [string, "null"], format: uuid }
+        verifiedSource: { type: string }
+        effectiveAt: { type: string, format: date-time }
+
+    Notice:
+      type: object
+      additionalProperties: false
+      required: [version, hash, title, purpose, effectiveAt]
+      properties:
+        version: { type: string }
+        hash: { type: string }
+        title: { type: string }
+        purpose: { type: string, enum: [UNDER_14_GUARDIAN_CONSENT] }
+        effectiveAt: { type: string, format: date-time }
