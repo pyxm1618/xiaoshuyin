@@ -2,13 +2,13 @@
 
 **Feature Directory**: `specs/004-case-participant-core`  
 **Created**: 2026-11-05  
-**Status**: Draft — Clarify BLOCKED (OQ-6)  
-**Stage**: Clarify（spec + clarifications；OQ-6 BLOCKED，本轮不进入 Plan / Checklist / Tasks / Analyze / Implement / Converge）  
+**Status**: Draft — Clarify FINAL PASS  
+**Stage**: Clarify（FINAL CLOSEOUT；OQ-1 ～ OQ-6 RESOLVED，OQ-7 DEFERRED / non-blocking；本轮不进入 Plan / Checklist / Tasks / Analyze / Implement / Converge）  
 **V1 Phase**: Phase 1 — Common Core 地基（`Docs/V1技术设计.md` §38「Account / Person / Family / Participant」）
 
 > 本 Spec 是已批准 Xiaoshuyin 文档的下游实现投影，不得引入未获批准的产品语义。
 >
-> **Docs baseline**: `Docs/V1产品需求.md` **v3.3**、`Docs/V1技术设计.md` **v3.8**（2026-11-04）。
+> **Docs baseline**: `Docs/V1产品需求.md` **v3.7**、`Docs/V1技术设计.md` **v3.12**（2026-11-06）；OQ-6 另直接消费已合并的 `specs/005-invited-identity-binding-contract/spec.md`。
 >
 > **Slice 边界**: 本 Slice 只建立「一个已经合法存在的 Person 如何成为某个 Case 的有限参与者」：参与关系语义、邀请 · 接受 · 拒绝 · 退出的生命周期、最小授权地基与不可枚举安全边界。它**不是** Assessment、Problem Formulation、Scene、Evidence 写入、AI、通用 participant response、Goal / Plan / Task 或通知 / UI 的替身。
 
@@ -36,11 +36,12 @@
 |---|---|---|
 | §1.2 参与原则 | `Docs/V1产品需求.md` | 家长可以独立开始；孩子按问题需要参与；孩子可接受邀请、拒绝参与、中途退出；未注册成员可被转述但不得升级为本人确认 |
 | §1.5 身份与家庭归属边界 | `Docs/V1产品需求.md` | Account ↔ Person 1:1 / 0..1；Person ↔ Family 多对多；guardian 不是家庭角色；V1 不提供跨家庭查找 / 关联 / 复用已有 Person 的产品能力 |
-| V1-C20 | `Docs/V1产品需求.md` | Account、Person、Family、Participant、Visibility、Purpose、Consent 等基本边界从 V1 存在，且彼此分开 |
-| V1-C21 | `Docs/V1产品需求.md` | 跨成员信息必须按真实授权用途检索与使用，不能靠 Prompt 或前端隐藏假装隔离 |
+| V1-C20 | `Docs/V1产品需求.md` | Account、Person、Family、Participant、Visibility、Purpose、Consent 等基本边界从 V1 存在，且彼此分开；Account↔Person binding 是独立身份事实，不等于 Participation |
+| V1-C21 | `Docs/V1产品需求.md` | 跨成员信息必须按真实授权用途检索与使用，不能靠 Prompt 或前端隐藏假装隔离；identity binding 不能替代业务授权 |
 | V1-C03 | `Docs/V1产品需求.md` | UNKNOWN / NOT_COLLECTED / DECLINED / CONFLICT 等真实状态不能被补成确定值（拒绝 ≠ 失败 ≠ 默认值） |
 | V1-C27 / V1-C28 | `Docs/V1产品需求.md` | 失败必须返回真实状态；重复提交、并发、重试不能制造重复业务结果 |
 | V1-C39 | `Docs/V1产品需求.md` | 服务端保存年龄段 / 未成年人模式 / 监护关系与必要监护人同意状态；UNDER_14 无有效监护人同意时不得继续对应处理；有效同意必须先于正式未成年人 Person / Compliance Profile 建立 |
+| V1-C44 | `Docs/V1产品需求.md` | 受邀既有 Person 在 Account = none 时必须使用 invitation-aware identity bootstrap；no-P2；binding 成功只建立 Account↔existing Person，不授予 Participation 或其它业务授权 |
 | U02 / U11 | `Docs/V1产品需求.md` §23 / §24 | U02 完成必要授权与适用单独同意（参与前置）；U11 必要时邀请孩子轻量参与，须覆盖拒绝、撤回、过期、越权 |
 | V1-X02 / V1-X04 | `Docs/V1产品需求.md` §26 | 孩子邀请等宣称能力必须在真实平台条件可用；孩子拒绝等非理想路径必须有真实验收 |
 | §5 不变量 1 / 4 / 5 / 17 | `Docs/V1技术设计.md` | Account / Person / Family / CaseParticipant 分开；转述不得升级为本人事实；真实未知状态不得被补值；重复提交 / 并发 / 重试不产生重复业务结果 |
@@ -49,7 +50,8 @@
 | §8.5 幂等 | `Docs/V1技术设计.md` | `actor_id + command_type + idempotency_key` 合同：相同请求返回原结果，同 key 不同 payload 返回 409 |
 | §9 Authorization & Consent | `Docs/V1技术设计.md` | 统一 `authorize()` 判定输入（含 Case 参与关系）；按当前目标 Family 判定；客户端 `family_id` / `case_id` 仅作待验证参数 |
 | §9.1 PostgreSQL RLS | `Docs/V1技术设计.md` | 家庭隔离第二道硬防线；`withRlsTransaction`；运行角色非 owner、NOBYPASSRLS；无上下文默认拒绝 |
-| §10 V1 的孩子参与 | `Docs/V1技术设计.md` | 有限 Case Participant；孩子端读取范围；UNDER_14 consent gate 顺序；不得读取家长私人原话 / 其他成员私人信息 / 无授权历史 Case |
+| §10 V1 的孩子参与 | `Docs/V1技术设计.md` | 有限 Case Participant；Case B 复用既有 Account↔Person binding；Case C 先完成 invitation-aware identity bootstrap，再由目标显式 accept；UNDER_14 consent / Compliance 前置；identity ≠ participation |
+| 005 invited identity contract | `specs/005-invited-identity-binding-contract/spec.md` | OQ-6 的 merged upstream：Case B / Case C、candidate recognition、token ≠ identity proof、no-P2、Age / Compliance gates、binding lifecycle ≠ invitation lifecycle；Slice 4 只消费，不重新定义 |
 | §7.2 / §7.8 / §7.9 | `Docs/V1技术设计.md` | `cases` / `case_events` / `business_audit_events` 作为领域历史与审计（Participant 生命周期复用 `business_audit_events`，不建第二套审计框架） |
 | §23 Domain Commands | `Docs/V1技术设计.md` | 模型只能 request / propose，不能 force / confirm on behalf of user（Participant 的 accept / decline / withdraw 是用户行为，不由模型代替） |
 | §28.8 孩子参与 | `Docs/V1技术设计.md` | Participant Core 的 API 契约面（invite / accept / decline / withdraw / 读取） |
@@ -67,7 +69,7 @@
 
 1. **`case_participants` 参与关系语义**：一个已经合法存在的 Person 与一个具体 Case 之间的 **Case 级有限参与关系**，与 Family membership、guardian relationship、Account ownership、全站角色、RBAC role 彼此独立（§5 不变量 1、§7.1、§10、V1-C20）。
 2. **Case / Person / Family 链接**：参与关系 MUST 同时绑定一个真实存在的 Case 及其所属目标 Family，和一个真实存在、且在该目标 Family 中合法存在的 Person（§7.1、§9、§1.5）。
-3. **参与生命周期**：邀请创建（该 Case 的参与资源进入待接受状态）→ （目标查看本次参与说明）→ 接受 / 拒绝 → 必要绑定确认 → 获得当前 Case 的有限权限；已接受的 Participant 可中途退出（§10、§28.8、U11）。**必要绑定确认**仅在 OQ-6 上游 identity contract 获批后成立；既有 Person 且 Account = none 的情形 C 当前 BLOCKED（见 Clarifications OQ-6）。接受前**不存在 active participant capability**（见 Clarifications OQ-1）。
+3. **参与生命周期**：邀请创建（该 Case 的参与资源进入待接受状态）→ 目标查看本次参与说明 → 身份前置满足 → 显式接受 / 拒绝 → 接受后获得当前 Case 的有限权限；已接受的 Participant 可中途退出（§10、§28.8、U11、V1-C44）。情形 B（P1 已有 Account B）仅在当前 authenticated Account == B 时复用既有 binding；否则拒绝且不 rebind。情形 C（P1 已存在、Account = none）必须先按 merged 005 contract 完成 invitation-aware identity bootstrap；binding 成功**只建立 Account↔P1，不等于 participation acceptance**，仍须显式 accept 才产生 active participant capability。binding PENDING / blocked / terminal 时 `active participation = 0`（见 Clarifications OQ-6）。
 4. **邀请创建的授权前置**：只有已批准的 Case 管理 actor 可以在合法 Case context 创建邀请；且 MUST 校验 Case authorization、target Family、Person 合法性、participant eligibility、Compliance / consent 前置条件（§9、§10、V1-C39）。
 5. **接受（Accept）**：正确目标 Person 接受后成为当前 Case 的有效有限 Participant；不自动授予任何 Case 级业务数据访问（§10、§28.8、V1-C20）。
 6. **拒绝（Decline）**：被邀请人 MUST 可以拒绝参与；拒绝是合法业务结果，不是失败或不合作，不自动关闭 Case，也不阻断家长可独立完成的工作（§1.2、U11、V1-X04、V1-C03）。
@@ -124,11 +126,11 @@
 
 ### User Story 2 — 目标看到发给自己的邀请并接受 (Priority: P1)
 
-被邀请的 Person（**已有 Account，情形 B**）通过微信登录、查看本次参与说明后接受邀请，完成必要绑定确认，成为当前 Case 的有效有限 Participant，且恰好产生一个活跃参与结果。**既有 Person 但 Account = none 的情形 C 当前 BLOCKED，不属于本 User Story 的可执行路径。**
+被邀请的既有 Person P1 查看本次参与说明后处理邀请。**情形 B**：P1 已有 Account B，当前 authenticated Account == B 时复用既有 Account↔P1 binding；不是 B 时拒绝且不 rebind。**情形 C**：P1 已存在但 Account = none，必须先完成 merged 005 contract 定义的 invitation-aware identity bootstrap；binding 成功只建立 Account↔P1，随后仍须由 P1 显式接受邀请，才成为当前 Case 的有效有限 Participant，且恰好产生一个活跃参与结果。
 
-**Upstream IDs**: §10、§28.8、U11、V1-C20、§1.5
+**Upstream IDs**: §10、§28.8、U11、V1-C20、V1-C44、§1.5、`specs/005-invited-identity-binding-contract/spec.md`
 
-**Independent Test**: 以**情形 B（目标 Person 已有 Account）**、正确目标身份 + 有效邀请接受一次；不得通过通用 `/api/v1/auth/wechat` 为首个 Account 的目标构造登录。断言只有一个活跃参与结果、Account ↔ Person 仍是 1:1 且复用既有 Person、Participant 未获得 Case 全量读取或任何业务对象。
+**Independent Test**: 分别覆盖情形 B 与 C：B 中正确 Account 复用既有 binding、错误 Account 被拒且不 rebind；C 中 invitation-aware binding 成功前 `active participation = 0`，不得先走普通 `/api/v1/auth/wechat` 创建 P2；binding 成功后仍需一次显式 accept 才产生恰好一个活跃参与结果。两种情形均断言 Person 数不增加、Account ↔ Person 保持 1:1、Participant 未获得 Case 全量读取或任何业务对象。
 
 ### User Story 3 — 孩子拒绝参与 (Priority: P1)
 
@@ -156,11 +158,11 @@
 
 ## Acceptance Scenarios
 
-1. **Happy path** — **Given** 一个已有 Case 及其所属 Family 的 V1 管理 actor，以及该 Family 中一个已经合法存在、**且已绑定 Account 的 Person（情形 B）**，**When** actor 为该 Case 创建参与邀请、目标登录后查看参与说明并接受，**Then** 恰好产生一个活跃的、仅限当前 Case 的有限参与结果；系统不创建第二个 Person、不写任何 Evidence、不授予 Case 全量读取。**情形 C（既有 Person、Account = none）当前 BLOCKED，不属于本场景的可执行 Happy Path。** **Upstream**: U11、§10、§28.8、V1-C20
+1. **Happy path** — **Given** 一个已有 Case 及其所属 Family 的 V1 管理 actor，以及该 Family 中一个已经合法存在的目标 Person P1，**When** actor 创建参与邀请，且（情形 B）当前 Account 与 P1 既有 Account 一致并复用 binding，或（情形 C）P1 无 Account 且先完成 invitation-aware identity bootstrap，然后 P1 显式接受，**Then** 恰好产生一个活跃的、仅限当前 Case 的有限参与结果；binding 本身不产生 participation，系统不创建第二个 Person、不写任何 Evidence、不授予 Case 全量读取。**Upstream**: U11、§10、§28.8、V1-C20、V1-C44、005 contract
 2. **Decline** — **Given** 一个有效参与邀请，**When** 目标选择拒绝，**Then** 不存在活跃参与、拒绝历史被保留、Case 不被自动关闭、家长可独立完成的工作不被阻断；拒绝不被记录为失败或不合作。**Upstream**: §1.2、U11、V1-X04、V1-C03
 3. **Withdraw** — **Given** 一个活跃 Participant，**When** 其中途退出，**Then** 后续 Participant 能力被拒绝、已形成的合法历史仍被保留且未被伪造删除、系统不再假装其仍在参与。**Upstream**: §1.2、U11、§10
 4. **Duplicate / concurrent accept** — **Given** 同一个有效邀请，**When** 并发或重复接受，**Then** 只产生恰好一个活跃参与结果，不产生第二条参与记录或第二个业务结果。**Upstream**: §8.5、§5 不变量 17、V1-C28
-5. **Wrong user token** — **Given** Person B 持有一个明确发给 Person A 的邀请，**When** Person B 尝试接受，**Then** 请求被拒绝、不产生参与、不产生第二个 Person / 绑定、响应不泄露目标 Person / Family / Case / guardian / age / consent 私密信息。**Upstream**: V1-C21、§9、§37.2、U11
+5. **Wrong user token** — **Given** Person B 持有一个明确发给 Person A 的邀请，**When** Person B 尝试接受或进入 identity bootstrap，**Then** invite possession 不构成 identity proof；B MUST NOT become Person A、MUST NOT 产生 active participation、MUST NOT 为 Person A 生成 decline，且响应不泄露目标 Person / Family / Case / guardian / age / consent 私密信息。**Upstream**: V1-C21、V1-C44、§9、§37.2、U11、005 contract
 6. **Cross Family** — **Given** 一个属于 Family A 的 Case，以及一个只属于 Family B 的 Person，**When** 尝试邀请或建立参与，**Then** 请求被拒绝、零参与写入、不得仅因 UUID 存在即视为合法参与关系，也不得泄露该 Person 的敏感信息。**Upstream**: V1-C21、§1.5、§9、§10
 7. **UNDER_14 illegal Person path** — **Given** 一个 UNDER_14 未成年人尚无有效监护人同意，**When** 尝试为其创建参与邀请或路径要求先建立正式 child Person，**Then** 系统 MUST NOT 通过邀请流程创建非法 child Person，也 MUST NOT 绕过 guardian relationship / 有效同意 / Compliance Profile 前置条件；对应处理被阻断。**Upstream**: V1-C39、§7.7A、§10、§5 不变量 1 / 27
 8. **Non-manager cannot invite** — **Given** 一个目标 Family 中不是该 Family V1 管理主体、且不是合法 Case 管理 actor 的成员，**When** 尝试为该 Case 创建参与邀请，**Then** 服务端拒绝且不创建邀请；该限制由服务端判定，不依赖前端隐藏。**Upstream**: §9、§10、V1-C21
@@ -169,7 +171,7 @@
 11. **Terminal invite cannot reactivate** — **Given** 一个待接受参与资源已进入终态（declined / expired / 越权作废），**When** 尝试再次接受或重新激活，**Then** 请求失败；已终止的待接受参与资源不可重复激活；已 withdraw 的 active participation 亦不得复活为 active。**Upstream**: U11、§5 不变量 17
 12. **No Case-wide access on accept** — **Given** 一个刚接受邀请的活跃 Participant，**When** 其尝试访问 Case 级业务资源（例如 Case 全量详情、家长私人原话、其他成员私人内容、Evidence、全部 Formulation / Plan），**Then** 这些访问在本 Slice MUST NOT 因存在参与行而被允许；Participant MUST NOT 自动继承 Case manager 能力。**Upstream**: §10、V1-C20、V1-C21、§9
 13. **No Evidence side effect** — **Given** 一次 accept、一次 decline、一次 withdraw，**When** 检查证据层，**Then** `Assertions + 0`、`Observations + 0`；accept ≠ Fact、decline ≠ Statement、withdraw ≠ Evidence。**Upstream**: §5 不变量 3、§7.2、Slice 3 边界
-14. **No duplicate Person / binding** — **Given** 一个已存在的 Person，**When** 其接受邀请，**Then** Account ↔ Person 仍为 1:1：已有绑定者（情形 B）复用其唯一绑定；无 Account 者（情形 C）在 **OQ-6 upstream identity contract review 完成前** MUST BLOCK；该 BLOCK 必须发生在任何新 Account / Person 创建之前，MUST NOT 先走通用 `/api/v1/auth/wechat` 创建 P2 再于 accept 拒绝；端到端首次微信登录路径当前 `BLOCKED / NOT VERIFIED`。不得产生第二个 Person、不得产生第二个绑定、不得仅凭 token 绑定、不得由昵称或 Family membership 推断 Person。**Upstream**: §1.5、§7.1、Clarifications OQ-6
+14. **No duplicate Person / binding** — **Given** 一个已存在的 Person P1，**When** 其处理邀请，**Then** Account ↔ Person 仍为 1:1：情形 B 仅复用匹配的既有 binding，Account 不匹配则拒绝且不 rebind；情形 C 必须先完成 invitation-aware identity bootstrap，MUST NOT 先走普通 `/api/v1/auth/wechat` 创建 P2。binding PENDING / blocked / terminal 时 `active participation = 0`；binding success 只建立 Account↔P1，仍须显式 accept 才能产生 active participation。不得产生第二个 Person、不得仅凭 token / nickname / Family membership 推断或绑定 Person。**Upstream**: §1.5、§7.1、V1-C44、Clarifications OQ-6、005 contract
 15. **Auditability** — **Given** 一次邀请创建、一次接受、一次拒绝、一次退出，**When** 检查审计，**Then** 生命周期事件可在既有 `business_audit_events` 中追溯；MUST NOT 出现第二套审计框架或第二套 audit 表。**Upstream**: §7.9、§38
 16. **Idempotent command outcome** — **Given** 同一 actor + command_type + idempotency_key 的重放，**When** 重复提交创建邀请 / 接受 / 拒绝 / 退出，**Then** 返回原结果且不制造重复业务结果；同 key 不同 canonical payload 返回 409。**Upstream**: §8.5、V1-C28
 17. **Route surface enumeration** — **Given** 本 Slice 的路由清单，**When** 枚举 public API，**Then** 只存在批准的最小 Participant Core 子集；MUST NOT 存在 `POST /api/v1/participations/:id/responses`、assessment、problem-formulation、scene、generic evidence CRUD、participant generic response 或任何越界 / 占位路由。**Upstream**: §28.8、Out of Scope
@@ -181,7 +183,7 @@
 - **Case 不存在 / 跨 Family / actor 无管理权限**：创建邀请 MUST 对三者行为一致，不泄露 Case 是否存在，也不返回 Family / Person / Case 私密字段（§37.2、V1-C21）。
 - **邀请 token 无效 / 已失效 / 已终止**：不返回任何私密细节；不得作为枚举 oracle；已终止 / 失效邀请不可重复激活（U11、§5 不变量 17）。
 - **decline ≠ withdraw ≠ expired（见 Clarifications OQ-2 / OQ-3）**：decline 与 expired 是**待接受参与资源**（accept 前）的终态，从未获得 participant capability；withdraw 是 **active participation**（accept 后）的终态（historical inactive participation）。三者 MUST NOT 互相替代或合并成同一状态。
-- **目标 Person 无 Account（见 Clarifications OQ-6）**：参与资源引用 Person 而非 Account。**持有/转发 invite token 本身 MUST NOT 构成 person identity proof**。使 active participation 成立的 accept 需要同时满足：目标 Person 是邀请目标 + 一个**产品级 identity confirmation（登录 Account 确属该 Person；当前 `NO APPROVED IDENTITY PROOF FOUND`）** + 一个**上游批准的 identity-binding seam**。该 seam 在当前 Slice 1 不存在（见 Clarifications OQ-6）；在上游 identity contract 批准之前，此类在线 self-accept MUST BLOCK（情形 C 当前 BLOCKED、`active participation = 0`），MUST NOT 静默创建新 Person，也 MUST NOT 仅凭 token 完成绑定，MUST NOT 先走通用 `/api/v1/auth/wechat` 创建 P2 再于 accept 拒绝。
+- **目标 Person 无 Account（见 Clarifications OQ-6）**：参与资源引用 Person 而非 Account。**持有/转发 invite token 本身 MUST NOT 构成 person identity proof**。情形 C 必须先按 merged 005 contract 完成 invitation-aware identity bootstrap，MUST NOT 先走普通 `/api/v1/auth/wechat` 创建 P2。binding PENDING / blocked / terminal 时 `active participation = 0`；binding success 仅建立 Account↔P1，仍无 active participant capability，直到目标 Person 显式 accept。错误 candidate MUST NOT become P1、MUST NOT 产生 active participation，也 MUST NOT 代 P1 产生 decline。
 - **target Person 尚未合法存在（见 Clarifications OQ-6）**：当前 Participant Core MUST NOT 借 invite 流程创建该 Person；UNDER_14 必须先按 Slice 1 consent-first 合法建立 Person。invite MUST NOT 倒置为「invite → create Person → collect data → consent later」。
 - **非目标接受**：拒绝；不得产生参与，不得产生第二个 Person / 绑定，不得泄露目标信息（V1-C21）。
 - **并发 / 重复接受**：只产生恰好一个活跃参与结果；不得产生重复参与行或重复业务结果（§8.5、§5 不变量 17）。
@@ -203,12 +205,12 @@
 - **FR-002** [UPSTREAM: §7.1 / §10 / §9] 参与关系 MUST 同时绑定 (a) 一个真实存在的 Case 及其所属目标 Family，和 (b) 一个真实存在且在该目标 Family 中合法存在的 Person。guardian relationship MAY 作为 eligibility / compliance / provenance 的输入之一，但 MUST NOT 自动授予 Case access、也 MUST NOT 自动构成 Participant。
 - **FR-003** [UPSTREAM: U11 / §10 / §28.8 / §9] 只有已批准的 Case 管理 actor（Slice 2 已冻结的 Case 管理主体语义）可以在合法 Case context 创建参与邀请。**知道 Person UUID MUST NOT 构成邀请依据**；创建 MUST 校验 Case authorization、target Family、Person 合法性、participant eligibility 与 Compliance / consent 前置条件。该管理资格 MUST 复用 Slice 2 冻结语义，MUST NOT 重新定义、放宽或引入新的 Case role。
 - **FR-004** [UPSTREAM: §1.5 / §10 / V1-C21] 邀请目标 MUST 是**已经合法存在于目标 Family 的 Person**。系统 MUST 拒绝「Family A 的 Case + 仅属于 Family B 的 Person」。MUST NOT 建立 pre-Person onboarding invitation，MUST NOT 为了完成邀请而创建新 Person。V1 不提供跨家庭查找 / 发现 / 匹配 / 链接 / 复用已有 Person 的产品能力。
-- **FR-005** [UPSTREAM: §10 / §28.8 / U11] 系统 MUST 交付 V1 参与入口：目标可查看本次参与说明，然后接受或拒绝；接受包含必要绑定确认；该绑定确认的产品语义在 OQ-6 上游 identity contract 获批前未定义，情形 C（既有 Person、Account = none）当前 BLOCKED，不得声称该接受路径已可执行；接受后获得当前 Case 的有限权限。该入口 MUST NOT 引入业务对象语义（Assessment / Formulation / Scene / Evidence / Plan）。
+- **FR-005** [UPSTREAM: §10 / §28.8 / U11 / V1-C44 / 005 contract] 系统 MUST 交付 V1 参与入口：目标可查看本次参与说明，然后接受或拒绝。情形 B 仅复用与 P1 一致的既有 Account↔Person binding；情形 C 在 participation accept 前 MUST 先完成 invitation-aware identity bootstrap。**Account↔P1 binding ≠ participation acceptance**：binding success 只建立身份绑定，仍须目标显式 accept 才获得当前 Case 的有限权限；binding PENDING / blocked / terminal 时不得产生 active participation。该入口 MUST NOT 引入业务对象语义（Assessment / Formulation / Scene / Evidence / Plan）。
 - **FR-006** [UPSTREAM: U11 / §37.2 / V1-C21] 邀请 MUST 不可枚举且只能由目标处理：token MUST NOT 可被猜测或枚举；非目标 Person MUST NOT 接受；token 与任何查询响应 MUST NOT 泄露 target Person / Family / Case / guardian / age / consent / compliance 私密细节；未授权 invite lookup MUST NOT 成为 Person / Case 枚举 oracle。
 - **FR-007** [UPSTREAM: §10 / §28.8 / §5 不变量 17] 由正确目标 Person 接受有效邀请 MUST 产生**恰好一个**活跃的有限参与结果；MUST NOT 产生第二条参与记录、第二个业务结果或重复绑定。
 - **FR-008** [UPSTREAM: §10 / V1-C20] Accept MUST NOT 自动授予：整个 Family 数据访问权、所有 Case 历史、家长私人内容、其他成员私人内容、所有未来 feature、Evidence 创建、AI 访问或任何事实确认。
-- **FR-009** [UPSTREAM: §1.5 / §7.1] Accept MUST 复用 Account ↔ Person = 1:1：MUST NOT 为已存在的 Person 生成第二个 Person，MUST NOT 重复 Account ↔ Person 绑定，MUST NOT 依据昵称猜 Person，MUST NOT 依据 Family membership 自动绑定账号。身份证明的产品语义（一个新的微信 Account 凭什么被证明就是既有 Person）不属于 Plan；只有上游 identity contract 获批后，具体 binding token / transaction / DB 机制才由 Plan 设计。
-- **FR-010** [UPSTREAM: V1-C39 / §7.7A / §10] 对 UNDER_14，Slice 1 的 consent-first 顺序 MUST 被继承：adult actor → guardian consent onboarding → valid consent → formal child Person → compliance state → downstream processing。参与邀请与接受 MUST NOT 变成「invite → create child Person → later obtain consent」，MUST NOT 为了发邀请或完成参与而绕过 guardian relationship、有效监护人同意或 Compliance Profile。
+- **FR-009** [UPSTREAM: §1.5 / §7.1 / V1-C44 / 005 contract] Accept MUST 复用 Account ↔ Person = 1:1：情形 B 当前 authenticated Account == P1 既有 Account 时复用，否则拒绝且不 rebind；情形 C 必须消费 merged 005 contract 的 invitation-aware identity bootstrap，MUST NOT 为已存在的 P1 生成 P2，MUST NOT 依据 token、昵称或 Family membership 自动绑定账号。Slice 4 Plan 只可设计该已批准 seam 的技术机制，MUST NOT 重新定义 identity proof / candidate recognition 的产品语义。
+- **FR-010** [UPSTREAM: V1-C39 / V1-C44 / §7.7A / §10 / 005 contract] 对 UNDER_14，Slice 1 的 consent-first 顺序 MUST 被继承：adult actor → guardian consent onboarding → valid consent → formal child Person → compliance state → downstream processing。对已经合法存在的 P1 进入 Case C identity bootstrap 时，在任何 P1-specific identity processing 前还 MUST 满足 current guardian / current valid guardian consent / applicable Compliance gates；任一 prerequisite 不合法时不得产生 active participation。参与邀请与接受 MUST NOT 变成「invite → create child Person → later obtain consent」。
 - **FR-011** [UPSTREAM: §1.2 / U11 / V1-X04 / V1-C03] 被邀请人 MUST 可以拒绝参与。Decline 是合法业务结果：MUST NOT 被当成失败或不合作，MUST NOT 自动关闭 Case，MUST NOT 自动阻断家长可独立完成的所有工作；孩子拒绝 MUST NOT 被处理成「整个服务必然失败」。
 - **FR-012** [UPSTREAM: U11 / V1-C03 / §5 不变量 5] 拒绝 MUST 留下可保留的真实历史；系统 MUST NOT 静默丢弃拒绝事实，也 MUST NOT 把拒绝补成确定性的「已参与」或「无问题」。领域语义已冻结（见 Clarifications OQ-2）：decline 使该 Case 的参与资源从**待接受状态**进入 declined 终态；被邀请人从未获得 active participant capability，因此不产生 active participation。拒绝事实保留在该参与资源的终态与审计历史中。
 - **FR-013** [UPSTREAM: §1.2 / U11] 已接受的 Participant MUST 可以中途退出。退出后后续 Participant 权限 MUST 停止；系统 MUST NOT 继续假装其仍在参与。
@@ -222,7 +224,7 @@
 - **FR-021** [UPSTREAM: §9 / §9.1 / V1-C21] 所有 Participant Core 读写 MUST 先经统一 `authorize()`，再在 `withRlsTransaction` 内执行；客户端传入的 `family_id` / `case_id` / `person_id` / participation 标识 MUST 只作待验证参数；RLS 存在 MUST NOT 成为跳过 `authorize()` 的理由；无上下文 MUST 默认拒绝。
 - **FR-022** [UPSTREAM: §37.2 / V1-C21 / §9] 创建邀请对「Case 不存在 / Case 属于其它 Family / actor 无 Case 管理权限」MUST 不泄露 Case 存在性；invitation token 查询 MUST NOT 向不合法 caller 泄露 target Person / Family / Case / guardian / age / consent / compliance 私密细节。具体 error code 复用既有冻结 shared error contract 或留 Plan。
 - **FR-023** [UPSTREAM: §7.9 / §38] Participant 生命周期 MUST 可审计，至少业务上可追踪 invitation created / invitation accepted / invitation declined / invitation expired / participation withdrawn。MUST 复用既有 `business_audit_events`；MUST NOT 创建第二套 audit framework；具体 event_type 名称与表结构留 Plan。
-- **FR-024** [UPSTREAM: V1-C39 / §10 / §9] Participant 不是 Consent 的替代物：`Participant accepted ≠ all purposes consented`，`guardian consent ≠ child participation acceptance`，二者是不同事实。未来进入 AI 交互、specific sensitive processing 或 feature-specific use 时，仍须重新验证对应 Consent / Compliance / Purpose / feature policy。
+- **FR-024** [UPSTREAM: V1-C20 / V1-C39 / V1-C44 / §10 / §9 / 005 contract] Identity、Participation 与 Consent 是不同事实：`Account↔P1 binding ≠ participation acceptance`，`Participant accepted ≠ all purposes consented`，`guardian consent ≠ identity-binding confirmation ≠ child participation acceptance`。binding success 不授予 Case participation；未来进入 AI 交互、specific sensitive processing 或 feature-specific use 时，仍须重新验证对应 Consent / Compliance / Purpose / feature policy。
 - **FR-025** [UPSTREAM: §9 / §10 / V1-C20] 未来任何业务对象访问 MUST 由 Participant 之外的独立 authorization 决定：参与行存在不足以放行；具体对象仍需 Visibility + Purpose + feature-specific authorization 重新校验。
 - **FR-026** [UPSTREAM: §28.8 / Clarifications OQ-1] 本 Slice 批准的 public surface 严格取自 §28.8 的当前子集（除明确 DEFERRED 者外，path 与 §28.8 一字不差）：`POST /api/v1/cases/:id/participation-invites`（建邀请）、`GET /api/v1/participation-invites/:token`（目标查看邀请）、`POST /api/v1/participation-invites/:token/accept`（接受）、`POST /api/v1/participations/:id/decline`（拒绝）、`POST /api/v1/participations/:id/withdraw`（退出）、`GET /api/v1/participations/:id`（读取参与最小状态）。唯一 DEFERRED 为 `POST /api/v1/participations/:id/responses`。MUST NOT 改写出与 §28.8 不一致的 path，MUST NOT 暴露任何越界 / 占位路由。
 - **FR-027** [UPSTREAM: §28.8 / §28.3 / Clarifications OQ-5] `GET /api/v1/participations/:id` 在本 Slice **CURRENT**，且 MUST 只返回 participation 资源自身的最小状态（participation 标识、其 Case 标识、其 Person 标识、其生命周期状态 pending / active / declined / expired / withdrawn、创建 / 接受 / 退出时间）；MUST NOT 返回 Case 内容、Family 详情、Evidence、家长原始消息、其他 Participant、Formulation、Plan 或任何 Case 业务对象；MUST NOT 成为隐式 Case read。可读 actor 限于该 participation 的 participant 本人与该 Case 所属目标 Family 的 V1 管理主体；其他 actor MUST 被拒绝且不泄露参与是否存在。具体 payload 字段名 / envelope 属 Plan。
@@ -281,7 +283,7 @@ Case 级参与关系。逻辑约束（不是 DDL）：
 - **SC-005**: terminal invite cannot reactivate：已拒绝（declined）/ 已过期（expired）/ 已作废 invitation 再次接受或激活均失败；已 withdraw 的 participation 不得复活为 active。
 - **SC-006**: unauthorized token lookup leaks no Case / Person payload：不合法 caller 查询邀请 token 时不返回 target Person / Family / Case / guardian / age / consent / compliance 字段，也不构成枚举 oracle。
 - **SC-007**: all approved routes enumerate exactly the expected Participant Core surface；不存在 `POST /api/v1/participations/:id/responses` 或任何越界 / 占位路由。
-- **SC-008**: **Slice 4 accept path creates no new Person / binding**：情形 B 复用其唯一绑定，接受前后 Account ↔ Person 仍为 1:1、Person 数不变、绑定数不变；情形 C（既有 Person、Account = none）在 OQ-6 upstream identity contract review 完成前 MUST BLOCK，`active participation = 0`；**端到端「既有 Person 无 Account → 首次微信登录」路径当前 `BLOCKED / NOT VERIFIED`，不得据此声称全局 no duplicate Person。**
+- **SC-008**: **Slice 4 accept path creates no duplicate Person / binding**：情形 B 仅复用匹配的既有 binding，错误 Account 不 rebind；情形 C 在 accept 前先完成 merged 005 contract 的 invitation-aware identity bootstrap，普通登录不得先创建 P2。binding PENDING / blocked / terminal 时 `active participation = 0`；binding success 只建立 Account↔P1，显式 accept 后才可产生 active participation。全过程 Person 数不因该邀请路径增加，Account ↔ Person 保持 1:1。
 - **SC-009**: decline does not auto-close Case，也不阻断家长可独立完成的工作；拒绝历史被保留。
 - **SC-010**: withdraw stops subsequent Participant capability，且已形成历史未被伪造删除。
 - **SC-011**: invite create 对「Case 不存在 / Case 属于其它 Family / actor 无 Case 管理权限」三类情形对外表现一致，不泄露 Case 存在性。
@@ -294,7 +296,7 @@ Case 级参与关系。逻辑约束（不是 DDL）：
 
 | Acceptance item | Verification type | Required evidence |
 |---|---|---|
-| Happy path：invite → accept → 一个活跃有限参与（场景 1、SC-002、SC-008） | integration + database | **情形 B（目标 Person 已有 Account）**：邀请创建、目标接受后端到端断言：恰好一个活跃参与、Account ↔ Person 1:1 复用既有 Person、无第二个 Person、无 Case 级业务数据被授予；**情形 C 当前 BLOCKED，不作端到端断言** |
+| Happy path：invite → accept → 一个活跃有限参与（场景 1、SC-002、SC-008） | integration + database | 情形 B：匹配 Account 复用既有 binding 后显式 accept；情形 C：先完成 invitation-aware identity bootstrap，再显式 accept。两者均断言恰好一个活跃参与、Person 数不增加、Account ↔ Person 1:1、无 Case 级业务数据被自动授予；仅 binding success 时 active participation 仍为 0 |
 | Decline 为合法结果并保留历史（场景 2、SC-009） | integration + database | 邀请 → 拒绝后：无活跃参与、拒绝历史存在、Case 状态未被自动改变、家长侧可独立操作未被阻断 |
 | Withdraw 停止权限且保留历史（场景 3、SC-010） | integration + database | 活跃参与 → 退出后：后续 Participant 能力被拒、历史记录仍可追溯且未被删除 |
 | Duplicate / concurrent accept（场景 4、SC-002、SC-014） | integration + database concurrency | 同一有效邀请并发 / 重复接受后，活跃参与计数 = 1；`case_participants` 行数不重复增长 |
@@ -307,7 +309,7 @@ Case 级参与关系。逻辑约束（不是 DDL）：
 | Terminal invite cannot reactivate（场景 11、SC-005） | integration + domain | 已终态 / 失效邀请再次 accept / 激活失败，且不新增活跃参与 |
 | No Case-wide access on accept（场景 12、SC-003） | integration | 活跃 Participant 访问 Case 级业务资源被拒；不继承 manager-only 能力 |
 | No Evidence side effect（场景 13、SC-004） | domain + database | accept / decline / withdraw 后 `assertions` 与 `observations` 计数不变（+0） |
-| No duplicate Person / binding（场景 14、SC-008、Clarifications OQ-6） | integration + database | 情形 B：接受后 Account ↔ Person 唯一约束仍成立、Person 数不变；情形 C（target Person 无 Account）：在 OQ-6 upstream identity contract review 完成前 accept MUST BLOCK，BLOCK 发生在任何新 Account / Person 创建之前，Person 数与绑定数均不变、不新建 Person；**仅证明 Slice 4 accept path；端到端首次微信登录 `BLOCKED / NOT VERIFIED`**；token possession 不得单独作为绑定依据 |
+| No duplicate Person / binding（场景 14、SC-008、Clarifications OQ-6） | integration + database | 情形 B：匹配 Account 复用、错误 Account 拒绝且不 rebind；情形 C：invitation-aware identity bootstrap 在 accept 前完成，普通登录不得先创建 P2；PENDING / blocked / terminal → active participation = 0；binding success → 只建立 Account↔P1，仍需 explicit accept；token possession 不得单独作为 identity proof |
 | Auditability（场景 15、SC-013） | integration + database | 生命周期事件存在于 `business_audit_events`；无第二套 audit 表 / 框架 |
 | Idempotency（场景 16、SC-014） | integration + domain contract | 重放返回原结果、业务结果数不变；同 scope key + 不同 canonical payload 返回 409（复用共享幂等层验证，不伪造不可达 HTTP 场景） |
 | Route surface enumeration（场景 17、SC-007、SC-015） | route + schema enumeration | 路由清单只含批准的最小 Participant Core 子集；不存在 `POST /participations/:id/responses`、assessment、formulation、scene、generic evidence CRUD、占位路由 |
@@ -327,7 +329,7 @@ Case 级参与关系。逻辑约束（不是 DDL）：
 8. **无 Evidence 副作用**：参与生命周期不得被写成事实 / 陈述 / 观察，也不得自动触发 Evidence 写入（FR-019）。
 9. **Consent 与参与分离**：Participant accepted ≠ all purposes consented；未来敏感处理仍需重新验证 Consent / Compliance / Purpose（FR-024）。
 10. **审计不可伪造**：生命周期事件复用既有 `business_audit_events`，不得创建第二套审计框架，也不得通过覆盖 / 删除历史改写参与真相（FR-023、§7.9）。
-11. **token ≠ identity proof**：invite token possession MUST NOT 单独构成 person identity proof；把一名既有 Person 与其 Account 绑定需要**上游批准**的产品级 identity confirmation 与 identity-binding seam（当前 `NO APPROVED IDENTITY PROOF FOUND`、OQ-6 BLOCKED），MUST NOT 由泄漏 / 转发的 token 单独授权，MUST NOT 由 Slice 4 Plan 自行定义。
+11. **token ≠ identity proof；identity ≠ participation**：invite token possession MUST NOT 单独构成 person identity proof；既有 P1 的 Account binding 必须消费 merged 005 contract 的 invitation-aware identity bootstrap。错误 candidate MUST NOT become P1、MUST NOT 产生 active participation、MUST NOT 为 P1 产生 decline。binding success 只建立 Account↔P1，MUST NOT 自动产生 participation；Slice 4 Plan MUST NOT 重新定义 identity proof / candidate recognition。
 
 ## Dependency Assumptions
 
@@ -373,7 +375,7 @@ Slice 1 / 2 / 3 只作为**design dependency**（冻结设计语义）与只读 
 4. `idempotency_keys` 行为（相同键重放、不同 payload 409）已通过；
 5. `business_audit_events` 基础已通过；
 6. 相关 CI 与数据库验证为 green；
-7. OQ-6 的 **upstream identity contract review 已完成并批准**（既有 Person / Account = none 的身份证明语义 + identity-binding seam）；否则情形 C MUST BLOCK，MUST NOT 作为已可用能力实现（见 Clarifications OQ-6 与 Clarification Blockers）；邀请 TTL 具体数值已按 §34.1 获批（release gate）。
+7. OQ-6 的 upstream identity dependency 已由 PR #11 独立评审、批准并 merge 到 `main`：未来 Implement MUST 消费当时 current merged `specs/005-invited-identity-binding-contract/spec.md` 与 authoritative Docs，MUST NOT 重新定义 identity proof；具体技术机制留 Plan。邀请 TTL 具体数值仍须按 §34.1 在 release gate 获批。
 
 若任一验证失败，Slice 4 MUST 停止并报告 BLOCKED / NOT VERIFIED；MUST NOT 在 Slice 4 私建替代 Family / Consent / RLS / 幂等 / 审计基础设施。
 
@@ -399,7 +401,7 @@ Slice 1 / 2 / 3 只作为**design dependency**（冻结设计语义）与只读 
 - **A-2 错误码命名与对外语义**：本文要求「不泄露存在性 / 不泄露私密字段」，但不发明新的错误码。若既有冻结 shared error contract（如 `CURRENT_FAMILY_NOT_FOUND` / `NOT_FAMILY_MANAGER` / `VALIDATION_ERROR` / `IDEMPOTENCY_PAYLOAD_MISMATCH`）可直接复用则复用，参与专属错误码命名留 Plan。
 - **A-3 邀请 TTL 数值**：已在 Clarifications 结案（OQ-4）：域语义（有限、服务端强制、caller 不可自定义、不得默认永久）已冻结；**具体数值属 RELEASE / POLICY GATE**（依据 §34.1 于上线前按真实服务目的 / 法规 / 供应商条款锁定），不是 Slice 4 可自行决定的产品数字。本文 MUST NOT 声明任何具体 TTL 数值（如 24h / 72h / 7d）。
 - **A-4 幂等适用范围**：§8.5 把幂等合同限定在「关键命令」；本文把「创建邀请 / 接受 / 拒绝 / 退出」视为关键命令属判断，不是文档枚举；不得据此要求全部读操作都带幂等键。
-- **A-5 Existing Person / Account 绑定 seam**：**OQ-6 BLOCKED — `UPSTREAM IDENTITY CONTRACT REVIEW REQUIRED`。** Slice 1 不提供「登录并绑定既有 Person」的 seam，正式 Docs 亦未定义现有 Person 的身份证明语义（`NO APPROVED IDENTITY PROOF FOUND`）。Slice 4 Plan MUST NOT 自行设计 identity proof，也 MUST NOT 将 invite token 升级为 identity proof；情形 C 在线 self-accept MUST BLOCK。是否新增 invitation-aware identity seam、以及它是 additive 还是修改 Slice 1 已冻结 identity contract，必须由 upstream 评审后决定。
+- **A-5 Existing Person / Account 绑定 seam**：**OQ-6 RESOLVED by merged upstream contract。** PR #11 已将 invitation-aware identity bootstrap、Case B / Case C、candidate recognition、no-P2、Age / Compliance gates 与 lifecycle separation 冻结到 authoritative Docs 及 `specs/005-invited-identity-binding-contract/spec.md`。Slice 4 只消费该 seam：MUST NOT 自行设计新的 identity proof，也 MUST NOT 将 invite token 升级为 identity proof。
 
 ## Clarifications
 
@@ -491,64 +493,66 @@ Slice 4 Clarify **MUST NOT 声明任何具体 TTL 数值**（如 24h / 72h / 7d�
 
 #### OQ-6 — Existing Person / Account 绑定 → BLOCKED — UPSTREAM IDENTITY CONTRACT REVIEW REQUIRED
 
-**最终决定**：OQ-6 **BLOCKED**。当前正式 Docs / 已冻结 upstream contract **未定义**「一个新的微信 Account 凭什么被证明就是既有 Person P1」。因此本轮不将其写成 RESOLVED。
+**最终决定**：OQ-6 **RESOLVED**。PR #11 的 `005-invited-identity-binding-contract` 已完成独立合同审核、获得 `approved-docs-change`、通过治理与 CI，并 merge 到 `main`。Slice 4 现在只消费该 authoritative identity seam，**不重新定义 identity proof**。
 
 ```text
-OQ-6 — BLOCKED
-NO APPROVED IDENTITY PROOF FOUND
-UPSTREAM IDENTITY CONTRACT REVIEW REQUIRED
+OQ-6 — RESOLVED
+UPSTREAM = specs/005-invited-identity-binding-contract/spec.md
+AUTHORITATIVE = Docs/V1产品需求.md + Docs/V1技术设计.md
 ```
 
-必须区分三种事实，三者 MUST NOT 混淆：
+必须继续区分三种事实：
 
-**A. target Person 不存在**：Slice 4 MUST NOT 创建 Person。对 UNDER_14，Slice 1 的 consent-first（guardian consent → formal child Person → compliance state）MUST 先成立，之后才可能有该 Case 的参与邀请。invite MUST NOT 倒置为「invite → login → create Person → collect child data → consent later」。
+**A. target Person 不存在**：语义不变。Slice 4 MUST NOT 创建 Person；UNDER_14 必须先按 Slice 1 consent-first 合法建立 Person 与适用 Compliance / Consent prerequisite，invite MUST NOT 倒置为「invite → login → create Person → consent later」。
 
-**B. target Person 已存在且已有 Account**：登录 Account MUST 与该 Person 既有绑定一致；否则 accept 失败。MUST NOT rebind，MUST NOT 覆盖既有绑定。此情形是可执行路径。
+**B. P1 已存在且已有 Account B**：
 
-**C. target Person 已存在但 Account = none**：这是真正的 seam，**当前 BLOCKED**：
+- 当前 authenticated Account == B → **reuse existing Account↔P1 binding**；
+- 不进入 identity bootstrap；
+- participation flow 可继续到显式 accept / decline；
+- 当前 Account != B → reject；MUST NOT rebind、replace 或 merge。
+
+**C. P1 已存在且 Account = none**：
+
+- MUST 进入 merged 005 contract 定义的 **invitation-aware identity bootstrap**；
+- MUST NOT 先走普通 `/api/v1/auth/wechat` 创建 P2；
+- identity binding MUST 在 Case C participation accept **之前成功**；
+- binding PENDING / blocked / terminal → `active participation = 0`；
+- binding success → **只建立 Account↔P1**，不产生 Case participation、不授予 Participant capability；
+- binding success 之后，目标 Person 仍必须对该 participation 做一次**显式 accept**，才可进入 active participation。
+
+**Identity ≠ Participation（冻结）**：
 
 ```text
-existing Person
-+ Account = none
-→ currently BLOCKED
-→ MUST NOT invoke a path that creates P2
-→ active participation = 0
+Account↔P1 binding
+≠
+participation acceptance
 ```
 
-**安全语义（冻结；不因 BLOCKED 而放松）**：
+因此「已经证明当前 Account 属于 P1」只解决身份，不代表「P1 同意参加这个 Case」。
 
-- **有效 invite = proof of invitation possession，MUST NOT 被直接等同于 proof of person identity。**
-- 因此 **`any logged-in / new Account + leaked / forwarded token → bind target Person` 必须被禁止。**
-- 使 accept 成立（获得 active participant capability）需要**同时**满足：
-  1. 目标 Person 确为该 invite 的 target；
-  2. 一个**经上游批准的产品级 identity confirmation**：确认当前登录 Account 属于该 Person；
-  3. 一个**经上游批准的 identity-binding seam**。
-- 上述第 2、3 项**当前均无正式来源**；MUST NOT 由 Slice 4 自行定义。
-- **谁来证明 / 授权绑定**：不是 token 本身；必须是独立于 invite token 的、可验证的身份事实 + upstream 批准的确认主体与时点。仅凭 token possession 不得授权绑定。
+**UNDER_14（只引用 upstream，不复制 Age Matrix）**：
 
-**与 Slice 1 的真实关系（只读核对结论）**：Slice 1 当前真实冻结的 `POST /api/v1/auth/wechat` 在首次登录（按 openid 无既有 Account）时**创建 Account 并同时创建一个新 Person**（`persons.account_id = accountId`）；既有 Account 登录只按 `account_id` 查回其 Person。**Slice 1 没有冻结任何「登录并绑定既有 Person」的正式产品 / API seam。** 因此若沿用现状，孩子首次微信登录会为其新建第二个 Person —— 这正是本 Slice 必须阻止的重复 Person，且必须在登录入口而非 accept 阶段阻断。
+- Case C 的 P1-specific identity processing 必须满足 current guardian / current valid guardian consent / applicable Compliance gates；
+- 任一合法 identity prerequisite 不满足时，MUST NOT 产生 active participation；
+- guardian consent、identity-binding confirmation、participation acceptance 是不同事实。
 
-**上游必须回答的最小问题集（当前均无正式答案）**：
+**Forwarded invite / wrong candidate**：
 
-| 问题 | 正式来源是否回答 |
-|---|---|
-| 谁有权确认「Account A 属于 Person P1」？ | 否 |
-| 确认什么命题、记录什么证据？ | 否 |
-| 依据什么独立于 invite token 的可验证事实？ | 否 |
-| 在哪个时点确认（登录前 / 登录后、accept 前 / 后）？ | 否 |
-| 如何防止 token 被转发、冒认、重放？ | 否 |
-| 如何避免 `/auth/wechat` 先创建 P2？ | 否 |
-| invitation-aware login seam 是 additive 还是修改 Slice 1 已冻结契约？ | 否，需 upstream review |
+- invite possession ≠ identity proof；
+- 错误 candidate MUST NOT become P1；
+- MUST NOT 产生 active participation；
+- MUST NOT 代 P1 产生 decline；
+- candidate recognition 与 anti-enumeration 细节由 merged 005 contract 持有，Slice 4 不重新设计。
 
-**禁止的伪方案（除非 authoritative Docs 明确批准，一律禁止）**：`/auth/wechat creates P2 → merge P1 and P2`；delete P1；delete P2；`invite token = identity proof`；`same Family = same Person`；nickname / profile match；guardian guesses identity；`Plan decides later`。
+**Invitation lifecycle 与 identity-binding lifecycle 分离**：
 
-**结论（Slice 4 行为）**：
+- Slice 4 继续持有 participation resource 生命周期：pending → accepted(active) / declined / expired；active → withdrawn；
+- binding attempt lifecycle 属 005 contract，MUST NOT 与 participation lifecycle 混合；
+- binding success 不会因为 participation decline / withdraw / Case close 而自动 unlink；
+- decline / withdraw 的既有冻结语义完全不变，本 OQ-6 closeout 不新增 manager cancel / creator cancel 或其它 invitation authorization。
 
-- 本 Slice MUST NOT 把「已有 Person 无 Account 时可自行 accept 绑定」写成既成能力。
-- Slice 4 Plan **MUST NOT** 自行设计 identity proof，也 MUST NOT 决定「一个新的微信 Account 凭什么被证明就是既有 Person P1」；这是 Identity semantics / security / authorization / product contract，必须由 upstream 先获批。
-- 在 OQ-6 upstream identity contract 获批之前，情形 C 的**在线 self-accept MUST BLOCK**：MUST NOT 创建新 Person，MUST NOT 仅凭 token 完成绑定，MUST NOT 先走通用 `/api/v1/auth/wechat` 创建 P2 再于 accept 拒绝。
-- 当前**不能判定** invitation-aware login / identity seam 属于「Slice 4 合法的 additive identity seam」还是「修改 Slice 1 已冻结 identity contract」；该判定属 upstream review，不得由 Slice 4 自行决定。
-- 身份证明的产品语义获批后，具体 binding token / crypto / transaction / DB 机制才属 Plan。
+**Plan 边界**：后续 Plan MAY 设计已批准 identity seam 的 endpoint / transaction / token / lock / DB constraint / pairing mechanism，但 MUST NOT 改写 merged 005 contract 的 identity proof、candidate recognition、Age / Compliance 或 no-P2 产品语义。本轮不进入 Plan。
 
 #### OQ-7 — Multi-participant interaction semantics → DEFERRED（NOT A SLICE 4 CLARIFY BLOCKER）
 
@@ -556,35 +560,32 @@ existing Person
 
 本 Slice MUST NOT 创建任何 participant 之间的协作、共享内容、相互发现或跨 Participant 可见性能力。未来由具体多人业务对象 / Visibility Slice 先定义这些语义，之后才可暴露相应能力。
 
-**Product / domain Clarification blockers**: 1（OQ-6 — existing Person / no Account identity proof 未定义）
+**Product / domain Clarification blockers**: 0
 
-**Clarification Blockers（必须由 upstream 先解决；未解决不得进入 Plan）**：
-
-- **OQ-6 — existing Person / no Account identity proof 未定义**：正式 Docs 与已冻结 upstream contract 均未定义「当前微信 Account 凭什么被证明属于既有 Person」。`NO APPROVED IDENTITY PROOF FOUND`；情形 C 当前 BLOCKED，`active participation = 0`。必须完成 `UPSTREAM IDENTITY CONTRACT REVIEW`。
+**Clarification Blockers**：NONE。OQ-6 的 upstream identity dependency 已由 PR #11 独立评审、批准并 merge 到 `main`；Slice 4 不再需要自行发明 identity proof。
 
 **Release / Policy Gates（不属 Clarification blocker；Implement / 上线前必须满足）**：
 
 - **邀请 TTL 具体数值**（OQ-4 B）：域语义已冻结，具体值属 release / policy gate，依据 §34.1 于上线前按真实服务目的 / 法规 / 供应商条款锁定；无批准值不得真实上线。
 
-**Implement / Architecture Dependency（仅在上游 identity contract 获批后成立）**：
+**Implement / Architecture Dependency（留给下一阶段 Plan，不在本轮展开）**：
 
-- **OQ-6 的技术实现机制**（SQL / transaction / lock / binding token / endpoint payload / DB constraint）：由 Plan 设计，但 MUST NOT 包含或替代身份证明的产品语义；当前上游未批准，不得提前归类为可执行技术依赖。
+- Case C 的 identity 技术机制只能消费 merged 005 contract；SQL / transaction / lock / binding token / endpoint payload / DB constraint 可由 Plan 设计，但 MUST NOT 重新定义 identity proof / candidate recognition / Age / Compliance / no-P2 产品语义。
 
 ## Open Questions
 
-以下保留本轮 **未解决 / BLOCKED / 已 defer** 的问题；OQ-1 ～ OQ-5 已结案，OQ-6 BLOCKED（`UPSTREAM IDENTITY CONTRACT REVIEW REQUIRED`），OQ-7 DEFERRED。
+OQ-1 ～ OQ-6 已 RESOLVED；OQ-7 继续 DEFERRED / NON-BLOCKING。没有剩余 Product / domain Clarification blocker。
 
 | # | 问题 | 状态 | 相关上游证据 |
 |---|---|---|---|
-| OQ-6 | existing Person / no Account 的 identity proof 未定义：一个新的微信 Account 凭什么被证明属于既有 Person P1？ | **BLOCKED — UPSTREAM IDENTITY CONTRACT REVIEW REQUIRED**；`NO APPROVED IDENTITY PROOF FOUND`；情形 C MUST BLOCK | §1.5、§7.1、§10、§28.1、§28.8、`specs/001-family-identity-core/contracts/identity-family-api.openapi.yaml`、`apps/server/api/src/routes/auth.ts` |
-| OQ-7 | 当一个 Case 已合法存在**多个 Participant**（不同 Person）时，他们彼此之间的**交互 / 可见性 / 协作语义**是什么？（是否知道彼此存在；是否允许参与者间直接共享；是否存在共同内容；哪些未来业务对象支持多参与者协作；是否需要 participant-to-participant visibility） | **DEFERRED — NOT A SLICE 4 CLARIFY BLOCKER**：Case 可含 0..N Participant；本 Slice 不创建任何 participant-to-participant 协作 / 共享 / 相互发现 / 跨 Participant 可见性能力；未来由业务对象 / Visibility Slice 定义后方可暴露 | §1.2、§7.1 |
+| OQ-6 | existing Person / no Account 的 identity seam：如何在不创建 P2 的前提下完成 Account↔P1 binding，并与 participation accept 分离？ | **RESOLVED**：Case B 复用 / mismatch reject；Case C 先 invitation-aware identity bootstrap；binding PENDING / blocked / terminal → active participation = 0；binding success 仅建立 Account↔P1，之后仍需 explicit accept | `Docs/V1产品需求.md` §1.2 / §1.5 / §19A.2 / V1-C44；`Docs/V1技术设计.md` §7.1 / §7.7A / §10 / §28.1 / §28.8；`specs/005-invited-identity-binding-contract/spec.md` |
+| OQ-7 | 当一个 Case 已合法存在**多个 Participant**（不同 Person）时，他们彼此之间的**交互 / 可见性 / 协作语义**是什么？ | **DEFERRED — NOT A SLICE 4 CLARIFY BLOCKER**：Case 可含 0..N Participant；本 Slice 不创建 participant-to-participant 协作 / 共享 / 相互发现 / 跨 Participant 可见性能力；未来由业务对象 / Visibility Slice 定义后方可暴露 | §1.2、§7.1 |
 
-**Product / domain Clarification blockers**: 1（OQ-6）
+**Product / domain Clarification blockers**: 0
 
 **Clarify outcome**:
 
 ```text
-SLICE 4 CLARIFY BLOCKED
-UPSTREAM IDENTITY CONTRACT REVIEW REQUIRED
+SLICE 4 CLARIFY FINAL PASS
+READY FOR PLAN
 ```
-
