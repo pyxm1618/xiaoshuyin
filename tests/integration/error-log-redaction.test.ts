@@ -53,7 +53,6 @@ const res = await app.inject({
 });
 process.stderr.write('STATUS=' + res.statusCode + '\\n');
 process.stderr.write('BODY=' + res.body + '\\n');
-process.stderr.write('BODY=' + res.body + '\\n');
 await app.close();
 `
     );
@@ -116,9 +115,6 @@ await app.close();
       const output = `${stdout}${stderr}`;
 
       expect(output).toContain('STATUS=500');
-      expect(output).toContain(
-        'BODY={"code":"INTERNAL_ERROR","message":"An internal error occurred"}'
-      );
       expect(output).toContain(
         'BODY={"code":"INTERNAL_ERROR","message":"An internal error occurred"}'
       );

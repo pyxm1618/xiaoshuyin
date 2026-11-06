@@ -12,7 +12,6 @@ import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
 import { hashPayload } from '../../packages/domain/src/idempotency.js';
-import { hashPayload } from '../../packages/domain/src/idempotency.js';
 
 let verifyPool: pg.Pool;
 
@@ -199,27 +198,7 @@ describe('CASE_CREATE exact identity (round 2)', () => {
     expect(res.body).not.toContain('Incomplete idempotency record');
   });
 
-  it('a committed placeholder returns the generic 500 body', async () => {
-    const { token, accountId, familyId } = await setup('placeholder');
-    await owner.query(`SELECT set_config('app.account_id', $1, false)`, [accountId]);
-    const key = 'placeholder-key-0001';
-    await owner.query(
-      `INSERT INTO idempotency_keys
-         (actor_account_id, command_type, idempotency_key, idempotency_key_bytes,
-          request_hash, response_status, response_body)
-       VALUES ($1, 'CASE_CREATE', NULL, $2, $3, 0, '{}'::jsonb)`,
-      [accountId, Buffer.from(key, 'utf16le'), hashPayload({ familyId, body: {} })]
-    );
-
-    const res = await post(token, key);
-    expect(res.statusCode).toBe(500);
-    expect(res.json()).toEqual({
-      code: 'INTERNAL_ERROR',
-      message: 'An internal error occurred',
-    });
-    expect(res.body).not.toContain('Incomplete idempotency record');
-  });
-
+  
   it('serializes concurrent identical byte keys into one business result', async () => {
     const { token, accountId } = await setup('concurrent');
     const key = '\u0000round2-concurrent-key';
