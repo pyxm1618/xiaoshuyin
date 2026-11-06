@@ -27,7 +27,8 @@ import { authorize } from '@xiaoshuyin/authorization';
 import {
   hashPayload,
   decideIdempotency,
-  encodeCaseIdempotencyKey,
+  caseIdempotencyKeyBytes,
+  isLegacyTextLookupSafe,
   getFamilyById,
   insertCase,
   insertCaseEvent,
@@ -107,7 +108,7 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
     '/api/v1/cases',
     {
       // Authentication precedes schema validation (D-4 step 0).
-      preValidation: app.authenticate,
+      onRequest: app.authenticate,
       schema: {
         operationId: 'createCase',
         summary: 'Create a Case container',
@@ -141,7 +142,10 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
         return reply.status(err.statusCode).send(err);
       }
       const logicalKey = parsed.data.idempotencyKey;
-      const storageKey = encodeCaseIdempotencyKey(logicalKey);
+      const keyBytes = caseIdempotencyKeyBytes(logicalKey);
+      // The legacy text column can only be queried for keys PostgreSQL can
+      // receive as text; the exact byte identity is always queried.
+      const legacyKeyText = isLegacyTextLookupSafe(logicalKey) ? logicalKey : null;
 
       // 1. Resolve the current target Family (Slice 1 semantics, no new codes).
       const familyId = await withIdentityTransaction(
@@ -178,23 +182,13 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
               throw httpError('CASE_ACCESS_DENIED');
             }
 
-            // Idempotency: reserve or replay/mismatch. Replay never locks the
-            // Family row and never writes business rows.
-            const reserved = await reserveIdempotency(tx, {
-              actorAccountId: accountId,
-              commandType: CASE_COMMAND,
-              idempotencyKey: storageKey,
-              requestHash,
-            });
-
-            if (!reserved) {
-              const existing = await getReservedIdempotency(tx, {
-                actorAccountId: accountId,
-                commandType: CASE_COMMAND,
-                idempotencyKey: storageKey,
-              });
+            // Idempotency: exact byte identity first, then the legacy raw-text
+            // row. REPLAY / MISMATCH never lock the Family row and never write
+            // business rows.
+            const decideExisting = (
+              existing: Awaited<ReturnType<typeof getReservedIdempotency>>
+            ) => {
               if (!existing) {
-                // RLS/visibility invariant: a conflicting key must be readable.
                 throw httpError('INTERNAL_ERROR', 'Idempotency record not visible');
               }
               // Shared contract: no second mismatch predicate in the route.
@@ -219,6 +213,32 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
                 status: replay.responseStatus,
                 body: replay.responseBody,
               };
+            };
+
+            const existing = await getReservedIdempotency(tx, {
+              actorAccountId: accountId,
+              commandType: CASE_COMMAND,
+              keyBytes,
+              legacyKeyText,
+            });
+            if (existing) return decideExisting(existing);
+
+            const reserved = await reserveIdempotency(tx, {
+              actorAccountId: accountId,
+              commandType: CASE_COMMAND,
+              keyBytes,
+              requestHash,
+            });
+
+            if (!reserved) {
+              // A concurrent transaction owns the same exact scope key.
+              const concurrent = await getReservedIdempotency(tx, {
+                actorAccountId: accountId,
+                commandType: CASE_COMMAND,
+                keyBytes,
+                legacyKeyText,
+              });
+              return decideExisting(concurrent);
             }
 
             // Family serialization point for primary assignment.
@@ -251,7 +271,7 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
             await completeIdempotency(tx, {
               actorAccountId: accountId,
               commandType: CASE_COMMAND,
-              idempotencyKey: storageKey,
+              keyBytes,
               status: 201,
               body,
             });
@@ -279,7 +299,7 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
     '/api/v1/cases',
     {
       exposeHeadRoute: false,
-      preValidation: app.authenticate,
+      onRequest: app.authenticate,
       schema: {
         operationId: 'listCases',
         summary: 'List the current Family Cases',
@@ -353,7 +373,7 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
     '/api/v1/cases/:id',
     {
       exposeHeadRoute: false,
-      preValidation: app.authenticate,
+      onRequest: app.authenticate,
       schema: {
         operationId: 'getCase',
         summary: 'Read a single Case',

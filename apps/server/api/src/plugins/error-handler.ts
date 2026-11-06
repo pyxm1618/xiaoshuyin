@@ -86,9 +86,23 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
     });
   }
 
-  // Unexpected error: log the real cause (never the response) so a real
-  // failure is diagnosable without leaking internals to the client.
-  req.log.error({ err }, 'unhandled request error');
+  // Unexpected error: whitelist-only logging.
+  // `pg` errors can carry SQL fragments, parameter values, request-derived
+  // detail and stack frames, so neither the error object nor its message,
+  // detail, query or parameters are logged. Only non-sensitive routing
+  // metadata plus a strictly validated SQLSTATE are recorded.
+  const rawCode = (err as { code?: unknown }).code;
+  const sqlstate =
+    typeof rawCode === 'string' && /^[0-9A-Z]{5}$/.test(rawCode) ? rawCode : undefined;
+  req.log.error(
+    {
+      requestId: req.id,
+      method: req.method,
+      route: req.routeOptions?.url ?? null,
+      ...(sqlstate ? { sqlstate } : {}),
+    },
+    'unhandled request error'
+  );
   return reply.status(500).send({
     code: 'INTERNAL_ERROR',
     message: 'An internal error occurred',
