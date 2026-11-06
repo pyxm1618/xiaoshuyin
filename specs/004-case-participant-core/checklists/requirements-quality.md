@@ -31,9 +31,9 @@ GAP:            0
 
 | Finding | 类型 | 初检问题 | 关闭方式 | 涉及 artifact |
 |---|---|---|---|---|
-| F-01 | Idempotency / Security | invite create replay 必须返回原结果，但 token 明文只存 hash，导致 replay 无法返回 token；若把 token 写入 `idempotency_keys.response_body` 则违反“token 明文不落库” | token 改为确定性 HMAC 派生；idempotency snapshot 只存 redacted body；replay 由 `participationId` + token secret 重新派生同一 token | plan D-1/D-2/D-5/D-9/D-15；research R-6/R-19；data-model §2.1/§9；auth contract §5.4；OpenAPI inviteToken description；quickstart §3 |
-| F-02 | Privacy / RLS | token RLS 仅按 hash 匹配，未限定 `PENDING`；且只靠“route 记得 select 安全列”不足以防列泄露 | token policy 加 `state='PENDING'`；新增 `security_invoker` safe view `case_participant_invite_public`，只含安全列；repository + guard test + OpenAPI 三层边界 | plan D-11；research R-7；data-model §3.2/§3.3/§3.5；auth contract §4.1/§4.4；quickstart §2 |
-| F-03 | Concurrency / Lifecycle | GET/read 会物化 expiry，但未明确 `FOR UPDATE` / 条件 UPDATE / exactly-once audit；并发 GET 可能重复 audit 或状态不一致 | 明确 GET / accept / decline 均 `SELECT FOR UPDATE` + 条件 UPDATE；只有 UPDATE 影响 1 行才写 audit；0 行不写 audit | plan D-4/D-10/D-14；research R-4；data-model §6.5；lifecycle contract §6 |
+| F-01 | Idempotency / Security | invite create replay 必须返回原结果，但 token 明文只存 hash，导致 replay 无法返回 token；若把 token 写入 `idempotency_keys.response_body` 则违反“token 明文不落库” | token 改为确定性 HMAC 派生；C-01 create 先 `SELECT uuidv7()` 预分配 `participationId`，token 派生先于 INSERT，INSERT 显式 `id`，`created_at` / `expires_at` 用 DB server time；idempotency snapshot 只存 redacted body；replay 由 `participationId` + token secret 重新派生同一 token | plan D-1/D-2/D-5/D-9/D-14/D-15；research R-6/R-19；data-model §2.1/§6.1/§9；auth contract §5.4；OpenAPI inviteToken description；quickstart §3 |
+| F-02 | Privacy / RLS | token RLS 仅按 hash 匹配，未限定 `PENDING`；且只靠“route 记得 select 安全列”不足以防列泄露 | token policy 加 `state='PENDING'`；新增 `security_invoker` safe view `case_participant_invite_public`，只含安全列，predicate 为 `state='PENDING' AND invite_expires_at > now()`；repository + guard test + OpenAPI 三层边界；effective-expired PENDING 不返回 200 | plan D-5/D-11/D-14；research R-7；data-model §3.2/§3.3/§3.5；auth contract §4.1/§4.4；quickstart §2 |
+| F-03 | Concurrency / Lifecycle | GET/read 会物化 expiry，但未明确 `FOR UPDATE` / 条件 UPDATE / exactly-once audit；并发 GET 可能重复 audit 或状态不一致 | 明确 GET / accept / decline 均 `SELECT FOR UPDATE` + 条件 UPDATE；GET self 先 `authorize(PARTICIPATION_READ_SELF)` + 用 server-trusted `participation.family_id` 建立 family write context；只有 UPDATE 影响 1 行才写 audit；0 行不写 audit；不新增 self UPDATE policy | plan D-4/D-6/D-10/D-14；research R-4；data-model §3.2/§6.5；auth contract §6.4；lifecycle contract §6 |
 | F-04 | Concurrency | 部分表述写成“恰好一个合法结果”，可能在 0 个满足条件时错误地要求 1 个成功 | 统一为“至多一个成功状态转换（0 或 1）；无满足条件时 0 合法” | plan D-10 / Verification；lifecycle contract N-11；quickstart §4 |
 | F-05 | Compliance | `MINOR_14_17` 写“其它 applicable consent 仍执行”，但当前 Slice 1 consent taxonomy 只有 `UNDER_14_GUARDIAN_CONSENT`；未说明未来 consent 类型归属 | 明确当前 taxonomy 只有该类型；未来新增 consent 类型必须在对应 Slice 扩展 gate；Slice 4 不发明、不忽略 | plan D-8；lifecycle contract §4 |
 | F-06 | Lifecycle / Audit | 到期后从未被访问的 PENDING 行是否必须产生 `PARTICIPATION_EXPIRED` audit 未说明 | 明确 never-accessed 为 derived EXPIRED，不自动写 audit；事实可由 `invite_expires_at` + state + time 追溯；未来无访问持久化事件由独立 data-lifecycle Slice 增加 | plan D-14；research R-4；data-model §6.5；auth contract §6.4；lifecycle contract §6 |
@@ -105,7 +105,7 @@ GAP:            0
 - [x] **CHK039** [TTL, plan D-14] 不存在 permanent fallback、`expires_at = infinity`、`interval '24 hours'` 硬编码或 caller `expiresAt` 输入。
 - [x] **CHK040** [Expiry, plan D-4 / D-14 / data-model §6.5] 明确区分 **effective expired state** 与 **persisted EXPIRED state**：PENDING + now >= expires_at 业务上等价 EXPIRED；物化是单独动作。
 - [x] **CHK041** [Expiry, plan D-14 / data-model §6.5] 未认证 invite lookup 只返回 `UNAVAILABLE`，不改写行、不写 audit；token lookup 只使用 safe view。
-- [x] **CHK042** [Expiry, plan D-4 / D-10 / D-14] GET / accept / decline 的 expiry 物化必须 `SELECT ... FOR UPDATE` + 条件 `UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at`。
+- [x] **CHK042** [Expiry, plan D-4 / D-6 / D-10 / D-14] GET / accept / decline 的 expiry 物化必须 `SELECT ... FOR UPDATE` + 条件 `UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at`；GET self 先 `authorize(PARTICIPATION_READ_SELF)` + `setFamilyContext(participation.family_id, actor.personId, 'PARTICIPATION')`；不新增 self UPDATE policy。
 - [x] **CHK043** [Expiry, plan D-14 / lifecycle contract §6] exactly-once audit：只有 UPDATE 影响 1 行才写 `PARTICIPATION_EXPIRED`；0 行不写；并发两个 GET 只有一个写 audit。
 - [x] **CHK044** [Concurrency, plan D-10 / lifecycle contract N-12] expiry 与 accept / decline 并发时有唯一合法赢家；若所有请求都不满足条件，0 个成功状态转换是合法结果。
 - [x] **CHK045** [Expiry, research R-4 / plan D-14] never-accessed 到期 PENDING 行被明确为 derived EXPIRED，不自动写 audit；可由 `invite_expires_at` + state + time 追溯；未来无访问持久化事件由独立 data-lifecycle Slice 增加。
@@ -119,7 +119,7 @@ GAP:            0
 - [x] **CHK048** [Data model, data-model §2.3] state / timestamp CHECK 覆盖 PENDING / ACTIVE / DECLINED / EXPIRED / WITHDRAWN 全部合法组合，并拒绝非法组合。
 - [x] **CHK049** [Data model, data-model §2.2] `(case_id, family_id)` 复合 FK 引用 `cases(id, family_id)`；Case 必须与 Family 一致。
 - [x] **CHK050** [Data model, data-model §2.2] `(person_id, family_id)` 复合 FK 引用 `family_members(person_id, family_id)`；为支持该 FK 增加的 `UNIQUE (person_id, family_id)` 是冗余、非破坏性、不新增业务语义。
-- [x] **CHK051** [Data model, data-model §2.1] `invite_token_hash` NOT NULL / UNIQUE / 64 hex；token 明文不落库；token 由确定性 HMAC 派生。
+- [x] **CHK051** [Data model, data-model §2.1 / §6.1] `invite_token_hash` NOT NULL / UNIQUE / 64 hex；token 明文不落库；token 由确定性 HMAC 派生；create 先 `SELECT uuidv7()` 预分配 `participationId`；INSERT 显式 `id`；`created_at` / `expires_at` 用 DB server time。
 - [x] **CHK052** [Data model, data-model §2.1] `invite_expires_at` NOT NULL、无 DB 默认值；`CHECK (invite_expires_at > created_at)`。
 - [x] **CHK053** [Data model, data-model §2.2] partial unique `(case_id, person_id) WHERE state IN ('PENDING','ACTIVE')` 可由 PostgreSQL 表达。
 - [x] **CHK054** [Data model, research R-8 / data-model §2.2] terminal 历史可多条；DECLINED / EXPIRED / WITHDRAWN 后可创建新 invitation；terminal resource 不可 reactivate 与新 resource 创建被明确区分。
@@ -134,11 +134,11 @@ GAP:            0
 - [x] **CHK058** [Security, spec FR-006 / plan D-7] token possession ≠ identity proof；仅持有 / 转发 token 不能变成 P1、不能 accept / decline、不能获得 participant capability。
 - [x] **CHK059** [Security, plan D-11 / data-model §3.2] `case_participants_invite_token_read` 只用于 SELECT，且 `state='PENDING'`；terminal 行不通过 token context 可见。
 - [x] **CHK060** [Security, plan D-11 / data-model §3.4] token context 使用 transaction-local `set_config(..., true)`；不跨连接泄漏；`set_invite_token_context` 不设置 family / person / account。
-- [x] **CHK061** [Security, plan D-11 / data-model §3.3] `case_participant_invite_public` 使用 `security_invoker = true`；只含 `participation_id` / `state` / `expires_at` / `created_at`。
+- [x] **CHK061** [Security, plan D-11 / data-model §3.3] `case_participant_invite_public` 使用 `security_invoker = true`；只含 `participation_id` / `state` / `expires_at` / `created_at`；predicate 为 `state='PENDING' AND invite_expires_at > now()`；effective-expired PENDING 不返回 200。
 - [x] **CHK062** [Security, plan D-11 / auth contract §4.4] token lookup repository 只查询 safe view；guard test 断言不使用 `SELECT *` / base table；DB view + repository + OpenAPI response 形成三层边界。
 - [x] **CHK063** [Security, OpenAPI / data-model] OpenAPI `ParticipationInvitePublicView` 不包含 personId / caseId / familyId / guardian / age / consent / compliance。
 - [x] **CHK064** [Security, research R-7 / auth contract §4.6] 不使用 `SECURITY DEFINER` 绕过 RLS；若未来使用，必须明确 search_path / privileges。当前方案使用 SECURITY INVOKER + RLS。
-- [x] **CHK065** [Security, plan D-9 / research R-19] invite create same-key replay 由 `participationId` + token secret 重新派生同一 token；不得把 token 明文写入 idempotency snapshot。
+- [x] **CHK065** [Security, plan D-9 / research R-19] invite create 先 `SELECT uuidv7()` 预分配 `participationId`；snapshot 保存 `participationId` + redacted metadata；same-key replay 由 `participationId` + token secret 重新派生同一 token；不得把 token 明文写入 idempotency snapshot。
 - [x] **CHK066** [Security, plan D-2 / D-5] token 只在 create 响应与 same-key replay 返回；其他读取 / 审计 / 日志不返回；这一语义在 OpenAPI 描述中明确。
 
 ---
@@ -164,7 +164,7 @@ GAP:            0
 - [x] **CHK078** [Authorization, spec FR-003 / plan D-6] Case manager = 创建 Family 的 adult Person；完全来自 Slice 1 / 2 冻结语义；没有新建 Case role / Family member role / manager enum。
 - [x] **CHK079** [Authorization, spec FR-020 / plan D-6] target / participant 判定 = `actor.personId === participation.person_id`；不读 / 不写 `persons.account_id`。
 - [x] **CHK080** [Authorization, plan D-6] manager actions 使用 `FAMILY_MANAGEMENT`；self actions 使用 `PARTICIPATION`；resource 使用 `PARTICIPATION`。
-- [x] **CHK081** [Authorization, plan D-6 / lifecycle contract] `actor.personId === participation.person_id` 只解决 self identity；不能单独替代 Case / Family / state / purpose / Compliance 判断。
+- [x] **CHK081** [Authorization, plan D-6 / lifecycle contract] `actor.personId === participation.person_id` 只解决 self identity；不能单独替代 Case / Family / state / purpose / Compliance 判断；GET self 在返回前必须调用 `authorize(PARTICIPATION_READ_SELF)`；self RLS match 不是 authorization success。
 - [x] **CHK082** [Authorization, spec §7.7A / plan D-6] guardian 不是 manager，也不是 participant；guardian relationship 不自动授予 Case read / participant read / participant management。
 - [x] **CHK083** [Authorization, spec FR-018 / plan D-6] 活跃 Participant 不继承 Case manager 能力；不能调用 manager-only Case 命令。
 - [x] **CHK084** [Authorization, spec FR-025 / plan D-6] participation row 只是 authorization substrate；不构成 Case / Evidence / Formulation / Plan 的读取授权。
@@ -197,7 +197,7 @@ GAP:            0
 - [x] **CHK101** [RLS, data-model §3.2] token read `state='PENDING' AND invite_token_hash = app_invite_token_hash()`；terminal 行不通过 token context 可见。
 - [x] **CHK102** [RLS, data-model §3.2] 无任何上下文 → 谓词 NULL → SELECT 0 行 / 写入拒绝；不是默认放行。
 - [x] **CHK103** [RLS, data-model §3.2] token / self policy 不授予 INSERT / UPDATE / DELETE；只有 family scope 允许写。
-- [x] **CHK104** [RLS, plan D-11 / auth contract §4] family / self / token policy 的 OR 组合不会意外扩大跨家庭访问；RLS 是 defense-in-depth，业务边界仍由 `authorize()` 判定。
+- [x] **CHK104** [RLS, plan D-11 / auth contract §4] family / self / token policy 的 OR 组合不会意外扩大跨家庭访问；RLS 是 defense-in-depth，业务边界仍由 `authorize()` 判定；self expiry 物化使用 server-trusted `participation.family_id` 建立 family write context；不新增 self UPDATE policy。
 
 ---
 
@@ -205,7 +205,7 @@ GAP:            0
 
 - [x] **CHK105** [Audit, spec FR-023 / plan D-12] 5 类 participation 事件存在：invite created / accepted / declined / expired / withdrawn；`resource_type = CASE_PARTICIPANT`。
 - [x] **CHK106** [Audit, plan D-12] actor attribution 真实：invite 由 manager account；accept / decline / withdraw 由 target account；expiry 由触发物化的已认证 account。
-- [x] **CHK107** [Audit, plan D-12 / D-14] 每个成功状态转换与 business 写入同一事务；replay 不追加第二组 audit；expiry 物化 exactly-once。
+- [x] **CHK107** [Audit, plan D-12 / D-14] 每个成功状态转换与 business 写入同一事务；replay 不追加第二组 audit；expiry 物化 exactly-once；GET self expiry audit 依赖合法 family write context；0 行不重复 audit。
 - [x] **CHK108** [Audit, plan D-12] 不记录 token / token hash / wechat_openid / 家长原话 / 不必要 PII；不为 audit 创建 Person / Account。
 - [x] **CHK109** [Audit, spec FR-023 / plan D-12] 不写 `case_events` 作为第二套 audit；不建 `participation_audit_events` 等第二张 audit 表。
 - [x] **CHK110** [Audit, plan D-12 / lifecycle contract §5] expiry 的 `occurred_at` 是物化时间，metadata 中的 `expiresAt` 是真实到期时间；不伪造成到期瞬间。
@@ -371,7 +371,7 @@ git status --porcelain=v1
 | `spec.md` diff | 0 |
 | `Docs/**` diff | 0 |
 | runtime / migration / tests diff | 0 |
-| `tasks.md` | absent |
+| `tasks.md` | absent at original Checklist stage；targeted re-validation base has tasks.md（read-only，unchanged） |
 | working tree | clean（checklist commit 后） |
 
 ---
@@ -387,7 +387,8 @@ GAP: 0
 
 ```text
 SLICE 4 CHECKLIST FINAL PASS
-READY FOR TASKS
+TARGETED CHECKLIST RE-VALIDATION PASS
+READY FOR TASKS REMEDIATION
 ```
 
 **边界**：Checklist PASS 不代表 Implement Gate OPEN。当前：
@@ -400,4 +401,77 @@ Slice 2: IMPLEMENTATION IN PROGRESS — NOT MERGED
 IMPLEMENT GATE = BLOCKED
 ```
 
-本阶段未创建 `tasks.md`，未执行 Analyze / Implement / Converge，未修改 `spec.md` / `Docs/**` / runtime / migration / tests。
+Original Checklist 阶段未创建 `tasks.md`；targeted re-validation 中 `tasks.md` 为只读输入，未修改。未执行 Analyze / Implement / Converge，未修改 `spec.md` / `Docs/**` / runtime / migration / tests。
+
+---
+
+## 19. Targeted Re-Validation Log — 2026-11-06
+
+**Base**: `eb3ea23e7a3f4f4ec2fe89be45725cc614326367`
+
+**Scope**: verify Plan Remediation findings C-01 / H-01 / H-02 / L-02 / L-05 and re-check F-01 / F-02 / F-03 / F-06 consistency. No full Checklist regeneration.
+
+**Re-validated entries**:
+
+```text
+CHK042  expiry materialization + GET self family context
+CHK051  token hash / preallocated participationId / DB server time
+CHK061  safe view security_invoker + expiry predicate
+CHK065  invite create replay / redacted snapshot
+CHK077  single authorize()
+CHK079  self identity
+CHK081  GET self must authorize READ_SELF
+CHK104  RLS OR composition / no self UPDATE policy
+CHK107  audit exactly-once / family write context
+CHK112  invite lookup expired -> 404
+CHK130  Implement Gate still BLOCKED
+```
+
+**Targeted results**:
+
+```text
+C-01 RESOLVED
+H-01 RESOLVED
+H-02 RESOLVED
+L-02 RESOLVED
+L-05 RESOLVED
+
+F-01 PASS
+F-02 PASS
+F-03 PASS
+F-06 PASS
+```
+
+**Evidence**:
+
+- C-01: Plan D-2/D-9/D-14、data-model §2.1/§6.1、auth contract §6.1、research R-5/R-6/R-19、quickstart §3 均冻结 `SELECT uuidv7()` 预分配、token 先于 INSERT、explicit `id`、DB server time。
+- H-01: data-model §3.2/§6.5、auth contract §6.4、lifecycle contract §6、research R-4、quickstart §4 均要求 `setFamilyContext(participation.family_id, actor.personId, 'PARTICIPATION')`；不新增 self UPDATE policy，不接收 client `familyId`。
+- H-02: Plan D-6、data-model §6.5、auth contract §6.4、CHK077/CHK081 均要求 `authorize(PARTICIPATION_READ_SELF)`；self RLS match 不是 authorization success。
+- L-02: Plan D-1 / Project Structure、auth contract §4.3 明确 `withInviteTokenTransaction` / `setInviteTokenContext` / `setFamilyContext` 三个 thin adapters；无 “if needed / 按需”。
+- L-05: Plan D-5/D-11/D-14、data-model §3.3、auth contract §4.4、lifecycle contract §6、quickstart §2 均冻结 view predicate `state='PENDING' AND invite_expires_at > now()`；token RLS 仍为 `state='PENDING'` 仅供已认证 accept/decline 物化。
+
+**No new Plan gap**: C-01/H-01/H-02/L-02/L-05 未引入 new state / new route / new RBAC / Evidence / AI / notification / identity runtime / cross-Family participation。
+
+**Deferred to Tasks Remediation**: M-01 Evidence boundary test、M-02 rollback test、M-03 participants-structure test、M-04 decline Case-status assertion、L-01 parallel test DB、L-03 traceability table、L-04 cross-family named test。These are not Plan-quality FAIL.
+
+**Validation**:
+
+```bash
+node .specify/scripts/validate-governance.mjs
+node .specify/scripts/tests/run-governance-tests.mjs
+ruby -ryaml -e 'YAML.load_file("specs/004-case-participant-core/contracts/participation-api.openapi.yaml")'
+```
+
+```text
+Spec governance validation PASS
+Governance self-test PASS: 15/15 cases
+OpenAPI YAML parse PASS: 6 paths / 22 schemas
+working tree: clean
+changed files: checklists/requirements-quality.md only
+spec.md / plan.md / research.md / data-model.md / quickstart.md / contracts/** / tasks.md / Docs/** / runtime / migration / tests: unchanged
+```
+
+```text
+TARGETED CHECKLIST RE-VALIDATION PASS
+READY FOR TASKS REMEDIATION
+```
