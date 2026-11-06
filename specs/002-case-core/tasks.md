@@ -551,3 +551,16 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 
 **新增 migration**：`db/migrations/003_case_idempotency_key_bytes.sql`（001/002 未修改）。
 **全量**：`bunx vitest run` → 51 files / 367 tests，0 failed / 0 skipped；`db:evidence` PASS；`openapi:check` PASS；governance PASS。
+
+---
+
+## Independent Converge Round 3 Remediation Evidence（2026-11-06）
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| R6 跨行 / SQL comment 绕过 | CLOSED | 整文件 `normalizeSql()` + `\s+` 匹配；`guard-scope.test.ts` 25/25（新增 6 个跨行 / 注释形态） |
+| Generic 500 契约 | CLOSED | `errorHandler` 统一处理 ≥500；Case route 5xx rethrow；placeholder / trigger 故障 / DB 异常均返回唯一 generic body |
+| Owner amendment 文档自洽 | CLOSED | `plan.md` §2.3 / §5.2 / §5.4 / D-11 / Impact；`data-model.md` §5.1 baseline 化 |
+| 003 重复 DDL | DONE | 删除重复 `DROP NOT NULL`；空库 replay PASS |
+
+**全量**：`bunx vitest run` → 51 files / 375 tests，0 failed / 0 skipped。

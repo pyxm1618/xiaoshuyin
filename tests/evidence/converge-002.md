@@ -252,3 +252,77 @@ Amendment 已写入 `plan.md` D-11.1、`data-model.md` §5.5、`contracts/author
 ## Remaining gaps
 
 `NONE`
+
+---
+
+# Independent Converge Round 3 Remediation（2026-11-06）
+
+**判定输入**: `INDEPENDENT CONVERGE FAIL — RETURN TO IMPLEMENT`（Round 3）
+**Old head**: `2b8538e1deaaed609c53f13f31f2e3ce2a13c0cf`
+**Remediation code head**: `97a5e9379f735b121a5160aa584f5d0d816fbdc5`（其后为本次证据提交；最终 head 以分支 HEAD / CI run 为准）
+**范围**: 只处理 Round 3 的 3 个 MEDIUM + 1 个 NON-BLOCKING cleanup；未重开其它已 CLOSED 项，未进入 Slice 3。
+
+## R6 multiline / SQL-comment bypass → CLOSED
+
+- 根因：`db/**` 原按 `content.split('\n')` 逐行匹配，regex 永远看不到跨行语句。
+- 修复：整文件 `normalizeSql()` —— 块注释 `/* … */` 与行注释 `-- …` 替换为空白（保留换行以便报行号），字符串字面量与引号标识符原样保留；DDL regex 在规范化内容上用 `\s+` / `\s*` 匹配，支持 `CREATE [UNLOGGED] TABLE [IF NOT EXISTS] [schema.]name`。
+- 未引入 SQL parser；未减少任何既有检测（含裸 `case_participants`、`pgTable('…')`、全量 forbidden vocabulary）。
+- 证据：`tests/integration/guard-scope.test.ts` **25/25**，新增 6 个跨行 / 注释形态：
+  `CREATE TABLE\n"public"."observations"`、`CREATE\nTABLE\ntasks`、
+  `CREATE TABLE /* probe */\n"public"."observations"`、
+  `CREATE /* probe */\nUNLOGGED TABLE IF NOT EXISTS\n"public"."observations"`、
+  `CREATE TABLE /*\nmulti-line\ncomment\n*/ case_followup_schedules`、
+  `CREATE TABLE -- probe\nobservations`；每个注入 exit≠0，清理后 `PASS (0 violations)`。
+
+## Generic 500 contract → CLOSED
+
+- 根因：已提交的 placeholder invariant 抛 `httpError('INTERNAL_ERROR', 'Incomplete idempotency record')`，Case route 的 catch 直接把 `err.message` 写进响应。
+- 修复（单事实源）：`errorHandler` 统一处理所有 `statusCode >= 500`——使用与 unexpected error 相同的白名单日志，并返回唯一 generic body；Case 三条 route 的 catch 改为「4xx 原样发送，5xx rethrow」。
+- 对外唯一 500 body：`{"code":"INTERNAL_ERROR","message":"An internal error occurred"}`。
+- 证据：
+  - `tests/integration/cases-idempotency-identity.test.ts` 新增「committed placeholder → 500」，断言 body 逐字节等于 generic，且不含 `Incomplete idempotency record`；
+  - `tests/integration/cases-rollback.test.ts`（真实 POST + trigger 故障）断言同一 generic body；
+  - `tests/integration/error-log-redaction.test.ts` 断言 `BODY={"code":"INTERNAL_ERROR","message":"An internal error occurred"}`，同时仍证明 secret / token / idempotencyKey 不出现在日志。
+
+## Owner amendment documentation contradiction → CLOSED
+
+- `plan.md`：§2.3 区分 002 baseline 与 Round 2 amendment；§5.2 把 scope 表述为 logical scope（physical 唯一性指向 D-11.1）；§5.4 区分 002 的 `command_type` CHECK 扩展与 003 的 physical representation 扩展；D-11 回滚行明确「仅针对 002」；Data and Migration Impact 改为现行事实（002 无列变更；003 新增 bytea 列 / CHECK / 唯一索引，无数据回填）。
+- `data-model.md`：§5.1 标题改为「003 之前的 Slice 2 baseline」并声明现行结构以 §5.5 为准。
+- 未修改 `Docs/**`、`spec.md`、`research.md`、`cases-api.openapi.yaml`、`quickstart.md`、Constitution、`AGENTS.md`。
+
+## 003 duplicate DDL cleanup → DONE
+
+- 删除 `003_case_idempotency_key_bytes.sql` 中完全重复的第二条 `ALTER COLUMN idempotency_key DROP NOT NULL` 及其重复注释；语义不变，未改 001 / 002，未改编号。
+- 空库 replay 重新验证：`bun run db:evidence` PASS（001 → 002 → 003，二次 apply no-op）。
+
+## 已 CLOSED finding 回归抽查
+
+| 项 | 结果 |
+|---|---|
+| Finding 1 OpenAPI operationId / bearerAuth | `openapi-cases.test.ts` 10/10；`openapi:check` PASS |
+| Finding 2 HEAD absent | Case 子树无 HEAD；HEAD 请求 404 |
+| Finding 3 auth ordering | 无 token / 非法 token + raw `__proto__` → 401 |
+| Finding 4 exact byte identity | `cases-idempotency-identity.test.ts` 7/7；表示层结构 7/7 |
+| Finding 5 shared mismatch | `cases-idempotency-mismatch.test.ts` 2/2 |
+| Finding 6 acceptance evidence | A07 / A06 / A13 全部绿 |
+| Logging redaction | 白名单日志保持；secret/token/body 不出现 |
+| `/cases/current` | 仍未注册；运行时落入 `:id` → 404 |
+
+## 验证
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS |
+| `bun run guard:static` | PASS (0 violations) |
+| `bunx vitest run tests/domain` | 80 passed |
+| `bunx vitest run tests/db` | 79 passed |
+| `bunx vitest run tests/integration` | 30 files / 216 passed |
+| `bunx vitest run`（全量） | **51 files / 375 tests，0 failed / 0 skipped** |
+| `bun run db:evidence` | PASS（003 清理后空库 replay + 二次 no-op） |
+| `bun run openapi:generate` ×2 | hash 一致；`openapi:check` PASS (no drift) |
+| `bun run coverage:audit` | 002：FR 25/25、SC 11/11、Acceptance 18/18 |
+| governance | `validate-governance` PASS；self-test 15/15 |
+
+## Remaining gaps
+
+`NONE`
