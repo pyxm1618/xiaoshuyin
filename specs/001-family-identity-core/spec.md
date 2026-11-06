@@ -43,14 +43,16 @@
 
 **范围裁剪说明（为什么本 Slice 不含 Participant）**：`Docs/V1技术设计.md` §7.1 将 `case_participants` 与 `cases` 分列于各自表组，§10 明确「孩子参与采用有限 Case Participant」，§28.8 的参与端点全部挂在 `/cases/:id/...` 之下。也就是说 Participant 在正式文档中是 **Case 作用域对象**，没有 `cases` 就不存在合法的 participant 记录。而 `cases` 会立即带入 Case Status / Phase 契约（§6.1—6.7、§8.1「一个家庭最多一个当前主要未结 Case」），属于本 Slice 明确排除的范围。因此本 Slice 交付 Participant 成立所依赖的**前置条件**：Person、家庭成员关系（§9 的「家庭关系」判定输入）与服务端可见范围判定；`case_participants` 与其邀请流程留给 Case 切片。此裁剪属切片边界决定，已按 Clarifications Q1 结案为 **RESOLVED — DEFER TO CASE SLICE**。
 
-## Downstream Contract Reconciliation — 005 / V1-C44（2026-11-06，additive）
+## Downstream Contract Reconciliation — 005 / V1-C44（2026-11-06，contract remediation round 1，additive）
 
 本 Slice 的合同面不因下游 `specs/005-invited-identity-binding-contract` 而改变。仅记录边界：
 
-- 普通 `POST /api/v1/auth/wechat` 行为不变：new openid → Account + Person；existing openid → 复用既有 Account / Person。
-- Account ↔ Person 仍为 1:1；Person → Account 仍为 0..1。
-- UNDER_14 consent-first 不变：有效监护人同意先于正式 child Person / Compliance Profile。
-- Family isolation、`authorize()` + RLS 双层、guardian 独立于 membership 均不变。
+- 普通 `POST /api/v1/auth/wechat` 行为不变：new openid → Account + Person；existing openid → 复用既有 Account / Person。禁止 `mode=invite`、隐藏参数或任何开关。
+- 普通登录只接收 `{ code }`，对 new openid 无法判断其是否对应某个既有 Person，因此**不承担**「识别并阻断 Case C」的保证。Invitation flow routing invariant 属 invitation-aware 流程本身：从 participation invitation 进入 Case C 时，必须先 route 到 invitation-aware bootstrap，不得先调用普通 login。
+- 若 candidate 已独立完成普通登录（Account A ↔ 既有 Person P2），之后再打开 P1 邀请：invited binding MUST reject，保持 A↔P2 与 P1 不变，不得 merge / delete / rebind / 创建 P1 的 active participation；属内部 identity conflict，candidate-facing response 仍受 anti-enumeration 约束。
+- Account ↔ Person 仍为 1:1；Person → Account 仍为 0..1。Case B（P1 已有 Account）复用既有 binding，不重新绑定；只有 Case C（P1 无 Account）才进入 invitation-aware bootstrap。
+- UNDER_14 consent-first 不变：有效监护人同意先于正式 child Person / Compliance Profile。对受邀绑定，该 gate 进一步前移：在 candidate↔P1 关联、记录 P1 专属确认、展示 P1 专属信息或请求 P1 专属第二方确认之前即须通过，commit 前复核。
+- Family isolation、`authorize()` + RLS 双层、guardian 独立于 membership 均不变。pending authentication context 不是家庭作用域身份，不得设置 `app.family_id` 或读取家庭数据。
 - 「受邀既有 Person、Account = none」的首次身份绑定由 V1-C44 与 005 合同定义，属独立 additive capability；本 Slice 不实现该 seam，也不提供任何「登录并绑定既有 Person」的入口。
 - 本 Slice 的 FR-001—FR-017 不被改写；005 只引用 FR-002 / FR-016 的既有基数与普通登录语义。
 
