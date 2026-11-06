@@ -68,6 +68,8 @@ actor.personId === participation.person_id
 - `PENDING` 且 `now() >= invite_expires_at` 在业务上等价于 `EXPIRED`；
 - 未认证 invite lookup 只返回 `UNAVAILABLE`，不改写行；
 - 有授权的 accept / decline / GET participation 观察到过期时，先 `SELECT ... FOR UPDATE`，再条件 `UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at` 物化 `EXPIRED` + `expired_at`；只有 UPDATE 影响 1 行才写 audit，0 行不写 audit；commit 后再返回真实失败 / 状态；
+- GET self path 在 self SELECT 后必须 `authorize(PARTICIPATION_READ_SELF)`；若需物化，必须用 server-trusted `participation.family_id` 调用既有 `setFamilyContext(..., actor.personId, 'PARTICIPATION')` 建立 family write context；manager path 已有 family context；不新增 self UPDATE policy，不接收 client `familyId`；
+- 未认证 public lookup 只查询 `case_participant_invite_public`；view 的 `state='PENDING' AND invite_expires_at > now()` 是 public availability 的 authoritative enforcement；effective-expired PENDING 返回 `UNAVAILABLE`；
 - 不引入 pg-boss / 后台定时器 / Temporal。
 
 **理由**：
@@ -91,7 +93,7 @@ actor.personId === participation.person_id
 **决定**：
 - `packages/contracts/src/env.ts` 新增 `PARTICIPATION_INVITE_TTL_SECONDS`，必须为正整数，无默认值；
 - 缺失 / 非法 → 启动配置校验失败（fail-closed）；
-- 创建 invite 时 `invite_expires_at = created_at + TTL`；
+- create 在同一 transaction 内先 `SELECT uuidv7()` 预分配 id；`created_at` / `updated_at` 使用 DB server `now()`，`invite_expires_at = now() + TTL`；应用不自行提供 clock；
 - caller 不得提交 / 覆盖 / 延长；
 - Plan 不写 `7d` / `24h` / `72h` / `30d` 等任何生产值；
 - 测试 / CI 使用显式 test-only 值，不构成产品 TTL。
@@ -111,10 +113,12 @@ actor.personId === participation.person_id
 ## R-6 invite token：确定性 HMAC 派生、hash-only 存储、全局唯一
 
 **决定**：
-- `token = base64url(HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + participationId))`；32-byte output，作为不透明 bearer secret；
+- create transaction 先 `SELECT uuidv7()` 预分配 `participationId`；再派生 `token = base64url(HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + participationId))`；32-byte output，作为不透明 bearer secret；
 - DB 只存 `sha256(token)` hex（64 chars），不存明文；
 - `invite_token_hash` 全局 UNIQUE；
-- token 在 create 响应返回；same-key idempotent replay 由 `participationId` + secret 重新派生同一 token；其他读取 / 日志 / 审计不再出现。
+- `INSERT` 必须显式写 `id = participationId`，不得依赖 INSERT 的 DB default；`created_at` / `updated_at` 使用 DB server `now()`，`invite_expires_at = now() + configured TTL`；
+- token 在 create 响应返回；same-key idempotent replay 由 `participationId` + secret 重新派生同一 token；其他读取 / 日志 / 审计不再出现；
+- `PARTICIPATION_INVITE_TOKEN_SECRET` 在 invitation lifetime / idempotency replay retention window 内必须稳定；change / removal while replay may still be required is an operational compatibility event；MUST NOT silently re-derive a different token；Slice 4 不实现 keyring / KMS / multi-key rotation。
 
 **理由**：
 - spec FR-006 要求 token 不可猜测 / 枚举；HMAC-SHA256 + server-only secret 提供足够熵。
@@ -136,8 +140,9 @@ actor.personId === participation.person_id
 **决定**：
 - 新增 `app.invite_token_hash` GUC、`app_invite_token_hash()` getter、`app.set_invite_token_context(text)` setter；
 - `case_participants` 增加 `FOR SELECT` policy：`state = 'PENDING' AND invite_token_hash = app_invite_token_hash()`；
-- 新增 `security_invoker = true` 的 `case_participant_invite_public` view，只暴露 `participation_id` / `state` / `expires_at` / `created_at`；未认证 invite lookup 只查询该 view；
+- 新增 `security_invoker = true` 的 `case_participant_invite_public` view，只暴露 `participation_id` / `state` / `expires_at` / `created_at`；view 的 predicate 为 `state='PENDING' AND invite_expires_at > now()`，这是 public availability 的 authoritative enforcement；未认证 invite lookup 只查询该 view；
 - 未认证 invite lookup 在只设置 token 上下文的事务内执行；
+- token RLS 仍保持 `state='PENDING'`，以便已认证 accept/decline 读取 effective-expired PENDING 行并物化；public lookup 只使用 view，不查询 base table；
 - repository 专用 safe-column 查询只 SELECT view 的安全列；不 SELECT `person_id` / `case_id` / `family_id` / `invite_token_hash`。
 
 **理由**：
@@ -346,6 +351,7 @@ UNIQUE (case_id, person_id) WHERE state IN ('PENDING', 'ACTIVE')
 ## R-19 invite create 的 token 幂等 replay
 
 **决定**：
+- create transaction 先 `SELECT uuidv7()` 预分配 `participationId`，再派生 token / hash；INSERT 显式写 `id = participationId`；`created_at` / `updated_at` 使用 DB server `now()`，`invite_expires_at = now() + configured TTL`；
 - `idempotency_keys.response_body` 对 `PARTICIPATION_INVITE_CREATE` 只保存 **redacted snapshot**：`participationId` / `caseId` / `personId` / `state` / `expiresAt` / `createdAt`；
 - snapshot **不保存 `inviteToken`**；
 - replay 时 route 从 snapshot 读取 `participationId`，用同一 token secret 重新派生 token，返回与首次 create 相同的完整响应（含同一 `inviteToken`）；
@@ -380,5 +386,10 @@ UNIQUE (case_id, person_id) WHERE state IN ('PENDING', 'ACTIVE')
 8. Case C 依赖 005 runtime；未实现前 Implement Gate BLOCKED（R-15 / D-17）。
 9. invite token 由确定性 HMAC 派生；create 与 same-key replay 返回同一 token 语义；idempotency snapshot 不含 token 明文（R-6 / R-19）。
 10. token lookup 通过 `security_invoker` safe view + pending-only RLS + repository projection + OpenAPI response 四层限制返回面（R-7）。
+11. C-01：create 先 `SELECT uuidv7()` 预分配 `participationId`；token 派生先于 INSERT；INSERT 显式 `id`；`created_at` / `expires_at` 由 DB server time 决定（R-6 / R-19）。
+12. H-01：GET self expiry 物化必须 `authorize(READ_SELF)` + 用 server-trusted `participation.family_id` 建立 family context；不新增 self UPDATE policy（R-4）。
+13. H-02：GET self 在返回前必须调用 `authorize(PARTICIPATION_READ_SELF)`；self RLS match 不等于 authorization success（R-4 / D-6）。
+14. L-02：`db/tx.ts` 明确新增 `withInviteTokenTransaction` / `setInviteTokenContext` / `setFamilyContext` 三个 thin adapters；不新建第二套 context framework。
+15. L-05：public lookup 的 safe view predicate 为 `state='PENDING' AND invite_expires_at > now()`；token RLS 保持 `state='PENDING'` 以便已认证 accept/decline 物化 expired PENDING（R-7）。
 
 若 Owner 认为任一映射需要回到 Clarify / 上游文档，必须先停止 Implement，不得由 Plan 静默改写。

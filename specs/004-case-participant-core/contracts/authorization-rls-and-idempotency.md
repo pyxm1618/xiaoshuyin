@@ -12,7 +12,7 @@
 | 端点 | 动作 | 授权 | 数据访问 | 写副作用 |
 |---|---|---|---|---|
 | `POST /api/v1/cases/:id/participation-invites` | `PARTICIPATION_INVITE_CREATE` | 当前 Family 的 V1 管理主体 | `cases` / `family_members` / `person_compliance_profiles` / `consent_records` 只读；`case_participants` / `business_audit_events` / `idempotency_keys` 写入 | participation + audit + idempotency |
-| `GET /api/v1/participation-invites/:token` | 无 `authorize()`（未认证 capability） | token possession；不构成 identity proof | `case_participant_invite_public` safe view 只读 | 无 |
+| `GET /api/v1/participation-invites/:token` | 无 `authorize()`（未认证 capability） | token possession；不构成 identity proof | `case_participant_invite_public` safe view 只读（PENDING + `expires_at > now()`） | 无 |
 | `POST /api/v1/participation-invites/:token/accept` | `PARTICIPATION_ACCEPT_SELF` | target Person 本人；identity prerequisite 满足 | `case_participants` 读写；Compliance / consent 只读 | state + audit + idempotency |
 | `POST /api/v1/participations/:id/decline` | `PARTICIPATION_DECLINE_SELF` | target Person 本人 | `case_participants` 读写 | state + audit + idempotency |
 | `POST /api/v1/participations/:id/withdraw` | `PARTICIPATION_WITHDRAW_SELF` | active Participant 本人 | `case_participants` 读写 | state + audit + idempotency |
@@ -140,7 +140,12 @@ PARTICIPATION_READ_MANAGER
 - `app_family_id()` / `app_person_id()` / `app_account_id()` / `app.purpose`：复用 Slice 1。
 - 新增 `app.invite_token_hash` / `app_invite_token_hash()` / `app.set_invite_token_context(text)`。
 - token 上下文只设置 token hash，不设置 family / person / account；未认证 caller 不能借此读取家庭数据。
-- 所有家庭级写必须在 `withRlsTransaction` 内；所有 self 解析先走 identity context，再 `set_family_context`。
+- **应用层 context adapters**（`apps/server/api/src/db/tx.ts`）：
+  - `withInviteTokenTransaction(pool, { tokenHash, purpose }, fn)`：未认证 public lookup；只调用 `app.set_invite_token_context(tokenHash)`，复用同一 `BEGIN/COMMIT/ROLLBACK`。
+  - `setInviteTokenContext(client, tokenHash)`：accept 在已有 identity transaction 内设置 token context。
+  - `setFamilyContext(client, familyId, personId, purpose)`：在已有 transaction 内调用 `app.set_family_context`；用于 self expiry / decline / withdraw / accept 解析 family 之后。
+  - `withIdentityTransaction` / `withRlsTransaction` 继续复用；不新增第二套 context framework。
+- 所有家庭级写必须在已有 transaction 内；所有 self 解析先走 identity context，再 `setFamilyContext`。`familyId` 必须来自 server-trusted 当前 Family 或已 SELECT 的 participation row，不得来自 client body。
 - 禁止：事务外 `SET LOCAL` 后从连接池查询；`sql.raw` 拼接 family / person / purpose；owner / BYPASSRLS runtime role；因 RLS 存在而跳过 `authorize()`。
 
 ### 4.4 safe view（DB 层列投影）
@@ -149,13 +154,15 @@ PARTICIPATION_READ_MANAGER
 CREATE VIEW case_participant_invite_public
 WITH (security_invoker = true) AS
 SELECT id AS participation_id, state, invite_expires_at AS expires_at, created_at
-FROM case_participants WHERE state = 'PENDING';
+FROM case_participants
+WHERE state = 'PENDING' AND invite_expires_at > now();
 GRANT SELECT ON case_participant_invite_public TO xiaoshuyin_app;
 ```
 
 - view 只含 `participation_id` / `state` / `expires_at` / `created_at`；不含 `person_id` / `case_id` / `family_id` / `invite_token_hash`。
+- **view 的 `state='PENDING' AND invite_expires_at > now()` 是 public availability 的 authoritative enforcement**；effective-expired PENDING 不返回 200。
 - `security_invoker = true` 使底层 RLS 继续生效；view 不绕过 token policy。
-- token lookup repository 只查询该 view，不查询 base table；guard test 断言不使用 `SELECT *`。
+- token RLS 仍保持 `state='PENDING'`，以便已认证 accept/decline 读取 effective-expired PENDING 行并物化；public lookup repository 只查询该 view，不查询 base table；guard test 断言不使用 `SELECT *`。
 - 三层边界：DB view 列投影 + repository 专用查询 + OpenAPI response schema。app role 的 base table `SELECT` 供其他命令使用，不用于 token lookup。
 
 ### 4.5 运行角色
@@ -228,6 +235,7 @@ request_hash = sha256(canonicalJson({
 - 并发同 key：第二个事务等待唯一索引判定；第一个提交则 REPLAY，第一个回滚则第二个执行。
 - 占位值在事务外不可见，不泄露。
 - **invite create snapshot 必须 redacted**：`response_body` 只保存 `participationId` / `caseId` / `personId` / `state` / `expiresAt` / `createdAt`，不保存 `inviteToken`。replay 时由 `participationId` + `PARTICIPATION_INVITE_TOKEN_SECRET` 重新派生同一 token，再返回完整响应。不得把 token 明文写入 `idempotency_keys`。
+- **secret stability**：`PARTICIPATION_INVITE_TOKEN_SECRET` 是 deployment-managed server secret；在 invitation lifetime / idempotency replay retention window 内必须稳定。Change / removal while replay may still be required is an operational compatibility event；MUST NOT silently re-derive a different token / return a different token。Slice 4 不实现 keyring / KMS / multi-key rotation；rotation lifecycle 属未来 ops/security design。
 
 ### 5.5 明确不做
 
@@ -255,13 +263,19 @@ request_hash = sha256(canonicalJson({
 7. SELECT target Person ∈ family（复合 FK 兜底）
 8. Compliance gate(target) → BLOCK → 403 PARTICIPATION_TARGET_INELIGIBLE
 9. 检查 (caseId, personId) 无 live participation；partial unique 兜底
-10. derive token = HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + participationId) → base64url
-    hash = sha256(token); expires_at = created_at + TTL
-11. INSERT case_participants(state='PENDING')
-12. INSERT business_audit_events(PARTICIPATION_INVITE_CREATED)
-13. UPDATE idempotency_keys 回填 201 + redacted snapshot（不含 inviteToken）
-14. COMMIT
-15. 返回 201：redacted snapshot + 重新派生的 inviteToken
+10. SELECT uuidv7() AS participationId（同一 transaction；预分配，不依赖 INSERT default）
+11. derive token = HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + participationId) → base64url
+    hash = sha256(token)
+12. INSERT case_participants(
+      id = participationId, state='PENDING',
+      invite_token_hash = hash,
+      created_at = now(), updated_at = now(),
+      invite_expires_at = now() + configured TTL
+    ) RETURNING id, created_at, invite_expires_at
+13. INSERT business_audit_events(PARTICIPATION_INVITE_CREATED)
+14. UPDATE idempotency_keys 回填 201 + redacted snapshot（含 participationId，不含 inviteToken）
+15. COMMIT
+16. 返回 201：redacted snapshot + 重新派生的 inviteToken
     （same-key replay 走同一 rehydration，返回同一 token 语义）
 ```
 
@@ -270,9 +284,9 @@ request_hash = sha256(canonicalJson({
 ```text
 0. 认证（Bearer → actor）
 1. identity context
-2. token context：app.set_invite_token_context(sha256(path token))
+2. token context：setInviteTokenContext(client, sha256(path token))
 3. SELECT participation by token hash（内部读取 family_id / person_id；不返回给客户端）
-4. set_family_context(family_id, actor.personId)（会员校验；失败 → 404 generic）
+4. setFamilyContext(client, family_id, actor.personId, 'PARTICIPATION')（会员校验；失败 → 404 generic）
 5. authorize(PARTICIPATION_ACCEPT_SELF, participation:{personId, state})
    - actor.personId !== participation.personId → 404 generic
 6. idempotency 占位 / 冲突读取与比对
@@ -295,7 +309,7 @@ request_hash = sha256(canonicalJson({
 1. identity context
 2. SELECT participation by id + person_id = app_person_id()
    0 行 → 404 PARTICIPATION_NOT_FOUND
-3. set_family_context(family_id, actor.personId)
+3. setFamilyContext(client, family_id, actor.personId, 'PARTICIPATION')
 4. authorize(PARTICIPATION_DECLINE_SELF / WITHDRAW_SELF)
 5. idempotency 占位 / 冲突读取
 6. SELECT FOR UPDATE
@@ -313,20 +327,32 @@ request_hash = sha256(canonicalJson({
 ```text
 1. identity context
 2. SELECT by id + person_id = app_person_id()
-   found → 若 PENDING 且过期：
-            SELECT FOR UPDATE
-            → UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at
-            → 仅当 UPDATE 影响 1 行时 INSERT business_audit_events(PARTICIPATION_EXPIRED)
-            → 返回
-          否则直接返回
-   not found →
-3. resolve current Family → set_family_context
+   found:
+     → authorize(PARTICIPATION_READ_SELF, participation:{personId, state})
+     → DENY → generic 404
+     → if not effectively expired: return minimal self projection
+     → derive familyId from selected participation row（server-trusted）
+     → setFamilyContext(client, familyId, actor.personId, 'PARTICIPATION')
+     → SELECT same participation FOR UPDATE
+     → recheck state='PENDING' AND now() >= invite_expires_at
+     → UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at
+     → 仅当 UPDATE 影响 1 行时 INSERT business_audit_events(PARTICIPATION_EXPIRED)
+     → 0 行：不重复 audit；读取 authoritative current state
+     → 返回 effective state
+   not found:
+3. resolve current Family → setFamilyContext(client, currentFamilyId, actor.personId, 'FAMILY_MANAGEMENT')
 4. authorize(PARTICIPATION_READ_MANAGER, participation)
 5. SELECT by id within Family；若 PENDING 且过期，执行同样的 FOR UPDATE / 条件 UPDATE / exactly-once audit
    → 返回或 404
 ```
 
 **GET expiry materialization**：唯一允许写 audit 的读路径；必须 `SELECT ... FOR UPDATE` + 条件 UPDATE；0 行表示已被其它事务处理，不写 audit。若 PENDING 行到期后从未被访问，不自动写 audit；有效状态仍为 EXPIRED，可由 `invite_expires_at` + state + 当前时间追溯（见 `research.md` R-4）。
+
+**GET self 的强制不变量**：
+- self path identity context purpose = `PARTICIPATION`；manager path purpose = `FAMILY_MANAGEMENT`。
+- self SELECT 后必须调用 `authorize(PARTICIPATION_READ_SELF)`；RLS self match 不是 authorization success。
+- `case_participants_self_read` 是 SELECT-only；expiry 物化需要 family write context。必须使用 server-trusted `participation.family_id` 调用既有 `setFamilyContext(..., actor.personId, 'PARTICIPATION')`；不得接收 client `familyId`，不得新增 self UPDATE policy。
+- participant 由 `case_participants` 复合 FK 保证是目标 Family 的 `family_members`，因此 `set_family_context` 的 membership 校验可通过。
 
 **不变量**：
 - 所有写步骤同一事务；任一失败整体回滚。
@@ -370,7 +396,9 @@ request_hash = sha256(canonicalJson({
 | RLS 4.2 / 4.3 | `tests/db/participants-rls.test.ts` |
 | 幂等 5.3 / 5.4（HTTP 可达） | `tests/integration/participations-idempotency.test.ts` |
 | invite create token replay 5.4 | `tests/integration/participations-idempotency.test.ts`（same key → 同一 token；token 不落库） |
-| safe view / token 列投影 4.4 | `tests/db/participants-rls.test.ts`、`tests/integration/participations-invite-lookup.test.ts` |
+| invite create preallocation / server time 6.1 | `tests/domain/participants-token.test.ts`、`tests/integration/participations-idempotency.test.ts`（participationId preallocated；createdAt / expiresAt DB server time） |
+| safe view / token 列投影 4.4 | `tests/db/participants-rls.test.ts`、`tests/integration/participations-invite-lookup.test.ts`（expired PENDING 404；view 只含 PENDING + unexpired） |
+| GET self READ_SELF / family context 6.4 | `tests/integration/participations-read.test.ts`、`tests/integration/participations-expiry.test.ts`、`tests/db/participants-rls.test.ts` |
 | 事务序列 6.1—6.4 | `tests/integration/participations-invite.test.ts`、`participations-accept.test.ts`、`participations-decline.test.ts`、`participations-withdraw.test.ts`、`participations-read.test.ts` |
 | 并发 | `tests/integration/participations-accept-concurrency.test.ts`、`tests/db/participants-constraints.test.ts` |
 | 错误语义 / 防枚举 | `tests/integration/participations-anti-enumeration.test.ts`、`tests/integration/participations-http-boundary.test.ts` |

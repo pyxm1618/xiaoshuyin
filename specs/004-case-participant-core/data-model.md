@@ -42,19 +42,19 @@ WITHDRAWN
 
 | 列 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `id` | `uuid` | `PRIMARY KEY DEFAULT uuidv7()` | 参与资源标识；创建后不可变 |
+| `id` | `uuid` | `PRIMARY KEY DEFAULT uuidv7()` | 参与资源标识；创建后不可变。invite-create path MUST 先 `SELECT uuidv7()` 预分配 id 并显式 INSERT；DB default 只作 schema fallback |
 | `family_id` | `uuid` | `NOT NULL`，`FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE RESTRICT` | 目标 Family；与 Case 一致 |
 | `case_id` | `uuid` | `NOT NULL` | 目标 Case；由复合 FK 保证同 Family |
 | `person_id` | `uuid` | `NOT NULL`，`FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE RESTRICT` | target / participant Person；不是 Account |
 | `state` | `case_participation_state` | `NOT NULL`，无默认值 | 生命周期状态；应用必须显式写入 |
 | `invite_token_hash` | `text` | `NOT NULL UNIQUE`，`CHECK (invite_token_hash ~ '^[0-9a-f]{64}$')` | `sha256(token)` hex；token 由 `HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + id)` 派生；token 明文不落库 |
-| `invite_expires_at` | `timestamptz` | `NOT NULL`，无默认值；`CHECK (invite_expires_at > created_at)` | 服务端 TTL 计算；不得永久 |
+| `invite_expires_at` | `timestamptz` | `NOT NULL`，无默认值；`CHECK (invite_expires_at > created_at)` | 服务端 DB `now()` + configured TTL；不得永久；应用不自行提供 clock |
 | `created_by_person_id` | `uuid` | `NOT NULL`，`FOREIGN KEY (created_by_person_id) REFERENCES persons(id) ON DELETE RESTRICT` | 创建邀请的 Case manager |
 | `accepted_at` | `timestamptz` | `NULL` | PENDING → ACTIVE 时写入；WITHDRAWN 保留 |
 | `declined_at` | `timestamptz` | `NULL` | PENDING → DECLINED 时写入 |
 | `expired_at` | `timestamptz` | `NULL` | PENDING → EXPIRED 物化时写入；`>= invite_expires_at` |
 | `withdrawn_at` | `timestamptz` | `NULL` | ACTIVE → WITHDRAWN 时写入；`>= accepted_at` |
-| `created_at` | `timestamptz` | `NOT NULL DEFAULT now()` | 服务端时间 |
+| `created_at` | `timestamptz` | `NOT NULL DEFAULT now()` | 服务端 DB `now()`；invite-create 与 `invite_expires_at` 在同一 transaction / statement 内取值 |
 | `updated_at` | `timestamptz` | `NOT NULL DEFAULT now()` | 状态转换时更新 |
 
 **为什么 `state` 不给默认值**：应用必须显式写入 `PENDING`；遗漏写入直接失败，避免“默认成功”。  
@@ -158,14 +158,16 @@ SELECT id AS participation_id,
        invite_expires_at AS expires_at,
        created_at
 FROM case_participants
-WHERE state = 'PENDING';
+WHERE state = 'PENDING'
+  AND invite_expires_at > now();
 
 GRANT SELECT ON case_participant_invite_public TO xiaoshuyin_app;
 ```
 
 - view 只暴露 `participation_id` / `state` / `expires_at` / `created_at`；不含 `person_id` / `case_id` / `family_id` / `invite_token_hash`。
 - `security_invoker = true` 使底层 `case_participants` 的 RLS 继续生效；view 不绕过 token policy。
-- 未认证 invite lookup 的 repository 只查询该 view，不查询 base table；guard test 断言不使用 `SELECT *` / base table。
+- **public availability 的 authoritative predicate 是 `state='PENDING' AND invite_expires_at > now()`**；effective-expired PENDING 行不可返回 200。
+- token RLS 仍保持 `state='PENDING'`，目的是让已认证 accept/decline 能读取 effective-expired PENDING 行并物化；public lookup 只查询该 view，不查询 base table；guard test 断言不使用 `SELECT *` / base table。
 - view 是 DB 层列投影，与应用层 repository、OpenAPI response 共同形成三层边界；它不是业务授权事实。
 
 ### 3.4 上下文函数
@@ -289,12 +291,22 @@ SET identity context
 → idempotency 占位 / 冲突读取
 → verify target Person ∈ Family（复合 FK 兜底）
 → Compliance gate（target）
-→ generate token + hash
-→ INSERT case_participants(state='PENDING', expires_at=...)
+→ SELECT uuidv7() AS participationId
+→ derive token = HMAC-SHA256(secret, "participation-invite:v1:" + participationId) → base64url
+→ hash = sha256(token)
+→ INSERT case_participants(
+    id = participationId, state='PENDING',
+    invite_token_hash = hash,
+    created_at = now(), updated_at = now(),
+    invite_expires_at = now() + configured TTL
+  ) RETURNING id, created_at, invite_expires_at
 → INSERT business_audit_events(PARTICIPATION_INVITE_CREATED)
-→ idempotency 回填
+→ idempotency 回填 redacted snapshot（含 participationId，不含 inviteToken）
 → COMMIT
 ```
+
+- `participationId` 必须在 token 派生之前由同一 transaction 的 `SELECT uuidv7()` 预分配；INSERT 显式写 `id`，不得依赖 DB default。
+- `created_at` / `updated_at` / `invite_expires_at` 使用 DB server `now()`；应用不自行决定 clock；positive TTL 保证 `invite_expires_at > created_at`。
 
 ### 6.2 accept
 
@@ -349,19 +361,30 @@ SET identity context
 ```text
 SET identity context
 → SELECT participation by id + person_id = app_person_id()（self read）
-   → found: 若 PENDING 且过期：
-       SELECT ... FOR UPDATE
+   → found:
+       → authorize(PARTICIPATION_READ_SELF, participation)
+       → DENY → generic 404
+       → if not effectively expired → return minimal self projection
+       → derive familyId from selected participation row（server-trusted）
+       → SET family context: setFamilyContext(familyId, actor.personId, 'PARTICIPATION')
+       → SELECT same participation FOR UPDATE
+       → recheck state='PENDING' AND now() >= invite_expires_at
        → UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at
-       → 仅当 UPDATE 影响 1 行时 INSERT business_audit_events(PARTICIPATION_EXPIRED)
+       → only if affected rows = 1: INSERT business_audit_events(PARTICIPATION_EXPIRED)
+       → if affected rows = 0: do not duplicate audit; read authoritative current state
+       → return effective state
+   → not found:
+       resolve current Family → SET family context
+       → authorize(PARTICIPATION_READ_MANAGER)
+       → SELECT by id within Family; 若 PENDING 且过期，执行同样的 FOR UPDATE / 条件 UPDATE / exactly-once audit
        → 返回最小状态
-   → not found: resolve current Family → SET family context → authorize(PARTICIPATION_READ_MANAGER)
-     → SELECT by id within Family; 若 PENDING 且过期，执行同样的 FOR UPDATE / 条件 UPDATE / exactly-once audit
-     → 返回最小状态
-     → not found: 404
+       → not found: 404
 ```
 
 - GET 不写 `case_events`；不写 access log。
 - GET 的过期物化是唯一允许写 audit 的读路径；因为它改变真实状态，必须留痕。
+- **self path 不可用 self RLS 代替 authorize**：self SELECT 后必须调用 `authorize(PARTICIPATION_READ_SELF)`；RLS 只是 defense-in-depth。
+- **self path 的写上下文**：`case_participants_self_read` 只有 SELECT；UPDATE / audit 需要 family scope。必须使用 server-trusted `participation.family_id` 调用既有 `setFamilyContext(..., actor.personId, 'PARTICIPATION')`；participant 由复合 FK 保证是 family member；不得接收 client `familyId`，不得新增 self UPDATE policy。
 - 物化必须 `SELECT ... FOR UPDATE` + 条件 UPDATE；只有 UPDATE 影响 1 行才写 audit，0 行不写 audit。并发两个 GET 时，只有一个事务能写 `PARTICIPATION_EXPIRED`。
 - 若 PENDING 行到期后从未被访问，不自动写 audit；有效状态仍为 EXPIRED，可由 `invite_expires_at` + state + 当前时间追溯（Plan closeout 明确定义，见 `research.md` R-4）。
 
@@ -432,5 +455,8 @@ SET identity context
 7. `created_by_person_id` 必须是真实 Person；本 Slice 不验证其 manager 资格于 DB 层（由应用 `authorize()` + `families.created_by_person_id` 判定）。
 8. 无 RLS 上下文时 `case_participants` 查询 0 行、写入拒绝。
 9. terminal 行不可通过应用路径变为 PENDING / ACTIVE；DB CHECK + 条件 UPDATE 双重保证。
-10. `case_participant_invite_public` view 只暴露 `participation_id` / `state` / `expires_at` / `created_at`；token lookup 不查询 base table 的敏感列。
-11. 不写 `case_events` / `assertions` / `observations` / `persons.account_id` / `person_compliance_profiles` / `consent_records` / `cases`。
+10. `case_participant_invite_public` view 只暴露 `participation_id` / `state` / `expires_at` / `created_at`；只含 `state='PENDING' AND invite_expires_at > now()`；token lookup 不查询 base table 的敏感列；effective-expired PENDING 不返回 200。
+11. invite-create 必须先 `SELECT uuidv7()` 预分配 `participationId`；`invite_token_hash` 在 INSERT 前已派生；INSERT 显式写 `id`；`created_at` / `invite_expires_at` 用 DB server time。
+12. GET self 必须先 `authorize(PARTICIPATION_READ_SELF)`；expiry 物化必须用 `participation.family_id` 建立 family context；不得新增 self UPDATE policy。
+13. `PARTICIPATION_INVITE_TOKEN_SECRET` 在 invitation lifetime / idempotency replay retention window 内必须稳定；不得静默产生不同 token。
+14. 不写 `case_events` / `assertions` / `observations` / `persons.account_id` / `person_compliance_profiles` / `consent_records` / `cases`。

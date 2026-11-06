@@ -158,9 +158,10 @@ accept precondition: actor.personId === participation.person_id
 
 ## 6. 过期语义
 
-**TTL**：
+**TTL / server time**：
 - `PARTICIPATION_INVITE_TTL_SECONDS` 为必需服务端配置，正整数，无默认值；
-- `PARTICIPATION_INVITE_TOKEN_SECRET` 为 token 确定性派生 secret，必需、≥32 bytes、不记录；
+- `PARTICIPATION_INVITE_TOKEN_SECRET` 为 token 确定性派生 secret，必需、≥32 bytes、不记录；在 invitation lifetime / idempotency replay retention window 内必须稳定，不得静默产生不同 token；
+- create 在同一 transaction 内先 `SELECT uuidv7()` 预分配 id；`created_at` / `updated_at` 使用 DB server `now()`，`invite_expires_at = now() + configured TTL`；`invite_expires_at > created_at` 由 positive TTL 保证；
 - 生产值属 RELEASE / POLICY GATE（§34.1）；Plan 不写具体数字；
 - caller 不得提交 / 覆盖 / 延长；
 - 无配置 / 非法 → 启动失败；请求层不得 fallback 为永久。
@@ -174,8 +175,9 @@ effectiveState(participation) =
 ```
 
 **物化**：
-- 未认证 invite lookup：只返回 `UNAVAILABLE`，不改写行、不写 audit；
+- 未认证 invite lookup：只查询 `case_participant_invite_public` safe view；view 的 `state='PENDING' AND invite_expires_at > now()` 是 public availability 的 authoritative enforcement；effective-expired PENDING 只返回 `UNAVAILABLE`，不改写行、不写 audit；
 - 有授权的 accept / decline / GET：先 `SELECT ... FOR UPDATE`，观察到过期 → 条件 UPDATE `EXPIRED` + `expired_at`；**只有 UPDATE 影响 1 行才写 audit**，0 行不写 audit（exactly-once）→ commit → 真实失败 / 状态；
+- GET self path：self SELECT 后必须 `authorize(PARTICIPATION_READ_SELF)`；若需物化，必须用 server-trusted `participation.family_id` 调用既有 `setFamilyContext(..., actor.personId, 'PARTICIPATION')` 建立 family write context；manager path 已有 family context；不新增 self UPDATE policy，不接收 client `familyId`；
 - 条件 UPDATE `WHERE state='PENDING' AND now() >= invite_expires_at` 是幂等；0 行表示已被其它事务处理；
 - 若 PENDING 行到期后从未被访问，不自动写 `PARTICIPATION_EXPIRED` audit；有效状态仍为 EXPIRED，可由 `invite_expires_at` + state + 当前时间追溯。本 Slice 不引入后台 job；若未来要求无访问也持久化 expiry 事件，由独立 data-lifecycle Slice 增加；
 - 不引入后台 job / pg-boss / Temporal；
@@ -278,7 +280,8 @@ body:    你被邀请参与一个已经存在的 Case。参与是有限的：你
 | Compliance 4 | `tests/integration/participations-compliance.test.ts` |
 | Audit 5 | `tests/integration/participations-audit.test.ts` |
 | Expiry 6 | `tests/integration/participations-expiry.test.ts`（含 GET exactly-once 物化、never-accessed derived state） |
-| invite token replay / safe view | `tests/integration/participations-idempotency.test.ts`、`tests/db/participants-rls.test.ts`、`tests/integration/participations-invite-lookup.test.ts` |
+| GET self READ_SELF / family context | `tests/integration/participations-read.test.ts`、`tests/integration/participations-expiry.test.ts`、`tests/db/participants-rls.test.ts` |
+| invite token replay / safe view | `tests/integration/participations-idempotency.test.ts`、`tests/db/participants-rls.test.ts`、`tests/integration/participations-invite-lookup.test.ts`（expired PENDING 404；view PENDING + unexpired） |
 | Anti-enumeration 7 | `tests/integration/participations-anti-enumeration.test.ts` |
 | 边界 8 | `tests/integration/participations-scope.test.ts`、`tests/db/participants-evidence-boundary.test.ts` |
 | 必测反例 9 | 对应 integration / db / domain 测试文件 |

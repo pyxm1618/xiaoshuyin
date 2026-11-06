@@ -18,7 +18,7 @@
 | 包管理器 | 仓库约定 `bun` | 项目约定 |
 | PostgreSQL | `18`，原生 `uuidv7()` | §2 / §7.0 |
 | Docker | Stage A Compose（PG18 + api） | §4 Stage A |
-| 环境变量 | `DATABASE_URL`（app 角色）、`MIGRATION_DATABASE_URL`（migrator 角色）、`SESSION_SECRET`、`EVIDENCE_HASH_PEPPER`、`PARTICIPATION_INVITE_TTL_SECONDS`、`PARTICIPATION_INVITE_TOKEN_SECRET` | Slice 1 Plan + 本 Plan |
+| 环境变量 | `DATABASE_URL`（app 角色）、`MIGRATION_DATABASE_URL`（migrator 角色）、`SESSION_SECRET`、`EVIDENCE_HASH_PEPPER`、`PARTICIPATION_INVITE_TTL_SECONDS`、`PARTICIPATION_INVITE_TOKEN_SECRET`（必须在 invitation lifetime / idempotency replay window 内稳定） | Slice 1 Plan + 本 Plan |
 | Slice 1 | 已 merge `main`，final schema / RLS / 幂等 / 审计 green | Plan §D-17 |
 | Slice 2 | `Implement complete → Independent Converge PASS → merged main` | Plan §D-17 |
 | 005 contract | 已 merge `main`（PR #11） | Plan §D-17 |
@@ -86,10 +86,11 @@ bunx vitest run tests/db/participants-structure.test.ts
 | `case_participants_one_live_per_case_person` | partial unique `(case_id, person_id) WHERE state IN ('PENDING','ACTIVE')` |
 | 复合 FK | `(case_id, family_id) → cases(id, family_id)`；`(person_id, family_id) → family_members(person_id, family_id)` |
 | state / timestamp CHECK | 每个 state 只允许对应时间戳组合；WITHDRAWN 必有 `accepted_at` |
-| `id` 默认值 | `uuidv7()` |
+| `id` 默认值 | `uuidv7()`；invite-create path 必须先 `SELECT uuidv7()` 预分配并显式 INSERT `id` |
 | 无上下文直连查询 | `case_participants` 0 行；写入被拒 |
 | token 上下文 | 只可见精确 PENDING token 行；`case_participant_invite_public` view 只含 `participation_id` / `state` / `expires_at` / `created_at` |
-| token safe view | terminal 行不通过 token context 可见；view 不含 person_id / case_id / family_id / invite_token_hash |
+| token safe view | terminal 行不通过 token context 可见；view predicate 为 `state='PENDING' AND invite_expires_at > now()`；effective-expired PENDING 不返回 200；view 不含 person_id / case_id / family_id / invite_token_hash |
+| public lookup expiry | effective-expired PENDING 行仅因持久 state 仍为 PENDING 也不能通过 public lookup 返回 200 |
 | app role grants | `case_participants` SELECT/INSERT/UPDATE；`case_participant_invite_public` SELECT；无 DELETE |
 | 越界表 | 不存在 `participation_invites` / `binding_attempts` / `participation_audit_events` / evidence writer 表 |
 | 越界列 | 不存在 `role` / `visibility` / `deleted_at` / `account_id` / `binding_state` |
@@ -142,7 +143,7 @@ curl -sS "$API/api/v1/participations/$PARTICIPATION_ID" \
 ```
 
 **期望**：
-- 建邀请 201；same-key replay 返回同一 `participationId` + 同一 `inviteToken`；其他读取不返回 token；token 明文不落库；
+- 建邀请 201；create transaction 先 `SELECT uuidv7()` 预分配 `participationId`，token 派生先于 INSERT，`createdAt` / `expiresAt` 来自 DB server time；same-key replay 返回同一 `participationId` + 同一 `inviteToken`；其他读取不返回 token；token 明文不落库；
 - GET invite 200 只含 `participationId` / `state` / `expiresAt` / `notice`；
 - accept 200 → `state = ACTIVE`；重复同 key → 原结果；不同 key → 200 当前 ACTIVE；
 - decline 200 → `state = DECLINED`；Case 不被自动关闭；
@@ -177,6 +178,15 @@ curl -sS "$API/api/v1/participations/$PARTICIPATION_ID" \
 # → 到期后无 ACTIVE；EXPIRED 物化 + audit
 # → 并发两个 GET：只有 1 个 PARTICIPATION_EXPIRED audit；另一个看到已物化状态
 # → 到期后从未访问：状态可派生为 EXPIRED，但不自动写 audit
+
+# GET self expired（participant）
+# → 必须使用 server-trusted participation.family_id 建立 family write context；
+#    self RLS 不是 authorization；GET self 必须先 authorize(PARTICIPATION_READ_SELF)
+# → 条件 UPDATE 影响 1 行才写 audit；不影响则 0 行、不重复 audit
+# → 不得接收 client familyId；不得新增 self UPDATE policy
+
+# public invite lookup expired PENDING
+# → 即使持久 state 仍为 PENDING，只要 effective expired，也必须 404 INVITATION_NOT_AVAILABLE
 
 # withdraw before accept
 # → 409；状态仍 PENDING
@@ -278,6 +288,9 @@ node .specify/scripts/tests/run-governance-tests.mjs
 
 Implement / Converge 必须保留：
 - 迁移前后 `pg_class` / `pg_policies` / `pg_constraint` / `information_schema.columns` 真实输出；
+- invite-create 的 `SELECT uuidv7()` 预分配 / explicit `id` / `created_at` / `invite_expires_at` DB server time 证据；
+- `PARTICIPATION_INVITE_TOKEN_SECRET` 稳定性说明（invitation lifetime / idempotency replay window）与“不把 secret 写入 log / audit”的证据；
+- public invite lookup 的 expired PENDING → 404 真实输出，以及 safe view 只含 PENDING + unexpired 的查询输出；
 - RLS 无上下文 / 错误 Family / token 上下文的真实查询结果；
 - 并发测试真实输出（double accept / accept vs decline / accept vs expiry）；
 - OpenAPI 两次生成 hash 一致性 + operation 数量；
