@@ -509,3 +509,23 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 ### 剩余缺口
 
 `NONE`
+
+---
+
+## Independent Converge Round 1 Remediation Evidence（2026-11-06）
+
+**Old head**: `d2e9587d143d6082c35fba281fcab86a047d7a72`
+**New head**: `c382b43077aece2b72af2a259fa6d3a36244eb41`
+**Migration**: 未新增（`db:migrate` 两次均 0 new）
+
+| Finding | 状态 | 证据 |
+|---|---|---|
+| 1 OpenAPI operationId / security / invalid-id | CLOSED | `tests/integration/openapi-cases.test.ts` 10/10；`tests/integration/cases-http-boundary.test.ts` malformed/nonexistent/cross-family 404 一致 |
+| 2 HEAD routes | CLOSED | Case 子树无 HEAD；`HEAD /cases`、`HEAD /cases/:id` → 404 |
+| 3 auth before validation | CLOSED | 无 token / 非法 token + 非法 body → 401；Slice 1 回归全绿 |
+| 4 `__proto__` / NUL / Unicode key | CLOSED | 422 + 四表零写入；NUL/Unicode key 首次+重放+6 路并发均 201 |
+| 5 shared mismatch | CLOSED | 真实存储行 → `decideIdempotency` → MISMATCH → 409，原行/原 Case 不变 |
+| 6 A07 / A06 / A13 | CLOSED | 普通 member 三端点；`case_events` 默认拒绝；真实 POST 故障注入回滚 |
+| 7 scope guard | CLOSED | `guard-scope.test.ts` 12/12，注入即 exit != 0，清理后 PASS |
+
+**全量**: `bunx vitest run` → 48 files / 347 tests，0 failed / 0 skipped；coverage 002 FR 25/25、SC 11/11、Acceptance 18/18；governance PASS；openapi:check PASS。

@@ -85,3 +85,76 @@
 ## 8. Remaining gaps
 
 `NONE`
+
+---
+
+# Independent Converge Round 1 Remediation（2026-11-06）
+
+**判定输入**: `INDEPENDENT CONVERGE FAIL — RETURN TO IMPLEMENT`
+**Old head**: `d2e9587d143d6082c35fba281fcab86a047d7a72`
+**New head**: `c382b43077aece2b72af2a259fa6d3a36244eb41`
+**范围**: 只关闭 7 个 finding；未重新设计 Slice 2，未改 frozen upstream，未新增 migration。
+
+## Finding 1 — OpenAPI contract drift → CLOSED
+
+- 代码侧单事实源补齐：`schema.operationId` = `createCase` / `listCases` / `getCase`，`schema.security = [{ bearerAuth: [] }]`，generator 声明 `components.securitySchemes.bearerAuth`（`type: http`, `scheme: bearer`）。
+- detail 路径参数改为文档化 `format: uuid` 但**不做校验门禁**；runtime 对 malformed id 统一 `404 CASE_NOT_FOUND`。
+- 未 hand-edit 生成物，未改 frozen contract。
+- 证据：`tests/integration/openapi-cases.test.ts`（10/10，逐 operation 断言 operationId / security / tags / params / request / response / error shapes）；`tests/integration/cases-http-boundary.test.ts`（malformed / nonexistent / cross-family 三类 404 响应逐字节一致）。
+
+## Finding 2 — HEAD routes → CLOSED
+
+- 两个 GET route 使用 `exposeHeadRoute: false`；Case 子树路由枚举为 `POST, GET` 与 `/:id (GET)`。
+- 未改 Slice 1 任何 route 的 HEAD 行为（`/healthz` 等仍为 `GET, HEAD`）。
+- 证据：`cases-http-boundary.test.ts` 断言 Case 子树不含 `HEAD`，且真实 `HEAD /api/v1/cases`、`HEAD /api/v1/cases/:id` 均 404 且无 Case 字段。
+
+## Finding 3 — auth before validation → CLOSED
+
+- 认证逻辑抽为 `createAuthenticate()`，通过 `app.decorate('authenticate')` 复用；Case 三端点使用 `preValidation: app.authenticate`；全局 `preHandler` 对已认证请求短路，Slice 1 行为不变。
+- 证据：无 token / 非法 token + 非法 body → `401 UNAUTHENTICATED`；`GET /cases/not-a-uuid` 无 token → 401；Slice 1 auth / family / consent 全量回归绿（`tests/integration` 28 files / 195 tests）。
+
+## Finding 4 — request boundary → CLOSED
+
+- **A. `__proto__`**：secure JSON parsing 保持开启；仅 `POST /api/v1/cases` 的 `FST_ERR_CTP_INVALID_JSON_BODY` 映射为 `422 VALIDATION_ERROR`，并证明 `cases / case_events / business_audit_events / idempotency_keys` 零新增；Slice 1 仍为 400。
+- **B. NUL / Unicode key**：新增 `encodeCaseIdempotencyKey()`——PostgreSQL 安全键原样存储；含 U+0000 / lone surrogate 或保留前缀的键用 `u:` + base64url(UTF-16LE) 可逆编码；可逆编码无法容纳于 128 字符列时使用 `h:` + SHA-256（不截断）。未缩小 public contract，未新建表。
+- 证据：`cases-http-boundary.test.ts` 覆盖 NUL key 首次 + 重放、Unicode key 重放与不同 key 不合并、6 路并发 NUL key 仅 1 个结果，全部 201 无 500。
+
+## Finding 5 — shared idempotency mismatch → CLOSED
+
+- route 删除本地 `request_hash !==` 判定，统一走 `decideIdempotency()`（REPLAY / MISMATCH / EXECUTE）。
+- 证据：`tests/integration/cases-idempotency-mismatch.test.ts` 在真实 POST 写入的行上，用同 actor + 同 CASE_CREATE + 同 key + 不同 request_hash 得到 `MISMATCH` → `409 IDEMPOTENCY_PAYLOAD_MISMATCH`，原 `response_status/response_body`、Case、event、audit、幂等行均不变（各 1）。
+
+## Finding 6 — acceptance coverage gaps → CLOSED
+
+- **A07**：新增普通 member（非 guardian、非 manager）三端点测试 → create/list 403 `CASE_ACCESS_DENIED`，detail 404 `CASE_NOT_FOUND`，无 Case 数据，且不落入 `CURRENT_FAMILY_NOT_FOUND`。
+- **A06**：新增 `case_events` 无上下文 SELECT=0 / INSERT 拒绝，与 `cases` 对称。
+- **A13**：真实 `POST /api/v1/cases` + 数据库侧临时 trigger 故障注入（`case_events` / `business_audit_events` 各一次）→ 500 `INTERNAL_ERROR`，`cases / case_events / business_audit_events / CASE_CREATE idempotency` 全为 0；移除故障后同 Family 可正常创建。测试自建自清，无 production hook。
+
+## Finding 7 — scope guard regression → CLOSED
+
+- R6 恢复并扩展：`CREATE TABLE`（含 `IF NOT EXISTS` / schema 限定 / 引号 / `UNLOGGED`）、`pgTable('...')`、裸 `case_participants` 引用。
+- 原有 `case_participants` / `assertions` / `observations` 检测能力保留，新增 forbidden vocabulary 全覆盖。
+- 证据：`tests/integration/guard-scope.test.ts` 12/12——9 个 SQL 形态 + `pgTable` + `apps/` 内 `FROM cases`（R4）逐个注入均 exit != 0，清理后恢复 `PASS (0 violations)`。
+
+## 专项验证（本轮真实输出）
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS |
+| `bun run guard:static` | PASS (0 violations) |
+| `bunx vitest run tests/domain` | 80 passed |
+| `bunx vitest run tests/db` | 72 passed |
+| `bunx vitest run tests/integration` | 28 files / 195 passed |
+| `bunx vitest run` | **48 files / 347 passed，0 failed / 0 skipped** |
+| `bun run db:migrate` ×2 | 0 new，2 previously applied（无新增 migration） |
+| `bun run openapi:generate` ×2 | 生成物 hash 一致；`openapi:check` PASS (no drift) |
+| `bun run coverage:audit` | 002: FR 25/25、SC 11/11、Acceptance 18/18、missing 0 |
+| `validate-governance` / `run-governance-tests` | PASS / PASS 15/15 |
+
+## Frozen upstream
+
+`Docs/**`、`AGENTS.md`、constitution、`spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/**`、`quickstart.md`、`checklists/**` 相对 Implement Base 与 old head 均无改动；`tasks.md` 仅追加 remediation evidence。
+
+## Remaining gaps
+
+`NONE`（7/7 findings CLOSED）
