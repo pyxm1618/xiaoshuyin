@@ -1,0 +1,661 @@
+openapi: 3.1.0
+info:
+  title: Xiaoshuyin V1 — Case Participant Core API
+  version: 0.1.0-plan
+  description: |
+    Slice 004-case-participant-core 的接口契约（Plan 阶段产物，未实现）。
+
+    上游：Docs/V1技术设计.md §10 / §28.8；Docs/V1产品需求.md §1.2 / §1.5 / §17.1 / §19A.2 / V1-C20 / V1-C21 / V1-C39 / V1-C44 / U11；
+    specs/005-invited-identity-binding-contract/spec.md。
+
+    本 Slice 只暴露六条最小路由：建邀请、目标查看邀请（未认证、token 作为 bearer capability）、
+    接受、拒绝、退出、读取 participation 最小状态。
+
+    明确不存在：POST /api/v1/participations/:id/responses（DEFERRED）、generic participant
+    response、participant 管理 / 列表 / 批量端点、Case 内容 / Evidence / Assessment /
+    Formulation / Scene / Plan / Task / Notification 端点。
+
+    身份语义：accept 的身份前置是「已认证 actor 的 resolved personId 等于
+    participation.person_id」。Slice 4 不创建 Person、不写 persons.account_id、不重绑、
+    不自动 accept。Case B 与 Case C 在 accept 层不可区分；Case C 的 invitation-aware
+    bootstrap 由 005 runtime 提供。binding success 只建立 Account↔Person，仍需显式 accept。
+
+    TTL 语义：邀请有效期由服务端配置 PARTICIPATION_INVITE_TTL_SECONDS 给出有限值；
+    本契约不冻结具体数字。客户端不得提交 / 覆盖 / 延长 TTL；没有永久邀请 fallback。
+
+servers:
+  - url: http://localhost:8787
+    description: Stage A local
+
+tags:
+  - name: participation
+
+paths:
+  /api/v1/cases/{id}/participation-invites:
+    post:
+      tags: [participation]
+      operationId: createParticipationInvite
+      summary: 为 Case 创建参与邀请
+      description: |
+        由当前目标 Family 的 V1 管理主体（创建该 Family 的 adult Person）为指定 Case 创建参与邀请。
+
+        服务端写入 family_id = 当前目标 Family、case_id = path 中的 Case、
+        person_id = 请求体 target Person、state = PENDING、
+        invite_token_hash = sha256(inviteToken)、invite_expires_at = created_at + server TTL、
+        created_by_person_id = 已验证 actor。
+
+        安全前置：Case 必须属于当前目标 Family；target Person 必须是该 Family 的合法成员；
+        target 当前 Compliance / guardian / consent / applicable gate 必须满足；
+        同一 (caseId, personId) 已有 PENDING / ACTIVE 参与资源时返回冲突。
+
+        反枚举：Case 不存在 / 属于其它 Family / actor 非 manager 统一返回 404 CASE_NOT_FOUND；
+        不返回 Case / Family / Person 是否存在、status、phase、primary 等字段。
+
+        inviteToken 是 bearer secret，只在本次 201 响应返回一次；后续任何读取 / 审计 / 日志都不再返回。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CaseIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateParticipationInviteRequest" }
+      responses:
+        "201":
+          description: 邀请已创建（或幂等重放原结果）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateParticipationInviteResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/ParticipationTargetIneligible"
+        "404":
+          description: CASE_NOT_FOUND / CURRENT_FAMILY_NOT_FOUND（统一反枚举；不泄露 Case 存在性）
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CaseNotFoundError"
+                  - $ref: "#/components/schemas/CurrentFamilyNotFoundError"
+        "409":
+          description: PARTICIPATION_ALREADY_EXISTS / IDEMPOTENCY_PAYLOAD_MISMATCH / CURRENT_FAMILY_AMBIGUOUS
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ParticipationAlreadyExistsError"
+                  - $ref: "#/components/schemas/IdempotencyPayloadMismatchError"
+                  - $ref: "#/components/schemas/CurrentFamilyAmbiguousError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/participation-invites/{token}:
+    get:
+      tags: [participation]
+      operationId: getParticipationInvite
+      summary: 目标查看参与邀请（未认证）
+      description: |
+        未认证 capability：token possession 本身只证明持有该邀请，不构成 identity proof。
+
+        有效且 PENDING 时返回 participationId（不透明 id，用于后续 decline）、state = PENDING、
+        expiresAt、通用参与说明 notice（版本化静态文案；不含 P1 具体信息）。
+
+        无效 / 已过期 / 已拒绝 / 已退出 / 不存在时统一返回 404 INVITATION_NOT_AVAILABLE；
+        响应不得区分原因，不得返回 personId / caseId / familyId / guardian / age / consent / compliance。
+
+        本端点不授予任何参与能力；accept / decline / withdraw 仍需认证与身份前置。
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/InviteTokenPath"
+      responses:
+        "200":
+          description: 邀请当前可用
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParticipationInvitePublicView" }
+        "404":
+          $ref: "#/components/responses/InvitationNotAvailable"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/participation-invites/{token}/accept:
+    post:
+      tags: [participation]
+      operationId: acceptParticipationInvite
+      summary: 接受参与邀请
+      description: |
+        身份前置：已认证 actor 的 resolved personId 必须等于该 participation 的 person_id。
+
+        Case B：当前 Account 等于 P1 既有 Account 时复用 binding，直接允许 accept；
+        Case B 不匹配：拒绝，不 rebind；Case C：005 runtime 必须已把 Account↔P1 binding
+        提交为 COMMITTED；否则拒绝，active participation = 0；binding PENDING / terminal /
+        不存在：统一拒绝，不泄露原因；普通登录先行（A↔P2）后打开 P1 邀请：拒绝，不 merge / rebind。
+
+        成功：PENDING → ACTIVE，恰好一个 active 参与结果，写审计。
+        重复 / 并发：同 idempotency key → 返回原结果；不同 key 且状态已 ACTIVE → 返回 200
+        当前 ACTIVE（幂等收敛，不新增行）；已 DECLINED / EXPIRED / WITHDRAWN →
+        409 PARTICIPATION_STATE_CONFLICT；未授权 / 非 target / 不可用 → 404 PARTICIPATION_NOT_FOUND。
+
+        接受不授予 Case 全量读取、家长私人内容、其他 Participant 内容、Evidence 或 manager 能力。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/InviteTokenPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptParticipationRequest" }
+      responses:
+        "200":
+          description: 参与已激活（或幂等收敛到当前 ACTIVE）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParticipationResource" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/ParticipationNotFound"
+        "409":
+          description: 授权 target 的非法状态转换，或幂等 payload mismatch
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ParticipationStateConflictError"
+                  - $ref: "#/components/schemas/IdempotencyPayloadMismatchError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/participations/{id}/decline:
+    post:
+      tags: [participation]
+      operationId: declineParticipation
+      summary: 拒绝参与
+      description: |
+        只有明确被邀请的 target Person 本人可以拒绝自己的 participation。
+        只允许 PENDING → DECLINED；decline 是合法业务结果，不是失败 / 不合作 / Case 关闭；
+        不产生 active participation，不创建 Evidence；不自动关闭 Case，不阻断家长可独立完成的工作；
+        不检查 guardian / consent / Compliance（保证拒绝始终可用）。
+        重复同 key → 返回原结果；不同 key 且当前 DECLINED → 返回 200 当前 DECLINED（幂等收敛）；
+        当前 ACTIVE / WITHDRAWN / EXPIRED → 409 PARTICIPATION_STATE_CONFLICT；
+        非 target / 不存在 → 404 PARTICIPATION_NOT_FOUND。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ParticipationIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeclineParticipationRequest" }
+      responses:
+        "200":
+          description: 拒绝已记录（或幂等收敛到当前 DECLINED）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParticipationResource" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/ParticipationNotFound"
+        "409":
+          description: 授权 target 的非法状态转换，或幂等 payload mismatch
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ParticipationStateConflictError"
+                  - $ref: "#/components/schemas/IdempotencyPayloadMismatchError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/participations/{id}/withdraw:
+    post:
+      tags: [participation]
+      operationId: withdrawParticipation
+      summary: 中途退出参与
+      description: |
+        只有该 active Participant 本人可以退出自己的 participation。
+        只允许 ACTIVE → WITHDRAWN；退出后后续 Participant 权限停止；
+        保留历史（WITHDRAWN + accepted_at + withdrawn_at），不伪造删除；
+        不自动关闭 Case，不创建 Evidence；不检查 guardian / consent / Compliance（保证退出始终可用）。
+        重复同 key → 返回原结果；不同 key 且当前 WITHDRAWN → 返回 200 当前 WITHDRAWN（幂等收敛）；
+        当前 PENDING / DECLINED / EXPIRED → 409 PARTICIPATION_STATE_CONFLICT（必须先 accept；decline ≠ withdraw）；
+        非 participant / 不存在 → 404 PARTICIPATION_NOT_FOUND。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ParticipationIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/WithdrawParticipationRequest" }
+      responses:
+        "200":
+          description: 退出已记录（或幂等收敛到当前 WITHDRAWN）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParticipationResource" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/ParticipationNotFound"
+        "409":
+          description: 授权 participant 的非法状态转换，或幂等 payload mismatch
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ParticipationStateConflictError"
+                  - $ref: "#/components/schemas/IdempotencyPayloadMismatchError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/participations/{id}:
+    get:
+      tags: [participation]
+      operationId: getParticipation
+      summary: 读取 participation 最小状态
+      description: |
+        可读 actor：该 participation 的 participant 本人；该 Case 所属目标 Family 的 V1 管理主体。
+        只返回 participation 资源自身最小状态：participation id / case id / person id / state / 关键时间。
+        MUST NOT 返回 Case 内容、Family 详情、Evidence、家长原始消息、其他 Participant、
+        Formulation、Plan 或任何 Case 业务对象；不得成为隐式 Case read。
+        其他 actor（非 target、非 manager、跨 Family、跨 Case）统一 404 PARTICIPATION_NOT_FOUND，
+        不泄露参与是否存在。若 PENDING 已过期，GET 会物化 EXPIRED + audit，并返回 state = EXPIRED。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ParticipationIdPath"
+      responses:
+        "200":
+          description: participation 最小状态
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ParticipationResource" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/ParticipationNotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Slice 1 签发的 session token。
+
+  parameters:
+    CaseIdPath:
+      name: id
+      in: path
+      required: true
+      description: Case UUID（待验证参数；存在不代表有权访问）。
+      schema: { type: string, format: uuid }
+    InviteTokenPath:
+      name: token
+      in: path
+      required: true
+      description: 不透明邀请 token；只作为 bearer capability，不构成 identity proof。
+      schema: { type: string, minLength: 1, maxLength: 256 }
+    ParticipationIdPath:
+      name: id
+      in: path
+      required: true
+      description: participation UUID（待验证参数；存在不代表有权访问）。
+      schema: { type: string, format: uuid }
+
+  schemas:
+    CaseParticipationState:
+      type: string
+      enum: [PENDING, ACTIVE, DECLINED, EXPIRED, WITHDRAWN]
+      description: |
+        冻结生命周期取值。不新增 REVOKED / CANCELLED / INVITED / ACCEPTED。
+        PENDING 无 active capability；ACTIVE 才有有限 participant capability；
+        DECLINED / EXPIRED / WITHDRAWN 为 terminal。
+
+    ParticipationNotice:
+      type: object
+      additionalProperties: false
+      required: [version, title, body]
+      description: 版本化通用参与说明；不含 P1 姓名 / 年龄 / guardian / consent / Case / Family 具体信息。
+      properties:
+        version:
+          type: string
+          minLength: 1
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+
+    CreateParticipationInviteRequest:
+      type: object
+      additionalProperties: false
+      required: [personId, idempotencyKey]
+      description: |
+        严格 schema。任何未声明字段（familyId、caseId、state、expiresAt、inviteToken、
+        guardian、consent、role 等）都会导致 422 VALIDATION_ERROR，且零业务写入。
+      properties:
+        personId:
+          type: string
+          format: uuid
+          description: 目标 Person；必须是当前目标 Family 中已合法存在的 Person。
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+          description: scope = (actor_account_id, PARTICIPATION_INVITE_CREATE, idempotencyKey)。
+
+    CreateParticipationInviteResponse:
+      type: object
+      additionalProperties: false
+      required: [participationId, caseId, personId, state, inviteToken, expiresAt, createdAt]
+      properties:
+        participationId:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        personId:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [PENDING]
+        inviteToken:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: bearer secret；只在创建响应返回一次；服务端只存 sha256(token)。
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    ParticipationInvitePublicView:
+      type: object
+      additionalProperties: false
+      required: [participationId, state, expiresAt, notice]
+      description: |
+        未认证 invite lookup 的最小安全视图。不得包含 personId / caseId / familyId /
+        guardian / age / consent / compliance / 其它任何私密字段。
+      properties:
+        participationId:
+          type: string
+          format: uuid
+          description: 不透明资源 id；用于 target 后续调用 decline。
+        state:
+          type: string
+          enum: [PENDING]
+        expiresAt:
+          type: string
+          format: date-time
+        notice:
+          $ref: "#/components/schemas/ParticipationNotice"
+
+    AcceptParticipationRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey]
+      properties:
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+
+    DeclineParticipationRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey]
+      properties:
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+
+    WithdrawParticipationRequest:
+      type: object
+      additionalProperties: false
+      required: [idempotencyKey]
+      properties:
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 128
+
+    ParticipationResource:
+      type: object
+      additionalProperties: false
+      required: [id, caseId, personId, state, createdAt]
+      description: |
+        participation 资源自身最小状态。不得包含 Family 详情、Case 内容、Evidence、
+        家长原始消息、其他 Participant、Formulation、Plan 或任何 Case 业务对象。
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        personId:
+          type: string
+          format: uuid
+        state:
+          $ref: "#/components/schemas/CaseParticipationState"
+        createdAt:
+          type: string
+          format: date-time
+        acceptedAt:
+          type: string
+          format: date-time
+          nullable: true
+        declinedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expiredAt:
+          type: string
+          format: date-time
+          nullable: true
+        withdrawnAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    ParticipationStateConflictError:
+      type: object
+      additionalProperties: false
+      required: [code, message, currentState]
+      properties:
+        code:
+          type: string
+          enum: [PARTICIPATION_STATE_CONFLICT]
+        message:
+          type: string
+        currentState:
+          $ref: "#/components/schemas/CaseParticipationState"
+
+    ParticipationAlreadyExistsError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [PARTICIPATION_ALREADY_EXISTS]
+        message:
+          type: string
+
+    ParticipationTargetIneligibleError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [PARTICIPATION_TARGET_INELIGIBLE]
+        message:
+          type: string
+
+    CaseNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [CASE_NOT_FOUND]
+        message:
+          type: string
+
+    CurrentFamilyNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_NOT_FOUND]
+        message:
+          type: string
+
+    CurrentFamilyAmbiguousError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_AMBIGUOUS]
+        message:
+          type: string
+
+    InvitationNotAvailableError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [INVITATION_NOT_AVAILABLE]
+        message:
+          type: string
+
+    ParticipationNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [PARTICIPATION_NOT_FOUND]
+        message:
+          type: string
+
+    UnauthenticatedError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [UNAUTHENTICATED]
+        message:
+          type: string
+
+    ValidationError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [VALIDATION_ERROR]
+        message:
+          type: string
+
+    IdempotencyPayloadMismatchError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [IDEMPOTENCY_PAYLOAD_MISMATCH]
+        message:
+          type: string
+
+    InternalError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [INTERNAL_ERROR]
+        message:
+          type: string
+
+  responses:
+    Unauthenticated:
+      description: 缺少 / 无效 session token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/UnauthenticatedError" }
+    CaseNotFound:
+      description: Case 不存在 / 属于其它 Family / actor 非 manager（统一，不泄露存在性）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CaseNotFoundError" }
+    InvitationNotAvailable:
+      description: 邀请无效 / 过期 / 已拒绝 / 已退出（统一，不泄露原因或目标信息）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/InvitationNotAvailableError" }
+    ParticipationNotFound:
+      description: participation 不存在 / 非 target / 非 manager / 无权访问（统一，不泄露存在性）
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ParticipationNotFoundError" }
+    ParticipationTargetIneligible:
+      description: target Person 当前不满足参与 eligibility；不含 age / guardian / consent 细节
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ParticipationTargetIneligibleError" }
+    ValidationError:
+      description: strict schema 失败 / 越权字段；零业务写入
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ValidationError" }
+    InternalError:
+      description: 未预期错误 / 不变量破坏；不伪装成功
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/InternalError" }
