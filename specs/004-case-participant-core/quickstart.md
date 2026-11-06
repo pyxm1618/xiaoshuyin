@@ -18,7 +18,7 @@
 | 包管理器 | 仓库约定 `bun` | 项目约定 |
 | PostgreSQL | `18`，原生 `uuidv7()` | §2 / §7.0 |
 | Docker | Stage A Compose（PG18 + api） | §4 Stage A |
-| 环境变量 | `DATABASE_URL`（app 角色）、`MIGRATION_DATABASE_URL`（migrator 角色）、`SESSION_SECRET`、`EVIDENCE_HASH_PEPPER`、`PARTICIPATION_INVITE_TTL_SECONDS` | Slice 1 Plan + 本 Plan |
+| 环境变量 | `DATABASE_URL`（app 角色）、`MIGRATION_DATABASE_URL`（migrator 角色）、`SESSION_SECRET`、`EVIDENCE_HASH_PEPPER`、`PARTICIPATION_INVITE_TTL_SECONDS`、`PARTICIPATION_INVITE_TOKEN_SECRET` | Slice 1 Plan + 本 Plan |
 | Slice 1 | 已 merge `main`，final schema / RLS / 幂等 / 审计 green | Plan §D-17 |
 | Slice 2 | `Implement complete → Independent Converge PASS → merged main` | Plan §D-17 |
 | 005 contract | 已 merge `main`（PR #11） | Plan §D-17 |
@@ -88,7 +88,9 @@ bunx vitest run tests/db/participants-structure.test.ts
 | state / timestamp CHECK | 每个 state 只允许对应时间戳组合；WITHDRAWN 必有 `accepted_at` |
 | `id` 默认值 | `uuidv7()` |
 | 无上下文直连查询 | `case_participants` 0 行；写入被拒 |
-| token 上下文 | 只可见精确 token 行；应用只 select 安全列 |
+| token 上下文 | 只可见精确 PENDING token 行；`case_participant_invite_public` view 只含 `participation_id` / `state` / `expires_at` / `created_at` |
+| token safe view | terminal 行不通过 token context 可见；view 不含 person_id / case_id / family_id / invite_token_hash |
+| app role grants | `case_participants` SELECT/INSERT/UPDATE；`case_participant_invite_public` SELECT；无 DELETE |
 | 越界表 | 不存在 `participation_invites` / `binding_attempts` / `participation_audit_events` / evidence writer 表 |
 | 越界列 | 不存在 `role` / `visibility` / `deleted_at` / `account_id` / `binding_state` |
 | 越界 CHECK 值 | `business_audit_events` 无 participation 以外的越界事件；`idempotency_keys.command_type` 只多 4 个 participation command |
@@ -106,7 +108,14 @@ curl -sS -X POST "$API/api/v1/cases/$CASE_ID/participation-invites" \
   -H 'Content-Type: application/json' \
   -d '{"personId":"'"$TARGET_PERSON_ID"'","idempotencyKey":"invite-0001"}'
 
-# 3.2 目标查看邀请（未认证）
+# 3.2 建邀请 same-key replay（token 语义）
+# 重复 3.1 的同一 idempotencyKey / body；期望同一 participationId + 同一 inviteToken
+curl -sS -X POST "$API/api/v1/cases/$CASE_ID/participation-invites" \
+  -H "Authorization: Bearer $MANAGER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"personId":"'"$TARGET_PERSON_ID"'","idempotencyKey":"invite-0001"}'
+
+# 3.3 目标查看邀请（未认证）
 curl -sS "$API/api/v1/participation-invites/$INVITE_TOKEN"
 
 # 3.3 接受（target；Case B 正确 Account / Case C binding 已 COMMITTED）
@@ -133,7 +142,7 @@ curl -sS "$API/api/v1/participations/$PARTICIPATION_ID" \
 ```
 
 **期望**：
-- 建邀请 201；`inviteToken` 只在此出现；
+- 建邀请 201；same-key replay 返回同一 `participationId` + 同一 `inviteToken`；其他读取不返回 token；token 明文不落库；
 - GET invite 200 只含 `participationId` / `state` / `expiresAt` / `notice`；
 - accept 200 → `state = ACTIVE`；重复同 key → 原结果；不同 key → 200 当前 ACTIVE；
 - decline 200 → `state = DECLINED`；Case 不被自动关闭；
@@ -162,10 +171,12 @@ curl -sS "$API/api/v1/participations/$PARTICIPATION_ID" \
 # → 建邀请 403 PARTICIPATION_TARGET_INELIGIBLE；accept generic 404；无 active
 
 # accept vs decline 并发
-# → 恰好一个合法结果；另一个 409 PARTICIPATION_STATE_CONFLICT
+# → 至多一个合法结果（0 或 1）；失败方 409 PARTICIPATION_STATE_CONFLICT
 
 # accept vs expiry
 # → 到期后无 ACTIVE；EXPIRED 物化 + audit
+# → 并发两个 GET：只有 1 个 PARTICIPATION_EXPIRED audit；另一个看到已物化状态
+# → 到期后从未访问：状态可派生为 EXPIRED，但不自动写 audit
 
 # withdraw before accept
 # → 409；状态仍 PENDING

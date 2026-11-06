@@ -120,7 +120,7 @@ accept precondition: actor.personId === participation.person_id
 
 **年龄边界**（引用 005，不复制矩阵）：
 - `UNDER_14`：current guardian + current valid guardian consent + applicable Compliance；
-- `MINOR_14_17`：applicable Compliance；不因年龄要求 UNDER_14 guardian consent；其它适用 Consent 仍执行；
+- `MINOR_14_17`：applicable Compliance；不因年龄要求 UNDER_14 guardian consent；其它适用 Consent 仍执行。Slice 1 当前 consent taxonomy 只定义 `UNDER_14_GUARDIAN_CONSENT`；目前没有其它 applicable consent 类型。若未来正式新增 consent 类型，必须在对应 Slice 扩展 gate；Slice 4 不发明、不忽略；
 - `ADULT`：不因年龄要求 UNDER_14 consent；Case C invited binding NOT SUPPORTED（005），无 Account 时 accept 只能 generic 失败；
 - `UNKNOWN`：BLOCK。
 
@@ -160,6 +160,7 @@ accept precondition: actor.personId === participation.person_id
 
 **TTL**：
 - `PARTICIPATION_INVITE_TTL_SECONDS` 为必需服务端配置，正整数，无默认值；
+- `PARTICIPATION_INVITE_TOKEN_SECRET` 为 token 确定性派生 secret，必需、≥32 bytes、不记录；
 - 生产值属 RELEASE / POLICY GATE（§34.1）；Plan 不写具体数字；
 - caller 不得提交 / 覆盖 / 延长；
 - 无配置 / 非法 → 启动失败；请求层不得 fallback 为永久。
@@ -174,8 +175,9 @@ effectiveState(participation) =
 
 **物化**：
 - 未认证 invite lookup：只返回 `UNAVAILABLE`，不改写行、不写 audit；
-- 有授权的 accept / decline / GET：在行锁下观察到过期 → 条件 UPDATE `EXPIRED` + `expired_at` + audit → commit → 真实失败 / 状态；
+- 有授权的 accept / decline / GET：先 `SELECT ... FOR UPDATE`，观察到过期 → 条件 UPDATE `EXPIRED` + `expired_at`；**只有 UPDATE 影响 1 行才写 audit**，0 行不写 audit（exactly-once）→ commit → 真实失败 / 状态；
 - 条件 UPDATE `WHERE state='PENDING' AND now() >= invite_expires_at` 是幂等；0 行表示已被其它事务处理；
+- 若 PENDING 行到期后从未被访问，不自动写 `PARTICIPATION_EXPIRED` audit；有效状态仍为 EXPIRED，可由 `invite_expires_at` + state + 当前时间追溯。本 Slice 不引入后台 job；若未来要求无访问也持久化 expiry 事件，由独立 data-lifecycle Slice 增加；
 - 不引入后台 job / pg-boss / Temporal；
 - 清理 / 归档属未来数据生命周期 Slice；本 Slice 不删除历史。
 
@@ -248,7 +250,7 @@ body:    你被邀请参与一个已经存在的 Case。参与是有限的：你
 | N-08 | UNDER_14 current consent 失效 | 建邀请 403 / accept generic；无 active；不用 stale snapshot |
 | N-09 | MINOR_14_17 有 guardian / 无 guardian | 按 005 矩阵；不因年龄要求 UNDER_14 consent；其它 applicable consent 仍执行 |
 | N-10 | UNKNOWN | BLOCK；不按 ADULT / 未成年放行 |
-| N-11 | accept vs decline 并发 | 恰好一个合法结果；另一个 409；无矛盾 |
+| N-11 | accept vs decline 并发 | 至多一个成功状态转换（0 或 1）；另一个 409；无矛盾 |
 | N-12 | accept vs expiry 并发 | 到期后不可 active；EXPIRED 物化 + audit；无复活 |
 | N-13 | double accept | 一个 active；同 key replay；不同 key 幂等收敛到 ACTIVE |
 | N-14 | withdraw replay | 不复活；WITHDRAWN 历史保留 |
@@ -262,6 +264,8 @@ body:    你被邀请参与一个已经存在的 Case。参与是有限的：你
 | N-22 | 审计事件 | 5 类事件存在；无第二套 audit；无 token / openid |
 | N-23 | 路由枚举 | 恰好 6 条；无 `/responses` / 越界 route |
 | N-24 | 结构枚举 | 无第二张 participant 表 / binding attempt 表 / evidence 表 / audit 表 |
+| N-25 | invite create same-key replay（token 语义） | 同一 participationId + 同一 inviteToken；token 明文不落库；不同 payload → 409 |
+| N-26 | token safe view | view 只含 participation_id / state / expires_at / created_at；terminal 行不通过 token context 可见 |
 
 ---
 
@@ -273,7 +277,8 @@ body:    你被邀请参与一个已经存在的 Case。参与是有限的：你
 | Identity seam 3 | `tests/integration/participations-identity-seam.test.ts` |
 | Compliance 4 | `tests/integration/participations-compliance.test.ts` |
 | Audit 5 | `tests/integration/participations-audit.test.ts` |
-| Expiry 6 | `tests/integration/participations-expiry.test.ts` |
+| Expiry 6 | `tests/integration/participations-expiry.test.ts`（含 GET exactly-once 物化、never-accessed derived state） |
+| invite token replay / safe view | `tests/integration/participations-idempotency.test.ts`、`tests/db/participants-rls.test.ts`、`tests/integration/participations-invite-lookup.test.ts` |
 | Anti-enumeration 7 | `tests/integration/participations-anti-enumeration.test.ts` |
 | 边界 8 | `tests/integration/participations-scope.test.ts`、`tests/db/participants-evidence-boundary.test.ts` |
 | 必测反例 9 | 对应 integration / db / domain 测试文件 |

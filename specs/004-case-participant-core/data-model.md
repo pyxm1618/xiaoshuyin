@@ -47,7 +47,7 @@ WITHDRAWN
 | `case_id` | `uuid` | `NOT NULL` | 目标 Case；由复合 FK 保证同 Family |
 | `person_id` | `uuid` | `NOT NULL`，`FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE RESTRICT` | target / participant Person；不是 Account |
 | `state` | `case_participation_state` | `NOT NULL`，无默认值 | 生命周期状态；应用必须显式写入 |
-| `invite_token_hash` | `text` | `NOT NULL UNIQUE`，`CHECK (invite_token_hash ~ '^[0-9a-f]{64}$')` | `sha256(token)` hex；token 明文不落库 |
+| `invite_token_hash` | `text` | `NOT NULL UNIQUE`，`CHECK (invite_token_hash ~ '^[0-9a-f]{64}$')` | `sha256(token)` hex；token 由 `HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + id)` 派生；token 明文不落库 |
 | `invite_expires_at` | `timestamptz` | `NOT NULL`，无默认值；`CHECK (invite_expires_at > created_at)` | 服务端 TTL 计算；不得永久 |
 | `created_by_person_id` | `uuid` | `NOT NULL`，`FOREIGN KEY (created_by_person_id) REFERENCES persons(id) ON DELETE RESTRICT` | 创建邀请的 Case manager |
 | `accepted_at` | `timestamptz` | `NULL` | PENDING → ACTIVE 时写入；WITHDRAWN 保留 |
@@ -140,7 +140,7 @@ CHECK (
 |---|---|---|---|---|
 | `case_participants_family_scope` | `ALL` | `family_id = app_family_id()` | `family_id = app_family_id()` | manager 建邀请 / 读取；target 在 family context 下的状态转换 |
 | `case_participants_self_read` | `SELECT` | `person_id = app_person_id()` | — | target / participant 在无 family 上下文时按 id 解析自己的 participation |
-| `case_participants_invite_token_read` | `SELECT` | `invite_token_hash = app_invite_token_hash()` | — | 未认证 invite lookup 精确按 token 读取安全列 |
+| `case_participants_invite_token_read` | `SELECT` | `state = 'PENDING' AND invite_token_hash = app_invite_token_hash()` | — | 未认证 invite lookup 精确按 token 读取 safe view；terminal 行不通过 token 上下文可见 |
 
 **组合行为**：
 
@@ -148,7 +148,27 @@ CHECK (
 - INSERT / UPDATE / DELETE：只有 `family_scope` 生效；token / self policy 不授予写权限。
 - 无上下文：`app_family_id()` / `app_person_id()` / `app_invite_token_hash()` 均为 NULL → 谓词 NULL → SELECT 0 行；写入被拒。
 
-### 3.3 上下文函数
+### 3.3 invite safe view
+
+```sql
+CREATE VIEW case_participant_invite_public
+WITH (security_invoker = true) AS
+SELECT id AS participation_id,
+       state,
+       invite_expires_at AS expires_at,
+       created_at
+FROM case_participants
+WHERE state = 'PENDING';
+
+GRANT SELECT ON case_participant_invite_public TO xiaoshuyin_app;
+```
+
+- view 只暴露 `participation_id` / `state` / `expires_at` / `created_at`；不含 `person_id` / `case_id` / `family_id` / `invite_token_hash`。
+- `security_invoker = true` 使底层 `case_participants` 的 RLS 继续生效；view 不绕过 token policy。
+- 未认证 invite lookup 的 repository 只查询该 view，不查询 base table；guard test 断言不使用 `SELECT *` / base table。
+- view 是 DB 层列投影，与应用层 repository、OpenAPI response 共同形成三层边界；它不是业务授权事实。
+
+### 3.4 上下文函数
 
 ```sql
 CREATE FUNCTION app_invite_token_hash() RETURNS text
@@ -171,11 +191,12 @@ END $$;
 - `family_scope` 仍需要 `app.family_id`；token 查询不能顺便建立 family 上下文。
 - 应用层必须先 authorize，再设置上下文；RLS 不替代 `authorize()`。
 
-### 3.4 运行角色与 GRANT
+### 3.5 运行角色与 GRANT
 
 | 对象 | `xiaoshuyin_app` 权限 |
 |---|---|
 | `case_participants` | `SELECT, INSERT, UPDATE`（无 `DELETE`；历史保留） |
+| `case_participant_invite_public` | `SELECT`（仅安全列） |
 | `case_participation_state` | `USAGE` |
 | `app.set_invite_token_context(text)` | `EXECUTE` |
 | `app_invite_token_hash()` | `EXECUTE` |
@@ -328,14 +349,21 @@ SET identity context
 ```text
 SET identity context
 → SELECT participation by id + person_id = app_person_id()（self read）
-   → found: 若 PENDING 且过期，物化 EXPIRED + audit；返回最小状态
+   → found: 若 PENDING 且过期：
+       SELECT ... FOR UPDATE
+       → UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at
+       → 仅当 UPDATE 影响 1 行时 INSERT business_audit_events(PARTICIPATION_EXPIRED)
+       → 返回最小状态
    → not found: resolve current Family → SET family context → authorize(PARTICIPATION_READ_MANAGER)
-     → SELECT by id within Family → 返回最小状态
+     → SELECT by id within Family; 若 PENDING 且过期，执行同样的 FOR UPDATE / 条件 UPDATE / exactly-once audit
+     → 返回最小状态
      → not found: 404
 ```
 
 - GET 不写 `case_events`；不写 access log。
 - GET 的过期物化是唯一允许写 audit 的读路径；因为它改变真实状态，必须留痕。
+- 物化必须 `SELECT ... FOR UPDATE` + 条件 UPDATE；只有 UPDATE 影响 1 行才写 audit，0 行不写 audit。并发两个 GET 时，只有一个事务能写 `PARTICIPATION_EXPIRED`。
+- 若 PENDING 行到期后从未被访问，不自动写 audit；有效状态仍为 EXPIRED，可由 `invite_expires_at` + state + 当前时间追溯（Plan closeout 明确定义，见 `research.md` R-4）。
 
 任一写入失败 → 整个事务回滚，不允许部分成功。
 
@@ -352,10 +380,11 @@ SET identity context
 5. `case_participants` 索引：token unique、partial unique live、family/case、person、pending expiry。
 6. `CREATE FUNCTION app_invite_token_hash()` / `app.set_invite_token_context(text)`。
 7. `ALTER TABLE case_participants ENABLE + FORCE ROW LEVEL SECURITY`。
-8. `CREATE POLICY` 三条：family scope、self read、invite-token read。
-9. `GRANT`：`SELECT, INSERT, UPDATE` on `case_participants`；enum `USAGE`；function `EXECUTE`。
-10. 扩展 `business_audit_events.event_type` / `resource_type` CHECK。
-11. 扩展 `idempotency_keys.command_type` CHECK。
+8. `CREATE POLICY` 三条：family scope、self read、invite-token read（`state = 'PENDING'`）。
+9. `CREATE VIEW case_participant_invite_public WITH (security_invoker = true)` + `GRANT SELECT`。
+10. `GRANT`：`SELECT, INSERT, UPDATE` on `case_participants`；view `SELECT`；enum `USAGE`；function `EXECUTE`。
+11. 扩展 `business_audit_events.event_type` / `resource_type` CHECK。
+12. 扩展 `idempotency_keys.command_type` CHECK。
 
 **顺序约束**：第 2 步的 `(person_id, family_id)` 唯一键是第 4 步复合 FK 的被引用唯一键；第 1 步 enum 必须先于表；RLS / policy 在表结构完成后启用；既有 CHECK 扩展最后执行。
 
@@ -397,10 +426,11 @@ SET identity context
 1. `state` 属于 `{PENDING, ACTIVE, DECLINED, EXPIRED, WITHDRAWN}`；无默认值。
 2. 每个 state 只允许对应的时间戳组合；WITHDRAWN 必有 `accepted_at` + `withdrawn_at`。
 3. `invite_expires_at > created_at`；`expired_at >= invite_expires_at`；`withdrawn_at >= accepted_at`。
-4. `invite_token_hash` 为 64 位 hex 且全局唯一；token 明文不在任何表 / 审计 / 日志中。
+4. `invite_token_hash` 为 64 位 hex 且全局唯一；token 由确定性 HMAC 派生；token 明文不在 `case_participants` / `idempotency_keys` / 审计 / 日志中；same-key create replay 由 `participationId` 重新派生同一 token。
 5. `(case_id, family_id)` 必须匹配真实 Case；`(person_id, family_id)` 必须匹配真实 `family_members`。
 6. 同一 `(case_id, person_id)` 最多一个 PENDING / ACTIVE。
 7. `created_by_person_id` 必须是真实 Person；本 Slice 不验证其 manager 资格于 DB 层（由应用 `authorize()` + `families.created_by_person_id` 判定）。
 8. 无 RLS 上下文时 `case_participants` 查询 0 行、写入拒绝。
 9. terminal 行不可通过应用路径变为 PENDING / ACTIVE；DB CHECK + 条件 UPDATE 双重保证。
-10. 不写 `case_events` / `assertions` / `observations` / `persons.account_id` / `person_compliance_profiles` / `consent_records` / `cases`。
+10. `case_participant_invite_public` view 只暴露 `participation_id` / `state` / `expires_at` / `created_at`；token lookup 不查询 base table 的敏感列。
+11. 不写 `case_events` / `assertions` / `observations` / `persons.account_id` / `person_compliance_profiles` / `consent_records` / `cases`。

@@ -51,7 +51,8 @@ paths:
         反枚举：Case 不存在 / 属于其它 Family / actor 非 manager 统一返回 404 CASE_NOT_FOUND；
         不返回 Case / Family / Person 是否存在、status、phase、primary 等字段。
 
-        inviteToken 是 bearer secret，只在本次 201 响应返回一次；后续任何读取 / 审计 / 日志都不再返回。
+        inviteToken 是 bearer secret；create 响应与 same-key idempotent replay 可返回同一 token；
+        其他读取 / 审计 / 日志不返回。token 由服务端 HMAC 确定性派生，DB 只存 hash，不存明文。
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/CaseIdPath"
@@ -378,7 +379,7 @@ components:
           type: string
           minLength: 1
           maxLength: 256
-          description: bearer secret；只在创建响应返回一次；服务端只存 sha256(token)。
+          description: bearer secret；create 与 same-key idempotent replay 可返回同一 token；服务端只存 sha256(token)，不存明文；不得写入日志 / 审计 / 其他读取响应。
         expiresAt:
           type: string
           format: date-time

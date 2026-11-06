@@ -12,7 +12,7 @@
 | 端点 | 动作 | 授权 | 数据访问 | 写副作用 |
 |---|---|---|---|---|
 | `POST /api/v1/cases/:id/participation-invites` | `PARTICIPATION_INVITE_CREATE` | 当前 Family 的 V1 管理主体 | `cases` / `family_members` / `person_compliance_profiles` / `consent_records` 只读；`case_participants` / `business_audit_events` / `idempotency_keys` 写入 | participation + audit + idempotency |
-| `GET /api/v1/participation-invites/:token` | 无 `authorize()`（未认证 capability） | token possession；不构成 identity proof | `case_participants` 按 token safe-column 只读 | 无 |
+| `GET /api/v1/participation-invites/:token` | 无 `authorize()`（未认证 capability） | token possession；不构成 identity proof | `case_participant_invite_public` safe view 只读 | 无 |
 | `POST /api/v1/participation-invites/:token/accept` | `PARTICIPATION_ACCEPT_SELF` | target Person 本人；identity prerequisite 满足 | `case_participants` 读写；Compliance / consent 只读 | state + audit + idempotency |
 | `POST /api/v1/participations/:id/decline` | `PARTICIPATION_DECLINE_SELF` | target Person 本人 | `case_participants` 读写 | state + audit + idempotency |
 | `POST /api/v1/participations/:id/withdraw` | `PARTICIPATION_WITHDRAW_SELF` | active Participant 本人 | `case_participants` 读写 | state + audit + idempotency |
@@ -121,7 +121,7 @@ PARTICIPATION_READ_MANAGER
 |---|---|---|---|---|---|
 | `case_participants` | 是 | 是 | `case_participants_family_scope`（ALL） | `family_id = app_family_id()` | 同左 |
 | `case_participants` | 是 | 是 | `case_participants_self_read`（SELECT） | `person_id = app_person_id()` | — |
-| `case_participants` | 是 | 是 | `case_participants_invite_token_read`（SELECT） | `invite_token_hash = app_invite_token_hash()` | — |
+| `case_participants` | 是 | 是 | `case_participants_invite_token_read`（SELECT） | `state = 'PENDING' AND invite_token_hash = app_invite_token_hash()` | — |
 
 ### 4.2 行为矩阵
 
@@ -131,7 +131,8 @@ PARTICIPATION_READ_MANAGER
 | Family A 上下文，Family A participation | 可见 | 允许（family_id = A） |
 | Family A 上下文，Family B participation | 0 行 | 拒绝 |
 | identity 上下文，`person_id = app_person_id()` | 自己的 participation 可见 | 仍需 family context |
-| token 上下文，精确 token hash | 仅该行可见（应用只 select 安全列） | 拒绝 |
+| token 上下文，精确 token hash 且 state=PENDING | 仅该行在 safe view 可见（view 只含安全列） | 拒绝 |
+| token 上下文，terminal 行 | 0 行 | 拒绝 |
 | 运行角色 `xiaoshuyin_app` | 非 owner、`NOBYPASSRLS` | `SELECT, INSERT, UPDATE` |
 
 ### 4.3 上下文
@@ -142,17 +143,32 @@ PARTICIPATION_READ_MANAGER
 - 所有家庭级写必须在 `withRlsTransaction` 内；所有 self 解析先走 identity context，再 `set_family_context`。
 - 禁止：事务外 `SET LOCAL` 后从连接池查询；`sql.raw` 拼接 family / person / purpose；owner / BYPASSRLS runtime role；因 RLS 存在而跳过 `authorize()`。
 
-### 4.4 运行角色
+### 4.4 safe view（DB 层列投影）
 
-- `xiaoshuyin_app`：非 table owner、`NOBYPASSRLS`、`SELECT, INSERT, UPDATE` on `case_participants`；无 `DELETE`。
+```sql
+CREATE VIEW case_participant_invite_public
+WITH (security_invoker = true) AS
+SELECT id AS participation_id, state, invite_expires_at AS expires_at, created_at
+FROM case_participants WHERE state = 'PENDING';
+GRANT SELECT ON case_participant_invite_public TO xiaoshuyin_app;
+```
+
+- view 只含 `participation_id` / `state` / `expires_at` / `created_at`；不含 `person_id` / `case_id` / `family_id` / `invite_token_hash`。
+- `security_invoker = true` 使底层 RLS 继续生效；view 不绕过 token policy。
+- token lookup repository 只查询该 view，不查询 base table；guard test 断言不使用 `SELECT *`。
+- 三层边界：DB view 列投影 + repository 专用查询 + OpenAPI response schema。app role 的 base table `SELECT` 供其他命令使用，不用于 token lookup。
+
+### 4.5 运行角色
+
+- `xiaoshuyin_app`：非 table owner、`NOBYPASSRLS`、`SELECT, INSERT, UPDATE` on `case_participants`；`SELECT` on `case_participant_invite_public`；无 `DELETE`。
 - `xiaoshuyin_migrator`：table owner，只跑 DDL，不作为应用 runtime。
 - 不修改 Slice 1 / 2 角色权限；不新增角色。
 
-### 4.5 明确不做
+### 4.6 明确不做
 
 - 不在 RLS policy 中判 manager / participant / purpose 矩阵。
 - 不把 token policy 用于写。
-- 不用 `SELECT *` 读取 token 行；repository 必须只 select 安全列。
+- 不用 `SELECT *` 读取 token 行；repository 必须只查询 safe view。
 - 不用 `SECURITY DEFINER` 绕过 RLS。
 
 ---
@@ -202,7 +218,7 @@ request_hash = sha256(canonicalJson({
 | 现有记录 | hash | 结果 |
 |---|---|---|
 | 无 | — | `EXECUTE`：占位 → 业务 → 回填 → commit |
-| 有 | 相同 | `REPLAY`：返回原 status / body；不重复写 participation / audit |
+| 有 | 相同 | `REPLAY`：不重复写 participation / audit；invite create 返回 redacted snapshot + 重新派生的 `inviteToken`；其他 command 返回原 status / body |
 | 有 | 不同 | `MISMATCH` → `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原资源 |
 
 ### 5.4 占位与回填
@@ -211,6 +227,7 @@ request_hash = sha256(canonicalJson({
 - 业务成功后：同一事务 `UPDATE` 回填真实 status + response body。
 - 并发同 key：第二个事务等待唯一索引判定；第一个提交则 REPLAY，第一个回滚则第二个执行。
 - 占位值在事务外不可见，不泄露。
+- **invite create snapshot 必须 redacted**：`response_body` 只保存 `participationId` / `caseId` / `personId` / `state` / `expiresAt` / `createdAt`，不保存 `inviteToken`。replay 时由 `participationId` + `PARTICIPATION_INVITE_TOKEN_SECRET` 重新派生同一 token，再返回完整响应。不得把 token 明文写入 `idempotency_keys`。
 
 ### 5.5 明确不做
 
@@ -238,12 +255,14 @@ request_hash = sha256(canonicalJson({
 7. SELECT target Person ∈ family（复合 FK 兜底）
 8. Compliance gate(target) → BLOCK → 403 PARTICIPATION_TARGET_INELIGIBLE
 9. 检查 (caseId, personId) 无 live participation；partial unique 兜底
-10. generate token + hash + expires_at
+10. derive token = HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + participationId) → base64url
+    hash = sha256(token); expires_at = created_at + TTL
 11. INSERT case_participants(state='PENDING')
 12. INSERT business_audit_events(PARTICIPATION_INVITE_CREATED)
-13. UPDATE idempotency_keys 回填 201 + response_body
+13. UPDATE idempotency_keys 回填 201 + redacted snapshot（不含 inviteToken）
 14. COMMIT
-15. 返回 201（inviteToken 只在此返回）
+15. 返回 201：redacted snapshot + 重新派生的 inviteToken
+    （same-key replay 走同一 rehydration，返回同一 token 语义）
 ```
 
 ### 6.2 accept
@@ -294,13 +313,20 @@ request_hash = sha256(canonicalJson({
 ```text
 1. identity context
 2. SELECT by id + person_id = app_person_id()
-   found → 若 PENDING 且过期：SELECT FOR UPDATE → UPDATE EXPIRED + audit → 返回
+   found → 若 PENDING 且过期：
+            SELECT FOR UPDATE
+            → UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at
+            → 仅当 UPDATE 影响 1 行时 INSERT business_audit_events(PARTICIPATION_EXPIRED)
+            → 返回
           否则直接返回
    not found →
 3. resolve current Family → set_family_context
 4. authorize(PARTICIPATION_READ_MANAGER, participation)
-5. SELECT by id within Family → 返回或 404
+5. SELECT by id within Family；若 PENDING 且过期，执行同样的 FOR UPDATE / 条件 UPDATE / exactly-once audit
+   → 返回或 404
 ```
+
+**GET expiry materialization**：唯一允许写 audit 的读路径；必须 `SELECT ... FOR UPDATE` + 条件 UPDATE；0 行表示已被其它事务处理，不写 audit。若 PENDING 行到期后从未被访问，不自动写 audit；有效状态仍为 EXPIRED，可由 `invite_expires_at` + state + 当前时间追溯（见 `research.md` R-4）。
 
 **不变量**：
 - 所有写步骤同一事务；任一失败整体回滚。
@@ -343,6 +369,8 @@ request_hash = sha256(canonicalJson({
 | 三角色 / guardian 边界 | `tests/integration/participations-authorization.test.ts` |
 | RLS 4.2 / 4.3 | `tests/db/participants-rls.test.ts` |
 | 幂等 5.3 / 5.4（HTTP 可达） | `tests/integration/participations-idempotency.test.ts` |
+| invite create token replay 5.4 | `tests/integration/participations-idempotency.test.ts`（same key → 同一 token；token 不落库） |
+| safe view / token 列投影 4.4 | `tests/db/participants-rls.test.ts`、`tests/integration/participations-invite-lookup.test.ts` |
 | 事务序列 6.1—6.4 | `tests/integration/participations-invite.test.ts`、`participations-accept.test.ts`、`participations-decline.test.ts`、`participations-withdraw.test.ts`、`participations-read.test.ts` |
 | 并发 | `tests/integration/participations-accept-concurrency.test.ts`、`tests/db/participants-constraints.test.ts` |
 | 错误语义 / 防枚举 | `tests/integration/participations-anti-enumeration.test.ts`、`tests/integration/participations-http-boundary.test.ts` |

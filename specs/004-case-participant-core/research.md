@@ -67,7 +67,7 @@ actor.personId === participation.person_id
 **决定**：
 - `PENDING` 且 `now() >= invite_expires_at` 在业务上等价于 `EXPIRED`；
 - 未认证 invite lookup 只返回 `UNAVAILABLE`，不改写行；
-- 有授权的 accept / decline / GET participation 观察到过期时，用条件 UPDATE 物化 `EXPIRED` + `expired_at` + audit；commit 后再返回真实失败 / 状态；
+- 有授权的 accept / decline / GET participation 观察到过期时，先 `SELECT ... FOR UPDATE`，再条件 `UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at` 物化 `EXPIRED` + `expired_at`；只有 UPDATE 影响 1 行才写 audit，0 行不写 audit；commit 后再返回真实失败 / 状态；
 - 不引入 pg-boss / 后台定时器 / Temporal。
 
 **理由**：
@@ -81,6 +81,8 @@ actor.personId === participation.person_id
 - 不物化、只算有效状态：无法在 DB / audit 中留下 EXPIRED 终态；不满足可审计性。
 
 **审计诚实性**：`PARTICIPATION_EXPIRED` 的 `occurred_at` 是物化时间，metadata 写真实 `expiresAt` 与 `materializedOnAccess: true`；不伪造成到期瞬间。
+
+**never-accessed 语义**：若一个 PENDING 行到期后从未被任何授权访问，它不会自动写 `PARTICIPATION_EXPIRED` audit；有效状态仍是 EXPIRED，且可由 `invite_expires_at` + state + 当前时间追溯。本 Slice 不引入后台 job；若未来要求“无访问也持久化 expiry 事件”，由独立 data-lifecycle Slice 增加。这是明确的 Plan 决定，不是遗漏。
 
 ---
 
@@ -106,22 +108,25 @@ actor.personId === participation.person_id
 
 ---
 
-## R-6 invite token：随机 32 字节、hash-only 存储、全局唯一
+## R-6 invite token：确定性 HMAC 派生、hash-only 存储、全局唯一
 
 **决定**：
-- token = 32 字节 CSPRNG，base64url 编码，作为不透明 bearer secret；
+- `token = base64url(HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + participationId))`；32-byte output，作为不透明 bearer secret；
 - DB 只存 `sha256(token)` hex（64 chars），不存明文；
 - `invite_token_hash` 全局 UNIQUE；
-- 明文只在建邀请响应返回一次；后续读取 / 日志 / 审计不再出现。
+- token 在 create 响应返回；same-key idempotent replay 由 `participationId` + secret 重新派生同一 token；其他读取 / 日志 / 审计不再出现。
 
 **理由**：
-- spec FR-006 要求 token 不可猜测 / 枚举；32 字节随机提供足够熵。
+- spec FR-006 要求 token 不可猜测 / 枚举；HMAC-SHA256 + server-only secret 提供足够熵。
 - hash-only 存储避免 DB 泄露直接获得可用 token。
+- 确定性派生解决“token 明文只返回一次”与“idempotent replay 必须返回原结果”的冲突：replay 不需要在 `idempotency_keys` 中存明文 token（详见 R-19）。
 - 全局唯一允许按 token 精确定位一条 participation，不暴露其它行。
 
 **否决的替代**：
+- 随机 token + 在 idempotency snapshot 存明文：违反“token 明文不落库”；拒绝。
+- 随机 token + 在 idempotency snapshot 存可逆密文：需要额外加密 / 密钥轮换机制；本轮不引入。
+- replay 不返回 token：破坏“same request returns original result”的可用性；除非 Owner 明确接受，否则不采用。
 - JWT / 自签 token：引入额外密钥轮换 / 过期语义，且与 005 identity token 混淆；拒绝。
-- 明文存储 token：DB 泄露即邀请泄露；拒绝。
 - token = participation id：可枚举 / 可猜测；拒绝。
 
 ---
@@ -130,13 +135,15 @@ actor.personId === participation.person_id
 
 **决定**：
 - 新增 `app.invite_token_hash` GUC、`app_invite_token_hash()` getter、`app.set_invite_token_context(text)` setter；
-- `case_participants` 增加 `FOR SELECT` policy：`invite_token_hash = app_invite_token_hash()`；
+- `case_participants` 增加 `FOR SELECT` policy：`state = 'PENDING' AND invite_token_hash = app_invite_token_hash()`；
+- 新增 `security_invoker = true` 的 `case_participant_invite_public` view，只暴露 `participation_id` / `state` / `expires_at` / `created_at`；未认证 invite lookup 只查询该 view；
 - 未认证 invite lookup 在只设置 token 上下文的事务内执行；
-- repository 专用 safe-column 查询只 SELECT `id, state, expires_at, created_at`；不 SELECT `person_id` / `case_id` / `family_id`。
+- repository 专用 safe-column 查询只 SELECT view 的安全列；不 SELECT `person_id` / `case_id` / `family_id` / `invite_token_hash`。
 
 **理由**：
 - `SECURITY DEFINER` 函数会绕过 RLS，把“不泄露”责任完全交给函数实现；与“RLS 是第二道防线”不一致。
-- GUC + policy 仍是数据库层可审计的访问路径；safe-column 查询限制返回面。
+- GUC + policy 仍是数据库层可审计的访问路径；`security_invoker` view 是 DB 层列投影，repository 是应用层投影，OpenAPI response 是 API 层投影，三层共同限制返回面。
+- token policy 只匹配 `PENDING`，terminal 行不通过 token 上下文可见；view 也过滤 `PENDING`。
 - 无 family / person 上下文时，token policy 只允许精确 token 行，不会跨家庭扫描。
 
 **否决的替代**：
@@ -336,6 +343,29 @@ UNIQUE (case_id, person_id) WHERE state IN ('PENDING', 'ACTIVE')
 
 ---
 
+## R-19 invite create 的 token 幂等 replay
+
+**决定**：
+- `idempotency_keys.response_body` 对 `PARTICIPATION_INVITE_CREATE` 只保存 **redacted snapshot**：`participationId` / `caseId` / `personId` / `state` / `expiresAt` / `createdAt`；
+- snapshot **不保存 `inviteToken`**；
+- replay 时 route 从 snapshot 读取 `participationId`，用同一 token secret 重新派生 token，返回与首次 create 相同的完整响应（含同一 `inviteToken`）；
+- 其他 command 的 replay 仍返回原 status / body；不同 payload → 409；
+- token 明文只存在于请求内存 / 响应，不进入 `case_participants`、`idempotency_keys`、audit、日志。
+
+**理由**：
+- FR-016 要求 invite creation 幂等；FR-006 要求 token 不可枚举且不应落库。
+- 随机 token + 存明文 snapshot 会违反“token 明文不落库”；redacted replay 不返回 token 又会破坏 retry 可用性。
+- 确定性派生 + redacted snapshot + replay rehydration 同时满足两个约束，不引入第二套 token 存储。
+
+**否决的替代**：
+- 存明文 token 到 idempotency snapshot：违反安全约束。
+- replay 不返回 token：客户端在响应丢失后无法交付邀请；不接受。
+- 为 token 建第二张存储表：第二真相源 / 额外攻击面；拒绝。
+
+**边界**：token secret 必须稳定；若未来需要 rotation / key versioning，必须先更新 Plan / release policy，不得在 Implement 临场发明。
+
+---
+
 ## R-18 Plan-level interpretation 清单（需 Owner 可见）
 
 以下不是产品变更，而是 Plan 对冻结语义的技术映射：
@@ -348,5 +378,7 @@ UNIQUE (case_id, person_id) WHERE state IN ('PENDING', 'ACTIVE')
 6. 审计只写 `business_audit_events`，不写 `case_events`（R-9）。
 7. decline / withdraw 不做 Compliance gate（R-13）。
 8. Case C 依赖 005 runtime；未实现前 Implement Gate BLOCKED（R-15 / D-17）。
+9. invite token 由确定性 HMAC 派生；create 与 same-key replay 返回同一 token 语义；idempotency snapshot 不含 token 明文（R-6 / R-19）。
+10. token lookup 通过 `security_invoker` safe view + pending-only RLS + repository projection + OpenAPI response 四层限制返回面（R-7）。
 
 若 Owner 认为任一映射需要回到 Clarify / 上游文档，必须先停止 Implement，不得由 Plan 静默改写。

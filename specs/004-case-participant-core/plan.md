@@ -48,7 +48,7 @@
 5. **Compliance gate**：建邀请与 accept 两处重新读取当前 Compliance / guardian / consent；decline / withdraw 不被合规 gate 阻断，保证退出与拒绝始终可用。
 6. **TTL**：`invite_expires_at` 由**服务端必需配置**给出有限值；Plan 不冻结任何具体数字；无配置时 fail-closed，绝不 fallback 为永久有效。
 7. **过期**：不引入后台定时器；pending 资源在 `invite_expires_at` 后按**有效状态**判定为 EXPIRED，并在首次有授权的读取 / 命令访问时物化 + 审计。
-8. **幂等 / 并发**：复用既有 `idempotency_keys` 与 `runIdempotentCommand`；接受 / 拒绝 / 退出用行锁 + 条件更新收敛到恰好一个合法结果。
+8. **幂等 / 并发**：复用既有 `idempotency_keys` 与 `runIdempotentCommand`；接受 / 拒绝 / 退出用行锁 + 条件更新收敛到至多一个成功状态转换（0 或 1；无满足条件时 0 合法）。
 9. **RLS**：`case_participants` ENABLE + FORCE；family scope + self read + invite-token read 三条策略；应用层 `authorize()` 仍是业务权限事实。
 10. **审计**：只复用 `business_audit_events`，扩展事件类型与 `resource_type`；不写 `case_events`、不建第二套 audit、不记录 token / openid / PII。
 
@@ -145,7 +145,7 @@
 | `packages/domain/src/idempotency.ts` | 扩展 `IdempotencyCommandType`：`PARTICIPATION_INVITE_CREATE` / `PARTICIPATION_ACCEPT` / `PARTICIPATION_DECLINE` / `PARTICIPATION_WITHDRAW` | 只扩展类型，不新建第二套幂等实现 |
 | `packages/authorization/src/authorize.ts` | 扩展 `AuthInput` / `Action` / `Purpose` / `Resource`，增加 participation 维度 | 不新建 `authorizeParticipation()`；所有判定仍走单一 `authorize()` |
 | `packages/contracts/src/schemas.ts` | 新增 participation Zod schemas（camelCase） | strict schema；客户端不得提交 `familyId` / `caseId` / `state` / token 等越权字段 |
-| `packages/contracts/src/env.ts` | 新增必需配置 `PARTICIPATION_INVITE_TTL_SECONDS`（正整数） | 无默认值；缺失 / 非正 → 启动失败（fail-closed） |
+| `packages/contracts/src/env.ts` | 新增必需配置 `PARTICIPATION_INVITE_TTL_SECONDS`（正整数）与 `PARTICIPATION_INVITE_TOKEN_SECRET`（≥32 bytes） | 无默认值；缺失 / 非法 → 启动失败（fail-closed） |
 | `packages/compliance/src/age-gate.ts` | 复用 `assertMinorProcessingAllowed` 作为参与 eligibility gate | 不复制 Age Matrix；不新增 consent 类型 |
 | `apps/server/api/src/routes/participations.ts` | 六条路由的 HTTP 编排 | 不持有 SQL；只调用 domain / authorization / compliance |
 | `apps/server/api/src/plugins/auth.ts` | 仅对 `GET /api/v1/participation-invites/:token` 放行未认证访问 | 不得放行 accept / decline / withdraw / GET participation |
@@ -170,7 +170,7 @@
 - **目标 Person**：`person_id` 必须属于目标 Family，由应用校验 + 复合 FK / RLS 双层保证。
 - **Case 归属**：`case_id` 必须属于同一 `family_id`，由复合 FK 保证。
 - **唯一性**：同一 `(case_id, person_id)` 最多一个 **PENDING 或 ACTIVE** 参与资源；terminal 历史可多条。该约束是防止重复活跃参与的结构防线，不是新业务状态。
-- **token**：32 字节随机、base64url 传输、SHA-256 hex 存储；全局唯一；明文只在创建响应返回一次。
+- **token**：`HMAC-SHA256(PARTICIPATION_INVITE_TOKEN_SECRET, "participation-invite:v1:" + participationId)` → base64url（32-byte output）；DB 只存 `sha256(token)` hex；全局唯一；token 明文不落库。create 响应与 same-key idempotent replay 可重新派生并返回同一 token；其他读取 / 审计 / 日志不返回。
 - **TTL**：`invite_expires_at` NOT NULL，无 DB 默认值；由服务端配置生成。
 - **历史**：`accepted_at` / `declined_at` / `expired_at` / `withdrawn_at` 与 state 一一对应；WITHDRAWN 保留 `accepted_at`。
 
@@ -193,13 +193,15 @@
 04  case_participants 自身约束 / 索引 / 复合 FK
 05  CREATE FUNCTION app_invite_token_hash() / app.set_invite_token_context()
 06  ALTER TABLE case_participants ENABLE + FORCE ROW LEVEL SECURITY
-07  CREATE POLICY family scope / self read / invite-token read
-08  GRANT SELECT, INSERT, UPDATE ON case_participants TO xiaoshuyin_app
+07  CREATE POLICY family scope / self read / invite-token read (PENDING only)
+08  CREATE VIEW case_participant_invite_public WITH (security_invoker = true)
+    + GRANT SELECT ON case_participant_invite_public TO xiaoshuyin_app
+09  GRANT SELECT, INSERT, UPDATE ON case_participants TO xiaoshuyin_app
     GRANT USAGE ON TYPE case_participation_state TO xiaoshuyin_app
     GRANT EXECUTE ON FUNCTION app.set_invite_token_context(text) TO xiaoshuyin_app
-09  ALTER TABLE business_audit_events DROP/ADD event_type CHECK
-10  ALTER TABLE business_audit_events DROP/ADD resource_type CHECK
-11  ALTER TABLE idempotency_keys DROP/ADD command_type CHECK
+10  ALTER TABLE business_audit_events DROP/ADD event_type CHECK
+11  ALTER TABLE business_audit_events DROP/ADD resource_type CHECK
+12  ALTER TABLE idempotency_keys DROP/ADD command_type CHECK
 ```
 
 **禁止**：
@@ -230,7 +232,7 @@ PENDING ──accept──→ ACTIVE ──withdraw──→ WITHDRAWN (historic
 5. `WITHDRAWN` 保留 `accepted_at`，表示“曾经合法参与，之后退出”；不得删除历史。
 6. 同一 `(case_id, person_id)` 最多一个 PENDING / ACTIVE；terminal 历史可多条。
 7. 过期判定：`state = PENDING AND now() >= invite_expires_at` 在业务上等价于 `EXPIRED`，即使尚未物化。
-8. 物化规则：有授权的 accept / decline / GET participation 在观察到过期时，先以条件 UPDATE 写 `EXPIRED` + `expired_at`，再返回真实结果；未认证 invite lookup 只返回 `UNAVAILABLE`，不改写行。
+8. 物化规则：有授权的 accept / decline / GET participation 在观察到过期时，先 `SELECT ... FOR UPDATE`，再以条件 `UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at` 写 `EXPIRED` + `expired_at`；只有 UPDATE 影响 1 行才写 audit，0 行不写 audit（exactly-once）；未认证 invite lookup 只返回 `UNAVAILABLE`，不改写行。
 
 **状态 / 时间戳 CHECK**（详见 `data-model.md`）：每个 state 只允许对应的时间戳组合；WITHDRAWN 必须同时有 `accepted_at` 与 `withdrawn_at`；EXPIRED 的 `expired_at` 必须 `>= invite_expires_at`。
 
@@ -265,7 +267,7 @@ ParticipationResource {
 
 - 不返回：Family 详情、Case 内容、Evidence、家长原始消息、其他 Participant、Formulation、Plan、任何 Case 业务对象。
 - `GET /participations/:id` 不得成为隐式 Case read。
-- 建邀请响应额外返回 `inviteToken`（仅一次）与 `expiresAt`；后续任何读取不再返回 token。
+- 建邀请响应额外返回 `inviteToken` 与 `expiresAt`；same-key idempotent replay 可重新派生同一 token；其他读取 / 审计 / 日志不返回 token。
 - 未认证 invite lookup 只返回 `{ participationId, state: 'PENDING', expiresAt, notice }`；不返回 `personId` / `caseId` / `familyId` / guardian / age / consent / compliance。
 
 完整 schema / 状态码 / 错误码见 `contracts/participation-api.openapi.yaml`。
@@ -391,10 +393,12 @@ actor.personId === participation.person_id
 | 现有记录 | hash | 结果 |
 |---|---|---|
 | 无 | — | `EXECUTE`：占位 → 业务 → 回填 → commit |
-| 有 | 相同 | `REPLAY`：返回原 status / body；不重复写 participation / audit |
+| 有 | 相同 | `REPLAY`：不重复写 participation / audit；invite create 返回 redacted snapshot + 重新派生的 `inviteToken`；其他 command 返回原 status / body |
 | 有 | 不同 | `MISMATCH` → `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原资源 |
 
 **并发同 key**：由既有事务级 advisory lock + 唯一索引串行化；第一个提交则第二个 replay，第一个回滚则第二个执行。
+
+**invite create replay 的 token 语义**：`idempotency_keys.response_body` 只保存 redacted snapshot（`participationId` / `caseId` / `personId` / `state` / `expiresAt` / `createdAt`），**不保存 `inviteToken`**；replay 时由 `participationId` + `PARTICIPATION_INVITE_TOKEN_SECRET` 重新派生同一 token，再返回与首次 create 相同的 token 语义。create 与 same-key replay 可返回 token；其他读取 / 审计 / 日志不返回。不得把 token 明文写入 idempotency snapshot。
 
 **不可达性说明**：本 Slice 的 public command shape 存在真实可变 path / body（不同 `caseId` / `personId` / token / participationId），因此同 key 不同 canonical payload 的 mismatch **是可达的**；测试必须在 HTTP / shared repository 层真实验证，不得伪造。这与 Slice 2 的 `CASE_CREATE` 形状不同，不得照搬“HTTP 不可达”的结论。
 
@@ -421,11 +425,13 @@ BEGIN
 |---|---|---|
 | double accept（同 key） | advisory lock + unique key | 第二个 replay 原结果；只有一个 active |
 | double accept（不同 key） | 行锁；第一个 PENDING→ACTIVE；第二个看到 ACTIVE | 返回 200 当前 ACTIVE（幂等收敛）；不新增行 |
+| double decline | 行锁 + 条件 UPDATE；第一个 PENDING→DECLINED；第二个看到 DECLINED | 返回 200 当前 DECLINED（幂等收敛）；不复活 |
 | accept vs decline | 行锁；先者赢；后者看到对方 terminal / active | 后者 `409 PARTICIPATION_STATE_CONFLICT`（授权 target）或 `404`（非 target）；不产生矛盾结果 |
 | accept vs expiry | 行锁 + `now() >= invite_expires_at` | 过期者先物化 EXPIRED + audit，commit 后返回 generic 失败；不产生 active |
 | decline vs expiry | 同上 | 只有一个 terminal（DECLINED 或 EXPIRED），不互相覆盖 |
-| withdraw replay | 行锁 + 条件 UPDATE | 第一次 ACTIVE→WITHDRAWN；第二次返回 200 当前 WITHDRAWN；不复活 |
+| double withdraw / withdraw replay | 行锁 + 条件 UPDATE | 第一次 ACTIVE→WITHDRAWN；第二次返回 200 当前 WITHDRAWN；不复活 |
 | withdraw before accept | 条件 UPDATE `WHERE state='ACTIVE'` 0 行 | `409 PARTICIPATION_STATE_CONFLICT`（currentState=PENDING）；不改变状态 |
+| identity / compliance changes during accept | 行锁 + 重新读取 current guardian / consent / Compliance | 不再满足 → 404 generic；不产生 active；不部分写入 |
 | concurrent invite create（同 case/person） | partial unique index `(case_id, person_id) WHERE state IN ('PENDING','ACTIVE')` | 一个成功；另一个 409 `PARTICIPATION_ALREADY_EXISTS`；无重复 live resource |
 | concurrent invite create（不同 target） | 独立行 | 各自成功；互不覆盖 |
 
@@ -447,11 +453,11 @@ BEGIN
 |---|---|---|---|
 | `case_participants_family_scope` | ALL | `family_id = app_family_id()` | `family_id = app_family_id()` |
 | `case_participants_self_read` | SELECT | `person_id = app_person_id()` | — |
-| `case_participants_invite_token_read` | SELECT | `invite_token_hash = app_invite_token_hash()` | — |
+| `case_participants_invite_token_read` | SELECT | `state = 'PENDING' AND invite_token_hash = app_invite_token_hash()` | — |
 
 - `app_invite_token_hash()` = `NULLIF(current_setting('app.invite_token_hash', true), '')`。
 - `app.set_invite_token_context(token_hash)` 只设置 `app.invite_token_hash`；要求非空、64 位 hex；无 family / person / account 上下文。
-- **invite-token policy 只用于 SELECT**：未认证邀请查看只允许读取安全列（participation id / state / expires_at / created_at），不得读取 / 返回 `person_id` / `case_id` / `family_id`；repository 必须使用专用 safe-column 查询，路由不得 `SELECT *`。
+- **invite-token policy 只用于 SELECT，且只匹配 PENDING**：未认证邀请查看通过 `security_invoker` 的 `case_participant_invite_public` view 读取安全列（participation_id / state / expires_at / created_at）；view 不含 `person_id` / `case_id` / `family_id` / `invite_token_hash`。app role 保留 base table SELECT 供其他命令使用，但 token route 的 repository 只查询 view；guard test 断言 token lookup 不使用 `SELECT *` / base table。该 view 是 DB 层列投影，不替代 `authorize()` / RLS。
 - **self policy 只用于 SELECT 解析**：decline / withdraw 先用它按 id + `person_id = app_person_id()` 解析 family_id，再 `set_family_context()` 获得写上下文；写入仍受 family policy 约束。
 - 无上下文 → 谓词 NULL → 0 行 / 写入拒绝。
 - 运行角色 `xiaoshuyin_app`：非 owner、`NOBYPASSRLS`、`SELECT/INSERT/UPDATE`；不授予 `DELETE`（历史保留）。
@@ -527,21 +533,24 @@ BEGIN
 
 ```text
 PARTICIPATION_INVITE_TTL_SECONDS: integer > 0
+PARTICIPATION_INVITE_TOKEN_SECRET: >= 32 bytes (server-only; never logged)
 ```
 
-- **无默认值**；缺失 / 非整数 / <= 0 → 启动配置校验失败（fail-closed）。
+- **无默认值**；缺失 / 非整数 / <= 0 / secret 过短 → 启动配置校验失败（fail-closed）。
 - 服务端在创建 invite 时计算 `invite_expires_at = created_at + TTL`。
 - caller **不得**提交 / 覆盖 / 延长 TTL；请求体 strict schema 不含 TTL 字段。
 - 不提供 `expiresAt` 客户端输入；不接受“永久邀请”。
 - **具体数值不在本 Plan 冻结**；生产值属 §34.1 的 RELEASE / POLICY GATE，必须在上线前按真实服务目的、法规、供应商条款批准。
 - 测试 / CI 可注入一个显式的 test-only 值；该值不是产品 TTL，不得写入产品文档或 production default。
 - 不使用 `interval '24 hours'` 之类硬编码；不得 fallback 为永久 `expires_at = infinity`。
+- `PARTICIPATION_INVITE_TOKEN_SECRET` 用于确定性派生 invite token；必须稳定；缺失 / 非法 → 启动失败。Rotation 属 release/ops gate；Slice 4 不实现 key versioning。
 
 **过期表达**：
 - 不使用 pg-boss / 后台定时器 / Temporal；
 - pending 过期按有效状态判定；有授权的 accept / decline / GET 在观察到过期时物化 + 审计；
 - 未认证 invite lookup 只返回 `UNAVAILABLE`，不物化、不写 audit；
-- 物化是幂等的：条件 `WHERE state='PENDING' AND now() >= invite_expires_at`，0 行表示已被其它事务处理；
+- GET / accept / decline 的物化必须 `SELECT ... FOR UPDATE` + 条件 `UPDATE ... WHERE state='PENDING' AND now() >= invite_expires_at`；只有 UPDATE 影响 1 行才写 audit，0 行不写 audit（exactly-once）；
+- 若某 PENDING 行到期后从未被访问，其有效状态为 EXPIRED，但不会自动写 `PARTICIPATION_EXPIRED` audit；该事实仍可由 `invite_expires_at` + state + 当前时间追溯。Slice 4 不引入后台 job；若未来要求无访问也持久化 expiry 事件，由独立 data-lifecycle Slice 增加；
 - 到期后不可 accept、不可重新激活；历史行保留；
 - 清理 / 归档属未来数据生命周期 Slice，本 Slice 不删除历史。
 
@@ -556,10 +565,10 @@ Plan 只设计测试，不写测试代码。测试分层：
 | unit / domain | 状态机、token hash、有效过期判定、错误映射、`authorize()` 新分支 | 每个转换只允许合法前置；terminal 不可复活；Case B/C 外部结果一致 |
 | integration / API | 六条 route 的 happy path + 失败路径 | 最小字段；无 Case / Family / Evidence 泄漏；strict 422 零写入 |
 | DB constraints | enum / CHECK / 复合 FK / partial unique / uuidv7 | 结构 introspection；非法状态/时间戳/跨 Family 插入被拒 |
-| DB / RLS | family / self / invite-token policies；无上下文；错误 Family | 0 行 / 写入拒绝；token safe-column 查询；不跨家庭 |
+| DB / RLS | family / self / invite-token policies；无上下文；错误 Family；`case_participant_invite_public` view | 0 行 / 写入拒绝；token safe-column；view 只含安全列；不跨家庭 |
 | authorization | manager / target / participant / guardian / 非成员 | 三角色独立；guardian 不自动授权；Participant 无 Case manager 能力 |
-| idempotency | 同 key replay / 不同 hash mismatch / 并发同 key | 原结果返回；业务结果数不变；409 可达 |
-| concurrency | double accept / accept vs decline / accept vs expiry / withdraw replay / concurrent invite | 恰好一个合法结果；无重复行；无复活 |
+| idempotency | 同 key replay / 不同 hash mismatch / 并发同 key；invite create token replay | 原结果返回；业务结果数不变；409 可达；same-key replay 返回同一 token 语义；token 不落库 |
+| concurrency | double accept / accept vs decline / accept vs expiry / withdraw replay / concurrent invite | 至多一个成功状态转换（0 或 1）；无重复行；无复活；expiry 物化 exactly-once |
 | negative security | wrong Family / wrong Case / wrong Person / wrong Account / expired / unauthorized / forwarded invite / multi-family Case C | 统一 generic；无 Person / Family / Case / guardian / age / consent / compliance 字段 |
 | API contract | OpenAPI operation 集合、strict schema、生成物一致性 | 恰好 6 个 participation operations；无 `/responses`；`openapi:check` PASS |
 | cross-slice | Participant 调用 Case manager routes；accept / decline / withdraw 无 Evidence | Case route 仍 404 / 403；`assertions` / `observations` 计数 +0 |
@@ -636,13 +645,14 @@ packages/
   authorization/src/authorize.ts  # participation actions / purpose / resource
   compliance/src/age-gate.ts      # 复用现有 gate（不新增矩阵）
   contracts/src/schemas.ts        # participation Zod schemas
-  contracts/src/env.ts            # PARTICIPATION_INVITE_TTL_SECONDS
+  contracts/src/env.ts            # PARTICIPATION_INVITE_TTL_SECONDS / PARTICIPATION_INVITE_TOKEN_SECRET
   domain/src/participants.ts      # 状态机 / token / repository
   domain/src/idempotency.ts       # 新 command types
   domain/src/index.ts             # 导出 participants
 
 db/
   migrations/<next>_case_participant_core.sql
+  # 含 case_participants / RLS / case_participant_invite_public view / CHECK 扩展
   # 不修改 001_initial_schema.sql / 002_case_core.sql / 003_case_idempotency_key_bytes.sql
 
 tests/
@@ -702,7 +712,8 @@ tests/
 | FR-003 / FR-004：只有 Case manager 可建邀请；target 必须在目标 Family | integration + DB | `bunx vitest run tests/integration/participations-invite.test.ts` | 非 manager 404；跨 Family Person 拒绝；零写入 |
 | FR-005 / FR-009：Case B 复用 / mismatch；Case C 先 binding；binding ≠ accept | integration（005 runtime 或明确 BLOCKED） | `bunx vitest run tests/integration/participations-identity-seam.test.ts` | 正确 Account accept；错误 Account 404；Case C 未 COMMITTED 时 active=0；COMMITTED 后仍需 accept |
 | FR-006 / FR-022：token 不可枚举；查询不泄露私密字段 | integration + security | `bunx vitest run tests/integration/participations-invite-lookup.test.ts` | 无效/过期/终止统一 404；200 仅返回 participationId / state / expiresAt / notice |
-| FR-007 / FR-016：accept 恰好一个 active；重复/并发收敛 | integration + DB concurrency | `bunx vitest run tests/integration/participations-accept-concurrency.test.ts` | active 计数 = 1；行数不重复增长；同 key replay |
+| FR-007 / FR-016：accept 成功产生恰好一个 active；并发至多一个（0 或 1） | integration + DB concurrency | `bunx vitest run tests/integration/participations-accept-concurrency.test.ts` | 单次有效 accept → active 计数 = 1；并发 / 重放不重复增长；同 key replay |
+| FR-016 / token replay：invite create 同 key replay 返回同一 token 语义 | integration + idempotency | `bunx vitest run tests/integration/participations-idempotency.test.ts` | same key + same payload → 同一 participationId + 同一 inviteToken；不同 payload → 409；token 明文不落库 |
 | FR-008 / FR-017 / FR-018：accept 不授予 Case 读取 / manager 能力 | integration cross-slice | `bunx vitest run tests/integration/participations-scope.test.ts` | Participant 调 Case route 仍 404；无 Case 内容返回 |
 | FR-010 / FR-024：UNDER_14 / Consent / Compliance 复检 | integration + compliance | `bunx vitest run tests/integration/participations-compliance.test.ts` | 无效 current consent → 建邀请 403 / accept generic 404；无 active；无 stale snapshot |
 | FR-011 / FR-012：decline 合法、保留历史、不关 Case | integration + DB | `bunx vitest run tests/integration/participations-decline.test.ts` | DECLINED 行存在；Case 状态不变；家长独立操作不被阻断 |
@@ -718,7 +729,7 @@ tests/
 | FR-030 / Acceptance 19：Implement gate | governance evidence | `node .specify/scripts/validate-governance.mjs` + `quickstart.md` §1 | Gate BLOCKED 时不得声称 Implement complete |
 | FR-031：真实失败状态；无部分写入 | integration + DB rollback | `bunx vitest run tests/integration/participations-rollback.test.ts` | 审计 / participation / idempotency 任一失败 → 整体回滚；无假成功 |
 | SC-001：cross-Family writes = 0 | DB + integration | `bunx vitest run tests/db/participants-rls.test.ts tests/integration/participations-cross-family.test.ts` | 跨 Family 邀请 / 参与被拒；UUID 存在不构成合法关系 |
-| SC-002 / SC-014：并发 / 幂等不重复 | integration + DB | `bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-idempotency.test.ts` | 一个 active；重放不新增；mismatch 409 |
+| SC-002 / SC-014：并发 / 幂等不重复 | integration + DB | `bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-idempotency.test.ts` | 至多一个 active（0 或 1）；重放不新增；mismatch 409 |
 | SC-003：Participant 不能调 manager-only Case 命令 | integration | `bunx vitest run tests/integration/participations-scope.test.ts` | 404 / 403 按 Slice 2 语义；无 Case 数据 |
 | SC-006：未授权 token lookup 不泄露 | integration + security | `bunx vitest run tests/integration/participations-invite-lookup.test.ts` | 无 Person / Family / Case / guardian / age / consent / compliance 字段 |
 | SC-008：无 duplicate Person / binding | integration + DB | `bunx vitest run tests/integration/participations-identity-seam.test.ts` | Person 数不增加；Account↔Person 1:1；无 rebind / merge |
