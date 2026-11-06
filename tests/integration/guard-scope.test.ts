@@ -29,7 +29,15 @@ async function runGuard(): Promise<{ code: number; output: string }> {
 function inject(file: string, content: string) {
   const full = join(ROOT, file);
   writeFileSync(full, content);
-  return () => rmSync(full, { force: true });
+  // Removing the probe is preferred; some sandboxes deny unlink, so an empty
+  // file is an equivalent clean state for the guard (no pattern can match).
+  return () => {
+    try {
+      rmSync(full, { force: true });
+    } catch {
+      writeFileSync(full, '');
+    }
+  };
 }
 
 const SQL_CASES: Array<[string, string]> = [
@@ -54,6 +62,33 @@ const SQL_CASES: Array<[string, string]> = [
   [
     'CREATE UNLOGGED TABLE IF NOT EXISTS "public"."observations"',
     'CREATE UNLOGGED TABLE IF NOT EXISTS "public"."observations" (id uuid);\n',
+  ],
+  // Newline-separated DDL (valid PostgreSQL, previously undetected).
+  [
+    'CREATE TABLE\n"public"."observations"',
+    'CREATE TABLE\n"public"."observations" (id uuid);\n',
+  ],
+  [
+    'CREATE\nTABLE\ntasks',
+    'CREATE\nTABLE\ntasks (id uuid);\n',
+  ],
+  // SQL comments between keywords / before the table name.
+  [
+    'CREATE TABLE /* probe */\n"public"."observations"',
+    'CREATE TABLE /* probe */\n"public"."observations" (id uuid);\n',
+  ],
+  [
+    'CREATE /* probe */\nUNLOGGED TABLE IF NOT EXISTS\n"public"."observations"',
+    'CREATE /* probe */\nUNLOGGED TABLE IF NOT EXISTS\n"public"."observations" (id uuid);\n',
+  ],
+  [
+    'CREATE TABLE /*\nmulti-line\ncomment\n*/ case_followup_schedules',
+    'CREATE TABLE /*\nmulti-line\ncomment\n*/ case_followup_schedules (id uuid);\n',
+  ],
+  // Line comment between keywords.
+  [
+    'CREATE TABLE -- probe\nobservations',
+    'CREATE TABLE -- probe\nobservations (id uuid);\n',
   ],
 ];
 

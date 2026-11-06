@@ -118,7 +118,10 @@ describe('Case create rollback (A13)', () => {
 
         // A real failure must never be disguised as success.
         expect(res.statusCode).toBe(500);
-        expect(res.json().code).toBe('INTERNAL_ERROR');
+        expect(res.json()).toEqual({
+          code: 'INTERNAL_ERROR',
+          message: 'An internal error occurred',
+        });
 
         expect(await counts(familyId, accountId)).toEqual({
           cases: 0,

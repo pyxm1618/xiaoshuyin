@@ -136,10 +136,12 @@ describe('Case authorization (T050)', () => {
     let memberToken: string;
     let managerToken: string;
     let existingCaseId: string;
+    let scenarioFamilyId: string;
 
     beforeAll(async () => {
       const manager = await login('a-manager');
       const familyId = await createFamily(manager.token, 'scenario-a');
+      scenarioFamilyId = familyId;
       managerToken = manager.token;
 
       const created = await createCase(manager.token);
@@ -152,11 +154,18 @@ describe('Case authorization (T050)', () => {
     });
 
     it('POST /cases → 403 CASE_ACCESS_DENIED with zero writes', async () => {
-      const before = await verifyPool.query('SELECT count(*)::int AS c FROM cases');
+      // Scoped to this Family so parallel suites cannot perturb the count.
+      const before = await verifyPool.query(
+        'SELECT count(*)::int AS c FROM cases WHERE family_id = $1',
+        [scenarioFamilyId]
+      );
       const res = await createCase(memberToken);
       expect(res.statusCode).toBe(403);
       expect(res.json()).toEqual({ code: 'CASE_ACCESS_DENIED', message: 'CASE_ACCESS_DENIED' });
-      const after = await verifyPool.query('SELECT count(*)::int AS c FROM cases');
+      const after = await verifyPool.query(
+        'SELECT count(*)::int AS c FROM cases WHERE family_id = $1',
+        [scenarioFamilyId]
+      );
       expect(after.rows[0].c).toBe(before.rows[0].c);
     });
 
