@@ -17,6 +17,20 @@
 
 ---
 
+## 1A. Downstream Contract Boundary — 005 / V1-C44（contract remediation round 1，additive）
+
+本文件不因受邀身份绑定合同而改变任何 policy、GUC 或事务入口。仅记录边界：
+
+- 首次登录的 `persons.WITH CHECK` self 分支（`account_id = app_account_id()`）只用于普通首次登录建立自己的 Person；MUST NOT 被复用于「绑定一个已经存在的 Person」。
+- 普通登录不承担识别 Case C 的责任：本文件不为其新增任何「既有 Person 匹配」能力。routing invariant 属 invitation-aware flow（从 participation invitation 进入 Case C 时必须先 route，不得先调用普通 login）。
+- Case B（P1 已有 Account）复用既有 binding，不重新绑定；只有 Case C（P1 无 Account）才走 invitation-aware bootstrap。
+- 受邀既有 Person 的首次绑定由 005 / V1-C44 的 invitation-aware capability 定义；其 pending authentication context 不是家庭作用域身份，不得设置 `app.family_id`，也不得凭它读取家庭数据。
+- 该能力需要独立确认语义：second-party confirmation = target confirmation + candidate recognition（family-attested，非 KYC），且同一 binding attempt；具体 RLS / transaction / 状态表达属后续 Plan，本文件不新增 policy、不改 SQL。
+- 在 candidate 尚未绑定为 P1 之前，candidate-facing response 必须与内部真实结果分离；RLS 上下文不得被用来向未绑定 candidate 返回可区分的目标 Family / Person / guardian / consent 状态。已授权的第二方 / 管理主体只在其自身授权上下文读取完成确认所必需的信息。
+- `authorize()` 的动作表、`DenyReason` 封闭集合与 §3 状态码映射不因该能力扩展；绑定成功后的家庭 / Case / Consent 访问仍按既有 `authorize()` 独立判定。
+
+---
+
 ## 2. `authorize()` 契约
 
 ### 2.1 输入（形状 = §9）
