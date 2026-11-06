@@ -113,4 +113,49 @@ describe('Database Roles (T012 RED)', () => {
       expect(rows[0].has, `app should have USAGE on enum ${enumName}`).toBe(true);
     }
   });
+
+  // ── Slice 2 (T025): Case Core tables ──────────────────────
+  // Deliberately NOT merged into the 10-table DML loop above: the Case
+  // tables are append-only for the runtime role and must never gain
+  // UPDATE / DELETE in this Slice.
+
+  it('Slice 2: cases / case_events exist and are owned by xiaoshuyin_migrator', async () => {
+    for (const table of ['cases', 'case_events']) {
+      const { rows } = await client.query(
+        `SELECT relowner::regrole::text as owner FROM pg_class WHERE relname = $1 AND relkind = 'r'`,
+        [table]
+      );
+      expect(rows.length, `table ${table} should exist`).toBe(1);
+      expect(rows[0].owner, `table ${table} owner`).toBe('xiaoshuyin_migrator');
+    }
+  });
+
+  it('Slice 2: app role has exactly SELECT + INSERT on cases / case_events', async () => {
+    for (const table of ['cases', 'case_events']) {
+      for (const priv of ['SELECT', 'INSERT']) {
+        const { rows } = await client.query(
+          `SELECT has_table_privilege('xiaoshuyin_app', $1, $2) as has`,
+          [table, priv]
+        );
+        expect(rows[0].has, `app should have ${priv} on ${table}`).toBe(true);
+      }
+      for (const priv of ['UPDATE', 'DELETE', 'TRUNCATE']) {
+        const { rows } = await client.query(
+          `SELECT has_table_privilege('xiaoshuyin_app', $1, $2) as has`,
+          [table, priv]
+        );
+        expect(rows[0].has, `app must NOT have ${priv} on ${table}`).toBe(false);
+      }
+    }
+  });
+
+  it('Slice 2: app role has USAGE on case_status / case_phase', async () => {
+    for (const enumName of ['case_status', 'case_phase']) {
+      const { rows } = await client.query(
+        `SELECT has_type_privilege('xiaoshuyin_app', $1, 'USAGE') as has`,
+        [enumName]
+      );
+      expect(rows[0].has, `app should have USAGE on enum ${enumName}`).toBe(true);
+    }
+  });
 });

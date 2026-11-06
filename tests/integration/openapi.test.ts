@@ -83,6 +83,9 @@ describe('OpenAPI Contract (T066)', () => {
       '/api/v1/consents',
       '/api/v1/compliance/profile',
       '/api/v1/compliance/notices',
+      // Slice 2 (002-case-core) — exactly three Case operations.
+      '/api/v1/cases',
+      '/api/v1/cases/{id}',
     ]);
     for (const path of Object.keys(spec.paths)) {
       expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);
