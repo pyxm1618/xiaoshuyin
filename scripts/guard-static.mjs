@@ -113,6 +113,7 @@ scanDir(ROOT, (file) => {
 const FAMILY_TABLES = [
   'families', 'family_members', 'guardian_consent_requests', 'consent_records',
   'person_compliance_profiles', 'person_profile_values', 'business_audit_events',
+  'cases', 'case_events',
 ];
 
 scanDir(ROOT, (file) => {
@@ -169,6 +170,15 @@ scanDir(ROOT, (file) => {
 });
 
 // ─── Rule 6: Scope guard ───
+// Out-of-scope tables for Slice 2 (Case Core). Their presence in a migration
+// or schema file means scope creep, not a future-proofing decision.
+const FORBIDDEN_TABLES = [
+  'case_participants', 'participation_invites', 'assertions', 'observations',
+  'problem_formulations', 'scene_node_states', 'scene_artifacts',
+  'dialogue_messages', 'safety_states', 'plan_versions', 'notifications',
+  'notification_attempts', 'ai_runs', 'checkins', 'reviews',
+];
+
 const FORBIDDEN_PATHS = [
   'apps/miniprogram',
   'apps/operations',
@@ -190,9 +200,10 @@ scanDir(join(ROOT, 'db'), (file) => {
   const relPath = getRelPath(file);
   const content = readFileSync(file, 'utf-8');
   content.split('\n').forEach((line, i) => {
-    if (/case_participants|CREATE\s+TABLE\s+(?:assertions|observations)/i.test(line)) {
+    const tableMatch = line.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["']?([a-z_]+)["']?/i);
+    if (tableMatch && FORBIDDEN_TABLES.includes(tableMatch[1].toLowerCase())) {
       addViolation('R6-scope-guard', relPath, i + 1,
-        'Forbidden table definition (case_participants/assertions/observations)');
+        `Forbidden out-of-scope table: ${tableMatch[1]}`);
     }
   });
 });

@@ -9,6 +9,8 @@ import { registerFamilyRoutes } from './routes/families.js';
 import { registerMemberRoutes } from './routes/members.js';
 import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerConsentRoutes } from './routes/consents.js';
+import { registerCaseRoutes } from './routes/cases.js';
+import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import { FakeWechatProvider } from './auth/wechat-provider.js';
 
 export async function buildApp() {
@@ -17,6 +19,11 @@ export async function buildApp() {
       level: process.env['LOG_LEVEL'] ?? 'warn',
     },
   });
+
+  // Zod schemas are the single source for route contracts; validation
+  // failures are mapped to the frozen 422 VALIDATION_ERROR by errorHandler.
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
 
   // Error handler
   app.setErrorHandler(errorHandler);
@@ -48,6 +55,7 @@ export async function buildApp() {
   registerMemberRoutes(app, pool);
   registerComplianceRoutes(app, pool);
   registerConsentRoutes(app, pool);
+  registerCaseRoutes(app, pool);
 
   return app;
 }

@@ -43,6 +43,72 @@ const SC = {
   'SC-008': ['tests/domain/provenance.test.ts', 'tests/integration/members.test.ts'],
 };
 
+
+// ── Slice 2 (002-case-core) ────────────────────────────────
+const FR_002 = {
+  'FR-001': ['tests/db/cases-schema.test.ts', 'tests/integration/cases-scope.test.ts'],
+  'FR-002': ['tests/db/cases-schema.test.ts', 'tests/db/migration-repro.test.ts'],
+  'FR-003': ['tests/db/cases-schema.test.ts', 'tests/domain/case-contracts.test.ts'],
+  'FR-004': ['tests/integration/cases-create.test.ts'],
+  'FR-005': ['tests/integration/cases-scope.test.ts', 'tests/domain/case-authorization.test.ts'],
+  'FR-006': ['tests/db/cases-primary-concurrency.test.ts', 'tests/db/cases-schema.test.ts'],
+  'FR-007': ['tests/db/cases-primary-concurrency.test.ts', 'tests/integration/cases-create.test.ts'],
+  'FR-008': ['tests/integration/cases-authorization.test.ts', 'tests/domain/case-authorization.test.ts'],
+  'FR-009': ['tests/domain/case-authorization.test.ts', 'tests/integration/cases-authorization.test.ts'],
+  'FR-010': ['tests/integration/cases-read.test.ts', 'tests/db/cases-rls.test.ts'],
+  'FR-011': ['tests/db/cases-rls.test.ts', 'tests/db/rls.test.ts'],
+  'FR-012': ['tests/integration/cases-idempotency.test.ts', 'tests/domain/idempotency-hash.test.ts'],
+  'FR-013': ['tests/integration/cases-create.test.ts', 'tests/domain/case-contracts.test.ts'],
+  'FR-014': ['tests/integration/cases-audit.test.ts', 'tests/db/cases-events-metadata.test.ts'],
+  'FR-015': ['tests/integration/cases-create.test.ts', 'tests/domain/case-contracts.test.ts'],
+  'FR-016': ['tests/integration/cases-read.test.ts', 'tests/domain/case-contracts.test.ts'],
+  'FR-017': ['tests/integration/cases-read.test.ts', 'tests/integration/cases-authorization.test.ts'],
+  'FR-018': ['tests/integration/cases-scope.test.ts'],
+  'FR-019': ['tests/integration/cases-read.test.ts', 'tests/integration/cases-authorization.test.ts'],
+  'FR-020': ['tests/integration/cases-scope.test.ts', 'tests/db/cases-schema.test.ts'],
+  'FR-021': ['tests/integration/cases-create.test.ts', 'tests/integration/cases-scope.test.ts'],
+  'FR-022': ['tests/integration/cases-read.test.ts'],
+  'FR-023': ['tests/integration/cases-read.test.ts', 'tests/db/cases-rls.test.ts'],
+  'FR-024': ['tests/integration/cases-authorization.test.ts'],
+  'FR-025': ['tests/integration/cases-read-no-audit.test.ts'],
+};
+
+const SC_002 = {
+  'SC-001': ['tests/integration/cases-create.test.ts', 'tests/db/cases-primary-concurrency.test.ts'],
+  'SC-002': ['tests/db/cases-primary-concurrency.test.ts', 'tests/integration/cases-idempotency.test.ts'],
+  'SC-003': ['tests/integration/cases-create.test.ts', 'tests/domain/case-contracts.test.ts'],
+  'SC-004': ['tests/integration/cases-read.test.ts', 'tests/db/cases-rls.test.ts'],
+  'SC-005': ['tests/integration/cases-authorization.test.ts'],
+  'SC-006': ['tests/integration/cases-idempotency.test.ts', 'tests/domain/idempotency-hash.test.ts'],
+  'SC-007': ['tests/integration/cases-audit.test.ts', 'tests/integration/cases-read-no-audit.test.ts'],
+  'SC-008': ['tests/integration/cases-scope.test.ts'],
+  'SC-009': ['tests/integration/cases-create.test.ts', 'tests/domain/case-contracts.test.ts'],
+  'SC-010': ['tests/integration/cases-read.test.ts', 'tests/integration/openapi-cases.test.ts'],
+  'SC-011': ['tests/integration/cases-read.test.ts'],
+};
+
+// spec.md Acceptance Evidence table (18 rows, in document order).
+const ACCEPTANCE_002 = {
+  'A01-first-case-open-intake-primary': ['tests/integration/cases-create.test.ts'],
+  'A02-candidate-retained': ['tests/integration/cases-create.test.ts'],
+  'A03-concurrent-primary-invariant': ['tests/db/cases-primary-concurrency.test.ts'],
+  'A04-list-detail-primary': ['tests/integration/cases-read.test.ts'],
+  'A05-cross-family-isolation': ['tests/integration/cases-read.test.ts', 'tests/db/cases-rls.test.ts'],
+  'A06-no-rls-context-default-deny': ['tests/db/cases-rls.test.ts'],
+  'A07-non-manager-denied': ['tests/integration/cases-authorization.test.ts'],
+  'A08-guardian-member-non-manager': ['tests/integration/cases-authorization.test.ts'],
+  'A09-guardian-non-member': ['tests/integration/cases-authorization.test.ts'],
+  'A10-fixed-404-403-semantics': ['tests/integration/cases-authorization.test.ts', 'tests/integration/cases-read.test.ts'],
+  'A11-create-idempotency-http': ['tests/integration/cases-idempotency.test.ts'],
+  'A12-shared-idempotency-mismatch': ['tests/domain/idempotency-hash.test.ts'],
+  'A13-create-event-and-audit': ['tests/integration/cases-audit.test.ts'],
+  'A14-read-no-audit': ['tests/integration/cases-read-no-audit.test.ts'],
+  'A15-out-of-scope-schema-api': ['tests/integration/cases-scope.test.ts'],
+  'A16-strict-422-zero-write': ['tests/integration/cases-create.test.ts'],
+  'A17-empty-family': ['tests/integration/cases-read.test.ts'],
+  'A18-rls-role-migration-uuidv7': ['tests/db/cases-schema.test.ts', 'tests/db/roles.test.ts', 'tests/db/migration-repro.test.ts'],
+};
+
 function fileOk(rel) {
   const full = join(ROOT, rel);
   if (!existsSync(full) || !statSync(full).isFile()) return false;
@@ -86,6 +152,76 @@ for (const [id, files] of Object.entries(SC)) {
     scOk++;
     console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
   }
+}
+
+// ── Slice 2 report ─────────────────────────────────────────
+console.log('');
+console.log('# 002-case-core — FR / SC / Acceptance Coverage Audit');
+console.log('');
+let fr2Ok = 0;
+let sc2Ok = 0;
+let acc2Ok = 0;
+const missing2 = [];
+
+console.log('## Functional Requirements (25)');
+console.log('');
+console.log('| Requirement | Test files | Status |');
+console.log('|---|---|---|');
+for (const [id, files] of Object.entries(FR_002)) {
+  const bad = files.filter((f) => !fileOk(f));
+  if (bad.length > 0) {
+    missing2.push(`${id}: ${bad.join(', ')}`);
+    console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
+  } else {
+    fr2Ok++;
+    console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
+  }
+}
+
+console.log('');
+console.log('## Success Criteria (11)');
+console.log('');
+console.log('| Criterion | Test files | Status |');
+console.log('|---|---|---|');
+for (const [id, files] of Object.entries(SC_002)) {
+  const bad = files.filter((f) => !fileOk(f));
+  if (bad.length > 0) {
+    missing2.push(`${id}: ${bad.join(', ')}`);
+    console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
+  } else {
+    sc2Ok++;
+    console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
+  }
+}
+
+console.log('');
+console.log('## Acceptance Evidence (18 rows in spec.md)');
+console.log('');
+console.log('| Acceptance item | Test files | Status |');
+console.log('|---|---|---|');
+for (const [id, files] of Object.entries(ACCEPTANCE_002)) {
+  const bad = files.filter((f) => !fileOk(f));
+  if (bad.length > 0) {
+    missing2.push(`${id}: ${bad.join(', ')}`);
+    console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
+  } else {
+    acc2Ok++;
+    console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
+  }
+}
+
+const fr2Total = Object.keys(FR_002).length;
+const sc2Total = Object.keys(SC_002).length;
+const acc2Total = Object.keys(ACCEPTANCE_002).length;
+console.log('');
+console.log(`FR ${fr2Ok}/${fr2Total}`);
+console.log(`SC ${sc2Ok}/${sc2Total}`);
+console.log(`Acceptance ${acc2Ok}/${acc2Total}`);
+console.log(`missing = ${missing2.length}`);
+if (missing2.length > 0) {
+  for (const m of missing2) console.log(`  MISSING ${m}`);
+  console.log('coverage-audit: FAIL');
+  process.exit(1);
 }
 
 const frTotal = Object.keys(FR).length;

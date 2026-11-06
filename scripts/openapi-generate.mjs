@@ -27,10 +27,14 @@ import { registerFamilyRoutes } from '${join(ROOT, 'apps/server/api/src/routes/f
 import { registerMemberRoutes } from '${join(ROOT, 'apps/server/api/src/routes/members.js')}';
 import { registerComplianceRoutes } from '${join(ROOT, 'apps/server/api/src/routes/compliance.js')}';
 import { registerConsentRoutes } from '${join(ROOT, 'apps/server/api/src/routes/consents.js')}';
+import { registerCaseRoutes } from '${join(ROOT, 'apps/server/api/src/routes/cases.js')}';
+import { validatorCompiler, serializerCompiler, jsonSchemaTransform } from 'fastify-type-provider-zod';
 import { FakeWechatProvider } from '${join(ROOT, 'apps/server/api/src/auth/wechat-provider.js')}';
 import { errorHandler } from '${join(ROOT, 'apps/server/api/src/plugins/error-handler.js')}';
 
 const app = Fastify({ logger: false });
+app.setValidatorCompiler(validatorCompiler);
+app.setSerializerCompiler(serializerCompiler);
 app.setErrorHandler(errorHandler);
 
 // Register swagger BEFORE routes
@@ -39,6 +43,7 @@ await app.register(swagger, {
     openapi: '3.1.0',
     info: { title: 'Xiaoshuyin API', version: '1.0.0' },
   },
+  transform: jsonSchemaTransform,
 });
 
 // Minimal pool stub (not connected — we only need route registration)
@@ -54,6 +59,7 @@ registerFamilyRoutes(app, pool);
 registerMemberRoutes(app, pool);
 registerComplianceRoutes(app, pool);
 registerConsentRoutes(app, pool);
+registerCaseRoutes(app, pool);
 
 await app.ready();
 const spec = app.swagger();

@@ -5,9 +5,22 @@
 
 import { createHash } from 'node:crypto';
 
-export type IdempotencyCommandType =
-  | 'FAMILY_CREATE' | 'MEMBER_CREATE' | 'MEMBER_UPDATE'
-  | 'GUARDIAN_CONSENT_REQUEST' | 'GUARDIAN_CONSENT_GRANT' | 'GUARDIAN_CONSENT_REVOKE';
+/**
+ * Single source for the command-type vocabulary: the union is derived from
+ * this runtime list, so tests can assert registration without a second
+ * registry drifting from the type.
+ */
+export const IDEMPOTENCY_COMMAND_TYPES = [
+  'FAMILY_CREATE',
+  'MEMBER_CREATE',
+  'MEMBER_UPDATE',
+  'GUARDIAN_CONSENT_REQUEST',
+  'GUARDIAN_CONSENT_GRANT',
+  'GUARDIAN_CONSENT_REVOKE',
+  'CASE_CREATE',
+] as const;
+
+export type IdempotencyCommandType = (typeof IDEMPOTENCY_COMMAND_TYPES)[number];
 
 export type IdempotencyDecision =
   | { action: 'REPLAY'; responseStatus: number; responseBody: unknown }

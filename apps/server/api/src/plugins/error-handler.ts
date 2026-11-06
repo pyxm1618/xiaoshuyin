@@ -33,6 +33,8 @@ const ERROR_MAP: Record<string, number> = {
   NOTICE_VERSION_MISMATCH: 403,
   CURRENT_FAMILY_NOT_FOUND: 404,
   CURRENT_FAMILY_AMBIGUOUS: 409,
+  CASE_NOT_FOUND: 404,
+  CASE_ACCESS_DENIED: 403,
   VALIDATION_ERROR: 422,
   AGE_BAND_SOURCE_NOT_ALLOWED: 422,
   IDEMPOTENCY_PAYLOAD_MISMATCH: 409,
@@ -52,6 +54,16 @@ export function toHttpError(code: string, message?: string, details?: Record<str
 }
 
 export function errorHandler(err: Error, _req: FastifyRequest, reply: FastifyReply) {
+  // Route schema validation failures surface as Fastify 400s. The frozen
+  // contract maps every schema violation to `422 VALIDATION_ERROR` with a
+  // single body shape (no leaked field details).
+  if ('validation' in err) {
+    return reply.status(422).send({
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid request body',
+    });
+  }
+
   if ('statusCode' in err && 'code' in err) {
     const httpErr = err as unknown as HttpError;
     return reply.status(httpErr.statusCode).send({

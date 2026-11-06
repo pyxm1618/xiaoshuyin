@@ -168,3 +168,46 @@ export const NoticeCatalogResponse = z.object({
     title: z.string(),
   })),
 });
+
+// ── Case Core schemas (Slice 2) ─────────────────────────────
+// `CreateCaseRequest` is STRICT: the only legal business field is the
+// idempotency key. Every undeclared field (familyId, creator, status, phase,
+// primary, version, title, summary, description, ...) is rejected — never
+// stripped — so the server can answer 422 with zero business writes.
+
+export const CaseStatus = z.enum([
+  'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+]);
+export type CaseStatusType = z.infer<typeof CaseStatus>;
+
+export const CasePhase = z.enum([
+  'INTAKE', 'ASSESSMENT', 'PROBLEM_FORMULATION', 'GOALS',
+  'PLANNING', 'EXECUTION', 'REVIEW', 'MAINTENANCE', 'CLOSED',
+]);
+export type CasePhaseType = z.infer<typeof CasePhase>;
+
+export const CreateCaseRequest = z.strictObject({
+  idempotencyKey: z.string().min(8).max(128),
+});
+export type CreateCaseRequestType = z.infer<typeof CreateCaseRequest>;
+
+export const CaseResponse = z.strictObject({
+  id: z.string().uuid(),
+  status: CaseStatus,
+  phase: CasePhase,
+  primary: z.boolean(),
+  version: z.number().int().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type CaseResponseType = z.infer<typeof CaseResponse>;
+
+export const CaseListResponse = z.strictObject({
+  items: z.array(CaseResponse),
+});
+export type CaseListResponseType = z.infer<typeof CaseListResponse>;
+
+export const CaseIdParams = z.object({
+  id: z.string().uuid(),
+});
+
