@@ -535,3 +535,19 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 - 最终 head：`2ae1769`；CI run `42177284538` → **5/5 success**。
 - 全量 `bunx vitest run`：48 files / 347 tests，exit 0。
 - A13 故障注入改为按 Family 限定（`WHEN (NEW.family_id = ...)`）+ 每轮唯一 trigger 名，消除与并行套件的相互影响。
+
+---
+
+## Independent Converge Round 2 Remediation Evidence（2026-11-06）
+
+**Owner-approved technical amendment**: logical idempotency key identity is stored exactly in bytea for new `CASE_CREATE` rows（`plan.md` D-11.1 / `data-model.md` §5.5 / `contracts/authorization-rls-and-idempotency.md` §5.1）。
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| Finding 3 auth 早于 content parsing | CLOSED | Case 路由 `onRequest: app.authenticate`；无 token / 非法 token + raw `__proto__` → 401；已认证 → 422 零写入 |
+| Finding 4 exact logical identity | CLOSED | migration `003_case_idempotency_key_bytes.sql`；`tests/db/case-idempotency-representation.test.ts` 7/7；`tests/integration/cases-idempotency-identity.test.ts` 5/5 |
+| Finding 7 R6 完整覆盖 | CLOSED | `guard-scope.test.ts` 19/19；覆盖 tasks / case_followup_schedules / goals / intervention_instances / data_requests / memory_* 与所有 DDL 形态 |
+| Logging 敏感泄漏 | CLOSED | `error-log-redaction.test.ts`：仅 requestId/method/route/sqlstate；secret/token/body 均不出现 |
+
+**新增 migration**：`db/migrations/003_case_idempotency_key_bytes.sql`（001/002 未修改）。
+**全量**：`bunx vitest run` → 51 files / 367 tests，0 failed / 0 skipped；`db:evidence` PASS；`openapi:check` PASS；governance PASS。

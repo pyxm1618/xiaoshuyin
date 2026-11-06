@@ -169,3 +169,86 @@
 | typecheck / guard / openapi / governance | PASS / PASS (0 violations) / PASS (no drift) / PASS |
 
 **收尾修复（test-only）**：A13 的故障 trigger 原本是表级，与并行套件对其他 Family 的写入冲突，导致 CI integration 偶发 500。已改为 `WHEN (NEW.family_id = <family>)` + 每轮唯一 trigger 名，故障仅作用于目标 Family；本地全量与 CI 均通过。
+
+---
+
+# Independent Converge Round 2 Remediation（2026-11-06）
+
+**判定输入**: `INDEPENDENT CONVERGE FAIL — RETURN TO IMPLEMENT`（Round 2）
+**Old head**: `cd2df0f39c3a221270995ee325bac6fb18298237`
+**Remediation code head**: `062c46602f9376105a4b6a12320961557f40b86b`（其后为本次证据提交；最终 head 以分支 HEAD / CI run 为准）
+**范围**: 只关闭 Round 2 的 Finding 3 / Finding 4 / Finding 7 / logging finding；未重开已 CLOSED 项，未改产品语义。
+
+## Owner-approved technical amendment
+
+> logical idempotency key identity is stored exactly in bytea for new CASE_CREATE rows.
+
+Amendment 已写入 `plan.md` D-11.1、`data-model.md` §5.5、`contracts/authorization-rls-and-idempotency.md` §5.1。
+未修改：`Docs/**`、`spec.md`、`research.md`、`cases-api.openapi.yaml`、`quickstart.md`、Constitution、`AGENTS.md`。
+
+## Finding 3 — auth 早于 content parsing → CLOSED
+
+- Case 三端点改为 route-level `onRequest: app.authenticate`（onRequest 在 content parsing 之前）；全局 `preHandler` 保留，已认证请求短路。
+- 证据（`tests/integration/cases-http-boundary.test.ts`）：
+  - 无 token + 普通非法 body → 401；
+  - 非法 token + 普通非法 body → 401；
+  - 无 token + raw `__proto__` JSON → **401**；
+  - 非法 token + raw `__proto__` JSON → **401**；
+  - 已认证 + raw `__proto__` → 422 `VALIDATION_ERROR` 且四表零写入。
+- Slice 1 auth/family/consent 全量回归绿（`tests/integration` 30 files / 208 tests）。
+
+## Finding 4 — exact logical identity → CLOSED
+
+- 新增 reviewed migration `db/migrations/003_case_idempotency_key_bytes.sql`：
+  - `idempotency_key_bytes bytea NULL`；`idempotency_key text` 允许 NULL；
+  - `idempotency_keys_key_representation_check`：非 CASE_CREATE → text only；CASE_CREATE → text 与 bytes **恰有其一**；
+  - `UNIQUE (actor_account_id, command_type, idempotency_key_bytes)`（既有 text 唯一约束保留）。
+- 新 CASE_CREATE 行存 `Buffer.from(logicalKey, 'utf16le')`；`u:`/`h:` 编码与 SHA fallback 已完全移除。
+- 读取顺序：bytea 精确匹配 → 未命中且 logical key 可作为 text 时才查 legacy（`idempotency_key_bytes IS NULL`）。
+- 证据：
+  - `tests/db/case-idempotency-representation.test.ts` 7/7（列类型、CHECK 正反例、bytea 唯一、Slice 1 text-only、NUL/Unicode/lone surrogate 字节级区分、无第二张表）；
+  - `tests/integration/cases-idempotency-identity.test.ts` 5/5（7 类合法 key 各自独立 scope、legacy raw replay、`h:` 前缀同样按 raw 身份、8 路并发同 key 仅 1 结果、不同 key 不合并）；
+  - `tests/integration/cases-idempotency-mismatch.test.ts` 保持 `decideIdempotency()` 单事实源。
+
+## Finding 7 — R6 forbidden-table coverage → CLOSED
+
+- `scripts/guard-static.mjs`：禁止表清单覆盖 data-model §8 全部表，含 `tasks`、`case_followup_schedules`、`goals`、`intervention_instances`、`data_requests`、`memory_*`。
+- 识别形式：`CREATE TABLE` / `CREATE UNLOGGED TABLE` / `IF NOT EXISTS` / 裸标识符 / 引号 / `"public"."observations"` / `pgTable('…')` / 裸 `case_participants`。
+- 证据：`tests/integration/guard-scope.test.ts` **19/19**（12 个原有 + 7 个新增形态逐个注入 exit≠0，清理后 `PASS (0 violations)`）。
+
+## Logging finding — sensitive leakage → CLOSED
+
+- `errorHandler` 仅记录白名单：`requestId` / `method` / `route` / `sqlstate`（严格 `^[0-9A-Z]{5}$`）；不再记录 `err`、message、detail、stack、query、参数、body、authorization、token。
+- 对外 500 body 保持 `{ code: 'INTERNAL_ERROR', message: 'An internal error occurred' }`。
+- 证据：`tests/integration/error-log-redaction.test.ts`——子进程捕获真实 pino 输出；PostgreSQL 异常含 synthetic secret（MESSAGE + DETAIL）时，输出含 `P0001` / `requestId` / route，**不含** secret、token、idempotencyKey、`authorization`。无 production 测试钩子。
+
+## 已 CLOSED finding 回归抽查
+
+| 项 | 结果 |
+|---|---|
+| OpenAPI operationId / bearerAuth / param format | `openapi-cases.test.ts` 10/10；两次生成 hash 一致，`openapi:check` PASS |
+| HEAD routes absent | Case 子树无 HEAD；`HEAD /cases`、`HEAD /cases/:id` → 404 |
+| invalid Case id → 404 | `not-a-uuid` / `current` / `123` 均为 `CASE_NOT_FOUND`，与 cross-family / nonexistent 一致 |
+| shared mismatch | 真实存储行 → `decideIdempotency` → MISMATCH → 409，原行/原 Case 不变 |
+| ordinary member (A07) / A06 RLS / A13 rollback | 全部保持绿 |
+| `/cases/current` 未注册 | 路由枚举与 OpenAPI 均不含；运行时落入 `:id` → 404 |
+
+## 验证
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS |
+| `bun run guard:static` | PASS (0 violations) |
+| `bunx vitest run tests/domain` | 80 passed |
+| `bunx vitest run tests/db` | 79 passed |
+| `bunx vitest run tests/integration` | 30 files / 208 passed |
+| `bunx vitest run`（全量） | **51 files / 367 tests，0 failed / 0 skipped** |
+| `bun run db:migrate` ×2 | 1 new (003) → 0 new / 3 previously applied |
+| `bun run db:evidence` | PASS（空库 001→002→003 重建 + 二次 apply no-op） |
+| `bun run openapi:generate` ×2 | 生成物 hash 一致；`openapi:check` PASS (no drift) |
+| `bun run coverage:audit` | 002：FR 25/25、SC 11/11、Acceptance 18/18；001：FR 17/17、SC 8/8 |
+| governance | `validate-governance` PASS；self-test 15/15 |
+
+## Remaining gaps
+
+`NONE`
