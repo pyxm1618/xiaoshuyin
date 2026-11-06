@@ -38,6 +38,15 @@ paths:
         此时 Person 还没有 compliance profile（年龄尚未声明），profile 在
         `POST /families` 确认 adult 年龄时写入。
         本 Slice 的 code2session 为适配器契约验证，真实平台调用 NOT VERIFIED（§40 Platform 门槛）。
+
+        **下游边界（005 / V1-C44，contract remediation round 1，additive）**：本端点只接收 `{ code }`；对 new openid
+        无法判断其是否对应某个既有 Person，因此本端点不承担、也不可能承担「识别并阻断所有 Case C」的保证。
+        Invitation flow routing invariant 属邀请流程本身：用户从 participation invitation 进入 Case C 时，
+        必须先 route 到 invitation-aware identity bootstrap，不得先调用本端点。
+        该能力由独立 invitation-aware identity-binding 合同定义：Case B 复用既有 Account 不重新绑定；Case C 才走
+        bootstrap，second-party confirmation = target confirmation + candidate recognition，且不得创建第二个 Person。
+        若 candidate 已通过本端点建立 A↔P2，之后打开 P1 邀请，invited binding MUST reject，保持 A↔P2 与 P1 不变。
+        本端点语义、请求与响应不因该能力改变；不得通过 `mode=invite` 或隐藏参数把两条路径合并。
       requestBody:
         required: true
         content:
