@@ -87,7 +87,7 @@
 : 前置门禁通过后建立的临时关联：candidate 已认证身份 + P1 + invitation context + binding attempt。它不是 Account↔Person binding，不是普通已认证身份，不是 active participation，也不授予任何业务授权。
 
 **Binding attempt**
-: 一次 candidate confirmation 与 second-party confirmation 共同指向的同一绑定请求；以 `binding_attempt_id` 作为幂等边界。
+: 一次 candidate confirmation 与 second-party confirmation 共同指向的同一绑定请求；以 `binding_attempt_id` 作为 attempt identity，而不是把整个 attempt 生命周期永久固定为同一结果的 operation idempotency key（§5.5）。
 
 **Candidate recognition**
 : 第二方基于与 P1 既有的现实家庭关系，独立辨认当前这次已认证微信身份的实际使用者就是 P1 的人工确认。它独立于 invite token possession、nickname / displayName、Family membership、客户端声称与系统自动推断；不是 KYC / 法定身份核验。
@@ -287,11 +287,14 @@ else:
 
 **Idempotency / Retry / Concurrency（唯一权威）**：
 
-1. 幂等单位是 **`binding_attempt_id`**（语义层；不要求现在决定数据库字段或 token）。同一个 attempt 的 duplicate / replay MUST 返回 same business result；已失败终态 MUST NOT 被重放为成功。若该 attempt 已在 invitation terminal 前 COMMITTED，same-attempt replay MUST 返回该历史 COMMITTED 结果，但 MUST NOT re-execute commit、MUST NOT revive invitation、MUST NOT 恢复 participation accept、MUST NOT 重建 authorization。
-2. 本合同 MUST NOT 声明 `(P1, authenticated WeChat identity, invitation)` 的永久全局唯一约束。
-3. **新 attempt**：old attempt terminal + invitation still valid + Slice 4 / business policy permits retry 时，MAY 针对同一 P1 / authenticated WeChat identity / invitation 发起 **new binding attempt**；它是 new attempt identity，不是旧 attempt 的 replay。
-4. **并发**：多个 attempt 并发时，最终 successful commit 数 MUST ∈ {0, 1}；binding count increase MUST <= 1。若其中一个满足全部条件 → exactly 1 commit，others terminal rejection；若全部 attempts 均 recognition failed / Consent invalidated / authorization failed / multi-family blocked / gate failed → 0 commit 是合法结果。MUST NOT 因此创建 P2。
-5. 最终 binding cardinality 仍由 Account↔Person 1:1 / Person→Account 0..1 保证。
+1. **Attempt identity ≠ operation idempotency**：`binding_attempt_id` 只标识同一次 binding attempt（语义层；不要求现在决定数据库字段或 token），不是把整个 attempt 生命周期永久固定为同一结果的 idempotency key。
+2. **Settled outcome**：`COMMITTED` 与 `TERMINAL ATTEMPT REJECTION` 是 settled。一旦 settled，对同一 attempt 的 replay / read-back MUST 返回其历史 settled outcome，MUST NOT 重新执行或改变 outcome；MUST NOT COMMITTED → TERMINAL，MUST NOT TERMINAL → COMMITTED。已 COMMITTED attempt replay 另受下方「Invitation / Attempt 分离」第 3 条约束。
+3. **Non-settled PENDING**：`PENDING` 不是 settled outcome；没有新业务事件的 exact duplicate operation MUST NOT 产生重复副作用，但新的合法 confirmation / new authorized business event / current gate re-evaluation MAY 推进同一 attempt 到 `COMMITTED` 或 `TERMINAL ATTEMPT REJECTION`，该推进不是 replay。
+4. **Non-settled RETRYABLE**：`RETRYABLE OPERATION FAILURE` 表示某一次 operation 的结果尚未可信收敛，不是 attempt 的永久 settled outcome；attempt 仍合法时，后续 retry / read-back / idempotent resolution MAY 得到当前 authoritative attempt outcome（`PENDING` / `COMMITTED` / `TERMINAL`）。MUST 保证 no double commit、no duplicate confirmation side effect、no fake success、no fake terminal failure；具体 operation id / idempotency key / read-back 机制留 Plan。
+5. 本合同 MUST NOT 声明 `(P1, authenticated WeChat identity, invitation)` 的永久全局唯一约束。
+6. **新 attempt**：old attempt terminal + invitation still valid + Slice 4 / business policy permits retry 时，MAY 针对同一 P1 / authenticated WeChat identity / invitation 发起 **new binding attempt**；它是 new attempt identity，不是旧 attempt 的 replay。
+7. **并发**：多个 attempt 并发时，最终 successful commit 数 MUST ∈ {0, 1}；binding count increase MUST <= 1。若其中一个满足全部条件 → exactly 1 commit，others terminal rejection；若全部 attempts 均 recognition failed / Consent invalidated / authorization failed / multi-family blocked / gate failed → 0 commit 是合法结果。MUST NOT 因此创建 P2。
+8. 最终 binding cardinality 仍由 Account↔Person 1:1 / Person→Account 0..1 保证。
 
 **Invitation / Attempt 分离**：
 
@@ -327,7 +330,7 @@ else:
 4. MUST NOT 记录 secret；MUST NOT 明文记录微信敏感凭据（含 `wechat_openid`）。
 5. MUST NOT 为满足 audit FK 而创建 Person / Account；Case C 在 formal Account 尚不存在即被 Gate 1 阻断时，系统仍 MUST 具备 auditable security outcome。
 6. audit storage MUST NOT weaken RLS / privacy。
-7. failure / pending / committed MUST NOT 被伪造或互相改写。
+7. failure / pending / committed 的历史记录 MUST NOT 被伪造或静默改写；§5.5 允许的合法生命周期推进（如 PENDING → COMMITTED）不属于改写。
 
 ### 5.6.4 Invitation authority boundary
 
@@ -416,14 +419,14 @@ else:
   - **验收**：UNDER_14 缺 consent → BLOCK（非 PENDING）；MINOR_14_17 无 UNDER_14 guardian consent 仍可继续（其它 applicable Consent 仍需通过）；UNKNOWN / ADULT → 终止；失败后无 P1 关联事实、无 P1-specific candidate confirmation、无 P1-specific second-party recognition request。
 - **IB-017（Event-Driven）**：即使 Gate 1 通过，在 Account A ↔ P1 commit 前系统 MUST 执行 Gate 2，按 §5.4 对当前状态重新校验 age / applicable Compliance、guardian where applicable、consent where applicable、invitation validity、confirmation authority、candidate recognition、Account / Person conflicts（§5.1 Gate 2；§5.5）。
   - **验收**：commit 前失效 → commit blocked；无 partial binding。
-- **IB-018（State-Driven）**：业务结果 MUST 封闭为 COMMITTED / PENDING / TERMINAL ATTEMPT REJECTION / RETRYABLE OPERATION FAILURE 四类；PENDING MUST 只表示 §5.5 定义的「attempt 仍合法且仅缺尚可合法补齐的步骤」（§5.5）。
-  - **验收**：PENDING 掩盖 consent invalid / identity conflict / 无权确认者 / multi-family / ADULT / UNKNOWN / invitation terminal → 合同违反。
-- **IB-019（Unwanted Behaviour）**：`TERMINAL ATTEMPT REJECTION` MUST 覆盖 §5.5 列出的全部情形；业务 attempt 仍合法时，技术性失败 MUST NOT 自动转成业务终态（§5.5）。
-  - **验收**：每一类均可判定为不可再成功；技术失败可重试且不伪造 COMMITTED。
+- **IB-018（State-Driven）**：业务结果 MUST 封闭为 COMMITTED / PENDING / TERMINAL ATTEMPT REJECTION / RETRYABLE OPERATION FAILURE 四类；PENDING MUST 只表示 §5.5 定义的「attempt 仍合法且仅缺尚可合法补齐的步骤」，且 MUST NOT 被解释为已 settled 或冻结 attempt 的未来业务结果（§5.5）。
+  - **验收**：PENDING 掩盖 consent invalid / identity conflict / 无权确认者 / multi-family / ADULT / UNKNOWN / invitation terminal → 合同违反；合法新确认 / 新授权业务事件到达后 MUST 可推进为 COMMITTED 或 TERMINAL ATTEMPT REJECTION；无新业务事件的 exact duplicate 不产生重复副作用。
+- **IB-019（Unwanted Behaviour）**：`TERMINAL ATTEMPT REJECTION` MUST 覆盖 §5.5 列出的全部情形；业务 attempt 仍合法时，技术性失败 MUST NOT 自动转成业务终态；`RETRYABLE OPERATION FAILURE` MUST NOT 被解释为 attempt 的永久 settled outcome（§5.5）。
+  - **验收**：每一类均可判定为不可再成功；技术失败可 retry / read-back 并收敛到当前 authoritative outcome，不伪造 COMMITTED 或 TERMINAL。
 - **IB-020（Unwanted Behaviour）**：`Invitation lifecycle` MUST NOT 等于 `Binding attempt lifecycle`；未证明为 P1 的 candidate 的 cancel / reject / identity failure / attempt expiration MUST 最多终止 attempt，MUST NOT decline / cancel / expire / withdraw P1 invitation（§5.5 / §5.6.4）。
   - **验收**：attempt terminal 后 invitation 状态不变（除非 Slice 4 已定义的 authorized lifecycle event 另行发生）。
-- **IB-021（Event-Driven）**：当 invitation 已 terminal / unusable 时，**尚未 COMMITTED 的** old attempt MUST NOT complete、MUST NOT revive old invitation；未来参与 MUST 使用 new invitation。若 attempt 在 invitation terminal 前已 COMMITTED，binding MUST 保持 COMMITTED，same-attempt replay MUST 返回该历史 COMMITTED 结果，但 MUST NOT re-execute commit、MUST NOT revive invitation、MUST NOT 恢复 participation accept、MUST NOT 重建 authorization。同一 attempt 重复提交 MUST 返回同一结果，已失败终态 MUST NOT 被重放为成功；old attempt terminal 且 invitation 仍 valid 时，new attempt MUST 按 §5.5 允许，MUST NOT 被旧 attempt 唯一性阻止（§5.5）。
-  - **验收**：invitation terminal 后提交未 COMMITTED 旧 attempt → 拒绝；已 COMMITTED attempt replay → 返回历史 COMMITTED，commit 不再执行；same attempt 幂等计数不变；new attempt 可与旧 attempt 并存为不同 attempt identity。
+- **IB-021（Event-Driven）**：当 invitation 已 terminal / unusable 时，**尚未 COMMITTED 的** old attempt MUST NOT complete、MUST NOT revive old invitation；未来参与 MUST 使用 new invitation。若 attempt 在 invitation terminal 前已 COMMITTED，binding MUST 保持 COMMITTED，same-attempt replay MUST 返回该历史 COMMITTED 结果，但 MUST NOT re-execute commit、MUST NOT revive invitation、MUST NOT 恢复 participation accept、MUST NOT 重建 authorization。对已 settled 的 `COMMITTED` / `TERMINAL ATTEMPT REJECTION`，同一 attempt 的 replay / read-back MUST 返回该历史 settled result，已失败终态 MUST NOT 被重放为成功；`PENDING` 与 `RETRYABLE` 不是 settled，MUST NOT 被永久冻结（§5.5）。old attempt terminal 且 invitation 仍 valid 时，new attempt MUST 按 §5.5 允许，MUST NOT 被旧 attempt 唯一性阻止（§5.5）。
+  - **验收**：invitation terminal 后提交未 COMMITTED 旧 attempt → 拒绝；已 COMMITTED attempt replay → 返回历史 COMMITTED，commit 不再执行；settled attempt 幂等计数不变；PENDING / RETRYABLE attempt 不被冻结；new attempt 可与旧 attempt 并存为不同 attempt identity。
 
 ## 7.5 No-P2、独立事实与未绑定响应
 
@@ -456,7 +459,7 @@ else:
 3. 唯一 Age / Pre-gate Matrix：UNDER_14、MINOR_14_17（有/无 guardian）、ADULT、UNKNOWN。
 4. Phase A → Gate 1 → Phase B → Gate 2 → Phase C 的唯一顺序、关联边界、UNDER_14 consent-first 与 commit 复核。
 5. no-P2、invitation flow routing、普通登录不变、普通登录先行冲突。
-6. 四类业务结果、single-attempt 幂等、new attempt 与并发收敛（commit ∈ {0, 1}）、`Invitation lifecycle ≠ Binding attempt lifecycle`。
+6. 四类业务结果、attempt identity 与 operation idempotency 分离（settled / non-settled）、new attempt 与并发收敛（commit ∈ {0, 1}）、`Invitation lifecycle ≠ Binding attempt lifecycle`。
 7. 未绑定 candidate 的内部 / 外部状态分离（anti-enumeration）。
 8. binding 作为独立身份事实；多 Family BLOCK；审计行为边界；Slice 1 additive reconciliation 与 Slice 4 OQ-6 解除条件。
 
@@ -501,6 +504,10 @@ else:
 20. **COMMITTED replay after invitation expiry** — **Given** binding 已 COMMITTED，之后 invitation 进入 terminal，**When** same attempt replay，**Then** MUST 返回 prior committed identity-binding result；MUST NOT re-execute commit、MUST NOT revive invitation、MUST NOT grant participation、MUST NOT recreate authorization。**Upstream**: V1-C44、Slice 4 contract
 21. **Operation timeout after valid Phase B confirmation** — **Given** Phase B 仍 valid 且 candidate confirmation 已记录，**When** 发生 transient network timeout / unknown operation result，**Then** attempt remains eligible for idempotent resolution / retry；existing valid confirmation MUST NOT be silently erased；MUST NOT assume success；MUST NOT assume terminal rejection。**Upstream**: V1-C44、§37.2
 22. **Attempt expiration after Phase B** — **Given** Phase B attempt 业务寿命到期，**When** 尝试 commit，**Then** attempt cannot commit（TERMINAL）；historical / audit facts MAY remain；MUST NOT leave active authorization / session / participation / half binding。**Upstream**: V1-C44、§37.2
+23. **PENDING progresses via new confirmation** — **Given** attempt 为 PENDING、Gate 1 已通过且 candidate 已确认、guardian 尚未确认，**When** 已授权 guardian 到达并作出确认、Gate 2 通过，**Then** MUST 合法推进为 COMMITTED；PENDING 不是 settled，不得被视为永久结果。**Upstream**: V1-C44
+24. **Exact duplicate while PENDING** — **Given** attempt 为 PENDING，**When** 同一 candidate confirmation request 在无新业务事件下 exact duplicate，**Then** MUST NOT 产生重复 confirmation / 重复副作用 / 重复 commit；同时 MUST NOT 因此冻结 attempt 或阻止后续合法确认推进。**Upstream**: V1-C44
+25. **RETRYABLE timeout resolves to COMMITTED** — **Given** commit operation timeout 且结果 unknown，**When** read-back 显示 commit 实际已成功，**Then** MUST 收敛为 COMMITTED；不得因先前返回 RETRYABLE 就永久返回 RETRYABLE；MUST NOT double commit。**Upstream**: V1-C44、§37.2
+26. **RETRYABLE timeout resolves to no commit / later terminal** — **Given** operation timeout，**When** read-back 确认未 commit 且后续 eligibility 失败，**Then** MAY 最终判定为 TERMINAL ATTEMPT REJECTION；MUST NOT 伪造 COMMITTED，也不得把 RETRYABLE 当作已 settled。**Upstream**: V1-C44、§37.2
 
 ---
 
@@ -511,7 +518,7 @@ else:
 | 合同与路由（IB-001—IB-002、IB-004—IB-005） | document + contract review | 两条路径边界清楚；Case B/C 分流；普通登录回归合同不改；routing invariant 可判定；无 `mode=invite` |
 | 双确认与 candidate recognition（IB-006—IB-010） | contract matrix | 等式与独立性逐条可判定；非 KYC 声明；四要素一致性；Phase A / B 边界；单项伪证明逐项拒绝 |
 | 年龄与确认主体（IB-011—IB-015） | contract matrix | §5.4 矩阵四行逐行可判定；UNDER_14 / MINOR_14_17 门禁差异；MINOR_14_17 不自动继承 UNDER_14 guardian consent，其它 applicable consent 仍执行；动态重估不产生 consent invalid → PENDING |
-| 前置门禁与生命周期（IB-016—IB-021） | contract matrix + state table | Gate 1 先于 Phase B；Gate 2 复核；四类结果封闭；PENDING 边界；single-attempt 幂等；COMMITTED replay；operation timeout ≠ attempt expiration；new attempt / 并发；attempt 与 invitation 分离 |
+| 前置门禁与生命周期（IB-016—IB-021） | contract matrix + state table | Gate 1 先于 Phase B；Gate 2 复核；四类结果封闭；PENDING 边界与可推进性；attempt identity ≠ operation idempotency；settled replay 稳定；RETRYABLE 可由 retry / read-back 收敛；operation timeout ≠ attempt expiration；new attempt / 并发；attempt 与 invitation 分离 |
 | No-P2 / 独立事实 / anti-enumeration（IB-022—IB-026） | contract review + response matrix | binding 前 / 失败后 / 并发后状态；concurrent commits ∈ {0, 1}；不同内部原因产生同一可观察结果 |
 | 审计与多家庭（IB-027—IB-028） | contract review | 多 membership BLOCK；审计行为边界；Case C 无 Account 时仍可审计；无枚举 oracle |
 | Slice 1 / Slice 4 governance | document + command | additive note；Slice 4 changed = 0；下方六项逐条状态 |
