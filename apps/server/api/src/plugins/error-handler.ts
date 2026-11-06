@@ -86,7 +86,9 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
     });
   }
 
-  // Unexpected error
+  // Unexpected error: log the real cause (never the response) so a real
+  // failure is diagnosable without leaking internals to the client.
+  req.log.error({ err }, 'unhandled request error');
   return reply.status(500).send({
     code: 'INTERNAL_ERROR',
     message: 'An internal error occurred',

@@ -49,7 +49,7 @@ describe('Case primary concurrency (T024)', () => {
         idempotencyKey: `t024-fam-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       },
     });
-    expect(res.statusCode).toBe(201);
+    expect(res.statusCode, `body: ${res.body}`).toBe(201);
     return res.json().id as string;
   }
 
@@ -71,7 +71,10 @@ describe('Case primary concurrency (T024)', () => {
       postCase(token, `t024-key-b-${Date.now()}`),
     ]);
 
-    expect([r1.statusCode, r2.statusCode]).toEqual([201, 201]);
+    expect(
+      [r1.statusCode, r2.statusCode],
+      `bodies: ${r1.body} | ${r2.body}`
+    ).toEqual([201, 201]);
 
     const aggregate = await verifyPool.query(
       `SELECT count(*)::int AS c FROM cases
