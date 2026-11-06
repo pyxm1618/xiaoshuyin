@@ -7,6 +7,10 @@
  *   → independent EXISTS(primary) → case → case_event → business_audit_event
  *   → idempotency fill → COMMIT.
  *
+ * Authentication runs in `preValidation` so it precedes schema validation
+ * (D-4 step 0). GET routes disable Fastify's implicit HEAD exposure, keeping
+ * the surface at exactly the three frozen operations.
+ *
  * No 23505 handling: the partial unique index is the last line of defence, so
  * a violation is a real failure that must roll the whole transaction back.
  */
@@ -17,12 +21,13 @@ import {
   CreateCaseRequest,
   CaseResponse,
   CaseListResponse,
-  CaseIdParams,
   ErrorSchema,
 } from '@xiaoshuyin/contracts';
 import { authorize } from '@xiaoshuyin/authorization';
 import {
   hashPayload,
+  decideIdempotency,
+  encodeCaseIdempotencyKey,
   getFamilyById,
   insertCase,
   insertCaseEvent,
@@ -42,6 +47,17 @@ import { toHttpError } from '../plugins/error-handler.js';
 import type pg from 'pg';
 
 const CASE_COMMAND = 'CASE_CREATE' as const;
+
+/**
+ * Path parameter carries the frozen `format: uuid` for documentation, but is
+ * NOT used as a validation gate: a malformed id must converge to the uniform
+ * `404 CASE_NOT_FOUND` instead of a contract-external 422.
+ */
+const CaseIdParams = z.object({
+  id: z.string().meta({ format: 'uuid' }),
+});
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CaseNotFoundError = z.strictObject({
   code: z.literal('CASE_NOT_FOUND'),
@@ -65,6 +81,9 @@ const CurrentFamilyAmbiguousError = z.strictObject({
 
 const CaseDetailNotFound = z.union([CaseNotFoundError, CurrentFamilyNotFoundError]);
 
+const BEARER_SECURITY = [{ bearerAuth: [] }];
+const CASE_TAG = ['case'];
+
 function httpError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const base = toHttpError(code, message);
   return Object.assign(new Error(base.message), { statusCode: base.statusCode, code: base.code });
@@ -87,7 +106,13 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.post(
     '/api/v1/cases',
     {
+      // Authentication precedes schema validation (D-4 step 0).
+      preValidation: app.authenticate,
       schema: {
+        operationId: 'createCase',
+        summary: 'Create a Case container',
+        tags: CASE_TAG,
+        security: BEARER_SECURITY,
         body: CreateCaseRequest,
         response: {
           201: CaseResponse,
@@ -115,12 +140,13 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
         const err = toHttpError('VALIDATION_ERROR', 'Invalid request body');
         return reply.status(err.statusCode).send(err);
       }
-      const { idempotencyKey } = parsed.data;
+      const logicalKey = parsed.data.idempotencyKey;
+      const storageKey = encodeCaseIdempotencyKey(logicalKey);
 
       // 1. Resolve the current target Family (Slice 1 semantics, no new codes).
       const familyId = await withIdentityTransaction(
         pool,
-        { accountId: accountId, purpose: 'FAMILY_MANAGEMENT' },
+        { accountId, purpose: 'FAMILY_MANAGEMENT' },
         (tx) => requireCurrentFamily(tx, personId)
       );
 
@@ -131,16 +157,11 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
       try {
         const outcome = await withRlsTransaction(
           pool,
-          {
-            familyId,
-            accountId: accountId,
-            personId: personId,
-            purpose: 'FAMILY_MANAGEMENT',
-          },
+          { familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT' },
           async (tx) => {
             const family = await getFamilyById(tx, familyId);
             const decision = authorize({
-              actor: { accountId: accountId, personId: personId },
+              actor: { accountId, personId },
               product: 'V1',
               family: {
                 familyId,
@@ -162,7 +183,7 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
             const reserved = await reserveIdempotency(tx, {
               actorAccountId: accountId,
               commandType: CASE_COMMAND,
-              idempotencyKey,
+              idempotencyKey: storageKey,
               requestHash,
             });
 
@@ -170,24 +191,33 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
               const existing = await getReservedIdempotency(tx, {
                 actorAccountId: accountId,
                 commandType: CASE_COMMAND,
-                idempotencyKey,
+                idempotencyKey: storageKey,
               });
               if (!existing) {
                 // RLS/visibility invariant: a conflicting key must be readable.
                 throw httpError('INTERNAL_ERROR', 'Idempotency record not visible');
               }
-              if (existing.request_hash !== requestHash) {
+              // Shared contract: no second mismatch predicate in the route.
+              const replay = decideIdempotency(
+                {
+                  requestHash: existing.request_hash,
+                  responseStatus: existing.response_status,
+                  responseBody: existing.response_body,
+                },
+                requestHash
+              );
+              if (replay.action === 'MISMATCH') {
                 return { kind: 'MISMATCH' as const };
               }
-              if (existing.response_status === 0) {
+              if (replay.action !== 'REPLAY' || replay.responseStatus === 0) {
                 // A committed placeholder is impossible in this transaction
                 // model; treat it as a real invariant failure, not a success.
                 throw httpError('INTERNAL_ERROR', 'Incomplete idempotency record');
               }
               return {
                 kind: 'REPLAY' as const,
-                status: existing.response_status,
-                body: existing.response_body,
+                status: replay.responseStatus,
+                body: replay.responseBody,
               };
             }
 
@@ -221,7 +251,7 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
             await completeIdempotency(tx, {
               actorAccountId: accountId,
               commandType: CASE_COMMAND,
-              idempotencyKey,
+              idempotencyKey: storageKey,
               status: 201,
               body,
             });
@@ -248,7 +278,13 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.get(
     '/api/v1/cases',
     {
+      exposeHeadRoute: false,
+      preValidation: app.authenticate,
       schema: {
+        operationId: 'listCases',
+        summary: 'List the current Family Cases',
+        tags: CASE_TAG,
+        security: BEARER_SECURITY,
         response: {
           200: CaseListResponse,
           401: ErrorSchema,
@@ -270,23 +306,18 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
 
       const familyId = await withIdentityTransaction(
         pool,
-        { accountId: accountId, purpose: 'FAMILY_MANAGEMENT' },
+        { accountId, purpose: 'FAMILY_MANAGEMENT' },
         (tx) => requireCurrentFamily(tx, personId)
       );
 
       try {
         const result = await withRlsTransaction(
           pool,
-          {
-            familyId,
-            accountId: accountId,
-            personId: personId,
-            purpose: 'FAMILY_MANAGEMENT',
-          },
+          { familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT' },
           async (tx) => {
             const family = await getFamilyById(tx, familyId);
             const decision = authorize({
-              actor: { accountId: accountId, personId: personId },
+              actor: { accountId, personId },
               product: 'V1',
               family: {
                 familyId,
@@ -321,7 +352,13 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.get(
     '/api/v1/cases/:id',
     {
+      exposeHeadRoute: false,
+      preValidation: app.authenticate,
       schema: {
+        operationId: 'getCase',
+        summary: 'Read a single Case',
+        tags: CASE_TAG,
+        security: BEARER_SECURITY,
         params: CaseIdParams,
         response: {
           200: CaseResponse,
@@ -344,23 +381,18 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
 
       const familyId = await withIdentityTransaction(
         pool,
-        { accountId: accountId, purpose: 'FAMILY_MANAGEMENT' },
+        { accountId, purpose: 'FAMILY_MANAGEMENT' },
         (tx) => requireCurrentFamily(tx, personId)
       );
 
       try {
         const row = await withRlsTransaction(
           pool,
-          {
-            familyId,
-            accountId: accountId,
-            personId: personId,
-            purpose: 'FAMILY_MANAGEMENT',
-          },
+          { familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT' },
           async (tx) => {
             const family = await getFamilyById(tx, familyId);
             const decision = authorize({
-              actor: { accountId: accountId, personId: personId },
+              actor: { accountId, personId },
               product: 'V1',
               family: {
                 familyId,
@@ -374,9 +406,10 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
               purpose: 'FAMILY_MANAGEMENT',
             });
 
-            // Anti-enumeration: "no access" and "does not exist" are the same
-            // 404 body. RLS already limits visibility to this Family.
-            if (decision.decision === 'DENY') {
+            // Anti-enumeration: "no access", "malformed id" and "does not
+            // exist" are the same 404 body. RLS already limits visibility to
+            // this Family, and a malformed id can never match a real row.
+            if (decision.decision === 'DENY' || !UUID_PATTERN.test(caseId)) {
               throw httpError('CASE_NOT_FOUND', 'Case not found');
             }
 

@@ -5,6 +5,12 @@
     "version": "1.0.0"
   },
   "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
     "schemas": {}
   },
   "paths": {
@@ -174,6 +180,11 @@
     },
     "/api/v1/cases": {
       "post": {
+        "operationId": "createCase",
+        "summary": "Create a Case container",
+        "tags": [
+          "case"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -195,6 +206,11 @@
             }
           }
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "201": {
             "description": "Default Response",
@@ -441,6 +457,16 @@
         }
       },
       "get": {
+        "operationId": "listCases",
+        "summary": "List the current Family Cases",
+        "tags": [
+          "case"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -671,16 +697,25 @@
     },
     "/api/v1/cases/{id}": {
       "get": {
+        "operationId": "getCase",
+        "summary": "Read a single Case",
+        "tags": [
+          "case"
+        ],
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              "format": "uuid"
             },
             "in": "path",
             "name": "id",
             "required": true
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
           }
         ],
         "responses": {

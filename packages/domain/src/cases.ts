@@ -8,6 +8,7 @@
  * line of defence; a 23505 there is a real failure, never a normal branch.
  */
 
+import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 
 type Tx = PoolClient;
@@ -156,6 +157,49 @@ export async function insertCaseAudit(
 }
 
 // ── Idempotency (CASE_CREATE) ───────────────────────────────
+
+/**
+ * Storage-safe representation of the logical CASE_CREATE idempotency key.
+ *
+ * The frozen public contract allows any string of 8–128 characters, but the
+ * shared `idempotency_keys.idempotency_key` column is `text` with a 8–128
+ * character CHECK and PostgreSQL rejects U+0000 inside text values.
+ *
+ * The mapping is deterministic and keeps the scope semantics
+ * (actor + command + logical key):
+ *   1. PostgreSQL-safe keys are stored verbatim — no historical change for
+ *      existing command types and no surprise for ordinary keys.
+ *   2. Keys containing U+0000 / lone surrogates (or that start with a reserved
+ *      prefix) are stored as `u:` + base64url(UTF-16LE). This is injective and
+ *      reversible, and fits the frozen column for realistic inputs.
+ *   3. A reversible encoding cannot fit 128 characters for every legal input
+ *      (pigeonhole: 128 arbitrary code units expand when encoded). For that
+ *      residual case the key is stored as `h:` + SHA-256 hex (66 chars): still
+ *      deterministic, never truncated, and collision-resistant over distinct
+ *      logical keys.
+ *
+ * No second idempotency table and no change to Slice 1 command semantics —
+ * `CASE_CREATE` is a new command type, so no existing row is reinterpreted.
+ */
+const RESERVED_KEY_PREFIX = /^[uh]:/;
+
+function isStorageSafe(key: string): boolean {
+  if (key.includes('\u0000')) return false;
+  if (typeof key.isWellFormed === 'function' && !key.isWellFormed()) return false;
+  return true;
+}
+
+export function encodeCaseIdempotencyKey(logicalKey: string): string {
+  if (isStorageSafe(logicalKey) && !RESERVED_KEY_PREFIX.test(logicalKey)) {
+    return logicalKey;
+  }
+  const reversible = 'u:' + Buffer.from(logicalKey, 'utf16le').toString('base64url');
+  if (reversible.length <= 128) return reversible;
+  const digest = createHash('sha256')
+    .update(Buffer.from(logicalKey, 'utf16le'))
+    .digest('hex');
+  return 'h:' + digest;
+}
 // Same table as Slice 1; no second idempotency store. Every call is expected
 // to run inside withRlsTransaction so the identity context is active.
 

@@ -1,6 +1,12 @@
 /**
  * Auth plugin: verifies session token, attaches actor to request.
  * Uses transaction-bound GUC to avoid pool reuse leakage (FR-013).
+ *
+ * The authentication work is exposed as a reusable `authenticate` hook so a
+ * route that must authenticate BEFORE schema validation (Case Core, plan D-4
+ * step 0) can run it in `preValidation` without duplicating the logic. The
+ * global `preHandler` keeps the Slice 1 behaviour and skips the work when the
+ * actor is already resolved.
  */
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -14,15 +20,17 @@ declare module 'fastify' {
       personId: string | null;
     } | null;
   }
+
+  interface FastifyInstance {
+    authenticate: (req: FastifyRequest) => Promise<void>;
+  }
 }
 
-export function registerAuthPlugin(app: FastifyInstance, pool: pg.Pool, sessionSecret: string) {
-  app.decorateRequest('actor', null);
+const PUBLIC_PATHS = new Set(['/healthz', '/api/v1/auth/wechat']);
 
-  app.addHook('preHandler', async (req: FastifyRequest) => {
-    if (req.url === '/healthz' || req.url === '/api/v1/auth/wechat') {
-      return;
-    }
+export function createAuthenticate(pool: pg.Pool, sessionSecret: string) {
+  return async function authenticate(req: FastifyRequest): Promise<void> {
+    if (req.actor) return;
 
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
@@ -80,5 +88,17 @@ export function registerAuthPlugin(app: FastifyInstance, pool: pg.Pool, sessionS
     } finally {
       client.release();
     }
+  };
+}
+
+export function registerAuthPlugin(app: FastifyInstance, pool: pg.Pool, sessionSecret: string) {
+  app.decorateRequest('actor', null);
+
+  const authenticate = createAuthenticate(pool, sessionSecret);
+  app.decorate('authenticate', authenticate);
+
+  app.addHook('preHandler', async (req: FastifyRequest) => {
+    if (PUBLIC_PATHS.has(req.url)) return;
+    await authenticate(req);
   });
 }

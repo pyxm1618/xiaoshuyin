@@ -207,7 +207,4 @@ export const CaseListResponse = z.strictObject({
 });
 export type CaseListResponseType = z.infer<typeof CaseListResponse>;
 
-export const CaseIdParams = z.object({
-  id: z.string().uuid(),
-});
 

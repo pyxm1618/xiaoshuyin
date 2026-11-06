@@ -42,6 +42,11 @@ await app.register(swagger, {
   openapi: {
     openapi: '3.1.0',
     info: { title: 'Xiaoshuyin API', version: '1.0.0' },
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: 'http', scheme: 'bearer' },
+      },
+    },
   },
   transform: jsonSchemaTransform,
 });

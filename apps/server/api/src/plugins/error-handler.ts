@@ -53,7 +53,20 @@ export function toHttpError(code: string, message?: string, details?: Record<str
   };
 }
 
-export function errorHandler(err: Error, _req: FastifyRequest, reply: FastifyReply) {
+export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyReply) {
+  // Secure JSON parsing rejects prototype-polluting payloads and invalid JSON.
+  // The Case create contract requires every undeclared business field to be a
+  // 422 VALIDATION_ERROR with zero writes, so this parse failure is mapped for
+  // that command only. Other endpoints keep the Fastify default (400).
+  const isCaseCreate =
+    req.method === 'POST' && (req.routeOptions?.url ?? req.url) === '/api/v1/cases';
+  if (isCaseCreate && (err as any).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+    return reply.status(422).send({
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid request body',
+    });
+  }
+
   // Route schema validation failures surface as Fastify 400s. The frozen
   // contract maps every schema violation to `422 VALIDATION_ERROR` with a
   // single body shape (no leaked field details).
