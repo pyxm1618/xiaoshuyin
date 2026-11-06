@@ -31,11 +31,6 @@ ALTER TABLE idempotency_keys
 ALTER TABLE idempotency_keys
   ALTER COLUMN idempotency_key DROP NOT NULL;
 
--- The text column stays present and required for every other command type,
--- but new CASE_CREATE rows use the bytea column instead.
-ALTER TABLE idempotency_keys
-  ALTER COLUMN idempotency_key DROP NOT NULL;
-
 -- ── Step 02: representation invariant ───────────────────────
 -- Non-CASE_CREATE: text only (Slice 1 semantics frozen).
 -- CASE_CREATE: exactly one of the two representations, never both, never none.

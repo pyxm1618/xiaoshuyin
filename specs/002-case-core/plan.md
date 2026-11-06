@@ -268,7 +268,10 @@ AND (metadata ->> 'version')::numeric >= 1
 #### 2.3 既有表的最小增量
 
 - `business_audit_events`：新增 `event_type = 'CASE_CREATED'`、`resource_type = 'CASE'`。沿用 `family_id` / `actor_account_id` / `resource_id` / `metadata` / `occurred_at`，不新增列。
-- `idempotency_keys`：新增 `command_type = 'CASE_CREATE'`。不新增列、不建第二张表。
+- `idempotency_keys`：
+  - **002_case_core baseline**：只扩展 `command_type = 'CASE_CREATE'`；002 本身**不新增** `idempotency_keys` 列。
+  - **Round 2 Owner-approved amendment**：`003_case_idempotency_key_bytes.sql` 新增 `idempotency_key_bytes`；见 D-11.1。
+  - 两个阶段都**不新建第二张幂等表**。
 - `families` / `persons` / `family_members`：只读使用，不修改。
 
 ---
@@ -400,7 +403,9 @@ request_hash = sha256(canonicalJson({
 - `canonicalJson`（排序键、无空白）与 `hashPayload` 复用 `packages/domain/src/idempotency.ts`。
 - **当前 `body` 规范化结果恒为 `{}`**（本 Slice 请求体只有 `idempotencyKey`）。
 - **familyId 是 canonical command context，不是客户端提交字段**：它不属于 idempotency scope，但会改变业务结果的归属。若不进 hash，同一 key 可在不同 Family 之间回放，属于跨家庭数据泄漏（违反 FR-010 / V1-C21）；若允许客户端提交 `familyId`，则会伪造上下文。客户端提交 `familyId` 仍按 strict schema 返回 422。
-- **actor / command_type 不重复进入 hash**：`idempotency_keys` 的唯一键已经是 `(actor_account_id, command_type, idempotency_key)`，重复混入没有额外区分力，只会让 payload 语义与 scope 语义耦合。该理由必须在实现注释中写明。
+- **actor / command_type 不重复进入 hash**：logical scope 已经是
+  `(actor_account_id, command_type, logical idempotencyKey)`，重复混入没有额外区分力，只会让 payload 语义与 scope 语义耦合。该理由必须在实现注释中写明。
+  - physical representation / uniqueness 见 **D-11.1**：legacy / Slice 1 使用 text unique，新 `CASE_CREATE` 使用 bytea unique；不得把物理 text 唯一键写成完整的现行 scope。
 - **请求体必须经过 Zod strict 解析后再 hash**：未知字段直接 422，不进入 hash；因此不存在「同语义不同序」误判。
 - 未来若 hash 输入语义需要变化，必须通过新 `command_type` 或显式迁移处理，不得静默改算法。
 
@@ -427,7 +432,12 @@ request_hash = sha256(canonicalJson({
 
 #### 5.4 不使用第二张表
 
-`CASE_CREATE` 复用 `idempotency_keys`；只通过 reviewed migration 扩展 `command_type` CHECK 白名单。不得新建 `case_idempotency` 或类似表。
+`CASE_CREATE` 复用 `idempotency_keys`。
+
+- **002_case_core 对 `idempotency_keys` 的原始扩展**：只扩展 `command_type` CHECK 白名单。
+- **Round 2 amendment**：另由 reviewed migration `003_case_idempotency_key_bytes.sql` 扩展 exact physical representation（见 D-11.1）。
+
+任何阶段都不得新建 `case_idempotency` 或类似表。
 
 ---
 
@@ -583,7 +593,7 @@ request_hash = sha256(canonicalJson({
 | 既有 CHECK 扩展 | 对 `business_audit_events.event_type` / `resource_type`、`idempotency_keys.command_type` 采用 `DROP CONSTRAINT` + `ADD CONSTRAINT` 的 reviewed SQL；实现前读取 `pg_constraint` 确认真实约束名（内联匿名 CHECK 的默认名可能随 Slice 1 final 变化） |
 | migration 内容顺序 | 严格按下列可执行顺序；**被引用的唯一键必须先于复合 FK 存在**：<br>1) `CREATE TYPE case_status` / `case_phase`<br>2) `CREATE TABLE cases`<br>3) `cases` 自身约束：PK、`UNIQUE (id, family_id)`、`version >= 1`、family / creator FK<br>4) `cases` 索引：`cases_one_primary_open_per_family` partial unique、列表 / 状态索引<br>5) `CREATE TABLE case_events`：family FK、actor FK、复合 FK `(case_id, family_id) REFERENCES cases(id, family_id)`、`event_type` CHECK<br>6) `case_events` 索引 / `metadata` shape CHECK<br>7) `cases` / `case_events` ENABLE + FORCE RLS<br>8) policies（`cases` / `case_events`）<br>9) GRANT（表 `SELECT, INSERT`；enum `USAGE`）<br>10) 扩展 `business_audit_events` / `idempotency_keys` 既有 CHECK 白名单 |
 | migration 顺序理由 | `case_events` 的复合 FK 需要 `cases` 的 `UNIQUE (id, family_id)` 作为被引用唯一键；若先建 `case_events` 再建该唯一约束，按字面执行会失败。因此 migration 必须把 `cases` 自身约束（含 `UNIQUE (id, family_id)`）放在第 3 步、`case_events` 放在第 5 步。RLS / policy 在两张表都建好后再启用，避免中间态；既有 CHECK 扩展仍最后执行。 |
-| 回滚 | 本 Slice 无数据回填；回滚 = 删除新表 / 新 enum / 新 policy / 新索引 + 还原两个 CHECK 白名单（实现阶段提供 down 步骤说明，不自动执行） |
+| 回滚 | **本节回滚描述仅针对 `002_case_core` migration**：本 Slice 无数据回填；回滚 = 删除新表 / 新 enum / 新 policy / 新索引 + 还原两个 CHECK 白名单（实现阶段提供 down 步骤说明，不自动执行）。`003` amendment 的回滚独立见 D-11.1，不得套用本节 |
 
 **为什么 CHECK 扩展放在最后**：新表与 RLS 先就位，避免在扩展白名单与建表之间出现「可写入但无表」或「有表但不可写」的中间态；整个 migration 在一个事务中执行（`db-migrate.mjs` 已保证）。
 
@@ -602,6 +612,7 @@ request_hash = sha256(canonicalJson({
 | legacy 兼容 | 003 之前的 raw text CASE_CREATE 行继续按 raw logical identity 读取（bytes IS NULL） |
 | 禁止 | digest、UUID 占位命名空间、base64 text 身份、截断；以及任何 reserved prefix（`u:` / `h:`）语义 |
 | 不变量保持 | 不新建第二张幂等表；Slice 1 六个 command 的物理语义与唯一性完全不变 |
+| 回滚（仅 003） | 删除 `idempotency_scope_key_bytes` 索引与 representation CHECK、删除 `idempotency_key_bytes` 列、恢复 `idempotency_key` NOT NULL；无数据回填，不回滚 002 |
 
 ---
 
@@ -635,7 +646,10 @@ request_hash = sha256(canonicalJson({
 - 新增 2 张表（`cases` / `case_events`）、2 个 enum（`case_status` / `case_phase`）、1 个 partial unique index、4 个普通索引、2 条 policy、若干 GRANT。
 - 新增 1 个复合外键 `case_events (case_id, family_id) → cases (id, family_id)`，因此 `cases` 需要 `UNIQUE (id, family_id)`；migration 必须先建立该唯一约束，再创建 `case_events` 复合外键。
 - `case_events.metadata` 新增 `case_events_metadata_shape_check`：JSON object 且 key 恰为 `{primary, version}`，拒绝正文 / PII / 额外 key；无默认值。
-- 既有表变更：`business_audit_events` 两个 CHECK 白名单扩值；`idempotency_keys` 一个 CHECK 白名单扩值。无列变更、无数据回填。
+- 既有表变更（现行事实）：
+  - `002_case_core`：`business_audit_events` 两个 CHECK 白名单扩值；`idempotency_keys` 一个 CHECK 白名单扩值。**无列变更、无数据回填。**
+  - `003_case_idempotency_key_bytes.sql`（Round 2 Owner-approved amendment）：新增 nullable `idempotency_key_bytes bytea`；`idempotency_key text` 改为 nullable；新增 representation CHECK；新增 `UNIQUE (actor_account_id, command_type, idempotency_key_bytes)` 索引；**无数据回填**。
+- `001` 不修改；`002` 不修改；不新建第二张幂等表。
 - 不修改 001 migration；不新增第二套幂等表或审计平台。
 - 无 pgvector / pg_jieba / pg-boss / Drizzle push。
 

@@ -178,7 +178,9 @@ CHECK (
 
 ## 5. `idempotency_keys`（既有表，最小增量）
 
-### 5.1 不新增列
+### 5.1 003 之前的 Slice 2 baseline
+
+> 本节描述 `002_case_core` 的初始结构假设（历史 baseline）。Round 2 Owner-approved amendment 之后的**现行物理结构以 §5.5 为准**；本节不代表 current final schema。
 
 沿用 Slice 1 结构：
 `id` / `actor_account_id` / `command_type` / `idempotency_key` / `request_hash` / `response_status` / `response_body` / `created_at`，
