@@ -75,9 +75,9 @@ describe('Case scope guard (T031)', () => {
   it('exposes exactly the three frozen Case operations', () => {
     const routes = app.printRoutes({ commonPrefix: false });
     // Collection: POST + GET (+ implicit HEAD). Detail: GET (+ HEAD).
-    expect(routes).toContain('/api/v1/cases (POST, GET, HEAD)');
+    expect(routes).toContain('/api/v1/cases (POST, GET)');
     const caseBlock = routes.slice(routes.indexOf('/api/v1/cases'));
-    expect(caseBlock).toContain('/:id (GET, HEAD)');
+    expect(caseBlock).toContain('/:id (GET)');
     // Exactly one Case subtree: no second `/cases/...` root line.
     const roots = routes.split('\n').filter((line) => line.includes('/api/v1/cases'));
     expect(roots.length).toBe(1);
@@ -97,17 +97,29 @@ describe('Case scope guard (T031)', () => {
       payload: { code: `t031_${Date.now()}` },
     });
     const token = login.json().token as string;
+    // Resolve a current Family so the detail branch is reachable (otherwise the
+    // Slice 1 Family semantics answer first).
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/families',
+      headers: { authorization: `Bearer ${token}` },
+      payload: {
+        displayName: 'T031',
+        ageBand: 'ADULT',
+        ageBandSource: 'SELF_STATEMENT',
+        idempotencyKey: `t031-fam-${Date.now()}`,
+      },
+    });
     // `/cases/current` is not a registered route: it can only fall into the
-    // `:id` parameter, where it is not a UUID and therefore a validation
-    // error — never a Case payload.
+    // `:id` parameter, where a non-UUID converges to the uniform Case-not-found
+    // 404 — never a Case payload and never a dedicated route.
     const current = await app.inject({
       method: 'GET',
       url: '/api/v1/cases/current',
       headers: { authorization: `Bearer ${token}` },
     });
-    expect(current.statusCode).toBe(422);
-    expect(current.json().code).toBe('VALIDATION_ERROR');
-    expect(JSON.stringify(current.json())).not.toMatch(/primary|phase|createdAt/);
+    expect(current.statusCode).toBe(404);
+    expect(current.json()).toEqual({ code: 'CASE_NOT_FOUND', message: 'Case not found' });
 
     const nested = await app.inject({
       method: 'GET',

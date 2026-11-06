@@ -97,6 +97,48 @@ describe('cases RLS (T022)', () => {
     }
   });
 
+  it('without app.family_id: case_events SELECT returns 0 and INSERT is denied', async () => {
+    const client = await app.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT app.set_identity_context($1, $2)', [accountA, 'FAMILY_MANAGEMENT']);
+
+      const sel = await client.query('SELECT count(*)::int AS c FROM case_events');
+      expect(sel.rows[0].c).toBe(0);
+
+      await expect(client.query(
+        `INSERT INTO case_events (family_id, case_id, actor_account_id, event_type, metadata)
+         VALUES ($1, $2, $3, 'CASE_CREATED', '{"primary": true, "version": 1}'::jsonb)`,
+        [familyA, caseA, accountA]
+      )).rejects.toThrow(/row-level security|42501/i);
+
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+  });
+
+  it('without app.family_id: cases SELECT returns 0 and INSERT is denied', async () => {
+    const client = await app.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT app.set_identity_context($1, $2)', [accountA, 'FAMILY_MANAGEMENT']);
+
+      const sel = await client.query('SELECT count(*)::int AS c FROM cases');
+      expect(sel.rows[0].c).toBe(0);
+
+      await expect(client.query(
+        `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
+         VALUES ($1, $2, 'OPEN', 'INTAKE', false, 1)`,
+        [familyA, personA]
+      )).rejects.toThrow(/row-level security|42501/i);
+
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+    }
+  });
+
   it('Family A context sees only Family A cases', async () => {
     const client = await app.connect();
     try {

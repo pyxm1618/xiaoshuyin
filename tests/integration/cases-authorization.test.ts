@@ -186,6 +186,37 @@ describe('Case authorization (T050)', () => {
     });
   });
 
+  describe('A07 — 普通 Family member（非 guardian、非 manager）', () => {
+    it('create/list 403 and detail 404 without Case data', async () => {
+      const manager = await login('a07-manager');
+      const familyId = await createFamily(manager.token, 'a07');
+      const created = await createCase(manager.token);
+      const caseId = created.json().id as string;
+
+      const member = await login('a07-member');
+      // Plain membership only: no guardian relationship, not the creator.
+      await joinFamily(familyId, member.personId);
+
+      const post = await createCase(member.token);
+      expect(post.statusCode).toBe(403);
+      expect(post.json().code).toBe('CASE_ACCESS_DENIED');
+
+      const list = await listCases(member.token);
+      expect(list.statusCode).toBe(403);
+      expect(list.json().code).toBe('CASE_ACCESS_DENIED');
+      expect(JSON.stringify(list.json())).not.toContain(caseId);
+
+      const detail = await getCase(member.token, caseId);
+      expect(detail.statusCode).toBe(404);
+      expect(detail.json()).toEqual({ code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      expect(JSON.stringify(detail.json())).not.toContain(caseId);
+
+      // The ordinary member is a legal Family member: the Family resolves, so
+      // this is the Case-level 403/404 branch, not CURRENT_FAMILY_NOT_FOUND.
+      expect(post.json().code).not.toBe('CURRENT_FAMILY_NOT_FOUND');
+    });
+  });
+
   describe('场景 B — guardian 但不是目标 Family 成员', () => {
     it('current Family is unresolved → Slice 1 semantics, no Case error codes', async () => {
       // A Family owned by someone else, where the actor is only a guardian.

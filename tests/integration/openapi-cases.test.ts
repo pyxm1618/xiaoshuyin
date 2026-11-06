@@ -45,6 +45,36 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
     ]);
   });
 
+  it('每个 operation 声明 frozen operationId 与 bearerAuth', () => {
+    const expected: Record<string, { op: string }> = {
+      'post /api/v1/cases': { op: 'createCase' },
+      'get /api/v1/cases': { op: 'listCases' },
+      'get /api/v1/cases/{id}': { op: 'getCase' },
+    };
+    for (const [key, { op }] of Object.entries(expected)) {
+      const [method, path] = key.split(' ');
+      const operation = spec.paths[path][method];
+      expect(operation.operationId, `${method} ${path} operationId`).toBe(op);
+      expect(operation.security, `${method} ${path} security`).toEqual([{ bearerAuth: [] }]);
+      expect(operation.tags).toEqual(['case']);
+    }
+    expect(spec.components.securitySchemes.bearerAuth).toEqual({
+      type: 'http',
+      scheme: 'bearer',
+    });
+  });
+
+  it('detail path parameter documents format uuid', () => {
+    const params = spec.paths['/api/v1/cases/{id}'].get.parameters;
+    expect(params.length).toBe(1);
+    expect(params[0]).toMatchObject({
+      name: 'id',
+      in: 'path',
+      required: true,
+      schema: { type: 'string', format: 'uuid' },
+    });
+  });
+
   it('does not expose /cases/current or transition endpoints', () => {
     for (const forbidden of ['current', 'pause', 'resume', 'switch-primary', 'close', 'recurrences']) {
       expect(JSON.stringify(spec.paths)).not.toContain(`/api/v1/cases/${forbidden}`);
