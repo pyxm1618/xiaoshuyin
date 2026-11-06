@@ -170,25 +170,42 @@ scanDir(ROOT, (file) => {
 });
 
 // ─── Rule 6: Scope guard ───
-// Out-of-scope tables for Slice 2 (Case Core). Their presence in a migration
-// or schema file means scope creep, not a future-proofing decision.
-// The list is additive: every table that was forbidden before stays forbidden.
-const FORBIDDEN_TABLES = [
-  'case_participants', 'participation_invites', 'assertions', 'observations',
-  'problem_formulations', 'scene_node_states', 'scene_artifacts',
-  'dialogue_messages', 'safety_states', 'plan_versions', 'notifications',
-  'notification_attempts', 'ai_runs', 'checkins', 'reviews',
+// Forbidden out-of-scope tables (specs/002-case-core/data-model.md §8).
+// The list is additive: every table forbidden before stays forbidden, and the
+// full Slice 2 exclusion vocabulary is covered — including `tasks`,
+// `case_followup_schedules`, `goals`, `intervention_instances`, `data_requests`
+// and the `memory_*` family.
+const FORBIDDEN_TABLE_PATTERNS = [
+  'case_participants',
+  'participation_invites',
+  'assertions',
+  'observations',
+  'dialogue_messages',
+  'problem_formulations',
+  'scene_node_states',
+  'scene_artifacts',
+  'safety_states',
+  'goals',
+  'intervention_instances',
+  'plan_versions',
+  'tasks',
+  'checkins',
+  'reviews',
+  'case_followup_schedules',
+  'notifications',
+  'notification_attempts',
+  'ai_runs',
+  'memory_[a-z0-9_]*',
+  'data_requests',
 ];
 
-// Detect the table regardless of the SQL/DDL form:
-//   CREATE TABLE assertions (...)
-//   CREATE TABLE IF NOT EXISTS public.case_participants (...)
-//   CREATE UNLOGGED TABLE "case_participants" (...)
-//   pgTable('case_participants', ...)
-// plus a bare mention of case_participants (the pre-existing rule).
-const FORBIDDEN_TABLE_NAME = FORBIDDEN_TABLES.map((t) => t.replace(/_/g, '[_]')).join('|');
+// Matches the table name as a SQL identifier: bare, quoted, schema-qualified
+// ("public"."observations"), with or without IF NOT EXISTS / UNLOGGED.
+const FORBIDDEN_TABLE_NAME = FORBIDDEN_TABLE_PATTERNS.join('|');
+const SQL_IDENT = '["\'`]?[A-Za-z_][A-Za-z0-9_]*["\'`]?';
 const FORBIDDEN_CREATE_TABLE = new RegExp(
-  `CREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:[A-Za-z_][A-Za-z0-9_]*\\s*\\.\\s*)?["'\`]?(${FORBIDDEN_TABLE_NAME})["'\`]?`,
+  `CREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?` +
+    `(?:${SQL_IDENT}\\s*\\.\\s*)?["'\`]?(${FORBIDDEN_TABLE_NAME})["'\`]?`,
   'i'
 );
 const FORBIDDEN_PGTABLE = new RegExp(

@@ -156,6 +156,25 @@ describe('Case HTTP boundary (converge findings 1–4)', () => {
     expect(badToken.statusCode).toBe(401);
     expect(badToken.json().code).toBe('UNAUTHENTICATED');
 
+    // Raw JSON that secure parsing rejects must still be 401 without a token.
+    const noTokenRaw = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cases',
+      headers: { 'content-type': 'application/json' },
+      payload: '{"idempotencyKey":"cv1-raw-1234","__proto__":{"polluted":true}}',
+    });
+    expect(noTokenRaw.statusCode).toBe(401);
+    expect(noTokenRaw.json().code).toBe('UNAUTHENTICATED');
+
+    const badTokenRaw = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cases',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer not-a-token' },
+      payload: '{"idempotencyKey":"cv1-raw-1234","__proto__":{"polluted":true}}',
+    });
+    expect(badTokenRaw.statusCode).toBe(401);
+    expect(badTokenRaw.json().code).toBe('UNAUTHENTICATED');
+
     const detailNoAuth = await app.inject({
       method: 'GET',
       url: '/api/v1/cases/not-a-uuid',

@@ -95,8 +95,8 @@ describe('Case idempotency (T063)', () => {
 
     const keys = await verifyPool.query(
       `SELECT count(*)::int AS c FROM idempotency_keys
-       WHERE command_type = 'CASE_CREATE' AND idempotency_key = $1`,
-      [key]
+       WHERE command_type = 'CASE_CREATE' AND idempotency_key_bytes = $1`,
+      [Buffer.from(key, 'utf16le')]
     );
     expect(keys.rows[0].c).toBe(1);
   });

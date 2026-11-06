@@ -45,6 +45,16 @@ const SQL_CASES: Array<[string, string]> = [
   ['CREATE TABLE problem_formulations', 'CREATE TABLE problem_formulations (id uuid);\n'],
   ['CREATE TABLE notifications', 'CREATE TABLE notifications (id uuid);\n'],
   ['CREATE TABLE safety_states', 'CREATE TABLE safety_states (id uuid);\n'],
+  ['CREATE TABLE tasks', 'CREATE TABLE tasks (id uuid);\n'],
+  ['CREATE TABLE case_followup_schedules', 'CREATE TABLE case_followup_schedules (id uuid);\n'],
+  ['CREATE TABLE goals', 'CREATE TABLE goals (id uuid);\n'],
+  ['CREATE TABLE intervention_instances', 'CREATE TABLE intervention_instances (id uuid);\n'],
+  ['CREATE TABLE data_requests', 'CREATE TABLE data_requests (id uuid);\n'],
+  ['CREATE TABLE memory_snapshots', 'CREATE TABLE memory_snapshots (id uuid);\n'],
+  [
+    'CREATE UNLOGGED TABLE IF NOT EXISTS "public"."observations"',
+    'CREATE UNLOGGED TABLE IF NOT EXISTS "public"."observations" (id uuid);\n',
+  ],
 ];
 
 afterAll(async () => {

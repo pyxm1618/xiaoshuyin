@@ -15,7 +15,7 @@ import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { toHttpError } from '../../apps/server/api/src/plugins/error-handler.js';
 import {
   decideIdempotency,
-  encodeCaseIdempotencyKey,
+  caseIdempotencyKeyBytes,
   hashPayload,
   reserveIdempotency,
   getReservedIdempotency,
@@ -85,7 +85,7 @@ describe('CASE_CREATE shared mismatch (finding 5)', () => {
         const reserved = await reserveIdempotency(tx, {
           actorAccountId: account.id,
           commandType: 'CASE_CREATE',
-          idempotencyKey: encodeCaseIdempotencyKey(key),
+          keyBytes: caseIdempotencyKeyBytes(key),
           requestHash: differentHash,
         });
         expect(reserved).toBe(false);
@@ -93,7 +93,8 @@ describe('CASE_CREATE shared mismatch (finding 5)', () => {
         const existing = await getReservedIdempotency(tx, {
           actorAccountId: account.id,
           commandType: 'CASE_CREATE',
-          idempotencyKey: encodeCaseIdempotencyKey(key),
+          keyBytes: caseIdempotencyKeyBytes(key),
+          legacyKeyText: key,
         });
         expect(existing).not.toBeNull();
 
@@ -161,7 +162,8 @@ describe('CASE_CREATE shared mismatch (finding 5)', () => {
         const existing = await getReservedIdempotency(tx, {
           actorAccountId: account.id,
           commandType: 'CASE_CREATE',
-          idempotencyKey: encodeCaseIdempotencyKey(key),
+          keyBytes: caseIdempotencyKeyBytes(key),
+          legacyKeyText: key,
         });
         return decideIdempotency(
           {
@@ -194,8 +196,8 @@ describe('CASE_CREATE shared mismatch (finding 5)', () => {
     );
     const keyRow = await verifyPool.query(
       `SELECT response_status, response_body FROM idempotency_keys
-       WHERE actor_account_id = $1 AND command_type = 'CASE_CREATE' AND idempotency_key = $2`,
-      [accountId, encodeCaseIdempotencyKey(logicalKey)]
+       WHERE actor_account_id = $1 AND command_type = 'CASE_CREATE' AND idempotency_key_bytes = $2`,
+      [accountId, caseIdempotencyKeyBytes(logicalKey)]
     );
     return {
       ...rows[0],
