@@ -127,6 +127,8 @@ actor_account_id + command_type='CASE_CREATE' + idempotency_key
 - lookup / 占位 / 回填 / replay 全部在 `withRlsTransaction` 内。
 - **scope 不含 family**：切换 Family 必须换 actor 视角才成立；`familyId` 只通过 canonical hash 参与一致性判定（见 5.2），不作为 scope 的一部分。
 
+**物理表示（Owner-approved amendment，Round 2）**：scope 的第三维是 **logical** `idempotencyKey`，必须是精确身份。新 `CASE_CREATE` 行把 logical key 的 UTF-16LE bytes 存入 `idempotency_key_bytes`（`bytea`），`idempotency_key` 留 NULL；Slice 1 六个 command 与 003 之前的 legacy `CASE_CREATE` 行仍使用 raw text 列。两列由 CHECK 强制「非 CASE_CREATE → text only；CASE_CREATE → 恰有其一」，并由两个 UNIQUE 约束分别覆盖。禁止用 digest / 占位 namespace / base64 text / 截断替代 logical identity。
+
 ### 5.2 Canonical payload hash
 
 ```text

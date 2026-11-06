@@ -587,6 +587,22 @@ request_hash = sha256(canonicalJson({
 
 **为什么 CHECK 扩展放在最后**：新表与 RLS 先就位，避免在扩展白名单与建表之间出现「可写入但无表」或「有表但不可写」的中间态；整个 migration 在一个事务中执行（`db-migrate.mjs` 已保证）。
 
+#### D-11.1 Amendment — exact CASE_CREATE idempotency key storage（Owner-approved，Round 2）
+
+逻辑 scope 不变：`actor_account_id + command_type + logical idempotencyKey`，且必须是**精确身份**（相同 logical key → 相同 scope；不同 logical key → 不同 scope），不得用概率性 digest 代替。
+
+物理表示补充（新增 reviewed migration `db/migrations/003_case_idempotency_key_bytes.sql`）：
+
+| 项 | 决定 |
+|---|---|
+| 新列 | `idempotency_key_bytes bytea NULL`；保留 `idempotency_key text` 并允许其为 NULL |
+| 表示不变量 | `command_type <> 'CASE_CREATE'` → text NOT NULL 且 bytes NULL；`CASE_CREATE` → text 与 bytes **恰有其一** |
+| 唯一性 | 保留 `UNIQUE (actor_account_id, command_type, idempotency_key)`；新增 `UNIQUE (actor_account_id, command_type, idempotency_key_bytes)` |
+| 新 CASE_CREATE 表示 | logical key 的 UTF-16LE bytes（deterministic / reversible / injective，可表示 NUL 与 lone surrogate） |
+| legacy 兼容 | 003 之前的 raw text CASE_CREATE 行继续按 raw logical identity 读取（bytes IS NULL） |
+| 禁止 | digest、UUID 占位命名空间、base64 text 身份、截断；以及任何 reserved prefix（`u:` / `h:`）语义 |
+| 不变量保持 | 不新建第二张幂等表；Slice 1 六个 command 的物理语义与唯一性完全不变 |
+
 ---
 
 ### D-12 明确不做（与 spec Out of Scope 对齐）

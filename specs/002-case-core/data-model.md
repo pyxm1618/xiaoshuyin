@@ -205,6 +205,20 @@ CHECK (
 - `command_type` 为内联匿名 CHECK；用 reviewed migration `DROP CONSTRAINT` + `ADD CONSTRAINT` 扩展。
 - 实现前读取 `pg_constraint` 确认真实约束名（默认预期 `idempotency_keys_command_type_check`）。
 
+### 5.5 物理表示 — CASE_CREATE exact identity（Owner-approved amendment，Round 2）
+
+`idempotency_key` 是 **logical** key（JS string，8–128 code units）。PostgreSQL `text` 不能表示 U+0000 与 lone surrogate，因此新 `CASE_CREATE` 行改用 `bytea`：
+
+| 列 | 非 CASE_CREATE | CASE_CREATE legacy | CASE_CREATE 新格式 |
+|---|---|---|---|
+| `idempotency_key` (text) | NOT NULL | NOT NULL（raw logical key） | **NULL** |
+| `idempotency_key_bytes` (bytea) | NULL | NULL | NOT NULL（UTF-16LE bytes） |
+
+- CHECK `idempotency_keys_key_representation_check` 精确保证上表：既不允许双 NULL，也不允许双非 NULL。
+- 唯一性：既有 `UNIQUE (actor_account_id, command_type, idempotency_key)` 继续服务 Slice 1 与 legacy 行；新增 `UNIQUE (actor_account_id, command_type, idempotency_key_bytes)` 服务新行（PostgreSQL 的 NULL-distinct 语义使两者互不干扰）。
+- 映射是 deterministic / reversible / injective：任意合法 logical key 都有精确 byte 表示，**不得**用 digest、占位命名空间、base64 text 或截断替代。
+- `u:` / `h:` 等前缀**没有**保留语义；legacy 行按 raw logical key 身份 replay。
+
 ---
 
 ## 6. RLS 与授权
