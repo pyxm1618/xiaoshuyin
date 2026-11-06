@@ -92,7 +92,7 @@
 
 **判定输入**: `INDEPENDENT CONVERGE FAIL — RETURN TO IMPLEMENT`
 **Old head**: `d2e9587d143d6082c35fba281fcab86a047d7a72`
-**New head**: `c382b43077aece2b72af2a259fa6d3a36244eb41`
+**Remediation code head**: `c382b43077aece2b72af2a259fa6d3a36244eb41`（最终 head 含本证据提交，以分支 HEAD / CI run 为准）
 **范围**: 只关闭 7 个 finding；未重新设计 Slice 2，未改 frozen upstream，未新增 migration。
 
 ## Finding 1 — OpenAPI contract drift → CLOSED
