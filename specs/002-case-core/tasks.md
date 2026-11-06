@@ -529,3 +529,9 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 | 7 scope guard | CLOSED | `guard-scope.test.ts` 12/12，注入即 exit != 0，清理后 PASS |
 
 **全量**: `bunx vitest run` → 48 files / 347 tests，0 failed / 0 skipped；coverage 002 FR 25/25、SC 11/11、Acceptance 18/18；governance PASS；openapi:check PASS。
+
+### Round 1 收尾证据
+
+- 最终 head：`2ae1769`；CI run `42177284538` → **5/5 success**。
+- 全量 `bunx vitest run`：48 files / 347 tests，exit 0。
+- A13 故障注入改为按 Family 限定（`WHEN (NEW.family_id = ...)`）+ 每轮唯一 trigger 名，消除与并行套件的相互影响。

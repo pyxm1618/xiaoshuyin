@@ -158,3 +158,14 @@
 ## Remaining gaps
 
 `NONE`（7/7 findings CLOSED）
+
+## 追加证据（Round 1 收尾，2026-11-06）
+
+| 项 | 值 |
+|---|---|
+| 最终 head | `2ae1769`（本轮 6 个 remediation commit） |
+| CI run | `42177284538` — Static / Unit / DB Migration / Integration / Contract **5/5 success** |
+| 全量测试 | `bunx vitest run` → 48 files / 347 tests，exit 0，0 failed / 0 skipped |
+| typecheck / guard / openapi / governance | PASS / PASS (0 violations) / PASS (no drift) / PASS |
+
+**收尾修复（test-only）**：A13 的故障 trigger 原本是表级，与并行套件对其他 Family 的写入冲突，导致 CI integration 偶发 500。已改为 `WHEN (NEW.family_id = <family>)` + 每轮唯一 trigger 名，故障仅作用于目标 Family；本地全量与 CI 均通过。
