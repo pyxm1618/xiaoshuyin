@@ -107,3 +107,35 @@ coverage-audit (003): PASS
 Slice 3 范围内 **NONE**。
 
 > 本自检不宣称 `MERGE SAFE`，不宣称 Independent Converge PASS，不授权 merge main。
+## 11. Audit II remediation（2026-11-07）
+
+**Start Head**: `814aa3a9ff9e5ff7858a99ae4ad7a3bdb1943da0`
+**审计结论**: CRITICAL 0 / HIGH 1 / MEDIUM 2 / LOW 0 → `RETURN TO IMPLEMENT`
+
+| Finding | 状态 | 修复 |
+|---|---|---|
+| AUD-II-001 (HIGH) | FIXED | `packages/domain/src/index.ts` 不再 `export * from './repository.js'`；改为显式导出既有批准 API。Evidence 低层写 primitive 仍留在 `repository.ts` 内部，生产 package 不可导入；消息路由改用新的 `recordDialogueMessage` domain writer。机械测试验证 4 个 Evidence writer + 1 个消息 writer、无 repository 写 primitive、无 FACT writer、disabled provenance 无法绕过 writer。 |
+| AUD-II-002 (MEDIUM) | FIXED | `setAssertionConflictGroup` / `setObservationConflictGroup` 改为条件 UPDATE（仅 `NULL → group` 或 `same → same`）；并发竞争落败返回 `rowCount = 0`，domain 抛 `EVIDENCE_CONFLICT_GROUP_IMMUTABLE`。真实双连接并发测试证明只有一个 group 成为真实值，`G1 → G2` 不可能发生。 |
+| AUD-II-003 (MEDIUM) | FIXED | 新增 `tests/db/migration-upgrade-evidence.test.ts`：临时库只应用 001–003 → 插入真实 Slice 1/2 数据并记录 invariant → 真实 migrator 应用 `004_evidence_core.sql` → 验证旧数据/关系存活、新 schema/RLS/grants/CHECK 正确 → 再次应用 `0 new` no-op → 销毁临时库。 |
+
+**新增 / 更新测试**
+
+- 更新 `tests/domain/evidence-capabilities.test.ts`（+5：production export boundary、repository primitive 不可见、FACT/generic writer 不存在、disabled provenance 不能绕过 statement/observation writer）
+- 新增 `tests/db/evidence-conflict-concurrency.test.ts`（3：条件 UPDATE 并发、NULL/same/different 三态、并发 `assignConflictGroup` 收敛）
+- 新增 `tests/db/migration-upgrade-evidence.test.ts`（2：001-003 → 004 升级保数据、二次应用 0 new）
+
+**本轮验证（真实执行）**
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS |
+| `bun run guard:static` | PASS (0 violations) |
+| `bunx vitest run` | **84 files / 629 tests passed, 0 failed, 0 skipped** |
+| `bun run openapi:generate` + `openapi:check` | PASS（无 drift） |
+| `bun run db:evidence` | PASS（fresh / upgrade / replay） |
+| `bun run coverage:audit` | PASS（21/21、10/10、13/13、115/115） |
+| `bun run verify-all` | PASS（36 PASS / 0 FAIL / 1 NOT VERIFIED = Slice 1 FR-002 平台真实性） |
+| `validate-governance` + `run-governance-tests` | PASS / 15/15 |
+| 冻结文档 diff（Docs、AGENTS、.specify、003 spec/plan/tasks/checklists/contracts、其它 Slice） | 0 |
+
+> 本轮仍只是开发 AI 的 remediation；不宣称 Audit II PASS，不 merge main。下一步交新的独立 Audit II 复审。

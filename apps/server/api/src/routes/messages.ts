@@ -26,8 +26,7 @@ import {
 import {
   buildCaseMessageRequestHash,
   getCaseById,
-  insertAuditEvent,
-  insertDialogueMessage,
+  recordDialogueMessage,
 } from '@xiaoshuyin/domain';
 import { withIdentityTransaction, withRlsTransaction, setFamilyContext } from '../db/tx.js';
 import { requireCurrentFamily } from '../family-context.js';
@@ -187,22 +186,18 @@ export function registerMessageRoutes(app: FastifyInstance, pool: pg.Pool) {
               throw err;
             }
 
-            const message = await insertDialogueMessage(tx, {
-              familyId,
-              caseId,
-              actorAccountId: accountId,
-              sourcePersonId: personId,
-              content,
-            });
-
-            // Metadata stays `{}` (never copies raw content / PII).
-            await insertAuditEvent(
+            // AUD-II-001: use the public domain message writer; the raw
+            // repository insert is package-internal. Message + audit stay in
+            // this transaction, and audit metadata remains `{}`.
+            const message = await recordDialogueMessage(
               tx,
-              familyId,
-              accountId,
-              'MESSAGE_RECORDED',
-              'DIALOGUE_MESSAGE',
-              message.id
+              {
+                familyId,
+                caseId,
+                actorAccountId: accountId,
+                actorPersonId: personId,
+              },
+              content
             );
 
             return {
@@ -210,7 +205,7 @@ export function registerMessageRoutes(app: FastifyInstance, pool: pg.Pool) {
               body: {
                 id: message.id,
                 caseId,
-                recordedAt: new Date(message.recorded_at).toISOString(),
+                recordedAt: message.recordedAt.toISOString(),
               },
             };
           }

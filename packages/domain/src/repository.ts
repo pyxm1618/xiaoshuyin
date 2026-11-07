@@ -526,24 +526,41 @@ export async function insertEvidenceObservation(
   return rows[0]!;
 }
 
+/**
+ * AUD-II-002: conflict_group_id is immutable once assigned.
+ *
+ * The conditional WHERE makes NULL -> group and same -> same the only
+ * transitions a concurrent transaction can win. A transaction that read NULL
+ * before another committed gets rowCount = 0 once the row lock is released
+ * (READ COMMITTED re-evaluates the predicate) and must fail closed, so a
+ * G1 -> G2 migration can never happen.
+ */
 export async function setAssertionConflictGroup(
   tx: Tx,
   id: string,
   conflictGroupId: string
-): Promise<void> {
-  await tx.query('UPDATE assertions SET conflict_group_id = $1 WHERE id = $2', [
-    conflictGroupId,
-    id,
-  ]);
+): Promise<boolean> {
+  const { rowCount } = await tx.query(
+    `UPDATE assertions
+        SET conflict_group_id = $1
+      WHERE id = $2
+        AND (conflict_group_id IS NULL OR conflict_group_id = $1)`,
+    [conflictGroupId, id]
+  );
+  return rowCount === 1;
 }
 
 export async function setObservationConflictGroup(
   tx: Tx,
   id: string,
   conflictGroupId: string
-): Promise<void> {
-  await tx.query('UPDATE observations SET conflict_group_id = $1 WHERE id = $2', [
-    conflictGroupId,
-    id,
-  ]);
+): Promise<boolean> {
+  const { rowCount } = await tx.query(
+    `UPDATE observations
+        SET conflict_group_id = $1
+      WHERE id = $2
+        AND (conflict_group_id IS NULL OR conflict_group_id = $1)`,
+    [conflictGroupId, id]
+  );
+  return rowCount === 1;
 }
