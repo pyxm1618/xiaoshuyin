@@ -21,7 +21,7 @@ describe('Schema Structure', () => {
     await client.end();
   });
 
-  it('8 enums exist with exact values', async () => {
+  it('10 enums exist with exact values (Slice 1 + Case Core)', async () => {
     const { rows } = await client.query(`
       SELECT t.typname, e.enumlabel
       FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid
@@ -37,9 +37,16 @@ describe('Schema Structure', () => {
     }
 
     expect(Object.keys(enumMap).sort()).toEqual([
-      'account_status', 'age_band', 'consent_decision', 'consent_purpose',
-      'consent_request_status', 'profile_attribute', 'profile_value_status',
-      'provenance_source',
+      'account_status', 'age_band', 'case_phase', 'case_status',
+      'consent_decision', 'consent_purpose', 'consent_request_status',
+      'profile_attribute', 'profile_value_status', 'provenance_source',
+    ]);
+    expect(enumMap['case_status']).toEqual([
+      'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+    ]);
+    expect(enumMap['case_phase']).toEqual([
+      'INTAKE', 'ASSESSMENT', 'PROBLEM_FORMULATION', 'GOALS',
+      'PLANNING', 'EXECUTION', 'REVIEW', 'MAINTENANCE', 'CLOSED',
     ]);
     expect(enumMap['age_band']).toEqual(['ADULT', 'MINOR_14_17', 'UNDER_14', 'UNKNOWN']);
     expect(enumMap['profile_attribute']).toEqual(['DISPLAY_NAME']);

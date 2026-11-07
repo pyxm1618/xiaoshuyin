@@ -9,32 +9,90 @@ import { registerFamilyRoutes } from './routes/families.js';
 import { registerMemberRoutes } from './routes/members.js';
 import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerConsentRoutes } from './routes/consents.js';
-import { FakeWechatProvider } from './auth/wechat-provider.js';
+import { registerCaseRoutes } from './routes/cases.js';
+import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
+import {
+  createWechatProvider,
+  loadRuntimeConfig,
+  type RuntimeConfig,
+} from './runtime-env.js';
 
-export async function buildApp() {
-  const app = Fastify({
-    logger: {
-      level: process.env['LOG_LEVEL'] ?? 'warn',
+export interface BuildAppOptions {
+  env?: NodeJS.ProcessEnv;
+  /** Test-only sink used to assert log privacy (F11). */
+  loggerStream?: NodeJS.WritableStream;
+  /** Test-only sink to capture real registered route schemas (contract drift). */
+  onRoute?: (route: any) => void;
+}
+
+/**
+ * Request serializer for logs (F11).
+ *
+ * Fastify's default serializer emits `remoteAddress` / `remotePort` at
+ * `LOG_LEVEL=info`. Raw client IP and User-Agent must never reach logs, so the
+ * serializer keeps only non-sensitive routing fields.
+ */
+export function requestLogSerializer(req: any) {
+  return {
+    method: req?.method,
+    url: req?.url,
+    host: req?.headers?.host,
+    requestId: req?.id,
+  };
+}
+
+function buildLoggerOptions(
+  env: NodeJS.ProcessEnv,
+  stream?: NodeJS.WritableStream
+) {
+  return {
+    level: env['LOG_LEVEL'] ?? 'warn',
+    serializers: { req: requestLogSerializer },
+    redact: {
+      paths: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.headers["user-agent"]',
+      ],
+      remove: true,
     },
-  });
+    ...(stream ? { stream } : {}),
+  };
+}
+
+export async function buildApp(options: BuildAppOptions = {}) {
+  const env = options.env ?? process.env;
+
+  // Fail-fast runtime contract (F1). Throws before any route is registered.
+  const runtime: RuntimeConfig = loadRuntimeConfig(env);
+
+  const app = Fastify({ logger: buildLoggerOptions(env, options.loggerStream) });
+
+  // Test-only: capture real route schemas before any route is registered.
+  if (options.onRoute) app.addHook('onRoute', options.onRoute);
+
+  // Zod schemas are the single source for route contracts; validation
+  // failures are mapped to the frozen 422 VALIDATION_ERROR by errorHandler.
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
 
   // Error handler
   app.setErrorHandler(errorHandler);
 
-  // Config
-  await app.register(configPlugin);
+  // Config (re-validates the same runtime contract and exposes the channel)
+  await app.register(configPlugin, { env });
 
   // Database pool
   const pool = new pg.Pool({
-    connectionString: process.env['DATABASE_URL'],
+    connectionString: env['DATABASE_URL'],
     max: 10,
   });
 
-  const sessionSecret = process.env['SESSION_SECRET'] ?? 'dev-secret-key-for-testing';
-  const wechatProvider = new FakeWechatProvider();
+  // Production never selects the fake provider (see createWechatProvider).
+  const wechatProvider = createWechatProvider(runtime);
 
   // Auth plugin
-  registerAuthPlugin(app, pool, sessionSecret);
+  registerAuthPlugin(app, pool, runtime.sessionSecret);
 
   // Health check (no auth)
   app.get('/healthz', async () => {
@@ -42,12 +100,13 @@ export async function buildApp() {
   });
 
   // Routes
-  registerAuthRoutes(app, pool, wechatProvider, sessionSecret);
+  registerAuthRoutes(app, pool, wechatProvider, runtime.sessionSecret);
   registerMeRoutes(app, pool);
   registerFamilyRoutes(app, pool);
   registerMemberRoutes(app, pool);
   registerComplianceRoutes(app, pool);
   registerConsentRoutes(app, pool);
+  registerCaseRoutes(app, pool);
 
   return app;
 }

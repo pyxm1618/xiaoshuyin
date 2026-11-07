@@ -2,6 +2,10 @@
  * Auth routes: POST /api/v1/auth/wechat, POST /api/v1/auth/logout.
  * Login: code → openid → Account → Person (same transaction).
  * Logout: session_epoch + 1, invalidating all prior tokens.
+ *
+ * Frozen OpenAPI contract:
+ *   - login always responds 200 with `{ accountId, sessionToken, expiresAt, person }`
+ *   - logout responds 204 with no body
  */
 
 import type { FastifyInstance } from 'fastify';
@@ -39,8 +43,8 @@ export function registerAuthRoutes(
 
       let accountId: string;
       let epoch: number;
-      let personId: string | null;
-      let isNew = false;
+      let personId: string;
+      let personCreatedAt: Date;
 
       if (existing.length > 0) {
         accountId = existing[0].id;
@@ -61,12 +65,18 @@ export function registerAuthRoutes(
 
         // Find existing person
         const { rows: persons } = await client.query(
-          'SELECT id FROM persons WHERE account_id = $1',
+          'SELECT id, created_at FROM persons WHERE account_id = $1',
           [accountId]
         );
-        personId = persons[0]?.id ?? null;
+        if (!persons[0]) {
+          throw Object.assign(new Error('Person missing for existing account'), {
+            statusCode: 500,
+            code: 'INTERNAL_ERROR',
+          });
+        }
+        personId = persons[0].id;
+        personCreatedAt = persons[0].created_at;
       } else {
-        isNew = true;
         // Create new account
         const { rows: newAccount } = await client.query(
           `INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0) RETURNING id`,
@@ -79,34 +89,37 @@ export function registerAuthRoutes(
         await client.query(`SELECT set_config('app.account_id', $1, true)`, [accountId]);
         await client.query(`SELECT set_config('app.purpose', 'SELF_IDENTITY', true)`);
 
-        // Create person
+        // Create person (DB default uuidv7())
         const { rows: newPerson } = await client.query(
-          `INSERT INTO persons (account_id, created_by_account_id) VALUES ($1, $1) RETURNING id`,
+          `INSERT INTO persons (account_id, created_by_account_id) VALUES ($1, $1) RETURNING id, created_at`,
           [accountId]
         );
         personId = newPerson[0].id;
+        personCreatedAt = newPerson[0].created_at;
       }
 
       await client.query('COMMIT');
 
       // Sign token
+      const expiresAtSeconds = Math.floor(Date.now() / 1000) + 86400;
       const token = signToken(
         {
           accountId,
           epoch,
-          exp: Math.floor(Date.now() / 1000) + 86400,
+          exp: expiresAtSeconds,
         },
         sessionSecret
       );
 
-      return reply.status(isNew ? 201 : 200).send({
-        account: { id: accountId },
+      return reply.status(200).send({
+        accountId,
+        sessionToken: token,
+        expiresAt: new Date(expiresAtSeconds * 1000).toISOString(),
         person: {
           id: personId,
-          profile: null,
-          values: [],
+          createdAt: personCreatedAt.toISOString(),
+          accountBound: true,
         },
-        token,
       });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -129,6 +142,6 @@ export function registerAuthRoutes(
       [actor.accountId]
     );
 
-    return reply.status(200).send({ success: true });
+    return reply.status(204).send();
   });
 }

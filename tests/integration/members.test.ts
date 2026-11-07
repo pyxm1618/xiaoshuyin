@@ -1,19 +1,29 @@
 /**
  * Members integration tests (T047 + T049 RED→GREEN).
  *
- * T047: POST /families/:id/members — add member (MINOR_14_17), account_id IS NULL,
- *   whitelist sources, cross-source coexist, same-source supersede, observedAt NULL.
- * T049: PATCH /families/:id/members/:personId — same-source supersede vs cross-source
- *   coexist, cross-family / non-manager rejected.
+ * Frozen OpenAPI:
+ *   CreateMemberRequest = { ageBand, ageBandSource, values?, guardianConsentId? }
+ *   UpdateMemberRequest = { values }
+ *   MemberResponse     = { personId, familyId, accountBound, profile, values }
+ *   `Idempotency-Key` is an HTTP header.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
-import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
+import {
+  auth,
+  commandHeaders,
+  createConsentRequest,
+  createFamily,
+  createMember,
+  grantConsent,
+  loginWithLabel,
+  updateMember,
+  valueInput,
+} from '../setup/api.js';
 
-// Superuser pool for verification queries (bypasses RLS)
 let verifyPool: pg.Pool;
 
 async function queryDb(sql: string, params: unknown[] = []) {
@@ -26,7 +36,6 @@ describe('Members Integration (T047 + T049)', () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    // Use postgres superuser for verification (bypass RLS)
     verifyPool = createAdminPool();
   });
 
@@ -35,64 +44,37 @@ describe('Members Integration (T047 + T049)', () => {
     await app.close();
   });
 
-  /** Helper: login + create family, returns { token, personId, familyId } */
   async function setupManagerAndFamily(label: string) {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `mem_${label}_${Date.now()}` },
-    });
-    const { token, person } = loginRes.json();
-
-    const famRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        displayName: `家庭-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `fam-mem-${label}-${Date.now()}`,
-      },
-    });
-    const family = famRes.json();
-    return { token, personId: person.id, familyId: family.id };
+    const { token, personId } = await loginWithLabel(app, `mem_${label}`);
+    const famRes = await createFamily(app, token, label);
+    expect(famRes.statusCode).toBe(201);
+    return { token, personId, familyId: famRes.json().id as string };
   }
 
   // ──────────────────────────────────────────────
   // T047: POST member creation
   // ──────────────────────────────────────────────
 
-  it('T047: POST member MINOR_14_17 succeeds, account_id IS NULL', async () => {
+  it('T047: POST member MINOR_14_17 succeeds, account_id IS NULL, UUIDv7', async () => {
     const { token, familyId } = await setupManagerAndFamily('t047a');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '小明',
-            sourceKind: 'GUARDIAN_RELAY',
-          },
-        ],
-        idempotencyKey: `mem-key-a-${Date.now()}`,
-      },
+    const res = await createMember(app, token, familyId, 't047a', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
+      values: [valueInput('小明', 'GUARDIAN_RELAY')],
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.personId).toBeDefined();
+    expect(body.familyId).toBe(familyId);
     expect(body.accountBound).toBe(false);
+    expect(body.profile.ageBand).toBe('MINOR_14_17');
+    expect(body.values).toHaveLength(1);
+    expect(body.values[0].value).toBe('小明');
+    // F10: API-created Person id is UUIDv7.
+    expect(body.personId[14]).toBe('7');
 
-    // Verify account_id IS NULL in DB (superuser bypasses RLS)
-    const { rows } = await queryDb(
-      'SELECT account_id FROM persons WHERE id = $1',
-      [body.personId]
-    );
+    const { rows } = await queryDb('SELECT account_id FROM persons WHERE id = $1', [body.personId]);
     expect(rows.length).toBe(1);
     expect(rows[0].account_id).toBeNull();
   });
@@ -100,33 +82,19 @@ describe('Members Integration (T047 + T049)', () => {
   it('T047: non-writable source rejected by schema → 422', async () => {
     const { token, familyId } = await setupManagerAndFamily('t047b');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'AI_HYPOTHESIS', // not in WritableSource enum
-        idempotencyKey: `mem-key-b-${Date.now()}`,
-      },
+    const res = await createMember(app, token, familyId, 't047b', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'AI_HYPOTHESIS',
     });
-    // Schema validation rejects non-writable source → 422
     expect(res.statusCode).toBe(422);
   });
 
   it('T047: UNDER_14 rejects non-guardian source → 422', async () => {
     const { token, familyId } = await setupManagerAndFamily('t047c');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'UNDER_14',
-        ageBandSource: 'SELF_STATEMENT', // not guardian source
-        guardianConsentId: undefined,
-        idempotencyKey: `mem-key-c-${Date.now()}`,
-      },
+    const res = await createMember(app, token, familyId, 't047c', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'SELF_STATEMENT',
     });
     expect(res.statusCode).toBe(422);
     expect(res.json().code).toBe('AGE_BAND_SOURCE_NOT_ALLOWED');
@@ -135,91 +103,43 @@ describe('Members Integration (T047 + T049)', () => {
   it('T047: different sources coexist (not overwritten)', async () => {
     const { token, familyId } = await setupManagerAndFamily('t047d');
 
-    // Create member with two different sources
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '名字A',
-            sourceKind: 'GUARDIAN_RELAY',
-          },
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '名字B',
-            sourceKind: 'SELF_STATEMENT',
-          },
-        ],
-        idempotencyKey: `mem-key-d-${Date.now()}`,
-      },
+    const createRes = await createMember(app, token, familyId, 't047d', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
+      values: [valueInput('名字A', 'GUARDIAN_RELAY')],
     });
     expect(createRes.statusCode).toBe(201);
     const memberPersonId = createRes.json().personId;
 
-    // Both values should be RECORDED
+    const patchRes = await updateMember(app, token, familyId, memberPersonId, 't047d', [
+      valueInput('名字B', 'SELF_STATEMENT'),
+    ]);
+    expect(patchRes.statusCode).toBe(200);
+
     const { rows } = await queryDb(
       `SELECT source_kind, value_text, status FROM person_profile_values
        WHERE person_id = $1 AND attribute = 'DISPLAY_NAME'`,
       [memberPersonId]
     );
     expect(rows.length).toBe(2);
-
-    const relayRow = rows.find((r: any) => r.source_kind === 'GUARDIAN_RELAY');
-    const selfRow = rows.find((r: any) => r.source_kind === 'SELF_STATEMENT');
-    expect(relayRow).toBeDefined();
-    expect(selfRow).toBeDefined();
-    expect(relayRow.status).toBe('RECORDED');
-    expect(selfRow.status).toBe('RECORDED');
+    expect(rows.every((r: any) => r.status === 'RECORDED')).toBe(true);
   });
 
   it('T047: same source supersedes → writes supersedes_id', async () => {
     const { token, familyId } = await setupManagerAndFamily('t047e');
 
-    // Create member with one source
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '旧名字',
-            sourceKind: 'GUARDIAN_RELAY',
-          },
-        ],
-        idempotencyKey: `mem-key-e1-${Date.now()}`,
-      },
+    const createRes = await createMember(app, token, familyId, 't047e', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
+      values: [valueInput('旧名字', 'GUARDIAN_RELAY')],
     });
-    expect(createRes.statusCode).toBe(201);
     const memberPersonId = createRes.json().personId;
 
-    // Update with same source → supersede
-    const patchRes = await app.inject({
-      method: 'PATCH',
-      url: `/api/v1/families/${familyId}/members/${memberPersonId}`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '新名字',
-            sourceKind: 'GUARDIAN_RELAY',
-          },
-        ],
-        idempotencyKey: `mem-key-e2-${Date.now()}`,
-      },
-    });
+    const patchRes = await updateMember(app, token, familyId, memberPersonId, 't047e', [
+      valueInput('新名字', 'GUARDIAN_RELAY'),
+    ]);
     expect(patchRes.statusCode).toBe(200);
 
-    // Old row should be SUPERSEDED, new row should have supersedes_id
     const { rows } = await queryDb(
       `SELECT id, value_text, status, supersedes_id FROM person_profile_values
        WHERE person_id = $1 AND attribute = 'DISPLAY_NAME' AND source_kind = 'GUARDIAN_RELAY'
@@ -238,23 +158,10 @@ describe('Members Integration (T047 + T049)', () => {
   it('T047: observedAt defaults to NULL', async () => {
     const { token, familyId } = await setupManagerAndFamily('t047f');
 
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '测试名',
-            sourceKind: 'GUARDIAN_RELAY',
-            // observedAt not provided
-          },
-        ],
-        idempotencyKey: `mem-key-f-${Date.now()}`,
-      },
+    const createRes = await createMember(app, token, familyId, 't047f', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
+      values: [valueInput('测试名', 'GUARDIAN_RELAY')],
     });
     expect(createRes.statusCode).toBe(201);
     const memberPersonId = createRes.json().personId;
@@ -267,6 +174,26 @@ describe('Members Integration (T047 + T049)', () => {
     expect(rows[0].observed_at).toBeNull();
   });
 
+  it('F8: explicit observedAt is preserved exactly', async () => {
+    const { token, familyId } = await setupManagerAndFamily('t047g');
+
+    const observedAt = '2026-02-03T04:05:06.000Z';
+    const createRes = await createMember(app, token, familyId, 't047g', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
+      values: [valueInput('有观测时间', 'GUARDIAN_RELAY', { observedAt })],
+    });
+    expect(createRes.statusCode).toBe(201);
+    const memberPersonId = createRes.json().personId;
+
+    const { rows } = await queryDb(
+      `SELECT observed_at FROM person_profile_values WHERE person_id = $1`,
+      [memberPersonId]
+    );
+    expect(new Date(rows[0].observed_at).toISOString()).toBe(observedAt);
+    expect(createRes.json().values[0].observedAt).toBe(observedAt);
+  });
+
   // ──────────────────────────────────────────────
   // T049: PATCH member update
   // ──────────────────────────────────────────────
@@ -274,45 +201,18 @@ describe('Members Integration (T047 + T049)', () => {
   it('T049: PATCH same-source replaces (supersede)', async () => {
     const { token, familyId } = await setupManagerAndFamily('t049a');
 
-    // Create member
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '初始名',
-            sourceKind: 'GUARDIAN_RELAY',
-          },
-        ],
-        idempotencyKey: `mem-key-9a1-${Date.now()}`,
-      },
+    const createRes = await createMember(app, token, familyId, 't049a', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
+      values: [valueInput('初始名', 'GUARDIAN_RELAY')],
     });
     const memberPersonId = createRes.json().personId;
 
-    // PATCH with same source
-    const patchRes = await app.inject({
-      method: 'PATCH',
-      url: `/api/v1/families/${familyId}/members/${memberPersonId}`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '更新名',
-            sourceKind: 'GUARDIAN_RELAY',
-          },
-        ],
-        idempotencyKey: `mem-key-9a2-${Date.now()}`,
-      },
-    });
+    const patchRes = await updateMember(app, token, familyId, memberPersonId, 't049a', [
+      valueInput('更新名', 'GUARDIAN_RELAY'),
+    ]);
     expect(patchRes.statusCode).toBe(200);
 
-    // Verify supersede
     const { rows } = await queryDb(
       `SELECT id, value_text, status, supersedes_id FROM person_profile_values
        WHERE person_id = $1 AND source_kind = 'GUARDIAN_RELAY'`,
@@ -328,45 +228,18 @@ describe('Members Integration (T047 + T049)', () => {
   it('T049: PATCH different source coexists (not overwritten)', async () => {
     const { token, familyId } = await setupManagerAndFamily('t049b');
 
-    // Create member with GUARDIAN_RELAY
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '守护者起名',
-            sourceKind: 'GUARDIAN_RELAY',
-          },
-        ],
-        idempotencyKey: `mem-key-9b1-${Date.now()}`,
-      },
+    const createRes = await createMember(app, token, familyId, 't049b', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
+      values: [valueInput('守护者起名', 'GUARDIAN_RELAY')],
     });
     const memberPersonId = createRes.json().personId;
 
-    // PATCH with different source
-    const patchRes = await app.inject({
-      method: 'PATCH',
-      url: `/api/v1/families/${familyId}/members/${memberPersonId}`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '自己起名',
-            sourceKind: 'SELF_STATEMENT',
-          },
-        ],
-        idempotencyKey: `mem-key-9b2-${Date.now()}`,
-      },
-    });
+    const patchRes = await updateMember(app, token, familyId, memberPersonId, 't049b', [
+      valueInput('自己起名', 'SELF_STATEMENT'),
+    ]);
     expect(patchRes.statusCode).toBe(200);
 
-    // Both should be RECORDED
     const { rows } = await queryDb(
       `SELECT source_kind, value_text, status FROM person_profile_values
        WHERE person_id = $1 AND attribute = 'DISPLAY_NAME'`,
@@ -377,82 +250,36 @@ describe('Members Integration (T047 + T049)', () => {
   });
 
   it('T049: non-manager PATCH → 403', async () => {
-    // Manager creates family + member
     const { token: managerToken, familyId } = await setupManagerAndFamily('t049c');
 
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${managerToken}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-        idempotencyKey: `mem-key-9c1-${Date.now()}`,
-      },
+    const createRes = await createMember(app, managerToken, familyId, 't049c', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
     });
     const memberPersonId = createRes.json().personId;
 
-    // Another user tries to PATCH
-    const otherLogin = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `mem_other_${Date.now()}` },
-    });
-    const { token: otherToken } = otherLogin.json();
+    const other = await loginWithLabel(app, 'mem_other');
 
-    const patchRes = await app.inject({
-      method: 'PATCH',
-      url: `/api/v1/families/${familyId}/members/${memberPersonId}`,
-      headers: { authorization: `Bearer ${otherToken}` },
-      payload: {
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '恶意改名',
-            sourceKind: 'SELF_STATEMENT',
-          },
-        ],
-        idempotencyKey: `mem-key-9c2-${Date.now()}`,
-      },
-    });
-    // Should be rejected (not manager or not in family)
+    const patchRes = await updateMember(app, other.token, familyId, memberPersonId, 't049c', [
+      valueInput('恶意改名', 'SELF_STATEMENT'),
+    ]);
     expect([403, 404]).toContain(patchRes.statusCode);
   });
 
   it('T049: cross-family PATCH → 403', async () => {
-    // Family A manager creates member
     const { token: tokenA, familyId: familyA } = await setupManagerAndFamily('t049d-a');
 
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyA}/members`,
-      headers: { authorization: `Bearer ${tokenA}` },
-      payload: {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-        idempotencyKey: `mem-key-9d1-${Date.now()}`,
-      },
+    const createRes = await createMember(app, tokenA, familyA, 't049d-a', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'GUARDIAN_RELAY',
     });
     const memberPersonId = createRes.json().personId;
 
-    // Family B manager tries to PATCH member of Family A
     const { token: tokenB, familyId: familyB } = await setupManagerAndFamily('t049d-b');
 
-    const patchRes = await app.inject({
-      method: 'PATCH',
-      url: `/api/v1/families/${familyB}/members/${memberPersonId}`,
-      headers: { authorization: `Bearer ${tokenB}` },
-      payload: {
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '跨家庭改名',
-            sourceKind: 'SELF_STATEMENT',
-          },
-        ],
-        idempotencyKey: `mem-key-9d2-${Date.now()}`,
-      },
-    });
+    const patchRes = await updateMember(app, tokenB, familyB, memberPersonId, 't049d-b', [
+      valueInput('跨家庭改名', 'SELF_STATEMENT'),
+    ]);
     expect([403, 404]).toContain(patchRes.statusCode);
   });
 
@@ -461,21 +288,14 @@ describe('Members Integration (T047 + T049)', () => {
   // ──────────────────────────────────────────────
 
   it('T051: FAMILY_CREATE non-SELF_STATEMENT → 422', async () => {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `mem_t051_${Date.now()}` },
-    });
-    const { token } = loginRes.json();
+    const { token } = await loginWithLabel(app, 'mem_t051');
 
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: commandHeaders(token, 'fam-t051'),
       payload: {
-        ageBand: 'ADULT',
-        ageBandSource: 'GUARDIAN_RELAY', // invalid for family create
-        idempotencyKey: `fam-t051-${Date.now()}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'GUARDIAN_RELAY' },
       },
     });
     expect(res.statusCode).toBe(422);
@@ -485,16 +305,9 @@ describe('Members Integration (T047 + T049)', () => {
   it('T051: member with invalid ageBandSource → 422', async () => {
     const { token, familyId } = await setupManagerAndFamily('t051b');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'UNDER_14',
-        ageBandSource: 'OTHER_MEMBER_RELAY', // not guardian source
-        guardianConsentId: undefined,
-        idempotencyKey: `mem-t051b-${Date.now()}`,
-      },
+    const res = await createMember(app, token, familyId, 't051b', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'OTHER_MEMBER_RELAY',
     });
     expect(res.statusCode).toBe(422);
     expect(res.json().code).toBe('AGE_BAND_SOURCE_NOT_ALLOWED');
@@ -505,24 +318,9 @@ describe('Members Integration (T047 + T049)', () => {
   // ──────────────────────────────────────────────
 
   async function grantConsentFor(token: string, label: string) {
-    const reqRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { noticeVersion: 'v1', idempotencyKey: `cr-${label}-${Date.now()}` },
-    });
-    const grantRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        consentRequestId: reqRes.json().id,
-        accepted: true,
-        noticeVersion: 'v1',
-        noticeHash: getCurrentNoticeHash(),
-        idempotencyKey: `cg-${label}-${Date.now()}`,
-      },
-    });
+    const reqRes = await createConsentRequest(app, token, label);
+    expect(reqRes.statusCode).toBe(201);
+    const grantRes = await grantConsent(app, token, label, reqRes.json().requestId);
     expect(grantRes.statusCode).toBe(201);
     return grantRes.json();
   }
@@ -531,24 +329,15 @@ describe('Members Integration (T047 + T049)', () => {
     const { token, familyId } = await setupManagerAndFamily('t057a');
     const consent = await grantConsentFor(token, 't057a');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'UNDER_14',
-        ageBandSource: 'GUARDIAN_RELAY',
-        guardianConsentId: consent.id,
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '小树',
-            sourceKind: 'GUARDIAN_RELAY',
-            providedByPersonId: '00000000-0000-4000-8000-000000000096', // not the guardian
-          },
-        ],
-        idempotencyKey: `mem-t057a-${Date.now()}`,
-      },
+    const res = await createMember(app, token, familyId, 't057a', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: consent.id,
+      values: [
+        valueInput('小树', 'GUARDIAN_RELAY', {
+          providedByPersonId: '00000000-0000-4000-8000-000000000096',
+        }),
+      ],
     });
     expect(res.statusCode).toBe(422);
     expect(res.json().code).toBe('AGE_BAND_SOURCE_NOT_ALLOWED');
@@ -558,24 +347,13 @@ describe('Members Integration (T047 + T049)', () => {
     const { token, personId, familyId } = await setupManagerAndFamily('t057b');
     const consent = await grantConsentFor(token, 't057b');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'UNDER_14',
-        ageBandSource: 'GUARDIAN_RELAY',
-        guardianConsentId: consent.id,
-        profileValues: [
-          {
-            attribute: 'DISPLAY_NAME',
-            valueText: '小树',
-            sourceKind: 'GUARDIAN_RELAY',
-            providedByPersonId: personId, // the guardian
-          },
-        ],
-        idempotencyKey: `mem-t057b-${Date.now()}`,
-      },
+    const res = await createMember(app, token, familyId, 't057b', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: consent.id,
+      values: [
+        valueInput('小树', 'GUARDIAN_RELAY', { providedByPersonId: personId }),
+      ],
     });
     expect(res.statusCode).toBe(201);
   });

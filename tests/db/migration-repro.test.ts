@@ -5,7 +5,7 @@
  * - Full migration can establish schema from empty PostgreSQL 18
  * - Second apply is a no-op
  * - Object set is consistent before and after
- * - Final set includes: 8 enums, 10 tables, RLS functions, 9 policies, consent trigger
+ * - Final set includes: 10 enums, 12 tables, RLS functions, 11 policies, consent trigger
  *
  * This test is EXPECTED TO FAIL (RED) until Phase 3 (T013-T028) completes.
  * It turns GREEN when the full reviewed migration is in place.
@@ -18,16 +18,18 @@ import { Client } from 'pg';
 const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATABASE_URL']!;
 
 // Expected final object counts
-const EXPECTED_ENUMS = 8;
-const EXPECTED_TABLES = 10;
+const EXPECTED_ENUMS = 10;
+const EXPECTED_TABLES = 12;
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 4; // set_account_context, set_identity_context, set_family_context, create_family
-const EXPECTED_POLICIES = 9;
+const EXPECTED_POLICIES = 11;
 const EXPECTED_TRIGGERS = 1; // consent_records_guard
 
 const EXPECTED_ENUM_NAMES = [
   'account_status',
   'age_band',
+  'case_phase',
+  'case_status',
   'consent_decision',
   'consent_purpose',
   'consent_request_status',
@@ -39,6 +41,8 @@ const EXPECTED_ENUM_NAMES = [
 const EXPECTED_TABLE_NAMES = [
   'accounts',
   'business_audit_events',
+  'case_events',
+  'cases',
   'consent_records',
   'families',
   'family_members',
@@ -61,7 +65,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     await client.end();
   });
 
-  it('should have all 8 enums with correct values', async () => {
+  it('should have all 10 enums with correct values', async () => {
     const { rows } = await client.query(`
       SELECT t.typname, array_agg(e.enumlabel ORDER BY e.enumsortorder) as values
       FROM pg_type t
@@ -77,7 +81,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(enumNames.length).toBe(EXPECTED_ENUMS);
   });
 
-  it('should have all 10 tables', async () => {
+  it('should have all 12 tables', async () => {
     const { rows } = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -113,7 +117,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 9 RLS policies', async () => {
+  it('should have 11 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'

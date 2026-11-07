@@ -4,39 +4,6 @@
  */
 
 export interface paths {
-    "/healthz": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/auth/wechat": {
         parameters: {
             query?: never;
@@ -46,24 +13,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post: operations["loginWithWechat"];
         delete?: never;
         options?: never;
         head?: never;
@@ -79,24 +29,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post: operations["logout"];
         delete?: never;
         options?: never;
         head?: never;
@@ -110,24 +43,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        get: operations["getMe"];
         put?: never;
         post?: never;
         delete?: never;
@@ -145,24 +61,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post: operations["createFamily"];
         delete?: never;
         options?: never;
         head?: never;
@@ -176,24 +75,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        get: operations["getCurrentFamily"];
         put?: never;
         post?: never;
         delete?: never;
@@ -211,26 +93,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post: operations["createMember"];
         delete?: never;
         options?: never;
         head?: never;
@@ -250,89 +113,19 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                    personId: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        patch: operations["updateMemberProfile"];
         trace?: never;
     };
-    "/api/v1/compliance/guardian-consents/requests": {
+    "/api/v1/consents": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["listConsents"];
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/compliance/guardian-consents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -348,59 +141,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path: {
-                    id: string;
-                };
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/consents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        put?: never;
-        post?: never;
+        post: operations["revokeConsent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -414,24 +155,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
+        get: operations["getOwnComplianceProfile"];
         put?: never;
         post?: never;
         delete?: never;
@@ -447,24 +171,71 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
+        get: operations["listComplianceNotices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/guardian-consents/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
+        get?: never;
+        put?: never;
+        post: operations["createGuardianConsentRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/guardian-consents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["grantGuardianConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCases"];
+        put?: never;
+        post: operations["createCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCase"];
         put?: never;
         post?: never;
         delete?: never;
@@ -476,12 +247,1291 @@ export interface paths {
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: never;
+    schemas: {
+        Error: {
+            code: string;
+            message: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        /** @enum {string} */
+        AgeBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+        /** @enum {string} */
+        WritableSource: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+        /** @enum {string} */
+        ProfileAttribute: "DISPLAY_NAME";
+        ProvenanceValueInput: {
+            /** @enum {string} */
+            attribute: "DISPLAY_NAME";
+            value: string;
+            /** @enum {string} */
+            source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+            /** Format: uuid */
+            providedByPersonId?: string;
+            /** Format: date-time */
+            observedAt?: string;
+        };
+        ProfileValue: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            attribute: "DISPLAY_NAME";
+            value: string;
+            /** @enum {string} */
+            source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+            providedByPersonId?: string | null;
+            observedAt?: string | null;
+            /** Format: date-time */
+            recordedAt: string;
+            /** @enum {string} */
+            status: "RECORDED" | "SUPERSEDED" | "RETRACTED";
+            supersedesId?: string | null;
+        };
+        ComplianceProfileSummary: {
+            /** @enum {string} */
+            ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+            minorMode: boolean;
+            guardianPersonId?: string | null;
+            guardianConsentVersion?: number | null;
+            verifiedSource: string;
+            /** Format: date-time */
+            effectiveAt?: string;
+        };
+        PersonSummary: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            createdAt: string;
+            accountBound?: boolean;
+            profile?: {
+                /** @enum {string} */
+                ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+                minorMode: boolean;
+                guardianPersonId?: string | null;
+                guardianConsentVersion?: number | null;
+                verifiedSource: string;
+                /** Format: date-time */
+                effectiveAt?: string;
+            };
+            values?: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                attribute: "DISPLAY_NAME";
+                value: string;
+                /** @enum {string} */
+                source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                providedByPersonId?: string | null;
+                observedAt?: string | null;
+                /** Format: date-time */
+                recordedAt: string;
+                /** @enum {string} */
+                status: "RECORDED" | "SUPERSEDED" | "RETRACTED";
+                supersedesId?: string | null;
+            }[];
+        };
+        LoginResponse: {
+            /** Format: uuid */
+            accountId: string;
+            sessionToken: string;
+            /** Format: date-time */
+            expiresAt: string;
+            person: {
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                createdAt: string;
+                accountBound?: boolean;
+                profile?: {
+                    /** @enum {string} */
+                    ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+                    minorMode: boolean;
+                    guardianPersonId?: string | null;
+                    guardianConsentVersion?: number | null;
+                    verifiedSource: string;
+                    /** Format: date-time */
+                    effectiveAt?: string;
+                };
+                values?: {
+                    /** Format: uuid */
+                    id: string;
+                    /** @enum {string} */
+                    attribute: "DISPLAY_NAME";
+                    value: string;
+                    /** @enum {string} */
+                    source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                    providedByPersonId?: string | null;
+                    observedAt?: string | null;
+                    /** Format: date-time */
+                    recordedAt: string;
+                    /** @enum {string} */
+                    status: "RECORDED" | "SUPERSEDED" | "RETRACTED";
+                    supersedesId?: string | null;
+                }[];
+            };
+        };
+        MeResponse: {
+            account: {
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                createdAt: string;
+                /** @enum {string} */
+                status: "ACTIVE" | "DISABLED";
+            };
+            person: {
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                createdAt: string;
+                accountBound?: boolean;
+                profile?: {
+                    /** @enum {string} */
+                    ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+                    minorMode: boolean;
+                    guardianPersonId?: string | null;
+                    guardianConsentVersion?: number | null;
+                    verifiedSource: string;
+                    /** Format: date-time */
+                    effectiveAt?: string;
+                };
+                values?: {
+                    /** Format: uuid */
+                    id: string;
+                    /** @enum {string} */
+                    attribute: "DISPLAY_NAME";
+                    value: string;
+                    /** @enum {string} */
+                    source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                    providedByPersonId?: string | null;
+                    observedAt?: string | null;
+                    /** Format: date-time */
+                    recordedAt: string;
+                    /** @enum {string} */
+                    status: "RECORDED" | "SUPERSEDED" | "RETRACTED";
+                    supersedesId?: string | null;
+                }[];
+            };
+        };
+        CreatorInput: {
+            /** @enum {string} */
+            ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+            /** @enum {string} */
+            ageBandSource: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+            values?: {
+                /** @enum {string} */
+                attribute: "DISPLAY_NAME";
+                value: string;
+                /** @enum {string} */
+                source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                /** Format: uuid */
+                providedByPersonId?: string;
+                /** Format: date-time */
+                observedAt?: string;
+            }[];
+        };
+        CreateFamilyRequest: {
+            displayName?: string;
+            creator: {
+                /** @enum {string} */
+                ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+                /** @enum {string} */
+                ageBandSource: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                values?: {
+                    /** @enum {string} */
+                    attribute: "DISPLAY_NAME";
+                    value: string;
+                    /** @enum {string} */
+                    source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                    /** Format: uuid */
+                    providedByPersonId?: string;
+                    /** Format: date-time */
+                    observedAt?: string;
+                }[];
+            };
+        };
+        FamilyResponse: {
+            /** Format: uuid */
+            id: string;
+            displayName?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            isManager: boolean;
+            memberCount?: number;
+        };
+        CreateMemberRequest: {
+            /** @enum {string} */
+            ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+            /** @enum {string} */
+            ageBandSource: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+            values?: {
+                /** @enum {string} */
+                attribute: "DISPLAY_NAME";
+                value: string;
+                /** @enum {string} */
+                source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                /** Format: uuid */
+                providedByPersonId?: string;
+                /** Format: date-time */
+                observedAt?: string;
+            }[];
+            /** Format: uuid */
+            guardianConsentId?: string;
+        };
+        UpdateMemberRequest: {
+            values: {
+                /** @enum {string} */
+                attribute: "DISPLAY_NAME";
+                value: string;
+                /** @enum {string} */
+                source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                /** Format: uuid */
+                providedByPersonId?: string;
+                /** Format: date-time */
+                observedAt?: string;
+            }[];
+        };
+        MemberResponse: {
+            /** Format: uuid */
+            personId: string;
+            /** Format: uuid */
+            familyId: string;
+            accountBound?: boolean;
+            profile: {
+                /** @enum {string} */
+                ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+                minorMode: boolean;
+                guardianPersonId?: string | null;
+                guardianConsentVersion?: number | null;
+                verifiedSource: string;
+                /** Format: date-time */
+                effectiveAt?: string;
+            };
+            values: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                attribute: "DISPLAY_NAME";
+                value: string;
+                /** @enum {string} */
+                source: "SELF_STATEMENT" | "GUARDIAN_OBSERVATION" | "GUARDIAN_RELAY" | "OTHER_MEMBER_RELAY";
+                providedByPersonId?: string | null;
+                observedAt?: string | null;
+                /** Format: date-time */
+                recordedAt: string;
+                /** @enum {string} */
+                status: "RECORDED" | "SUPERSEDED" | "RETRACTED";
+                supersedesId?: string | null;
+            }[];
+        };
+        CreateConsentRequestRequest: {
+            /** @enum {string} */
+            declaredAgeBand: "UNDER_14";
+            noticeVersion: string;
+            /** @enum {string} */
+            channel: "MINIPROGRAM" | "TEST";
+            /** Format: uuid */
+            existingSubjectPersonId?: string;
+        };
+        ConsentRequestResponse: {
+            /** Format: uuid */
+            requestId: string;
+            /** @enum {string} */
+            declaredAgeBand: "UNDER_14";
+            noticeVersion: string;
+            noticeHash: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** @enum {string} */
+            status: "PENDING" | "GRANTED" | "EXPIRED" | "ABANDONED";
+        };
+        GrantConsentRequest: {
+            /** Format: uuid */
+            onboardingRequestId: string;
+            noticeVersion: string;
+            /** @constant */
+            accepted: true;
+        };
+        ConsentRecord: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            purpose: "UNDER_14_GUARDIAN_CONSENT";
+            /** @enum {string} */
+            decision: "GRANTED" | "REVOKED";
+            version: number;
+            /** Format: uuid */
+            guardianPersonId?: string;
+            onboardingRequestId?: string | null;
+            boundPersonId?: string | null;
+            boundAt?: string | null;
+            noticeVersion?: string;
+            noticeHash?: string;
+            policyVersion?: string;
+            /** Format: date-time */
+            decidedAt: string;
+            supersedesId?: string | null;
+        };
+        ComplianceProfile: {
+            /** Format: uuid */
+            personId: string;
+            /** @enum {string} */
+            ageBand: "ADULT" | "MINOR_14_17" | "UNDER_14" | "UNKNOWN";
+            minorMode: boolean;
+            guardianPersonId?: string | null;
+            guardianConsentVersion?: number | null;
+            guardianConsentRecordId?: string | null;
+            verifiedSource: string;
+            /** Format: date-time */
+            effectiveAt: string;
+        };
+        Notice: {
+            version: string;
+            hash: string;
+            title: string;
+            /** @enum {string} */
+            purpose: "UNDER_14_GUARDIAN_CONSENT";
+            /** Format: date-time */
+            effectiveAt: string;
+        };
+        CreateCaseRequest: Record<string, never>;
+        CaseResponse: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+            /** @enum {string} */
+            phase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
+            primary: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CaseListResponse: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                status: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+                /** @enum {string} */
+                phase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
+                primary: boolean;
+                version: number;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+        };
+        /** @enum {string} */
+        CaseStatus: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+        /** @enum {string} */
+        CasePhase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
+        CaseAccessDeniedError: {
+            /** @enum {string} */
+            code: "CASE_ACCESS_DENIED";
+            message: string;
+        };
+        CaseNotFoundError: {
+            /** @enum {string} */
+            code: "CASE_NOT_FOUND";
+            message: string;
+        };
+        CurrentFamilyNotFoundError: {
+            /** @enum {string} */
+            code: "CURRENT_FAMILY_NOT_FOUND";
+            message: string;
+        };
+        CurrentFamilyAmbiguousError: {
+            /** @enum {string} */
+            code: "CURRENT_FAMILY_AMBIGUOUS";
+            message: string;
+        };
+    };
     responses: never;
-    parameters: never;
+    parameters: {
+        /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+        IdempotencyKey: string;
+        FamilyIdPath: string;
+        PersonIdPath: string;
+        /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+        IdempotencyKeyHeader: string;
+        /** @description Case UUID（待验证参数；存在不代表有权访问）。 */
+        CaseIdPath: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+    loginWithWechat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 登录成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已登出 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前身份 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createFamily: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFamilyRequest"];
+            };
+        };
+        responses: {
+            /** @description 家庭已建立 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FAMILY_ALREADY_OWNED` / `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCurrentFamily: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前家庭 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createMember: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["FamilyIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description 成员已建立 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `MEMBER_ALREADY_EXISTS` / `GUARDIAN_CONSENT_ALREADY_BOUND` / `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    updateMemberProfile: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: components["parameters"]["FamilyIdPath"];
+                personId: components["parameters"]["PersonIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description 已更新 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listConsents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 同意记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConsentRecord"][];
+                    };
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    revokeConsent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description 已撤回 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentRecord"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getOwnComplianceProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 自己的 profile */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceProfile"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listComplianceNotices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 告知目录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        notices: components["schemas"]["Notice"][];
+                    };
+                };
+            };
+        };
+    };
+    createGuardianConsentRequest: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateConsentRequestRequest"];
+            };
+        };
+        responses: {
+            /** @description onboarding 已发起 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentRequestResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    grantGuardianConsent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description 同意已成立 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentRecord"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `FORBIDDEN` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前家庭的 Case 集合（可能为空） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseListResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CASE_ACCESS_DENIED` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAccessDeniedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createCase: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Case 已创建（或幂等重放原结果） */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CASE_ACCESS_DENIED` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAccessDeniedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS`（current Family 无法唯一解析，真实可达） / `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同；当前 public HTTP command shape 下不可达） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Case UUID（待验证参数；存在不代表有权访问）。 */
+                id: components["parameters"]["CaseIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Case 详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseNotFoundError"] | components["schemas"]["CurrentFamilyNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyAmbiguousError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+}
