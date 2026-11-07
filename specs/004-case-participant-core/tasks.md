@@ -290,24 +290,24 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：Phase 2 完成；T026—T028 可先写。
   - 完成条件：测试先以实现不存在 / 行为不符预期 FAIL。
 
-- [ ] T030 实现 `packages/domain/src/participants.ts` 的纯状态机 + effective expiry + token/hash helpers。 [REQ: FR-007 / FR-015 / D-4 / D-14 / F-01 / F-03] [VERIFY: `bunx vitest run tests/domain/participants-domain.test.ts`]
+- [ ] T030 实现 `packages/domain/src/participants.ts` 的纯状态机 + effective expiry。 [REQ: FR-007 / FR-015 / D-4 / D-14 / F-03] [VERIFY: `bunx vitest run tests/domain/participants-domain.test.ts`]
   - 目标：让 T026—T028 通过。
   - 文件：`packages/domain/src/participants.ts`。
-  - 动作：状态转换守卫、effective state、timestamp 规则、token HMAC/hash helper（不写 SQL）。
+  - 动作：状态转换守卫、effective state、timestamp 规则（不写 SQL）；不拥有 token 派生 / hash / create orchestration，token 语义归 T038。
   - 前置：T026—T028；Phase 2。
   - 完成条件：domain 测试 PASS；无新增状态。
 
-- [ ] T031 实现 participation repository：create / read / lock / state update / expiry materialization。 [REQ: FR-001 / FR-007 / FR-015 / FR-016 / D-2 / D-4 / D-9 / D-10 / F-01] [VERIFY: `bunx vitest run tests/db/participants-schema.test.ts tests/domain/participants-domain.test.ts`；C-01 create ordering 由 T037/T058/T066 验证]
+- [ ] T031 实现 participation repository：create / read / lock / state update / expiry materialization。 [REQ: FR-001 / FR-007 / FR-015 / FR-016 / D-2 / D-4 / D-9 / D-10 / F-01] [VERIFY: `bunx vitest run tests/db/participants-schema.test.ts tests/domain/participants-domain.test.ts`]
   - 目标：把状态机落到 `case_participants`。
   - 文件：`packages/domain/src/participants.ts`。
-  - 动作：所有 SQL 只在 repository；`SELECT ... FOR UPDATE`；条件 UPDATE；create 返回 id / state / timestamps；invite-create 同一 transaction 先 `SELECT uuidv7()` 预分配 `participationId`；INSERT 显式 `id`；`created_at` / `updated_at` = DB `now()`；`invite_expires_at` = DB `now()` + configured TTL；不得依赖 INSERT default；不写 `persons.account_id`。
+  - 动作：所有 SQL 只在 repository；`SELECT ... FOR UPDATE`；条件 UPDATE；create 返回 id / state / timestamps；invite-create 同一 transaction 先 `SELECT uuidv7()` 预分配 `participationId`；提供 `insertParticipation(tx, { id, tokenHash, createdAt, inviteExpiresAt, ... })`；INSERT 显式 `id`；持久化调用方提供的 `invite_token_hash`；`created_at` / `updated_at` / `invite_expires_at` 由 server-time inputs / DB `now()` 决定；不得依赖 INSERT default；不派生 token（token 算法归 T038）；不写 `persons.account_id`；不实现 HTTP / idempotency orchestration。
   - 前置：T030。
-  - 完成条件：repository 方法可被测试调用；SQL 不散落路由。
+  - 完成条件：repository 方法可被测试调用；SQL 不散落路由；T030/T035/T038 不重复实现 create flow。C-01 create ordering 的完整编排由 T061/T071 验证，本 Task 不以 T037/T058/T066 为完成依据。
 
-- [ ] T032 实现 accept / decline / withdraw / expiry materialization 的事务路径。 [REQ: FR-007 / FR-011 / FR-013 / FR-015 / FR-020 / FR-021 / FR-031 / D-4 / D-6 / D-10 / D-11 / F-03 / F-04 / F-06] [VERIFY: `bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-expiry.test.ts tests/integration/participations-read.test.ts tests/db/participants-rls.test.ts`]
+- [ ] T032 实现 accept / decline / withdraw / expiry materialization 的事务路径。 [REQ: FR-007 / FR-011 / FR-013 / FR-015 / FR-031 / D-4 / D-10 / F-03 / F-04 / F-06] [VERIFY: `bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-expiry.test.ts`]
   - 目标：让 T029 通过；确保 exactly-once expiry audit。
   - 文件：`packages/domain/src/participants.ts`（service 层可单独文件，但 SQL 留在 repository）。
-  - 动作：行锁 + 条件 UPDATE；expiry 只有影响 1 行才写 audit；0 行不写；成功转换至多 1；无复活；GET self expiry materialization 在 self SELECT + `authorize(PARTICIPATION_READ_SELF)` 后，用 server-trusted `participation.family_id` 调用 `setFamilyContext(..., actor.personId, 'PARTICIPATION')`，再 FOR UPDATE；不新增 self UPDATE policy，不接收 client familyId。
+  - 动作：行锁 + 条件 UPDATE；expiry 只有影响 1 行才写 audit；0 行不写；成功转换至多 1；无复活。只实现 domain / repository lifecycle transaction mechanics 与 expiry materialization primitive；**不**承担 HTTP GET self orchestration、route authorization sequence、`setFamilyContext` adapter 编排（归 T043/T045/T061）。
   - 前置：T031。
   - 完成条件：T029 PASS；并发测试真实输出 0/1。
 
@@ -352,26 +352,26 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：Phase 2 / T030。
   - 完成条件：测试先以实现不存在预期 FAIL。
 
-- [ ] T038 实现 token 派生 / hash / create response redaction / replay rehydration。 [REQ: FR-006 / FR-016 / D-2 / D-9 / D-14 / F-01] [VERIFY: `bunx vitest run tests/domain/participants-token.test.ts tests/integration/participations-idempotency.test.ts tests/integration/participations-invite.test.ts`]
-  - 目标：让 T035—T037 通过。
-  - 文件：`packages/domain/src/participants.ts`、路由 / idempotency 编排（`apps/server/api/src/idempotency.ts` 可在 T071 完成）。
-  - 动作：derive token 前先 `SELECT uuidv7()` 预分配 `participationId`；hash 存储；INSERT 显式 `id`；`created_at` / `updated_at` = DB `now()`；`invite_expires_at` = DB `now()` + configured TTL；redacted snapshot；replay 由 `participationId` + secret 重新派生；不得存明文。
-  - 前置：T035—T037。
-  - 完成条件：token 测试 / replay 测试 PASS。
+- [ ] T038 实现 token 派生 / hash / redacted serialization / replay rehydration primitives。 [REQ: FR-006 / FR-016 / D-2 / D-9 / D-14 / F-01] [VERIFY: `bunx vitest run tests/domain/participants-token.test.ts`]
+  - 目标：让 T035 / T036 通过；只拥有 token / tokenHash / replay primitive，不拥有 DB create / HTTP / idempotency orchestration。
+  - 文件：`packages/domain/src/participants.ts`。
+  - 动作：从预分配 `participationId` 派生 token；`sha256(token)`；redacted snapshot / replay rehydration primitives；不得 INSERT `case_participants`、不得实现 DB create flow、不得实现 HTTP invite-create / idempotent replay（由 T061 / T071 组合）；不得存明文。
+  - 前置：T035 / T036；T037 可先写（expected fail，T071 使其通过）。
+  - 完成条件：`tests/domain/participants-token.test.ts` PASS；token primitive 可被 T061 / T071 组合调用。
 
-- [ ] T039 实现 safe public projection mapping（`case_participant_invite_public` → OpenAPI `ParticipationInvitePublicView`）。 [REQ: FR-006 / FR-022 / D-11 / D-14 / F-02] [VERIFY: `bunx vitest run tests/integration/participations-invite-lookup.test.ts tests/db/participants-token-view.test.ts`]
-  - 目标：让未认证 invite lookup 只返回安全列。
-  - 文件：`packages/domain/src/participants.ts`（repository）+ `packages/contracts/src/schemas.ts`。
-  - 动作：只 SELECT view 的 `participation_id / state / expires_at / created_at`；view predicate `state='PENDING' AND invite_expires_at > now()`；effective-expired PENDING 返回 404；不 SELECT base table 敏感列；不 SELECT *。
-  - 前置：T038；T024。
-  - 完成条件：lookup 响应无 person / case / family / guardian / age / consent / compliance。
-
-- [ ] T040 [P] 新增 DB / RLS 测试：token path 只走 safe view、terminal token 不可读、token 不能 UPDATE、repository 不 `SELECT *`。 [REQ: FR-006 / FR-021 / D-11 / D-14 / F-02] [VERIFY: `bunx vitest run tests/db/participants-token-view.test.ts`]
+- [ ] T039 [P] 新增 DB / RLS 测试：token path 只走 safe view、terminal token 不可读、token 不能 UPDATE、repository 不 `SELECT *`。 [REQ: FR-006 / FR-021 / D-11 / D-14 / F-02] [VERIFY: `bunx vitest run tests/db/participants-token-view.test.ts`]
   - 目标：验证 F-02 的三层边界。
   - 文件：`tests/db/participants-token-view.test.ts`。
   - 动作：token context 仅 PENDING；terminal 0 行；view 列集合；view predicate expiry；effective-expired PENDING 0 行；token RLS 仍 `state='PENDING'` 仅供已认证 accept/decline 物化；UPDATE 被拒；guard test 断言无 `SELECT *` / base table。
-  - 前置：T039；T024。
-  - 完成条件：真实 DB / policy 输出。
+  - 前置：T024。
+  - 完成条件：测试先以 safe view / policy 不存在预期 FAIL。
+
+- [ ] T040 实现 safe public projection mapping（`case_participant_invite_public` → OpenAPI `ParticipationInvitePublicView`）。 [REQ: FR-006 / FR-022 / D-11 / D-14 / F-02] [VERIFY: `bunx vitest run tests/db/participants-token-view.test.ts`]
+  - 目标：让 T039 通过；只实现 repository / projection，HTTP lookup integration 由 Phase 7 T059 / T061 验证。
+  - 文件：`packages/domain/src/participants.ts`（repository）+ `packages/contracts/src/schemas.ts`。
+  - 动作：只 SELECT view 的 `participation_id / state / expires_at / created_at`；view predicate `state='PENDING' AND invite_expires_at > now()`；effective-expired PENDING 返回 404；不 SELECT base table 敏感列；不 SELECT *；不实现 HTTP route。
+  - 前置：T038；T024；T039。
+  - 完成条件：T039 PASS；projection 可被 Phase 7 route 使用。
 
 - [ ] T041 验证 F-01 / F-02 closeout 证据并记录。 [REQ: FR-006 / FR-016 / D-9 / D-11 / F-01 / F-02] [VERIFY: `bunx vitest run tests/domain/participants-token.test.ts tests/db/participants-token-view.test.ts tests/integration/participations-idempotency.test.ts`；`rg -n "inviteToken" packages/domain/src/participants.ts apps/server/api/src`]
   - 目标：确认 token 明文不落库且 replay 返回同一 token。
@@ -393,12 +393,12 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：Phase 1。
   - 完成条件：测试先以实现不存在预期 FAIL。
 
-- [ ] T043 [P] 新增 integration 测试：manager 建邀请；target accept / decline；active participant withdraw；guardian 不自动授权。 [REQ: FR-003 / FR-020 / D-6] [VERIFY: `bunx vitest run tests/integration/participations-authorization.test.ts`]
-  - 目标：验证三角色边界。
+- [ ] T043 [P] 新增 integration 测试：manager 建邀请；target accept / decline；active participant withdraw；guardian 不自动授权；GET self READ_SELF / self RLS ≠ authorization / server-trusted family context。 [REQ: FR-003 / FR-020 / FR-021 / D-6 / D-11 / D-14] [VERIFY: `bunx vitest run tests/integration/participations-authorization.test.ts`]
+  - 目标：验证三角色边界与 GET self 授权/上下文顺序。
   - 文件：`tests/integration/participations-authorization.test.ts`。
-  - 动作：manager 可建邀请；普通 member / guardian 不可；target 可处理自己的；active 可 withdraw；guardian 不因 guardian 关系获得 participant read / management。
+  - 动作：manager 可建邀请；普通 member / guardian 不可；target 可处理自己的；active 可 withdraw；guardian 不因 guardian 关系获得 participant read / management；GET self 可见 ≠ authorization success，必须 `authorize(PARTICIPATION_READ_SELF)`；expiry 物化必须使用 server-trusted `participation.family_id`，不接收 client `familyId`。
   - 前置：T042。
-  - 完成条件：测试先以实现不存在预期 FAIL。
+  - 完成条件：测试先以实现不存在预期 FAIL；T045 使其通过。
 
 - [ ] T044 实现 `packages/authorization/src/authorize.ts` 的 participation 扩展。 [REQ: FR-020 / D-6 / D-1] [VERIFY: `bunx vitest run tests/domain/participants-authorization.test.ts`]
   - 目标：让 T042 通过；保持单一入口。
@@ -407,12 +407,12 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：T042。
   - 完成条件：unit 测试 PASS；既有 action 行为不变。
 
-- [ ] T045 实现 route / service 的 authorization 调用与 family / self / token context 使用。 [REQ: FR-020 / FR-021 / D-6 / D-11 / D-14] [VERIFY: `bunx vitest run tests/integration/participations-authorization.test.ts tests/integration/participations-read.test.ts tests/db/participants-rls.test.ts`；`rg -n "authorizeParticipation" apps packages`]
-  - 目标：让 T043 通过；所有 action 先 authorize 再 SQL。
+- [ ] T045 实现 route / service 的 authorization 调用与 family / self / token context 使用。 [REQ: FR-020 / FR-021 / D-6 / D-11 / D-14] [VERIFY: `bunx vitest run tests/integration/participations-authorization.test.ts tests/db/participants-rls.test.ts`；`rg -n "authorizeParticipation" apps packages`]
+  - 目标：让 T043 通过；所有 action 先 authorize 再 SQL；HTTP GET read 的 end-to-end 由 T060/T061 验证，本 Task 不以 T060 为完成依据。
   - 文件：`apps/server/api/src/routes/participations.ts`、`apps/server/api/src/db/tx.ts`、`packages/domain/src/participants.ts`。`db/tx.ts` 明确新增三个 thin adapters：`withInviteTokenTransaction`（未认证 public lookup）、`setInviteTokenContext`（accept 已有 identity transaction）、`setFamilyContext`（self expiry / decline / withdraw / accept 解析 family 后）；不新建第二套 context framework。
   - 动作：manager create 用 family context；target / participant 用 identity + family context；token lookup 用 token context；GET self 先 `authorize(PARTICIPATION_READ_SELF)`，expiry 物化用 server-trusted `participation.family_id` 建立 family context；accept 用 `setInviteTokenContext` + `setFamilyContext`；不绕过 authorize；不得从 client 接收 `familyId`。
-  - 前置：T044。
-  - 完成条件：T043 PASS；`authorizeParticipation` 不存在。
+  - 前置：T043 / T044。
+  - 完成条件：T043 PASS；`authorizeParticipation` 不存在；不依赖 T060 或任何后续 Phase 测试。
 
 - [ ] T046 [P] 新增 DB / RLS 测试：no context / wrong family / wrong person / self / manager / token / wrong token / token cannot UPDATE。 [REQ: FR-021 / D-11 / D-14] [VERIFY: `bunx vitest run tests/db/participants-rls.test.ts`]
   - 目标：验证 RLS 行为矩阵。
@@ -510,12 +510,12 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：T056；T008。
   - 完成条件：测试先以 route 不存在预期 FAIL。
 
-- [ ] T058 [P] 新增 integration 测试：create invite happy path（201、token、expiresAt、audit、idempotency）。 [REQ: FR-003 / FR-004 / FR-016 / FR-026 / D-5 / D-9 / D-14 / F-01] [VERIFY: `bunx vitest run tests/integration/participations-invite.test.ts`]
-  - 目标：冻结 create invite 的可观察结果。
+- [ ] T058 [P] 新增 integration 测试：create invite happy path（201、token、expiresAt、audit）。 [REQ: FR-003 / FR-004 / FR-026 / D-5 / D-14 / F-01] [VERIFY: `bunx vitest run tests/integration/participations-invite.test.ts`]
+  - 目标：冻结 create invite 的可观察结果；idempotent replay 由 T066 / T071 验证，不在本 Task。
   - 文件：`tests/integration/participations-invite.test.ts`。
-  - 动作：manager 建邀请；断言 201 / PENDING / token 只在 create + same-key replay 返回 / `participationId` 预分配 / explicit `id` / `createdAt` / `expiresAt` DB server time / audit / 无 Evidence；token 明文不落库。
+  - 动作：manager 建邀请；断言 201 / PENDING / token 在 create 响应返回 / `participationId` 预分配 / explicit `id` / `createdAt` / `expiresAt` DB server time / audit / 无 Evidence；token 明文不落库；不要求 same-key replay（T066/T071）。
   - 前置：T056；T025。
-  - 完成条件：测试先以实现不存在预期 FAIL。
+  - 完成条件：测试先以实现不存在预期 FAIL；T061 使其通过。
 
 - [ ] T059 [P] 新增 integration 测试：invite lookup 200 最小字段；无效 / 过期 / 终止统一 404。 [REQ: FR-006 / FR-022 / FR-027 / D-5 / D-14] [VERIFY: `bunx vitest run tests/integration/participations-invite-lookup.test.ts`]
   - 目标：冻结未认证 lookup。
@@ -531,12 +531,12 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：T056；T032。
   - 完成条件：测试先以实现不存在预期 FAIL。
 
-- [ ] T061 实现 `apps/server/api/src/routes/participations.ts` 的 6 条 route。 [REQ: FR-026 / FR-027 / FR-028 / D-5] [VERIFY: `bunx vitest run tests/integration/participations-invite.test.ts tests/integration/participations-invite-lookup.test.ts tests/integration/participations-accept.test.ts tests/integration/participations-decline.test.ts tests/integration/participations-withdraw.test.ts tests/integration/participations-read.test.ts`]
-  - 目标：让 T058—T060 通过。
+- [ ] T061 实现 `apps/server/api/src/routes/participations.ts` 的 6 条 route。 [REQ: FR-003 / FR-004 / FR-026 / FR-027 / FR-028 / D-5] [VERIFY: `bunx vitest run tests/integration/participations-invite.test.ts tests/integration/participations-invite-lookup.test.ts tests/integration/participations-accept.test.ts tests/integration/participations-decline.test.ts tests/integration/participations-withdraw.test.ts tests/integration/participations-read.test.ts`]
+  - 目标：让 T058—T060 通过；create route 组合 T031 preallocate / T038 token / T031 insert / audit，不实现 idempotent replay（T071）。
   - 文件：`apps/server/api/src/routes/participations.ts`。
-  - 动作：严格 schema；调用 domain / authorization / compliance；不持有 SQL；不新增 route。
-  - 前置：T058—T060；T045；T053。
-  - 完成条件：6 route happy path PASS；route surface 恰为 6。
+  - 动作：严格 schema；调用 domain / authorization / compliance；invite create 组合 `SELECT uuidv7()` → T038 token/hash → T031 explicit-id insert → audit；不持有 SQL；不新增 route；不实现 T071 replay rehydration。
+  - 前置：T058—T060；T031；T038；T045；T053。
+  - 完成条件：6 route happy path PASS；route surface 恰为 6；T058 不要求 idempotent replay。
 
 - [ ] T062 注册 routes 到 `apps/server/api/src/app.ts`；`plugins/auth.ts` 只放行 GET invite。 [REQ: FR-006 / FR-026 / D-5] [VERIFY: `bunx vitest run tests/integration/participations-route-surface.test.ts tests/integration/participations-invite-lookup.test.ts`；`rg -n "participations" apps/server/api/src/app.ts apps/server/api/src/plugins/auth.ts`]
   - 目标：让 route 真实可达，且只对 GET invite 免认证。
@@ -608,9 +608,9 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 完成条件：幂等测试 PASS。
 
 - [ ] T071 实现 `apps/server/api/src/idempotency.ts` 的 participation command 编排 + invite create replay rehydration。 [REQ: FR-016 / D-9 / D-14 / F-01] [VERIFY: `bunx vitest run tests/integration/participations-idempotency.test.ts`]
-  - 目标：让 T065 / T066 通过；snapshot redacted，replay 重新派生 token。
+  - 目标：让 T037 / T065 / T066 通过；snapshot redacted，replay 重新派生 token。
   - 文件：`apps/server/api/src/idempotency.ts`。
-  - 动作：复用 `runIdempotentCommand`；invite create snapshot 保存 `participationId` + redacted metadata，不含 plaintext token；replay 由 `participationId` + secret 重新派生同一 token；create path 已预分配 id / explicit id / DB server time；其他 command replay 原 body。
+  - 动作：复用 `runIdempotentCommand`；包装 T061 create route（T031 preallocate / T038 token / T031 explicit-id insert / audit）；snapshot 保存 `participationId` + redacted metadata，不含 plaintext token；replay 由 `participationId` + secret 重新派生同一 token；不 INSERT 新 participation；其他 command replay 原 body。
   - 前置：T070；T038。
   - 完成条件：T065 / T066 PASS。
 
@@ -679,7 +679,7 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 - [ ] T080 验证无 `case_events` / 第二套 audit；记录 F-06 never-accessed expiry 证据。 [REQ: FR-023 / D-12 / F-06] [VERIFY: `bunx vitest run tests/integration/participations-audit.test.ts tests/integration/participations-expiry.test.ts`；`rg -n "case_events|participation_audit_events" packages/domain/src/participants.ts apps/server/api/src`]
   - 目标：确认审计边界与 never-accessed 语义。
   - 文件：证据记录；不修改设计。
-  - 动作：断言不写 `case_events`；无第二套 audit；never-accessed 不自动写 `PARTICIPATION_EXPIRED`；FR-019 Evidence boundary 由 T089 单独验证，本 Task 不以其为 `[REQ]`。
+  - 动作：断言不写 `case_events`；无第二套 audit；never-accessed 不自动写 `PARTICIPATION_EXPIRED`；FR-019 Evidence boundary 由 T081 单独验证，本 Task 不以其为 `[REQ]`。
   - 前置：T079。
   - 完成条件：证据 PASS。
 
@@ -687,91 +687,91 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 
 # Phase 10 — Integration / Verification
 
-> 只运行验证，不新增实现。所有测试真实 PostgreSQL 18，不 mock DB。测试运行共享同一 `DATABASE_URL`，T081—T085 串行执行，不标 `[P]`。
+> 只运行验证，不新增实现。所有测试真实 PostgreSQL 18，不 mock DB。测试运行共享同一 `DATABASE_URL`，T081—T092 串行执行，不标 `[P]`。先创建全部 verification-only tests，再运行 aggregate / full-suite。
 
-- [ ] T081 运行 domain / unit 测试。 [REQ: FR-001—FR-031 / D-15] [VERIFY: `bunx vitest run tests/domain`]
+- [ ] T081 新增 DB 测试：accept / decline / withdraw 不产生 Evidence side effect（条件验证）。 [REQ: FR-019 / Acceptance 13 / SC-004 / D-12] [VERIFY: `bunx vitest run tests/db/participants-evidence-boundary.test.ts`]
+  - 目标：证明三种参与动作不产生 Evidence side effect；Evidence tables absent 不是 failure。
+  - 文件：`tests/db/participants-evidence-boundary.test.ts`。
+  - 动作：先 `SELECT to_regclass('public.assertions')` / `to_regclass('public.observations')`；present → baseline count → accept / decline / withdraw → assertions delta = 0 / observations delta = 0；absent → 断言 remain absent + no Evidence writer / repository / route / migration；不得创建 Evidence tables、mock Evidence schema 或要求 Slice 3；不得只检查 `case_events` / audit。
+  - 前置：T061 / T072（核心实现已完成）；verification-only。
+  - 完成条件：absent / present 两分支均 PASS；Slice 4 产生 Evidence write → FAIL。
+
+- [ ] T082 新增 integration 测试：participation / audit / idempotency 任一步失败时整事务回滚。 [REQ: FR-031 / D-9 / D-12] [VERIFY: `bunx vitest run tests/integration/participations-rollback.test.ts`]
+  - 目标：证明没有 partial commit / 假成功。
+  - 文件：`tests/integration/participations-rollback.test.ts`。
+  - 动作：使用真实 transaction helper；在同一个 transaction 内先执行真实 participation state change（PENDING→ACTIVE），再以 `business_audit_events.event_type='ROLLBACK_TEST_INVALID_EVENT'` 触发既有 event_type CHECK；另以 `idempotency_keys.command_type='ROLLBACK_TEST_INVALID_COMMAND'` 触发既有 command_type CHECK；失败点均在 participation mutation 之后、commit 之前；不使用 production test-only hook；断言 participation state / audit rows / idempotency rows 全部回滚。
+  - 前置：T072；verification-only。
+  - 完成条件：任一失败点均无 partial rows；无法用 CHECK 触发则报告 BLOCKED，不得改用 production hook。
+
+- [ ] T083 新增 DB 测试：Slice 4 结构边界，无越界 domain / Evidence / Intervention / AI / notification / generic response。 [REQ: FR-025 / SC-015 / D-17] [VERIFY: `bunx vitest run tests/db/participants-structure.test.ts`]
+  - 目标：证明 `case_participants` 仍是唯一 participation resource，且无 Assessment / Problem Formulation / Scene / Evidence writer / Goal / Intervention / Plan domain / Task domain / AI / notification delivery / generic participant response。
+  - 文件：`tests/db/participants-structure.test.ts`。
+  - 动作：`information_schema` / `pg_constraint` / route enumeration；断言 `to_regclass('public.intervention_instances') IS NULL`（或实际 schema namespace 等价断言）；断言无越界 table / type / route / generic response；不实现 Intervention。
+  - 前置：T025 / T056；verification-only。
+  - 完成条件：结构测试 PASS；发现越界对象 → FAIL。
+
+- [ ] T084 新增 integration 测试：cross-family named verification（422 vs 404/403 分流）。 [REQ: SC-001 / FR-004 / FR-022 / D-5 / D-6 / D-11 / D-13] [VERIFY: `bunx vitest run tests/integration/participations-cross-family.test.ts`]
+  - 目标：真实跨 Family 资源访问被拒；client body `familyId` spoof 在 strict schema 前 422。
+  - 文件：`tests/integration/participations-cross-family.test.ts`。
+  - 动作：A) wrong Family / target Person 属于另一 Family / Case 属于另一 Family / cross-family resource access → 404 / 403 按冻结 contract、zero write、no existence leak；B) client body `familyId` spoof → 422 VALIDATION_ERROR、zero business writes、在业务授权逻辑之前拒绝；不得放宽 strict schema。
+  - 前置：T045 / T061；verification-only。
+  - 完成条件：两类语义分别 PASS。
+
+- [ ] T085 运行 domain / unit 测试。 [REQ: FR-001—FR-031 / D-15] [VERIFY: `bunx vitest run tests/domain`]
   - 目标：确认纯规则 / 状态机 / token / authorize。
   - 文件：`tests/domain/**`。
   - 动作：执行；检查 0 failed / 0 skipped；不跳过失败。
   - 前置：Phase 1—9 实现完成。
   - 完成条件：domain 测试 PASS。
 
-- [ ] T082 运行 DB / RLS / migration 测试。 [REQ: FR-021 / FR-029 / D-3 / D-11] [VERIFY: `bunx vitest run tests/db`；`bun run db:evidence`]
+- [ ] T086 运行 DB / RLS / migration 测试（必须包含 T081 / T083）。 [REQ: FR-021 / FR-029 / D-3 / D-11] [VERIFY: `bunx vitest run tests/db`；`bun run db:evidence`]
   - 目标：确认 schema / RLS / role / migration replay。
   - 文件：`tests/db/**`。
   - 动作：执行；检查 `relrowsecurity` / `relforcerowsecurity` / runtime role / safe view。
-  - 前置：T025。
-  - 完成条件：DB 测试 PASS；db:evidence PASS。
+  - 前置：T025 / T081 / T083。
+  - 完成条件：DB 测试 PASS；db:evidence PASS；aggregate 覆盖 T081/T083。
 
-- [ ] T083 运行 integration / API 测试。 [REQ: FR-005—FR-027 / D-5 / D-7] [VERIFY: `bunx vitest run tests/integration`]
+- [ ] T087 运行 integration / API 测试（必须包含 T082 / T084）。 [REQ: FR-005—FR-027 / D-5 / D-7] [VERIFY: `bunx vitest run tests/integration`]
   - 目标：确认六 route / identity / compliance / scope。
   - 文件：`tests/integration/**`。
   - 动作：执行；检查 0 failed / 0 skipped。
-  - 前置：T061—T064。
-  - 完成条件：integration PASS。
+  - 前置：T061—T064 / T082 / T084。
+  - 完成条件：integration PASS；aggregate 覆盖 T082/T084。
 
-- [ ] T084 运行 idempotency / concurrency 测试。 [REQ: FR-016 / FR-031 / D-9 / D-10] [VERIFY: `bunx vitest run tests/integration/participations-idempotency.test.ts tests/integration/participations-accept-concurrency.test.ts tests/db/participants-live-uniqueness.test.ts`]
+- [ ] T088 运行 idempotency / concurrency 测试。 [REQ: FR-016 / FR-031 / D-9 / D-10] [VERIFY: `bunx vitest run tests/integration/participations-idempotency.test.ts tests/integration/participations-accept-concurrency.test.ts tests/db/participants-live-uniqueness.test.ts`]
   - 目标：确认 replay / mismatch / 0-or-1 / expiry。
   - 文件：对应测试文件。
   - 动作：执行；检查真实并发输出。
   - 前置：T071 / T072。
   - 完成条件：测试 PASS。
 
-- [ ] T085 运行 negative security / anti-enumeration 测试。 [REQ: FR-006 / FR-022 / D-13] [VERIFY: `bunx vitest run tests/integration/participations-anti-enumeration.test.ts tests/integration/participations-http-boundary.test.ts tests/integration/participations-identity-seam.test.ts`]
+- [ ] T089 运行 negative security / anti-enumeration 测试。 [REQ: FR-006 / FR-022 / D-13] [VERIFY: `bunx vitest run tests/integration/participations-anti-enumeration.test.ts tests/integration/participations-http-boundary.test.ts tests/integration/participations-identity-seam.test.ts`]
   - 目标：确认无敏感字段 / 无 oracle / 无 P2。
   - 文件：对应测试文件。
   - 动作：执行；检查真实 HTTP status / body。
   - 前置：T079。
   - 完成条件：测试 PASS。
 
-- [ ] T086 运行 OpenAPI 生成 / check / typecheck / static guard。 [REQ: FR-026 / FR-027 / D-5] [VERIFY: `bun run openapi:generate`；`bun run openapi:check`；`bun run typecheck`；`bun run guard:static`]
+- [ ] T090 运行 OpenAPI 生成 / check / typecheck / static guard。 [REQ: FR-026 / FR-027 / D-5] [VERIFY: `bun run openapi:generate`；`bun run openapi:check`；`bun run typecheck`；`bun run guard:static`]
   - 目标：确认契约 / 类型 / 静态边界。
   - 文件：generated artifacts（只由生成器写）。
   - 动作：执行；断言 6 个 participation operations；两次生成 hash 一致。
   - 前置：T064。
   - 完成条件：全部 PASS。
 
-- [ ] T087 运行全量测试。 [REQ: FR-001—FR-031 / D-15] [VERIFY: `bunx vitest run`]
+- [ ] T091 运行全量测试（必须包含 T081—T090 全部新增测试与 aggregate）。 [REQ: FR-001—FR-031 / D-15] [VERIFY: `bunx vitest run`]
   - 目标：确认无回归 / 无 skip。
   - 文件：`tests/**`。
   - 动作：执行；检查 0 failed / 0 skipped；不得削弱断言。
-  - 前置：T081—T086。
-  - 完成条件：全量 PASS。
+  - 前置：T081—T090。
+  - 完成条件：全量 PASS；aggregate 覆盖所有最终测试。
 
-- [ ] T088 运行 `quickstart.md` §1—§7 并记录 Case C / 005 runtime 状态。 [REQ: FR-030 / D-17 / Acceptance 19] [VERIFY: 按 `quickstart.md` 执行；记录真实输出]
+- [ ] T092 运行 `quickstart.md` §1—§7 并记录 Case C / 005 runtime 状态。 [REQ: FR-030 / D-17 / Acceptance 19] [VERIFY: 按 `quickstart.md` 执行；记录真实输出]
   - 目标：确认验证路径与依赖状态。
   - 文件：`quickstart.md`（只读）、`tests/evidence/**`（Implement 证据）。
   - 动作：执行 quickstart；若 005 runtime 不可用 → `BLOCKED — 005 IDENTITY RUNTIME NOT AVAILABLE`；不得声称 Case C E2E PASS。
-  - 前置：T087。
+  - 前置：T091。
   - 完成条件：quickstart 结果真实记录；PASS 或 BLOCKED 明确。
-
-- [ ] T089 新增 DB 测试：accept / decline / withdraw 不产生 Evidence side effect。 [REQ: FR-019 / Acceptance 13 / SC-004 / D-12] [VERIFY: `bunx vitest run tests/db/participants-evidence-boundary.test.ts`]
-  - 目标：证明三种参与动作后 `assertions` / `observations` 计数 +0，无 Evidence 表写入。
-  - 文件：`tests/db/participants-evidence-boundary.test.ts`。
-  - 动作：记录 baseline count → accept / decline / withdraw → delta = 0；断言无 Evidence writer / 无 Statement / Observation rows；不得只检查 `case_events` / audit 表。
-  - 前置：T061 / T072（核心实现已完成）；verification-only，不引入新业务行为。
-  - 完成条件：测试真实 PASS；任一动作新增 Evidence → FAIL。
-
-- [ ] T090 新增 integration 测试：participation / audit / idempotency 任一步失败时整事务回滚。 [REQ: FR-031 / D-9 / D-12] [VERIFY: `bunx vitest run tests/integration/participations-rollback.test.ts`]
-  - 目标：证明没有 partial commit / 假成功。
-  - 文件：`tests/integration/participations-rollback.test.ts`。
-  - 动作：注入代表性问题（participation state change / `business_audit_events` / idempotency snapshot 失败）；断言三者均回滚，无 partial 行。
-  - 前置：T072；verification-only。
-  - 完成条件：回滚测试 PASS；任一 partial commit → FAIL。
-
-- [ ] T091 新增 DB 测试：Slice 4 结构边界，无越界 domain / Evidence / AI / notification / generic response。 [REQ: FR-025 / SC-015 / D-17] [VERIFY: `bunx vitest run tests/db/participants-structure.test.ts`]
-  - 目标：证明 `case_participants` 仍是唯一 participation resource，且无 Assessment / Problem Formulation / Scene / Evidence writer / AI / Goal / Plan / Task domain / notification delivery / generic participant response。
-  - 文件：`tests/db/participants-structure.test.ts`。
-  - 动作：`information_schema` / `pg_constraint` / route enumeration；断言无越界 table / type / route / generic response。
-  - 前置：T025 / T056；verification-only。
-  - 完成条件：结构测试 PASS；发现越界对象 → FAIL。
-
-- [ ] T092 新增 integration 测试：cross-family named verification。 [REQ: SC-001 / FR-004 / FR-022 / D-6 / D-11] [VERIFY: `bunx vitest run tests/integration/participations-cross-family.test.ts`]
-  - 目标：wrong Family / target Person 属于另一 Family / Case 属于另一 Family / client family spoofing 均不能 create / read / accept participation。
-  - 文件：`tests/integration/participations-cross-family.test.ts`。
-  - 动作：覆盖三类 cross-family + client body `familyId` spoof；断言统一 404 / 403 冻结语义、零写入、无存在性泄露。
-  - 前置：T045 / T061；verification-only。
-  - 完成条件：cross-family 测试 PASS；任何跨 Family 成功写入 → FAIL。
 
 ---
 
@@ -783,7 +783,7 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 目标：区分预期实现 / 生成物 / 测试证据 / unexpected。
   - 文件：evidence log（`tests/evidence/**` 或仓库现有 evidence 位置）。
   - 动作：记录 base SHA；列出 changed files；unexpected 必须为 0。
-  - 前置：T087。
+  - 前置：T091（full suite）。
   - 完成条件：分类清晰；unexpected = 0。
 
 - [ ] T094 验证冻结上游 diff = 0。 [REQ: FR-030 / D-17] [VERIFY: `git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD -- Docs specs/004-case-participant-core/spec.md specs/004-case-participant-core/plan.md specs/004-case-participant-core/research.md specs/004-case-participant-core/data-model.md specs/004-case-participant-core/quickstart.md specs/004-case-participant-core/contracts specs/004-case-participant-core/checklists`]
@@ -804,7 +804,7 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 目标：整理 requirement coverage / scope / contracts / tests / RLS / concurrency / idempotency / remaining gaps。
   - 文件：`tests/evidence/**` 或仓库现有 evidence 路径。
   - 动作：记录真实命令输出；不写“已独立 Converge”；不写“可 merge”。
-  - 前置：T087 / T088。
+  - 前置：T091（full suite）/ T092（quickstart）。
   - 完成条件：evidence 完整；无虚假 PASS。
 
 - [ ] T097 Implement 最终 gate：重新核实依赖；输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE` 或 `BLOCKED`。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: 重跑 T001—T006；`bunx vitest run`；`bun run openapi:check`；`node .specify/scripts/validate-governance.mjs`]
@@ -833,24 +833,24 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 | FR-011 | T027 / T032 / T051 / T067 |
 | FR-012 | T027 / T060 / T067 / T074 / T078 |
 | FR-013 | T027 / T032 / T051 / T067 |
-| FR-014 | T027 / T074 / T080 |
+| FR-014 | T027 / T033 / T074 / T080 |
 | FR-015 | T026 / T027 / T029 / T032 / T068 / T073 |
-| FR-016 | T065 / T066 / T070 / T071 |
+| FR-016 | T031 / T037 / T038 / T058 / T065 / T066 / T070 / T071 |
 | FR-017 | T047 / T060 |
 | FR-018 | T047 |
-| FR-019 | T019 / T030 / T089 |
+| FR-019 | T019 / T030 / T081 |
 | FR-020 | T042 / T043 / T044 / T047 / T048 |
 | FR-021 | T019 / T020 / T046 / T045 |
 | FR-022 | T075 / T076 / T077 / T079 |
 | FR-023 | T074 / T078 / T080 |
 | FR-024 | T049 / T050 / T052 / T053 |
-| FR-025 | T047 / T091 |
+| FR-025 | T047 / T083 |
 | FR-026 | T056 / T057 / T058 / T059 / T060 / T061 / T062 / T064 |
 | FR-027 | T056 / T060 / T061 / T064 |
 | FR-028 | T056 / T061 / T064 |
 | FR-029 | T018 / T023 / T069 |
-| FR-030 | T001 / T002 / T003 / T004 / T005 / T006 / T088 / T097 |
-| FR-031 | T032 / T070 / T071 / T072 / T078 / T079 / T090 |
+| FR-030 | T001 / T002 / T003 / T004 / T005 / T006 / T092 / T097 |
+| FR-031 | T032 / T070 / T071 / T072 / T078 / T079 / T082 |
 
 ## 3. Acceptance Traceability
 
@@ -861,29 +861,29 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 | 3 Withdraw | T027 / T032 / T051 / T067 |
 | 4 Duplicate / concurrent accept | T067 / T068 |
 | 5 Wrong user token | T035 / T036 / T039 / T059 / T076 |
-| 6 Cross Family | T017 / T046 / T075 / T092 |
+| 6 Cross Family | T017 / T046 / T075 / T084 |
 | 7 UNDER_14 illegal path | T051 / T053 |
-| 8 Non-manager cannot invite | T042 / T058 / T075 |
+| 8 Non-manager cannot invite | T042 / T043 / T058 / T075 |
 | 9 Invite create anti-enumeration | T075 |
 | 10 Unauthorized token lookup | T040 / T059 / T076 |
 | 11 Terminal invite cannot reactivate | T027 / T068 |
 | 12 No Case-wide access on accept | T047 / T060 |
-| 13 No Evidence side effect | T019 / T030 / T089 |
+| 13 No Evidence side effect | T019 / T030 / T081 |
 | 14 No duplicate Person / binding | T049 / T050 / T052 / T053 |
 | 15 Auditability | T074 / T078 |
 | 16 Idempotent command outcome | T065 / T066 / T070 / T071 |
 | 17 Route surface enumeration | T056 / T061 / T064 |
-| 18 RLS / cross-family hard block | T019 / T046 / T092 |
-| 19 Implement gate | T001—T006 / T088 / T097 |
+| 18 RLS / cross-family hard block | T019 / T046 / T084 |
+| 19 Implement gate | T001—T006 / T092 / T097 |
 
 ## 4. SC Traceability
 
 | SC | Tasks |
 |---|---|
-| SC-001 | T017 / T046 / T075 / T092 |
+| SC-001 | T017 / T046 / T075 / T084 |
 | SC-002 | T067 / T068 |
 | SC-003 | T047 |
-| SC-004 | T019 / T030 / T089 |
+| SC-004 | T019 / T030 / T081 |
 | SC-005 | T027 / T068 |
 | SC-006 | T040 / T059 / T076 |
 | SC-007 | T056 / T061 / T064 |
@@ -894,7 +894,7 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 | SC-012 | T051 / T053 |
 | SC-013 | T074 / T078 |
 | SC-014 | T065 / T066 / T068 / T070 / T071 |
-| SC-015 | T015—T025 / T056—T064 / T091 |
+| SC-015 | T015—T025 / T056—T064 / T083 |
 
 ## 5. Plan Decision Traceability
 
@@ -905,18 +905,18 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 | D-3 migration | T021—T025 / T093 |
 | D-4 state model | T026—T034 |
 | D-5 API | T056—T064 |
-| D-6 authorization | T042—T048 |
+| D-6 authorization | T042—T048 / T060 |
 | D-7 identity prerequisite | T049—T055 |
 | D-8 Compliance / Consent | T049—T055 |
 | D-9 idempotency | T031 / T037 / T038 / T058 / T065—T073 |
 | D-10 concurrency | T029 / T067 / T068 / T069 / T072 |
-| D-11 RLS | T019 / T020 / T024 / T045 / T046 |
+| D-11 RLS | T019 / T020 / T024 / T039 / T040 / T045 / T046 |
 | D-12 audit | T074—T080 |
 | D-13 anti-enumeration / failure | T075—T077 / T079 |
 | D-14 TTL / expiry | T009 / T010 / T026 / T029 / T031 / T032 / T037 / T038 / T039 / T058 / T059 / T073 |
 | D-15 testing | T081—T092 |
 | D-16 observability | T078 / T096 |
-| D-17 dependencies / Implement gate | T001—T006 / T088 / T097 |
+| D-17 dependencies / Implement gate | T001—T006 / T092 / T097 |
 
 ## 6. Checklist Findings Traceability
 
@@ -924,7 +924,7 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 |---|---|
 | F-01 invite create token idempotency replay | T031 / T035—T041 / T058 / T066 / T071 |
 | F-02 token RLS pending + safe view | T020 / T024 / T039 / T040 / T046 / T059 |
-| F-03 GET expiry exactly-once | T029 / T032 / T045 / T046 / T060 / T068 / T073 |
+| F-03 GET expiry exactly-once | T029 / T032 / T043 / T045 / T046 / T060 / T068 / T073 |
 | F-04 concurrency 0/1 | T028 / T068 / T073 |
 | F-05 MINOR_14_17 consent taxonomy | T051 / T053 / T055 |
 | F-06 never-accessed expiry audit | T029 / T032 / T073 / T080 |
@@ -991,7 +991,7 @@ IMPLEMENT GATE = BLOCKED
 ```bash
 node .specify/scripts/validate-governance.mjs
 node .specify/scripts/tests/run-governance-tests.mjs
-git diff --name-only a5d83c359604d8a54aea56c2adfa57c893b768ad..HEAD
+git diff --name-only e8fdc4b5c6baca3131b3bd583f1890e89afbfc9c..HEAD
 git status --porcelain=v1
 ```
 
@@ -1004,8 +1004,11 @@ git status --porcelain=v1
 | `tasks.md` task lines | 每条含 `[REQ:...]` 与 `[VERIFY:...]` |
 | Tasks total / `[P]` / IDs | 97 / 37 / T001—T097 连续，无重复无跳号 |
 | C-01 / H-01 / H-02 / L-02 / L-05 task sync | PASS |
-| M-01 / M-02 / M-03 / M-04 / L-01 / L-03 / L-04 | RESOLVED |
-| Changes vs Targeted Checklist head（a5d83c3） | 仅 `specs/004-case-participant-core/tasks.md` |
+| F1 / F2 Tasks sync | PASS |
+| F3 / F4 / F5 / F6 / F7 / F8 | RESOLVED |
+| future-test VERIFY references | 0 |
+| aggregate runs include all final tests | PASS |
+| Changes vs Targeted Checklist head（e8fdc4b） | 仅 `specs/004-case-participant-core/tasks.md` |
 | `spec.md` / `plan.md` / `research.md` / `data-model.md` / `quickstart.md` / `contracts/**` / `checklists/**` | 0 diff |
 | `Docs/**` | 0 diff |
 | `apps/**` / `packages/**` / `db/**` / `tests/**` | 0 diff |
@@ -1017,10 +1020,10 @@ git status --porcelain=v1
 ## 10. Final Status
 
 ```text
-SLICE 4 TASKS REMEDIATION COMPLETE
-READY FOR FINAL ANALYZE ROUND 2
+SLICE 4 TASKS REMEDIATION ROUND 2 COMPLETE
+READY FOR FINAL ANALYZE ROUND 3
 ```
 
 **边界**：本轮只修改 `tasks.md`；未执行 Analyze / Implement / Converge，未修改实现、migration、tests、`spec.md`、`Docs/**`。
 
-下一阶段：**Final Analyze Round 2**；继续由同一个 AI B 执行，但必须作为独立只读 Analyze 回合。
+下一阶段：**Final Analyze Round 3**；继续由同一个 AI B 执行，但必须作为独立只读 Analyze 回合。
