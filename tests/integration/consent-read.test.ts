@@ -1,14 +1,20 @@
 /**
  * Consent read integration tests (T060).
- * GET /api/v1/consents (no family → 200 { items: [] }, frozen OpenAPI shape)
- * GET /api/v1/compliance/profile
- * GET /api/v1/compliance/notices
+ *   GET /api/v1/consents (no family → 200 { items: [] })
+ *   GET /api/v1/compliance/profile
+ *   GET /api/v1/compliance/notices
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
+import {
+  auth,
+  createConsentRequest,
+  createFamily,
+  loginWithLabel,
+} from '../setup/api.js';
 
 let verifyPool: pg.Pool;
 
@@ -27,64 +33,34 @@ describe('Consent Read Integration (T060)', () => {
   });
 
   async function setupManagerAndFamily(label: string) {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `crd_${label}_${Date.now()}` },
-    });
-    const { token, person } = loginRes.json();
-
-    const famRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        displayName: `家庭-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `fam-crd-${label}-${Date.now()}`,
-      },
-    });
-    const family = famRes.json();
-    return { token, personId: person.id, familyId: family.id };
+    const { token, personId } = await loginWithLabel(app, `crd_${label}`);
+    const famRes = await createFamily(app, token, label);
+    expect(famRes.statusCode).toBe(201);
+    return { token, personId, familyId: famRes.json().id as string };
   }
 
   it('T060: GET /consents no family → 200 empty list', async () => {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `crd_nofam_${Date.now()}` },
-    });
-    const { token } = loginRes.json();
+    const { token } = await loginWithLabel(app, 'crd_nofam');
 
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/consents',
-      headers: { authorization: `Bearer ${token}` },
+      headers: auth(token),
     });
     expect(res.statusCode).toBe(200);
-    // Frozen OpenAPI contract: collection endpoint returns { "items": [...] }
     expect(res.json()).toEqual({ items: [] });
   });
 
   it('T060: GET /consents with family returns { items: [...] }', async () => {
     const { token } = await setupManagerAndFamily('t060a');
 
-    // Create a consent request first
-    await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        noticeVersion: 'v1',
-        idempotencyKey: `cr-t060a-${Date.now()}`,
-      },
-    });
+    const reqRes = await createConsentRequest(app, token, 't060a');
+    expect(reqRes.statusCode).toBe(201);
 
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/consents',
-      headers: { authorization: `Bearer ${token}` },
+      headers: auth(token),
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -98,27 +74,24 @@ describe('Consent Read Integration (T060)', () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/compliance/profile',
-      headers: { authorization: `Bearer ${token}` },
+      headers: auth(token),
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.ageBand).toBeDefined();
-    expect(body.minorMode).toBeDefined();
+    expect(body.personId).toBe(personId);
+    expect(body.ageBand).toBe('ADULT');
+    expect(body.minorMode).toBe(false);
     expect(body.verifiedSource).toBeDefined();
+    expect(body.effectiveAt).toBeDefined();
   });
 
   it('T060: GET /compliance/notices returns catalog', async () => {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `crd_notices_${Date.now()}` },
-    });
-    const { token } = loginRes.json();
+    const { token } = await loginWithLabel(app, 'crd_notices');
 
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/compliance/notices',
-      headers: { authorization: `Bearer ${token}` },
+      headers: auth(token),
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -127,5 +100,7 @@ describe('Consent Read Integration (T060)', () => {
     expect(body.notices[0].version).toBe('v1');
     expect(body.notices[0].hash).toBeDefined();
     expect(body.notices[0].title).toBeDefined();
+    expect(body.notices[0].purpose).toBe('UNDER_14_GUARDIAN_CONSENT');
+    expect(body.notices[0].effectiveAt).toBeDefined();
   });
 });

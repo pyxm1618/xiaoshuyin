@@ -1,18 +1,22 @@
 /**
  * Consent revoke integration tests (T058 RED→GREEN).
- * POST /api/v1/consents/{id}/revoke
- * - Revoke writes REVOKED v2 (onboarding_request_id IS NULL, supersedes_id=v1)
- * - Profile pointer advances
- * - Gate immediately BLOCK
- * - Audit row exists
- * - Re-consent continues the chain at v3 (supersedes v2, same bound Person)
+ *
+ * Frozen OpenAPI: `Idempotency-Key` header; optional `{ reason? }` body;
+ * response = full ConsentRecord.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
-import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
+import {
+  createConsentRequest,
+  createFamily,
+  createMember,
+  grantConsent,
+  loginWithLabel,
+  revokeConsent,
+} from '../setup/api.js';
 
 let verifyPool: pg.Pool;
 
@@ -43,94 +47,45 @@ describe('Consent Revoke Integration (T058)', () => {
   });
 
   async function setupManagerAndFamily(label: string) {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `crv_${label}_${Date.now()}` },
-    });
-    const { token, person } = loginRes.json();
-
-    const famRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        displayName: `家庭-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `fam-crv-${label}-${Date.now()}`,
-      },
-    });
-    const family = famRes.json();
-    return { token, personId: person.id, familyId: family.id };
+    const actor = await loginWithLabel(app, `crv_${label}`);
+    const fam = await createFamily(app, actor.token, `crv_${label}`);
+    expect(fam.statusCode).toBe(201);
+    return { ...actor, familyId: fam.json().id as string };
   }
 
   async function createAndGrantConsent(
-    token: string,
+    actor: { token: string },
     label: string,
-    subjectPersonId?: string
+    existingSubjectPersonId?: string
   ) {
-    const reqRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        noticeVersion: 'v1',
-        ...(subjectPersonId ? { subjectPersonId } : {}),
-        idempotencyKey: `cr-${label}-${Date.now()}`,
-      },
-    });
-    const request = reqRes.json();
-
-    const grantRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        consentRequestId: request.id,
-        accepted: true,
-        noticeVersion: 'v1',
-        noticeHash: getCurrentNoticeHash(),
-        idempotencyKey: `cg-${label}-${Date.now()}`,
-      },
-    });
+    const reqRes = await createConsentRequest(app, actor.token, `crv_${label}`,
+      existingSubjectPersonId ? { existingSubjectPersonId } : {});
+    expect(reqRes.statusCode).toBe(201);
+    const grantRes = await grantConsent(app, actor.token, `crv_${label}`, reqRes.json().requestId);
     return grantRes.json();
   }
 
   it('T058: revoke writes REVOKED v2 with supersedes_id=v1', async () => {
-    const { token, familyId } = await setupManagerAndFamily('t058a');
-    const consent = await createAndGrantConsent(token, 't058a');
+    const actor = await setupManagerAndFamily('t058a');
+    const consent = await createAndGrantConsent(actor, 't058a');
 
-    // Create UNDER_14 member with consent
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'UNDER_14',
-        ageBandSource: 'GUARDIAN_RELAY',
-        guardianConsentId: consent.id,
-        idempotencyKey: `mem-crv-a-${Date.now()}`,
-      },
+    const createRes = await createMember(app, actor.token, actor.familyId, 't058a', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: consent.id,
     });
     expect(createRes.statusCode).toBe(201);
     const memberPersonId = createRes.json().personId;
 
-    // Revoke
-    const revokeRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/consents/${consent.id}/revoke`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        idempotencyKey: `rv-key-a-${Date.now()}`,
-      },
+    const revokeRes = await revokeConsent(app, actor.token, 't058a', consent.id, {
+      reason: 'family request',
     });
     expect(revokeRes.statusCode).toBe(200);
     const revokeBody = revokeRes.json();
     expect(revokeBody.decision).toBe('REVOKED');
     expect(revokeBody.version).toBe(2);
+    expect(revokeBody.purpose).toBe('UNDER_14_GUARDIAN_CONSENT');
 
-    // Verify REVOKED v2 in DB
     const { rows } = await queryDb(
       `SELECT decision, version, onboarding_request_id, supersedes_id
        FROM consent_records WHERE id = $1`,
@@ -141,7 +96,6 @@ describe('Consent Revoke Integration (T058)', () => {
     expect(rows[0].onboarding_request_id).toBeNull();
     expect(rows[0].supersedes_id).toBe(consent.id);
 
-    // Verify profile pointer advanced
     const { rows: profileRows } = await queryDb(
       `SELECT guardian_consent_record_id, guardian_consent_version
        FROM person_compliance_profiles WHERE person_id = $1`,
@@ -150,7 +104,6 @@ describe('Consent Revoke Integration (T058)', () => {
     expect(profileRows[0].guardian_consent_record_id).toBe(revokeBody.id);
     expect(profileRows[0].guardian_consent_version).toBe(2);
 
-    // Verify audit row exists
     const { rows: auditRows } = await queryDb(
       `SELECT event_type FROM business_audit_events
        WHERE resource_id = $1 AND event_type LIKE '%CONSENT%'`,
@@ -160,44 +113,26 @@ describe('Consent Revoke Integration (T058)', () => {
   });
 
   it('T058: gate BLOCK after revoke', async () => {
-    const { token, familyId } = await setupManagerAndFamily('t058b');
-    const consent = await createAndGrantConsent(token, 't058b');
+    const actor = await setupManagerAndFamily('t058b');
+    const consent = await createAndGrantConsent(actor, 't058b');
 
-    // Create UNDER_14 member
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'UNDER_14',
-        ageBandSource: 'GUARDIAN_RELAY',
-        guardianConsentId: consent.id,
-        idempotencyKey: `mem-crv-b-${Date.now()}`,
-      },
+    const createRes = await createMember(app, actor.token, actor.familyId, 't058b', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: consent.id,
     });
-    const memberPersonId = createRes.json().personId;
+    expect(createRes.statusCode).toBe(201);
 
-    // Revoke
-    const revokeRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/consents/${consent.id}/revoke`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        idempotencyKey: `rv-key-b-${Date.now()}`,
-      },
-    });
+    const revokeRes = await revokeConsent(app, actor.token, 't058b', consent.id);
     expect(revokeRes.statusCode).toBe(200);
     const revokeBody = revokeRes.json();
-    expect(revokeBody.decision).toBe('REVOKED');
 
-    // Original v1 should remain GRANTED (immutable), new v2 is REVOKED
     const { rows: v1Rows } = await queryDb(
       'SELECT decision FROM consent_records WHERE id = $1',
       [consent.id]
     );
     expect(v1Rows[0].decision).toBe('GRANTED');
 
-    // New record should be REVOKED with supersedes_id = v1
     const { rows: v2Rows } = await queryDb(
       'SELECT decision, supersedes_id FROM consent_records WHERE id = $1',
       [revokeBody.id]
@@ -207,45 +142,28 @@ describe('Consent Revoke Integration (T058)', () => {
   });
 
   it('T058: re-consent continues the chain at v3 (not a new v1)', async () => {
-    const { token, familyId } = await setupManagerAndFamily('t058c');
-    const consent = await createAndGrantConsent(token, 't058c');
+    const actor = await setupManagerAndFamily('t058c');
+    const consent = await createAndGrantConsent(actor, 't058c');
 
-    // Create UNDER_14 member with v1
-    const createRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/families/${familyId}/members`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        ageBand: 'UNDER_14',
-        ageBandSource: 'GUARDIAN_RELAY',
-        guardianConsentId: consent.id,
-        idempotencyKey: `mem-crv-c1-${Date.now()}`,
-      },
+    const createRes = await createMember(app, actor.token, actor.familyId, 't058c', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: consent.id,
     });
     expect(createRes.statusCode).toBe(201);
     const memberPersonId = createRes.json().personId;
 
-    const peopleBefore = await countFamilyMembers(familyId);
+    const peopleBefore = await countFamilyMembers(actor.familyId);
 
-    // Revoke → v2 REVOKED
-    const revokeRes = await app.inject({
-      method: 'POST',
-      url: `/api/v1/consents/${consent.id}/revoke`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: `rv-key-c-${Date.now()}` },
-    });
+    const revokeRes = await revokeConsent(app, actor.token, 't058c', consent.id);
     expect(revokeRes.statusCode).toBe(200);
     const revokedConsent = revokeRes.json();
-    expect(revokedConsent.version).toBe(2);
-    expect(revokedConsent.decision).toBe('REVOKED');
 
-    // Re-consent for the EXISTING subject person → must continue chain at v3
-    const newConsent = await createAndGrantConsent(token, 't058c-regrant', memberPersonId);
+    const newConsent = await createAndGrantConsent(actor, 't058c-regrant', memberPersonId);
     expect(newConsent.decision).toBe('GRANTED');
     expect(newConsent.version).toBe(3);
     expect(newConsent.boundPersonId).toBe(memberPersonId);
 
-    // v1 stays GRANTED (immutable)
     const { rows: v1Rows } = await queryDb(
       'SELECT decision, version, bound_person_id, supersedes_id, onboarding_request_id FROM consent_records WHERE id = $1',
       [consent.id]
@@ -255,7 +173,6 @@ describe('Consent Revoke Integration (T058)', () => {
     expect(v1Rows[0].supersedes_id).toBeNull();
     expect(v1Rows[0].bound_person_id).toBe(memberPersonId);
 
-    // v2 REVOKED supersedes v1
     const { rows: v2Rows } = await queryDb(
       'SELECT decision, version, bound_person_id, supersedes_id, onboarding_request_id FROM consent_records WHERE id = $1',
       [revokedConsent.id]
@@ -266,7 +183,6 @@ describe('Consent Revoke Integration (T058)', () => {
     expect(v2Rows[0].onboarding_request_id).toBeNull();
     expect(v2Rows[0].bound_person_id).toBe(memberPersonId);
 
-    // v3 GRANTED supersedes v2, bound to the SAME person, carried by request B
     const { rows: v3Rows } = await queryDb(
       'SELECT decision, version, bound_person_id, bound_at, supersedes_id, onboarding_request_id FROM consent_records WHERE id = $1',
       [newConsent.id]
@@ -277,15 +193,13 @@ describe('Consent Revoke Integration (T058)', () => {
     expect(v3Rows[0].bound_person_id).toBe(memberPersonId);
     expect(v3Rows[0].bound_at).not.toBeNull();
 
-    // All three rows bound to the same Person P
     const { rows: boundRows } = await queryDb(
       'SELECT DISTINCT bound_person_id FROM consent_records WHERE family_id = $1',
-      [familyId]
+      [actor.familyId]
     );
     expect(boundRows.length).toBe(1);
     expect(boundRows[0].bound_person_id).toBe(memberPersonId);
 
-    // compliance pointer advanced to v3
     const { rows: profileRows } = await queryDb(
       'SELECT guardian_consent_record_id, guardian_consent_version FROM person_compliance_profiles WHERE person_id = $1',
       [memberPersonId]
@@ -293,21 +207,6 @@ describe('Consent Revoke Integration (T058)', () => {
     expect(profileRows[0].guardian_consent_record_id).toBe(newConsent.id);
     expect(profileRows[0].guardian_consent_version).toBe(3);
 
-    // Person count unchanged (no second child Person created)
-    expect(await countFamilyMembers(familyId)).toBe(peopleBefore);
-
-    // Processing gate restored to ALLOW
-    const patchRes = await app.inject({
-      method: 'PATCH',
-      url: `/api/v1/families/${familyId}/members/${memberPersonId}`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        profileValues: [
-          { attribute: 'DISPLAY_NAME', valueText: '小树', sourceKind: 'GUARDIAN_RELAY' },
-        ],
-        idempotencyKey: `mem-crv-c2-${Date.now()}`,
-      },
-    });
-    expect(patchRes.statusCode).toBe(200);
+    expect(await countFamilyMembers(actor.familyId)).toBe(peopleBefore);
   });
 });

@@ -16,7 +16,13 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
-import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
+import {
+  auth,
+  commandHeaders,
+  createConsentRequest,
+  createFamily,
+  loginWithLabel,
+} from '../setup/api.js';
 
 let verifyPool: pg.Pool;
 
@@ -36,29 +42,8 @@ describe('Current Family Determinism (G11)', () => {
     await app.close();
   });
 
-  async function login(label: string) {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `g11_${label}_${Date.now()}_${Math.random().toString(36).slice(2)}` },
-    });
-    expect([200, 201]).toContain(res.statusCode);
-    const body = res.json();
-    return { token: body.token as string, personId: body.person.id as string };
-  }
-
-  async function createFamily(token: string, label: string): Promise<string> {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        displayName: `G11-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `g11-fam-${label}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      },
-    });
+  async function createFamilyAs(token: string, label: string): Promise<string> {
+    const res = await createFamily(app, token, label);
     expect(res.statusCode).toBe(201);
     return res.json().id as string;
   }
@@ -74,7 +59,7 @@ describe('Current Family Determinism (G11)', () => {
     return app.inject({
       method: 'GET',
       url: '/api/v1/families/current',
-      headers: { authorization: `Bearer ${token}` },
+      headers: auth(token),
     });
   }
 
@@ -85,7 +70,7 @@ describe('Current Family Determinism (G11)', () => {
   }
 
   it('0 membership → NONE (404 CURRENT_FAMILY_NOT_FOUND), no Family fields', async () => {
-    const { token } = await login('none');
+    const { token } = await loginWithLabel(app, 'g11_none');
     const res = await getCurrent(token);
     expect(res.statusCode).toBe(404);
     const body = res.json();
@@ -94,9 +79,9 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('1 membership (not actor-owned) → that family, isManager=false', async () => {
-    const actor = await login('single_member');
-    const owner = await login('single_owner');
-    const ownerFamily = await createFamily(owner.token, 'single');
+    const actor = await loginWithLabel(app, 'g11_single_member');
+    const owner = await loginWithLabel(app, 'g11_single_owner');
+    const ownerFamily = await createFamilyAs(owner.token, 'g11-single');
     await addMembership(actor.personId, ownerFamily);
 
     const res = await getCurrent(actor.token);
@@ -107,8 +92,8 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('1 membership (actor-owned) → that family, isManager=true', async () => {
-    const actor = await login('single_own');
-    const familyId = await createFamily(actor.token, 'own');
+    const actor = await loginWithLabel(app, 'g11_single_own');
+    const familyId = await createFamilyAs(actor.token, 'g11-own');
 
     const res = await getCurrent(actor.token);
     expect(res.statusCode).toBe(200);
@@ -117,10 +102,10 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('>1 membership + exactly one actor-owned → same owned family across 5 calls', async () => {
-    const actor = await login('multi_owned');
-    const other = await login('multi_owned_other');
-    const ownedFamily = await createFamily(actor.token, 'owned');
-    const otherFamily = await createFamily(other.token, 'other');
+    const actor = await loginWithLabel(app, 'g11_multi_owned');
+    const other = await loginWithLabel(app, 'g11_multi_owned_other');
+    const ownedFamily = await createFamilyAs(actor.token, 'g11-owned');
+    const otherFamily = await createFamilyAs(other.token, 'g11-other');
     await addMembership(actor.personId, otherFamily);
 
     const seen: string[] = [];
@@ -138,11 +123,11 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('>1 membership + no actor-owned family → stable 409 across 5 calls', async () => {
-    const actor = await login('multi_none');
-    const b = await login('multi_none_b');
-    const c = await login('multi_none_c');
-    const familyB = await createFamily(b.token, 'none_b');
-    const familyC = await createFamily(c.token, 'none_c');
+    const actor = await loginWithLabel(app, 'g11_multi_none');
+    const b = await loginWithLabel(app, 'g11_multi_none_b');
+    const c = await loginWithLabel(app, 'g11_multi_none_c');
+    const familyB = await createFamilyAs(b.token, 'g11-none_b');
+    const familyC = await createFamilyAs(c.token, 'g11-none_c');
     await addMembership(actor.personId, familyB);
     await addMembership(actor.personId, familyC);
 
@@ -158,19 +143,17 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('fixture insertion order reversal does not change the owned-family result', async () => {
-    // Variant 1: owned family first, then the extra membership.
-    const actorA = await login('order_a');
-    const otherA = await login('order_a_other');
-    const ownedA = await createFamily(actorA.token, 'order_a_owned');
-    const otherFamilyA = await createFamily(otherA.token, 'order_a_other');
+    const actorA = await loginWithLabel(app, 'g11_order_a');
+    const otherA = await loginWithLabel(app, 'g11_order_a_other');
+    const ownedA = await createFamilyAs(actorA.token, 'g11-order_a_owned');
+    const otherFamilyA = await createFamilyAs(otherA.token, 'g11-order_a_other');
     await addMembership(actorA.personId, otherFamilyA);
 
-    // Variant 2: extra membership first, then the actor creates their own family.
-    const actorB = await login('order_b');
-    const otherB = await login('order_b_other');
-    const otherFamilyB = await createFamily(otherB.token, 'order_b_other');
+    const actorB = await loginWithLabel(app, 'g11_order_b');
+    const otherB = await loginWithLabel(app, 'g11_order_b_other');
+    const otherFamilyB = await createFamilyAs(otherB.token, 'g11-order_b_other');
     await addMembership(actorB.personId, otherFamilyB);
-    const ownedB = await createFamily(actorB.token, 'order_b_owned');
+    const ownedB = await createFamilyAs(actorB.token, 'g11-order_b_owned');
 
     for (let i = 0; i < 5; i += 1) {
       const resA = await getCurrent(actorA.token);
@@ -183,11 +166,11 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('GET /consents → 409 on ambiguity (not an empty list, no family fields)', async () => {
-    const actor = await login('consents_ambiguous');
-    const b = await login('consents_ambiguous_b');
-    const c = await login('consents_ambiguous_c');
-    const familyB = await createFamily(b.token, 'consents_b');
-    const familyC = await createFamily(c.token, 'consents_c');
+    const actor = await loginWithLabel(app, 'g11_consents_ambiguous');
+    const b = await loginWithLabel(app, 'g11_consents_ambiguous_b');
+    const c = await loginWithLabel(app, 'g11_consents_ambiguous_c');
+    const familyB = await createFamilyAs(b.token, 'g11-consents_b');
+    const familyC = await createFamilyAs(c.token, 'g11-consents_c');
     await addMembership(actor.personId, familyB);
     await addMembership(actor.personId, familyC);
 
@@ -195,7 +178,7 @@ describe('Current Family Determinism (G11)', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/consents',
-        headers: { authorization: `Bearer ${actor.token}` },
+        headers: auth(actor.token),
       });
       expect(res.statusCode).toBe(409);
       const body = res.json();
@@ -206,24 +189,16 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('guardian consent request → 409 on ambiguity', async () => {
-    const actor = await login('guardian_request_ambiguous');
-    const b = await login('guardian_request_ambiguous_b');
-    const c = await login('guardian_request_ambiguous_c');
-    const familyB = await createFamily(b.token, 'gr_b');
-    const familyC = await createFamily(c.token, 'gr_c');
+    const actor = await loginWithLabel(app, 'g11_gr_ambiguous');
+    const b = await loginWithLabel(app, 'g11_gr_ambiguous_b');
+    const c = await loginWithLabel(app, 'g11_gr_ambiguous_c');
+    const familyB = await createFamilyAs(b.token, 'g11-gr_b');
+    const familyC = await createFamilyAs(c.token, 'g11-gr_c');
     await addMembership(actor.personId, familyB);
     await addMembership(actor.personId, familyC);
 
     for (let i = 0; i < 5; i += 1) {
-      const res = await app.inject({
-        method: 'POST',
-        url: '/api/v1/compliance/guardian-consents/requests',
-        headers: { authorization: `Bearer ${actor.token}` },
-        payload: {
-          noticeVersion: 'v1',
-          idempotencyKey: `g11-gr-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
-        },
-      });
+      const res = await createConsentRequest(app, actor.token, `g11-gr-${i}`);
       expect(res.statusCode).toBe(409);
       const body = res.json();
       expect(body.code).toBe('CURRENT_FAMILY_AMBIGUOUS');
@@ -232,11 +207,11 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('guardian consent grant → 409 on ambiguity', async () => {
-    const actor = await login('grant_ambiguous');
-    const b = await login('grant_ambiguous_b');
-    const c = await login('grant_ambiguous_c');
-    const familyB = await createFamily(b.token, 'ga_b');
-    const familyC = await createFamily(c.token, 'ga_c');
+    const actor = await loginWithLabel(app, 'g11_ga_ambiguous');
+    const b = await loginWithLabel(app, 'g11_ga_ambiguous_b');
+    const c = await loginWithLabel(app, 'g11_ga_ambiguous_c');
+    const familyB = await createFamilyAs(b.token, 'g11-ga_b');
+    const familyC = await createFamilyAs(c.token, 'g11-ga_c');
     await addMembership(actor.personId, familyB);
     await addMembership(actor.personId, familyC);
 
@@ -244,13 +219,11 @@ describe('Current Family Determinism (G11)', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/api/v1/compliance/guardian-consents',
-        headers: { authorization: `Bearer ${actor.token}` },
+        headers: commandHeaders(actor.token, `g11-ga-${i}`),
         payload: {
-          consentRequestId: crypto.randomUUID(),
+          onboardingRequestId: crypto.randomUUID(),
           accepted: true,
           noticeVersion: 'v1',
-          noticeHash: getCurrentNoticeHash(),
-          idempotencyKey: `g11-ga-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
         },
       });
       expect(res.statusCode).toBe(409);
@@ -261,11 +234,11 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('consent revoke → 409 on ambiguity', async () => {
-    const actor = await login('revoke_ambiguous');
-    const b = await login('revoke_ambiguous_b');
-    const c = await login('revoke_ambiguous_c');
-    const familyB = await createFamily(b.token, 'ra_b');
-    const familyC = await createFamily(c.token, 'ra_c');
+    const actor = await loginWithLabel(app, 'g11_ra_ambiguous');
+    const b = await loginWithLabel(app, 'g11_ra_ambiguous_b');
+    const c = await loginWithLabel(app, 'g11_ra_ambiguous_c');
+    const familyB = await createFamilyAs(b.token, 'g11-ra_b');
+    const familyC = await createFamilyAs(c.token, 'g11-ra_c');
     await addMembership(actor.personId, familyB);
     await addMembership(actor.personId, familyC);
 
@@ -273,10 +246,8 @@ describe('Current Family Determinism (G11)', () => {
       const res = await app.inject({
         method: 'POST',
         url: `/api/v1/consents/${crypto.randomUUID()}/revoke`,
-        headers: { authorization: `Bearer ${actor.token}` },
-        payload: {
-          idempotencyKey: `g11-ra-${Date.now()}-${i}-${Math.random().toString(36).slice(2)}`,
-        },
+        headers: commandHeaders(actor.token, `g11-ra-${i}`),
+        payload: {},
       });
       expect(res.statusCode).toBe(409);
       const body = res.json();
@@ -286,11 +257,11 @@ describe('Current Family Determinism (G11)', () => {
   });
 
   it('GET /consents with 0 membership still returns 200 { items: [] }', async () => {
-    const { token } = await login('consents_empty');
+    const { token } = await loginWithLabel(app, 'g11_consents_empty');
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/consents',
-      headers: { authorization: `Bearer ${token}` },
+      headers: auth(token),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ items: [] });

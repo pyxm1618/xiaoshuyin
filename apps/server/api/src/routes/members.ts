@@ -2,30 +2,38 @@
  * Member routes: POST /api/v1/families/:id/members, PATCH /api/v1/families/:id/members/:personId.
  * Per plan.md D-4: per-value provenance, source rules by path.
  * Data access via packages repository (guard R4).
+ *
+ * Frozen OpenAPI is the source of truth for request/response shapes and the
+ * `Idempotency-Key` header.
  */
 
 import type { FastifyInstance } from 'fastify';
 import { CreateMemberRequest, UpdateMemberRequest } from '@xiaoshuyin/contracts';
-import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
+import { setFamilyContext } from '../db/tx.js';
+import { readIdempotencyKey, runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
   hashPayload,
   checkSourceAcceptability,
   resolveProvenanceProvider,
-  getFamilyById,
   insertFamilyMember,
   insertPerson,
   insertProfileValue,
   supersedeProfileValue,
   getProfileValuesBySource,
+  getProfileValuesFull,
   insertAuditEvent,
   isFamilyMember,
+  generateUuidv7,
 } from '@xiaoshuyin/domain';
+import { requireFamilyAction } from '../authz.js';
 import {
   assertMinorProcessingAllowed,
   getCurrentNoticeHash,
   getConsentRecordById,
+  getValidConsentForBinding,
   getComplianceProfileForUpdate,
+  getComplianceProfile,
   getConsentRecordForGate,
   bindConsentToPerson,
   insertComplianceProfile,
@@ -121,6 +129,49 @@ async function runProcessingGate(
   });
 }
 
+function profileValueDto(v: any) {
+  return {
+    id: v.id,
+    attribute: v.attribute,
+    value: v.value_text,
+    source: v.source_kind,
+    providedByPersonId: v.provided_by_person_id,
+    observedAt: v.observed_at ? v.observed_at.toISOString() : null,
+    recordedAt: v.recorded_at.toISOString(),
+    status: v.status,
+    supersedesId: v.supersedes_id,
+  };
+}
+
+async function buildMemberResponse(
+  tx: pg.PoolClient,
+  personId: string,
+  familyId: string
+) {
+  const profile = await getComplianceProfile(tx, personId);
+  if (!profile) {
+    throw Object.assign(new Error('Profile missing'), {
+      statusCode: 500,
+      code: 'INTERNAL_ERROR',
+    });
+  }
+  const values = await getProfileValuesFull(tx, personId);
+  return {
+    personId,
+    familyId,
+    accountBound: false,
+    profile: {
+      ageBand: profile.age_band,
+      minorMode: profile.minor_mode,
+      guardianPersonId: profile.guardian_person_id,
+      guardianConsentVersion: profile.guardian_consent_version,
+      verifiedSource: profile.verified_source,
+      effectiveAt: profile.effective_at.toISOString(),
+    },
+    values: values.map(profileValueDto),
+  };
+}
+
 export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
   // POST /api/v1/families/:id/members
   app.post('/api/v1/families/:id/members', async (req, reply) => {
@@ -139,8 +190,9 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const { ageBand, ageBandSource, profileValues, guardianConsentId, idempotencyKey } = parsed.data;
-    const requestHash = hashPayload({ familyId, ageBand, ageBandSource, profileValues, guardianConsentId });
+    const { ageBand, ageBandSource, values, guardianConsentId } = parsed.data;
+    const idempotencyKey = readIdempotencyKey(req);
+    const requestHash = hashPayload({ familyId, ageBand, ageBandSource, values, guardianConsentId });
 
     try {
       const outcome = await runIdempotentCommand(
@@ -152,9 +204,21 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
           commandType: 'MEMBER_CREATE',
           idempotencyKey,
           requestHash,
-          resolveFamilyId: async () => familyId,
         },
         async (tx) => {
+          // FR-011: member creation is decided by the unified authorize().
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'MEMBER_CREATE',
+            purpose: 'FAMILY_MANAGEMENT',
+            resource: { type: 'FAMILY', familyId },
+          });
+
+          // §4.4: establish family context before any family-scoped read/write.
+          await setFamilyContext(tx, familyId, personId, 'FAMILY_MANAGEMENT');
+
           // Source acceptability check
           const path = ageBand === 'UNDER_14' ? 'MEMBER_CREATE_UNDER_14' : 'MEMBER_CREATE_OTHER';
           const sourceError = checkSourceAcceptability(path, ageBand, ageBandSource);
@@ -165,29 +229,21 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             });
           }
 
-          // Check manager permission
-          const family = await getFamilyById(tx, familyId);
-          if (!family) {
-            throw Object.assign(new Error('Family not found'), { statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND' });
-          }
-          if (family.created_by_person_id !== personId) {
-            throw Object.assign(new Error('Not manager'), { statusCode: 403, code: 'NOT_FAMILY_MANAGER' });
-          }
-
           const isUnder14 = ageBand === 'UNDER_14';
           const minorMode = ageBand === 'MINOR_14_17' || ageBand === 'UNDER_14';
 
           // consent-first (quickstart §2.3 / D-3): lock + validate the consent
           // BEFORE any child Person or Compliance Profile is created.
+          // F2/F6: only the current, still-valid chain head with a schema-valid
+          // evidence object may be bound.
           let lockedConsentId: string | null = null;
           let lockedGuardianPersonId: string | null = null;
           if (isUnder14) {
             if (!guardianConsentId) {
               throw Object.assign(new Error('Consent required'), { statusCode: 403, code: 'GUARDIAN_CONSENT_REQUIRED' });
             }
-            // Lock and validate consent
             const consent = await getConsentRecordById(tx, guardianConsentId);
-            if (!consent || consent.decision !== 'GRANTED') {
+            if (!consent) {
               throw Object.assign(new Error('Invalid consent'), { statusCode: 403, code: 'GUARDIAN_CONSENT_REQUIRED' });
             }
             if (consent.guardian_person_id !== personId) {
@@ -198,12 +254,23 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
             if (consent.bound_person_id !== null) {
               throw Object.assign(new Error('Already bound'), { statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_BOUND' });
             }
+            const valid = await getValidConsentForBinding(tx, guardianConsentId, {
+              familyId,
+              guardianPersonId: personId,
+              guardianAccountId: accountId,
+              currentNoticeHash: getCurrentNoticeHash(),
+            });
+            if (!valid) {
+              throw Object.assign(new Error('Invalid consent'), {
+                statusCode: 403, code: 'GUARDIAN_CONSENT_REQUIRED',
+              });
+            }
             lockedConsentId = guardianConsentId;
             lockedGuardianPersonId = consent.guardian_person_id;
           }
 
-          // Pre-generate personId
-          const newPersonId = crypto.randomUUID();
+          // UUIDv7 comes from PostgreSQL 18, never from crypto.randomUUID().
+          const newPersonId = await generateUuidv7(tx);
 
           // Insert membership (deferrable FK)
           await insertFamilyMember(tx, familyId, newPersonId);
@@ -225,20 +292,34 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
 
           // Insert profile values with provenance.
           // UNDER_14: provider is PINNED to consent.guardian_person_id.
-          if (profileValues) {
-            for (const pv of profileValues) {
-              const provider = await resolveProviderForValue(tx, familyId, {
-                sourceKind: pv.sourceKind,
-                subjectPersonId: newPersonId,
-                actorPersonId: personId,
-                providedByPersonId: pv.providedByPersonId ?? null,
-                pinnedProvider: lockedGuardianPersonId,
-              });
-              await insertProfileValue(
-                tx, newPersonId, pv.attribute, pv.valueText,
-                pv.sourceKind, provider, accountId
-              );
+          for (const pv of values ?? []) {
+            const provider = await resolveProviderForValue(tx, familyId, {
+              sourceKind: pv.source,
+              subjectPersonId: newPersonId,
+              actorPersonId: personId,
+              providedByPersonId: pv.providedByPersonId ?? null,
+              pinnedProvider: lockedGuardianPersonId,
+            });
+
+            // F9: at most one RECORDED per (person, attribute, source).
+            const existing = await getProfileValuesBySource(
+              tx, newPersonId, pv.attribute, pv.source
+            );
+            for (const ex of existing) {
+              await supersedeProfileValue(tx, ex.id);
             }
+
+            await insertProfileValue(
+              tx,
+              newPersonId,
+              pv.attribute,
+              pv.value,
+              pv.source,
+              provider,
+              accountId,
+              existing[0]?.id ?? null,
+              pv.observedAt ? new Date(pv.observedAt) : null
+            );
           }
 
           // Audit
@@ -246,21 +327,7 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
 
           return {
             status: 201,
-            body: {
-              personId: newPersonId,
-              accountBound: false,
-              profile: {
-                ageBand,
-                minorMode,
-                verifiedSource: ageBandSource,
-              },
-              values: (profileValues ?? []).map((pv) => ({
-                attribute: pv.attribute,
-                valueText: pv.valueText,
-                sourceKind: pv.sourceKind,
-                status: 'RECORDED',
-              })),
-            },
+            body: await buildMemberResponse(tx, newPersonId, familyId),
           };
         }
       );
@@ -300,8 +367,9 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const { profileValues, idempotencyKey } = parsed.data;
-    const requestHash = hashPayload({ familyId, targetPersonId, profileValues });
+    const { values } = parsed.data;
+    const idempotencyKey = readIdempotencyKey(req);
+    const requestHash = hashPayload({ familyId, targetPersonId, values });
 
     try {
       const outcome = await runIdempotentCommand(
@@ -313,20 +381,35 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
           commandType: 'MEMBER_UPDATE',
           idempotencyKey,
           requestHash,
-          resolveFamilyId: async () => familyId,
         },
         async (tx) => {
-          // Check manager
-          const family = await getFamilyById(tx, familyId);
-          if (!family || family.created_by_person_id !== personId) {
-            throw Object.assign(new Error('Not manager'), { statusCode: 403, code: 'NOT_FAMILY_MANAGER' });
-          }
+          // §4.4 / C2: the first authorization only proves membership, which is
+          // readable from the actor's own self branch. The target-membership
+          // fact used by MEMBER_UPDATE is family-scoped and only readable after
+          // `set_family_context`, so the second authorize() runs there.
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'FAMILY_READ',
+            purpose: 'FAMILY_MANAGEMENT',
+            resource: { type: 'FAMILY', familyId },
+          });
 
-          // Check target person is a member of this family
-          const isMember = await isFamilyMember(tx, familyId, targetPersonId);
-          if (!isMember) {
-            throw Object.assign(new Error('Target not in family'), { statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND' });
-          }
+          await setFamilyContext(tx, familyId, personId, 'FAMILY_MANAGEMENT');
+
+          // FR-011: manager + target-membership are decided by authorize().
+          // A target person outside this family is a denial, not a new context.
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'MEMBER_UPDATE',
+            purpose: 'FAMILY_MANAGEMENT',
+            resource: { type: 'MEMBER', familyId, personId: targetPersonId },
+            targetPersonId,
+          });
+
 
           // Processing gate (contracts/consent-onboarding.md §7): must run BEFORE
           // any profile-value write. An UNDER_14 Person whose current consent
@@ -340,11 +423,11 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
           }
 
           // Update profile values (append with supersede)
-          for (const pv of profileValues) {
-            const existing = await getProfileValuesBySource(tx, targetPersonId, pv.attribute, pv.sourceKind);
+          for (const pv of values) {
+            const existing = await getProfileValuesBySource(tx, targetPersonId, pv.attribute, pv.source);
 
             const provider = await resolveProviderForValue(tx, familyId, {
-              sourceKind: pv.sourceKind,
+              sourceKind: pv.source,
               subjectPersonId: targetPersonId,
               actorPersonId: personId,
               providedByPersonId: pv.providedByPersonId ?? null,
@@ -355,18 +438,27 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
               await supersedeProfileValue(tx, ex.id);
             }
 
-            // Insert new value
+            // Insert new value (F8 keeps observedAt exactly when supplied)
             await insertProfileValue(
-              tx, targetPersonId, pv.attribute, pv.valueText,
-              pv.sourceKind, provider, accountId,
-              existing[0]?.id ?? null
+              tx,
+              targetPersonId,
+              pv.attribute,
+              pv.value,
+              pv.source,
+              provider,
+              accountId,
+              existing[0]?.id ?? null,
+              pv.observedAt ? new Date(pv.observedAt) : null
             );
           }
 
           // Audit
           await insertAuditEvent(tx, familyId, accountId, 'MEMBER_PROFILE_VALUE_RECORDED', 'PERSON', targetPersonId);
 
-          return { status: 200, body: { success: true } };
+          return {
+            status: 200,
+            body: await buildMemberResponse(tx, targetPersonId, familyId),
+          };
         }
       );
 

@@ -1,118 +1,42 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
- * openapi-generate.mjs — Generate OpenAPI spec and TypeScript types.
- * Uses @fastify/swagger from the built app, then openapi-typescript.
- * Output: packages/generated/openapi.json + packages/generated/openapi.d.ts
+ * openapi-generate.mjs — Generate the OpenAPI artifact + TypeScript types.
+ *
+ * The document is built from the same Zod contracts the routes use
+ * (`apps/server/api/src/openapi-spec.ts`). The frozen YAML remains the
+ * Source of Truth; `openapi-check` proves semantic equivalence.
  */
 
-import { writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const OUT_DIR = join(ROOT, 'packages', 'generated');
+const SPEC_PATH = join(OUT_DIR, 'openapi.json');
+const TYPES_PATH = join(OUT_DIR, 'openapi.d.ts');
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
 
-  // Generate OpenAPI spec via inline script that builds app with swagger
-  const specScript = `
-import Fastify from 'fastify';
-import pg from 'pg';
-import swagger from '@fastify/swagger';
-import { registerAuthPlugin } from '${join(ROOT, 'apps/server/api/src/plugins/auth.js')}';
-import { registerAuthRoutes } from '${join(ROOT, 'apps/server/api/src/routes/auth.js')}';
-import { registerMeRoutes } from '${join(ROOT, 'apps/server/api/src/routes/me.js')}';
-import { registerFamilyRoutes } from '${join(ROOT, 'apps/server/api/src/routes/families.js')}';
-import { registerMemberRoutes } from '${join(ROOT, 'apps/server/api/src/routes/members.js')}';
-import { registerComplianceRoutes } from '${join(ROOT, 'apps/server/api/src/routes/compliance.js')}';
-import { registerConsentRoutes } from '${join(ROOT, 'apps/server/api/src/routes/consents.js')}';
-import { registerCaseRoutes } from '${join(ROOT, 'apps/server/api/src/routes/cases.js')}';
-import { validatorCompiler, serializerCompiler, jsonSchemaTransform } from 'fastify-type-provider-zod';
-import { FakeWechatProvider } from '${join(ROOT, 'apps/server/api/src/auth/wechat-provider.js')}';
-import { errorHandler } from '${join(ROOT, 'apps/server/api/src/plugins/error-handler.js')}';
+  const { buildOpenApiDocument } = await import(
+    join(ROOT, 'apps/server/api/src/openapi-spec.ts')
+  );
+  const spec = buildOpenApiDocument();
 
-const app = Fastify({ logger: false });
-app.setValidatorCompiler(validatorCompiler);
-app.setSerializerCompiler(serializerCompiler);
-app.setErrorHandler(errorHandler);
+  const pathCount = Object.keys(spec.paths ?? {}).length;
+  console.log(`  Detected ${pathCount} paths`);
 
-// Register swagger BEFORE routes
-await app.register(swagger, {
-  openapi: {
-    openapi: '3.1.0',
-    info: { title: 'Xiaoshuyin API', version: '1.0.0' },
-    components: {
-      securitySchemes: {
-        bearerAuth: { type: 'http', scheme: 'bearer' },
-      },
-    },
-  },
-  transform: jsonSchemaTransform,
-});
+  writeFileSync(SPEC_PATH, JSON.stringify(spec, null, 2) + '\n');
+  console.log(`Generated: ${SPEC_PATH}`);
 
-// Minimal pool stub (not connected — we only need route registration)
-const pool = { query: () => { throw new Error('not connected'); }, connect: () => { throw new Error('not connected'); } };
-const sessionSecret = 'test_placeholder_secret_for_openapi_gen';
-const wechatProvider = new FakeWechatProvider();
-
-registerAuthPlugin(app, pool, sessionSecret);
-app.get('/healthz', async () => ({ status: 'ok' }));
-registerAuthRoutes(app, pool, wechatProvider, sessionSecret);
-registerMeRoutes(app, pool);
-registerFamilyRoutes(app, pool);
-registerMemberRoutes(app, pool);
-registerComplianceRoutes(app, pool);
-registerConsentRoutes(app, pool);
-registerCaseRoutes(app, pool);
-
-await app.ready();
-const spec = app.swagger();
-console.log(JSON.stringify(spec, null, 2));
-await app.close();
-process.exit(0);
-`;
-
-  const tmpFile = join(ROOT, 'apps', 'server', 'api', '.openapi-gen-temp.mjs');
-  writeFileSync(tmpFile, specScript);
-
-  try {
-    const output = execSync(`bun run ${tmpFile}`, {
-      cwd: ROOT,
-      encoding: 'utf-8',
-      timeout: 30000,
-      env: { ...process.env, DATABASE_URL: process.env.DATABASE_URL || 'postgres://localhost:5432/xiaoshuyin_test' },
-    });
-
-    // Extract JSON from output
-    const jsonStart = output.indexOf('{');
-    const jsonEnd = output.lastIndexOf('}');
-    if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error('Could not find JSON in swagger output');
-    }
-    const specJson = output.slice(jsonStart, jsonEnd + 1);
-
-    // Validate it's proper JSON
-    const spec = JSON.parse(specJson);
-    const pathCount = Object.keys(spec.paths || {}).length;
-    console.log(`  Detected ${pathCount} paths`);
-
-    // Write OpenAPI spec
-    const specPath = join(OUT_DIR, 'openapi.json');
-    writeFileSync(specPath, JSON.stringify(spec, null, 2) + '\n');
-    console.log(`Generated: ${specPath}`);
-
-    // Generate TypeScript types
-    execSync(`bunx openapi-typescript ${specPath} -o ${join(OUT_DIR, 'openapi.d.ts')}`, {
-      cwd: ROOT,
-      encoding: 'utf-8',
-      timeout: 30000,
-    });
-    console.log(`Generated: ${join(OUT_DIR, 'openapi.d.ts')}`);
-    console.log('openapi-generate: OK');
-  } finally {
-    try { unlinkSync(tmpFile); } catch {}
-  }
+  execSync(`bunx openapi-typescript ${SPEC_PATH} -o ${TYPES_PATH}`, {
+    cwd: ROOT,
+    encoding: 'utf-8',
+    timeout: 60000,
+  });
+  console.log(`Generated: ${TYPES_PATH}`);
+  console.log('openapi-generate: OK');
 }
 
 main().catch((err) => {

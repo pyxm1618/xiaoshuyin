@@ -16,8 +16,8 @@
     "guard:static": "node scripts/guard-static.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:evidence": "node scripts/db-evidence.mjs",
-    "openapi:generate": "node scripts/openapi-generate.mjs",
-    "openapi:check": "node scripts/openapi-check.mjs",
+    "openapi:generate": "bun scripts/openapi-generate.mjs",
+    "openapi:check": "bun scripts/openapi-check.mjs",
     "coverage:audit": "node scripts/coverage-audit.mjs",
     "verify-all": "node scripts/verify-all.mjs"
   },
