@@ -502,21 +502,21 @@
   - **Verify**: `node .specify/scripts/validate-governance.mjs` and `node .specify/scripts/tests/run-governance-tests.mjs` pass; frozen-upstream diff is empty; unexpected implementation diff count = 0
   - **Evidence**: Frozen-path diff output, full diff classification, governance PASS/self-test counts.
 
-- [ ] T065 [REQ:§40;constitution:VI;CHK115] Push normally and require every real required CI job for the final implementation Head to complete successfully. [VERIFY:final GitHub Actions run conclusion success for every required job]
+- [x] T065 [REQ:§40;constitution:VI;CHK115] Push normally and require every real required CI job for the final implementation Head to complete successfully. [VERIFY:final GitHub Actions run conclusion success for every required job]
   - **Depends on**: T064
   - **Files**: `.github/workflows/ci.yml`; GitHub Actions run for final implementation Head
   - **Action**: Push normally and require every real required CI job for the final implementation Head to complete successfully. No placeholder/allowed-failure job may substitute for required validation.
   - **Verify**: final GitHub Actions run conclusion success for every required job
   - **Evidence**: Final Head SHA, workflow URL, per-job conclusions.
 
-- [ ] T066 [REQ:FR-001-FR-021;SC-001-SC-010;Acceptance-1-13;constitution:VI] Implement AI performs self-convergence/evidence collection only: re-read frozen Spec/Plan/Contracts/Checklist, compare implementation against every requirement/security/scope gate, record remaining gaps, and verify no upstream semantics changed. [VERIFY:self-check records requirement/security/scope/CI evidence and `remaining gaps = 0`; otherwise BLOCKED with exact task IDs]
+- [x] T066 [REQ:FR-001-FR-021;SC-001-SC-010;Acceptance-1-13;constitution:VI] Implement AI performs self-convergence/evidence collection only: re-read frozen Spec/Plan/Contracts/Checklist, compare implementation against every requirement/security/scope gate, record remaining gaps, and verify no upstream semantics changed. [VERIFY:self-check records requirement/security/scope/CI evidence and `remaining gaps = 0`; otherwise BLOCKED with exact task IDs]
   - **Depends on**: T062, T063, T064, T065
   - **Files**: no new product artifact; evidence/reporting only
   - **Action**: Implement AI performs self-convergence/evidence collection only: re-read frozen Spec/Plan/Contracts/Checklist, compare implementation against every requirement/security/scope gate, record remaining gaps, and verify no upstream semantics changed. This is NOT independent Converge and must not claim merge safety.
   - **Verify**: self-check records requirement/security/scope/CI evidence and `remaining gaps = 0`; otherwise BLOCKED with exact task IDs
   - **Evidence**: Implementation self-convergence evidence with explicit note `not independent Converge`.
 
-- [ ] T067 [REQ:AGENTS:§3;constitution:VI] Final Implement handoff. [VERIFY:T001–T066 all complete; remaining gaps=0; working tree clean; fixed handoff text emitted]
+- [x] T067 [REQ:AGENTS:§3;constitution:VI] Final Implement handoff. [VERIFY:T001–T066 all complete; remaining gaps=0; working tree clean; fixed handoff text emitted]
   - **Depends on**: T066
   - **Files**: final implementation state; no new code
   - **Action**: Final Implement handoff. Only when T001–T066 are genuinely complete and all gates/tests/migration/OpenAPI/governance/CI/coverage evidence are green, output exactly `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE` and stop. Do not perform independent Converge, do not declare MERGE SAFE, do not merge main.
