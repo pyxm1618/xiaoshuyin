@@ -645,6 +645,11 @@ export interface components {
             code: "CURRENT_FAMILY_NOT_FOUND";
             message: string;
         };
+        CurrentFamilyAmbiguousError: {
+            /** @enum {string} */
+            code: "CURRENT_FAMILY_AMBIGUOUS";
+            message: string;
+        };
     };
     responses: never;
     parameters: {
@@ -1369,6 +1374,15 @@ export interface operations {
                     "application/json": components["schemas"]["CurrentFamilyNotFoundError"];
                 };
             };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description `INTERNAL_ERROR` */
             500: {
                 headers: {
@@ -1432,7 +1446,7 @@ export interface operations {
                     "application/json": components["schemas"]["CurrentFamilyNotFoundError"];
                 };
             };
-            /** @description `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            /** @description `CURRENT_FAMILY_AMBIGUOUS`（current Family 无法唯一解析，真实可达） / `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同；当前 public HTTP command shape 下不可达） */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1498,6 +1512,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseNotFoundError"] | components["schemas"]["CurrentFamilyNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyAmbiguousError"];
                 };
             };
             /** @description `INTERNAL_ERROR` */

@@ -161,4 +161,24 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
     expect(Object.keys(schema.properties).sort()).toEqual(['code', 'details', 'message']);
     expect(schema.properties.code.type).toBe('string');
   });
+
+  it('all three Case operations declare the real 409 status (MEDIUM-01)', () => {
+    expect(Object.keys(spec.paths['/api/v1/cases'].post.responses).sort()).toEqual([
+      '201', '401', '403', '404', '409', '422', '500',
+    ]);
+    expect(Object.keys(spec.paths['/api/v1/cases'].get.responses).sort()).toEqual([
+      '200', '401', '403', '404', '409', '500',
+    ]);
+    expect(Object.keys(spec.paths['/api/v1/cases/{id}'].get.responses).sort()).toEqual([
+      '200', '401', '404', '409', '500',
+    ]);
+  });
+
+  it('detail 409 carries the CURRENT_FAMILY_AMBIGUOUS literal (not merged into 404)', () => {
+    const schema = schemaOf(spec.paths['/api/v1/cases/{id}'].get, '409');
+    expect(literalCodes(schema)).toEqual(['CURRENT_FAMILY_AMBIGUOUS']);
+    expect(literalCodes(schemaOf(spec.paths['/api/v1/cases/{id}'].get, '404')).sort()).toEqual([
+      'CASE_NOT_FOUND', 'CURRENT_FAMILY_NOT_FOUND',
+    ]);
+  });
 });

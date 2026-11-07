@@ -939,7 +939,7 @@
             }
           },
           "409": {
-            "description": "`IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`（current Family 无法唯一解析，真实可达） / `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同；当前 public HTTP command shape 下不可达）",
             "content": {
               "application/json": {
                 "schema": {
@@ -1021,6 +1021,16 @@
               }
             }
           },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "500": {
             "description": "`INTERNAL_ERROR`",
             "content": {
@@ -1084,6 +1094,16 @@
                       "$ref": "#/components/schemas/CurrentFamilyNotFoundError"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentFamilyAmbiguousError"
                 }
               }
             }
@@ -2980,6 +3000,25 @@
             "type": "string",
             "enum": [
               "CURRENT_FAMILY_NOT_FOUND"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "CurrentFamilyAmbiguousError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "CURRENT_FAMILY_AMBIGUOUS"
             ]
           },
           "message": {

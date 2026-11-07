@@ -90,7 +90,20 @@ paths:
         "404":
           $ref: "#/components/responses/CurrentFamilyNotFound"
         "409":
-          $ref: "#/components/responses/IdempotencyPayloadMismatch"
+          description: |
+            `CURRENT_FAMILY_AMBIGUOUS`：current Family 无法唯一解析（真实可达，沿用
+            Slice 1 Final 多 Family 语义，响应不含 Case 字段）。
+            `IDEMPOTENCY_PAYLOAD_MISMATCH`：相同 actor + CASE_CREATE + idempotencyKey
+            但 canonical payload hash 不同；保留共享幂等合同，当前 public HTTP command
+            shape 下不可达。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                currentFamilyAmbiguous:
+                  value: { code: CURRENT_FAMILY_AMBIGUOUS, message: Current family is ambiguous }
+                idempotencyPayloadMismatch:
+                  value: { code: IDEMPOTENCY_PAYLOAD_MISMATCH, message: IDEMPOTENCY_PAYLOAD_MISMATCH }
         "422":
           $ref: "#/components/responses/ValidationError"
         "500":
@@ -123,6 +136,8 @@ paths:
           $ref: "#/components/responses/CaseAccessDenied"
         "404":
           $ref: "#/components/responses/CurrentFamilyNotFound"
+        "409":
+          $ref: "#/components/responses/CurrentFamilyAmbiguous"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -158,6 +173,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/CaseNotFound"
+        "409":
+          $ref: "#/components/responses/CurrentFamilyAmbiguousDetail"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -297,6 +314,18 @@ components:
         message:
           type: string
 
+    CurrentFamilyAmbiguousError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: current Family 无法唯一解析；`code` 由结构固定为 `CURRENT_FAMILY_AMBIGUOUS`。
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_AMBIGUOUS]
+        message:
+          type: string
+
     CaseNotFoundError:
       type: object
       additionalProperties: false
@@ -338,6 +367,24 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/CaseAccessDeniedError" }
           example: { code: CASE_ACCESS_DENIED, message: Case access denied }
+
+    CurrentFamilyAmbiguous:
+      description: |
+        current Family 无法唯一解析（actor 属于多个 Family 且无法唯一确定 current Family）。
+        沿用 Slice 1 Final 的 409 `CURRENT_FAMILY_AMBIGUOUS`；响应不含 Family / Case 字段。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: CURRENT_FAMILY_AMBIGUOUS, message: Current family is ambiguous }
+
+    CurrentFamilyAmbiguousDetail:
+      description: |
+        Case 详情的 409：current Family 无法唯一解析。不得与 404 `CASE_NOT_FOUND` 合并，
+        保持 Slice 1 Final 的 409 语义；响应不含 Family / Case 字段。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CurrentFamilyAmbiguousError" }
+          example: { code: CURRENT_FAMILY_AMBIGUOUS, message: Current family is ambiguous }
 
     CurrentFamilyNotFound:
       description: |

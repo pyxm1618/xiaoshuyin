@@ -165,7 +165,7 @@ describe('Case authorization (T050)', () => {
       );
       const res = await createCase(memberToken);
       expect(res.statusCode).toBe(403);
-      expect(res.json()).toEqual({ code: 'CASE_ACCESS_DENIED', message: 'CASE_ACCESS_DENIED' });
+      expect(res.json()).toEqual({ code: 'CASE_ACCESS_DENIED', message: 'Case access denied' });
       const after = await verifyPool.query(
         'SELECT count(*)::int AS c FROM cases WHERE family_id = $1',
         [scenarioFamilyId]
@@ -177,7 +177,7 @@ describe('Case authorization (T050)', () => {
       const res = await listCases(memberToken);
       expect(res.statusCode).toBe(403);
       const body = res.json();
-      expect(body).toEqual({ code: 'CASE_ACCESS_DENIED', message: 'CASE_ACCESS_DENIED' });
+      expect(body).toEqual({ code: 'CASE_ACCESS_DENIED', message: 'Case access denied' });
       expect(JSON.stringify(body)).not.toContain(existingCaseId);
     });
 

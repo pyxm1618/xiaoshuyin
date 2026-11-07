@@ -101,6 +101,10 @@ const CurrentFamilyNotFoundErrorSchema = z.strictObject({
   code: z.enum(['CURRENT_FAMILY_NOT_FOUND']),
   message: z.string(),
 });
+const CurrentFamilyAmbiguousErrorSchema = z.strictObject({
+  code: z.enum(['CURRENT_FAMILY_AMBIGUOUS']),
+  message: z.string(),
+});
 
 export function buildOpenApiDocument() {
   const schemas: Record<string, JsonSchema> = {
@@ -134,6 +138,7 @@ export function buildOpenApiDocument() {
     CaseAccessDeniedError: toJsonSchema(CaseAccessDeniedErrorSchema),
     CaseNotFoundError: toJsonSchema(CaseNotFoundErrorSchema),
     CurrentFamilyNotFoundError: toJsonSchema(CurrentFamilyNotFoundErrorSchema),
+    CurrentFamilyAmbiguousError: toJsonSchema(CurrentFamilyAmbiguousErrorSchema),
   };
 
   const paths: Record<string, unknown> = {
@@ -349,7 +354,9 @@ export function buildOpenApiDocument() {
           '401': errorResponse('`UNAUTHENTICATED`'),
           '403': refResponse('`CASE_ACCESS_DENIED`', 'CaseAccessDeniedError'),
           '404': refResponse('`CURRENT_FAMILY_NOT_FOUND`', 'CurrentFamilyNotFoundError'),
-          '409': errorResponse('`IDEMPOTENCY_PAYLOAD_MISMATCH`'),
+          '409': errorResponse(
+            '`CURRENT_FAMILY_AMBIGUOUS`（current Family 无法唯一解析，真实可达） / `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同；当前 public HTTP command shape 下不可达）'
+          ),
           '422': errorResponse('`VALIDATION_ERROR`'),
           '500': errorResponse('`INTERNAL_ERROR`'),
         },
@@ -363,6 +370,7 @@ export function buildOpenApiDocument() {
           '401': errorResponse('`UNAUTHENTICATED`'),
           '403': refResponse('`CASE_ACCESS_DENIED`', 'CaseAccessDeniedError'),
           '404': refResponse('`CURRENT_FAMILY_NOT_FOUND`', 'CurrentFamilyNotFoundError'),
+          '409': errorResponse('`CURRENT_FAMILY_AMBIGUOUS`'),
           '500': errorResponse('`INTERNAL_ERROR`'),
         },
       },
@@ -379,6 +387,7 @@ export function buildOpenApiDocument() {
           '404': jsonResponse('`CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND`', {
             oneOf: [ref('CaseNotFoundError'), ref('CurrentFamilyNotFoundError')],
           }),
+          '409': refResponse('`CURRENT_FAMILY_AMBIGUOUS`', 'CurrentFamilyAmbiguousError'),
           '500': errorResponse('`INTERNAL_ERROR`'),
         },
       },

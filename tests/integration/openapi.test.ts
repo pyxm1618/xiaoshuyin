@@ -44,6 +44,7 @@ const FROZEN_SCHEMAS = [
   'CreateFamilyRequest',
   'CreateMemberRequest',
   'CreatorInput',
+  'CurrentFamilyAmbiguousError',
   'CurrentFamilyNotFoundError',
   'Error',
   'FamilyResponse',

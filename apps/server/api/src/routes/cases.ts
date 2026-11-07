@@ -176,7 +176,7 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
               });
             } catch {
               // Family resolved but actor is not the V1 management subject.
-              throw httpError('CASE_ACCESS_DENIED');
+              throw httpError('CASE_ACCESS_DENIED', 'Case access denied');
             }
 
             // Idempotency: exact byte identity first, then the legacy raw-text
@@ -357,7 +357,7 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
               });
             } catch {
               // Family resolved but actor is not the V1 management subject.
-              throw httpError('CASE_ACCESS_DENIED');
+              throw httpError('CASE_ACCESS_DENIED', 'Case access denied');
             }
 
             const rows = await listCases(tx, familyId);
