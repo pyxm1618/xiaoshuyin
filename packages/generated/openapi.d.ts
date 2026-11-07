@@ -212,6 +212,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCases"];
+        put?: never;
+        post: operations["createCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -563,6 +595,61 @@ export interface components {
             /** Format: date-time */
             effectiveAt: string;
         };
+        CreateCaseRequest: Record<string, never>;
+        CaseResponse: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+            /** @enum {string} */
+            phase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
+            primary: boolean;
+            version: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CaseListResponse: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                status: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+                /** @enum {string} */
+                phase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
+                primary: boolean;
+                version: number;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
+        };
+        /** @enum {string} */
+        CaseStatus: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+        /** @enum {string} */
+        CasePhase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
+        CaseAccessDeniedError: {
+            /** @enum {string} */
+            code: "CASE_ACCESS_DENIED";
+            message: string;
+        };
+        CaseNotFoundError: {
+            /** @enum {string} */
+            code: "CASE_NOT_FOUND";
+            message: string;
+        };
+        CurrentFamilyNotFoundError: {
+            /** @enum {string} */
+            code: "CURRENT_FAMILY_NOT_FOUND";
+            message: string;
+        };
+        CurrentFamilyAmbiguousError: {
+            /** @enum {string} */
+            code: "CURRENT_FAMILY_AMBIGUOUS";
+            message: string;
+        };
     };
     responses: never;
     parameters: {
@@ -570,6 +657,10 @@ export interface components {
         IdempotencyKey: string;
         FamilyIdPath: string;
         PersonIdPath: string;
+        /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+        IdempotencyKeyHeader: string;
+        /** @description Case UUID（待验证参数；存在不代表有权访问）。 */
+        CaseIdPath: string;
     };
     requestBodies: never;
     headers: never;
@@ -1229,6 +1320,211 @@ export interface operations {
             };
             /** @description `VALIDATION_ERROR` */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前家庭的 Case 集合（可能为空） */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseListResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CASE_ACCESS_DENIED` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAccessDeniedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createCase: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Case 已创建（或幂等重放原结果） */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CASE_ACCESS_DENIED` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAccessDeniedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS`（current Family 无法唯一解析，真实可达） / `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同；当前 public HTTP command shape 下不可达） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Case UUID（待验证参数；存在不代表有权访问）。 */
+                id: components["parameters"]["CaseIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Case 详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseNotFoundError"] | components["schemas"]["CurrentFamilyNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyAmbiguousError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

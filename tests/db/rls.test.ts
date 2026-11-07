@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('9 tables have ENABLE + FORCE RLS, accounts does not', async () => {
+  it('11 tables have ENABLE + FORCE RLS, accounts does not', async () => {
     const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
@@ -33,7 +33,7 @@ describe('RLS', () => {
     const rlsTables = rows.filter((r: any) => r.relrowsecurity);
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
-    expect(rlsTables.length).toBe(9);
+    expect(rlsTables.length).toBe(11);
     expect(noRlsTables.map((r: any) => r.relname)).toContain('accounts');
 
     for (const t of rlsTables) {
@@ -41,11 +41,29 @@ describe('RLS', () => {
     }
   });
 
-  it('9 policies exist', async () => {
+  it('11 policies exist', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(9);
+    expect(rows.length).toBe(11);
+  });
+
+  it('Slice 2: case policies are Family-scope only', async () => {
+    const { rows } = await client.query(
+      `SELECT tablename, policyname, qual, with_check
+       FROM pg_policies
+       WHERE schemaname = 'public' AND tablename IN ('cases', 'case_events')
+       ORDER BY tablename`
+    );
+    expect(rows.map((r: any) => r.policyname)).toEqual([
+      'case_events_family_scope', 'cases_family_scope',
+    ]);
+    for (const r of rows as any[]) {
+      const using = String(r.qual ?? '');
+      const check = String(r.with_check ?? '');
+      expect(using, `${r.policyname} USING`).toMatch(/family_id = app_family_id\(\)/);
+      expect(check, `${r.policyname} WITH CHECK`).toMatch(/family_id = app_family_id\(\)/);
+    }
   });
 
   it('no context returns 0 rows', async () => {

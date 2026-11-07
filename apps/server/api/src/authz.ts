@@ -32,6 +32,8 @@ export interface FamilyActionRequest {
   action: Action;
   purpose: Purpose;
   resource: Resource;
+  /** Present only for CASE_READ; the Case increment (plan D-6). */
+  caseId?: string;
   /** Verified guardian identity of the consent / request being acted on. */
   guardianPersonId?: string | null;
   /** Target person for MEMBER_UPDATE. */
@@ -72,7 +74,9 @@ export async function decideFamilyAction(
     actor: { accountId: req.accountId, personId: req.personId },
     product: 'V1',
     family: { familyId: req.familyId },
-    case: null,
+    // Case increment: a present caseId is the only way to add the case
+    // dimension; collection-level Case actions stay `case: null`.
+    case: req.caseId ? { caseId: req.caseId } : null,
     resource: req.resource,
     action: req.action,
     purpose: req.purpose,

@@ -9,6 +9,8 @@ import { registerFamilyRoutes } from './routes/families.js';
 import { registerMemberRoutes } from './routes/members.js';
 import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerConsentRoutes } from './routes/consents.js';
+import { registerCaseRoutes } from './routes/cases.js';
+import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import {
   createWechatProvider,
   loadRuntimeConfig,
@@ -19,6 +21,8 @@ export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
   /** Test-only sink used to assert log privacy (F11). */
   loggerStream?: NodeJS.WritableStream;
+  /** Test-only sink to capture real registered route schemas (contract drift). */
+  onRoute?: (route: any) => void;
 }
 
 /**
@@ -64,6 +68,14 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   const app = Fastify({ logger: buildLoggerOptions(env, options.loggerStream) });
 
+  // Test-only: capture real route schemas before any route is registered.
+  if (options.onRoute) app.addHook('onRoute', options.onRoute);
+
+  // Zod schemas are the single source for route contracts; validation
+  // failures are mapped to the frozen 422 VALIDATION_ERROR by errorHandler.
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+
   // Error handler
   app.setErrorHandler(errorHandler);
 
@@ -94,6 +106,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerMemberRoutes(app, pool);
   registerComplianceRoutes(app, pool);
   registerConsentRoutes(app, pool);
+  registerCaseRoutes(app, pool);
 
   return app;
 }

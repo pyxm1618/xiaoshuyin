@@ -5,6 +5,7 @@
  *   - `Docs/V1技术设计.md` §9 (single authorization entry, "ID present ≠ access")
  *   - `specs/001-family-identity-core/contracts/authorization-and-rls.md` §2
  *   - `specs/001-family-identity-core/plan.md` D-2 / D-5.2
+ *   - `specs/002-case-core/plan.md` D-6 (Case increment only)
  *
  * Two independent dimensions (FR-006):
  *   - Family membership  → `family_members(family_id, person_id)`
@@ -22,7 +23,8 @@ export type Action =
   | 'IDENTITY_SELF_READ' | 'FAMILY_CREATE' | 'FAMILY_READ'
   | 'MEMBER_CREATE' | 'MEMBER_UPDATE'
   | 'GUARDIAN_CONSENT_REQUEST' | 'GUARDIAN_CONSENT_GRANT' | 'GUARDIAN_CONSENT_REVOKE'
-  | 'MINOR_PROCESSING';
+  | 'MINOR_PROCESSING'
+  | 'CASE_CREATE' | 'CASE_LIST' | 'CASE_READ';
 
 export type Purpose = 'SELF_IDENTITY' | 'FAMILY_MANAGEMENT' | 'GUARDIAN_CONSENT';
 
@@ -35,14 +37,15 @@ export type Resource =
   | { type: 'SELF'; personId: string }
   | { type: 'FAMILY'; familyId: string }
   | { type: 'MEMBER'; familyId: string; personId: string }
-  | { type: 'CONSENT'; familyId: string; consentId?: string };
+  | { type: 'CONSENT'; familyId: string; consentId?: string }
+  | { type: 'CASE'; familyId: string; caseId: string };
 
 export type AgeBandValue = 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN';
 
 export type DenyReason =
   | 'NO_ACTOR' | 'UNSUPPORTED_DIMENSION' | 'UNSUPPORTED_ACTION' | 'UNSUPPORTED_PURPOSE'
   | 'FAMILY_CONTEXT_REQUIRED' | 'NOT_FAMILY_MEMBER' | 'NOT_FAMILY_MANAGER'
-  | 'NOT_GUARDIAN' | 'AGE_BAND_UNKNOWN' | 'AUTHORIZATION_ERROR';
+  | 'NOT_GUARDIAN' | 'AGE_BAND_UNKNOWN' | 'CASE_CONTEXT_REQUIRED' | 'AUTHORIZATION_ERROR';
 
 export type Decision =
   | {
@@ -78,7 +81,7 @@ export interface AuthInput {
   actor: { accountId: string; personId: string };
   product: 'V1';
   family: { familyId: string } | null;
-  case: null; // always null in Slice 001
+  case: { caseId: string } | null;
   resource: Resource;
   action: Action;
   purpose: Purpose;
@@ -91,6 +94,7 @@ const REGISTERED_ACTIONS: Action[] = [
   'MEMBER_CREATE', 'MEMBER_UPDATE',
   'GUARDIAN_CONSENT_REQUEST', 'GUARDIAN_CONSENT_GRANT', 'GUARDIAN_CONSENT_REVOKE',
   'MINOR_PROCESSING',
+  'CASE_CREATE', 'CASE_LIST', 'CASE_READ',
 ];
 
 const REGISTERED_PURPOSES: Purpose[] = ['SELF_IDENTITY', 'FAMILY_MANAGEMENT', 'GUARDIAN_CONSENT'];
@@ -105,6 +109,9 @@ const FAMILY_ACTIONS: Action[] = [
 const MANAGER_ACTIONS: Action[] = [
   'MEMBER_CREATE', 'MEMBER_UPDATE', 'GUARDIAN_CONSENT_REQUEST',
 ];
+
+/** Case actions (Slice 2 increment, plan D-6.2). */
+const CASE_ACTIONS: Action[] = ['CASE_CREATE', 'CASE_LIST', 'CASE_READ'];
 
 const EMPTY_FACTS: AuthorizeFacts = {
   membership: false,
@@ -146,22 +153,72 @@ function familyResourceMatches(
   return input.resource.familyId === input.family.familyId;
 }
 
+/**
+ * Case actions reuse FAMILY_MANAGEMENT and the verified manager fact; there is
+ * no separate Case role. Collection actions carry no case dimension while the
+ * detail action requires one and its resource id must match (id present ≠
+ * access).
+ */
+function decideCaseAction(
+  input: AuthInput,
+  facts: AuthorizeFacts,
+  actorPersonId: string
+): Decision {
+  // a. Family context is mandatory for every Case action.
+  if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
+
+  // b. Case management reuses FAMILY_MANAGEMENT; no new Purpose enum.
+  if (input.purpose !== 'FAMILY_MANAGEMENT') return deny('UNSUPPORTED_PURPOSE');
+
+  // c. Membership is a verified fact; RLS visibility is not authorization.
+  if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
+
+  // d. Management subject = the Person who created the target Family.
+  const manager = facts.familyCreatedByPersonId === actorPersonId;
+  if (!manager) return deny('NOT_FAMILY_MANAGER');
+
+  // e. Collection-level actions carry no case dimension.
+  if (input.action === 'CASE_CREATE' || input.action === 'CASE_LIST') {
+    if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
+    if (input.resource.type !== 'FAMILY') return deny('NOT_FAMILY_MEMBER');
+    if (input.resource.familyId !== input.family.familyId) {
+      return deny('NOT_FAMILY_MEMBER');
+    }
+    return allow(true, input.purpose);
+  }
+
+  // f. Detail action requires a case dimension.
+  if (input.case === null) return deny('CASE_CONTEXT_REQUIRED');
+  if (input.resource.type !== 'CASE') return deny('NOT_FAMILY_MEMBER');
+  if (input.resource.familyId !== input.family.familyId) {
+    return deny('NOT_FAMILY_MEMBER');
+  }
+  if (input.resource.caseId !== input.case.caseId) return deny('NOT_FAMILY_MEMBER');
+
+  return allow(true, input.purpose);
+}
+
 export function authorize(input: AuthInput): Decision {
   try {
-    // 1. Fail-closed on any unsupported dimension.
-    if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
-
-    // 2. Closed registries.
+    // 1. Closed registries.
     if (!REGISTERED_ACTIONS.includes(input.action)) return deny('UNSUPPORTED_ACTION');
     if (!REGISTERED_PURPOSES.includes(input.purpose)) return deny('UNSUPPORTED_PURPOSE');
 
-    // 3. No authenticated actor → nothing can be authorized.
+    // 2. No authenticated actor → nothing can be authorized.
     if (!input.actor?.accountId || !input.actor?.personId) return deny('NO_ACTOR');
 
     const actorPersonId = input.actor.personId;
     const facts = input.facts ?? EMPTY_FACTS;
 
-    // 4. Family-scoped actions require an explicit family context.
+    // 3. Case actions: dedicated branch (D-6.2); Case increment only.
+    if (CASE_ACTIONS.includes(input.action)) {
+      return decideCaseAction(input, facts, actorPersonId);
+    }
+
+    // 4. Non-Case actions keep Slice 1 fail-closed behavior on the case dimension.
+    if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
+
+    // 5. Family-scoped actions require an explicit family context.
     if (FAMILY_ACTIONS.includes(input.action) && input.family === null) {
       return deny('FAMILY_CONTEXT_REQUIRED');
     }

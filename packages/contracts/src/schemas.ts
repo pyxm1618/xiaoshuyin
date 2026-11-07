@@ -260,3 +260,40 @@ export const ConsentListResponse = z.strictObject({
   items: z.array(ConsentRecord),
 });
 export type ConsentListResponseType = z.infer<typeof ConsentListResponse>;
+
+// ── Case Core schemas (Slice 2) ─────────────────────────────
+// `CreateCaseRequest` is a STRICT EMPTY business object: the idempotency key
+// travels in the `Idempotency-Key` header, never in the body. Every undeclared
+// field (idempotencyKey, familyId, creator, status, phase, primary, version,
+// title, summary, description, ...) is rejected — never stripped — so the
+// server can answer 422 with zero business writes.
+
+export const CaseStatus = z.enum([
+  'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+]);
+export type CaseStatusType = z.infer<typeof CaseStatus>;
+
+export const CasePhase = z.enum([
+  'INTAKE', 'ASSESSMENT', 'PROBLEM_FORMULATION', 'GOALS',
+  'PLANNING', 'EXECUTION', 'REVIEW', 'MAINTENANCE', 'CLOSED',
+]);
+export type CasePhaseType = z.infer<typeof CasePhase>;
+
+export const CreateCaseRequest = z.strictObject({});
+export type CreateCaseRequestType = z.infer<typeof CreateCaseRequest>;
+
+export const CaseResponse = z.strictObject({
+  id: z.string().uuid(),
+  status: CaseStatus,
+  phase: CasePhase,
+  primary: z.boolean(),
+  version: z.number().int().min(1),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type CaseResponseType = z.infer<typeof CaseResponse>;
+
+export const CaseListResponse = z.strictObject({
+  items: z.array(CaseResponse),
+});
+export type CaseListResponseType = z.infer<typeof CaseListResponse>;

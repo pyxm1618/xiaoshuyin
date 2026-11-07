@@ -29,14 +29,23 @@ const SPEC_PATH = join(ROOT, 'packages', 'generated', 'openapi.json');
 
 const FROZEN_SCHEMAS = [
   'AgeBand',
+  'CaseAccessDeniedError',
+  'CaseListResponse',
+  'CaseNotFoundError',
+  'CasePhase',
+  'CaseResponse',
+  'CaseStatus',
   'ComplianceProfile',
   'ComplianceProfileSummary',
   'ConsentRecord',
   'ConsentRequestResponse',
+  'CreateCaseRequest',
   'CreateConsentRequestRequest',
   'CreateFamilyRequest',
   'CreateMemberRequest',
   'CreatorInput',
+  'CurrentFamilyAmbiguousError',
+  'CurrentFamilyNotFoundError',
   'Error',
   'FamilyResponse',
   'GrantConsentRequest',
@@ -80,7 +89,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-  it('contains exactly the 13 frozen business operations', () => {
+  it('contains exactly the 16 frozen business operations', () => {
     const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
@@ -91,6 +100,8 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       }
     }
     expect(operations.sort()).toEqual([
+      'GET /api/v1/cases',
+      'GET /api/v1/cases/{id}',
       'GET /api/v1/compliance/notices',
       'GET /api/v1/compliance/profile',
       'GET /api/v1/consents',
@@ -99,6 +110,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'PATCH /api/v1/families/{id}/members/{personId}',
       'POST /api/v1/auth/logout',
       'POST /api/v1/auth/wechat',
+      'POST /api/v1/cases',
       'POST /api/v1/compliance/guardian-consents',
       'POST /api/v1/compliance/guardian-consents/requests',
       'POST /api/v1/consents/{id}/revoke',
@@ -116,13 +128,41 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       ['post', '/api/v1/compliance/guardian-consents/requests'],
       ['post', '/api/v1/compliance/guardian-consents'],
       ['post', '/api/v1/consents/{id}/revoke'],
+      ['post', '/api/v1/cases'],
     ] as const;
     for (const [method, path] of commands) {
       const params = spec.paths[path][method].parameters ?? [];
-      const hasHeader = params.some(
-        (p: any) => p.$ref === '#/components/parameters/IdempotencyKey'
+      const hasHeader = params.some((p: any) =>
+        p.$ref === '#/components/parameters/IdempotencyKey' ||
+        p.$ref === '#/components/parameters/IdempotencyKeyHeader'
       );
       expect(hasHeader, `${method.toUpperCase()} ${path} missing Idempotency-Key`).toBe(true);
+    }
+  });
+
+  it('no unplanned business endpoints', () => {
+    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+    const allowedPaths = new Set([
+      '/healthz',
+      '/api/v1/auth/wechat',
+      '/api/v1/auth/logout',
+      '/api/v1/me',
+      '/api/v1/families',
+      '/api/v1/families/current',
+      '/api/v1/families/{id}/members',
+      '/api/v1/families/{id}/members/{personId}',
+      '/api/v1/compliance/guardian-consents/requests',
+      '/api/v1/compliance/guardian-consents',
+      '/api/v1/consents/{id}/revoke',
+      '/api/v1/consents',
+      '/api/v1/compliance/profile',
+      '/api/v1/compliance/notices',
+      // Slice 2 (002-case-core) — exactly three Case operations.
+      '/api/v1/cases',
+      '/api/v1/cases/{id}',
+    ]);
+    for (const path of Object.keys(spec.paths)) {
+      expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);
     }
   });
 
