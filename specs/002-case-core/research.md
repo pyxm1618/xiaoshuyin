@@ -5,7 +5,7 @@
 **结论**: 所有技术未知项已在 Plan 内解决；无 `NEEDS CLARIFICATION`，无产品级 Open Question。
 
 > 本文只记录**技术选择**与理由。任何产品语义问题必须回到 `spec.md` / `Docs/**`，不得在此决定。
-> 所有调研基于 Slice 1 `feat/001-family-identity-core` 的只读真实实现（closeout 复核 Head `74a31eb`，60/72 tasks）；不代表 Slice 1 已最终冻结。
+> 所有调研基于 **Slice 1 Final**（`origin/main` `ee9d07e`，PR #13 merged）的只读真实实现；Slice 1 已 CLOSED，不得重新打开。
 
 ---
 
@@ -49,22 +49,23 @@
 
 ---
 
-## R-3 幂等键 transport：请求体字段 `idempotencyKey`
+## R-3 幂等键 transport：`Idempotency-Key` HTTP header（**Post-Slice1 Final UPDATED**）
 
 **Decision**
-`POST /api/v1/cases` 的 `idempotencyKey` 放在 JSON 请求体（8–128 字符），与 Slice 1 的 `CreateFamilyRequest` / `CreateMemberRequest` / `CreateConsentRequestRequest` 一致。
+`CASE_CREATE` 的幂等键由 **`Idempotency-Key` HTTP header** 承载（8–128 字符），复用 Slice 1 Final 的 `readIdempotencyKey(req)`；`POST /api/v1/cases` 的 JSON 请求体**不包含** `idempotencyKey`（business body 恒为 `{}`）。
 
 **Rationale**
-1. §27A 要求「Schema 只能有一个代码侧事实源」；Slice 1 的 Zod `packages/contracts/src/schemas.ts` 已经把幂等键定义为 body 字段，runtime 也按 body 读取。
-2. 沿用既有 runtime 行为，不创造第二套 transport 机制。
-3. Slice 1 手写 OpenAPI 中的 `Idempotency-Key` header 与 runtime / Zod 不一致，是 Slice 1 final closeout 的待收敛项（Implement Gate G9）；Slice 2 不复制该偏差。
-4. 若 Slice 1 final 统一改为 header，Slice 2 在 Implement Gate 重新对齐本 Plan 与 OpenAPI；不允许两套并存。
+1. Slice 1 Final 已正式冻结 header transport：`apps/server/api/src/idempotency.ts` 的六个 mutating command 都使用 `Idempotency-Key`，并导出唯一 `readIdempotencyKey`。
+2. Slice 1 Final 的 `packages/contracts/src/schemas.ts` 已移除六个命令的 body `idempotencyKey`；继续使用 body 会形成第二套 transport 与第二套事实源。
+3. Spec A-2 明确「§8.5 未规定 header 还是 body；由 Plan 决定」；本次是 transport / implementation dependency 修正，不改变幂等语义。
+4. 只有 header 是正式 contract；**不得**长期同时支持 body + header。
 
-**冻结状态**：本决策为 Plan 的 Frozen Technical Decision **R1**。Implement AI 不得临场重新选择；若 Slice 1 final G9 最终改为 header，Slice 2 必须先返回 Plan Review 更新契约。
+**冻结状态**：本决策为 Plan 的 Frozen Technical Decision **R1**，已从 body 正式更新为 **header**。Implement AI 不得临场重新选择，也不得保留 body fallback。
 
 **Alternatives considered**
-- header `Idempotency-Key`：更符合 HTTP 惯例，但与 Slice 1 代码侧事实源不一致，会造成同一仓库两套机制。
+- body `idempotencyKey`：与 Slice 1 Final 冲突，已淘汰；不得作为 fallback。
 - query 参数：不适合幂等语义，且易被日志/缓存污染。
+- 第二套 header parser：重复 Slice 1 Final 基础设施，禁止。
 
 ---
 
@@ -73,18 +74,18 @@
 **Decision**
 ```text
 request_hash = sha256(canonicalJson({ familyId, body }))
-body = Zod strict 解析后的请求体去掉 idempotencyKey（当前恒为 {}）
+body = Zod strict 解析后的业务请求体（当前恒为 {}；header 不进入 body）
 ```
-
 **Rationale**
 - `familyId` **必须**进入 hash：它不属于 idempotency scope，但决定业务结果归属；不进入会导致同一 key 跨 Family 回放，产生跨家庭数据泄漏（FR-010 / V1-C21）。
 - `familyId` 是**服务端 canonical command context**，不是客户端提交字段；客户端提交 `familyId` 仍按 strict schema 返回 422。这样既保留 Family 归属的 hash 语义，又不允许伪造上下文。
+- `Idempotency-Key` header **不进入** hash：它已在 logical scope 中，且位置是 transport，不是业务 payload。
 - `actor_account_id` / `command_type` **不**进入 hash：它们已是 `idempotency_keys` 唯一键 `(actor_account_id, command_type, idempotency_key)` 的组成部分，重复混入没有额外区分力，只会把 scope 语义与 payload 语义耦合。
 - `body` 进入 hash：保持「同 key 不同 payload → 409」的通用语义；当前 body 为空，但 hash 结构不因 body 为空而退化——`familyId` 仍保证不同 Family 的请求被区分。
 - 使用 Zod strict 解析后的对象：未知字段直接 422，不进入 hash，避免「字段顺序不同 → hash 不同」的误判；`canonicalJson` 已按 key 排序。
 
-**可达性澄清（closeout）**
-在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，本 Slice 的 public `POST /api/v1/cases` 只接受 `{idempotencyKey}`；去掉幂等键后 `body = {}`，`familyId` 又只能由服务端 current Family 解析唯一确定。因此 public HTTP API 在该 command shape 下**不存在第二种合法业务 payload**，`MISMATCH → 409` 在 HTTP 层不可达。
+**可达性澄清（Post-Slice1）**
+在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，本 Slice 的 public `POST /api/v1/cases` 的 business body 恒为 `{}`（幂等键在 header），`familyId` 又只能由服务端 current Family 解析唯一确定。因此 public HTTP API 在该 command shape 下**不存在第二种合法业务 payload**，`MISMATCH → 409` 在 HTTP 层不可达。
 该分支仍在 shared idempotency domain / repository contract 层实现并验证；不得通过切换 actor（会改变 scope）、伪造 Family 上下文或新增无业务意义字段制造假场景。
 canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未来若正式语义允许同一 actor 在多个 Family 执行 `CASE_CREATE`，相同 scope key + 不同 `familyId` 会得到不同 hash 并正确进入 mismatch；这不是当前 public HTTP 测试场景，也不得删除 `familyId` hash。
 
@@ -149,25 +150,30 @@ Case 创建同时写两张表：`case_events`（领域历史）与 `business_aud
 
 ---
 
-## R-8 Authorization 增量扩展而非 `authorizeCase()`
+## R-8 Authorization 增量扩展而非 `authorizeCase()`（**Post-Slice1 Final UPDATED**）
 
 **Decision**
-在现有 `authorize()` 内扩展：
+在 Slice 1 Final 的 `authorize()` 内扩展：
 - `Action` 增加 `CASE_CREATE` / `CASE_LIST` / `CASE_READ`；
-- `Resource` 增加 `CASE`；
+- `Resource` 增加结构化 `{ type: 'CASE'; familyId: string; caseId: string }`（**不是**扁平字符串 `'CASE'`）；
 - `AuthInput.case` 从 `null` 扩为 `{ caseId } | null`；
-- `AuthInput.family` 增加可选 `createdByPersonId`，用于纯函数 manager 判定；
-- 新增 `CASE_CONTEXT_REQUIRED`。
+- **不新增** `family.createdByPersonId`；manager 判定继续使用 Final 的 `facts.familyCreatedByPersonId`；
+- Case 动作要求 `facts.membership === true`（fail-closed）；
+- 新增 `CASE_CONTEXT_REQUIRED`；
+- 保持 `basis = { membership, manager, purpose }` 完整形状；
+- 路由层复用 Slice 1 Final `apps/server/api/src/authz.ts`，只增量支持 `caseId` 与 Case 错误映射。
 
 **Rationale**
-- §9 只定义了一个统一 `authorize()` 输入；新建 `authorizeCase()` 会产生第二个权限入口，违反「统一判定」。
-- manager 判定本来就是 `isFamilyManager(family, actorPersonId)` 纯函数；把它纳入 `authorize()` 对 Case 动作是增量，不改变 Family / Consent 行为。
+- Slice 1 Final 已把 `authorize()` 重构为结构化 `AuthorizeFacts` + 结构化 `Resource` 对象；恢复旧的 `family.createdByPersonId` / 扁平 `Resource` 会产生第二个授权形状。
+- §9 只定义了一个统一 `authorize()` 输入；新建 `authorizeCase()` 会产生第二个权限入口。
+- `authz.ts` 已在同一事务内读取 facts；Case 路由复用它可以避免第二套 facts 读取。
 - Case 归属无法由纯函数判断；由 `withRlsTransaction` + RLS 保证，`case_id` 仅作待验证参数。
 - 不引入 Case role / RBAC / Visibility Matrix / Permission DSL。
 
 **Alternatives considered**
 - `authorizeCase()` 独立函数：两个入口，容易出现一处漏判。
 - 在路由里直接 if/else 判 manager：绕过统一判定，无法被 domain 测试覆盖。
+- 恢复 `family.createdByPersonId` + 扁平 `Resource`：与 Slice 1 Final 冲突，已被淘汰。
 - 把 Case 归属查询放进 `authorize()`：纯函数被破坏，且引入数据库依赖。
 
 ---
@@ -310,27 +316,60 @@ CREATE UNIQUE INDEX cases_one_primary_open_per_family
 
 ---
 
-## R-16 Slice 1 偏差清单（Implement Gate 必读）
+## R-16 Slice 1 偏差清单（**Post-Slice1 Final UPDATED**）
 
-以下偏差在 Plan 阶段**只记录、不修复**；它们是 G6 / G9 / G10 的验证对象：
+下列偏差在 Slice 1 Final 已**全部修复**；Slice 2 必须继承 Final 行为，**不得照抄旧偏差**。
 
-| 偏差 | 证据 | 对本 Slice 的影响 |
+| 旧偏差 | Slice 1 Final 状态 | 对本 Slice 的约束 |
 |---|---|---|
-| `families.ts` 的幂等 lookup 在无 identity 上下文的 `pool.query` 中执行 | `apps/server/api/src/routes/families.ts:36` | Case 幂等禁止照抄；必须在 `withRlsTransaction` 内 |
-| 幂等响应写入在业务事务**之外**的独立 `withIdentityTransaction` | `families.ts:106`、`members.ts:173` | 违反「同一业务事务原子」；Case 不照抄 |
-| OpenAPI 声明 `Idempotency-Key` header，runtime / Zod 用 body `idempotencyKey` | `contracts/identity-family-api.openapi.yaml:411` vs `packages/contracts/src/schemas.ts:77` | G9 需收敛；Case 选择 body（Plan R1 / research R-3） |
-| `/families/current` 对多 Family actor 取 `rows[0]`，无 `ORDER BY`，未实现确定性的多 Family 选择语义 | `families.ts:137-150` vs Slice 1 plan D-6.1 | Case 的 current family 解析沿用 final 实现；**G11 必须证明确定性**。若 final 仍存在未定义行为 → `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`；Slice 2 不实现 Family switching |
-| `authorize()` 的 MANAGER_ACTIONS 分支为 placeholder `ALLOW` | `authorize.ts:94-101` | Case 动作必须传 `createdByPersonId` 并真实判定 |
-| `package.json` 引用不存在脚本（`db:evidence` / `openapi:generate` / `openapi:check` / `coverage:audit` / `verify-all`） | `package.json` vs `scripts/` | Verification Plan 只用真实命令；G10 补齐 |
+| `families.ts` 幂等 lookup 在无 identity 上下文的 `pool.query` | **已修复**：`runIdempotentCommand` 在 identity 上下文事务内 peek / lock / recheck | Case 幂等必须在 `withRlsTransaction` 内 |
+| 幂等响应写入在业务事务之外 | **已修复**：同一事务内 insert / 回填 | Case 必须同一事务原子写入 |
+| OpenAPI 声明 `Idempotency-Key` header，runtime / Zod 用 body | **已修复**：runtime / Zod / OpenAPI 统一为 header；schemas 移除 body key | Case 必须使用 header（R1 / R3） |
+| `/families/current` 多 Family 取 `rows[0]`、无确定性 | **已修复**：`CURRENT_FAMILY_AMBIGUOUS`（确定性拒绝） | Case 沿用 Final 语义，不定义第二套 Family 错误码 |
+| `authorize()` 的 `MANAGER_ACTIONS` 为 placeholder `ALLOW` | **已修复**：结构化 `AuthorizeFacts` + 真实 manager 判定 + `authz.ts` | Case 必须在 Final 模型上增量扩展（R-8） |
+| `package.json` 引用不存在脚本 | **已修复**：`db:evidence` / `openapi:generate` / `openapi:check` / `coverage:audit` / `verify-all` 均存在 | Verification Plan 使用真实命令 |
+
+## R-17 OpenAPI 生成 / 检查架构（**Slice 1 Final**）
+
+**Decision**
+Slice 2 必须复用 Slice 1 Final 的：
+- `apps/server/api/src/openapi-spec.ts` 的 `buildOpenApiDocument()`（从同一 Zod schemas 构建 generated JSON）；
+- `scripts/openapi-generate.mjs` 调用该 builder；
+- `scripts/openapi-check.mjs` 对 **frozen YAML ↔ runtime** 做语义等价（paths / methods / operationId / parameters / requestBody / response status / components.schemas 结构），不是只比较生成文件 diff。
+
+Slice 2 的 frozen YAML 为 `specs/002-case-core/contracts/cases-api.openapi.yaml`；必须把 Case operations 纳入同一语义等价检查。
+
+**禁止**：inline swagger 临时脚本、`node` vs `bun` 混用、只比较生成文件 hash 的弱检查、hand-edit generated artifact。
+
+## R-18 Runtime env / logging / provider（**Slice 1 Final**）
+
+**Decision**
+Slice 2 `app.ts` 必须保留：
+- `loadRuntimeConfig(env)` fail-fast（`SESSION_SECRET` / `EVIDENCE_HASH_PEPPER` / WeChat secrets，长度校验）；
+- 生产不得 fallback 到 fake WeChat provider（`createWechatProvider`）；
+- `requestLogSerializer` + logger redact（不记录 raw IP / UA / authorization）；
+- `buildApp({ env, loggerStream })` 的测试注入能力。
+
+Slice 2 只追加 `registerCaseRoutes(app, pool)`；不得恢复 `process.env['SESSION_SECRET'] ?? 'dev-secret-key-for-testing'` 或无条件 `new FakeWechatProvider()`。
 
 ---
 
 ## 结论
 
-Phase 0 无未解决问题。所有决策均可追溯到 `Docs/**` 或 Slice 1 冻结契约；没有新增产品语义，没有引入未批准依赖。
-Slice 2 closeout 已收口以下技术项：
+Phase 0 无未解决问题。所有决策均可追溯到 `Docs/**` 或 Slice 1 Final 冻结契约；没有新增产品语义，没有引入未批准依赖。
+
+**Post-Slice1 Final dependency reconciliation（2026-11-07）**：
+- R-3 / R1：transport 从 body `idempotencyKey` 正式更新为 **`Idempotency-Key` header**；body 无业务字段；
+- R-4：header 不进入 hash；body 恒为 `{}`；
+- R-8：authorization 基于 Final `AuthorizeFacts` + 结构化 `Resource` + `authz.ts`，不恢复旧扁平模型；
+- R-16：Slice 1 旧偏差已全部由 Final 修复，Slice 2 必须继承；
+- R-17：OpenAPI 必须复用 Final `openapi-spec.ts` + semantic equivalence；
+- R-18：`app.ts` 必须保留 Final runtime-env / log privacy / provider。
+
+Slice 2 closeout 已收口以下技术项（语义不变）：
 - CHK043：`CASE_CREATE` 的 HTTP different-payload mismatch 在「同一 actor + 同一 current Family canonical context」下不可达；shared idempotency contract 保留 §8.5 MISMATCH→409，`familyId` hash 不删除。
 - CHK034：`is_primary = true` 冻结为“当前 primary assignment”，未来 Close / switch-primary 必须在自身事务内清除 / 转移；历史由 `case_events` 表达。
 - CHK068：`case_events.metadata` 由 `case_events_metadata_shape_check` 强制 key 集合恰为 `{primary, version}`，无默认值。
 - CHK084：migration 顺序固定为 enum → `cases` → `cases` 自身约束（含 `UNIQUE (id, family_id)`）→ `cases` 索引 → `case_events` 复合 FK / metadata CHECK → RLS / policy → GRANT → 既有 CHECK 扩展。
+
 进入 Phase 1 的产物：`data-model.md`、`contracts/**`、`quickstart.md`。

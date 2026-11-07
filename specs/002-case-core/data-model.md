@@ -199,7 +199,7 @@ CHECK (
 - 占位：首次插入使用 `response_status = 0`、`response_body = '{}'`，同一事务内回填真实响应。
 - `request_hash` 组成见 `research.md` R-4：`{ familyId, body }`。`familyId` 是服务端已验证的 canonical command context，不是客户端提交字段（客户端提交 → 422）。
 - 相同 key + 相同 hash → 返回原 `response_status` / `response_body`；相同 key + 不同 hash → `MISMATCH` → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
-- 在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，public 请求体只有 `idempotencyKey`，`body` 恒为 `{}`；因此当前 public HTTP command shape 不存在第二种合法 business payload，mismatch 分支在 shared idempotency domain / repository contract 层验证，不在 HTTP 层伪造。
+- 在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，`Idempotency-Key` 在 header，public business body 恒为 `{}`；因此当前 public HTTP command shape 不存在第二种合法 business payload，mismatch 分支在 shared idempotency domain / repository contract 层验证，不在 HTTP 层伪造。
 - canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`；未来若正式语义允许同一 actor 在多个 Family 执行 `CASE_CREATE`，相同 scope key + 不同 `familyId` 会得到不同 hash 并正确进入 mismatch。不得删除 `familyId` hash。
 
 ### 5.4 扩展方式

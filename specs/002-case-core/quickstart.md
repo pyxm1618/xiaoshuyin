@@ -32,10 +32,23 @@ docker compose -f docker-compose.stage-a.yml up -d postgres
 
 ## 1. 发布前 Gate（Implement Gate）
 
-在写任何 Case 代码前，先逐项现场验证 Slice 1：
+> **Post-Slice1 Final（2026-11-07）**：Slice 1 已 CLOSED。第 1–3 项已满足；第 4–8 项是下一阶段开发 AI 的硬前置。
+
+| # | Gate | 状态 |
+|---|---|---|
+| 1 | Slice 1 Final Audit II PASS | 已满足 |
+| 2 | Slice 1 merged `main`（`ee9d07e`） | 已满足 |
+| 3 | Slice 1 post-merge CI PASS | 已满足 |
+| 4 | merge latest `main` into `feat/002-case-core` | 下一阶段 |
+| 5 | resolve shared-infrastructure conflicts | 下一阶段 |
+| 6 | preserve Slice 1 Final guarantees | 下一阶段 |
+| 7 | adapt Slice 2 idempotency contract to header | 下一阶段 |
+| 8 | full regression | 下一阶段 |
+
+在写任何 Case 代码前，先逐项现场验证 Slice 1 Final：
 
 ```bash
-# G1/G2：Slice 1 已合并；Slice 2 与最终 main 正常 merge（禁止 rebase / force push）
+# G1/G2/G4：Slice 1 已合并；Slice 2 与最终 main 正常 merge（禁止 rebase / force push）
 git fetch origin
 git checkout feat/002-case-core
 git merge origin/main
@@ -45,15 +58,17 @@ git merge-base --is-ancestor origin/main HEAD   # 必须成功
 psql "$MIGRATION_DATABASE_URL" -c "\d families" -c "\d family_members" \
   -c "\d business_audit_events" -c "\d idempotency_keys"
 
-# G6—G8：Slice 1 测试
-bunx vitest run tests/domain tests/db tests/integration/auth.test.ts \
-  tests/integration/families.test.ts tests/integration/members.test.ts
+# G6—G8：Slice 1 Final 测试
+bunx vitest run tests/domain tests/db tests/integration
+
+# G9：OpenAPI frozen YAML ↔ runtime semantic equivalence
+bun run openapi:check
 
 # G10：CI 与 converge（以真实 workflow / report 为准）
 
-# G11：current Family 解析具备确定性
+# G11：current Family 解析具备确定性（Final 含 CURRENT_FAMILY_AMBIGUOUS）
 # 构造属于 >=2 Family 的 actor，重复调用 GET /api/v1/families/current，
-# 断言每次结果一致且可解释；不得依赖无 ORDER BY 的 rows[0]。
+# 断言返回确定性的 CURRENT_FAMILY_AMBIGUOUS，不得依赖无 ORDER BY 的 rows[0]。
 ```
 
 > **G2 冲突处理**：正常解决冲突后重跑 governance / tests，然后**普通 push**；不得 rebase，不得 force push。
@@ -117,11 +132,12 @@ curl -sX POST localhost:8787/api/v1/auth/wechat \
 
 TOKEN=$(jq -r .sessionToken /tmp/login.json)
 
-# 建立 Family（Slice 1；含 ADULT 声明与幂等键）
+# 建立 Family（Slice 1 Final；header 幂等键 + creator）
 curl -sX POST localhost:8787/api/v1/families \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"displayName":"A家","ageBand":"ADULT","ageBandSource":"SELF_STATEMENT","idempotencyKey":"family-create-001"}'
+  -H 'Idempotency-Key: family-create-001' \
+  -d '{"displayName":"A家","creator":{"ageBand":"ADULT","ageBandSource":"SELF_STATEMENT"}}'
 ```
 
 ### 3.2 创建第一个 Case（primary = true）
@@ -131,7 +147,8 @@ curl -s -D /tmp/create1.headers -o /tmp/create1.json \
   -X POST localhost:8787/api/v1/cases \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"idempotencyKey":"case-create-0001"}'
+  -H 'Idempotency-Key: case-create-0001' \
+  -d '{}'
 
 jq . /tmp/create1.json
 ```
@@ -158,7 +175,8 @@ HTTP `201`；响应中不含 `familyId`、creator、title、description、任何
 curl -s -X POST localhost:8787/api/v1/cases \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"idempotencyKey":"case-create-0002"}' | jq .
+  -H 'Idempotency-Key: case-create-0002' \
+  -d '{}' | jq .
 ```
 
 期望：`primary = false`，`status = OPEN`，`phase = INTAKE`，`version = 1`；旧 Case 不变。
@@ -214,7 +232,16 @@ curl -s -o /tmp/bad.json -w '%{http_code}\n' \
   -X POST localhost:8787/api/v1/cases \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"idempotencyKey":"case-create-bad-1","status":"CLOSED","primary":true}'
+  -H 'Idempotency-Key: case-create-bad-1' \
+  -d '{"status":"CLOSED","primary":true}'
+
+# body 里出现 idempotencyKey 也必须是 422（正式 transport 只有 header）
+curl -s -o /tmp/bad2.json -w '%{http_code}\n' \
+  -X POST localhost:8787/api/v1/cases \
+  -H "authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -H 'Idempotency-Key: case-create-bad-2' \
+  -d '{"idempotencyKey":"case-create-bad-2"}'
 ```
 
 期望：`422`，`code = VALIDATION_ERROR`；**零业务写入**：`cases`、`case_events`、`business_audit_events`、`idempotency_keys` 均无新增，不得忽略非法字段后用服务端值创建。
@@ -251,7 +278,9 @@ actor 必须是目标 Family 的合法 `family_member`，current Family 已成�
 curl -s -o /tmp/deny-create.json -w '%{http_code}\n' \
   -X POST localhost:8787/api/v1/cases \
   -H "authorization: Bearer $GUARDIAN_MEMBER_TOKEN" \
-  -H 'content-type: application/json' -d '{"idempotencyKey":"case-create-deny-1"}'
+  -H 'content-type: application/json' \
+  -H 'Idempotency-Key: case-create-deny-1' \
+  -d '{}'
 
 # 列表
 curl -s -o /tmp/deny-list.json -w '%{http_code}\n' \
@@ -290,7 +319,8 @@ actor 仅有 guardian relationship，不是目标 Family 的 `family_member`。�
 curl -s -X POST localhost:8787/api/v1/cases \
   -H "authorization: Bearer $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"idempotencyKey":"case-create-0001"}' | jq -r .id
+  -H 'Idempotency-Key: case-create-0001' \
+  -d '{}' | jq -r .id
 ```
 
 期望：返回**原 Case ID**；再查 `cases` / `case_events` / `business_audit_events` 行数不变。
@@ -298,9 +328,9 @@ curl -s -X POST localhost:8787/api/v1/cases \
 
 ### 5.2 同 key 不同 payload：shared contract，非 HTTP
 
-本 Slice 的 `POST /api/v1/cases` 唯一合法业务 body 是 `{"idempotencyKey":"..."}`；
+本 Slice 的 `POST /api/v1/cases` 的幂等键由 `Idempotency-Key` header 承载，business body 恒为 `{}`；
 在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，
-去掉幂等键后 `body = {}`，`familyId` 又由服务端 current Family 唯一解析，因此
+`familyId` 又由服务端 current Family 唯一解析，因此
 **不存在第二种合法业务 payload**，public HTTP API 无法真实触发 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`。
 
 canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。
@@ -359,17 +389,41 @@ echo "$BEFORE_EVENTS/$AFTER_EVENTS $BEFORE_AUDITS/$AFTER_AUDITS"
 
 ## 8. 静态守卫与回归
 
+Post-Slice1 Final 的强制回归顺序：
+
 ```bash
 bun run typecheck
 bun run guard:static
+
 bunx vitest run tests/domain
-bunx vitest run tests/db tests/integration
+bunx vitest run tests/db
+bunx vitest run tests/integration
+bunx vitest run
+
+bun run db:migrate
+bun run db:migrate
+
+bun run db:evidence
+
+bun run openapi:generate
+bun run openapi:check
+
+bun run coverage:audit
+
+node scripts/verify-all.mjs --archive
+
+node .specify/scripts/validate-governance.mjs
+node .specify/scripts/tests/run-governance-tests.mjs
 ```
 
 期望：
-- `guard-static: PASS (0 violations)`；
+- `guard-static: PASS (0 violations)`；Slice 1 Final 全部 guard 保留；
 - 无 `drizzle-kit push`、无 secret literal、无越界目录；
-- Slice 1 既有测试仍 green（只允许按新增表做「增量对齐」，不得削弱断言）。
+- Slice 1 Final 既有测试仍 green（只允许按新增表做「增量对齐」，不得削弱断言）；
+- `db:migrate` 两次：首次 APPLY，第二次全 SKIP；
+- `openapi:generate` 两次 hash 一致；`openapi:check` 执行 semantic equivalence；
+- `db:evidence` / `coverage:audit` / `verify-all --archive` / governance 全部 PASS；
+- `0 failed` / `0 skipped`。
 
 ---
 
@@ -381,13 +435,18 @@ bunx vitest run tests/db tests/integration
 | 结构 / RLS | `cases-schema` / `cases-rls` 测试的真实断言输出 |
 | 并发不变量 | `cases-primary-concurrency` 的聚合查询结果 |
 | 授权 / 反枚举 | `cases-authorization` / `cases-read` 的 HTTP 状态与响应体 |
-| 幂等（HTTP 可达） | `cases-idempotency` 的 replay / 并发同 key 行数前后对比 |
+| 幂等（HTTP 可达） | `cases-idempotency` 的 **header replay** / 并发同 key 行数前后对比 |
 | 幂等 mismatch（shared contract） | domain / repository contract 用例：same scope + different `request_hash` → MISMATCH → 409 映射；**不声称 HTTP 可达** |
 | 事件 / 审计 | `case_events` / `business_audit_events` 按 `case_id` / `resource_id` 的计数 |
 | metadata 形状 | `case_events.metadata` key 集合恰为 `{primary, version}`；无 title / description / 正文 / 用户输入 / PII；额外 key 的直连 DB 写入被 `case_events_metadata_shape_check` 拒绝（23514） |
 | 读不写审计 | 第 7 节前后计数 |
 | Scope | 表 / 路由 / 列 introspection 输出 |
+| Slice 1 regression | `bunx vitest run tests/domain tests/db tests/integration` 全绿，Final 断言未削弱 |
+| OpenAPI semantic equivalence | `bun run openapi:check`：frozen YAML ↔ runtime，不是仅比较生成文件 |
+| DB evidence | `bun run db:evidence` PASS |
+| Coverage | `bun run coverage:audit`：001 + 002 均无 missing |
+| Governance | `validate-governance.mjs` + self-test PASS |
 | CI | `.github/workflows/ci.yml` 全 job green |
-| Converge | converge 报告无未解决 gap |
+| Converge | 新 Head 的 converge 报告无未解决 gap；旧 Head 结果作废 |
 
 任一证据缺失或环境不可运行：报告 `BLOCKED` / `NOT VERIFIED`，不得以“设计已完成”代替证据。

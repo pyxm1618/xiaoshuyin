@@ -4,8 +4,12 @@
 **Plan / 契约基线**: `plan.md`、`research.md`、`data-model.md`、`contracts/**`、`quickstart.md`、`checklists/requirements-quality.md`
 **Branch**: `feat/002-case-core`
 **Tasks 生成时 Head**: `1fc82c97e687bb73cb3048bb92240805f34880da`
+**Post-Slice1 reconciliation Base Head**: `9ac76f7e8e1640d5e5a448faa062296bd65443f9`
+**Latest main at reconciliation**: `ee9d07e059566884e0329fb0eb4a4ab9dbf8ea83`
+**旧 merge base**: `ed0d5fbee8c6764be704da8d80fb27ad2172222b`
+**Ahead / Behind（`origin/main...HEAD`）**: 38 / 4
 **Docs baseline**: `Docs/V1产品需求.md` v3.3、`Docs/V1技术设计.md` v3.8
-**阶段**: **Tasks only**。本文件只把已冻结的 Spec / Plan 拆成可执行任务图；**不进入 Analyze / Implement**，不修改业务代码、migration、tests、Spec、Plan、Contracts、Checklist 或 `Docs/**`。
+**阶段**: Plan / Tasks dependency reconciliation（2026-11-07）。只修正 Slice 1 Final 依赖与 transport / authorization / OpenAPI 契约；**不进入 Analyze / Implement**，不修改业务代码、migration、tests、Spec、Contracts、Checklist 或 `Docs/**`。
 
 > **两种语境，不得混用（重要）**
 > - **本轮 = Tasks authoring**：只编辑本文件。本轮要求 `Docs/**`、Spec / Plan / Research / Data Model / Contracts / Checklist、业务代码、migration、测试代码的 diff 均为 0。该要求**只约束本轮**，不是 T085 的验收条件。
@@ -20,6 +24,23 @@
 
 ---
 
+## 0A. Post-Slice1 Dependency Gate（2026-11-07，强制顺序）
+
+> 本轮是 **Plan / Contract reconciliation**，不改业务代码、不执行 merge。下列 8 项是下一阶段开发 AI 的前置门禁：
+
+| # | Gate | 当前状态 |
+|---|---|---|
+| 1 | Slice 1 Final Audit II PASS | **已满足** |
+| 2 | Slice 1 merged `main`（`ee9d07e`） | **已满足** |
+| 3 | Slice 1 post-merge CI PASS | **已满足** |
+| 4 | merge latest `main` into `feat/002-case-core` | **下一阶段执行**（普通 merge，禁止 rebase / force push） |
+| 5 | resolve shared-infrastructure conflicts | **下一阶段执行** |
+| 6 | preserve Slice 1 Final guarantees | **下一阶段执行** |
+| 7 | adapt Slice 2 idempotency contract to `Idempotency-Key` header | **下一阶段执行** |
+| 8 | full regression | **下一阶段执行** |
+
+若 4–8 任一未完成：`BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`。禁止用旧基线证据宣称完成。
+
 ## 0. Implement Gate（硬前置，T013 起不得执行）
 
 > 以下 11 项是 `plan.md` §0.2 的 G1–G11。**任一失败即停止**，不得在 Slice 2 私建替代基础设施。
@@ -33,7 +54,7 @@
 - [x] T006 [REQ:plan:G6] 现场验证 G6：`idempotency_keys` final behavior 全绿：同 key 同 hash → 原结果；同 key 异 hash → 409（shared contract）；身份级 RLS；lookup / insert / replay 均在 identity 上下文事务内（依赖 T002） [VERIFY:`bunx vitest run tests/domain/idempotency-hash.test.ts tests/integration/idempotency.test.ts`（存在即运行）；并记录 `rg "pool.query|withIdentityTransaction|withRlsTransaction" apps/server/api/src/routes/families.ts` 的实际上下文]
 - [x] T007 [REQ:plan:G7] 现场验证 G7：`business_audit_events` final structure 全绿：`event_type` / `resource_type` 为 reviewed CHECK、family 级 RLS、追加语义可用（依赖 T002） [VERIFY:`psql -c "\d business_audit_events"`；`SELECT policyname, tablename FROM pg_policies WHERE tablename='business_audit_events'` 输出]
 - [x] T008 [REQ:plan:G8] 现场验证 G8：RLS / roles / cross-family tests 全绿：`relrowsecurity` / `relforcerowsecurity`、`rolbypassrls=false`、owner 非 app、无上下文零行、跨家庭零行（依赖 T002） [VERIFY:`bunx vitest run tests/db/rls.test.ts tests/db/roles.test.ts` 全绿；保留查询输出]
-- [x] T009 [REQ:plan:G9;R1] 现场验证 G9：`packages/contracts` Zod 为代码侧单事实源；OpenAPI 可由其生成且 `openapi:check` 无意外 diff；幂等键 transport 在 OpenAPI 与 runtime 一致；若 Slice 1 final 改为 header，触发 Plan Review（R1 变更条件）（依赖 T002） [VERIFY:`bun run openapi:check` PASS；`rg "idempotencyKey" packages/contracts/src/schemas.ts apps/server/api/src/routes` 与生成 OpenAPI 比对，记录 body/header 结论]
+- [x] T009 [REQ:plan:G9;R1] 现场验证 G9：Slice 1 Final 的 OpenAPI 由 `apps/server/api/src/openapi-spec.ts` 构建，且 `openapi:check` 执行 **frozen YAML ↔ runtime semantic equivalence**；幂等键 transport 为 **`Idempotency-Key` header**（`readIdempotencyKey`）。R1 已在 Plan reconciliation 更新为 header；本任务确认 Final 形状，不再触发额外 Plan Review（依赖 T002） [VERIFY:`bun run openapi:check` PASS；`rg "readIdempotencyKey|Idempotency-Key" apps/server/api/src/idempotency.ts`；`rg "idempotencyKey" packages/contracts/src/schemas.ts` 在 Slice 1 六命令中为空；记录 header 结论]
 - [x] T010 [REQ:plan:G10] 现场验证 G10：Slice 1 final CI 全 job green、independent converge PASS；`package.json` 引用的验证脚本真实存在（依赖 T002） [VERIFY:CI workflow run 链接 5/5 success；converge 报告无未解决 gap；`ls scripts/db-migrate.mjs scripts/guard-static.mjs scripts/openapi-generate.mjs scripts/openapi-check.mjs`]
 - [x] T011 [REQ:plan:G11] 现场验证 G11：current Family 解析具备确定性；对属于 ≥2 Family 的 actor 重复请求结果一致且可解释；不得依赖无 `ORDER BY` 的 `rows[0]`（依赖 T002） [VERIFY:至少 5 次 `GET /api/v1/families/current` 结果一致；`rg "getCurrentFamily|ORDER BY" packages/domain/src/repository.ts apps/server/api/src/routes/families.ts` 显示确定性依据；失败即 `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`]
 - [x] T012 [REQ:plan:0.2] Gate 判定与阻断协议：逐项记录 G1–G11 结果；任一失败按固定文案停止，**不得开始 T013**（依赖 T003–T011） [VERIFY:11 项结果清单；失败项现场输出与 `BLOCKED` 文案；全部 PASS 才允许进入 Phase 1]
@@ -49,7 +70,7 @@
 - [x] T013 [REQ:plan:D-11;FR-002] 确定 Slice 2 reviewed migration 文件名与编号：读取 `db/migrations/`，按 Slice 1 final 实际编号取下一个序号，命名为 `<next-after-slice1-final>_case_core.sql`；不修改 `001_initial_schema.sql`（依赖 T012） [VERIFY:`ls db/migrations` 输出；目标文件名在仓库中不存在；`git diff --name-only origin/main -- db/migrations/001_initial_schema.sql` 为空]
 - [x] T014 [P] [REQ:plan:D-11;data-model:§4.3/§5.4] 读取 `pg_constraint` 确认 `business_audit_events.event_type`、`business_audit_events.resource_type`、`idempotency_keys.command_type` 的真实约束名；不得假设默认名（依赖 T012） [VERIFY:`SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint WHERE conrelid IN ('business_audit_events'::regclass,'idempotency_keys'::regclass)` 输出真实名字]
 - [x] T015 [P] [REQ:plan:G9;§27A] 确认 `packages/contracts/src/schemas.ts` 当前 shape 与导出方式；确认新增 Case schema 不修改既有 schema（依赖 T012） [VERIFY:`rg "export const" packages/contracts/src/schemas.ts`；`git diff --name-only origin/main -- packages/contracts/src/schemas.ts` 当前为空]
-- [x] T016 [P] [REQ:plan:G4;D-6] 确认 `authorize()` final implementation 与既有 domain 测试；记录 `case: null`、`MANAGER_ACTIONS` 分支、`FamilyInfo` 的真实形状（依赖 T012） [VERIFY:`rg "case:|MANAGER_ACTIONS|isFamilyManager" packages/authorization/src/authorize.ts`；`bunx vitest run tests/domain/authorization.test.ts` 绿]
+- [x] T016 [P] [REQ:plan:G4;D-6] 确认 Slice 1 Final `authorize()` 与 `authz.ts` 的真实形状：结构化 `AuthorizeFacts`、结构化 `Resource` 对象、`case: null`、`family: { familyId }`、`basis = { membership, manager, purpose }`；记录 `decideFamilyAction` / `requireFamilyAction` / `denyToError`（依赖 T012） [VERIFY:`rg "AuthorizeFacts|familyCreatedByPersonId|decideFamilyAction|requireFamilyAction" packages/authorization/src/authorize.ts apps/server/api/src/authz.ts`；`bunx vitest run tests/domain/authorization.test.ts` 绿]
 - [x] T017 [P] [REQ:plan:D-6.5] 确认 `error-handler.ts` 当前错误码映射；确认 `CASE_NOT_FOUND` / `CASE_ACCESS_DENIED` 尚不存在，既有 `CURRENT_FAMILY_NOT_FOUND` / `VALIDATION_ERROR` / `IDEMPOTENCY_PAYLOAD_MISMATCH` 存在（依赖 T012） [VERIFY:`rg "CASE_|CURRENT_FAMILY_NOT_FOUND|VALIDATION_ERROR|IDEMPOTENCY_PAYLOAD_MISMATCH" apps/server/api/src/plugins/error-handler.ts` 输出]
 - [x] T018 [P] [REQ:plan:D-6.5;R5] 确认 current Family 的调用点与错误码：`getCurrentFamily`、`CURRENT_FAMILY_NOT_FOUND`；Case 端点复用同一语义，不定义第二套 Family 错误码（依赖 T012） [VERIFY:`rg "getCurrentFamily|CURRENT_FAMILY_NOT_FOUND" apps packages tests` 输出]
 - [x] T019 [P] [REQ:plan:G10] 确认 CI 与验证脚本真实存在且命令名与 `quickstart.md` 一致（依赖 T012） [VERIFY:`ls scripts/db-migrate.mjs scripts/guard-static.mjs scripts/openapi-generate.mjs scripts/openapi-check.mjs`；`jq .scripts package.json`]
@@ -68,9 +89,9 @@
 - [x] T025 [P] [REQ:FR-011;CHK055;CHK066;CHK088] 扩展 `tests/db/roles.test.ts`：保留原 10 表断言；新增 `cases` / `case_events` 的 owner 检查；新增独立断言：`xiaoshuyin_app` 对两表仅有 `SELECT, INSERT`（`UPDATE` / `DELETE` 必为 false）；`case_status` / `case_phase` `USAGE=true`；**不得**把新表塞进原四权限循环，不得删除旧断言（依赖 T013、T014） [VERIFY:`bunx vitest run tests/db/roles.test.ts` 预期 RED（新表不存在），保留输出]
 - [x] T026 [P] [REQ:FR-011;CHK055] 扩展 `tests/db/rls.test.ts`：表计数 9→11、policy 计数 9→11；保留逐表 FORCE 断言；新增 `cases_family_scope` / `case_events_family_scope` 的 `USING` / `WITH CHECK` 断言；不得改成宽松 wildcard（依赖 T013） [VERIFY:`bunx vitest run tests/db/rls.test.ts` 预期 RED（计数仍为 9），保留输出]
 - [x] T027 [P] [REQ:FR-002;FR-003;plan:G10] 扩展 `tests/db/migration-repro.test.ts`：enum 8→10、table 10→12、policy 9→11；新增 `case_status` / `case_phase` 枚举值断言；保留旧断言与第二次 apply no-op 检查；不得删除任何旧断言（依赖 T013） [VERIFY:`bunx vitest run tests/db/migration-repro.test.ts` 预期 RED（计数与枚举不匹配），保留输出]
-- [x] T028 [P] [REQ:FR-012;§8.5] 扩展 `tests/domain/idempotency-hash.test.ts` 的 shared contract 用例：`CASE_CREATE` canonical context 为 `{familyId: verifiedCurrentFamilyId, body: {}}`；`actor` / `command_type` 不进入 hash；same scope key + different `request_hash` → `MISMATCH` → 映射 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原结果；不得换 actor、伪造 Family 或新增无意义 body 字段（依赖 T015） [VERIFY:`bunx vitest run tests/domain/idempotency-hash.test.ts` 预期 RED（repository/service contract 未实现），保留输出]
-- [x] T029 [P] [REQ:FR-008;FR-009;D-6.2] 新增 `tests/domain/case-authorization.test.ts` RED：manager allow；非 manager deny `NOT_FAMILY_MANAGER`；`family.createdByPersonId` 缺失 deny；`family=null` → `FAMILY_CONTEXT_REQUIRED`；`purpose != FAMILY_MANAGEMENT` → `UNSUPPORTED_PURPOSE`；unknown action → `UNSUPPORTED_ACTION`；`CASE_CREATE` / `CASE_LIST` + `case != null` → `UNSUPPORTED_DIMENSION`；`CASE_READ` + `case == null` → `CASE_CONTEXT_REQUIRED`；非 Case 动作 `case != null` 仍 `UNSUPPORTED_DIMENSION`（依赖 T016） [VERIFY:`bunx vitest run tests/domain/case-authorization.test.ts` 预期 RED，保留输出]
-- [x] T030 [P] [REQ:FR-015;FR-016;FR-017;§28.3] 新增 `tests/domain/case-contracts.test.ts` RED：`CreateCaseRequest` strict 只接受 `idempotencyKey`（8–128）；`familyId` / `createdByPersonId` / `creator` / `status` / `phase` / `primary` / `isPrimary` / `version` / `title` / `summary` / `description` / `problemDescription` 均拒绝；`CaseResponse` 恰为 `id,status,phase,primary,version,createdAt,updatedAt`；`CaseListResponse` 为 `{items}`；`CaseStatus` / `CasePhase` 完整词汇（依赖 T015） [VERIFY:`bunx vitest run tests/domain/case-contracts.test.ts` 预期 RED，保留输出]
+- [x] T028 [P] [REQ:FR-012;§8.5] 扩展 `tests/domain/idempotency-hash.test.ts` 的 shared contract 用例：`CASE_CREATE` canonical context 为 `{familyId: verifiedCurrentFamilyId, body: {}}`；`Idempotency-Key` header、`actor` / `command_type` 不进入 hash；same scope key + different `request_hash` → `MISMATCH` → 映射 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原结果；不得换 actor、伪造 Family 或新增无意义 body 字段（依赖 T015） [VERIFY:`bunx vitest run tests/domain/idempotency-hash.test.ts` 预期 RED（repository/service contract 未实现），保留输出]
+- [x] T029 [P] [REQ:FR-008;FR-009;D-6.2] 新增 `tests/domain/case-authorization.test.ts` RED：manager allow（`facts.familyCreatedByPersonId === actor.personId`）；非 manager deny `NOT_FAMILY_MANAGER`；`facts.membership === false` deny `NOT_FAMILY_MEMBER`；`family=null` → `FAMILY_CONTEXT_REQUIRED`；`purpose != FAMILY_MANAGEMENT` → `UNSUPPORTED_PURPOSE`；unknown action → `UNSUPPORTED_ACTION`；`CASE_CREATE` / `CASE_LIST` + `case != null` → `UNSUPPORTED_DIMENSION`；`CASE_READ` + `case == null` → `CASE_CONTEXT_REQUIRED`；resource 与 family / case 不一致 → `NOT_FAMILY_MEMBER`；非 Case 动作 `case != null` 仍 `UNSUPPORTED_DIMENSION`（依赖 T016） [VERIFY:`bunx vitest run tests/domain/case-authorization.test.ts` 预期 RED，保留输出]
+- [x] T030 [P] [REQ:FR-015;FR-016;FR-017;§28.3] 新增 `tests/domain/case-contracts.test.ts` RED：`CreateCaseRequest` strict 且**无业务字段**（不包含 `idempotencyKey`）；`idempotencyKey` / `familyId` / `createdByPersonId` / `creator` / `status` / `phase` / `primary` / `isPrimary` / `version` / `title` / `summary` / `description` / `problemDescription` 均拒绝；`CaseResponse` 恰为 `id,status,phase,primary,version,createdAt,updatedAt`；`CaseListResponse` 为 `{items}`；`CaseStatus` / `CasePhase` 完整词汇（依赖 T015） [VERIFY:`bunx vitest run tests/domain/case-contracts.test.ts` 预期 RED，保留输出]
 - [x] T031 [P] [REQ:FR-005;FR-018;FR-020;SC-008] 新增 `tests/integration/cases-scope.test.ts` RED：路由枚举恰为 3 条 Case 端点；不存在 `/cases/current`、pause、resume、switch-primary、close、recurrences、messages、assessments、participants；DB introspection 不存在 `case_participants`、`assertions`、`observations`、`problem_formulations`、`scene_node_states`、`scene_artifacts`、`dialogue_messages`、Safety / Plan / Task / Notification 表；`cases` 无禁止列；`case_events.event_type` 仅 `CASE_CREATED`（依赖 T013、T017、T020） [VERIFY:`bunx vitest run tests/integration/cases-scope.test.ts` 预期 RED，保留输出]
 
 ---
@@ -98,9 +119,9 @@
 
 目标：实现纯函数与 repository 基础设施，让 domain RED 转绿；不实现路由，不改变既有 Family / Consent 行为。
 
-- [x] T043 [P] [REQ:FR-023;FR-024;plan:D-6.5] 在 `apps/server/api/src/plugins/error-handler.ts` 的 `ERROR_MAP` 增加 `CASE_NOT_FOUND: 404`、`CASE_ACCESS_DENIED: 403`；不改变既有映射，不新增 Family 错误码（依赖 T017） [VERIFY:`rg "CASE_NOT_FOUND|CASE_ACCESS_DENIED" apps/server/api/src/plugins/error-handler.ts`；`bun run typecheck` 通过]
-- [x] T044 [P] [REQ:FR-008;FR-009;plan:D-6.2] 扩展 `packages/authorization/src/authorize.ts`：`Action` 加 `CASE_CREATE` / `CASE_LIST` / `CASE_READ`；`Resource` 加 `CASE`；`AuthInput.case` 改为 `{ caseId: string } | null`；`AuthInput.family` 加可选 `createdByPersonId`；`DenyReason` 加 `CASE_CONTEXT_REQUIRED`；按 D-6.2 顺序 fail-closed；**不新建 `authorizeCase()`**；非 Case 动作保持既有行为（依赖 T029、T016） [VERIFY:`bunx vitest run tests/domain/case-authorization.test.ts tests/domain/authorization.test.ts` 全绿]
-- [x] T045 [P] [REQ:FR-015;FR-016;FR-017;§28.3] 在 `packages/contracts/src/schemas.ts` 新增 `CreateCaseRequest`（Zod strict，`idempotencyKey` 8–128）、`CaseResponse`、`CaseListResponse`、`CaseStatus`、`CasePhase`；不修改既有 schema（依赖 T030、T015） [VERIFY:`bun run typecheck`；`bunx vitest run tests/domain/case-contracts.test.ts` 绿]
+- [x] T043 [P] [REQ:FR-023;FR-024;plan:D-6.5;R7] 在 `apps/server/api/src/plugins/error-handler.ts` 保留 Slice 1 Final 全部错误码（含 `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` / `CURRENT_FAMILY_AMBIGUOUS`）与 generic 500 / 日志白名单；只追加 `CASE_NOT_FOUND: 404`、`CASE_ACCESS_DENIED: 403`；不新增 Family 错误码（依赖 T017） [VERIFY:`rg "CASE_NOT_FOUND|CASE_ACCESS_DENIED|NOT_FAMILY_MANAGER|CURRENT_FAMILY_AMBIGUOUS|INTERNAL_ERROR" apps/server/api/src/plugins/error-handler.ts`；`bun run typecheck` 通过]
+- [x] T044 [P] [REQ:FR-008;FR-009;plan:D-6.2] 在 Slice 1 Final 的 `packages/authorization/src/authorize.ts` 上增量扩展：`Action` 加 `CASE_CREATE` / `CASE_LIST` / `CASE_READ`；`Resource` 加 `{ type: 'CASE'; familyId; caseId }`；`AuthInput.case` 改为 `{ caseId: string } | null`；**保持** `family: { familyId }` 与 `facts: AuthorizeFacts`；manager 判定使用 `facts.familyCreatedByPersonId`；Case 动作要求 `facts.membership === true`；`DenyReason` 加 `CASE_CONTEXT_REQUIRED`；按 D-6.2 顺序 fail-closed；**不新建 `authorizeCase()`**；非 Case 动作保持 Final 行为（依赖 T029、T016） [VERIFY:`bunx vitest run tests/domain/case-authorization.test.ts tests/domain/authorization.test.ts` 全绿]
+- [x] T045 [P] [REQ:FR-015;FR-016;FR-017;§28.3] 采用 Slice 1 Final 的 `packages/contracts/src/schemas.ts`（`z.strictObject`，六命令无 body `idempotencyKey`）作为基线；只追加 `CreateCaseRequest`（strict 且**无业务字段**）、`CaseResponse`、`CaseListResponse`、`CaseStatus`、`CasePhase`；不保留旧字段名或旧 body key（依赖 T030、T015） [VERIFY:`bun run typecheck`；`bunx vitest run tests/domain/case-contracts.test.ts` 绿；`rg "idempotencyKey" packages/contracts/src/schemas.ts` 在 Case schema 中为空]
 - [x] T046 [P] [REQ:FR-012;§8.5] 在 `packages/domain/src/idempotency.ts` 的 `IdempotencyCommandType` 加入 `CASE_CREATE`；不改变 `canonicalJson` / `hashPayload` / `decideIdempotency` 语义（依赖 T028） [VERIFY:`bunx vitest run tests/domain/idempotency-hash.test.ts` 绿；`bun run typecheck` 通过]
 - [x] T047 [REQ:FR-006;FR-007;FR-016;plan:D-3.2] 新增 `packages/domain/src/cases.ts`（或同包 repository）实现：`lockFamilyForPrimaryDecision(tx, familyId)`（`SELECT id FROM families WHERE id = $1 FOR UPDATE`）、`existsCurrentPrimary(tx, familyId)`（**独立语句**）、`insertCase(tx, {familyId, createdByPersonId, isPrimary})`（显式 `OPEN` / `INTAKE` / `version=1`）、`getCaseById(tx, caseId)`、`listCases(tx, familyId)`（`ORDER BY is_primary DESC, created_at ASC, id ASC`）；全部参数化，不放在 `apps/`（依赖 T042、T020） [VERIFY:`bun run typecheck`；`rg "FOR UPDATE|ORDER BY is_primary DESC" packages/domain/src/cases.ts` 输出]
 - [x] T048 [REQ:FR-014;CHK064] 在同一 `packages/domain/src/cases.ts` 增加 `insertCaseEvent(tx, {familyId, caseId, actorAccountId, primary, version})` 显式写 `CASE_CREATED` 与 metadata `{primary, version}`；增加 `insertCaseAudit(tx, {familyId, caseId, actorAccountId, primary, version})` 写 `business_audit_events` 的 `CASE_CREATED` / `CASE`；职责不同不得合并（依赖 T047） [VERIFY:`rg "CASE_CREATED|resource_type|metadata" packages/domain/src/cases.ts`；`bun run typecheck`]
@@ -111,9 +132,9 @@
 ## Phase 5 — Case Create（TDD：集成 RED → 实现 → 转绿）
 
 - [x] T050 [P] [REQ:FR-008;FR-009;FR-024;D-6;场景8/9A/9B] 新增 `tests/integration/cases-authorization.test.ts` RED，显式两组：**A 组**（Family member + guardian + non-manager）create/list `403 CASE_ACCESS_DENIED`、detail `404 CASE_NOT_FOUND`；**B 组**（guardian non-member）current Family 未解析，沿用 Slice 1 `CURRENT_FAMILY_NOT_FOUND`，响应无 Case 字段，**不出现** `CASE_ACCESS_DENIED` / `CASE_NOT_FOUND`；另含 manager allow（依赖 T042、T043、T044、T045） [VERIFY:`bunx vitest run tests/integration/cases-authorization.test.ts` 预期 RED（端点未实现），保留输出]
-- [x] T051 [P] [REQ:FR-004;FR-006;FR-007;FR-015;SC-001;SC-003] 新增 `tests/integration/cases-create.test.ts` RED：首 Case `primary=true` / `OPEN` / `INTAKE` / `version=1` / Family 归属正确；第二 Case `primary=false`；携带 `familyId` / `creator` / `status` / `phase` / `primary` / `version` / `title` 等未声明字段 → `422 VALIDATION_ERROR` 且 `cases` / `case_events` / `business_audit_events` / `idempotency_keys` 零新增；响应无 `familyId` / creator / 内容字段（依赖 T042、T043、T045） [VERIFY:`bunx vitest run tests/integration/cases-create.test.ts` 预期 RED（端点未实现），保留输出]
-- [x] T052 [REQ:FR-012;FR-014;plan:D-4] 实现 `apps/server/api/src/routes/cases.ts` 的 `POST /api/v1/cases`，严格按唯一冻结顺序：认证 → 解析 current Family（identity 上下文，0 行 → `CURRENT_FAMILY_NOT_FOUND`）→ `withRlsTransaction`（purpose `FAMILY_MANAGEMENT`）→ 读 `families.created_by_person_id` → `authorize(CASE_CREATE)`（DENY → `403 CASE_ACCESS_DENIED`）→ 幂等占位 / REPLAY / `409 IDEMPOTENCY_PAYLOAD_MISMATCH` → `SELECT ... FOR UPDATE` 锁 Family → 独立 `EXISTS` 判定 → 插 Case → 插 `case_event` → 插 `business_audit_event` → 回填幂等响应 → COMMIT → 201；**不得**捕获 23505 转 201/409（依赖 T047、T048、T049、T043、T044、T045） [VERIFY:`bun run typecheck`；`rg "FOR UPDATE|existsCurrentPrimary|insertCaseEvent|insertCaseAudit|completeIdempotency" apps/server/api/src/routes/cases.ts` 顺序与 D-4 一致]
-- [x] T053 [REQ:plan:D-1.2] 在 `apps/server/api/src/app.ts` 注册 `registerCaseRoutes(app, pool)`；不改变既有路由注册顺序与行为（依赖 T052） [VERIFY:`rg "registerCaseRoutes" apps/server/api/src/app.ts`；`bun run typecheck`]
+- [x] T051 [P] [REQ:FR-004;FR-006;FR-007;FR-015;SC-001;SC-003] 新增 `tests/integration/cases-create.test.ts` RED：首 Case `primary=true` / `OPEN` / `INTAKE` / `version=1` / Family 归属正确；第二 Case `primary=false`；使用 `Idempotency-Key` header；header 缺失 / 非法 → `422 VALIDATION_ERROR`；body 携带 `idempotencyKey` / `familyId` / `creator` / `status` / `phase` / `primary` / `version` / `title` 等未声明字段 → `422 VALIDATION_ERROR` 且 `cases` / `case_events` / `business_audit_events` / `idempotency_keys` 零新增；响应无 `familyId` / creator / 内容字段（依赖 T042、T043、T045） [VERIFY:`bunx vitest run tests/integration/cases-create.test.ts` 预期 RED（端点未实现），保留输出]
+- [x] T052 [REQ:FR-012;FR-014;plan:D-4] 实现 `apps/server/api/src/routes/cases.ts` 的 `POST /api/v1/cases`，严格按唯一冻结顺序：认证 → `readIdempotencyKey(req)`（header 8–128，缺失/非法 → `422 VALIDATION_ERROR`）→ 解析 current Family（identity 上下文，0 行 → `CURRENT_FAMILY_NOT_FOUND`；多 Family → 沿用 Final `CURRENT_FAMILY_AMBIGUOUS`）→ `withRlsTransaction`（purpose `FAMILY_MANAGEMENT`）→ `requireFamilyAction(tx, { action:'CASE_CREATE', family:{familyId}, case:null, resource:{type:'FAMILY',familyId} })`（复用 `authz.ts` 读 facts；DENY `NOT_FAMILY_MEMBER`/`NOT_FAMILY_MANAGER` → `403 CASE_ACCESS_DENIED`）→ 幂等占位 / REPLAY / `409 IDEMPOTENCY_PAYLOAD_MISMATCH`（bytea 路径）→ `SELECT ... FOR UPDATE` 锁 Family → 独立 `EXISTS` 判定 → 插 Case → 插 `case_event` → 插 `business_audit_event` → 回填幂等响应 → COMMIT → 201；**不得**从 body 读 idempotencyKey；**不得**捕获 23505 转 201/409（依赖 T047、T048、T049、T043、T044、T045） [VERIFY:`bun run typecheck`；`rg "readIdempotencyKey|requireFamilyAction|existsCurrentPrimary|insertCaseEvent|insertCaseAudit|completeIdempotency" apps/server/api/src/routes/cases.ts` 顺序与 D-4 一致；`rg "body.*idempotencyKey|idempotencyKey.*body" apps/server/api/src/routes/cases.ts` 为空]
+- [x] T053 [REQ:plan:D-1.2;R7] 在 `apps/server/api/src/app.ts` 保留 Slice 1 Final 的 `loadRuntimeConfig` / `createWechatProvider` / `requestLogSerializer` / logger redact / `buildApp({ env, loggerStream })`，只追加 `registerCaseRoutes(app, pool)`；不得恢复硬编码 `SESSION_SECRET` fallback 或无条件 `FakeWechatProvider`（依赖 T052） [VERIFY:`rg "registerCaseRoutes|loadRuntimeConfig|requestLogSerializer|createWechatProvider" apps/server/api/src/app.ts`；`rg "dev-secret-key-for-testing" apps/server/api/src/app.ts` 为空；`bun run typecheck`]
 - [x] T054 [REQ:FR-004;FR-006;FR-007;SC-001] 运行 create 与 create/list 授权用例转绿：`tests/integration/cases-create.test.ts` 全部通过；`tests/integration/cases-authorization.test.ts` 的 POST / list 用例通过；detail 授权用例留待 T058（依赖 T050、T051、T052、T053） [VERIFY:`bunx vitest run tests/integration/cases-create.test.ts tests/integration/cases-authorization.test.ts` 输出；create 与 list 分组全绿，detail 分组仍 RED 且原因已记录]
 
 ---
@@ -160,12 +181,12 @@
 
 ## Phase 10 — OpenAPI / Generated Client（代码侧单事实源）
 
-- [x] T075 [REQ:§27A;FR-015;FR-016;FR-017] 为 `apps/server/api/src/routes/cases.ts` 三个端点声明 `schema`（body / response / params），复用 `packages/contracts` 的 Zod schema 与 `fastify-type-provider-zod`；不改变既有路由 validator 行为；422 仍映射 `VALIDATION_ERROR` 且零业务写入（依赖 T053） [VERIFY:`bun run typecheck`；`bunx vitest run tests/integration/cases-create.test.ts` 的 422 用例仍绿]
-- [x] T076 [REQ:§27A;plan:D-9] 更新 `scripts/openapi-generate.mjs` 的临时 spec 脚本，import 并注册 `registerCaseRoutes(app, pool)`；不改变既有路由注册（依赖 T075） [VERIFY:`rg "registerCaseRoutes" scripts/openapi-generate.mjs`；`bun run openapi:generate` 不报 not connected]
+- [x] T075 [REQ:§27A;FR-015;FR-016;FR-017] 为 `apps/server/api/src/routes/cases.ts` 三个端点声明 `schema`（**header `Idempotency-Key`**、**body 无业务字段**、response、params），复用 Slice 1 Final `packages/contracts` 的 Zod schema 与 `fastify-type-provider-zod`；不改变既有路由 validator 行为；422 仍映射 `VALIDATION_ERROR` 且零业务写入（依赖 T053） [VERIFY:`bun run typecheck`；`bunx vitest run tests/integration/cases-create.test.ts` 的 422 用例仍绿；`rg "Idempotency-Key|idempotencyKey" apps/server/api/src/routes/cases.ts` 仅为注释或 header 名称]
+- [x] T076 [REQ:§27A;plan:D-9;R8] 适配 Slice 1 Final 的 OpenAPI 架构：扩展 `apps/server/api/src/openapi-spec.ts` 的 `buildOpenApiDocument()` 加入 Case operations（复用同一 Zod schemas）；`scripts/openapi-generate.mjs` 调用该 builder；**不得**使用 inline swagger 临时脚本（依赖 T075） [VERIFY:`rg "buildOpenApiDocument|createCase|listCases|getCase" apps/server/api/src/openapi-spec.ts`；`bun run openapi:generate` 输出 Case operations 且不报 not connected]
 - [x] T077 [REQ:§27A] 运行 `bun run openapi:generate` 生成 / 更新 `packages/generated/openapi.json` 与 `packages/generated/openapi.d.ts`；**不得 hand-edit generated artifact**；不得把生成物当第二真相源。验证必须**路径限定**（只检视 `packages/generated/`，不得用全分支 `git diff --name-only` 判断）且**可重复**：记录两文件 hash 后再次运行同一 generator，hash 必须完全一致；Case 3 operations 必须真实进入 generated output（依赖 T076） [VERIFY:`git diff --name-only -- packages/generated/` 只能出现 `openapi.json` / `openapi.d.ts` 两个 generator 管理文件（本次生成未改变文件时允许为空，此时以两次生成 hash 一致为准）；首次生成后 `shasum -a 256 packages/generated/openapi.json packages/generated/openapi.d.ts` 记录值，再次 `bun run openapi:generate` 后重新计算且完全一致；第二次生成后 `git status --short -- packages/generated/` 无残留；`bun run openapi:check` PASS；generated output 含 createCase / listCases / getCase 三个 Case operation]
 - [x] T078 [P] [REQ:FR-018;CHK077;§28.3] 新增 `tests/integration/openapi-cases.test.ts`：Case operation 恰为 3（`createCase` / `listCases` / `getCase`）；`/api/v1/cases` 有 POST / GET，`/api/v1/cases/{id}` 有 GET；错误响应结构引用 `CaseNotFound` / `CaseAccessDenied` / `CurrentFamilyNotFound`；`code` 为 literal / enum 可机械验证；不存在 `/cases/current` 等越界路径（依赖 T077） [VERIFY:`bunx vitest run tests/integration/openapi-cases.test.ts` 通过，输出 `3/3`]
-- [x] T079 [REQ:§27A;plan:G9] 运行 `bun run openapi:check`：无 drift，二次生成无 diff（依赖 T078） [VERIFY:`bun run openapi:check` 输出 `PASS (no drift)`]
-- [x] T080 [REQ:CHK077;plan:D-9] 将生成 OpenAPI 与 `specs/002-case-core/contracts/cases-api.openapi.yaml` 做结构比对：3 operations、`CreateCaseRequest` strict、`CaseResponse` 7 字段、错误结构；若不一致 → `BLOCKED — CONTRACT DRIFT`，**不得修改 specs 契约**或 hand-edit generated artifact（依赖 T079） [VERIFY:比对脚本或测试输出；差异清单为空；否则停止并报告]
+- [x] T079 [REQ:§27A;plan:G9;R8] 运行 `bun run openapi:check`：必须执行 **frozen YAML ↔ runtime semantic equivalence**（paths / methods / operationId / parameters / requestBody / response status / components.schemas 结构），不得只比较生成文件 diff；二次生成 hash 一致（依赖 T078） [VERIFY:`bun run openapi:check` 输出 `PASS (no drift)` 且包含 semantic equivalence；`shasum -a 256 packages/generated/openapi.json packages/generated/openapi.d.ts` 两次一致]
+- [x] T080 [REQ:CHK077;plan:D-9;R8] 将生成 OpenAPI 与 `specs/002-case-core/contracts/cases-api.openapi.yaml` 做 **semantic equivalence** 比对：3 operations、`Idempotency-Key` header parameter、`CreateCaseRequest` strict 且无业务字段、`CaseResponse` 7 字段、错误结构；若不一致 → `BLOCKED — CONTRACT DRIFT`，**不得修改 specs 契约**或 hand-edit generated artifact（依赖 T079） [VERIFY:比对脚本或测试输出；差异清单为空；否则停止并报告]
 
 ---
 
@@ -340,7 +361,11 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 | 项 | Tasks |
 |---|---|
 | G1–G11 | T001–T012 |
-| R1（body `idempotencyKey`） | T009、T045、T052、T080 |
+| R1（`Idempotency-Key` header） | T009、T045、T052、T080 |
+| R6（复用 Final `AuthorizeFacts` + `authz.ts`） | T016、T029、T044、T052 |
+| R7（保留 runtime-env / log privacy / provider） | T053、T043 |
+| R8（OpenAPI semantic equivalence） | T076、T079、T080 |
+| R9（采用 Final schemas 基线） | T015、T045 |
 | R2（不分页） | T055、T057、T058 |
 | R3（API `primary` / DB `is_primary`） | T033、T047、T055 |
 | R4（append-only / 最小 GRANT） | T040、T073 |
@@ -375,19 +400,24 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 | 文件 / 目录 | 任务 | 并发规则 |
 |---|---|---|
 | `db/migrations/<next-after-slice1-final>_case_core.sql` | T032–T041 | **全串行**；同一 reviewed migration；中途不得 apply；不得改 `001_initial_schema.sql` |
-| `packages/authorization/src/authorize.ts` | T044 | 单写；不得新建 `authorizeCase()` |
-| `packages/contracts/src/schemas.ts` | T045 | 单写；只新增 Case schema，不改既有 schema |
+| `packages/authorization/src/authorize.ts` | T044 | 单写；在 Slice 1 Final `AuthorizeFacts` 模型上增量；不得新建 `authorizeCase()` |
+| `apps/server/api/src/authz.ts` | T052 | 复用 Final adapter；只扩 `caseId` 与 Case 错误映射；不得第二套 facts 读取 |
+| `packages/contracts/src/schemas.ts` | T045 | 单写；采用 Final `z.strictObject` 基线，只追加无业务字段的 Case schema |
 | `packages/domain/src/idempotency.ts` | T046 | 单写；只加 `CASE_CREATE` 类型 |
 | `packages/domain/src/cases.ts` | T047–T049 | 同文件串行；所有 Case SQL 归此，不放 `apps/` |
 | `packages/domain/src/repository.ts` | T047（只读复用） | 不得为 Case 复制第二套 repository 框架 |
-| `apps/server/api/src/routes/cases.ts` | T052、T056、T075 | 同文件串行；T075 只加 schema |
-| `apps/server/api/src/app.ts` | T053 | 单写；只加一行注册 |
-| `apps/server/api/src/plugins/error-handler.ts` | T043 | 单写；只加两个 Case 错误码 |
-| `scripts/guard-static.mjs` | T071 | 单写；在现有规则内扩展，不新建 checker |
-| `scripts/openapi-generate.mjs` | T076 | 单写；只加 cases route 注册 |
+| `apps/server/api/src/routes/cases.ts` | T052、T056、T075 | 同文件串行；T075 只加 schema；header 使用 `readIdempotencyKey` |
+| `apps/server/api/src/app.ts` | T053 | 单写；保留 Final runtime-env / log privacy / provider，只追加 `registerCaseRoutes` |
+| `apps/server/api/src/openapi-spec.ts` | T076 | 单写；扩展 Case operations；不得回退 inline swagger |
+| `apps/server/api/src/plugins/error-handler.ts` | T043 | 单写；保留 Final 全部码 + generic 500，只加两个 Case 错误码 |
+| `apps/server/api/src/runtime-env.ts` | T053（只读复用） | 不得复制第二套 runtime boundary |
+| `scripts/guard-static.mjs` | T071 | 单写；在现有规则内扩展，不新建 checker；保留 Final guard |
+| `scripts/openapi-generate.mjs` | T076 | 单写；调用 `openapi-spec.ts` builder |
+| `scripts/openapi-check.mjs` | T079 | 单写；frozen YAML ↔ runtime semantic equivalence |
 | `packages/generated/openapi.json` / `openapi.d.ts` | T077 | 只由 `openapi:generate` 生成；禁止 hand-edit |
-| `tests/db/rls.test.ts` | T026 | 单写；保留旧断言，只做表 / policy 计数与新表覆盖扩展 |
-| `tests/db/roles.test.ts` | T025 | 单写；保留旧 10 表断言，新增独立最小权限断言 |
+| `tests/setup/api.ts` | T050–T063（只读复用） | 复用 Final helper；不复制第二套 app builder |
+| `tests/db/rls.test.ts` | T026 | 单写；保留 Final 断言，只做表 / policy 计数与新表覆盖扩展 |
+| `tests/db/roles.test.ts` | T025 | 单写；保留 Final 10 表断言，新增独立最小权限断言 |
 | `tests/db/migration-repro.test.ts` | T027 | 单写；保留旧断言，只更新最终对象集合 |
 | `tests/integration/cases-authorization.test.ts` | T050、T060、T061 | 同文件串行；场景 A / B 分 `describe`，不得合并 |
 | `tests/integration/cases-*.test.ts` | T024、T051、T055、T059、T063、T069、T078 | 各自独立文件；不同任务不写同一文件 |
@@ -437,6 +467,14 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 
 `SLICE 2 TASKS FINAL — READY FOR ANALYZE`
 ---
+
+## 基线失效声明（2026-11-07 Post-Slice1 Dependency Reconciliation）
+
+> 下方 2026-11-06 / 2026-11-07 的 Implement Completion Evidence 与 Independent Converge Round 1–4 证据，全部基于 **Slice 1 Final remediation 合并前**的旧基线（merge base `ed0d5fb`）。Slice 1 Final 合并后：
+> - 这些证据**不能**作为最终 Slice 2 结论；
+> - merge `origin/main`（`ee9d07e`）后必须在**新 Head** 上完整重跑 T001–T087 验证与 Independent Converge；
+> - 旧 Head 的测试数量 / CI / converge 结论一律作废；
+> - 旧证据中 body `idempotencyKey` / 旧 `authorize()` 形状 / 旧 `app.ts` runtime / 旧 OpenAPI 弱检查的通过结果，**不证明**新契约已实现。
 
 ## Implement Completion Evidence（2026-11-06）
 

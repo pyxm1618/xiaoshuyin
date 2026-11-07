@@ -19,9 +19,9 @@ info:
     客户端提交 `familyId`、`status`、`phase`、`primary`、`version`、creator 或任何内容字段
     一律 422（strict schema，显式拒绝而不是静默忽略）。
 
-    幂等键 `idempotencyKey` 位于 JSON 请求体，与 Slice 1 代码侧 Zod 事实源
-    （`packages/contracts/src/schemas.ts`）一致；理由见 `plan.md` D-5、Frozen Technical Decision R1
-    与 `research.md` R-3。
+    幂等键由 **`Idempotency-Key` HTTP header** 承载（8–128 字符），与 Slice 1 Final
+    的六个 mutating command 完全一致；JSON 请求体**不包含** `idempotencyKey`。
+    理由见 `plan.md` D-5、Frozen Technical Decision R1 与 `research.md` R-3。
 
 servers:
   - url: http://localhost:8787
@@ -60,8 +60,8 @@ paths:
         `409 IDEMPOTENCY_PAYLOAD_MISMATCH`。
 
         可达性说明：在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context**
-        下，当前请求体除 `idempotencyKey` 外没有可变业务字段，去掉幂等键后 canonical body
-        恒为 `{}`，`familyId` 又由服务端 current Family 唯一解析，因此本 Slice 的 public HTTP API
+        下，business body 恒为 `{}`（`Idempotency-Key` 在 header，不进入 body），`familyId` 又由
+        服务端 current Family 唯一解析，因此本 Slice 的 public HTTP API
         **不存在可达的 different-payload 请求**；409 合同保留在 shared idempotency 基础设施层验证，
         不得通过切换 actor（会改变 scope）或新增无业务意义字段伪造该场景。
         canonical hash 仍保留 `{ familyId, body }`；未来若正式语义允许同一 actor 在多个 Family
@@ -70,6 +70,8 @@ paths:
         授权：仅当前目标 Family 的 V1 管理主体（创建该 Family 的 adult Person）。
         普通 membership、guardian relationship、已知 case_id 均不构成访问资格。
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
       requestBody:
         required: true
         content:
@@ -167,6 +169,16 @@ components:
       description: Slice 1 签发的 session token。
 
   parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        §8.5 关键命令幂等键，与 Slice 1 Final 的六个 mutating command 使用同一 header
+        transport。长度 8–128；缺失 / 非法 → 422 VALIDATION_ERROR。scope =
+        (actor_account_id, CASE_CREATE, logical idempotencyKey)；header 不进入 body，
+        也不进入 canonical payload hash（已在 scope 中）。
+      schema: { type: string, minLength: 8, maxLength: 128 }
     CaseIdPath:
       name: id
       in: path
@@ -178,24 +190,13 @@ components:
     CreateCaseRequest:
       type: object
       additionalProperties: false
-      required: [idempotencyKey]
       description: |
-        严格 schema（`additionalProperties: false`）。任何未声明字段（含 familyId、
-        status、phase、primary、version、creator、title、description 等）都会导致
-        422 VALIDATION_ERROR，且零业务写入（Case / case_event / business_audit_event /
-        新幂等结果均无新增），而不是被静默忽略。
-      properties:
-        idempotencyKey:
-          type: string
-          minLength: 8
-          maxLength: 128
-          description: |
-            §8.5 关键命令幂等键。scope = (actor_account_id, CASE_CREATE, idempotencyKey)。
-            相同 key + 相同 canonical payload 返回原结果；shared idempotency 合同对
-            相同 scope key + 不同 canonical payload hash 映射为 409。在当前 V1 管理语义 +
-            同一 actor + 同一 current Family canonical context 下，请求体形状使 public HTTP
-            层不存在可达的 different-payload 请求；`familyId` 由服务端 current Family 解析，
-            客户端不得提交。canonical hash 仍保留 `{ familyId, body }`，不得删除。
+        严格 schema（`additionalProperties: false`）。业务 body **不包含任何字段**：
+        不得出现 idempotencyKey、familyId、status、phase、primary、version、creator、
+        title、description 等；任何未声明字段都会导致 422 VALIDATION_ERROR，且零业务写入
+        （Case / case_event / business_audit_event / 新幂等结果均无新增），而不是被静默忽略。
+        幂等键由 `Idempotency-Key` header 承载，不在 body 中。
+      properties: {}
 
     CaseResponse:
       type: object
@@ -381,8 +382,8 @@ components:
         相同 actor + CASE_CREATE + idempotencyKey，但 canonical payload hash 不同。
         不修改原 Case、不追加事件/审计。
 
-        当前 Slice 在同一 actor + 同一 current Family canonical context 下，请求体只有
-        `idempotencyKey`，canonical body 恒为 `{}`，`familyId` 又由服务端 current Family
+        当前 Slice 在同一 actor + 同一 current Family canonical context 下，business body 恒为
+        `{}`（`Idempotency-Key` 在 header，不进入 body），`familyId` 又由服务端 current Family
         唯一解析，因此本响应在当前 public HTTP command shape 下**不可达**；合同保留并在
         shared idempotency domain / repository contract 层验证。
         canonical hash 仍保留 `{ familyId, body }`：未来若同一 actor 可在多个 Family 执行

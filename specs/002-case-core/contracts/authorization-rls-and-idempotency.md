@@ -19,39 +19,50 @@
 
 ## 2. `authorize()` 增量契约
 
-### 2.1 输入形状（扩展现有 `AuthInput`）
+### 2.1 输入形状（在 Slice 1 Final 模型上增量扩展）
 
-| 字段 | Slice 1 | Slice 2 |
+> Slice 1 Final 已把 `authorize()` 重构为 **`AuthorizeFacts` 结构化模型**。本契约基于 Final 形状，**不得**恢复旧的 `family.createdByPersonId` + 扁平 `Resource` 字符串。
+
+| 字段 | Slice 1 Final | Slice 2 |
 |---|---|---|
 | `actor` | `{ accountId, personId }` | 不变 |
 | `product` | `'V1'` | 不变 |
-| `family` | `{ familyId } \| null` | `{ familyId; createdByPersonId?: string } \| null` |
-| `case` | `null` | `{ caseId: string } \| null` |
-| `resource` | `SELF \| FAMILY \| MEMBER \| CONSENT` | 新增 `CASE` |
+| `family` | `{ familyId: string } \| null` | **保持 `{ familyId }`**；不得新增 `createdByPersonId` |
+| `case` | `null`（Final 硬编码） | `{ caseId: string } \| null` |
+| `resource` | 结构化 union：`{ type:'SELF'; personId }` / `{ type:'FAMILY'; familyId }` / `{ type:'MEMBER'; familyId; personId }` / `{ type:'CONSENT'; familyId; consentId? }` | 新增 `{ type:'CASE'; familyId: string; caseId: string }` |
+| `facts` | `AuthorizeFacts`：`membership` / `familyCreatedByPersonId` / `actorAgeBand` / `guardianPersonId` / `targetIsFamilyMember` / `familyId` | **复用同一 facts**；Case 动作使用 `facts.membership` 与 `facts.familyCreatedByPersonId` |
 | `action` | 9 个注册动作 | 新增 `CASE_CREATE` / `CASE_LIST` / `CASE_READ` |
 | `purpose` | `SELF_IDENTITY \| FAMILY_MANAGEMENT \| GUARDIAN_CONSENT` | 不新增枚举；Case 动作要求 `FAMILY_MANAGEMENT` |
+| `basis` | `{ membership: true; manager: boolean; purpose }` | 保持完整 basis；不得退化为 `{ manager }` |
+| `DenyReason` | Final 集合（含 `NO_ACTOR` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` / `NOT_GUARDIAN` / `AGE_BAND_UNKNOWN` / `AUTHORIZATION_ERROR`） | 新增 `CASE_CONTEXT_REQUIRED` |
 
-### 2.2 判定顺序（fail-closed）
+### 2.2 判定顺序（fail-closed；基于 Final `AuthorizeFacts`）
 
 ```text
-1. 若 action 不属于注册表                         → DENY / UNSUPPORTED_ACTION
-2. 若 purpose 不属于注册枚举                      → DENY / UNSUPPORTED_PURPOSE
-3. Case 动作：
-   a. family === null                             → DENY / FAMILY_CONTEXT_REQUIRED
-   b. purpose !== 'FAMILY_MANAGEMENT'             → DENY / UNSUPPORTED_PURPOSE
-   c. family.createdByPersonId 缺失                → DENY / NOT_FAMILY_MANAGER
-   d. family.createdByPersonId !== actor.personId → DENY / NOT_FAMILY_MANAGER
-   e. CASE_CREATE / CASE_LIST 且 case !== null    → DENY / UNSUPPORTED_DIMENSION
-   f. CASE_READ 且 case === null                  → DENY / CASE_CONTEXT_REQUIRED
-   g. 其他                                          → ALLOW / { manager: true }
-4. 非 Case 动作：
-   - 保持 Slice 1 行为不变（含 case !== null → UNSUPPORTED_DIMENSION）
-5. 任何内部异常                                   → DENY / AUTHORIZATION_ERROR
+1. action 不属于注册表                                  → DENY / UNSUPPORTED_ACTION
+2. purpose 不属于注册枚举                               → DENY / UNSUPPORTED_PURPOSE
+3. actor.accountId / actor.personId 缺失                → DENY / NO_ACTOR
+4. Case 动作：family === null                           → DENY / FAMILY_CONTEXT_REQUIRED
+5. Case 动作：purpose !== 'FAMILY_MANAGEMENT'           → DENY / UNSUPPORTED_PURPOSE
+6. Case 动作：facts.membership !== true                 → DENY / NOT_FAMILY_MEMBER
+7. Case 动作：facts.familyCreatedByPersonId 缺失或 ≠ actor.personId
+                                                        → DENY / NOT_FAMILY_MANAGER
+8. CASE_CREATE / CASE_LIST：
+   case !== null                                         → DENY / UNSUPPORTED_DIMENSION
+   resource.type !== 'FAMILY' 或 resource.familyId !== family.familyId
+                                                        → DENY / NOT_FAMILY_MEMBER
+9. CASE_READ 且 case === null                           → DENY / CASE_CONTEXT_REQUIRED
+10. CASE_READ：resource.type !== 'CASE'
+    或 resource.familyId !== family.familyId
+    或 resource.caseId !== case.caseId                  → DENY / NOT_FAMILY_MEMBER
+11. 通过                                                 → ALLOW / { membership: true, manager: true, purpose }
+12. 非 Case 动作：保持 Final 行为；case !== null 仅对非 Case 动作 → UNSUPPORTED_DIMENSION
+13. 任何内部异常                                         → DENY / AUTHORIZATION_ERROR
 ```
 
-**规则 c / d 的理由**：`authorize()` 是纯函数，不能查数据库；manager 判定只能基于调用方已经读取并验证的 `family.createdByPersonId`。
-缺失该字段时不能默认放行（fail-closed）。
-`isFamilyManager(family, actorPersonId)` 仍保留为同一判定的纯函数实现。
+**规则 6 / 7 的理由**：`authorize()` 是纯函数，不能查数据库；manager 判定只能基于调用方已经读取并验证的 `facts.membership` 与 `facts.familyCreatedByPersonId`。缺失 facts 时不能默认放行（fail-closed）。`isFamilyManager(family, actorPersonId)` 仍保留为同一判定的纯函数实现，但 Case 分支以 facts 为准。
+
+**规则 10 的理由**：`resource` 是请求方提供的未验证参数；即使 Case 归属由 RLS 保证，也必须拒绝 resource 与已解析 family / case 不一致的伪造上下文。
 
 ### 2.3 明确不做
 
@@ -60,6 +71,7 @@
 - 不把普通 membership / guardian relationship / 已知 `case_id` 作为 Case 访问依据。
 - 不在 `authorize()` 中读数据库或判断 Case 归属。
 - 不新增 Purpose 枚举；Case 管理沿用 `FAMILY_MANAGEMENT`。
+- **不恢复** Slice 1 Final 已淘汰的 `family.createdByPersonId` / 扁平 `Resource` 字符串；manager 判定只使用 `facts.familyCreatedByPersonId`。
 
 ---
 
@@ -122,7 +134,7 @@ actor_account_id + command_type='CASE_CREATE' + idempotency_key
 ```
 
 - 复用 `idempotency_keys`；不新建第二张表。
-- `idempotency_key`：JSON body `idempotencyKey`，8–128 字符（Frozen Technical Decision **R1**）。
+- `idempotency_key`：**`Idempotency-Key` HTTP header**（8–128 字符），通过 Slice 1 Final `readIdempotencyKey(req)` 读取（Frozen Technical Decision **R1**）。body **不包含**幂等键。
 - 同一张表的 RLS：`actor_account_id = app_account_id()`；无 identity 上下文 0 行 / 拒写。
 - lookup / 占位 / 回填 / replay 全部在 `withRlsTransaction` 内。
 - **scope 不含 family**：切换 Family 必须换 actor 视角才成立；`familyId` 只通过 canonical hash 参与一致性判定（见 5.2），不作为 scope 的一部分。
@@ -134,19 +146,19 @@ actor_account_id + command_type='CASE_CREATE' + idempotency_key
 ```text
 request_hash = sha256(canonicalJson({
   familyId: <已验证当前目标 Family ID>,
-  body: <Zod strict 解析后的请求体，去掉 idempotencyKey>
+  body: <Zod strict 解析后的业务请求体>
 }))
 ```
 
 | 输入 | 是否进入 hash | 理由 |
 |---|---|---|
 | `familyId`（服务端已验证的当前目标 Family） | 是 | 不属于 scope；决定结果归属；不进入会跨 Family 回放。它是 canonical command context，**不是客户端提交字段**；客户端提交 `familyId` → 422 |
-| `idempotencyKey` | 否 | 已在 scope 中 |
+| `Idempotency-Key` header | 否 | 已在 scope 中；header 不进入 body |
 | `actor_account_id` | 否 | 已在 scope 中 |
 | `command_type` | 否 | 已在 scope 中 |
-| 请求体其他字段 | 是（当前恒为空 `{}`） | 保持「同 key 不同 payload → 409」语义 |
+| 请求体业务字段 | 是（当前恒为 `{}`） | 保持「同 key 不同 payload → 409」语义；body 不得含 `idempotencyKey` |
 
-**可达性（冻结澄清）**：在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，public `POST /api/v1/cases` 唯一合法业务 body 是 `{idempotencyKey}`；去掉幂等键后 `body = {}`，`familyId` 由服务端 current Family 解析唯一确定。因此当前 public HTTP command shape **不存在第二种合法 business payload**，mismatch 分支在 HTTP 层不可达；该分支在 shared idempotency domain / repository contract 层验证。
+**可达性（冻结澄清）**：在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context** 下，public `POST /api/v1/cases` 的 business body 恒为 `{}`（`Idempotency-Key` 在 header），`familyId` 由服务端 current Family 解析唯一确定。因此当前 public HTTP command shape **不存在第二种合法 business payload**，mismatch 分支在 HTTP 层不可达；该分支在 shared idempotency domain / repository contract 层验证。
 
 canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未来若正式语义允许同一 actor 在多个 Family 执行 `CASE_CREATE`，相同 scope key + 不同 `familyId` 会得到不同 hash 并正确进入 mismatch；这不是当前 public HTTP 测试场景，不得删除 `familyId` hash。
 
@@ -176,22 +188,30 @@ canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未
 
 ```text
 0. 认证（Bearer → actor）
+0.1 readIdempotencyKey(req) → 8–128 header
+    缺失 / 非法 → 422 VALIDATION_ERROR（不得从 body 读取）
 1. 解析当前目标 Family（identity 上下文事务）
    0 行 → 404 CURRENT_FAMILY_NOT_FOUND
-   >1 行 → 沿用 Slice 1 final 多 Family 语义
+   >1 行 → 沿用 Slice 1 Final 多 Family 语义（含 CURRENT_FAMILY_AMBIGUOUS）
 2. withRlsTransaction({familyId, accountId, personId, purpose:'FAMILY_MANAGEMENT'})
-3. SELECT created_by_person_id FROM families WHERE id = $1
-4. authorize(CASE_CREATE, family:{familyId, createdByPersonId}, case:null)
-   DENY → 403 CASE_ACCESS_DENIED
-5. idempotency 占位 / 冲突读取与比对（REPLAY 或 409 在此返回）
-6. SELECT id FROM families WHERE id = $1 FOR UPDATE      ← Family 串行化点
-7. SELECT EXISTS(primary 未结 Case)                       ← 独立语句、新快照
-8. INSERT cases(status='OPEN', phase='INTAKE', is_primary=<判定>, version=1)
-9. INSERT case_events('CASE_CREATED', metadata={primary, version})
-10. INSERT business_audit_events('CASE_CREATED', 'CASE', caseId, metadata)
-11. UPDATE idempotency_keys 回填 201 + response_body
-12. COMMIT
-13. 返回 201
+3. requireFamilyAction(tx, {
+     action: 'CASE_CREATE',
+     family: { familyId },
+     case: null,
+     resource: { type: 'FAMILY', familyId },
+     purpose: 'FAMILY_MANAGEMENT'
+   })
+   authz.ts 在同一事务内读 facts（membership / familyCreatedByPersonId）
+   DENY NOT_FAMILY_MEMBER / NOT_FAMILY_MANAGER → 403 CASE_ACCESS_DENIED
+4. idempotency 占位 / 冲突读取与比对（REPLAY 或 409 在此返回）
+5. SELECT id FROM families WHERE id = $1 FOR UPDATE      ← Family 串行化点
+6. SELECT EXISTS(primary 未结 Case)                       ← 独立语句、新快照
+7. INSERT cases(status='OPEN', phase='INTAKE', is_primary=<判定>, version=1)
+8. INSERT case_events('CASE_CREATED', metadata={primary, version})
+9. INSERT business_audit_events('CASE_CREATED', 'CASE', caseId, metadata)
+10. UPDATE idempotency_keys 回填 201 + response_body
+11. COMMIT
+12. 返回 201
 ```
 
 **不变量**
@@ -211,7 +231,7 @@ canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未
 | `CURRENT_FAMILY_NOT_FOUND` | 404 | 当前 Family 未解析（Slice 1 语义；包括 actor 不是目标 Family 成员 / 仅有 guardian relationship） | 无 Case 数据 |
 | `CASE_NOT_FOUND` | 404 | 详情：不存在 / 跨 Family / 无资格（Family 已解析） | 逐字节一致，无 Case 字段 |
 | `IDEMPOTENCY_PAYLOAD_MISMATCH` | 409 | 同 key 不同 hash | 不改原 Case |
-| `VALIDATION_ERROR` | 422 | strict schema 失败（含越权字段） | **零业务写入**：Case / `case_event` / `business_audit_event` / 新幂等结果均无新增 |
+| `VALIDATION_ERROR` | 422 | strict schema 失败（含越权字段）；缺失 / 非法 `Idempotency-Key` header | **零业务写入**：Case / `case_event` / `business_audit_event` / 新幂等结果均无新增 |
 | `INTERNAL_ERROR` | 500 | 未预期错误 / 不变量破坏 | 不伪装成功 |
 
 **禁止**
@@ -227,9 +247,13 @@ canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未
 
 | 契约 | 测试 |
 |---|---|
-| authorize 规则 2.2 | `tests/domain/case-authorization.test.ts` |
+| authorize 规则 2.2（Final `AuthorizeFacts`） | `tests/domain/case-authorization.test.ts`；`tests/domain/authorization.test.ts`（Slice 1 regression） |
 | 归属与 404 / 403 语义 | `tests/integration/cases-authorization.test.ts`、`tests/integration/cases-read.test.ts` |
+| `authz.ts` 唯一入口（不新建 `authorizeCase()`） | 静态断言 + `tests/integration/cases-authorization.test.ts` |
 | RLS 4.2 | `tests/db/cases-rls.test.ts` |
-| 幂等 5.3 / 5.4（HTTP 可达行为） | `tests/integration/cases-idempotency.test.ts`（replay + 并发同 key） |
+| 幂等 5.1–5.4（HTTP 可达行为） | `tests/integration/cases-idempotency.test.ts`（header replay + 并发同 key） |
 | 幂等 MISMATCH 合同（shared layer） | `tests/domain/idempotency-hash.test.ts` + repository/service contract 用例；**不是** HTTP 可达场景 |
 | 事务序列 6 | `tests/integration/cases-create.test.ts`、`tests/db/cases-primary-concurrency.test.ts` |
+| Slice 1 Final regression | `bunx vitest run tests/domain tests/db tests/integration`（既有 Final 断言不得削弱） |
+| OpenAPI semantic equivalence | `bun run openapi:check`（frozen YAML ↔ runtime） |
+| 全量回归 | `bunx vitest run`；`node scripts/verify-all.mjs --archive` |

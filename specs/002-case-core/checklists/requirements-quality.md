@@ -62,8 +62,8 @@
 ## 5. 幂等
 
 - [x] CHK036 `CASE_CREATE` 的幂等 scope 是否明确为 `actor_account_id + command_type + idempotency_key`，并复用既有 `idempotency_keys` 而不新建第二张幂等表？[PASS] — `spec.md` FR-012；`plan.md` D-5.4；`data-model.md` §5]
-- [x] CHK037 幂等键是否为 JSON body 字段 `idempotencyKey`（8–128 字符），并作为 R1 冻结，不在 Implement 时重新选择？[PASS] — `plan.md` R1 / D-5.1；`research.md` R-3；`contracts/cases-api.openapi.yaml` CreateCaseRequest]
-- [x] CHK038 canonical command context 是否明确为 `{ familyId: 已验证当前目标 Family, body: 去掉 idempotencyKey 后的请求体 }`，且客户端提交 `familyId` 必须 422？[PASS] — `plan.md` D-5.2；`research.md` R-4；`contracts/authorization-rls-and-idempotency.md` §5.2]
+- [x] CHK037 幂等键是否为 **`Idempotency-Key` HTTP header**（8–128 字符），并作为 R1 冻结，不在 Implement 时重新选择？[PASS] — `plan.md` R1 / D-5.1；`research.md` R-3；`contracts/cases-api.openapi.yaml` `IdempotencyKeyHeader`；`contracts/authorization-rls-and-idempotency.md` §5.1]
+- [x] CHK038 canonical command context 是否明确为 `{ familyId: 已验证当前目标 Family, body: Zod strict 解析后的业务请求体 }`；header 不进入 body / hash，且客户端提交 `familyId` 必须 422？[PASS] — `plan.md` D-5.2；`research.md` R-4；`contracts/authorization-rls-and-idempotency.md` §5.2]
 - [x] CHK039 相同 key + 相同 canonical payload 重放是否返回原结果，且不新建 Case、不追加 `case_event` / `business_audit_event`？[PASS] — `spec.md` FR-012 / SC-006；`plan.md` D-5.3]
 - [x] CHK040 并发同 key 是否被规定为只产生一个业务结果，其余为原结果 REPLAY？[PASS] — `plan.md` D-3.4 / D-5.3；`quickstart.md` §5.1]
 - [x] CHK041 相同 scope key + 不同 `request_hash` 是否仍在 shared idempotency domain / repository contract 层返回 MISMATCH 并映射为 `409 IDEMPOTENCY_PAYLOAD_MISMATCH`？[PASS] — `spec.md` Clarifications Q3 / FR-012；`plan.md` D-5.3；`contracts/authorization-rls-and-idempotency.md` §5.3]
@@ -76,7 +76,7 @@
 - [x] CHK045 `CASE_CREATE` / `CASE_LIST` / `CASE_READ` 是否增量进入现有 `authorize()`，且明确不新建 `authorizeCase()`？[PASS] — `spec.md` FR-008；`plan.md` D-6.1；`contracts/authorization-rls-and-idempotency.md` §2.1]
 - [x] CHK046 Case 管理主体是否明确为当前目标 Family 的 V1 管理主体（创建该 Family 的 adult Person），且不新建 Case role / RBAC？[PASS] — `spec.md` D2 / FR-008；`plan.md` D-6.4；`contracts/authorization-rls-and-idempotency.md` §2.2]
 - [x] CHK047 普通 membership、guardian relationship、已知 `case_id` 是否都被明确声明为不自动授予 Case 访问？[PASS] — `spec.md` FR-009 / Scenario 8；`plan.md` D-6.4；`contracts/authorization-rls-and-idempotency.md` §2.3]
-- [x] CHK048 未知 action / purpose / context 是否 fail-closed，且 `family.createdByPersonId` 缺失时明确 DENY 而不是默认放行？[PASS] — `plan.md` D-6.2；`contracts/authorization-rls-and-idempotency.md` §2.2]
+- [x] CHK048 未知 action / purpose / context 是否 fail-closed，且 `facts.familyCreatedByPersonId` 缺失或 `facts.membership === false` 时明确 DENY 而不是默认放行？[PASS] — `plan.md` D-6.2；`contracts/authorization-rls-and-idempotency.md` §2.2]
 - [x] CHK049 `CASE_CREATE` / `CASE_LIST` 要求 `case === null`、`CASE_READ` 要求 `case !== null`，且非 Case 动作保持既有行为，是否写清？[PASS] — `plan.md` D-6.2 规则 5–7；`research.md` R-8]
 - [x] CHK050 Case 是否属于当前 Family 是否明确由 `withRlsTransaction` + RLS 保证，而不是由 `authorize()` 纯函数推断？[PASS] — `plan.md` D-6.3；`contracts/authorization-rls-and-idempotency.md` §3]
 - [x] CHK051 创建 / 列表在 Family 已解析但 actor 非管理主体时返回 `403 CASE_ACCESS_DENIED`、单 Case 详情返回 `404 CASE_NOT_FOUND`，是否一致？[PASS] — `spec.md` D6 / FR-023 / FR-024；`plan.md` D-6.5；`contracts/authorization-rls-and-idempotency.md` §7]
@@ -109,7 +109,7 @@
 ## 9. API 契约与错误语义
 
 - [x] CHK071 是否只暴露 `POST /api/v1/cases`、`GET /api/v1/cases`、`GET /api/v1/cases/:id`，且没有 `/cases/current`、PATCH、pause、resume、switch-primary、close、recurrences、messages、assessments、participants？[PASS] — `spec.md` FR-018；`plan.md` D-12；`contracts/cases-api.openapi.yaml` paths]
-- [x] CHK072 `POST /api/v1/cases` 是否为 strict body，只接受 `idempotencyKey`，且 `familyId` / status / phase / primary / version / creator / 内容字段都被拒绝？[PASS] — `contracts/cases-api.openapi.yaml` CreateCaseRequest `additionalProperties: false`；`plan.md` D-9.1]
+- [x] CHK072 `POST /api/v1/cases` 是否为 strict body 且**无业务字段**（不含 `idempotencyKey`），幂等键由 `Idempotency-Key` header 承载，且 `familyId` / status / phase / primary / version / creator / 内容字段都被拒绝？[PASS] — `contracts/cases-api.openapi.yaml` `CreateCaseRequest` `additionalProperties: false` + `properties: {}` + `IdempotencyKeyHeader`；`plan.md` D-9.1]
 - [x] CHK073 `CaseResponse` 是否恰好包含 `id / status / phase / primary / version / createdAt / updatedAt`，不含 `familyId`、creator 或任何内容字段？[PASS] — `plan.md` R-15 / D-9.4；`contracts/cases-api.openapi.yaml` CaseResponse]
 - [x] CHK074 列表是否使用 `{ "items": [...] }`、不分页、按 `primary DESC, createdAt ASC, id ASC` 稳定排序，空 Family 返回真实空集合？[PASS] — `plan.md` R2 / D-9.2；`contracts/cases-api.openapi.yaml` CaseListResponse；`quickstart.md` §3.4 / §3.6]
 - [x] CHK075 详情对“不存在 / 跨 Family / 同 Family 无资格”是否统一 `404 CASE_NOT_FOUND`，响应逐字节一致且不泄露任何 Case 字段？[PASS] — `spec.md` FR-023 / D6；`plan.md` D-9.3；`contracts/cases-api.openapi.yaml` GET detail 404 description]
@@ -140,10 +140,23 @@
 - [x] CHK094 验证命令是否真实存在或已被显式列为 Gate 补齐项，且 Plan 阶段没有声称这些命令已执行通过？[PASS] — `quickstart.md` §0 声明 Plan 阶段未执行；`plan.md` G10；`research.md` R-16]
 - [x] CHK095 G1—G11 是否完整列出，且 G11 明确要求 current-family 语义确定、不得依赖无 `ORDER BY` 的 `rows[0]`，失败时使用精确的 `BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`？[PASS] — `plan.md` §0.2 G11；`quickstart.md` §1]
 - [x] CHK096 Slice 1 是否只作为只读依赖，明确不在 Slice 2 分支修改 Slice 1 文件、重新设计其冻结基线或修改正式 Docs？[PASS] — `spec.md` Implementation Dependencies；`plan.md` §0.3 / G2]
-- [x] CHK097 R1—R5 是否全部作为 Frozen Technical Decisions 固定，且没有被重新列入 Open Questions？[PASS] — `plan.md` Frozen Technical Decisions；`spec.md` Open Questions: NONE]
+- [x] CHK097 R1—R9 是否全部作为 Frozen Technical Decisions 固定，且没有被重新列入 Open Questions？[PASS] — `plan.md` Frozen Technical Decisions（R1 header、R6 AuthorizeFacts、R7 runtime/logging、R8 OpenAPI semantic equivalence、R9 Final schemas）；`spec.md` Open Questions: NONE]
 - [x] CHK098 是否不存在未解决的 Open Questions / Residual blockers，且 G11 的实现前 Gate 与 Spec 层歧义被明确区分？[PASS] — `spec.md` Open Questions: NONE / Residual blockers: NONE；`plan.md` Blockers: NONE + G11]
 - [x] CHK099 Slice 1 baseline 漂移（Head / migration 序号 / 60-of-72 状态）是否通过 Implement 前重新验证处理，而不是在 Plan 中硬编码？[PASS] — `plan.md` §0.1 / §0.2；`research.md` R-16]
 - [x] CHK100 本 Slice 是否足够小、可独立实现与独立评审，不需要等待 Participant / Evidence / AI / UI Slice 先行？[PASS] — `spec.md` §Scope / Non-Goals；`plan.md` Complexity Exceptions / Blockers]
+
+## 12. Post-Slice1 Final Dependency Reconciliation（2026-11-07）
+
+- [x] CHK101 是否记录了最新 `origin/main`、Slice 2 previous Head、旧 merge base、ahead / behind 的真实值？[PASS] — `plan.md` §0.1；`tasks.md` 头部：main `ee9d07e`、Slice 2 `9ac76f7`、merge base `ed0d5fb`、38 / 4]
+- [x] CHK102 R1 是否已从 body `idempotencyKey` 正式更新为 `Idempotency-Key` header，且没有保留 body fallback？[PASS] — `plan.md` R1 / D-5.1；`research.md` R-3；`contracts/authorization-rls-and-idempotency.md` §5.1；`contracts/cases-api.openapi.yaml`；`quickstart.md`]
+- [x] CHK103 OpenAPI `CreateCaseRequest` 是否为 strict 且无业务字段，并声明 `Idempotency-Key` header parameter？[PASS] — `contracts/cases-api.openapi.yaml` `properties: {}` + `IdempotencyKeyHeader`]
+- [x] CHK104 Case 授权是否基于 Slice 1 Final `AuthorizeFacts` + `authz.ts`，且不恢复 `family.createdByPersonId` / 扁平 `Resource`？[PASS] — `plan.md` D-6.1 / D-6.2 / D-6.4.1；`research.md` R-8；`contracts/authorization-rls-and-idempotency.md` §2.1 / §2.2]
+- [x] CHK105 `app.ts` 是否明确保留 Slice 1 Final `runtime-env.ts` fail-fast / `requestLogSerializer` / `createWechatProvider`，只追加 `registerCaseRoutes`？[PASS] — `plan.md` R7 / §0.3；`research.md` R-18；`tasks.md` T053]
+- [x] CHK106 `error-handler.ts` 是否保留 Final 全部错误码 + generic 500 / 日志白名单，只追加 Case 码？[PASS] — `plan.md` §0.3 / 矩阵；`tasks.md` T043]
+- [x] CHK107 OpenAPI 生成 / 检查是否适配 Final `openapi-spec.ts` + frozen YAML ↔ runtime semantic equivalence，禁止回退弱检查？[PASS] — `plan.md` R8 / §0.3 / 矩阵；`research.md` R-17；`tasks.md` T076 / T079 / T080]
+- [x] CHK108 `packages/contracts/src/schemas.ts` 是否采用 Final `z.strictObject` 基线并移除六命令 body `idempotencyKey`，只追加 Case schema？[PASS] — `plan.md` R9；`tasks.md` T015 / T045；矩阵]
+- [x] CHK109 static guard / db-evidence / coverage 是否保留 Final 全部断言并只做 Slice 2 增量？[PASS] — `plan.md` 矩阵 / Project Structure；`tasks.md` T071 / T081 / T082]
+- [x] CHK110 Dependency Gate 1–8 是否写入，当前 1–3 已满足、4–8 下一阶段，且明确普通 merge / 禁止 rebase / force push / 旧 Head 证据作废？[PASS] — `tasks.md` §0A / 基线失效声明；`quickstart.md` §1；`plan.md` §0.2 / R-5]
 
 ---
 
@@ -166,11 +179,11 @@
 
 ## Review Decision
 
-- **Total CHK**: 100
-- **PASS**: 100
+- **Total CHK**: 110
+- **PASS**: 110
 - **FAIL**: 0
 - **NEEDS REVIEW**: 0
-- **Decision**: **PASS — ready for Tasks**
+- **Decision**: **PASS — Post-Slice1 Dependency Reconciliation completed; ready for merge/remediation round**
 
 > 结论：Spec / Plan / Research / Data Model / Contracts / Quickstart 已在 Case Core 的产品边界、migration 顺序、primary 语义、幂等可达性、metadata 形状、OpenAPI 错误码结构与 16 个 Acceptance Scenario 验证路径上完全对齐。100 项 Checklist 全部 PASS，无 FAIL / NEEDS REVIEW / 未解决 Blocker。
 >
@@ -191,4 +204,4 @@
 | 2026-11-05 | 精确限定 mismatch 可达性前提；保留 familyId hash | CHK043 |
 | 2026-11-05 | 增加 case_events.metadata DB CHECK 与验证路径 | CHK068 |
 | 2026-11-05 | OpenAPI 结构化固定 CASE_NOT_FOUND / CASE_ACCESS_DENIED，并引用 CaseNotFound | CHK077 |
-| 2026-11-05 | 重跑 100 项 Checklist：100 PASS / 0 FAIL / 0 NEEDS REVIEW | 全部 |
+| 2026-11-05 | 重跑 100 项 Checklist：100 PASS / 0 FAIL / 0 NEEDS REVIEW | 全部 || 2026-11-07 | Post-Slice1 Final dependency reconciliation：R1 body → header；authorize 改为 Final `AuthorizeFacts` + `authz.ts`；OpenAPI 适配 semantic equivalence；`app.ts` 保留 runtime-env / log privacy / provider；schemas 采用 Final 基线；追加 CHK101–CHK110 | CHK037、CHK038、CHK072、CHK097、CHK101–CHK110 |
