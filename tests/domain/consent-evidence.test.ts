@@ -50,7 +50,7 @@ describe('ConsentEvidence schema', () => {
   it('rejects channel / age band outside the frozen domain', () => {
     expect(() =>
       ConsentEvidence.parse({
-        channel: 'TEST',
+        channel: 'WEB',
         accepted_text_hash: 'a'.repeat(64),
         declared_age_band: 'UNDER_14',
         client_ip_hash: 'b'.repeat(64),
@@ -86,6 +86,7 @@ describe('buildConsentEvidence', () => {
 
   it('produces exactly the schema keys and frozen values', () => {
     const evidence = buildConsentEvidence({
+      channel: 'TEST',
       acceptedTextHash,
       clientIp: '203.0.113.9',
       userAgent: 'TestAgent/1.0',
@@ -94,13 +95,14 @@ describe('buildConsentEvidence', () => {
     expect(Object.keys(evidence).sort()).toEqual(
       ['accepted_text_hash', 'channel', 'client_ip_hash', 'declared_age_band', 'user_agent_hash']
     );
-    expect(evidence.channel).toBe('MINIPROGRAM');
+    expect(evidence.channel).toBe('TEST');
     expect(evidence.declared_age_band).toBe('UNDER_14');
     expect(evidence.accepted_text_hash).toBe(acceptedTextHash);
   });
 
   it('hashes client IP / User-Agent with HMAC-SHA256(pepper)', () => {
     const evidence = buildConsentEvidence({
+      channel: 'TEST',
       acceptedTextHash,
       clientIp: '203.0.113.9',
       userAgent: 'TestAgent/1.0',
@@ -117,6 +119,7 @@ describe('buildConsentEvidence', () => {
 
   it('represents a missing IP / UA deterministically without fabricating raw values', () => {
     const evidence = buildConsentEvidence({
+      channel: 'TEST',
       acceptedTextHash,
       clientIp: null,
       userAgent: null,
@@ -131,6 +134,7 @@ describe('buildConsentEvidence', () => {
     const rawUa = 'SensitiveAgent/9.9';
     const serialized = JSON.stringify(
       buildConsentEvidence({
+        channel: 'TEST',
         acceptedTextHash,
         clientIp: rawIp,
         userAgent: rawUa,

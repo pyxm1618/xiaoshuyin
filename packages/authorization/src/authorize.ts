@@ -66,6 +66,12 @@ export interface AuthorizeFacts {
   guardianPersonId: string | null;
   /** Real membership of the targeted person in the target family. */
   targetIsFamilyMember: boolean;
+  /**
+   * Real `families.id` the facts were read from. Internal (not a frozen
+   * contract) and used to prove that `FAMILY_CREATE` is deciding on the row
+   * that was actually persisted in this transaction.
+   */
+  familyId?: string | null;
 }
 
 export interface AuthInput {
@@ -106,6 +112,7 @@ const EMPTY_FACTS: AuthorizeFacts = {
   actorAgeBand: null,
   guardianPersonId: null,
   targetIsFamilyMember: false,
+  familyId: null,
 };
 
 export interface FamilyInfo {
@@ -173,6 +180,13 @@ export function authorize(input: AuthInput): Decision {
         // The new family's `created_by_person_id` is written from actor.personId
         // by the creation command; the caller passes that persisted fact back.
         // Anything other than "the row says this actor" is a denial.
+        //
+        // Resource hardening: the request-supplied family id must equal the
+        // real row that was just persisted, and the real row id must be the
+        // one the facts were read from (id present ≠ access).
+        if (input.resource.type !== 'FAMILY') return deny('NOT_FAMILY_MEMBER');
+        if (facts.familyId === null || facts.familyId === undefined) return deny('NOT_FAMILY_MEMBER');
+        if (facts.familyId !== input.resource.familyId) return deny('NOT_FAMILY_MEMBER');
         if (facts.familyCreatedByPersonId === null) return deny('NOT_FAMILY_MANAGER');
         if (facts.familyCreatedByPersonId !== actorPersonId) return deny('NOT_FAMILY_MANAGER');
         return allow(true, input.purpose);

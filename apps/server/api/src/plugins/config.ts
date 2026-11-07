@@ -1,20 +1,28 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { requireEvidencePepper } from '../evidence-pepper.js';
+import { loadRuntimeConfig, type RuntimeMode } from '../runtime-env.js';
 
-export const configPlugin: FastifyPluginAsync = async (fastify) => {
-  // Fail fast at startup: the evidence pepper is a required deployment secret
-  // and MUST NOT fall back to a hard-coded value.
-  requireEvidencePepper();
+export interface ConfigPluginOptions {
+  env?: NodeJS.ProcessEnv;
+}
+
+export const configPlugin: FastifyPluginAsync<ConfigPluginOptions> = async (fastify, opts) => {
+  // Fail fast at startup: the runtime contract (session secret, evidence
+  // pepper, WeChat credentials) is required and has no fallback value.
+  const runtime = loadRuntimeConfig(opts.env ?? process.env);
 
   fastify.decorate('config', {
-    env: process.env['NODE_ENV'] ?? 'development',
+    env: runtime.mode,
+    consentChannel: runtime.consentChannel,
+    evidencePepper: runtime.evidencePepper,
   });
 };
 
 declare module 'fastify' {
   interface FastifyInstance {
     config: {
-      env: string;
+      env: RuntimeMode;
+      consentChannel: 'MINIPROGRAM' | 'TEST';
+      evidencePepper: string;
     };
   }
 }

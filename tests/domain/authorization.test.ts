@@ -120,7 +120,7 @@ describe('FAMILY_CREATE', () => {
   it('allows when the persisted creator fact equals the actor', () => {
     const r = authorize({
       ...baseInput('FAMILY_CREATE', { type: 'FAMILY', familyId: 'f1' }),
-      facts: facts({ membership: false, familyCreatedByPersonId: 'p1' }),
+      facts: facts({ membership: false, familyCreatedByPersonId: 'p1', familyId: 'f1' }),
     });
     expect(r.decision).toBe('ALLOW');
     expect(r.decision === 'ALLOW' && r.basis.manager).toBe(true);
@@ -129,7 +129,7 @@ describe('FAMILY_CREATE', () => {
   it('denies when the creator fact belongs to someone else', () => {
     const r = authorize({
       ...baseInput('FAMILY_CREATE', { type: 'FAMILY', familyId: 'f1' }),
-      facts: facts({ membership: false, familyCreatedByPersonId: 'p2' }),
+      facts: facts({ membership: false, familyCreatedByPersonId: 'p2', familyId: 'f1' }),
     });
     expect(r).toEqual({ decision: 'DENY', reason: 'NOT_FAMILY_MANAGER' });
   });
@@ -144,7 +144,15 @@ describe('FAMILY_CREATE', () => {
       action: 'FAMILY_CREATE',
       purpose: 'FAMILY_MANAGEMENT',
     });
-    expect(r).toEqual({ decision: 'DENY', reason: 'NOT_FAMILY_MANAGER' });
+    expect(r).toEqual({ decision: 'DENY', reason: 'NOT_FAMILY_MEMBER' });
+  });
+
+  it('denies when the resource familyId differs from the persisted row', () => {
+    const r = authorize({
+      ...baseInput('FAMILY_CREATE', { type: 'FAMILY', familyId: 'other' }),
+      facts: facts({ membership: false, familyCreatedByPersonId: 'p1', familyId: 'f1' }),
+    });
+    expect(r.decision).toBe('DENY');
   });
 });
 

@@ -4,6 +4,8 @@
  * Asserts the persisted `consent_records.evidence` JSON is exactly the frozen
  * object from contracts/consent-onboarding.md §4, with real HMAC digests from
  * the deployment pepper and no raw IP / UA / pepper leakage.
+ *
+ * C1 / option d: `channel` is server-decided (`TEST` under NODE_ENV=test).
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -13,11 +15,17 @@ import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
 import {
   getAcceptanceTextHash,
-  getCurrentNoticeHash,
   getRevocationTextHash,
 } from '../../packages/compliance/src/notices.js';
+import {
+  commandHeaders,
+  createConsentRequest,
+  createFamily,
+  loginWithLabel,
+} from '../setup/api.js';
 
 const PEPPER = process.env['EVIDENCE_HASH_PEPPER']!;
+const EXPECTED_CHANNEL = process.env['NODE_ENV'] === 'test' ? 'TEST' : 'MINIPROGRAM';
 const EXPECTED_KEYS = [
   'accepted_text_hash',
   'channel',
@@ -48,40 +56,16 @@ describe('Consent evidence storage (HIGH-02)', () => {
   });
 
   async function setupManager(label: string) {
-    const login = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `ev-${label}-${Date.now()}-${Math.random()}` },
-    });
-    const { token } = login.json();
-
-    const fam = await app.inject({
-      method: 'POST',
-      url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        displayName: `家庭-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `fam-ev-${label}-${Date.now()}`,
-      },
-    });
+    const actor = await loginWithLabel(app, `ev_${label}`);
+    const fam = await createFamily(app, actor.token, `ev_${label}`);
     expect(fam.statusCode).toBe(201);
-    return { token, familyId: fam.json().id as string };
+    return { token: actor.token, familyId: fam.json().id as string };
   }
 
   async function createRequest(token: string, label: string) {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        noticeVersion: 'v1',
-        idempotencyKey: `cr-ev-${label}-${Date.now()}-${Math.random()}`,
-      },
-    });
+    const res = await createConsentRequest(app, token, `ev_${label}`);
     expect(res.statusCode).toBe(201);
-    return res.json().id as string;
+    return res.json().requestId as string;
   }
 
   function grant(
@@ -90,7 +74,7 @@ describe('Consent evidence storage (HIGH-02)', () => {
     label: string,
     opts: { userAgent?: string; remoteAddress?: string } = {}
   ) {
-    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    const headers: Record<string, string> = commandHeaders(token, `ev-${label}`);
     if (opts.userAgent !== undefined) headers['user-agent'] = opts.userAgent;
     return app.inject({
       method: 'POST',
@@ -98,11 +82,9 @@ describe('Consent evidence storage (HIGH-02)', () => {
       headers,
       ...(opts.remoteAddress ? { remoteAddress: opts.remoteAddress } : {}),
       payload: {
-        consentRequestId: requestId,
-        accepted: true,
+        onboardingRequestId: requestId,
         noticeVersion: 'v1',
-        noticeHash: getCurrentNoticeHash(),
-        idempotencyKey: `cg-ev-${label}-${Date.now()}-${Math.random()}`,
+        accepted: true,
       },
     });
   }
@@ -113,7 +95,10 @@ describe('Consent evidence storage (HIGH-02)', () => {
       [consentId]
     );
     expect(rows.length).toBe(1);
-    return { evidence: rows[0].evidence as Record<string, unknown>, noticeHash: rows[0].notice_hash as string };
+    return {
+      evidence: rows[0].evidence as Record<string, unknown>,
+      noticeHash: rows[0].notice_hash as string,
+    };
   }
 
   it('GRANTED evidence matches the frozen schema exactly and uses real HMAC', async () => {
@@ -128,7 +113,7 @@ describe('Consent evidence storage (HIGH-02)', () => {
     const { evidence, noticeHash } = await readEvidence(res.json().id);
 
     expect(Object.keys(evidence).sort()).toEqual(EXPECTED_KEYS);
-    expect(evidence.channel).toBe('MINIPROGRAM');
+    expect(evidence.channel).toBe(EXPECTED_CHANNEL);
     expect(evidence.declared_age_band).toBe('UNDER_14');
     expect(evidence.accepted_text_hash).toBe(getAcceptanceTextHash('v1'));
     expect(evidence.accepted_text_hash).not.toBe(noticeHash);
@@ -170,15 +155,15 @@ describe('Consent evidence storage (HIGH-02)', () => {
     const revokeRes = await app.inject({
       method: 'POST',
       url: `/api/v1/consents/${consentId}/revoke`,
-      headers: { authorization: `Bearer ${token}`, 'user-agent': rawUa },
+      headers: { ...commandHeaders(token, 'ev-rv'), 'user-agent': rawUa },
       remoteAddress: rawIp,
-      payload: { idempotencyKey: `rv-ev-${Date.now()}` },
+      payload: {},
     });
     expect(revokeRes.statusCode).toBe(200);
 
     const { evidence } = await readEvidence(revokeRes.json().id);
     expect(Object.keys(evidence).sort()).toEqual(EXPECTED_KEYS);
-    expect(evidence.channel).toBe('MINIPROGRAM');
+    expect(evidence.channel).toBe(EXPECTED_CHANNEL);
     expect(evidence.declared_age_band).toBe('UNDER_14');
     expect(evidence.accepted_text_hash).toBe(getRevocationTextHash('v1'));
     expect(evidence.client_ip_hash).toBe(hmac(rawIp));

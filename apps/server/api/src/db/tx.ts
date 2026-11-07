@@ -97,3 +97,17 @@ export async function withRlsTransaction<T>(
     client.release();
   }
 }
+/**
+ * Thin adapter for the frozen `app.set_family_context` entry (§4.3 entry B).
+ * Used inside an already-open identity transaction so that
+ * `resolve → authorize → set_family_context → target read/write` stay in ONE
+ * transaction (§4.4) without introducing a second context framework.
+ */
+export async function setFamilyContext(
+  tx: TxClient,
+  familyId: string,
+  personId: string,
+  purpose: string
+): Promise<void> {
+  await tx.query('SELECT app.set_family_context($1, $2, $3)', [familyId, personId, purpose]);
+}

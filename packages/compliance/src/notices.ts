@@ -9,6 +9,10 @@ export interface Notice {
   version: string;
   title: string;
   body: string;
+  /** Frozen single-purpose scope for this slice. */
+  purpose: 'UNDER_14_GUARDIAN_CONSENT';
+  /** Deterministic version effective timestamp (no wall-clock drift). */
+  effectiveAt: string;
 }
 
 export const NOTICE_CATALOG: Notice[] = [
@@ -18,6 +22,8 @@ export const NOTICE_CATALOG: Notice[] = [
     body: '您正在为一名不满14周岁的未成年人建立档案。根据相关法律法规，我们需要取得您的明确同意。' +
       '我们将仅处理完成监护身份确认、必要告知与取得同意所严格必要的信息。' +
       '您可以随时撤回同意。同意撤回后，我们将停止对该未成年人的后续个人信息处理。',
+    purpose: 'UNDER_14_GUARDIAN_CONSENT',
+    effectiveAt: '2026-01-01T00:00:00.000Z',
   },
 ];
 
@@ -44,6 +50,8 @@ export function getCatalog() {
     version: n.version,
     hash: getNoticeHash(n.version)!,
     title: n.title,
+    purpose: n.purpose,
+    effectiveAt: n.effectiveAt,
   }));
 }
 // ── Versioned confirmation statements (evidence) ────────────

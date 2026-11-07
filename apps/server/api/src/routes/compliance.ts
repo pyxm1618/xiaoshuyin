@@ -2,6 +2,13 @@
  * Compliance routes: guardian consent requests + grants.
  * Per plan.md D-3.2/D-3.3: minimal state, no child PII.
  * Data access via packages repository (guard R4).
+ *
+ * Transaction order follows contracts/authorization-and-rls.md §4.4 and the
+ * Owner ruling on C2:
+ *   - request: identity → resolve → authorize(REQUEST) → set_family_context → write
+ *   - grant:   identity → resolve → membership authorize → set_family_context
+ *              → read target → guardian authorize → write
+ * Both authorize calls go through the single `@xiaoshuyin/authorization` entry.
  */
 
 import type { FastifyInstance } from 'fastify';
@@ -9,23 +16,86 @@ import {
   CreateConsentRequestRequest,
   GrantConsentRequest,
 } from '@xiaoshuyin/contracts';
-import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
+import { setFamilyContext } from '../db/tx.js';
+import { readIdempotencyKey, runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
-import { getNoticeHash, buildConsentEvidence, getAcceptanceTextHash } from '@xiaoshuyin/compliance';
+import {
+  getNoticeHash,
+  buildConsentEvidence,
+  getAcceptanceTextHash,
+  runtimeConsentChannel,
+} from '@xiaoshuyin/compliance';
 import { hashPayload, isFamilyMember } from '@xiaoshuyin/domain';
 import { requireCurrentFamily } from '../family-context.js';
 import { requireFamilyAction } from '../authz.js';
 import { requireEvidencePepper } from '../evidence-pepper.js';
+import { consentRecordDto } from '../consent-dto.js';
 import {
   insertConsentRequest,
   getConsentRequestForUpdate,
   updateConsentRequestGranted,
   insertConsentRecord,
   getComplianceProfileForUpdate,
+  getComplianceProfile,
   getConsentRecordForGate,
   updateComplianceProfileConsent,
+
 } from '@xiaoshuyin/compliance';
+import { insertAuditEvent } from '@xiaoshuyin/domain';
 import type pg from 'pg';
+
+const ACTIVITY_PURPOSE = 'GUARDIAN_CONSENT';
+
+function forbidden(message: string) {
+  const err = toHttpError('FORBIDDEN', message);
+  return Object.assign(new Error(err.message), err);
+}
+
+function validationError(message: string) {
+  const err = toHttpError('VALIDATION_ERROR', message);
+  return Object.assign(new Error(err.message), err);
+}
+
+/**
+ * F4: validate a re-consent subject BEFORE writing any onboarding row.
+ *
+ * The caller has already established family context. Every failure that could
+ * reveal whether another family's Person exists is collapsed into the same
+ * 403 FORBIDDEN (no existence oracle). A still-active GRANTED chain is a
+ * conflict the actor is already authorized to know about (409).
+ */
+async function assertReConsentCandidate(
+  tx: pg.PoolClient,
+  familyId: string,
+  subjectPersonId: string,
+  actorPersonId: string
+): Promise<void> {
+  const inFamily = await isFamilyMember(tx, familyId, subjectPersonId);
+  if (!inFamily) throw forbidden('Subject is not a re-consent candidate');
+
+  const profile = await getComplianceProfileForUpdate(tx, subjectPersonId);
+  if (!profile) throw forbidden('Subject is not a re-consent candidate');
+  if (profile.age_band !== 'UNDER_14') throw forbidden('Subject is not a re-consent candidate');
+
+  const currentId = profile.guardian_consent_record_id ?? null;
+  if (!currentId) throw forbidden('Subject is not a re-consent candidate');
+
+  const current = await getConsentRecordForGate(tx, currentId);
+  if (!current) throw forbidden('Subject is not a re-consent candidate');
+
+  if (current.decision !== 'REVOKED') {
+    const err = toHttpError('GUARDIAN_CONSENT_ALREADY_GRANTED');
+    throw Object.assign(new Error(err.message), err);
+  }
+  if (current.bound_person_id !== subjectPersonId) {
+    throw forbidden('Subject is not a re-consent candidate');
+  }
+  if (current.guardian_person_id !== actorPersonId || profile.guardian_person_id !== actorPersonId) {
+    throw Object.assign(new Error('Not the guardian of this subject'), {
+      statusCode: 403, code: 'NOT_GUARDIAN',
+    });
+  }
+}
 
 export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
   // POST /api/v1/compliance/guardian-consents/requests
@@ -44,54 +114,76 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const { noticeVersion, subjectPersonId, idempotencyKey } = parsed.data;
-    const requestHash = hashPayload({ noticeVersion, subjectPersonId });
+    const { declaredAgeBand, noticeVersion, channel, existingSubjectPersonId } = parsed.data;
+
+    // C1 / option d: channel is server-decided. The request may only declare
+    // the channel implied by this runtime; it never drives stored evidence.
+    if (channel !== runtimeConsentChannel()) {
+      const err = toHttpError('VALIDATION_ERROR', 'channel does not match runtime');
+      return reply.status(err.statusCode).send(err);
+    }
+
+    const idempotencyKey = readIdempotencyKey(req);
+    const requestHash = hashPayload({
+      declaredAgeBand,
+      noticeVersion,
+      channel,
+      existingSubjectPersonId,
+    });
 
     try {
       const outcome = await runIdempotentCommand(
         pool,
         {
-          accountId: accountId,
-          personId: personId,
-          purpose: 'GUARDIAN_CONSENT',
+          accountId,
+          personId,
+          purpose: ACTIVITY_PURPOSE,
           commandType: 'GUARDIAN_CONSENT_REQUEST',
           idempotencyKey,
           requestHash,
-          resolveFamilyId: async (tx) => requireCurrentFamily(tx, personId),
         },
         async (tx) => {
           const noticeHash = getNoticeHash(noticeVersion);
           if (!noticeHash) {
-            throw Object.assign(new Error('Invalid notice version'), {
-              statusCode: 422, code: 'VALIDATION_ERROR',
-            });
+            throw validationError('Invalid notice version');
           }
 
           const familyId = await requireCurrentFamily(tx, personId);
 
-          // Frozen action table (contracts/authorization-and-rls.md §2.3):
-          // membership + manager + actor age_band = ADULT.
-          // UNKNOWN / MINOR_14_17 / UNDER_14 / missing profile never pass.
+          // Frozen action table (§2.3): membership + manager + actor ADULT.
           await requireFamilyAction(tx, {
             accountId,
             personId,
             familyId,
             action: 'GUARDIAN_CONSENT_REQUEST',
-            purpose: 'GUARDIAN_CONSENT',
+            purpose: ACTIVITY_PURPOSE,
             resource: { type: 'FAMILY', familyId },
           });
 
+          // §4.4: family context before subject validation / write.
+          await setFamilyContext(tx, familyId, personId, ACTIVITY_PURPOSE);
+
+          if (existingSubjectPersonId) {
+            await assertReConsentCandidate(tx, familyId, existingSubjectPersonId, personId);
+          }
+
           const result = await insertConsentRequest(
-            tx, familyId, personId, subjectPersonId ?? null, noticeVersion, noticeHash
+            tx, familyId, personId, existingSubjectPersonId ?? null, noticeVersion, noticeHash
+          );
+
+          await insertAuditEvent(
+            tx, familyId, accountId, 'CONSENT_REQUEST_CREATED', 'CONSENT', result.id
           );
 
           return {
             status: 201,
             body: {
-              id: result.id,
-              status: result.status,
+              requestId: result.id,
+              declaredAgeBand: 'UNDER_14',
               noticeVersion: result.notice_version,
-              expiresAt: result.expires_at,
+              noticeHash: result.notice_hash,
+              expiresAt: new Date(result.expires_at).toISOString(),
+              status: result.status,
             },
           };
         }
@@ -126,24 +218,24 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const { consentRequestId, accepted, noticeVersion, noticeHash, idempotencyKey } = parsed.data;
-    const requestHash = hashPayload({ consentRequestId, accepted, noticeVersion, noticeHash });
+    const { onboardingRequestId, noticeVersion, accepted } = parsed.data;
+    const idempotencyKey = readIdempotencyKey(req);
+    const requestHash = hashPayload({ onboardingRequestId, noticeVersion, accepted });
 
     try {
       const outcome = await runIdempotentCommand(
         pool,
         {
-          accountId: accountId,
-          personId: personId,
-          purpose: 'GUARDIAN_CONSENT',
+          accountId,
+          personId,
+          purpose: ACTIVITY_PURPOSE,
           commandType: 'GUARDIAN_CONSENT_GRANT',
           idempotencyKey,
           requestHash,
-          resolveFamilyId: async (tx) => requireCurrentFamily(tx, personId),
         },
         async (tx) => {
           const expectedHash = getNoticeHash(noticeVersion);
-          if (!expectedHash || expectedHash !== noticeHash) {
+          if (!expectedHash) {
             throw Object.assign(new Error('Notice mismatch'), {
               statusCode: 403, code: 'GUARDIAN_CONSENT_NOTICE_MISMATCH',
             });
@@ -151,24 +243,43 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
 
           const familyId = await requireCurrentFamily(tx, personId);
 
-          const request = await getConsentRequestForUpdate(tx, consentRequestId);
+          // First authorize: membership-level family authorization.
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'FAMILY_READ',
+            purpose: ACTIVITY_PURPOSE,
+            resource: { type: 'FAMILY', familyId },
+          });
+
+          await setFamilyContext(tx, familyId, personId, ACTIVITY_PURPOSE);
+
+          const request = await getConsentRequestForUpdate(tx, onboardingRequestId);
           if (!request) {
-            throw Object.assign(new Error('Request not found'), {
-              statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND',
-            });
+            // Frozen OpenAPI declares no 404 for this endpoint.
+            throw forbidden('Consent request not found');
           }
-          // Guardian authority is a separate dimension from family membership
-          // (FR-006). It is decided by the unified authorize(), using the real
-          // guardian_person_id read (FOR UPDATE) above.
+
+          // Second authorize: guardian dimension, from the real DB row.
           await requireFamilyAction(tx, {
             accountId,
             personId,
             familyId,
             action: 'GUARDIAN_CONSENT_GRANT',
-            purpose: 'GUARDIAN_CONSENT',
-            resource: { type: 'CONSENT', familyId, consentId: consentRequestId },
+            purpose: ACTIVITY_PURPOSE,
+            resource: { type: 'CONSENT', familyId, consentId: onboardingRequestId },
             guardianPersonId: request.guardian_person_id,
           });
+
+          // F3: grant is an ADULT-only action (consent-onboarding.md §3 C2).
+          // Re-read the actor profile inside this transaction; never trust the
+          // request-time check. UNKNOWN / MINOR / UNDER_14 / missing → 403.
+          const actorProfile = await getComplianceProfile(tx, personId);
+          if (!actorProfile || actorProfile.age_band !== 'ADULT') {
+            throw forbidden('Guardian consent requires an ADULT actor');
+          }
+
           if (request.status !== 'PENDING') {
             throw Object.assign(new Error('Already granted'), {
               statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
@@ -179,7 +290,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
               statusCode: 403, code: 'GUARDIAN_CONSENT_EXPIRED',
             });
           }
-          if (request.notice_version !== noticeVersion || request.notice_hash !== noticeHash) {
+          if (request.notice_version !== noticeVersion || request.notice_hash !== expectedHash) {
             throw Object.assign(new Error('Notice mismatch'), {
               statusCode: 403, code: 'GUARDIAN_CONSENT_NOTICE_MISMATCH',
             });
@@ -199,54 +310,16 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
 
           const subjectPersonId = request.subject_person_id;
           if (subjectPersonId) {
-            const invalid = (message: string) =>
-              Object.assign(new Error(message), {
-                statusCode: 422, code: 'VALIDATION_ERROR',
-              });
+            // Same candidate contract as the request path; state may have
+            // changed between request and grant.
+            await assertReConsentCandidate(tx, familyId, subjectPersonId, personId);
 
-            // 1. subject must belong to the current family scope
-            const inFamily = await isFamilyMember(tx, familyId, subjectPersonId);
-            if (!inFamily) throw invalid('Subject is not a re-consent candidate');
-
-            // 2. subject must have a compliance profile
             const profile = await getComplianceProfileForUpdate(tx, subjectPersonId);
-            if (!profile) throw invalid('Subject is not a re-consent candidate');
-
-            // 3. …and it must be an UNDER_14 profile
-            if (profile.age_band !== 'UNDER_14') {
-              throw invalid('Subject is not a re-consent candidate');
-            }
-
-            // 4. the profile must carry a current consent pointer
-            const currentId = profile.guardian_consent_record_id ?? null;
-            if (!currentId) throw invalid('Subject is not a re-consent candidate');
-
-            // 5. the current consent record must exist
+            const currentId = profile!.guardian_consent_record_id!;
             const current = await getConsentRecordForGate(tx, currentId);
-            if (!current) throw invalid('Subject is not a re-consent candidate');
 
-            // 6. it must already be REVOKED (a still-GRANTED version is a conflict)
-            if (current.decision !== 'REVOKED') {
-              throw Object.assign(new Error('Current consent is still active'), {
-                statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
-              });
-            }
-
-            // 7. the current version must be bound to exactly this subject
-            if (current.bound_person_id !== subjectPersonId) {
-              throw invalid('Subject is not a re-consent candidate');
-            }
-
-            // 8./9. guardian authority: current record and profile must both point
-            //       at the actor (the request guardian is checked above).
-            if (current.guardian_person_id !== personId || profile.guardian_person_id !== personId) {
-              throw Object.assign(new Error('Not the guardian of this subject'), {
-                statusCode: 403, code: 'NOT_GUARDIAN',
-              });
-            }
-
-            newVersion = current.version + 1;
-            supersedesId = current.id;
+            newVersion = current!.version + 1;
+            supersedesId = current!.id;
             boundPersonId = subjectPersonId;
             boundAt = new Date();
           }
@@ -254,26 +327,25 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
           // Frozen evidence contract (contracts/consent-onboarding.md §4):
           // exactly {channel, accepted_text_hash, declared_age_band,
           // client_ip_hash, user_agent_hash}. Raw IP / UA never stored; the
-          // pepper never leaves this call.
+          // pepper never leaves this call. `channel` is server-decided (C1 d).
           const acceptanceTextHash = getAcceptanceTextHash(noticeVersion);
           if (!acceptanceTextHash) {
-            throw Object.assign(new Error('Invalid notice version'), {
-              statusCode: 422, code: 'VALIDATION_ERROR',
-            });
+            throw validationError('Invalid notice version');
           }
           const evidence = buildConsentEvidence({
+            channel: runtimeConsentChannel(),
             acceptedTextHash: acceptanceTextHash,
             clientIp: req.ip,
             userAgent: req.headers['user-agent'] ?? null,
             pepper: requireEvidencePepper(),
           });
 
-          await updateConsentRequestGranted(tx, consentRequestId);
+          await updateConsentRequestGranted(tx, onboardingRequestId);
 
           const record = await insertConsentRecord(
             tx, familyId, personId, accountId,
-            'GRANTED', newVersion, consentRequestId, boundPersonId, boundAt,
-            noticeVersion, noticeHash, 'v1',
+            'GRANTED', newVersion, onboardingRequestId, boundPersonId, boundAt,
+            noticeVersion, expectedHash, 'v1',
             evidence,
             supersedesId
           );
@@ -285,14 +357,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
 
           return {
             status: 201,
-            body: {
-              id: record.id,
-              decision: record.decision,
-              version: record.version,
-              noticeVersion: record.notice_version,
-              decidedAt: record.decided_at,
-              boundPersonId: record.bound_person_id,
-            },
+            body: consentRecordDto(record),
           };
         }
       );

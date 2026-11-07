@@ -42,7 +42,8 @@ async function readFacts(
   tx: pg.PoolClient,
   req: FamilyActionRequest
 ): Promise<AuthorizeFacts> {
-  const needsAgeBand = req.action === 'GUARDIAN_CONSENT_REQUEST';
+  const needsAgeBand =
+    req.action === 'GUARDIAN_CONSENT_REQUEST' || req.action === 'GUARDIAN_CONSENT_GRANT';
 
   const family = await getFamilyById(tx, req.familyId);
   const membership = await isFamilyMember(tx, req.familyId, req.personId);
@@ -58,6 +59,7 @@ async function readFacts(
     actorAgeBand: profile ? (profile.age_band as AuthorizeFacts['actorAgeBand']) : null,
     guardianPersonId: req.guardianPersonId ?? null,
     targetIsFamilyMember,
+    familyId: family ? req.familyId : null,
   };
 }
 

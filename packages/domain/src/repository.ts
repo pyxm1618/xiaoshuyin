@@ -40,7 +40,7 @@ export async function insertPerson(
 
 export async function getAccountById(tx: Tx, accountId: string) {
   const { rows } = await tx.query(
-    'SELECT id, created_at, last_login_at FROM accounts WHERE id = $1',
+    'SELECT id, created_at, last_login_at, status FROM accounts WHERE id = $1',
     [accountId]
   );
   return rows[0] ?? null;
@@ -104,6 +104,35 @@ export async function getFamilyById(tx: Tx, familyId: string) {
   return rows[0] ?? null;
 }
 
+export async function getFamilyByIdFull(tx: Tx, familyId: string) {
+  const { rows } = await tx.query(
+    `SELECT id, display_name, created_by_person_id, created_at
+     FROM families WHERE id = $1`,
+    [familyId]
+  );
+  return rows[0] ?? null;
+}
+
+/** Persist a brand-new family through the frozen `app.create_family` entry. */
+export async function createFamily(
+  tx: Tx,
+  familyId: string,
+  creatorPersonId: string,
+  displayName: string | null
+): Promise<void> {
+  await tx.query('SELECT app.create_family($1, $2, $3)', [
+    familyId,
+    creatorPersonId,
+    displayName,
+  ]);
+}
+
+/** PostgreSQL 18 native UUIDv7 generator (never `crypto.randomUUID()`). */
+export async function generateUuidv7(tx: Tx): Promise<string> {
+  const { rows } = await tx.query('SELECT uuidv7() AS id');
+  return rows[0].id;
+}
+
 
 // ── Family Member ───────────────────────────────────────────
 
@@ -146,6 +175,19 @@ export async function getProfileValuesWithId(tx: Tx, personId: string) {
     `SELECT id, value_text, status, supersedes_id
      FROM person_profile_values
      WHERE person_id = $1 AND status = 'RECORDED'`,
+    [personId]
+  );
+  return rows;
+}
+
+/** Frozen `ProfileValue` projection: only RECORDED values, full provenance. */
+export async function getProfileValuesFull(tx: Tx, personId: string) {
+  const { rows } = await tx.query(
+    `SELECT id, attribute, value_text, source_kind, provided_by_person_id,
+            observed_at, recorded_at, status, supersedes_id
+     FROM person_profile_values
+     WHERE person_id = $1 AND status = 'RECORDED'
+     ORDER BY recorded_at`,
     [personId]
   );
   return rows;
@@ -257,7 +299,9 @@ export async function insertIdempotencyKey(
 
 export async function getPersonWithProfile(tx: Tx, accountId: string) {
   const { rows } = await tx.query(
-    `SELECT p.id, p.created_at, cp.age_band, cp.minor_mode, cp.verified_source
+    `SELECT p.id, p.created_at,
+            cp.age_band, cp.minor_mode, cp.verified_source,
+            cp.guardian_person_id, cp.guardian_consent_version, cp.effective_at
      FROM persons p
      LEFT JOIN person_compliance_profiles cp ON cp.person_id = p.id
      WHERE p.account_id = $1`,

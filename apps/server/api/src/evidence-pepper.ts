@@ -9,8 +9,8 @@
 
 export const MIN_PEPPER_LENGTH = 16;
 
-export function requireEvidencePepper(): string {
-  const pepper = process.env['EVIDENCE_HASH_PEPPER'];
+export function requireEvidencePepper(env: NodeJS.ProcessEnv = process.env): string {
+  const pepper = env['EVIDENCE_HASH_PEPPER'];
   if (!pepper || pepper.length < MIN_PEPPER_LENGTH) {
     throw Object.assign(
       new Error(`EVIDENCE_HASH_PEPPER must be at least ${MIN_PEPPER_LENGTH} characters`),

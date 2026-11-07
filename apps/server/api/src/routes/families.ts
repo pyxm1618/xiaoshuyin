@@ -1,12 +1,15 @@
 /**
  * Family routes: POST /api/v1/families, GET /api/v1/families/current.
  * Data access via packages/domain repository (guard R4).
+ *
+ * Frozen OpenAPI is the source of truth for request/response shapes and the
+ * `Idempotency-Key` header.
  */
 
 import type { FastifyInstance } from 'fastify';
 import { CreateFamilyRequest } from '@xiaoshuyin/contracts';
-import { withIdentityTransaction } from '../db/tx.js';
-import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
+import { withIdentityTransaction, setFamilyContext } from '../db/tx.js';
+import { readIdempotencyKey, runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
   hashPayload,
@@ -14,8 +17,14 @@ import {
   resolveProvenanceProvider,
   insertFamilyMember,
   insertProfileValue,
+  supersedeProfileValue,
+  getProfileValuesBySource,
   insertAuditEvent,
   isFamilyMember,
+  createFamily,
+  generateUuidv7,
+  getFamilyByIdFull,
+  countFamilyMembers,
 } from '@xiaoshuyin/domain';
 import { resolveCurrentFamily } from '../family-context.js';
 import { requireFamilyAction } from '../authz.js';
@@ -38,9 +47,9 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
-    const { displayName, ageBand, ageBandSource, profileValues, idempotencyKey } = parsed.data;
-    const requestHash = hashPayload({ displayName, ageBand, ageBandSource, profileValues });
-    const newFamilyId = crypto.randomUUID();
+    const { displayName, creator } = parsed.data;
+    const idempotencyKey = readIdempotencyKey(req);
+    const requestHash = hashPayload({ displayName, creator });
 
     try {
       const outcome = await runIdempotentCommand(
@@ -52,12 +61,15 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
           commandType: 'FAMILY_CREATE',
           idempotencyKey,
           requestHash,
-          createFamily: { newFamilyId, displayName: displayName ?? null },
         },
         async (tx) => {
+          // UUIDv7 comes from PostgreSQL 18, never from crypto.randomUUID().
+          const newFamilyId = await generateUuidv7(tx);
+
+          // Persist the real family row first so authorize() reads a real fact.
+          await createFamily(tx, newFamilyId, personId, displayName ?? null);
+
           // FR-011 / §9: family creation goes through the unified entry point.
-          // The fact comes from the row written by app.create_family() in this
-          // same transaction; manager is never assumed.
           const decision = await requireFamilyAction(tx, {
             accountId,
             personId,
@@ -68,7 +80,11 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
           });
 
           // Creator MUST be ADULT + SELF_STATEMENT (CHK023 / T046).
-          const sourceError = checkSourceAcceptability('FAMILY_CREATE', ageBand, ageBandSource);
+          const sourceError = checkSourceAcceptability(
+            'FAMILY_CREATE',
+            creator.ageBand,
+            creator.ageBandSource
+          );
           if (sourceError) {
             throw Object.assign(new Error(sourceError), {
               statusCode: toHttpError(sourceError).statusCode,
@@ -79,46 +95,65 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
           await insertFamilyMember(tx, newFamilyId, personId);
           await insertComplianceProfile(tx, personId, 'ADULT', false, 'SELF_STATEMENT');
 
-          if (profileValues) {
-            for (const pv of profileValues) {
-              // Subject of the creator's own values is the creator themself.
-              const resolution = resolveProvenanceProvider({
-                sourceKind: pv.sourceKind,
-                subjectPersonId: personId,
-                actorPersonId: personId,
-                providedByPersonId: pv.providedByPersonId ?? null,
+          for (const pv of creator.values ?? []) {
+            // Subject of the creator's own values is the creator themself.
+            const resolution = resolveProvenanceProvider({
+              sourceKind: pv.source,
+              subjectPersonId: personId,
+              actorPersonId: personId,
+              providedByPersonId: pv.providedByPersonId ?? null,
+            });
+            if (resolution.kind === 'INVALID') {
+              throw Object.assign(new Error('Provenance provider not allowed'), {
+                statusCode: 422,
+                code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
               });
-              if (resolution.kind === 'INVALID') {
-                throw Object.assign(new Error('Provenance provider not allowed'), {
+            }
+            if (resolution.kind === 'CANDIDATE') {
+              const inFamily = await isFamilyMember(tx, newFamilyId, resolution.provider);
+              if (!inFamily) {
+                throw Object.assign(new Error('Provenance provider is not a family member'), {
                   statusCode: 422,
                   code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
                 });
               }
-              if (resolution.kind === 'CANDIDATE') {
-                const inFamily = await isFamilyMember(tx, newFamilyId, resolution.provider);
-                if (!inFamily) {
-                  throw Object.assign(new Error('Provenance provider is not a family member'), {
-                    statusCode: 422,
-                    code: 'AGE_BAND_SOURCE_NOT_ALLOWED',
-                  });
-                }
-              }
-              await insertProfileValue(
-                tx, personId, pv.attribute, pv.valueText,
-                pv.sourceKind, resolution.provider, accountId
-              );
             }
+
+            // F9: at most one RECORDED per (person, attribute, source).
+            const existing = await getProfileValuesBySource(
+              tx, personId, pv.attribute, pv.source
+            );
+            for (const ex of existing) {
+              await supersedeProfileValue(tx, ex.id);
+            }
+
+            // F8: observedAt is preserved exactly when supplied; NULL otherwise.
+            await insertProfileValue(
+              tx,
+              personId,
+              pv.attribute,
+              pv.value,
+              pv.source,
+              resolution.provider,
+              accountId,
+              existing[0]?.id ?? null,
+              pv.observedAt ? new Date(pv.observedAt) : null
+            );
           }
 
           await insertAuditEvent(tx, newFamilyId, accountId, 'FAMILY_CREATED', 'FAMILY', newFamilyId);
+
+          const row = await getFamilyByIdFull(tx, newFamilyId);
+          const memberCount = await countFamilyMembers(tx, newFamilyId);
 
           return {
             status: 201,
             body: {
               id: newFamilyId,
               displayName: displayName ?? null,
+              createdAt: row.created_at.toISOString(),
               isManager: decision.basis.manager,
-              createdAt: new Date().toISOString(),
+              memberCount,
             },
           };
         }
@@ -146,6 +181,8 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
       return reply.status(err.statusCode).send(err);
     }
 
+    // §4.4: identity → resolve → authorize → set_family_context → target read,
+    // all in ONE transaction.
     const resolution = await withIdentityTransaction(
       pool,
       { accountId, purpose: 'FAMILY_MANAGEMENT' },
@@ -163,7 +200,13 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
           purpose: 'FAMILY_MANAGEMENT',
           resource: { type: 'FAMILY', familyId: current.family.id },
         });
-        return { ...current, manager: decision.basis.manager };
+
+        await setFamilyContext(tx, current.family.id, personId, 'FAMILY_MANAGEMENT');
+
+        const family = await getFamilyByIdFull(tx, current.family.id);
+        const memberCount = await countFamilyMembers(tx, current.family.id);
+
+        return { ...current, family, manager: decision.basis.manager, memberCount };
       }
     );
 
@@ -182,8 +225,9 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
     return reply.status(200).send({
       id: family.id,
       displayName: family.display_name,
+      createdAt: family.created_at.toISOString(),
       isManager: resolution.manager,
-      createdAt: family.created_at,
+      memberCount: resolution.memberCount,
     });
   });
 }
