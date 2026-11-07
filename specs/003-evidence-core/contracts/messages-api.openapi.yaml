@@ -18,6 +18,7 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
       requestBody:
         required: true
         content:
@@ -42,23 +43,28 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 components:
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Required shared idempotency transport key. The key is not part of the JSON request body or canonical payload hash.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
   schemas:
     CreateCaseMessageRequest:
       type: object
       additionalProperties: false
       required:
         - content
-        - idempotencyKey
       properties:
         content:
           type: string
           minLength: 1
           maxLength: 8000
-          description: Exact raw message. Server validation also rejects whitespace-only values.
-        idempotencyKey:
-          type: string
-          minLength: 8
-          maxLength: 128
+          description: Exact raw message. Server validation also rejects whitespace-only values. `idempotencyKey` is not accepted in the body.
     CaseMessageResponse:
       type: object
       additionalProperties: false

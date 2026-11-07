@@ -19,7 +19,7 @@
 | 依赖 | 当前读取事实 | Plan 处理 |
 |---|---|---|
 | Slice 1 | 已有 Family/Person/guardian、`family_members`、`provenance_source`、`business_audit_events`、`idempotency_keys`、RLS transaction 与 shared idempotency runtime | 复用，不修改 |
-| Slice 1 idempotency | scope = `(actor_account_id, command_type, idempotency_key)`；body transport；canonical JSON + SHA-256；same hash replay；different hash mismatch；concurrent same-key serialization；response snapshot 与业务写同事务 | Q3 直接沿用 |
+| Slice 1 idempotency | scope = `(actor_account_id, command_type, idempotency_key)`；`Idempotency-Key` HTTP header transport；canonical JSON + SHA-256；same hash replay；different hash mismatch；concurrent same-key serialization；response snapshot 与业务写同事务 | Q3 直接沿用 |
 | Slice 2 | 已冻结 Case schema / authorization / anti-enumeration / RLS / audit / CASE_CREATE idempotency 设计，但尚不视为 runtime 已实现 | 作为设计依赖 |
 | Slice 3 | 当前只有 `spec.md` | 本轮只创建 Plan artifacts |
 
@@ -89,7 +89,7 @@ observations
 
 1. **Q1**：Assertion 与 Observation 各自显式持有必要 provenance 列；TypeScript 复用共享 provenance types/validators，但数据库不抽成万能父表。
 2. **Q2**：未知、未收集、拒绝、不适用只作为 Observation value availability；occurred time、confirmation、validity、conflict 分开表达。不存在万能 `epistemic_state`。
-3. **Q3**：Message 使用 shared `idempotency_keys`，`command_type=CASE_MESSAGE_CREATE`，沿用 body `idempotencyKey`；hash = verified `familyId + caseId + raw content`。
+3. **Q3**：Message 使用 shared `idempotency_keys`，`command_type=CASE_MESSAGE_CREATE`，沿用 final main 冻结的 `Idempotency-Key` HTTP header；hash = verified `familyId + caseId + raw content`。
 4. Message 写入自动 Assertion 数量恒为 0。
 5. 内部能力按 `recordStatement`、`recordHypothesis`、`recordObservation` 明确拆分；不存在 `recordFact`、`promoteToFact`、`createEvidence(anything)`。其中 `recordHypothesis` 仅保留为 future-facing domain capability contract，本 Slice production runtime 没有可达 AI caller。
 6. `assertions` 的 runtime INSERT 有数据库最后防线：`family_id = app_family_id() AND kind <> 'FACT'`。因此 domain helper 被绕过时，`xiaoshuyin_app` 仍不能直接 INSERT FACT；test-only FACT fixture 只能走隔离 privileged context。
@@ -351,13 +351,13 @@ Anti-enumeration：
 CASE_MESSAGE_CREATE
 ```
 
-**transport**：沿用 Slice 1 runtime body field：
+**transport**：统一沿用 final main 已冻结的 HTTP header：
 
-```json
-{"content":"...","idempotencyKey":"8..128"}
+```http
+Idempotency-Key: <8..128 chars>
 ```
 
-若 Slice 1 final 改 header，Slice 3 必须 Plan Review；不得双轨。
+JSON body 只承载业务字段 `content`；不得包含 `idempotencyKey`，不得双轨。
 
 **scope**：
 
@@ -375,7 +375,7 @@ sha256(canonicalJson({
 }))
 ```
 
-idempotencyKey 不进 hash；actor/command 已在 scope；familyId/caseId 防止跨目标错误 replay。content 不 trim/normalize 后存储；validator 只拒绝空/纯空白/超长。
+`Idempotency-Key` header 值不进 hash；actor/command 已在 scope；familyId/caseId 防止跨目标错误 replay。content 不 trim/normalize 后存储；validator 只拒绝空/纯空白/超长。
 
 行为：
 
@@ -398,14 +398,21 @@ planning-time Slice 1 当前 helper 已有 fast peek + advisory lock + second lo
 POST /api/v1/cases/:id/messages
 ```
 
-strict request：
+required transport header：
+
+```http
+Idempotency-Key: <8..128 chars>
+```
+
+strict JSON request body：
 
 ```json
 {
-  "content": "1..8000 chars; non-whitespace; exact raw stored",
-  "idempotencyKey": "8..128 chars"
+  "content": "1..8000 chars; non-whitespace; exact raw stored"
 }
 ```
+
+body 不接受 `idempotencyKey`；不得双轨。
 
 server-owned：family_id、case_id、actor_account_id、source_person_id、recorded_at。
 

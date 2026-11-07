@@ -47,10 +47,10 @@ BLOCKED — SLICE 3 IMPLEMENTATION DEPENDENCY
 POST /api/v1/cases/{caseId}/messages
 Authorization: Bearer <token>
 Content-Type: application/json
+Idempotency-Key: msg-test-0001
 
 {
-  "content": "孩子最近晚上总说还不想睡。",
-  "idempotencyKey": "msg-test-0001"
+  "content": "孩子最近晚上总说还不想睡。"
 }
 ```
 

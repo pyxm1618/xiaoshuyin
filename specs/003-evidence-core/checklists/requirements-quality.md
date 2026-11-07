@@ -95,8 +95,8 @@
 - [x] CHK053 **Q1 Observation structure**。**PASS 条件**：Observation/Assertion 分表；共享 provenance 只复用 TS helper，不建 evidence supertable。**实际结果**：PASS。
 - [x] CHK054 **Q2 value availability**。**PASS 条件**：KNOWN/UNKNOWN/NOT_COLLECTED/DECLINED/NOT_APPLICABLE 与 time/confirmation/conflict/validity 分层。**实际结果**：PASS。
 - [x] CHK055 **Q2 scalar values**。**PASS 条件**：TEXT/NUMBER/BOOLEAN；0 与 false 保持 KNOWN；UNKNOWN 不靠 null 推断。**实际结果**：PASS。
-- [x] CHK056 **Q3 command**。**PASS 条件**：`CASE_MESSAGE_CREATE`、body transport、shared idempotency 唯一。**实际结果**：PASS。
-- [x] CHK057 **Q3 canonical hash**。**PASS 条件**：verified `familyId + caseId + body.content`；idempotencyKey 不进 hash；content 使用 exact stored string。**实际结果**：PASS。
+- [x] CHK056 **Q3 command**。**PASS 条件**：`CASE_MESSAGE_CREATE`、`Idempotency-Key` HTTP header transport、shared idempotency 唯一。**实际结果**：PASS。
+- [x] CHK057 **Q3 canonical hash**。**PASS 条件**：verified `familyId + caseId + body.content`；`Idempotency-Key` header 值不进 hash；content 使用 exact stored string。**实际结果**：PASS。
 - [x] CHK058 **Q4 raw message only**。**PASS 条件**：message write → raw message only → automatic Assertions = 0；未来 1 message → 0..N Assertions。**实际结果**：PASS。
 - [x] CHK059 **Q5 FACT semantic exists**。**PASS 条件**：FACT enum/domain union 存在但当前无正式创建/确认 flow。**实际结果**：PASS。
 - [x] CHK060 **Q5 FACT reachability hard stop**。**PASS 条件**：public/AI/extractor/arbitrary runtime DB path 均不能写 FACT；future Slice 必须显式改 policy/contract。**实际结果**：PASS。
@@ -151,14 +151,14 @@
 ## 9. Message / Idempotency / Transaction / Audit / OpenAPI
 
 - [x] CHK089 **Public route surface**。**PASS 条件**：唯一新增 `POST /api/v1/cases/{id}/messages`。**实际结果**：PASS。
-- [x] CHK090 **Request schema**。**PASS 条件**：只接受 `content` + `idempotencyKey`；`additionalProperties=false`；content 1..8000 且 whitespace-only reject。**实际结果**：PASS。
-- [x] CHK091 **Forbidden client fields**。**PASS 条件**：familyId/actorId/person IDs/recordedAt/assertionKind 均不可提交。**实际结果**：PASS。
+- [x] CHK090 **Request schema**。**PASS 条件**：JSON body 只接受 `content` 且 `additionalProperties=false`；`idempotencyKey` body field 必须拒绝；required `Idempotency-Key` header 为 8..128 chars；content 1..8000 且 whitespace-only reject。**实际结果**：PASS。
+- [x] CHK091 **Forbidden client fields**。**PASS 条件**：body 中 `idempotencyKey`/familyId/actorId/person IDs/recordedAt/assertionKind 均不可提交。**实际结果**：PASS。
 - [x] CHK092 **Response privacy**。**PASS 条件**：201 只返回 id/caseId/recordedAt，不回显 raw content，避免 idempotency snapshot 复制正文。**实际结果**：PASS。
 - [x] CHK093 **Idempotency scope**。**PASS 条件**：`(actor_account_id, CASE_MESSAGE_CREATE, idempotency_key)`，复用 existing table。**实际结果**：PASS。
 - [x] CHK094 **Replay/mismatch**。**PASS 条件**：same key+same hash replay 原 status/body；same key+different hash 409；两者零业务新增。**实际结果**：PASS。
 - [x] CHK095 **Concurrency**。**PASS 条件**：same-key advisory/shared lock + second lookup → one EXECUTE；different key+same content → 两条独立 raw messages。**实际结果**：PASS。
 - [x] CHK096 **Authorization before replay**。**PASS 条件**：specific Case authorization preflight 必须先于 replay；EXECUTE 内 re-read/re-authorize。**实际结果**：PASS — 与 Slice 1 当前 helper 的 fast-peek 历史形状存在依赖差异，但 Plan 已明确 final helper 不支持时必须 Plan Review，不得复制第二 engine。
-- [x] CHK097 **Message transaction order**。**PASS 条件**：authenticate → strict validate → current Family → Case auth preflight → canonical hash → shared idempotency → BEGIN/RLS → lock → second lookup → re-read/re-authorize → message → audit → snapshot → COMMIT。**实际结果**：PASS。
+- [x] CHK097 **Message transaction order**。**PASS 条件**：authenticate → strict body validate → read/validate `Idempotency-Key` header → current Family → Case auth preflight → canonical hash → shared idempotency → BEGIN/RLS → lock → second lookup → re-read/re-authorize → message → audit → snapshot → COMMIT。**实际结果**：PASS。
 - [x] CHK098 **Atomic set**。**PASS 条件**：message + business_audit_event + idempotency response 同事务；任一失败全回滚。**实际结果**：PASS。
 - [x] CHK099 **Forbidden side effects**。**PASS 条件**：Message transaction 不含 Assertion、Observation、case_event、Formulation、Scene、AI job/background job。**实际结果**：PASS。
 - [x] CHK100 **Audit vocabulary**。**PASS 条件**：`MESSAGE_RECORDED/DIALOGUE_MESSAGE`、`ASSERTION_RECORDED/ASSERTION`、`OBSERVATION_RECORDED/OBSERVATION`，不建第二 audit。**实际结果**：PASS。

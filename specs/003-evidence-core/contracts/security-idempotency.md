@@ -70,16 +70,21 @@ POST /api/v1/cases/:id/messages
 CASE_MESSAGE_CREATE
 ```
 
-Body transport：
+HTTP transport：
+
+```http
+Idempotency-Key: <8..128 chars>
+```
+
+JSON body：
 
 ```json
 {
-  "content": "...",
-  "idempotencyKey": "..."
+  "content": "..."
 }
 ```
 
-若 Slice 1 final transport 改变，Implement 前必须 Plan Review。
+body 不包含 `idempotencyKey`；不得双轨。该 transport 与 final main 冻结合同一致。
 
 ## 4. Idempotency scope
 
@@ -102,7 +107,7 @@ sha256(canonicalJson({
 ```
 
 - actor/command 不重复进 hash；
-- idempotencyKey 不进 hash；
+- `Idempotency-Key` header 值不进 hash；
 - familyId/caseId 只来自 server-verified context；
 - content 使用实际存储字符串，不做 trim 后存储。
 
