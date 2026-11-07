@@ -158,6 +158,28 @@ function cleanup(root) {
   cleanup(root);
 }
 
+for (const fixture of [
+  { name: "completed lowercase task passes", tasks: "- [x] T001 done [REQ:U01] [VERIFY:unit test]", code: 0 },
+  { name: "completed uppercase task passes", tasks: "- [X] T001 done [REQ:U01] [VERIFY:unit test]", code: 0 },
+  { name: "mixed completed and pending tasks pass", tasks: "- [x] T001 done [REQ:U01] [VERIFY:unit test]\n- [ ] T002 pending [REQ:U01] [VERIFY:unit test]", code: 0 },
+  { name: "completed task without REQ fails", tasks: "- [x] T001 done [VERIFY:unit test]", code: 1, error: "task missing [REQ:...]" },
+  { name: "completed task without VERIFY fails", tasks: "- [x] T001 done [REQ:U01]", code: 1, error: "task missing [VERIFY:...]" },
+]) {
+  const root = makeProject();
+  const dir = "008-task-status";
+  featureDir(root, dir);
+  writeFile(root, path.join("specs", dir, "spec.md"), SPEC_MD);
+  writeFile(root, path.join("specs", dir, "plan.md"), PLAN_MD);
+  writeFile(root, path.join("specs", dir, "tasks.md"), `# Tasks: fixture\n\n${fixture.tasks}\n`);
+  const actual = run(validator, root);
+  const pass = record(fixture.name, fixture.code, actual);
+  if (pass && fixture.error && !actual.out.includes(fixture.error)) {
+    results[results.length - 1].pass = false;
+    results[results.length - 1].note = `missing expected error: ${fixture.error}`;
+  }
+  cleanup(root);
+}
+
 // ---------------------------------------------------------------- Cases G–H
 const DOCS_CHANGES = ["Docs/V1产品需求.md", "Docs/reference/legacy-digital-use-requirements.md"];
 const NON_DOCS_CHANGES = [".specify/README.md", "AGENTS.md"];

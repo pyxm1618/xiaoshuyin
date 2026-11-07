@@ -1,0 +1,4 @@
+$ bun run guard:static
+$ node scripts/guard-static.mjs
+guard-static: PASS (0 violations)
+EXIT_CODE=0
