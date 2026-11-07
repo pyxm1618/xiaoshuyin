@@ -16,7 +16,7 @@
 > - **Current = Post-Slice1 Reconciliation Execution（T088–T100，全部 `[ ]`）**：唯一有效的当前执行状态；必须在新 Head 上重新执行并保留真实输出。
 > - **Historical = T001–T087（`[x]` 旧基线记录）**：**NOT VALID AS CURRENT FINAL EXECUTION STATUS**；旧 390 tests / 旧 CI / 旧 Converge 仅作历史证据。
 > - **阶段顺序**：Specify → Clarify → Plan → Checklist → Tasks → 审计一 → Implement → 独立 Converge（审计二）。本回合只做 Audit I remediation，完成即停止，交新的 Audit I re-audit。
-> - **本轮结束状态**：`SLICE 2 DEPENDENCY RECONCILIATION AUDIT I REMEDIATION COMPLETE — READY FOR AUDIT I RE-AUDIT`（见文末）。
+> - **本轮结束状态**：`SLICE 2 DEPENDENCY RECONCILIATION HIGH-04 REMEDIATION COMPLETE — READY FOR FINAL AUDIT I RE-AUDIT`（见文末）。
 > - **Current execution 结束状态**：`IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`（由 T100 输出）。
 
 > **任务格式**：`- [ ] T### [P] [REQ:<上游 ID / 章节>] <动作、文件/目录、前置依赖、完成条件> [VERIFY:<真实命令或证据>]`
@@ -61,8 +61,8 @@
 - [ ] T096 [REQ:plan:Project-Structure;Gate8] reconcile test setup / guard / scripts：复用 `tests/setup/api.ts`；`guard-static.mjs` 保留 Final 全部 guard 并追加 `cases` / `case_events`；`db-evidence.mjs` / `coverage-audit.mjs` 保留 Final 断言并做 Slice 2 增量；`package.json` 脚本对齐 `bun`（依赖 T089） [VERIFY:`rg "tests/setup/api.ts" tests/integration`；`bun run guard:static` 输出 `PASS (0 violations)`；`bun run db:evidence` PASS；`bun run coverage:audit` 输出 001 + 002 覆盖]
 - [ ] T097 [REQ:plan:Verification-Plan;Gate8] full regression：`bun run typecheck`、`bun run guard:static`、`bunx vitest run tests/domain`、`bunx vitest run tests/db`、`bunx vitest run tests/integration`、`bunx vitest run`；要求 `0 failed` / `0 skipped`（依赖 T090–T096） [VERIFY:全部命令退出 0；输出 `0 failed` / `0 skipped`；归档真实输出]
 - [ ] T098 [REQ:plan:Verification-Plan;Gate8] migration / DB evidence：`bun run db:migrate` 两次（首次 APPLY、第二次全 SKIP）；`bun run db:evidence` PASS（依赖 T092） [VERIFY:两次 `db:migrate` 输出；`db:evidence` PASS；`schema_migrations` 记录一致]
-- [ ] T099 [REQ:plan:Verification-Plan;plan:G10;Gate8] **Final evidence + current Head CI verification**：完成 OpenAPI / coverage / verify-all / governance 验证后，在所有 reconciliation code + tests + evidence 已提交并 push 到 `origin/feat/002-case-core` 的前提下，为 **current Final implementation Head SHA** 验证 `.github/workflows/ci.yml` 的一次完整执行：5 个 job 必须全部 SUCCESS —— **Static Checks / Unit Tests / DB Migration / Integration Tests / Contract**。不得用旧 Slice 2 CI、旧 Head CI、main CI、planning Head CI、部分 jobs、pending / cancelled / skipped / neutral 替代。必须保存：Final implementation Head SHA、Workflow run ID / URL、CI commit SHA、5 项 job status；并证明 **CI Head SHA == current Final implementation Head SHA**（依赖 T095 / T097） [VERIFY:`bun run openapi:generate` 两次 `shasum -a 256 packages/generated/openapi.json packages/generated/openapi.d.ts` 一致；`bun run openapi:check` PASS（frozen YAML ↔ runtime semantic equivalence）；`bun run coverage:audit` 输出 FR 25/25、SC 11/11、Acceptance 18/18、missing 0；`node scripts/verify-all.mjs --archive` PASS；`node .specify/scripts/validate-governance.mjs` 与 `node .specify/scripts/tests/run-governance-tests.mjs` PASS；记录 `FINAL_IMPLEMENTATION_HEAD=$(git rev-parse HEAD)` 且 `git rev-parse origin/feat/002-case-core` 等于该 SHA；`gh run list --workflow ci.yml --commit "$FINAL_IMPLEMENTATION_HEAD" --limit 5` 找到该 SHA 的 completed run；`gh run view <run-id> --json headSha,status,conclusion,jobs` 断言 `headSha == FINAL_IMPLEMENTATION_HEAD`、`status == completed`、`conclusion == success`、`jobs` 恰为 5 项且每项 `conclusion == success`；保存 run ID / URL 与 5 项 job status]
-- [ ] T100 [REQ:plan:Verification-Plan;plan:G10;AGENTS:§5;MEDIUM-01] implementation reconciliation closeout：仅当 T088–T099 全部完成，且以下全部成立，才能勾选并输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`：① `bun run typecheck` PASS；② `bun run guard:static` PASS；③ `bunx vitest run tests/domain` PASS；④ `bunx vitest run tests/db` PASS；⑤ `bunx vitest run tests/integration` PASS；⑥ `bunx vitest run` PASS；⑦ `0 failed` / `0 skipped`；⑧ `bun run db:migrate` #1 APPLY PASS、#2 SKIP PASS；⑨ `bun run db:evidence` PASS；⑩ `bun run openapi:generate` determinism PASS；⑪ `bun run openapi:check` PASS；⑫ coverage FR 25/25、SC 11/11、Acceptance 18/18；⑬ `node scripts/verify-all.mjs --archive` PASS；⑭ governance validator PASS、self-test PASS；⑮ **current Final Head CI 5/5 PASS**（Static Checks / Unit Tests / DB Migration / Integration Tests / Contract），且 CI Head SHA == current Final implementation Head SHA；⑯ remaining gap = 0。若 new CI 尚未完成、失败、不是同一 Head、或只有历史 CI，T100 不得勾选。不得 merge main、不得宣布 Slice 2 PASS / CLOSED（依赖 T098 / T099） [VERIFY:最终报告逐项列出 ①–⑯ 的真实输出与证据；`git status --short` clean；`git rev-parse HEAD` == `git rev-parse origin/feat/002-case-core` == CI `headSha`；`gh run view <run-id> --json headSha,status,conclusion,jobs` 断言 `status=completed`、`conclusion=success`、5 项 job 全部 success；固定文案]
+- [ ] T099 [REQ:plan:Verification-Plan;plan:G10;Gate8] **Final evidence + `FINAL_IMPLEMENTATION_HEAD` CI verification**：完成 OpenAPI / coverage / verify-all / governance 验证后，在所有 reconciliation 业务实现、migration、tests、generated artifacts 已 commit 并 push 到 `origin/feat/002-case-core` 的前提下，记录 **`FINAL_IMPLEMENTATION_HEAD`**，并为该 SHA 验证 `.github/workflows/ci.yml` 的一次完整执行：5 个 job 必须全部 SUCCESS —— **Static Checks / Unit Tests / DB Migration / Integration Tests / Contract**。不得用旧 Slice 2 CI、旧 Head CI、main CI、planning Head CI、部分 jobs、pending / cancelled / skipped / neutral 替代。必须保存：`FINAL_IMPLEMENTATION_HEAD` SHA、CI run ID / URL、CI headSha、5 项 job status；并证明 **CI headSha == `FINAL_IMPLEMENTATION_HEAD`**（依赖 T095 / T097） [VERIFY:`bun run openapi:generate` 两次 `shasum -a 256 packages/generated/openapi.json packages/generated/openapi.d.ts` 一致；`bun run openapi:check` PASS（frozen YAML ↔ runtime semantic equivalence）；`bun run coverage:audit` 输出 FR 25/25、SC 11/11、Acceptance 18/18、missing 0；`node scripts/verify-all.mjs --archive` PASS；`node .specify/scripts/validate-governance.mjs` 与 `node .specify/scripts/tests/run-governance-tests.mjs` PASS；记录 `FINAL_IMPLEMENTATION_HEAD=$(git rev-parse HEAD)`，此时 `git rev-parse origin/feat/002-case-core` 等于该 SHA（bookkeeping closeout 尚未发生）；`gh run list --workflow ci.yml --commit "$FINAL_IMPLEMENTATION_HEAD" --limit 5` 找到该 SHA 的 completed run；`gh run view <run-id> --json headSha,status,conclusion,jobs` 断言 `headSha == FINAL_IMPLEMENTATION_HEAD`、`status == completed`、`conclusion == success`、`jobs` 恰为 5 项且每项 `conclusion == success`；保存 run ID / URL 与 5 项 job status]
+- [ ] T100 [REQ:plan:Verification-Plan;plan:G10;AGENTS:§5;MEDIUM-01] implementation reconciliation closeout（两层验证）：**A. Implementation verification（对象 = `FINAL_IMPLEMENTATION_HEAD`）**：确认 ① `bun run typecheck` PASS；② `bun run guard:static` PASS；③ `bunx vitest run tests/domain` PASS；④ `bunx vitest run tests/db` PASS；⑤ `bunx vitest run tests/integration` PASS；⑥ `bunx vitest run` PASS；⑦ `0 failed` / `0 skipped`；⑧ `bun run db:migrate` #1 APPLY PASS、#2 SKIP PASS；⑨ `bun run db:evidence` PASS；⑩ `bun run openapi:generate` determinism PASS；⑪ `bun run openapi:check` PASS；⑫ coverage FR 25/25、SC 11/11、Acceptance 18/18；⑬ `node scripts/verify-all.mjs --archive` PASS；⑭ governance validator PASS、self-test PASS；⑮ **CI 5/5 PASS**（Static Checks / Unit Tests / DB Migration / Integration Tests / Contract），且 **CI headSha == `FINAL_IMPLEMENTATION_HEAD`**；⑯ remaining implementation gap = 0。**不要求 CI headSha == `FINAL_CLOSEOUT_HEAD`。** **B. Closeout verification**：A 全部成立后，允许一次**纯 bookkeeping closeout commit**（只把 T088–T100 标记 `[x]` 并记录 CI evidence）；生成 `FINAL_CLOSEOUT_HEAD=$(git rev-parse HEAD)`；验证 `origin/feat/002-case-core == FINAL_CLOSEOUT_HEAD`；`git merge-base --is-ancestor "$FINAL_IMPLEMENTATION_HEAD" "$FINAL_CLOSEOUT_HEAD"` exit 0；`git diff --name-only "$FINAL_IMPLEMENTATION_HEAD".."$FINAL_CLOSEOUT_HEAD"` 仅包含允许的 bookkeeping/evidence 文件（优先 `specs/002-case-core/tasks.md`，以及明确列出的既有 Slice 2 closeout evidence 文件）；business code / migration / runtime tests / contracts / frozen planning semantics changes = 0；`git status --short` clean。**不得要求 `CI(FINAL_CLOSEOUT_HEAD)` 作为 T100 前置**；若 GitHub 自动触发，仅作 supplemental evidence。不得 merge main、不得宣布 Slice 2 PASS / CLOSED（依赖 T098 / T099） [VERIFY:A：最终报告逐项列出 ①–⑯ 的真实输出与证据；`gh run view <run-id> --json headSha,status,conclusion,jobs` 断言 `headSha == FINAL_IMPLEMENTATION_HEAD`、`status=completed`、`conclusion=success`、5 项 job 全部 success。B：记录 `FINAL_CLOSEOUT_HEAD=$(git rev-parse HEAD)`；`git rev-parse origin/feat/002-case-core` == `FINAL_CLOSEOUT_HEAD`；`git merge-base --is-ancestor "$FINAL_IMPLEMENTATION_HEAD" "$FINAL_CLOSEOUT_HEAD"` exit 0；`git diff --name-only "$FINAL_IMPLEMENTATION_HEAD".."$FINAL_CLOSEOUT_HEAD"` 仅 bookkeeping/evidence；`git diff --name-only "$FINAL_IMPLEMENTATION_HEAD".."$FINAL_CLOSEOUT_HEAD" -- apps packages db tests/domain tests/db tests/integration scripts .github Docs specs/001-family-identity-core specs/002-case-core/spec.md specs/002-case-core/plan.md specs/002-case-core/contracts` 为空；`git status --short` clean；不要求 `gh run` 对 `FINAL_CLOSEOUT_HEAD` 绿色]
 
 ### Current Dependency Chain（T088–T100）
 
@@ -80,8 +80,85 @@ T098 / T099 → T100
 - `T090`（授权）、`T093`（schemas）、`T094`（app/runtime）在 `T089` 后可并行准备，但 `T091` 依赖 `T090`，`T095` 依赖 `T093`。
 - `T097`（full regression）必须等实现类任务 `T090–T096` 全部完成。
 - `T098`（migration evidence）依赖 `T092`（bytea storage）。
-- `T099`（OpenAPI / coverage / verify-all / governance + current Final Head CI 5/5）依赖 `T095` / `T097`。
-- `T100`（closeout）只能在 `T098` / `T099` 全 PASS 后执行，且必须核验 current Final Head CI 5/5。
+- `T099`（OpenAPI / coverage / verify-all / governance + `FINAL_IMPLEMENTATION_HEAD` CI 5/5）依赖 `T095` / `T097`。
+- `T100`（closeout）只能在 `T098` / `T099` 全 PASS 后执行；A 层核验 `FINAL_IMPLEMENTATION_HEAD` 的 CI 5/5，B 层核验 `FINAL_CLOSEOUT_HEAD` 的 ancestry / allowed diff / remote sync / clean tree。
+
+### Closeout Head Semantics（HIGH-04 冻结）
+
+#### 1. `FINAL_IMPLEMENTATION_HEAD`
+
+定义：所有 Slice 2 implementation reconciliation 的业务实现、migration、tests、generated artifacts、verification artifacts 已完成，并已经 commit + push，但尚未做最终 Tasks/evidence bookkeeping closeout 的 commit SHA。它是**唯一 required CI 验证对象**。
+
+必须满足：
+
+```text
+CI headSha == FINAL_IMPLEMENTATION_HEAD
+Static Checks       SUCCESS
+Unit Tests          SUCCESS
+DB Migration        SUCCESS
+Integration Tests   SUCCESS
+Contract            SUCCESS
+```
+
+即 **5 / 5 SUCCESS**。
+
+#### 2. `FINAL_CLOSEOUT_HEAD`
+
+定义：在 `FINAL_IMPLEMENTATION_HEAD` 的 CI 5/5 PASS 之后，仅用于记录完成状态、CI evidence、Task checkbox 和最终 closeout evidence 的**纯 bookkeeping commit Head**。
+
+允许：
+
+```text
+FINAL_CLOSEOUT_HEAD != FINAL_IMPLEMENTATION_HEAD
+```
+
+这是正常且预期的。
+
+#### 3. 正式 ancestry
+
+```bash
+git merge-base --is-ancestor \
+  "$FINAL_IMPLEMENTATION_HEAD" \
+  "$FINAL_CLOSEOUT_HEAD"
+```
+
+必须 `exit 0`。
+
+#### 4. Closeout diff 允许范围
+
+`FINAL_IMPLEMENTATION_HEAD..FINAL_CLOSEOUT_HEAD` 只允许 **bookkeeping / completion evidence changes**：
+
+- `specs/002-case-core/tasks.md`
+- 明确列出的既有 Slice 2 closeout evidence 文件（若存在）
+
+**明确禁止**：`apps/**`、`packages/**`、`db/**`、`tests/domain/**`、`tests/db/**`、`tests/integration/**`、`scripts/**`、`.github/**`、`Docs/**`、`specs/001-family-identity-core/**`、`specs/002-case-core/spec.md`、`specs/002-case-core/plan.md`、`specs/002-case-core/contracts/**`，以及 migration、business implementation、runtime schema、authorization、idempotency implementation、OpenAPI implementation、test assertions、CI workflow、frozen planning semantics。
+
+#### 5. 有限状态证明
+
+```text
+H1 = FINAL_IMPLEMENTATION_HEAD
+CI(H1) = 5/5 PASS
+
+H2 = FINAL_CLOSEOUT_HEAD
+H1 ancestor-of H2
+H1..H2 = bookkeeping only
+
+origin/feat/002-case-core = H2
+working tree = clean
+
+T088–T100 = [x] 在 H2 中稳定成立
+```
+
+不会要求 `CI(H2) == H2` 作为再次勾选 T100 的前置；required CI 只锚定 `FINAL_IMPLEMENTATION_HEAD`。
+
+#### 6. Independent Converge 输入
+
+- 审计对象：`FINAL_CLOSEOUT_HEAD`（branch Head）。
+- 代码级 CI evidence 锚定：`FINAL_IMPLEMENTATION_HEAD`。
+- 审计 AI 必须验证：
+  - `CI headSha == FINAL_IMPLEMENTATION_HEAD`；
+  - `FINAL_IMPLEMENTATION_HEAD` ancestor of `FINAL_CLOSEOUT_HEAD`；
+  - `FINAL_IMPLEMENTATION_HEAD..FINAL_CLOSEOUT_HEAD` diff 仅 bookkeeping/evidence。
 
 ---
 
@@ -504,7 +581,7 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 4. 没有为了变绿而削弱 Slice 1 Final 断言、CHECK、RLS、GRANT 或需求；
 5. 偏离已记录；若改变意图，必须先回到上游文档。
 
-当前阶段未完成，直到 T088–T100 全部 `[x]`，且：
+当前阶段未完成，直到 T088–T100 全部 `[x]`，且 **A. Implementation verification（对象 `FINAL_IMPLEMENTATION_HEAD`）** 全部成立：
 
 - typecheck / guard / domain / db / integration / full vitest PASS；
 - `0 failed` / `0 skipped`；
@@ -513,16 +590,48 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 - FR 25/25、SC 11/11、Acceptance **18/18**；
 - `verify-all` PASS；
 - governance validator + self-test PASS；
-- **current Final Head CI 5/5 PASS**（Static Checks / Unit Tests / DB Migration / Integration Tests / Contract），且 CI Head SHA == current Final implementation Head SHA；
-- remaining gap = 0；
-- T100 输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`。
+- **CI 5/5 PASS**（Static Checks / Unit Tests / DB Migration / Integration Tests / Contract），且 **CI headSha == `FINAL_IMPLEMENTATION_HEAD`**；
+- remaining implementation gap = 0。
 
-若 new CI 尚未完成、失败、不是同一 Head、或只有历史 CI，当前阶段不得标记完成。
+**B. Closeout verification（对象 `FINAL_CLOSEOUT_HEAD`）** 必须成立：
+
+- `FINAL_CLOSEOUT_HEAD = git rev-parse HEAD`（纯 bookkeeping closeout commit）；
+- `origin/feat/002-case-core == FINAL_CLOSEOUT_HEAD`；
+- `git merge-base --is-ancestor "$FINAL_IMPLEMENTATION_HEAD" "$FINAL_CLOSEOUT_HEAD"` exit 0；
+- `FINAL_IMPLEMENTATION_HEAD..FINAL_CLOSEOUT_HEAD` diff 仅 bookkeeping/evidence；
+- business code / migration / runtime tests / contracts / frozen planning semantics changes = 0；
+- `git status --short` clean。
+
+正式 completion sequence：
+
+```text
+Implementation reconciliation
+↓
+全部 implementation verification PASS
+↓
+commit + push
+↓
+FINAL_IMPLEMENTATION_HEAD
+↓
+CI(FINAL_IMPLEMENTATION_HEAD) = 5/5 PASS
+↓
+记录 CI evidence / Tasks completion
+↓
+纯 bookkeeping closeout commit
+↓
+FINAL_CLOSEOUT_HEAD
+↓
+验证 ancestry + allowed diff + remote sync + clean tree
+↓
+IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE
+```
+
+**不得要求 `CI(FINAL_CLOSEOUT_HEAD)` 作为 T100 前置。** 若 GitHub 因 push 自动触发，仅作 supplemental evidence。若 required CI（`FINAL_IMPLEMENTATION_HEAD`）尚未完成、失败、不是同一 Head、或只有历史 CI，当前阶段不得标记完成。
 
 此后开发 AI **必须停止**：Independent Converge / final review / CI verification 由全新 AI 执行，merge 是另一项独立决定。
 
 **当前任务状态：T088–T100 全部 `[ ]`；T001–T087 仅历史记录。**
-`SLICE 2 DEPENDENCY RECONCILIATION — READY FOR AUDIT I RE-AUDIT`
+`SLICE 2 DEPENDENCY RECONCILIATION HIGH-04 REMEDIATION COMPLETE — READY FOR FINAL AUDIT I RE-AUDIT`
 ---
 
 ## 基线失效声明（2026-11-07 Post-Slice1 Dependency Reconciliation）
