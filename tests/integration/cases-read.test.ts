@@ -36,19 +36,20 @@ describe('Case read (T055)', () => {
       payload: { code: `t055_${label}_${Date.now()}_${seq++}` },
     });
     const body = res.json();
-    return { token: body.token as string, personId: body.person.id as string };
+    return { token: body.sessionToken as string, personId: body.person.id as string };
   }
 
   async function createFamily(token: string, label: string) {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t055-fam-${label}-${Date.now()}-${seq++}`,
+      },
       payload: {
         displayName: `T055-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `t055-fam-${label}-${Date.now()}-${seq++}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     expect(res.statusCode).toBe(201);
@@ -59,8 +60,11 @@ describe('Case read (T055)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: `t055-case-${Date.now()}-${seq++}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t055-case-${Date.now()}-${seq++}`,
+      },
+      payload: {},
     });
     expect(res.statusCode).toBe(201);
     return res.json();

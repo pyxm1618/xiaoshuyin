@@ -1,8 +1,10 @@
 /**
  * T030 — Case contracts (packages/contracts/src/schemas.ts).
  *
- * CreateCaseRequest is strict: the only legal business field is idempotencyKey.
- * Every forbidden client-controlled field must be rejected, not stripped.
+ * CreateCaseRequest is a STRICT EMPTY business object: the idempotency key is
+ * carried by the `Idempotency-Key` header, never by the body. Every
+ * client-controlled field (including body `idempotencyKey`) must be rejected,
+ * not stripped.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -17,24 +19,18 @@ import {
 const KEY = 'case-key-0001';
 
 describe('CreateCaseRequest (T030)', () => {
-  it('accepts { idempotencyKey } only', () => {
-    const parsed = CreateCaseRequest.safeParse({ idempotencyKey: KEY });
+  it('accepts an empty business object only', () => {
+    const parsed = CreateCaseRequest.safeParse({});
     expect(parsed.success).toBe(true);
-    if (parsed.success) expect(parsed.data).toEqual({ idempotencyKey: KEY });
+    if (parsed.success) expect(parsed.data).toEqual({});
   });
 
-  it('enforces 8–128 characters', () => {
-    expect(CreateCaseRequest.safeParse({ idempotencyKey: 'short' }).success).toBe(false);
-    expect(CreateCaseRequest.safeParse({ idempotencyKey: 'x'.repeat(129) }).success).toBe(false);
-    expect(CreateCaseRequest.safeParse({ idempotencyKey: 'x'.repeat(8) }).success).toBe(true);
-    expect(CreateCaseRequest.safeParse({ idempotencyKey: 'x'.repeat(128) }).success).toBe(true);
-  });
-
-  it('requires idempotencyKey', () => {
-    expect(CreateCaseRequest.safeParse({}).success).toBe(false);
+  it('rejects a body-level idempotencyKey', () => {
+    expect(CreateCaseRequest.safeParse({ idempotencyKey: KEY }).success).toBe(false);
   });
 
   const forbidden: Record<string, unknown> = {
+    idempotencyKey: KEY,
     familyId: '11111111-1111-7111-8111-111111111111',
     createdByPersonId: '22222222-2222-7222-8222-222222222222',
     creator: 'someone',
@@ -54,7 +50,7 @@ describe('CreateCaseRequest (T030)', () => {
 
   for (const [field, value] of Object.entries(forbidden)) {
     it(`rejects undeclared field ${field}`, () => {
-      const parsed = CreateCaseRequest.safeParse({ idempotencyKey: KEY, [field]: value });
+      const parsed = CreateCaseRequest.safeParse({ [field]: value });
       expect(parsed.success).toBe(false);
       if (!parsed.success) {
         expect(parsed.error.issues.some((i) => i.code === 'unrecognized_keys')).toBe(true);

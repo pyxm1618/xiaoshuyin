@@ -36,9 +36,9 @@ describe('Case create (T051)', () => {
     });
     const body = res.json();
     return {
-      token: body.token as string,
+      token: body.sessionToken as string,
       personId: body.person.id as string,
-      accountId: body.account.id as string,
+      accountId: body.accountId as string,
     };
   }
 
@@ -46,24 +46,27 @@ describe('Case create (T051)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t051-fam-${label}-${Date.now()}-${seq++}`,
+      },
       payload: {
         displayName: `T051-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `t051-fam-${label}-${Date.now()}-${seq++}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     expect(res.statusCode).toBe(201);
     return res.json().id as string;
   }
 
-  function postCase(token: string, payload: Record<string, unknown>) {
+  function postCase(token: string, key: string | null, body: Record<string, unknown> = {}) {
+    const headers: Record<string, string> = { authorization: `Bearer ${token}` };
+    if (key !== null) headers['idempotency-key'] = key;
     return app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload,
+      headers,
+      payload: body,
     });
   }
 
@@ -85,7 +88,7 @@ describe('Case create (T051)', () => {
     const { token, personId } = await login('first');
     const familyId = await createFamily(token, 'first');
 
-    const res = await postCase(token, { idempotencyKey: `t051-first-${Date.now()}` });
+    const res = await postCase(token, `t051-first-${Date.now()}`);
     expect(res.statusCode).toBe(201);
     const body = res.json();
 
@@ -118,8 +121,8 @@ describe('Case create (T051)', () => {
     const { token } = await login('second');
     await createFamily(token, 'second');
 
-    const first = await postCase(token, { idempotencyKey: `t051-a-${Date.now()}` });
-    const second = await postCase(token, { idempotencyKey: `t051-b-${Date.now()}` });
+    const first = await postCase(token, `t051-a-${Date.now()}`);
+    const second = await postCase(token, `t051-b-${Date.now()}`);
 
     expect(first.statusCode).toBe(201);
     expect(second.statusCode).toBe(201);
@@ -163,10 +166,7 @@ describe('Case create (T051)', () => {
       const familyId = await createFamily(token, `reject-${field}`);
 
       const before = await counts(familyId, accountId);
-      const res = await postCase(token, {
-        idempotencyKey: `t051-reject-${field}-${Date.now()}`,
-        ...extra,
-      });
+      const res = await postCase(token, `t051-reject-${field}-${Date.now()}`, extra);
       const after = await counts(familyId, accountId);
 
       expect(res.statusCode).toBe(422);
@@ -175,12 +175,13 @@ describe('Case create (T051)', () => {
     });
   }
 
-  it('missing idempotencyKey is 422 and writes nothing', async () => {
+  it('missing Idempotency-Key header is 422 and writes nothing', async () => {
     const { token, accountId } = await login('missing-key');
     const familyId = await createFamily(token, 'missing-key');
     const before = await counts(familyId, accountId);
-    const res = await postCase(token, {});
+    const res = await postCase(token, null, {});
     expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('VALIDATION_ERROR');
     expect(await counts(familyId, accountId)).toEqual(before);
   });
 });

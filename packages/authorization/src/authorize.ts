@@ -38,7 +38,7 @@ export type Resource =
   | { type: 'FAMILY'; familyId: string }
   | { type: 'MEMBER'; familyId: string; personId: string }
   | { type: 'CONSENT'; familyId: string; consentId?: string }
-  | { type: 'CASE'; caseId: string };
+  | { type: 'CASE'; familyId: string; caseId: string };
 
 export type AgeBandValue = 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN';
 
@@ -170,21 +170,30 @@ function decideCaseAction(
   // b. Case management reuses FAMILY_MANAGEMENT; no new Purpose enum.
   if (input.purpose !== 'FAMILY_MANAGEMENT') return deny('UNSUPPORTED_PURPOSE');
 
-  // c / d. Management subject = the Person who created the target Family.
+  // c. Membership is a verified fact; RLS visibility is not authorization.
+  if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
+
+  // d. Management subject = the Person who created the target Family.
   const manager = facts.familyCreatedByPersonId === actorPersonId;
   if (!manager) return deny('NOT_FAMILY_MANAGER');
 
   // e. Collection-level actions carry no case dimension.
-  if ((input.action === 'CASE_CREATE' || input.action === 'CASE_LIST') && input.case !== null) {
-    return deny('UNSUPPORTED_DIMENSION');
+  if (input.action === 'CASE_CREATE' || input.action === 'CASE_LIST') {
+    if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
+    if (input.resource.type !== 'FAMILY') return deny('NOT_FAMILY_MEMBER');
+    if (input.resource.familyId !== input.family.familyId) {
+      return deny('NOT_FAMILY_MEMBER');
+    }
+    return allow(true, input.purpose);
   }
 
   // f. Detail action requires a case dimension.
-  if (input.action === 'CASE_READ') {
-    if (input.case === null) return deny('CASE_CONTEXT_REQUIRED');
-    if (input.resource.type !== 'CASE') return deny('CASE_CONTEXT_REQUIRED');
-    if (input.resource.caseId !== input.case.caseId) return deny('CASE_CONTEXT_REQUIRED');
+  if (input.case === null) return deny('CASE_CONTEXT_REQUIRED');
+  if (input.resource.type !== 'CASE') return deny('NOT_FAMILY_MEMBER');
+  if (input.resource.familyId !== input.family.familyId) {
+    return deny('NOT_FAMILY_MEMBER');
   }
+  if (input.resource.caseId !== input.case.caseId) return deny('NOT_FAMILY_MEMBER');
 
   return allow(true, input.purpose);
 }

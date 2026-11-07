@@ -69,22 +69,23 @@ describe('Case create rollback (A13)', () => {
       url: '/api/v1/auth/wechat',
       payload: { code: `cv1_rb_${label}_${Date.now()}` },
     });
-    const { token, person, account } = login.json();
+    const { sessionToken, person, accountId } = login.json();
     const family = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        'idempotency-key': `cv1-rb-fam-${label}-${Date.now()}`,
+      },
       payload: {
         displayName: `CV1-RB-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `cv1-rb-fam-${label}-${Date.now()}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     return {
-      token: token as string,
+      token: sessionToken as string,
       personId: person.id as string,
-      accountId: account.id as string,
+      accountId: accountId as string,
       familyId: family.json().id as string,
     };
   }
@@ -112,8 +113,11 @@ describe('Case create rollback (A13)', () => {
         const res = await app.inject({
           method: 'POST',
           url: '/api/v1/cases',
-          headers: { authorization: `Bearer ${token}` },
-          payload: { idempotencyKey: `cv1-rb-${table}-${Date.now()}` },
+          headers: {
+            authorization: `Bearer ${token}`,
+            'idempotency-key': `cv1-rb-${table}-${Date.now()}`,
+          },
+          payload: {},
         });
 
         // A real failure must never be disguised as success.
@@ -137,8 +141,11 @@ describe('Case create rollback (A13)', () => {
       const ok = await app.inject({
         method: 'POST',
         url: '/api/v1/cases',
-        headers: { authorization: `Bearer ${token}` },
-        payload: { idempotencyKey: `cv1-rb-recover-${table}-${Date.now()}` },
+        headers: {
+          authorization: `Bearer ${token}`,
+          'idempotency-key': `cv1-rb-recover-${table}-${Date.now()}`,
+        },
+        payload: {},
       });
       expect(ok.statusCode).toBe(201);
       expect(await counts(familyId, accountId)).toMatchObject({ cases: 1, events: 1, audits: 1 });

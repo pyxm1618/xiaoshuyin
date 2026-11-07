@@ -31,16 +31,17 @@ describe('Case event + audit (T069)', () => {
       url: '/api/v1/auth/wechat',
       payload: { code: `t069_${label}_${Date.now()}` },
     });
-    const token = login.json().token as string;
+    const token = login.json().sessionToken as string;
     const family = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t069-fam-${label}-${Date.now()}`,
+      },
       payload: {
         displayName: `T069-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `t069-fam-${label}-${Date.now()}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     return { token, familyId: family.json().id as string };
@@ -51,8 +52,11 @@ describe('Case event + audit (T069)', () => {
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: `t069-case-${Date.now()}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t069-case-${Date.now()}`,
+      },
+      payload: {},
     });
     expect(created.statusCode).toBe(201);
     const caseId = created.json().id as string;

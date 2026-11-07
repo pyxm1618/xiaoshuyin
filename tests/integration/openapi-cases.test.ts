@@ -11,18 +11,39 @@ const spec = JSON.parse(
   readFileSync(join(process.cwd(), 'packages/generated/openapi.json'), 'utf-8')
 );
 
+function resolveRef(node: any): any {
+  if (!node || typeof node !== 'object') return node;
+  if (typeof node.$ref === 'string' && node.$ref.startsWith('#/components/schemas/')) {
+    return spec.components.schemas[node.$ref.split('/').pop()!];
+  }
+  return node;
+}
+
+function resolveParameter(node: any): any {
+  if (
+    node &&
+    typeof node === 'object' &&
+    typeof node.$ref === 'string' &&
+    node.$ref.startsWith('#/components/parameters/')
+  ) {
+    return spec.components.parameters[node.$ref.split('/').pop()!];
+  }
+  return node;
+}
+
 function schemaOf(operation: any, status: string): any {
-  return operation.responses[status]?.content?.['application/json']?.schema;
+  return resolveRef(operation.responses[status]?.content?.['application/json']?.schema);
 }
 
 function literalCodes(schema: any): string[] {
-  if (!schema) return [];
-  if (Array.isArray(schema.enum)) return schema.enum;
+  const resolved = resolveRef(schema);
+  if (!resolved) return [];
+  if (Array.isArray(resolved.enum)) return resolved.enum;
   const collected: string[] = [];
-  for (const branch of schema.anyOf ?? schema.oneOf ?? []) {
+  for (const branch of resolved.anyOf ?? resolved.oneOf ?? []) {
     collected.push(...literalCodes(branch));
   }
-  if (schema.properties?.code) collected.push(...literalCodes(schema.properties.code));
+  if (resolved.properties?.code) collected.push(...literalCodes(resolved.properties.code));
   return collected;
 }
 
@@ -58,14 +79,14 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       expect(operation.security, `${method} ${path} security`).toEqual([{ bearerAuth: [] }]);
       expect(operation.tags).toEqual(['case']);
     }
-    expect(spec.components.securitySchemes.bearerAuth).toEqual({
+    expect(spec.components.securitySchemes.bearerAuth).toMatchObject({
       type: 'http',
       scheme: 'bearer',
     });
   });
 
   it('detail path parameter documents format uuid', () => {
-    const params = spec.paths['/api/v1/cases/{id}'].get.parameters;
+    const params = spec.paths['/api/v1/cases/{id}'].get.parameters.map(resolveParameter);
     expect(params.length).toBe(1);
     expect(params[0]).toMatchObject({
       name: 'id',
@@ -75,19 +96,27 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
     });
   });
 
+  it('create declares the Idempotency-Key header parameter', () => {
+    const params = spec.paths['/api/v1/cases'].post.parameters.map(resolveParameter);
+    const header = params.find((p: any) => p.name === 'Idempotency-Key' && p.in === 'header');
+    expect(header, 'missing Idempotency-Key header parameter').toBeDefined();
+    expect(header.required).toBe(true);
+    expect(header.schema).toMatchObject({ type: 'string', minLength: 8, maxLength: 128 });
+  });
+
   it('does not expose /cases/current or transition endpoints', () => {
     for (const forbidden of ['current', 'pause', 'resume', 'switch-primary', 'close', 'recurrences']) {
       expect(JSON.stringify(spec.paths)).not.toContain(`/api/v1/cases/${forbidden}`);
     }
   });
 
-  it('CreateCaseRequest is strict and only accepts idempotencyKey', () => {
-    const schema = spec.paths['/api/v1/cases'].post.requestBody.content['application/json'].schema;
+  it('CreateCaseRequest is a strict empty business object', () => {
+    const schema = resolveRef(
+      spec.paths['/api/v1/cases'].post.requestBody.content['application/json'].schema
+    );
     expect(schema.additionalProperties).toBe(false);
-    expect(Object.keys(schema.properties)).toEqual(['idempotencyKey']);
-    expect(schema.required).toEqual(['idempotencyKey']);
-    expect(schema.properties.idempotencyKey.minLength).toBe(8);
-    expect(schema.properties.idempotencyKey.maxLength).toBe(128);
+    expect(Object.keys(schema.properties ?? {})).toEqual([]);
+    expect(schema.required ?? []).toEqual([]);
   });
 
   it('CaseResponse exposes exactly the seven frozen fields', () => {
@@ -108,7 +137,8 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
     const schema = schemaOf(spec.paths['/api/v1/cases'].get, '200');
     expect(Object.keys(schema.properties)).toEqual(['items']);
     expect(schema.properties.items.type).toBe('array');
-    expect(Object.keys(schema.properties.items.items.properties).sort()).toEqual([
+    const item = resolveRef(schema.properties.items.items);
+    expect(Object.keys(item.properties).sort()).toEqual([
       'createdAt', 'id', 'phase', 'primary', 'status', 'updatedAt', 'version',
     ]);
   });

@@ -1,5 +1,5 @@
 # T067 — Database / RLS / Migration Evidence
-生成时间: 2026-11-06T09:40:49.610Z
+生成时间: 2026-11-07T09:31:52.807Z
 
 说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
 空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
@@ -28,12 +28,12 @@
 | family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
 
 ## 空库重建 + migration replay（真实执行）
-  CREATE DATABASE xiaoshuyin_evidence_1793958049648 OWNER xiaoshuyin_migrator — OK
+  CREATE DATABASE xiaoshuyin_evidence_1794043912843 OWNER xiaoshuyin_migrator — OK
   第一次 db:migrate (空库):
     APPLY 001_initial_schema.sql
       APPLY 002_case_core.sql
       APPLY 003_case_idempotency_key_bytes.sql
-    
+
     Migration complete: 3 new, 0 previously applied.
     Verified: app role has no DDL permissions.
 
@@ -63,26 +63,26 @@
     SKIP 001_initial_schema.sql (already applied)
       SKIP 002_case_core.sql (already applied)
       SKIP 003_case_idempotency_key_bytes.sql (already applied)
-    
+
     Migration complete: 0 new, 3 previously applied.
     Verified: app role has no DDL permissions.
 | migration replay 为 no-op（对象集合不变） | enum:account_status|enum:age_band|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_scope|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | enum:account_status|enum:age_band|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_scope|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | PASS |
 | replay 输出声明 0 new | true | true | PASS |
-  DROP DATABASE xiaoshuyin_evidence_1793958049648 — OK
+  DROP DATABASE xiaoshuyin_evidence_1794043912843 — OK
 
 ## T011 / T012 红灯测试转绿（真实命令输出归档）
   $ bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts
-    RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-002-case-core
-    
-     ✓ tests/db/migration-repro.test.ts (7 tests) 29ms
-     ✓ tests/db/roles.test.ts (9 tests) 50ms
-    
+    RUN  v3.2.7 <ROOT>
+
+     ✓ tests/db/migration-repro.test.ts (7 tests) 38ms
+     ✓ tests/db/roles.test.ts (9 tests) 62ms
+
      Test Files  2 passed (2)
           Tests  16 passed (16)
-       Start at  17:40:50
-       Duration  230ms (transform 30ms, setup 17ms, collect 45ms, tests 79ms, environment 0ms, prepare 77ms)
-    
-    (node:47418) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+       Start at  17:31:53
+       Duration  203ms (transform 23ms, setup 13ms, collect 39ms, tests 100ms, environment 0ms, prepare 59ms)
+
+    (node:18079) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
     (Use `node --trace-deprecation ...` to show where the warning was created)
 | T011 migration-repro + T012 roles exit code | 0 | 0 | PASS |
 | T011/T012 测试全绿 | true | true | PASS |

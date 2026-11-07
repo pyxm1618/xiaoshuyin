@@ -32,7 +32,7 @@ describe('Case read produces no audit rows (T059)', () => {
       url: '/api/v1/auth/wechat',
       payload: { code: `t059_${label}_${Date.now()}` },
     });
-    return res.json().token as string;
+    return res.json().sessionToken as string;
   }
 
   it('list and detail do not add event / audit rows', async () => {
@@ -40,20 +40,24 @@ describe('Case read produces no audit rows (T059)', () => {
     const family = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t059-fam-${Date.now()}`,
+      },
       payload: {
         displayName: 'T059',
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `t059-fam-${Date.now()}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     const familyId = family.json().id as string;
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: `t059-case-${Date.now()}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t059-case-${Date.now()}`,
+      },
+      payload: {},
     });
     const caseId = created.json().id as string;
 

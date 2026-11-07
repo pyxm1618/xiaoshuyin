@@ -24,13 +24,11 @@ import {
   CaseListResponse,
   ErrorSchema,
 } from '@xiaoshuyin/contracts';
-import { authorize } from '@xiaoshuyin/authorization';
 import {
   hashPayload,
   decideIdempotency,
   caseIdempotencyKeyBytes,
   isLegacyTextLookupSafe,
-  getFamilyById,
   insertCase,
   insertCaseEvent,
   insertCaseAudit,
@@ -45,6 +43,8 @@ import {
 } from '@xiaoshuyin/domain';
 import { withIdentityTransaction, withRlsTransaction } from '../db/tx.js';
 import { requireCurrentFamily } from '../family-context.js';
+import { readIdempotencyKey } from '../idempotency.js';
+import { requireFamilyAction } from '../authz.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import type pg from 'pg';
 
@@ -142,7 +142,8 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
         const err = toHttpError('VALIDATION_ERROR', 'Invalid request body');
         return reply.status(err.statusCode).send(err);
       }
-      const logicalKey = parsed.data.idempotencyKey;
+      // Idempotency-Key is a transport header, never a body field.
+      const logicalKey = readIdempotencyKey(req);
       const keyBytes = caseIdempotencyKeyBytes(logicalKey);
       // The legacy text column can only be queried for keys PostgreSQL can
       // receive as text; the exact byte identity is always queried.
@@ -164,22 +165,17 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
           pool,
           { familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT' },
           async (tx) => {
-            const family = await getFamilyById(tx, familyId);
-            const decision = authorize({
-              actor: { accountId, personId },
-              product: 'V1',
-              family: {
+            try {
+              await requireFamilyAction(tx, {
+                accountId,
+                personId,
                 familyId,
-                ...(family?.created_by_person_id
-                  ? { createdByPersonId: family.created_by_person_id }
-                  : {}),
-              },
-              case: null,
-              resource: 'CASE',
-              action: 'CASE_CREATE',
-              purpose: 'FAMILY_MANAGEMENT',
-            });
-            if (decision.decision === 'DENY') {
+                action: 'CASE_CREATE',
+                purpose: 'FAMILY_MANAGEMENT',
+                resource: { type: 'FAMILY', familyId },
+              });
+            } catch {
+              // Family resolved but actor is not the V1 management subject.
               throw httpError('CASE_ACCESS_DENIED');
             }
 
@@ -350,22 +346,17 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
           pool,
           { familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT' },
           async (tx) => {
-            const family = await getFamilyById(tx, familyId);
-            const decision = authorize({
-              actor: { accountId, personId },
-              product: 'V1',
-              family: {
+            try {
+              await requireFamilyAction(tx, {
+                accountId,
+                personId,
                 familyId,
-                ...(family?.created_by_person_id
-                  ? { createdByPersonId: family.created_by_person_id }
-                  : {}),
-              },
-              case: null,
-              resource: 'CASE',
-              action: 'CASE_LIST',
-              purpose: 'FAMILY_MANAGEMENT',
-            });
-            if (decision.decision === 'DENY') {
+                action: 'CASE_LIST',
+                purpose: 'FAMILY_MANAGEMENT',
+                resource: { type: 'FAMILY', familyId },
+              });
+            } catch {
+              // Family resolved but actor is not the V1 management subject.
               throw httpError('CASE_ACCESS_DENIED');
             }
 
@@ -427,26 +418,25 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
           pool,
           { familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT' },
           async (tx) => {
-            const family = await getFamilyById(tx, familyId);
-            const decision = authorize({
-              actor: { accountId, personId },
-              product: 'V1',
-              family: {
+            try {
+              await requireFamilyAction(tx, {
+                accountId,
+                personId,
                 familyId,
-                ...(family?.created_by_person_id
-                  ? { createdByPersonId: family.created_by_person_id }
-                  : {}),
-              },
-              case: { caseId },
-              resource: 'CASE',
-              action: 'CASE_READ',
-              purpose: 'FAMILY_MANAGEMENT',
-            });
+                action: 'CASE_READ',
+                purpose: 'FAMILY_MANAGEMENT',
+                resource: { type: 'CASE', familyId, caseId },
+                caseId,
+              });
+            } catch {
+              // Anti-enumeration: "no access", "malformed id" and "does not
+              // exist" are the same 404 body.
+              throw httpError('CASE_NOT_FOUND', 'Case not found');
+            }
 
-            // Anti-enumeration: "no access", "malformed id" and "does not
-            // exist" are the same 404 body. RLS already limits visibility to
-            // this Family, and a malformed id can never match a real row.
-            if (decision.decision === 'DENY' || !UUID_PATTERN.test(caseId)) {
+            // A malformed id can never match a real row; RLS already limits
+            // visibility to this Family.
+            if (!UUID_PATTERN.test(caseId)) {
               throw httpError('CASE_NOT_FOUND', 'Case not found');
             }
 

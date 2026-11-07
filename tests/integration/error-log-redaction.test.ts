@@ -48,8 +48,8 @@ await app.ready();
 const res = await app.inject({
   method: 'POST',
   url: '/api/v1/cases',
-  headers: { authorization: 'Bearer ' + token },
-  payload: { idempotencyKey: key },
+  headers: { authorization: 'Bearer ' + token, 'idempotency-key': key },
+  payload: {},
 });
 process.stderr.write('STATUS=' + res.statusCode + '\\n');
 process.stderr.write('BODY=' + res.body + '\\n');
@@ -78,16 +78,17 @@ await app.close();
       url: '/api/v1/auth/wechat',
       payload: { code: `r2log_${Date.now()}` },
     });
-    const token = login.json().token as string;
+    const token = login.json().sessionToken as string;
     const family = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `r2log-fam-${Date.now()}`,
+      },
       payload: {
         displayName: 'R2-LOG',
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `r2log-fam-${Date.now()}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     const familyId = family.json().id as string;

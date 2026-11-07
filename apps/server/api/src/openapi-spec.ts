@@ -32,6 +32,11 @@ import {
   ComplianceProfile,
   Notice,
   ErrorSchema,
+  CreateCaseRequest,
+  CaseResponse,
+  CaseListResponse,
+  CaseStatus,
+  CasePhase,
 } from '@xiaoshuyin/contracts';
 
 type JsonSchema = Record<string, unknown>;
@@ -82,6 +87,21 @@ const consentIdPath = {
 
 const errorResponse = (description: string) => refResponse(description, 'Error');
 
+// Case-specific error bodies are structurally fixed to one code (frozen
+// cases-api.openapi.yaml §components.schemas).
+const CaseAccessDeniedErrorSchema = z.strictObject({
+  code: z.enum(['CASE_ACCESS_DENIED']),
+  message: z.string(),
+});
+const CaseNotFoundErrorSchema = z.strictObject({
+  code: z.enum(['CASE_NOT_FOUND']),
+  message: z.string(),
+});
+const CurrentFamilyNotFoundErrorSchema = z.strictObject({
+  code: z.enum(['CURRENT_FAMILY_NOT_FOUND']),
+  message: z.string(),
+});
+
 export function buildOpenApiDocument() {
   const schemas: Record<string, JsonSchema> = {
     Error: toJsonSchema(ErrorSchema),
@@ -106,6 +126,14 @@ export function buildOpenApiDocument() {
     ConsentRecord: toJsonSchema(ConsentRecord),
     ComplianceProfile: toJsonSchema(ComplianceProfile),
     Notice: toJsonSchema(Notice),
+    CreateCaseRequest: toJsonSchema(CreateCaseRequest),
+    CaseResponse: toJsonSchema(CaseResponse),
+    CaseListResponse: toJsonSchema(CaseListResponse),
+    CaseStatus: toJsonSchema(CaseStatus),
+    CasePhase: toJsonSchema(CasePhase),
+    CaseAccessDeniedError: toJsonSchema(CaseAccessDeniedErrorSchema),
+    CaseNotFoundError: toJsonSchema(CaseNotFoundErrorSchema),
+    CurrentFamilyNotFoundError: toJsonSchema(CurrentFamilyNotFoundErrorSchema),
   };
 
   const paths: Record<string, unknown> = {
@@ -309,6 +337,52 @@ export function buildOpenApiDocument() {
         },
       },
     },
+    '/api/v1/cases': {
+      post: {
+        tags: ['case'],
+        operationId: 'createCase',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('IdempotencyKeyHeader')],
+        requestBody: refBody('CreateCaseRequest'),
+        responses: {
+          '201': refResponse('Case 已创建（或幂等重放原结果）', 'CaseResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '403': refResponse('`CASE_ACCESS_DENIED`', 'CaseAccessDeniedError'),
+          '404': refResponse('`CURRENT_FAMILY_NOT_FOUND`', 'CurrentFamilyNotFoundError'),
+          '409': errorResponse('`IDEMPOTENCY_PAYLOAD_MISMATCH`'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+      get: {
+        tags: ['case'],
+        operationId: 'listCases',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': refResponse('当前家庭的 Case 集合（可能为空）', 'CaseListResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '403': refResponse('`CASE_ACCESS_DENIED`', 'CaseAccessDeniedError'),
+          '404': refResponse('`CURRENT_FAMILY_NOT_FOUND`', 'CurrentFamilyNotFoundError'),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}': {
+      get: {
+        tags: ['case'],
+        operationId: 'getCase',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseIdPath')],
+        responses: {
+          '200': refResponse('Case 详情', 'CaseResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': jsonResponse('`CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND`', {
+            oneOf: [ref('CaseNotFoundError'), ref('CurrentFamilyNotFoundError')],
+          }),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
   };
 
   return {
@@ -320,6 +394,7 @@ export function buildOpenApiDocument() {
       { name: 'family' },
       { name: 'consent' },
       { name: 'compliance' },
+      { name: 'case' },
     ],
     paths,
     components: {
@@ -344,6 +419,20 @@ export function buildOpenApiDocument() {
           name: 'personId',
           in: 'path',
           required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+        IdempotencyKeyHeader: {
+          name: 'Idempotency-Key',
+          in: 'header',
+          required: true,
+          description: '关键命令幂等键（§8.5）。同 key 不同 payload → 409。',
+          schema: { type: 'string', minLength: 8, maxLength: 128 },
+        },
+        CaseIdPath: {
+          name: 'id',
+          in: 'path',
+          required: true,
+          description: 'Case UUID（待验证参数；存在不代表有权访问）。',
           schema: { type: 'string', format: 'uuid' },
         },
       },

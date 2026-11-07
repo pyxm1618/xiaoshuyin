@@ -34,19 +34,20 @@ describe('Case primary concurrency (T024)', () => {
       payload: { code: `t024_${label}_${Date.now()}_${Math.random().toString(36).slice(2)}` },
     });
     const body = res.json();
-    return { token: body.token as string, personId: body.person.id as string };
+    return { token: body.sessionToken as string, personId: body.person.id as string };
   }
 
   async function createFamily(token: string) {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t024-fam-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      },
       payload: {
         displayName: 'T024 Family',
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `t024-fam-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     expect(res.statusCode, `body: ${res.body}`).toBe(201);
@@ -57,8 +58,11 @@ describe('Case primary concurrency (T024)', () => {
     return app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': key,
+      },
+      payload: {},
     });
   }
 

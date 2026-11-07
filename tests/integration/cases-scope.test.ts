@@ -96,18 +96,19 @@ describe('Case scope guard (T031)', () => {
       url: '/api/v1/auth/wechat',
       payload: { code: `t031_${Date.now()}` },
     });
-    const token = login.json().token as string;
+    const token = login.json().sessionToken as string;
     // Resolve a current Family so the detail branch is reachable (otherwise the
     // Slice 1 Family semantics answer first).
     await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t031-fam-${Date.now()}`,
+      },
       payload: {
         displayName: 'T031',
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `t031-fam-${Date.now()}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     // `/cases/current` is not a registered route: it can only fall into the

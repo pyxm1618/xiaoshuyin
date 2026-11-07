@@ -40,19 +40,20 @@ describe('Case HTTP boundary (converge findings 1–4)', () => {
       payload: { code: `cv1_${label}_${Date.now()}_${seq++}` },
     });
     const body = res.json();
-    return { token: body.token as string, accountId: body.account.id as string };
+    return { token: body.sessionToken as string, accountId: body.accountId as string };
   }
 
   async function family(token: string, label: string) {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `cv1-fam-${label}-${Date.now()}-${seq++}`,
+      },
       payload: {
         displayName: `CV1-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `cv1-fam-${label}-${Date.now()}-${seq++}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     expect(res.statusCode).toBe(201);
@@ -108,8 +109,11 @@ describe('Case HTTP boundary (converge findings 1–4)', () => {
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${a.token}` },
-      payload: { idempotencyKey: `cv1-cmp-${Date.now()}` },
+      headers: {
+        authorization: `Bearer ${a.token}`,
+        'idempotency-key': `cv1-cmp-${Date.now()}`,
+      },
+      payload: {},
     });
     const caseA = created.json().id as string;
 
@@ -208,8 +212,12 @@ describe('Case HTTP boundary (converge findings 1–4)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      payload: '{"idempotencyKey":"cv1-proto-1234","__proto__":{"polluted":true}}',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'idempotency-key': 'cv1-proto-1234',
+      },
+      payload: '{"__proto__":{"polluted":true}}',
     });
 
     expect(res.statusCode).toBe(422);
@@ -229,36 +237,24 @@ describe('Case HTTP boundary (converge findings 1–4)', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  // ── Finding 4B: NUL / Unicode idempotency keys ──────────
-  it('accepts a NUL idempotency key without 500 and replays stably', async () => {
-    const { token, accountId } = await login('nul');
-    const familyId = await family(token, 'nul');
-    const key = '\u0000cv1-nul-key-0001';
+  // ── Finding 4B: header key boundaries ───────────────────
+  it('rejects an out-of-range Idempotency-Key header with 422 and zero writes', async () => {
+    const { token, accountId } = await login('range');
+    const familyId = await family(token, 'range');
+    const before = await counts(familyId, accountId);
 
-    const first = await app.inject({
-      method: 'POST',
-      url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
-    });
-    expect(first.statusCode).toBe(201);
+    for (const bad of ['short', 'x'.repeat(129)]) {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/cases',
+        headers: { authorization: `Bearer ${token}`, 'idempotency-key': bad },
+        payload: {},
+      });
+      expect(res.statusCode, `length ${bad.length}`).toBe(422);
+      expect(res.json().code).toBe('VALIDATION_ERROR');
+    }
 
-    const replay = await app.inject({
-      method: 'POST',
-      url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
-    });
-    expect(replay.statusCode).toBe(201);
-    expect(replay.json().id).toBe(first.json().id);
-
-    const rows = await verifyPool.query(
-      `SELECT count(*)::int AS c FROM idempotency_keys
-       WHERE actor_account_id = $1 AND command_type = 'CASE_CREATE'`,
-      [accountId]
-    );
-    expect(rows.rows[0].c).toBe(1);
-    expect(await counts(familyId, accountId)).toMatchObject({ cases: 1, events: 1, audits: 1 });
+    expect(await counts(familyId, accountId)).toEqual(before);
   });
 
   it('accepts a Unicode key, replays stably and keeps distinct keys distinct', async () => {
@@ -269,42 +265,42 @@ describe('Case HTTP boundary (converge findings 1–4)', () => {
     const first = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': key },
+      payload: {},
     });
     expect(first.statusCode).toBe(201);
 
     const replay = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': key },
+      payload: {},
     });
     expect(replay.json().id).toBe(first.json().id);
 
     const other = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: 'ключ-тест-🔑-0002' },
+      headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'ключ-тест-🔑-0002' },
+      payload: {},
     });
     expect(other.statusCode).toBe(201);
     expect(other.json().id).not.toBe(first.json().id);
     expect(await counts(familyId, accountId)).toMatchObject({ cases: 2, events: 2, audits: 2 });
   });
 
-  it('concurrent NUL-key retries produce one business result', async () => {
-    const { token, accountId } = await login('nul-concurrent');
-    const familyId = await family(token, 'nul-concurrent');
-    const key = '\u0000cv1-nul-concurrent-0001';
+  it('concurrent identical-key retries produce one business result', async () => {
+    const { token, accountId } = await login('concurrent');
+    const familyId = await family(token, 'concurrent');
+    const key = 'cv1-concurrent-key-0001';
 
     const responses = await Promise.all(
       Array.from({ length: 6 }, () =>
         app.inject({
           method: 'POST',
           url: '/api/v1/cases',
-          headers: { authorization: `Bearer ${token}` },
-          payload: { idempotencyKey: key },
+          headers: { authorization: `Bearer ${token}`, 'idempotency-key': key },
+          payload: {},
         })
       )
     );

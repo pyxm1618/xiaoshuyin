@@ -47,16 +47,19 @@ describe('CASE_CREATE shared mismatch (finding 5)', () => {
       url: '/api/v1/auth/wechat',
       payload: { code: `cv1_mismatch_${Date.now()}` },
     });
-    const { token, person, account } = login.json();
+    const { sessionToken, person, accountId } = login.json();
+    const token = sessionToken as string;
+    const account = { id: accountId as string };
     const familyRes = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `cv1-mismatch-fam-${Date.now()}`,
+      },
       payload: {
         displayName: 'CV1-Mismatch',
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `cv1-mismatch-fam-${Date.now()}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     const familyId = familyRes.json().id as string;
@@ -65,8 +68,11 @@ describe('CASE_CREATE shared mismatch (finding 5)', () => {
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': key,
+      },
+      payload: {},
     });
     expect(created.statusCode).toBe(201);
     const caseId = created.json().id as string;
@@ -132,16 +138,19 @@ describe('CASE_CREATE shared mismatch (finding 5)', () => {
       url: '/api/v1/auth/wechat',
       payload: { code: `cv1_replay_${Date.now()}` },
     });
-    const { token, person, account } = login.json();
+    const { sessionToken, person, accountId } = login.json();
+    const token = sessionToken as string;
+    const account = { id: accountId as string };
     const familyRes = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `cv1-replay-fam-${Date.now()}`,
+      },
       payload: {
         displayName: 'CV1-Replay',
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `cv1-replay-fam-${Date.now()}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     const familyId = familyRes.json().id as string;
@@ -149,8 +158,11 @@ describe('CASE_CREATE shared mismatch (finding 5)', () => {
     const created = await app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': key,
+      },
+      payload: {},
     });
     expect(created.statusCode).toBe(201);
 

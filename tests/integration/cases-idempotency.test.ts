@@ -39,7 +39,7 @@ describe('Case idempotency (T063)', () => {
       payload: { code: `t063_${label}_${Date.now()}_${seq++}` },
     });
     const body = res.json();
-    return { token: body.token as string, personId: body.person.id as string };
+    return { token: body.sessionToken as string, personId: body.person.id as string };
   }
 
   async function setupFamily(label: string) {
@@ -47,12 +47,13 @@ describe('Case idempotency (T063)', () => {
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': `t063-fam-${label}-${Date.now()}-${seq++}`,
+      },
       payload: {
         displayName: `T063-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `t063-fam-${label}-${Date.now()}-${seq++}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     expect(res.statusCode).toBe(201);
@@ -63,8 +64,11 @@ describe('Case idempotency (T063)', () => {
     return app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': key,
+      },
+      payload: {},
     });
   }
 

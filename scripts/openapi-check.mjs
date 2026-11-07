@@ -16,13 +16,28 @@ import { execSync } from 'node:child_process';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const GENERATED = join(ROOT, 'packages', 'generated', 'openapi.json');
-const FROZEN = join(
-  ROOT,
-  'specs',
-  '001-family-identity-core',
-  'contracts',
-  'identity-family-api.openapi.yaml'
-);
+const FROZEN_DOCS = [
+  {
+    label: '001-family-identity-core',
+    path: join(
+      ROOT,
+      'specs',
+      '001-family-identity-core',
+      'contracts',
+      'identity-family-api.openapi.yaml'
+    ),
+  },
+  {
+    label: '002-case-core',
+    path: join(
+      ROOT,
+      'specs',
+      '002-case-core',
+      'contracts',
+      'cases-api.openapi.yaml'
+    ),
+  },
+];
 
 const DROP_KEYS = new Set([
   '$schema',
@@ -136,71 +151,68 @@ function collectOperations(spec) {
   return ops;
 }
 
-function compareDocuments(frozen, generated) {
+function compareSubset(frozen, generated, label) {
   const frozenOps = collectOperations(frozen);
   const generatedOps = collectOperations(generated);
 
-  const frozenKeys = [...frozenOps.keys()].sort();
-  const generatedKeys = [...generatedOps.keys()].sort();
-  if (!equal(frozenKeys, generatedKeys)) {
-    fail(`operation set differs\n  frozen:    ${frozenKeys.join(', ')}\n  generated: ${generatedKeys.join(', ')}`);
-  }
-
-  for (const key of frozenKeys) {
-    const f = frozenOps.get(key);
+  for (const [key, f] of frozenOps) {
     const g = generatedOps.get(key);
+    if (!g) fail(`[${label}] missing operation ${key}`);
 
     if (f.operationId !== g.operationId) {
-      fail(`${key}: operationId differs (${f.operationId} vs ${g.operationId})`);
+      fail(`[${label}] ${key}: operationId differs (${f.operationId} vs ${g.operationId})`);
     }
 
     if (!equal(normalize(f.parameters ?? [], frozen), normalize(g.parameters ?? [], generated))) {
-      fail(`${key}: parameters differ`);
+      fail(`[${label}] ${key}: parameters differ`);
     }
 
     const frozenBody = f.requestBody;
     const generatedBody = g.requestBody;
     if (Boolean(frozenBody) !== Boolean(generatedBody)) {
-      fail(`${key}: requestBody presence differs`);
+      fail(`[${label}] ${key}: requestBody presence differs`);
     }
     if (frozenBody && generatedBody) {
       if (Boolean(frozenBody.required) !== Boolean(generatedBody.required)) {
-        fail(`${key}: requestBody.required differs`);
+        fail(`[${label}] ${key}: requestBody.required differs`);
       }
       const fs = frozenBody.content?.['application/json']?.schema;
       const gs = generatedBody.content?.['application/json']?.schema;
       if (!equal(normalize(fs ?? null, frozen), normalize(gs ?? null, generated))) {
-        fail(`${key}: requestBody schema differs`);
+        fail(`[${label}] ${key}: requestBody schema differs`);
       }
     }
 
     const frozenStatuses = Object.keys(f.responses ?? {}).sort();
     const generatedStatuses = Object.keys(g.responses ?? {}).sort();
     if (!equal(frozenStatuses, generatedStatuses)) {
-      fail(`${key}: response status set differs (${frozenStatuses} vs ${generatedStatuses})`);
+      fail(`[${label}] ${key}: response status set differs (${frozenStatuses} vs ${generatedStatuses})`);
     }
   }
 
   const frozenSchemas = frozen.components?.schemas ?? {};
   const generatedSchemas = generated.components?.schemas ?? {};
-  const frozenNames = Object.keys(frozenSchemas).sort();
-  const generatedNames = Object.keys(generatedSchemas).sort();
-  if (!equal(frozenNames, generatedNames)) {
-    fail(`components.schemas names differ\n  frozen:    ${frozenNames.join(', ')}\n  generated: ${generatedNames.join(', ')}`);
-  }
 
-  for (const name of frozenNames) {
+  for (const name of Object.keys(frozenSchemas)) {
+    if (!(name in generatedSchemas)) fail(`[${label}] missing components.schemas.${name}`);
     if (!equal(normalize(frozenSchemas[name], frozen), normalize(generatedSchemas[name], generated))) {
       console.error('  frozen:', JSON.stringify(stable(normalize(frozenSchemas[name], frozen)), null, 2));
       console.error('  generated:', JSON.stringify(stable(normalize(generatedSchemas[name], generated)), null, 2));
-      fail(`components.schemas.${name} differs`);
+      fail(`[${label}] components.schemas.${name} differs`);
     }
   }
+
+  return {
+    operations: [...frozenOps.keys()],
+    schemas: Object.keys(frozenSchemas),
+  };
 }
 
 function main() {
-  if (!existsSync(FROZEN)) fail(`frozen contract missing: ${FROZEN}`);
   if (!existsSync(GENERATED)) fail('generated artifact missing. Run `bun run openapi:generate` first.');
+  for (const doc of FROZEN_DOCS) {
+    if (!existsSync(doc.path)) fail(`frozen contract missing: ${doc.path}`);
+  }
 
   // Regenerate to prove the committed artifact is current.
   try {
@@ -210,10 +222,26 @@ function main() {
   }
 
   const generated = JSON.parse(readFileSync(GENERATED, 'utf-8'));
-  const frozen = Bun.YAML.parse(readFileSync(FROZEN, 'utf-8'));
 
-  compareDocuments(frozen, generated);
-  console.log('openapi-check: PASS (semantic equivalence with frozen contract)');
+  const unionOps = new Set();
+  const unionSchemas = new Set();
+  for (const doc of FROZEN_DOCS) {
+    const frozen = Bun.YAML.parse(readFileSync(doc.path, 'utf-8'));
+    const result = compareSubset(frozen, generated, doc.label);
+    for (const op of result.operations) unionOps.add(op);
+    for (const name of result.schemas) unionSchemas.add(name);
+  }
+
+  const generatedOps = [...collectOperations(generated).keys()].sort();
+  const generatedSchemas = Object.keys(generated.components?.schemas ?? {}).sort();
+  if (!equal([...unionOps].sort(), generatedOps)) {
+    fail(`generated operation set is not the union of the frozen contracts\n  expected: ${[...unionOps].sort().join(', ')}\n  actual:   ${generatedOps.join(', ')}`);
+  }
+  if (!equal([...unionSchemas].sort(), generatedSchemas)) {
+    fail(`generated schema set is not the union of the frozen contracts\n  expected: ${[...unionSchemas].sort().join(', ')}\n  actual:   ${generatedSchemas.join(', ')}`);
+  }
+
+  console.log('openapi-check: PASS (semantic equivalence with frozen contracts)');
 }
 
 main();

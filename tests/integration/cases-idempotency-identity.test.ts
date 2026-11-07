@@ -42,21 +42,22 @@ describe('CASE_CREATE exact identity (round 2)', () => {
       url: '/api/v1/auth/wechat',
       payload: { code: `r2id_${label}_${Date.now()}_${seq++}` },
     });
-    const { token, person, account } = login.json();
+    const { sessionToken, person, accountId } = login.json();
     const family = await app.inject({
       method: 'POST',
       url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
+      headers: {
+        authorization: `Bearer ${sessionToken}`,
+        'idempotency-key': `r2id-fam-${label}-${Date.now()}-${seq++}`,
+      },
       payload: {
         displayName: `R2-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `r2id-fam-${label}-${Date.now()}-${seq++}`,
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
       },
     });
     return {
-      token: token as string,
-      accountId: account.id as string,
+      token: sessionToken as string,
+      accountId: accountId as string,
       familyId: family.json().id as string,
     };
   }
@@ -65,8 +66,11 @@ describe('CASE_CREATE exact identity (round 2)', () => {
     return app.inject({
       method: 'POST',
       url: '/api/v1/cases',
-      headers: { authorization: `Bearer ${token}` },
-      payload: { idempotencyKey: key },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'idempotency-key': key,
+      },
+      payload: {},
     });
   }
 
@@ -83,36 +87,54 @@ describe('CASE_CREATE exact identity (round 2)', () => {
   }
 
   it('keeps every legal logical key in a distinct scope', async () => {
-    const { token, accountId } = await setup('identity');
-    const keys = [
+    const { token, accountId, familyId } = await setup('identity');
+    const httpKeys = [
       'normal-key-0001',
       'u:colon-prefixed-key',
       'h:colon-prefixed-key',
-      '\u0000nul-prefixed-key',
       'ключ-тест-🔑-0001',
-      '\uD800lone-surrogate-key',
       'x'.repeat(128),
     ];
+    // U+0000 and lone surrogates are legal logical keys for the storage
+    // identity but cannot cross an HTTP header, so their exact UTF-16LE byte
+    // identity is proven directly against the repository table.
+    const storageOnlyKeys = ['\u0000nul-prefixed-key', '\uD800lone-surrogate-key'];
 
     const ids = new Set<string>();
-    for (const key of keys) {
+    for (const key of httpKeys) {
       const res = await post(token, key);
-      expect(res.statusCode, `key #${keys.indexOf(key)}`).toBe(201);
+      expect(res.statusCode, `key ${JSON.stringify(key)}`).toBe(201);
       ids.add(res.json().id as string);
     }
 
-    expect(ids.size).toBe(keys.length);
+    for (const key of storageOnlyKeys) {
+      await verifyPool.query(
+        `INSERT INTO idempotency_keys
+           (actor_account_id, command_type, idempotency_key, idempotency_key_bytes,
+            request_hash, response_status, response_body)
+         VALUES ($1, 'CASE_CREATE', NULL, $2, $3, 201, $4::jsonb)`,
+        [
+          accountId,
+          Buffer.from(key, 'utf16le'),
+          hashPayload({ familyId, body: {} }),
+          JSON.stringify({}),
+        ]
+      );
+    }
+
+    const total = httpKeys.length + storageOnlyKeys.length;
+    expect(ids.size).toBe(httpKeys.length);
     const rows = await countRows(accountId);
-    expect(rows.rows).toBe(keys.length);
-    expect(rows.distinct_bytes).toBe(keys.length);
+    expect(rows.rows).toBe(total);
+    expect(rows.distinct_bytes).toBe(total);
     expect(rows.legacy_rows).toBe(0);
 
-    // Every key replays its own result.
-    for (const key of keys) {
+    // Every HTTP key replays its own result.
+    for (const key of httpKeys) {
       const replay = await post(token, key);
       expect(replay.statusCode).toBe(201);
     }
-    expect((await countRows(accountId)).rows).toBe(keys.length);
+    expect((await countRows(accountId)).rows).toBe(total);
   });
 
   it('replays a legacy raw-text row under its own raw identity', async () => {
@@ -250,7 +272,7 @@ describe('CASE_CREATE exact identity (round 2)', () => {
 
   it('serializes concurrent identical byte keys into one business result', async () => {
     const { token, accountId } = await setup('concurrent');
-    const key = '\u0000round2-concurrent-key';
+    const key = 'round2-concurrent-key-0001';
 
     const responses = await Promise.all(Array.from({ length: 8 }, () => post(token, key)));
     expect(responses.every((r) => r.statusCode === 201)).toBe(true);
@@ -266,7 +288,7 @@ describe('CASE_CREATE exact identity (round 2)', () => {
 
   it('does not merge distinct byte keys under concurrency', async () => {
     const { token, accountId } = await setup('concurrent-distinct');
-    const keys = ['\u0000a-concurrent-1', '\u0000a-concurrent-2', '\u0000a-concurrent-3'];
+    const keys = ['a-concurrent-1', 'a-concurrent-2', 'a-concurrent-3'];
 
     const responses = await Promise.all(keys.map((k) => post(token, k)));
     expect(responses.map((r) => r.statusCode)).toEqual([201, 201, 201]);
