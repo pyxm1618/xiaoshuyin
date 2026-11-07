@@ -36,7 +36,7 @@ import {
   bootstrap,
   type BindingHarness,
 } from '../setup/identity-binding.js';
-import { hashToken } from '../../apps/server/api/src/identity-binding/crypto.js';
+import { deriveIdentityDigest, hashToken } from '../../apps/server/api/src/identity-binding/crypto.js';
 
 function countSql(h: BindingHarness, table: string): Promise<number> {
   return h.admin.query(`SELECT count(*)::int AS n FROM ${table}`).then((r) => r.rows[0].n);
@@ -82,27 +82,42 @@ describe('identity binding candidate surfaces use the single authorize()', () =>
 
   it('DENY on bootstrap fails closed with no business write', async () => {
     const target = await createTarget(h, 'authz_deny_boot', { ageBand: 'UNDER_14' });
-    const before = {
-      contexts: await countSql(h, 'binding_pending_contexts'),
-      attempts: await countSql(h, 'binding_attempts'),
-      audits: await countSql(h, 'identity_binding_audit_events'),
-      accounts: await countSql(h, 'accounts'),
-      persons: await countSql(h, 'persons'),
-    };
+    const code = `deny_${randomUUID()}`;
+    const digest = deriveIdentityDigest(
+      process.env['IDENTITY_BINDING_SECRET']!,
+      `fake_${code}`
+    );
 
     authState.deny = true;
-    const boot = await bootstrap(h, target.invitationToken, `deny_${randomUUID()}`);
+    const boot = await bootstrap(h, target.invitationToken, code);
     expect(boot.statusCode).toBe(401);
     expect(boot.json()).toEqual({
       code: 'WECHAT_AUTH_FAILED',
       message: 'WeChat authentication failed',
     });
 
-    expect(await countSql(h, 'binding_pending_contexts')).toBe(before.contexts);
-    expect(await countSql(h, 'binding_attempts')).toBe(before.attempts);
-    expect(await countSql(h, 'identity_binding_audit_events')).toBe(before.audits);
-    expect(await countSql(h, 'accounts')).toBe(before.accounts);
-    expect(await countSql(h, 'persons')).toBe(before.persons);
+    // Scope every count to this attempt's candidate identity / openid so that
+    // parallel suites cannot pollute the fail-closed assertion.
+    const contexts = await h.admin.query(
+      'SELECT count(*)::int AS n FROM binding_pending_contexts WHERE candidate_identity_digest = $1',
+      [digest]
+    );
+    expect(contexts.rows[0].n).toBe(0);
+    const attempts = await h.admin.query(
+      'SELECT count(*)::int AS n FROM binding_attempts WHERE candidate_identity_digest = $1',
+      [digest]
+    );
+    expect(attempts.rows[0].n).toBe(0);
+    const audits = await h.admin.query(
+      'SELECT count(*)::int AS n FROM identity_binding_audit_events WHERE candidate_identity_digest = $1',
+      [digest]
+    );
+    expect(audits.rows[0].n).toBe(0);
+    const accounts = await h.admin.query(
+      'SELECT count(*)::int AS n FROM accounts WHERE wechat_openid = $1',
+      [`fake_${code}`]
+    );
+    expect(accounts.rows[0].n).toBe(0);
   });
 
   it('DENY on context surfaces is generic and writes nothing', async () => {

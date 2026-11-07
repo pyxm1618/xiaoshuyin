@@ -110,6 +110,17 @@ export async function listPendingBindings(
 // returns still-valid PENDING attempts (`expires_at > now()` in SQL).
       const expiredRows = await materializeExpiredForPerson(tx, input.targetPersonId);
       for (const expired of expiredRows) {
+        // The audit insert policy requires the candidate identity digest GUC;
+        // the target-only Gate context does not carry it, so bind the exact
+        // attempt scope before writing the TERMINAL audit.
+        await setBindingAttemptContext(tx, {
+          attemptId: expired.id,
+          identityDigest: expired.candidateIdentityDigest,
+          invitationId: expired.invitationParticipationId,
+          targetPersonId: expired.targetPersonId,
+          targetFamilyId: expired.targetFamilyId,
+          purpose: 'IDENTITY_BINDING_GATE',
+        });
         await appendAudit(tx, {
           correlationId: randomUUID(),
           attemptId: expired.id,
