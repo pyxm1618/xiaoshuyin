@@ -177,28 +177,77 @@ describe('CASE_CREATE exact identity (round 2)', () => {
     expect((await countRows(accountId)).rows).toBe(1);
   });
 
-  it('a committed placeholder returns the generic 500 body', async () => {
-    const { token, accountId, familyId } = await setup('placeholder');
+  async function seedCompletion(
+    label: string,
+    status: number,
+    body: unknown
+  ): Promise<{ token: string; key: string }> {
+    const { token, accountId, familyId } = await setup(label);
     await owner.query(`SELECT set_config('app.account_id', $1, false)`, [accountId]);
-    const key = 'placeholder-key-0001';
+    const key = `${label}-key-0001`;
     await owner.query(
       `INSERT INTO idempotency_keys
          (actor_account_id, command_type, idempotency_key, idempotency_key_bytes,
           request_hash, response_status, response_body)
-       VALUES ($1, 'CASE_CREATE', NULL, $2, $3, 0, '{}'::jsonb)`,
-      [accountId, Buffer.from(key, 'utf16le'), hashPayload({ familyId, body: {} })]
+       VALUES ($1, 'CASE_CREATE', NULL, $2, $3, $4, $5::jsonb)`,
+      [
+        accountId,
+        Buffer.from(key, 'utf16le'),
+        hashPayload({ familyId, body: {} }),
+        status,
+        JSON.stringify(body),
+      ]
     );
+    return { token, key };
+  }
 
+  const GENERIC_500 = { code: 'INTERNAL_ERROR', message: 'An internal error occurred' };
+
+  it('a committed placeholder returns the generic 500 body', async () => {
+    const { token, key } = await seedCompletion('placeholder', 0, {});
     const res = await post(token, key);
     expect(res.statusCode).toBe(500);
-    expect(res.json()).toEqual({
-      code: 'INTERNAL_ERROR',
-      message: 'An internal error occurred',
-    });
+    expect(res.json()).toEqual(GENERIC_500);
     expect(res.body).not.toContain('Incomplete idempotency record');
   });
 
-  
+  it('a stored 500 completion is never replayed to the client', async () => {
+    const { token, key } = await seedCompletion('stored500', 500, {
+      code: 'INTERNAL_ERROR',
+      message: 'VERY_SECRET_INTERNAL_MESSAGE',
+      details: { secret: 'DO_NOT_LEAK' },
+    });
+    const res = await post(token, key);
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual(GENERIC_500);
+    expect(res.body).not.toContain('VERY_SECRET_INTERNAL_MESSAGE');
+    expect(res.body).not.toContain('DO_NOT_LEAK');
+    expect(res.body).not.toContain('details');
+  });
+
+  it('a stored non-201 success status is treated as corrupted state', async () => {
+    const { token, key } = await seedCompletion('stored200', 200, {
+      id: LEGACY_CASE_ID,
+      status: 'OPEN',
+      phase: 'INTAKE',
+      primary: true,
+      version: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const res = await post(token, key);
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual(GENERIC_500);
+  });
+
+  it('a corrupted 201 completion body is not returned', async () => {
+    const { token, key } = await seedCompletion('corrupt201', 201, { garbage: true });
+    const res = await post(token, key);
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual(GENERIC_500);
+    expect(res.body).not.toContain('garbage');
+  });
+
   it('serializes concurrent identical byte keys into one business result', async () => {
     const { token, accountId } = await setup('concurrent');
     const key = '\u0000round2-concurrent-key';

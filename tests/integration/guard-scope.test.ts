@@ -90,6 +90,33 @@ const SQL_CASES: Array<[string, string]> = [
     'CREATE TABLE -- probe\nobservations',
     'CREATE TABLE -- probe\nobservations (id uuid);\n',
   ],
+  // Nested block comments (PostgreSQL nests them; a boolean flag would stop
+  // at the first */ and leak the rest of the statement).
+  [
+    'nested comment before TABLE',
+    'CREATE /* outer /* inner */ tail */\nTABLE public.observations (id uuid);\n',
+  ],
+  [
+    'triple nested comment',
+    'CREATE /* a /* b /* c */ b */ a */\nUNLOGGED TABLE IF NOT EXISTS\n"public"."tasks" (id uuid);\n',
+  ],
+  [
+    'nested comment between TABLE and name',
+    'CREATE TABLE /* a /* b */ a */ "public"."observations" (id uuid);\n',
+  ],
+];
+
+// SQL where the forbidden text only appears inside a literal: PostgreSQL does
+// not create a table, so the guard must stay silent.
+const ALLOWED_SQL: Array<[string, string]> = [
+  ['single-quoted literal', "SELECT 'CREATE TABLE observations (id uuid)';\n"],
+  ['single-quoted literal (tasks)', "SELECT 'CREATE TABLE tasks (id uuid)';\n"],
+  ['single-quoted doubled quote', "SELECT 'CREATE TABLE observations (id uuid)''x';\n"],
+  ['dollar-quoted literal', 'SELECT $$CREATE TABLE observations (id uuid)$$;\n'],
+  [
+    'tagged dollar-quoted literal',
+    'SELECT $probe$CREATE TABLE case_followup_schedules (id uuid)$probe$;\n',
+  ],
 ];
 
 afterAll(async () => {
@@ -105,6 +132,32 @@ describe('Scope guard rejection (finding 7)', () => {
         const { code, output } = await runGuard();
         expect(code, output).not.toBe(0);
         expect(output).toContain('R6-scope-guard');
+      } finally {
+        cleanup();
+      }
+    });
+  }
+
+  for (const [name, content] of ALLOWED_SQL) {
+    it(`allows: ${name} (literal is not DDL)`, async () => {
+      const cleanup = inject('db/__guard_probe__.sql', content);
+      try {
+        const { code, output } = await runGuard();
+        expect(code, output).toBe(0);
+        expect(output).toContain('PASS (0 violations)');
+      } finally {
+        cleanup();
+      }
+    });
+  }
+
+  for (const [name, content] of ALLOWED_SQL) {
+    it(`allows: ${name} (literal is not DDL)`, async () => {
+      const cleanup = inject('db/__guard_probe__.sql', content);
+      try {
+        const { code, output } = await runGuard();
+        expect(code, output).toBe(0);
+        expect(output).toContain('PASS (0 violations)');
       } finally {
         cleanup();
       }
