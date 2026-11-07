@@ -20,7 +20,6 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
   '/switch-primary',
   '/close',
   '/recurrences',
-  '/messages',
   '/assessments',
   '/participants',
   '/scene',
@@ -33,9 +32,6 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
 const FORBIDDEN_TABLES = [
   'case_participants',
   'participation_invites',
-  'assertions',
-  'observations',
-  'dialogue_messages',
   'problem_formulations',
   'scene_node_states',
   'scene_artifacts',
@@ -78,6 +74,8 @@ describe('Case scope guard (T031)', () => {
     expect(routes).toContain('/api/v1/cases (POST, GET)');
     const caseBlock = routes.slice(routes.indexOf('/api/v1/cases'));
     expect(caseBlock).toContain('/:id (GET)');
+    // Slice 3 adds exactly one approved nested public operation.
+    expect(caseBlock).toContain('/messages (POST)');
     // Exactly one Case subtree: no second `/cases/...` root line.
     const roots = routes.split('\n').filter((line) => line.includes('/api/v1/cases'));
     expect(roots.length).toBe(1);

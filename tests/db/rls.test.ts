@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('11 tables have ENABLE + FORCE RLS, accounts does not', async () => {
+  it('14 tables have ENABLE + FORCE RLS, accounts does not', async () => {
     const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
@@ -33,7 +33,7 @@ describe('RLS', () => {
     const rlsTables = rows.filter((r: any) => r.relrowsecurity);
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
-    expect(rlsTables.length).toBe(11);
+    expect(rlsTables.length).toBe(14);
     expect(noRlsTables.map((r: any) => r.relname)).toContain('accounts');
 
     for (const t of rlsTables) {
@@ -41,11 +41,11 @@ describe('RLS', () => {
     }
   });
 
-  it('11 policies exist', async () => {
+  it('19 policies exist', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(11);
+    expect(rows.length).toBe(19);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {

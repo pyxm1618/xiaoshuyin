@@ -37,6 +37,16 @@ const FROZEN_DOCS = [
       'cases-api.openapi.yaml'
     ),
   },
+  {
+    label: '003-evidence-core',
+    path: join(
+      ROOT,
+      'specs',
+      '003-evidence-core',
+      'contracts',
+      'messages-api.openapi.yaml'
+    ),
+  },
 ];
 
 const DROP_KEYS = new Set([

@@ -1,5 +1,5 @@
 # T067 — Database / RLS / Migration Evidence
-生成时间: 2026-11-07T10:07:03.082Z
+生成时间: 2026-11-07T12:16:34.700Z
 
 说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
 空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
@@ -8,53 +8,54 @@
 
 | 检查 | 期望 | 实际 | 结果 |
 |---|---|---|---|
-| 11 张业务表 relrowsecurity/relforcerowsecurity | true/true × 11 | ["business_audit_events=true/true","case_events=true/true","cases=true/true","consent_records=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+| 14 张业务表 relrowsecurity/relforcerowsecurity | true/true × 14 | ["assertions=true/true","business_audit_events=true/true","case_events=true/true","cases=true/true","consent_records=true/true","dialogue_messages=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","observations=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
 | accounts 无 RLS | false/false | false/false | PASS |
 | 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
 | xiaoshuyin_app rolbypassrls | false | false | PASS |
 | xiaoshuyin_migrator rolbypassrls | false | false | PASS |
-| uuidv7() 默认值的 11 张 id 表 | ["accounts","business_audit_events","case_events","cases","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | ["accounts","business_audit_events","case_events","cases","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | PASS |
-| uuidv7 默认值表达式 | uuidv7() × 11 | ["uuidv7()"] | PASS |
-| 枚举数量与名称（10） | ["account_status","age_band","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | PASS |
+| uuidv7() 默认值的 14 张 id 表 | ["accounts","assertions","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","observations","person_profile_values","persons"] | ["accounts","assertions","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","observations","person_profile_values","persons"] | PASS |
+| uuidv7 默认值表达式 | uuidv7() × 14 | ["uuidv7()"] | PASS |
+| 枚举数量与名称（15） | ["account_status","age_band","assertion_kind","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","assertion_kind","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | PASS |
 | age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
 | profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
 | 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
-| 业务表数量（12） | ["accounts","business_audit_events","case_events","cases","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | ["accounts","business_audit_events","case_events","cases","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | PASS |
-| 不存在 assertions / observations 表 | 0 | 0 | PASS |
-| RLS policy 数量（11） | 11 | 11 | PASS |
+| 业务表数量（15） | ["accounts","assertions","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","observations","person_compliance_profiles","person_profile_values","persons"] | ["accounts","assertions","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","observations","person_compliance_profiles","person_profile_values","persons"] | PASS |
+| Slice 3 三表存在 | 3 | 3 | PASS |
+| RLS policy 数量（19） | 19 | 19 | PASS |
 | consent 不可变触发器 | ["consent_records_guard"] | ["consent_records_guard"] | PASS |
 | persons 无 family_id / source_kind / role | 0 | 0 | PASS |
 | persons.account_id UNIQUE | true | true | PASS |
 | family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
 
 ## 空库重建 + migration replay（真实执行）
-  CREATE DATABASE xiaoshuyin_evidence_1794046023129 OWNER xiaoshuyin_migrator — OK
+  CREATE DATABASE xiaoshuyin_evidence_1794053794755 OWNER xiaoshuyin_migrator — OK
   第一次 db:migrate (空库):
     APPLY 001_initial_schema.sql
       APPLY 002_case_core.sql
       APPLY 003_case_idempotency_key_bytes.sql
-
-    Migration complete: 3 new, 0 previously applied.
+      APPLY 004_evidence_core.sql
+    
+    Migration complete: 4 new, 0 previously applied.
     Verified: app role has no DDL permissions.
 
 ## 空库重建结果 — quickstart §1 期望表逐项核对（真实查询输出）
 
 | 检查 | 期望 | 实际 | 结果 |
 |---|---|---|---|
-| 11 张业务表 relrowsecurity/relforcerowsecurity | true/true × 11 | ["business_audit_events=true/true","case_events=true/true","cases=true/true","consent_records=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+| 14 张业务表 relrowsecurity/relforcerowsecurity | true/true × 14 | ["assertions=true/true","business_audit_events=true/true","case_events=true/true","cases=true/true","consent_records=true/true","dialogue_messages=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","observations=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
 | accounts 无 RLS | false/false | false/false | PASS |
 | 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
 | xiaoshuyin_app rolbypassrls | false | false | PASS |
 | xiaoshuyin_migrator rolbypassrls | false | false | PASS |
-| uuidv7() 默认值的 11 张 id 表 | ["accounts","business_audit_events","case_events","cases","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | ["accounts","business_audit_events","case_events","cases","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_profile_values","persons"] | PASS |
-| uuidv7 默认值表达式 | uuidv7() × 11 | ["uuidv7()"] | PASS |
-| 枚举数量与名称（10） | ["account_status","age_band","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","profile_attribute","profile_value_status","provenance_source"] | PASS |
+| uuidv7() 默认值的 14 张 id 表 | ["accounts","assertions","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","observations","person_profile_values","persons"] | ["accounts","assertions","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","observations","person_profile_values","persons"] | PASS |
+| uuidv7 默认值表达式 | uuidv7() × 14 | ["uuidv7()"] | PASS |
+| 枚举数量与名称（15） | ["account_status","age_band","assertion_kind","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","assertion_kind","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | PASS |
 | age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
 | profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
 | 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
-| 业务表数量（12） | ["accounts","business_audit_events","case_events","cases","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | ["accounts","business_audit_events","case_events","cases","consent_records","families","family_members","guardian_consent_requests","idempotency_keys","person_compliance_profiles","person_profile_values","persons"] | PASS |
-| 不存在 assertions / observations 表 | 0 | 0 | PASS |
-| RLS policy 数量（11） | 11 | 11 | PASS |
+| 业务表数量（15） | ["accounts","assertions","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","observations","person_compliance_profiles","person_profile_values","persons"] | ["accounts","assertions","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","observations","person_compliance_profiles","person_profile_values","persons"] | PASS |
+| Slice 3 三表存在 | 3 | 3 | PASS |
+| RLS policy 数量（19） | 19 | 19 | PASS |
 | consent 不可变触发器 | ["consent_records_guard"] | ["consent_records_guard"] | PASS |
 | persons 无 family_id / source_kind / role | 0 | 0 | PASS |
 | persons.account_id UNIQUE | true | true | PASS |
@@ -63,26 +64,27 @@
     SKIP 001_initial_schema.sql (already applied)
       SKIP 002_case_core.sql (already applied)
       SKIP 003_case_idempotency_key_bytes.sql (already applied)
-
-    Migration complete: 0 new, 3 previously applied.
+      SKIP 004_evidence_core.sql (already applied)
+    
+    Migration complete: 0 new, 4 previously applied.
     Verified: app role has no DDL permissions.
-| migration replay 为 no-op（对象集合不变） | enum:account_status|enum:age_band|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_scope|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | enum:account_status|enum:age_band|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_scope|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | PASS |
+| migration replay 为 no-op（对象集合不变） | enum:account_status|enum:age_band|enum:assertion_kind|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:evidence_confirmation_status|enum:evidence_time_state|enum:observation_value_state|enum:observation_value_type|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:assertions_insert|policy:assertions_select|policy:assertions_update|policy:audit_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_scope|policy:dialogue_messages_insert|policy:dialogue_messages_select|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:observations_insert|policy:observations_select|policy:observations_update|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:assertions|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:dialogue_messages|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:observations|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | enum:account_status|enum:age_band|enum:assertion_kind|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:evidence_confirmation_status|enum:evidence_time_state|enum:observation_value_state|enum:observation_value_type|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:assertions_insert|policy:assertions_select|policy:assertions_update|policy:audit_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_scope|policy:dialogue_messages_insert|policy:dialogue_messages_select|policy:families_scope|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:observations_insert|policy:observations_select|policy:observations_update|policy:pcp_scope|policy:persons_scope|policy:ppv_scope|table:accounts|table:assertions|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:dialogue_messages|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:observations|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:consent_records_guard | PASS |
 | replay 输出声明 0 new | true | true | PASS |
-  DROP DATABASE xiaoshuyin_evidence_1794046023129 — OK
+  DROP DATABASE xiaoshuyin_evidence_1794053794755 — OK
 
 ## T011 / T012 红灯测试转绿（真实命令输出归档）
   $ bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts
-    RUN  v3.2.7 <ROOT>
-
-     ✓ tests/db/migration-repro.test.ts (7 tests) 45ms
-     ✓ tests/db/roles.test.ts (9 tests) 71ms
-
+    RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-003-evidence-core
+    
+     ✓ tests/db/migration-repro.test.ts (7 tests) 39ms
+     ✓ tests/db/roles.test.ts (9 tests) 67ms
+    
      Test Files  2 passed (2)
           Tests  16 passed (16)
-       Start at  18:07:03
-       Duration  229ms (transform 23ms, setup 13ms, collect 37ms, tests 115ms, environment 0ms, prepare 68ms)
-
-    (node:37243) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+       Start at  20:16:35
+       Duration  231ms (transform 26ms, setup 15ms, collect 45ms, tests 106ms, environment 0ms, prepare 72ms)
+    
+    (node:90684) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
     (Use `node --trace-deprecation ...` to show where the warning was created)
 | T011 migration-repro + T012 roles exit code | 0 | 0 | PASS |
 | T011/T012 测试全绿 | true | true | PASS |

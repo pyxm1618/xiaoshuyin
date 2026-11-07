@@ -236,3 +236,117 @@ if (missing.length > 0) {
   process.exit(1);
 }
 console.log(`coverage-audit: PASS (FR ${frOk}/${frTotal}, SC ${scOk}/${scTotal}, missing = 0)`);
+
+// ── Slice 3 (003-evidence-core) ────────────────────────────
+const FR_003 = {
+  'FR-001': ['tests/db/evidence-schema.test.ts', 'tests/domain/evidence-capabilities.test.ts'],
+  'FR-002': ['tests/db/evidence-schema.test.ts', 'tests/db/evidence-fks-supersedes.test.ts'],
+  'FR-003': ['tests/db/evidence-observation-storage.test.ts', 'tests/domain/evidence-observation.test.ts'],
+  'FR-004': ['tests/domain/evidence-provenance.test.ts', 'tests/integration/evidence-write.test.ts'],
+  'FR-005': ['tests/db/evidence-observation-storage.test.ts', 'tests/domain/evidence-observation.test.ts'],
+  'FR-006': ['tests/domain/evidence-conflict-supersedes.test.ts', 'tests/integration/evidence-write.test.ts'],
+  'FR-007': ['tests/db/evidence-fks-supersedes.test.ts', 'tests/domain/evidence-conflict-supersedes.test.ts'],
+  'FR-008': ['tests/db/evidence-fact-guard.test.ts', 'tests/domain/evidence-capabilities.test.ts'],
+  'FR-009': ['tests/integration/messages-create.test.ts', 'tests/integration/openapi-evidence.test.ts'],
+  'FR-010': ['tests/integration/messages-authorization.test.ts', 'tests/integration/messages-authorization-before-replay.test.ts'],
+  'FR-011': ['tests/db/evidence-rls-grants.test.ts', 'tests/db/evidence-fact-guard.test.ts'],
+  'FR-012': ['tests/integration/evidence-scope.test.ts', 'tests/domain/evidence-capabilities.test.ts'],
+  'FR-013': ['tests/integration/openapi-evidence.test.ts', 'tests/integration/messages-create.test.ts'],
+  'FR-014': ['tests/integration/evidence-scope.test.ts', 'tests/domain/evidence-conflict-supersedes.test.ts'],
+  'FR-015': ['tests/integration/openapi-evidence.test.ts', 'tests/integration/evidence-scope.test.ts'],
+  'FR-016': ['tests/domain/evidence-provenance.test.ts', 'tests/domain/evidence-person-reference.test.ts'],
+  'FR-017': ['tests/integration/messages-idempotency.test.ts', 'tests/db/evidence-audit-idempotency.test.ts'],
+  'FR-018': ['tests/integration/messages-authorization.test.ts', 'tests/integration/evidence-scope.test.ts'],
+  'FR-019': ['tests/integration/messages-create.test.ts', 'tests/domain/evidence-person-reference.test.ts'],
+  'FR-020': ['tests/integration/evidence-scope.test.ts', 'tests/db/migration-repro.test.ts'],
+  'FR-021': ['tests/db/evidence-fks-supersedes.test.ts', 'tests/domain/evidence-person-reference.test.ts'],
+};
+
+const SC_003 = {
+  'SC-001': ['tests/db/evidence-schema.test.ts', 'tests/domain/evidence-capabilities.test.ts'],
+  'SC-002': ['tests/domain/evidence-provenance.test.ts', 'tests/integration/evidence-write.test.ts'],
+  'SC-003': ['tests/domain/evidence-conflict-supersedes.test.ts', 'tests/integration/evidence-write.test.ts'],
+  'SC-004': ['tests/db/evidence-observation-storage.test.ts', 'tests/domain/evidence-observation.test.ts'],
+  'SC-005': ['tests/db/evidence-fks-supersedes.test.ts', 'tests/domain/evidence-conflict-supersedes.test.ts'],
+  'SC-006': ['tests/db/evidence-rls-grants.test.ts', 'tests/integration/messages-authorization.test.ts'],
+  'SC-007': ['tests/integration/messages-create.test.ts', 'tests/integration/evidence-scope.test.ts'],
+  'SC-008': ['tests/integration/evidence-scope.test.ts', 'tests/integration/openapi-evidence.test.ts'],
+  'SC-009': ['tests/domain/evidence-provenance.test.ts', 'tests/domain/evidence-conflict-supersedes.test.ts'],
+  'SC-010': ['tests/integration/evidence-scope.test.ts', 'tests/db/migration-repro.test.ts'],
+};
+
+const ACCEPTANCE_003 = {
+  'A01-message-raw-only-zero-assertion': ['tests/integration/messages-create.test.ts'],
+  'A02-guardian-relay-stays-statement': ['tests/integration/evidence-write.test.ts', 'tests/domain/evidence-provenance.test.ts'],
+  'A03-conflict-no-winner': ['tests/integration/evidence-write.test.ts', 'tests/domain/evidence-conflict-supersedes.test.ts'],
+  'A04-unknown-states-roundtrip': ['tests/db/evidence-observation-storage.test.ts', 'tests/domain/evidence-observation.test.ts'],
+  'A05-hypothesis-cannot-become-fact': ['tests/domain/evidence-capabilities.test.ts', 'tests/db/evidence-fact-guard.test.ts', 'tests/db/evidence-rls-grants.test.ts'],
+  'A06-supersedes-keeps-old-history': ['tests/db/evidence-fks-supersedes.test.ts', 'tests/integration/evidence-write.test.ts'],
+  'A07-cross-family-isolation': ['tests/integration/messages-authorization.test.ts', 'tests/db/evidence-rls-grants.test.ts'],
+  'A08-provenance-traceability': ['tests/db/evidence-schema.test.ts', 'tests/domain/evidence-provenance.test.ts'],
+  'A09-only-approved-message-post': ['tests/integration/openapi-evidence.test.ts', 'tests/integration/evidence-scope.test.ts'],
+  'A10-observation-separate-from-assertion': ['tests/db/evidence-schema.test.ts', 'tests/db/evidence-observation-storage.test.ts'],
+  'A11-ai-extractor-cannot-confirm-fact': ['tests/domain/evidence-capabilities.test.ts', 'tests/domain/evidence-provenance.test.ts'],
+  'A12-dependency-gate-blocked': ['tests/integration/evidence-scope.test.ts', 'tests/db/migration-repro.test.ts'],
+  'A13-family-a-cannot-reference-family-b-person': ['tests/domain/evidence-person-reference.test.ts', 'tests/db/evidence-fks-supersedes.test.ts'],
+};
+
+function auditSlice3() {
+  console.log('');
+  console.log('# 003-evidence-core — FR / SC / Acceptance / Checklist Coverage Audit');
+  console.log('');
+
+  const missing3 = [];
+  let fr3Ok = 0;
+  let sc3Ok = 0;
+  let acc3Ok = 0;
+
+  const table = (label, entries, onOk) => {
+    console.log(`## ${label}`);
+    console.log('');
+    console.log('| Item | Test files | Status |');
+    console.log('|---|---|---|');
+    for (const [id, files] of Object.entries(entries)) {
+      const bad = files.filter((f) => !fileOk(f));
+      if (bad.length > 0) {
+        missing3.push(`${id}: ${bad.join(', ')}`);
+        console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
+      } else {
+        onOk();
+        console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
+      }
+    }
+    console.log('');
+  };
+
+  table('Functional Requirements (21)', FR_003, () => { fr3Ok++; });
+  table('Success Criteria (10)', SC_003, () => { sc3Ok++; });
+  table('Acceptance Scenarios (13)', ACCEPTANCE_003, () => { acc3Ok++; });
+
+  const checklistPath = join(
+    ROOT,
+    'specs',
+    '003-evidence-core',
+    'checklists',
+    'requirements-quality.md'
+  );
+  const checklist = readFileSync(checklistPath, 'utf-8');
+  const checked = [...checklist.matchAll(/^- \[x\] CHK(\d{3})/gm)].length;
+  const chkTotal = 115;
+  if (checked !== chkTotal) missing3.push(`Checklist: ${checked}/${chkTotal}`);
+
+  console.log(`FR ${fr3Ok}/${Object.keys(FR_003).length}`);
+  console.log(`SC ${sc3Ok}/${Object.keys(SC_003).length}`);
+  console.log(`Acceptance ${acc3Ok}/${Object.keys(ACCEPTANCE_003).length}`);
+  console.log(`Checklist ${checked}/${chkTotal}`);
+  console.log(`missing = ${missing3.length}`);
+  if (missing3.length > 0) {
+    for (const m of missing3) console.log(`  MISSING ${m}`);
+    console.log('coverage-audit (003): FAIL');
+    process.exitCode = 1;
+  } else {
+    console.log('coverage-audit (003): PASS');
+  }
+}
+
+auditSlice3();

@@ -297,3 +297,52 @@ export const CaseListResponse = z.strictObject({
   items: z.array(CaseResponse),
 });
 export type CaseListResponseType = z.infer<typeof CaseListResponse>;
+
+// ── Evidence Core message schemas (Slice 3) ─────────────────
+// `content` is the only legal business field. The idempotency key travels in
+// the `Idempotency-Key` HTTP header and is rejected inside the body. The
+// response deliberately never echoes raw content (the idempotency response
+// snapshot must not become a second copy of the message).
+
+export const CreateCaseMessageRequest = z.strictObject({
+  content: z.string().min(1).max(8000),
+});
+export type CreateCaseMessageRequestType = z.infer<typeof CreateCaseMessageRequest>;
+
+export const CaseMessageResponse = z.strictObject({
+  id: z.string().uuid(),
+  caseId: z.string().uuid(),
+  recordedAt: z.string().datetime(),
+});
+export type CaseMessageResponseType = z.infer<typeof CaseMessageResponse>;
+
+export const UnauthenticatedError = z.strictObject({
+  code: z.enum(['UNAUTHENTICATED']),
+  message: z.string(),
+});
+
+export const CurrentFamilyNotFoundError = z.strictObject({
+  code: z.enum(['CURRENT_FAMILY_NOT_FOUND']),
+  message: z.string(),
+});
+
+export const CaseNotFoundError = z.strictObject({
+  code: z.enum(['CASE_NOT_FOUND']),
+  message: z.string(),
+});
+
+export const IdempotencyPayloadMismatchError = z.strictObject({
+  code: z.enum(['IDEMPOTENCY_PAYLOAD_MISMATCH']),
+  message: z.string(),
+});
+
+export const ValidationError = z.strictObject({
+  code: z.enum(['VALIDATION_ERROR']),
+  message: z.string(),
+  details: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const InternalError = z.strictObject({
+  code: z.enum(['INTERNAL_ERROR']),
+  message: z.string(),
+});

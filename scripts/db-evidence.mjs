@@ -56,26 +56,31 @@ function quoteIdent(name) {
 }
 
 const RLS_TABLES = [
-  'business_audit_events', 'case_events', 'cases', 'consent_records', 'families',
-  'family_members', 'guardian_consent_requests', 'idempotency_keys',
-  'person_compliance_profiles', 'person_profile_values', 'persons',
+  'assertions', 'business_audit_events', 'case_events', 'cases', 'consent_records',
+  'dialogue_messages', 'families', 'family_members', 'guardian_consent_requests',
+  'idempotency_keys', 'observations', 'person_compliance_profiles',
+  'person_profile_values', 'persons',
 ];
 
 const EXPECTED_TABLES = [
-  'accounts', 'business_audit_events', 'case_events', 'cases', 'consent_records',
-  'families', 'family_members', 'guardian_consent_requests', 'idempotency_keys',
+  'accounts', 'assertions', 'business_audit_events', 'case_events', 'cases',
+  'consent_records', 'dialogue_messages', 'families', 'family_members',
+  'guardian_consent_requests', 'idempotency_keys', 'observations',
   'person_compliance_profiles', 'person_profile_values', 'persons',
 ].sort();
 
 const EXPECTED_ENUMS = [
-  'account_status', 'age_band', 'case_phase', 'case_status', 'consent_decision',
-  'consent_purpose', 'consent_request_status', 'profile_attribute',
-  'profile_value_status', 'provenance_source',
+  'account_status', 'age_band', 'assertion_kind', 'case_phase', 'case_status',
+  'consent_decision', 'consent_purpose', 'consent_request_status',
+  'evidence_confirmation_status', 'evidence_time_state', 'observation_value_state',
+  'observation_value_type', 'profile_attribute', 'profile_value_status',
+  'provenance_source',
 ].sort();
 
 const EXPECTED_UUIDV7_TABLES = [
-  'accounts', 'business_audit_events', 'case_events', 'cases', 'consent_records',
-  'families', 'family_members', 'guardian_consent_requests', 'idempotency_keys',
+  'accounts', 'assertions', 'business_audit_events', 'case_events', 'cases',
+  'consent_records', 'dialogue_messages', 'families', 'family_members',
+  'guardian_consent_requests', 'idempotency_keys', 'observations',
   'person_profile_values', 'persons',
 ].sort();
 
@@ -165,9 +170,10 @@ function verifyStructure(label, d) {
 
   const rlsMap = Object.fromEntries(d.rls.map((r) => [r.relname, r]));
   const rlsFlags = RLS_TABLES.map((t) => `${t}=${rlsMap[t]?.relrowsecurity}/${rlsMap[t]?.relforcerowsecurity}`);
-  check('11 张业务表 relrowsecurity/relforcerowsecurity', 'true/true × 11',
+  check(`${RLS_TABLES.length} 张业务表 relrowsecurity/relforcerowsecurity`,
+    `true/true × ${RLS_TABLES.length}`,
     rlsFlags,
-    (a) => a.length === 11 && a.every((s) => s.endsWith('=true/true')));
+    (a) => a.length === RLS_TABLES.length && a.every((s) => s.endsWith('=true/true')));
   check('accounts 无 RLS', 'false/false',
     `${rlsMap['accounts']?.relrowsecurity}/${rlsMap['accounts']?.relforcerowsecurity}`);
 
@@ -181,13 +187,14 @@ function verifyStructure(label, d) {
   check('xiaoshuyin_migrator rolbypassrls', 'false', migratorRole?.rolbypassrls);
 
   const uuidTables = d.uuidv7.map((r) => r.table_name).sort();
-  check('uuidv7() 默认值的 11 张 id 表', JSON.stringify(EXPECTED_UUIDV7_TABLES), uuidTables,
+  check(`uuidv7() 默认值的 ${EXPECTED_UUIDV7_TABLES.length} 张 id 表`,
+    JSON.stringify(EXPECTED_UUIDV7_TABLES), uuidTables,
     (a) => JSON.stringify(a) === JSON.stringify(EXPECTED_UUIDV7_TABLES));
-  check('uuidv7 默认值表达式', 'uuidv7() × 11',
+  check('uuidv7 默认值表达式', `uuidv7() × ${EXPECTED_UUIDV7_TABLES.length}`,
     [...new Set(d.uuidv7.map((r) => r.column_default))],
     (a) => a.length === 1 && a[0] === 'uuidv7()');
 
-  check('枚举数量与名称（10）', JSON.stringify(EXPECTED_ENUMS),
+  check(`枚举数量与名称（${EXPECTED_ENUMS.length}）`, JSON.stringify(EXPECTED_ENUMS),
     d.enums.map((r) => r.typname).sort(),
     (a) => JSON.stringify(a) === JSON.stringify(EXPECTED_ENUMS));
   const ageBand = d.enums.find((r) => r.typname === 'age_band');
@@ -197,12 +204,13 @@ function verifyStructure(label, d) {
   check('不存在 RELATION_DESCRIPTOR enum label', 0,
     d.enums.flatMap(labelsOf).filter((l) => l === 'RELATION_DESCRIPTOR').length);
 
-  check('业务表数量（12）', JSON.stringify(EXPECTED_TABLES),
+  check(`业务表数量（${EXPECTED_TABLES.length}）`, JSON.stringify(EXPECTED_TABLES),
     d.tables.map((r) => r.tablename),
     (a) => JSON.stringify(a) === JSON.stringify(EXPECTED_TABLES));
-  check('不存在 assertions / observations 表', '0',
-    d.tables.filter((r) => ['assertions', 'observations'].includes(r.tablename)).length);
-  check('RLS policy 数量（11）', 11, d.policies.length);
+  check('Slice 3 三表存在', '3',
+    d.tables.filter((r) =>
+      ['assertions', 'dialogue_messages', 'observations'].includes(r.tablename)).length);
+  check('RLS policy 数量（19）', 19, d.policies.length);
   check('consent 不可变触发器', '["consent_records_guard"]',
     d.triggers.map((r) => r.tgname));
 

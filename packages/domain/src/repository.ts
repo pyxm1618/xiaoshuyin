@@ -309,3 +309,241 @@ export async function getPersonWithProfile(tx: Tx, accountId: string) {
   );
   return rows[0] ?? null;
 }
+
+// ── Evidence Core: dialogue_messages ────────────────────────
+
+export interface DialogueMessageRow {
+  id: string;
+  family_id: string;
+  case_id: string;
+  actor_account_id: string;
+  source_person_id: string;
+  content: string;
+  recorded_at: Date;
+}
+
+/** Insert one raw Case message. `recorded_at` is server-owned by DEFAULT now(). */
+export async function insertDialogueMessage(
+  tx: Tx,
+  args: {
+    familyId: string;
+    caseId: string;
+    actorAccountId: string;
+    sourcePersonId: string;
+    content: string;
+  }
+): Promise<DialogueMessageRow> {
+  const { rows } = await tx.query<DialogueMessageRow>(
+    `INSERT INTO dialogue_messages
+       (family_id, case_id, actor_account_id, source_person_id, content)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, family_id, case_id, actor_account_id, source_person_id, content, recorded_at`,
+    [args.familyId, args.caseId, args.actorAccountId, args.sourcePersonId, args.content]
+  );
+  return rows[0]!;
+}
+
+export async function getDialogueMessageById(
+  tx: Tx,
+  id: string
+): Promise<DialogueMessageRow | null> {
+  const { rows } = await tx.query<DialogueMessageRow>(
+    `SELECT id, family_id, case_id, actor_account_id, source_person_id, content, recorded_at
+       FROM dialogue_messages WHERE id = $1`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+// ── Evidence Core: assertions / observations ────────────────
+
+export interface EvidenceRefRow {
+  id: string;
+  family_id: string;
+  case_id: string;
+  conflict_group_id: string | null;
+}
+
+export interface EvidenceInsertResult {
+  id: string;
+  recorded_at: Date;
+}
+
+/** Guardian relationship of a subject Person (Slice 1 frozen semantics). */
+export async function getGuardianPersonId(
+  tx: Tx,
+  subjectPersonId: string
+): Promise<string | null> {
+  const { rows } = await tx.query(
+    `SELECT guardian_person_id FROM person_compliance_profiles WHERE person_id = $1`,
+    [subjectPersonId]
+  );
+  return rows[0]?.guardian_person_id ?? null;
+}
+
+export async function getAssertionRef(tx: Tx, id: string): Promise<EvidenceRefRow | null> {
+  const { rows } = await tx.query<EvidenceRefRow>(
+    `SELECT id, family_id, case_id, conflict_group_id FROM assertions WHERE id = $1`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getObservationRef(tx: Tx, id: string): Promise<EvidenceRefRow | null> {
+  const { rows } = await tx.query<EvidenceRefRow>(
+    `SELECT id, family_id, case_id, conflict_group_id FROM observations WHERE id = $1`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getAssertionSupersedeTarget(
+  tx: Tx,
+  id: string
+): Promise<{ id: string; family_id: string; case_id: string } | null> {
+  const { rows } = await tx.query(
+    `SELECT id, family_id, case_id FROM assertions WHERE id = $1`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getObservationSupersedeTarget(
+  tx: Tx,
+  id: string
+): Promise<{ id: string; family_id: string; case_id: string } | null> {
+  const { rows } = await tx.query(
+    `SELECT id, family_id, case_id FROM observations WHERE id = $1`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
+export interface AssertionInsertRow {
+  familyId: string;
+  caseId: string;
+  subjectPersonId: string | null;
+  sourceKind: string;
+  sourcePersonId: string | null;
+  sourceMessageId: string | null;
+  occurredTimeState: string;
+  occurredAt: Date | null;
+  validFrom: Date | null;
+  validUntil: Date | null;
+  confirmationStatus: string;
+  supersedesId: string | null;
+  kind: 'STATEMENT' | 'HYPOTHESIS';
+  content: string;
+}
+
+export async function insertEvidenceAssertion(
+  tx: Tx,
+  row: AssertionInsertRow
+): Promise<EvidenceInsertResult> {
+  const { rows } = await tx.query(
+    `INSERT INTO assertions
+       (family_id, case_id, subject_person_id, source_kind, source_person_id,
+        source_message_id, occurred_time_state, occurred_at, valid_from, valid_until,
+        confirmation_status, supersedes_id, kind, content)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     RETURNING id, recorded_at`,
+    [
+      row.familyId,
+      row.caseId,
+      row.subjectPersonId,
+      row.sourceKind,
+      row.sourcePersonId,
+      row.sourceMessageId,
+      row.occurredTimeState,
+      row.occurredAt,
+      row.validFrom,
+      row.validUntil,
+      row.confirmationStatus,
+      row.supersedesId,
+      row.kind,
+      row.content,
+    ]
+  );
+  return rows[0]!;
+}
+
+export interface ObservationInsertRow {
+  familyId: string;
+  caseId: string;
+  subjectPersonId: string | null;
+  sourceKind: string;
+  sourcePersonId: string | null;
+  sourceMessageId: string | null;
+  occurredTimeState: string;
+  occurredAt: Date | null;
+  validFrom: Date | null;
+  validUntil: Date | null;
+  confirmationStatus: string;
+  supersedesId: string | null;
+  observationCode: string;
+  valueState: string;
+  valueType: string | null;
+  valueText: string | null;
+  valueNumber: number | null;
+  valueBoolean: boolean | null;
+  unit: string | null;
+}
+
+export async function insertEvidenceObservation(
+  tx: Tx,
+  row: ObservationInsertRow
+): Promise<EvidenceInsertResult> {
+  const { rows } = await tx.query(
+    `INSERT INTO observations
+       (family_id, case_id, subject_person_id, source_kind, source_person_id,
+        source_message_id, occurred_time_state, occurred_at, valid_from, valid_until,
+        confirmation_status, supersedes_id, observation_code,
+        value_state, value_type, value_text, value_number, value_boolean, unit)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+     RETURNING id, recorded_at`,
+    [
+      row.familyId,
+      row.caseId,
+      row.subjectPersonId,
+      row.sourceKind,
+      row.sourcePersonId,
+      row.sourceMessageId,
+      row.occurredTimeState,
+      row.occurredAt,
+      row.validFrom,
+      row.validUntil,
+      row.confirmationStatus,
+      row.supersedesId,
+      row.observationCode,
+      row.valueState,
+      row.valueType,
+      row.valueText,
+      row.valueNumber,
+      row.valueBoolean,
+      row.unit,
+    ]
+  );
+  return rows[0]!;
+}
+
+export async function setAssertionConflictGroup(
+  tx: Tx,
+  id: string,
+  conflictGroupId: string
+): Promise<void> {
+  await tx.query('UPDATE assertions SET conflict_group_id = $1 WHERE id = $2', [
+    conflictGroupId,
+    id,
+  ]);
+}
+
+export async function setObservationConflictGroup(
+  tx: Tx,
+  id: string,
+  conflictGroupId: string
+): Promise<void> {
+  await tx.query('UPDATE observations SET conflict_group_id = $1 WHERE id = $2', [
+    conflictGroupId,
+    id,
+  ]);
+}

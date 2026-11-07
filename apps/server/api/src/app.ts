@@ -10,6 +10,7 @@ import { registerMemberRoutes } from './routes/members.js';
 import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerConsentRoutes } from './routes/consents.js';
 import { registerCaseRoutes } from './routes/cases.js';
+import { registerMessageRoutes } from './routes/messages.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import {
   createWechatProvider,
@@ -107,6 +108,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerComplianceRoutes(app, pool);
   registerConsentRoutes(app, pool);
   registerCaseRoutes(app, pool);
+  registerMessageRoutes(app, pool);
 
   return app;
 }
