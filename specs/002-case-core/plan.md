@@ -612,7 +612,48 @@ request_hash = sha256(canonicalJson({
 | legacy 兼容 | 003 之前的 raw text CASE_CREATE 行继续按 raw logical identity 读取（bytes IS NULL） |
 | 禁止 | digest、UUID 占位命名空间、base64 text 身份、截断；以及任何 reserved prefix（`u:` / `h:`）语义 |
 | 不变量保持 | 不新建第二张幂等表；Slice 1 六个 command 的物理语义与唯一性完全不变 |
-| 回滚（仅 003） | 删除 `idempotency_scope_key_bytes` 索引与 representation CHECK、删除 `idempotency_key_bytes` 列、恢复 `idempotency_key` NOT NULL；无数据回填，不回滚 002 |
+| 回滚（仅 003） | **取决于是否已产生 new-format rows，不存在无条件 schema rollback**。状态 A / B 见下方 D-11.2；不回滚 002 |
+| forward 数据影响 | 003 前进方向**无数据回填**（不重写任何既有行） |
+
+#### D-11.2 003 rollback / recovery（不是无条件 schema downgrade）
+
+003 一旦写入 new-format `CASE_CREATE` 行（`idempotency_key IS NULL AND idempotency_key_bytes IS NOT NULL`），就**不存在无损的纯 schema rollback**：PostgreSQL `text` 无法表示 U+0000 与 lone surrogate，因此连「把所有 bytea 解码回 text」都不是通用可逆操作。
+
+**状态 A — 尚未产生 new-format rows**
+
+以只读查询确认不存在该形态的行：
+
+```sql
+SELECT NOT EXISTS (
+  SELECT 1 FROM idempotency_keys
+  WHERE command_type = 'CASE_CREATE'
+    AND idempotency_key_bytes IS NOT NULL
+) AS rollback_safe;
+```
+
+`rollback_safe = true` 时，可按 reviewed 步骤人工回滚：
+
+1. `DROP INDEX idempotency_scope_key_bytes`
+2. `ALTER TABLE idempotency_keys DROP CONSTRAINT idempotency_keys_key_representation_check`
+3. `ALTER TABLE idempotency_keys DROP COLUMN idempotency_key_bytes`
+4. `ALTER TABLE idempotency_keys ALTER COLUMN idempotency_key SET NOT NULL`
+
+**状态 B — 已存在 new-format rows**
+
+`rollback_safe = false` 时：
+
+- **禁止**直接执行状态 A 的第 3 / 4 步（必然 `23502`，或丢失 exact identity）；
+- 必须先制定 reviewed **data disposition / migration plan**，至少明确：
+  - 这些 idempotency records 是否保留；
+  - 是否改为停止回滚（推荐：保持 003 在线）；
+  - 是否需要 archive / 导出；
+  - 是否存在可逆到 `text` 的 subset（仅不含 NUL / lone surrogate 的 key）；
+  - 不可表示 key（NUL / lone surrogate）如何处置；
+  - 如何保证 logical idempotency identity 不被改变；
+  - 如何避免历史 `CASE_CREATE` 请求在回滚后被重复执行。
+- 在数据处理方案获批前：**不得** `DROP COLUMN idempotency_key_bytes`，**不得** `SET idempotency_key NOT NULL`。
+
+**禁止的表述**：不得声称「把 bytea 全部转回 text 即可回滚」——bytea 表示的存在原因正是 text 无法精确表示全部合法 JS strings。
 
 ---
 
@@ -767,7 +808,9 @@ tests/integration/cases-scope.test.ts      # 新增
    - 删除 `case_events` policy / 表；删除 `cases` policy / 索引 / 表；删除 `case_status` / `case_phase` enum。
    - 将 `business_audit_events` 的两个 CHECK 还原为 Slice 1 白名单；将 `idempotency_keys.command_type` CHECK 还原。
    - 注意：若已存在 `CASE_CREATED` 审计行或 `CASE_CREATE` 幂等行，直接还原 CHECK 会失败；必须在回滚前决定这些行的处理（本 Slice 为 Greenfield，预期无存量）。
-3. **数据**：本 Slice 无回填、无跨表复制；回滚不涉及数据迁移。
+3. **数据（按 migration 分别说明，不得合并成一句）**：
+   - `002_case_core`：前进方向无业务数据回填、无跨表复制；其自身的 schema rollback 见 D-11。
+   - `003_case_idempotency_key_bytes.sql`：**前进方向无数据回填**；但这不等于「回滚不需要数据处理」。一旦运行后已产生 bytea-only `CASE_CREATE` 行，回滚可能需要 reviewed data disposition / migration，且不存在无条件 schema rollback（见 D-11.2）。不得把「forward 无 backfill」写成「rollback 永远不涉及数据迁移」。
 4. **不自动执行**：任何 down migration 都必须人工 review，不在 runtime 自动运行。
 
 ---

@@ -326,3 +326,99 @@ Amendment 已写入 `plan.md` D-11.1、`data-model.md` §5.5、`contracts/author
 ## Remaining gaps
 
 `NONE`
+
+---
+
+# Independent Converge Round 4 Remediation（2026-11-07）
+
+**判定输入**: `INDEPENDENT CONVERGE FAIL — RETURN TO IMPLEMENT`（Round 4）
+**Old head**: `369e1f1f22f05177e96e1a97aa39aaf6aed06315`
+**Remediation code head**: `ece4e04222d19810b06f0c1c4aa6c01db66c5a42`（其后为本次证据提交；最终 head 以分支 HEAD / CI run 为准）
+**范围**: 只关闭 Round 4 的 A / B / C 三个 MEDIUM；未重开任何已 CLOSED 项。
+
+## Finding A — R6 nested comment bypass + string-literal false positive → CLOSED
+
+**修复前现场复现（真实命令输出）**
+
+| Probe | PostgreSQL 语义 | 修复前 guard |
+|---|---|---|
+| `CREATE /* outer /* inner */ tail */\nTABLE public.observations (id uuid);` | 真实建表 | **exit 0（漏检）** |
+| `SELECT 'CREATE TABLE observations (id uuid)';` | 不建表 | **exit 1（误报）** |
+| `SELECT $$CREATE TABLE observations (id uuid)$$;` | 不建表 | **exit 1（误报）** |
+
+**修复**
+
+`normalizeSql()` 由「布尔 `inBlockComment`」改为最小 lexical scanner：
+
+- `blockDepth` 计数器，支持任意嵌套深度（`/*` +1、`*/` -1），注释内容全部空白化；
+- 单引号字符串（含 `''` 转义）内容空白化——literal 不可能成为 DDL；
+- dollar-quoted（`$$…$$` 与 `$tag$…$tag$`）内容空白化；
+- 双引号 identifier **保留**（它是名字，不是 literal），因此 `CREATE TABLE "public"."observations"` 仍然命中；
+- 保留换行以维持行号；`pgTable('…')` 因参数是字符串字面量，改为在**原文**上匹配。
+
+**修复后验证（同一批 probe，真实执行）**
+
+- 嵌套注释 3 个真阳性（`before TABLE` / 三层嵌套 / `TABLE` 与表名之间）→ 均 `exit != 0`；
+- 字面量 5 个负向（单引号 / `''` 转义 / `$$` / `$tag$` / `tasks` 变体）→ 均 `exit 0 / PASS (0 violations)`；
+- 原有能力全部保留（multiline、block/line comment、quoted schema、UNLOGGED、IF NOT EXISTS、pgTable、全量 forbidden vocabulary）。
+- 套件：`tests/integration/guard-scope.test.ts` **38/38**。
+
+## Finding B — CASE_CREATE replay 不得返回任意持久化 status/body → CLOSED
+
+**冻结合同**：CASE_CREATE 的持久化完成状态只有 `201 + CaseResponse`。
+
+**修复**
+
+```text
+decideIdempotency → REPLAY
+  ├─ responseStatus !== 201        → INTERNAL_ERROR（不是只拦 0 或 >=500）
+  └─ CaseResponse.safeParse(body) 失败 → INTERNAL_ERROR（不返回被污染数据）
+两者都经 route rethrow 5xx → 单一 generic 500
+```
+
+**证据**（`tests/integration/cases-idempotency-identity.test.ts`，真实 DB 行 + 真实 POST）
+
+| 场景 | 存储行 | 结果 |
+|---|---|---|
+| B1 placeholder | `response_status = 0` | 500 generic；不含 `Incomplete idempotency record` |
+| B2 stored 500 | `500` + `{message:"VERY_SECRET_INTERNAL_MESSAGE", details:{secret:"DO_NOT_LEAK"}}` | 500 generic；三个敏感串均不出现 |
+| B3 non-201 success | `200` + 合法 Case body | 500 generic |
+| B4 corrupted 201 | `201` + `{"garbage":true}` | 500 generic；不含 `garbage` |
+| B5 normal 201 | 正常创建后的行 | 原样 replay 同一 Case（既有用例保持绿） |
+
+## Finding C — 003 rollback / recovery 文档 → CLOSED
+
+- `plan.md` D-11.1 的回滚行改为「取决于是否已产生 new-format rows」，并新增 **D-11.2**：
+  - **状态 A**（`rollback_safe = true`，附只读判定 SQL）：可按 reviewed 步骤删除 bytea 唯一索引 / representation CHECK / bytea 列，并恢复 `idempotency_key NOT NULL`；
+  - **状态 B**（已存在 bytea-only 行）：**禁止**直接 schema rollback（必然 `23502` 或丢失 exact identity），必须先有 reviewed data disposition / migration plan，列出保留/停止/archive/可逆 subset/NUL 与 lone surrogate 处置/identity 不变/replay 防重复等决策点；
+  - 明确禁止「把 bytea 全部转回 text 即可回滚」的说法。
+- `Rollback / Recovery` 总节拆分为 002 与 003 两条：003 **forward 无回填** ≠ **rollback 不需要数据处理**。
+- 未修改 `Docs/**`、`spec.md`、`research.md`、`cases-api.openapi.yaml`、`quickstart.md`、Constitution、`AGENTS.md`。
+
+## 已 CLOSED finding 回归抽查
+
+| 项 | 结果 |
+|---|---|
+| bytea / UTF-16LE exact identity | `cases-idempotency-identity.test.ts` 9/9；表示层结构 7/7 |
+| shared mismatch | `cases-idempotency-mismatch.test.ts` 2/2 |
+| auth ordering | 无 token / 非法 token + raw `__proto__` → 401 |
+| generic 500 单事实源 | 全部 5xx 走同一 body；logging 白名单未变 |
+| OpenAPI / HEAD / 404 / A06 / A07 / A13 / `/cases/current` | 全绿（对应套件未改动） |
+
+## 验证
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS |
+| `bun run guard:static` | PASS (0 violations) |
+| 四个重点套件（guard / identity / idempotency / redaction） | 51 passed |
+| `bunx vitest run tests/domain` | 9 files / 80 passed |
+| `bunx vitest run tests/db` | 12 files / 79 passed |
+| `bunx vitest run`（全量） | **51 files / 390 tests，0 failed / 0 skipped** |
+| `bun run db:evidence` | PASS（空库 001→002→003 + 二次 apply no-op） |
+| `bun run openapi:check` | PASS (no drift) |
+| governance | `validate-governance` PASS；self-test 15/15 |
+
+## Remaining gaps
+
+`NONE`

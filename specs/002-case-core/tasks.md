@@ -564,3 +564,15 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 | 003 重复 DDL | DONE | 删除重复 `DROP NOT NULL`；空库 replay PASS |
 
 **全量**：`bunx vitest run` → 51 files / 375 tests，0 failed / 0 skipped。
+
+---
+
+## Independent Converge Round 4 Remediation Evidence（2026-11-07）
+
+| 项 | 状态 | 证据 |
+|---|---|---|
+| A — R6 nested comment / literal false positive | CLOSED | 词法器改为 blockDepth + 单引号 / dollar-quote 空白化；`guard-scope.test.ts` 38/38（3 个嵌套真阳性 + 5 个字面量负向） |
+| B — replay 任意 stored status/body | CLOSED | REPLAY 仅接受 `201 + CaseResponse`；status 0/200/500 与损坏 201 body 均 generic 500；`cases-idempotency-identity.test.ts` 9/9 |
+| C — 003 rollback / recovery 文档 | CLOSED | `plan.md` D-11.2 状态 A/B；总 Rollback 节区分 002 与 003；删除「回滚不涉及数据迁移」的错误表述 |
+
+**全量**：`bunx vitest run` → 51 files / 390 tests，0 failed / 0 skipped。
