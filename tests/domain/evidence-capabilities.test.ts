@@ -94,9 +94,10 @@ describe('Evidence capability surface (T018)', () => {
 /**
  * AUD-II-001 — production export boundary.
  *
- * The package entrypoint must expose exactly the approved Evidence writers
- * (plus the sole message command writer) and must NOT expose low-level Evidence
- * repository write primitives that could bypass provenance/FACT validation.
+ * The package entrypoint must expose exactly the four frozen Evidence writers
+ * and must NOT expose any fifth writer (including the message-command helper)
+ * or low-level Evidence repository write primitives that could bypass
+ * provenance/FACT validation.
  */
 describe('Evidence production export boundary (AUD-II-001)', () => {
   const APPROVED_WRITERS = [
@@ -104,7 +105,6 @@ describe('Evidence production export boundary (AUD-II-001)', () => {
     'recordHypothesis',
     'recordObservation',
     'assignConflictGroup',
-    'recordDialogueMessage',
   ];
 
   const FORBIDDEN_REPOSITORY_WRITES = [
@@ -121,6 +121,10 @@ describe('Evidence production export boundary (AUD-II-001)', () => {
     for (const name of APPROVED_WRITERS) {
       expect(typeof (domain as any)[name], name).toBe('function');
     }
+  });
+
+  it('does not expose the internal message writer as a fifth Evidence writer', () => {
+    expect((domain as any).recordDialogueMessage).toBeUndefined();
   });
 
   it('does not expose any Evidence repository write primitive', () => {

@@ -22,7 +22,7 @@ import {
   getObservationRef,
   getObservationSupersedeTarget,
   insertAuditEvent,
-  insertDialogueMessage,
+
   insertEvidenceAssertion,
   insertEvidenceObservation,
   isFamilyMember,
@@ -525,39 +525,6 @@ export interface EvidenceWriteResult {
   recordedAt: Date;
 }
 
-/**
- * AUD-II-001: the sole public message writer used by the approved Message POST.
- *
- * The raw `insertDialogueMessage` repository primitive is no longer exported
- * from the package, so production callers cannot bypass this context check.
- * Message + business audit stay in the caller's transaction (the atomic set).
- */
-export async function recordDialogueMessage(
-  tx: Tx,
-  ctx: EvidenceWriteContext,
-  content: string
-): Promise<EvidenceWriteResult> {
-  assertValidContent(content);
-  if (!(await isFamilyMember(tx, ctx.familyId, ctx.actorPersonId))) {
-    throw new EvidenceDomainError('EVIDENCE_PERSON_REFERENCE_INVALID');
-  }
-  const row = await insertDialogueMessage(tx, {
-    familyId: ctx.familyId,
-    caseId: ctx.caseId,
-    actorAccountId: ctx.actorAccountId,
-    sourcePersonId: ctx.actorPersonId,
-    content,
-  });
-  await insertAuditEvent(
-    tx,
-    ctx.familyId,
-    ctx.actorAccountId,
-    'MESSAGE_RECORDED',
-    'DIALOGUE_MESSAGE',
-    row.id
-  );
-  return { id: row.id, recordedAt: row.recorded_at };
-}
 
 export interface AssertionDraft {
   subjectPersonId: string | null;

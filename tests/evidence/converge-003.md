@@ -114,7 +114,7 @@ Slice 3 范围内 **NONE**。
 
 | Finding | 状态 | 修复 |
 |---|---|---|
-| AUD-II-001 (HIGH) | FIXED | `packages/domain/src/index.ts` 不再 `export * from './repository.js'`；改为显式导出既有批准 API。Evidence 低层写 primitive 仍留在 `repository.ts` 内部，生产 package 不可导入；消息路由改用新的 `recordDialogueMessage` domain writer。机械测试验证 4 个 Evidence writer + 1 个消息 writer、无 repository 写 primitive、无 FACT writer、disabled provenance 无法绕过 writer。 |
+| AUD-II-001 (HIGH) | FIXED | `packages/domain/src/index.ts` 不再 `export * from './repository.js'`；改为显式导出既有批准 API。Evidence 低层写 primitive 仍留在 `repository.ts` 内部，生产 package 不可导入。production package entrypoint 对 Evidence writer 只暴露严格 4 个：`recordStatement` / `recordHypothesis` / `recordObservation` / `assignConflictGroup`；消息写入口移至 `packages/domain/src/internal/message-writer.ts` 内部 seam，不从 index 导出。机械测试验证 4 个 writer、`recordDialogueMessage` 与 repository 写 primitive 均 undefined、无 FACT writer、disabled provenance 无法绕过 writer。 |
 | AUD-II-002 (MEDIUM) | FIXED | `setAssertionConflictGroup` / `setObservationConflictGroup` 改为条件 UPDATE（仅 `NULL → group` 或 `same → same`）；并发竞争落败返回 `rowCount = 0`，domain 抛 `EVIDENCE_CONFLICT_GROUP_IMMUTABLE`。真实双连接并发测试证明只有一个 group 成为真实值，`G1 → G2` 不可能发生。 |
 | AUD-II-003 (MEDIUM) | FIXED | 新增 `tests/db/migration-upgrade-evidence.test.ts`：临时库只应用 001–003 → 插入真实 Slice 1/2 数据并记录 invariant → 真实 migrator 应用 `004_evidence_core.sql` → 验证旧数据/关系存活、新 schema/RLS/grants/CHECK 正确 → 再次应用 `0 new` no-op → 销毁临时库。 |
 
@@ -139,3 +139,37 @@ Slice 3 范围内 **NONE**。
 | 冻结文档 diff（Docs、AGENTS、.specify、003 spec/plan/tasks/checklists/contracts、其它 Slice） | 0 |
 
 > 本轮仍只是开发 AI 的 remediation；不宣称 Audit II PASS，不 merge main。下一步交新的独立 Audit II 复审。
+## 12. AUD-II-001 精准 re-remediation（2026-11-07）
+
+**Start Head**: `2e0e5c963e6d895beee69a5c74e6bb4602b52c1f`
+
+审计确认 AUD-II-002 / AUD-II-003 已修复；仅 AUD-II-001 残留「`recordDialogueMessage` 成为第 5 个 public Evidence writer」。
+
+本轮修复：
+
+- 删除 `packages/domain/src/evidence.ts` 的 `recordDialogueMessage` export。
+- 新增 `packages/domain/src/internal/message-writer.ts` 作为 Message command 的内部 seam（不导出 index）。
+- `apps/server/api/src/routes/messages.ts` 从该内部模块路径导入，Message 行为、事务边界与 audit 原子性不变。
+- `tests/domain/evidence-capabilities.test.ts` 的 `APPROVED_WRITERS` 恢复为严格 4 个，并新增 `recordDialogueMessage` 在 package entrypoint 必须 undefined 的断言。
+
+**真实验证**
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS |
+| `bun run guard:static` | PASS (0 violations) |
+| 入口面实测 | `recordStatement/recordHypothesis/recordObservation/assignConflictGroup` = function；`recordDialogueMessage` = undefined；`insertEvidenceAssertion` = undefined |
+| `tests/domain` | 16 files / 179 tests PASS |
+| `tests/db` | 20 files / 136 tests PASS |
+| `tests/integration` | 48 files / 315 tests PASS |
+| 全量 | 84 files / 630 tests PASS，0 failed，0 skipped |
+| `bun run openapi:check` | PASS（无 drift） |
+| `bun run db:evidence` | PASS |
+| `bun run coverage:audit` | PASS（21/21、10/10、13/13、115/115） |
+| `bun run verify-all` | PASS（36 PASS / 0 FAIL / 1 NOT VERIFIED = Slice 1 FR-002 平台真实性） |
+| governance | PASS / 15/15 |
+| AUD-II-002 回归 | `tests/db/evidence-conflict-concurrency.test.ts` 3/3 PASS |
+| AUD-II-003 回归 | `tests/db/migration-upgrade-evidence.test.ts` 2/2 PASS |
+| 冻结文档 diff | 0 |
+
+> 仍不宣称 Audit II PASS、不 merge main；由新的独立 Audit II 最终判定。

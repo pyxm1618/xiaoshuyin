@@ -26,8 +26,11 @@ import {
 import {
   buildCaseMessageRequestHash,
   getCaseById,
-  recordDialogueMessage,
 } from '@xiaoshuyin/domain';
+// AUD-II-001: explicit package-internal seam. This module is NOT exported from
+// the production package entrypoint, keeping the Evidence public writer surface
+// at exactly the four frozen writers.
+import { recordDialogueMessage } from '@xiaoshuyin/domain/src/internal/message-writer.js';
 import { withIdentityTransaction, withRlsTransaction, setFamilyContext } from '../db/tx.js';
 import { requireCurrentFamily } from '../family-context.js';
 import {
