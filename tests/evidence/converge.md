@@ -418,3 +418,86 @@ T057 的时间顺序断言由 `<=` 收紧为要求的 `<`，专项测试 3/3 PAS
 之后重新执行 `node scripts/verify-all.mjs --archive`：36 PASS / 0 FAIL，完整套件 29 files / 178 tests，0 skipped；详细输出见 `verify-all.log`。其中真实微信平台验证仍为 NOT VERIFIED。
 逐项核对 T057（严格顺序及专项 PASS）、T058（§14 的 RED 记录）、T059（撤回专项 PASS）、T068（完整归档 PASS）、T072（收敛记录、治理验证及受保护文件说明），任务状态为 72/72。
 Final Head CI 是独立外部证据，须以提交后的 GitHub Actions 结果为准；此处不预先声明通过。
+
+
+---
+
+## 18. Final Independent Audit（最终独立代码审计二）
+
+- **Audited main SHA**: `ed0d5fbee8c6764be704da8d80fb27ad2172222b`
+- **Audit Role**: Independent Audit AI（全新独立模型，未参与 Slice 1 前期开发、修复或计划工作）
+- **Date**: 2026-11-07
+- **Evidence Branch**: `review/slice1-final-independent-audit`
+
+### 1. 历史审计问题关闭状态（Historical Findings Status）
+
+#### Round 1 Findings (6/6 CLOSED)
+| # | Finding | Severity | Status | Evidence |
+|---|---|---|---|---|
+| 1 | revoke consent 后仍可写 UNDER_14 profile values（PATCH 缺少 processing gate） | CRITICAL | **RESOLVED** | `runProcessingGate` 调用 `getComplianceProfileForUpdate` 严格串行化，状态为 REVOKED 时 403 阻断；`tests/integration/processing-gate.test.ts` 5/5 PASS |
+| 2 | re-consent 新开 v1，未接续 v3 版本链 | HIGH | **RESOLVED** | Mode B 正确获取 current consent，设置 `newVersion = current.version + 1`、`supersedes_id = current.id`，生成 v3 记录；`tests/integration/consent-revoke.test.ts` 3/3 PASS，`consent-reconsent.test.ts` 5/5 PASS |
+| 3 | provenance provider 可由客户端伪造 | HIGH | **RESOLVED** | `resolveProvenanceProvider` 纯函数严格校验，UNDER_14 锁定为 pinnedProvider，越界返回 422；`tests/integration/age-band-source.test.ts` 12/12 PASS |
+| 4 | Family creator 未强制 `ageBand=ADULT` | HIGH | **RESOLVED** | `checkSourceAcceptability` 强制 `ageBand === 'ADULT'`，非成人返回 403 `FAMILY_MANAGER_MUST_BE_ADULT`；`tests/integration/families.test.ts` 6/6 PASS |
+| 5 | root `typecheck` 自递归 | HIGH | **RESOLVED** | 根脚本改为 `node scripts/typecheck-all.mjs`，单次线性执行 exit 0，无自递归；`bun run typecheck` PASS |
+| 6 | `GET /consents` 返回裸数组非 `{ items: [...] }` | MEDIUM | **RESOLVED** | 统一返回 `{ items: [...] }`；`tests/integration/consent-read.test.ts` 4/4 PASS |
+
+#### Round 2 Findings (5/5 CLOSED)
+| # | Finding | Severity | Status | Evidence |
+|---|---|---|---|---|
+| 1 | processing gate 用无锁 `getComplianceProfileForGate` 产生 TOCTOU 竞争 | CRITICAL | **RESOLVED** | 改用 `getComplianceProfileForUpdate(tx, personId)` 事务级行锁；`tests/integration/processing-gate.test.ts` 并发锁竞争验证 PASS |
+| 2 | `resolveProvenanceProvider` pinned 分支绕过 source 校验 | HIGH | **RESOLVED** | pinned 分支先校验 `sourceKind ∈ {GUARDIAN_RELAY, GUARDIAN_OBSERVATION}`，非 guardian 来源返回 422；`tests/integration/age-band-source.test.ts` 12/12 PASS |
+| 3 | `subject_person_id != NULL` 时预条件不全满足却回退 Mode A 偷建未绑定 v1 | HIGH | **RESOLVED** | 明确拆分 Mode A 与 Mode B，Mode B 依次核验 9 项预条件，不满足直接抛错，绝不回退 Mode A；`tests/integration/consent-reconsent.test.ts` 5/5 PASS |
+| 4 | converge.md 旧正文自相矛盾 | MEDIUM | **RESOLVED** | 历史失败保留并补充 `Historical — superseded` 批注，事实清晰真实 |
+| 5 | untracked 本地 artifact (`.arts/settings.json`) | WORKSPACE | **RESOLVED** | 工作区清洁，无多余未追踪文件 |
+
+### 2. 真实命令执行结果（Commands Executed）
+
+所有命令均在本轮由独立审计 AI 真实重新执行，无引用旧日志：
+
+| 校验类别 | 真实执行命令 | 退出码 | 结果与真实数据 |
+|---|---|---|---|
+| 类型检查 (Typecheck) | `bun run typecheck` | 0 | PASS（root tsbase + 5 workspace 线性执行，无递归） |
+| 静态守卫 (Static Guard) | `bun run guard:static` | 0 | PASS（0 violations） |
+| 契约漂移检查 (OpenAPI) | `bun run openapi:check` | 0 | PASS（14 paths，no drift） |
+| 单元与集成测试套件 | `bunx vitest run` | 0 | **30 files / 189 tests 全部 PASS，0 failed，0 skipped** |
+| 数据库结构与 RLS 证据 | `bun run db:evidence` | 0 | PASS（9 表 ENABLE+FORCE RLS、accounts 无 RLS、owner=migrator、NOBYPASSRLS、8 enum、10 表、9 policy、空库重建与 replay PASS） |
+| FR/SC 需求覆盖审计 | `bun run coverage:audit` | 0 | PASS（FR 17/17，SC 8/8，missing = 0） |
+| 规格治理校验 | `node .specify/scripts/validate-governance.mjs` | 0 | PASS（`specs/001-family-identity-core [tasked]`，`specs/005-invited-identity-binding-contract [spec-only]`） |
+| 治理规则自测 | `node .specify/scripts/tests/run-governance-tests.mjs` | 0 | PASS（15/15 cases） |
+| 全量规约验证计划 | `node scripts/verify-all.mjs` | 0 | PASS（26 项计划，36 命令 PASS，0 FAIL，1 NOT VERIFIED per plan） |
+| 静态守卫反向探测 | negative probes (scratch) | 0 | PASS（7 组探测：R1~R5 违规均被阻断，普通注释不误报） |
+
+### 3. 架构不变量与安全独立复核（Architecture & Security Verification）
+
+- **Account / Person**: 数据库级 1:1 与 0..1 严格约束成立；普通登录在 `withAccountTransaction` 内同事务创建；无账号 Person 来源独立记录；无跨家庭任意查找/关联已有 Person 接口。
+- **Family**: Person ↔ Family 多对多经 `family_members` 表达；当前家庭解析经 `resolveCurrentFamily` 规则确定性裁决（0: NONE / 1: RESOLVED / >1 且唯一 owned: RESOLVED / 其余: 409 CURRENT_FAMILY_AMBIGUOUS），彻底杜绝 `rows[0]` 伪解析。
+- **Guardian**: 与 Family membership 严格解耦；非 guardian 成员无 grant/revoke 权限（403 `NOT_GUARDIAN`）；非家庭成员无家庭访问权（403 `NOT_FAMILY_MEMBER`）。
+- **UNDER_14 consent-first**: 严格遵循 `lock consent → validate → pregenerate personId → membership → Person → bind consent → profile`；无有效同意时 403 `GUARDIAN_CONSENT_REQUIRED` 且库中无未成年人 Person/profile 写入。
+- **普通微信登录**: 保持标准 `code2session → Account + Person`，无邀请流参数泄漏（`mode=invite` 不存在）。
+- **Authorization**: fail-closed 纯函数；V1 仅创建 Family 的 adult 具备管理主体权限；无 generic RBAC 与自动授权。
+- **RLS**: 真实 PostgreSQL 18 环境验证；9 张业务表 `ENABLE + FORCE RLS`；运行角色 `xiaoshuyin_app` 非 owner 且 `NOBYPASSRLS`；无上下文或跨家庭上下文查询返回 0 行，写入被拒（42501）。
+- **Idempotency**: 6 个核心关键命令统一采用基于 `pg_advisory_xact_lock` 的两阶段幂等编排，同事务写入幂等记录与业务数据，同 key 重放一致，不同 payload 抛 409。
+- **Consent 生命周期**: 严格实现 `v1 GRANTED → v2 REVOKED → v3 GRANTED` 递增不可变版本链；触发器 `consent_records_guard` 物理阻止历史记录修改或删除。
+- **Error Handling / Anti-enumeration**: 401/403/404/409/422 语义清晰；403 响应体只有 `code` 与 `message`，不回显目标对象字段；500 统一脱敏为 `INTERNAL_ERROR`，无 stack/SQL/token/PII 泄露。
+- **Scope 审计**: 严格限定于 Slice 1 边界；无 Case、Participant、Evidence、Assessment、Formulation、Goal、Intervention、Plan、AI、RAG、Memory 泄漏。
+
+### 4. 外部环境未验证项（External NOT VERIFIED Items）
+
+- **FR-002 真实微信平台接口（`code2session`）**: 标记为 **NOT VERIFIED**。
+  - **依据**: 真实调用需要微信官方小程序凭据与真实客户端短期授权码，按 `plan.md` §Verification Plan 行 03 与 `quickstart.md` §5 明确不计入本地合并门禁，属于 **external release verification**（发布前环境门槛），不阻碍 Slice 1 代码闭环与代码合并。
+
+---
+
+### 5. 最终审计结论（Final Verdict）
+
+```text
+CRITICAL: 0
+HIGH: 0
+blocking MEDIUM: 0
+LOW: 0
+
+Historical Round 1 findings: ALL CLOSED
+Historical Round 2 findings: ALL CLOSED
+```
+
+**SLICE 1 FINAL INDEPENDENT AUDIT PASS**
