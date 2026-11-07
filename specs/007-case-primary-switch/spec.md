@@ -15,15 +15,55 @@
 
 ## 0. Slice Selection Basis（为什么是 007）
 
-当前仓库已有 Slice 的真实归属见 §4。Phase 1 剩余未拥有能力中，唯一在 001 + 002 之上**可以完整、真实、无虚构地实现**的，是主问题切换：
+### 0.1 已有 Slice 的真实归属（2026-11-07 核对）
 
-| 候选 | 上游依据 | 现在可判定结论 |
-|---|---|---|
-| A. Case 主问题切换（本 Slice） | V1-C01、产品 §2.1、技术 §8.1 / §23 / §28.3 / §29.4、§39 V1-C01 验收行 | **选中**：V1-C01 的 §39 验收明确包含「并发创建/切换」，而 Slice 2 只实现了创建；该能力无任何 Phase 4/5 对象前置 |
-| B. Case Status 服务状态命令（Pause / Resume） | V1-C18、§6.6、§28.3 | 暂不选：其验收（「普通提醒必须随状态和授权停止」）依赖 Follow-up Schedule / Notification（§24—§26，Phase 4）；Resume 的前置链（Safety / Policy / Plan）尚未存在，此时冻结会迫使 Spec 对未实现子系统做语义让步 |
-| C. Problem Formulation 核心 | V1-C04、§2.5、§7.2、§8.2、§12.4、§29.1、§28.3 | 暂不选：硬依赖 Slice 3（Evidence）实现，且自然的生产者（Assessment / AI）属 Phase 2—3；现在冻结会先撞上「谁产生 formulation」这一产品空白 |
+| 编号 | 目录 | 类型 | 合并 main | 实现状态 | 本 Slice 关系 |
+|---|---|---|---|---|---|
+| 001 | `specs/001-family-identity-core` | implementation | 是（PR #9、#10、#13） | 已交付 | 硬依赖（授权 / RLS / 幂等 / 审计 / Family 解析） |
+| 002 | `specs/002-case-core` | implementation | **否** | 分支存在，tasks 87/87 已勾选 | 硬依赖（`cases` / `is_primary` / `version` / 事件 / 锁原语） |
+| 003 | `specs/003-evidence-core` | implementation | 否 | 仅 spec / plan / tasks，无代码 | 无依赖（不读不写） |
+| 004 | `specs/004-case-participant-core` | implementation | 否 | 仅 spec / plan / tasks，无代码 | 无依赖 |
+| 005 | `specs/005-invited-identity-binding-contract` | **合同**（非 implementation） | 是（PR #11） | 合同冻结 | 无依赖 |
+| 006 | `specs/006-identity-binding-runtime` | implementation（005 的 runtime） | 否 | 仅 spec / plan / tasks，无代码 | 无依赖 |
 
-**结论**：切片顺序按依赖与可真实性排序，不按 §38 行文顺序。主问题切换补齐的是 V1-C01 的**未完成验收半句**，且是后续所有「只有 primary 可推进」判定（§5 不变量 19、§6.7）能够被真实改变而非永久钉死在「第一个 Case」上的前置。
+> 因此「Slice 6」（001—006 之后的下一个 implementation slice）在仓库中的真实编号是 **007**。本判断先核对内容与 ownership，再决定目录名；未按编号猜测。
+
+### 0.2 候选分析（最多 3 个）
+
+**候选 A — Case 主问题切换（`SwitchPrimaryCase`）**
+
+- 上游：`Docs/总产品需求.md` §6；V1-C01；`Docs/V1产品需求.md` §2.1；`Docs/V1技术设计.md` §5 不变量 2/19、§8.1、§23、§28.3、§29.4、§39 V1-C01 行。
+- 为什么现在：总产品需求 §6 明文「候选问题记录与**必要切换**从 V1 即存在」；§39 对 V1-C01 的验收含「并发创建/**切换**」，而 Slice 2 只实现了创建并明确排除 `switch-primary`。当前候选 Case 只能创建、永远不能成为主线。
+- 依赖：Slice 1（已合并）+ Slice 2（已实现、未合并）。无 Phase 2—5 对象前置。
+- Hard blocker：仅程序性——Slice 2 未合并 main。
+- 为什么适合独立：单一能力（改变「谁是当前主线」），一个命令、一个端点、一组不变量；可独立 Specify / Clarify / Plan / Tasks / 审计一 / Implement / 审计二。
+- 为什么不与其他候选合并：它不改变 `status` / `phase`，与状态机无共享转换表；与 PF 无共享对象。
+
+**候选 B — Case 服务状态命令（`PauseCase` / `ResumeCase`）**
+
+- 上游：V1-C18；`Docs/V1技术设计.md` §6.6、§28.3。
+- 为什么现在：用户暂停/恢复是 V1 明确的产品动作，且 Slice 2 明确排除。
+- 依赖：Slice 1 / 2。
+- Hard blocker：**语义性**——V1-C18 的验收是「普通提醒必须随状态和授权停止」，依赖 Follow-up Schedule / Notification（§24—§26，Phase 4）；`ResumeCase` 的前置链（primary、授权、Safety、Policy、Plan）中三项尚不存在，现在冻结只能对其做语义让步或让 Pause 变成死路。
+- 为什么适合独立：本身很干净。
+- 为什么不选：会把「未实现子系统的空域真」写进 Spec 的关键门禁，风险高于收益；应在 Phase 4 前、Schedule 语义冻结后做。
+
+**候选 C — Problem Formulation 核心**
+
+- 上游：V1-C04；`Docs/V1产品需求.md` §2.5；`Docs/V1技术设计.md` §7.2、§8.2、§12.4、§28.3、§29.1。
+- 为什么现在：V1-C04 是硬产品门禁（Assessment 后必须形成可纠正的 Formulation），Slice 2/3/4 均明确不实现。
+- 依赖：Slice 3（Evidence）实现；Phase 2/3 的 Assessment / AI 作为自然生产者。
+- Hard blocker：Slice 3 未实现 + **生产者缺失**（谁产生第一份 formulation 未定）。
+- 为什么适合独立：是。
+- 为什么不选：现在冻结会在 Plan 阶段立刻撞上「生产者」空白，等于把阻塞后移；应先完成 003 与 assessment 入口。
+
+### 0.3 结论
+
+```text
+Recommended Slice 007 = Case 主问题切换（SwitchPrimaryCase）
+```
+
+切片顺序按依赖与可真实性排序，不按 §38 行文顺序。主问题切换补齐的是 V1-C01 与总产品需求 §6 的**未完成半句**，也是后续所有「只有 primary 可推进」判定（§5 不变量 19、§6.7）能够被真实改变、而不是永久钉死在「第一个 Case」上的前置。
 
 ---
 
@@ -31,6 +71,7 @@
 
 | Upstream ID / Section | Source | 本 Slice 的投影 |
 |---|---|---|
+| §6 一次只解决一个主要问题 | `Docs/总产品需求.md` | 「候选问题不能丢失」+「当前主要判断发生变化时，允许重新分诊和**切换主问题**，保留原判断、方案及切换原因」+ 「**候选问题记录与必要切换从 V1 即存在**；完整多人、多问题管理在 V3 增强」——这是本 Slice 最强的产品依据，同时界定 V1 只做「必要切换」，不做 V3 的多问题管理 |
 | V1-C01 | `Docs/V1产品需求.md` §24 | 一个家庭最多一个当前主要 Case 执行主线；候选问题可保留，且「需要切换主要 Case」是正式产品动作 |
 | §2.1 | `Docs/V1产品需求.md` | 切换主要 Case 的六条产品规则：说明理由、保留原 Case 全部业务内容、处理旧任务与提醒、由有权用户确认、切换后才启动新主线、安全状态不能靠「切走 Case」规避 |
 | U04 | `Docs/V1产品需求.md` §23 | 「查看当前主要 Case 与阶段」在切换后必须立即反映新的主问题，不引入第二真相源 |
@@ -38,6 +79,7 @@
 | V1-C24 | `Docs/V1产品需求.md` §24 | AI 无最终业务确认权：切换是本人在位确认，AI 只能建议 |
 | V1-C25 | `Docs/V1产品需求.md` §24 | Safety 可在任意阶段中断普通流程，不可被普通操作绕过 |
 | V1-C27 / V1-C28 | `Docs/V1产品需求.md` §24 | 失败必须返回真实状态；重复 / 并发 / 重试不得制造重复业务结果 |
+| §3.3 / §13 | `Docs/总体技术架构.md` | Case 是长期问题对象而不是一次聊天；Authorization 独立于 UI / Prompt，V1 由 `authorize()` + PostgreSQL RLS 双层执行；不为假想复杂度提前引入 Policy Engine |
 | §5 不变量 1 / 2 / 12 / 17 / 19 / 20 | `Docs/V1技术设计.md` | 对象分开；最多一个当前主要未结 Case；Safety Hold 优先；并发不重复；只有 primary 可进入或恢复普通执行；SAFETY_HOLD 不能被主线切换覆盖 |
 | §8.1 | `Docs/V1技术设计.md` | 「一个家庭最多一个当前主要未结 Case」必须由数据库保证，不能只靠前端或 AI runtime |
 | §8.5 / §8.6 | `Docs/V1技术设计.md` | 关键命令幂等合同；关键聚合版本与旧版本请求不得覆盖新状态 |
@@ -62,7 +104,7 @@
 
 Slice 2 建立了 `cases` 容器与「一个 Family 最多一个当前主要未结 Case」的数据库不变量，但**故意不实现任何主线变更命令**（002 FR-005 / FR-018 明确 `/switch-primary` 必须不存在）。结果是当前系统存在一个真实的产品空洞：
 
-1. 一个 Family 只能永久保留第一个 Case 为 primary；后续 Case 被创建为候选后**无法成为主线**，V1-C01 的「候选问题可保留」因此只是半功能：候选可写不可用。
+1. 上位产品已明确「候选问题记录与**必要切换**从 V1 即存在」（`Docs/总产品需求.md` §6），但当前系统没有这条路径：一个 Family 只能永久保留第一个 Case 为 primary；后续 Case 被创建为候选后**无法成为主线**，V1-C01 的「候选问题可保留」因此只是半功能：候选可写不可用。
 2. `Docs/V1技术设计.md` §39 对 V1-C01 的验收明写「并发创建/**切换**后最多一个 primary」，其中「切换」在当前实现中没有任何可执行路径。
 3. 所有后续「只有 primary 可以推进」的判定（§5 不变量 19、§6.7 的 Resume / Confirm Formulation / Confirm Goal / Activate Plan / Review 推进）都建立在一个**不可变**的 primary 上；一旦 Phase 2 之后开始按 primary 守门，这个空洞会固化成架构缺陷，而不是一个待补功能。
 4. 产品 §2.1 已经把「切换主要 Case」写成六条正式规则，其中「由有权用户确认」「安全状态不能靠切走 Case 规避」属于当前就能冻结并验证的业务语义，不属于未来规划。
@@ -99,6 +141,7 @@ Slice 2 建立了 `cases` 容器与「一个 Family 最多一个当前主要未�
 10. **不做数据权利**：不实现查看 / 更正 / 导出 / 删除，不实现切换历史的对外导出（Phase 5）。
 11. **不做 UI**：微信小程序与运营后台页面属 §28A。
 12. **不优化性能基线**：不发明 p95 / 并发上限（§37.2 未给出）。
+13. **不做 V3 的完整多问题 / 多人管理**：候选问题排序、优先级建议、跨问题视图、多人协作管理属 V3 增强（`Docs/总产品需求.md` §6）；V1 只交付「必要切换」。
 
 ---
 
@@ -203,7 +246,7 @@ Slice 2 建立了 `cases` 容器与「一个 Family 最多一个当前主要未�
 4. 原 primary 的全部业务数据（未来包括问题理解、目标、方案、执行、结果）保持可读、可追溯；切换不删除、不归档、不改写。
 5. 切换历史只能追加，不能覆盖；后续切换不得让上一次切换看起来「从未发生」。
 
-### 6.6 「无当前 primary」的边界
+### 边界：无当前 primary 时（晋升）
 
 若该 Family 当前不存在未结 primary（当前只能由未来的关闭流程造成）：
 
@@ -211,7 +254,7 @@ Slice 2 建立了 `cases` 容器与「一个 Family 最多一个当前主要未�
 - 该分支现在不可达（`CloseCase` 未实现），但 Spec 冻结其语义，禁止 500、禁止拒绝、禁止创建第二个 primary。
 - 推导见 Clarifications Q2。
 
-### 6.7 候选 Case 的业务位置
+### 候选 Case 的业务位置
 
 - 候选 Case 仍然是**真实、可读、可归属、可审计**的 Case（Slice 2 已冻结），只是不进入普通执行主线。
 - 本 Slice 不定义候选 Case 的评估、优先级、排序或「建议切换」算法。
@@ -547,6 +590,9 @@ IMPLEMENT BLOCKED BY: Slice 2 (specs/002-case-core) 尚未合并到 main
 
 **Q11 — 切换历史是否进入数据权利 / 导出？**
 **RESOLVED — 本 Slice 不决定，交 Phase 5。** 依据：U18 / §28.9 / §34—35 属数据权利 Slice；本 Slice 只保证历史真实存在且不可覆盖，具体导出形态由该 Slice 决定。
+
+**Q12 — 总产品需求 §6 说的「重新分诊」是否也属于本命令？**
+**RESOLVED — 不属于。** 依据：§6 允许「重新分诊并切换主问题」，但技术侧把这两件事分开表达：Phase 转换必须经 §6.7 的对应 Domain Command（`ReassessFromFormulation`、`StartAssessment` 等），主线选择由本命令表达；§29.4 第 6 步也明确「目标 Case 原 status/phase 不在切换事务中自动恢复」。若让切换隐式重置阶段，等于用一个控制面命令改写业务阶段，违反 §6.1 / §6.2 的分离与 §5 不变量 6。故「重新分诊」由目标 Case 自身的阶段命令承担，本 Slice 只负责「谁在主线」。
 
 **No blocking product ambiguity remains.**
 
