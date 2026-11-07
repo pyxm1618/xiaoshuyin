@@ -45,7 +45,7 @@ GAP:            0
 ## 2. Scope & Boundary
 
 - [x] **CHK001** [Scope, spec FR-001 / plan D-2] Participant 被明确定义为 **Case-scoped relationship**；文档明确它不等于 Family membership、guardian relationship、Account ownership、site role 或 generic RBAC role。
-- [x] **CHK002** [Scope, spec Out of Scope / plan D-17] Assessment、Problem Formulation、Scene、Evidence、Assertion、Observation、Goal、Intervention、Plan execution、Task、AI、RAG、Memory、Safety framework、actual notification sending、frontend UI 全部不在本 Slice；Plan / Contracts 没有偷偷拉回。
+- [x] **CHK002** [Scope, spec Out of Scope / plan D-17] Assessment、Problem Formulation、Scene、Evidence、Assertion、Observation、Goal、Intervention、Plan execution、Task、AI、RAG、Memory、Safety framework、actual notification sending、frontend UI 全部不在本 Slice；Plan / Contracts 没有偷偷拉回；数据库结构断言 `intervention_instances` 不存在；Intervention 仅为 absence，不是实现要求。
 - [x] **CHK003** [Scope, spec FR-026 / FR-028 / OpenAPI] `POST /api/v1/participations/:id/responses` 明确 DEFER；OpenAPI 不存在该 path，Plan 明确说明它属于未来具体业务对象，不是 Slice 4。
 - [x] **CHK004** [Scope, spec FR-026 / FR-027 / OpenAPI] 不存在 generic participant response、participant 管理、列表、批量、delete、restore、manager cancel 路由。
 - [x] **CHK005** [Scope, spec FR-001 / FR-018 / plan D-6] 不存在 generic RBAC、Case role、Participant role、Visibility Matrix、Permission DSL、role enum。
@@ -123,7 +123,7 @@ GAP:            0
 - [x] **CHK052** [Data model, data-model §2.1] `invite_expires_at` NOT NULL、无 DB 默认值；`CHECK (invite_expires_at > created_at)`。
 - [x] **CHK053** [Data model, data-model §2.2] partial unique `(case_id, person_id) WHERE state IN ('PENDING','ACTIVE')` 可由 PostgreSQL 表达。
 - [x] **CHK054** [Data model, research R-8 / data-model §2.2] terminal 历史可多条；DECLINED / EXPIRED / WITHDRAWN 后可创建新 invitation；terminal resource 不可 reactivate 与新 resource 创建被明确区分。
-- [x] **CHK055** [Data model, spec FR-019 / FR-023 / plan D-12] participation 生命周期不写 `case_events`、不写 Evidence、不建第二张 audit 表。
+- [x] **CHK055** [Data model, spec FR-019 / FR-023 / plan D-12] participation 生命周期不写 `case_events`、不写 Evidence、不建第二张 audit 表；Evidence tables absent ≠ test failure（absent → remain absent + no Evidence writer；present → baseline count delta = 0），Slice 3 不是 dependency。
 
 ---
 
@@ -266,7 +266,7 @@ GAP:            0
 | FR-016 | CHK085—CHK087 | plan D-9 |
 | FR-017 | CHK084 | plan D-6 |
 | FR-018 | CHK083 | plan D-6 |
-| FR-019 | CHK055 / CHK109 | plan D-12 |
+| FR-019 | CHK002 / CHK055 / CHK109 | plan D-12 |
 | FR-020 | CHK077—CHK084 | plan D-6 |
 | FR-021 | CHK097—CHK104 | plan D-11 |
 | FR-022 | CHK111—CHK115 | plan D-13 |
@@ -311,7 +311,7 @@ GAP:            0
 | SC-001 | CHK006 / CHK049 / CHK050 / CHK104 |
 | SC-002 | CHK088 / CHK096 |
 | SC-003 | CHK083 |
-| SC-004 | CHK055 |
+| SC-004 | CHK002 / CHK055 |
 | SC-005 | CHK016 |
 | SC-006 | CHK063 / CHK112 / CHK115 |
 | SC-007 | CHK067 / CHK073 / CHK125 |
@@ -322,7 +322,7 @@ GAP:            0
 | SC-012 | CHK028 / CHK029 / CHK033 |
 | SC-013 | CHK105—CHK110 |
 | SC-014 | CHK085—CHK087 / CHK096 |
-| SC-015 | CHK003 / CHK073 / CHK117—CHK125 |
+| SC-015 | CHK002 / CHK003 / CHK055 / CHK073 / CHK117—CHK125 |
 
 ### D-1 — D-17 covered
 
@@ -387,8 +387,8 @@ GAP: 0
 
 ```text
 SLICE 4 CHECKLIST FINAL PASS
-TARGETED CHECKLIST RE-VALIDATION PASS
-READY FOR TASKS REMEDIATION
+TARGETED CHECKLIST RE-VALIDATION ROUND 2 PASS
+READY FOR TASKS REMEDIATION ROUND 2
 ```
 
 **边界**：Checklist PASS 不代表 Implement Gate OPEN。当前：
@@ -474,4 +474,92 @@ spec.md / plan.md / research.md / data-model.md / quickstart.md / contracts/** /
 ```text
 TARGETED CHECKLIST RE-VALIDATION PASS
 READY FOR TASKS REMEDIATION
+```
+---
+
+## 20. Targeted Re-Validation Round 2 Log — 2026-11-06
+
+**Base**: `6a6683c49fca7f84fb1ef890f09c62223e94e365`
+
+**Scope**: verify Plan Remediation Round 2 findings F1 / F2（Analyze Round 2 findings，不是 Checklist F-01 / F-02）。No full Checklist regeneration；保持 130 条。
+
+**Re-validated entries**:
+
+```text
+CHK002  Intervention / intervention_instances absence
+CHK008  Slice 3 NOT A DEPENDENCY
+CHK055  Evidence tables absent/present conditional verification
+CHK109  no second audit
+CHK126  Quickstart verification path
+FR-019  CHK002 / CHK055 / CHK109
+SC-004  CHK002 / CHK055
+SC-015  CHK002 / CHK003 / CHK055 / CHK073 / CHK117—CHK125
+```
+
+**Targeted results**:
+
+```text
+F1 RESOLVED
+  Evidence tables absent: PASS
+    - to_regclass('public.assertions') / to_regclass('public.observations') 均为 NULL
+    - remain absent + no Evidence writer / repository / route / migration
+    - accept / decline / withdraw 测试可在无 Slice 3 的 baseline 执行
+    - Evidence tables absent ≠ test failure
+
+  Evidence tables present: PASS
+    - baseline count → accept / decline / withdraw → delta = 0
+
+  Slice 3 NOT dependency: PASS
+
+F2 RESOLVED
+  Intervention included in SC-015: PASS
+  intervention_instances absence verifiable: PASS
+  No Intervention implementation introduced: PASS
+```
+
+**Previous findings regression**:
+
+```text
+C-01 PASS
+H-01 PASS
+H-02 PASS
+L-02 PASS
+L-05 PASS
+
+F-01 PASS
+F-02 PASS
+F-03 PASS
+F-04 PASS
+F-05 PASS
+F-06 PASS
+```
+
+**No new Plan gap**: F1 / F2 未引入 new product semantics / route / state / RBAC / Evidence implementation / Intervention implementation / Slice 3 dependency。
+
+**Deferred to Tasks Remediation Round 2**: F3（T092 client `familyId` spoofing 应为 422、不是 404/403）、F4（T032/T038/T039/T045 引用后续 Phase 测试与 helper）、F5–F8、T089 Evidence 条件断言、T091 Intervention 断言。`tasks.md` 本轮仍只读、未修改；这些不是 Plan-quality FAIL。
+
+**Validation**:
+
+```bash
+node .specify/scripts/validate-governance.mjs
+node .specify/scripts/tests/run-governance-tests.mjs
+ruby -ryaml -e 'YAML.load_file("specs/004-case-participant-core/contracts/participation-api.openapi.yaml")'
+```
+
+```text
+Spec governance validation PASS
+Governance self-test PASS: 15/15 cases
+OpenAPI YAML parse PASS: 6 paths / 22 schemas（未修改）
+Checklist total: 130
+PASS: 130
+unchecked: 0
+Gap: 0
+working tree: clean
+changed files: checklists/requirements-quality.md only
+spec.md / plan.md / research.md / data-model.md / quickstart.md / contracts/** / tasks.md / Docs/** / runtime / migration / tests: unchanged
+```
+
+```text
+TARGETED CHECKLIST RE-VALIDATION ROUND 2 PASS
+READY FOR TASKS REMEDIATION ROUND 2
 ```
