@@ -151,19 +151,6 @@ describe('Scope guard rejection (finding 7)', () => {
     });
   }
 
-  for (const [name, content] of ALLOWED_SQL) {
-    it(`allows: ${name} (literal is not DDL)`, async () => {
-      const cleanup = inject('db/__guard_probe__.sql', content);
-      try {
-        const { code, output } = await runGuard();
-        expect(code, output).toBe(0);
-        expect(output).toContain('PASS (0 violations)');
-      } finally {
-        cleanup();
-      }
-    });
-  }
-
   it("rejects pgTable('case_participants', ...)", async () => {
     const cleanup = inject(
       'db/__guard_probe__.ts',

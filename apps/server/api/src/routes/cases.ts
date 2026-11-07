@@ -7,9 +7,10 @@
  *   → independent EXISTS(primary) → case → case_event → business_audit_event
  *   → idempotency fill → COMMIT.
  *
- * Authentication runs in `preValidation` so it precedes schema validation
- * (D-4 step 0). GET routes disable Fastify's implicit HEAD exposure, keeping
- * the surface at exactly the three frozen operations.
+ * Authentication runs in route-level `onRequest` so it precedes content
+ * parsing and schema validation (D-4 step 0). GET routes disable Fastify's
+ * implicit HEAD exposure, keeping the surface at exactly the three frozen
+ * operations.
  *
  * No 23505 handling: the partial unique index is the last line of defence, so
  * a violation is a real failure that must roll the whole transaction back.
