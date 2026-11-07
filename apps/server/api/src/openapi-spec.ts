@@ -37,6 +37,18 @@ import {
   CaseListResponse,
   CaseStatus,
   CasePhase,
+  BindingBootstrapRequest,
+  BindingCandidateDecisionRequest,
+  BindingConfirmerDecisionRequest,
+  BindingBootstrapGenericResponse,
+  BindingBootstrapReusedResponse,
+  BindingGenericResponse,
+  BindingStatusResponse,
+  BindingSessionCommittedResponse,
+  BindingPendingListResponse,
+  BindingConfirmerDecisionResponse,
+  BindingNotFoundError,
+  BindingContextInvalidError,
 } from '@xiaoshuyin/contracts';
 
 type JsonSchema = Record<string, unknown>;
@@ -139,6 +151,18 @@ export function buildOpenApiDocument() {
     CaseNotFoundError: toJsonSchema(CaseNotFoundErrorSchema),
     CurrentFamilyNotFoundError: toJsonSchema(CurrentFamilyNotFoundErrorSchema),
     CurrentFamilyAmbiguousError: toJsonSchema(CurrentFamilyAmbiguousErrorSchema),
+    BindingBootstrapRequest: toJsonSchema(BindingBootstrapRequest),
+    BindingCandidateDecisionRequest: toJsonSchema(BindingCandidateDecisionRequest),
+    BindingConfirmerDecisionRequest: toJsonSchema(BindingConfirmerDecisionRequest),
+    BindingBootstrapGenericResponse: toJsonSchema(BindingBootstrapGenericResponse),
+    BindingBootstrapReusedResponse: toJsonSchema(BindingBootstrapReusedResponse),
+    BindingGenericResponse: toJsonSchema(BindingGenericResponse),
+    BindingStatusResponse: toJsonSchema(BindingStatusResponse),
+    BindingSessionCommittedResponse: toJsonSchema(BindingSessionCommittedResponse),
+    BindingPendingListResponse: toJsonSchema(BindingPendingListResponse),
+    BindingConfirmerDecisionResponse: toJsonSchema(BindingConfirmerDecisionResponse),
+    BindingNotFoundError: toJsonSchema(BindingNotFoundError),
+    BindingContextInvalidError: toJsonSchema(BindingContextInvalidError),
   };
 
   const paths: Record<string, unknown> = {
@@ -392,6 +416,96 @@ export function buildOpenApiDocument() {
         },
       },
     },
+    // ── Slice 006 identity binding: exactly six surfaces ──
+    '/api/v1/identity-bindings/bootstrap': {
+      post: {
+        tags: ['identity-binding'],
+        operationId: 'bootstrapIdentityBinding',
+        requestBody: refBody('BindingBootstrapRequest'),
+        responses: {
+          '200': jsonResponse('generic 或 Case B 复用', {
+            oneOf: [
+              ref('BindingBootstrapGenericResponse'),
+              ref('BindingBootstrapReusedResponse'),
+            ],
+          }),
+          '401': errorResponse('`WECHAT_AUTH_FAILED`'),
+          '409': errorResponse('`IDEMPOTENCY_PAYLOAD_MISMATCH`'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/candidate-decision': {
+      post: {
+        tags: ['identity-binding'],
+        operationId: 'submitCandidateBindingDecision',
+        parameters: [paramRef('BindingContextHeader')],
+        requestBody: refBody('BindingCandidateDecisionRequest'),
+        responses: {
+          '200': refResponse('统一 generic 结果', 'BindingGenericResponse'),
+          '401': refResponse('`BINDING_CONTEXT_INVALID`', 'BindingContextInvalidError'),
+          '409': errorResponse('`IDEMPOTENCY_PAYLOAD_MISMATCH`'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/status': {
+      get: {
+        tags: ['identity-binding'],
+        operationId: 'getCandidateBindingStatus',
+        parameters: [paramRef('BindingContextHeader')],
+        responses: {
+          '200': refResponse('candidate 可见状态', 'BindingStatusResponse'),
+          '401': refResponse('`BINDING_CONTEXT_INVALID`', 'BindingContextInvalidError'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/session': {
+      post: {
+        tags: ['identity-binding'],
+        operationId: 'exchangeBindingSession',
+        parameters: [paramRef('BindingContextHeader')],
+        responses: {
+          '200': jsonResponse('未 COMMITTED generic / COMMITTED 普通会话', {
+            oneOf: [
+              ref('BindingGenericResponse'),
+              ref('BindingSessionCommittedResponse'),
+            ],
+          }),
+          '401': refResponse('`BINDING_CONTEXT_INVALID`', 'BindingContextInvalidError'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/pending': {
+      get: {
+        tags: ['identity-binding'],
+        operationId: 'listPendingBindings',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('BindingPersonIdQuery')],
+        responses: {
+          '200': refResponse('最小 attempts 列表', 'BindingPendingListResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': refResponse('`BINDING_NOT_FOUND`', 'BindingNotFoundError'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/{attemptId}/decision': {
+      post: {
+        tags: ['identity-binding'],
+        operationId: 'submitSecondPartyBindingDecision',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('BindingAttemptIdPath')],
+        requestBody: refBody('BindingConfirmerDecisionRequest'),
+        responses: {
+          '200': refResponse('确认后 attempt 状态', 'BindingConfirmerDecisionResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': refResponse('`BINDING_NOT_FOUND`', 'BindingNotFoundError'),
+          '409': errorResponse('`BINDING_STATE_CONFLICT` / `IDEMPOTENCY_PAYLOAD_MISMATCH`'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+        },
+      },
+    },
   };
 
   return {
@@ -442,6 +556,26 @@ export function buildOpenApiDocument() {
           in: 'path',
           required: true,
           description: 'Case UUID（待验证参数；存在不代表有权访问）。',
+          schema: { type: 'string', format: 'uuid' },
+        },
+        BindingContextHeader: {
+          name: 'X-Binding-Context',
+          in: 'header',
+          required: true,
+          description: 'opaque pending authentication context；不是普通会话。',
+          schema: { type: 'string', minLength: 16, maxLength: 256 },
+        },
+        BindingPersonIdQuery: {
+          name: 'personId',
+          in: 'query',
+          required: true,
+          description: '待验证的 target Person P1；服务端读取唯一 Family。',
+          schema: { type: 'string', format: 'uuid' },
+        },
+        BindingAttemptIdPath: {
+          name: 'attemptId',
+          in: 'path',
+          required: true,
           schema: { type: 'string', format: 'uuid' },
         },
       },

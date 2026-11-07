@@ -15,6 +15,9 @@ const FULL_ENV: NodeJS.ProcessEnv = {
   EVIDENCE_HASH_PEPPER: 'b'.repeat(32),
   WECHAT_APP_ID: 'wx-test-app-id',
   WECHAT_APP_SECRET: 'wx-test-app-secret',
+  IDENTITY_BINDING_SECRET: 'test-identity-binding-secret-fixture-32chars',
+  IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
+  IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
 };
 
 describe('Production runtime env boundary (F1)', () => {

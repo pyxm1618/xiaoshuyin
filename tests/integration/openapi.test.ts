@@ -29,6 +29,18 @@ const SPEC_PATH = join(ROOT, 'packages', 'generated', 'openapi.json');
 
 const FROZEN_SCHEMAS = [
   'AgeBand',
+  'BindingBootstrapGenericResponse',
+  'BindingBootstrapRequest',
+  'BindingBootstrapReusedResponse',
+  'BindingCandidateDecisionRequest',
+  'BindingConfirmerDecisionRequest',
+  'BindingConfirmerDecisionResponse',
+  'BindingContextInvalidError',
+  'BindingGenericResponse',
+  'BindingNotFoundError',
+  'BindingPendingListResponse',
+  'BindingSessionCommittedResponse',
+  'BindingStatusResponse',
   'CaseAccessDeniedError',
   'CaseListResponse',
   'CaseNotFoundError',
@@ -89,7 +101,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-  it('contains exactly the 16 frozen business operations', () => {
+  it('contains exactly the 22 frozen business operations (16 + Slice 6 six)', () => {
     const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
@@ -106,6 +118,8 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'GET /api/v1/compliance/profile',
       'GET /api/v1/consents',
       'GET /api/v1/families/current',
+      'GET /api/v1/identity-bindings/pending',
+      'GET /api/v1/identity-bindings/status',
       'GET /api/v1/me',
       'PATCH /api/v1/families/{id}/members/{personId}',
       'POST /api/v1/auth/logout',
@@ -116,6 +130,10 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'POST /api/v1/consents/{id}/revoke',
       'POST /api/v1/families',
       'POST /api/v1/families/{id}/members',
+      'POST /api/v1/identity-bindings/bootstrap',
+      'POST /api/v1/identity-bindings/candidate-decision',
+      'POST /api/v1/identity-bindings/session',
+      'POST /api/v1/identity-bindings/{attemptId}/decision',
     ].sort());
   });
 
@@ -160,6 +178,13 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       // Slice 2 (002-case-core) — exactly three Case operations.
       '/api/v1/cases',
       '/api/v1/cases/{id}',
+      // Slice 6 (006-identity-binding-runtime) — exactly six binding surfaces.
+      '/api/v1/identity-bindings/bootstrap',
+      '/api/v1/identity-bindings/candidate-decision',
+      '/api/v1/identity-bindings/status',
+      '/api/v1/identity-bindings/session',
+      '/api/v1/identity-bindings/pending',
+      '/api/v1/identity-bindings/{attemptId}/decision',
     ]);
     for (const path of Object.keys(spec.paths)) {
       expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);

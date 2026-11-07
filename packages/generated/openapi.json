@@ -1120,6 +1120,355 @@
           }
         }
       }
+    },
+    "/api/v1/identity-bindings/bootstrap": {
+      "post": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "bootstrapIdentityBinding",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingBootstrapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "generic 或 Case B 复用",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BindingBootstrapGenericResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BindingBootstrapReusedResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`WECHAT_AUTH_FAILED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/candidate-decision": {
+      "post": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "submitCandidateBindingDecision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingContextHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingCandidateDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "统一 generic 结果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingGenericResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`BINDING_CONTEXT_INVALID`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingContextInvalidError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/status": {
+      "get": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "getCandidateBindingStatus",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingContextHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "candidate 可见状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`BINDING_CONTEXT_INVALID`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingContextInvalidError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/session": {
+      "post": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "exchangeBindingSession",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingContextHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "未 COMMITTED generic / COMMITTED 普通会话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BindingGenericResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BindingSessionCommittedResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`BINDING_CONTEXT_INVALID`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingContextInvalidError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/pending": {
+      "get": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "listPendingBindings",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingPersonIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "最小 attempts 列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingPendingListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`BINDING_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingNotFoundError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/{attemptId}/decision": {
+      "post": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "submitSecondPartyBindingDecision",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingAttemptIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingConfirmerDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "确认后 attempt 状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingConfirmerDecisionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`BINDING_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`BINDING_STATE_CONFLICT` / `IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1176,6 +1525,36 @@
         "in": "path",
         "required": true,
         "description": "Case UUID（待验证参数；存在不代表有权访问）。",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "BindingContextHeader": {
+        "name": "X-Binding-Context",
+        "in": "header",
+        "required": true,
+        "description": "opaque pending authentication context；不是普通会话。",
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 256
+        }
+      },
+      "BindingPersonIdQuery": {
+        "name": "personId",
+        "in": "query",
+        "required": true,
+        "description": "待验证的 target Person P1；服务端读取唯一 Family。",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "BindingAttemptIdPath": {
+        "name": "attemptId",
+        "in": "path",
+        "required": true,
         "schema": {
           "type": "string",
           "format": "uuid"
@@ -3020,6 +3399,340 @@
             "enum": [
               "CURRENT_FAMILY_AMBIGUOUS"
             ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "BindingBootstrapRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "invitationToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "code",
+          "invitationToken",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "BindingCandidateDecisionRequest": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "AFFIRM",
+              "REJECT",
+              "CANCEL"
+            ]
+          },
+          "confirmationVersion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "candidate-binding-v1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "decision",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "BindingConfirmerDecisionRequest": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "AFFIRM",
+              "REJECT"
+            ]
+          },
+          "targetConfirmed": {
+            "type": "boolean"
+          },
+          "candidateRecognized": {
+            "type": "boolean"
+          },
+          "confirmationVersion": {
+            "type": "string",
+            "const": "second-party-recognition-v1"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "personId",
+          "decision",
+          "targetConfirmed",
+          "candidateRecognized",
+          "confirmationVersion",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "BindingBootstrapGenericResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "NOT_COMPLETED"
+          },
+          "pendingContextToken": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "binding",
+          "pendingContextToken"
+        ],
+        "additionalProperties": false
+      },
+      "BindingBootstrapReusedResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "REUSED"
+          },
+          "sessionToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "person": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "binding",
+          "sessionToken",
+          "account",
+          "person"
+        ],
+        "additionalProperties": false
+      },
+      "BindingGenericResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "NOT_COMPLETED"
+          }
+        },
+        "required": [
+          "binding"
+        ],
+        "additionalProperties": false
+      },
+      "BindingStatusResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "enum": [
+              "NOT_COMPLETED",
+              "COMMITTED"
+            ]
+          }
+        },
+        "required": [
+          "binding"
+        ],
+        "additionalProperties": false
+      },
+      "BindingSessionCommittedResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "COMMITTED"
+          },
+          "sessionToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "person": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "binding",
+          "sessionToken",
+          "account",
+          "person"
+        ],
+        "additionalProperties": false
+      },
+      "BindingPendingListResponse": {
+        "type": "object",
+        "properties": {
+          "attempts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attemptId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                }
+              },
+              "required": [
+                "attemptId",
+                "createdAt",
+                "expiresAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "attempts"
+        ],
+        "additionalProperties": false
+      },
+      "BindingConfirmerDecisionResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "COMMITTED",
+              "TERMINAL"
+            ]
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "BindingNotFoundError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "BINDING_NOT_FOUND"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "BindingContextInvalidError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "BINDING_CONTEXT_INVALID"
           },
           "message": {
             "type": "string"

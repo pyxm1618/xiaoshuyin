@@ -37,6 +37,16 @@ const FROZEN_DOCS = [
       'cases-api.openapi.yaml'
     ),
   },
+  {
+    label: '006-identity-binding-runtime',
+    path: join(
+      ROOT,
+      'specs',
+      '006-identity-binding-runtime',
+      'contracts',
+      'identity-binding-api.openapi.yaml'
+    ),
+  },
 ];
 
 const DROP_KEYS = new Set([

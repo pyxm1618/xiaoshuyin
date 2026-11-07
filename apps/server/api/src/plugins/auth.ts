@@ -26,7 +26,28 @@ declare module 'fastify' {
   }
 }
 
-const PUBLIC_PATHS = new Set(['/healthz', '/api/v1/auth/wechat']);
+const PUBLIC_PATHS = new Set([
+  '/healthz',
+  '/api/v1/auth/wechat',
+  '/api/v1/identity-bindings/bootstrap',
+]);
+
+const BINDING_CANDIDATE_PATHS = new Set([
+  '/api/v1/identity-bindings/candidate-decision',
+  '/api/v1/identity-bindings/status',
+  '/api/v1/identity-bindings/session',
+]);
+
+function isBindingConfirmerPath(pathname: string): boolean {
+  if (pathname === '/api/v1/identity-bindings/pending') return true;
+  return /^\/api\/v1\/identity-bindings\/[^/]+\/decision$/.test(pathname);
+}
+
+function hasBindingContext(req: FastifyRequest): boolean {
+  const raw = req.headers['x-binding-context'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === 'string' && value.length > 0;
+}
 
 export function createAuthenticate(pool: pg.Pool, sessionSecret: string) {
   return async function authenticate(req: FastifyRequest): Promise<void> {
@@ -98,7 +119,33 @@ export function registerAuthPlugin(app: FastifyInstance, pool: pg.Pool, sessionS
   app.decorate('authenticate', authenticate);
 
   app.addHook('preHandler', async (req: FastifyRequest) => {
-    if (PUBLIC_PATHS.has(req.url)) return;
+    const pathname = req.url.split('?')[0]!;
+    if (PUBLIC_PATHS.has(pathname)) return;
+
+    // Candidate capability routes: X-Binding-Context replaces Bearer. A normal
+    // session must never be accepted here, and a missing context is a 401.
+    if (BINDING_CANDIDATE_PATHS.has(pathname)) {
+      if (hasBindingContext(req)) return;
+      throw Object.assign(new Error('Binding context invalid'), {
+        statusCode: 401,
+        code: 'BINDING_CONTEXT_INVALID',
+        message: 'Binding context invalid',
+      });
+    }
+
+    // Confirmer routes require an independent Bearer session; a candidate
+    // context header on the same request is rejected outright.
+    if (isBindingConfirmerPath(pathname)) {
+      if (hasBindingContext(req)) {
+        throw Object.assign(new Error('Invalid session'), {
+          statusCode: 401,
+          code: 'UNAUTHENTICATED',
+        });
+      }
+      await authenticate(req);
+      return;
+    }
+
     await authenticate(req);
   });
 }

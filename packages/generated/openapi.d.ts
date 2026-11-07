@@ -244,6 +244,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/identity-bindings/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bootstrapIdentityBinding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity-bindings/candidate-decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submitCandidateBindingDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity-bindings/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCandidateBindingStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity-bindings/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["exchangeBindingSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity-bindings/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPendingBindings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/identity-bindings/{attemptId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["submitSecondPartyBindingDecision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -650,6 +746,91 @@ export interface components {
             code: "CURRENT_FAMILY_AMBIGUOUS";
             message: string;
         };
+        BindingBootstrapRequest: {
+            code: string;
+            invitationToken: string;
+            idempotencyKey: string;
+        };
+        BindingCandidateDecisionRequest: {
+            /** @enum {string} */
+            decision: "AFFIRM" | "REJECT" | "CANCEL";
+            confirmationVersion?: "candidate-binding-v1" | null;
+            idempotencyKey: string;
+        };
+        BindingConfirmerDecisionRequest: {
+            /** Format: uuid */
+            personId: string;
+            /** @enum {string} */
+            decision: "AFFIRM" | "REJECT";
+            targetConfirmed: boolean;
+            candidateRecognized: boolean;
+            /** @constant */
+            confirmationVersion: "second-party-recognition-v1";
+            idempotencyKey: string;
+        };
+        BindingBootstrapGenericResponse: {
+            /** @constant */
+            binding: "NOT_COMPLETED";
+            pendingContextToken: string;
+        };
+        BindingBootstrapReusedResponse: {
+            /** @constant */
+            binding: "REUSED";
+            sessionToken: string;
+            account: {
+                /** Format: uuid */
+                id: string;
+            };
+            person: {
+                /** Format: uuid */
+                id: string;
+            };
+        };
+        BindingGenericResponse: {
+            /** @constant */
+            binding: "NOT_COMPLETED";
+        };
+        BindingStatusResponse: {
+            /** @enum {string} */
+            binding: "NOT_COMPLETED" | "COMMITTED";
+        };
+        BindingSessionCommittedResponse: {
+            /** @constant */
+            binding: "COMMITTED";
+            sessionToken: string;
+            account: {
+                /** Format: uuid */
+                id: string;
+            };
+            person: {
+                /** Format: uuid */
+                id: string;
+            };
+        };
+        BindingPendingListResponse: {
+            attempts: {
+                /** Format: uuid */
+                attemptId: string;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                expiresAt: string;
+            }[];
+        };
+        BindingConfirmerDecisionResponse: {
+            /** @enum {string} */
+            state: "PENDING" | "COMMITTED" | "TERMINAL";
+        };
+        BindingNotFoundError: {
+            /** @constant */
+            code: "BINDING_NOT_FOUND";
+            message: string;
+        };
+        BindingContextInvalidError: {
+            /** @constant */
+            code: "BINDING_CONTEXT_INVALID";
+            message: string;
+        };
     };
     responses: never;
     parameters: {
@@ -661,6 +842,11 @@ export interface components {
         IdempotencyKeyHeader: string;
         /** @description Case UUID（待验证参数；存在不代表有权访问）。 */
         CaseIdPath: string;
+        /** @description opaque pending authentication context；不是普通会话。 */
+        BindingContextHeader: string;
+        /** @description 待验证的 target Person P1；服务端读取唯一 Family。 */
+        BindingPersonIdQuery: string;
+        BindingAttemptIdPath: string;
     };
     requestBodies: never;
     headers: never;
@@ -1525,6 +1711,287 @@ export interface operations {
             };
             /** @description `INTERNAL_ERROR` */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    bootstrapIdentityBinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindingBootstrapRequest"];
+            };
+        };
+        responses: {
+            /** @description generic 或 Case B 复用 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingBootstrapGenericResponse"] | components["schemas"]["BindingBootstrapReusedResponse"];
+                };
+            };
+            /** @description `WECHAT_AUTH_FAILED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitCandidateBindingDecision: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description opaque pending authentication context；不是普通会话。 */
+                "X-Binding-Context": components["parameters"]["BindingContextHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindingCandidateDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 统一 generic 结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingGenericResponse"];
+                };
+            };
+            /** @description `BINDING_CONTEXT_INVALID` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingContextInvalidError"];
+                };
+            };
+            /** @description `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCandidateBindingStatus: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description opaque pending authentication context；不是普通会话。 */
+                "X-Binding-Context": components["parameters"]["BindingContextHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description candidate 可见状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingStatusResponse"];
+                };
+            };
+            /** @description `BINDING_CONTEXT_INVALID` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingContextInvalidError"];
+                };
+            };
+        };
+    };
+    exchangeBindingSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description opaque pending authentication context；不是普通会话。 */
+                "X-Binding-Context": components["parameters"]["BindingContextHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 未 COMMITTED generic / COMMITTED 普通会话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingGenericResponse"] | components["schemas"]["BindingSessionCommittedResponse"];
+                };
+            };
+            /** @description `BINDING_CONTEXT_INVALID` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingContextInvalidError"];
+                };
+            };
+        };
+    };
+    listPendingBindings: {
+        parameters: {
+            query: {
+                /** @description 待验证的 target Person P1；服务端读取唯一 Family。 */
+                personId: components["parameters"]["BindingPersonIdQuery"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 最小 attempts 列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingPendingListResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `BINDING_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingNotFoundError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitSecondPartyBindingDecision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attemptId: components["parameters"]["BindingAttemptIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BindingConfirmerDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 确认后 attempt 状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingConfirmerDecisionResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `BINDING_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BindingNotFoundError"];
+                };
+            };
+            /** @description `BINDING_STATE_CONFLICT` / `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

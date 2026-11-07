@@ -17,17 +17,22 @@ import { Client } from 'pg';
 
 const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATABASE_URL']!;
 
-// Expected final object counts
-const EXPECTED_ENUMS = 10;
-const EXPECTED_TABLES = 12;
+// Expected final object counts (Slice 1 + Case Core + Slice 6 binding)
+const EXPECTED_ENUMS = 15;
+const EXPECTED_TABLES = 17;
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 4; // set_account_context, set_identity_context, set_family_context, create_family
-const EXPECTED_POLICIES = 11;
+const EXPECTED_POLICIES = 27;
 const EXPECTED_TRIGGERS = 1; // consent_records_guard
 
 const EXPECTED_ENUM_NAMES = [
   'account_status',
   'age_band',
+  'binding_attempt_state',
+  'binding_confirmation_kind',
+  'binding_confirmer_authority',
+  'binding_operation_command',
+  'binding_operation_scope',
   'case_phase',
   'case_status',
   'consent_decision',
@@ -40,6 +45,10 @@ const EXPECTED_ENUM_NAMES = [
 
 const EXPECTED_TABLE_NAMES = [
   'accounts',
+  'binding_attempts',
+  'binding_confirmations',
+  'binding_operation_keys',
+  'binding_pending_contexts',
   'business_audit_events',
   'case_events',
   'cases',
@@ -48,6 +57,7 @@ const EXPECTED_TABLE_NAMES = [
   'family_members',
   'guardian_consent_requests',
   'idempotency_keys',
+  'identity_binding_audit_events',
   'person_compliance_profiles',
   'person_profile_values',
   'persons',

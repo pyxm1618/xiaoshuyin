@@ -10,12 +10,18 @@ import { registerMemberRoutes } from './routes/members.js';
 import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerConsentRoutes } from './routes/consents.js';
 import { registerCaseRoutes } from './routes/cases.js';
+import { registerIdentityBindingRoutes } from './routes/identity-bindings.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import {
   createWechatProvider,
   loadRuntimeConfig,
   type RuntimeConfig,
 } from './runtime-env.js';
+import type { WechatAuthProvider } from './auth/wechat-provider.js';
+import {
+  UnavailableInvitationPort,
+  type InvitationResolutionPort,
+} from './identity-binding/invitation-port.js';
 
 export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
@@ -23,6 +29,15 @@ export interface BuildAppOptions {
   loggerStream?: NodeJS.WritableStream;
   /** Test-only sink to capture real registered route schemas (contract drift). */
   onRoute?: (route: any) => void;
+  /**
+   * Identity-binding injection points. Production uses the fail-closed
+   * UnavailableInvitationPort until the Slice 4 runtime adapter is merged
+   * (T121); tests inject the contract-level fixture.
+   */
+  identityBinding?: {
+    invitationPort?: InvitationResolutionPort;
+    wechatProvider?: WechatAuthProvider;
+  };
 }
 
 /**
@@ -89,7 +104,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
 
   // Production never selects the fake provider (see createWechatProvider).
-  const wechatProvider = createWechatProvider(runtime);
+  const wechatProvider =
+    options.identityBinding?.wechatProvider ?? createWechatProvider(runtime);
 
   // Auth plugin
   registerAuthPlugin(app, pool, runtime.sessionSecret);
@@ -107,6 +123,18 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerComplianceRoutes(app, pool);
   registerConsentRoutes(app, pool);
   registerCaseRoutes(app, pool);
+
+  // Slice 006: exactly six identity-binding capability routes.
+  registerIdentityBindingRoutes(app, {
+    pool,
+    invitationPort:
+      options.identityBinding?.invitationPort ?? new UnavailableInvitationPort(),
+    wechatProvider,
+    identityBindingSecret: runtime.identityBindingSecret,
+    contextTtlSeconds: runtime.identityBindingContextTtlSeconds,
+    attemptTtlSeconds: runtime.identityBindingAttemptTtlSeconds,
+    sessionSecret: runtime.sessionSecret,
+  });
 
   return app;
 }

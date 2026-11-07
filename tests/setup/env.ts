@@ -20,6 +20,9 @@ const testDefaults: Record<string, string> = {
   SESSION_SECRET: 'test-session-secret-fixture-value',
   WECHAT_APP_ID: 'test-wechat-app-id',
   WECHAT_APP_SECRET: 'test-wechat-app-secret',
+  IDENTITY_BINDING_SECRET: 'test-identity-binding-secret-fixture-32chars',
+  IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
+  IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
 };
 for (const [key, value] of Object.entries(testDefaults)) {
   if (!process.env[key]) process.env[key] = value;
