@@ -274,7 +274,7 @@ Slice 2 建立了 `cases` 容器与「一个 Family 最多一个当前主要未�
 3A. **目标可见性**：目标 Case 必须存在、且属于当前目标 Family（在 Family 锁内重读；RLS 必须同时生效）。不满足 → 与第 3 条**完全相同**的 `404 CASE_NOT_FOUND`。
 4. **目标不是 CLOSED**：`target.status = CLOSED` → `409 CASE_CLOSED`；零写入。
 5. **目标不是 SAFETY_HOLD**：`target.status = SAFETY_HOLD` → `409 SAFETY_HOLD_BLOCKED`；零写入（推导见 Q3）。
-6. **当前 primary 不处于 SAFETY_HOLD、且无生效安全阻断**：否则 → `409 SAFETY_HOLD_BLOCKED`；零写入（§29.4 第 3 步、产品 §2.1 第 6 条）。
+6. **当前 primary 不处于 SAFETY_HOLD、且无生效安全阻断**：否则 → `409 SAFETY_HOLD_BLOCKED`；零写入（§29.4 第 3 步、产品 §2.1 第 6 条）。当前唯一可判定的载体是 `cases.status`；`risk_events` 等安全对象尚不存在，本 Slice MUST NOT 为其建表或造假数据。Safety Slice 落地后，该谓词按 §13.8 扩展为真实风险判定。
 7. **目标不是当前 primary**：`target` 已是当前未结 primary → `409 CASE_ALREADY_PRIMARY`；不得伪造成成功、不得递增版本、不得写事件（见 Q1）。
 8. **期望主线视图匹配**：客户端必须同时给出其观察到的「当前 primary 标识」与该 primary 的 `version`；无 primary 时两者必须显式为 `null`。与服务端锁内重读结果不一致 → `409 STALE_PRIMARY_VIEW`；零写入。
 9. **理由合法**：`reason` 去首尾空白后必须非空、必须有有限上限。空串 / 纯空白 / 超长 → `422 VALIDATION_ERROR`；零写入。
