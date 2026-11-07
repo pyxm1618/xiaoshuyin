@@ -521,6 +521,7 @@ IMPLEMENT BLOCKED BY: Slice 2（specs/002-case-core）尚未完成并合并
 2. 该文件 §0A 的 Gate 4—8（merge 最新 main、解决共享基础设施冲突、保留 Slice 1 Final 保证、适配 `Idempotency-Key`、全量回归）标记为「下一阶段执行」，尚未完成。
 3. 因此 Slice 2 尚未在 reconciliation 后的 head 上重跑审计二，也**未 merge main**（`origin/feat/002-case-core` = `f9a454b`，相对 `origin/main` = `ee9d07e` 为 **40 ahead / 4 behind**）。
 4. `origin/main` 当前不含 `cases` / `case_events` / `is_primary` 唯一索引 / `CASE_CREATE` 幂等类型（`git ls-tree origin/main` 可验证）。
+5. Slice 2 分支仍是 **pre-reconciliation 形状**：`apps/server/api/src/routes/cases.ts` 仍从 body 读取 `idempotencyKey`，尚未适配 Slice 1 Final 的 `Idempotency-Key` header（这正是未执行的 T091）。因此 Plan 可以参考其结构，但**不得**把该分支的当前 transport 当成最终合同。
 
 > 该阻断是**程序性**的，不是语义性的。Spec 可以独立冻结；Implement Gate 在 Slice 2 合并后自动打开。打开前必须重新核对 Slice 2 是否改变了 `is_primary` / `version` / 事件词汇 / 锁原语 / `Idempotency-Key` 合同；若改变，本 Spec 必须显式复核并记录差异，不得静默适配。
 
