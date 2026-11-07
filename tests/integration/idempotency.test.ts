@@ -1,21 +1,22 @@
 /**
  * T065: Six-command idempotency matrix — ONE parameterized framework.
  *
- *   FAMILY_CREATE / MEMBER_CREATE / MEMBER_UPDATE /
- *   GUARDIAN_CONSENT_REQUEST / GUARDIAN_CONSENT_GRANT / GUARDIAN_CONSENT_REVOKE
- *
- * For EVERY command the same three assertions are generated from the case data:
- *   1. same key + same payload   → replay of the ORIGINAL response
- *   2. same key + different payload → 409 IDEMPOTENCY_PAYLOAD_MISMATCH
- *   3. no duplicate business object (exactly +1 object, replays add nothing)
- *
- * Plus: 20 concurrent same-key requests, and GET never consumes a key.
+ * Frozen OpenAPI: `Idempotency-Key` is an HTTP header for every mutating
+ * command. Same key + same payload → replay; same key + different payload → 409.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
 import type pg from 'pg';
+import {
+  auth,
+  createConsentRequest,
+  createFamily,
+  createMember,
+  grantConsent,
+  loginWithLabel,
+} from '../setup/api.js';
 
 let verifyPool: pg.Pool;
 
@@ -25,15 +26,11 @@ interface ApiResult {
 }
 
 interface CommandEnv {
-  /** First request payload, WITHOUT idempotencyKey. */
   base: Record<string, unknown>;
-  /** Different payload for the mismatch case, WITHOUT idempotencyKey. */
   variant: Record<string, unknown>;
-  /** Optional URL target override for the mismatch case (e.g. another consent id). */
   variantTarget?: string;
   expectedStatus: number;
-  call: (payload: Record<string, unknown>, target?: string) => Promise<ApiResult>;
-  /** Count of the business objects this command is allowed to create. */
+  call: (key: string, payload: Record<string, unknown>, target?: string) => Promise<ApiResult>;
   count: () => Promise<number>;
 }
 
@@ -56,10 +53,6 @@ describe('Idempotency Matrix (T065)', () => {
     await app.close();
   });
 
-  function auth(token: string) {
-    return { authorization: `Bearer ${token}` };
-  }
-
   function keyFor(command: string, purpose: string) {
     return `t065-${command}-${purpose}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   }
@@ -69,97 +62,59 @@ describe('Idempotency Matrix (T065)', () => {
     return Number(rows[0].cnt);
   }
 
-  async function login(label: string) {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `t065_${label}_${Date.now()}_${crypto.randomUUID().slice(0, 8)}` },
-    });
-    expect([200, 201]).toContain(res.statusCode);
-    const { token, person } = res.json();
-    return { token: token as string, personId: person.id as string };
-  }
-
   async function setupFamily(label: string) {
-    const { token, personId } = await login(label);
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/families',
-      headers: auth(token),
-      payload: {
-        displayName: `幂等-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: keyFor('SETUP_FAMILY', label),
-      },
-    });
+    const actor = await loginWithLabel(app, `t065_${label}`);
+    const res = await createFamily(app, actor.token, `t065-${label}`);
     expect(res.statusCode).toBe(201);
-    return { token, personId, familyId: res.json().id as string };
-  }
-
-  async function getNoticeHash(token: string): Promise<string> {
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/compliance/notices',
-      headers: auth(token),
-    });
-    expect(res.statusCode).toBe(200);
-    return res.json().notices[0].hash as string;
+    return { token: actor.token, personId: actor.personId, familyId: res.json().id as string };
   }
 
   async function createRequest(token: string, label: string): Promise<string> {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: auth(token),
-      payload: { noticeVersion: 'v1', idempotencyKey: keyFor('SETUP_REQ', label) },
-    });
+    const res = await createConsentRequest(app, token, `t065-${label}`);
     expect(res.statusCode).toBe(201);
-    return res.json().id as string;
+    return res.json().requestId as string;
   }
 
   async function grant(token: string, requestId: string, label: string): Promise<string> {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: auth(token),
-      payload: {
-        consentRequestId: requestId,
-        accepted: true,
-        noticeVersion: 'v1',
-        noticeHash: await getNoticeHash(token),
-        idempotencyKey: keyFor('SETUP_GRANT', label),
-      },
-    });
+    const res = await grantConsent(app, token, `t065-${label}`, requestId);
     expect(res.statusCode).toBe(201);
     return res.json().id as string;
   }
 
-  async function inject(
+  function inject(
     method: 'POST' | 'PATCH',
     url: string,
     token: string,
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
+    key: string
   ): Promise<ApiResult> {
-    const res = await app.inject({ method, url, headers: auth(token), payload });
-    return { statusCode: res.statusCode, body: res.json() };
+    return app.inject({
+      method,
+      url,
+      headers: { ...auth(token), 'idempotency-key': key },
+      payload,
+    }).then((res) => ({ statusCode: res.statusCode, body: res.json() }));
   }
-
-  // ── Case data: six commands, one shared assertion framework ──
 
   const cases: CommandCase[] = [
     {
       command: 'FAMILY_CREATE',
       setup: async () => {
-        const { token, personId } = await login('fc');
+        const actor = await loginWithLabel(app, 't065_fc');
         return {
-          base: { displayName: '幂等-A', ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
-          variant: { displayName: '幂等-B', ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
+          base: {
+            displayName: '幂等-A',
+            creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
+          },
+          variant: {
+            displayName: '幂等-B',
+            creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
+          },
           expectedStatus: 201,
-          call: (payload) => inject('POST', '/api/v1/families', token, payload),
+          call: (key, payload) => inject('POST', '/api/v1/families', actor.token, payload, key),
           count: () => count(
             'SELECT count(*)::int AS cnt FROM families WHERE created_by_person_id = $1',
-            [personId]
+            [actor.personId]
           ),
         };
       },
@@ -172,7 +127,7 @@ describe('Idempotency Matrix (T065)', () => {
           base: { ageBand: 'MINOR_14_17', ageBandSource: 'GUARDIAN_OBSERVATION' },
           variant: { ageBand: 'MINOR_14_17', ageBandSource: 'GUARDIAN_RELAY' },
           expectedStatus: 201,
-          call: (payload) => inject('POST', `/api/v1/families/${familyId}/members`, token, payload),
+          call: (key, payload) => inject('POST', `/api/v1/families/${familyId}/members`, token, payload, key),
           count: () => count(
             'SELECT count(*)::int AS cnt FROM family_members WHERE family_id = $1',
             [familyId]
@@ -184,22 +139,18 @@ describe('Idempotency Matrix (T065)', () => {
       command: 'MEMBER_UPDATE',
       setup: async () => {
         const { token, familyId } = await setupFamily('mu');
-        const created = await inject('POST', `/api/v1/families/${familyId}/members`, token, {
+        const created = await createMember(app, token, familyId, 't065-mu', {
           ageBand: 'MINOR_14_17',
           ageBandSource: 'GUARDIAN_OBSERVATION',
-          idempotencyKey: keyFor('SETUP_MEMBER', 'mu'),
         });
         expect(created.statusCode).toBe(201);
-        const targetPersonId = created.body.personId as string;
+        const targetPersonId = created.json().personId as string;
         return {
-          base: {
-            profileValues: [{ attribute: 'DISPLAY_NAME', valueText: '名字A', sourceKind: 'GUARDIAN_OBSERVATION' }],
-          },
-          variant: {
-            profileValues: [{ attribute: 'DISPLAY_NAME', valueText: '名字B', sourceKind: 'GUARDIAN_OBSERVATION' }],
-          },
+          base: { values: [{ attribute: 'DISPLAY_NAME', value: '名字A', source: 'GUARDIAN_OBSERVATION' }] },
+          variant: { values: [{ attribute: 'DISPLAY_NAME', value: '名字B', source: 'GUARDIAN_OBSERVATION' }] },
           expectedStatus: 200,
-          call: (payload) => inject('PATCH', `/api/v1/families/${familyId}/members/${targetPersonId}`, token, payload),
+          call: (key, payload) =>
+            inject('PATCH', `/api/v1/families/${familyId}/members/${targetPersonId}`, token, payload, key),
           count: () => count(
             "SELECT count(*)::int AS cnt FROM person_profile_values WHERE person_id = $1 AND status = 'RECORDED'",
             [targetPersonId]
@@ -211,11 +162,12 @@ describe('Idempotency Matrix (T065)', () => {
       command: 'GUARDIAN_CONSENT_REQUEST',
       setup: async () => {
         const { token, familyId } = await setupFamily('gcr');
+        const channel = process.env['NODE_ENV'] === 'test' ? 'TEST' : 'MINIPROGRAM';
         return {
-          base: { noticeVersion: 'v1' },
-          variant: { noticeVersion: 'v2' },
+          base: { declaredAgeBand: 'UNDER_14', noticeVersion: 'v1', channel },
+          variant: { declaredAgeBand: 'UNDER_14', noticeVersion: 'v999', channel },
           expectedStatus: 201,
-          call: (payload) => inject('POST', '/api/v1/compliance/guardian-consents/requests', token, payload),
+          call: (key, payload) => inject('POST', '/api/v1/compliance/guardian-consents/requests', token, payload, key),
           count: () => count(
             'SELECT count(*)::int AS cnt FROM guardian_consent_requests WHERE family_id = $1',
             [familyId]
@@ -229,12 +181,11 @@ describe('Idempotency Matrix (T065)', () => {
         const { token, familyId } = await setupFamily('gcg');
         const requestA = await createRequest(token, 'gcg-a');
         const requestB = await createRequest(token, 'gcg-b');
-        const hash = await getNoticeHash(token);
         return {
-          base: { consentRequestId: requestA, accepted: true, noticeVersion: 'v1', noticeHash: hash },
-          variant: { consentRequestId: requestB, accepted: true, noticeVersion: 'v1', noticeHash: hash },
+          base: { onboardingRequestId: requestA, noticeVersion: 'v1', accepted: true },
+          variant: { onboardingRequestId: requestB, noticeVersion: 'v1', accepted: true },
           expectedStatus: 201,
-          call: (payload) => inject('POST', '/api/v1/compliance/guardian-consents', token, payload),
+          call: (key, payload) => inject('POST', '/api/v1/compliance/guardian-consents', token, payload, key),
           count: () => count(
             'SELECT count(*)::int AS cnt FROM consent_records WHERE family_id = $1',
             [familyId]
@@ -253,8 +204,8 @@ describe('Idempotency Matrix (T065)', () => {
           variant: {},
           variantTarget: consentB,
           expectedStatus: 200,
-          call: (payload, target) =>
-            inject('POST', `/api/v1/consents/${target ?? consentA}/revoke`, token, payload),
+          call: (key, payload, target) =>
+            inject('POST', `/api/v1/consents/${target ?? consentA}/revoke`, token, payload, key),
           count: () => count(
             'SELECT count(*)::int AS cnt FROM consent_records WHERE family_id = $1',
             [familyId]
@@ -269,10 +220,10 @@ describe('Idempotency Matrix (T065)', () => {
       it('same key + same payload → replay original response', async () => {
         const env = await c.setup();
         const key = keyFor(c.command, 'replay');
-        const first = await env.call({ ...env.base, idempotencyKey: key });
+        const first = await env.call(key, env.base);
         expect(first.statusCode).toBe(env.expectedStatus);
 
-        const replay = await env.call({ ...env.base, idempotencyKey: key });
+        const replay = await env.call(key, env.base);
         expect(replay.statusCode).toBe(first.statusCode);
         expect(replay.body).toEqual(first.body);
       });
@@ -280,13 +231,10 @@ describe('Idempotency Matrix (T065)', () => {
       it('same key + different payload → 409 IDEMPOTENCY_PAYLOAD_MISMATCH', async () => {
         const env = await c.setup();
         const key = keyFor(c.command, 'mismatch');
-        const first = await env.call({ ...env.base, idempotencyKey: key });
+        const first = await env.call(key, env.base);
         expect(first.statusCode).toBe(env.expectedStatus);
 
-        const mismatch = await env.call(
-          { ...env.variant, idempotencyKey: key },
-          env.variantTarget
-        );
+        const mismatch = await env.call(key, env.variant, env.variantTarget);
         expect(mismatch.statusCode).toBe(409);
         expect(mismatch.body.code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
       });
@@ -296,13 +244,13 @@ describe('Idempotency Matrix (T065)', () => {
         const key = keyFor(c.command, 'nodup');
         const before = await env.count();
 
-        const first = await env.call({ ...env.base, idempotencyKey: key });
+        const first = await env.call(key, env.base);
         expect(first.statusCode).toBe(env.expectedStatus);
         const afterFirst = await env.count();
         expect(afterFirst - before).toBe(1);
 
         for (let i = 0; i < 3; i++) {
-          const replay = await env.call({ ...env.base, idempotencyKey: key });
+          const replay = await env.call(key, env.base);
           expect(replay.statusCode).toBe(env.expectedStatus);
           expect(replay.body).toEqual(first.body);
         }
@@ -311,21 +259,31 @@ describe('Idempotency Matrix (T065)', () => {
     });
   }
 
+  it('missing Idempotency-Key header → 422', async () => {
+    const { token } = await setupFamily('nokey');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/families',
+      headers: auth(token),
+      payload: {
+        creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
+      },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('VALIDATION_ERROR');
+  });
+
   it('concurrent 20 requests with same key → only 1 business object', async () => {
     const { token, familyId } = await setupFamily('conc');
     const key = keyFor('MEMBER_CREATE', 'concurrent');
-    const payload = {
-      ageBand: 'MINOR_14_17',
-      ageBandSource: 'GUARDIAN_OBSERVATION',
-      idempotencyKey: key,
-    };
+    const payload = { ageBand: 'MINOR_14_17', ageBandSource: 'GUARDIAN_OBSERVATION' };
 
     const results = await Promise.all(
       Array.from({ length: 20 }, () =>
         app.inject({
           method: 'POST',
           url: `/api/v1/families/${familyId}/members`,
-          headers: auth(token),
+          headers: { ...auth(token), 'idempotency-key': key },
           payload,
         })
       )
@@ -335,13 +293,11 @@ describe('Idempotency Matrix (T065)', () => {
       expect([200, 201, 409]).toContain(r.statusCode);
     }
 
-    // 1 manager + 1 created member — no 20 duplicate memberships.
     expect(await count(
       'SELECT count(*)::int AS cnt FROM family_members WHERE family_id = $1',
       [familyId]
     )).toBe(2);
 
-    // Every successful response refers to the SAME original Person.
     const personIds = new Set(
       results.map((r) => r.json().personId).filter((id) => typeof id === 'string')
     );

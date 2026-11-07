@@ -1,11 +1,39 @@
 /**
  * Compliance repository — consent + compliance profile data access.
  * Routes must NOT hold direct SQL for these tables (guard R4).
+ *
+ * Every read that is used to make a "this consent is still valid" decision
+ * validates `evidence` against the single `ConsentEvidence` schema and fails
+ * closed on legacy / malformed rows (F6).
  */
 
 import type { PoolClient } from 'pg';
+import { ConsentEvidence, type ConsentEvidenceType } from '@xiaoshuyin/contracts';
 
 export type Tx = PoolClient;
+
+export interface ConsentRecordRow {
+  id: string;
+  family_id: string;
+  guardian_person_id: string;
+  guardian_account_id: string;
+  purpose: string;
+  decision: 'GRANTED' | 'REVOKED';
+  version: number;
+  onboarding_request_id: string | null;
+  bound_person_id: string | null;
+  bound_at: Date | null;
+  notice_version: string;
+  notice_hash: string;
+  policy_version: string;
+  evidence: unknown;
+  decided_at: Date;
+  supersedes_id: string | null;
+}
+
+function evidenceIsValid(evidence: unknown): boolean {
+  return ConsentEvidence.safeParse(evidence).success;
+}
 
 // ── Guardian Consent Requests ───────────────────────────────
 
@@ -22,7 +50,7 @@ export async function insertConsentRequest(
        (family_id, guardian_person_id, subject_person_id, declared_age_band,
         notice_version, notice_hash, status, expires_at)
      VALUES ($1, $2, $3, 'UNDER_14', $4, $5, 'PENDING', now() + interval '24 hours')
-     RETURNING id, status, notice_version, expires_at`,
+     RETURNING id, status, notice_version, notice_hash, expires_at`,
     [familyId, guardianPersonId, subjectPersonId, noticeVersion, noticeHash]
   );
   return rows[0];
@@ -38,6 +66,16 @@ export async function getConsentRequestForUpdate(tx: Tx, id: string) {
   return rows[0] ?? null;
 }
 
+export async function getConsentRequestForGate(tx: Tx, id: string) {
+  const { rows } = await tx.query(
+    `SELECT id, status, expires_at, notice_version, notice_hash, guardian_person_id,
+            subject_person_id, family_id
+     FROM guardian_consent_requests WHERE id = $1`,
+    [id]
+  );
+  return rows[0] ?? null;
+}
+
 export async function updateConsentRequestGranted(tx: Tx, id: string): Promise<void> {
   await tx.query(
     `UPDATE guardian_consent_requests SET status = 'GRANTED', completed_at = now() WHERE id = $1`,
@@ -47,23 +85,77 @@ export async function updateConsentRequestGranted(tx: Tx, id: string): Promise<v
 
 // ── Consent Records ─────────────────────────────────────────
 
-export async function getConsentRecordForUpdate(tx: Tx, id: string) {
+const CONSENT_COLUMNS = `id, family_id, guardian_person_id, guardian_account_id, purpose,
+  decision, version, onboarding_request_id, bound_person_id, bound_at,
+  notice_version, notice_hash, policy_version, evidence, decided_at, supersedes_id`;
+
+export async function getConsentRecordForUpdate(tx: Tx, id: string): Promise<ConsentRecordRow | null> {
   const { rows } = await tx.query(
-    `SELECT id, decision, version, bound_person_id, notice_version, notice_hash,
-            guardian_person_id, guardian_account_id, family_id, bound_at
-     FROM consent_records WHERE id = $1 FOR UPDATE`,
+    `SELECT ${CONSENT_COLUMNS} FROM consent_records WHERE id = $1 FOR UPDATE`,
     [id]
   );
   return rows[0] ?? null;
 }
 
-export async function getConsentRecordById(tx: Tx, id: string) {
+export async function getConsentRecordById(tx: Tx, id: string): Promise<ConsentRecordRow | null> {
   const { rows } = await tx.query(
-    `SELECT id, guardian_person_id, decision, bound_person_id, notice_hash
-     FROM consent_records WHERE id = $1 FOR UPDATE`,
+    `SELECT ${CONSENT_COLUMNS} FROM consent_records WHERE id = $1 FOR UPDATE`,
     [id]
   );
   return rows[0] ?? null;
+}
+
+export interface ValidConsentOptions {
+  familyId: string;
+  guardianPersonId: string;
+  guardianAccountId: string;
+  currentNoticeHash: string;
+}
+
+/**
+ * F2 / F6: a consent may only be used for a first bind when it is the current,
+ * still-valid chain head:
+ *   - GRANTED, not yet bound;
+ *   - same family + same guardian person/account;
+ *   - notice still current;
+ *   - its onboarding request still valid and not expired;
+ *   - no other row supersedes it;
+ *   - evidence passes the frozen `ConsentEvidence` schema.
+ * Anything else returns null (fail closed, no legacy evidence repair).
+ */
+export async function getValidConsentForBinding(
+  tx: Tx,
+  id: string,
+  opts: ValidConsentOptions
+): Promise<ConsentRecordRow | null> {
+  const { rows } = await tx.query(
+    `SELECT ${CONSENT_COLUMNS},
+            NOT EXISTS (SELECT 1 FROM consent_records s WHERE s.supersedes_id = c.id) AS is_chain_head,
+            (SELECT (r.expires_at > now()
+                     AND r.family_id = c.family_id
+                     AND r.notice_hash = c.notice_hash
+                     AND r.status NOT IN ('EXPIRED', 'ABANDONED'))
+             FROM guardian_consent_requests r
+             WHERE r.id = c.onboarding_request_id) AS request_valid
+     FROM consent_records c
+     WHERE c.id = $1
+     FOR UPDATE`,
+    [id]
+  );
+  const row = rows[0];
+  if (!row) return null;
+
+  if (row.decision !== 'GRANTED') return null;
+  if (row.bound_person_id !== null) return null;
+  if (row.family_id !== opts.familyId) return null;
+  if (row.guardian_person_id !== opts.guardianPersonId) return null;
+  if (row.guardian_account_id !== opts.guardianAccountId) return null;
+  if (row.notice_hash !== opts.currentNoticeHash) return null;
+  if (row.is_chain_head !== true) return null;
+  if (row.request_valid !== true) return null;
+  if (!evidenceIsValid(row.evidence)) return null;
+
+  return row;
 }
 
 // ── Processing gate (read-only, contracts/consent-onboarding.md §7) ──
@@ -89,13 +181,21 @@ export async function getComplianceProfileForUpdate(tx: Tx, personId: string) {
   return rows[0] ?? null;
 }
 
+/**
+ * F6: the gate only sees a consent row whose evidence validates against the
+ * frozen schema. Legacy `{accepted:true,timestamp}` rows are reported as
+ * "no usable consent" → BLOCK, never silently repaired.
+ */
 export async function getConsentRecordForGate(tx: Tx, id: string) {
   const { rows } = await tx.query(
-    `SELECT id, version, decision, bound_person_id, notice_hash, guardian_person_id
+    `SELECT id, version, decision, bound_person_id, notice_hash, guardian_person_id, evidence
      FROM consent_records WHERE id = $1`,
     [id]
   );
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) return null;
+  if (!evidenceIsValid(row.evidence)) return null;
+  return row;
 }
 
 export async function insertConsentRecord(
@@ -111,9 +211,12 @@ export async function insertConsentRecord(
   noticeVersion: string,
   noticeHash: string,
   policyVersion: string,
-  evidence: string,
+  evidence: ConsentEvidenceType,
   supersedesId: string | null = null
 ) {
+  // The evidence column is never free-form jsonb: the single ConsentEvidence
+  // schema validates the object before it is serialized for storage.
+  const validatedEvidence = ConsentEvidence.parse(evidence);
   const { rows } = await tx.query(
     `INSERT INTO consent_records
        (family_id, guardian_person_id, guardian_account_id, purpose, decision,
@@ -121,11 +224,12 @@ export async function insertConsentRecord(
         notice_version, notice_hash, policy_version, evidence, supersedes_id)
      VALUES ($1, $2, $3, 'UNDER_14_GUARDIAN_CONSENT', $4, $5, $6, $7, $8,
              $9, $10, $11, $12, $13)
-     RETURNING id, decision, version, notice_version, decided_at, bound_person_id`,
+     RETURNING ${CONSENT_COLUMNS}`,
     [
       familyId, guardianPersonId, guardianAccountId, decision, version,
       onboardingRequestId, boundPersonId, boundAt,
-      noticeVersion, noticeHash, policyVersion, evidence, supersedesId,
+      noticeVersion, noticeHash, policyVersion,
+      JSON.stringify(validatedEvidence), supersedesId,
     ]
   );
   return rows[0];
@@ -145,8 +249,7 @@ export async function bindConsentToPerson(
 
 export async function getConsentsByFamily(tx: Tx, familyId: string) {
   const { rows } = await tx.query(
-    `SELECT id, decision, version, notice_version, decided_at, bound_person_id
-     FROM consent_records WHERE family_id = $1
+    `SELECT ${CONSENT_COLUMNS} FROM consent_records WHERE family_id = $1
      ORDER BY decided_at DESC`,
     [familyId]
   );
@@ -157,7 +260,8 @@ export async function getConsentsByFamily(tx: Tx, familyId: string) {
 
 export async function getComplianceProfile(tx: Tx, personId: string) {
   const { rows } = await tx.query(
-    `SELECT age_band, minor_mode, verified_source, guardian_consent_version, effective_at
+    `SELECT person_id, age_band, minor_mode, verified_source,
+            guardian_person_id, guardian_consent_record_id, guardian_consent_version, effective_at
      FROM person_compliance_profiles WHERE person_id = $1`,
     [personId]
   );

@@ -10,10 +10,14 @@
  *   - concurrent same-key requests are serialized by a transaction-scoped
  *     advisory lock, so at most one business object can be created.
  *
+ * Family context is NOT set here. Per contracts/authorization-and-rls.md §4.4
+ * each command runs `resolve → authorize → set_family_context → read/write`
+ * inside `fn`, in this same transaction.
+ *
  * Data access stays in packages/** (guard R4); this module only orchestrates.
  */
 
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import pg from 'pg';
 import {
   decideIdempotency,
@@ -41,10 +45,27 @@ export interface IdempotentCommandConfig {
   commandType: IdempotencyCommandType;
   idempotencyKey: string;
   requestHash: string;
-  /** Resolved inside the transaction, only on the EXECUTE path. */
-  resolveFamilyId?: (tx: pg.PoolClient) => Promise<string | null>;
-  /** FAMILY_CREATE only: create the family row before the business callback. */
-  createFamily?: { newFamilyId: string; displayName: string | null };
+}
+
+const MIN_IDEMPOTENCY_KEY_LENGTH = 8;
+const MAX_IDEMPOTENCY_KEY_LENGTH = 128;
+
+/**
+ * Frozen OpenAPI contract: `Idempotency-Key` is an HTTP header for all six
+ * mutating commands, required, 8..128 characters.
+ */
+export function readIdempotencyKey(req: FastifyRequest): string {
+  const raw = req.headers['idempotency-key'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (
+    typeof value !== 'string' ||
+    value.length < MIN_IDEMPOTENCY_KEY_LENGTH ||
+    value.length > MAX_IDEMPOTENCY_KEY_LENGTH
+  ) {
+    const err = toHttpError('VALIDATION_ERROR', 'Idempotency-Key header is required');
+    throw Object.assign(new Error(err.message), err);
+  }
+  return value;
 }
 
 function decide(
@@ -121,21 +142,6 @@ export async function runIdempotentCommand(
     if (decision) {
       await client.query('COMMIT');
       return decision;
-    }
-
-    if (cfg.resolveFamilyId) {
-      const familyId = await cfg.resolveFamilyId(client);
-      if (familyId) {
-        await client.query('SELECT app.set_family_context($1, $2, $3)', [
-          familyId, cfg.personId, cfg.purpose,
-        ]);
-      }
-    }
-
-    if (cfg.createFamily) {
-      await client.query('SELECT app.create_family($1, $2, $3)', [
-        cfg.createFamily.newFamilyId, cfg.personId, cfg.createFamily.displayName,
-      ]);
     }
 
     const response = await fn(client);
