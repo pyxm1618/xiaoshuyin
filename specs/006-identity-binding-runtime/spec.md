@@ -2,11 +2,11 @@
 
 **Feature Directory**: `specs/006-identity-binding-runtime`  
 **Created**: 2026-11-07  
-**Status**: Draft — Specify / Clarify  
+**Status**: Specify / Clarify FINAL PASS  
 **V1 Phase**: Phase 1 — Common Core 地基（`Docs/V1技术设计.md` §38；「Invited existing-Person identity binding 属 Phase 1 的身份前置能力」，实现顺序由独立 Slice 批准）  
 **Docs baseline**: `Docs/V1产品需求.md` v3.7、`Docs/V1技术设计.md` v3.12  
 **Upstream frozen contract**: `specs/005-invited-identity-binding-contract/spec.md`（merged main，Contract only）  
-**Stage**: Specify / Clarify only。**禁止进入 Plan / Checklist / Tasks / Analyze / Implement / Remediation / Converge。**
+**Stage**: Specify / Clarify FINAL PASS only。尚未进入 Plan / Checklist / Tasks / Analyze（审计一）/ Implement / Remediation / Converge（审计二）。
 
 > 本 Spec 是已批准 Xiaoshuyin 文档与已冻结 005 Identity Binding Contract 的**下游 runtime 实现投影**。它把 005 的合同语义转化为「运行时必须具备什么能力、由谁拥有、边界在哪、如何判定」，不新增任何产品语义，不重开 005 的任何裁定。
 >
@@ -364,9 +364,9 @@ TERMINAL   → 不再转换（settled）
 | retry after RETRYABLE | retry / read-back MUST 收敛到 authoritative attempt outcome（PENDING / COMMITTED / TERMINAL）；不得永久返回 RETRYABLE；不得 double commit |
 | retry after TERMINAL | 返回历史 TERMINAL；MUST NOT 重开同一 attempt；new attempt 需 invitation valid + 业务政策允许 |
 | concurrent same-key requests | 只产生一个业务结果；其余为 replay；不得重复 confirmation / 重复 commit / 重复 audit |
-| concurrent different-key same-binding | 同一 `(P1, authenticated WeChat identity, invitation)` 的 non-settled attempt 至多一个；最终 successful commits ∈ {0,1}；binding increase ≤ 1 |
+| concurrent different-key same-binding | 最终 successful commits ∈ {0,1}；binding increase ≤ 1；non-settled live attempt 收敛机制由 Plan 决定（可为「同一三元组最多一个 live attempt」或等价机制）；MUST NOT 声明永久全局唯一 |
 
-**边界**：`binding_attempt_id`（语义标识，物理字段名留 Plan）只标识 attempt，不是把整个 attempt 生命周期永久固定为同一结果的 operation idempotency key。MUST NOT 声明 `(P1, authenticated WeChat identity, invitation)` 的**永久全局唯一**约束；但 non-settled 期间必须收敛为至多一个 live attempt。
+**边界**：`binding_attempt_id`（语义标识，物理字段名留 Plan）只标识 attempt，不是把整个 attempt 生命周期永久固定为同一结果的 operation idempotency key。MUST NOT 声明 `(P1, authenticated WeChat identity, invitation)` 的**永久全局唯一**约束。non-settled 期间的并发收敛机制（是否采用「同一三元组最多一个 live attempt」或等价机制）由 Plan 决定；无论采用何种机制，都必须满足 005 §5.5 与本节表格的全部业务结果（含 new attempt、retry、no double commit、`successful commits ∈ {0,1}`）。
 
 ## Concurrency Semantics
 
@@ -380,7 +380,7 @@ TERMINAL   → 不再转换（settled）
 | 两个不同 Account 同时认领同一 existing Person | `successful commits ∈ {0,1}`；另一个 TERMINAL | P1 的 Account 绑定必须由数据库唯一 / 条件更新收敛 |
 | 同一 Account 同时匹配两个 Person | 至多一个 binding；另一个 identity conflict → TERMINAL | 唯一约束 + 条件更新 |
 
-**强制原则**：上述收敛 MUST NOT 只依赖应用层「先查询再写入」。必须在数据库层存在唯一约束、条件更新或等效串行化机制；具体约束 / 锁 / 索引 / 隔离级别留 Plan。并发下 `Person` 增量 MUST 为 0。
+**强制原则**：上述收敛 MUST NOT 只依赖应用层「先查询再写入」。必须在数据库层存在最终收敛保证；具体机制（约束 / 条件更新 / 行锁 / 索引 / 隔离级别，以及是否采用「同一 `(P1, identity, invitation)` 最多一个 live/non-settled attempt」）由 Plan 决定。并发下 `Person` 增量 MUST 为 0。
 
 ## No-P2 Invariant
 
@@ -553,7 +553,7 @@ Slice 4（Case Participant Core）后续**可以依赖**的 contract-level 事�
 - **FR-014** [UPSTREAM: 005 §5.5 / IB-019] `RETRYABLE OPERATION FAILURE` MUST 表示单次 operation 结果尚未可信收敛，MUST NOT 是 attempt 的永久 settled outcome、MUST NOT 是第四种 attempt 生命周期状态；operation timeout MUST NOT 自动终止 attempt、MUST NOT 擦除已有效 Phase B confirmation；attempt expiration MUST 使 attempt `TERMINAL` 且不得 commit。
 - **FR-015** [UPSTREAM: 005 IB-020 / IB-021] `Invitation lifecycle` MUST NOT 等于 `Binding attempt lifecycle`；未证明为 P1 的 candidate 的 cancel / reject / identity failure / attempt expiration MUST 最多终止 attempt，MUST NOT decline / cancel / expire / withdraw P1 invitation；invitation terminal 后尚未 COMMITTED 的 attempt MUST NOT commit，已 COMMITTED 的 binding MUST 保持 COMMITTED，same-attempt replay MUST 返回历史 COMMITTED 但 MUST NOT re-execute commit / revive invitation / 恢复 participation accept / 重建 authorization。
 - **FR-016** [UPSTREAM: §5 不变量 29 / 005 IB-022 / IB-023] invitation-aware flow MUST 保证 no-P2：binding 前 MUST NOT 创建 P2、普通业务会话、active participation、membership、guardian、Case permission；成功 MUST NOT 先建 P2 再 merge / rename / delete；并发下 `successful commits ∈ {0,1}`、`binding increase ≤ 1`、`Person 增量 = 0`；全部失败时 `0 commit` 是合法结果。
-- **FR-017** [UPSTREAM: §7.1 / 005 §5.5] 并发收敛 MUST 在数据库层存在最终保证（唯一约束 / 条件更新 / 行锁 / 等效串行化），MUST NOT 只依赖应用层先查再写；同一 `(P1, authenticated WeChat identity, invitation)` 的 non-settled attempt MUST 至多一个；MUST NOT 声明该三元组的永久全局唯一。
+- **FR-017** [UPSTREAM: §7.1 / 005 §5.5] 并发收敛 MUST 在数据库层存在最终保证，MUST NOT 只依赖应用层先查再写；具体机制（唯一约束 / 条件更新 / 行锁 / 等效串行化，以及是否采用「同一 `(P1, authenticated WeChat identity, invitation)` 最多一个 live/non-settled attempt」）由 Plan 决定；无论采用何种机制，MUST 满足 005 §5.5 的 new-attempt、retry、concurrency 与 `successful commits ∈ {0,1}`，且 MUST NOT 声明该三元组的永久全局唯一。
 - **FR-018** [UPSTREAM: 005 IB-024 / §5.6.1] 成功 binding MUST 是独立 identity fact，只建立 `Account A ↔ P1`；participation decline / withdraw、Case close、guardian consent revoke、其它下游授权撤销 MUST NOT 自动解绑；本 Slice MUST NOT 设计 unlink / rebind / merge / duplicate Person recovery。
 - **FR-019** [UPSTREAM: 005 IB-025 / IB-026 / §5.6.2] 内部结果与 candidate-facing 结果 MUST 分离；未绑定 candidate 只能得到不可区分的 generic「binding not completed」；MUST NOT 泄露 guardian 是否存在、consent 是否有效、age band、multi-family、Person 是否存在、目标 Family 归属、其它 Account 绑定；文案 / 状态 / 「下一步可继续动作」MUST NOT 成为 oracle；已授权 second-party / manager MAY 在其自身授权上下文看到完成确认必需信息，不得扩散。
 - **FR-020** [UPSTREAM: §1.5 / 005 IB-027] P1 当前存在多个 Family membership 或不属于目标 Family 时 MUST BLOCK；MUST NOT 选择任一 Family 作为确认权来源；MUST NOT 泄露其它 Family；schema 级多对多保留。
@@ -634,7 +634,7 @@ No requirement may be invented to make implementation easier.
 - **SC-002**：Case B 匹配 Account 复用既有 binding、无新 binding / 无新 Person、不要求重新双确认；不匹配 Account 被拒且不 rebind。
 - **SC-003**：任何 attempt 的业务结果只能是四类之一；`COMMITTED` / `TERMINAL` replay 返回历史 settled outcome，commit 不重复执行；`PENDING` / `RETRYABLE` 不被冻结为永久结果。
 - **SC-004**：no-P2 机械可验证：ordinary-login-first、concurrent attempts、retry after timeout、commit rollback、invitation terminal 重试后 `Person 增量 = 0`、`P2 = 0`、`partial binding = 0`。
-- **SC-005**：并发压测下 `successful commits ∈ {0,1}`、`binding increase ≤ 1`；数据库层唯一 / 条件更新可被证明（不是应用层先查再写）。
+- **SC-005**：并发压测下 `successful commits ∈ {0,1}`、`binding increase ≤ 1`；Plan 选定的数据库层收敛机制可被证明（不是应用层先查再写）；MUST NOT 声明 `(P1, authenticated WeChat identity, invitation)` 永久全局唯一。
 - **SC-006**：same key + same payload 无重复副作用；same key + different payload 被拒且不改原结果；different key + same semantic op 不产生第二个 live attempt。
 - **SC-007**：未绑定 candidate 对 6 类内部原因（guardian 存在性、consent 有效性、age band、multi-family、Person 存在性、target Family 归属）观察不到任何差异；对外统一 generic。
 - **SC-008**：`Person 增量 = 0` 在所有失败 / 超时 / 取消 / expiration / 并发失败路径成立；失败后无 P2 / partial binding / 普通会话 / active authorization / partial participation。
@@ -658,7 +658,7 @@ No requirement may be invented to make implementation easier.
 **AS-07 — Invitation stale / consumed / terminal（邀请过期 / 已消费 / 终态）** — **Given** invitation 已进入 Slice 4 定义的终态 / 不可用，**When** 旧 attempt 尚未 COMMITTED，**Then** MUST NOT commit、MUST NOT 复活 invitation；同一 attempt replay 返回 terminal；未来参与需 new invitation → new attempt；若 attempt 在 invitation terminal 前已 COMMITTED，则 binding 保持 COMMITTED、replay 返回历史 COMMITTED 且不 re-execute / revive。**对应 005 场景 12、20。**
 **AS-08 — Account already bound（candidate Account 已绑定其它 Person）** — **Given** candidate 已通过普通登录形成 `A↔P2`，**When** 打开 P1 邀请尝试 binding，**Then** identity conflict → `TERMINAL`；`A↔P2` 与 P1 不变；MUST NOT merge / delete / rebind / 创建 P1 的 active participation；对外 generic；MUST NOT 声称该场景 P2 = 0。**对应 005 场景 15；runtime 特有：identity conflict 门禁在 commit 前可判定。**
 **AS-09 — Person already bound（P1 已有 Account B）** — **Given** P1 已有 Account B，**When** 当前已认证 Account == B → 复用 binding、不重新绑定、不要求双确认、可继续 Slice 4 的 accept / decline；!= B → 拒绝、不 rebind / 替换、无 active participation。**对应 005 场景 16。**
-**AS-10 — Concurrent claim on same P1（并发认领同一 Person）** — **Given** 多个 attempt 并发绑定同一 P1，**When** 全部完成，**Then** `successful commits ∈ {0,1}`、`binding increase ≤ 1`、`Person 增量 = 0`；其余 attempt `TERMINAL`；全部失败时 `0 commit` 合法；数据库层唯一 / 条件更新可证明。**对应 005 场景 13；runtime 特有：DB 层最终保证。**
+**AS-10 — Concurrent claim on same P1（并发认领同一 Person）** — **Given** 多个 attempt 并发绑定同一 P1，**When** 全部完成，**Then** `successful commits ∈ {0,1}`、`binding increase ≤ 1`、`Person 增量 = 0`；其余 attempt `TERMINAL`；全部失败时 `0 commit` 合法；Plan 选定的数据库层收敛机制可证明。**对应 005 场景 13；runtime 特有：DB 层最终保证。**
 **AS-11 — Duplicate replay（重复提交 / 同幂等键）** — **Given** 同一 key + 同一 payload 已处理，**When** 客户端重试（含并发同 key），**Then** 返回原结果；不产生第二条 attempt / 第二份 confirmation / 第二次 commit / 第二组 audit。**对应 005 场景 24（PENDING 分支）；runtime 特有：幂等基础设施与 attempt 回读。**
 **AS-12 — Idempotency mismatch（同 key 不同 payload）** — **Given** 同一 key + 不同 canonical payload，**When** 提交，**Then** 拒绝（映射 409，具体 code / envelope 留 Plan），原 attempt / 原结果不被修改。**对应 Docs §8.5；runtime 特有：mismatch 分支。**
 **AS-13 — Retryable failure（技术失败）** — **Given** Phase B 有效、candidate confirmation 已记录，**When** 发生 timeout / unknown network result，**Then** `RETRYABLE OPERATION FAILURE`；attempt 仍合法；已有效 confirmation 不被擦除；不得假设成功 / 失败；retry / read-back 收敛到 authoritative outcome；不 double commit。**对应 005 场景 21、25、26。**
@@ -688,7 +688,7 @@ No requirement may be invented to make implementation easier.
 | attempt 持久化与 settled replay（FR-012、FR-013、SC-003、AS-15、AS-19） | integration + database | 重启后 attempt 状态 / outcome / confirmation / audit 回读；COMMITTED / TERMINAL replay 返回历史结果；不 re-execute commit；PENDING / RETRYABLE 不被冻结 |
 | 四类结果与 PENDING 边界（FR-013、FR-014、AS-13、AS-14） | domain + integration | 四类逐项可判定；PENDING 掩盖失效 → 失败；RETRYABLE 不是 attempt 状态；operation timeout 不终止 attempt、不擦除 confirmation；expiration 后 commit = 0 |
 | 幂等矩阵（FR-022、SC-006、AS-11、AS-12） | integration + concurrency | same key same payload / different payload / replay settled / replay PENDING / retry RETRYABLE / concurrent same-key / concurrent different-key 全表逐项断言 |
-| 并发与 DB 层最终保证（FR-017、SC-005、AS-10） | database concurrency | 并发 attempt 后 `successful commits ∈ {0,1}`、`binding increase ≤ 1`、Person 增量 0；唯一约束 / 条件更新 / 行锁的实际拒绝输出；不得仅应用层先查再写 |
+| 并发与 DB 层最终保证（FR-017、SC-005、AS-10） | database concurrency | 并发 attempt 后 `successful commits ∈ {0,1}`、`binding increase ≤ 1`、Person 增量 0；Plan 选定的数据库层收敛机制的实际拒绝 / 串行化输出；不得仅应用层先查再写；MUST NOT 声明该三元组永久全局唯一 |
 | no-P2 与无危险残留（FR-016、FR-021、SC-004、SC-008、AS-16、AS-22） | integration + database | ordinary-login-first / concurrent / retry / rollback / invitation terminal 后对象计数：P2 = 0、partial binding = 0、session = 0、active authz = 0、partial participation = 0；事务失败全回滚 |
 | 独立事实与不解绑（FR-018、SC-010） | integration | decline / withdraw / Case close / consent revoke 后 binding 仍存在；唯一新增关系为 Account↔Person；无 membership / guardian / Consent / Case / Participant 新增 |
 | anti-enumeration（FR-019、SC-007） | integration + response matrix | 6 类内部原因对 candidate 无观察差异；generic「binding not completed」；文案 / 状态 / 下一步动作无 oracle；已授权 second-party 可见性不扩散 |
@@ -724,10 +724,9 @@ No requirement may be invented to make implementation easier.
 
 1. **Case C 的正式 Account 在 Phase C commit 创建**：由 §1.5「一个 Account 只代表一个 Person」、§7.1 Account↔Person 1:1、005 §5.1 Phase A 不得创建 Person、005 §1.3「创建或复用恰好一个 Account」、005 场景 19「任何 Account 建立前阻断」共同推出。MUST NOT 在 Phase A / B 创建 Account。
 2. **binding attempt 需要可持久化回读**：由 005 §5.5 settled replay、并发 commit ∈{0,1}、§5.6.3 audit outcome 推出；物理形态留 Plan。
-3. **同一 `(P1, identity, invitation)` 的 non-settled attempt 至多一个**：这是 runtime 收敛要求，不违反 005「不得声明永久全局唯一」；settled 后允许 new attempt。
-4. **RETRYABLE 是 operation 维度**：由 005 §5.5「不是 attempt 的永久 settled outcome」「operation timeout」「read-back」推导；attempt lifecycle 只有 PENDING / COMMITTED / TERMINAL。
-5. **Gate 1 / Gate 2 的服务端合规读取**：由 Docs §10「读取既有 Consent / Compliance 状态以执行 Gate 1，属于执行合规门禁的必要处理」与 §9.1「pending context 不是家庭作用域读取」共同约束：读取由服务端门禁执行、结果不返回 candidate、不建立家庭作用域身份。
-6. **V1 家庭主端为现有微信小程序**（V1-C36）；本 Slice 只交付服务端能力，不交付页面。
+3. **RETRYABLE 是 operation 维度**：由 005 §5.5「不是 attempt 的永久 settled outcome」「operation timeout」「read-back」推导；attempt lifecycle 只有 PENDING / COMMITTED / TERMINAL。
+4. **Gate 1 / Gate 2 的服务端合规读取**：由 Docs §10「读取既有 Consent / Compliance 状态以执行 Gate 1，属于执行合规门禁的必要处理」与 §9.1「pending context 不是家庭作用域读取」共同约束：读取由服务端门禁执行、结果不返回 candidate、不建立家庭作用域身份。
+5. **V1 家庭主端为现有微信小程序**（V1-C36）；本 Slice 只交付服务端能力，不交付页面。
 
 ### Plan-level decisions（非 Clarify blocker，留 Plan）
 
@@ -736,7 +735,7 @@ No requirement may be invented to make implementation easier.
 3. capability surface 的端点数量 / 路径 / HTTP status / error envelope；candidate-facing generic 与 second-party 可见信息的具体形状。
 4. Gate 1 / Gate 2 的服务端可信评估实现；与 `authorize()` / `withRlsTransaction` 的具体交互。
 5. 新增 `authorize()` 动作 / 命令类型 / 审计事件类型的命名与迁移；是否复用 `business_audit_events`。
-6. 并发收敛的具体约束 / 锁 / 索引 / 隔离级别。
+6. 并发收敛的具体约束 / 锁 / 索引 / 隔离级别。Plan 必须决定是否通过「同一 `(P1, identity, invitation)` 最多一个 live/non-settled attempt」或其他等价并发收敛机制实现重复请求与并发控制；MUST NOT 把该策略升级为永久全局唯一约束。无论采用何种机制，都必须满足 005 §5.5 的 new-attempt、retry、concurrency 与 `successful commits ∈ {0,1}` 合同。本 Spec 不规定 unique index / row lock / 单行限制或任何具体实现。
 7. retry / read-back / 操作结果查询机制；是否引入后台任务（本 Slice 默认不引入；若引入必须证明不是业务终态唯一依据）。
 
 ### Clarifications
