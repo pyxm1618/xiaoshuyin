@@ -18,6 +18,7 @@ import {
   isFamilyMember,
 } from '@xiaoshuyin/domain';
 import { resolveCurrentFamily } from '../family-context.js';
+import { requireFamilyAction } from '../authz.js';
 import { insertComplianceProfile } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
 
@@ -54,6 +55,18 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
           createFamily: { newFamilyId, displayName: displayName ?? null },
         },
         async (tx) => {
+          // FR-011 / §9: family creation goes through the unified entry point.
+          // The fact comes from the row written by app.create_family() in this
+          // same transaction; manager is never assumed.
+          const decision = await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId: newFamilyId,
+            action: 'FAMILY_CREATE',
+            purpose: 'FAMILY_MANAGEMENT',
+            resource: { type: 'FAMILY', familyId: newFamilyId },
+          });
+
           // Creator MUST be ADULT + SELF_STATEMENT (CHK023 / T046).
           const sourceError = checkSourceAcceptability('FAMILY_CREATE', ageBand, ageBandSource);
           if (sourceError) {
@@ -104,7 +117,7 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
             body: {
               id: newFamilyId,
               displayName: displayName ?? null,
-              isManager: true,
+              isManager: decision.basis.manager,
               createdAt: new Date().toISOString(),
             },
           };
@@ -135,8 +148,23 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
 
     const resolution = await withIdentityTransaction(
       pool,
-      { accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => resolveCurrentFamily(tx, personId)
+      { accountId, purpose: 'FAMILY_MANAGEMENT' },
+      async (tx) => {
+        const current = await resolveCurrentFamily(tx, personId);
+        if (current.status !== 'RESOLVED') return current;
+
+        // FR-011: no family-scoped read bypasses authorize(); isManager is the
+        // decision basis, never recomputed from the row downstream.
+        const decision = await requireFamilyAction(tx, {
+          accountId,
+          personId,
+          familyId: current.family.id,
+          action: 'FAMILY_READ',
+          purpose: 'FAMILY_MANAGEMENT',
+          resource: { type: 'FAMILY', familyId: current.family.id },
+        });
+        return { ...current, manager: decision.basis.manager };
+      }
     );
 
     if (resolution.status === 'NONE') {
@@ -154,7 +182,7 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
     return reply.status(200).send({
       id: family.id,
       displayName: family.display_name,
-      isManager: family.created_by_person_id === personId,
+      isManager: resolution.manager,
       createdAt: family.created_at,
     });
   });

@@ -12,7 +12,6 @@ import {
   hashPayload,
   checkSourceAcceptability,
   resolveProvenanceProvider,
-  getFamilyById,
   insertFamilyMember,
   insertPerson,
   insertProfileValue,
@@ -21,6 +20,7 @@ import {
   insertAuditEvent,
   isFamilyMember,
 } from '@xiaoshuyin/domain';
+import { requireFamilyAction } from '../authz.js';
 import {
   assertMinorProcessingAllowed,
   getCurrentNoticeHash,
@@ -155,6 +155,16 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
           resolveFamilyId: async () => familyId,
         },
         async (tx) => {
+          // FR-011: member creation is decided by the unified authorize().
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'MEMBER_CREATE',
+            purpose: 'FAMILY_MANAGEMENT',
+            resource: { type: 'FAMILY', familyId },
+          });
+
           // Source acceptability check
           const path = ageBand === 'UNDER_14' ? 'MEMBER_CREATE_UNDER_14' : 'MEMBER_CREATE_OTHER';
           const sourceError = checkSourceAcceptability(path, ageBand, ageBandSource);
@@ -163,15 +173,6 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
               statusCode: toHttpError(sourceError).statusCode,
               code: sourceError,
             });
-          }
-
-          // Check manager permission
-          const family = await getFamilyById(tx, familyId);
-          if (!family) {
-            throw Object.assign(new Error('Family not found'), { statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND' });
-          }
-          if (family.created_by_person_id !== personId) {
-            throw Object.assign(new Error('Not manager'), { statusCode: 403, code: 'NOT_FAMILY_MANAGER' });
           }
 
           const isUnder14 = ageBand === 'UNDER_14';
@@ -316,17 +317,17 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
           resolveFamilyId: async () => familyId,
         },
         async (tx) => {
-          // Check manager
-          const family = await getFamilyById(tx, familyId);
-          if (!family || family.created_by_person_id !== personId) {
-            throw Object.assign(new Error('Not manager'), { statusCode: 403, code: 'NOT_FAMILY_MANAGER' });
-          }
-
-          // Check target person is a member of this family
-          const isMember = await isFamilyMember(tx, familyId, targetPersonId);
-          if (!isMember) {
-            throw Object.assign(new Error('Target not in family'), { statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND' });
-          }
+          // FR-011: manager + target-membership are decided by authorize().
+          // A target person outside this family is a denial, not a new context.
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'MEMBER_UPDATE',
+            purpose: 'FAMILY_MANAGEMENT',
+            resource: { type: 'MEMBER', familyId, personId: targetPersonId },
+            targetPersonId,
+          });
 
           // Processing gate (contracts/consent-onboarding.md §7): must run BEFORE
           // any profile-value write. An UNDER_14 Person whose current consent

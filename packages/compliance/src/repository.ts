@@ -4,6 +4,7 @@
  */
 
 import type { PoolClient } from 'pg';
+import { ConsentEvidence, type ConsentEvidenceType } from '@xiaoshuyin/contracts';
 
 export type Tx = PoolClient;
 
@@ -111,9 +112,12 @@ export async function insertConsentRecord(
   noticeVersion: string,
   noticeHash: string,
   policyVersion: string,
-  evidence: string,
+  evidence: ConsentEvidenceType,
   supersedesId: string | null = null
 ) {
+  // The evidence column is never free-form jsonb: the single ConsentEvidence
+  // schema validates the object before it is serialized for storage.
+  const validatedEvidence = ConsentEvidence.parse(evidence);
   const { rows } = await tx.query(
     `INSERT INTO consent_records
        (family_id, guardian_person_id, guardian_account_id, purpose, decision,
@@ -125,7 +129,8 @@ export async function insertConsentRecord(
     [
       familyId, guardianPersonId, guardianAccountId, decision, version,
       onboardingRequestId, boundPersonId, boundAt,
-      noticeVersion, noticeHash, policyVersion, evidence, supersedesId,
+      noticeVersion, noticeHash, policyVersion,
+      JSON.stringify(validatedEvidence), supersedesId,
     ]
   );
   return rows[0];

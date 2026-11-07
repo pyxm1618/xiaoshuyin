@@ -11,9 +11,11 @@ import {
 } from '@xiaoshuyin/contracts';
 import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
-import { getNoticeHash } from '@xiaoshuyin/compliance';
+import { getNoticeHash, buildConsentEvidence, getAcceptanceTextHash } from '@xiaoshuyin/compliance';
 import { hashPayload, isFamilyMember } from '@xiaoshuyin/domain';
 import { requireCurrentFamily } from '../family-context.js';
+import { requireFamilyAction } from '../authz.js';
+import { requireEvidencePepper } from '../evidence-pepper.js';
 import {
   insertConsentRequest,
   getConsentRequestForUpdate,
@@ -51,7 +53,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
         {
           accountId: accountId,
           personId: personId,
-          purpose: 'FAMILY_MANAGEMENT',
+          purpose: 'GUARDIAN_CONSENT',
           commandType: 'GUARDIAN_CONSENT_REQUEST',
           idempotencyKey,
           requestHash,
@@ -66,6 +68,18 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
           }
 
           const familyId = await requireCurrentFamily(tx, personId);
+
+          // Frozen action table (contracts/authorization-and-rls.md §2.3):
+          // membership + manager + actor age_band = ADULT.
+          // UNKNOWN / MINOR_14_17 / UNDER_14 / missing profile never pass.
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'GUARDIAN_CONSENT_REQUEST',
+            purpose: 'GUARDIAN_CONSENT',
+            resource: { type: 'FAMILY', familyId },
+          });
 
           const result = await insertConsentRequest(
             tx, familyId, personId, subjectPersonId ?? null, noticeVersion, noticeHash
@@ -121,7 +135,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
         {
           accountId: accountId,
           personId: personId,
-          purpose: 'FAMILY_MANAGEMENT',
+          purpose: 'GUARDIAN_CONSENT',
           commandType: 'GUARDIAN_CONSENT_GRANT',
           idempotencyKey,
           requestHash,
@@ -143,12 +157,18 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
               statusCode: 404, code: 'CURRENT_FAMILY_NOT_FOUND',
             });
           }
-          // Guardian authority is a separate dimension from family membership.
-          if (request.guardian_person_id !== personId) {
-            throw Object.assign(new Error('Not the guardian of this consent request'), {
-              statusCode: 403, code: 'NOT_GUARDIAN',
-            });
-          }
+          // Guardian authority is a separate dimension from family membership
+          // (FR-006). It is decided by the unified authorize(), using the real
+          // guardian_person_id read (FOR UPDATE) above.
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'GUARDIAN_CONSENT_GRANT',
+            purpose: 'GUARDIAN_CONSENT',
+            resource: { type: 'CONSENT', familyId, consentId: consentRequestId },
+            guardianPersonId: request.guardian_person_id,
+          });
           if (request.status !== 'PENDING') {
             throw Object.assign(new Error('Already granted'), {
               statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
@@ -231,13 +251,30 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
             boundAt = new Date();
           }
 
+          // Frozen evidence contract (contracts/consent-onboarding.md §4):
+          // exactly {channel, accepted_text_hash, declared_age_band,
+          // client_ip_hash, user_agent_hash}. Raw IP / UA never stored; the
+          // pepper never leaves this call.
+          const acceptanceTextHash = getAcceptanceTextHash(noticeVersion);
+          if (!acceptanceTextHash) {
+            throw Object.assign(new Error('Invalid notice version'), {
+              statusCode: 422, code: 'VALIDATION_ERROR',
+            });
+          }
+          const evidence = buildConsentEvidence({
+            acceptedTextHash: acceptanceTextHash,
+            clientIp: req.ip,
+            userAgent: req.headers['user-agent'] ?? null,
+            pepper: requireEvidencePepper(),
+          });
+
           await updateConsentRequestGranted(tx, consentRequestId);
 
           const record = await insertConsentRecord(
             tx, familyId, personId, accountId,
             'GRANTED', newVersion, consentRequestId, boundPersonId, boundAt,
             noticeVersion, noticeHash, 'v1',
-            JSON.stringify({ accepted: true, timestamp: new Date().toISOString() }),
+            evidence,
             supersedesId
           );
 

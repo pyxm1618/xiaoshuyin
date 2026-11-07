@@ -151,6 +151,23 @@ export const RevokeConsentRequest = z.object({
   idempotencyKey: z.string().min(8).max(128),
 });
 
+// ── Consent evidence schema ─────────────────────────────────
+//
+// Single source of truth for `consent_records.evidence`
+// (contracts/consent-onboarding.md §4). The same schema is used when the
+// evidence is produced and when it is persisted, so a free-form jsonb shape
+// is structurally impossible. `accepted_text_hash` is the hash of the
+// versioned acceptance statement — it is deliberately NOT `notice_hash`.
+
+export const ConsentEvidence = z.strictObject({
+  channel: z.literal('MINIPROGRAM'),
+  accepted_text_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  declared_age_band: z.literal('UNDER_14'),
+  client_ip_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  user_agent_hash: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type ConsentEvidenceType = z.infer<typeof ConsentEvidence>;
+
 // ── Compliance schemas ──────────────────────────────────────
 
 export const ComplianceProfileResponse = z.object({

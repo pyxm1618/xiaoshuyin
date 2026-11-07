@@ -9,9 +9,15 @@ import { RevokeConsentRequest } from '@xiaoshuyin/contracts';
 import { withRlsTransaction, withIdentityTransaction } from '../db/tx.js';
 import { runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
-import { getCatalog } from '@xiaoshuyin/compliance';
+import {
+  getCatalog,
+  buildConsentEvidence,
+  getRevocationTextHash,
+} from '@xiaoshuyin/compliance';
 import { insertAuditEvent, hashPayload } from '@xiaoshuyin/domain';
 import { resolveCurrentFamily, requireCurrentFamily } from '../family-context.js';
+import { requireFamilyAction, requireSelfAction } from '../authz.js';
+import { requireEvidencePepper } from '../evidence-pepper.js';
 import {
   getConsentRecordForUpdate,
   insertConsentRecord,
@@ -48,7 +54,7 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
         {
           accountId: accountId,
           personId: personId,
-          purpose: 'FAMILY_MANAGEMENT',
+          purpose: 'GUARDIAN_CONSENT',
           commandType: 'GUARDIAN_CONSENT_REVOKE',
           idempotencyKey,
           requestHash,
@@ -68,25 +74,42 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
               statusCode: 403, code: 'NOT_FAMILY_MEMBER',
             });
           }
-          // Guardian authority is a separate dimension from family membership.
-          if (consent.guardian_person_id !== personId) {
-            throw Object.assign(new Error('Not the guardian of this consent'), {
-              statusCode: 403, code: 'NOT_GUARDIAN',
-            });
-          }
+          // Guardian authority is a separate dimension from family membership
+          // (FR-006), decided by the unified authorize() from the real row.
+          await requireFamilyAction(tx, {
+            accountId,
+            personId,
+            familyId,
+            action: 'GUARDIAN_CONSENT_REVOKE',
+            purpose: 'GUARDIAN_CONSENT',
+            resource: { type: 'CONSENT', familyId, consentId },
+            guardianPersonId: consent.guardian_person_id,
+          });
           if (consent.decision === 'REVOKED') {
             throw Object.assign(new Error('Already revoked'), {
               statusCode: 409, code: 'GUARDIAN_CONSENT_ALREADY_GRANTED',
             });
           }
 
-          // Create REVOKED version (v+1)
+          // Create REVOKED version (v+1). Evidence keeps the frozen five-field shape.
+          const revocationTextHash = getRevocationTextHash(consent.notice_version);
+          if (!revocationTextHash) {
+            throw Object.assign(new Error('Invalid notice version'), {
+              statusCode: 422, code: 'VALIDATION_ERROR',
+            });
+          }
+          const evidence = buildConsentEvidence({
+            acceptedTextHash: revocationTextHash,
+            clientIp: req.ip,
+            userAgent: req.headers['user-agent'] ?? null,
+            pepper: requireEvidencePepper(),
+          });
           const newVersion = consent.version + 1;
           const newConsent = await insertConsentRecord(
             tx, consent.family_id, consent.guardian_person_id, consent.guardian_account_id,
             'REVOKED', newVersion, null, consent.bound_person_id, consent.bound_at,
             consent.notice_version, consent.notice_hash, 'v1',
-            JSON.stringify({ revoked: true, timestamp: new Date().toISOString() }),
+            evidence,
             consent.id
           );
 
@@ -137,8 +160,21 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
 
     const resolution = await withIdentityTransaction(
       pool,
-      { accountId: accountId, purpose: 'SELF_IDENTITY' },
-      (tx) => resolveCurrentFamily(tx, personId)
+      { accountId: accountId, purpose: 'FAMILY_MANAGEMENT' },
+      async (tx) => {
+        const current = await resolveCurrentFamily(tx, personId);
+        if (current.status !== 'RESOLVED') return current;
+        // FR-011: family-scoped read through the unified entry point.
+        await requireFamilyAction(tx, {
+          accountId,
+          personId,
+          familyId: current.family.id,
+          action: 'FAMILY_READ',
+          purpose: 'FAMILY_MANAGEMENT',
+          resource: { type: 'FAMILY', familyId: current.family.id },
+        });
+        return current;
+      }
     );
     if (resolution.status === 'NONE') {
       // Frozen OpenAPI contract: collection endpoint → { "items": [...] }
@@ -184,6 +220,9 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
+
+    // FR-011: identity self-read through the unified entry point.
+    requireSelfAction(accountId, personId, 'SELF_IDENTITY');
 
     try {
       const result = await withIdentityTransaction(

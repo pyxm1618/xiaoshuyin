@@ -6,16 +6,20 @@
 import type { FastifyInstance } from 'fastify';
 import { withIdentityTransaction } from '../db/tx.js';
 import { toHttpError } from '../plugins/error-handler.js';
+import { requireSelfAction } from '../authz.js';
 import { getAccountById, getPersonWithProfile, getProfileValues } from '@xiaoshuyin/domain';
 import type pg from 'pg';
 
 export function registerMeRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.get('/api/v1/me', async (req, reply) => {
     const actor = req.actor;
-    if (!actor?.accountId) {
+    if (!actor?.accountId || !actor.personId) {
       const err = toHttpError('UNAUTHENTICATED');
       return reply.status(err.statusCode).send(err);
     }
+
+    // FR-011: identity self-read also passes through the unified entry point.
+    requireSelfAction(actor.accountId, actor.personId, 'SELF_IDENTITY');
 
     const result = await withIdentityTransaction(
       pool,
