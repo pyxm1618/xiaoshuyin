@@ -668,6 +668,51 @@ IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE
 | governance self-test | 15/15 PASS |
 
 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`
+
+## Audit II Remediation Evidence（2026-11-07）
+
+| 项 | 值 |
+|---|---|
+| MEDIUM-01 Runtime ↔ OpenAPI contract drift | CLOSED |
+| LOW-01 `CASE_ACCESS_DENIED` message | CLOSED |
+| Previous `FINAL_IMPLEMENTATION_HEAD` | `d3c729bf15ca74d43e9bd42d846555619f9d2723` |
+| New `FINAL_IMPLEMENTATION_HEAD` | `b3e86dd71655bc40bc229bdf7ca347250d5ce689` |
+| Required CI run | `42362602650` |
+| Required CI URL | https://github.com/pyxm1618/xiaoshuyin/actions/runs/42362602650 |
+| CI headSha | `b3e86dd71655bc40bc229bdf7ca347250d5ce689`（== new `FINAL_IMPLEMENTATION_HEAD`） |
+| Static Checks | SUCCESS |
+| Unit Tests | SUCCESS |
+| DB Migration | SUCCESS |
+| Integration Tests | SUCCESS |
+| Contract | SUCCESS |
+| CI 5/5 | PASS |
+
+修复内容：
+
+- `GET /api/v1/cases`、`GET /api/v1/cases/{id}` 正式声明真实可达的 `409 CURRENT_FAMILY_AMBIGUOUS`；
+- `POST /api/v1/cases` 的 409 同时表达 `CURRENT_FAMILY_AMBIGUOUS`（真实可达）与 `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同，当前 public HTTP command shape 下不可达）；
+- 新增真实 Fastify `onRoute` 捕获，机械比较 runtime route response status set 与 generated OpenAPI status set；
+- `CASE_ACCESS_DENIED` runtime message 与冻结文本统一为 `Case access denied`。
+
+本地验证（new implementation Head）：
+
+| 验证 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS |
+| `bun run guard:static` | PASS |
+| `tests/domain` | 10 files / 125 tests / 0 failed / 0 skipped |
+| `tests/db` | 12 files / 79 tests / 0 failed / 0 skipped |
+| `tests/integration` | 41 files / 276 tests / 0 failed / 0 skipped |
+| full `bunx vitest run` | 63 files / 480 tests / 0 failed / 0 skipped |
+| `db:migrate` #1 / #2 | 隔离临时库 APPLY 001–003 / 二次全 SKIP；共享库两次全 SKIP |
+| `db:evidence` | PASS |
+| `openapi:generate` determinism | PASS |
+| `openapi:check` | PASS（001 + 002 frozen semantic equivalence） |
+| coverage | FR 25/25、SC 11/11、Acceptance 18/18、missing 0 |
+| `verify-all --archive` | PASS（36 PASS / 0 FAIL） |
+| governance validator / self-test | PASS / 15/15 PASS |
+
+`AUDIT II REMEDIATION COMPLETE — READY FOR FINAL INDEPENDENT RE-AUDIT`
 ---
 
 ## 基线失效声明（2026-11-07 Post-Slice1 Dependency Reconciliation）
