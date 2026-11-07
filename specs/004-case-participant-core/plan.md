@@ -580,7 +580,7 @@ Plan 只设计测试，不写测试代码。测试分层：
 | concurrency | double accept / accept vs decline / accept vs expiry / withdraw replay / concurrent invite | 至多一个成功状态转换（0 或 1）；无重复行；无复活；expiry 物化 exactly-once |
 | negative security | wrong Family / wrong Case / wrong Person / wrong Account / expired / unauthorized / forwarded invite / multi-family Case C | 统一 generic；无 Person / Family / Case / guardian / age / consent / compliance 字段 |
 | API contract | OpenAPI operation 集合、strict schema、生成物一致性 | 恰好 6 个 participation operations；无 `/responses`；`openapi:check` PASS |
-| cross-slice | Participant 调用 Case manager routes；accept / decline / withdraw 无 Evidence | Case route 仍 404 / 403；`assertions` / `observations` 计数 +0 |
+| cross-slice | Participant 调用 Case manager routes；accept / decline / withdraw 无 Evidence | Case route 仍 404 / 403；先 `to_regclass` 检查 Evidence tables：absent → remain absent + no Evidence writer；present → baseline count + accept/decline/withdraw delta = 0；不得引入 Slice 3 dependency |
 
 **必须覆盖的 spec 场景**：
 - Case B correct Account / wrong Account；
@@ -731,7 +731,7 @@ tests/
 | FR-011 / FR-012：decline 合法、保留历史、不关 Case | integration + DB | `bunx vitest run tests/integration/participations-decline.test.ts` | DECLINED 行存在；Case 状态不变；家长独立操作不被阻断 |
 | FR-013 / FR-014：withdraw 停权、保留历史、不复活 | integration + DB | `bunx vitest run tests/integration/participations-withdraw.test.ts` | 后续能力拒绝；WITHDRAWN 历史存在；accept 不能再激活 |
 | FR-015 / SC-005：terminal 不可重新激活；expiry 终态 | domain + integration | `bunx vitest run tests/domain/participants-domain.test.ts tests/integration/participations-expiry.test.ts` | DECLINED / EXPIRED / WITHDRAWN 再 accept 失败；无新 active；GET self expired 先 authorize READ_SELF + family context，物化 + exactly-once audit |
-| FR-019 / SC-004：无 Evidence 副作用 | DB | `bunx vitest run tests/db/participants-evidence-boundary.test.ts` | `assertions` / `observations` 计数 +0；无 Evidence 表写入 |
+| FR-019 / SC-004：无 Evidence 副作用 | DB | `bunx vitest run tests/db/participants-evidence-boundary.test.ts` | 先 `to_regclass` 检查 `assertions` / `observations`：absent → assert remain absent + no Evidence table/writer/repository/route/migration；present → baseline count → accept / decline / withdraw → delta = 0；Slice 3 仍 NOT A DEPENDENCY |
 | FR-020 / FR-021：三角色授权；RLS 双层 | domain + integration + DB | `bunx vitest run tests/domain/participants-authorization.test.ts tests/integration/participations-authorization.test.ts tests/db/participants-rls.test.ts` | manager / target / participant 分离；GET self 先 READ_SELF authorize；无上下文 0 行；错误 Family 0 行 / 拒写 |
 | FR-023 / SC-013：审计可追溯、无第二套 audit | integration + DB | `bunx vitest run tests/integration/participations-audit.test.ts` | 5 类事件存在；`resource_type = CASE_PARTICIPANT`；无第二张 audit 表 |
 | FR-025：未来对象访问仍需独立授权 | integration | `bunx vitest run tests/integration/participations-scope.test.ts` | participation 行不构成 Case / Evidence / Formulation / Plan 访问 |
@@ -747,7 +747,7 @@ tests/
 | SC-008：无 duplicate Person / binding | integration + DB | `bunx vitest run tests/integration/participations-identity-seam.test.ts` | Person 数不增加；Account↔Person 1:1；无 rebind / merge |
 | SC-009 / SC-010：decline / withdraw 历史与权限 | integration + DB | `bunx vitest run tests/integration/participations-decline.test.ts tests/integration/participations-withdraw.test.ts` | 历史保留；权限停止；Case 不自动关闭 |
 | SC-011 / SC-012：anti-enumeration / UNDER_14 block | integration + security | `bunx vitest run tests/integration/participations-anti-enumeration.test.ts tests/integration/participations-compliance.test.ts` | 三类建邀请失败一致；UNDER_14 无同意阻断 |
-| SC-015：结构 / 路由枚举无越界对象 | structure + route enumeration | `bunx vitest run tests/db/participants-structure.test.ts tests/integration/participations-route-surface.test.ts` | 无 formulation / scene / evidence writer / assessment / generic response / AI / plan / task / notification |
+| SC-015：结构 / 路由枚举无越界对象 | structure + route enumeration | `bunx vitest run tests/db/participants-structure.test.ts tests/integration/participations-route-surface.test.ts` | 无 Assessment / Problem Formulation / Scene / Evidence writer / Goal / Intervention（`intervention_instances`）/ Plan domain / Task domain / AI / notification delivery / generic participant response |
 | Migration / RLS / 角色 / uuidv7 | DB verification | `bun run db:migrate && bun run db:evidence` | `relrowsecurity = true`、`relforcerowsecurity = true`、app role 非 owner / `rolbypassrls = false`、`uuidv7()` 默认值 |
 
 **全量收尾**：
@@ -825,12 +825,23 @@ node .specify/scripts/tests/run-governance-tests.mjs
 
 ---
 
+## Plan Remediation Round 2 — Final Analyze Round 2 Findings（2026-11-06）
+
+| Finding | 状态 | 关闭点 |
+|---|---|---|
+| F1 Evidence boundary test assumes Evidence tables exist | RESOLVED | D-15 cross-slice row + FR-019 / SC-004 row：先 `to_regclass` 检查；absent → remain absent + no Evidence writer / repository / route / migration；present → baseline count + accept/decline/withdraw delta = 0；Slice 3 仍 NOT A DEPENDENCY；quickstart §4 / §7 同步 |
+| F2 SC-015 missing Intervention | RESOLVED | SC-015 row + quickstart structure expectations：明确 `Intervention` / `intervention_instances` 不存在；不实现 Intervention |
+
+> 本轮只修 F1 / F2；`spec.md` / `data-model.md` / `contracts/**` / `checklists/**` / `tasks.md` / `Docs/**` / runtime / migration / tests 均未修改。
+
+---
+
 ## Plan Status
 
 ```text
 SLICE 4 PLAN FINAL PASS
-PLAN REMEDIATION COMPLETE
-READY FOR TARGETED CHECKLIST RE-VALIDATION
+PLAN REMEDIATION ROUND 2 COMPLETE
+READY FOR TARGETED CHECKLIST RE-VALIDATION ROUND 2
 ```
 
 **注意**：Plan PASS **不** 等于 Implement Gate OPEN。Implement Gate 当前为 `BLOCKED`，原因见 §D-17。

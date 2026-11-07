@@ -92,7 +92,7 @@ bunx vitest run tests/db/participants-structure.test.ts
 | token safe view | terminal 行不通过 token context 可见；view predicate 为 `state='PENDING' AND invite_expires_at > now()`；effective-expired PENDING 不返回 200；view 不含 person_id / case_id / family_id / invite_token_hash |
 | public lookup expiry | effective-expired PENDING 行仅因持久 state 仍为 PENDING 也不能通过 public lookup 返回 200 |
 | app role grants | `case_participants` SELECT/INSERT/UPDATE；`case_participant_invite_public` SELECT；无 DELETE |
-| 越界表 | 不存在 `participation_invites` / `binding_attempts` / `participation_audit_events` / evidence writer 表 |
+| 越界表 | 不存在 `participation_invites` / `binding_attempts` / `participation_audit_events` / `intervention_instances` / evidence writer 表；Evidence tables 按 §4 条件检查，不把 Slice 3 变成 dependency |
 | 越界列 | 不存在 `role` / `visibility` / `deleted_at` / `account_id` / `binding_state` |
 | 越界 CHECK 值 | `business_audit_events` 无 participation 以外的越界事件；`idempotency_keys.command_type` 只多 4 个 participation command |
 
@@ -197,8 +197,14 @@ curl -sS "$API/api/v1/participations/$PARTICIPATION_ID" \
 # Participant 调 GET /api/v1/cases/:id
 # → 按 Slice 2 manager-only 语义失败；无 Case 数据
 
-# accept / decline / withdraw 后 Evidence 计数
-# → assertions / observations +0
+# accept / decline / withdraw 后 Evidence 副作用
+# → 先 to_regclass('public.assertions') / to_regclass('public.observations')
+# → absent: 断言 remain absent + 无 Evidence writer / repository / route / migration；不得创建表、不得依赖 Slice 3
+# → present: baseline count → accept / decline / withdraw → delta = 0
+
+# structure boundary（participants-structure.test.ts）
+# → to_regclass('intervention_instances') IS NULL
+# → 无 Assessment / Problem Formulation / Scene / Evidence writer / Goal / Intervention / Plan domain / Task domain / AI / notification / generic participant response
 ```
 
 ---
@@ -289,6 +295,7 @@ node .specify/scripts/tests/run-governance-tests.mjs
 Implement / Converge 必须保留：
 - 迁移前后 `pg_class` / `pg_policies` / `pg_constraint` / `information_schema.columns` 真实输出；
 - invite-create 的 `SELECT uuidv7()` 预分配 / explicit `id` / `created_at` / `invite_expires_at` DB server time 证据；
+- Evidence boundary 的 `to_regclass` / 条件 count 输出（absent 与 present 两分支）；structure boundary 的 `intervention_instances` 不存在输出；
 - `PARTICIPATION_INVITE_TOKEN_SECRET` 稳定性说明（invitation lifetime / idempotency replay window）与“不把 secret 写入 log / audit”的证据；
 - public invite lookup 的 expired PENDING → 404 真实输出，以及 safe view 只含 PENDING + unexpired 的查询输出；
 - RLS 无上下文 / 错误 Family / token 上下文的真实查询结果；
