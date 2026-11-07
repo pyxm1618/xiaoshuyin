@@ -272,7 +272,7 @@ CREATE INDEX binding_context_attempt_idx ON binding_pending_contexts (attempt_id
 | 是否使用 token / challenge | 使用 opaque bearer-like `X-Binding-Context`；不是 JWT，不是普通 session，不含 openid / person / attempt 明文 |
 | secret 是否落库 | `IDENTITY_BINDING_SECRET` 不落库；openid 以 AES-256-GCM 加密落库，密钥由 `IDENTITY_BINDING_SECRET` HKDF 派生；commit / terminal / Gate 1 失败后清空 ciphertext |
 | expiry | 由 required positive env `IDENTITY_BINDING_CONTEXT_TTL_SECONDS` 决定；caller 不可提交 / 覆盖 / 延长 |
-| replay | 同一 token 可重复读取 status / 发起 decision；decision 由 operation key 与 attempt 条件更新收敛；不因 replay 产生第二份 confirmation / 第二次 commit |
+| replay | 同一 token 可重复读取 status / 发起 decision；decision 由 operation key 与 attempt 条件更新收敛；不因 replay 产生第二份 confirmation / 第二次 commit。Bootstrap replay 的 transport credential 规则见 D-3.4 |
 | 如何传到 Phase B | Gate 1 通过后，attempt 创建在同一事务内把 `attempt_id` 与 `invitation_participation_id` 写回 context；Phase B 的 candidate decision 从 context 读取 attempt |
 | 如何保证不能当普通业务 session | 普通 `plugins/auth.ts` 只接受 `Authorization: Bearer`，并显式拒绝 `X-Binding-Context`；binding 路由使用独立 preHandler；context 不设置 `app.account_id` / `app.person_id` / `app.family_id`；不签发普通 session，只有 `POST /session` 在 COMMITTED 后签发 |
 
@@ -297,6 +297,21 @@ tokenHash      = sha256hex(token)
 - **ciphertext 清理**：commit 成功、attempt terminal、以及任何 pre-attempt 阻断（invalid invitation / Case B mismatch / Gate 1 fail）后，必须清空 `openid_ciphertext / nonce / tag`；不得为失败路径保留可解密 openid。
 - 不记录 key、token、openid、ciphertext 到日志 / audit / response。
 - 不在本 Slice 设计 KMS / keyring / key rotation；secret 变更属 operational compatibility event，必须 fail-safe，不得静默产生不同 digest / 不可解密旧 context。
+
+### D-3.4 Bootstrap replay 的 transport credential（Plan clarification）
+
+冻结约束：token = 32 random bytes；DB 只存 `sha256(token)`；operation key 不保存 `response_body`；Bootstrap response 必须返回 `pendingContextToken`。因此旧 token 明文不可从数据库重建。
+
+```text
+new pending transport context on bootstrap replay
+  ≠ new binding attempt
+  ≠ duplicate business side effect
+```
+
+- same `BOOTSTRAP` operation key + same payload replay **MAY** 创建一条新的 `binding_pending_contexts` 行并返回新的随机 `pendingContextToken`；该行只是 transport credential，MUST 立即 link 到同一 authoritative attempt（`attempt_id` / `invitation_participation_id` 不变），受同一 `IDENTITY_BINDING_CONTEXT_TTL_SECONDS` 约束。
+- MUST NOT 因 replay 创建第二个 attempt、第二份 confirmation、第二次 commit、第二条业务 audit 行、第二个 operation key。
+- replay 必须读取 authoritative attempt state：`PENDING` / `TERMINAL` → candidate-facing generic；`COMMITTED` → `{ binding:"COMMITTED" }`（D-10.2）。
+- 新 context 行是幂等记录的 transport 伴生事实，不是 attempt identity，也不是 operation outcome 快照；不得把首次 response body 当作 replay 结果。
 
 ---
 
@@ -412,8 +427,8 @@ CREATE TABLE binding_operation_keys (
 | same key concurrent | 事务级 advisory lock（`pg_advisory_xact_lock(hashtextextended(scope, key))`）+ 唯一约束；第二个等待后重读，只产生一个业务结果 |
 | different key + same semantic operation，已有 PENDING attempt | 收敛到同一 attempt（部分唯一索引 + `SELECT ... FOR UPDATE`）；不创建第二个 live attempt |
 | different key + same semantic operation，旧 attempt terminal 且 invitation valid | 允许 new attempt；new attempt 是 new identity；旧 attempt replay 仍返回旧结果 |
-| replay after COMMITTED | 返回历史 COMMITTED；不 re-execute、不 revive invitation、不恢复 participation accept、不重建 authorization |
-| replay while PENDING | exact duplicate 无重复副作用；新的合法 confirmation / gate re-evaluation 可推进同一 attempt；推进不是 replay |
+| replay after COMMITTED | 返回历史 COMMITTED；bootstrap replay 的 body 为 `{ binding:"COMMITTED" }`（D-10.2）；不 re-execute、不 revive invitation、不恢复 participation accept、不重建 authorization；不追加业务 audit 行 |
+| replay while PENDING | exact duplicate 无重复副作用（D-3.4 允许的新 transport context 行不属于业务副作用）；新的合法 confirmation / gate re-evaluation 可推进同一 attempt；推进不是 replay |
 | retry after RETRYABLE | retry / read-back 收敛到 authoritative outcome（PENDING / COMMITTED / TERMINAL）；不永久返回 RETRYABLE；不 double commit |
 | retry after TERMINAL | 返回历史 TERMINAL；不重开同一 attempt；new attempt 需 invitation valid + 业务政策允许 |
 | concurrent same-key | 只产生一个业务结果；其余 replay；不重复 confirmation / commit / audit |
@@ -555,7 +570,7 @@ new attempt after terminal remains possible
 | guardian consent 当前有效 | `consent_records` + `packages/compliance/src/age-gate.ts` | 复用 `assertMinorProcessingAllowed` 的完整判定（decision / bound_person_id / notice_hash / guardian_person_id） |
 | current notice hash | `packages/compliance/src/notices.ts` | 复用；不新增 notice |
 | Family management actor | `families.created_by_person_id` | Slice 1 D-2 的 V1 管理主体；不引入 manager 角色表 |
-| applicant / candidate Account 冲突 | `accounts` + `persons.account_id` | openid 唯一 + account 绑定检查 |
+| applicant / candidate Account 冲突 | `accounts` + `persons.account_id` | 先按 openid 读取 candidate Account；再用 purpose-scoped policy `persons_binding_candidate_account_read`（D-13.3）只读取该 Account 绑定的 Person；绑定到非 P1 → Gate 1 `IDENTITY_CONFLICT`；candidate-facing 仍为 generic |
 
 **不新增**：`compliance_feature_policies`、`privacy_impact_assessments`、`regulatory_release_evidence`、guardian policy、Consent 类型。V1 baseline 中不存在这些表；006 只执行现有事实能表达的「applicable Compliance gate」。若未来新增 feature policy，由对应 Slice 扩展 Gate，006 不预造。
 
@@ -636,7 +651,7 @@ type BindingGateResult =
 
 - `GET /api/v1/identity-bindings/pending?personId=P1`（Bearer）返回该 P1 当前 **`state='PENDING' AND expires_at > now()`** attempts 的最小列表：`{ attemptId, createdAt, expiresAt }`。过期 attempt 不得出现在列表；访问可条件物化 `TERMINAL / ATTEMPT_EXPIRED` + audit，不依赖后台 job。
 - 不返回 candidate 昵称、openid、age、guardian、consent、Family 名称、Case 信息。
-- 授权：先 `authorize(IDENTITY_BINDING_CONFIRMER_LIST)`，facts = `{ targetPersonId, targetFamilyId, targetAgeBand, guardianPersonId, familyCreatedByPersonId, membership? }`；未授权 / P1 不存在 / P1 多 Family / 非目标 Family 统一 404 `BINDING_NOT_FOUND`。targetFamilyId 由服务端读取 P1 的唯一 `family_members` 行得到；多行或无行 → 404 generic，不选择任一 Family。
+- 授权：先 `authorize(IDENTITY_BINDING_CONFIRMER_LIST)`，facts = `{ targetPersonId, targetFamilyId, targetAgeBand, guardianPersonId, familyCreatedByPersonId, membership? }`；未授权 / P1 不存在 / P1 多 Family / 非目标 Family 统一 404 `BINDING_NOT_FOUND`。targetFamilyId 由服务端读取 P1 的唯一 `family_members` 行得到；多行或无行 → 404 generic，不选择任一 Family。读取使用 D-13.4 的 `withBindingTargetTransaction`（只设置 target-person GUC），在 Family 解析完成前 MUST NOT 读取 profile / consent。
 - guardian 不要求是 Family member；manager 必须是 `families.created_by_person_id`。`targetIsFamilyMember` 必须为 true（由 invitation + Gate 保证）。
 - confirmer 如何知道哪个 attempt 对应真实孩子：attempt id 由 candidate 端展示，candidate 与 confirmer 线下 / 同屏配对；Plan 不新增 QR / PIN / pairing code / 生物识别 / 电话 / 视频 / KYC。attempt id 是 opaque UUID，不是身份证明。
 
@@ -682,11 +697,16 @@ type BindingGateResult =
 // response: generic（Gate 1 fail / Case C PENDING / Case B mismatch / invitation invalid）
 { "binding": "NOT_COMPLETED", "pendingContextToken": "43-char base64url" }
 
-// response: Case B 正确 Account（唯一可区分成功分支）
+// response: Case B 正确 Account（唯一未绑定阶段可区分的成功分支）
 { "binding": "REUSED", "sessionToken": "...", "account": { "id": "uuid" }, "person": { "id": "uuid" } }
+
+// response: 同一 BOOTSTRAP operation key / 同一 attempt 已 COMMITTED 的 settled replay
+{ "binding": "COMMITTED" }
 ```
 
 - 只有 `binding` 与 token 字段；无 `attemptId`、`personId`、`familyId`、`ageBand`、`guardian`、`consent`、`reason`。
+- `COMMITTED` 是 historical settled replay（005 §5.5 / spec settled replay）：MUST NOT 使用 `REUSED`（Case B 专用）；MUST NOT 重新 commit、revive invitation、恢复 participation accept、重建 authorization；response 不含 `pendingContextToken` / `sessionToken` / `attemptId`。candidate 此时已是 P1，故不属于未绑定阶段 anti-enumeration generic。普通 session 仍只通过 `POST /api/v1/identity-bindings/session` 兑换。
+- **OpenAPI / schema expectation**：bootstrap 200 response 的 `oneOf` 必须包含 `BindingBootstrapCommittedResponse`（strict object，`binding: const "COMMITTED"`，`additionalProperties: false`，无其它字段）。冻结 YAML 与 generated OpenAPI 的同步属于 Implement（T092 / T097），Plan 回合不改 contracts。
 - WeChat `code2session` 失败 → 401 `WECHAT_AUTH_FAILED`（不涉及 P1 信息）。
 - 普通 `POST /api/v1/auth/wechat` 完全不改。
 
@@ -820,7 +840,7 @@ type BindingGateResult =
 | status 未 committed | 200 | `{ binding:"NOT_COMPLETED" }` | 固定 | 无 |
 | session 未 committed | 200 | `{ binding:"NOT_COMPLETED" }` | 固定 | 无 |
 | Case B 正确 Account | 200 | `{ binding:"REUSED", sessionToken, account, person }` | 固定 | 可继续 Slice 4 accept / decline |
-| attempt COMMITTED（candidate 已是 P1） | 200 | `{ binding:"COMMITTED" }` / session | 固定 | 可 exchange session |
+| attempt COMMITTED（candidate 已是 P1，含同一 BOOTSTRAP operation key 的 settled replay） | 200 | bootstrap replay `{ binding:"COMMITTED" }`；status `{ binding:"COMMITTED" }`；session `{ binding:"COMMITTED", sessionToken, account, person }` | 固定 | 可 exchange session |
 
 **不可区分性检查项**：HTTP status、body key 集合、字段值（除随机 token）、error code（不出现）、`Set-Cookie`（无）、`Location` / redirect（无）、`X-*` 业务 header（无）、read-back 结果（status / session 均 generic）、endpoint availability（全部挂载）。未绑定阶段唯一可区分的成功分支是 Case B 正确 Account；attempt COMMITTED 后的 `COMMITTED` / session 也属于授权成功分支，因为此时 candidate 已是 P1。
 
@@ -924,6 +944,7 @@ export interface AuthorizeFacts {
 | `app.binding_target_person_id` | `withBindingGateTransaction` / commit | P1 过滤 |
 | `app.binding_target_family_id` | `withBindingGateTransaction` / commit | target Family 过滤 |
 | `app.binding_commit_account_id` | `withBindingCommitTransaction` | `persons.account_id` 提交值校验 |
+| `app.binding_candidate_account_id` | `withBindingGateTransaction` / `withBindingCommitTransaction` | 当前 authenticated candidate Account（若 openid 已解析出 Account）；**只**用于 `persons_binding_candidate_account_read` 判定 candidate 是否已绑定其它 Person，不用于任意 person 查询 |
 | `app.binding_operation_scope` | operation key 读写 | operation scope 过滤 |
 
 Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDING_COMMIT`。
@@ -932,7 +953,7 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 
 | 表 | `USING` / `WITH CHECK` |
 |---|---|
-| `binding_pending_contexts` | `token_hash = app_binding_context_hash()`；commit context：`id = app_binding_context_id()` |
+| `binding_pending_contexts` | `token_hash = app_binding_context_hash()`；commit context：`id = app_binding_context_id()`；attempt-scoped：`attempt_id = app_binding_attempt_id()`，仅 `IDENTITY_BINDING_GATE` / `IDENTITY_BINDING_COMMIT`（供 commit 在不重放 token 的情况下锁定 / 清理该 attempt 的 context） |
 | `binding_attempts` | PENDING：`candidate_identity_digest = app_binding_identity_digest() AND invitation_participation_id = app_binding_invitation_id() AND (app_binding_attempt_id() IS NULL OR id = app_binding_attempt_id())`；GATE：`target_person_id = app_binding_target_person_id() AND target_family_id = app_binding_target_family_id()`；COMMIT：`id = app_binding_attempt_id() AND target_person_id = app_binding_target_person_id() AND target_family_id = app_binding_target_family_id()` |
 | `binding_confirmations` | 与 attempt 相同的 attempt 可见性；PENDING 通过 `attempt_id = app_binding_attempt_id()`；GATE 通过 target person join；COMMIT 精确 attempt |
 | `binding_operation_keys` | `(scope_kind = 'CANDIDATE_CONTEXT' AND app.purpose = 'IDENTITY_BINDING_PENDING' AND scope_key = app_binding_operation_scope()) OR (scope_kind = 'ACCOUNT' AND scope_key = app_account_id()::text)` |
@@ -945,6 +966,7 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 | 表 | 新 policy | 语义 |
 |---|---|---|
 | `persons` | `persons_binding_target_read` | `USING (id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+| `persons` | `persons_binding_candidate_account_read` | `USING (account_id = app_binding_candidate_account_id())`，仅 `IDENTITY_BINDING_GATE` / `IDENTITY_BINDING_COMMIT` purpose；只读取当前 authenticated candidate Account 已绑定的 Person，用于 `IDENTITY_CONFLICT` 判定；禁止任意 person 查询；不返回 candidate-facing P2 信息 |
 | `persons` | `persons_binding_commit_update` | `USING (id = app_binding_target_person_id() AND account_id IS NULL)`；`WITH CHECK (id = app_binding_target_person_id() AND account_id = app_binding_commit_account_id())`，仅 COMMIT |
 | `families` | `families_binding_read` | `USING (id = app_binding_target_family_id())`，仅 GATE / COMMIT |
 | `family_members` | `family_members_binding_read` | `USING (person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
@@ -959,12 +981,13 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 
 ### D-13.4 事务 adapter（扩展 `apps/server/api/src/db/tx.ts`）
 
-新增 5 个 thin wrapper，全部复用 `BEGIN/COMMIT/ROLLBACK` + `set_config(..., true)`，不新建 context framework：
+新增 6 个 thin wrapper（其中 `withBindingTargetTransaction` 是 D-9.2 解析 P1 唯一 Family 所需的最小 target-person-only context），全部复用 `BEGIN/COMMIT/ROLLBACK` + `set_config(..., true)`，不新建 context framework：
 
 1. `withBindingContextTransaction({ tokenHash }, fn)`：`app.binding_context_hash`、purpose `IDENTITY_BINDING_PENDING`。
 2. `withBindingBootstrapTransaction({ contextHash, identityDigest, invitationId }, fn)`：上述 + identity / invitation；invitation resolution 后在同一事务内调用 `app.set_binding_gate_context(targetPersonId, targetFamilyId, actorAccountId)` 设置 Gate GUC，再执行 Gate 1 + attempt 创建 + context 关联；不另开事务。
-3. `withBindingGateTransaction({ targetPersonId, targetFamilyId, actorAccountId }, fn)`：target GUCs + `app.account_id = actorAccountId`（confirmer / candidate account；用于 operation key ACCOUNT scope 与 audit actor；不用于读取 candidate 已绑定 Person）；purpose `IDENTITY_BINDING_GATE`。
-4. `withBindingCommitTransaction({ attemptId, targetPersonId, targetFamilyId, contextId, actorAccountId, commitAccountId? }, fn)`：attempt / target / context GUCs；`app.account_id = actorAccountId`（confirmer 审计归因 + account-scope operation key）；若 `commitAccountId` 在事务开始前已知则设置 `app.binding_commit_account_id`；若 Account 在事务内创建 / 复用，调用 `app.set_binding_commit_account_id(accountId)` 后再执行 `UPDATE persons`。purpose `IDENTITY_BINDING_COMMIT`。
+3. `withBindingGateTransaction({ targetFamilyId?, targetPersonId, actorAccountId, candidateAccountId? }, fn)`：target GUCs + `app.account_id = actorAccountId`（**仅已认证 actor**：confirmer；用于 operation key ACCOUNT scope 与 audit actor）；若本次 authenticated candidate 的 Account 已由 openid 解析，则额外设置 `app.binding_candidate_account_id = candidateAccountId`（**仅**用于 D-13.3 的 candidate-account read policy 判定 `IDENTITY_CONFLICT`，不得用于读取 P1 以外任何 Person，不设置 family scope）；purpose `IDENTITY_BINDING_GATE`。`actorAccountId` 与 `candidateAccountId` 语义不同，不得混用：前者是操作者，后者是被认证的 candidate。`targetFamilyId` 未知时由 `withBindingTargetTransaction` 先完成 P1 membership 解析，再在同一事务内设置 family GUC。
+3b. `withBindingTargetTransaction({ targetPersonId, actorAccountId }, fn)`：只设置 `app.binding_target_person_id` + `app.account_id` + purpose `IDENTITY_BINDING_GATE`，用于在 `targetFamilyId` 未知时读取 P1 唯一 `family_members`；MUST NOT 读取 profile / consent，不设置 family / person business scope；不得变成任意 person lookup。
+4. `withBindingCommitTransaction({ attemptId, targetPersonId, targetFamilyId, contextId, actorAccountId, candidateAccountId?, commitAccountId? }, fn)`：attempt / target / context GUCs；`app.account_id = actorAccountId`（confirmer 审计归因 + account-scope operation key）；若 candidate Account 已知则设置 `app.binding_candidate_account_id`（同一 candidate read policy，只用于 Gate 2 冲突复核）；若 `commitAccountId` 在事务开始前已知则设置 `app.binding_commit_account_id`；若 Account 在事务内创建 / 复用，调用 `app.set_binding_commit_account_id(accountId)` 后再执行 `UPDATE persons`。purpose `IDENTITY_BINDING_COMMIT`。
 5. `withBindingAttemptTransaction({ attemptId, identityDigest, invitationId }, fn)`：candidate decision / status 读取。
 
 - 业务代码不得直接 `set_config`；所有上下文通过上述 wrapper。
@@ -976,6 +999,7 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 
 - 无上下文：新表 0 行 / 写拒绝；Slice 1 表既有行为不变。
 - 错误 Family / 错误 account / 错误 attempt：0 行。
+- `persons_binding_candidate_account_read` 只在该 candidate Account GUC 下返回该 Account 绑定的单个 Person；未设置 GUC / 非 binding purpose / 其它 Account → 0 行；不得成为任意 person lookup。
 - `pg_class.relrowsecurity` / `relforcerowsecurity` = true；`pg_roles.rolbypassrls` = false；owner ≠ app。
 - 审计表 runtime `SELECT` 被拒绝；migrator / test admin 可读。
 
@@ -1027,7 +1051,8 @@ CREATE TABLE identity_binding_audit_events (
                                 'BINDING_SECOND_PARTY_CONFIRMED',
                                 'BINDING_SECOND_PARTY_REJECTED',
                                 'BINDING_COMMITTED',
-                                'BINDING_TERMINAL'
+                                'BINDING_TERMINAL',
+                                'BINDING_OPERATION_RETRYABLE'
                               )),
   result                      text NOT NULL CHECK (result IN ('PENDING','COMMITTED','TERMINAL','RETRYABLE')),
   terminal_reason             text,
@@ -1047,6 +1072,7 @@ CREATE INDEX identity_binding_audit_correlation_idx
 
 - `BINDING_GATE1_BLOCKED` 是所有 **Phase B attempt 创建之前**的阻断事件（invalid invitation、Case B mismatch、Gate 1 fail）的统一 security outcome；`terminal_reason` 区分具体原因。
 - 成功 / pending / terminal / retryable 的 security-relevant outcome 均写 audit；PENDING 的重复 replay 不写第二条。
+- `RETRYABLE` 只写 operation-level 事件：`event_type='BINDING_OPERATION_RETRYABLE'` + `result='RETRYABLE'`；MUST NOT 使用 `BINDING_TERMINAL` 冒充，MUST NOT 改变 attempt state，MUST NOT 把 RETRYABLE 变成 settled outcome；D-14 的 best-effort 例外适用。
 - actor 真实：candidate 用 identity digest + context id（不存 openid）；confirmer 用 `actor_account_id` + `actor_person_id`。
 - target Person / Family / attempt / result / reason 可追溯；但 **Gate 1 阻断 / Case B mismatch / invalid invitation 发生在 Phase B 之前，audit MUST NOT 记录 `target_person_id` / `target_family_id` / `invitation_participation_id`**，只记录 `correlation_id` + `candidate_identity_digest` + `event_type` + `result` + `terminal_reason`，避免形成 candidate↔P1 business association。Phase B attempt 已存在后的 Gate 2 / terminal / commit audit 才记录 target person / family / attempt。
 - 不记录 token、token hash、openid、ciphertext、consent 原文、家长原话、PII。
@@ -1153,10 +1179,12 @@ participation invitation 打开
 07 indexes（partial unique live key + query indexes）
 08 context getter functions（app_binding_context_hash / identity_digest /
    invitation_id / attempt_id / target_person_id / target_family_id /
-   operation_scope / commit_account_id）
-09 set_binding_context functions（SECURITY INVOKER，只 set_config + 参数校验）
-10 ENABLE + FORCE RLS + 新表 policies
-11 Slice 1 表追加 purpose-scoped binding policies（D-13.3）
+   operation_scope / commit_account_id / candidate_account_id）
+09 set_binding_context functions（SECURITY INVOKER，只 set_config + 参数校验；
+   含 set_binding_target_context / set_binding_candidate_account_id）
+10 ENABLE + FORCE RLS + 新表 policies（含 context attempt-scope policy）
+11 Slice 1 表追加 purpose-scoped binding policies（D-13.3，含
+   persons_binding_candidate_account_read）
 12 append-only / immutable triggers（confirmations / audit）
 13 GRANT 到 xiaoshuyin_app（最小 DML；audit 仅 INSERT）
 ```
@@ -1166,6 +1194,7 @@ participation invitation 打开
 - 追加 policy 使用新名字，避免与既有 policy 冲突；不改既有 policy 定义。
 - 迁移必须可重复执行？沿用 `scripts/db-migrate.mjs` 的 migration tracking；不写 `DROP ... IF EXISTS` 破坏历史。
 - 所有新表主键 `uuidv7()`；时间使用 DB `now()`。
+- **Slice 5 最终只允许一个 006-owned additive migration。** 若开发过程中出现第二个 006-owned migration（例如 `005_identity_binding_candidate_account_gate.sql`）且相关 migration 均尚未 merge main：把后者中经批准的内容 fold 回 `00X_identity_binding_runtime.sql`，删除该额外文件，用普通 commit 记录；禁止 rebase、禁止 force push、禁止修改任何已 merge migration；随后重跑 fresh / upgrade / second-apply / DB evidence。不得将第二个 migration 合法化。
 
 ### D-18.2 Rollback
 
@@ -1187,18 +1216,18 @@ participation invitation 打开
 | Domain / Unit | `tests/domain/identity-binding-idempotency.test.ts` | operation key scope、same/different payload、replay、new attempt |
 | Domain / Unit | `tests/domain/identity-binding-crypto.test.ts` | token hash、HKDF、AES-GCM、无明文 openid |
 | Domain / Unit | `tests/domain/identity-binding-anti-enumeration.test.ts` | generic serializer、body keys、无 attemptId / reason |
-| Database | `tests/db/identity-binding-schema.test.ts` | 表 / enum / CHECK / 部分唯一索引 / 无永久唯一 |
-| Database | `tests/db/identity-binding-rls.test.ts` | 新表 FORCE RLS、无上下文 0 行、错误 family / attempt 0 行、audit runtime 不可读 |
+| Database | `tests/db/identity-binding-schema.test.ts` | 表 / enum / CHECK / 部分唯一索引 / 无永久唯一 / audit `event_type` 闭集含 `BINDING_OPERATION_RETRYABLE` |
+| Database | `tests/db/identity-binding-rls.test.ts` | 新表 FORCE RLS、无上下文 0 行、错误 family / attempt 0 行、audit runtime 不可读、candidate-account read policy 只返回该 Account 绑定的 Person |
 | Database | `tests/db/identity-binding-concurrency.test.ts` | 并发 commit ∈ {0,1}、double confirmation、account / person conflict、0 commit |
 | Integration | `tests/integration/identity-binding-bootstrap.test.ts` | Case B / C、Gate 1、invalid invitation、pending context、no session |
 | Integration | `tests/integration/identity-binding-candidate.test.ts` | AFFIRM / REJECT / CANCEL、跨 attempt / identity、replay |
 | Integration | `tests/integration/identity-binding-confirmer.test.ts` | 授权、list、AFFIRM / REJECT、candidate 代持拒绝、独立认证 |
 | Integration | `tests/integration/identity-binding-commit.test.ts` | happy path、Account at commit、Gate 2 recheck、consent revoked between gates、invitation terminal between gates |
-| Integration | `tests/integration/identity-binding-idempotency.test.ts` | 全幂等矩阵、concurrent same-key、different-key same semantic |
+| Integration | `tests/integration/identity-binding-idempotency.test.ts` | 全幂等矩阵、concurrent same-key、different-key same semantic、bootstrap replay PENDING / COMMITTED / TERMINAL |
 | Integration | `tests/integration/identity-binding-anti-enumeration.test.ts` | 6 类内部原因 response matrix、status / body / headers 不可区分 |
 | Integration | `tests/integration/identity-binding-ordinary-login-regression.test.ts` | 普通 `/auth/wechat` new / existing、无 mode / hidden switch、无 P2 |
 | Integration | `tests/integration/identity-binding-invitation-contract.test.ts` | port VALID / TERMINAL_UNUSABLE、no second invitation model |
-| Integration | `tests/integration/identity-binding-audit.test.ts` | outcome 可追溯、无 secret / openid、append-only、不为 audit 建对象 |
+| Integration | `tests/integration/identity-binding-audit.test.ts` | outcome 可追溯、`BINDING_OPERATION_RETRYABLE` 独立 event、无 secret / openid、append-only、不为 audit 建对象 |
 | Integration | `tests/integration/identity-binding-rollback.test.ts` | 注入 commit 中途失败 → 全回滚、无孤立 Account / partial binding / settled attempt |
 | Contract | `tests/integration/identity-binding-openapi.test.ts` | 6 条 route、schema、错误 envelope；无 participant route |
 | Governance | `node scripts/validate-governance.mjs` / `run-governance-tests.mjs` / `guard-static` / `typecheck` / `openapi:check` / `coverage:audit` | 治理 / 静态 / 类型 / 契约 / 覆盖 |
@@ -1359,7 +1388,8 @@ Slice 6 T121–T124 closeout   ← 依赖 Slice 4 runtime
 
 ## Data and Migration Impact
 
-- 新增 5 张表、5 个 enum、若干索引 / 部分唯一索引 / CHECK、16 个 context getter / setter 函数、5 张新表 policy、6 条 Slice 1 表追加 policy、2 个 append-only trigger、GRANT。
+- 新增 5 张表、5 个 enum、若干索引 / 部分唯一索引 / CHECK、19 个 context getter / setter 函数、9 条新表 policy、7 条 Slice 1 表追加 policy（含 `persons_binding_candidate_account_read`）、2 个 append-only trigger、GRANT。
+- 全部 006-owned schema 只通过**一个** reviewed additive migration 落地（D-18.1）。
 - 不修改 Slice 1 表结构、列、既有约束、既有 policy、既有 enum、既有 audit / idempotency 数据。
 - 新增 6 条 HTTP route、新增 OpenAPI 文件、generated 产物由脚本生成。
 - 新增 3 个 required env（`IDENTITY_BINDING_SECRET`、两个 TTL）；env schema 变更属于 Implement，不在 Plan 写代码。

@@ -80,7 +80,7 @@
 - [x] CHK053 Is DB 只存 token hash，不存 token 明文？[Security, plan D-3.2]
 - [x] CHK054 Is openid 明确以 AES-256-GCM 加密存储，commit / terminal / Gate 1 失败后清空 ciphertext？[Security, plan D-3.2 / D-3.3]
 - [x] CHK055 Is context TTL 由 required positive env 决定，caller 不可提交 / 覆盖 / 延长？[Precision, plan D-3.2 / D-3.3]
-- [x] CHK056 Is context replay 明确不产生第二份 confirmation / 第二次 commit，且 status / decision 可重复读取？[Consistency, plan D-3.2 / D-5.3]
+- [x] CHK056 Is context replay 明确不产生第二份 confirmation / 第二次 commit，且 status / decision 可重复读取？Bootstrap replay 允许新 transport context，但必须 link 同一 authoritative attempt 且不重复业务副作用（plan D-3.4）。[Consistency, plan D-3.2 / D-3.4 / D-5.3]
 - [x] CHK057 Is context 防篡改由 token 随机性、hash 存储、identity digest、attempt 绑定共同保证，而不是客户端声明？[Security, plan D-3.2]
 - [x] CHK058 Is Phase A 明确不设置 `app.family_id` / `app.person_id`，不读取家庭业务数据？[Security, spec AS-20 / plan D-13.2]
 - [x] CHK059 Is Phase B 通过同一事务把 `attempt_id` + `invitation_participation_id` 写回 context，且 Gate 1 前不写？[Consistency, plan D-8.3]
@@ -109,7 +109,7 @@
 - [x] CHK076 Is concurrent same-key 明确由 advisory lock + 唯一约束串行化，而不是内存锁？[Security, plan D-5.3]
 - [x] CHK077 Is different key + same semantic operation 明确收敛到同一 PENDING attempt，不创建第二个 live attempt？[Consistency, spec FR-022 / plan D-5.3]
 - [x] CHK078 Is old attempt terminal + invitation valid 时 new attempt 明确允许，且 old attempt replay 仍返回旧结果？[Completeness, 005 §5.5 第 6 条 / plan D-5.3]
-- [x] CHK079 Is replay after COMMITTED 明确不 re-execute commit、不 revive invitation、不重建 authorization？[Consistency, spec FR-015 / plan D-5.3]
+- [x] CHK079 Is replay after COMMITTED 明确不 re-execute commit、不 revive invitation、不重建 authorization？Bootstrap settled replay 明确返回 `{ binding:"COMMITTED" }`，不写成 REUSED。[Consistency, spec FR-015 / plan D-5.3 / D-10.2]
 - [x] CHK080 Is replay while PENDING 明确「exact duplicate 无重复副作用，但合法新事件可推进同一 attempt」？[Precision, spec FR-013 / plan D-5.3]
 - [x] CHK081 Is retry after RETRYABLE 明确收敛到 authoritative outcome，不永久 RETRYABLE？[Consistency, spec FR-014 / plan D-5.3]
 - [x] CHK082 Is retry after TERMINAL 明确返回历史 TERMINAL，不重开同一 attempt？[Consistency, plan D-5.3]
@@ -175,10 +175,10 @@
 - [x] CHK127 Is pending context 明确不拥有 family context，不设置 `app.family_id` / `app.person_id`？[Security, spec AS-20 / plan D-13.2]
 - [x] CHK128 Is Gate 上下文明确可安全读取 P1 Compliance / consent / membership，且不冒充 P1 / 不设置 family scope？[Security, plan D-13.3]
 - [x] CHK129 Is commit 上下文明确只允许更新 target P1 的 `account_id`，不能更新其他 family member？[Security, plan D-13.3]
-- [x] CHK130 Is 对 Slice 1 表的增量 policy 明确为 additive、purpose-scoped、只读 / 精确提交，不改既有 policy？[Consistency, plan D-13.3]
+- [x] CHK130 Is 对 Slice 1 表的增量 policy 明确为 additive、purpose-scoped、只读 / 精确提交，不改既有 policy？`persons_binding_candidate_account_read` 只在 GATE / COMMIT purpose 下按 candidate Account 读取其已绑定 Person，仅用于 `IDENTITY_CONFLICT`。[Consistency, plan D-13.3 / D-8.1]
 - [x] CHK131 Is audit 表明确 runtime 不可读（`USING (false)`），只可 INSERT，不削弱 privacy？[Security, plan D-13.2 / D-15.2]
 - [x] CHK132 Is 无上下文 / 错误 Family / 错误 attempt 直连查询明确返回 0 行 / 拒绝？[Completeness, spec AS-24 / plan D-13.5]
-- [x] CHK133 Is candidate 明确不能直接读取 P1 Compliance / consent / 其他 Family 数据？[Security, plan D-13.3 / D-11]
+- [x] CHK133 Is candidate 明确不能直接读取 P1 Compliance / consent / 其他 Family 数据？candidate-account read policy 只允许读取该 candidate Account 自身绑定的 Person，不返回 P1 门禁或 P2 信息。[Security, plan D-13.3 / D-11]
 - [x] CHK134 Is RLS 验证明确要求 `pg_class.relrowsecurity` / `relforcerowsecurity` / `rolbypassrls` 真实输出，而不是文档声明？[Measurability, plan D-13.5]
 
 ## 13. Audit / Provenance
@@ -190,7 +190,7 @@
 - [x] CHK139 Is 明确不为 audit FK 创建 Person / Account，且 actor / target 可空？[Consistency, 005 §5.6.3 / plan D-15.2]
 - [x] CHK140 Is audit 明确 append-only、无 UPDATE / DELETE、trigger 拒绝改写？[Consistency, plan D-15.2]
 - [x] CHK141 Is replay 明确不追加第二组 audit，合法推进（PENDING→COMMITTED / TERMINAL）不算改写？[Consistency, spec FR-023 / plan D-15.2]
-- [x] CHK142 Is RETRYABLE 的审计策略明确为 best-effort、不伪造成功 / 终态，且失败不改变 retryable 结果？[Clarity, plan D-14 / D-21]
+- [x] CHK142 Is RETRYABLE 的审计策略明确为 best-effort、不伪造成功 / 终态，且失败不改变 retryable 结果？使用独立 `BINDING_OPERATION_RETRYABLE` + `result='RETRYABLE'`，不用 `BINDING_TERMINAL` 冒充。[Clarity, plan D-14 / D-15.2 / D-21]
 
 ## 14. Invitation Seam & Dependencies
 
@@ -208,7 +208,7 @@
 ## 15. API / Contract Surface
 
 - [x] CHK153 Is 端点数明确为 6，且没有 participant / Case / Evidence / UI / 通知端点？[Completeness, plan D-10.1]
-- [x] CHK154 Is bootstrap 请求 / 响应 schema 明确，且没有 `mode=invite` / hidden switch？[Precision, plan D-10.2 / D-17.1]
+- [x] CHK154 Is bootstrap 请求 / 响应 schema 明确，且没有 `mode=invite` / hidden switch？响应 union 含 generic / REUSED / settled replay `{ binding:"COMMITTED" }`。[Precision, plan D-10.2 / D-17.1]
 - [x] CHK155 Is candidate decision 的 AFFIRM / REJECT / CANCEL 语义明确，且 response 始终 generic？[Completeness, plan D-10.2]
 - [x] CHK156 Is confirmer list / decision 的授权、最小字段、状态码明确？[Completeness, plan D-10.2 / D-11.2]
 - [x] CHK157 Is status / session exchange 明确为 candidate 的 read-back 与 ordinary identity 桥接，且不创建 Account / Person？[Clarity, plan D-10.2]
@@ -221,7 +221,7 @@
 ## 16. Migration & Rollback
 
 - [x] CHK163 Is migration 明确 additive、不修改 `001_initial_schema.sql`、不改 Slice 1 列 / 约束 / enum？[Completeness, plan D-18.1]
-- [x] CHK164 Is migration 顺序明确（enum → tables → indexes → functions → RLS → Slice 1 policies → triggers → grants）？[Clarity, plan D-18.1]
+- [x] CHK164 Is migration 顺序明确（enum → tables → indexes → functions → RLS → Slice 1 policies → triggers → grants）？且 Slice 5 最终只允许一个 006-owned additive migration（第二个未 merge migration 必须 fold 回唯一文件并删除）。[Clarity, plan D-18.1]
 - [x] CHK165 Is migration 编号明确为 Implement 时读取最新 merged main 后分配，不硬编码？[Precision, plan D-18.1]
 - [x] CHK166 Is 新表主键 / 时间 / uuidv7 基线明确？[Consistency, plan D-18.1]
 - [x] CHK167 Is GRANT 明确为最小 DML，audit 仅 INSERT，且 app 非 owner？[Security, plan D-18.1 / D-13.2]
@@ -236,7 +236,7 @@
 - [x] CHK173 Are 必测反例（no-P2、concurrent commit、retry/read-back、Account conflict、Person conflict、Gate 2 race、consent revoked、invitation terminal between gates、duplicate confirmation、cross-attempt、anti-enum、RLS wrong family、ordinary login regression）逐项列出？[Completeness, plan D-19.3]
 - [x] CHK174 Is no-P2 明确要求对象计数可观察（Person increment / P2 / partial binding / session / authz / participant）？[Measurability, spec SC-004 / plan D-19.3]
 - [x] CHK175 Is concurrency 测试明确要求真实数据库并发输出，而不是应用层 mock？[Measurability, plan D-19.1 / D-7]
-- [x] CHK176 Is idempotency 测试明确覆盖全表（same/different payload、concurrent same-key、different-key same semantic、settled replay、PENDING replay、RETRYABLE retry）？[Completeness, plan D-5.3 / D-19.1]
+- [x] CHK176 Is idempotency 测试明确覆盖全表（same/different payload、concurrent same-key、different-key same semantic、settled replay、PENDING replay、RETRYABLE retry）？含 bootstrap replay PENDING / COMMITTED / TERMINAL。[Completeness, plan D-5.3 / D-3.4 / D-19.1]
 - [x] CHK177 Is anti-enumeration 测试明确比较 status / body keys / headers / read-back，而不只是文案？[Measurability, plan D-11.1 / D-19.1]
 - [x] CHK178 Is RLS 测试明确覆盖无上下文 / 错误 family / 错误 attempt / audit runtime 不可读？[Completeness, plan D-13.5 / D-19.1]
 - [x] CHK179 Is ordinary `/auth/wechat` regression 测试明确覆盖 new / existing openid 与无 hidden switch？[Completeness, plan D-17.1 / D-19.1]
@@ -251,7 +251,7 @@
 - [x] CHK185 Is 明确没有 `INSERT INTO persons`、没有 Person merge / unlink / rebind / duplicate recovery？[Consistency, plan D-7.3 / D-20]
 - [x] CHK186 Is 明确没有 Case / Evidence / Participant / Assessment / Intervention / Notification / AI / RAG 表或路由？[Consistency, plan D-20]
 - [x] CHK187 Is observability 明确记录 correlation / attempt / result，且禁止 openid / token / consent / PII？[Security, plan D-21]
-- [x] CHK188 Is RETRYABLE 的日志 / audit 明确不伪造成功 / 终态？[Consistency, plan D-21]
+- [x] CHK188 Is RETRYABLE 的日志 / audit 明确不伪造成功 / 终态？event_type 使用 `BINDING_OPERATION_RETRYABLE`，attempt state 不变。[Consistency, plan D-15.2 / D-21]
 - [x] CHK189 Is 审计一的 20 项检查（Spec→Plan 漂移、语义改变、FR/SC/AS 漏项、负向场景、不可执行 Task、并发证明、RETRYABLE、幂等、永久唯一、P2、Account orphan、RLS、authorization/recognition 混淆、candidate 泄露、invitation 侵入、Slice 4 侵入、runtime 依赖未标 BLOCKED、Task 顺序、测试映射、开发 AI 可直接实施）逐项在 Plan / Checklist 中有落点？[Auditability, plan D-1—D-22 / checklist CHK001—CHK188]
 - [x] CHK190 Is Checklist 自身明确「PASS 不等于 Implement Gate OPEN」，且 dependency blocker 不会被误记为 Plan FAIL？[Clarity, checklist header / plan D-22.3]
 
@@ -261,4 +261,11 @@
 
 - 2026-11-07：Plan 完成后首次 Checklist authoring。全部条目按 Spec / 005 / Docs / Slice 1 schema / Slice 4 contract 独立核对；未发现需要修改冻结 Spec 的缺口。
 - 已知非 Checklist FAIL 的真实 blocker：`plan.md` D-22.1 H1（Slice 1 `authorize()` 占位 / 无最终 Converge PASS）是 **Slice 6 core implementation 的唯一 hard blocker**；H3（Slice 4 runtime 未 merge）只阻塞 `T121–T124` 的真实 adapter / E2E closeout，不阻塞 core implementation，也不构成循环依赖。当前状态为 `IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY`，不影响 Plan 冻结。
-- 2026-11-07 Dependency Gate correction：将 Slice 4 runtime 从「core Implement blocker」降级为「late E2E blocker」；明确 `Slice 6 core ← Slice 1`、`Slice 4 implementation ← Slice 6 core runtime`、`Slice 6 T121–T124 ← Slice 4 runtime` 的分阶段交接，不存在循环硬依赖。条目总数仍为 190，未新增/删除。
+- 2026-11-07 Dependency Gate correction：将 Slice 4 runtime 从「core Implement blocker」降级为「late E2E blocker」；明确 `Slice 6 core ← Slice 1`、`Slice 4 implementation ← Slice 6 core runtime`、`Slice 6 T121–T124 ← Slice 4 runtime` 的分阶段交接，不存在循环硬依赖。条目总数仍为 190，未新增/删除。- 2026-11-07 Targeted Plan Remediation（实施中发现冻结 Plan 内部缺口，仅最小定点修正）：
+  - **M3 candidate-account RLS**：D-8.1 要求 ordinary-login-first / candidate Account conflict，而 D-13.3 / D-13.4 原无合法读取路径且明确 `actorAccountId` 不用于读取 candidate Person。已冻结最小 purpose-scoped 读取：GUC `app.binding_candidate_account_id` + policy `persons_binding_candidate_account_read`（仅 GATE / COMMIT，只读该 authenticated candidate Account 已绑定的 Person，仅用于 `IDENTITY_CONFLICT`，不返回 candidate-facing P2 信息）。复核 CHK018 / CHK128 / CHK130 / CHK133 / CHK178。
+  - **M3 其余额外对象裁定**：`binding_context_attempt_scope`、`app.set_binding_target_context` / `withBindingTargetTransaction` 经判定为冻结 D-6.1（commit 必须在同一事务锁定 context）与 D-9.2（targetFamilyId 需先由 P1 membership 解析）所必需，已最小写入 Plan：前者仅 GATE / COMMIT purpose + `attempt_id = app_binding_attempt_id()`，后者仅 target-person GUC、purpose GATE、Family 解析前不得读 profile / consent；两者均不扩大 Family scope、不构成第二 authorization engine。复核 CHK127 / CHK128 / CHK130 / CHK164。
+  - **M3 single migration**：D-18.1 保持「单个 reviewed additive migration」；开发分支现有 004 + 005 且均未 merge 时，必须把 005 批准内容 fold 回唯一 006 migration、删除 005、普通 commit，不 rebase / force push / 改已 merge migration，并重跑 fresh / upgrade / second-apply / DB evidence。复核 CHK163–CHK168。
+  - **M6 COMMITTED bootstrap replay**：D-10.2 / D-11.1 / D-5.3 明确同一 BOOTSTRAP operation key 在 attempt 已 COMMITTED 后返回 historical `{ binding:"COMMITTED" }`；不写成 `REUSED`，不重新 commit、不 revive invitation、不自动 accept、不重建 authorization；OpenAPI / schema 增加 strict `BindingBootstrapCommittedResponse`。复核 CHK079 / CHK154 / CHK176。
+  - **M13 RETRYABLE audit**：D-15.1 event_type 闭集新增 `BINDING_OPERATION_RETRYABLE`，D-15.2 要求 `result='RETRYABLE'` 且不改变 attempt state、不用 `BINDING_TERMINAL` 冒充、不扩展 `business_audit_events`。复核 CHK142 / CHK188。
+  - **M5 bootstrap replay context clarification**：在 token 明文不落库、operation key 不存 response body 的冻结约束下，D-3.4 明确 same-key bootstrap replay 允许新建 transport context / token，但必须 link 同一 authoritative attempt；`new transport context ≠ new attempt ≠ duplicate business side effect`。复核 CHK056 / CHK176。
+  - 条目总数仍为 190（未新增/删除）；`spec.md`、`Docs/**`、`specs/005/**`、`apps/**`、`packages/**`、`db/**`、`tests/**` 只读。
