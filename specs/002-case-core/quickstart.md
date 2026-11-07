@@ -2,7 +2,7 @@
 
 **Slice**: `specs/002-case-core`
 **Phase**: Phase 1（`Docs/V1技术设计.md` §38）
-**状态**: Plan 阶段产物。此文档描述**实现完成后**如何验证本 Slice；当前分支尚无 Case 实现代码，因此本文所有命令在 Plan 阶段**均未执行**，不得作为已通过的证据。
+**状态**: Slice 2 已存在旧 Slice 1 基线上的 Case implementation；该 implementation 在 **Post-Slice1 Final reconciliation 完成前不得视为最终验证状态**。本文命令在 reconciliation 完成前**未执行**，不得作为已通过的证据。
 
 > 本指南只给验证路径，不给实现代码、migration 内容或完整测试套件。
 > 契约细节见 `contracts/cases-api.openapi.yaml`、`contracts/authorization-rls-and-idempotency.md`、`contracts/case-events-and-business-audit.md`。
@@ -18,8 +18,8 @@
 | 包管理器 | 仓库约定 `bun` | 项目约定 |
 | PostgreSQL | `18`，原生 `uuidv7()` | §2 / §7.0 |
 | Docker | Stage A Compose（PG18 + api） | §4 Stage A |
-| 环境变量 | `DATABASE_URL`（app 角色）、`MIGRATION_DATABASE_URL`（migrator 角色）、`SESSION_SECRET` | Slice 1 Plan |
-| Slice 1 | 已合并到 main，final schema / RLS / 幂等 / 审计 green；current Family 解析具备确定性语义（G11） | Plan §0.2 G1—G11 |
+| 环境变量 | `DATABASE_URL`（app 角色）、`MIGRATION_DATABASE_URL`（migrator 角色）、`SESSION_SECRET`、`EVIDENCE_HASH_PEPPER`、`WECHAT_APP_ID`、`WECHAT_APP_SECRET` | Slice 1 Final `runtime-env.ts` |
+| Slice 1 | 已 CLOSED（Final Audit II PASS、PR #13 merged main、post-merge CI PASS）；final schema / RLS / 幂等 / 审计 green；current Family 解析具备确定性语义（G11） | Plan §0.2 G1—G11 |
 
 ```bash
 # 角色与数据库由 Compose init 建立，Stage A 使用 PostgreSQL 18

@@ -96,7 +96,7 @@
 
 ## 8. 事务、事件与审计
 
-- [x] CHK062 Case 创建是否有唯一明确顺序：认证 → 解析当前 Family → `withRlsTransaction` → 读取 Family / authorize → 幂等判定 → Family 行锁 → primary 判定 → Case → `case_event` → `business_audit_event` → 幂等响应 → COMMIT？[PASS] — `plan.md` D-4；`contracts/authorization-rls-and-idempotency.md` §6]
+- [x] CHK062 Case 创建是否有唯一明确顺序：认证 → 解析当前 Family → `withRlsTransaction` → `requireFamilyAction`（Final adapter 内部读取 `AuthorizeFacts` 并调用 `authorize()`）→ 幂等判定 → Family 行锁 → primary 判定 → Case → `case_event` → `business_audit_event` → 幂等响应 → COMMIT？[PASS] — `plan.md` D-4 / D-6.4.1；`contracts/authorization-rls-and-idempotency.md` §6]
 - [x] CHK063 Case、`case_event`、`business_audit_event`、幂等响应是否明确为同一事务，任一失败整体回滚，禁止部分成功？[PASS] — `spec.md` FR-014 / SC-007；`plan.md` D-4；`data-model.md` §9]
 - [x] CHK064 `case_events`（领域历史）与 `business_audit_events`（跨资源业务审计）是否明确职责不同、不能合并，且本 Slice 同时写两者？[PASS] — `plan.md` D-8；`contracts/case-events-and-business-audit.md` §1；`research.md` R-7]
 - [x] CHK065 本 Slice `case_events` 是否只有 `CASE_CREATED`，没有 pause / resume / close / switch-primary 等未来事件？[PASS] — `data-model.md` §3.1 / §3.4；`contracts/case-events-and-business-audit.md` §6]
@@ -134,7 +134,7 @@
 
 - [x] CHK089 每条 FR-001—FR-025 是否都有至少一个明确的 verification path（测试文件 / DB introspection / contract test）？[PASS] — `plan.md` Verification Plan]
 - [x] CHK090 每条 SC-001—SC-011 是否可在不依赖未来 Slice 的前提下被度量？[PASS] — `spec.md` Success Criteria；`plan.md` Verification Plan]
-- [x] CHK091 Acceptance Scenarios 1—16 是否都能追到明确的验证路径，且预期结果与 Plan / Contract 一致？[PASS] — 16/16 均有路径；Scenario 9 已拆为 9A / 9B 并同步到 `plan.md` Verification Plan、`contracts/authorization-rls-and-idempotency.md` §3 / §7、`quickstart.md` §4.3；Scenario 13 为 `422 VALIDATION_ERROR` + 零写入，并与 Plan / OpenAPI / Quickstart 一致。]
+- [x] CHK091 Acceptance Scenarios 1—18 是否都能追到明确的验证路径，且预期结果与 Plan / Contract 一致？[PASS] — **18/18** 均有路径；Scenario 9 已拆为 9A / 9B 并同步到 `plan.md` Verification Plan、`contracts/authorization-rls-and-idempotency.md` §3 / §7、`quickstart.md` §4.3；Scenario 13 为 `422 VALIDATION_ERROR` + 零写入，并与 Plan / OpenAPI / Quickstart 一致。]
 - [x] CHK092 验证是否明确区分 HTTP 可达的幂等 replay / 并发同 key 行为与 shared layer 的 MISMATCH → 409 合同，且不伪造 HTTP different-payload 场景？[PASS] — `plan.md` Verification Plan；`contracts/authorization-rls-and-idempotency.md` §5.3 / §8；`quickstart.md` §5.2]
 - [x] CHK093 并发是否使用真实 PostgreSQL 多连接验证，schema / RLS 使用真实 introspection，路由使用真实枚举，而不是 mock 或 expected-fail？[PASS] — `plan.md` Technical Baseline / Verification Plan；`quickstart.md` §6]
 - [x] CHK094 验证命令是否真实存在或已被显式列为 Gate 补齐项，且 Plan 阶段没有声称这些命令已执行通过？[PASS] — `quickstart.md` §0 声明 Plan 阶段未执行；`plan.md` G10；`research.md` R-16]
@@ -173,7 +173,7 @@
 | MINOR | CHK043 | `plan.md` D-5.3 / `research.md` R-4 | “HTTP 层不可达”未显式限定同一 canonical family context；`familyId` 进入 hash，跨 Family 同 key 会产生 MISMATCH | 已限定为“当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context”；Plan D-5.3、Research R-4、Contract §5.2、Quickstart §5.2、OpenAPI 同步；canonical hash 保留 `{ familyId, body }` | RESOLVED |
 | MINOR | CHK068 | `data-model.md` §3.1 / §3.2；`contracts/case-events-and-business-audit.md` §2.1 | `metadata` 只允许 `{primary, version}` 没有 DB CHECK 或验证路径 | 增加 `case_events_metadata_shape_check`（JSON object、key 恰为 `{primary, version}`、primary boolean、version integer-compatible ≥1、无默认值）；Data Model §3.2、Plan D-2.2 / Verification Plan、Contract §2.1、Quickstart §2 / §9 同步 | RESOLVED |
 | MINOR | CHK077 | `contracts/cases-api.openapi.yaml` GET detail 404 | 404 / 403 错误码主要靠描述文字，`CaseNotFound` 组件定义但未引用 | 新增 `CaseAccessDeniedError` / `CaseNotFoundError` / `CurrentFamilyNotFoundError`，`code` 由 `enum` 固定；GET detail 404 直接 `$ref` `CaseNotFound` response，create/list 403 `$ref` `CaseAccessDenied` response | RESOLVED |
-| MINOR | CHK091 | `spec.md` Acceptance Evidence；`plan.md` Verification Plan | 16 个场景路径存在，但 Scenario 9 / 13 的预期结果曾与 CHK053 / CHK022 冲突 | 16/16 路径一致；Scenario 9A / 9B 与 Scenario 13（422 + 零写入）已同步到 Plan Verification Plan、Contract、Quickstart | RESOLVED |
+| MINOR | CHK091 | `spec.md` Acceptance Evidence；`plan.md` Verification Plan | 18 个场景路径存在，但 Scenario 9 / 13 的预期结果曾与 CHK053 / CHK022 冲突 | **18/18** 路径一致；Scenario 9A / 9B 与 Scenario 13（422 + 零写入）已同步到 Plan Verification Plan、Contract、Quickstart | RESOLVED |
 
 ---
 
@@ -204,4 +204,6 @@
 | 2026-11-05 | 精确限定 mismatch 可达性前提；保留 familyId hash | CHK043 |
 | 2026-11-05 | 增加 case_events.metadata DB CHECK 与验证路径 | CHK068 |
 | 2026-11-05 | OpenAPI 结构化固定 CASE_NOT_FOUND / CASE_ACCESS_DENIED，并引用 CaseNotFound | CHK077 |
-| 2026-11-05 | 重跑 100 项 Checklist：100 PASS / 0 FAIL / 0 NEEDS REVIEW | 全部 || 2026-11-07 | Post-Slice1 Final dependency reconciliation：R1 body → header；authorize 改为 Final `AuthorizeFacts` + `authz.ts`；OpenAPI 适配 semantic equivalence；`app.ts` 保留 runtime-env / log privacy / provider；schemas 采用 Final 基线；追加 CHK101–CHK110 | CHK037、CHK038、CHK072、CHK097、CHK101–CHK110 |
+| 2026-11-05 | 重跑 100 项 Checklist：100 PASS / 0 FAIL / 0 NEEDS REVIEW | 全部 |
+| 2026-11-07 | Post-Slice1 Final dependency reconciliation：R1 body → header；authorize 改为 Final `AuthorizeFacts` + `authz.ts`；OpenAPI 适配 semantic equivalence；`app.ts` 保留 runtime-env / log privacy / provider；schemas 采用 Final 基线；追加 CHK101–CHK110 | CHK037、CHK038、CHK072、CHK097、CHK101–CHK110 |
+| 2026-11-07 | Audit I remediation：HIGH-01 新增当前执行任务组 T088–T100（全部 `[ ]`），旧 T001–T087 标记 historical；HIGH-02 T049 改为 CASE_CREATE bytea exact identity；HIGH-03 `requireFamilyAction` 改为 Final adapter 输入形状；MEDIUM-01 Acceptance 统一 18/18；LOW quickstart 状态与环境变量修正 | CHK037、CHK038、CHK062、CHK072、CHK091、CHK097、CHK101–CHK110 |

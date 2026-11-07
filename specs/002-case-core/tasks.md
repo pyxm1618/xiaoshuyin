@@ -3,22 +3,24 @@
 **Feature**: `specs/002-case-core/spec.md`
 **Plan / 契约基线**: `plan.md`、`research.md`、`data-model.md`、`contracts/**`、`quickstart.md`、`checklists/requirements-quality.md`
 **Branch**: `feat/002-case-core`
-**Tasks 生成时 Head**: `1fc82c97e687bb73cb3048bb92240805f34880da`
+**Tasks 生成时 Head（historical）**: `1fc82c97e687bb73cb3048bb92240805f34880da`
 **Post-Slice1 reconciliation Base Head**: `9ac76f7e8e1640d5e5a448faa062296bd65443f9`
+**Audit I remediation Base Head**: `f9a454b207e038622bb61b9da4cb0bbf7a1385a5`
 **Latest main at reconciliation**: `ee9d07e059566884e0329fb0eb4a4ab9dbf8ea83`
 **旧 merge base**: `ed0d5fbee8c6764be704da8d80fb27ad2172222b`
-**Ahead / Behind（`origin/main...HEAD`）**: 38 / 4
+**Ahead / Behind（`origin/main...HEAD`）**: 39 / 4（remediation base `f9a454b`）
 **Docs baseline**: `Docs/V1产品需求.md` v3.3、`Docs/V1技术设计.md` v3.8
-**阶段**: Plan / Tasks dependency reconciliation（2026-11-07）。只修正 Slice 1 Final 依赖与 transport / authorization / OpenAPI 契约；**不进入 Analyze / Implement**，不修改业务代码、migration、tests、Spec、Contracts、Checklist 或 `Docs/**`。
+**阶段**: Audit I remediation（2026-11-07）。只修 Audit I 确认的 **3 HIGH + 1 MEDIUM + 1 LOW**；不改产品语义、不改业务代码、不 merge main、不进入 Implement。
 
 > **两种语境，不得混用（重要）**
-> - **本轮 = Tasks authoring**：只编辑本文件。本轮要求 `Docs/**`、Spec / Plan / Research / Data Model / Contracts / Checklist、业务代码、migration、测试代码的 diff 均为 0。该要求**只约束本轮**，不是 T085 的验收条件。
-> - **T001–T087 = 未来 Implement 执行**：这些任务描述另一个 AI 在 Implement 阶段如何操作。届时业务代码、新 migration、tests、generated OpenAPI / types、`guard-static` 合法增量、本文件的 checkbox `[x]` 与 completion / evidence 状态**都是预期存在的改动**。T085 只要求这些改动**可追溯到具体 Task**，不要求 diff = 0。
-> - **阶段顺序**：Specify → Clarify → Plan → Checklist → Tasks → **Analyze** → Implement → **独立 Converge**。Analyze 在 Implement **之前**；T087 是 Implement 的终点，其输出移交给一个**全新的独立 AI** 做 Converge / final review / CI verification。
-> - **本轮结束状态**：`SLICE 2 TASKS FINAL — READY FOR ANALYZE`（见文末）。
-> - **Implement 结束状态**：`IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`（由 T087 输出）。
+> - **Current = Post-Slice1 Reconciliation Execution（T088–T100，全部 `[ ]`）**：唯一有效的当前执行状态；必须在新 Head 上重新执行并保留真实输出。
+> - **Historical = T001–T087（`[x]` 旧基线记录）**：**NOT VALID AS CURRENT FINAL EXECUTION STATUS**；旧 390 tests / 旧 CI / 旧 Converge 仅作历史证据。
+> - **阶段顺序**：Specify → Clarify → Plan → Checklist → Tasks → 审计一 → Implement → 独立 Converge（审计二）。本回合只做 Audit I remediation，完成即停止，交新的 Audit I re-audit。
+> - **本轮结束状态**：`SLICE 2 DEPENDENCY RECONCILIATION AUDIT I REMEDIATION COMPLETE — READY FOR AUDIT I RE-AUDIT`（见文末）。
+> - **Current execution 结束状态**：`IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`（由 T100 输出）。
 
-> **任务格式**：`- [x] T### [P] [REQ:<上游 ID / 章节>] <动作、文件/目录、前置依赖、完成条件> [VERIFY:<真实命令或证据>]`
+> **任务格式**：`- [ ] T### [P] [REQ:<上游 ID / 章节>] <动作、文件/目录、前置依赖、完成条件> [VERIFY:<真实命令或证据>]`
+> 历史任务可能保留 `[x]`，但仅表示旧基线记录，不是当前状态。
 > `[P]` 仅表示：在所列前置全部完成后，与同批次其它 `[P]` 任务无文件冲突、无未完成依赖，可并行执行。
 > 每个任务必须同时具备 `[REQ:...]` 与 `[VERIFY:...]`；缺少任一项即无效。
 
@@ -41,7 +43,55 @@
 
 若 4–8 任一未完成：`BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`。禁止用旧基线证据宣称完成。
 
-## 0. Implement Gate（硬前置，T013 起不得执行）
+---
+
+## Current Post-Slice1 Reconciliation Execution Tasks（T088–T100；全部初始 `[ ]`）
+
+> 本节是**当前唯一有效的执行状态**。它 supersede 下方 Historical T001–T087 的 `[x]` 完成状态。
+> T088–T100 全部保持 `[ ]`，直到下一阶段开发 AI 真正执行并保留真实输出。任何旧 390 tests / 旧 CI / 旧 Converge PASS 都不能替代本节任务。
+
+- [ ] T088 [REQ:plan:G2;Gate4] 在 `feat/002-case-core` 上执行**普通 merge** 最新 `origin/main`（`ee9d07e`），禁止 rebase / force push；冲突按「Slice 1 Final 优先、Slice 2 增量保留」解决；记录 merge commit SHA（依赖 §0A Gate 1–3 PASS） [VERIFY:`git fetch origin`；`git merge origin/main`；`git merge-base --is-ancestor origin/main HEAD` 退出 0；`git status --short` clean]
+- [ ] T089 [REQ:plan:G3/G4;Gate5] 核对 merge 后共享基础设施已按 Final 收敛：`authorize.ts` 使用 `AuthorizeFacts`、`authz.ts` 存在、`idempotency.ts` 使用 `Idempotency-Key` header、`schemas.ts` 为 `z.strictObject`、`app.ts` 使用 `runtime-env.ts`、`error-handler.ts` 保留 Final 全码、`openapi-generate.mjs` / `openapi-check.mjs` 使用 `openapi-spec.ts`（依赖 T088） [VERIFY:`rg "AuthorizeFacts|readIdempotencyKey|loadRuntimeConfig|requestLogSerializer|buildOpenApiDocument" packages/authorization/src/authorize.ts apps/server/api/src/idempotency.ts apps/server/api/src/app.ts apps/server/api/src/openapi-spec.ts`；`rg "dev-secret-key-for-testing|inline swagger|family.createdByPersonId" apps/server/api/src packages/authorization/src` 为空；`bun run typecheck` 通过]
+- [ ] T090 [REQ:plan:D-6;Gate6] reconcile authorization adapter：只在 `apps/server/api/src/authz.ts` 的 `FamilyActionRequest` 增加可选 `caseId`；Case route 调用 `requireFamilyAction(tx, { accountId, personId, familyId, action, purpose, resource, caseId? })`；由 `authz.ts` 内部读取 `AuthorizeFacts` 并构造 `authorize({ actor, product, family, case, resource, action, purpose, facts })`；**不得**在 route 构造 facts / authorize 输入、不得新建 `authorizeCase()`、不得绕过 `requireFamilyAction`（依赖 T089） [VERIFY:`rg "requireFamilyAction|caseId" apps/server/api/src/routes/cases.ts apps/server/api/src/authz.ts`；`rg "AuthorizeFacts|authorize\(" apps/server/api/src/routes/cases.ts` 为空；`bunx vitest run tests/domain/authorization.test.ts tests/domain/case-authorization.test.ts` 全绿]
+- [ ] T091 [REQ:plan:D-5.1;R1;Gate7] reconcile CASE_CREATE transport：Case route 使用 `readIdempotencyKey(req)` 读取 `Idempotency-Key` header（8–128）；`CreateCaseRequest` 为 strict 空业务对象；删除 body `idempotencyKey`；OpenAPI 同步 header parameter（依赖 T090） [VERIFY:`rg "readIdempotencyKey|Idempotency-Key" apps/server/api/src/routes/cases.ts`；`rg "idempotencyKey" apps/server/api/src/routes/cases.ts packages/contracts/src/schemas.ts` 仅为「不得包含 / 拒绝字段」或注释；`bunx vitest run tests/integration/cases-idempotency.test.ts` 全绿]
+- [ ] T092 [REQ:plan:D-11.1;D-11.2;Gate7] reconcile CASE_CREATE storage：`caseIdempotencyKeyBytes(logicalKey)` 使用 UTF-16LE；`reserveIdempotency` 写入 `idempotency_key = NULL`、`idempotency_key_bytes = $3`、`ON CONFLICT DO NOTHING`；`getReservedIdempotency` 先按 bytea 查 `FOR SHARE`，未命中且 key 为 text-safe 时兼容 legacy text 行（`idempotency_key = $3 AND idempotency_key_bytes IS NULL`）；`completeIdempotency` 按 bytea 回填；保留 `003` representation CHECK / bytea unique / legacy text compatibility；**不得**删除 `003`、不得把 CASE_CREATE 改回 text、不得修改 Slice 1 六命令 text path（依赖 T091） [VERIFY:`rg "idempotency_key_bytes|utf16le|ON CONFLICT DO NOTHING|legacy" packages/domain/src/cases.ts`；`rg "idempotency_key_bytes|idempotency_keys_key_representation_check|idempotency_scope_key_bytes" db/migrations/003_case_idempotency_key_bytes.sql`；`bunx vitest run tests/db/case-idempotency-representation.test.ts tests/integration/cases-idempotency-identity.test.ts` 全绿]
+- [ ] T093 [REQ:plan:R9;Gate5] reconcile runtime schemas：采用 Slice 1 Final `z.strictObject` 基线，六个既有命令请求体不含 `idempotencyKey`；只追加 `CreateCaseRequest`（strict、无业务字段）、`CaseResponse`、`CaseListResponse`、`CaseStatus`、`CasePhase`（依赖 T089） [VERIFY:`rg "idempotencyKey" packages/contracts/src/schemas.ts` 为空；`bunx vitest run tests/domain/case-contracts.test.ts` 全绿；`bun run typecheck` 通过]
+- [ ] T094 [REQ:plan:R7;Gate6] reconcile app / runtime / logging：保留 `loadRuntimeConfig` / `createWechatProvider` / `requestLogSerializer` / logger redact / `buildApp({ env, loggerStream })`；只追加 `registerCaseRoutes`；不得恢复硬编码 secret fallback 或无条件 fake provider（依赖 T089） [VERIFY:`rg "loadRuntimeConfig|requestLogSerializer|createWechatProvider|registerCaseRoutes" apps/server/api/src/app.ts`；`rg "dev-secret-key-for-testing" apps/server/api/src/app.ts` 为空；`bunx vitest run tests/integration/runtime-env.test.ts tests/integration/log-privacy.test.ts` 全绿]
+- [ ] T095 [REQ:plan:R8;Gate5] reconcile OpenAPI：扩展 `apps/server/api/src/openapi-spec.ts` 的 `buildOpenApiDocument()` 加入 Case operations；`openapi-generate.mjs` 调用该 builder；`openapi-check.mjs` 执行 frozen YAML ↔ runtime semantic equivalence；`package.json` 使用 `bun` 调用；不得 hand-edit generated artifact（依赖 T093） [VERIFY:`bun run openapi:generate`；`bun run openapi:check` 输出 semantic equivalence PASS；`git diff --name-only -- packages/generated/` 仅 `openapi.json` / `openapi.d.ts`；`rg "Idempotency-Key|CreateCaseRequest|createCase|listCases|getCase" apps/server/api/src/openapi-spec.ts`]
+- [ ] T096 [REQ:plan:Project-Structure;Gate8] reconcile test setup / guard / scripts：复用 `tests/setup/api.ts`；`guard-static.mjs` 保留 Final 全部 guard 并追加 `cases` / `case_events`；`db-evidence.mjs` / `coverage-audit.mjs` 保留 Final 断言并做 Slice 2 增量；`package.json` 脚本对齐 `bun`（依赖 T089） [VERIFY:`rg "tests/setup/api.ts" tests/integration`；`bun run guard:static` 输出 `PASS (0 violations)`；`bun run db:evidence` PASS；`bun run coverage:audit` 输出 001 + 002 覆盖]
+- [ ] T097 [REQ:plan:Verification-Plan;Gate8] full regression：`bun run typecheck`、`bun run guard:static`、`bunx vitest run tests/domain`、`bunx vitest run tests/db`、`bunx vitest run tests/integration`、`bunx vitest run`；要求 `0 failed` / `0 skipped`（依赖 T090–T096） [VERIFY:全部命令退出 0；输出 `0 failed` / `0 skipped`；归档真实输出]
+- [ ] T098 [REQ:plan:Verification-Plan;Gate8] migration / DB evidence：`bun run db:migrate` 两次（首次 APPLY、第二次全 SKIP）；`bun run db:evidence` PASS（依赖 T092） [VERIFY:两次 `db:migrate` 输出；`db:evidence` PASS；`schema_migrations` 记录一致]
+- [ ] T099 [REQ:plan:Verification-Plan;Gate8] OpenAPI / coverage / verify-all / governance：`bun run openapi:generate` 两次 hash 一致；`bun run openapi:check`；`bun run coverage:audit`（FR 25/25、SC 11/11、Acceptance 18/18）；`node scripts/verify-all.mjs --archive`；`node .specify/scripts/validate-governance.mjs`；`node .specify/scripts/tests/run-governance-tests.mjs`（依赖 T095 / T097） [VERIFY:全部命令输出 PASS；generated 两文件 hash 一致；coverage `missing 0`]
+- [ ] T100 [REQ:plan:Verification-Plan;AGENTS:§5;MEDIUM-01] implementation reconciliation closeout：确认 0 failed / 0 skipped、FR 25/25、SC 11/11、Acceptance **18/18**、remaining gap = 0；输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`；不得 merge main、不得宣布 Slice 2 PASS / CLOSED（依赖 T098 / T099） [VERIFY:最终报告逐项证据；`git status --short` clean；固定文案；`git log -1 --format=%H` 记录当前 Head]
+
+### Current Dependency Chain（T088–T100）
+
+```text
+T088 → T089 → T090 → T091 → T092
+             ↘ T093 → T095
+             ↘ T094
+T090–T096 → T097
+T092 → T098
+T095 / T097 → T099
+T098 / T099 → T100
+```
+
+- `T088` 是唯一入口（merge）；未完成前 `T089–T100` 不得执行。
+- `T090`（授权）、`T093`（schemas）、`T094`（app/runtime）在 `T089` 后可并行准备，但 `T091` 依赖 `T090`，`T095` 依赖 `T093`。
+- `T097`（full regression）必须等实现类任务 `T090–T096` 全部完成。
+- `T098`（migration evidence）依赖 `T092`（bytea storage）。
+- `T099`（OpenAPI / coverage / verify-all / governance）依赖 `T095` / `T097`。
+- `T100`（closeout）只能在 `T098` / `T099` 全 PASS 后执行。
+
+---
+
+## Historical Implementation Record — T001–T087（NOT VALID AS CURRENT FINAL EXECUTION STATUS）
+
+> 下列 T001–T087 的 `[x]` **仅表示旧基线（merge base `ed0d5fb`）上的历史实现记录**，不是当前 Post-Slice1 Final 的执行状态。
+> 特别是：T002（旧 merge）、T081（旧 full regression）、T084（旧 CI）、T087（旧 final handoff）均已失效；当前对应任务为 **T088 / T097 / T099 / T100**。
+> 旧 390 tests / 旧 CI / 旧 Converge 输出 = historical evidence only；不得作为当前 Slice 2 结论。
+
+## 0. Implement Gate（hard prerequisite — historical execution context）
 
 > 以下 11 项是 `plan.md` §0.2 的 G1–G11。**任一失败即停止**，不得在 Slice 2 私建替代基础设施。
 > 失败文案固定为：`BLOCKED — SLICE 1 IMPLEMENTATION DEPENDENCY`；G11 失败固定为：`BLOCKED — SLICE 1 CURRENT FAMILY SEMANTICS NOT STABLE`。
@@ -125,7 +175,7 @@
 - [x] T046 [P] [REQ:FR-012;§8.5] 在 `packages/domain/src/idempotency.ts` 的 `IdempotencyCommandType` 加入 `CASE_CREATE`；不改变 `canonicalJson` / `hashPayload` / `decideIdempotency` 语义（依赖 T028） [VERIFY:`bunx vitest run tests/domain/idempotency-hash.test.ts` 绿；`bun run typecheck` 通过]
 - [x] T047 [REQ:FR-006;FR-007;FR-016;plan:D-3.2] 新增 `packages/domain/src/cases.ts`（或同包 repository）实现：`lockFamilyForPrimaryDecision(tx, familyId)`（`SELECT id FROM families WHERE id = $1 FOR UPDATE`）、`existsCurrentPrimary(tx, familyId)`（**独立语句**）、`insertCase(tx, {familyId, createdByPersonId, isPrimary})`（显式 `OPEN` / `INTAKE` / `version=1`）、`getCaseById(tx, caseId)`、`listCases(tx, familyId)`（`ORDER BY is_primary DESC, created_at ASC, id ASC`）；全部参数化，不放在 `apps/`（依赖 T042、T020） [VERIFY:`bun run typecheck`；`rg "FOR UPDATE|ORDER BY is_primary DESC" packages/domain/src/cases.ts` 输出]
 - [x] T048 [REQ:FR-014;CHK064] 在同一 `packages/domain/src/cases.ts` 增加 `insertCaseEvent(tx, {familyId, caseId, actorAccountId, primary, version})` 显式写 `CASE_CREATED` 与 metadata `{primary, version}`；增加 `insertCaseAudit(tx, {familyId, caseId, actorAccountId, primary, version})` 写 `business_audit_events` 的 `CASE_CREATED` / `CASE`；职责不同不得合并（依赖 T047） [VERIFY:`rg "CASE_CREATED|resource_type|metadata" packages/domain/src/cases.ts`；`bun run typecheck`]
-- [x] T049 [REQ:FR-012;plan:D-5.4] 在同一 `packages/domain/src/cases.ts` 增加幂等占位 / 读取 / 回填：`reserveIdempotency`（`INSERT ... ON CONFLICT (actor_account_id, command_type, idempotency_key) DO NOTHING RETURNING id`，占位 `response_status=0`、`response_body='{}'`）、`getReservedIdempotency`（`FOR SHARE`）、`completeIdempotency`（同一事务回填 `201` + response body）；全部在 `withRlsTransaction` 内使用（依赖 T048） [VERIFY:`rg "ON CONFLICT|FOR SHARE|response_status = 0" packages/domain/src/cases.ts`；`bun run typecheck`]
+- [x] T049 [REQ:FR-012;plan:D-5.4;D-11.1] 在同一 `packages/domain/src/cases.ts` 增加 **CASE_CREATE bytea exact identity** 幂等路径：`caseIdempotencyKeyBytes(logicalKey)` 返回 UTF-16LE bytes；`reserveIdempotency` 执行 `INSERT INTO idempotency_keys (actor_account_id, command_type, idempotency_key, idempotency_key_bytes, request_hash, response_status, response_body) VALUES ($1, $2, NULL, $3, $4, 0, '{}'::jsonb) ON CONFLICT DO NOTHING RETURNING id`（**text 列为 NULL，bytes 列为 logical key 精确身份**）；`getReservedIdempotency` 先按 `(actor_account_id, command_type, idempotency_key_bytes)` 查 `FOR SHARE`，未命中且 logical key 为 text-safe 时兼容 legacy `CASE_CREATE` text 行（`idempotency_key = $3 AND idempotency_key_bytes IS NULL`）；`completeIdempotency` 按 bytes 回填 `201` + response body；保留 `003` 的 representation CHECK、bytea unique、legacy text compatibility，Slice 1 六个命令继续走 text path（依赖 T048） [VERIFY:`rg "idempotency_key_bytes|utf16le|ON CONFLICT DO NOTHING|legacy" packages/domain/src/cases.ts`；`rg "idempotency_key_bytes|idempotency_keys_key_representation_check|idempotency_scope_key_bytes" db/migrations/003_case_idempotency_key_bytes.sql`；`bun run typecheck`]
 
 ---
 
@@ -133,7 +183,7 @@
 
 - [x] T050 [P] [REQ:FR-008;FR-009;FR-024;D-6;场景8/9A/9B] 新增 `tests/integration/cases-authorization.test.ts` RED，显式两组：**A 组**（Family member + guardian + non-manager）create/list `403 CASE_ACCESS_DENIED`、detail `404 CASE_NOT_FOUND`；**B 组**（guardian non-member）current Family 未解析，沿用 Slice 1 `CURRENT_FAMILY_NOT_FOUND`，响应无 Case 字段，**不出现** `CASE_ACCESS_DENIED` / `CASE_NOT_FOUND`；另含 manager allow（依赖 T042、T043、T044、T045） [VERIFY:`bunx vitest run tests/integration/cases-authorization.test.ts` 预期 RED（端点未实现），保留输出]
 - [x] T051 [P] [REQ:FR-004;FR-006;FR-007;FR-015;SC-001;SC-003] 新增 `tests/integration/cases-create.test.ts` RED：首 Case `primary=true` / `OPEN` / `INTAKE` / `version=1` / Family 归属正确；第二 Case `primary=false`；使用 `Idempotency-Key` header；header 缺失 / 非法 → `422 VALIDATION_ERROR`；body 携带 `idempotencyKey` / `familyId` / `creator` / `status` / `phase` / `primary` / `version` / `title` 等未声明字段 → `422 VALIDATION_ERROR` 且 `cases` / `case_events` / `business_audit_events` / `idempotency_keys` 零新增；响应无 `familyId` / creator / 内容字段（依赖 T042、T043、T045） [VERIFY:`bunx vitest run tests/integration/cases-create.test.ts` 预期 RED（端点未实现），保留输出]
-- [x] T052 [REQ:FR-012;FR-014;plan:D-4] 实现 `apps/server/api/src/routes/cases.ts` 的 `POST /api/v1/cases`，严格按唯一冻结顺序：认证 → `readIdempotencyKey(req)`（header 8–128，缺失/非法 → `422 VALIDATION_ERROR`）→ 解析 current Family（identity 上下文，0 行 → `CURRENT_FAMILY_NOT_FOUND`；多 Family → 沿用 Final `CURRENT_FAMILY_AMBIGUOUS`）→ `withRlsTransaction`（purpose `FAMILY_MANAGEMENT`）→ `requireFamilyAction(tx, { action:'CASE_CREATE', family:{familyId}, case:null, resource:{type:'FAMILY',familyId} })`（复用 `authz.ts` 读 facts；DENY `NOT_FAMILY_MEMBER`/`NOT_FAMILY_MANAGER` → `403 CASE_ACCESS_DENIED`）→ 幂等占位 / REPLAY / `409 IDEMPOTENCY_PAYLOAD_MISMATCH`（bytea 路径）→ `SELECT ... FOR UPDATE` 锁 Family → 独立 `EXISTS` 判定 → 插 Case → 插 `case_event` → 插 `business_audit_event` → 回填幂等响应 → COMMIT → 201；**不得**从 body 读 idempotencyKey；**不得**捕获 23505 转 201/409（依赖 T047、T048、T049、T043、T044、T045） [VERIFY:`bun run typecheck`；`rg "readIdempotencyKey|requireFamilyAction|existsCurrentPrimary|insertCaseEvent|insertCaseAudit|completeIdempotency" apps/server/api/src/routes/cases.ts` 顺序与 D-4 一致；`rg "body.*idempotencyKey|idempotencyKey.*body" apps/server/api/src/routes/cases.ts` 为空]
+- [x] T052 [REQ:FR-012;FR-014;plan:D-4] 实现 `apps/server/api/src/routes/cases.ts` 的 `POST /api/v1/cases`，严格按唯一冻结顺序：认证 → `readIdempotencyKey(req)`（header 8–128，缺失/非法 → `422 VALIDATION_ERROR`）→ 解析 current Family（identity 上下文，0 行 → `CURRENT_FAMILY_NOT_FOUND`；多 Family → 沿用 Final `CURRENT_FAMILY_AMBIGUOUS`）→ `withRlsTransaction`（purpose `FAMILY_MANAGEMENT`）→ `requireFamilyAction(tx, { accountId: actor.accountId, personId: actor.personId, familyId, action: 'CASE_CREATE', purpose: 'FAMILY_MANAGEMENT', resource: { type: 'FAMILY', familyId } })`（复用 `authz.ts`；adapter 内部读取 `AuthorizeFacts` 并构造 `authorize({ actor, product, family, case, resource, action, purpose, facts })`；DENY `NOT_FAMILY_MEMBER`/`NOT_FAMILY_MANAGER` → `403 CASE_ACCESS_DENIED`）→ 幂等占位 / REPLAY / `409 IDEMPOTENCY_PAYLOAD_MISMATCH`（bytea 路径）→ `SELECT ... FOR UPDATE` 锁 Family → 独立 `EXISTS` 判定 → 插 Case → 插 `case_event` → 插 `business_audit_event` → 回填幂等响应 → COMMIT → 201；**route 不得构造 facts / authorize 输入**；**不得**从 body 读 idempotencyKey；**不得**捕获 23505 转 201/409（依赖 T047、T048、T049、T043、T044、T045） [VERIFY:`bun run typecheck`；`rg "readIdempotencyKey|requireFamilyAction|existsCurrentPrimary|insertCaseEvent|insertCaseAudit|completeIdempotency" apps/server/api/src/routes/cases.ts` 顺序与 D-4 一致；`rg "AuthorizeFacts|authorize\(" apps/server/api/src/routes/cases.ts` 为空；`rg "body.*idempotencyKey|idempotencyKey.*body" apps/server/api/src/routes/cases.ts` 为空]
 - [x] T053 [REQ:plan:D-1.2;R7] 在 `apps/server/api/src/app.ts` 保留 Slice 1 Final 的 `loadRuntimeConfig` / `createWechatProvider` / `requestLogSerializer` / logger redact / `buildApp({ env, loggerStream })`，只追加 `registerCaseRoutes(app, pool)`；不得恢复硬编码 `SESSION_SECRET` fallback 或无条件 `FakeWechatProvider`（依赖 T052） [VERIFY:`rg "registerCaseRoutes|loadRuntimeConfig|requestLogSerializer|createWechatProvider" apps/server/api/src/app.ts`；`rg "dev-secret-key-for-testing" apps/server/api/src/app.ts` 为空；`bun run typecheck`]
 - [x] T054 [REQ:FR-004;FR-006;FR-007;SC-001] 运行 create 与 create/list 授权用例转绿：`tests/integration/cases-create.test.ts` 全部通过；`tests/integration/cases-authorization.test.ts` 的 POST / list 用例通过；detail 授权用例留待 T058（依赖 T050、T051、T052、T053） [VERIFY:`bunx vitest run tests/integration/cases-create.test.ts tests/integration/cases-authorization.test.ts` 输出；create 与 list 分组全绿，detail 分组仍 RED 且原因已记录]
 
@@ -142,7 +192,7 @@
 ## Phase 6 — Case List / Detail（TDD）
 
 - [x] T055 [P] [REQ:FR-016;FR-017;FR-022;SC-010;SC-011] 新增 `tests/integration/cases-read.test.ts` RED：list 返回 `items`、排序 `primary DESC, createdAt ASC, id ASC`、不分页、空 Family 返回真实空集合、primary 唯一可识别、不返回其他 Family；detail 成功返回独立 `status` / `phase`；不存在 ID → `404 CASE_NOT_FOUND`；响应无 `familyId` / creator / 内容字段（依赖 T042、T043、T045） [VERIFY:`bunx vitest run tests/integration/cases-read.test.ts` 预期 RED（端点未实现），保留输出]
-- [x] T056 [REQ:FR-016;FR-017;FR-023;plan:D-9.2/D-9.3] 在 `apps/server/api/src/routes/cases.ts` 实现 `GET /api/v1/cases` 与 `GET /api/v1/cases/:id`：`CASE_LIST` / `CASE_READ` 授权；仍在 `withRlsTransaction` 内只读；detail 对不存在 / 跨 Family / 无资格统一 `404 CASE_NOT_FOUND`，响应体逐字节一致、无 `details`、无任何 Case 字段；不写 `case_events` / `business_audit_events`（依赖 T052） [VERIFY:`bun run typecheck`；`rg "GET /api/v1/cases|CASE_READ|CASE_NOT_FOUND" apps/server/api/src/routes/cases.ts`]
+- [x] T056 [REQ:FR-016;FR-017;FR-023;plan:D-9.2/D-9.3] 在 `apps/server/api/src/routes/cases.ts` 实现 `GET /api/v1/cases` 与 `GET /api/v1/cases/:id`：`CASE_LIST` 调用 `requireFamilyAction(tx, { accountId, personId, familyId, action: 'CASE_LIST', purpose: 'FAMILY_MANAGEMENT', resource: { type: 'FAMILY', familyId } })`；`CASE_READ` 调用 `requireFamilyAction(tx, { accountId, personId, familyId, action: 'CASE_READ', purpose: 'FAMILY_MANAGEMENT', resource: { type: 'CASE', familyId, caseId }, caseId })`；由 `authz.ts` 内部构造 `authorize()` 输入；仍在 `withRlsTransaction` 内只读；detail 对不存在 / 跨 Family / 无资格统一 `404 CASE_NOT_FOUND`，响应体逐字节一致、无 `details`、无任何 Case 字段；不写 `case_events` / `business_audit_events`（依赖 T052） [VERIFY:`bun run typecheck`；`rg "GET /api/v1/cases|CASE_READ|CASE_NOT_FOUND|requireFamilyAction" apps/server/api/src/routes/cases.ts`；`rg "AuthorizeFacts|authorize\(" apps/server/api/src/routes/cases.ts` 为空]
 - [x] T057 [REQ:FR-016;R2;R3] 在 `packages/domain/src/cases.ts` 的 `listCases` 固定 `ORDER BY is_primary DESC, created_at ASC, id ASC`；空结果返回空数组；不伪造 placeholder / 默认 Case；不实现分页参数（依赖 T056） [VERIFY:`rg "ORDER BY is_primary DESC, created_at ASC, id ASC" packages/domain/src/cases.ts`；`bunx vitest run tests/integration/cases-read.test.ts` 排序与空集合用例通过]
 - [x] T058 [REQ:FR-017;SC-010;场景5] 运行 read 与 detail 授权用例转绿：`tests/integration/cases-read.test.ts` 全绿；`tests/integration/cases-authorization.test.ts` 的 detail 分组（含场景 A 404）通过（依赖 T055、T056、T057、T054） [VERIFY:`bunx vitest run tests/integration/cases-read.test.ts tests/integration/cases-authorization.test.ts` 全绿，保留状态码与响应体输出]
 - [x] T059 [REQ:FR-025;D7;SC-007] 新增 `tests/integration/cases-read-no-audit.test.ts`：调用 `GET /api/v1/cases` 与 `GET /api/v1/cases/:id` 前后，`case_events` 与 `business_audit_events` 行数不变；不存在 `CASE_VIEWED` / `CASE_LISTED` / `CASE_ACCESSED` 事件；不新建 access-log 表（依赖 T056） [VERIFY:先写测试并运行，记录 before/after 计数；若读取写审计则判定 T056 实现缺陷并修复；最终测试通过且计数相等]
@@ -199,12 +249,12 @@
 > - T087：**Implement Final Handoff**——输出固定文案后立即停止，移交全新独立 AI。
 
 - [x] T081 [REQ:plan:Verification-Plan;constitution:VI] 全量回归：`bun run typecheck`、`bun run guard:static`、`bunx vitest run tests/domain`、`bunx vitest run tests/db`、`bunx vitest run tests/integration`、`bun run openapi:check`、空库 `bun run db:migrate` replay；逐条检查输出（依赖 T042、T054、T058、T064、T067、T069、T072、T079） [VERIFY:全部命令退出 0；无跳过 / 无 expected-fail；输出归档]
-- [x] T082 [REQ:FR-001–FR-025;SC-001–SC-011;Acceptance 1–16] Coverage 审计：逐条确认 25 条 FR、11 条 SC、16 个 Acceptance 均有至少一个测试文件与用例；缺口必须为 0；不得用“设计已存在”代替测试（依赖 T081） [VERIFY:审计输出 `FR 25/25`、`SC 11/11`、`Acceptance 16/16`；missing 列表为空]
+- [x] T082 [REQ:FR-001–FR-025;SC-001–SC-011;Acceptance 1–18] Coverage 审计：逐条确认 25 条 FR、11 条 SC、18 个 Acceptance 均有至少一个测试文件与用例；缺口必须为 0；不得用“设计已存在”代替测试（依赖 T081） [VERIFY:审计输出 `FR 25/25`、`SC 11/11`、`Acceptance 18/18`；missing 列表为空]
 - [x] T083 [REQ:quickstart:§2–§7] 按 `quickstart.md` 真实执行关键路径：migration、创建首个 / 第二个 Case、列表、详情、422 越权字段、404 反枚举、场景 A / B、幂等 replay、并发、读不写审计；记录真实响应（依赖 T081） [VERIFY:状态码与响应字段逐项匹配 quickstart 期望；记录归档]
 - [x] T084 [REQ:plan:G10;§40] CI 全 job green：`static`、`unit`、`db-migrate`、`integration`、`contract` 在 feature branch 全部真实 success，不得 placeholder / 假成功（依赖 T081） [VERIFY:GitHub Actions run 链接，5/5 success]
 - [x] T085 [REQ:constitution:V/VI;AGENTS:§7] **Implement final governance（不是 Tasks 生成阶段的验证）**：此时 T001–T084 已完成，业务代码 / 新 migration / tests / generated OpenAPI / generated types / `guard-static` 合法增量 / 本文件 checkbox 与 evidence 都属于**预期 diff**，T085 **不要求这些 diff 为 0**。① **Frozen upstream 未被擅改**：`Docs/**`、`AGENTS.md`、`.specify/memory/constitution.md`、`spec.md`、`plan.md`、`research.md`、`data-model.md`、`contracts/**`、`quickstart.md`、`checklists/requirements-quality.md` 相对 `IMPLEMENT_BASE_SHA` 无语义修改，除非经过明确的上游回退与重新审核；② `tasks.md` 仅允许 `[ ] → [x]`、completion / evidence 状态与必要的执行证据引用，不得借 checkbox 更新改变 requirement / design；③ **Implementation diff 必须 explainable 而非 zero**：`git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD` 的每一项都必须能追溯到 T001–T084 中至少一个明确 Task，并分类为 expected implementation changes / expected generated artifacts / expected tests 与 evidence / unexpected；不得存在 unexplained file、scope creep、future Slice placeholder、Docs semantic drift、为让测试通过而删除既有断言（依赖 T081） [VERIFY:`node .specify/scripts/validate-governance.mjs` 与 `node .specify/scripts/tests/run-governance-tests.mjs` 均 PASS；`git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD -- Docs AGENTS.md .specify/memory/constitution.md specs/002-case-core/spec.md specs/002-case-core/plan.md specs/002-case-core/research.md specs/002-case-core/data-model.md specs/002-case-core/contracts specs/002-case-core/quickstart.md specs/002-case-core/checklists` 输出为空；`git diff "$IMPLEMENT_BASE_SHA"...HEAD -- specs/002-case-core/tasks.md` 仅含 checkbox 与 completion / evidence 行变更、无 requirement / design 语义改动；`git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD` 全量清单按四类归档并输出计数，unexpected 计数 = 0]
 - [x] T086 [REQ:constitution:VI;plan:Verification-Plan] **Implementation Convergence Evidence（Implement AI 自检，不是最终独立 Converge）**：由 Implement AI 整理 requirement coverage、scope、contracts、tests、RLS、concurrency、idempotency、CI、remaining gaps 的对照证据；重读 `spec.md` 的 FR / SC / Acceptance 与 `contracts/**` 逐项比对，记录 frozen upstream 未改与 implementation diff 的分类结果；本任务不得替代独立 Converge review，不得据此宣布可 merge（依赖 T082–T085） [VERIFY:自检记录含上述各项与真实命令输出；`git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD` 的四类计数归档；remaining gaps 为空，或逐项列出并转 BLOCKED]
-- [x] T087 [REQ:AGENTS:§3;constitution:VI] **Implement Final Handoff（Implement 阶段终点）**：仅当 T001–T086 全部完成、G1–G11 PASS、全部测试 PASS、migration replay PASS、OpenAPI check PASS、CI 全 job PASS、governance PASS、coverage FR 25/25 与 SC 11/11 与 Acceptance 16/16、remaining gap = 0 时，输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE` 并停止；存在任一未解决问题则输出 `BLOCKED` 并报告具体 Task 与证据。**停止边界**：不得自行充当独立 Converge reviewer、不得自行宣布可 merge、不得 merge 到 main、不得重新进入 Analyze、不得修改冻结需求以消除 gap；下一步必须交给一个全新的独立 AI 执行 Converge / final review / CI verification（依赖 T086） [VERIFY:最终报告含 T001–T086 逐项完成状态、G1–G11 PASS、测试 / migration / OpenAPI / CI / governance / coverage 证据、remaining gap = 0；`git status --short` 无未提交残留；输出固定文案 IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE；无 merge / Analyze / Implement 后续动作]
+- [x] T087 [REQ:AGENTS:§3;constitution:VI] **Implement Final Handoff（Implement 阶段终点）**：仅当 T001–T086 全部完成、G1–G11 PASS、全部测试 PASS、migration replay PASS、OpenAPI check PASS、CI 全 job PASS、governance PASS、coverage FR 25/25 与 SC 11/11 与 Acceptance 18/18、remaining gap = 0 时，输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE` 并停止；存在任一未解决问题则输出 `BLOCKED` 并报告具体 Task 与证据。**停止边界**：不得自行充当独立 Converge reviewer、不得自行宣布可 merge、不得 merge 到 main、不得重新进入 Analyze、不得修改冻结需求以消除 gap；下一步必须交给一个全新的独立 AI 执行 Converge / final review / CI verification（依赖 T086） [VERIFY:最终报告含 T001–T086 逐项完成状态、G1–G11 PASS、测试 / migration / OpenAPI / CI / governance / coverage 证据、remaining gap = 0；`git status --short` 无未提交残留；输出固定文案 IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE；无 merge / Analyze / Implement 后续动作]
 
 ---
 
@@ -335,7 +385,7 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 | SC-010 | T055–T058、T070 |
 | SC-011 | T055、T057、T058 |
 
-### Acceptance 1–16 → Tasks
+### Acceptance 1–18 → Tasks
 
 | Acceptance | Tasks |
 |---|---|
@@ -355,6 +405,8 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 | 14 | T054、T058、T070 |
 | 15 | T055、T058 |
 | 16 | T059 |
+| 17（空 Family 真实空结果，场景 15 / SC-011） | T055、T058 |
+| 18（RLS / 角色 / migration / uuidv7，FR-002 / FR-011） | T021、T025、T027、T042 |
 
 ### Gate / Frozen Decisions
 
@@ -438,41 +490,37 @@ T001 → T002 → T003–T011 → T012 → T013 → T021–T031 → T032 → T03
 
 ## Completion Contract
 
-### 本轮：Tasks authoring（当前执行）
+### Historical：Tasks authoring（T001–T087；已完成、仅作历史）
 
-本轮只产出本文件，**不执行 T001–T087**。完成条件：
+历史 Tasks authoring 只产出任务图，不执行实现。T001–T087 的 `[x]` 是旧基线记录，**不是当前最终执行状态**。
 
-1. T001–T087 连续、编号唯一、每条具备 `[REQ:...]` 与 `[VERIFY:...]`；
-2. 依赖图无环、无前向依赖、无不可能前置；关键路径有效；
-3. `node .specify/scripts/validate-governance.mjs` PASS，`node .specify/scripts/tests/run-governance-tests.mjs` 10/10；
-4. 相对本轮基线，`Docs/**`、Spec / Plan / Research / Data Model / Contracts / Checklist、业务代码、migration、测试代码 diff = 0，仅本文件改动。
-
-满足后输出 `SLICE 2 TASKS FINAL — READY FOR ANALYZE` 并停止。
-**该 diff = 0 只约束本轮 Tasks authoring，不得写进 T085；T085 属于未来 Implement 阶段，要求 implementation diff 可解释而非为零。**
-
-### 未来：Implement 执行（另一个 AI 运行 T001–T087）
+### Current：Post-Slice1 Reconciliation Execution（T088–T100，全部 `[ ]`）
 
 一个任务只有满足下列全部条件才算完成：
 
-1. 其声明的实现 / 测试 / migration 产物存在；
+1. 其声明的产物存在（merge / 代码 / migration / tests / generated，以对应 Task 为准）；
 2. `[VERIFY:...]` 指定的命令**实际执行**并保留输出；
 3. 观察到的结果与 Expected 一致；
-4. 没有为了变绿而削弱测试、fixture、CHECK、RLS、GRANT 或需求；
+4. 没有为了变绿而削弱 Slice 1 Final 断言、CHECK、RLS、GRANT 或需求；
 5. 偏离已记录；若改变意图，必须先回到上游文档。
 
-Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087 判定均无剩余缺口，且 T087 输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`。
-此后 Implement AI **必须停止**：独立 Converge / final review / CI verification 由全新 AI 执行，merge 是另一项独立决定。
+当前阶段未完成，直到 T088–T100 全部 `[x]`，且：
+- `0 failed` / `0 skipped`；
+- FR 25/25、SC 11/11、Acceptance **18/18**；
+- remaining gap = 0；
+- T100 输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE`。
 
-**本文件（Tasks authoring）完成后停止。** 本轮不得进入 Analyze / Implement。
+此后开发 AI **必须停止**：Independent Converge / final review / CI verification 由全新 AI 执行，merge 是另一项独立决定。
 
-`SLICE 2 TASKS FINAL — READY FOR ANALYZE`
+**当前任务状态：T088–T100 全部 `[ ]`；T001–T087 仅历史记录。**
+`SLICE 2 DEPENDENCY RECONCILIATION — READY FOR AUDIT I RE-AUDIT`
 ---
 
 ## 基线失效声明（2026-11-07 Post-Slice1 Dependency Reconciliation）
 
 > 下方 2026-11-06 / 2026-11-07 的 Implement Completion Evidence 与 Independent Converge Round 1–4 证据，全部基于 **Slice 1 Final remediation 合并前**的旧基线（merge base `ed0d5fb`）。Slice 1 Final 合并后：
 > - 这些证据**不能**作为最终 Slice 2 结论；
-> - merge `origin/main`（`ee9d07e`）后必须在**新 Head** 上完整重跑 T001–T087 验证与 Independent Converge；
+> - merge `origin/main`（`ee9d07e`）后必须在**新 Head** 上完整执行 **T088–T100** 并重跑 Independent Converge；旧 T001–T087 仅作历史参考；
 > - 旧 Head 的测试数量 / CI / converge 结论一律作废；
 > - 旧证据中 body `idempotencyKey` / 旧 `authorize()` 形状 / 旧 `app.ts` runtime / 旧 OpenAPI 弱检查的通过结果，**不证明**新契约已实现。
 
@@ -499,7 +547,7 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 | G6 | PASS | `idempotency-hash` 6/6；`integration/idempotency` 20/20；`peekIdempotency` 在 identity 上下文事务内 |
 | G7 | PASS | `business_audit_events_event_type_check` / `_resource_type_check`；policy `audit_scope` |
 | G8 | PASS | `db/rls` 10/10、`db/roles` 9/9；两角色 `rolbypassrls=false`、非 superuser |
-| G9 | PASS | `openapi:check` → `PASS (no drift)`；幂等键为 body 字段（R1） |
+| G9 | PASS（historical old baseline） | 旧基线：`openapi:check` → `PASS (no drift)`；幂等键为 body 字段（R1 body，**已 superseded by `Idempotency-Key` header**） |
 | G10 | PASS | CI 5 job；main run `42056003115`（PR #10 merge）success |
 | G11 | PASS | 真实 HTTP probe（Scenario A/B/C，各 5 次 + heap-order disturbance）：A 恒为 actor-owned Family（before == after）；B 恒 `409 CURRENT_FAMILY_AMBIGUOUS`（响应仅 `code`/`message`/`statusCode`）；C 单成员稳定 |
 
@@ -539,7 +587,7 @@ Implement 未完成，直到 Analyze 已通过、CI 全绿、T086 自检与 T087
 
 ### 偏差记录
 
-1. `spec.md` 的 Acceptance Evidence 表为 **18 行**，`tasks.md` T082 记为「16/16」。以 `spec.md` 为准执行，审计输出 18/18；`tasks.md` 的 16 为旧计数，未修改任务意图。
+1. `spec.md` 的 Acceptance Evidence 表为 **18 行**，以 `spec.md` 为准执行，审计输出 **18/18**。旧 T082 / T087 曾记「16/16」，属旧基线计数；**Post-Slice1 remediation 已统一为 18/18**（T082 / T087 / T099 / T100 与 Coverage 表均为 18 项）。
 2. `GET /api/v1/cases/current` 不是注册路由，但会落入 `:id` 参数并被 UUID 校验拒绝（422 `VALIDATION_ERROR`，无 Case 字段）。`/cases/x/switch-primary` 等嵌套路径为 404。
 3. `db-evidence.mjs` / `coverage-audit.mjs` 的 Slice 1 硬编码计数按新增对象同步更新（8→10 enum、10→12 table、9→11 policy），未删除任何既有断言。
 4. `tests/db/schema-structure.test.ts` 的 enum 断言由 8 扩为 10 并追加 `case_status` / `case_phase` 词汇断言。

@@ -36,6 +36,10 @@
 | `basis` | `{ membership: true; manager: boolean; purpose }` | 保持完整 basis；不得退化为 `{ manager }` |
 | `DenyReason` | Final 集合（含 `NO_ACTOR` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` / `NOT_GUARDIAN` / `AGE_BAND_UNKNOWN` / `AUTHORIZATION_ERROR`） | 新增 `CASE_CONTEXT_REQUIRED` |
 
+**Route 层输入形状（冻结）**：Case route 必须调用
+`requireFamilyAction(tx, { accountId, personId, familyId, action, purpose, resource, caseId? })`。
+`AuthInput` 表描述的是 `authorize()` 的输入，**不是** `requireFamilyAction()` 的输入。由 `authz.ts` 内部读取 `AuthorizeFacts` 并构造 `authorize({ actor, product, family, case, resource, action, purpose, facts })`。Route **不得**自行构造 `actor` / `family` / `case` / `facts`，不得新建 `authorizeCase()`。
+
 ### 2.2 判定顺序（fail-closed；基于 Final `AuthorizeFacts`）
 
 ```text
@@ -175,12 +179,17 @@ canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未
 - shared idempotency contract（domain / repository-service）：验证 same scope key + different `request_hash` → `MISMATCH` → 409 映射。
 - **禁止**声称 public HTTP API 存在可达的合法 different-payload 请求；**禁止**用换 actor（scope 改变）制造 mismatch。
 
-### 5.4 占位与回填
+### 5.4 占位与回填（CASE_CREATE bytea path）
 
-- 首次：`INSERT ... ON CONFLICT (scope) DO NOTHING RETURNING id`，占位 `response_status=0` / `response_body='{}'`。
-- 业务成功后：同一事务 `UPDATE` 回填 `201` + 完整响应体。
+- CASE_CREATE 首次由 `reserveIdempotency` 写入：
+  `INSERT INTO idempotency_keys (actor_account_id, command_type, idempotency_key, idempotency_key_bytes, request_hash, response_status, response_body) VALUES ($1, $2, NULL, $3, $4, 0, '{}'::jsonb) ON CONFLICT DO NOTHING RETURNING id`
+  —— `idempotency_key` 为 NULL，`idempotency_key_bytes` = logical key 的 **UTF-16LE bytes**。
+- 唯一身份：`(actor_account_id, command_type, idempotency_key_bytes)`；`003` 的 representation CHECK 保证「非 CASE_CREATE → text only；CASE_CREATE → 恰有其一」。
+- `getReservedIdempotency`：先按 bytes 查 `FOR SHARE`；未命中且 logical key 为 text-safe 时兼容 legacy `CASE_CREATE` text 行（`idempotency_key = $3 AND idempotency_key_bytes IS NULL`）。
+- 业务成功后：同一事务 `completeIdempotency` 按 bytes 回填 `201` + 完整响应体。
 - 并发同 key：第二个事务等待唯一索引判定；第一个提交则 REPLAY，第一个回滚则第二个执行。
 - 占位值在事务外不可见，不泄露。
+- **Slice 1 六个既有命令继续使用 text `idempotency_key` path**；不得删除 `003`、不得把 `CASE_CREATE` 改回 text、不得修改 Slice 1 六命令的物理语义。
 
 ---
 
@@ -195,13 +204,15 @@ canonical hash 仍保留 `{ familyId: verifiedCurrentFamilyId, body: {} }`。未
    >1 行 → 沿用 Slice 1 Final 多 Family 语义（含 CURRENT_FAMILY_AMBIGUOUS）
 2. withRlsTransaction({familyId, accountId, personId, purpose:'FAMILY_MANAGEMENT'})
 3. requireFamilyAction(tx, {
+     accountId: actor.accountId,
+     personId: actor.personId,
+     familyId,
      action: 'CASE_CREATE',
-     family: { familyId },
-     case: null,
-     resource: { type: 'FAMILY', familyId },
-     purpose: 'FAMILY_MANAGEMENT'
+     purpose: 'FAMILY_MANAGEMENT',
+     resource: { type: 'FAMILY', familyId }
    })
-   authz.ts 在同一事务内读 facts（membership / familyCreatedByPersonId）
+   authz.ts 在同一事务内读 facts（membership / familyCreatedByPersonId），
+   并在内部构造 authorize({ actor, product, family, case, resource, action, purpose, facts })
    DENY NOT_FAMILY_MEMBER / NOT_FAMILY_MANAGER → 403 CASE_ACCESS_DENIED
 4. idempotency 占位 / 冲突读取与比对（REPLAY 或 409 在此返回）
 5. SELECT id FROM families WHERE id = $1 FOR UPDATE      ← Family 串行化点

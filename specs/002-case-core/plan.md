@@ -115,7 +115,7 @@
 | §37.2 | `Docs/V1技术设计.md` | 跨家庭硬阻断；幂等；p95 待压测后冻结 |
 | §38 Phase 1 | `Docs/V1技术设计.md` | 本 Slice 只切 Case 容器这一刀 |
 
-Spec 映射：FR-001—FR-025、SC-001—SC-011、Acceptance Scenarios 1—16、D1—D7。
+Spec 映射：FR-001—FR-025、SC-001—SC-011、Acceptance Scenarios 1—18、D1—D7。
 **本 Plan 不改变 spec 的产品语义；A-2 / A-3 只做技术选择。**
 
 ---
@@ -377,12 +377,14 @@ idempotency 占位（INSERT ... ON CONFLICT DO NOTHING）
    多行 → 沿用 Slice 1 Final `CURRENT_FAMILY_AMBIGUOUS`；G11 未通过时禁止 Implement
 2. withRlsTransaction({familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT'})
 3. requireFamilyAction(tx, {
+     accountId: actor.accountId,
+     personId: actor.personId,
+     familyId,
      action: 'CASE_CREATE',
-     family: { familyId },
-     case: null,
-     resource: { type: 'FAMILY', familyId },
-     purpose: 'FAMILY_MANAGEMENT'
-   })                                   ← 复用 authz.ts；同事务内读 AuthorizeFacts
+     purpose: 'FAMILY_MANAGEMENT',
+     resource: { type: 'FAMILY', familyId }
+   })                                   ← 复用 authz.ts；adapter 内部读 AuthorizeFacts
+                                         并构造 authorize({ actor, product, family, case, resource, action, purpose, facts })
    DENY NOT_FAMILY_MEMBER / NOT_FAMILY_MANAGER → 403 CASE_ACCESS_DENIED（无任何 Case 数据）
 4. 幂等占位（CASE_CREATE bytea 路径）：reserveIdempotency(...) ON CONFLICT DO NOTHING
    - 未插入（已有行）→ getReservedIdempotency（FOR SHARE，bytes + legacy text）
@@ -554,9 +556,10 @@ Slice 1 Final 新增 `apps/server/api/src/authz.ts`，提供：
 - `denyToError(reason)`：统一 deny → HTTP 映射。
 
 Slice 2 **必须复用该 adapter**，只做增量：
+0. **Route 层输入形状固定为** `requireFamilyAction(tx, { accountId, personId, familyId, action, purpose, resource, caseId? })`。Route **不得**传 `{ family, case }`，也不得构造 `authorize()` 输入。
 1. 扩展 `FamilyActionRequest`，允许可选 `caseId`；
 2. `readFacts` 继续读取 `membership` / `familyCreatedByPersonId`（Case 归属仍由 RLS 保证，不在 facts 中判断）；
-3. 调用同一 `authorize()`，传入结构化 `Resource` 与 `case` 维度；
+3. `authz.ts` 内部构造 `authorize({ actor: { accountId, personId }, product: 'V1', family: { familyId }, case: caseId ? { caseId } : null, resource, action, purpose, facts })`；
 4. Case 路由的 deny 映射：
    - `CASE_CREATE` / `CASE_LIST`（Family 已解析）：`NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` → `403 CASE_ACCESS_DENIED`；
    - `CASE_READ`（Family 已解析）：任何 Case deny → `404 CASE_NOT_FOUND`（不泄露存在性）；
