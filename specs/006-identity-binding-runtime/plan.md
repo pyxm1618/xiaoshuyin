@@ -1,0 +1,1472 @@
+# Implementation Plan: Identity Binding Runtime（受邀既有 Person 的身份绑定运行时）
+
+**Feature**: `specs/006-identity-binding-runtime/spec.md`
+**Date**: 2026-11-07
+**V1 Phase**: Phase 1 — Common Core 地基（`Docs/V1技术设计.md` §38）
+**Plan base (feature head)**: `f76adeea72291068e5b30559f541fe8d90644454`
+**Docs baseline**: `Docs/V1产品需求.md` v3.7、`Docs/V1技术设计.md` v3.12
+**Upstream frozen contract**: `specs/005-invited-identity-binding-contract/spec.md`（merged main，Contract only）
+**Stage**: Plan only。本文件不实现代码、不写 migration、不建路由、不改测试。
+
+> 本 Plan 是 `Docs/V1技术设计.md` §7.1 / §7.7A / §9 / §9.1 / §10 / §28.1 / §28.8、`Docs/V1产品需求.md` §1.2 / §1.5 / §19A.2 / V1-C44 与 005 冻结合同的 runtime 实现投影。它只回答「006 如何落地」，不新增、不重开、不削弱任何已冻结产品语义。
+>
+> **单一职责声明**：本轮只产出 Plan / Checklist / Tasks / 审计一。任何 `apps/**`、`packages/**`、`db/**`、`tests/**`、`Docs/**`、`specs/001~005/**` 的修改都不属于本轮。
+
+---
+
+## Upstream Traceability
+
+| Plan 决策 | 上游 ID / 章节 |
+|---|---|
+| 独立 invitation-aware bootstrap，普通登录不变 | V1-C44、`V1技术设计.md` §28.1、005 IB-001 / IB-002 |
+| Phase A → Gate 1 → Phase B → Gate 2 → Phase C 唯一顺序 | 005 §5.1 |
+| Case B 复用 / 拒绝，Case C 只走 bootstrap | 005 §5.2、`V1技术设计.md` §10 |
+| second-party confirmation = target confirmation + candidate recognition | 005 §5.3、`V1技术设计.md` §7.7A |
+| 年龄 / 确认主体矩阵 | 005 §5.4、`V1产品需求.md` §19A.2 |
+| 四类业务结果、PENDING 边界、settled replay、operation ≠ attempt | 005 §5.5 |
+| 并发 commit ∈ {0,1}、binding increase ≤ 1、Person 增量 = 0 | 005 §5.5、spec FR-016 / FR-017 |
+| binding 是独立身份事实、不授予授权、不自动解绑 | 005 §5.6.1、V1-C20 / V1-C21 |
+| 内部结果 ≠ candidate-facing 结果 | 005 §5.6.2、spec FR-019 |
+| 审计行为冻结、存储不冻结、不记录 secret | 005 §5.6.3、spec FR-023 |
+| invitation 生命周期归 Slice 4 | 005 §5.6.4、Slice 4 `participant-lifecycle-and-identity-seam.md` §1 / §6 |
+| P1 多 Family / 不属于目标 Family → BLOCK | 005 §5.7、`V1技术设计.md` §7.1 |
+| Account ↔ Person 1:1、Person → Account 0..1 | `V1技术设计.md` §7.1、Slice 1 `db/migrations/001_initial_schema.sql` |
+| 统一 `authorize()`、RLS、migrator/app 双角色 | `V1技术设计.md` §9 / §9.1、Slice 1 Plan D-5 |
+| 关键命令 `actor + command_type + idempotency_key` | `V1技术设计.md` §8.5、Slice 1 Plan D-6.3 |
+| 普通 `/auth/wechat` 回归不变 | 005 §5.2 第 5 条、`V1技术设计.md` §28.1 |
+
+**Blocking rule**：本 Plan 的任何表、端点、命令、事件或授权动作都必须能追溯到上表或 006 Spec 的 FR / AS / SC。无法追溯的设计一律删除，不得以「以后可能有用」保留。
+
+---
+
+## Summary
+
+006 交付一个**独立的身份绑定运行时**，把 005 的合同语义落成可持久化、可幂等、可并发收敛、可审计、可验证的服务端能力：
+
+1. **5 张专用表**：pending authentication context、binding attempt、binding confirmation、binding operation key、identity binding audit event。它们属于 006，不重建 Person / Account / Family / Consent / audit / idempotency 基线。
+2. **1 个数据库层并发收敛点**：`PENDING` 状态上的部分唯一索引 `(target_person_id, candidate_identity_digest, invitation_participation_id)`；它不是永久全局唯一，terminal / committed 后同三元组可创建 new attempt。
+3. **1 个最终提交点**：`UPDATE persons SET account_id = ... WHERE id = P1 AND account_id IS NULL` + `persons.account_id UNIQUE` + `accounts.wechat_openid UNIQUE`，在同一事务内与 attempt settled、audit 一起完成。
+4. **6 个端点**：bootstrap、candidate decision、candidate status、session exchange、confirmer pending list、confirmer decision。没有 participant、Case、UI、通知、KYC、后台任务。
+5. **candidate-facing 统一 generic**：除 Case B 正确 Account 复用外，未绑定 candidate 的所有内部原因在 HTTP status、body keys、字段、下一步能力上不可区分。
+6. **Gate 1 / Gate 2 复用现有事实源**：`person_compliance_profiles`、`consent_records`、`family_members`、`families.created_by_person_id`、Slice 1 `assertMinorProcessingAllowed`；不复制 guardian / consent / authorization 系统。
+7. **审计专用 sink**：新建 `identity_binding_audit_events`，append-only、无 secret、无明文 openid、不为 audit FK 创建 Person / Account；`business_audit_events` 因 `actor_account_id` / `family_id` NOT NULL 与封闭 event_type 无法承载 Case C pre-account 结果，故不复用。
+
+**不做**：普通登录改造、`mode=invite`、Person / Account / Family 重建、Case / Evidence / Participant、invitation lifecycle、Consent 平台扩展、UI、通知、后台 job、KYC、merge / unlink / rebind、V2–V5。
+
+---
+
+## Technical Baseline
+
+| 维度 | 冻结选择 |
+|---|---|
+| Runtime | Node 26 / TypeScript / Fastify / `pg` / Zod |
+| DB | PostgreSQL 18，`uuidv7()`，reviewed SQL migration，禁止 `drizzle-kit push` |
+| 迁移角色 | `xiaoshuyin_migrator`（table owner，只跑 DDL）；`xiaoshuyin_app`（NOBYPASSRLS，最小 DML） |
+| RLS | 新表全部 `ENABLE` + `FORCE ROW LEVEL SECURITY`；事务内 `set_config(..., true)` |
+| 授权 | 单一 `authorize()`，新增动作 / purpose / resource 必须注册并 fail-closed |
+| 幂等 | 新表 `binding_operation_keys`，与既有 `idempotency_keys` 分离；不复用 `actor_account_id` NOT NULL 表 |
+| 契约 | Zod → Fastify schema → 手写 OpenAPI → generated types；generated 只由脚本生成 |
+| 测试 | Vitest；domain / DB / integration / concurrency / security / contract / governance |
+
+**不引入**：新框架、消息队列、worker、outbox、定时器、KMS、keyring、外部身份提供方、通用 attestation 平台。
+
+---
+
+## Constitution Check
+
+- **Spec 治理**：本 Plan 不修改 `Docs/**`、`specs/001~005/**`、`spec.md`。`Docs/**` diff 必须为 0。
+- **切片刻度**：006 不实现 Slice 2 / 3 / 4 的业务；只消费 Slice 4 合同与 Slice 1 基线。
+- **冻结语义**：Phase 顺序、Case B/C、Age Matrix、PENDING 边界、no-P2、anti-enumeration、invitation 生命周期归属全部原样保留。
+- **验证证据**：每个 Task 必须有可执行验证；不能以「设计存在」代替「代码真实可用」。
+- **依赖诚实**：Slice 1 的 `authorize()` 在 `origin/main` 仍是占位实现；这是 Slice 6 **core implementation 的唯一 hard blocker**。Slice 4 runtime 不是 core blocker：Slice 6 core 可基于冻结 contract + port + fixture 完成；Slice 4 runtime 只阻塞 `T121–T124` 的真实 adapter / E2E closeout。不得把 Slice 4 runtime 与 Slice 6 core 写成循环硬依赖。
+
+---
+
+## Design Decisions Index
+
+| ID | 决策 |
+|---|---|
+| D-1 | 数据模型总览与业务 ownership |
+| D-2 | Binding attempt 持久化与生命周期表达 |
+| D-3 | Pending authentication context |
+| D-4 | Confirmation 持久化 |
+| D-5 | Operation-level idempotency |
+| D-6 | Account ↔ Person Phase C commit |
+| D-7 | 并发收敛与数据库层最终保证 |
+| D-8 | Gate 1 / Gate 2 执行与 Age / Pre-gate Matrix |
+| D-9 | Second-party authorization 与确认者发现 |
+| D-10 | Runtime API / command surface |
+| D-11 | Anti-enumeration response matrix |
+| D-12 | Authorization 扩展 |
+| D-13 | RLS 与事务上下文 |
+| D-14 | Transaction boundary |
+| D-15 | Audit / provenance |
+| D-16 | Invitation seam 与 Slice 4 dependency |
+| D-17 | Ordinary login boundary 与 client flow |
+| D-18 | Migration sequencing / rollback |
+| D-19 | Test plan 与 FR / AS / SC 映射 |
+| D-20 | Explicit exclusions / structure checks |
+| D-21 | Observability / logging |
+| D-22 | Dependency gate 与 Implement Gate |
+
+---
+
+## D-1 数据模型总览与业务 ownership
+
+### D-1.1 新增对象（全部 additive，全部 006-owned）
+
+| 表 | 业务 ownership | 作用 | 不承载 |
+|---|---|---|---|
+| `binding_pending_contexts` | 006 | Phase A 的临时认证上下文；token hash、加密 openid、identity digest、attempt 关联 | Person、Account、session、family context、P1 关联（attempt 关联前） |
+| `binding_attempts` | 006 | 一次 binding attempt 的语义标识、P1、invitation、lifecycle、settled outcome | membership、guardian、Consent、Case / Participant 权限、Evidence |
+| `binding_confirmations` | 006 | candidate / second-party affirmative confirmation，append-only | Consent、membership、guardian relationship |
+| `binding_operation_keys` | 006 | 006 命令的 operation-level 幂等记录 | attempt 生命周期结果快照 |
+| `identity_binding_audit_events` | 006 | security-relevant binding outcome 的 append-only 审计 | 通用审计框架、PII、secret |
+
+**为什么必须新增 attempt 表**：005 §5.5 要求 settled replay、并发 commit ∈ {0,1}、new attempt、attempt expiration 与 audit outcome 可回读；进程内存或日志不构成权威事实。Slice 4 合同 `N-24` 的「无 binding attempt 表」只是 Slice 4 自身结构枚举，不禁止 006 拥有 attempt runtime。
+
+**为什么不复用 `business_audit_events`**：该表 `family_id`、`actor_account_id` 均 NOT NULL，`event_type` 是封闭 CHECK 列表；Case C 在 Gate 1 被阻断时可能没有正式 Account，`family_id` 也可能无法从 candidate 侧合法设置。为满足它而创建 Account / Person 或放宽 Slice 1 约束，直接违反 005 §5.6.3 与 spec FR-023。006 新建一张**单用途、append-only、write-only-to-runtime** 的审计表，不是第二套通用审计框架。
+
+**为什么不复用 `idempotency_keys`**：该表 `actor_account_id` NOT NULL 且 RLS 由 `app.account_id` 限定；bootstrap / candidate decision 发生在正式 Account 存在之前。006 新建 `binding_operation_keys`，scope 可按 candidate identity 或 Account 区分。
+
+### D-1.2 不新增 / 不修改的对象
+
+- 不新增 `persons`、`accounts`、`families`、`family_members`、`consent_records`、`person_compliance_profiles` 的任何列。
+- 不新增 Consent 类型、guardian policy、PIPIA、feature policy、Case / Participant / Evidence / Assessment / Notification 表。
+- 不创建 `case_participants` 或任何 invitation 表；`invitation_participation_id` 只是 Slice 4 合同引用，**不建 FK**（见 D-16）。
+- 不修改 `business_audit_events`、`idempotency_keys`、Slice 1 RLS 既有 policy 的语义；只追加 purpose-scoped 读 / 提交 policy（D-13）。
+
+---
+
+## D-2 Binding attempt 持久化与生命周期表达
+
+### D-2.1 表定义（Plan 冻结）
+
+```sql
+CREATE TYPE binding_attempt_state AS ENUM ('PENDING', 'COMMITTED', 'TERMINAL');
+
+CREATE TABLE binding_attempts (
+  id                          uuid PRIMARY KEY DEFAULT uuidv7(),
+  target_person_id            uuid NOT NULL REFERENCES persons(id) ON DELETE RESTRICT,
+  target_family_id            uuid NOT NULL REFERENCES families(id) ON DELETE RESTRICT,
+  invitation_participation_id uuid NOT NULL,
+  candidate_identity_digest   text NOT NULL CHECK (candidate_identity_digest ~ '^[0-9a-f]{64}$'),
+  state                       binding_attempt_state NOT NULL DEFAULT 'PENDING',
+  terminal_reason             text,
+  committed_account_id        uuid REFERENCES accounts(id) ON DELETE RESTRICT,
+  created_at                  timestamptz NOT NULL DEFAULT now(),
+  expires_at                  timestamptz NOT NULL,
+  settled_at                  timestamptz,
+  CONSTRAINT binding_attempt_expiry_after_creation CHECK (expires_at > created_at),
+  CONSTRAINT binding_attempt_terminal_reason_closed CHECK (
+    terminal_reason IS NULL OR terminal_reason IN (
+      'IDENTITY_CONFLICT',
+      'TARGET_ALREADY_BOUND',
+      'CANDIDATE_ACCOUNT_BOUND_OTHER_PERSON',
+      'MULTI_FAMILY_BLOCK',
+      'AGE_BAND_ADULT_UNSUPPORTED',
+      'AGE_BAND_UNKNOWN_BLOCKED',
+      'GUARDIAN_MISSING',
+      'GUARDIAN_CONSENT_INVALID',
+      'COMPLIANCE_BLOCKED',
+      'INVITATION_TERMINAL',
+      'ATTEMPT_EXPIRED',
+      'CANDIDATE_REJECTED',
+      'CANDIDATE_CANCELLED',
+      'WRONG_CONFIRMER',
+      'RECOGNITION_REJECTED',
+      'CONFIRMER_REJECTED',
+      'CONCURRENCY_LOSER'
+    )
+  ),
+  CONSTRAINT binding_attempt_state_consistency CHECK (
+    (state = 'PENDING')
+      = (terminal_reason IS NULL AND committed_account_id IS NULL AND settled_at IS NULL)
+  ),
+  CONSTRAINT binding_attempt_terminal_consistency CHECK (
+    state <> 'TERMINAL'
+      OR (terminal_reason IS NOT NULL AND committed_account_id IS NULL AND settled_at IS NOT NULL)
+  ),
+  CONSTRAINT binding_attempt_committed_consistency CHECK (
+    state <> 'COMMITTED'
+      OR (terminal_reason IS NULL AND committed_account_id IS NOT NULL AND settled_at IS NOT NULL)
+  )
+);
+
+CREATE UNIQUE INDEX binding_attempts_live_key
+  ON binding_attempts (target_person_id, candidate_identity_digest, invitation_participation_id)
+  WHERE state = 'PENDING';
+
+CREATE INDEX binding_attempts_target_idx
+  ON binding_attempts (target_person_id, state, created_at DESC);
+
+CREATE INDEX binding_attempts_invitation_idx
+  ON binding_attempts (invitation_participation_id, created_at DESC);
+```
+
+### D-2.2 生命周期表达
+
+| 维度 | 表达 | 说明 |
+|---|---|---|
+| `PENDING` | `state = 'PENDING'`，`settled_at IS NULL` | attempt 仍合法，仅缺可在同一 attempt 内补齐的合法确认 |
+| `COMMITTED` | `state = 'COMMITTED'`，`committed_account_id` 非空，`settled_at` 非空 | binding 成功，`Account A ↔ P1` |
+| `TERMINAL` | `state = 'TERMINAL'`，`terminal_reason` 非空，`settled_at` 非空 | attempt 永不能再成功 |
+| `RETRYABLE` | **不落表、不是 attempt state** | 只存在于 operation 结果；由 response 表达，retry / read-back 解析回 authoritative attempt state |
+| expiration | `expires_at` + 访问时条件物化 | 到期后任何 commit / 确认 / 新 attempt 创建都先条件更新为 `TERMINAL` + `ATTEMPT_EXPIRED`，不是后台 job |
+
+**为什么 RETRYABLE 不能成为 attempt settled state**：005 §5.5 明确 RETRYABLE 是 operation 维度；若落成 attempt 状态，会错误冻结 attempt，使 timeout 后的合法重试无法推进，并违反 `PENDING → COMMITTED` 的合法路径。
+
+**为什么不用永久 `(P1, identity, invitation)` 唯一**：部分唯一索引的谓词 `WHERE state = 'PENDING'` 使 terminal / committed 行退出索引；old attempt terminal + invitation valid + 业务政策允许时，同三元组可以插入 new attempt。该设计满足「至多一个 live attempt」且不形成永久全局唯一。
+
+### D-2.3 attempt identity ≠ operation idempotency
+
+- `binding_attempts.id` 只标识 attempt 身份。
+- operation idempotency 由 `binding_operation_keys` 表达（D-5）。
+- 任何代码不得把 `binding_attempts.id` 作为幂等键，也不得把 operation key 的响应快照当成 attempt 的永久结果。
+
+---
+
+## D-3 Pending authentication context
+
+### D-3.1 表定义（Plan 冻结）
+
+```sql
+CREATE TABLE binding_pending_contexts (
+  id                          uuid PRIMARY KEY DEFAULT uuidv7(),
+  token_hash                  text NOT NULL UNIQUE CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+  candidate_identity_digest   text NOT NULL CHECK (candidate_identity_digest ~ '^[0-9a-f]{64}$'),
+  attempt_id                  uuid REFERENCES binding_attempts(id) ON DELETE RESTRICT,
+  invitation_participation_id uuid,
+  committed_account_id        uuid REFERENCES accounts(id) ON DELETE RESTRICT,
+  openid_ciphertext           bytea,
+  openid_nonce                bytea,
+  openid_tag                  bytea,
+  created_at                  timestamptz NOT NULL DEFAULT now(),
+  last_used_at                timestamptz,
+  expires_at                  timestamptz NOT NULL,
+  CONSTRAINT binding_context_expiry_after_creation CHECK (expires_at > created_at),
+  CONSTRAINT binding_context_encryption_complete CHECK (
+    (openid_ciphertext IS NULL AND openid_nonce IS NULL AND openid_tag IS NULL)
+    OR (openid_ciphertext IS NOT NULL AND openid_nonce IS NOT NULL AND openid_tag IS NOT NULL)
+  ),
+  CONSTRAINT binding_context_invitation_requires_attempt CHECK (
+    invitation_participation_id IS NULL OR attempt_id IS NOT NULL
+  ),
+  CONSTRAINT binding_context_committed_requires_attempt CHECK (
+    committed_account_id IS NULL OR attempt_id IS NOT NULL
+  )
+);
+
+CREATE INDEX binding_context_attempt_idx ON binding_pending_contexts (attempt_id);
+```
+
+### D-3.2 语义
+
+| 问题 | 冻结决定 |
+|---|---|
+| 如何可信表达 | 32 字节随机 token（base64url）返回给 client；DB 只存 `sha256(token)`；每次请求用 `X-Binding-Context` 传递，正常 `Authorization: Bearer` 不能调用 |
+| 生命周期 | `expires_at = created_at + IDENTITY_BINDING_CONTEXT_TTL_SECONDS`；过期后 token 无效，必须重新 bootstrap |
+| 与 WeChat authentication result 的关系 | 在 Phase A 由服务端 `code2session` 得到 openid；identity digest = HMAC-SHA256(`IDENTITY_BINDING_SECRET`, `identity-binding:openid-digest:v1:` + openid) |
+| 如何防篡改 | token 随机、不可预测；DB 只存 hash；context 行与 identity digest、attempt 绑定；客户端不能提交 digest / openid / personId |
+| 是否持久化 | 是；短暂持久化是完成后续 Phase 与 commit 所必需；不是进程内存 |
+| 是否使用 token / challenge | 使用 opaque bearer-like `X-Binding-Context`；不是 JWT，不是普通 session，不含 openid / person / attempt 明文 |
+| secret 是否落库 | `IDENTITY_BINDING_SECRET` 不落库；openid 以 AES-256-GCM 加密落库，密钥由 `IDENTITY_BINDING_SECRET` HKDF 派生；commit / terminal / Gate 1 失败后清空 ciphertext |
+| expiry | 由 required positive env `IDENTITY_BINDING_CONTEXT_TTL_SECONDS` 决定；caller 不可提交 / 覆盖 / 延长 |
+| replay | 同一 token 可重复读取 status / 发起 decision；decision 由 operation key 与 attempt 条件更新收敛；不因 replay 产生第二份 confirmation / 第二次 commit |
+| 如何传到 Phase B | Gate 1 通过后，attempt 创建在同一事务内把 `attempt_id` 与 `invitation_participation_id` 写回 context；Phase B 的 candidate decision 从 context 读取 attempt |
+| 如何保证不能当普通业务 session | 普通 `plugins/auth.ts` 只接受 `Authorization: Bearer`，并显式拒绝 `X-Binding-Context`；binding 路由使用独立 preHandler；context 不设置 `app.account_id` / `app.person_id` / `app.family_id`；不签发普通 session，只有 `POST /session` 在 COMMITTED 后签发 |
+
+### D-3.3 Crypto / env
+
+| Env | 要求 | 用途 |
+|---|---|---|
+| `IDENTITY_BINDING_SECRET` | required，>= 32 bytes，不记录 | HKDF 派生 identity pepper 与 AES key |
+| `IDENTITY_BINDING_CONTEXT_TTL_SECONDS` | required，正整数，无默认值 | pending context TTL |
+| `IDENTITY_BINDING_ATTEMPT_TTL_SECONDS` | required，正整数，无默认值 | attempt TTL |
+
+派生：
+
+```text
+identityPepper = HKDF-SHA256(secret, info="identity-binding:openid-digest:v1", len=32)
+aesKey         = HKDF-SHA256(secret, info="identity-binding:pending-openid:v1", len=32)
+token          = base64url(randomBytes(32))
+tokenHash      = sha256hex(token)
+```
+
+- 加密：AES-256-GCM，12-byte random nonce，AAD = `context.id::text`。
+- **ciphertext 清理**：commit 成功、attempt terminal、以及任何 pre-attempt 阻断（invalid invitation / Case B mismatch / Gate 1 fail）后，必须清空 `openid_ciphertext / nonce / tag`；不得为失败路径保留可解密 openid。
+- 不记录 key、token、openid、ciphertext 到日志 / audit / response。
+- 不在本 Slice 设计 KMS / keyring / key rotation；secret 变更属 operational compatibility event，必须 fail-safe，不得静默产生不同 digest / 不可解密旧 context。
+
+---
+
+## D-4 Confirmation 持久化
+
+### D-4.1 表定义（Plan 冻结）
+
+```sql
+CREATE TYPE binding_confirmation_kind AS ENUM ('CANDIDATE', 'SECOND_PARTY');
+CREATE TYPE binding_confirmer_authority AS ENUM ('GUARDIAN', 'FAMILY_MANAGER');
+
+CREATE TABLE binding_confirmations (
+  id                      uuid PRIMARY KEY DEFAULT uuidv7(),
+  attempt_id              uuid NOT NULL REFERENCES binding_attempts(id) ON DELETE RESTRICT,
+  kind                    binding_confirmation_kind NOT NULL,
+  actor_pending_context_id uuid REFERENCES binding_pending_contexts(id) ON DELETE RESTRICT,
+  actor_account_id        uuid REFERENCES accounts(id) ON DELETE RESTRICT,
+  actor_person_id         uuid REFERENCES persons(id) ON DELETE RESTRICT,
+  authority               binding_confirmer_authority,
+  target_confirmed        boolean NOT NULL,
+  candidate_recognized    boolean NOT NULL,
+  statement_version       text NOT NULL,
+  recorded_at             timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT binding_confirmation_one_per_kind UNIQUE (attempt_id, kind),
+  CONSTRAINT binding_confirmation_candidate_shape CHECK (
+    kind <> 'CANDIDATE'
+    OR (
+      actor_pending_context_id IS NOT NULL
+      AND actor_account_id IS NULL
+      AND actor_person_id IS NULL
+      AND authority IS NULL
+      AND target_confirmed = true
+      AND candidate_recognized = false
+      AND statement_version = 'candidate-binding-v1'
+    )
+  ),
+  CONSTRAINT binding_confirmation_second_party_shape CHECK (
+    kind <> 'SECOND_PARTY'
+    OR (
+      actor_pending_context_id IS NULL
+      AND actor_account_id IS NOT NULL
+      AND actor_person_id IS NOT NULL
+      AND authority IS NOT NULL
+      AND target_confirmed = true
+      AND candidate_recognized = true
+      AND statement_version = 'second-party-recognition-v1'
+    )
+  )
+);
+```
+
+### D-4.2 为何单表
+
+- candidate / second-party 共享同一 attempt、同一一致性约束、同一 append-only 语义；单表使 `UNIQUE(attempt_id, kind)` 直接阻止重复确认与跨 attempt 复用。
+- 不为未来通用 attestation 平台预留 provider、credential、claim、policy 等抽象。
+- 不为 rejection 建 confirmation 行：拒绝 / 取消是 attempt 的 `terminal_reason`，由 audit 记录 actor 与结果；`binding_confirmations` 只保存 affirmative 历史事实。
+
+### D-4.3 可变性 / 历史 / replay
+
+| 维度 | 决定 |
+|---|---|
+| append-only | `xiaoshuyin_app` 只授予 `SELECT, INSERT`；`BEFORE UPDATE OR DELETE` trigger 抛异常 |
+| actor | candidate 用 `actor_pending_context_id`；second party 用 `actor_account_id` + `actor_person_id` + `authority` |
+| confirmation authority | `GUARDIAN` / `FAMILY_MANAGER`；由 Gate 2 当前事实重新判定，不信任客户端 |
+| timestamp | DB `now()`；不接受客户端时间 |
+| attempt association | `attempt_id` FK + `UNIQUE(attempt_id, kind)`；跨 attempt 复用被结构阻止 |
+| invalidation / historical state | confirmation 不删除、不覆盖；若 gate 失效，attempt 转 `TERMINAL`，confirmation 历史保留 |
+| replay | 同一 attempt 同 kind 的 `INSERT ... ON CONFLICT DO NOTHING`；不追加第二行 audit；返回 authoritative state |
+
+---
+
+## D-5 Operation-level idempotency
+
+### D-5.1 表定义（Plan 冻结）
+
+```sql
+CREATE TYPE binding_operation_scope AS ENUM ('CANDIDATE_CONTEXT', 'ACCOUNT');
+CREATE TYPE binding_operation_command AS ENUM (
+  'BOOTSTRAP', 'CANDIDATE_DECISION', 'SECOND_PARTY_DECISION'
+);
+
+CREATE TABLE binding_operation_keys (
+  id              uuid PRIMARY KEY DEFAULT uuidv7(),
+  scope_kind      binding_operation_scope NOT NULL,
+  scope_key       text NOT NULL CHECK (length(scope_key) BETWEEN 16 AND 128),
+  command_type    binding_operation_command NOT NULL,
+  idempotency_key text NOT NULL CHECK (length(idempotency_key) BETWEEN 8 AND 128),
+  request_hash    text NOT NULL CHECK (request_hash ~ '^[0-9a-f]{64}$'),
+  attempt_id      uuid REFERENCES binding_attempts(id) ON DELETE RESTRICT,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT binding_operation_unique
+    UNIQUE (scope_kind, scope_key, command_type, idempotency_key)
+);
+```
+
+### D-5.2 Scope
+
+| 命令 | scope_kind | scope_key | 说明 |
+|---|---|---|---|
+| `BOOTSTRAP` | `CANDIDATE_CONTEXT` | `sha256hex("bootstrap:v1:" + (invitation_participation_id OR "unresolved:" + sha256hex(invitationToken)) + ":" + candidate_identity_digest)` | 在正式 Account 之前稳定；invalid invitation 用 token hash 代替 id，不存 token 明文 |
+| `CANDIDATE_DECISION` | `CANDIDATE_CONTEXT` | `binding_pending_contexts.id` | 同一 context 的同一 key 收敛 |
+| `SECOND_PARTY_DECISION` | `ACCOUNT` | `actor.accountId` | 已认证 confirmer account |
+
+**不存储 `response_body` / `response_status`**：binding attempt 的 authoritative state 会合法推进（PENDING → COMMITTED / TERMINAL）。若冻结首次响应，会产生 `PENDING forever` / `RETRYABLE forever`，违反 005 §5.5 与 M4-M01。Replay 必须重新读取 attempt 的当前 authoritative outcome。
+
+### D-5.3 幂等矩阵（冻结行为）
+
+| 场景 | 行为 |
+|---|---|
+| same key + same payload（未 settled） | 返回当前 attempt 状态；无重复副作用；不创建第二 attempt / 第二 confirmation / 第二次 commit |
+| same key + same payload（已 settled） | 返回历史 settled outcome；不重新执行 commit；不改 outcome |
+| same key + different payload | 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原 attempt / 原结果 |
+| same key concurrent | 事务级 advisory lock（`pg_advisory_xact_lock(hashtextextended(scope, key))`）+ 唯一约束；第二个等待后重读，只产生一个业务结果 |
+| different key + same semantic operation，已有 PENDING attempt | 收敛到同一 attempt（部分唯一索引 + `SELECT ... FOR UPDATE`）；不创建第二个 live attempt |
+| different key + same semantic operation，旧 attempt terminal 且 invitation valid | 允许 new attempt；new attempt 是 new identity；旧 attempt replay 仍返回旧结果 |
+| replay after COMMITTED | 返回历史 COMMITTED；不 re-execute、不 revive invitation、不恢复 participation accept、不重建 authorization |
+| replay while PENDING | exact duplicate 无重复副作用；新的合法 confirmation / gate re-evaluation 可推进同一 attempt；推进不是 replay |
+| retry after RETRYABLE | retry / read-back 收敛到 authoritative outcome（PENDING / COMMITTED / TERMINAL）；不永久返回 RETRYABLE；不 double commit |
+| retry after TERMINAL | 返回历史 TERMINAL；不重开同一 attempt；new attempt 需 invitation valid + 业务政策允许 |
+| concurrent same-key | 只产生一个业务结果；其余 replay；不重复 confirmation / commit / audit |
+
+### D-5.4 operation key 与 attempt identity 的边界
+
+- `binding_operation_keys.attempt_id` 可以为 NULL（Gate 1 阻断 / invalid invitation 的 bootstrap）。
+- operation key 不表达任何 attempt 状态；attempt 状态只在 `binding_attempts.state`。
+- 任何 replay / read-back 都先读 attempt，再决定 response；不得从 operation key 推断成功 / 失败。
+
+---
+
+## D-6 Account ↔ Person Phase C commit
+
+### D-6.1 冻结 SQL 顺序（同一事务）
+
+```text
+BEGIN
+  SELECT attempt FROM binding_attempts WHERE id = $attempt FOR UPDATE
+  SELECT context FROM binding_pending_contexts WHERE id = $context FOR UPDATE
+  -- Gate 2 recheck（D-8）
+  -- 1. P1 仍存在且 account_id 仍为 NULL
+  -- 2. P1 仅属于 target family
+  -- 3. age / guardian / consent / compliance 当前值通过
+  -- 4. invitation 仍 valid
+  -- 5. 两份 affirmative confirmation 属于同一 attempt
+  -- 6. confirmer authority 当前仍成立
+  -- 7. candidate account 冲突检查
+  INSERT INTO accounts (wechat_openid, session_epoch)
+    VALUES ($openid, 0)
+    ON CONFLICT (wechat_openid) DO NOTHING
+    RETURNING id
+  -- 若未插入：SELECT id FROM accounts WHERE wechat_openid = $openid FOR UPDATE
+  -- 若该 account 已绑定 person：!= P1 → TERMINAL IDENTITY_CONFLICT；== P1 → 只可能已 committed，见 D-6.3
+  UPDATE persons
+    SET account_id = $accountId, updated_at = now()
+    WHERE id = $p1 AND account_id IS NULL
+  -- rowCount 必须 = 1
+  UPDATE binding_attempts
+    SET state = 'COMMITTED', committed_account_id = $accountId, settled_at = now()
+    WHERE id = $attempt AND state = 'PENDING'
+  -- rowCount 必须 = 1
+  UPDATE binding_pending_contexts
+    SET committed_account_id = $accountId,
+        openid_ciphertext = NULL, openid_nonce = NULL, openid_tag = NULL
+    WHERE id = $context
+  INSERT INTO identity_binding_audit_events (... event_type='BINDING_COMMITTED' ...)
+COMMIT
+```
+
+### D-6.2 不允许出现的中途状态
+
+- Account 创建成功但 `persons.account_id` 未更新：同一事务，失败即回滚。
+- `persons.account_id` 已更新但 attempt 仍 PENDING：`UPDATE binding_attempts` 必须同事务且 rowCount = 1。
+- attempt COMMITTED 但 audit 未写：audit 同事务，失败即回滚。
+- 任何 `INSERT INTO persons`：006 代码中不存在；P1 已存在。
+- 任何 `INSERT INTO accounts` 在 Phase A / Phase B：只在 Phase C commit 事务内。
+
+### D-6.3 冲突处理
+
+| 观察 | 结果 |
+|---|---|
+| `persons.account_id` 对 P1 已非空 | `TERMINAL` `TARGET_ALREADY_BOUND`（除非本 attempt 已 COMMITTED，则返回历史 COMMITTED） |
+| 已存在 openid 的 Account 已绑定其他 Person | `TERMINAL` `IDENTITY_CONFLICT` |
+| 已存在 openid 的 Account 未绑定 Person | 复用该 Account；继续 commit |
+| `UPDATE persons ... WHERE account_id IS NULL` rowCount = 0 | `TERMINAL` `CONCURRENCY_LOSER` / `TARGET_ALREADY_BOUND`（按当前读取判定） |
+| `UPDATE binding_attempts ... WHERE state='PENDING'` rowCount = 0 | 读取 authoritative state；若已 COMMITTED 返回历史；若 TERMINAL 返回历史 |
+
+**Account status 边界**：`accounts.status` 属 Slice 1 事实；006 不新增 `DISABLED` 语义。existing account 按 openid 复用与普通登录一致；若 Slice 1 未来增加 status enforcement，006 跟随，不自行定义 disabled-account policy。
+
+### D-6.4 exactly-once 的数据库保证
+
+- `persons.account_id UNIQUE`：一个 Account 不能对应两个 Person；一个 Person 不能绑定两个 Account。
+- `accounts.wechat_openid UNIQUE`：一个 openid 只有一个 Account。
+- `UPDATE persons ... WHERE account_id IS NULL`：条件更新，影响行数 ≤ 1；第二个 attempt 不可能覆盖。
+- `UPDATE binding_attempts ... WHERE state='PENDING'`：条件更新，影响行数 ≤ 1。
+- 行锁 `FOR UPDATE` on P1 / attempt / account：同一 P1 / account 的 commit 串行化。
+- 事务隔离级别：`READ COMMITTED` + 上述行锁 / 条件更新 / 唯一约束即可；不使用 `SERIALIZABLE`，不依赖应用层锁。
+
+---
+
+## D-7 并发收敛与数据库层最终保证
+
+### D-7.1 选定机制（只此一套）
+
+1. **live attempt 唯一**：部分唯一索引 `binding_attempts_live_key`，`WHERE state='PENDING'`。
+2. **行锁**：commit 事务对 attempt、P1、account 执行 `FOR UPDATE`。
+3. **条件更新**：P1 `account_id IS NULL`、attempt `state='PENDING'`。
+4. **唯一约束**：`persons.account_id UNIQUE`、`accounts.wechat_openid UNIQUE`。
+5. **不采用**：advisory lock 作为业务收敛（只用于同 key 幂等串行化）、SERIALIZABLE、进程内锁、永久三元组唯一。
+
+### D-7.2 必须证明的并发结果
+
+| 竞争 | 结果 | 数据库落点 |
+|---|---|---|
+| 两个请求同时绑定同一 Account | 至多一个 commit；Account 不会对应两个 Person | `persons.account_id UNIQUE` + account 行锁 |
+| 两个请求同时认领同一 P1 | 至多一个 commit；另一端 TERMINAL | P1 行锁 + `UPDATE ... WHERE account_id IS NULL` |
+| 同一 invitation 被重复使用 | 同一 attempt 幂等收敛；不重复 commit | 部分唯一索引 + operation key |
+| candidate / second-party confirmation 并发 | 两份确认可先后到达；只有全部成立 + Gate 2 通过才 commit | attempt 行锁 + `UNIQUE(attempt_id, kind)` |
+| commit 与 retry 并发 | 只允许一个 commit；另一方收敛同一 settled outcome | attempt 行锁 + 条件更新 |
+| 两个不同 Account 同时认领同一 P1 | `successful commits ∈ {0,1}`；另一个 TERMINAL | P1 行锁 + 条件更新 |
+| 同一 Account 同时匹配两个 Person | 至多一个 binding；另一个 IDENTITY_CONFLICT | account 行锁 + `persons.account_id UNIQUE` |
+
+### D-7.3 不变量证明
+
+```text
+successful commits ∈ {0, 1}
+binding increase ≤ 1
+Person increment = 0
+no double commit
+no duplicate confirmation side effect
+settled replay stable
+new attempt after terminal remains possible
+```
+
+- `Person increment = 0`：006 没有任何 `INSERT INTO persons`；P1 由 Slice 1 预先存在。
+- `binding increase ≤ 1`：P1 的 `account_id` 条件更新只有一个事务能成功；`persons.account_id` 唯一。
+- `new attempt after terminal`：部分唯一索引只约束 PENDING；terminal 行不阻塞插入。
+- `settled replay stable`：`state` 只能从 PENDING 转出；COMMITTED / TERMINAL 没有反向更新路径。
+- `no double commit`：attempt 条件更新 + P1 条件更新在同事务；第二个事务 rowCount = 0。
+
+### D-7.4 明确不做
+
+- 不声明 `(P1, identity, invitation)` 永久全局唯一。
+- 不把「同一三元组至多一个 live attempt」写成产品语义；它只是 Plan 的并发收敛机制。
+- 不用 advisory lock 作为跨 attempt 的业务锁；advisory lock 只用于同一 operation key 的并发串行化。
+
+---
+
+## D-8 Gate 1 / Gate 2 执行与 Age / Pre-gate Matrix
+
+### D-8.1 复用现有事实源
+
+| 判定输入 | 来源 | 复用方式 |
+|---|---|---|
+| P1 是否存在 | `persons` | `SELECT id FROM persons WHERE id = $p1` |
+| P1 是否属于目标 Family 且只有一个 Family | `family_members` | `SELECT family_id FROM family_members WHERE person_id = $p1`；必须恰好 1 行且 `family_id = target_family_id` |
+| age_band / minor_mode / guardian_person_id / guardian_consent_record_id / guardian_consent_version | `person_compliance_profiles` | 直接读取；不推断、不补值 |
+| guardian consent 当前有效 | `consent_records` + `packages/compliance/src/age-gate.ts` | 复用 `assertMinorProcessingAllowed` 的完整判定（decision / bound_person_id / notice_hash / guardian_person_id） |
+| current notice hash | `packages/compliance/src/notices.ts` | 复用；不新增 notice |
+| Family management actor | `families.created_by_person_id` | Slice 1 D-2 的 V1 管理主体；不引入 manager 角色表 |
+| applicant / candidate Account 冲突 | `accounts` + `persons.account_id` | openid 唯一 + account 绑定检查 |
+
+**不新增**：`compliance_feature_policies`、`privacy_impact_assessments`、`regulatory_release_evidence`、guardian policy、Consent 类型。V1 baseline 中不存在这些表；006 只执行现有事实能表达的「applicable Compliance gate」。若未来新增 feature policy，由对应 Slice 扩展 Gate，006 不预造。
+
+### D-8.2 `evaluateBindingGate`
+
+**包边界（防止 `domain ↔ compliance` 循环依赖）**：`packages/compliance` 依赖 `packages/domain`，因此 `packages/domain` MUST NOT 反向 import `@xiaoshuyin/compliance`。Gate 判定分两层：
+
+1. **domain pure matrix**（`packages/domain/src/identity-binding-gate.ts`）：不读 DB、不 import compliance；输入是已读取的 facts + `minorGate` 结果。
+2. **app composition**（`apps/server/api/src/identity-binding/gate.ts`）：读取 profile / consent，调用 Slice 1 `assertMinorProcessingAllowed`，再把结果传入 domain pure matrix。
+
+```ts
+type BindingGateInput = {
+  stage: 'GATE_1' | 'GATE_2';
+  targetPersonId: string | null;
+  targetFamilyId: string | null;
+  targetAgeBand: AgeBand | null;
+  guardianPersonId: string | null;
+  familyCreatedByPersonId: string | null;
+  membershipFamilyIds: string[];       // P1 当前 membership；用于 multi-family BLOCK
+  invitation: InvitationResolution;    // valid | terminal-unusable + P1 + target family
+  candidateAccountId: string | null;
+  confirmer: { accountId: string; personId: string } | null;
+  minorGate: 'ALLOW' | 'BLOCK' | 'NOT_APPLICABLE'; // app 层调用 assertMinorProcessingAllowed 的结果
+};
+
+type BindingGateResult =
+  | { decision: 'PASS'; ageBand: AgeBand; authority: 'GUARDIAN' | 'FAMILY_MANAGER' | null }
+  | { decision: 'BLOCK'; reason: BindingTerminalReason };
+```
+
+执行顺序（两阶段完全相同，Gate 2 额外复核）：
+
+1. invitation 必须 `valid`；否则 `INVITATION_TERMINAL`（Gate 1 / Gate 2 均适用）。
+2. P1 必须存在；否则 `IDENTITY_CONFLICT`。
+3. P1 membership 恰好 1 行且等于 target family；否则 `MULTI_FAMILY_BLOCK`。
+4. 读取 current profile：
+   - 无 profile → `COMPLIANCE_BLOCKED`
+   - `ADULT` → `AGE_BAND_ADULT_UNSUPPORTED`
+   - `UNKNOWN` → `AGE_BAND_UNKNOWN_BLOCKED`
+   - `UNDER_14`：`guardian_person_id` 非空；`assertMinorProcessingAllowed` PASS；否则 `GUARDIAN_MISSING` / `GUARDIAN_CONSENT_INVALID` / `COMPLIANCE_BLOCKED`
+   - `MINOR_14_17`：`assertMinorProcessingAllowed` PASS（不要求 UNDER_14 guardian consent）；否则 `COMPLIANCE_BLOCKED`
+5. Gate 2 额外：
+   - attempt 未过期；否则 `ATTEMPT_EXPIRED`
+   - candidate confirmation 存在；否则不 commit（PENDING，不是 TERMINAL）
+   - second-party confirmation 存在（commit 触发时）；否则不 commit（PENDING）
+   - confirmer 当前 authority 仍成立；否则 `WRONG_CONFIRMER`
+   - P1 `account_id IS NULL`；否则 `TARGET_ALREADY_BOUND`
+   - candidate Account 若存在且已绑定其他 Person → `IDENTITY_CONFLICT`
+6. `verified_source` 永不参与 guardian authority；`family_members` 永不用于推导 guardian。
+
+### D-8.3 Gate 1 先于任何 P1-specific processing
+
+- 在 Gate 1 PASS 前，bootstrap 不得创建 attempt、不得写 candidate confirmation、不得请求 second-party recognition、不得展示 P1 信息。
+- Gate 1 失败时：pending context 仍可存在（无 attempt、无 invitation id、无 P1 id），审计记录 gate1 blocked；response 与 PENDING 完全一致。
+- Gate 1 通过后、attempt 创建的同一事务内才写 `attempt_id` 与 `invitation_participation_id` 到 context。
+
+### D-8.4 Gate 2 不使用 stale snapshot
+
+- Gate 2 每次 commit 都重新读取 current profile / consent / membership / invitation / confirmer authority。
+- 不缓存 Gate 1 结果；不把 Gate 1 的 `BindingGateResult` 传给 Gate 2 复用。
+- consent 在 Gate 1 后撤回 → Gate 2 `GUARDIAN_CONSENT_INVALID` → `TERMINAL`，不 PENDING。
+- invitation 在 Gate 1 后 terminal → Gate 2 `INVITATION_TERMINAL` → `TERMINAL`。
+
+---
+
+## D-9 Second-party authorization 与确认者发现
+
+### D-9.1 确认主体（唯一矩阵投影）
+
+| age_band | confirmer | 禁止 |
+|---|---|---|
+| `UNDER_14` | 当前 `guardian_person_id` 对应的已认证 Account / Person | Family manager fallback；membership 推导；`verified_source` 推导 |
+| `MINOR_14_17` 有 guardian | 当前 `guardian_person_id` 对应的已认证 Account / Person | Family manager 替代 |
+| `MINOR_14_17` 无 guardian | `families.created_by_person_id` 对应的已认证 Account / Person | 仅凭管理权限自动批准；membership 推导 |
+| `ADULT` / `UNKNOWN` | 不存在 | 任何确认 |
+
+### D-9.2 确认者发现
+
+- `GET /api/v1/identity-bindings/pending?personId=P1`（Bearer）返回该 P1 当前 **`state='PENDING' AND expires_at > now()`** attempts 的最小列表：`{ attemptId, createdAt, expiresAt }`。过期 attempt 不得出现在列表；访问可条件物化 `TERMINAL / ATTEMPT_EXPIRED` + audit，不依赖后台 job。
+- 不返回 candidate 昵称、openid、age、guardian、consent、Family 名称、Case 信息。
+- 授权：先 `authorize(IDENTITY_BINDING_CONFIRMER_LIST)`，facts = `{ targetPersonId, targetFamilyId, targetAgeBand, guardianPersonId, familyCreatedByPersonId, membership? }`；未授权 / P1 不存在 / P1 多 Family / 非目标 Family 统一 404 `BINDING_NOT_FOUND`。targetFamilyId 由服务端读取 P1 的唯一 `family_members` 行得到；多行或无行 → 404 generic，不选择任一 Family。
+- guardian 不要求是 Family member；manager 必须是 `families.created_by_person_id`。`targetIsFamilyMember` 必须为 true（由 invitation + Gate 保证）。
+- confirmer 如何知道哪个 attempt 对应真实孩子：attempt id 由 candidate 端展示，candidate 与 confirmer 线下 / 同屏配对；Plan 不新增 QR / PIN / pairing code / 生物识别 / 电话 / 视频 / KYC。attempt id 是 opaque UUID，不是身份证明。
+
+### D-9.3 独立认证
+
+- confirmer 路由只接受 `Authorization: Bearer` 正常会话；显式拒绝 `X-Binding-Context`。
+- candidate 会话不能调用 confirmer 路由；candidate 不能代持。
+- AI / 系统不得代确认；confirmation 只能由已认证 actor 的显式 request 产生。
+
+### D-9.4 确认命题
+
+- `target confirmation + candidate recognition` 同时为 true 才允许 affirm。
+- `candidateRecognized=false` 或 `targetConfirmed=false` 是 explicit rejection → attempt `TERMINAL` `RECOGNITION_REJECTED` / `CONFIRMER_REJECTED`，不写 affirmative confirmation。
+- 无法独立辨认 → confirmer 必须选择 REJECT；不得以 Family membership / manager role / verified_source / 昵称自动 confirm。
+- **不允许 second-party 在 affirmative 后撤销**：一旦 `binding_confirmations (SECOND_PARTY)` 已存在，后续 REJECT → `409 BINDING_STATE_CONFLICT`，不改变 attempt，不删除 / 覆盖 confirmation。Candidate 在 PENDING 期间仍可 REJECT / CANCEL；attempt 转 TERMINAL，但已记录的 candidate confirmation 不被删除。该决定不使用 Spec 保留给 Plan 的「commit 前明确撤销」选项，保持 affirmative 为历史事实。
+- confirmation 不等于 Consent；不写 `consent_records`。
+
+---
+
+## D-10 Runtime API / command surface
+
+### D-10.1 端点（恰好 6 条）
+
+| # | Method / Path | 使用方 | Auth | 幂等 |
+|---|---|---|---|---|
+| 1 | `POST /api/v1/identity-bindings/bootstrap` | candidate | 无 session；body 含 WeChat `code` + `invitationToken` + `idempotencyKey` | `BOOTSTRAP` |
+| 2 | `POST /api/v1/identity-bindings/candidate-decision` | candidate | `X-Binding-Context` | `CANDIDATE_DECISION` |
+| 3 | `GET /api/v1/identity-bindings/status` | candidate | `X-Binding-Context` | 读；无幂等键 |
+| 4 | `POST /api/v1/identity-bindings/session` | candidate | `X-Binding-Context` | 读 + session 签发；无业务幂等键 |
+| 5 | `GET /api/v1/identity-bindings/pending?personId=P1` | authorized confirmer | `Authorization: Bearer` | 读 |
+| 6 | `POST /api/v1/identity-bindings/:attemptId/decision` | authorized confirmer | `Authorization: Bearer` | `SECOND_PARTY_DECISION` |
+
+**明确不实现**：`POST /api/v1/participations/.../accept|decline|withdraw`、`POST /api/v1/cases/.../participation-invites`、任何 participant / Case / Evidence / UI / 通知端点。
+
+### D-10.2 请求 / 响应
+
+#### 1. Bootstrap
+
+```json
+// request
+{ "code": "wechat-code", "invitationToken": "opaque-invitation-token", "idempotencyKey": ">=8 chars" }
+
+// response: generic（Gate 1 fail / Case C PENDING / Case B mismatch / invitation invalid）
+{ "binding": "NOT_COMPLETED", "pendingContextToken": "43-char base64url" }
+
+// response: Case B 正确 Account（唯一可区分成功分支）
+{ "binding": "REUSED", "sessionToken": "...", "account": { "id": "uuid" }, "person": { "id": "uuid" } }
+```
+
+- 只有 `binding` 与 token 字段；无 `attemptId`、`personId`、`familyId`、`ageBand`、`guardian`、`consent`、`reason`。
+- WeChat `code2session` 失败 → 401 `WECHAT_AUTH_FAILED`（不涉及 P1 信息）。
+- 普通 `POST /api/v1/auth/wechat` 完全不改。
+
+#### 2. Candidate decision
+
+```json
+// request
+{
+  "decision": "AFFIRM" | "REJECT" | "CANCEL",
+  "confirmationVersion": "candidate-binding-v1", // AFFIRM 必需
+  "idempotencyKey": ">=8 chars"
+}
+
+// response（所有内部结果一致）
+{ "binding": "NOT_COMPLETED" }
+```
+
+- 无 attempt / 跨 identity / 已 terminal / attempt 过期 / invitation terminal → 同一 200 body。
+- REJECT / CANCEL 只终止 attempt，不改变 invitation。
+- 401 仅 `X-Binding-Context` 无效 / 过期。
+
+#### 3. Status
+
+```json
+{ "binding": "NOT_COMPLETED" }
+// 或 committed 后
+{ "binding": "COMMITTED" }
+```
+
+- 未提交前不得返回 `attemptId` / reason / age / guardian / consent / multi-family / other binding。
+- committed 后返回 COMMITTED 不构成 oracle：此时 candidate 已是 P1。
+
+#### 4. Session exchange
+
+```json
+{ "binding": "NOT_COMPLETED" }
+// 或
+{ "binding": "COMMITTED", "sessionToken": "...", "account": { "id": "uuid" }, "person": { "id": "uuid" } }
+```
+
+- 只有 attempt COMMITTED 且 context identity digest 与 attempt 一致才签发。
+- Session exchange 是 capability → ordinary session 的桥接，不是 mutating business command：不创建 Account / Person / binding，不改变 attempt / participation；不需要业务 idempotency key。相同 committed attempt 重复 exchange 得到同一 account / person（token 字符串可因签发时间不同而不同，身份不变）。
+- 不创建 Account / Person；只读取 `committed_account_id` / P1 / current `session_epoch`。
+- 不 bump `session_epoch`；签发普通 session token（与登录同格式）。
+- 未 committed → 200 generic，不 409。
+
+#### 5. Confirmer pending list
+
+```json
+{ "attempts": [ { "attemptId": "uuid", "createdAt": "iso", "expiresAt": "iso" } ] }
+```
+
+- 0 条 → 200 空数组（authorized 但当前没有 PENDING）。
+- 未授权 / P1 不存在 / 非目标 Family → 404 `{ "code": "BINDING_NOT_FOUND", "message": "Binding not found" }`。
+
+#### 6. Confirmer decision
+
+```json
+// request
+{
+  "personId": "uuid",                 // 待验证参数；服务端必须与 attempt.target_person_id 一致
+  "decision": "AFFIRM" | "REJECT",
+  "targetConfirmed": true | false,
+  "candidateRecognized": true | false,
+  "confirmationVersion": "second-party-recognition-v1",
+  "idempotencyKey": ">=8 chars"
+}
+
+// response（authorized）
+{ "state": "PENDING" | "COMMITTED" | "TERMINAL" }
+```
+
+- `personId` 是待验证参数：服务端先由它解析唯一 target family / authority，再读取 `attemptId AND target_person_id = personId` 的 attempt；不匹配 → 404 generic。
+- AFFIRM 要求 `targetConfirmed=true` 且 `candidateRecognized=true`；否则 422 `VALIDATION_ERROR`。
+- REJECT 可 `candidateRecognized=false`；attempt terminal。
+- 未授权 / attempt 不属于该 P1 / P1 不存在 → 404 `BINDING_NOT_FOUND`。
+- same key different payload → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
+- 已在 terminal 的 attempt → 200 `{ state: "TERMINAL" }`（authorized replay / 状态读取），不重开。
+
+### D-10.3 Error envelope
+
+沿用 Slice 1 `toHttpError`：
+
+```json
+{ "code": "STRING", "message": "STRING", "details": { } }
+```
+
+新增映射：
+
+| code | HTTP | 使用方 |
+|---|---|---|
+| `WECHAT_AUTH_FAILED` | 401 | bootstrap |
+| `BINDING_CONTEXT_INVALID` | 401 | candidate 路由 |
+| `BINDING_NOT_FOUND` | 404 | confirmer 路由 |
+| `BINDING_STATE_CONFLICT` | 409 | authorized confirmer 的非法状态（非 candidate） |
+| `IDEMPOTENCY_PAYLOAD_MISMATCH` | 409 | 所有命令 |
+| `VALIDATION_ERROR` | 422 | schema / AFFIRM 字段不完整 |
+
+- candidate-facing 业务分支不使用 `BINDING_NOT_FOUND` / `BINDING_STATE_CONFLICT`；统一 200 generic。
+- 任何 error body 不含 P1 / Family / guardian / consent / age / attempt 细节。
+
+### D-10.4 Auth plugin 修改边界
+
+- `apps/server/api/src/plugins/auth.ts`：
+  - exempt 列表新增 `/api/v1/identity-bindings/bootstrap`（无 session）。
+  - 对 `/api/v1/identity-bindings/candidate-decision`、`/status`、`/session`：若存在 `X-Binding-Context`，跳过普通 Bearer 校验，交给 binding preHandler；若不存在，返回 401 `BINDING_CONTEXT_INVALID`。
+  - 对 `/pending`、`/:attemptId/decision`：继续要求 Bearer；若同时存在 `X-Binding-Context`，返回 401，禁止 candidate 代持。
+- 普通 `POST /api/v1/auth/wechat` 的 schema、路径、行为不变。
+- 不新增 `mode` / `inviteMode` / `binding=true` / 特殊 header 到普通登录。
+
+---
+
+## D-11 Anti-enumeration response matrix
+
+### D-11.1 Candidate-facing matrix（冻结）
+
+| 内部事实 | HTTP | Body | Headers | 可继续动作 |
+|---|---|---|---|---|
+| invitation 不存在 / 不可解析 | 200 | `{ binding:"NOT_COMPLETED", pendingContextToken }` | 固定 | status / decision 可用，但 generic |
+| invitation expired / consumed / terminal | 200 | 同上 | 固定 | 同上 |
+| P1 不存在 | 200 | 同上 | 固定 | 同上 |
+| P1 多 Family / 不属于目标 Family | 200 | 同上 | 固定 | 同上 |
+| UNDER_14 无 guardian | 200 | 同上 | 固定 | 同上 |
+| UNDER_14 consent invalid / revoked / expired | 200 | 同上 | 固定 | 同上 |
+| ADULT / UNKNOWN | 200 | 同上 | 固定 | 同上 |
+| Case B 错误 Account | 200 | 同上 | 固定 | 同上 |
+| candidate Account 已绑定 P2 | 200 | 同上 | 固定 | 同上 |
+| attempt PENDING | 200 | 同上 | 固定 | 同上 |
+| attempt TERMINAL / expired | 200 | 同上 | 固定 | 同上 |
+| candidate decision 任何内部结果 | 200 | `{ binding:"NOT_COMPLETED" }` | 固定 | 无 |
+| status 未 committed | 200 | `{ binding:"NOT_COMPLETED" }` | 固定 | 无 |
+| session 未 committed | 200 | `{ binding:"NOT_COMPLETED" }` | 固定 | 无 |
+| Case B 正确 Account | 200 | `{ binding:"REUSED", sessionToken, account, person }` | 固定 | 可继续 Slice 4 accept / decline |
+| attempt COMMITTED（candidate 已是 P1） | 200 | `{ binding:"COMMITTED" }` / session | 固定 | 可 exchange session |
+
+**不可区分性检查项**：HTTP status、body key 集合、字段值（除随机 token）、error code（不出现）、`Set-Cookie`（无）、`Location` / redirect（无）、`X-*` 业务 header（无）、read-back 结果（status / session 均 generic）、endpoint availability（全部挂载）。未绑定阶段唯一可区分的成功分支是 Case B 正确 Account；attempt COMMITTED 后的 `COMMITTED` / session 也属于授权成功分支，因为此时 candidate 已是 P1。
+
+### D-11.2 Confirmer-facing matrix
+
+| 内部事实 | HTTP | Body |
+|---|---|---|
+| 未认证 | 401 | `{ code:"UNAUTHENTICATED" }` |
+| 未授权 confirmer / P1 不存在 / 非目标 Family | 404 | `{ code:"BINDING_NOT_FOUND", message:"Binding not found" }` |
+| authorized、无 PENDING attempt | 200 | `{ attempts: [] }` |
+| authorized、有 PENDING attempt | 200 | 最小列表 |
+| authorized decision AFFIRM | 200 | `{ state }` |
+| authorized decision REJECT | 200 | `{ state:"TERMINAL" }` |
+| same key different payload | 409 | `{ code:"IDEMPOTENCY_PAYLOAD_MISMATCH" }` |
+
+- 404 body 不含 `personId`、`familyId`、`ageBand`、`guardian`、`consent`。
+- confirmer 可见性只限完成确认所需的最小字段，不扩散给 candidate。
+
+### D-11.3 Timing / side-channel 边界
+
+- 所有 generic 分支在返回前必须完成：WeChat auth → pending context 创建 → invitation resolution → Gate 1 评估 → audit 写入 → 序列化。禁止在 invitation 解析失败时提前 return（必须走同一 response serializer）。
+- 不承诺密码学常量时间；不新增 padding / fake query / 人为延迟。响应形状不可区分是强制项；timing 只要求不出现明显的「提前 return → 0 查询」分支。
+- 不扩展到通用 side-channel 项目（CPU cache、TLS、连接复用等）。
+
+---
+
+## D-12 Authorization 扩展
+
+### D-12.1 `authorize()` 目标形状
+
+在 Slice 1 最终 `authorize()`（含 `facts` / object `Resource` 的 remediated 版本）基础上增量扩展：
+
+```ts
+export type Action =
+  | ...existing
+  | 'IDENTITY_BINDING_BOOTSTRAP'
+  | 'IDENTITY_BINDING_CANDIDATE_DECIDE'
+  | 'IDENTITY_BINDING_STATUS_SELF'
+  | 'IDENTITY_BINDING_SESSION_EXCHANGE'
+  | 'IDENTITY_BINDING_CONFIRMER_LIST'
+  | 'IDENTITY_BINDING_SECOND_PARTY_DECIDE';
+
+export type Purpose = ...existing | 'IDENTITY_BINDING';
+
+export type Resource =
+  | ...existing
+  | { type: 'BINDING'; attemptId: string | null; personId: string | null };
+
+export type Actor =
+  | { kind: 'ACCOUNT'; accountId: string; personId: string }
+  | { kind: 'BINDING_CONTEXT'; contextId: string; candidateIdentityDigest: string }
+  | { kind: 'WECHAT_CANDIDATE'; candidateIdentityDigest: string };
+
+export interface AuthorizeFacts {
+  ...existing;
+  targetPersonId: string | null;
+  targetFamilyId: string | null;
+  targetAgeBand: AgeBand | null;
+  guardianPersonId: string | null;
+  familyCreatedByPersonId: string | null;
+  targetIsFamilyMember: boolean;
+}
+```
+
+### D-12.2 动作判定
+
+| Action | Actor | 规则 |
+|---|---|---|
+| `IDENTITY_BINDING_BOOTSTRAP` | `WECHAT_CANDIDATE` | 仅 purpose `IDENTITY_BINDING`；无 Account / Person；否则 DENY |
+| `IDENTITY_BINDING_CANDIDATE_DECIDE` | `BINDING_CONTEXT` | resource `BINDING`；context 有效；否则 DENY |
+| `IDENTITY_BINDING_STATUS_SELF` | `BINDING_CONTEXT` | 同上 |
+| `IDENTITY_BINDING_SESSION_EXCHANGE` | `BINDING_CONTEXT` | 同上；committed 由 domain 再判（authorize 不读 attempt） |
+| `IDENTITY_BINDING_CONFIRMER_LIST` | `ACCOUNT` | facts 必须齐全；UNDER_14 → `actor.personId === guardianPersonId`；MINOR 有 guardian → 同上；MINOR 无 guardian → `actor.personId === familyCreatedByPersonId`；ADULT / UNKNOWN → DENY；`targetIsFamilyMember` 必须 true |
+| `IDENTITY_BINDING_SECOND_PARTY_DECIDE` | `ACCOUNT` | 同 confirmer list；另要求 resource `BINDING` 且 `attemptId` 非空 |
+
+新增 deny reasons：`BINDING_CONTEXT_INVALID`、`NOT_BINDING_AUTHORIZED_CONFIRMER`、`BINDING_AGE_UNSUPPORTED`、`BINDING_TARGET_INVALID`。
+
+- `authorize()` 仍是纯函数；不读 DB；facts 由 Gate 上下文读取后传入。
+- 所有分支 fail-closed：facts 缺失 / null → DENY。
+- 不引入 `authorizeBinding()` 第二入口；不引入 generic RBAC / participant role / guardian 自动授权。
+
+### D-12.3 兼容性
+
+- 既有 action / purpose / resource 行为不变；新增枚举值前必须先合并 Slice 1 的实际 `authorize()`（当前 main 仍是占位实现，见 D-22）。
+- 普通登录、Family、Consent、Compliance 端点不传 binding facts，行为不变。
+- 新增动作必须有 allow / deny 双分支测试。
+
+---
+
+## D-13 RLS 与事务上下文
+
+### D-13.1 新 GUC 与 purpose
+
+| GUC | 设置者 | 用途 |
+|---|---|---|
+| `app.binding_context_hash` | `withBindingContextTransaction` | pending context 查找 |
+| `app.binding_context_id` | `withBindingCommitTransaction` | context 更新（清 ciphertext / 记 committed account） |
+| `app.binding_identity_digest` | `withBindingBootstrapTransaction` | candidate identity 过滤 |
+| `app.binding_invitation_id` | `withBindingBootstrapTransaction` | invitation 过滤 |
+| `app.binding_attempt_id` | `withBindingAttemptTransaction` / commit | attempt 精确过滤 |
+| `app.binding_target_person_id` | `withBindingGateTransaction` / commit | P1 过滤 |
+| `app.binding_target_family_id` | `withBindingGateTransaction` / commit | target Family 过滤 |
+| `app.binding_commit_account_id` | `withBindingCommitTransaction` | `persons.account_id` 提交值校验 |
+| `app.binding_operation_scope` | operation key 读写 | operation scope 过滤 |
+
+Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDING_COMMIT`。
+
+### D-13.2 新表 policy
+
+| 表 | `USING` / `WITH CHECK` |
+|---|---|
+| `binding_pending_contexts` | `token_hash = app_binding_context_hash()`；commit context：`id = app_binding_context_id()` |
+| `binding_attempts` | PENDING：`candidate_identity_digest = app_binding_identity_digest() AND invitation_participation_id = app_binding_invitation_id() AND (app_binding_attempt_id() IS NULL OR id = app_binding_attempt_id())`；GATE：`target_person_id = app_binding_target_person_id() AND target_family_id = app_binding_target_family_id()`；COMMIT：`id = app_binding_attempt_id() AND target_person_id = app_binding_target_person_id() AND target_family_id = app_binding_target_family_id()` |
+| `binding_confirmations` | 与 attempt 相同的 attempt 可见性；PENDING 通过 `attempt_id = app_binding_attempt_id()`；GATE 通过 target person join；COMMIT 精确 attempt |
+| `binding_operation_keys` | `(scope_kind = 'CANDIDATE_CONTEXT' AND app.purpose = 'IDENTITY_BINDING_PENDING' AND scope_key = app_binding_operation_scope()) OR (scope_kind = 'ACCOUNT' AND scope_key = app_account_id()::text)` |
+| `identity_binding_audit_events` | `USING (false)`（runtime 不可读）；`WITH CHECK` 要求 purpose ∈ binding purposes 且 target person 为空或匹配 GUC / candidate digest 匹配 |
+
+所有新表 `ENABLE` + `FORCE ROW LEVEL SECURITY`；`xiaoshuyin_app` 非 owner、NOBYPASSRLS。
+
+### D-13.3 对 Slice 1 表的增量 policy（只读 / 精确提交）
+
+| 表 | 新 policy | 语义 |
+|---|---|---|
+| `persons` | `persons_binding_target_read` | `USING (id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+| `persons` | `persons_binding_commit_update` | `USING (id = app_binding_target_person_id() AND account_id IS NULL)`；`WITH CHECK (id = app_binding_target_person_id() AND account_id = app_binding_commit_account_id())`，仅 COMMIT |
+| `families` | `families_binding_read` | `USING (id = app_binding_target_family_id())`，仅 GATE / COMMIT |
+| `family_members` | `family_members_binding_read` | `USING (person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+| `person_compliance_profiles` | `pcp_binding_read` | `USING (person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+| `consent_records` | `consent_binding_read` | `USING (family_id = app_binding_target_family_id() AND bound_person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+
+- 新 policy 均为 **permissive append**，不改变既有 policy 语义；只在 binding purpose + 对应 GUC 下生效。
+- `family_members` 的 `person_id = target_person_id` 允许读取 P1 的全部 membership，用于 multi-family BLOCK；这些 Family 名称不返回 candidate。
+- `persons_binding_commit_update` 需要新增 GUC `app.binding_commit_account_id`。
+- 不通过 `app.family_id` / `app.person_id` 建立 binding 上下文；不冒充 P1；pending context 不设置 family scope。
+- 不关闭 RLS；不使用 owner / BYPASSRLS 运行时。
+
+### D-13.4 事务 adapter（扩展 `apps/server/api/src/db/tx.ts`）
+
+新增 5 个 thin wrapper，全部复用 `BEGIN/COMMIT/ROLLBACK` + `set_config(..., true)`，不新建 context framework：
+
+1. `withBindingContextTransaction({ tokenHash }, fn)`：`app.binding_context_hash`、purpose `IDENTITY_BINDING_PENDING`。
+2. `withBindingBootstrapTransaction({ contextHash, identityDigest, invitationId }, fn)`：上述 + identity / invitation；invitation resolution 后在同一事务内调用 `app.set_binding_gate_context(targetPersonId, targetFamilyId, actorAccountId)` 设置 Gate GUC，再执行 Gate 1 + attempt 创建 + context 关联；不另开事务。
+3. `withBindingGateTransaction({ targetPersonId, targetFamilyId, actorAccountId }, fn)`：target GUCs + `app.account_id = actorAccountId`（confirmer / candidate account；用于 operation key ACCOUNT scope 与 audit actor；不用于读取 candidate 已绑定 Person）；purpose `IDENTITY_BINDING_GATE`。
+4. `withBindingCommitTransaction({ attemptId, targetPersonId, targetFamilyId, contextId, actorAccountId, commitAccountId? }, fn)`：attempt / target / context GUCs；`app.account_id = actorAccountId`（confirmer 审计归因 + account-scope operation key）；若 `commitAccountId` 在事务开始前已知则设置 `app.binding_commit_account_id`；若 Account 在事务内创建 / 复用，调用 `app.set_binding_commit_account_id(accountId)` 后再执行 `UPDATE persons`。purpose `IDENTITY_BINDING_COMMIT`。
+5. `withBindingAttemptTransaction({ attemptId, identityDigest, invitationId }, fn)`：candidate decision / status 读取。
+
+- 业务代码不得直接 `set_config`；所有上下文通过上述 wrapper。
+- `binding_operation_keys` 的 lookup / insert MUST 先调用 `app.set_binding_operation_scope(scopeKey)`；ACCOUNT scope 由调用上下文提供 `app.account_id`，CANDIDATE_CONTEXT scope 要求 purpose `IDENTITY_BINDING_PENDING`。
+- `actorAccountId` 为空时不设置 `app.account_id`；不设置 `app.person_id` / `app.family_id`。
+- Case B 正确 Account 的 session 签发复用既有 `withAccountTransaction`，不新增 wrapper。
+
+### D-13.5 RLS 验证
+
+- 无上下文：新表 0 行 / 写拒绝；Slice 1 表既有行为不变。
+- 错误 Family / 错误 account / 错误 attempt：0 行。
+- `pg_class.relrowsecurity` / `relforcerowsecurity` = true；`pg_roles.rolbypassrls` = false；owner ≠ app。
+- 审计表 runtime `SELECT` 被拒绝；migrator / test admin 可读。
+
+---
+
+## D-14 Transaction boundary
+
+| 操作 | 事务内容 | 失败语义 |
+|---|---|---|
+| Bootstrap | WeChat auth 在 DB 外；DB 事务内：创建 pending context（加密 openid）→ invitation resolution → Gate 1 → 创建 / 收敛 attempt → context 关联 → audit → commit | 任一写失败 → 整体回滚；返回 `RETRYABLE`（若 attempt 仍合法）或 generic（业务失败）；不留下 partial context / attempt |
+| Candidate decision AFFIRM | `FOR UPDATE` attempt → 校验 context identity → 插入 candidate confirmation → audit → commit | 失败回滚；无 partial confirmation / audit |
+| Candidate REJECT / CANCEL | `FOR UPDATE` attempt → 条件更新 PENDING→TERMINAL + reason → audit → commit | 失败回滚；attempt 保持 PENDING 或已 terminal（由其它事务） |
+| Second-party decision AFFIRM | **事务 A（Phase B confirmation）**：`FOR UPDATE` attempt → 校验当前 authority → `INSERT binding_confirmations (SECOND_PARTY)` → audit `PENDING` → commit。**事务 B（Phase C commit）**：按 D-6.1 重新执行 Gate 2 → Account 创建 / 复用 → `UPDATE persons` → `UPDATE attempt COMMITTED` → context 清理 → audit → commit | 事务 A 失败 → 回滚；事务 B 业务失败 → 同事务写 TERMINAL + audit；事务 B 基础设施失败 → 回滚，事务 A 的 confirmation 保留，返回 `RETRYABLE`；retry 解析到 authoritative outcome，不 double commit |
+| Second-party REJECT | `FOR UPDATE` attempt → 条件更新 PENDING→TERMINAL + reason → audit → commit | 失败回滚 |
+| Status / pending list | 只读事务；`FOR UPDATE` 不需要 | 读失败 → 500，不改变状态 |
+| Session exchange | 只读事务：读 context / attempt / account / person / epoch → 事务外签名（纯计算） | 读失败 → 500；不签发 |
+| Attempt expiry materialization | 在访问事务内 `FOR UPDATE` + `UPDATE ... WHERE state='PENDING' AND now() >= expires_at`；affected rows = 1 才写 audit | 0 行 → 读当前状态；不重复 audit |
+
+- 幂等记录与业务写入同一事务。
+- Second-party AFFIRM 的事务 A（confirmation）与事务 B（commit）分离是 Phase B confirmation 与 Phase C commit 的分离：事务 A 只写 Phase B confirmation + audit，不写 Account / binding / attempt settled；事务 B 只写 Phase C commit 事实。事务 A 已提交但事务 B 因基础设施失败回滚时，attempt 仍 PENDING、confirmation 保留，retry 解析到 authoritative outcome；这不构成 Account / binding / attempt 的跨事务拼装。
+- 中途不跨事务拼接 Account / binding / attempt / audit。
+- 审计表失败 → 业务回滚（audit 是核心事务的一部分）。
+- 唯一例外：RETRYABLE operation 的 best-effort audit 在失败的独立事务之后尝试；失败不改变 retryable 结果，不伪造成功 / 终态。
+
+---
+
+## D-15 Audit / provenance
+
+### D-15.1 表定义（Plan 冻结）
+
+```sql
+CREATE TABLE identity_binding_audit_events (
+  id                          uuid PRIMARY KEY DEFAULT uuidv7(),
+  correlation_id              uuid NOT NULL,
+  attempt_id                  uuid REFERENCES binding_attempts(id) ON DELETE RESTRICT,
+  target_person_id            uuid REFERENCES persons(id) ON DELETE RESTRICT,
+  target_family_id            uuid REFERENCES families(id) ON DELETE RESTRICT,
+  invitation_participation_id uuid,
+  actor_account_id            uuid REFERENCES accounts(id) ON DELETE RESTRICT,
+  actor_person_id             uuid REFERENCES persons(id) ON DELETE RESTRICT,
+  candidate_identity_digest   text CHECK (candidate_identity_digest IS NULL OR candidate_identity_digest ~ '^[0-9a-f]{64}$'),
+  event_type                  text NOT NULL CHECK (event_type IN (
+                                'BINDING_BOOTSTRAP_AUTHENTICATED',
+                                'BINDING_GATE1_BLOCKED',
+                                'BINDING_ATTEMPT_CREATED',
+                                'BINDING_CANDIDATE_CONFIRMED',
+                                'BINDING_CANDIDATE_REJECTED',
+                                'BINDING_CANDIDATE_CANCELLED',
+                                'BINDING_SECOND_PARTY_CONFIRMED',
+                                'BINDING_SECOND_PARTY_REJECTED',
+                                'BINDING_COMMITTED',
+                                'BINDING_TERMINAL'
+                              )),
+  result                      text NOT NULL CHECK (result IN ('PENDING','COMMITTED','TERMINAL','RETRYABLE')),
+  terminal_reason             text,
+  metadata                    jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(metadata) = 'object'),
+  occurred_at                  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX identity_binding_audit_attempt_idx
+  ON identity_binding_audit_events (attempt_id, occurred_at DESC);
+CREATE INDEX identity_binding_audit_person_idx
+  ON identity_binding_audit_events (target_person_id, occurred_at DESC);
+CREATE INDEX identity_binding_audit_correlation_idx
+  ON identity_binding_audit_events (correlation_id, occurred_at DESC);
+```
+
+### D-15.2 记录规则
+
+- `BINDING_GATE1_BLOCKED` 是所有 **Phase B attempt 创建之前**的阻断事件（invalid invitation、Case B mismatch、Gate 1 fail）的统一 security outcome；`terminal_reason` 区分具体原因。
+- 成功 / pending / terminal / retryable 的 security-relevant outcome 均写 audit；PENDING 的重复 replay 不写第二条。
+- actor 真实：candidate 用 identity digest + context id（不存 openid）；confirmer 用 `actor_account_id` + `actor_person_id`。
+- target Person / Family / attempt / result / reason 可追溯；但 **Gate 1 阻断 / Case B mismatch / invalid invitation 发生在 Phase B 之前，audit MUST NOT 记录 `target_person_id` / `target_family_id` / `invitation_participation_id`**，只记录 `correlation_id` + `candidate_identity_digest` + `event_type` + `result` + `terminal_reason`，避免形成 candidate↔P1 business association。Phase B attempt 已存在后的 Gate 2 / terminal / commit audit 才记录 target person / family / attempt。
+- 不记录 token、token hash、openid、ciphertext、consent 原文、家长原话、PII。
+- 不为 audit FK 创建 Person / Account；`actor_account_id`、`target_person_id` 可空；invalid invitation 时 target 为空。
+- append-only：app 只 `INSERT`；无 `SELECT` / `UPDATE` / `DELETE`；`BEFORE UPDATE OR DELETE` trigger 抛异常；migrator / test admin 可读。
+- RLS：`WITH CHECK` 要求 purpose ∈ binding purposes；`USING (false)` 阻止 runtime 读取；不削弱其它表 privacy。
+- 合法推进（PENDING → COMMITTED / TERMINAL）是新增行，不是改写旧行。
+
+### D-15.3 为什么不是第二套审计框架
+
+- 只有一张表、一组封闭 event_type、一个写入路径（binding runtime）、一个读取路径（migrator / forensic / tests）。
+- 没有通用 event bus、subscription、handler、outbox、replay engine。
+- 不替代 `business_audit_events`；Slice 1 的 Family / Consent / Member 审计不变。
+
+---
+
+## D-16 Invitation seam 与 Slice 4 dependency
+
+### D-16.1 合同接口
+
+006 定义 consumer port（在 `packages/domain` 或 `apps/server/api/src/identity-binding/invitation-port.ts`）：
+
+```ts
+export type InvitationResolution =
+  | {
+      status: 'VALID';
+      participationId: string;
+      targetPersonId: string;
+      targetFamilyId: string;
+      expiresAt: string;
+    }
+  | { status: 'TERMINAL_UNUSABLE' };
+
+export interface InvitationResolutionPort {
+  resolveByToken(tx: pg.PoolClient, invitationToken: string): Promise<InvitationResolution>;
+}
+```
+
+- `VALID` 只表示 Slice 4 定义的 `pending` 且未过期、token 可用；`TERMINAL_UNUSABLE` 覆盖 not found / expired / declined / withdrawn / accepted（已消费）/ unauthorized invalidation。
+- 006 不读取 Case 内容、不读 Case ownership、不写 participation、不创建 invitation。
+- 006 不新增 `invitations` 表、不定义 invitation state / token / expiry / cancel / manager revoke。
+- `invitation_participation_id` 在 006 表上只是 uuid 引用，**无 FK**；避免对 Slice 4 表存在性、migration 顺序、table ownership 的硬耦合。
+- 生产 adapter 必须使用与 006 bootstrap 相同的 DB transaction / `tx` client；不得另开事务或快照缓存。
+- 在 Slice 4 runtime 未 merge 时，只提供 **contract-level test double**（内存 fixture），仅用于 domain / runtime 测试；不得写 fake invitation 表 / fake token service / 第二套 lifecycle。
+
+### D-16.2 验证分层
+
+| 层 | 当前可做 | 依赖 |
+|---|---|---|
+| Contract-level | port 接口、VALID / TERMINAL_UNUSABLE 分支、Gate 1 / Phase B / commit、Case B / C、invitation terminal between gates | 006 自身 + fixture |
+| True runtime E2E | 真实 invitation token → bootstrap → binding → Slice 4 accept；active participation 与 binding 联合验收 | **BLOCKED BY SLICE 4 RUNTIME** |
+
+- Tasks 必须把 blocked 项显式标注；不得删除、mock 后宣称 PASS、或修改 Slice 4。
+- Slice 4 contract 当前在 `origin/feat/004-case-participant-core`（`a2d82c73b5d134f6559ea9247ee19eda15cb0f16`），**not merged main**；Implement 前必须重新读取当时 merged main。
+
+---
+
+## D-17 Ordinary login boundary 与 client flow
+
+### D-17.1 普通登录不变
+
+- `POST /api/v1/auth/wechat` 只接收 `{ code }`；new openid → Account + Person；existing openid → reuse。
+- 不新增 `mode=invite`、`inviteMode`、`binding=true`、特殊 header、隐藏 query、`invitationToken` 字段。
+- 普通登录内部不猜测 / 解析 / 阻断 Case C；不承担 no-P2 保证。
+- `WechatLoginRequest` schema 不变；`auth.ts` 的登录事务不变。
+- 回归测试：new / existing openid、response shape、P2 行为不变。
+- **并发首次登录为 pre-existing 限制**：同一 openid 的两个并发普通登录本身已存在 `accounts.wechat_openid UNIQUE` 竞争；006 不修改、不扩大、也不宣称修复该并发行为。006 的 Phase C Account 创建使用 `ON CONFLICT (wechat_openid) DO NOTHING`，顺序语义不变。若 Owner 要求并发 auth robustness，属独立 auth hardening，不在 006 修改普通登录。
+
+### D-17.2 产品 / client flow（不设计 UI）
+
+```text
+participation invitation 打开
+→ 若目标 Person 已有 Account（Case B）：
+   普通登录或 bootstrap 复用；不进入双确认
+→ 若目标 Person 无 Account（Case C）：
+   在调用普通 /auth/wechat 之前调用 POST /identity-bindings/bootstrap
+   → 得到 pendingContextToken + binding:NOT_COMPLETED
+   → candidate 在本端确认
+   → authorized confirmer 在独立会话确认
+   → candidate 轮询 status
+   → COMMITTED 后 POST /session 换取普通 session
+   → 继续 Slice 4 的 accept / decline
+```
+
+- 该 flow 是产品 / client 责任；006 只提供 capability。
+- 不允许普通登录先行创建 P2 后再绑定；若已发生，identity conflict。
+- 不设计页面、组件、通知、二维码、PIN、电话、视频、KYC。
+
+---
+
+## D-18 Migration sequencing / rollback
+
+### D-18.1 顺序（单个 reviewed additive migration）
+
+```text
+01 CREATE TYPE binding_attempt_state / binding_confirmation_kind /
+            binding_confirmer_authority / binding_operation_scope /
+            binding_operation_command
+02 binding_pending_contexts
+03 binding_attempts
+04 binding_confirmations
+05 binding_operation_keys
+06 identity_binding_audit_events
+07 indexes（partial unique live key + query indexes）
+08 context getter functions（app_binding_context_hash / identity_digest /
+   invitation_id / attempt_id / target_person_id / target_family_id /
+   operation_scope / commit_account_id）
+09 set_binding_context functions（SECURITY INVOKER，只 set_config + 参数校验）
+10 ENABLE + FORCE RLS + 新表 policies
+11 Slice 1 表追加 purpose-scoped binding policies（D-13.3）
+12 append-only / immutable triggers（confirmations / audit）
+13 GRANT 到 xiaoshuyin_app（最小 DML；audit 仅 INSERT）
+```
+
+- 文件：`db/migrations/00X_identity_binding_runtime.sql`；编号在 Implement 时读取最新 merged main 后分配，不硬编码。
+- 不修改 `001_initial_schema.sql`；不修改 Slice 1 表列 / 约束 / enum。
+- 追加 policy 使用新名字，避免与既有 policy 冲突；不改既有 policy 定义。
+- 迁移必须可重复执行？沿用 `scripts/db-migrate.mjs` 的 migration tracking；不写 `DROP ... IF EXISTS` 破坏历史。
+- 所有新表主键 `uuidv7()`；时间使用 DB `now()`。
+
+### D-18.2 Rollback
+
+- 反向顺序：DROP triggers → DROP 追加 policies → DROP 新表 policies → DROP functions → DROP tables → DROP types。
+- 不删除 Slice 1 表 / 列 / 既有 policy。
+- Rollback 只在未产生业务数据的 migration 验证环境执行；生产回滚策略属于发布流程，不在本 Slice 设计数据迁移。
+- Rollback 脚本不得被用于删除已产生的 binding / audit 历史。
+
+---
+
+## D-19 Test plan 与 FR / AS / SC 映射
+
+### D-19.1 测试分层
+
+| 层 | 文件（Implement 创建） | 覆盖 |
+|---|---|---|
+| Domain / Unit | `tests/domain/identity-binding-state.test.ts` | 状态机、禁止转换、settled、expiration、RETRYABLE 不是 state |
+| Domain / Unit | `tests/domain/identity-binding-gate.test.ts` | UNDER_14 / MINOR 有 / 无 guardian / ADULT / UNKNOWN、consent revoked、multi-family、verified_source 不用 |
+| Domain / Unit | `tests/domain/identity-binding-idempotency.test.ts` | operation key scope、same/different payload、replay、new attempt |
+| Domain / Unit | `tests/domain/identity-binding-crypto.test.ts` | token hash、HKDF、AES-GCM、无明文 openid |
+| Domain / Unit | `tests/domain/identity-binding-anti-enumeration.test.ts` | generic serializer、body keys、无 attemptId / reason |
+| Database | `tests/db/identity-binding-schema.test.ts` | 表 / enum / CHECK / 部分唯一索引 / 无永久唯一 |
+| Database | `tests/db/identity-binding-rls.test.ts` | 新表 FORCE RLS、无上下文 0 行、错误 family / attempt 0 行、audit runtime 不可读 |
+| Database | `tests/db/identity-binding-concurrency.test.ts` | 并发 commit ∈ {0,1}、double confirmation、account / person conflict、0 commit |
+| Integration | `tests/integration/identity-binding-bootstrap.test.ts` | Case B / C、Gate 1、invalid invitation、pending context、no session |
+| Integration | `tests/integration/identity-binding-candidate.test.ts` | AFFIRM / REJECT / CANCEL、跨 attempt / identity、replay |
+| Integration | `tests/integration/identity-binding-confirmer.test.ts` | 授权、list、AFFIRM / REJECT、candidate 代持拒绝、独立认证 |
+| Integration | `tests/integration/identity-binding-commit.test.ts` | happy path、Account at commit、Gate 2 recheck、consent revoked between gates、invitation terminal between gates |
+| Integration | `tests/integration/identity-binding-idempotency.test.ts` | 全幂等矩阵、concurrent same-key、different-key same semantic |
+| Integration | `tests/integration/identity-binding-anti-enumeration.test.ts` | 6 类内部原因 response matrix、status / body / headers 不可区分 |
+| Integration | `tests/integration/identity-binding-ordinary-login-regression.test.ts` | 普通 `/auth/wechat` new / existing、无 mode / hidden switch、无 P2 |
+| Integration | `tests/integration/identity-binding-invitation-contract.test.ts` | port VALID / TERMINAL_UNUSABLE、no second invitation model |
+| Integration | `tests/integration/identity-binding-audit.test.ts` | outcome 可追溯、无 secret / openid、append-only、不为 audit 建对象 |
+| Integration | `tests/integration/identity-binding-rollback.test.ts` | 注入 commit 中途失败 → 全回滚、无孤立 Account / partial binding / settled attempt |
+| Contract | `tests/integration/identity-binding-openapi.test.ts` | 6 条 route、schema、错误 envelope；无 participant route |
+| Governance | `node scripts/validate-governance.mjs` / `run-governance-tests.mjs` / `guard-static` / `typecheck` / `openapi:check` / `coverage:audit` | 治理 / 静态 / 类型 / 契约 / 覆盖 |
+| **BLOCKED** | `tests/integration/identity-binding-slice4-e2e.test.ts` | 真实 Slice 4 invitation → bootstrap → binding → accept；**BLOCKED BY SLICE 4 RUNTIME** |
+
+### D-19.2 FR / AS / SC 映射
+
+| Spec 项 | 测试 |
+|---|---|
+| FR-001 / SC-013 / AS-01 | ordinary-login-regression + bootstrap |
+| FR-002 | bootstrap + invitation-contract + client flow docs |
+| FR-003 / SC-002 / AS-09 | bootstrap Case B + commit |
+| FR-004 / SC-001 / AS-01 / AS-21 | commit + schema |
+| FR-005 / AS-20 | bootstrap + RLS + no-session |
+| FR-006 / FR-010 / SC-009 / AS-02 / AS-03 / AS-14 | gate domain + commit |
+| FR-007 / FR-008 / AS-23 | candidate + state |
+| FR-009 / AS-05 / AS-17 | confirmer + authorization |
+| FR-011 / SC-001 / AS-21 | commit |
+| FR-012 / AS-19 | schema + persistence |
+| FR-013 / SC-003 / AS-14 / AS-15 | state + replay |
+| FR-014 / AS-13 | retry / read-back |
+| FR-015 / AS-07 / AS-04 / AS-05 | invitation seam + terminal |
+| FR-016 / FR-021 / SC-004 / SC-008 / AS-08 / AS-16 / AS-22 | no-P2 + ordinary-login-first / account-bound conflict + rollback |
+| FR-017 / SC-005 / AS-10 | concurrency |
+| FR-018 / SC-010 | binding independent fact |
+| FR-019 / SC-007 / AS-06 / AS-18 | anti-enumeration |
+| FR-020 / AS-18 | multi-family |
+| FR-022 / SC-006 / AS-11 / AS-12 | idempotency |
+| FR-023 / SC-011 / AS-24 | audit |
+| FR-024 / AS-20 / AS-24 | authz / RLS |
+| FR-025 / SC-012 | downstream contract (contract-level) |
+| FR-026 | dependency gate / blocked E2E |
+| FR-027 / SC-014 | structure / exclusions |
+| FR-028 | failure / retry / no partial |
+
+**Acceptance 全量**：AS-01—AS-24 均在上表或对应测试文件中；没有 orphan acceptance。
+
+### D-19.3 必测反例（不可省略）
+
+- no-P2：ordinary-login-first、concurrent attempts、retry after timeout、commit rollback、invitation terminal 后重试 → `persons` 增量 = 0、P2 = 0、partial binding = 0。
+- concurrent commit：N 个 attempt 并发 → successful commits ∈ {0,1}；全部失败 → 0 commit。
+- retry / read-back：RETRYABLE 不落 attempt state；read-back 收敛 PENDING / COMMITTED / TERMINAL。
+- Account conflict：openid 已绑定 P2 → TERMINAL；不 merge / rebind。
+- Person conflict：P1 已绑 Account → TERMINAL；不替换。
+- Gate 2 race：Gate 1 后 consent revoke / guardian change / invitation terminal → commit blocked，TERMINAL。
+- duplicate confirmation：same key / different key → 一份 confirmation、无重复 audit。
+- cross-attempt confirmation：confirmation 不能复用到 new attempt。
+- anti-enumeration matrix：所有内部原因 response 不可区分。
+- RLS wrong family：Gate / commit / audit 0 行或拒绝。
+- ordinary `/auth/wechat` regression：new / existing openid 行为不变。
+
+---
+
+## D-20 Explicit exclusions / structure checks
+
+Implement 必须能机械证明以下不存在（CI / guard / grep / schema introspection）：
+
+1. 普通登录改造、`mode=invite`、`inviteMode`、`binding=true`、隐藏 invitation 参数。
+2. KYC / government-ID / 人脸 / 视频 / 电话 / 外部身份证明 / 敏感数据源。
+3. `INSERT INTO persons`（006 代码 / migration 均不得出现）。
+4. Person / Account / Family merge / unlink / rebind / duplicate recovery / 批量 reconciliation。
+5. AI / fuzzy matching / 邮箱 / 手机 / 昵称自动匹配。
+6. Profile / Account Settings / 身份中心 UI / 小程序页面 / 运营后台 UI。
+7. Case Participant implementation、accept / decline / withdraw / participant API / participant capability。
+8. `cases` / `case_participants` / Case ownership / visibility / 权限解析修改。
+9. Evidence 写入（`assertions` / `observations` / STATEMENT / FACT / HYPOTHESIS / OBSERVATION）。
+10. Invitation 创建 / 取消 / 撤回 / 过期 / token 生成 / 通知 / 第二套 invitation 模型。
+11. Consent / Compliance 平台扩展、新 Consent 类型、新 guardian policy、PIPIA、feature policy。
+12. 多家庭产品能力（switching / linking / search / discovery / merge / shared identity）。
+13. 后台 job / 定时器 / 通用 workflow engine / 第二套通用审计框架。
+14. V2–V5 capabilities。
+
+**结构枚举**：006 新表只有 5 张；新端点只有 6 条；新 enum 只有 5 个；没有 `case_*` / `evidence_*` / `assessment_*` / `intervention_*` / `notification_*` / `ai_*` 表。
+
+---
+
+## D-21 Observability / logging
+
+- 结构化日志字段：`correlationId`、`attemptId`（可空）、`event`、`result`、`terminalReason`（server-internal）、`durationMs`。
+- 禁止日志：openid、token、token hash、ciphertext、consent 原文、家长原话、candidate / P1 姓名、Family 名称、微信凭据。
+- candidate-facing 不展示 internal reason；日志可记录 internal reason，但只用于运维 / 安全排查。
+- 不新增 metrics / tracing 平台；使用现有 Fastify logger。
+- `RETRYABLE` 的 best-effort audit / log 不得伪造成功或终态。
+
+---
+
+## D-22 Dependency gate 与 Implement Gate
+
+### D-22.1 Dependency classification
+
+| # | 类别 | 依赖 | 当前事实 | 对 Slice 6 的影响 |
+|---|---|---|---|---|
+| H1 | **Hard core Implement blocker** | Slice 1 runtime：真实 `authorize()`（fail-closed、facts、manager / guardian 判定）、RLS helper、幂等、审计基线 | `origin/main` = `ed0d5fb`；`packages/authorization/src/authorize.ts` 对 `MANAGER_ACTIONS` 与 `MINOR_PROCESSING` 仍是占位 `return ALLOW`；真实实现只在未合并的 `origin/fix/slice1-final-audit-remediation`（`af6bb0c`）；`tests/evidence/converge.md` 没有最终 INDEPENDENT CONVERGE PASS 记录 | **BLOCKED**：必须先 `Slice 1 final remediation → 审计二 PASS → merge main`；在此之前 Slice 6 core implementation 不得启动 |
+| H2 | **Hard core contract** | 005 Identity Binding Contract | merged main（`ed0d5fb`） | SATISFIED（语义） |
+| H3 | **Contract-only dependency + late E2E blocker** | Slice 4 participant contract（invitation valid / terminal-unusable + P1 + target Family） | `origin/feat/004-case-participant-core` = `a2d82c73b5d134f6559ea9247ee19eda15cb0f16`，**not merged main**；Slice 4 runtime 未实现 | **不阻塞 core implementation**：Slice 6 以冻结 contract + `InvitationResolutionPort` + contract fixture / test double 完成 schema / domain / pending auth / attempt / confirmation / Gate / idempotency / concurrency / authorization / RLS / audit / API / transaction / retry / contract-level tests；**只阻塞**真实 production adapter 与真实 Case C E2E，即 `T121–T124 = BLOCKED BY SLICE 4 RUNTIME` |
+
+### D-22.2 Non-dependencies
+
+- Slice 2 `002-case-core`：不依赖；不读 Case 内容；当前 `origin/feat/002-case-core` = `9ac76f7`，未 merge main，不影响 006 domain / schema。
+- Slice 3 `003-evidence-core`：明确不写 Evidence；不是依赖。
+
+### D-22.3 Implement Gate 状态机与循环依赖排除
+
+```text
+当前（B1 未解决）：
+PLAN FROZEN
+IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY
+T121–T124 = BLOCKED BY SLICE 4 RUNTIME
+
+B1 解决后（Slice 1 remediation → 审计二 PASS → merge main）：
+PLAN FROZEN
+READY FOR CORE IMPLEMENTATION
+允许开发 AI 执行所有不依赖 Slice 4 runtime 的任务（Phase 1–14）
+T121–T124 继续 BLOCKED BY SLICE 4 RUNTIME
+
+Slice 4 runtime available 后：
+执行 T121–T124 → real adapter / real Slice 4 integration / full Case C E2E
+→ Slice 6 Implement complete → 审计二
+```
+
+**B1 / B2 的精确定义**
+
+1. **B1 — Slice 1 真实 `authorize()` 未合并 / 未 Converge PASS**：这是 Slice 6 **core implementation 的唯一 hard blocker**；B1 未解决时 `IMPLEMENT BLOCKED`。
+2. **B2 — Slice 4 runtime 未 merge**：这是 **Slice 4 runtime 的 late E2E blocker**，不是 Slice 6 core implementation 的 hard blocker。B2 只冻结 `T121–T124`，不得冻结 Phase 1–14。
+
+**为什么不存在循环硬依赖**
+
+```text
+Slice 6 core implementation ← 只依赖 Slice 1（B1）
+Slice 4 implementation       ← 依赖 Slice 6 core runtime available
+Slice 6 T121–T124 closeout   ← 依赖 Slice 4 runtime
+```
+
+这是**分阶段交接**，不是循环：
+
+- Slice 6 core **不等待** Slice 4 runtime；
+- Slice 4 等待的是 Slice 6 **core runtime available**，不是 Slice 6 的 `T121–T124` full closeout；
+- Slice 6 只在 **late closeout** 阶段等待 Slice 4 runtime；
+- Slice 6 core 与 Slice 4 runtime 之间不存在互相等待的边。
+
+**直接回答「Slice 6 是否必须等待 Slice 2 / Slice 3 / Slice 4 实现后才能开始开发？」**
+
+- 不需要等待 Slice 2、Slice 3。
+- **不需要等待 Slice 4 runtime 才能开始 Slice 6 core implementation**。Slice 6 core 使用冻结 contract + port + fixture 完成；禁止私建第二套 invitation runtime，禁止伪造 Slice 4 production implementation。
+- 必须等待 Slice 1 final remediation + 审计二 PASS + merge main；这是 B1。
+- `T121–T124` 必须等待 Slice 4 runtime；这是 B2，只影响 late E2E closeout。
+
+---
+
+## Existing Contracts Reused
+
+- `Docs/V1技术设计.md` §7.1 身份基数；§7.7A Compliance；§9 / §9.1 授权 / RLS；§10 孩子参与；§28.1 / §28.8 API 边界；§8.5 幂等；§7.0 migration / uuidv7。
+- `specs/005-invited-identity-binding-contract/spec.md` §5.1—§5.7、§6、IB-001—IB-028、Acceptance 1—26。
+- Slice 1：`accounts` / `persons` / `families` / `family_members` / `guardian_consent_requests` / `consent_records` / `person_compliance_profiles` / `business_audit_events` / `idempotency_keys`；`authorize()`；`withRlsTransaction`；`app.set_*_context`；`assertMinorProcessingAllowed`；`notices`。
+- Slice 4 contract：`participant-lifecycle-and-identity-seam.md` §1 / §2 / §3 / §4 / §6 / §7 / §9。
+
+---
+
+## Data and Migration Impact
+
+- 新增 5 张表、5 个 enum、若干索引 / 部分唯一索引 / CHECK、16 个 context getter / setter 函数、5 张新表 policy、6 条 Slice 1 表追加 policy、2 个 append-only trigger、GRANT。
+- 不修改 Slice 1 表结构、列、既有约束、既有 policy、既有 enum、既有 audit / idempotency 数据。
+- 新增 6 条 HTTP route、新增 OpenAPI 文件、generated 产物由脚本生成。
+- 新增 3 个 required env（`IDENTITY_BINDING_SECRET`、两个 TTL）；env schema 变更属于 Implement，不在 Plan 写代码。
+
+## Authorization / Safety / Compliance Impact
+
+- 新增 6 个 authorization action、1 个 purpose、1 个 resource type、若干 deny reason；既有 action 行为不变。
+- Gate 1 / Gate 2 复用 Slice 1 Compliance / Consent 事实；不新增 Consent 类型、不新增 guardian policy。
+- `verified_source` 不参与 guardian authority；`family_members` 不推导 guardian。
+- 不削弱 RLS；新增 policy 只在 binding purpose 下生效。
+
+## API / Contract Impact
+
+- 新增 `specs/006-identity-binding-runtime/contracts/identity-binding-api.openapi.yaml`（Implement 创建）。
+- 新 route 必须加入手写 OpenAPI；`openapi:generate` / `openapi:check` 必须 PASS。
+- 普通 `/auth/wechat` schema / 行为不变。
+
+## AI / RAG / Eval Impact
+
+- 无。006 不调用 AI、不做身份判断、不做 fuzzy matching、不写 Memory / Evidence。
+
+## Async / Notification / Side-Effect Impact
+
+- 无后台 job / 定时器 / 通知 / outbox。Attempt expiration 通过访问时条件物化，不依赖后台任务。
+
+---
+
+## Project Structure（Implement 目标）
+
+```text
+apps/server/api/src/
+  identity-binding/
+    gate.ts                      # app-layer Gate facts + assertMinorProcessingAllowed composition
+    bootstrap.ts                 # Phase A / Gate 1 / attempt creation
+    candidate-decision.ts        # candidate AFFIRM / REJECT / CANCEL
+    confirmer.ts                 # list / decision + authority
+    commit.ts                    # Gate 2 + Phase C
+    session-exchange.ts          # COMMITTED → ordinary session
+    anti-enumeration.ts          # generic serializer
+    crypto.ts                    # HKDF / AES-GCM / token hash
+    invitation-port.ts           # Slice 4 consumer port
+    errors.ts                    # binding error codes
+  routes/identity-bindings.ts    # 6 routes
+  db/tx.ts                       # + 5 binding wrappers（extend existing）
+  plugins/auth.ts                # binding auth exemption / rejection
+  plugins/error-handler.ts       # + binding error codes
+packages/domain/src/
+  identity-binding.ts            # state machine / idempotency types
+  identity-binding-gate.ts       # pure Age / Pre-gate matrix（不 import compliance）
+  identity-binding-repository.ts # SQL access（no direct SQL in routes）
+packages/authorization/src/
+  authorize.ts                   # + binding actions / purpose / resource / facts
+packages/contracts/src/
+  identity-binding-schemas.ts    # Zod request / response / error
+db/migrations/
+  00X_identity_binding_runtime.sql
+tests/
+  domain/identity-binding-*.test.ts
+  db/identity-binding-*.test.ts
+  integration/identity-binding-*.test.ts
+```
+
+- 业务 SQL 在 `packages/domain` / repository；route 只做 schema / auth / orchestration。
+- 不新增 `packages/identity-binding` 大平台；006 代码集中在现有 app / domain / authorization / contracts。
+
+---
+
+## Verification Plan
+
+| 验证 | 命令 | 证据 |
+|---|---|---|
+| TypeScript | `bun run typecheck`（`node scripts/typecheck-all.mjs`） | 0 error |
+| Unit / integration / DB | `bun run vitest run` | 全 PASS，0 skipped（除显式 BLOCKED 项） |
+| 静态 guard | `bun run guard:static` | PASS |
+| OpenAPI | `bun run openapi:check` | 手写契约与 generated 一致 |
+| Migration | `bun run db:migrate` + `db:evidence` | 可重放，RLS / role / schema 证据 |
+| Coverage | `bun run coverage:audit` | 阈值 PASS |
+| Governance | `node .specify/scripts/validate-governance.mjs` + `node .specify/scripts/tests/run-governance-tests.mjs` | governance PASS、self-test 全 PASS、`Docs/**` diff = 0 |
+| Full | `bun run verify-all` | 归档全 PASS |
+| Blocked E2E | Slice 4 runtime 未 merge | 必须报 `BLOCKED`，不得 PASS |
+
+---
+
+## Rollback / Recovery
+
+- Migration additive；回滚顺序见 D-18.2。
+- 业务回滚：commit 事务失败 → 全回滚；attempt 可保持 PENDING 或已 TERMINAL；不得删除历史 confirmation / audit。
+- Pending context 过期：无后台清理；下次访问拒绝；ciphertext 保留至过期或清理策略（未来数据生命周期）。
+- 不实现数据删除 / unlink / merge / rebind。
+
+---
+
+## Complexity Exceptions
+
+| 例外 | 理由 | 边界 |
+|---|---|---|
+| 新增 5 张表 | 005 要求 attempt 持久化、confirmation 关联、operation 幂等、audit outcome；现有表无法承载 | 单用途、无通用平台 |
+| 新增审计表 | `business_audit_events` NOT NULL / 封闭 event_type 无法承载 pre-account 结果 | 单表、append-only、write-only runtime |
+| 新增 5 个 binding 事务 wrapper | 需要 purpose-scoped RLS 上下文，且不得冒充 P1 / 设置 family scope | 复用 `tx.ts`，不新建 framework |
+| AES-GCM 加密 openid | pending context 需要原始 openid 在 Phase C 创建 Account；明文短期落库不符合最小暴露 | 只加密 pending context；commit 后清零；不引入 KMS |
+| 6 条端点 | bootstrap / candidate / confirmer 的最小闭环 + status / session | 无 participant / UI / 通知 |
+
+---
+
+## Open Review Items（非阻塞，需审核确认）
+
+1. **Slice 1 真实 `authorize()` 形状**：本 Plan 按 remediated 版本（object Resource + facts）设计；若最终合并版本不同，Implement 前必须回 Plan 对齐，不得临场发明第二套授权入口。
+2. **Slice 4 production adapter 的最终文件位置**：由 Slice 4 实现决定；006 只冻结 port 接口，不在本 Slice 写 adapter。
+3. **TTL 数值**：属 RELEASE / POLICY GATE；Plan 只要求 required positive env，不写具体秒数。
+4. **`IDENTITY_BINDING_SECRET` 轮换**：属 operational compatibility；本 Slice 只要求 fail-safe，不设计 KMS / keyring。

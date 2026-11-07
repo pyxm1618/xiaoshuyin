@@ -1,0 +1,282 @@
+# Tasks: Identity Binding Runtime（006-identity-binding-runtime）
+
+**Feature**: `specs/006-identity-binding-runtime/spec.md`
+**Plan**: `plan.md`
+**Created**: 2026-11-07
+**Stage**: Tasks only。本文件不执行 Implement、不运行测试、不写代码、不写 migration。
+
+> **执行规则**
+> 1. `T001—T006` 是 Dependency Gate，必须先执行；`T001` FAIL 是 **Slice 6 core implementation 的唯一 hard blocker**，此时整个 Implement **STOP**，`changed files = 0`。`T002` 只核验 Slice 4 **contract** 可用性；Slice 4 **runtime** 缺失不阻塞 Phase 1–14，只阻塞 Phase 15 `T121–T124`。
+> 2. 每个实现任务必须在对应测试任务之后执行；测试任务先写 RED 断言，再实现，再用 `[VERIFY]` 命令证明。测试任务的 `[VERIFY]` 可以是预期 RED；实现任务的 `[VERIFY]` 必须是 PASS。
+> 3. `[VERIFY]` 只能引用当前 Task 之前已创建的文件 / helper / route；不得引用未来 Phase 的产物。
+> 4. `[P]` 只用于纯 domain 单元测试文件：不同文件、只依赖已冻结类型、不共享 DB / route / helper。DB、integration、route、migration、generated contract 任务一律不标 `[P]`。
+> 5. `BLOCKED BY SLICE 4 RUNTIME` 只适用于 Phase 15 `T121–T124`（真实 production adapter / 真实 Slice 4 integration / full Case C E2E）。这些任务不得删除、不得 mock 后宣称 PASS、不得修改 Slice 4；只能报告 BLOCKED。该标签 **不得** 用于冻结 Phase 1–14。
+> 6. Migration 编号在 Implement 时读取最新 merged main 后分配；本文件不硬编码 `002`。
+> 7. 本任务图不修改 `Docs/**`、`specs/001~005/**`、Slice 4 文件、普通登录语义、Case / Evidence / Participant。
+> 8. B1（Slice 1 final remediation → 审计二 PASS → merge main）解决后，状态必须变为 `READY FOR CORE IMPLEMENTATION`；Phase 1–14 可执行，`T121–T124` 继续 `BLOCKED BY SLICE 4 RUNTIME`。Slice 6 core 不等待 Slice 4 runtime；Slice 4 implementation 依赖的是 Slice 6 **core runtime available**，不是 Slice 6 full closeout。
+
+---
+
+## Phase 0 — Dependency Gate（阻塞门）
+
+- [ ] T001 — 核验 Slice 1 真实 `authorize()` 已 merge main 且存在最终 INDEPENDENT CONVERGE PASS。检查 `origin/main` 的 `packages/authorization/src/authorize.ts` 不再对 `MANAGER_ACTIONS` / `MINOR_PROCESSING` 返回占位 ALLOW；检查 `tests/evidence/converge.md` 有最终 PASS 记录。**FAIL → STOP，changed files = 0。** **Files**: 只读：`packages/authorization/src/authorize.ts`、`tests/evidence/converge.md`、`git log origin/main` **Depends**: — **Acceptance**: 记录真实命令输出；两项任一不满足 → `IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY` [REQ:FR-026 / plan D-22.1 H1 / CHK149] [VERIFY:git show origin/main:packages/authorization/src/authorize.ts && tail -40 tests/evidence/converge.md]
+- [ ] T002 — 核验 Slice 4 participant contract 在最终 remote head；记录 `participant-lifecycle-and-identity-seam.md` 的 invitation valid / terminal-unusable、P1、target Family 语义。**不得 merge Slice 4，不得写 Slice 4 文件。** **Files**: 只读：`origin/feat/004-case-participant-core:specs/004-case-participant-core/contracts/participant-lifecycle-and-identity-seam.md` **Depends**: — **Acceptance**: 记录 contract head SHA 与语义；contract-only 可用 [REQ:FR-026 / plan D-16.1 / CHK143] [VERIFY:git show origin/feat/004-case-participant-core:specs/004-case-participant-core/contracts/participant-lifecycle-and-identity-seam.md]
+- [ ] T003 — 核验 005 contract 在 `origin/main`，且 `specs/005-invited-identity-binding-contract/spec.md` 未被修改。 **Files**: 只读：`git rev-parse origin/main`、`git diff origin/main -- specs/005-invited-identity-binding-contract` **Depends**: — **Acceptance**: 005 diff = 0；记录 main SHA [REQ:plan Upstream / CHK003] [VERIFY:git rev-parse origin/main && git diff origin/main -- specs/005-invited-identity-binding-contract]
+- [ ] T004 — 核验 `specs/002-case-core`、`specs/004-case-participant-core` 是否在 main；记录真实依赖状态。不得把 Slice 2 / 3 变成依赖。 **Files**: 只读：`git ls-tree origin/main specs`、`git rev-parse origin/feat/002-case-core` **Depends**: — **Acceptance**: 记录 002 / 004 是否 merge；006 不读 Case [REQ:FR-026 / plan D-22.2 / CHK151] [VERIFY:git ls-tree origin/main specs && git rev-parse origin/feat/002-case-core]
+- [ ] T005 — 运行普通登录回归基线：`bun run vitest run tests/integration/auth.test.ts` + `tests/integration/openapi.test.ts`。记录 exact output。 **Files**: 只读运行 **Depends**: T003 **Acceptance**: 全 PASS；若失败 → STOP，不得开始 006 [REQ:FR-001 / SC-013 / CHK179] [VERIFY:bun run vitest run tests/integration/auth.test.ts tests/integration/openapi.test.ts]
+- [ ] T006 — 记录 `IMPLEMENT_BASE_SHA`（当时 merged main + 006 feature head）与 migration 下一个可用编号；确认 working tree clean。 **Files**: 只读 **Depends**: T001—T005 **Acceptance**: 输出 base SHA / next migration number / clean [REQ:plan D-18.1 / CHK165] [VERIFY:git rev-parse HEAD && git status --short]
+
+**Gate 结论规则**
+
+```text
+T001 FAIL → IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY
+T002 contract unavailable → IMPLEMENT BLOCKED — SLICE 4 CONTRACT UNAVAILABLE
+T005 regression FAIL → IMPLEMENT BLOCKED — ORDINARY LOGIN REGRESSION
+
+T001 / T002 / T005 PASS，但 Slice 4 runtime 仍 unavailable
+→ READY FOR CORE IMPLEMENTATION（Phase 1–14 可执行）
+→ T121–T124 继续 BLOCKED BY SLICE 4 RUNTIME
+
+T001 / T002 / T005 PASS，且 Slice 4 runtime available
+→ Phase 1–14 + Phase 15 T121–T124 全部可执行
+→ Slice 6 Implement complete → 审计二
+```
+
+> 当前事实（2026-11-07）：T001 预期 FAIL（main 的 `authorize()` 仍是占位实现，remediation 分支 `af6bb0c` 未合并，`tests/evidence/converge.md` 无最终独立 Converge PASS）。因此当前状态为 `IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY`；Slice 4 runtime 缺失只影响 `T121–T124`，不冻结 Phase 1–14。
+>
+> **循环依赖排除**：`Slice 6 core ← Slice 1`；`Slice 4 implementation ← Slice 6 core runtime`；`Slice 6 T121–T124 ← Slice 4 runtime`。三段是分阶段交接，不是互相等待的环。
+
+---
+
+## Phase 1 — Schema Tests & Additive Migration
+
+- [ ] T007 — 写 schema RED 测试：5 张表、5 个 enum、attempt 三态、terminal_reason CHECK、partial unique live index、无永久三元组唯一、pending context CHECK、confirmation CHECK、audit append-only。 **Files**: `tests/db/identity-binding-schema.test.ts` **Depends**: T006 **Acceptance**: 预期 RED；文件覆盖 plan D-2 / D-3 / D-4 / D-5 / D-15 全部结构断言 [REQ:FR-012 / AS-19 / CHK037—CHK050] [VERIFY:bun run vitest run tests/db/identity-binding-schema.test.ts]
+- [ ] T008 — 写 additive migration：5 个 enum + `binding_pending_contexts` + `binding_attempts`。不改 `001_initial_schema.sql`。 **Files**: `db/migrations/00X_identity_binding_runtime.sql` **Depends**: T006 **Acceptance**: migration 文件 review；enum / 两张表定义与 plan D-2 / D-3 一致 [REQ:FR-012 / plan D-18.1 / CHK163—CHK166] [VERIFY:node scripts/db-migrate.mjs]
+- [ ] T009 — 同 migration 追加 `binding_confirmations` + `binding_operation_keys` + `identity_binding_audit_events`。 **Files**: 同上 **Depends**: T008 **Acceptance**: 表结构、CHECK、UNIQUE 与 plan D-4 / D-5 / D-15 一致 [REQ:FR-012 / FR-022 / FR-023] [VERIFY:node scripts/db-migrate.mjs]
+- [ ] T010 — 同 migration 追加 indexes：partial unique live key、attempt target / invitation、context attempt、audit attempt / person / correlation。 **Files**: 同上 **Depends**: T009 **Acceptance**: partial index 谓词严格 `WHERE state = 'PENDING'`；无永久唯一 [REQ:FR-017 / plan D-2.1 / CHK044] [VERIFY:node scripts/db-migrate.mjs]
+- [ ] T011 — 同 migration 追加 context getter / setter functions：`app_binding_*()`、`app.set_binding_*_context()`、`app.set_binding_operation_scope()`、`app.set_binding_commit_account_id()`（SECURITY INVOKER，只 set_config + 参数校验）。 **Files**: 同上 **Depends**: T010 **Acceptance**: 函数签名与 plan D-13.1 / D-13.4 一致；不新建 context framework [REQ:FR-024 / plan D-13.1 / D-13.4] [VERIFY:node scripts/db-migrate.mjs]
+- [ ] T012 — 同 migration 追加新表 `ENABLE` + `FORCE ROW LEVEL SECURITY` + policies。 **Files**: 同上 **Depends**: T011 **Acceptance**: 5 张表 `relrowsecurity` / `relforcerowsecurity` = true [REQ:FR-024 / plan D-13.2 / CHK125] [VERIFY:node scripts/db-migrate.mjs && node scripts/db-evidence.mjs]
+- [ ] T013 — 同 migration 追加 Slice 1 表 purpose-scoped 读 / commit policies：persons、families、family_members、person_compliance_profiles、consent_records。只追加，不改既有 policy。 **Files**: 同上 **Depends**: T012 **Acceptance**: policy 名唯一；既有 policy 文本未变；仅 binding purpose + GUC 生效 [REQ:plan D-13.3 / CHK130] [VERIFY:node scripts/db-migrate.mjs && node scripts/db-evidence.mjs]
+- [ ] T014 — 同 migration 追加 append-only / immutable triggers：confirmations 拒绝 UPDATE / DELETE；audit 拒绝 UPDATE / DELETE。 **Files**: 同上 **Depends**: T013 **Acceptance**: trigger 存在；UPDATE / DELETE 抛异常 [REQ:plan D-4.3 / D-15.2 / CHK140] [VERIFY:node scripts/db-migrate.mjs && node scripts/db-evidence.mjs]
+- [ ] T015 — 同 migration 追加 GRANT：attempts / contexts / confirmations / operation keys 的最小 DML；audit 仅 INSERT；enum USAGE；functions EXECUTE。 **Files**: 同上 **Depends**: T014 **Acceptance**: `has_table_privilege` 输出符合 plan D-18.1 [REQ:plan D-18.1 / CHK167] [VERIFY:node scripts/db-migrate.mjs && bun run vitest run tests/db/identity-binding-schema.test.ts]
+- [ ] T016 — 运行 migration + schema test，记录 real output；若 migration 编号冲突，按最新 main 重新分配后重跑。 **Files**: migration、`tests/db/identity-binding-schema.test.ts` **Depends**: T007—T015 **Acceptance**: `bun run db:migrate` PASS；schema test PASS [REQ:FR-012 / plan D-18.1] [VERIFY:bun run db:migrate]
+
+---
+
+## Phase 2 — Domain Pure Logic
+
+- [ ] T017 — 定义 domain 类型：`BindingAttemptState`、`BindingTerminalReason`、`BindingGateResult`、`BindingAttemptProjection`、`BindingConfirmationRecord`；不引入 `RETRYABLE` state。 **Files**: `packages/domain/src/identity-binding.ts` **Depends**: T006 **Acceptance**: `bun run typecheck` PASS [REQ:FR-013 / plan D-2.2] [VERIFY:bun run typecheck]
+- [ ] T018 [P] — 写状态机 RED 测试：允许转换、禁止转换、settled、expiration、RETRYABLE 不是 state。 **Files**: `tests/domain/identity-binding-state.test.ts` **Depends**: T017 **Acceptance**: 预期 RED；覆盖 plan D-2.2 全部转换 [REQ:FR-013 / AS-14 / CHK039—CHK043] [VERIFY:bun run vitest run tests/domain/identity-binding-state.test.ts]
+- [ ] T019 — 实现状态机纯函数：`canTransition`、`settleAttempt`、`isSettled`、`materializeExpiration`。 **Files**: `packages/domain/src/identity-binding.ts` **Depends**: T018 **Acceptance**: `bun run vitest run tests/domain/identity-binding-state.test.ts` PASS [REQ:FR-013 / plan D-2.2] [VERIFY:bun run vitest run tests/domain/identity-binding-state.test.ts]
+- [ ] T020 [P] — 写 Gate matrix RED 测试：UNDER_14 / MINOR 有 / 无 guardian / ADULT / UNKNOWN、consent revoked、multi-family、verified_source 不参与。 **Files**: `tests/domain/identity-binding-gate.test.ts` **Depends**: T017 **Acceptance**: 预期 RED；逐行断言 Gate 1 / Gate 2 结果与 reason [REQ:FR-006 / FR-010 / AS-02 / AS-03 / AS-14] [VERIFY:bun run vitest run tests/domain/identity-binding-gate.test.ts]
+- [ ] T021 — 实现 domain pure Gate matrix：`evaluateBindingGate(input)`；不 import `@xiaoshuyin/compliance`；输入含 app 层传入的 `minorGate` 结果。 **Files**: `packages/domain/src/identity-binding-gate.ts` **Depends**: T020 **Acceptance**: `bun run vitest run tests/domain/identity-binding-gate.test.ts` PASS [REQ:plan D-8.2 / CHK023—CHK036] [VERIFY:bun run vitest run tests/domain/identity-binding-gate.test.ts]
+- [ ] T022 [P] — 写 idempotency RED 测试：scope、same/different payload、replay、new attempt、`attempt id ≠ operation key`。 **Files**: `tests/domain/identity-binding-idempotency.test.ts` **Depends**: T017 **Acceptance**: 预期 RED；覆盖 plan D-5.3 全表 [REQ:FR-022 / SC-006 / CHK071—CHK082] [VERIFY:bun run vitest run tests/domain/identity-binding-idempotency.test.ts]
+- [ ] T023 — 实现 idempotency 纯函数：`computeOperationScope`、`decideBindingOperation`、`canCreateNewAttempt`；不存 response body。 **Files**: `packages/domain/src/identity-binding.ts` **Depends**: T022 **Acceptance**: `bun run vitest run tests/domain/identity-binding-idempotency.test.ts` PASS [REQ:plan D-5 / CHK073] [VERIFY:bun run vitest run tests/domain/identity-binding-idempotency.test.ts]
+- [ ] T024 [P] — 写 anti-enumeration serializer RED 测试：bootstrap / decision / status / session 的 generic body key 集合，不含 attempt / person / family / reason。 **Files**: `tests/domain/identity-binding-anti-enumeration.test.ts` **Depends**: T017 **Acceptance**: 预期 RED；对比所有内部 reason 的输出 key 集合 [REQ:FR-019 / SC-007 / CHK105—CHK114] [VERIFY:bun run vitest run tests/domain/identity-binding-anti-enumeration.test.ts]
+- [ ] T025 — 实现 generic serializer：`candidateBootstrapResponse`、`candidateDecisionResponse`、`candidateStatusResponse`、`candidateSessionResponse`；唯一成功分支 Case B / COMMITTED。 **Files**: `packages/domain/src/identity-binding-anti-enumeration.ts` **Depends**: T024 **Acceptance**: `bun run vitest run tests/domain/identity-binding-anti-enumeration.test.ts` PASS [REQ:plan D-11 / CHK105] [VERIFY:bun run vitest run tests/domain/identity-binding-anti-enumeration.test.ts]
+- [ ] T026 — 实现 attempt projection / terminal reason mapping：内部 reason → 公开 state / generic；authorized confirmer 投影只含 state。 **Files**: `packages/domain/src/identity-binding.ts` **Depends**: T019 / T023 **Acceptance**: `bun run typecheck` + 上述 domain tests PASS [REQ:FR-013 / FR-019 / plan D-11.2] [VERIFY:bun run typecheck]
+
+---
+
+## Phase 3 — Crypto, Env, Pending Context
+
+- [ ] T027 [P] — 写 crypto RED 测试：token 32 bytes、sha256 hash、HKDF 两个 label、AES-GCM nonce/tag、decrypt 失败、无明文 openid。 **Files**: `tests/domain/identity-binding-crypto.test.ts` **Depends**: T017 **Acceptance**: 预期 RED；断言 plan D-3.3 全部性质 [REQ:plan D-3.3 / CHK052—CHK054] [VERIFY:bun run vitest run tests/domain/identity-binding-crypto.test.ts]
+- [ ] T028 — 实现 `identity-binding-crypto.ts`：`createContextToken`、`hashToken`、`deriveIdentityDigest`、`encryptOpenid`、`decryptOpenid`；只使用 `node:crypto`。 **Files**: `apps/server/api/src/identity-binding/crypto.ts` **Depends**: T027 **Acceptance**: `bun run vitest run tests/domain/identity-binding-crypto.test.ts` PASS [REQ:plan D-3.3 / CHK054] [VERIFY:bun run vitest run tests/domain/identity-binding-crypto.test.ts]
+- [ ] T029 [P] — 写 env schema RED 测试：`IDENTITY_BINDING_SECRET` >=32、两个 TTL required positive、无 default。 **Files**: `tests/domain/identity-binding-env.test.ts` **Depends**: T017 **Acceptance**: 预期 RED；缺失 / 非法 → parse fail [REQ:plan D-3.3 / CHK055] [VERIFY:bun run vitest run tests/domain/identity-binding-env.test.ts]
+- [ ] T030 — 扩展 `packages/contracts/src/env.ts`：新增 3 个 required env；更新 `.env.example`（若仓库存在）。 **Files**: `packages/contracts/src/env.ts`、`.env.example` **Depends**: T029 **Acceptance**: `bun run vitest run tests/domain/identity-binding-env.test.ts` PASS [REQ:plan D-3.3] [VERIFY:bun run vitest run tests/domain/identity-binding-env.test.ts]
+- [ ] T031 — 写 pending context repository RED 测试（DB）：insert / load by token hash / link attempt / clear ciphertext / expiry / replay。 **Files**: `tests/db/identity-binding-context.test.ts` **Depends**: T016 / T028 **Acceptance**: 预期 RED；表行为与 plan D-3 一致 [REQ:plan D-3.2 / CHK056 / CHK060] [VERIFY:bun run vitest run tests/db/identity-binding-context.test.ts]
+- [ ] T032 — 实现 pending context repository：`create`、`findByTokenHash`、`linkAttempt`、`markCommitted`、`clearOpenid`、`materializeExpiry`。 **Files**: `apps/server/api/src/identity-binding/pending-context-repository.ts` **Depends**: T031 **Acceptance**: `bun run vitest run tests/db/identity-binding-context.test.ts` PASS [REQ:plan D-3.2 / D-14] [VERIFY:bun run vitest run tests/db/identity-binding-context.test.ts]
+
+---
+
+## Phase 4 — Repositories, RLS Context, Invitation Port
+
+- [ ] T033 — 写 tx wrapper RED 测试（DB）：5 个 binding wrapper 设置正确 GUC / purpose；commit context 设置 `app.account_id=actorAccountId` 与 `app.binding_commit_account_id`；普通 wrapper 行为不变。 **Files**: `tests/db/identity-binding-tx.test.ts` **Depends**: T016 **Acceptance**: 预期 RED；GUC 值 / purpose 逐项断言 [REQ:plan D-13.4 / CHK127] [VERIFY:bun run vitest run tests/db/identity-binding-tx.test.ts]
+- [ ] T034 — 扩展 `apps/server/api/src/db/tx.ts`：`withBindingContextTransaction`、`withBindingBootstrapTransaction`、`withBindingGateTransaction`、`withBindingCommitTransaction`、`withBindingAttemptTransaction`；bootstrap 在 invitation resolve 后调用 `app.set_binding_gate_context` 设置 target GUC（同一事务）。 **Files**: `apps/server/api/src/db/tx.ts` **Depends**: T033 **Acceptance**: `bun run vitest run tests/db/identity-binding-tx.test.ts` PASS [REQ:plan D-13.4] [VERIFY:bun run vitest run tests/db/identity-binding-tx.test.ts]
+- [ ] T035 — 写 attempt repository RED 测试（DB）：create / find live by triple / find by id / settle / expire / new attempt after terminal。 **Files**: `tests/db/identity-binding-attempt-repository.test.ts` **Depends**: T034 **Acceptance**: 预期 RED；partial unique 冲突 / new attempt 行为正确 [REQ:plan D-2 / D-7 / CHK044—CHK045] [VERIFY:bun run vitest run tests/db/identity-binding-attempt-repository.test.ts]
+- [ ] T036 — 实现 attempt repository：`createAttempt`、`findLiveByTriple`、`findByIdForUpdate`、`settleCommitted`、`settleTerminal`、`materializeExpired`。 **Files**: `apps/server/api/src/identity-binding/attempt-repository.ts` **Depends**: T035 **Acceptance**: `bun run vitest run tests/db/identity-binding-attempt-repository.test.ts` PASS [REQ:plan D-2 / D-7] [VERIFY:bun run vitest run tests/db/identity-binding-attempt-repository.test.ts]
+- [ ] T037 — 写 confirmation repository RED 测试（DB）：append、one-per-kind、append-only、cross-attempt 拒绝。 **Files**: `tests/db/identity-binding-confirmation-repository.test.ts` **Depends**: T034 **Acceptance**: 预期 RED；UNIQUE / trigger / no UPDATE / no DELETE 实际拒绝 [REQ:plan D-4 / CHK069—CHK070] [VERIFY:bun run vitest run tests/db/identity-binding-confirmation-repository.test.ts]
+- [ ] T038 — 实现 confirmation repository：`appendCandidate`、`appendSecondParty`、`listByAttempt`；不提供 update / delete。 **Files**: `apps/server/api/src/identity-binding/confirmation-repository.ts` **Depends**: T037 **Acceptance**: `bun run vitest run tests/db/identity-binding-confirmation-repository.test.ts` PASS [REQ:plan D-4] [VERIFY:bun run vitest run tests/db/identity-binding-confirmation-repository.test.ts]
+- [ ] T039 — 写 operation key repository RED 测试（DB）：scope / cross-scope-kind 拒绝 / same key / mismatch / concurrent same-key / no response body。 **Files**: `tests/db/identity-binding-operation-key-repository.test.ts` **Depends**: T034 **Acceptance**: 预期 RED；唯一约束 / advisory lock / replay 行为正确；CANDIDATE_CONTEXT 与 ACCOUNT scope 互不可读 [REQ:plan D-5 / D-13.2 / CHK071—CHK082] [VERIFY:bun run vitest run tests/db/identity-binding-operation-key-repository.test.ts]
+- [ ] T040 — 实现 operation key repository：`lockScope`、`find`、`insert`、`mapAttempt`；每次 lookup / insert 前调用 `app.set_binding_operation_scope(scopeKey)`；不存 response body。 **Files**: `apps/server/api/src/identity-binding/operation-key-repository.ts` **Depends**: T039 **Acceptance**: `bun run vitest run tests/db/identity-binding-operation-key-repository.test.ts` PASS [REQ:plan D-5 / D-13.2] [VERIFY:bun run vitest run tests/db/identity-binding-operation-key-repository.test.ts]
+- [ ] T041 [P] — 写 invitation port RED 测试：VALID / TERMINAL_UNUSABLE、fixture 只用于 contract-level、不得写第二套 invitation 模型。 **Files**: `tests/domain/identity-binding-invitation-port.test.ts` **Depends**: T017 **Acceptance**: 预期 RED；port 分支 / fixture 行为断言 [REQ:plan D-16 / CHK143—CHK146] [VERIFY:bun run vitest run tests/domain/identity-binding-invitation-port.test.ts]
+- [ ] T042 — 定义 `InvitationResolutionPort` + `InvitationResolution` + contract-level fixture；production adapter 位置留空并标 BLOCKED（T121）。 **Files**: `apps/server/api/src/identity-binding/invitation-port.ts` **Depends**: T041 **Acceptance**: `bun run vitest run tests/domain/identity-binding-invitation-port.test.ts` PASS [REQ:plan D-16.1] [VERIFY:bun run vitest run tests/domain/identity-binding-invitation-port.test.ts]
+- [ ] T043 — 写 audit repository RED 测试（DB）：insert、append-only、runtime 不可读、无 secret、target nullable。 **Files**: `tests/db/identity-binding-audit-repository.test.ts` **Depends**: T034 **Acceptance**: 预期 RED；INSERT 成功；SELECT 被 RLS 拒绝；UPDATE / DELETE 抛异常 [REQ:plan D-15 / CHK135—CHK142] [VERIFY:bun run vitest run tests/db/identity-binding-audit-repository.test.ts]
+- [ ] T044 — 实现 audit repository：`appendAudit` 仅 INSERT，不返回到 runtime 业务响应。 **Files**: `apps/server/api/src/identity-binding/audit-repository.ts` **Depends**: T043 **Acceptance**: `bun run vitest run tests/db/identity-binding-audit-repository.test.ts` PASS [REQ:plan D-15] [VERIFY:bun run vitest run tests/db/identity-binding-audit-repository.test.ts]
+
+---
+
+## Phase 5 — Authorization Extension
+
+- [ ] T045 [P] — 写 authorization RED 测试：6 个新 action 的 allow / deny；UNDER_14 / MINOR / ADULT / UNKNOWN；facts 缺失 DENY；candidate 不能调用 confirmer 动作。 **Files**: `tests/domain/identity-binding-authorization.test.ts` **Depends**: T006 **Acceptance**: 预期 RED；每个 action 至少 1 allow + 1 deny [REQ:FR-024 / plan D-12 / CHK115—CHK124] [VERIFY:bun run vitest run tests/domain/identity-binding-authorization.test.ts]
+- [ ] T046 — 扩展 `authorize()`：Action / Purpose / Resource / Actor / AuthorizeFacts / deny reasons；既有 action 行为不变。 **Files**: `packages/authorization/src/authorize.ts` **Depends**: T045 **Acceptance**: `bun run vitest run tests/domain/identity-binding-authorization.test.ts` PASS [REQ:plan D-12] [VERIFY:bun run vitest run tests/domain/identity-binding-authorization.test.ts]
+- [ ] T047 — 写 app-layer gate facts builder RED 测试：读取 P1 / family / age / guardian / manager / membership + 调用 `assertMinorProcessingAllowed` 产生 `minorGate`；缺失即 null。 **Files**: `tests/domain/identity-binding-facts.test.ts` **Depends**: T046 **Acceptance**: 预期 RED；facts 字段完整 / 缺失行为断言 [REQ:plan D-8.2 / D-12.1] [VERIFY:bun run vitest run tests/domain/identity-binding-facts.test.ts]
+- [ ] T048 — 实现 app-layer `gate.ts` facts builder：repository 读取 + `assertMinorProcessingAllowed`，再调用 domain pure matrix；不读 `verified_source`，不从 membership 推导 guardian。 **Files**: `apps/server/api/src/identity-binding/gate.ts` **Depends**: T047 **Acceptance**: `bun run vitest run tests/domain/identity-binding-facts.test.ts` PASS [REQ:plan D-8.1 / D-8.2 / D-12.2] [VERIFY:bun run vitest run tests/domain/identity-binding-facts.test.ts]
+
+---
+
+## Phase 6 — Bootstrap Runtime（Phase A / Gate 1 / Phase B）
+
+- [ ] T049 — 写 bootstrap RED 测试：WeChat auth → invitation resolve → Case B / C → Gate 1 → context / attempt；Case B match 不建 attempt；Gate 1 fail 不建 attempt。 **Files**: `tests/integration/identity-binding-bootstrap.test.ts` **Depends**: T042 / T046 / T048 **Acceptance**: 预期 RED；分支逐项断言；无 Account / Person 创建 [REQ:FR-001—FR-007 / AS-01 / AS-06 / AS-09 / AS-20] [VERIFY:bun run vitest run tests/integration/identity-binding-bootstrap.test.ts]
+- [ ] T050 — 实现 bootstrap orchestration：`bootstrap()`；WeChat auth 外部；单事务内 context / invitation / Gate 1 / attempt / audit；invalid invitation / Gate 1 fail / pre-attempt block 清空 ciphertext。 **Files**: `apps/server/api/src/identity-binding/bootstrap.ts` **Depends**: T049 **Acceptance**: `bun run vitest run tests/integration/identity-binding-bootstrap.test.ts` PASS [REQ:plan D-3.2 / D-14 / D-17] [VERIFY:bun run vitest run tests/integration/identity-binding-bootstrap.test.ts]
+- [ ] T051 — 写 Case B RED 测试：正确 Account → REUSED + session；错误 Account → generic；均不创建 Person / binding。 **Files**: `tests/integration/identity-binding-case-b.test.ts` **Depends**: T050 **Acceptance**: 预期 RED；Account / Person / binding 计数断言 [REQ:FR-003 / SC-002 / AS-09] [VERIFY:bun run vitest run tests/integration/identity-binding-case-b.test.ts]
+- [ ] T052 — 实现 Case B 分支 + session 签发复用；不进入 bootstrap attempt；Case B mismatch 的 context 清空 ciphertext 后返回 generic。 **Files**: `apps/server/api/src/identity-binding/bootstrap.ts` **Depends**: T051 **Acceptance**: `bun run vitest run tests/integration/identity-binding-case-b.test.ts` PASS [REQ:plan D-3.2 / D-6 / D-17] [VERIFY:bun run vitest run tests/integration/identity-binding-case-b.test.ts]
+- [ ] T053 — 写 Gate 1 blocked RED 测试：UNDER_14 no guardian / consent invalid / ADULT / UNKNOWN / multi-family / invitation invalid；无 attempt、无 P1-specific confirmation、无 session。 **Files**: `tests/integration/identity-binding-gate1.test.ts` **Depends**: T050 **Acceptance**: 预期 RED；每个分支 0 attempt / 0 account / 0 person increment / generic [REQ:FR-006 / AS-14 / AS-06] [VERIFY:bun run vitest run tests/integration/identity-binding-gate1.test.ts]
+- [ ] T054 — 实现 Gate 1 blocked 分支：context 保留、ciphertext 清空、audit、generic；不创建 attempt。 **Files**: `apps/server/api/src/identity-binding/bootstrap.ts` **Depends**: T053 **Acceptance**: `bun run vitest run tests/integration/identity-binding-gate1.test.ts` PASS [REQ:plan D-8.3] [VERIFY:bun run vitest run tests/integration/identity-binding-gate1.test.ts]
+- [ ] T055 — 写 attempt creation RED 测试：Gate 1 pass → PENDING attempt；same triple 收敛；terminal 后 new attempt；expired 物化。 **Files**: `tests/integration/identity-binding-attempt-create.test.ts` **Depends**: T050 / T036 **Acceptance**: 预期 RED；partial unique / rowCount / new attempt 行为断言 [REQ:FR-017 / AS-10 / CHK045] [VERIFY:bun run vitest run tests/integration/identity-binding-attempt-create.test.ts]
+- [ ] T056 — 实现 attempt creation / convergence：find live → create or converge → unique violation re-read → link context。 **Files**: `apps/server/api/src/identity-binding/bootstrap.ts` **Depends**: T055 **Acceptance**: `bun run vitest run tests/integration/identity-binding-attempt-create.test.ts` PASS [REQ:plan D-7 / D-14] [VERIFY:bun run vitest run tests/integration/identity-binding-attempt-create.test.ts]
+- [ ] T057 — 写 bootstrap route RED 测试：`POST /identity-bindings/bootstrap` schema、200 generic、Case B REUSED、401 WeChat fail、无 mode / hidden params。 **Files**: `tests/integration/identity-binding-bootstrap-route.test.ts` **Depends**: T050 **Acceptance**: 预期 RED；route 行为 / response shape 断言 [REQ:FR-001 / plan D-10.1] [VERIFY:bun run vitest run tests/integration/identity-binding-bootstrap-route.test.ts]
+- [ ] T058 — 实现 bootstrap route + **bootstrap Zod schema**（写入 `identity-binding-schemas.ts` 的 bootstrap 段）+ WeChat provider 调用；注册到 app。 **Files**: `apps/server/api/src/routes/identity-bindings.ts`、`packages/contracts/src/identity-binding-schemas.ts`、`apps/server/api/src/app.ts` **Depends**: T057 **Acceptance**: `bun run vitest run tests/integration/identity-binding-bootstrap-route.test.ts` PASS [REQ:plan D-10.2] [VERIFY:bun run vitest run tests/integration/identity-binding-bootstrap-route.test.ts]
+
+---
+
+## Phase 7 — Candidate Decision / Status
+
+- [ ] T059 — 写 candidate decision RED 测试：AFFIRM / REJECT / CANCEL、无 attempt → generic、跨 identity / 跨 invitation 拒绝、replay 无重复 confirmation。 **Files**: `tests/integration/identity-binding-candidate.test.ts` **Depends**: T050 / T036 / T038 / T040 **Acceptance**: 预期 RED；分支逐项断言；invitation 不变 [REQ:FR-008 / AS-04 / AS-23 / CHK061—CHK065] [VERIFY:bun run vitest run tests/integration/identity-binding-candidate.test.ts]
+- [ ] T060 — 实现 candidate decision orchestration：context → attempt → identity check → confirmation or terminal + audit；所有结果 generic。 **Files**: `apps/server/api/src/identity-binding/candidate-decision.ts` **Depends**: T059 **Acceptance**: `bun run vitest run tests/integration/identity-binding-candidate.test.ts` PASS [REQ:plan D-10.2 / D-14] [VERIFY:bun run vitest run tests/integration/identity-binding-candidate.test.ts]
+- [ ] T061 — 写 candidate status RED 测试：未 committed → generic；committed → COMMITTED；无 attempt / terminal → generic；无 attempt id / reason。 **Files**: `tests/integration/identity-binding-status.test.ts` **Depends**: T050 **Acceptance**: 预期 RED；response key 集合断言 [REQ:FR-019 / plan D-11.1] [VERIFY:bun run vitest run tests/integration/identity-binding-status.test.ts]
+- [ ] T062 — 实现 status orchestration + route。 **Files**: `apps/server/api/src/identity-binding/candidate-status.ts`、`apps/server/api/src/routes/identity-bindings.ts` **Depends**: T061 **Acceptance**: `bun run vitest run tests/integration/identity-binding-status.test.ts` PASS [REQ:plan D-10.2] [VERIFY:bun run vitest run tests/integration/identity-binding-status.test.ts]
+- [ ] T063 — 写 candidate route auth RED 测试：`X-Binding-Context` 接受；Bearer 拒绝；无 header 401；candidate 不能调用 confirmer 路由。 **Files**: `tests/integration/identity-binding-candidate-auth.test.ts` **Depends**: T062 **Acceptance**: 预期 RED；status / decision 路由 auth 行为断言 [REQ:FR-024 / plan D-10.4 / CHK121] [VERIFY:bun run vitest run tests/integration/identity-binding-candidate-auth.test.ts]
+- [ ] T064 — 实现 candidate preHandler / auth plugin exemption；普通 Bearer 不进入 binding 路由。 **Files**: `apps/server/api/src/plugins/auth.ts`、`apps/server/api/src/routes/identity-bindings.ts` **Depends**: T063 **Acceptance**: `bun run vitest run tests/integration/identity-binding-candidate-auth.test.ts` PASS [REQ:plan D-10.4] [VERIFY:bun run vitest run tests/integration/identity-binding-candidate-auth.test.ts]
+
+---
+
+## Phase 8 — Confirmer Runtime
+
+- [ ] T065 — 写 confirmer authority RED 测试：UNDER_14 guardian only；MINOR 有 guardian；MINOR 无 guardian manager；ADULT / UNKNOWN 拒绝；verified_source 不参与；candidate token 拒绝；`personId` 与 attempt.target_person_id 不一致 → 404；AFFIRM 写 confirmation 后 state ∈ {PENDING, COMMITTED}（commit 接入前后均成立）。 **Files**: `tests/integration/identity-binding-confirmer.test.ts` **Depends**: T048 / T050 **Acceptance**: 预期 RED；每个 age 分支 allow / deny；personId mismatch 404 [REQ:FR-009 / AS-17 / CHK119—CHK121] [VERIFY:bun run vitest run tests/integration/identity-binding-confirmer.test.ts]
+- [ ] T066 — 实现 confirmer authority + **decision validation**（list 由 T070 实现）：先以 `personId` 解析 target family / authority，再读取 `attemptId AND target_person_id=personId`；AFFIRM 写 second-party confirmation，保持 PENDING（T086 接入 commit 后可返回 COMMITTED）；REJECT 写 TERMINAL；不在本任务触发 commit。 **Files**: `apps/server/api/src/identity-binding/confirmer.ts` **Depends**: T065 **Acceptance**: `bun run vitest run tests/integration/identity-binding-confirmer.test.ts` PASS；AFFIRM 后 confirmation 存在、state ∈ {PENDING, COMMITTED} [REQ:plan D-9 / D-10 / D-14] [VERIFY:bun run vitest run tests/integration/identity-binding-confirmer.test.ts]
+- [ ] T067 — 写 confirmer rejected / unable-to-recognize RED 测试：REJECT 不 commit、invitation 不变、无 partial binding、无 P2；**已 affirmative 后再 REJECT → 409，attempt / confirmation 不变**。 **Files**: `tests/integration/identity-binding-confirmer-reject.test.ts` **Depends**: T066 **Acceptance**: 预期 RED；attempt TERMINAL；0 account / 0 person increment；affirm 后 reject 无状态改变 [REQ:AS-05 / CHK069] [VERIFY:bun run vitest run tests/integration/identity-binding-confirmer-reject.test.ts]
+- [ ] T068 — 实现 confirmer REJECT 分支 + terminal audit；若 SECOND_PARTY affirmative 已存在则 409 `BINDING_STATE_CONFLICT`，不改 attempt。 **Files**: `apps/server/api/src/identity-binding/confirmer.ts` **Depends**: T067 **Acceptance**: `bun run vitest run tests/integration/identity-binding-confirmer-reject.test.ts` PASS [REQ:plan D-9.4 / D-14] [VERIFY:bun run vitest run tests/integration/identity-binding-confirmer-reject.test.ts]
+- [ ] T069 — 写 confirmer list 最小字段 / 404 generic RED 测试：未授权 / P1 不存在 / 非目标 Family 同一 404；无 P1 细节；`state='PENDING' AND expires_at > now()` 过滤，过期 attempt 不出现。 **Files**: `tests/integration/identity-binding-confirmer-list.test.ts` **Depends**: T066 **Acceptance**: 预期 RED；body key / status 断言 [REQ:FR-019 / plan D-9.2 / D-11.2] [VERIFY:bun run vitest run tests/integration/identity-binding-confirmer-list.test.ts]
+- [ ] T070 — 实现 confirmer list repository + route + generic 404；targetFamilyId 由服务端读取 P1 唯一 `family_members` 行（多行 / 无行 → 404 generic）；查询必须带 `state='PENDING' AND expires_at > now()`，过期 attempt 可条件物化 TERMINAL + audit。 **Files**: `apps/server/api/src/identity-binding/confirmer.ts`、`routes/identity-bindings.ts` **Depends**: T069 **Acceptance**: `bun run vitest run tests/integration/identity-binding-confirmer-list.test.ts` PASS [REQ:plan D-9.2 / D-14] [VERIFY:bun run vitest run tests/integration/identity-binding-confirmer-list.test.ts]
+- [ ] T071 — 写 confirmer 独立认证 RED 测试：candidate 会话 / `X-Binding-Context` 不能调用 confirmer decision；confirmer 不能复用 candidate token。 **Files**: `tests/integration/identity-binding-confirmer-independent.test.ts` **Depends**: T070 **Acceptance**: 预期 RED；401 / 404 断言 [REQ:plan D-9.3 / CHK121] [VERIFY:bun run vitest run tests/integration/identity-binding-confirmer-independent.test.ts]
+- [ ] T072 — 实现 confirmer route auth：只接受 Bearer；显式拒绝 `X-Binding-Context`。 **Files**: `apps/server/api/src/plugins/auth.ts`、`routes/identity-bindings.ts` **Depends**: T071 **Acceptance**: `bun run vitest run tests/integration/identity-binding-confirmer-independent.test.ts` PASS [REQ:plan D-10.4] [VERIFY:bun run vitest run tests/integration/identity-binding-confirmer-independent.test.ts]
+
+---
+
+## Phase 9 — Gate 2 & Phase C Commit
+
+- [ ] T073 — 写 Gate 2 / commit RED 测试（DB）：Gate 2 当前状态复核、consent revoked between gates、invitation terminal between gates、P1 account null、confirmer authority 变化。 **Files**: `tests/integration/identity-binding-commit-gate2.test.ts` **Depends**: T066 / T036 / T044 **Acceptance**: 预期 RED；每个失效分支 commit = 0、TERMINAL，不 PENDING [REQ:FR-010 / SC-009 / AS-14] [VERIFY:bun run vitest run tests/integration/identity-binding-commit-gate2.test.ts]
+- [ ] T074 — 实现 commit orchestration：attempt / P1 / account 行锁 → Gate 2 → Account create / reuse → `UPDATE persons` → `UPDATE attempt` → context 清理 → audit。 **Files**: `apps/server/api/src/identity-binding/commit.ts` **Depends**: T073 **Acceptance**: `bun run vitest run tests/integration/identity-binding-commit-gate2.test.ts` PASS [REQ:plan D-6 / D-14] [VERIFY:bun run vitest run tests/integration/identity-binding-commit-gate2.test.ts]
+- [ ] T075 — 写 Account create / reuse RED 测试：无 Account → create；existing unbound → reuse；existing bound P1 → historical COMMITTED / conflict；existing bound P2 → TERMINAL。 **Files**: `tests/integration/identity-binding-account.test.ts` **Depends**: T074 **Acceptance**: 预期 RED；Account / Person 计数与 binding 断言 [REQ:FR-011 / AS-21 / CHK107—CHK110] [VERIFY:bun run vitest run tests/integration/identity-binding-account.test.ts]
+- [ ] T076 — 实现 Account create / reuse + conflict 分支；不 INSERT Person。 **Files**: `apps/server/api/src/identity-binding/commit.ts` **Depends**: T075 **Acceptance**: `bun run vitest run tests/integration/identity-binding-account.test.ts` PASS [REQ:plan D-6.3] [VERIFY:bun run vitest run tests/integration/identity-binding-account.test.ts]
+- [ ] T077 — 写 P1 conditional update RED 测试（DB）：rowCount 1 / 0、并发 P1、已绑定 P1、Person account unique。 **Files**: `tests/db/identity-binding-p1-commit.test.ts` **Depends**: T074 **Acceptance**: 预期 RED；rowCount / unique violation / TERMINAL 断言 [REQ:FR-011 / FR-017 / SC-005] [VERIFY:bun run vitest run tests/db/identity-binding-p1-commit.test.ts]
+- [ ] T078 — 实现 P1 conditional update + rowCount 判定 + concurrency loser terminal。 **Files**: `apps/server/api/src/identity-binding/commit.ts` **Depends**: T077 **Acceptance**: `bun run vitest run tests/db/identity-binding-p1-commit.test.ts` PASS [REQ:plan D-6.4 / D-7] [VERIFY:bun run vitest run tests/db/identity-binding-p1-commit.test.ts]
+- [ ] T079 — 写 attempt settle / audit RED 测试（DB）：COMMITTED 与 TERMINAL 各一次、replay 不改、audit 同事务。 **Files**: `tests/integration/identity-binding-commit-settle.test.ts` **Depends**: T074 / T044 **Acceptance**: 预期 RED；state / settled_at / audit 行数断言 [REQ:FR-013 / FR-023 / AS-15] [VERIFY:bun run vitest run tests/integration/identity-binding-commit-settle.test.ts]
+- [ ] T080 — 实现 attempt settle + audit + context ciphertext 清理。 **Files**: `apps/server/api/src/identity-binding/commit.ts`、`audit-repository.ts` **Depends**: T079 **Acceptance**: `bun run vitest run tests/integration/identity-binding-commit-settle.test.ts` PASS [REQ:plan D-6.1 / D-15] [VERIFY:bun run vitest run tests/integration/identity-binding-commit-settle.test.ts]
+- [ ] T081 — 写 rollback 注入 RED 测试：Gate2 / Account / persons update / attempt update / audit 任一失败 → 全回滚；无孤立 Account / partial binding / COMMITTED attempt。 **Files**: `tests/integration/identity-binding-rollback.test.ts` **Depends**: T080 **Acceptance**: 预期 RED；注入点逐项、对象计数 = 0 [REQ:FR-021 / AS-22 / CHK100] [VERIFY:bun run vitest run tests/integration/identity-binding-rollback.test.ts]
+- [ ] T082 — 实现事务错误分类：业务失败 → terminal + audit；基础设施失败 → RETRYABLE + best-effort audit；确保回滚。 **Files**: `apps/server/api/src/identity-binding/commit.ts`、`errors.ts` **Depends**: T081 **Acceptance**: `bun run vitest run tests/integration/identity-binding-rollback.test.ts` PASS [REQ:plan D-14] [VERIFY:bun run vitest run tests/integration/identity-binding-rollback.test.ts]
+- [ ] T083 — 写并发 commit RED 测试（DB）：同一 P1 多 attempt、同一 Account 多 P1、double confirmation、commit vs retry、全失败 0 commit。 **Files**: `tests/db/identity-binding-concurrency.test.ts` **Depends**: T078 / T080 **Acceptance**: 预期 RED；successful commits ∈ {0,1}；binding increase ≤ 1；Person increment 0 [REQ:FR-016 / FR-017 / SC-005 / AS-10] [VERIFY:bun run vitest run tests/db/identity-binding-concurrency.test.ts]
+- [ ] T084 — 实现并发收敛补齐：unique violation / rowCount 0 → 读取 authoritative state → terminal / replay；不引入第二套锁。 **Files**: `apps/server/api/src/identity-binding/commit.ts` **Depends**: T083 **Acceptance**: `bun run vitest run tests/db/identity-binding-concurrency.test.ts` PASS [REQ:plan D-7] [VERIFY:bun run vitest run tests/db/identity-binding-concurrency.test.ts]
+- [ ] T085 — 写 commit integration RED 测试：AS-01 / AS-02 / AS-03 / AS-15 / AS-19 / AS-21 / AS-23 全链路。 **Files**: `tests/integration/identity-binding-commit.test.ts` **Depends**: T084 **Acceptance**: 预期 RED；happy path + replay + persistence + cross-attempt 断言 [REQ:AS-01—AS-03 / AS-15 / AS-19 / AS-21 / AS-23] [VERIFY:bun run vitest run tests/integration/identity-binding-commit.test.ts]
+- [ ] T086 — 接入 confirmer AFFIRM → commit：事务 A 已提交 second-party confirmation；事务 B 执行 D-6.1 commit。commit 基础设施失败时 confirmation 保留并返回 RETRYABLE；不 double commit。 **Files**: `apps/server/api/src/identity-binding/confirmer.ts`、`commit.ts` **Depends**: T085 / T066 **Acceptance**: `bun run vitest run tests/integration/identity-binding-commit.test.ts` PASS；AFFIRM → COMMITTED；失败重试 → 不 double commit [REQ:plan D-14 / FR-014 / AS-13] [VERIFY:bun run vitest run tests/integration/identity-binding-commit.test.ts]
+
+---
+
+## Phase 10 — Session Exchange & Ordinary Identity Bridge
+
+- [ ] T087 — 写 session exchange RED 测试：COMMITTED → session；未 committed → generic；无 Account / Person 创建；不 bump epoch。 **Files**: `tests/integration/identity-binding-session.test.ts` **Depends**: T086 **Acceptance**: 预期 RED；response / 对象计数 / epoch 断言 [REQ:FR-011 / AS-01 / CHK157] [VERIFY:bun run vitest run tests/integration/identity-binding-session.test.ts]
+- [ ] T088 — 实现 `session-exchange.ts` + route；读取 committed account / P1 / epoch，签发普通 session。 **Files**: `apps/server/api/src/identity-binding/session-exchange.ts`、`routes/identity-bindings.ts` **Depends**: T087 **Acceptance**: `bun run vitest run tests/integration/identity-binding-session.test.ts` PASS [REQ:plan D-10.2] [VERIFY:bun run vitest run tests/integration/identity-binding-session.test.ts]
+- [ ] T089 — 写 ordinary login regression RED 测试：`POST /auth/wechat` new openid → Account + Person；existing → reuse；无 `mode` / `inviteMode` / `binding` / hidden query / 特殊 header。 **Files**: `tests/integration/identity-binding-ordinary-login-regression.test.ts` **Depends**: T032 **Acceptance**: 预期 RED；与基线输出一致；无 P2 [REQ:FR-001 / SC-013 / CHK159] [VERIFY:bun run vitest run tests/integration/identity-binding-ordinary-login-regression.test.ts]
+- [ ] T090 — 运行 ordinary login regression；若因 auth plugin exemption 引入回归，修复 plugin 边界，不改登录事务。 **Files**: `plugins/auth.ts`、`routes/auth.ts` **Depends**: T089 **Acceptance**: `bun run vitest run tests/integration/identity-binding-ordinary-login-regression.test.ts` + `tests/integration/auth.test.ts` PASS [REQ:plan D-17.1] [VERIFY:bun run vitest run tests/integration/identity-binding-ordinary-login-regression.test.ts]
+
+---
+
+## Phase 11 — Contracts, Routes, Error Envelope
+
+- [ ] T091 — **扩展** `identity-binding-schemas.ts`（保留 T058 的 bootstrap 段）：candidate-decision / status / session / pending list / confirmer decision（含 `personId`）；严格 `additionalProperties: false` 语义。 **Files**: `packages/contracts/src/identity-binding-schemas.ts` **Depends**: T017 / T058 **Acceptance**: `bun run typecheck` PASS [REQ:plan D-10.2 / CHK154—CHK157] [VERIFY:bun run typecheck]
+- [ ] T092 — 写手写 OpenAPI：6 条 route、request / response / error envelope；不 hand-edit generated。 **Files**: `specs/006-identity-binding-runtime/contracts/identity-binding-api.openapi.yaml` **Depends**: T091 **Acceptance**: OpenAPI parse PASS [REQ:plan API Contract Impact / CHK160] [VERIFY:ruby -ryaml -e "YAML.load_file(%q{specs/006-identity-binding-runtime/contracts/identity-binding-api.openapi.yaml})"]
+- [ ] T093 — 写 route enumeration / no participant route RED 测试：恰好 6 条 binding route；无 `/participations` / `/cases` / `/evidence` / `/interventions`。 **Files**: `tests/integration/identity-binding-routes.test.ts` **Depends**: T092 **Acceptance**: 预期 RED；`fastify.printRoutes()` 或 OpenAPI path 断言 [REQ:plan D-20 / CHK153 / CHK186] [VERIFY:bun run vitest run tests/integration/identity-binding-routes.test.ts]
+- [ ] T094 — 实现 6 条 route 注册到 `app.ts`；确认无 participant / Case / Evidence / UI 路由。 **Files**: `apps/server/api/src/app.ts`、`routes/identity-bindings.ts` **Depends**: T058 / T062 / T066 / T070 / T072 / T088 / T093 **Acceptance**: `bun run vitest run tests/integration/identity-binding-routes.test.ts` PASS；恰好 6 条 [REQ:plan D-10.1 / CHK153] [VERIFY:bun run vitest run tests/integration/identity-binding-routes.test.ts]
+- [ ] T095 — 写 error envelope / validation RED 测试：AFFIRM 缺字段 → 422；candidate generic 不出现新 code；confirmer 404 统一。 **Files**: `tests/integration/identity-binding-error-envelope.test.ts` **Depends**: T094 **Acceptance**: 预期 RED；status / body 断言 [REQ:plan D-10.3] [VERIFY:bun run vitest run tests/integration/identity-binding-error-envelope.test.ts]
+- [ ] T096 — 实现 `error-handler.ts` 扩展：`WECHAT_AUTH_FAILED`、`BINDING_CONTEXT_INVALID`、`BINDING_NOT_FOUND`、`BINDING_STATE_CONFLICT`；错误体无 P1 细节。 **Files**: `apps/server/api/src/plugins/error-handler.ts` **Depends**: T095 **Acceptance**: `bun run vitest run tests/integration/identity-binding-error-envelope.test.ts` PASS [REQ:plan D-10.3 / CHK158] [VERIFY:bun run vitest run tests/integration/identity-binding-error-envelope.test.ts]
+- [ ] T097 — 运行 `openapi:generate`；检查 generated 产物只由脚本生成；`openapi:check` PASS。 **Files**: `packages/generated/openapi.json`、`openapi.d.ts` **Depends**: T092 / T094 **Acceptance**: `bun run openapi:check` PASS；无 hand-edit [REQ:plan Technical Baseline / CHK160] [VERIFY:bun run openapi:check]
+- [ ] T098 — 写 contract-level invitation seam 测试：VALID / TERMINAL_UNUSABLE、真实 adapter 不存在时标记 BLOCKED，不 fake invitation 表。 **Files**: `tests/integration/identity-binding-invitation-contract.test.ts` **Depends**: T042 / T094 **Acceptance**: port 分支断言 PASS；无第二套 invitation 模型 [REQ:plan D-16 / CHK143—CHK148] [VERIFY:bun run vitest run tests/integration/identity-binding-invitation-contract.test.ts]
+
+---
+
+## Phase 12 — Audit, Anti-Enumeration, RLS Hardening
+
+- [ ] T099 — 写 audit outcome RED 测试：COMMITTED / PENDING / TERMINAL / RETRYABLE 可追溯；无 token / openid / ciphertext / consent 原文；不为 audit 创建 Person / Account；Gate 1 阻断 / Case B mismatch / invalid invitation 的 audit 无 target_person / target_family / invitation id。 **Files**: `tests/integration/identity-binding-audit.test.ts` **Depends**: T086 / T044 **Acceptance**: 预期 RED；每个 outcome 至少 1 条 audit；secret 扫描 = 0；Phase A 阻断 audit 无 P1 关联 [REQ:FR-023 / SC-011 / AS-24 / CHK135—CHK142] [VERIFY:bun run vitest run tests/integration/identity-binding-audit.test.ts]
+- [ ] T100 — 实现 audit 写入点补齐：bootstrap authenticated / Gate1 blocked / attempt created / candidate confirmed / candidate rejected / second-party confirmed / committed / terminal；Phase A 阻断分支不得写 target person / family / invitation id。 **Files**: `bootstrap.ts`、`candidate-decision.ts`、`confirmer.ts`、`commit.ts`、`audit-repository.ts` **Depends**: T099 **Acceptance**: `bun run vitest run tests/integration/identity-binding-audit.test.ts` PASS [REQ:plan D-15.2] [VERIFY:bun run vitest run tests/integration/identity-binding-audit.test.ts]
+- [ ] T101 — 写 anti-enumeration matrix RED 测试：invalid invitation / P1 not exist / multi-family / no guardian / consent invalid / ADULT / UNKNOWN / Case B wrong / account bound P2 / PENDING / TERMINAL / expired 的 status / body keys / headers 全部一致。 **Files**: `tests/integration/identity-binding-anti-enumeration.test.ts` **Depends**: T094 / T025 **Acceptance**: 预期 RED；逐行 matrix 断言；无 attemptId / personId / reason；无 redirect / Set-Cookie [REQ:FR-019 / SC-007 / CHK105—CHK114] [VERIFY:bun run vitest run tests/integration/identity-binding-anti-enumeration.test.ts]
+- [ ] T102 — 修复任何 response 差异：统一 serializer、固定字段、禁止提前 return；不引入人为延迟。 **Files**: `identity-binding/anti-enumeration.ts`、routes **Depends**: T101 **Acceptance**: `bun run vitest run tests/integration/identity-binding-anti-enumeration.test.ts` PASS [REQ:plan D-11.3] [VERIFY:bun run vitest run tests/integration/identity-binding-anti-enumeration.test.ts]
+- [ ] T103 — 写 RLS RED 测试：无上下文 0 行；错误 family / attempt 0 行；candidate 不能读 P1 profile / consent；audit runtime SELECT 拒绝；commit 不能更新非 target person。 **Files**: `tests/db/identity-binding-rls.test.ts` **Depends**: T016 / T034 **Acceptance**: 预期 RED；每个 policy 至少 1 正 / 1 反 [REQ:FR-024 / AS-24 / CHK125—CHK134] [VERIFY:bun run vitest run tests/db/identity-binding-rls.test.ts]
+- [ ] T104 — 修复 RLS / policy 缺口；若需修改已应用 migration，必须新增 **additive migration**，不得编辑已应用 migration；不关闭 RLS、不使用 owner / BYPASSRLS。 **Files**: 新增 additive migration / contexts **Depends**: T103 **Acceptance**: `bun run vitest run tests/db/identity-binding-rls.test.ts` PASS [REQ:plan D-13 / CHK163] [VERIFY:bun run vitest run tests/db/identity-binding-rls.test.ts]
+
+---
+
+## Phase 13 — Verification-Only Tests & Test Suites
+
+- [ ] T105 — 写并运行 no-P2 / object-count 测试：ordinary-login-first、concurrent、retry、rollback、invitation terminal；`persons` increment = 0、P2 = 0、partial binding = 0、session = 0、authz = 0、participant = 0。 **Files**: `tests/integration/identity-binding-no-p2.test.ts` **Depends**: T081 / T083 / T086 **Acceptance**: 新测试先于 aggregate run 创建并 PASS [REQ:FR-016 / FR-021 / SC-004 / SC-008 / CHK174] [VERIFY:bun run vitest run tests/integration/identity-binding-no-p2.test.ts]
+- [ ] T106 — 写并运行 integration idempotency matrix：same/different payload、concurrent same-key、different-key same semantic、settled replay、PENDING replay、RETRYABLE retry、TERMINAL retry。 **Files**: `tests/integration/identity-binding-idempotency.test.ts` **Depends**: T040 / T060 / T086 **Acceptance**: 新测试先于 aggregate run 创建并 PASS [REQ:FR-022 / SC-006 / CHK176] [VERIFY:bun run vitest run tests/integration/identity-binding-idempotency.test.ts]
+- [ ] T107 — 运行 domain suite：state / gate / idempotency / crypto / env / anti-enum / authz / facts。 **Files**: 测试 **Depends**: T019 / T021 / T023 / T025 / T028 / T030 / T046 / T048 **Acceptance**: `bun run vitest run tests/domain` PASS [REQ:plan D-19.1] [VERIFY:bun run vitest run tests/domain]
+- [ ] T108 — 运行 DB suite：schema / tx / context / attempt / confirmation / operation key / audit / p1 commit / concurrency / rls。 **Files**: 测试 **Depends**: T016 / T032 / T034 / T036 / T038 / T040 / T044 / T078 / T084 / T104 **Acceptance**: `bun run vitest run tests/db` PASS [REQ:plan D-19.1] [VERIFY:bun run vitest run tests/db]
+- [ ] T109 — 运行 integration suite（含 T105 / T106）：bootstrap / case-b / gate1 / attempt-create / candidate / status / confirmer / commit / session / routes / error / audit / anti-enum / invitation / ordinary regression / rollback / no-p2 / idempotency。 **Files**: 测试 **Depends**: T105 / T106 / T058 / T060 / T062 / T064 / T066 / T068 / T070 / T072 / T086 / T088 / T090 / T093 / T094 / T097 / T098 / T100 / T102 **Acceptance**: `bun run vitest run tests/integration` PASS（除 explicit BLOCKED） [REQ:plan D-19.1] [VERIFY:bun run vitest run tests/integration]
+- [ ] T110 — 运行 concurrency suite：同 P1 / 同 Account / 双确认 / commit vs retry / 全失败 0 commit。 **Files**: `tests/db/identity-binding-concurrency.test.ts` **Depends**: T108 **Acceptance**: 全 PASS；0/1 commit [REQ:FR-017 / SC-005 / CHK175] [VERIFY:bun run vitest run tests/db/identity-binding-concurrency.test.ts]
+- [ ] T111 — 运行 security / anti-enum suite：6 类内部原因、confirmer 最小可见、candidate token 不能代持、audit 无 secret。 **Files**: `tests/integration/identity-binding-anti-enumeration.test.ts`、`tests/integration/identity-binding-audit.test.ts`、`tests/integration/identity-binding-confirmer-independent.test.ts` **Depends**: T101 / T099 / T071 **Acceptance**: 全 PASS [REQ:FR-019 / AS-17 / AS-24 / CHK177] [VERIFY:bun run vitest run tests/integration/identity-binding-anti-enumeration.test.ts tests/integration/identity-binding-audit.test.ts tests/integration/identity-binding-confirmer-independent.test.ts]
+- [ ] T112 — 运行 contract suite：OpenAPI 6 paths、schemas、generated 一致、无 participant route。 **Files**: `tests/integration/identity-binding-routes.test.ts`、OpenAPI generated **Depends**: T092 / T093 / T097 **Acceptance**: 全 PASS [REQ:FR-025 / SC-014 / CHK160 / CHK186] [VERIFY:bun run vitest run tests/integration/identity-binding-routes.test.ts && bun run openapi:check]
+
+---
+
+## Phase 14 — Governance & Full Verification
+
+- [ ] T113 — `bun run typecheck`（`node scripts/typecheck-all.mjs`）。 **Files**: — **Depends**: T112 **Acceptance**: 0 error [REQ:plan Verification Plan] [VERIFY:node scripts/typecheck-all.mjs]
+- [ ] T114 — `bun run guard:static`。 **Files**: — **Depends**: T112 **Acceptance**: PASS；无 `mode=invite` / KYC / Person INSERT / participant / Evidence 越界 [REQ:plan D-20 / CHK181—CHK186] [VERIFY:node scripts/guard-static.mjs]
+- [ ] T115 — `bun run openapi:check` + `bun run coverage:audit`。 **Files**: — **Depends**: T112 **Acceptance**: 全 PASS；coverage 达标 [REQ:plan Verification Plan] [VERIFY:node scripts/openapi-check.mjs && node scripts/coverage-audit.mjs]
+- [ ] T116 — `bun run db:migrate` + `bun run db:evidence`；记录 RLS / role / migration / schema 真实输出。 **Files**: — **Depends**: T112 **Acceptance**: migration 可重放；`relrowsecurity` / `relforcerowsecurity` / `rolbypassrls` 证据 PASS [REQ:CHK134 / CHK168] [VERIFY:node scripts/db-migrate.mjs && node scripts/db-evidence.mjs]
+- [ ] T117 — `node .specify/scripts/validate-governance.mjs` + `node .specify/scripts/tests/run-governance-tests.mjs`。 **Files**: — **Depends**: T113—T116 **Acceptance**: governance PASS；self-test 全 PASS；`Docs/**` diff = 0 [REQ:plan Constitution Check / CHK181] [VERIFY:node .specify/scripts/validate-governance.mjs && node .specify/scripts/tests/run-governance-tests.mjs]
+- [ ] T118 — `bun run verify-all` 全量；归档真实输出。 **Files**: — **Depends**: T117 **Acceptance**: 全 PASS；0 skipped（除 explicit BLOCKED） [REQ:plan Verification Plan] [VERIFY:node scripts/verify-all.mjs]
+- [ ] T119 — 结构 / exclusion 审计：`grep` 证明无 `INSERT INTO persons`、无 `case_participants` / `cases` / `assertions` / `observations` / `intervention_instances` / `notification` / KYC / 人脸 / 视频 / 电话；无 `mode=invite`。 **Files**: — **Depends**: T118 **Acceptance**: 全部 0 match [REQ:plan D-20 / SC-014] [VERIFY:rg -n "INSERT INTO persons|mode=invite|case_participants|assertions|observations|intervention_instances" apps packages db tests]
+- [ ] T120 — 最终 diff 审计：`git diff --stat IMPLEMENT_BASE_SHA` 仅允许 006 预期文件；`Docs/**`、`specs/001~005/**`、Slice 4 文件 diff = 0。 **Files**: — **Depends**: T119 **Acceptance**: diff 审计 PASS [REQ:CHK181] [VERIFY:git diff --stat IMPLEMENT_BASE_SHA]
+
+---
+
+## Phase 15 — Blocked by Slice 4 Runtime（late closeout only）
+
+> 本 Phase 只承载真实 production adapter / 真实 Slice 4 integration / full Case C E2E。它 **不阻塞** Phase 1–14；B1 解决后即进入 `READY FOR CORE IMPLEMENTATION`，本 Phase 继续 BLOCKED，直到 Slice 4 runtime available。
+
+- [ ] T121 — **BLOCKED BY SLICE 4 RUNTIME**：实现 production `InvitationResolutionPort` adapter，读取 Slice 4 正式 invitation / participation 事实。不得创建 invitation 表、不得写 participation。 **Files**: `apps/server/api/src/identity-binding/invitation-slice4-adapter.ts`（仅当 Slice 4 runtime 已 merge） **Depends**: Slice 4 runtime merged main **Acceptance**: adapter 实现 port、`bun run typecheck` PASS、`tests/integration/identity-binding-invitation-contract.test.ts` PASS；真实 token resolve 由 T122 验证 [REQ:plan D-16.2 / FR-026] [VERIFY:bun run typecheck && bun run vitest run tests/integration/identity-binding-invitation-contract.test.ts]
+- [ ] T122 — **BLOCKED BY SLICE 4 RUNTIME**：真实 invitation token → bootstrap → binding → Slice 4 accept 端到端。 **Files**: `tests/integration/identity-binding-slice4-e2e.test.ts` **Depends**: T121 **Acceptance**: 端到端 PASS；active participation 与 binding 联合断言 [REQ:AS-01 / FR-025 / CHK180] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
+- [ ] T123 — **BLOCKED BY SLICE 4 RUNTIME**：active participation 与 binding COMMITTED / PENDING / TERMINAL 的联合验收（Case C accept 必须显式）。 **Files**: 同上 **Depends**: T122 **Acceptance**: active participation = 0 for PENDING / TERMINAL；COMMITTED 仍需 accept [REQ:FR-025 / SC-012] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
+- [ ] T124 — **BLOCKED BY SLICE 4 RUNTIME**：U11 真实微信平台条件下「拒绝 / 撤回 / 过期 / 越权」联合验收。 **Files**: 同上 **Depends**: T123 **Acceptance**: 真实平台证据；否则 `NOT VERIFIED` [REQ:U11 / FR-026] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
+
+---
+
+## Dependency Graph（Phase 级）
+
+```text
+T001—T006 Dependency Gate
+  └─ FAIL → STOP
+  └─ T001/T002/T005 PASS → Phase 1–14
+Phase 1 Schema/Migration
+  └─ Phase 2 Domain
+       ├─ Phase 3 Crypto/Context
+       ├─ Phase 4 Repositories/Tx/Invitation port
+       └─ Phase 5 Authorization
+            └─ Phase 6 Bootstrap
+                 ├─ Phase 7 Candidate
+                 └─ Phase 8 Confirmer（AFFIRM 只写 Phase B confirmation）
+                      └─ Phase 9 Commit（Gate 2 + Phase C，含 T086 接入 AFFIRM）
+                           └─ Phase 10 Session/Ordinary regression
+                                └─ Phase 11 Contracts/Routes/Error
+                                     └─ Phase 12 Audit/Anti-enum/RLS
+                                          └─ Phase 13 Verification-only tests + suites
+                                               └─ Phase 14 Governance/Full verification
+Phase 15 late closeout（不 gate Phase 1–14）— 等待 Slice 4 runtime；T121–T124 只能报告 BLOCKED，不得删除或 mock
+```
+
+---
+
+## Task Counts（逐条核对）
+
+| 类别 | 数量 | 口径 |
+| Total tasks | 124 | T001—T124，连续、无重复、无跳号 |
+| Implementation tasks | 55 | 生产代码 / migration / route / schema / adapter / fix task |
+| Test tasks | 52 | 写测试、运行测试 suite、回归运行（含 T005、T105、T106） |
+| Governance tasks | 13 | T001—T004 依赖核验、T006 base 记录、T113—T120 |
+| Blocked tasks | 4 | T121—T124，全部 `BLOCKED BY SLICE 4 RUNTIME` |
+
+**`[P]` 任务（8 个，全部为纯 domain 单元测试，不同文件）**：T018、T020、T022、T024、T027、T029、T041、T045。
+
+**说明**：DB / integration / route / migration / generated contract 任务不标 `[P]`，因为它们共享真实数据库、migration 顺序或 route 文件，不能证明并行安全。
