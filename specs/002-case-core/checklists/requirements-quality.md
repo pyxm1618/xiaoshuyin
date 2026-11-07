@@ -185,9 +185,9 @@
 - **NEEDS REVIEW**: 0
 - **Decision**: **PASS — Post-Slice1 Dependency Reconciliation completed; ready for merge/remediation round**
 
-> 结论：Spec / Plan / Research / Data Model / Contracts / Quickstart 已在 Case Core 的产品边界、migration 顺序、primary 语义、幂等可达性、metadata 形状、OpenAPI 错误码结构与 16 个 Acceptance Scenario 验证路径上完全对齐。100 项 Checklist 全部 PASS，无 FAIL / NEEDS REVIEW / 未解决 Blocker。
+> 结论：Spec / Plan / Research / Data Model / Contracts / Quickstart 已在 Case Core 的产品边界、migration 顺序、primary 语义、幂等可达性、metadata 形状、OpenAPI 错误码结构与 **18 个 Acceptance Scenario** 验证路径上完全对齐。**110 项 Checklist** 全部 PASS，无 FAIL / NEEDS REVIEW / 未解决 Blocker。
 >
-> Slice 2 closeout 可以进入 Tasks；不得在本阶段进入 Analyze / Implement。
+> 当前统计：**Total CHK = 110**、**PASS = 110**、**Acceptance = 18/18**。不得在本阶段进入 Analyze / Implement。
 
 ## Review Log
 
