@@ -214,33 +214,53 @@ const FORBIDDEN_PGTABLE = new RegExp(
 );
 
 /**
- * Replace SQL comments with whitespace while preserving newlines and string
- * literals / quoted identifiers, so multi-line DDL is matched as one statement.
- * Newlines are kept so the reported line number stays meaningful.
+ * Minimal SQL lexical normalizer used only for the scope guard.
+ *
+ * It is NOT a SQL parser: it walks the file once and produces a same-length
+ * string where non-code regions are blanked (newlines preserved so reported
+ * line numbers stay meaningful):
+ *   - line comments      `-- …`                 → blanks
+ *   - block comments     `/* … *\/`, nested     → blanks (depth counter)
+ *   - single-quoted text `'…'`, `''` escape     → blanks (never DDL)
+ *   - dollar-quoted text `$$…$$`, `$tag$…$tag$` → blanks (never DDL)
+ *   - double-quoted identifiers `"…"`            → preserved (they ARE names)
+ *
+ * PostgreSQL allows nested block comments, so a boolean flag would end the
+ * comment at the first `*\/` and let the rest of the statement leak through.
  */
 function normalizeSql(content) {
   let out = '';
   let i = 0;
-  let inBlockComment = false;
+  let blockDepth = 0;
   let inLineComment = false;
   let inSingleQuote = false;
   let inDoubleQuote = false;
+  let dollarTag = null;
+
+  const blank = (ch) => (ch === '\n' ? '\n' : ' ');
 
   while (i < content.length) {
     const ch = content[i];
     const next = content[i + 1];
 
-    if (inBlockComment) {
-      if (ch === '*' && next === '/') {
-        inBlockComment = false;
+    if (blockDepth > 0) {
+      if (ch === '/' && next === '*') {
+        blockDepth += 1;
         out += '  ';
         i += 2;
-      } else {
-        out += ch === '\n' ? '\n' : ' ';
-        i += 1;
+        continue;
       }
+      if (ch === '*' && next === '/') {
+        blockDepth -= 1;
+        out += '  ';
+        i += 2;
+        continue;
+      }
+      out += blank(ch);
+      i += 1;
       continue;
     }
+
     if (inLineComment) {
       if (ch === '\n') {
         inLineComment = false;
@@ -251,43 +271,65 @@ function normalizeSql(content) {
       i += 1;
       continue;
     }
-    if (inSingleQuote) {
-      if (ch === "'" && next === "'") {
-        out += "''";
-        i += 2;
+
+    if (dollarTag !== null) {
+      if (content.startsWith(dollarTag, i)) {
+        out += ' '.repeat(dollarTag.length);
+        i += dollarTag.length;
+        dollarTag = null;
         continue;
       }
-      if (ch === "'") inSingleQuote = false;
-      out += ch;
+      out += blank(ch);
       i += 1;
       continue;
     }
+
+    if (inSingleQuote) {
+      if (ch === "'" && next === "'") {
+        out += '  ';
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        inSingleQuote = false;
+        out += ' ';
+        i += 1;
+        continue;
+      }
+      out += blank(ch);
+      i += 1;
+      continue;
+    }
+
     if (inDoubleQuote) {
       if (ch === '"' && next === '"') {
         out += '""';
         i += 2;
         continue;
       }
-      if (ch === '"') inDoubleQuote = false;
+      if (ch === '"') {
+        inDoubleQuote = false;
+      }
       out += ch;
       i += 1;
       continue;
     }
-    if (ch === '/' && next === '*') {
-      inBlockComment = true;
-      out += '  ';
-      i += 2;
-      continue;
-    }
+
     if (ch === '-' && next === '-') {
       inLineComment = true;
       out += '  ';
       i += 2;
       continue;
     }
+    if (ch === '/' && next === '*') {
+      blockDepth = 1;
+      out += '  ';
+      i += 2;
+      continue;
+    }
     if (ch === "'") {
       inSingleQuote = true;
-      out += ch;
+      out += ' ';
       i += 1;
       continue;
     }
@@ -297,9 +339,20 @@ function normalizeSql(content) {
       i += 1;
       continue;
     }
+    if (ch === '$') {
+      const tagMatch = /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(content.slice(i));
+      if (tagMatch) {
+        dollarTag = tagMatch[0];
+        out += ' '.repeat(dollarTag.length);
+        i += dollarTag.length;
+        continue;
+      }
+    }
+
     out += ch;
     i += 1;
   }
+
   return out;
 }
 
@@ -337,8 +390,10 @@ scanDir(join(ROOT, 'db'), (file) => {
     addViolation('R6-scope-guard', relPath, lineOf(normalized, match.index ?? 0),
       `Forbidden out-of-scope table definition: ${match[1]}`);
   }
-  for (const match of normalized.matchAll(FORBIDDEN_PGTABLE)) {
-    addViolation('R6-scope-guard', relPath, lineOf(normalized, match.index ?? 0),
+  // pgTable() takes the table name as a string literal, which the normalizer
+  // intentionally blanks for DDL matching; scan the raw text for it instead.
+  for (const match of raw.matchAll(FORBIDDEN_PGTABLE)) {
+    addViolation('R6-scope-guard', relPath, lineOf(raw, match.index ?? 0),
       `Forbidden out-of-scope table declared via pgTable: ${match[1]}`);
   }
   // Unchanged pre-existing rule: a bare reference to the participant table.

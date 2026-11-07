@@ -203,15 +203,27 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
               if (replay.action === 'MISMATCH') {
                 return { kind: 'MISMATCH' as const };
               }
-              if (replay.action !== 'REPLAY' || replay.responseStatus === 0) {
-                // A committed placeholder is impossible in this transaction
-                // model; treat it as a real invariant failure, not a success.
+              if (replay.action !== 'REPLAY') {
+                // A committed placeholder (0) is impossible in this
+                // transaction model; treat it as a real invariant failure.
                 throw httpError('INTERNAL_ERROR', 'Incomplete idempotency record');
+              }
+              // The frozen CASE_CREATE persisted completion contract is
+              // `201 + CaseResponse` only. Any other stored status (0, 200,
+              // 409, 500, …) is corrupted state and must never be replayed.
+              if (replay.responseStatus !== 201) {
+                throw httpError('INTERNAL_ERROR', 'Invalid idempotency completion status');
+              }
+              // Never trust a stored body blindly: a polluted 201 body must not
+              // reach the client.
+              const storedBody = CaseResponse.safeParse(replay.responseBody);
+              if (!storedBody.success) {
+                throw httpError('INTERNAL_ERROR', 'Invalid idempotency completion body');
               }
               return {
                 kind: 'REPLAY' as const,
-                status: replay.responseStatus,
-                body: replay.responseBody,
+                status: 201,
+                body: storedBody.data,
               };
             };
 
