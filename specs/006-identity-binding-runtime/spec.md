@@ -188,7 +188,7 @@ binding 前不产生普通会话或 active participation
 : 单次 operation 的结果尚未可信收敛（timeout / unknown network result / transient failure）；不是 attempt 的永久 settled outcome，也不是第四种 attempt 生命周期状态。
 
 **No-P2**
-: invitation-aware flow 在任何阶段都不得创建第二个 Person；Approve 后仅允许 Account 增量 ∈ {0,1}、binding 增量 ∈ {0,1}、Person 增量 = 0。
+: invitation-aware flow 在任何阶段都不得创建第二个 Person；binding 成功后仅允许 Account 增量 ∈ {0,1}、binding 增量 ∈ {0,1}、Person 增量 = 0。
 
 ## Frozen Upstream Contracts
 
@@ -461,7 +461,7 @@ TERMINAL   → 不再转换（settled）
 | Gate 1 失败（含 consent invalid / ADULT / UNKNOWN） | `TERMINAL ATTEMPT REJECTION`；generic | P1-specific 信息、confirmation、审计可追溯 outcome 除外无业务残留 |
 | candidate 明确拒绝 / 取消 | 该 attempt `TERMINAL` | invitation 状态不变；P1 不变；不产生 P2 |
 | second party 拒绝 / 无法辨认 | 该 attempt `TERMINAL` / BLOCK | 不 commit；不产生 partial binding |
-| 身份冲突（P1 已绑其它 Account / Account 已绑其它 Person / 普通登录先行） | `TERMINAL`；不 rebind / 不 merge | 既有 A↔P2 与 P1 保持；不创建 active L1 participation |
+| 身份冲突（P1 已绑其它 Account / Account 已绑其它 Person / 普通登录先行） | `TERMINAL`；不 rebind / 不 merge | 既有 A↔P2 与 P1 保持；不创建 active participation |
 | multi-family / 不属于目标 Family | BLOCK（`TERMINAL`） | 不泄露其它 Family；不变更 membership |
 | invitation terminal（未 COMMITTED） | 不 commit；同一 attempt 返回 terminal；不复活 invitation | 不得产生 binding；不得恢复参与 |
 | commit 写入失败 / 事务异常 | 回滚；`RETRYABLE OPERATION FAILURE`（若 attempt 仍合法） | 无 partial Account / binding / attempt settled / 会话 |
