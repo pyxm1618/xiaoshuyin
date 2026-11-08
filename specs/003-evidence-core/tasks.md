@@ -225,7 +225,7 @@
   - **Verify**: `bunx vitest run tests/integration/evidence-write.test.ts` is RED because internal Evidence writers/schema do not exist
   - **Evidence**: RED DB row/audit/rollback evidence for internal writers.
 
-- [x] T028 [P] [REQ:FR-013;FR-015;CHK089-102;§27A] Write RED generated-OpenAPI tests requiring exactly one Slice 3 public operation `createCaseMessage`, strict request fields, response without content, and mechanically fixed 401/404(oneOf)/409(oneOf)/422/500 code schemas; 409 MUST be `oneOf(CURRENT_FAMILY_AMBIGUOUS, IDEMPOTENCY_PAYLOAD_MISMATCH)`. [VERIFY:`bunx vitest run tests/integration/openapi-evidence.test.ts` is RED because the operation is absent from generated OpenAPI]
+- [x] T028 [P] [REQ:FR-013;FR-015;CHK089-102;§27A] Write RED generated-OpenAPI tests requiring exactly one Slice 3 public operation `createCaseMessage`, strict request fields, response without content, and mechanically fixed 401/404(oneOf)/409/422/500 code schemas. [VERIFY:`bunx vitest run tests/integration/openapi-evidence.test.ts` is RED because the operation is absent from generated OpenAPI]
   - **Depends on**: T010, T011
   - **Files**: `tests/integration/openapi-evidence.test.ts`
   - **Action**: Write RED generated-OpenAPI tests requiring exactly one Slice 3 public operation `createCaseMessage`, strict request fields, response without content, and mechanically fixed 401/404(oneOf)/409/422/500 code schemas. Assert no generic Evidence CRUD paths.
@@ -325,7 +325,7 @@
 - [x] T041 [REQ:FR-004;FR-006;FR-007;FR-008;FR-016;FR-017;FR-021;CHK061-088] Implement the four approved type-specific production functions `recordStatement`, `recordHypothesis`, `recordObservation`, `assignConflictGroup` over the authorized transaction/repository boundary. [VERIFY:`bunx vitest run tests/domain/evidence-capabilities.test.ts tests/domain/evidence-provenance.test.ts tests/domain/evidence-conflict-supersedes.test.ts tests/domain/evidence-person-reference.test.ts` passes]
   - **Depends on**: T040
   - **Files**: `packages/domain/src/evidence.ts`; `packages/domain/src/repository.ts`
-  - **Action**: Implement the four approved type-specific production functions `recordStatement`, `recordHypothesis`, `recordObservation`, `assignConflictGroup` over the authorized transaction/repository boundary. Each write revalidates Case/Family, Person refs, provenance, source message, time/value/validity/supersedes and writes Evidence + audit atomically. `recordHypothesis` must fail closed under all currently disabled production provenance compositions; do not invent AI runtime plumbing. Additionally, each writer must mechanically revalidate current Case/Family/Purpose via the approved `CASE_READ + FAMILY_MANAGEMENT + specific Case` path and gate every non-null subject/source Person through the existing compliance rules (COLD-001/COLD-002; see T068–T071). This does not add `EVIDENCE_WRITE` or any new authorization action.
+  - **Action**: Implement the four approved type-specific production functions `recordStatement`, `recordHypothesis`, `recordObservation`, `assignConflictGroup` over the authorized transaction/repository boundary. Each write revalidates Case/Family, Person refs, provenance, source message, time/value/validity/supersedes and writes Evidence + audit atomically. `recordHypothesis` must fail closed under all currently disabled production provenance compositions; do not invent AI runtime plumbing.
   - **Verify**: `bunx vitest run tests/domain/evidence-capabilities.test.ts tests/domain/evidence-provenance.test.ts tests/domain/evidence-conflict-supersedes.test.ts tests/domain/evidence-person-reference.test.ts` passes
   - **Evidence**: Writer signatures, capability behavior, validation/audit transaction evidence.
 
@@ -415,7 +415,7 @@
 - [x] T053 [REQ:FR-013;FR-015;CHK089-102] Drive OpenAPI RED test GREEN and perform a Slice-scoped semantic comparison for `POST /api/v1/cases/{id}/messages` / `createCaseMessage` and its referenced Slice 3 schemas only. [VERIFY:extract the generated `createCaseMessage` path/operation and its referenced Slice 3 schemas, normalize non-semantic generator ordering/format differences, and require zero semantic differences against the frozen Slice 3 contract; existing non-Slice-3 generated routes/schemas are outside this comparison and MUST NOT be treated as differences]
   - **Depends on**: T052, T028
   - **Files**: `tests/integration/openapi-evidence.test.ts`; `specs/003-evidence-core/contracts/messages-api.openapi.yaml` read-only
-  - **Action**: Drive OpenAPI RED test GREEN and compare only the frozen Slice 3 Message API subtree against generated output: path `POST /api/v1/cases/{id}/messages`; `operationId=createCaseMessage`; required `Idempotency-Key` header parameter (8–128 chars); request body fields exactly `content` with `additionalProperties=false` and body `idempotencyKey` rejected; response approved fields exactly `id` + `caseId` + `recordedAt` and no raw content; errors mechanically fixed to 401 `UNAUTHENTICATED`, 404 `oneOf(CURRENT_FAMILY_NOT_FOUND, CASE_NOT_FOUND)`, 409 `oneOf(CURRENT_FAMILY_AMBIGUOUS, IDEMPOTENCY_PAYLOAD_MISMATCH)`, 422 `VALIDATION_ERROR`, 500 `INTERNAL_ERROR`; and no Slice 3 `/assertions`, `/observations`, `/evidence`, generic Evidence CRUD or FACT route. Extract that generated path/operation and only the schemas it references, normalize non-semantic generator ordering/format differences, and require zero semantic differences against `specs/003-evidence-core/contracts/messages-api.openapi.yaml`. Existing non-Slice-3 generated routes/schemas are outside this comparison and MUST NOT be treated as differences. A Slice 3 contract mismatch is BLOCKED; do not alter the frozen contract from Implement.
+  - **Action**: Drive OpenAPI RED test GREEN and compare only the frozen Slice 3 Message API subtree against generated output: path `POST /api/v1/cases/{id}/messages`; `operationId=createCaseMessage`; required `Idempotency-Key` header parameter (8–128 chars); request body fields exactly `content` with `additionalProperties=false` and body `idempotencyKey` rejected; response approved fields exactly `id` + `caseId` + `recordedAt` and no raw content; errors mechanically fixed to 401 `UNAUTHENTICATED`, 404 `oneOf(CURRENT_FAMILY_NOT_FOUND, CASE_NOT_FOUND)`, 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`, 422 `VALIDATION_ERROR`, 500 `INTERNAL_ERROR`; and no Slice 3 `/assertions`, `/observations`, `/evidence`, generic Evidence CRUD or FACT route. Extract that generated path/operation and only the schemas it references, normalize non-semantic generator ordering/format differences, and require zero semantic differences against `specs/003-evidence-core/contracts/messages-api.openapi.yaml`. Existing non-Slice-3 generated routes/schemas are outside this comparison and MUST NOT be treated as differences. A Slice 3 contract mismatch is BLOCKED; do not alter the frozen contract from Implement.
   - **Verify**: `bunx vitest run tests/integration/openapi-evidence.test.ts` passes; extract the generated `createCaseMessage` path/operation and its referenced Slice 3 schemas, normalize non-semantic generator ordering/format differences, and require zero semantic differences against the frozen Slice 3 contract. Existing non-Slice-3 generated routes/schemas are outside this comparison and MUST NOT be treated as differences.
   - **Evidence**: OpenAPI test output and frozen-vs-generated comparison result.
 
@@ -529,13 +529,17 @@
 > 本节只覆盖 Cold-Start Audit 确认的 COLD-001 / COLD-002 / COLD-003，不重开 Plan、不扩展 Evidence 范围、不新增 authorization action。
 > T068–T078 在 Plan Review 冻结后为 `[ ]`；T001–T067 为历史实施记录，不重编号、不重写。
 
-- [ ] T068 [P] [REQ:FR-010;FR-021;CHK018;CHK069;CHK072] Write RED integration tests for internal Evidence writer authorization revalidation. [VERIFY:`bunx vitest run tests/integration/evidence-writer-authorization.test.ts` is RED because the writer authorization seam is absent]
+- [ ] T068 [P] [REQ:FR-010;FR-021;CHK018;CHK069;CHK070;CHK072] Write the complete RED authorization matrix for all four approved Evidence capabilities (`recordStatement`, `recordHypothesis`, `recordObservation`, `assignConflictGroup`). [VERIFY:`bunx vitest run tests/integration/evidence-writer-authorization.test.ts` is RED because the writer authorization seam is absent]
   - **Depends on**: T067
   - **Files**: `tests/integration/evidence-writer-authorization.test.ts`
-  - **Action**: Cover current Family manager allowed; ordinary member denied; guardian without Case permission denied; account↔person mismatch denied; missing and cross-Family Case denied; unknown and non-`FAMILY_MANAGEMENT` purpose denied; every denial writes zero assertion/observation/audit rows.
-  - **Verify**: `bunx vitest run tests/integration/evidence-writer-authorization.test.ts` is RED because the writer authorization seam is absent.
-  - **Evidence**: RED authorization matrix with zero-write assertions.
-
+  - **Action**: Cover all four capabilities explicitly and independently; a Statement-only case may not stand in for Observation, Hypothesis or Conflict.
+    - **recordStatement**: ordinary member / unauthorized actor → `EVIDENCE_CASE_NOT_AUTHORIZED`; assertion +0 and audit +0. Also cover `actorAccountId` ↔ `actorPersonId` mismatch, missing Case, wrong Case, wrong Family, and unsupported Purpose; each must fail closed with the same authorization reason and zero writes.
+    - **recordObservation**: ordinary member / unauthorized actor → `EVIDENCE_CASE_NOT_AUTHORIZED`; observation +0 and audit +0. Do not infer this from the Statement test.
+    - **recordHypothesis**: freeze error precedence. Unauthorized caller must receive `EVIDENCE_CASE_NOT_AUTHORIZED` FIRST and must not observe the capability-level `EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE`. An authorized manager with valid context must continue to the existing hypothesis fail-closed result `EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE`; do not change the current production-disabled semantics.
+    - **assignConflictGroup**: unauthorized caller → `EVIDENCE_CASE_NOT_AUTHORIZED`, and authorization failure must occur before any Evidence ref read/resolution so an unauthorized caller cannot probe object existence (`EVIDENCE_CONFLICT_INVALID` may not precede authorization). Mechanically assert `conflict_group_id` is unchanged for every target ref (Assertion and Observation); row-count equality alone is insufficient because this capability performs UPDATE, not INSERT.
+    - **Ordering**: for all four capabilities, authorization revalidation must happen before Person ref lookup, guardian lookup, source-message lookup, supersedes lookup, Evidence ref lookup, and any compliance/provenance-sensitive read, so unauthorized callers cannot distinguish object existence through differing errors.
+  - **Verify**: `bunx vitest run tests/integration/evidence-writer-authorization.test.ts` is RED because the writer authorization seam is absent
+  - **Evidence**: Per-capability RED matrix with exact reason precedence, zero-write counts, pre-read ordering trace, and unchanged `conflict_group_id` for every target ref.
 - [ ] T069 [REQ:FR-010;FR-021;CHK018;CHK072] Implement the non-exported writer authorization seam and wire all four Evidence writers. [VERIFY:`bun run typecheck` and `bunx vitest run tests/integration/evidence-writer-authorization.test.ts tests/domain/evidence-capabilities.test.ts` pass]
   - **Depends on**: T068
   - **Files**: `packages/domain/src/internal/evidence-authorization.ts` (new, not exported); `packages/domain/src/evidence.ts`; `packages/domain/package.json`; `bun.lock`
@@ -543,13 +547,24 @@
   - **Verify**: `bun run typecheck` passes; `bunx vitest run tests/integration/evidence-writer-authorization.test.ts tests/domain/evidence-capabilities.test.ts` passes.
   - **Evidence**: Seam diff, dependency diff, writer call-order trace, authorization test output.
 
-- [ ] T070 [P] [REQ:FR-021;CHK069;CHK070;CHK074] Write RED integration tests proving the compliance gate covers subject and source Person references. [VERIFY:`bunx vitest run tests/integration/evidence-person-processing-gate.test.ts` is RED because only the subject is currently checked]
+- [ ] T070 [P] [REQ:FR-021;CHK069;CHK070;CHK074] Write the complete RED subject-and-source compliance matrix for every non-null Person reference processed by an Evidence write. [VERIFY:`bunx vitest run tests/integration/evidence-person-processing-gate.test.ts` is RED because only the subject is currently checked]
   - **Depends on**: T069
   - **Files**: `tests/integration/evidence-person-processing-gate.test.ts`
-  - **Action**: Cover subject=ADULT + source=UNDER_14 with revoked/missing/stale/invalid consent → blocked; source UNKNOWN or missing profile → blocked; source ADULT → allowed; subject and source both valid → allowed; subject===source → allowed and checked once without changing semantics; every block writes zero rows.
-  - **Verify**: `bunx vitest run tests/integration/evidence-person-processing-gate.test.ts` is RED because only the subject is currently checked.
-  - **Evidence**: RED subject/source compliance matrix.
-
+  - **Action**: For `sourcePersonId`, cover the complete frozen age/compliance semantics with independent fixtures and assertions; do not use two ADULT fixtures as the only positive proof.
+    - `source = ADULT` → ALLOW.
+    - `source = MINOR_14_17` → ALLOW, with its own explicit assertion/fixture.
+    - `source = UNDER_14 + valid current guardian consent` → ALLOW, with its own explicit assertion/fixture.
+    - `source = UNDER_14 + missing consent` → BLOCK.
+    - `source = UNDER_14 + revoked consent` → BLOCK.
+    - `source = UNDER_14 + stale consent` → BLOCK.
+    - `source = UNDER_14 + malformed / unusable consent` → BLOCK.
+    - `source = UNKNOWN` → BLOCK.
+    - `source profile missing` → BLOCK.
+    - Keep `subjectPersonId` under the same gate; subject-only or source-only checks do not satisfy this task.
+    - `subject === source` → dedupe (one check) with semantically identical outcome; prove both ALLOW and BLOCK cases are unchanged by dedupe.
+    - Every BLOCK case writes zero Evidence rows and zero audit rows; positive and negative cases must be distinguishable from the same unified matrix.
+  - **Verify**: `bunx vitest run tests/integration/evidence-person-processing-gate.test.ts` is RED because only the subject is currently checked
+  - **Evidence**: RED matrix covering the full source age/consent table, independent MINOR_14_17 and UNDER_14-valid ALLOW fixtures, subject gate, dedupe equivalence, and zero-write counts.
 - [ ] T071 [REQ:FR-021;CHK069;CHK070;CHK074] Extend the repository processing gate to every non-null Person reference processed by the write. [VERIFY:`bunx vitest run tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/domain/age-band.test.ts` passes]
   - **Depends on**: T070
   - **Files**: `packages/domain/src/repository.ts`
