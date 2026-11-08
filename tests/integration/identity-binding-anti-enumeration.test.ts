@@ -17,22 +17,48 @@ import {
 import { loginWithLabel, revokeConsent } from '../setup/api.js';
 import type { IncomingHttpHeaders } from 'node:http';
 
+// Headers that no business branch can influence: `date` is wall-clock,
+// `content-length` follows the randomized opaque token, and `connection` /
+// `keep-alive` are transport-level. Every other header — including every
+// `x-*` header, `set-cookie`, `location` and `content-type` — is compared
+// verbatim. There is no "assume the remaining headers are equal" shortcut.
+const INFRASTRUCTURE_HEADERS = new Set(['date', 'content-length', 'connection', 'keep-alive']);
+
+function observableHeaders(headers: IncomingHttpHeaders): Record<string, string | string[]> {
+  const out: Record<string, string | string[]> = {};
+  for (const [rawName, value] of Object.entries(headers)) {
+    const name = rawName.toLowerCase();
+    if (INFRASTRUCTURE_HEADERS.has(name) || value === undefined) continue;
+    out[name] = value;
+  }
+  return out;
+}
+
 function observable(res: { statusCode: number; body: string; headers: IncomingHttpHeaders }) {
   const parsed = JSON.parse(res.body) as Record<string, unknown>;
+  const hasToken = Object.prototype.hasOwnProperty.call(parsed, 'pendingContextToken');
+  const token = parsed['pendingContextToken'];
   return {
     statusCode: res.statusCode,
+    headers: observableHeaders(res.headers),
     keys: Object.keys(parsed).sort(),
     // Every generic body is `{binding, pendingContextToken}` with only the
-    // opaque random token differing. Normalize it so shape comparison is exact.
+    // opaque random token differing. Normalize the value but still compare the
+    // field's type / length / encoding class below.
     shape: {
       ...parsed,
-      ...(Object.prototype.hasOwnProperty.call(parsed, 'pendingContextToken')
-        ? { pendingContextToken: '<opaque>' }
-        : {}),
+      ...(hasToken ? { pendingContextToken: '<opaque>' } : {}),
     },
-    setCookie: res.headers['set-cookie'] ?? null,
-    location: res.headers['location'] ?? null,
-    contentType: res.headers['content-type'],
+    tokenShape: hasToken
+      ? {
+          type: typeof token,
+          length: typeof token === 'string' ? token.length : -1,
+          format:
+            typeof token === 'string' && /^[A-Za-z0-9_-]{43}$/.test(token)
+              ? 'base64url32'
+              : 'unexpected',
+        }
+      : null,
   };
 }
 
@@ -130,8 +156,11 @@ describe('candidate-facing anti-enumeration', () => {
     expect(baseline.statusCode).toBe(200);
     expect(baseline.keys).toEqual(['binding', 'pendingContextToken']);
     expect(baseline.shape).toEqual({ binding: 'NOT_COMPLETED', pendingContextToken: '<opaque>' });
-    expect(baseline.setCookie).toBeNull();
-    expect(baseline.location).toBeNull();
+    expect(baseline.headers['set-cookie']).toBeUndefined();
+    expect(baseline.headers['location']).toBeUndefined();
+    expect(baseline.headers['content-type']).toContain('application/json');
+    expect(Object.keys(baseline.headers).filter((name) => name.startsWith('x-'))).toEqual([]);
+    expect(baseline.tokenShape).toEqual({ type: 'string', length: 43, format: 'base64url32' });
 
     runs.forEach((run, i) => {
       const obs = observations[i]!;
@@ -188,8 +217,10 @@ describe('candidate-facing anti-enumeration', () => {
       expect(obs.statusCode).toBe(200);
       expect(obs.keys).toEqual(['binding']);
       expect(obs.shape).toEqual({ binding: 'NOT_COMPLETED' });
-      expect(obs.setCookie).toBeNull();
-      expect(obs.location).toBeNull();
+      expect(obs.headers['set-cookie']).toBeUndefined();
+      expect(obs.headers['location']).toBeUndefined();
+      expect(obs.headers['content-type']).toContain('application/json');
+      expect(Object.keys(obs.headers).filter((name) => name.startsWith('x-'))).toEqual([]);
     }
     expect(observations[1]).toEqual(observations[0]);
     expect(observations[2]).toEqual(observations[0]);
