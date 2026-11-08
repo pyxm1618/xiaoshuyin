@@ -23,7 +23,6 @@ import type { Tx } from './repository.js';
 import {
   getAssertionRef,
   getAssertionSupersedeTarget,
-  getDialogueMessageById,
   getGuardianPersonId,
   getObservationRef,
   getObservationSupersedeTarget,
@@ -32,6 +31,7 @@ import {
   insertEvidenceAssertion,
   insertEvidenceObservation,
   isFamilyMember,
+  verifyEvidenceSourceMessage,
   setAssertionConflictGroup,
   setObservationConflictGroup,
   generateUuidv7,
@@ -507,31 +507,6 @@ async function resolvePersonFacts(
   return { subjectIsFamilyMember, sourceIsFamilyMember, sourceIsGuardianOfSubject };
 }
 
-async function verifySourceMessage(
-  tx: Tx,
-  ctx: EvidenceWriteContext,
-  sourceMessageId: string | null,
-  sourcePersonId: string | null
-): Promise<void> {
-  if (sourceMessageId === null) return;
-  const row = await getDialogueMessageById(tx, sourceMessageId);
-  const validation = validateSourceMessage({
-    sourceMessageId,
-    sourcePersonId,
-    message: row
-      ? {
-          id: row.id,
-          familyId: row.family_id,
-          caseId: row.case_id,
-          sourcePersonId: row.source_person_id,
-        }
-      : null,
-    familyId: ctx.familyId,
-    caseId: ctx.caseId,
-  });
-  if (!validation.ok) throw new EvidenceDomainError(validation.code);
-}
-
 export async function recordStatement(
   tx: Tx,
   ctx: EvidenceWriteContext,
@@ -604,7 +579,12 @@ async function writeAssertion(
   });
   if (!provenance.ok) throw new EvidenceDomainError(provenance.code);
 
-  await verifySourceMessage(tx, ctx, sourceMessageId, sourcePersonId);
+  await verifyEvidenceSourceMessage(tx, {
+    familyId: ctx.familyId,
+    caseId: ctx.caseId,
+    sourceMessageId,
+    sourcePersonId,
+  });
 
   const supersedesId = draft.supersedesId ?? null;
   if (supersedesId !== null) {
@@ -695,7 +675,12 @@ export async function recordObservation(
   });
   if (!provenance.ok) throw new EvidenceDomainError(provenance.code);
 
-  await verifySourceMessage(tx, ctx, sourceMessageId, sourcePersonId);
+  await verifyEvidenceSourceMessage(tx, {
+    familyId: ctx.familyId,
+    caseId: ctx.caseId,
+    sourceMessageId,
+    sourcePersonId,
+  });
 
   const supersedesId = draft.supersedesId ?? null;
   if (supersedesId !== null) {
