@@ -1,6 +1,6 @@
 # T068 — Verification Plan 26 条逐条执行归档
 
-执行时间: 2026-11-08T01:35:05.875Z
+执行时间: 2026-11-08T01:38:14.307Z
 archive=true
 
 说明：每条均真实启动命令并捕获 stdout/stderr、退出码与耗时。
@@ -14,18 +14,18 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: MAPPED — me.test.ts 未落地；登录响应契约与 Account/Person 列结构由 auth.test.ts + schema-structure.test.ts 覆盖
 - 期望: 200；account 与自身 person 存在；openid 不出现
   [01] $ bunx vitest run tests/integration/auth.test.ts tests/db/schema-structure.test.ts
-  [01] exit=0 duration=0.8s
+  [01] exit=0 duration=0.9s
   [01] --- real output begin ---
   [01] | 
   [01] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [01] | 
   [01] |  ✓ tests/db/schema-structure.test.ts (6 tests) 60ms
-  [01] |  ✓ tests/integration/auth.test.ts (4 tests) 146ms
+  [01] |  ✓ tests/integration/auth.test.ts (4 tests) 175ms
   [01] | 
   [01] |  Test Files  2 passed (2)
   [01] |       Tests  10 passed (10)
-  [01] |    Start at  09:35:06
-  [01] |    Duration  546ms (transform 137ms, setup 12ms, collect 286ms, tests 206ms, environment 0ms, prepare 73ms)
+  [01] |    Start at  09:38:14
+  [01] |    Duration  573ms (transform 147ms, setup 18ms, collect 294ms, tests 235ms, environment 0ms, prepare 80ms)
   [01] --- real output end ---
 - 结果: PASS
 
@@ -36,17 +36,17 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: 首次登录建 Account+Person；重复登录不新增；logout 后 401
   [02] $ bunx vitest run tests/integration/auth.test.ts
-  [02] exit=0 duration=0.7s
+  [02] exit=0 duration=0.6s
   [02] --- real output begin ---
   [02] | 
   [02] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [02] | 
-  [02] |  ✓ tests/integration/auth.test.ts (4 tests) 121ms
+  [02] |  ✓ tests/integration/auth.test.ts (4 tests) 119ms
   [02] | 
   [02] |  Test Files  1 passed (1)
   [02] |       Tests  4 passed (4)
-  [02] |    Start at  09:35:06
-  [02] |    Duration  435ms (transform 111ms, setup 5ms, collect 200ms, tests 121ms, environment 0ms, prepare 27ms)
+  [02] |    Start at  09:38:15
+  [02] |    Duration  411ms (transform 106ms, setup 5ms, collect 185ms, tests 119ms, environment 0ms, prepare 26ms)
   [02] --- real output end ---
 - 结果: PASS
 
@@ -65,18 +65,18 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: MAPPED — 幂等重放/409 断言实现阶段落在 idempotency.test.ts 的 FAMILY_CREATE 参数化用例
 - 期望: 首次建家庭成功；复用登录 Person；同 key 重放不新增；不同 payload → 409
   [04] $ bunx vitest run tests/integration/families.test.ts tests/integration/idempotency.test.ts
-  [04] exit=0 duration=1.3s
+  [04] exit=0 duration=1.2s
   [04] --- real output begin ---
   [04] | 
   [04] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [04] | 
-  [04] |  ✓ tests/integration/families.test.ts (6 tests) 158ms
-  [04] |  ✓ tests/integration/idempotency.test.ts (21 tests) 770ms
+  [04] |  ✓ tests/integration/families.test.ts (6 tests) 150ms
+  [04] |  ✓ tests/integration/idempotency.test.ts (21 tests) 683ms
   [04] | 
   [04] |  Test Files  2 passed (2)
   [04] |       Tests  27 passed (27)
-  [04] |    Start at  09:35:07
-  [04] |    Duration  1.11s (transform 134ms, setup 11ms, collect 465ms, tests 929ms, environment 0ms, prepare 56ms)
+  [04] |    Start at  09:38:15
+  [04] |    Duration  993ms (transform 121ms, setup 11ms, collect 403ms, tests 832ms, environment 0ms, prepare 54ms)
   [04] --- real output end ---
 - 结果: PASS
 
@@ -92,14 +92,14 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [05] | 
   [05] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [05] | 
-  [05] |  ✓ tests/domain/provenance.test.ts (5 tests) 2ms
-  [05] |  ✓ tests/integration/families.test.ts (6 tests) 153ms
-  [05] |  ✓ tests/integration/members.test.ts (15 tests) 429ms
+  [05] |  ✓ tests/domain/provenance.test.ts (5 tests) 1ms
+  [05] |  ✓ tests/integration/families.test.ts (6 tests) 168ms
+  [05] |  ✓ tests/integration/members.test.ts (15 tests) 443ms
   [05] | 
   [05] |  Test Files  3 passed (3)
   [05] |       Tests  26 passed (26)
-  [05] |    Start at  09:35:08
-  [05] |    Duration  774ms (transform 150ms, setup 17ms, collect 490ms, tests 584ms, environment 0ms, prepare 87ms)
+  [05] |    Start at  09:38:17
+  [05] |    Duration  760ms (transform 135ms, setup 17ms, collect 437ms, tests 613ms, environment 0ms, prepare 86ms)
   [05] --- real output end ---
 - 结果: PASS
 
@@ -110,18 +110,18 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: MAPPED — 空态的第二个端点（consent request 404）由 consent-request.test.ts 覆盖
 - 期望: GET /families/current 404；POST /compliance/guardian-consents/requests 404；非成员 403
   [06] $ bunx vitest run tests/integration/families.test.ts tests/integration/consent-request.test.ts
-  [06] exit=0 duration=0.8s
+  [06] exit=0 duration=0.7s
   [06] --- real output begin ---
   [06] | 
   [06] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [06] | 
-  [06] |  ✓ tests/integration/families.test.ts (6 tests) 159ms
-  [06] |  ✓ tests/integration/consent-request.test.ts (5 tests) 189ms
+  [06] |  ✓ tests/integration/families.test.ts (6 tests) 151ms
+  [06] |  ✓ tests/integration/consent-request.test.ts (5 tests) 177ms
   [06] | 
   [06] |  Test Files  2 passed (2)
   [06] |       Tests  11 passed (11)
-  [06] |    Start at  09:35:09
-  [06] |    Duration  526ms (transform 124ms, setup 13ms, collect 418ms, tests 348ms, environment 0ms, prepare 64ms)
+  [06] |    Start at  09:38:18
+  [06] |    Duration  483ms (transform 120ms, setup 11ms, collect 397ms, tests 327ms, environment 0ms, prepare 54ms)
   [06] --- real output end ---
 - 结果: PASS
 
@@ -137,12 +137,12 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [07] | 
   [07] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [07] | 
-  [07] |  ✓ tests/db/constraints.test.ts (3 tests) 55ms
+  [07] |  ✓ tests/db/constraints.test.ts (3 tests) 56ms
   [07] | 
   [07] |  Test Files  1 passed (1)
   [07] |       Tests  3 passed (3)
-  [07] |    Start at  09:35:10
-  [07] |    Duration  175ms (transform 13ms, setup 5ms, collect 12ms, tests 55ms, environment 0ms, prepare 27ms)
+  [07] |    Start at  09:38:18
+  [07] |    Duration  177ms (transform 13ms, setup 5ms, collect 13ms, tests 56ms, environment 0ms, prepare 26ms)
   [07] --- real output end ---
 - 结果: PASS
 
@@ -158,13 +158,13 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [08] | 
   [08] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [08] | 
-  [08] |  ✓ tests/db/schema-structure.test.ts (6 tests) 42ms
-  [08] |  ✓ tests/db/constraints.test.ts (3 tests) 45ms
+  [08] |  ✓ tests/db/schema-structure.test.ts (6 tests) 46ms
+  [08] |  ✓ tests/db/constraints.test.ts (3 tests) 48ms
   [08] | 
   [08] |  Test Files  2 passed (2)
   [08] |       Tests  9 passed (9)
-  [08] |    Start at  09:35:10
-  [08] |    Duration  178ms (transform 21ms, setup 12ms, collect 33ms, tests 88ms, environment 0ms, prepare 56ms)
+  [08] |    Start at  09:38:19
+  [08] |    Duration  182ms (transform 22ms, setup 12ms, collect 35ms, tests 94ms, environment 0ms, prepare 59ms)
   [08] --- real output end ---
 - 结果: PASS
 
@@ -175,18 +175,18 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: 多来源并存；同源 SUPERSEDED；persons 无 source_kind
   [09] $ bunx vitest run tests/domain/provenance.test.ts tests/integration/members.test.ts
-  [09] exit=0 duration=1.7s
+  [09] exit=0 duration=1.0s
   [09] --- real output begin ---
   [09] | 
   [09] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [09] | 
-  [09] |  ✓ tests/domain/provenance.test.ts (5 tests) 2ms
-  [09] |  ✓ tests/integration/members.test.ts (15 tests) 948ms
+  [09] |  ✓ tests/domain/provenance.test.ts (5 tests) 1ms
+  [09] |  ✓ tests/integration/members.test.ts (15 tests) 474ms
   [09] | 
   [09] |  Test Files  2 passed (2)
   [09] |       Tests  20 passed (20)
-  [09] |    Start at  09:35:11
-  [09] |    Duration  1.28s (transform 129ms, setup 11ms, collect 230ms, tests 949ms, environment 0ms, prepare 62ms)
+  [09] |    Start at  09:38:19
+  [09] |    Duration  783ms (transform 124ms, setup 11ms, collect 218ms, tests 475ms, environment 0ms, prepare 54ms)
   [09] --- real output end ---
 - 结果: PASS
 
@@ -197,17 +197,17 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: 403 GUARDIAN_CONSENT_REQUIRED；无 person / profile 落库
   [10] $ bunx vitest run tests/integration/consent-first.test.ts
-  [10] exit=0 duration=0.8s
+  [10] exit=0 duration=0.7s
   [10] --- real output begin ---
   [10] | 
   [10] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [10] | 
-  [10] |  ✓ tests/integration/consent-first.test.ts (3 tests) 204ms
+  [10] |  ✓ tests/integration/consent-first.test.ts (3 tests) 213ms
   [10] | 
   [10] |  Test Files  1 passed (1)
   [10] |       Tests  3 passed (3)
-  [10] |    Start at  09:35:13
-  [10] |    Duration  542ms (transform 129ms, setup 7ms, collect 226ms, tests 204ms, environment 0ms, prepare 27ms)
+  [10] |    Start at  09:38:20
+  [10] |    Duration  507ms (transform 106ms, setup 5ms, collect 185ms, tests 213ms, environment 0ms, prepare 25ms)
   [10] --- real output end ---
 - 结果: PASS
 
@@ -223,12 +223,12 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [11] | 
   [11] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [11] | 
-  [11] |  ✓ tests/db/consent-structure.test.ts (3 tests) 59ms
+  [11] |  ✓ tests/db/consent-structure.test.ts (3 tests) 60ms
   [11] | 
   [11] |  Test Files  1 passed (1)
   [11] |       Tests  3 passed (3)
-  [11] |    Start at  09:35:13
-  [11] |    Duration  200ms (transform 17ms, setup 8ms, collect 15ms, tests 59ms, environment 0ms, prepare 37ms)
+  [11] |    Start at  09:38:21
+  [11] |    Duration  181ms (transform 14ms, setup 5ms, collect 13ms, tests 60ms, environment 0ms, prepare 27ms)
   [11] --- real output end ---
 - 结果: PASS
 
@@ -239,18 +239,18 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: MAPPED — grant 响应契约由 consent-grant.test.ts 覆盖，与 consent-first 建档顺序合并验证
 - 期望: GRANTED 后建档成功；profile 的 guardian/consent 版本一致
   [12] $ bunx vitest run tests/integration/consent-first.test.ts tests/integration/consent-grant.test.ts
-  [12] exit=0 duration=0.8s
+  [12] exit=0 duration=0.7s
   [12] --- real output begin ---
   [12] | 
   [12] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [12] | 
-  [12] |  ✓ tests/integration/consent-first.test.ts (3 tests) 193ms
-  [12] |  ✓ tests/integration/consent-grant.test.ts (5 tests) 247ms
+  [12] |  ✓ tests/integration/consent-first.test.ts (3 tests) 178ms
+  [12] |  ✓ tests/integration/consent-grant.test.ts (5 tests) 229ms
   [12] | 
   [12] |  Test Files  2 passed (2)
   [12] |       Tests  8 passed (8)
-  [12] |    Start at  09:35:14
-  [12] |    Duration  570ms (transform 124ms, setup 11ms, collect 421ms, tests 441ms, environment 0ms, prepare 56ms)
+  [12] |    Start at  09:38:21
+  [12] |    Duration  537ms (transform 118ms, setup 12ms, collect 400ms, tests 407ms, environment 0ms, prepare 54ms)
   [12] --- real output end ---
 - 结果: PASS
 
@@ -266,12 +266,12 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [13] | 
   [13] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [13] | 
-  [13] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 263ms
+  [13] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 299ms
   [13] | 
   [13] |  Test Files  1 passed (1)
   [13] |       Tests  3 passed (3)
-  [13] |    Start at  09:35:15
-  [13] |    Duration  578ms (transform 112ms, setup 6ms, collect 203ms, tests 263ms, environment 0ms, prepare 26ms)
+  [13] |    Start at  09:38:22
+  [13] |    Duration  593ms (transform 105ms, setup 5ms, collect 187ms, tests 299ms, environment 0ms, prepare 24ms)
   [13] --- real output end ---
 - 结果: PASS
 
@@ -287,13 +287,13 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [14] | 
   [14] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [14] | 
-  [14] |  ✓ tests/db/consent-structure.test.ts (3 tests) 51ms
-  [14] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 255ms
+  [14] |  ✓ tests/db/consent-structure.test.ts (3 tests) 46ms
+  [14] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 306ms
   [14] | 
   [14] |  Test Files  2 passed (2)
   [14] |       Tests  6 passed (6)
-  [14] |    Start at  09:35:15
-  [14] |    Duration  586ms (transform 128ms, setup 12ms, collect 237ms, tests 305ms, environment 0ms, prepare 55ms)
+  [14] |    Start at  09:38:23
+  [14] |    Duration  618ms (transform 120ms, setup 11ms, collect 222ms, tests 352ms, environment 0ms, prepare 53ms)
   [14] --- real output end ---
 - 结果: PASS
 
@@ -309,12 +309,12 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [15] | 
   [15] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [15] | 
-  [15] |  ✓ tests/db/consent-structure.test.ts (3 tests) 54ms
+  [15] |  ✓ tests/db/consent-structure.test.ts (3 tests) 60ms
   [15] | 
   [15] |  Test Files  1 passed (1)
   [15] |       Tests  3 passed (3)
-  [15] |    Start at  09:35:16
-  [15] |    Duration  179ms (transform 14ms, setup 6ms, collect 14ms, tests 54ms, environment 0ms, prepare 26ms)
+  [15] |    Start at  09:38:24
+  [15] |    Duration  180ms (transform 13ms, setup 5ms, collect 13ms, tests 60ms, environment 0ms, prepare 26ms)
   [15] --- real output end ---
 - 结果: PASS
 
@@ -325,7 +325,7 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: UNKNOWN → BLOCK / AGE_BAND_UNKNOWN；NOT_COLLECTED 不是合法 age_band
   [16] $ bunx vitest run tests/domain/age-band.test.ts
-  [16] exit=0 duration=0.4s
+  [16] exit=0 duration=0.3s
   [16] --- real output begin ---
   [16] | 
   [16] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
@@ -334,8 +334,8 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [16] | 
   [16] |  Test Files  1 passed (1)
   [16] |       Tests  7 passed (7)
-  [16] |    Start at  09:35:17
-  [16] |    Duration  126ms (transform 19ms, setup 6ms, collect 12ms, tests 1ms, environment 0ms, prepare 27ms)
+  [16] |    Start at  09:38:24
+  [16] |    Duration  118ms (transform 18ms, setup 6ms, collect 11ms, tests 1ms, environment 0ms, prepare 25ms)
   [16] --- real output end ---
 - 结果: PASS
 
@@ -346,18 +346,18 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: 跨家庭 403 无目标字段；伪造 family_id 无效；非 manager 403；无上下文 0 行
   [17] $ bunx vitest run tests/integration/authorization.test.ts tests/db/rls.test.ts
-  [17] exit=0 duration=0.9s
+  [17] exit=0 duration=0.8s
   [17] --- real output begin ---
   [17] | 
   [17] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [17] | 
-  [17] |  ✓ tests/db/rls.test.ts (10 tests) 125ms
-  [17] |  ✓ tests/integration/authorization.test.ts (7 tests) 289ms
+  [17] |  ✓ tests/db/rls.test.ts (10 tests) 122ms
+  [17] |  ✓ tests/integration/authorization.test.ts (7 tests) 302ms
   [17] | 
   [17] |  Test Files  2 passed (2)
   [17] |       Tests  17 passed (17)
-  [17] |    Start at  09:35:17
-  [17] |    Duration  649ms (transform 143ms, setup 12ms, collect 271ms, tests 414ms, environment 0ms, prepare 61ms)
+  [17] |    Start at  09:38:24
+  [17] |    Duration  619ms (transform 124ms, setup 10ms, collect 230ms, tests 424ms, environment 0ms, prepare 54ms)
   [17] --- real output end ---
 - 结果: PASS
 
@@ -368,17 +368,17 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: guardian 关系不构成 Family 访问权限；403 且响应无目标字段
   [18] $ bunx vitest run tests/integration/authorization-dimensions.test.ts
-  [18] exit=0 duration=1.0s
+  [18] exit=0 duration=0.8s
   [18] --- real output begin ---
   [18] | 
   [18] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [18] | 
-  [18] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 272ms
+  [18] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 295ms
   [18] | 
   [18] |  Test Files  1 passed (1)
   [18] |       Tests  5 passed (5)
-  [18] |    Start at  09:35:18
-  [18] |    Duration  620ms (transform 129ms, setup 6ms, collect 231ms, tests 272ms, environment 0ms, prepare 27ms)
+  [18] |    Start at  09:38:25
+  [18] |    Duration  594ms (transform 109ms, setup 6ms, collect 192ms, tests 295ms, environment 0ms, prepare 25ms)
   [18] --- real output end ---
 - 结果: PASS
 
@@ -389,17 +389,17 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: grant 与 revoke 被拒，正式错误码 NOT_GUARDIAN
   [19] $ bunx vitest run tests/integration/authorization-dimensions.test.ts
-  [19] exit=0 duration=1.0s
+  [19] exit=0 duration=0.8s
   [19] --- real output begin ---
   [19] | 
   [19] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [19] | 
-  [19] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 393ms
+  [19] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 313ms
   [19] | 
   [19] |  Test Files  1 passed (1)
   [19] |       Tests  5 passed (5)
-  [19] |    Start at  09:35:19
-  [19] |    Duration  727ms (transform 124ms, setup 6ms, collect 215ms, tests 393ms, environment 0ms, prepare 31ms)
+  [19] |    Start at  09:38:26
+  [19] |    Duration  607ms (transform 107ms, setup 5ms, collect 188ms, tests 313ms, environment 0ms, prepare 25ms)
   [19] --- real output end ---
 - 结果: PASS
 
@@ -410,19 +410,19 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: MAPPED — profiles.test.ts 未落地；profile 的 band/minor_mode/verified_source 由 members + consent-first + consent-structure 覆盖
 - 期望: ADULT minor_mode=false；MINOR/UNDER_14 minor_mode=true；verified_source 实际落库
   [20] $ bunx vitest run tests/integration/members.test.ts tests/integration/consent-first.test.ts tests/db/consent-structure.test.ts
-  [20] exit=0 duration=1.4s
+  [20] exit=0 duration=1.0s
   [20] --- real output begin ---
   [20] | 
   [20] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [20] | 
-  [20] |  ✓ tests/db/consent-structure.test.ts (3 tests) 47ms
-  [20] |  ✓ tests/integration/consent-first.test.ts (3 tests) 216ms
-  [20] |  ✓ tests/integration/members.test.ts (15 tests) 762ms
+  [20] |  ✓ tests/db/consent-structure.test.ts (3 tests) 43ms
+  [20] |  ✓ tests/integration/consent-first.test.ts (3 tests) 210ms
+  [20] |  ✓ tests/integration/members.test.ts (15 tests) 459ms
   [20] | 
   [20] |  Test Files  3 passed (3)
   [20] |       Tests  21 passed (21)
-  [20] |    Start at  09:35:20
-  [20] |    Duration  1.18s (transform 178ms, setup 20ms, collect 617ms, tests 1.02s, environment 0ms, prepare 104ms)
+  [20] |    Start at  09:38:27
+  [20] |    Duration  797ms (transform 135ms, setup 17ms, collect 475ms, tests 713ms, environment 0ms, prepare 85ms)
   [20] --- real output end ---
 - 结果: PASS
 
@@ -433,18 +433,18 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: MAPPED — owner ≠ app / NOBYPASSRLS 由 roles.test.ts 覆盖，与 rls.test.ts 合并验证
 - 期望: relrowsecurity/relforcerowsecurity=true；rolbypassrls=false；uuidv7 默认值
   [21] $ bunx vitest run tests/db/rls.test.ts tests/db/roles.test.ts
-  [21] exit=0 duration=0.6s
+  [21] exit=0 duration=0.4s
   [21] --- real output begin ---
   [21] | 
   [21] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [21] | 
-  [21] |  ✓ tests/db/roles.test.ts (9 tests) 87ms
-  [21] |  ✓ tests/db/rls.test.ts (10 tests) 122ms
+  [21] |  ✓ tests/db/roles.test.ts (9 tests) 77ms
+  [21] |  ✓ tests/db/rls.test.ts (10 tests) 108ms
   [21] | 
   [21] |  Test Files  2 passed (2)
   [21] |       Tests  19 passed (19)
-  [21] |    Start at  09:35:21
-  [21] |    Duration  330ms (transform 56ms, setup 28ms, collect 95ms, tests 208ms, environment 0ms, prepare 78ms)
+  [21] |    Start at  09:38:28
+  [21] |    Duration  236ms (transform 24ms, setup 11ms, collect 39ms, tests 185ms, environment 0ms, prepare 53ms)
   [21] --- real output end ---
 - 结果: PASS
 
@@ -455,18 +455,18 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: MAPPED — rls-transaction.test.ts 未落地；连接池上下文不泄漏 / set_family_context 42501 由 rls.test.ts 与 authorization.test.ts 覆盖
 - 期望: 事务外上下文查询 0 行；非成员 set_family_context 抛 42501；连接池不泄漏
   [22] $ bunx vitest run tests/db/rls.test.ts tests/integration/authorization.test.ts
-  [22] exit=0 duration=0.9s
+  [22] exit=0 duration=0.8s
   [22] --- real output begin ---
   [22] | 
   [22] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [22] | 
-  [22] |  ✓ tests/db/rls.test.ts (10 tests) 124ms
-  [22] |  ✓ tests/integration/authorization.test.ts (7 tests) 316ms
+  [22] |  ✓ tests/db/rls.test.ts (10 tests) 116ms
+  [22] |  ✓ tests/integration/authorization.test.ts (7 tests) 302ms
   [22] | 
   [22] |  Test Files  2 passed (2)
   [22] |       Tests  17 passed (17)
-  [22] |    Start at  09:35:22
-  [22] |    Duration  673ms (transform 135ms, setup 12ms, collect 280ms, tests 440ms, environment 0ms, prepare 56ms)
+  [22] |    Start at  09:38:28
+  [22] |    Duration  624ms (transform 126ms, setup 12ms, collect 232ms, tests 417ms, environment 0ms, prepare 55ms)
   [22] --- real output end ---
 - 结果: PASS
 
@@ -477,17 +477,17 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: 六命令参数化矩阵；并发 20 次同 key 记录数不变；不同 payload → 409
   [23] $ bunx vitest run tests/integration/idempotency.test.ts
-  [23] exit=0 duration=1.4s
+  [23] exit=0 duration=1.3s
   [23] --- real output begin ---
   [23] | 
   [23] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [23] | 
-  [23] |  ✓ tests/integration/idempotency.test.ts (21 tests) 789ms
+  [23] |  ✓ tests/integration/idempotency.test.ts (21 tests) 765ms
   [23] | 
   [23] |  Test Files  1 passed (1)
   [23] |       Tests  21 passed (21)
-  [23] |    Start at  09:35:23
-  [23] |    Duration  1.13s (transform 123ms, setup 6ms, collect 216ms, tests 789ms, environment 0ms, prepare 28ms)
+  [23] |    Start at  09:38:29
+  [23] |    Duration  1.06s (transform 109ms, setup 5ms, collect 191ms, tests 765ms, environment 0ms, prepare 25ms)
   [23] --- real output end ---
 - 结果: PASS
 
@@ -498,17 +498,17 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 - 映射: EXACT
 - 期望: A 只见 A 的 key；B 的 key 回放 0 行；无上下文写入被拒
   [24] $ bunx vitest run tests/db/idempotency-rls.test.ts
-  [24] exit=0 duration=0.5s
+  [24] exit=0 duration=0.4s
   [24] --- real output begin ---
   [24] | 
   [24] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [24] | 
-  [24] |  ✓ tests/db/idempotency-rls.test.ts (3 tests) 83ms
+  [24] |  ✓ tests/db/idempotency-rls.test.ts (3 tests) 82ms
   [24] | 
   [24] |  Test Files  1 passed (1)
   [24] |       Tests  3 passed (3)
-  [24] |    Start at  09:35:24
-  [24] |    Duration  215ms (transform 15ms, setup 6ms, collect 14ms, tests 83ms, environment 0ms, prepare 27ms)
+  [24] |    Start at  09:38:30
+  [24] |    Duration  204ms (transform 14ms, setup 6ms, collect 13ms, tests 82ms, environment 0ms, prepare 26ms)
   [24] --- real output end ---
 - 结果: PASS
 
@@ -538,12 +538,12 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [26] | 
   [26] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [26] | 
-  [26] |  ✓ tests/integration/openapi.test.ts (7 tests) 193ms
+  [26] |  ✓ tests/integration/openapi.test.ts (7 tests) 188ms
   [26] | 
   [26] |  Test Files  1 passed (1)
   [26] |       Tests  7 passed (7)
-  [26] |    Start at  09:35:25
-  [26] |    Duration  512ms (transform 116ms, setup 6ms, collect 208ms, tests 193ms, environment 0ms, prepare 28ms)
+  [26] |    Start at  09:38:31
+  [26] |    Duration  489ms (transform 109ms, setup 6ms, collect 192ms, tests 188ms, environment 0ms, prepare 25ms)
   [26] --- real output end ---
 - 结果: PASS
 
@@ -613,7 +613,6 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [protected-file diff] | apps/server/api/src/routes/identity-bindings.ts
   [protected-file diff] | apps/server/api/src/runtime-env.ts
   [protected-file diff] | db/migrations/004_identity_binding_runtime.sql
-  [protected-file diff] | db/migrations/005_identity_binding_candidate_account_gate.sql
   [protected-file diff] | packages/authorization/src/authorize.ts
   [protected-file diff] | packages/contracts/src/env.ts
   [protected-file diff] | packages/contracts/src/identity-binding-schemas.ts
@@ -625,6 +624,7 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [protected-file diff] | packages/domain/src/repository.ts
   [protected-file diff] | packages/generated/openapi.d.ts
   [protected-file diff] | packages/generated/openapi.json
+  [protected-file diff] | scripts/db-evidence.mjs
   [protected-file diff] | scripts/openapi-check.mjs
   [protected-file diff] | specs/006-identity-binding-runtime/checklists/requirements-quality.md
   [protected-file diff] | specs/006-identity-binding-runtime/contracts/identity-binding-api.openapi.yaml
@@ -636,6 +636,7 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [protected-file diff] | tests/db/identity-binding-concurrency.test.ts
   [protected-file diff] | tests/db/identity-binding-confirmation-repository.test.ts
   [protected-file diff] | tests/db/identity-binding-context.test.ts
+  [protected-file diff] | tests/db/identity-binding-facts.test.ts
   [protected-file diff] | tests/db/identity-binding-operation-key-repository.test.ts
   [protected-file diff] | tests/db/identity-binding-p1-commit.test.ts
   [protected-file diff] | tests/db/identity-binding-rls.test.ts
@@ -649,28 +650,41 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [protected-file diff] | tests/domain/identity-binding-authorization.test.ts
   [protected-file diff] | tests/domain/identity-binding-crypto.test.ts
   [protected-file diff] | tests/domain/identity-binding-env.test.ts
-  [protected-file diff] | tests/domain/identity-binding-facts.test.ts
   [protected-file diff] | tests/domain/identity-binding-gate.test.ts
   [protected-file diff] | tests/domain/identity-binding-idempotency.test.ts
   [protected-file diff] | tests/domain/identity-binding-invitation-port.test.ts
   [protected-file diff] | tests/domain/identity-binding-state.test.ts
+  [protected-file diff] | tests/evidence/db-evidence.log
+  [protected-file diff] | tests/evidence/verify-all.log
+  [protected-file diff] | tests/integration/identity-binding-account.test.ts
   [protected-file diff] | tests/integration/identity-binding-anti-enumeration.test.ts
   [protected-file diff] | tests/integration/identity-binding-attempt-create.test.ts
+  [protected-file diff] | tests/integration/identity-binding-audit.test.ts
   [protected-file diff] | tests/integration/identity-binding-authorization-surfaces.test.ts
+  [protected-file diff] | tests/integration/identity-binding-bootstrap-route.test.ts
+  [protected-file diff] | tests/integration/identity-binding-bootstrap.test.ts
+  [protected-file diff] | tests/integration/identity-binding-candidate-auth.test.ts
   [protected-file diff] | tests/integration/identity-binding-candidate.test.ts
   [protected-file diff] | tests/integration/identity-binding-case-b.test.ts
+  [protected-file diff] | tests/integration/identity-binding-commit-gate2.test.ts
+  [protected-file diff] | tests/integration/identity-binding-commit-settle.test.ts
   [protected-file diff] | tests/integration/identity-binding-commit.test.ts
   [protected-file diff] | tests/integration/identity-binding-confirmer-independent.test.ts
   [protected-file diff] | tests/integration/identity-binding-confirmer-list.test.ts
   [protected-file diff] | tests/integration/identity-binding-confirmer-ordering.test.ts
   [protected-file diff] | tests/integration/identity-binding-confirmer-reject.test.ts
   [protected-file diff] | tests/integration/identity-binding-confirmer.test.ts
+  [protected-file diff] | tests/integration/identity-binding-error-envelope.test.ts
   [protected-file diff] | tests/integration/identity-binding-gate1.test.ts
+  [protected-file diff] | tests/integration/identity-binding-idempotency.test.ts
+  [protected-file diff] | tests/integration/identity-binding-invitation-contract.test.ts
+  [protected-file diff] | tests/integration/identity-binding-no-p2.test.ts
   [protected-file diff] | tests/integration/identity-binding-ordinary-login-regression.test.ts
   [protected-file diff] | tests/integration/identity-binding-replay.test.ts
   [protected-file diff] | tests/integration/identity-binding-rollback.test.ts
   [protected-file diff] | tests/integration/identity-binding-routes.test.ts
   [protected-file diff] | tests/integration/identity-binding-session.test.ts
+  [protected-file diff] | tests/integration/identity-binding-status.test.ts
   [protected-file diff] | tests/integration/openapi.test.ts
   [protected-file diff] | tests/integration/runtime-env.test.ts
   [protected-file diff] | tests/setup/env.ts
@@ -682,137 +696,137 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
 ## FINAL GATES
 
   [G1 全量测试套件] $ bunx vitest run
-  [G1 全量测试套件] exit=0 duration=17.9s
+  [G1 全量测试套件] exit=0 duration=16.4s
   [G1 全量测试套件] --- real output begin ---
   [G1 全量测试套件] | 
   [G1 全量测试套件] |  RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [G1 全量测试套件] | 
-  [G1 全量测试套件] |  ✓ tests/integration/processing-gate.test.ts (5 tests) 486ms
-  [G1 全量测试套件] |  ✓ tests/integration/idempotency.test.ts (21 tests) 789ms
-  [G1 全量测试套件] |  ✓ tests/integration/members.test.ts (15 tests) 435ms
-  [G1 全量测试套件] |  ✓ tests/integration/guard-scope.test.ts (33 tests) 2774ms
-  [G1 全量测试套件] |  ✓ tests/integration/current-family-determinism.test.ts (11 tests) 481ms
-  [G1 全量测试套件] |  ✓ tests/integration/age-band-source.test.ts (12 tests) 410ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-operation-key-repository.test.ts (6 tests) 334ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-commit-gate2.test.ts (4 tests) 345ms
+  [G1 全量测试套件] |  ✓ tests/integration/idempotency.test.ts (21 tests) 748ms
+  [G1 全量测试套件] |  ✓ tests/integration/processing-gate.test.ts (5 tests) 432ms
+  [G1 全量测试套件] |  ✓ tests/integration/current-family-determinism.test.ts (11 tests) 471ms
+  [G1 全量测试套件] |  ✓ tests/integration/guard-scope.test.ts (33 tests) 2713ms
+  [G1 全量测试套件] |  ✓ tests/integration/members.test.ts (15 tests) 439ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-validity.test.ts (5 tests) 255ms
+  [G1 全量测试套件] |  ✓ tests/integration/age-band-source.test.ts (12 tests) 378ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-error-envelope.test.ts (5 tests) 253ms
+  [G1 全量测试套件] | {"level":50,"time":1794101916920,"pid":7906,"hostname":"Mac-Mini-M4.lan","reqId":"req-m","requestId":"req-m","method":"POST","route":"/api/v1/cases","msg":"unhandled request error"}
+  [G1 全量测试套件] | {"level":50,"time":1794101916936,"pid":7906,"hostname":"Mac-Mini-M4.lan","reqId":"req-p","requestId":"req-p","method":"POST","route":"/api/v1/cases","msg":"unhandled request error"}
+  [G1 全量测试套件] | {"level":50,"time":1794101916950,"pid":7906,"hostname":"Mac-Mini-M4.lan","reqId":"req-s","requestId":"req-s","method":"POST","route":"/api/v1/cases","msg":"unhandled request error"}
+  [G1 全量测试套件] | {"level":50,"time":1794101916967,"pid":7906,"hostname":"Mac-Mini-M4.lan","reqId":"req-v","requestId":"req-v","method":"POST","route":"/api/v1/cases","msg":"unhandled request error"}
+  [G1 全量测试套件] |  ✓ tests/integration/cases-idempotency-identity.test.ts (9 tests) 325ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer.test.ts (3 tests) 319ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-commit-gate2.test.ts (4 tests) 350ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-candidate-auth.test.ts (3 tests) 249ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-operation-key-repository.test.ts (6 tests) 326ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-idempotency.test.ts (5 tests) 318ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-create.test.ts (18 tests) 296ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-account.test.ts (4 tests) 277ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer-list.test.ts (3 tests) 220ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-reconsent.test.ts (5 tests) 221ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-candidate.test.ts (4 tests) 264ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-status.test.ts (3 tests) 312ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-bootstrap.test.ts (4 tests) 251ms
+  [G1 全量测试套件] | {"level":50,"time":1794101919774,"pid":7955,"hostname":"Mac-Mini-M4.lan","reqId":"req-8","requestId":"req-8","method":"POST","route":"/api/v1/identity-bindings/:attemptId/decision","msg":"unhandled request error"}
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-audit.test.ts (3 tests) 323ms
+  [G1 全量测试套件] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 229ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-rls.test.ts (5 tests) 286ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-attempt-repository.test.ts (4 tests) 282ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-no-p2.test.ts (3 tests) 278ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 225ms
+  [G1 全量测试套件] |  ✓ tests/integration/authorization.test.ts (7 tests) 253ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-bootstrap-route.test.ts (5 tests) 211ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-request-candidate.test.ts (4 tests) 245ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-gate1.test.ts (4 tests) 203ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-context.test.ts (4 tests) 254ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-read.test.ts (7 tests) 258ms
   [G1 全量测试套件] |  ✓ tests/db/identity-binding-p1-commit.test.ts (3 tests) 271ms
-  [G1 全量测试套件] | {"level":50,"time":1794101731190,"pid":4816,"hostname":"Mac-Mini-M4.lan","reqId":"req-8","requestId":"req-8","method":"POST","route":"/api/v1/identity-bindings/:attemptId/decision","msg":"unhandled request error"}
-  [G1 全量测试套件] |  ✓ tests/integration/authorization-dimensions.test.ts (5 tests) 244ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-audit.test.ts (3 tests) 318ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-status.test.ts (3 tests) 321ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-idempotency.test.ts (5 tests) 331ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-account.test.ts (4 tests) 325ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-create.test.ts (18 tests) 330ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-candidate.test.ts (4 tests) 323ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-validity.test.ts (5 tests) 418ms
-  [G1 全量测试套件] | {"level":50,"time":1794101733209,"pid":4850,"hostname":"Mac-Mini-M4.lan","reqId":"req-m","requestId":"req-m","method":"POST","route":"/api/v1/cases","msg":"unhandled request error"}
-  [G1 全量测试套件] | {"level":50,"time":1794101733226,"pid":4850,"hostname":"Mac-Mini-M4.lan","reqId":"req-p","requestId":"req-p","method":"POST","route":"/api/v1/cases","msg":"unhandled request error"}
-  [G1 全量测试套件] | {"level":50,"time":1794101733244,"pid":4850,"hostname":"Mac-Mini-M4.lan","reqId":"req-s","requestId":"req-s","method":"POST","route":"/api/v1/cases","msg":"unhandled request error"}
-  [G1 全量测试套件] | {"level":50,"time":1794101733260,"pid":4850,"hostname":"Mac-Mini-M4.lan","reqId":"req-v","requestId":"req-v","method":"POST","route":"/api/v1/cases","msg":"unhandled request error"}
-  [G1 全量测试套件] |  ✓ tests/integration/cases-idempotency-identity.test.ts (9 tests) 365ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-context.test.ts (4 tests) 281ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-no-p2.test.ts (3 tests) 307ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-authorization-surfaces.test.ts (3 tests) 243ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-rls.test.ts (5 tests) 313ms
-  [G1 全量测试套件] |  ✓ tests/integration/authorization.test.ts (7 tests) 271ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-commit-settle.test.ts (2 tests) 222ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-attempt-repository.test.ts (4 tests) 309ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-gate1.test.ts (4 tests) 286ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-confirmation-repository.test.ts (3 tests) 265ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-reconsent.test.ts (5 tests) 325ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-request-candidate.test.ts (4 tests) 291ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-grant-authz.test.ts (6 tests) 270ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer.test.ts (3 tests) 350ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-http-boundary.test.ts (10 tests) 270ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-read.test.ts (7 tests) 277ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-error-envelope.test.ts (5 tests) 365ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-bootstrap.test.ts (4 tests) 321ms
-  [G1 全量测试套件] |  ✓ tests/integration/error-log-redaction.test.ts (1 test) 10416ms
-  [G1 全量测试套件] |    ✓ unexpected error logging is redacted > logs SQLSTATE and request metadata without request-derived values  10356ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-request-authz.test.ts (6 tests) 242ms
-  [G1 全量测试套件] |  ✓ tests/db/cases-primary-concurrency.test.ts (3 tests) 268ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-bootstrap-route.test.ts (5 tests) 301ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer-list.test.ts (3 tests) 325ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-candidate-auth.test.ts (3 tests) 339ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-attempt-create.test.ts (2 tests) 252ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-anti-enumeration.test.ts (2 tests) 220ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-audit-repository.test.ts (5 tests) 236ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-revoke.test.ts (3 tests) 311ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-grant.test.ts (5 tests) 227ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-case-b.test.ts (2 tests) 171ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-authorization.test.ts (7 tests) 234ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-commit.test.ts (1 test) 181ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer-reject.test.ts (2 tests) 236ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-current-family-ambiguous.test.ts (3 tests) 182ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-first.test.ts (3 tests) 173ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-session.test.ts (1 test) 183ms
-  [G1 全量测试套件] |  ✓ tests/integration/transaction-boundary.test.ts (5 tests) 193ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-idempotency.test.ts (3 tests) 209ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-replay.test.ts (1 test) 245ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-concurrency.test.ts (1 test) 214ms
-  [G1 全量测试套件] | {"level":50,"time":1794101740884,"pid":4974,"hostname":"Mac-Mini-M4.lan","reqId":"req-3","requestId":"req-3","method":"POST","route":"/api/v1/cases","sqlstate":"P0001","msg":"unhandled request error"}
-  [G1 全量测试套件] | {"level":50,"time":1794101740930,"pid":4974,"hostname":"Mac-Mini-M4.lan","reqId":"req-7","requestId":"req-7","method":"POST","route":"/api/v1/cases","sqlstate":"P0001","msg":"unhandled request error"}
-  [G1 全量测试套件] |  ✓ tests/integration/cases-rollback.test.ts (2 tests) 170ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-evidence.test.ts (3 tests) 195ms
-  [G1 全量测试套件] |  ✓ tests/integration/openapi.test.ts (7 tests) 180ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-request.test.ts (5 tests) 200ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-rollback.test.ts (1 test) 178ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer-ordering.test.ts (1 test) 150ms
-  [G1 全量测试套件] |  ✓ tests/integration/families.test.ts (6 tests) 172ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-read-no-audit.test.ts (2 tests) 202ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer-independent.test.ts (2 tests) 233ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-audit.test.ts (2 tests) 132ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-invitation-contract.test.ts (4 tests) 160ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-facts.test.ts (3 tests) 204ms
-  [G1 全量测试套件] |  ✓ tests/db/rls.test.ts (10 tests) 104ms
-  [G1 全量测试套件] |  ✓ tests/integration/log-privacy.test.ts (1 test) 131ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-idempotency-mismatch.test.ts (2 tests) 151ms
-  [G1 全量测试套件] |  ✓ tests/integration/consent-read.test.ts (4 tests) 134ms
-  [G1 全量测试套件] |  ✓ tests/integration/auth.test.ts (4 tests) 83ms
-  [G1 全量测试套件] |  ✓ tests/integration/uuid-v7.test.ts (3 tests) 100ms
-  [G1 全量测试套件] |  ✓ tests/db/cases-rls.test.ts (10 tests) 66ms
-  [G1 全量测试套件] |  ✓ tests/db/roles.test.ts (9 tests) 48ms
-  [G1 全量测试套件] |  ✓ tests/integration/cases-scope.test.ts (7 tests) 98ms
-  [G1 全量测试套件] |  ✓ tests/db/idempotency-rls.test.ts (3 tests) 41ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-ordinary-login-regression.test.ts (2 tests) 67ms
-  [G1 全量测试套件] |  ✓ tests/db/cases-events-metadata.test.ts (8 tests) 60ms
-  [G1 全量测试套件] |  ✓ tests/db/case-idempotency-representation.test.ts (7 tests) 34ms
-  [G1 全量测试套件] |  ✓ tests/db/consent-structure.test.ts (3 tests) 41ms
-  [G1 全量测试套件] |  ✓ tests/db/migration-repro.test.ts (7 tests) 28ms
-  [G1 全量测试套件] |  ✓ tests/integration/runtime-env.test.ts (5 tests) 65ms
-  [G1 全量测试套件] |  ✓ tests/db/constraints.test.ts (3 tests) 50ms
-  [G1 全量测试套件] |  ✓ tests/db/cases-schema.test.ts (10 tests) 43ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-schema.test.ts (10 tests) 36ms
-  [G1 全量测试套件] |  ✓ tests/db/schema-structure.test.ts (6 tests) 45ms
-  [G1 全量测试套件] |  ✓ tests/db/identity-binding-tx.test.ts (7 tests) 38ms
-  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-routes.test.ts (2 tests) 31ms
-  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-crypto.test.ts (6 tests) 4ms
-  [G1 全量测试套件] |  ✓ tests/integration/openapi-runtime-drift.test.ts (1 test) 30ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-http-boundary.test.ts (10 tests) 245ms
+  [G1 全量测试套件] |  ✓ tests/db/cases-primary-concurrency.test.ts (3 tests) 175ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-grant-authz.test.ts (6 tests) 236ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-attempt-create.test.ts (2 tests) 192ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-confirmation-repository.test.ts (3 tests) 248ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-replay.test.ts (1 test) 164ms
+  [G1 全量测试套件] |  ✓ tests/integration/error-log-redaction.test.ts (1 test) 10342ms
+  [G1 全量测试套件] |    ✓ unexpected error logging is redacted > logs SQLSTATE and request metadata without request-derived values  10289ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-authorization-surfaces.test.ts (3 tests) 220ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-request-authz.test.ts (6 tests) 192ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-audit-repository.test.ts (5 tests) 211ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer-reject.test.ts (2 tests) 234ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-authorization.test.ts (7 tests) 273ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer-independent.test.ts (2 tests) 175ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-grant.test.ts (5 tests) 220ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-anti-enumeration.test.ts (2 tests) 192ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-commit-settle.test.ts (2 tests) 249ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-concurrency.test.ts (1 test) 158ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-first.test.ts (3 tests) 187ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-facts.test.ts (3 tests) 161ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-idempotency.test.ts (3 tests) 182ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-read-no-audit.test.ts (2 tests) 163ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-evidence.test.ts (3 tests) 189ms
+  [G1 全量测试套件] |  ✓ tests/integration/transaction-boundary.test.ts (5 tests) 186ms
+  [G1 全量测试套件] |  ✓ tests/integration/openapi.test.ts (7 tests) 177ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-session.test.ts (1 test) 180ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-current-family-ambiguous.test.ts (3 tests) 177ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-rollback.test.ts (1 test) 161ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-commit.test.ts (1 test) 190ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-request.test.ts (5 tests) 170ms
+  [G1 全量测试套件] | {"level":50,"time":1794101926556,"pid":8066,"hostname":"Mac-Mini-M4.lan","reqId":"req-3","requestId":"req-3","method":"POST","route":"/api/v1/cases","sqlstate":"P0001","msg":"unhandled request error"}
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-invitation-contract.test.ts (4 tests) 121ms
+  [G1 全量测试套件] | {"level":50,"time":1794101926604,"pid":8066,"hostname":"Mac-Mini-M4.lan","reqId":"req-7","requestId":"req-7","method":"POST","route":"/api/v1/cases","sqlstate":"P0001","msg":"unhandled request error"}
+  [G1 全量测试套件] |  ✓ tests/integration/cases-rollback.test.ts (2 tests) 152ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-case-b.test.ts (2 tests) 188ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-idempotency-mismatch.test.ts (2 tests) 130ms
+  [G1 全量测试套件] |  ✓ tests/integration/families.test.ts (6 tests) 149ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-confirmer-ordering.test.ts (1 test) 149ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-audit.test.ts (2 tests) 126ms
+  [G1 全量测试套件] |  ✓ tests/integration/consent-read.test.ts (4 tests) 130ms
+  [G1 全量测试套件] |  ✓ tests/integration/log-privacy.test.ts (1 test) 105ms
+  [G1 全量测试套件] |  ✓ tests/db/rls.test.ts (10 tests) 87ms
+  [G1 全量测试套件] |  ✓ tests/integration/auth.test.ts (4 tests) 80ms
+  [G1 全量测试套件] |  ✓ tests/integration/uuid-v7.test.ts (3 tests) 98ms
+  [G1 全量测试套件] |  ✓ tests/db/idempotency-rls.test.ts (3 tests) 40ms
+  [G1 全量测试套件] |  ✓ tests/db/roles.test.ts (9 tests) 42ms
+  [G1 全量测试套件] |  ✓ tests/integration/cases-scope.test.ts (7 tests) 87ms
+  [G1 全量测试套件] |  ✓ tests/db/cases-rls.test.ts (10 tests) 78ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-ordinary-login-regression.test.ts (2 tests) 64ms
+  [G1 全量测试套件] |  ✓ tests/integration/runtime-env.test.ts (5 tests) 55ms
+  [G1 全量测试套件] |  ✓ tests/db/migration-repro.test.ts (7 tests) 38ms
+  [G1 全量测试套件] |  ✓ tests/db/cases-events-metadata.test.ts (8 tests) 77ms
+  [G1 全量测试套件] |  ✓ tests/db/constraints.test.ts (3 tests) 27ms
+  [G1 全量测试套件] |  ✓ tests/db/schema-structure.test.ts (6 tests) 38ms
+  [G1 全量测试套件] |  ✓ tests/db/consent-structure.test.ts (3 tests) 38ms
+  [G1 全量测试套件] |  ✓ tests/db/cases-schema.test.ts (10 tests) 31ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-schema.test.ts (10 tests) 42ms
+  [G1 全量测试套件] |  ✓ tests/db/case-idempotency-representation.test.ts (7 tests) 56ms
+  [G1 全量测试套件] |  ✓ tests/db/identity-binding-tx.test.ts (7 tests) 27ms
   [G1 全量测试套件] |  ✓ tests/domain/case-contracts.test.ts (24 tests) 4ms
+  [G1 全量测试套件] |  ✓ tests/integration/identity-binding-routes.test.ts (2 tests) 35ms
+  [G1 全量测试套件] |  ✓ tests/integration/openapi-runtime-drift.test.ts (1 test) 33ms
   [G1 全量测试套件] |  ✓ tests/domain/consent-evidence.test.ts (10 tests) 4ms
+  [G1 全量测试套件] |  ✓ tests/integration/openapi-cases.test.ts (13 tests) 3ms
+  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-gate.test.ts (16 tests) 2ms
+  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-crypto.test.ts (6 tests) 4ms
+  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-authorization.test.ts (7 tests) 2ms
   [G1 全量测试套件] |  ✓ tests/domain/env.test.ts (6 tests) 4ms
+  [G1 全量测试套件] |  ✓ tests/domain/authorization.test.ts (36 tests) 4ms
+  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-anti-enumeration.test.ts (4 tests) 2ms
   [G1 全量测试套件] |  ✓ tests/domain/identity-binding-env.test.ts (3 tests) 3ms
   [G1 全量测试套件] |  ✓ tests/domain/idempotency-hash.test.ts (11 tests) 3ms
-  [G1 全量测试套件] |  ✓ tests/domain/authorization.test.ts (36 tests) 3ms
-  [G1 全量测试套件] |  ✓ tests/integration/openapi-cases.test.ts (13 tests) 4ms
-  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-idempotency.test.ts (6 tests) 2ms
   [G1 全量测试套件] |  ✓ tests/domain/case-authorization.test.ts (19 tests) 2ms
-  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-invitation-port.test.ts (4 tests) 2ms
   [G1 全量测试套件] |  ✓ tests/domain/identity-binding-state.test.ts (5 tests) 2ms
-  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-gate.test.ts (16 tests) 4ms
-  [G1 全量测试套件] |  ✓ tests/domain/session-token.test.ts (4 tests) 2ms
-  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-anti-enumeration.test.ts (4 tests) 3ms
-  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-authorization.test.ts (7 tests) 3ms
-  [G1 全量测试套件] |  ✓ tests/domain/provenance.test.ts (5 tests) 3ms
+  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-idempotency.test.ts (6 tests) 2ms
+  [G1 全量测试套件] |  ✓ tests/domain/identity-binding-invitation-port.test.ts (4 tests) 2ms
+  [G1 全量测试套件] |  ✓ tests/domain/session-token.test.ts (4 tests) 1ms
+  [G1 全量测试套件] |  ✓ tests/domain/provenance.test.ts (5 tests) 2ms
   [G1 全量测试套件] |  ✓ tests/domain/age-band.test.ts (7 tests) 2ms
   [G1 全量测试套件] |  ✓ tests/domain/notices.test.ts (3 tests) 1ms
   [G1 全量测试套件] | 
   [G1 全量测试套件] |  Test Files  111 passed (111)
   [G1 全量测试套件] |       Tests  663 passed (663)
-  [G1 全量测试套件] |    Start at  09:35:26
-  [G1 全量测试套件] |    Duration  17.72s (transform 484ms, setup 74ms, collect 7.67s, tests 33.38s, environment 8ms, prepare 3.13s)
+  [G1 全量测试套件] |    Start at  09:38:33
+  [G1 全量测试套件] |    Duration  16.18s (transform 430ms, setup 60ms, collect 6.81s, tests 30.96s, environment 7ms, prepare 2.70s)
   [G1 全量测试套件] | 
-  [G1 全量测试套件] | (node:5065) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+  [G1 全量测试套件] | (node:8104) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
   [G1 全量测试套件] | (Use `node --trace-deprecation ...` to show where the warning was created)
   [G1 全量测试套件] --- real output end ---
   [G1 全量测试套件] 结果: PASS
@@ -859,10 +873,10 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [G6 OpenAPI 漂移检查] 结果: PASS
 
   [G7 DB 结构证据] $ bun run db:evidence
-  [G7 DB 结构证据] exit=0 duration=1.0s
+  [G7 DB 结构证据] exit=0 duration=0.8s
   [G7 DB 结构证据] --- real output begin ---
   [G7 DB 结构证据] | # T067 — Database / RLS / Migration Evidence
-  [G7 DB 结构证据] | 生成时间: 2026-11-08T01:35:46.103Z
+  [G7 DB 结构证据] | 生成时间: 2026-11-08T01:38:50.796Z
   [G7 DB 结构证据] | 
   [G7 DB 结构证据] | 说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
   [G7 DB 结构证据] | 空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
@@ -893,7 +907,7 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [G7 DB 结构证据] | | family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
   [G7 DB 结构证据] | 
   [G7 DB 结构证据] | ## 空库重建 + migration replay（真实执行）
-  [G7 DB 结构证据] |   CREATE DATABASE xiaoshuyin_evidence_1794101746165 OWNER xiaoshuyin_migrator — OK
+  [G7 DB 结构证据] |   CREATE DATABASE xiaoshuyin_evidence_1794101930853 OWNER xiaoshuyin_migrator — OK
   [G7 DB 结构证据] |   第一次 db:migrate (空库):
   [G7 DB 结构证据] |     APPLY 001_initial_schema.sql
   [G7 DB 结构证据] |       APPLY 002_case_core.sql
@@ -937,21 +951,21 @@ FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。
   [G7 DB 结构证据] |     Verified: app role has no DDL permissions.
   [G7 DB 结构证据] | | migration replay 为 no-op（对象集合不变） | enum:account_status|enum:age_band|enum:binding_attempt_state|enum:binding_confirmation_kind|enum:binding_confirmer_authority|enum:binding_operation_command|enum:binding_operation_scope|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:binding_attempts_commit_scope|policy:binding_attempts_identity_scope|policy:binding_attempts_target_scope|policy:binding_confirmations_attempt_scope|policy:binding_confirmations_target_scope|policy:binding_context_attempt_scope|policy:binding_context_token_scope|policy:binding_operation_keys_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_binding_read|policy:consent_scope|policy:families_binding_read|policy:families_scope|policy:family_members_binding_read|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:identity_binding_audit_insert_scope|policy:pcp_binding_read|policy:pcp_scope|policy:persons_binding_candidate_account_read|policy:persons_binding_commit_update|policy:persons_binding_target_read|policy:persons_scope|policy:ppv_scope|table:accounts|table:binding_attempts|table:binding_confirmations|table:binding_operation_keys|table:binding_pending_contexts|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:identity_binding_audit_events|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:binding_confirmations_no_update_delete|trigger:consent_records_guard|trigger:identity_binding_audit_no_update_delete | enum:account_status|enum:age_band|enum:binding_attempt_state|enum:binding_confirmation_kind|enum:binding_confirmer_authority|enum:binding_operation_command|enum:binding_operation_scope|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:binding_attempts_commit_scope|policy:binding_attempts_identity_scope|policy:binding_attempts_target_scope|policy:binding_confirmations_attempt_scope|policy:binding_confirmations_target_scope|policy:binding_context_attempt_scope|policy:binding_context_token_scope|policy:binding_operation_keys_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_binding_read|policy:consent_scope|policy:families_binding_read|policy:families_scope|policy:family_members_binding_read|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:identity_binding_audit_insert_scope|policy:pcp_binding_read|policy:pcp_scope|policy:persons_binding_candidate_account_read|policy:persons_binding_commit_update|policy:persons_binding_target_read|policy:persons_scope|policy:ppv_scope|table:accounts|table:binding_attempts|table:binding_confirmations|table:binding_operation_keys|table:binding_pending_contexts|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:identity_binding_audit_events|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:binding_confirmations_no_update_delete|trigger:consent_records_guard|trigger:identity_binding_audit_no_update_delete | PASS |
   [G7 DB 结构证据] | | replay 输出声明 0 new | true | true | PASS |
-  [G7 DB 结构证据] |   DROP DATABASE xiaoshuyin_evidence_1794101746165 — OK
+  [G7 DB 结构证据] |   DROP DATABASE xiaoshuyin_evidence_1794101930853 — OK
   [G7 DB 结构证据] | 
   [G7 DB 结构证据] | ## T011 / T012 红灯测试转绿（真实命令输出归档）
   [G7 DB 结构证据] |   $ bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts
   [G7 DB 结构证据] |     RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
   [G7 DB 结构证据] |     
-  [G7 DB 结构证据] |      ✓ tests/db/migration-repro.test.ts (7 tests) 54ms
-  [G7 DB 结构证据] |      ✓ tests/db/roles.test.ts (9 tests) 72ms
+  [G7 DB 结构证据] |      ✓ tests/db/migration-repro.test.ts (7 tests) 45ms
+  [G7 DB 结构证据] |      ✓ tests/db/roles.test.ts (9 tests) 63ms
   [G7 DB 结构证据] |     
   [G7 DB 结构证据] |      Test Files  2 passed (2)
   [G7 DB 结构证据] |           Tests  16 passed (16)
-  [G7 DB 结构证据] |        Start at  09:35:46
-  [G7 DB 结构证据] |        Duration  219ms (transform 24ms, setup 12ms, collect 45ms, tests 126ms, environment 0ms, prepare 62ms)
+  [G7 DB 结构证据] |        Start at  09:38:51
+  [G7 DB 结构证据] |        Duration  190ms (transform 22ms, setup 12ms, collect 36ms, tests 108ms, environment 0ms, prepare 54ms)
   [G7 DB 结构证据] |     
-  [G7 DB 结构证据] |     (node:5252) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+  [G7 DB 结构证据] |     (node:8319) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
   [G7 DB 结构证据] |     (Use `node --trace-deprecation ...` to show where the warning was created)
   [G7 DB 结构证据] | | T011 migration-repro + T012 roles exit code | 0 | 0 | PASS |
   [G7 DB 结构证据] | | T011/T012 测试全绿 | true | true | PASS |

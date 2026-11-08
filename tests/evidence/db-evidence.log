@@ -1,5 +1,5 @@
 # T067 — Database / RLS / Migration Evidence
-生成时间: 2026-11-08T01:35:46.103Z
+生成时间: 2026-11-08T01:38:50.796Z
 
 说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
 空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
@@ -30,7 +30,7 @@
 | family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
 
 ## 空库重建 + migration replay（真实执行）
-  CREATE DATABASE xiaoshuyin_evidence_1794101746165 OWNER xiaoshuyin_migrator — OK
+  CREATE DATABASE xiaoshuyin_evidence_1794101930853 OWNER xiaoshuyin_migrator — OK
   第一次 db:migrate (空库):
     APPLY 001_initial_schema.sql
       APPLY 002_case_core.sql
@@ -74,21 +74,21 @@
     Verified: app role has no DDL permissions.
 | migration replay 为 no-op（对象集合不变） | enum:account_status|enum:age_band|enum:binding_attempt_state|enum:binding_confirmation_kind|enum:binding_confirmer_authority|enum:binding_operation_command|enum:binding_operation_scope|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:binding_attempts_commit_scope|policy:binding_attempts_identity_scope|policy:binding_attempts_target_scope|policy:binding_confirmations_attempt_scope|policy:binding_confirmations_target_scope|policy:binding_context_attempt_scope|policy:binding_context_token_scope|policy:binding_operation_keys_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_binding_read|policy:consent_scope|policy:families_binding_read|policy:families_scope|policy:family_members_binding_read|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:identity_binding_audit_insert_scope|policy:pcp_binding_read|policy:pcp_scope|policy:persons_binding_candidate_account_read|policy:persons_binding_commit_update|policy:persons_binding_target_read|policy:persons_scope|policy:ppv_scope|table:accounts|table:binding_attempts|table:binding_confirmations|table:binding_operation_keys|table:binding_pending_contexts|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:identity_binding_audit_events|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:binding_confirmations_no_update_delete|trigger:consent_records_guard|trigger:identity_binding_audit_no_update_delete | enum:account_status|enum:age_band|enum:binding_attempt_state|enum:binding_confirmation_kind|enum:binding_confirmer_authority|enum:binding_operation_command|enum:binding_operation_scope|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:audit_scope|policy:binding_attempts_commit_scope|policy:binding_attempts_identity_scope|policy:binding_attempts_target_scope|policy:binding_confirmations_attempt_scope|policy:binding_confirmations_target_scope|policy:binding_context_attempt_scope|policy:binding_context_token_scope|policy:binding_operation_keys_scope|policy:case_events_family_scope|policy:cases_family_scope|policy:consent_binding_read|policy:consent_scope|policy:families_binding_read|policy:families_scope|policy:family_members_binding_read|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:identity_binding_audit_insert_scope|policy:pcp_binding_read|policy:pcp_scope|policy:persons_binding_candidate_account_read|policy:persons_binding_commit_update|policy:persons_binding_target_read|policy:persons_scope|policy:ppv_scope|table:accounts|table:binding_attempts|table:binding_confirmations|table:binding_operation_keys|table:binding_pending_contexts|table:business_audit_events|table:case_events|table:cases|table:consent_records|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:identity_binding_audit_events|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:binding_confirmations_no_update_delete|trigger:consent_records_guard|trigger:identity_binding_audit_no_update_delete | PASS |
 | replay 输出声明 0 new | true | true | PASS |
-  DROP DATABASE xiaoshuyin_evidence_1794101746165 — OK
+  DROP DATABASE xiaoshuyin_evidence_1794101930853 — OK
 
 ## T011 / T012 红灯测试转绿（真实命令输出归档）
   $ bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts
     RUN  v3.2.7 /Users/milushangdi/Projects/xiaoshuyin-006-identity-binding-runtime
     
-     ✓ tests/db/migration-repro.test.ts (7 tests) 54ms
-     ✓ tests/db/roles.test.ts (9 tests) 72ms
+     ✓ tests/db/migration-repro.test.ts (7 tests) 45ms
+     ✓ tests/db/roles.test.ts (9 tests) 63ms
     
      Test Files  2 passed (2)
           Tests  16 passed (16)
-       Start at  09:35:46
-       Duration  219ms (transform 24ms, setup 12ms, collect 45ms, tests 126ms, environment 0ms, prepare 62ms)
+       Start at  09:38:51
+       Duration  190ms (transform 22ms, setup 12ms, collect 36ms, tests 108ms, environment 0ms, prepare 54ms)
     
-    (node:5252) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+    (node:8319) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
     (Use `node --trace-deprecation ...` to show where the warning was created)
 | T011 migration-repro + T012 roles exit code | 0 | 0 | PASS |
 | T011/T012 测试全绿 | true | true | PASS |
