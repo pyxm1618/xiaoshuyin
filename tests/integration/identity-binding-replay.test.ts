@@ -91,17 +91,17 @@ describe('bootstrap replay reads back the authoritative attempt (H3)', () => {
     expect(commit.statusCode).toBe(200);
     expect(commit.json().state).toBe('COMMITTED');
 
-    // ── COMMITTED replay ──
+    // ── COMMITTED replay: frozen settled replay body `{ binding: "COMMITTED" }` ──
     const third = await bootstrap(h, target.invitationToken, code, key);
     expect(third.statusCode).toBe(200);
-    expect(third.json().binding).toBe('NOT_COMPLETED');
-    const thirdToken = third.json().pendingContextToken as string;
+    expect(third.json()).toEqual({ binding: 'COMMITTED' });
 
-    const replayStatus = await candidateStatus(h, thirdToken);
+    // The replay must not mint a transport credential for a settled attempt.
+    const replayStatus = await candidateStatus(h, secondToken);
     expect(replayStatus.statusCode).toBe(200);
     expect(replayStatus.json()).toEqual({ binding: 'COMMITTED' });
 
-    const replaySession = await candidateSession(h, thirdToken);
+    const replaySession = await candidateSession(h, secondToken);
     expect(replaySession.statusCode).toBe(200);
     expect(replaySession.json().binding).toBe('COMMITTED');
 
@@ -126,6 +126,6 @@ describe('bootstrap replay reads back the authoritative attempt (H3)', () => {
 
     // first token remains a valid pre-commit context; no extra attempt.
     expect(firstToken).not.toBe(secondToken);
-    expect(secondToken).not.toBe(thirdToken);
+    expect(third.json()).not.toHaveProperty('pendingContextToken');
   });
 });

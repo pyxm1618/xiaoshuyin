@@ -193,4 +193,54 @@ describe('identity binding schema', () => {
     );
     expect(existing.rows[0].cnt).toBe(5);
   });
+
+  it('registers the five new-table RLS policies', async () => {
+    const { rows } = await admin.query(
+      `SELECT policyname FROM pg_policies
+       WHERE tablename IN (
+         'binding_pending_contexts','binding_attempts','binding_confirmations',
+         'binding_operation_keys','identity_binding_audit_events'
+       )`
+    );
+    const names = rows.map((r) => r.policyname);
+    for (const name of [
+      'binding_context_token_scope',
+      'binding_context_attempt_scope',
+      'binding_attempts_identity_scope',
+      'binding_attempts_target_scope',
+      'binding_attempts_commit_scope',
+      'binding_confirmations_attempt_scope',
+      'binding_confirmations_target_scope',
+      'binding_operation_keys_scope',
+      'identity_binding_audit_insert_scope',
+    ]) {
+      expect(names).toContain(name);
+    }
+  });
+
+  it('audit event_type closed set includes BINDING_OPERATION_RETRYABLE', async () => {
+    const { rows } = await admin.query(
+      `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+       WHERE conrelid = 'identity_binding_audit_events'::regclass
+         AND conname = 'identity_binding_audit_events_event_type_check'`
+    );
+    expect(rows[0].def).toContain('BINDING_OPERATION_RETRYABLE');
+    // The runtime INSERT can really store the event.
+    await admin.query(
+      `INSERT INTO identity_binding_audit_events
+         (correlation_id, event_type, result, metadata)
+       VALUES (gen_random_uuid(), 'BINDING_OPERATION_RETRYABLE', 'RETRYABLE', '{}'::jsonb)`
+    );
+  });
+
+  it('candidate account read is limited to GATE / COMMIT purposes', async () => {
+    const { rows } = await admin.query(
+      `SELECT pg_get_expr(polqual, polrelid) AS qual
+       FROM pg_policy WHERE polname = 'persons_binding_candidate_account_read'`
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].qual).toContain('IDENTITY_BINDING_GATE');
+    expect(rows[0].qual).toContain('IDENTITY_BINDING_COMMIT');
+    expect(rows[0].qual).toContain('app_binding_candidate_account_id');
+  });
 });

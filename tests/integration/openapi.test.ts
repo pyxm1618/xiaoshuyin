@@ -29,6 +29,7 @@ const SPEC_PATH = join(ROOT, 'packages', 'generated', 'openapi.json');
 
 const FROZEN_SCHEMAS = [
   'AgeBand',
+  'BindingBootstrapCommittedResponse',
   'BindingBootstrapGenericResponse',
   'BindingBootstrapRequest',
   'BindingBootstrapReusedResponse',
@@ -101,7 +102,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-  it('contains exactly the 22 frozen business operations (16 + Slice 6 six)', () => {
+  it('contains exactly the 22 frozen business operations (16 + business Slice 5 six)', () => {
     const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
@@ -178,7 +179,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       // Slice 2 (002-case-core) — exactly three Case operations.
       '/api/v1/cases',
       '/api/v1/cases/{id}',
-      // Slice 6 (006-identity-binding-runtime) — exactly six binding surfaces.
+      // Business Slice 5 (repo feature 006) — exactly six binding surfaces.
       '/api/v1/identity-bindings/bootstrap',
       '/api/v1/identity-bindings/candidate-decision',
       '/api/v1/identity-bindings/status',

@@ -1,8 +1,10 @@
 /**
- * App-layer Gate facts builder against the real database.
+ * T047 — app-layer Gate facts builder against the real database.
  *
- * Runs under the app role (NOBYPASSRLS) so the binding purpose policies are
- * exercised exactly as in production.
+ * This is DB-backed behavior and therefore MUST live in `tests/db/**`, never in
+ * the pure `tests/domain/**` suite (plan D-19.1). It runs under the app role
+ * (NOBYPASSRLS) so the binding purpose policies are exercised exactly as in
+ * production.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

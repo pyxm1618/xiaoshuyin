@@ -37,10 +37,8 @@ import {
   type BindingHarness,
 } from '../setup/identity-binding.js';
 import { deriveIdentityDigest, hashToken } from '../../apps/server/api/src/identity-binding/crypto.js';
+import { computeOperationScope } from '@xiaoshuyin/domain';
 
-function countSql(h: BindingHarness, table: string): Promise<number> {
-  return h.admin.query(`SELECT count(*)::int AS n FROM ${table}`).then((r) => r.rows[0].n);
-}
 
 describe('identity binding candidate surfaces use the single authorize()', () => {
   let h: BindingHarness;
@@ -80,7 +78,7 @@ describe('identity binding candidate surfaces use the single authorize()', () =>
     expect(actions.has('IDENTITY_BINDING_SESSION_EXCHANGE')).toBe(true);
   });
 
-  it('DENY on bootstrap fails closed with no business write', async () => {
+  it('DENY on bootstrap stays anti-enumeration generic with no business write', async () => {
     const target = await createTarget(h, 'authz_deny_boot', { ageBand: 'UNDER_14' });
     const code = `deny_${randomUUID()}`;
     const digest = deriveIdentityDigest(
@@ -90,19 +88,32 @@ describe('identity binding candidate surfaces use the single authorize()', () =>
 
     authState.deny = true;
     const boot = await bootstrap(h, target.invitationToken, code);
-    expect(boot.statusCode).toBe(401);
-    expect(boot.json()).toEqual({
-      code: 'WECHAT_AUTH_FAILED',
-      message: 'WeChat authentication failed',
-    });
+    // plan D-10.3: authorize() DENY is NOT a WeChat authentication failure.
+    // The candidate sees the same frozen generic bootstrap shape.
+    expect(boot.statusCode).toBe(200);
+    expect(Object.keys(boot.json()).sort()).toEqual(['binding', 'pendingContextToken']);
+    expect(boot.json().binding).toBe('NOT_COMPLETED');
 
-    // Scope every count to this attempt's candidate identity / openid so that
-    // parallel suites cannot pollute the fail-closed assertion.
+    // The transport context is created (same observable shape), but the
+    // ciphertext is cleared and no operation key / attempt / confirmation /
+    // business audit / account / person is written.
     const contexts = await h.admin.query(
-      'SELECT count(*)::int AS n FROM binding_pending_contexts WHERE candidate_identity_digest = $1',
+      'SELECT count(*)::int AS n, count(openid_ciphertext)::int AS cipher FROM binding_pending_contexts WHERE candidate_identity_digest = $1',
       [digest]
     );
-    expect(contexts.rows[0].n).toBe(0);
+    expect(contexts.rows[0].n).toBe(1);
+    expect(contexts.rows[0].cipher).toBe(0);
+    const keys = await h.admin.query(
+      'SELECT count(*)::int AS n FROM binding_operation_keys WHERE scope_key = $1',
+      [
+        computeOperationScope({
+          commandType: 'BOOTSTRAP',
+          invitationParticipationId: target.participationId,
+          candidateIdentityDigest: digest,
+        }).scopeKey,
+      ]
+    );
+    expect(keys.rows[0].n).toBe(0);
     const attempts = await h.admin.query(
       'SELECT count(*)::int AS n FROM binding_attempts WHERE candidate_identity_digest = $1',
       [digest]
@@ -131,11 +142,22 @@ describe('identity binding candidate surfaces use the single authorize()', () =>
       [id, hashToken(token), 'a'.repeat(64)]
     );
 
-    const beforeKeys = await countSql(h, 'binding_operation_keys');
-    const beforeConfirmations = await countSql(h, 'binding_confirmations');
-    const beforeAudits = await countSql(h, 'identity_binding_audit_events');
-    const beforeAccounts = await countSql(h, 'accounts');
-    const beforePersons = await countSql(h, 'persons');
+    const digest = 'a'.repeat(64);
+    const beforeKeys = await h.admin
+      .query('SELECT count(*)::int AS n FROM binding_operation_keys WHERE scope_key = $1', [id])
+      .then((r) => r.rows[0].n);
+    const beforeConfirmations = await h.admin
+      .query(
+        'SELECT count(*)::int AS n FROM binding_confirmations WHERE actor_pending_context_id = $1',
+        [id]
+      )
+      .then((r) => r.rows[0].n);
+    const beforeAudits = await h.admin
+      .query(
+        'SELECT count(*)::int AS n FROM identity_binding_audit_events WHERE candidate_identity_digest = $1',
+        [digest]
+      )
+      .then((r) => r.rows[0].n);
 
     authState.deny = true;
 
@@ -151,11 +173,32 @@ describe('identity binding candidate surfaces use the single authorize()', () =>
     expect(session.statusCode).toBe(200);
     expect(session.json()).toEqual({ binding: 'NOT_COMPLETED' });
 
-    expect(await countSql(h, 'binding_operation_keys')).toBe(beforeKeys);
-    expect(await countSql(h, 'binding_confirmations')).toBe(beforeConfirmations);
-    expect(await countSql(h, 'identity_binding_audit_events')).toBe(beforeAudits);
-    expect(await countSql(h, 'accounts')).toBe(beforeAccounts);
-    expect(await countSql(h, 'persons')).toBe(beforePersons);
+    const afterKeys = await h.admin
+      .query('SELECT count(*)::int AS n FROM binding_operation_keys WHERE scope_key = $1', [id])
+      .then((r) => r.rows[0].n);
+    const afterConfirmations = await h.admin
+      .query(
+        'SELECT count(*)::int AS n FROM binding_confirmations WHERE actor_pending_context_id = $1',
+        [id]
+      )
+      .then((r) => r.rows[0].n);
+    const afterAudits = await h.admin
+      .query(
+        'SELECT count(*)::int AS n FROM identity_binding_audit_events WHERE candidate_identity_digest = $1',
+        [digest]
+      )
+      .then((r) => r.rows[0].n);
+
+    expect(afterKeys).toBe(beforeKeys);
+    expect(afterConfirmations).toBe(beforeConfirmations);
+    expect(afterAudits).toBe(beforeAudits);
+
+    const ctx = await h.admin.query(
+      'SELECT attempt_id, committed_account_id FROM binding_pending_contexts WHERE id = $1',
+      [id]
+    );
+    expect(ctx.rows[0].attempt_id).toBeNull();
+    expect(ctx.rows[0].committed_account_id).toBeNull();
     // The target fixture ids stay unused; keep the variable meaningful.
     expect(target.targetPersonId).toMatch(/^[0-9a-f-]{36}$/);
   });
