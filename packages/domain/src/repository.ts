@@ -454,7 +454,7 @@ function refuseMinorProcessing(reason: string): never {
   });
 }
 
-async function validateRawEvidenceSourceMessage(
+export async function verifyEvidenceSourceMessage(
   tx: Tx,
   row: {
     familyId: string;
@@ -611,7 +611,7 @@ export async function insertEvidenceAssertion(
     row,
     row.kind === 'HYPOTHESIS' ? 'RECORD_HYPOTHESIS' : 'RECORD_STATEMENT'
   );
-  await validateRawEvidenceSourceMessage(tx, row);
+  await verifyEvidenceSourceMessage(tx, row);
   await assertEvidenceSubjectProcessingAllowed(tx, row.subjectPersonId);
 
   const { rows } = await tx.query(
@@ -669,7 +669,7 @@ export async function insertEvidenceObservation(
 ): Promise<EvidenceInsertResult> {
   // Execute the same frozen provenance matrix as recordObservation().
   await validateRawEvidenceProvenance(tx, row, 'RECORD_OBSERVATION');
-  await validateRawEvidenceSourceMessage(tx, row);
+  await verifyEvidenceSourceMessage(tx, row);
   await assertEvidenceSubjectProcessingAllowed(tx, row.subjectPersonId);
 
   const { rows } = await tx.query(
