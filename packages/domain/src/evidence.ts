@@ -13,7 +13,9 @@
  */
 
 import {
-  EVIDENCE_WRITABLE_SOURCES,
+  validateEvidenceProvenance,
+  type EvidenceProvenanceFacts,
+  type EvidenceProvenanceWriter,
   type ProvenanceSource,
 } from './provenance.js';
 import type { Tx } from './repository.js';
@@ -53,10 +55,7 @@ export type EvidenceTimeState = 'KNOWN' | 'UNKNOWN';
 export type EvidenceConfirmationStatus = 'UNCONFIRMED' | 'SOURCE_CONFIRMED' | 'DISPUTED';
 
 
-export type EvidenceWriter =
-  | 'RECORD_STATEMENT'
-  | 'RECORD_OBSERVATION'
-  | 'RECORD_HYPOTHESIS';
+export type EvidenceWriter = EvidenceProvenanceWriter;
 
 // ── Errors ──────────────────────────────────────────────────
 
@@ -301,77 +300,17 @@ export function validateObservationValue(
 
 // ── Provenance ──────────────────────────────────────────────
 
-const ALLOWED_SOURCES: readonly ProvenanceSource[] = EVIDENCE_WRITABLE_SOURCES;
+export type ProvenanceFacts = EvidenceProvenanceFacts;
 
-export interface ProvenanceFacts {
-  writer: EvidenceWriter;
-  sourceKind: ProvenanceSource;
-  subjectPersonId: string | null;
-  sourcePersonId: string | null;
-  subjectIsFamilyMember: boolean;
-  sourceIsFamilyMember: boolean;
-  sourceIsGuardianOfSubject: boolean;
-}
-
+/**
+ * Public compatibility wrapper over the single frozen provenance seam.
+ * All business rules live in provenance.ts so controlled and raw writers cannot drift.
+ */
 export function validateProvenance(
   facts: ProvenanceFacts
 ): EvidenceCheck {
-  const { writer, sourceKind } = facts;
-
-  // recordHypothesis is a future-facing contract only: this Slice has no
-  // production-admissible hypothesis source / AI caller.
-  if (writer === 'RECORD_HYPOTHESIS') {
-    return fail('EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE');
-  }
-
-  if (!ALLOWED_SOURCES.includes(sourceKind)) {
-    return fail('EVIDENCE_PROVENANCE_INVALID');
-  }
-
-  // Every allowed source requires a real subject and a real source Person, and
-  // both must be members of the target Family. Guardian relation never
-  // substitutes for membership.
-  if (!facts.subjectPersonId || !facts.sourcePersonId) {
-    return fail('EVIDENCE_PROVENANCE_INVALID');
-  }
-  if (!facts.subjectIsFamilyMember || !facts.sourceIsFamilyMember) {
-    return fail('EVIDENCE_PROVENANCE_INVALID');
-  }
-
-  switch (sourceKind) {
-    case 'SELF_STATEMENT':
-      if (writer !== 'RECORD_STATEMENT') return fail('EVIDENCE_PROVENANCE_INVALID');
-      if (facts.sourcePersonId !== facts.subjectPersonId) {
-        return fail('EVIDENCE_PROVENANCE_INVALID');
-      }
-      return { ok: true };
-
-    case 'GUARDIAN_OBSERVATION':
-      if (writer !== 'RECORD_OBSERVATION') return fail('EVIDENCE_PROVENANCE_INVALID');
-      if (facts.sourcePersonId === facts.subjectPersonId) {
-        return fail('EVIDENCE_PROVENANCE_INVALID');
-      }
-      if (!facts.sourceIsGuardianOfSubject) return fail('EVIDENCE_PROVENANCE_INVALID');
-      return { ok: true };
-
-    case 'GUARDIAN_RELAY':
-      if (writer !== 'RECORD_STATEMENT') return fail('EVIDENCE_PROVENANCE_INVALID');
-      if (facts.sourcePersonId === facts.subjectPersonId) {
-        return fail('EVIDENCE_PROVENANCE_INVALID');
-      }
-      if (!facts.sourceIsGuardianOfSubject) return fail('EVIDENCE_PROVENANCE_INVALID');
-      return { ok: true };
-
-    case 'OTHER_MEMBER_RELAY':
-      if (writer !== 'RECORD_STATEMENT') return fail('EVIDENCE_PROVENANCE_INVALID');
-      if (facts.sourcePersonId === facts.subjectPersonId) {
-        return fail('EVIDENCE_PROVENANCE_INVALID');
-      }
-      return { ok: true };
-
-    default:
-      return fail('EVIDENCE_PROVENANCE_INVALID');
-  }
+  const validation = validateEvidenceProvenance(facts);
+  return validation.ok ? { ok: true } : fail(validation.code);
 }
 
 // ── Person references / source message ──────────────────────
