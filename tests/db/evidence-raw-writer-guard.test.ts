@@ -23,7 +23,10 @@ const APP_URL = process.env['DATABASE_URL']!;
 interface Fixture {
   familyId: string;
   caseId: string;
-  personId: string;
+  actorPersonId: string;
+  subjectPersonId: string;
+  otherMemberPersonId: string;
+  outsiderPersonId: string;
   accountId: string;
 }
 
@@ -54,7 +57,7 @@ async function withContext<T>(fn: (client: pg.PoolClient) => Promise<T>): Promis
     ]);
     await client.query('SELECT app.set_family_context($1, $2, $3)', [
       fx.familyId,
-      fx.personId,
+      fx.actorPersonId,
       'FAMILY_MANAGEMENT',
     ]);
     return await fn(client);
@@ -68,19 +71,27 @@ async function rowCounts() {
   const { rows } = await admin.query(
     `SELECT
        (SELECT count(*)::int FROM assertions WHERE family_id = $1) AS assertions,
-       (SELECT count(*)::int FROM observations WHERE family_id = $1) AS observations`,
+       (SELECT count(*)::int FROM observations WHERE family_id = $1) AS observations,
+       (SELECT count(*)::int FROM business_audit_events WHERE family_id = $1) AS audits`,
     [fx.familyId]
   );
-  return rows[0] as { assertions: number; observations: number };
+  return rows[0] as { assertions: number; observations: number; audits: number };
 }
 
-function assertionRow(sourceKind: string, kind: 'STATEMENT' | 'HYPOTHESIS' = 'STATEMENT') {
+function assertionRow(
+  sourceKind: string,
+  overrides: Partial<{
+    subjectPersonId: string | null;
+    sourcePersonId: string | null;
+    kind: 'STATEMENT' | 'HYPOTHESIS' | 'FACT';
+  }> = {}
+) {
   return {
     familyId: fx.familyId,
     caseId: fx.caseId,
-    subjectPersonId: fx.personId,
+    subjectPersonId: fx.subjectPersonId,
     sourceKind,
-    sourcePersonId: fx.personId,
+    sourcePersonId: fx.subjectPersonId,
     sourceMessageId: null,
     occurredTimeState: 'UNKNOWN',
     occurredAt: null,
@@ -88,18 +99,25 @@ function assertionRow(sourceKind: string, kind: 'STATEMENT' | 'HYPOTHESIS' = 'ST
     validUntil: null,
     confirmationStatus: 'UNCONFIRMED',
     supersedesId: null,
-    kind,
+    kind: 'STATEMENT',
     content: 'raw writer guard probe',
+    ...overrides,
   };
 }
 
-function observationRow(sourceKind: string) {
+function observationRow(
+  sourceKind: string,
+  overrides: Partial<{
+    subjectPersonId: string | null;
+    sourcePersonId: string | null;
+  }> = {}
+) {
   return {
     familyId: fx.familyId,
     caseId: fx.caseId,
-    subjectPersonId: fx.personId,
+    subjectPersonId: fx.subjectPersonId,
     sourceKind,
-    sourcePersonId: fx.personId,
+    sourcePersonId: fx.actorPersonId,
     sourceMessageId: null,
     occurredTimeState: 'UNKNOWN',
     occurredAt: null,
@@ -114,7 +132,17 @@ function observationRow(sourceKind: string) {
     valueNumber: null,
     valueBoolean: null,
     unit: null,
+    ...overrides,
   };
+}
+
+function expectNoRowsAdded(
+  before: { assertions: number; observations: number; audits: number },
+  after: { assertions: number; observations: number; audits: number }
+) {
+  expect(after.assertions).toBe(before.assertions);
+  expect(after.observations).toBe(before.observations);
+  expect(after.audits).toBe(before.audits);
 }
 
 describe('ULT-001 raw Evidence writer fail-closed', () => {
@@ -131,120 +159,264 @@ describe('ULT-001 raw Evidence writer fail-closed', () => {
     await admin.end();
   });
 
-  it('raw assertion writer refuses every frozen-disabled provenance source', async () => {
+  it('refuses frozen-disabled provenance and HYPOTHESIS with evidence/audit rows +0', async () => {
     const before = await rowCounts();
+
     for (const sourceKind of DISABLED_SOURCES) {
       await withContext(async (client) => {
         await expect(
           insertEvidenceAssertion(client, assertionRow(sourceKind) as any),
-          sourceKind
+          'assertion ' + sourceKind
         ).rejects.toMatchObject({ code: 'EVIDENCE_PROVENANCE_INVALID' });
       });
-    }
-    const after = await rowCounts();
-    expect(after.assertions).toBe(before.assertions);
-  });
-
-  it('raw assertion writer refuses HYPOTHESIS (no admissible hypothesis source)', async () => {
-    const before = await rowCounts();
-    await withContext(async (client) => {
-      await expect(
-        insertEvidenceAssertion(client, assertionRow('AI_HYPOTHESIS', 'HYPOTHESIS') as any)
-      ).rejects.toMatchObject({ code: 'EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE' });
-    });
-    const after = await rowCounts();
-    expect(after.assertions).toBe(before.assertions);
-  });
-
-  it('raw observation writer refuses every frozen-disabled provenance source', async () => {
-    const before = await rowCounts();
-    for (const sourceKind of DISABLED_SOURCES) {
       await withContext(async (client) => {
         await expect(
           insertEvidenceObservation(client, observationRow(sourceKind) as any),
-          sourceKind
+          'observation ' + sourceKind
         ).rejects.toMatchObject({ code: 'EVIDENCE_PROVENANCE_INVALID' });
       });
     }
-    const after = await rowCounts();
-    expect(after.observations).toBe(before.observations);
+
+    await withContext(async (client) => {
+      await expect(
+        insertEvidenceAssertion(
+          client,
+          assertionRow('AI_HYPOTHESIS', { kind: 'HYPOTHESIS' }) as any
+        )
+      ).rejects.toMatchObject({ code: 'EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE' });
+    });
+
+    expectNoRowsAdded(before, await rowCounts());
   });
 
-  it('raw observation writer refuses non-observation writer compositions', async () => {
+  it('refuses every frozen source/subject/guardian relation bypass with rows +0', async () => {
     const before = await rowCounts();
+
+    const illegalAssertions = [
+      {
+        label: 'STATEMENT + GUARDIAN_OBSERVATION',
+        row: assertionRow('GUARDIAN_OBSERVATION', {
+          sourcePersonId: fx.actorPersonId,
+        }),
+      },
+      {
+        label: 'SELF_STATEMENT source != subject',
+        row: assertionRow('SELF_STATEMENT', {
+          sourcePersonId: fx.actorPersonId,
+        }),
+      },
+      {
+        label: 'SELF_STATEMENT source missing',
+        row: assertionRow('SELF_STATEMENT', {
+          sourcePersonId: null,
+        }),
+      },
+      {
+        label: 'GUARDIAN_RELAY source == subject',
+        row: assertionRow('GUARDIAN_RELAY', {
+          sourcePersonId: fx.subjectPersonId,
+        }),
+      },
+      {
+        label: 'GUARDIAN_RELAY source is not real guardian',
+        row: assertionRow('GUARDIAN_RELAY', {
+          sourcePersonId: fx.otherMemberPersonId,
+        }),
+      },
+      {
+        label: 'OTHER_MEMBER_RELAY source == subject',
+        row: assertionRow('OTHER_MEMBER_RELAY', {
+          sourcePersonId: fx.subjectPersonId,
+        }),
+      },
+      {
+        label: 'OTHER_MEMBER_RELAY source outside Family',
+        row: assertionRow('OTHER_MEMBER_RELAY', {
+          sourcePersonId: fx.outsiderPersonId,
+        }),
+      },
+    ];
+
+    for (const probe of illegalAssertions) {
+      await withContext(async (client) => {
+        await expect(
+          insertEvidenceAssertion(client, probe.row as any),
+          probe.label
+        ).rejects.toMatchObject({ code: 'EVIDENCE_PROVENANCE_INVALID' });
+      });
+    }
+
+    const illegalObservations = [
+      {
+        label: 'GUARDIAN_OBSERVATION subject missing',
+        row: observationRow('GUARDIAN_OBSERVATION', {
+          subjectPersonId: null,
+        }),
+      },
+      {
+        label: 'GUARDIAN_OBSERVATION source == subject',
+        row: observationRow('GUARDIAN_OBSERVATION', {
+          sourcePersonId: fx.subjectPersonId,
+        }),
+      },
+      {
+        label: 'GUARDIAN_OBSERVATION source is not real guardian',
+        row: observationRow('GUARDIAN_OBSERVATION', {
+          sourcePersonId: fx.otherMemberPersonId,
+        }),
+      },
+    ];
+
+    for (const probe of illegalObservations) {
+      await withContext(async (client) => {
+        await expect(
+          insertEvidenceObservation(client, probe.row as any),
+          probe.label
+        ).rejects.toMatchObject({ code: 'EVIDENCE_PROVENANCE_INVALID' });
+      });
+    }
+
     for (const sourceKind of NON_OBSERVATION_SOURCES) {
       await withContext(async (client) => {
         await expect(
           insertEvidenceObservation(client, observationRow(sourceKind) as any),
-          sourceKind
+          'observation + ' + sourceKind
         ).rejects.toMatchObject({ code: 'EVIDENCE_PROVENANCE_INVALID' });
       });
     }
-    const after = await rowCounts();
-    expect(after.observations).toBe(before.observations);
+
+    expectNoRowsAdded(before, await rowCounts());
   });
 
-  it('FACT is still rejected by the database hard guard, not relabelled', async () => {
+  it('FACT remains rejected by the database hard guard with rows +0', async () => {
     const before = await rowCounts();
     await withContext(async (client) => {
-      // The application guard intentionally lets FACT reach the database.
       await expect(
-        insertEvidenceAssertion(client, assertionRow('SELF_STATEMENT', 'FACT' as any) as any)
+        insertEvidenceAssertion(
+          client,
+          assertionRow('SELF_STATEMENT', { kind: 'FACT' }) as any
+        )
       ).rejects.toThrow(/row-level security|42501/i);
     });
-    const after = await rowCounts();
-    expect(after.assertions).toBe(before.assertions);
+    expectNoRowsAdded(before, await rowCounts());
   });
 
-  it('still admits the frozen-writable provenance combinations', async () => {
+  it('still admits all four frozen approved provenance combinations', async () => {
     const before = await rowCounts();
+
     await withContext(async (client) => {
-      const assertion = await insertEvidenceAssertion(
+      const selfStatement = await insertEvidenceAssertion(
         client,
         assertionRow('SELF_STATEMENT') as any
       );
-      expect(assertion.id).toBeTruthy();
-
-      const observation = await insertEvidenceObservation(
-        client,
-        observationRow('GUARDIAN_OBSERVATION') as any
-      );
-      expect(observation.id).toBeTruthy();
+      expect(selfStatement.id).toBeTruthy();
     });
-    const after = await rowCounts();
-    // Both inserts were rolled back with the fixture transaction.
-    expect(after.assertions).toBe(before.assertions);
-    expect(after.observations).toBe(before.observations);
+
+    await withContext(async (client) => {
+      const guardianRelay = await insertEvidenceAssertion(
+        client,
+        assertionRow('GUARDIAN_RELAY', {
+          sourcePersonId: fx.actorPersonId,
+        }) as any
+      );
+      expect(guardianRelay.id).toBeTruthy();
+    });
+
+    await withContext(async (client) => {
+      const otherMemberRelay = await insertEvidenceAssertion(
+        client,
+        assertionRow('OTHER_MEMBER_RELAY', {
+          sourcePersonId: fx.otherMemberPersonId,
+        }) as any
+      );
+      expect(otherMemberRelay.id).toBeTruthy();
+    });
+
+    await withContext(async (client) => {
+      const guardianObservation = await insertEvidenceObservation(
+        client,
+        observationRow('GUARDIAN_OBSERVATION', {
+          sourcePersonId: fx.actorPersonId,
+        }) as any
+      );
+      expect(guardianObservation.id).toBeTruthy();
+    });
+
+    // Every successful probe runs inside an explicit rollback transaction.
+    expectNoRowsAdded(before, await rowCounts());
   });
 });
 
 async function seed(admin: pg.Client): Promise<Fixture> {
-  const suffix = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+  const suffix = String(Date.now()) + '_' + String(Math.floor(Math.random() * 1e6));
   const { rows: acc } = await admin.query(
     `INSERT INTO accounts (wechat_openid) VALUES ($1) RETURNING id`,
-    [`t_ult001_${suffix}`]
+    ['t_ult001_' + suffix]
   );
-  const accountId = acc[0].id;
-  const { rows: person } = await admin.query(
+  const accountId = acc[0].id as string;
+
+  const { rows: actor } = await admin.query(
     `INSERT INTO persons (account_id, created_by_account_id) VALUES ($1, $1) RETURNING id`,
     [accountId]
   );
-  const personId = person[0].id;
+  const actorPersonId = actor[0].id as string;
+
+  const { rows: subject } = await admin.query(
+    `INSERT INTO persons (account_id, created_by_account_id) VALUES (NULL, $1) RETURNING id`,
+    [accountId]
+  );
+  const subjectPersonId = subject[0].id as string;
+
+  const { rows: other } = await admin.query(
+    `INSERT INTO persons (account_id, created_by_account_id) VALUES (NULL, $1) RETURNING id`,
+    [accountId]
+  );
+  const otherMemberPersonId = other[0].id as string;
+
+  const { rows: outsider } = await admin.query(
+    `INSERT INTO persons (account_id, created_by_account_id) VALUES (NULL, $1) RETURNING id`,
+    [accountId]
+  );
+  const outsiderPersonId = outsider[0].id as string;
+
   const { rows: fam } = await admin.query(
     `INSERT INTO families (display_name, created_by_person_id) VALUES ('t_ult001', $1) RETURNING id`,
-    [personId]
+    [actorPersonId]
   );
-  const familyId = fam[0].id;
-  await admin.query(`INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)`, [
-    familyId,
-    personId,
-  ]);
-  const { rows: c } = await admin.query(
+  const familyId = fam[0].id as string;
+
+  for (const personId of [actorPersonId, subjectPersonId, otherMemberPersonId]) {
+    await admin.query(
+      `INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)`,
+      [familyId, personId]
+    );
+  }
+
+  // Real frozen guardian relation: the source must equal this persisted
+  // guardian_person_id for GUARDIAN_RELAY / GUARDIAN_OBSERVATION.
+  await admin.query(
+    `INSERT INTO person_compliance_profiles
+       (person_id, age_band, minor_mode, guardian_person_id,
+        guardian_consent_version, guardian_consent_record_id, verified_source)
+     VALUES ($1, 'MINOR_14_17', true, $2, NULL, NULL, 'GUARDIAN_RELAY')`,
+    [subjectPersonId, actorPersonId]
+  );
+
+  const { rows: kase } = await admin.query(
     `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
      VALUES ($1, $2, 'OPEN', 'INTAKE', true, 1) RETURNING id`,
-    [familyId, personId]
+    [familyId, actorPersonId]
   );
-  return { familyId, caseId: c[0].id, personId, accountId };
+
+  return {
+    familyId,
+    caseId: kase[0].id as string,
+    actorPersonId,
+    subjectPersonId,
+    otherMemberPersonId,
+    outsiderPersonId,
+    accountId,
+  };
 }
 
 async function cleanup(admin: pg.Client) {
@@ -259,12 +431,23 @@ async function cleanup(admin: pg.Client) {
       `DELETE FROM dialogue_messages WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
     );
     await admin.query(
+      `DELETE FROM business_audit_events WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
+    );
+    await admin.query(
       `DELETE FROM cases WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
     );
     await admin.query(
       `DELETE FROM family_members WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
     );
     await admin.query(`DELETE FROM families WHERE display_name = 't_ult001'`);
+    await admin.query(
+      `DELETE FROM person_compliance_profiles
+       WHERE person_id IN (
+         SELECT id FROM persons WHERE created_by_account_id IN (
+           SELECT id FROM accounts WHERE wechat_openid LIKE 't\\_ult001\\_%'
+         )
+       )`
+    );
     await admin.query(
       `DELETE FROM persons WHERE created_by_account_id IN (
          SELECT id FROM accounts WHERE wechat_openid LIKE 't\\_ult001\\_%')`
