@@ -301,7 +301,7 @@ describe('ULT-001 raw Evidence writer fail-closed', () => {
     const { rows: otherFamily } = await admin.query(
       `INSERT INTO families (display_name, created_by_person_id)
        VALUES ('t_ult001_wrong_family', $1) RETURNING id`,
-      [fx.actorPersonId]
+      [fx.outsiderPersonId]
     );
     await admin.query(
       'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
