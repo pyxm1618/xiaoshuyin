@@ -4,6 +4,11 @@
  */
 
 import type { PoolClient } from 'pg';
+import {
+  EVIDENCE_OBSERVATION_SOURCES,
+  EVIDENCE_WRITABLE_SOURCES,
+  type ProvenanceSource,
+} from './provenance.js';
 
 export type Tx = PoolClient;
 
@@ -369,6 +374,29 @@ export interface EvidenceInsertResult {
   recorded_at: Date;
 }
 
+/**
+ * ULT-001 defence-in-depth.
+ *
+ * Closing the package subpaths is not enough: a relative source import, an
+ * in-package caller or a test could still reach these raw writers. They
+ * therefore refuse the frozen-disabled provenance sources and writer
+ * compositions themselves, using the same single-source provenance matrix as
+ * the controlled writers. FACT is intentionally not judged here — it stays
+ * rejected by the database hard guard (`assertions` INSERT policy).
+ */
+function refuseEvidenceWrite(
+  code: 'EVIDENCE_PROVENANCE_INVALID' | 'EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE'
+): never {
+  throw Object.assign(new Error('Evidence provenance is not admissible'), {
+    name: 'EvidenceDomainError',
+    code,
+  });
+}
+
+function isWritableSource(sourceKind: string): boolean {
+  return EVIDENCE_WRITABLE_SOURCES.includes(sourceKind as ProvenanceSource);
+}
+
 /** Guardian relationship of a subject Person (Slice 1 frozen semantics). */
 export async function getGuardianPersonId(
   tx: Tx,
@@ -440,6 +468,16 @@ export async function insertEvidenceAssertion(
   tx: Tx,
   row: AssertionInsertRow
 ): Promise<EvidenceInsertResult> {
+  // No production hypothesis source exists in this Slice; no writer may
+  // persist HYPOTHESIS, and a STATEMENT carrying a disabled provenance source
+  // is refused before any SQL runs.
+  if (row.kind === 'HYPOTHESIS') {
+    refuseEvidenceWrite('EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE');
+  }
+  if (row.kind === 'STATEMENT' && !isWritableSource(row.sourceKind)) {
+    refuseEvidenceWrite('EVIDENCE_PROVENANCE_INVALID');
+  }
+
   const { rows } = await tx.query(
     `INSERT INTO assertions
        (family_id, case_id, subject_person_id, source_kind, source_person_id,
@@ -493,6 +531,11 @@ export async function insertEvidenceObservation(
   tx: Tx,
   row: ObservationInsertRow
 ): Promise<EvidenceInsertResult> {
+  // The observation writer admits exactly one provenance source.
+  if (!EVIDENCE_OBSERVATION_SOURCES.includes(row.sourceKind as ProvenanceSource)) {
+    refuseEvidenceWrite('EVIDENCE_PROVENANCE_INVALID');
+  }
+
   const { rows } = await tx.query(
     `INSERT INTO observations
        (family_id, case_id, subject_person_id, source_kind, source_person_id,

@@ -27,10 +27,13 @@ import {
   buildCaseMessageRequestHash,
   getCaseById,
 } from '@xiaoshuyin/domain';
-// AUD-II-001: explicit package-internal seam. This module is NOT exported from
-// the production package entrypoint, keeping the Evidence public writer surface
-// at exactly the four frozen writers.
-import { recordDialogueMessage } from '@xiaoshuyin/domain/src/internal/message-writer.js';
+// AUD-II-001 / ULT-001: explicit *workspace-internal* seam.
+//
+// `@xiaoshuyin/domain` now closes its package subpaths via `exports`, so this
+// module can only be reached through a workspace relative source reference.
+// It is deliberately NOT a package export: the production Evidence public
+// writer surface stays exactly the four frozen writers.
+import { recordDialogueMessage } from '../../../../../packages/domain/src/internal/message-writer.js';
 import { withIdentityTransaction, withRlsTransaction, setFamilyContext } from '../db/tx.js';
 import { requireCurrentFamily } from '../family-context.js';
 import {
@@ -38,7 +41,7 @@ import {
   runIdempotentCommand,
   sendCommandOutcome,
 } from '../idempotency.js';
-import { requireFamilyAction } from '../authz.js';
+import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { toHttpError } from '../plugins/error-handler.js';
 
 const PURPOSE = 'FAMILY_MANAGEMENT' as const;
@@ -81,7 +84,12 @@ interface CaseContext {
 
 /**
  * RLS-scoped Case existence + approved Case-management authorization.
- * Every failure is the same 404 body (anti-enumeration).
+ * Every *known authorization denial* is the same 404 body (anti-enumeration).
+ *
+ * ULT-002: only explicit business denials are collapsed into 404. Unknown
+ * failures (PostgreSQL `57014` statement timeout, connection loss, unexpected
+ * infrastructure errors) propagate unchanged so the global error handler
+ * answers 500 INTERNAL_ERROR instead of misreporting "Case not found".
  */
 async function requireAuthorizedCase(tx: pg.PoolClient, ctx: CaseContext): Promise<void> {
   try {
@@ -94,8 +102,9 @@ async function requireAuthorizedCase(tx: pg.PoolClient, ctx: CaseContext): Promi
       resource: { type: 'CASE', familyId: ctx.familyId, caseId: ctx.caseId },
       caseId: ctx.caseId,
     });
-  } catch {
-    throw caseNotFound();
+  } catch (err) {
+    if (isKnownAuthorizationDenial(err)) throw caseNotFound();
+    throw err;
   }
 
   if (!UUID_PATTERN.test(ctx.caseId)) throw caseNotFound();

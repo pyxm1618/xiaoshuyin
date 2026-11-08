@@ -12,7 +12,10 @@
  * The database `assertions` INSERT policy is the last line of defence.
  */
 
-import type { ProvenanceSource } from './provenance.js';
+import {
+  EVIDENCE_WRITABLE_SOURCES,
+  type ProvenanceSource,
+} from './provenance.js';
 import type { Tx } from './repository.js';
 import {
   getAssertionRef,
@@ -298,12 +301,7 @@ export function validateObservationValue(
 
 // ── Provenance ──────────────────────────────────────────────
 
-const ALLOWED_SOURCES: ProvenanceSource[] = [
-  'SELF_STATEMENT',
-  'GUARDIAN_OBSERVATION',
-  'GUARDIAN_RELAY',
-  'OTHER_MEMBER_RELAY',
-];
+const ALLOWED_SOURCES: readonly ProvenanceSource[] = EVIDENCE_WRITABLE_SOURCES;
 
 export interface ProvenanceFacts {
   writer: EvidenceWriter;

@@ -9,6 +9,31 @@ export type ProvenanceSource =
   | 'OTHER_MEMBER_RELAY' | 'MANUAL_DEVICE_DATA' | 'STAFF_RECORD'
   | 'AI_HYPOTHESIS' | 'SOURCE_CONFIRMED';
 
+/**
+ * ULT-001: single source of truth for the frozen Evidence provenance matrix.
+ *
+ * Both the controlled writers (`evidence.ts`) and the raw repository writers
+ * (`repository.ts`) consume these sets, so defence-in-depth never forks a
+ * second copy of the business rule.
+ */
+export const EVIDENCE_WRITABLE_SOURCES: readonly ProvenanceSource[] = [
+  'SELF_STATEMENT',
+  'GUARDIAN_OBSERVATION',
+  'GUARDIAN_RELAY',
+  'OTHER_MEMBER_RELAY',
+];
+
+export const EVIDENCE_OBSERVATION_SOURCES: readonly ProvenanceSource[] = [
+  'GUARDIAN_OBSERVATION',
+];
+
+export const EVIDENCE_DISABLED_SOURCES: readonly ProvenanceSource[] = [
+  'MANUAL_DEVICE_DATA',
+  'STAFF_RECORD',
+  'AI_HYPOTHESIS',
+  'SOURCE_CONFIRMED',
+];
+
 export type ProfileAttribute = 'DISPLAY_NAME';
 
 export type ValueStatus = 'RECORDED' | 'SUPERSEDED' | 'RETRACTED';
@@ -99,9 +124,7 @@ export function checkSourceAcceptability(
  * Returns the provider to persist, or the frozen error code
  * `AGE_BAND_SOURCE_NOT_ALLOWED` (422) when the client tried to forge it.
  */
-const WRITABLE_SOURCES: ProvenanceSource[] = [
-  'SELF_STATEMENT', 'GUARDIAN_OBSERVATION', 'GUARDIAN_RELAY', 'OTHER_MEMBER_RELAY',
-];
+const WRITABLE_SOURCES: ProvenanceSource[] = [...EVIDENCE_WRITABLE_SOURCES];
 
 export type ProviderResolution =
   | { kind: 'FIXED'; provider: string }

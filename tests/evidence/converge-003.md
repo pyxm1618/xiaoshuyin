@@ -172,4 +172,45 @@ Slice 3 范围内 **NONE**。
 | AUD-II-003 回归 | `tests/db/migration-upgrade-evidence.test.ts` 2/2 PASS |
 | 冻结文档 diff | 0 |
 
-> 仍不宣称 Audit II PASS、不 merge main；由新的独立 Audit II 最终判定。
+> 仍不宣称 Audit II PASS、不 merge main；由新的独立 Audit II 最终判定。## 13. Ultimate Audit remediation：ULT-001 / ULT-002（2026-11-08）
+
+**Start Head**: `c2593fafc3ff6fc35816e478348e95fb1cc1c0d9`
+
+本轮只修 Ultimate Audit 的两项 MEDIUM，不重开 Slice 3、不改冻结文档与 migration。
+
+### ULT-001 — Evidence writer 边界双层封闭
+
+- 第一层（package boundary）：`packages/domain/package.json` 增加最小 `exports`（仅 `"."` → `./src/index.ts`），外部 package consumer 无法再解析 `@xiaoshuyin/domain/src/repository*` 或 `src/internal/*`。服务端内部 Message seam 改为 workspace 相对源码引用（`apps/server/api/src/routes/messages.ts`），不是 package subpath，也不是 public API；为允许该跨包源码引用，`apps/server/api/tsconfig.json` 只做最小 `rootDir` / `composite` 调整。
+- 第二层（repository defence-in-depth）：`insertEvidenceAssertion` / `insertEvidenceObservation` 自身 fail-closed，拒绝 `AI_HYPOTHESIS` / `MANUAL_DEVICE_DATA` / `STAFF_RECORD` / `SOURCE_CONFIRMED`、`kind = HYPOTHESIS` 以及 observation 的非 `GUARDIAN_OBSERVATION` 组合。来源集合下沉到 `packages/domain/src/provenance.ts` 的单一常量，受控 writer 与 raw writer 共用，未复制第二套业务逻辑。FACT 仍不在应用层判定，继续由数据库 `assertions_insert` hard guard 拒绝。
+
+### ULT-002 — Message authorization 错误分类
+
+- `apps/server/api/src/routes/messages.ts` 不再裸 `catch` 一揽子转 404；只有 `authz.ts` 中由 `denyToError()` 标记的明确 authorization denial 才映射为 `404 CASE_NOT_FOUND`。
+- `NO_ACTOR` / 401 不带该标记，继续走原有 authentication 路径。
+- 未知异常（真实 PostgreSQL `57014`、连接失败、基础设施错误）继续 throw，由全局 error handler 返回 `500 INTERNAL_ERROR` 并进入既有 unexpected-error 日志白名单。
+
+### 新增测试
+
+- `tests/domain/package-boundary.test.ts`（8）：真实 Bun 子进程从 `apps/server/api` 解析包；approved entrypoint 可用；`src/repository.js` / `src/repository` / `repository.js` / `src/internal/message-writer.js` / `internal/message-writer.js` 全部无法导入；entrypoint 不暴露 `recordDialogueMessage` 与任何 raw writer。
+- `tests/db/evidence-raw-writer-guard.test.ts`（6）：raw assertion/observation writer 拒绝 4 类禁用 provenance、HYPOTHESIS、非 observation 来源；FACT 仍由 DB hard guard 拒绝；冻结可写组合仍成功；所有拒绝均 rows +0。
+- `tests/integration/messages-authorization-error-classification.test.ts`（5）：明确 denial → 404；真实 `57014` 不被判定为 denial；真实 PostgreSQL statement timeout（`options=-c statement_timeout=1500` + `LOCK TABLE families` 注入）→ 500 `INTERNAL_ERROR`；message/audit/idempotency 均 +0；日志含 `sqlstate=57014` 且无 SQL/凭据；故障恢复后正常请求 201。
+
+### 真实验证（本 Head 现场执行）
+
+| 命令 | 结果 |
+|---|---|
+| `bun run typecheck` | PASS |
+| `bun run guard:static` | PASS（0 violations） |
+| `tests/domain` | 17 files / 187 tests PASS |
+| `tests/db` | 21 files / 142 tests PASS |
+| `tests/integration` | 49 files / 320 tests PASS |
+| 全量 | 87 files / 649 tests PASS，0 failed，0 skipped |
+| `bun run openapi:generate` + `openapi:check` | PASS，generated 无漂移 |
+| `bun run db:evidence` | PASS |
+| `bun run coverage:audit` | PASS（21/21、10/10、13/13、115/115） |
+| `bun run verify-all` | PASS（36 PASS / 0 FAIL / 1 NOT VERIFIED = Slice 1 FR-002 平台真实性） |
+| governance validate + self-test | PASS / 15/15 |
+| migration diff | 0（`004_evidence_core.sql` 未改动） |
+| AUD-II-002 / AUD-II-003 回归 | conflict concurrency 3/3、migration upgrade 2/2 PASS |
+
+> 本轮仍是开发 AI 的 remediation；不宣称 Ultimate Audit PASS / MERGE SAFE、不创建 PR、不 merge main。下一步交独立高级审计 AI 复审。
