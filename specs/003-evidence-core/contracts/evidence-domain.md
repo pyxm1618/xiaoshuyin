@@ -28,7 +28,23 @@ recordObservation(context, draft)
 assignConflictGroup(context, refs)
 ```
 
-这些函数都必须接收已经完成 Case/Family authorization 的 context，并在 repository 层再次验证 scope/provenance。`recordHypothesis` 仅保留为 future-facing type-specific capability contract：Slice 3 production runtime 没有 AI caller，也没有当前可接受的 AI provenance；不得因函数/enum 存在就伪造 AI 写入路径。
+这些函数都必须接收由 server authentication / authorization 层构造的 context，并携带 `familyId` / `caseId` / `actorAccountId` / `actorPersonId` / `purpose`。writer 执行时不得只相信 context 的注释或 TypeScript 形状，必须在同一事务内机械复核当前 Case / Family / Purpose authorization：
+
+1. `actorAccountId` 对应的 Person 必须等于 `actorPersonId`；
+2. `caseId` 必须真实存在，且 `case.family_id === familyId`；
+3. 复用唯一 `authorize()`，固定使用 `action=CASE_READ` + `purpose=ctx.purpose` + `resource={type:'CASE',familyId,caseId}` + `case={caseId}`；facts 必须从数据库读取，不得由 caller 声明；
+4. 任一 DENY、Case 不存在 / 跨 Family、account↔person 不匹配、未注册 purpose 或非 `FAMILY_MANAGEMENT` purpose → fail closed，统一内部 reason `EVIDENCE_CASE_NOT_AUTHORIZED`（不得新增 HTTP error code，未来 route 自行映射 anti-enumeration 语义）。
+
+本 Slice 不新增 authorization action，也不扩展 `Action` / `Purpose` taxonomy；`CASE_READ + FAMILY_MANAGEMENT + specific Case` 就是当前已批准的 Evidence internal write actor path。Evidence 独立 permission 只能由未来 Slice 正式设计。guardian relationship 不参与 Case 判定，也不授予 Case permission。RLS 仍只是 Family isolation 第二层，不替代上述机械复核。
+
+`recordHypothesis` 仅保留为 future-facing type-specific capability contract：Slice 3 production runtime 没有 AI caller，也没有当前可接受的 AI provenance；不得因函数/enum 存在就伪造 AI 写入路径。
+
+所有本次 write 实际处理的非空 Person reference 都必须通过 Slice 1 现有 compliance gate，而不是只检查 subject：
+
+- `subjectPersonId !== null` → 必须检查；
+- `sourcePersonId !== null` → 必须检查；
+- `subjectPersonId === sourcePersonId` 时允许只检查一次，语义不变；
+- 完全复用 `assertMinorProcessingAllowed` 及其现有 repository 数据源，不建立第二套 Compliance 系统；`ADULT` / `MINOR_14_17` / `UNDER_14` 有效当前 consent → 允许；`UNDER_14` missing/revoked/stale/invalid、`UNKNOWN`、profile missing → fail closed，错误 code 沿用现有 gate。
 
 明确不存在：
 

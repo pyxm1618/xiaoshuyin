@@ -91,7 +91,8 @@ Idempotency-Key: msg-test-0001
 3. guardian + member 但不是 approved Case actor 不可写；
 4. guardian 但不属于目标 Family时 Family layer fail closed；
 5. 跨 Family已知 Case UUID 与不存在/无权 Case 的 external response 不泄露差异；
-6. wrong RLS family context 查询三表 0 rows，写 denied。
+6. wrong RLS family context 查询三表 0 rows，写 denied；
+7. internal Evidence writer 执行时机械复核 `CASE_READ + FAMILY_MANAGEMENT + specific Case`：ordinary member、guardian-without-Case-permission、account↔person mismatch、Case 不存在/跨 Family、未知 purpose 全部 fail closed（`EVIDENCE_CASE_NOT_AUTHORIZED`），零写入。
 
 ## 5. Person reference security
 
@@ -101,7 +102,8 @@ internal/domain/DB tests：
 - guardian relationship alone 不改变结果；
 - UUID 不存在与跨 Family-only 不向 public caller暴露可区分细节；
 - Evidence Core 不创建 Person；
-- source_message 与 evidence family/case/source person 必须一致。
+- source_message 与 evidence family/case/source person 必须一致；
+- `subject_person_id` 与 `source_person_id` 两个非空 Person ref 都必须通过现有 compliance gate；source=UNDER_14 revoked/missing/stale、UNKNOWN、profile missing 均阻断，subject===source 去重不改变语义。
 
 ## 6. Provenance admissibility
 
@@ -183,7 +185,7 @@ bun run openapi:check
 
 - 401 → `UNAUTHENTICATED`
 - 404 → `oneOf(CURRENT_FAMILY_NOT_FOUND, CASE_NOT_FOUND)`
-- 409 → `IDEMPOTENCY_PAYLOAD_MISMATCH`
+- 409 → `oneOf(CURRENT_FAMILY_AMBIGUOUS, IDEMPOTENCY_PAYLOAD_MISMATCH)`
 - 422 → `VALIDATION_ERROR`
 - 500 → `INTERNAL_ERROR`
 

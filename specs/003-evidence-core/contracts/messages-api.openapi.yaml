@@ -37,7 +37,7 @@ paths:
         '404':
           $ref: '#/components/responses/CaseOrCurrentFamilyNotFound'
         '409':
-          $ref: '#/components/responses/IdempotencyPayloadMismatch'
+          $ref: '#/components/responses/CurrentFamilyAmbiguousOrIdempotencyPayloadMismatch'
         '422':
           $ref: '#/components/responses/ValidationError'
         '500':
@@ -104,6 +104,18 @@ components:
         code:
           type: string
           enum: [CURRENT_FAMILY_NOT_FOUND]
+        message:
+          type: string
+
+    CurrentFamilyAmbiguousError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: Reuses Slice 1 Final current-Family ambiguity semantics; code is mechanically fixed.
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_AMBIGUOUS]
         message:
           type: string
 
@@ -174,6 +186,18 @@ components:
             oneOf:
               - $ref: '#/components/schemas/CurrentFamilyNotFoundError'
               - $ref: '#/components/schemas/CaseNotFoundError'
+
+    CurrentFamilyAmbiguousOrIdempotencyPayloadMismatch:
+      description: >-
+        current Family cannot be uniquely resolved under Slice 1 Final semantics
+        (CURRENT_FAMILY_AMBIGUOUS), or the same CASE_MESSAGE_CREATE idempotency key
+        was reused with a different canonical request (IDEMPOTENCY_PAYLOAD_MISMATCH).
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/CurrentFamilyAmbiguousError'
+              - $ref: '#/components/schemas/IdempotencyPayloadMismatchError'
 
     IdempotencyPayloadMismatch:
       description: Same CASE_MESSAGE_CREATE idempotency key reused with a different canonical request.

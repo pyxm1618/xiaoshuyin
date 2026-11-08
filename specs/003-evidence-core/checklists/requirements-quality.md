@@ -36,7 +36,7 @@
 - [x] CHK015 **FR-007**：validity / supersedes 历史。**PASS 条件**：新行不原地覆盖旧行；same type/Family/Case；旧记录可追溯。**实际结果**：PASS。
 - [x] CHK016 **FR-008**：禁止自动 Fact promotion。**PASS 条件**：无 public/AI/arbitrary internal FACT path；FACT schema/domain 仍存在；数据库 runtime hard guard 存在。**实际结果**：PASS。
 - [x] CHK017 **FR-009**：Message POST 保存 raw input only。**PASS 条件**：message write 自动 Assertions = 0，无 Assessment/Scene/Formulation 副作用。**实际结果**：PASS。
-- [x] CHK018 **FR-010**：服务端 Authorization / Purpose。**PASS 条件**：public Message 复用已批准 Case management actor path；internal Evidence 必须携带授权 Family/Case context；RLS 不替代业务授权。**实际结果**：PASS。
+- [x] CHK018 **FR-010**：服务端 Authorization / Purpose。**PASS 条件**：public Message 复用已批准 Case management actor path；internal Evidence 必须携带授权 Family/Case/Purpose context，并在 writer 执行时机械复核 `actorAccountId↔actorPersonId`、Case 真实属于 Family、`authorize(CASE_READ + FAMILY_MANAGEMENT + specific Case)`；任何 DENY / 未知 purpose fail closed；不新增 authorization action；RLS 不替代业务授权。**实际结果**：PASS — Plan/Contract 已冻结该机械 seam；实现由 T068–T069 验证。
 - [x] CHK019 **FR-011**：Family RLS 最后防线。**PASS 条件**：三表 ENABLE/FORCE RLS，错误 Family context 读 0 / 写拒绝，runtime 非 owner/NOBYPASSRLS。**实际结果**：PASS — Plan 明确 future DB introspection。
 - [x] CHK020 **FR-012**：Scene-agnostic domain。**PASS 条件**：无 Digital Use field/routing hardcode。**实际结果**：PASS。
 - [x] CHK021 **FR-013**：typed contract。**PASS 条件**：Zod/OpenAPI 流程、strict request、未声明字段拒绝。**实际结果**：PASS — OpenAPI `additionalProperties:false`。
@@ -120,12 +120,12 @@
 
 ## 7. Person Reference / Authorization / Anti-enumeration
 
-- [x] CHK069 **subject_person_id**。**PASS 条件**：non-null 必须是 target Family `family_members` 合法 ref，并通过 application authorization。**实际结果**：PASS。
-- [x] CHK070 **source_person_id**。**PASS 条件**：同上，且按 source_kind relationship rule 验证。**实际结果**：PASS。
+- [x] CHK069 **subject_person_id**。**PASS 条件**：non-null 必须是 target Family `family_members` 合法 ref，并通过 application authorization；同时必须通过当前 Slice 1 compliance gate（`ADULT` / `MINOR_14_17` / `UNDER_14` valid consent 允许，`UNDER_14` missing/revoked/stale/invalid、`UNKNOWN`、profile missing fail closed）。**实际结果**：PASS — Plan/Contract 已冻结；实现由 T071 验证。
+- [x] CHK070 **source_person_id**。**PASS 条件**：同上，且按 source_kind relationship rule 验证；同时必须通过当前 Slice 1 compliance gate（source=UNDER_14 revoked/missing/stale/invalid、UNKNOWN、profile missing 均阻断；`subjectPersonId === sourcePersonId` 时允许只检查一次，语义不变）。**实际结果**：PASS — Plan/Contract 已冻结；实现由 T070–T071 验证。
 - [x] CHK071 **Family A → Family B-only Person DB guard**。**PASS 条件**：`(family_id, person_id) -> family_members(family_id,person_id)` composite FK 拒绝。**实际结果**：PASS — subject/source 两处均规划。
-- [x] CHK072 **Case ownership**。**PASS 条件**：Evidence 的 `(case_id,family_id)` 必须引用当前 Family Case；Case authorization 先行。**实际结果**：PASS。
+- [x] CHK072 **Case ownership**。**PASS 条件**：Evidence 的 `(case_id,family_id)` 必须引用当前 Family Case；Case authorization 先行，且 internal writer 必须在读取任何 Person/provenance/supersedes 数据之前机械复核 `CASE_READ + FAMILY_MANAGEMENT + specific Case`；ordinary member 不能仅凭 RLS Family context 写入。**实际结果**：PASS — Plan/Contract 已冻结；实现由 T068–T069 验证。
 - [x] CHK073 **guardian boundary**。**PASS 条件**：guardian relationship 只验证 provenance/compliance 关系，不替代 Family membership/Case permission。**实际结果**：PASS。
-- [x] CHK074 **UNDER_14**。**PASS 条件**：只能引用 Slice 1 已合法建立的 child Person；Evidence Core 不创建 child Person、不绕过 consent-first。**实际结果**：PASS。
+- [x] CHK074 **UNDER_14**。**PASS 条件**：只能引用 Slice 1 已合法建立的 child Person；Evidence Core 不创建 child Person、不绕过 consent-first；`subject_person_id` 与 `source_person_id` 两个非空引用都必须通过当前 consent/compliance gate，source=UNDER_14 revoked/missing/stale/invalid 必须阻断。**实际结果**：PASS — Plan/Contract 已冻结；实现由 T070–T071 验证。
 - [x] CHK075 **source_message provenance**。**PASS 条件**：同 Family/Case/source person；message 不存在或不匹配时 fail closed。**实际结果**：PASS。
 - [x] CHK076 **anti-enumeration**。**PASS 条件**：invalid Person ref 不暴露 UUID 是否存在/其它 Family/guardian 私密细节；specific Case 延续统一 404 语义。**实际结果**：PASS。
 
@@ -163,7 +163,7 @@
 - [x] CHK099 **Forbidden side effects**。**PASS 条件**：Message transaction 不含 Assertion、Observation、case_event、Formulation、Scene、AI job/background job。**实际结果**：PASS。
 - [x] CHK100 **Audit vocabulary**。**PASS 条件**：`MESSAGE_RECORDED/DIALOGUE_MESSAGE`、`ASSERTION_RECORDED/ASSERTION`、`OBSERVATION_RECORDED/OBSERVATION`，不建第二 audit。**实际结果**：PASS。
 - [x] CHK101 **Audit metadata**。**PASS 条件**：metadata 固定 `{}`，不得复制 raw message/assertion content/observation value/PII；不镜像 `case_events`。**实际结果**：PASS。
-- [x] CHK102 **OpenAPI fixed errors**。**PASS 条件**：401=`UNAUTHENTICATED`；404=`oneOf(CURRENT_FAMILY_NOT_FOUND, CASE_NOT_FOUND)`；409=`IDEMPOTENCY_PAYLOAD_MISMATCH`；422=`VALIDATION_ERROR`；500=`INTERNAL_ERROR`；均由 schema enum/oneOf 机械限制。**实际结果**：PASS。
+- [x] CHK102 **OpenAPI fixed errors**。**PASS 条件**：401=`UNAUTHENTICATED`；404=`oneOf(CURRENT_FAMILY_NOT_FOUND, CASE_NOT_FOUND)`；409=`oneOf(CURRENT_FAMILY_AMBIGUOUS, IDEMPOTENCY_PAYLOAD_MISMATCH)`；422=`VALIDATION_ERROR`；500=`INTERNAL_ERROR`；均由 schema enum/oneOf 机械限制。**实际结果**：PASS — Plan/Contract 已冻结；实现由 T073–T074 验证。
 
 ---
 

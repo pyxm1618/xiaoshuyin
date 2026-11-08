@@ -15,7 +15,7 @@ public Message 写入只复用 Slice 2 final 已批准的 Case management actor 
 - 知道 caseId；
 - 知道 personId。
 
-Internal Evidence write 也必须携带已授权 Family/Case context；当前无 Participant，因此不能发明 Participant 权限。
+Internal Evidence write 也必须携带已授权 Family/Case/Purpose context，并在 writer 执行时机械复核，而不是仅凭 context 注释：`actorAccountId` 对应 Person 必须等于 `actorPersonId`；Case 必须真实属于目标 Family；必须复用唯一 `authorize()`，固定 `CASE_READ + FAMILY_MANAGEMENT + specific Case`；任一拒绝 / 未知 purpose fail closed。本 Slice 不新增 authorization action，也不扩展 taxonomy；当前无 Participant，因此不能发明 Participant 权限。RLS 不替代该复核。
 
 ### RLS
 
@@ -45,7 +45,8 @@ WITH CHECK (
 3. Person 必须存在于 target Family 的 `family_members`；
 4. guardian relationship 不能替代 membership；
 5. UNDER_14 Person 必须是 Slice 1 已合法存在的 Person；Evidence Core 不创建 Person；
-6. source message存在时还要验证 same Family/Case/source person。
+6. source message存在时还要验证 same Family/Case/source person；
+7. `subject_person_id` 与 `source_person_id` 两个非空引用都必须通过 Slice 1 现有 compliance gate；`subjectPersonId === sourcePersonId` 时允许只检查一次，语义不变；`UNDER_14` missing/revoked/stale/invalid、`UNKNOWN`、profile missing fail closed，错误 code 沿用现有 gate。
 
 数据库用 composite FK 防止跨 Family-only Person 被引用。
 
@@ -122,6 +123,8 @@ sha256(canonicalJson({
 
 Replay/Mismatch 不增加 message/audit/assertion/observation。
 
+current Family 无法唯一解析时沿用 Slice 1 Final 的 409 `CURRENT_FAMILY_AMBIGUOUS`；该 409 与 `IDEMPOTENCY_PAYLOAD_MISMATCH` 并列构成 Message route 的 409 集合，见 §9。
+
 ## 6. Authorization before replay
 
 specific Case replay 不得绕过当前 authorization。
@@ -177,8 +180,9 @@ COMMIT
 
 ```text
 BEGIN in authorized family/case context
-→ revalidate Case/Family
+→ revalidate actor account↔person binding, Case 真实属于 Family, and Case/Family/Purpose via authorize(CASE_READ, FAMILY_MANAGEMENT, specific Case)
 → validate subject/source Person refs
+→ gate every non-null subject/source Person against the existing compliance rules (subject === source checks once)
 → validate provenance source against the frozen 8-row Slice 3 admissibility matrix
 → validate guardian/source/subject relationship where required
 → validate source message
@@ -194,7 +198,7 @@ BEGIN in authorized family/case context
 ## 9. Anti-enumeration
 
 specific Case message：
-- current Family无法合法解析：沿用 Slice 1 final Family error；
+- current Family无法合法解析：沿用 Slice 1 final Family error，即 HTTP 409 `CURRENT_FAMILY_AMBIGUOUS`（与 `IDEMPOTENCY_PAYLOAD_MISMATCH` 并列构成 409 集合；不得改成 404、不得吞掉 ambiguity、不得猜 Family）；
 - Family 已合法解析但 Case 不存在/cross-family/Case actor无权：沿用 Slice 2 final indistinguishable `CASE_NOT_FOUND`；
 - response 不含目标 Family/Case内部字段。
 

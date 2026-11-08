@@ -146,6 +146,8 @@ apps/server/api
       └─ shared idempotent command
 
 packages/domain
+  ├─ internal/evidence-authorization.ts (non-exported seam)
+  │    └─ reuses @xiaoshuyin/authorization authorize()
   ├─ dialogue-message repository/service
   └─ evidence domain service
       ├─ recordStatement(...)
@@ -157,6 +159,8 @@ packages/domain
 禁止：`createEvidence(anything)`、caller-selectable `createAssertion({kind})`、`recordFact`、`promoteToFact`、public `/assertions` / `/observations` / `/evidence`、route-local dedupe cache。
 
 共享 provenance 只在 TS type/validator/repository helper 层复用；数据库每张表显式持列。
+
+`packages/domain` 通过非导出内部 seam 依赖 `@xiaoshuyin/authorization`；依赖方向为 `domain → authorization → contracts`，不引入循环，也不新增 authorization action。该 seam 不进入 production entrypoint，不改变冻结的四个 Evidence writer 公共表面。
 
 ### D-2 Q1 — Observation 最小结构
 
@@ -335,7 +339,18 @@ Message public path只允许 Slice 2 final 已批准的 Case management actor pa
 5. UNDER_14 只能引用 Slice 1 已合法建立 Person；Evidence Core 不创建 Person；
 6. 若有 `source_message_id`，Message 必须与 Evidence 同 Family/Case，source person 必须一致。
 
-DB composite FK 防跨 Family Person；RLS 防跨 Family row。RLS 不判断 manager/Participant/Purpose/FACT confirmation。
+Internal Evidence writer 的 context 必须携带 `familyId` / `caseId` / `actorAccountId` / `actorPersonId` / `purpose`，并在 writer 执行时、读取任何 Person/provenance/supersedes 数据之前机械复核当前 Case / Family / Purpose authorization：
+
+7. `actorAccountId` 对应的 Person 必须等于 `actorPersonId`；
+8. `caseId` 必须真实存在且 `case.family_id === familyId`；
+9. 复用唯一 `authorize()`，固定 `action=CASE_READ` + `purpose=ctx.purpose` + `resource={type:'CASE',familyId,caseId}` + `case={caseId}`，facts 必须从数据库读取；
+10. 任一 DENY、未知 / 非 `FAMILY_MANAGEMENT` purpose、Case 不存在 / 跨 Family、account↔person 不匹配 → fail closed，统一内部 reason `EVIDENCE_CASE_NOT_AUTHORIZED`（不新增 HTTP code）。
+
+本 Slice 不新增 `EVIDENCE_WRITE` action，也不扩展 `Action` / `Purpose` taxonomy；`CASE_READ + FAMILY_MANAGEMENT + specific Case` 与 Message production path 保持一致。Evidence 独立 permission 由未来 Slice 正式设计。
+
+所有本次 write 实际处理的非空 Person reference 都必须通过 Slice 1 现有 compliance gate：`subjectPersonId !== null` 必须检查，`sourcePersonId !== null` 必须检查；`subjectPersonId === sourcePersonId` 时允许只检查一次，语义不变。完全复用 `assertMinorProcessingAllowed` 与现有 repository 数据源，不建立第二套 Compliance 系统；`ADULT` / `MINOR_14_17` / `UNDER_14` 有效当前 consent → 允许，`UNDER_14` missing/revoked/stale/invalid、`UNKNOWN`、profile missing → fail closed。
+
+DB composite FK 防跨 Family Person；RLS 防跨 Family row。RLS 不判断 manager/Participant/Purpose/FACT confirmation，也不替代上述 application authorization 复核。
 
 Anti-enumeration：
 
@@ -386,6 +401,8 @@ sha256(canonicalJson({
 | concurrent same key | shared lock + second lookup，只 1 EXECUTE |
 | different key + same content | 两条独立 raw message，不做 content dedupe |
 
+current Family 无法唯一解析时的 409 见 D-7 与 `security-idempotency.md` §9；它不属于幂等 payload mismatch。
+
 planning-time Slice 1 当前 helper 已有 fast peek + advisory lock + second lookup + response snapshot；Slice 3 不复制。
 
 **安全顺序**：specific Case authorization preflight 必须发生在 shared replay fast path之前；EXECUTE callback 内再验证 Case/Family/auth。若 final helper 无法安全支持此顺序，触发 Gate / Plan Review。
@@ -428,7 +445,7 @@ server-owned：family_id、case_id、actor_account_id、source_person_id、recor
 
 不回显 raw content，避免正文复制进 idempotency response snapshot。
 
-错误沿用现有 contracts：401、404 `CURRENT_FAMILY_NOT_FOUND`、404 `CASE_NOT_FOUND`、409 `IDEMPOTENCY_PAYLOAD_MISMATCH`、422 `VALIDATION_ERROR`、500。
+错误沿用现有 contracts：401、404 `CURRENT_FAMILY_NOT_FOUND`、404 `CASE_NOT_FOUND`、409 `oneOf(CURRENT_FAMILY_AMBIGUOUS, IDEMPOTENCY_PAYLOAD_MISMATCH)`、422 `VALIDATION_ERROR`、500。
 
 强不变量：
 
@@ -466,7 +483,7 @@ dialogue_message + business_audit_event + idempotency response
 
 无 Assertion、case_event、job、AI run、Formulation、Scene state 副作用。
 
-Internal Statement/Hypothesis/Observation：同一 authorized RLS transaction 内 revalidate Case/Family → person refs → provenance/time/value/validity/supersedes → insert evidence → audit → commit。
+Internal Statement/Hypothesis/Observation：同一 authorized RLS transaction 内 revalidate actor account↔person binding → Case 真实属于 Family → Case/Family/Purpose via `authorize(CASE_READ, FAMILY_MANAGEMENT, specific Case)` → all non-null subject/source Person compliance gate → person refs → provenance/time/value/validity/supersedes → insert evidence → audit → commit。
 
 ### D-9 Audit / Events
 
@@ -521,7 +538,7 @@ Conflict：
 - error code 由 schema 机械固定，而不是只写在 prose/example：
   - 401 → `UNAUTHENTICATED`
   - 404 → `oneOf(CURRENT_FAMILY_NOT_FOUND, CASE_NOT_FOUND)`
-  - 409 → `IDEMPOTENCY_PAYLOAD_MISMATCH`
+  - 409 → `oneOf(CURRENT_FAMILY_AMBIGUOUS, IDEMPOTENCY_PAYLOAD_MISMATCH)`
   - 422 → `VALIDATION_ERROR`
   - 500 → `INTERNAL_ERROR`
 - 401/500 复用现有错误 taxonomy；404 复用 Slice 1 Family + Slice 2 Case anti-enumeration 语义，不定义第二套错误码。
@@ -592,7 +609,7 @@ packages/generated/
 | FR-007 | supersedes | old row 保留；same Case/Family；self-reference reject；旧 row supersedes mutation denied；append-only production path 无法成环，无 graph detector |
 | FR-008 | FACT capability + DB guard | FACT type存在；production exports/routes 无 FACT write/confirm/promote；`xiaoshuyin_app` + 正确 Family context INSERT FACT → DB reject；STATEMENT/HYPOTHESIS 在其它校验通过时可写 |
 | FR-009 | message integration | raw message + audit + idem；auto Assertion count=0 |
-| FR-010/011/021 | auth/RLS/person ref | wrong Family/Case/Person fail closed，无 leakage；guardian relation 不授予 Family/Case access |
+| FR-010/011/021 | auth/RLS/person ref | wrong Family/Case/Person fail closed，无 leakage；internal writer 机械复核 `CASE_READ + FAMILY_MANAGEMENT + specific Case`；ordinary member / guardian 不能仅凭 RLS context 写入；所有非空 subject/source Person 均过 compliance gate；guardian relation 不授予 Family/Case access |
 | FR-013/015 | OpenAPI route/error contract | 只新增 message POST，无 generic CRUD；401/404/409/422/500 的 `code` 可由 schema 机械校验 |
 | FR-017 | concurrency/idempotency | replay original；mismatch 409；并发同 key 仅一条 message/audit |
 | Audit | DB integration | metadata 无正文/PII；case_events 不镜像 |
