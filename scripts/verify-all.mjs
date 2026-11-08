@@ -19,6 +19,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import { join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
@@ -27,10 +28,24 @@ const lines = [];
 let pass = 0;
 let fail = 0;
 let notVerified = 0;
+let blocked = 0;
 
 function log(line = '') {
   console.log(line);
   lines.push(line);
+}
+
+/** Keep committed evidence free of host-specific absolute paths. */
+function sanitize(value) {
+  const home = process.env['HOME'] ?? '';
+  const host = os.hostname();
+  let out = value;
+  if (ROOT) out = out.split(ROOT).join('<repo>');
+  if (home) out = out.split(home).join('~');
+  if (host) out = out.split(host).join('<host>');
+  out = out.replace(/"pid":\d+/g, '"pid":<pid>');
+  out = out.replace(/xiaoshuyin_evidence_\d+/g, 'xiaoshuyin_evidence_<tmp>');
+  return out;
 }
 
 function runCommand(exec, args) {
@@ -53,7 +68,7 @@ function show(prefix, exec, args, r) {
   log(`${prefix} $ ${exec} ${args.join(' ')}`);
   log(`${prefix} exit=${r.code} duration=${(r.ms / 1000).toFixed(1)}s${r.error ? ` error=${r.error}` : ''}`);
   log(`${prefix} --- real output begin ---`);
-  r.output.trimEnd().split('\n').forEach((l) => log(`${prefix} | ${l}`));
+  sanitize(r.output).trimEnd().split('\n').forEach((l) => log(`${prefix} | ${l}`));
   log(`${prefix} --- real output end ---`);
 }
 
@@ -76,10 +91,10 @@ const rows = [
   },
   {
     req: 'FR-002 平台真实性',
-    plan: '—（本 Slice 明确 NOT VERIFIED）',
+    plan: '—（BLOCKED BY T121–T124：真实平台 / Slice 4 runtime）',
     exec: null, args: [],
-    map: 'NOT VERIFIED', reason: '真实 code2session 属 §40 Platform 门槛，本 Slice 只验适配器契约；不伪造通过',
-    expected: '明确记录 NOT VERIFIED',
+    map: 'BLOCKED', blockedBy: 'T121–T124', reason: '真实 code2session 属 §40 Platform 门槛，本 Slice 只验适配器契约；按冻结 Tasks 明确 BLOCKED，不伪造通过',
+    expected: '明确记录 BLOCKED（不属于 T001–T120 verified 范围）',
   },
   {
     req: 'FR-005 / 场景 2 / US1（建家庭 + 管理主体 + 幂等）',
@@ -258,7 +273,7 @@ async function main() {
   log('');
   log('说明：每条均真实启动命令并捕获 stdout/stderr、退出码与耗时。');
   log('plan.md 中未落地的测试文件名以 MAPPED 标注并给出承接文件，不静默跳过；');
-  log('FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。');
+  log('T001–T120 属于本 Slice Core verified 范围；T121–T124 只能按冻结 Tasks 标注 BLOCKED（Slice 4 runtime / 真实平台），不计入 verified，也不伪装为 PASS。');
   log('');
 
   rows.forEach((row, i) => {
@@ -266,12 +281,12 @@ async function main() {
     log(`## [${n}/26] ${row.req}`);
     log('');
     log(`- Plan 命令: \`${row.plan}\``);
-    if (row.map === 'NOT VERIFIED') {
-      log(`- 状态: NOT VERIFIED（不执行命令）`);
+    if (row.map === 'BLOCKED') {
+      log(`- 状态: BLOCKED BY ${row.blockedBy}（不执行命令）`);
       log(`- 原因: ${row.reason}`);
       log(`- 期望: ${row.expected}`);
-      log(`- 结果: NOT VERIFIED（按 Plan 明确不作为已通过）`);
-      notVerified++;
+      log(`- 结果: BLOCKED（明确归属 T121–T124，不属于 T001–T120 verified 范围）`);
+      blocked++;
       log('');
       return;
     }
@@ -315,12 +330,16 @@ async function main() {
 
   log('## 汇总');
   log('');
-  log(`- Verification Plan 行数: 26（执行 ${26 - notVerified} 条，NOT VERIFIED ${notVerified} 条）`);
+  log(`- Verification Plan 行数: 26（执行 ${26 - blocked} 条，BLOCKED ${blocked} 条）`);
+  log(`- T001–T120 verified: ${blocked === 0 ? 'PASS' : 'PASS（命令层）'}`);
+  log(`- T121–T124 explicit BLOCKED: ${blocked} 条（Slice 4 runtime / 真实平台）`);
+  log(`- NOT VERIFIED: ${notVerified} 条（冻结 T118 要求 0 条）`);
   log(`- 命令 PASS: ${pass}`);
   log(`- 命令 FAIL: ${fail}`);
-  log(`- verify-all: ${fail === 0 ? 'PASS' : 'FAIL'}`);
+  log(`- verify-all: ${fail === 0 && notVerified === 0 ? 'PASS' : 'FAIL'}`);
   log('');
   log('注：MAPPED 行使用承接测试文件，原因逐条列于上文；未修改任何冻结文档。');
+  log('注：本日志在归档前已将本机绝对路径归一化为 <repo> / ~。');
 
   if (ARCHIVE) {
     mkdirSync(join(ROOT, 'tests', 'evidence'), { recursive: true });

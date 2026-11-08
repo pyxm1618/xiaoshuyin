@@ -16,16 +16,30 @@
 
 import pg from 'pg';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import { join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const lines = [];
 let failures = 0;
 
+function sanitize(value) {
+  const home = process.env['HOME'] ?? '';
+  const host = os.hostname();
+  let out = String(value);
+  if (ROOT) out = out.split(ROOT).join('<repo>');
+  if (home) out = out.split(home).join('~');
+  if (host) out = out.split(host).join('<host>');
+  out = out.replace(/"pid":\d+/g, '"pid":<pid>');
+  out = out.replace(/xiaoshuyin_evidence_\d+/g, 'xiaoshuyin_evidence_<tmp>');
+  return out;
+}
+
 function log(line = '') {
-  console.log(line);
-  lines.push(line);
+  const clean = sanitize(line);
+  console.log(clean);
+  lines.push(clean);
 }
 
 function norm(v) {

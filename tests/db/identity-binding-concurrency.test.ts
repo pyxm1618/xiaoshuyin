@@ -92,4 +92,161 @@ describe('binding commit concurrency', () => {
     );
     expect(p2.rows[0].cnt).toBe(0);
   });
+
+  it('two Persons claim the same candidate Account concurrently → at most one binding', async () => {
+    const code = `conc_account_${randomUUID()}`;
+    const targetA = await createTarget(h, 'conc_account_a', { ageBand: 'UNDER_14' });
+    const targetB = await createTarget(h, 'conc_account_b', { ageBand: 'UNDER_14' });
+
+    const bootA = await bootstrap(h, targetA.invitationToken, code);
+    const bootB = await bootstrap(h, targetB.invitationToken, code);
+    const tokenA = bootA.json().pendingContextToken as string;
+    const tokenB = bootB.json().pendingContextToken as string;
+    expect(bootA.json().binding).toBe('NOT_COMPLETED');
+    expect(bootB.json().binding).toBe('NOT_COMPLETED');
+    await Promise.all([
+      candidateDecision(h, tokenA, 'AFFIRM', `ca-${randomUUID()}`, 'candidate-binding-v1'),
+      candidateDecision(h, tokenB, 'AFFIRM', `cb-${randomUUID()}`, 'candidate-binding-v1'),
+    ]);
+
+    const attemptsA = await h.admin.query(
+      'SELECT id FROM binding_attempts WHERE target_person_id = $1',
+      [targetA.targetPersonId]
+    );
+    const attemptsB = await h.admin.query(
+      'SELECT id FROM binding_attempts WHERE target_person_id = $1',
+      [targetB.targetPersonId]
+    );
+    expect(attemptsA.rows).toHaveLength(1);
+    expect(attemptsB.rows).toHaveLength(1);
+
+    const [resA, resB] = await Promise.all([
+      confirmerDecision(h, targetA.guardian.token, attemptsA.rows[0].id, {
+        personId: targetA.targetPersonId,
+        decision: 'AFFIRM',
+        idempotencyKey: `sa-${randomUUID()}`,
+      }),
+      confirmerDecision(h, targetB.guardian.token, attemptsB.rows[0].id, {
+        personId: targetB.targetPersonId,
+        decision: 'AFFIRM',
+        idempotencyKey: `sb-${randomUUID()}`,
+      }),
+    ]);
+    expect([resA.json().state, resB.json().state].sort()).toEqual(['COMMITTED', 'TERMINAL']);
+
+    const accounts = await h.admin.query('SELECT count(*)::int AS n FROM accounts WHERE wechat_openid = $1', [
+      `fake_${code}`,
+    ]);
+    expect(accounts.rows[0].n).toBe(1);
+    const account = await h.admin.query('SELECT id FROM accounts WHERE wechat_openid = $1', [
+      `fake_${code}`,
+    ]);
+    const bound = await h.admin.query('SELECT count(*)::int AS n FROM persons WHERE account_id = $1', [
+      account.rows[0].id,
+    ]);
+    expect(bound.rows[0].n).toBe(1);
+    const committed = await h.admin.query(
+      `SELECT count(*)::int AS n FROM binding_attempts
+        WHERE target_person_id = ANY($1::uuid[]) AND state = 'COMMITTED'`,
+      [[targetA.targetPersonId, targetB.targetPersonId]]
+    );
+    expect(committed.rows[0].n).toBe(1);
+    const p2 = await h.admin.query(
+      `SELECT count(*)::int AS n FROM persons p
+        JOIN accounts a ON a.id = p.created_by_account_id
+       WHERE a.wechat_openid = $1`,
+      [`fake_${code}`]
+    );
+    expect(p2.rows[0].n).toBe(0);
+  });
+
+  it('double confirmation / commit-vs-retry converges to exactly one commit', async () => {
+    const target = await createTarget(h, 'conc_double', { ageBand: 'UNDER_14' });
+    const code = `conc_double_${randomUUID()}`;
+    const { attemptId } = await startBinding(h, target, code);
+
+    const [a, b] = await Promise.all([
+      confirmerDecision(h, target.guardian.token, attemptId, {
+        personId: target.targetPersonId,
+        decision: 'AFFIRM',
+        idempotencyKey: `dc-a-${randomUUID()}`,
+      }),
+      confirmerDecision(h, target.guardian.token, attemptId, {
+        personId: target.targetPersonId,
+        decision: 'AFFIRM',
+        idempotencyKey: `dc-b-${randomUUID()}`,
+      }),
+    ]);
+    expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
+    expect([a.json().state, b.json().state]).toEqual(['COMMITTED', 'COMMITTED']);
+
+    const confirmations = await h.admin.query(
+      "SELECT count(*)::int AS n FROM binding_confirmations WHERE attempt_id = $1 AND kind = 'SECOND_PARTY'",
+      [attemptId]
+    );
+    expect(confirmations.rows[0].n).toBe(1);
+    const commitAudit = await h.admin.query(
+      "SELECT count(*)::int AS n FROM identity_binding_audit_events WHERE attempt_id = $1 AND event_type = 'BINDING_COMMITTED'",
+      [attemptId]
+    );
+    expect(commitAudit.rows[0].n).toBe(1);
+    const bound = await h.admin.query(
+      'SELECT count(*)::int AS n FROM persons WHERE id = $1 AND account_id IS NOT NULL',
+      [target.targetPersonId]
+    );
+    expect(bound.rows[0].n).toBe(1);
+    const p2 = await h.admin.query(
+      `SELECT count(*)::int AS n FROM persons p
+        JOIN accounts a ON a.id = p.created_by_account_id
+       WHERE a.wechat_openid = $1`,
+      [`fake_${code}`]
+    );
+    expect(p2.rows[0].n).toBe(0);
+  });
+
+  it('all-failure concurrent commits produce zero commits and no Person increment', async () => {
+    const target = await createTarget(h, 'conc_all_fail', { ageBand: 'UNDER_14' });
+    const code = `conc_all_fail_${randomUUID()}`;
+    const { attemptId } = await startBinding(h, target, code);
+    const personsBefore = await h.admin.query(
+      'SELECT count(*)::int AS n FROM persons WHERE id = $1',
+      [target.targetPersonId]
+    );
+
+    // Invitation is now terminal: Gate 2 must fail for every concurrent retry.
+    h.port.remove(target.invitationToken);
+    const results = await Promise.all([
+      confirmerDecision(h, target.guardian.token, attemptId, {
+        personId: target.targetPersonId,
+        decision: 'AFFIRM',
+        idempotencyKey: `af-a-${randomUUID()}`,
+      }),
+      confirmerDecision(h, target.guardian.token, attemptId, {
+        personId: target.targetPersonId,
+        decision: 'AFFIRM',
+        idempotencyKey: `af-b-${randomUUID()}`,
+      }),
+    ]);
+    expect(results.map((r) => r.json().state)).toEqual(['TERMINAL', 'TERMINAL']);
+
+    const committed = await h.admin.query(
+      "SELECT count(*)::int AS n FROM binding_attempts WHERE target_person_id = $1 AND state = 'COMMITTED'",
+      [target.targetPersonId]
+    );
+    expect(committed.rows[0].n).toBe(0);
+    const bound = await h.admin.query(
+      'SELECT count(*)::int AS n FROM persons WHERE id = $1 AND account_id IS NOT NULL',
+      [target.targetPersonId]
+    );
+    expect(bound.rows[0].n).toBe(0);
+    const accounts = await h.admin.query('SELECT count(*)::int AS n FROM accounts WHERE wechat_openid = $1', [
+      `fake_${code}`,
+    ]);
+    expect(accounts.rows[0].n).toBe(0);
+    const personsAfter = await h.admin.query(
+      'SELECT count(*)::int AS n FROM persons WHERE id = $1',
+      [target.targetPersonId]
+    );
+    expect(personsAfter.rows[0].n).toBe(personsBefore.rows[0].n);
+  });
 });

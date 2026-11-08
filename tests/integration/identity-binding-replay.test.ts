@@ -43,7 +43,8 @@ describe('bootstrap replay reads back the authoritative attempt (H3)', () => {
     );
     const attemptId = attempt.rows[0].id as string;
     const keysAfterFirst = await h.admin.query(
-      `SELECT count(*)::int AS n FROM binding_operation_keys WHERE command_type = 'BOOTSTRAP'`
+      `SELECT count(*)::int AS n FROM binding_operation_keys WHERE attempt_id = $1`,
+      [attemptId]
     );
 
     // ── PENDING replay ──
@@ -59,7 +60,8 @@ describe('bootstrap replay reads back the authoritative attempt (H3)', () => {
     expect(attempts.rows[0].n).toBe(1);
 
     const keys = await h.admin.query(
-      `SELECT count(*)::int AS n FROM binding_operation_keys WHERE command_type = 'BOOTSTRAP'`
+      `SELECT count(*)::int AS n FROM binding_operation_keys WHERE attempt_id = $1`,
+      [attemptId]
     );
     expect(keys.rows[0].n).toBe(keysAfterFirst.rows[0].n);
 

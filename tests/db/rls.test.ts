@@ -42,11 +42,11 @@ describe('RLS', () => {
     }
   });
 
-  it('27 policies exist (Slice 1/2 11 + Slice 6 additive 16)', async () => {
+  it('29 policies exist (Slice 1/2 11 + Slice 6 additive 18)', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(27);
+    expect(rows.length).toBe(29);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
