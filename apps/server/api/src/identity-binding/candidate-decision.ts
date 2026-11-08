@@ -24,7 +24,7 @@ import {
   settleTerminal,
 } from './attempt-repository.js';
 import { appendCandidate } from './confirmation-repository.js';
-import { clearOpenid } from './pending-context-repository.js';
+import { clearOpenidForAttempt } from './pending-context-repository.js';
 import { appendAudit } from './audit-repository.js';
 import {
   find as findOperationKey,
@@ -182,7 +182,7 @@ export async function submitCandidateDecision(
           result: 'TERMINAL',
           terminalReason: 'ATTEMPT_EXPIRED',
         });
-        await clearOpenid(tx, context.id);
+        await scrubAttemptContexts(tx, expired);
         await recordOperation(tx, scope, input, requestHash, expired.id);
         return { binding: 'NOT_COMPLETED' };
       }
@@ -233,7 +233,7 @@ export async function submitCandidateDecision(
           result: 'TERMINAL',
           terminalReason: reason,
         });
-        await clearOpenid(tx, context.id);
+        await scrubAttemptContexts(tx, settled);
       }
       await recordOperation(tx, scope, input, requestHash, attempt.id);
       return { binding: 'NOT_COMPLETED' };
@@ -241,6 +241,36 @@ export async function submitCandidateDecision(
   );
 }
 
+
+/**
+ * Scrub every transport context linked to the settled attempt. The pending
+ * purpose cannot see attempt-scoped context rows, so the exact attempt scope is
+ * re-established under the Gate purpose first (F-05).
+ */
+async function scrubAttemptContexts(
+  tx: pg.PoolClient,
+  attempt: { id: string; candidateIdentityDigest: string; invitationParticipationId: string | null; targetPersonId: string; targetFamilyId: string }
+): Promise<void> {
+  await setBindingAttemptContext(tx, {
+    attemptId: attempt.id,
+    identityDigest: attempt.candidateIdentityDigest,
+    invitationId: attempt.invitationParticipationId,
+    targetPersonId: attempt.targetPersonId,
+    targetFamilyId: attempt.targetFamilyId,
+    purpose: 'IDENTITY_BINDING_GATE',
+  });
+  await clearOpenidForAttempt(tx, attempt.id);
+  // Restore the pending purpose: candidate operations record their own
+  // idempotency key under `IDENTITY_BINDING_PENDING` afterwards.
+  await setBindingAttemptContext(tx, {
+    attemptId: attempt.id,
+    identityDigest: attempt.candidateIdentityDigest,
+    invitationId: attempt.invitationParticipationId,
+    targetPersonId: attempt.targetPersonId,
+    targetFamilyId: attempt.targetFamilyId,
+    purpose: 'IDENTITY_BINDING_PENDING',
+  });
+}
 
 async function recordOperation(
   tx: pg.PoolClient,

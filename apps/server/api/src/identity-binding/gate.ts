@@ -12,6 +12,7 @@ import {
   getFamilyById,
   getMembershipFamilyIds,
   getPersonById,
+  lockBindingGateRows,
   evaluateBindingGate,
   type BindingAgeBand,
   type BindingGateInput,
@@ -184,6 +185,28 @@ export async function resolveTargetFamilyId(
 ): Promise<string | null> {
   const ids = await getMembershipFamilyIds(tx, targetPersonId);
   return ids.length === 1 ? ids[0]! : null;
+}
+
+/**
+ * Establish the Gate 2 concurrency-safe consistency boundary (F-01).
+ *
+ * Gate 2 is evaluated from current authoritative facts. A fresh SELECT alone is
+ * not enough: an invalidating change (consent revoke, guardian change,
+ * membership change) that commits before the binding linearization point must
+ * block the commit. Locking the authoritative rows in a fixed order forces such
+ * changes to either commit before we read (and be observed by the Gate) or wait
+ * until this transaction finishes (i.e. after the linearization point).
+ *
+ * Lock order: persons → person_compliance_profiles → consent_records →
+ * family_members → families. Callers must hold the attempt/context locks first
+ * (D-6.1) and must not acquire these in a different order.
+ */
+export async function lockBindingGateFacts(
+  tx: pg.PoolClient,
+  targetPersonId: string,
+  targetFamilyId: string
+): Promise<void> {
+  await lockBindingGateRows(tx, targetPersonId, targetFamilyId);
 }
 
 /**

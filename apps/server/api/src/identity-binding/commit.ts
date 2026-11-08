@@ -22,9 +22,9 @@ import {
   withBindingCommitTransaction,
 } from '../db/tx.js';
 import { decryptOpenid, deriveIdentityDigest } from './crypto.js';
-import { evaluateGateForTarget } from './gate.js';
+import { evaluateGateForTarget, lockBindingGateFacts } from './gate.js';
 import {
-  clearOpenid,
+  clearOpenidForAttempt,
   findByAttemptIdForUpdate,
   markCommittedForAttempt,
   type PendingContextRow,
@@ -163,7 +163,26 @@ async function commitInTransaction(
   if (candidateAccount) {
     await setBindingCandidateAccountId(tx, candidateAccount.id);
   }
-  const candidateBoundPerson = candidateAccount
+
+
+  // ── F-01: bind the Gate 2 facts to the binding linearization point ──
+  // Lock every authoritative row the Gate reads, then evaluate the Gate from
+  // those locked (current) values. An invalidating change that already
+  // committed before this point is visible here and blocks; one that tries to
+  // commit concurrently waits for this transaction and is therefore ordered
+  // after the linearization point.
+  // Lock the candidate Account first: it is the row the binding transaction
+  // competes on, and holding it before the Gate facts keeps the Gate lock set
+  // minimal (F-01). A concurrent ordinary-login bind of the same Account parks
+  // here instead of racing the Gate evaluation.
+  if (candidateAccount) {
+    await tx.query('SELECT id FROM accounts WHERE id = $1 FOR UPDATE', [candidateAccount.id]);
+  }
+
+  await lockBindingGateFacts(tx, attempt.targetPersonId, attempt.targetFamilyId);
+  // Re-read the Account→Person binding under the lock: a concurrent ordinary
+  // login may have bound this Account to another Person after the first read.
+  const candidateBoundPersonLocked = candidateAccount
     ? await getPersonByAccountId(tx, candidateAccount.id)
     : null;
 
@@ -178,7 +197,7 @@ async function commitInTransaction(
     targetFamilyId: attempt.targetFamilyId,
     invitation,
     candidateAccountId: candidateAccount?.id ?? null,
-    candidateAccountBoundPersonId: candidateBoundPerson?.id ?? null,
+    candidateAccountBoundPersonId: candidateBoundPersonLocked?.id ?? null,
     confirmer: {
       accountId: secondPartyConfirmation.actorAccountId!,
       personId: secondPartyConfirmation.actorPersonId!,
@@ -277,7 +296,7 @@ async function terminalize(
       result: 'TERMINAL',
       terminalReason: reason,
     });
-    await clearOpenid(tx, context.id);
+    await clearOpenidForAttempt(tx, attempt.id);
   }
   return { outcome: 'TERMINAL', reason };
 }

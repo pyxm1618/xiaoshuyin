@@ -98,7 +98,12 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     expect(Object.keys(schemas).sort()).toEqual([...FROZEN_SCHEMAS].sort());
     for (const name of FROZEN_SCHEMAS) {
       expect(schemas[name], `missing schema ${name}`).toBeDefined();
-      expect(schemas[name].type ?? schemas[name].$ref).toBeDefined();
+      expect(
+        schemas[name].type ??
+          schemas[name].$ref ??
+          schemas[name].oneOf ??
+          schemas[name].anyOf
+      ).toBeDefined();
     }
   });
 

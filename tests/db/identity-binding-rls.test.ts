@@ -12,6 +12,7 @@ import {
   type BindingHarness,
 } from '../setup/identity-binding.js';
 import {
+  setBindingCandidateAccountId,
   withAccountTransaction,
   withBindingContextTransaction,
   withBindingCommitTransaction,
@@ -137,5 +138,102 @@ describe('binding RLS isolation', () => {
       }
     );
     expect(rows).toBe(0);
+  });
+
+  it('intended read policies are SELECT and the commit policy is UPDATE (F-03)', async () => {
+    const { rows } = await h.admin.query(
+      `SELECT p.polname, p.polcmd
+         FROM pg_policy p
+         JOIN pg_class c ON c.oid = p.polrelid
+        WHERE p.polname IN (
+          'persons_binding_target_read',
+          'persons_binding_candidate_account_read',
+          'persons_binding_commit_update',
+          'families_binding_read',
+          'family_members_binding_read',
+          'pcp_binding_read',
+          'consent_binding_read'
+        )`
+    );
+    const polcmd = new Map(rows.map((r: any) => [r.polname, r.polcmd]));
+    // 'r' = SELECT, 'w' = UPDATE, '*' = ALL
+    expect(polcmd.get('persons_binding_target_read')).toBe('r');
+    expect(polcmd.get('persons_binding_candidate_account_read')).toBe('r');
+    expect(polcmd.get('families_binding_read')).toBe('r');
+    expect(polcmd.get('family_members_binding_read')).toBe('r');
+    expect(polcmd.get('pcp_binding_read')).toBe('r');
+    expect(polcmd.get('consent_binding_read')).toBe('r');
+    expect(polcmd.get('persons_binding_commit_update')).toBe('w');
+  });
+
+  it('GATE purpose reads the target but cannot write it (F-03 negative matrix)', async () => {
+    const target = await createTarget(h, 'rls_gate_write', { ageBand: 'UNDER_14' });
+
+    const result = await withBindingGateTransaction(
+      pool,
+      { targetPersonId: target.targetPersonId, targetFamilyId: target.familyId },
+      async (tx) => {
+        const read = await tx.query(
+          'SELECT count(*)::int AS n FROM persons WHERE id = $1',
+          [target.targetPersonId]
+        );
+        const deny = async (sql: string, params: unknown[]) => {
+          try {
+            const r = await tx.query(sql, params as any[]);
+            return { kind: 'rows', rowCount: r.rowCount ?? 0 };
+          } catch (err: any) {
+            return { kind: 'error', code: err.code as string };
+          }
+        };
+        const update = await deny(
+          'UPDATE persons SET updated_at = now() WHERE id = $1',
+          [target.targetPersonId]
+        );
+        const del = await deny('DELETE FROM persons WHERE id = $1', [target.targetPersonId]);
+        const insert = await deny(
+          'INSERT INTO persons (created_by_account_id) VALUES ($1)',
+          [target.guardian.accountId]
+        );
+        return { read: read.rows[0].n, update, del, insert };
+      }
+    );
+
+    expect(result.read).toBe(1);
+    for (const outcome of [result.update, result.del, result.insert]) {
+      const denied =
+        outcome.kind === 'error' || (outcome.kind === 'rows' && outcome.rowCount === 0);
+      expect(denied).toBe(true);
+    }
+  });
+
+  it('candidate-account read policy exposes only the bound Person for reading (F-03)', async () => {
+    const target = await createTarget(h, 'rls_cand_read', { ageBand: 'UNDER_14' });
+
+    const result = await withBindingGateTransaction(
+      pool,
+      { targetPersonId: target.targetPersonId, targetFamilyId: target.familyId },
+      async (tx) => {
+        await setBindingCandidateAccountId(tx, target.guardian.accountId);
+        const read = await tx.query(
+          'SELECT count(*)::int AS n FROM persons WHERE account_id = $1',
+          [target.guardian.accountId]
+        );
+        const update = await (async () => {
+          try {
+            const r = await tx.query(
+              'UPDATE persons SET updated_at = now() WHERE account_id = $1',
+              [target.guardian.accountId]
+            );
+            return r.rowCount ?? 0;
+          } catch (err: any) {
+            return err.code;
+          }
+        })();
+        return { read: read.rows[0].n, update };
+      }
+    );
+
+    expect(result.read).toBeGreaterThanOrEqual(1);
+    expect(result.update === 0 || typeof result.update === 'string').toBe(true);
   });
 });

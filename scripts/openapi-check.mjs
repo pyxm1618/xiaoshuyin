@@ -13,6 +13,7 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
+import { normalize } from './lib/openapi-normalize.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const GENERATED = join(ROOT, 'packages', 'generated', 'openapi.json');
@@ -49,87 +50,8 @@ const FROZEN_DOCS = [
   },
 ];
 
-const DROP_KEYS = new Set([
-  '$schema',
-  'title',
-  'description',
-  'example',
-  'examples',
-  'format',
-  'pattern',
-  'minLength',
-  'maxLength',
-  'minimum',
-  'maximum',
-  'minItems',
-  'maxItems',
-  'default',
-  'deprecated',
-  'propertyNames',
-]);
-
-function resolveSchemaRef(refString, root) {
-  const parts = refString.replace(/^#\//, '').split('/');
-  let current = root;
-  for (const part of parts) current = current?.[part];
-  return current;
-}
-
-function normalize(node, root) {
-  if (Array.isArray(node)) return node.map((item) => normalize(item, root));
-  if (!node || typeof node !== 'object') return node;
-
-  if (
-    typeof node.$ref === 'string' &&
-    node.$ref.startsWith('#/components/schemas/')
-  ) {
-    return normalize(resolveSchemaRef(node.$ref, root), root);
-  }
-
-  const out = {};
-  for (const [key, value] of Object.entries(node)) {
-    if (DROP_KEYS.has(key) || key.startsWith('x-')) continue;
-
-    if (key === 'allOf' && Array.isArray(value) && value.length === 1) {
-      return normalize(value[0], root);
-    }
-
-    if ((key === 'anyOf' || key === 'oneOf') && Array.isArray(value)) {
-      const items = value.map((item) => normalize(item, root));
-      const nonNull = items.filter((item) => item && item.type !== 'null');
-      const hasNull = items.some((item) => item && item.type === 'null');
-      if (hasNull && nonNull.length === 1) {
-        const base = { ...nonNull[0] };
-        const baseType = base.type;
-        out.type = Array.isArray(baseType)
-          ? [...new Set([...baseType, 'null'])]
-          : [baseType, 'null'];
-        for (const [baseKey, baseValue] of Object.entries(base)) {
-          if (baseKey !== 'type') out[baseKey] = baseValue;
-        }
-        continue;
-      }
-      out[key] = items;
-      continue;
-    }
-
-    const normalized = normalize(value, root);
-    out[key] = key === 'required' && Array.isArray(normalized)
-      ? [...normalized].sort()
-      : normalized;
-  }
-
-  if (
-    'additionalProperties' in out &&
-    out.additionalProperties &&
-    typeof out.additionalProperties === 'object' &&
-    Object.keys(out.additionalProperties).length === 0
-  ) {
-    out.additionalProperties = true;
-  }
-
-  return out;
-}
+// Normalization lives in `scripts/lib/openapi-normalize.mjs` so the semantic
+// regression test can prove the false-equivalence fix without running main().
 
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);

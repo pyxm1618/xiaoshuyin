@@ -12,6 +12,7 @@ import {
   candidateSession,
   candidateStatus,
   createTarget,
+  personAccountId,
   type BindingHarness,
 } from '../setup/identity-binding.js';
 import { loginWithLabel, revokeConsent } from '../setup/api.js';
@@ -243,4 +244,49 @@ describe('candidate-facing anti-enumeration', () => {
     expect(session.statusCode).toBe(200);
     expect(session.json()).toEqual({ binding: 'NOT_COMPLETED' });
   });
+
+  it('true Case B mismatch (P1 bound to A, candidate authenticates as B) is generically indistinguishable', async () => {
+    const target = await createTarget(h, 'enum_true_caseb', { ageBand: 'UNDER_14' });
+    const codeA = `enum_true_caseb_a_${randomUUID()}`;
+    const account = await h.admin.query(
+      'INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0) RETURNING id',
+      [`fake_${codeA}`]
+    );
+    const boundAccountId = account.rows[0].id as string;
+    await h.admin.query('UPDATE persons SET account_id = $1 WHERE id = $2', [
+      boundAccountId,
+      target.targetPersonId,
+    ]);
+
+    const baseline = observable(
+      await bootstrap(h, `missing_${randomUUID()}`, `enum_true_base_${randomUUID()}`)
+    );
+    const codeB = `enum_true_caseb_b_${randomUUID()}`;
+    const mismatchRes = await bootstrap(
+      h,
+      target.invitationToken,
+      codeB,
+      `enum_true_mismatch_${randomUUID()}`
+    );
+    const mismatch = observable(mismatchRes);
+    expect(mismatch).toEqual(baseline);
+
+    // No attempt, no confirmation, no rebind, no P1 leak.
+    const attempts = await h.admin.query(
+      'SELECT count(*)::int AS n FROM binding_attempts WHERE target_person_id = $1',
+      [target.targetPersonId]
+    );
+    expect(attempts.rows[0].n).toBe(0);
+    const confirmations = await h.admin.query(
+      `SELECT count(*)::int AS n FROM binding_confirmations c
+         JOIN binding_attempts a ON a.id = c.attempt_id
+        WHERE a.target_person_id = $1`,
+      [target.targetPersonId]
+    );
+    expect(confirmations.rows[0].n).toBe(0);
+    expect(await personAccountId(h, target.targetPersonId)).toBe(boundAccountId);
+    expect(mismatchRes.body).not.toContain(target.targetPersonId);
+    expect(mismatchRes.body).not.toContain(boundAccountId);
+  });
+
 });

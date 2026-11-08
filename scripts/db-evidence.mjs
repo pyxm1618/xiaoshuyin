@@ -87,9 +87,11 @@ const SLICE5_ENUMS = [
 ].sort();
 const SLICE5_POLICIES = [
   'binding_context_token_scope', 'binding_context_attempt_scope',
-  'binding_attempts_identity_scope', 'binding_attempts_target_scope',
-  'binding_attempts_commit_scope', 'binding_confirmations_attempt_scope',
-  'binding_confirmations_target_scope', 'binding_operation_keys_scope',
+  'binding_context_no_attempt_identity_scope',
+  'binding_attempts_identity_scope', 'binding_attempts_operation_replay',
+  'binding_attempts_target_scope', 'binding_attempts_commit_scope',
+  'binding_confirmations_attempt_scope', 'binding_confirmations_target_scope',
+  'binding_operation_keys_scope', 'binding_operation_keys_bootstrap_fingerprint',
   'identity_binding_audit_insert_scope', 'persons_binding_target_read',
   'persons_binding_candidate_account_read', 'persons_binding_commit_update',
   'families_binding_read', 'family_members_binding_read', 'pcp_binding_read',

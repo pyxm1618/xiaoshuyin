@@ -175,6 +175,38 @@ export async function clearOpenid(tx: pg.PoolClient, contextId: string): Promise
   );
 }
 
+/** Scrub every transport context linked to one authoritative attempt (F-05). */
+export async function clearOpenidForAttempt(
+  tx: pg.PoolClient,
+  attemptId: string
+): Promise<void> {
+  await tx.query(
+    `UPDATE binding_pending_contexts
+     SET openid_ciphertext = NULL, openid_nonce = NULL, openid_tag = NULL
+     WHERE attempt_id = $1`,
+    [attemptId]
+  );
+}
+
+/**
+ * Scrub every pre-attempt transport context for the candidate identity scope
+ * (F-05). Invalid invitation / authorize DENY / Case B mismatch / Gate 1 fail
+ * never link an attempt, so scoping by attempt alone would leak decryptable
+ * OpenIDs across repeated bootstrap replays.
+ */
+export async function clearOpenidForNoAttemptIdentity(
+  tx: pg.PoolClient,
+  identityDigest: string
+): Promise<void> {
+  await tx.query(
+    `UPDATE binding_pending_contexts
+     SET openid_ciphertext = NULL, openid_nonce = NULL, openid_tag = NULL
+     WHERE attempt_id IS NULL
+       AND candidate_identity_digest = $1`,
+    [identityDigest]
+  );
+}
+
 export function isExpired(row: PendingContextRow, now: Date = new Date()): boolean {
   return now.getTime() >= row.expiresAt.getTime();
 }

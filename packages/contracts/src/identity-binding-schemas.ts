@@ -18,14 +18,30 @@ export const BindingBootstrapRequest = z.strictObject({
   idempotencyKey: z.string().min(8).max(128),
 });
 
-export const BindingCandidateDecisionRequest = z.strictObject({
-  decision: BindingCandidateDecision,
-  // Frozen OpenAPI: `type: [string, 'null']` + `const: candidate-binding-v1`.
-  // AFFIRM still requires the literal value at the route/command layer; null
-  // (or omission) for REJECT / CANCEL is accepted by the contract.
-  confirmationVersion: z.union([z.literal('candidate-binding-v1'), z.null()]).optional(),
-  idempotencyKey: z.string().min(8).max(128),
-});
+/**
+ * Frozen candidate decision contract (F-06):
+ *   AFFIRM  — `confirmationVersion` is REQUIRED and must be the exact literal.
+ *   REJECT  — `confirmationVersion` MUST be omitted.
+ *   CANCEL  — `confirmationVersion` MUST be omitted.
+ *
+ * Because every branch is a strict object, a `null` version (or any other
+ * property) on REJECT / CANCEL is rejected as 422 instead of silently accepted.
+ */
+export const BindingCandidateDecisionRequest = z.discriminatedUnion('decision', [
+  z.strictObject({
+    decision: z.literal('AFFIRM'),
+    confirmationVersion: z.literal('candidate-binding-v1'),
+    idempotencyKey: z.string().min(8).max(128),
+  }),
+  z.strictObject({
+    decision: z.literal('REJECT'),
+    idempotencyKey: z.string().min(8).max(128),
+  }),
+  z.strictObject({
+    decision: z.literal('CANCEL'),
+    idempotencyKey: z.string().min(8).max(128),
+  }),
+]);
 
 export const BindingConfirmerDecisionRequest = z.strictObject({
   personId: z.string().uuid(),

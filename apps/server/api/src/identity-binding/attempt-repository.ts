@@ -39,6 +39,13 @@ export interface CreateAttemptInput {
 export interface CreateAttemptResult {
   attempt: BindingAttemptRow;
   created: boolean;
+  /**
+   * Expired PENDING attempts transitioned by THIS transaction immediately
+   * before creation/convergence. Only the transaction that actually flipped
+   * `state` receives them, so the caller writes exactly one expiry audit and
+   * one all-context scrub (F-07).
+   */
+  expired: BindingAttemptRow[];
 }
 
 function isUniqueViolation(err: unknown): boolean {
@@ -47,6 +54,33 @@ function isUniqueViolation(err: unknown): boolean {
     err !== null &&
     (err as { code?: string }).code === '23505'
   );
+}
+
+/**
+ * Conditional expiry materialization for one frozen triple. PostgreSQL
+ * re-evaluates the WHERE clause after waiting on the row lock, so concurrent
+ * bootstrap requests cannot both transition the same expired row.
+ */
+export async function materializeExpiredForTriple(
+  tx: pg.PoolClient,
+  input: {
+    targetPersonId: string;
+    candidateIdentityDigest: string;
+    invitationParticipationId: string;
+  }
+): Promise<BindingAttemptRow[]> {
+  const { rows } = await tx.query(
+    `UPDATE binding_attempts
+        SET state = 'TERMINAL', terminal_reason = 'ATTEMPT_EXPIRED', settled_at = now()
+      WHERE target_person_id = $1
+        AND candidate_identity_digest = $2
+        AND invitation_participation_id = $3
+        AND state = 'PENDING'
+        AND expires_at <= now()
+      RETURNING ${COLUMNS}`,
+    [input.targetPersonId, input.candidateIdentityDigest, input.invitationParticipationId]
+  );
+  return rows.map(mapRow);
 }
 
 /**
@@ -59,6 +93,15 @@ export async function createAttempt(
   tx: pg.PoolClient,
   input: CreateAttemptInput
 ): Promise<CreateAttemptResult> {
+  // An expired PENDING row must leave the live state before a new attempt is
+  // created; otherwise the partial unique index would converge the new
+  // operation onto an already-expired attempt (F-07).
+  const expired = await materializeExpiredForTriple(tx, {
+    targetPersonId: input.targetPersonId,
+    candidateIdentityDigest: input.candidateIdentityDigest,
+    invitationParticipationId: input.invitationParticipationId,
+  });
+
   // A unique violation aborts the enclosing transaction in PostgreSQL. The
   // convergence loser must roll back to a savepoint before re-reading the
   // authoritative live attempt, otherwise the second bootstrap dies with
@@ -80,7 +123,7 @@ export async function createAttempt(
       ]
     );
     await tx.query('RELEASE SAVEPOINT binding_attempt_create');
-    return { attempt: mapRow(rows[0]), created: true };
+    return { attempt: mapRow(rows[0]), created: true, expired };
   } catch (err) {
     if (!isUniqueViolation(err)) throw err;
     await tx.query('ROLLBACK TO SAVEPOINT binding_attempt_create');
@@ -91,7 +134,7 @@ export async function createAttempt(
       invitationParticipationId: input.invitationParticipationId,
     });
     if (!live) throw err;
-    return { attempt: live, created: false };
+    return { attempt: live, created: false, expired };
   }
 }
 
@@ -108,7 +151,8 @@ export async function findLiveByTriple(
      WHERE target_person_id = $1
        AND candidate_identity_digest = $2
        AND invitation_participation_id = $3
-       AND state = 'PENDING'`,
+       AND state = 'PENDING'
+       AND expires_at > now()`,
     [input.targetPersonId, input.candidateIdentityDigest, input.invitationParticipationId]
   );
   return rows[0] ? mapRow(rows[0]) : null;

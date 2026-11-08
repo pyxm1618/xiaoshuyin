@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * coverage-audit.mjs — T069 FR/SC coverage audit.
+ * coverage-audit.mjs — FR / SC / Acceptance substantive coverage audit.
  *
- * Maps every one of the 17 FR and 8 SC in spec.md to REAL test files.
- * A requirement is "missing" when it has no mapping or any mapped file does
- * not exist / is empty. Exits 1 on any missing coverage.
+ * Slice 1 and Slice 2 keep their original mappings. Slice 5 (repo feature 006)
+ * adds a substantive gate: every frozen FR / SC / Acceptance scenario and every
+ * Ultimate Audit finding F-01–F-08 must map to a real, non-empty test file. A
+ * missing / deleted proof fails closed.
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 
@@ -42,7 +44,6 @@ const SC = {
   'SC-007': ['tests/db/constraints.test.ts'],
   'SC-008': ['tests/domain/provenance.test.ts', 'tests/integration/members.test.ts'],
 };
-
 
 // ── Slice 2 (002-case-core) ────────────────────────────────
 const FR_002 = {
@@ -87,7 +88,6 @@ const SC_002 = {
   'SC-011': ['tests/integration/cases-read.test.ts'],
 };
 
-// spec.md Acceptance Evidence table (18 rows, in document order).
 const ACCEPTANCE_002 = {
   'A01-first-case-open-intake-primary': ['tests/integration/cases-create.test.ts'],
   'A02-candidate-retained': ['tests/integration/cases-create.test.ts'],
@@ -109,130 +109,183 @@ const ACCEPTANCE_002 = {
   'A18-rls-role-migration-uuidv7': ['tests/db/cases-schema.test.ts', 'tests/db/roles.test.ts', 'tests/db/migration-repro.test.ts'],
 };
 
-function fileOk(rel) {
-  const full = join(ROOT, rel);
+// ── Slice 5 (006-identity-binding-runtime) ─────────────────
+const FR_006 = {
+  'FR-001': ['tests/integration/identity-binding-ordinary-login-regression.test.ts', 'tests/integration/identity-binding-bootstrap.test.ts'],
+  'FR-002': ['tests/integration/identity-binding-bootstrap-route.test.ts'],
+  'FR-003': ['tests/integration/identity-binding-case-b.test.ts'],
+  'FR-004': ['tests/integration/identity-binding-commit.test.ts'],
+  'FR-005': ['tests/integration/identity-binding-bootstrap.test.ts', 'tests/db/identity-binding-context.test.ts'],
+  'FR-006': ['tests/integration/identity-binding-gate1.test.ts', 'tests/db/identity-binding-facts.test.ts'],
+  'FR-007': ['tests/integration/identity-binding-gate1.test.ts', 'tests/integration/identity-binding-candidate-auth.test.ts'],
+  'FR-008': ['tests/integration/identity-binding-candidate.test.ts', 'tests/db/identity-binding-confirmation-repository.test.ts'],
+  'FR-009': ['tests/integration/identity-binding-confirmer-independent.test.ts', 'tests/integration/identity-binding-confirmer-ordering.test.ts'],
+  'FR-010': ['tests/integration/identity-binding-commit-gate2.test.ts', 'tests/integration/identity-binding-gate1.test.ts'],
+  'FR-011': ['tests/integration/identity-binding-commit.test.ts', 'tests/integration/identity-binding-account.test.ts'],
+  'FR-012': ['tests/db/identity-binding-attempt-repository.test.ts'],
+  'FR-013': ['tests/integration/identity-binding-commit-settle.test.ts', 'tests/integration/identity-binding-replay.test.ts'],
+  'FR-014': ['tests/integration/identity-binding-attempt-create.test.ts', 'tests/integration/identity-binding-failure-injection.test.ts'],
+  'FR-015': ['tests/integration/identity-binding-replay.test.ts', 'tests/integration/identity-binding-attempt-create.test.ts'],
+  'FR-016': ['tests/integration/identity-binding-no-p2.test.ts'],
+  'FR-017': ['tests/db/identity-binding-concurrency.test.ts'],
+  'FR-018': ['tests/integration/identity-binding-case-b.test.ts', 'tests/integration/identity-binding-commit.test.ts'],
+  'FR-019': ['tests/integration/identity-binding-anti-enumeration.test.ts'],
+  'FR-020': ['tests/integration/identity-binding-gate1.test.ts', 'tests/integration/identity-binding-anti-enumeration.test.ts'],
+  'FR-021': ['tests/integration/identity-binding-no-p2.test.ts', 'tests/integration/identity-binding-failure-injection.test.ts'],
+  'FR-022': ['tests/integration/identity-binding-idempotency.test.ts'],
+  'FR-023': ['tests/integration/identity-binding-audit.test.ts', 'tests/db/identity-binding-audit-repository.test.ts'],
+  'FR-024': ['tests/integration/identity-binding-authorization-surfaces.test.ts', 'tests/db/identity-binding-rls.test.ts'],
+  'FR-025': ['tests/integration/identity-binding-invitation-contract.test.ts'],
+  'FR-026': ['tests/integration/identity-binding-invitation-contract.test.ts'],
+  'FR-027': ['tests/integration/identity-binding-routes.test.ts', 'tests/db/identity-binding-schema.test.ts'],
+  'FR-028': ['tests/integration/identity-binding-error-envelope.test.ts', 'tests/integration/identity-binding-no-p2.test.ts'],
+};
+
+const SC_006 = {
+  'SC-001': ['tests/integration/identity-binding-commit.test.ts'],
+  'SC-002': ['tests/integration/identity-binding-case-b.test.ts'],
+  'SC-003': ['tests/db/identity-binding-attempt-repository.test.ts', 'tests/integration/identity-binding-replay.test.ts'],
+  'SC-004': ['tests/integration/identity-binding-no-p2.test.ts'],
+  'SC-005': ['tests/db/identity-binding-concurrency.test.ts'],
+  'SC-006': ['tests/integration/identity-binding-idempotency.test.ts'],
+  'SC-007': ['tests/integration/identity-binding-anti-enumeration.test.ts'],
+  'SC-008': ['tests/integration/identity-binding-no-p2.test.ts', 'tests/integration/identity-binding-failure-injection.test.ts'],
+  'SC-009': ['tests/integration/identity-binding-gate1.test.ts', 'tests/integration/identity-binding-commit-gate2.test.ts'],
+  'SC-010': ['tests/integration/identity-binding-commit.test.ts', 'tests/integration/identity-binding-case-b.test.ts'],
+  'SC-011': ['tests/integration/identity-binding-audit.test.ts'],
+  'SC-012': ['tests/integration/identity-binding-invitation-contract.test.ts'],
+  'SC-013': ['tests/integration/identity-binding-ordinary-login-regression.test.ts'],
+  'SC-014': ['tests/integration/identity-binding-routes.test.ts', 'tests/db/identity-binding-schema.test.ts'],
+};
+
+const ACCEPTANCE_006 = {
+  'AS-01': ['tests/integration/identity-binding-commit.test.ts'],
+  'AS-02': ['tests/integration/identity-binding-commit.test.ts'],
+  'AS-03': ['tests/integration/identity-binding-commit.test.ts'],
+  'AS-04': ['tests/integration/identity-binding-candidate.test.ts'],
+  'AS-05': ['tests/integration/identity-binding-confirmer-reject.test.ts'],
+  'AS-06': ['tests/integration/identity-binding-bootstrap.test.ts'],
+  'AS-07': ['tests/integration/identity-binding-attempt-create.test.ts', 'tests/integration/identity-binding-replay.test.ts'],
+  'AS-08': ['tests/integration/identity-binding-case-b.test.ts'],
+  'AS-09': ['tests/integration/identity-binding-case-b.test.ts'],
+  'AS-10': ['tests/db/identity-binding-concurrency.test.ts'],
+  'AS-11': ['tests/integration/identity-binding-idempotency.test.ts'],
+  'AS-12': ['tests/integration/identity-binding-idempotency.test.ts'],
+  'AS-13': ['tests/integration/identity-binding-failure-injection.test.ts', 'tests/integration/identity-binding-rollback.test.ts'],
+  'AS-14': ['tests/integration/identity-binding-commit-gate2.test.ts', 'tests/integration/identity-binding-candidate.test.ts'],
+  'AS-15': ['tests/integration/identity-binding-replay.test.ts'],
+  'AS-16': ['tests/integration/identity-binding-no-p2.test.ts'],
+  'AS-17': ['tests/integration/identity-binding-confirmer-independent.test.ts', 'tests/integration/identity-binding-authorization-surfaces.test.ts'],
+  'AS-18': ['tests/integration/identity-binding-gate1.test.ts', 'tests/integration/identity-binding-anti-enumeration.test.ts'],
+  'AS-19': ['tests/db/identity-binding-attempt-repository.test.ts', 'tests/integration/identity-binding-replay.test.ts'],
+  'AS-20': ['tests/integration/identity-binding-bootstrap.test.ts', 'tests/db/identity-binding-context.test.ts'],
+  'AS-21': ['tests/integration/identity-binding-commit.test.ts', 'tests/integration/identity-binding-account.test.ts'],
+  'AS-22': ['tests/integration/identity-binding-failure-injection.test.ts'],
+  'AS-23': ['tests/db/identity-binding-confirmation-repository.test.ts', 'tests/integration/identity-binding-idempotency.test.ts'],
+  'AS-24': ['tests/db/identity-binding-rls.test.ts', 'tests/integration/identity-binding-audit.test.ts'],
+};
+
+/** Ultimate Audit findings F-01–F-08 → the tests that prove each one. */
+const FINDINGS_006 = {
+  'F-01': ['tests/integration/identity-binding-commit-gate2.test.ts'],
+  'F-02': ['tests/integration/identity-binding-confirmer.test.ts', 'tests/integration/identity-binding-idempotency.test.ts'],
+  'F-03': ['tests/db/identity-binding-rls.test.ts'],
+  'F-04': ['tests/integration/identity-binding-pairing.test.ts'],
+  'F-05': ['tests/integration/identity-binding-context-cleanup.test.ts', 'tests/integration/identity-binding-candidate.test.ts'],
+  'F-06': ['tests/integration/openapi-semantic-equivalence.test.ts', 'tests/integration/identity-binding-candidate.test.ts'],
+  'F-07': ['tests/integration/identity-binding-attempt-create.test.ts'],
+  'F-08': ['tests/integration/identity-binding-failure-injection.test.ts', 'tests/integration/identity-binding-rollback.test.ts'],
+};
+
+/** The 26 reopened Slice-5 tasks and their direct verification files. */
+const REOPENED_TASKS_006 = {
+  T013: ['tests/db/identity-binding-rls.test.ts'],
+  T036: ['tests/db/identity-binding-attempt-repository.test.ts'],
+  T037: ['tests/db/identity-binding-confirmation-repository.test.ts'],
+  T039: ['tests/db/identity-binding-operation-key-repository.test.ts'],
+  T050: ['tests/integration/identity-binding-bootstrap.test.ts', 'tests/db/identity-binding-context.test.ts'],
+  T055: ['tests/integration/identity-binding-attempt-create.test.ts'],
+  T056: ['tests/integration/identity-binding-attempt-create.test.ts'],
+  T059: ['tests/integration/identity-binding-candidate.test.ts'],
+  T060: ['tests/integration/identity-binding-candidate.test.ts', 'tests/integration/identity-binding-context-cleanup.test.ts'],
+  T065: ['tests/integration/identity-binding-confirmer.test.ts', 'tests/integration/identity-binding-pairing.test.ts'],
+  T066: ['tests/integration/identity-binding-confirmer.test.ts'],
+  T068: ['tests/integration/identity-binding-confirmer-reject.test.ts'],
+  T073: ['tests/integration/identity-binding-commit-gate2.test.ts'],
+  T074: ['tests/integration/identity-binding-commit-gate2.test.ts'],
+  T080: ['tests/integration/identity-binding-commit-settle.test.ts', 'tests/integration/identity-binding-context-cleanup.test.ts'],
+  T081: ['tests/integration/identity-binding-failure-injection.test.ts', 'tests/integration/identity-binding-rollback.test.ts'],
+  T085: ['tests/integration/identity-binding-commit.test.ts', 'tests/integration/identity-binding-pairing.test.ts'],
+  T091: ['tests/integration/identity-binding-candidate.test.ts', 'tests/db/identity-binding-schema.test.ts'],
+  T092: ['tests/integration/openapi-semantic-equivalence.test.ts'],
+  T097: ['tests/integration/openapi-semantic-equivalence.test.ts'],
+  T101: ['tests/integration/identity-binding-anti-enumeration.test.ts'],
+  T103: ['tests/db/identity-binding-rls.test.ts'],
+  T104: ['tests/db/identity-binding-rls.test.ts'],
+  T106: ['tests/integration/identity-binding-idempotency.test.ts'],
+  T112: ['tests/integration/identity-binding-routes.test.ts', 'tests/integration/openapi-semantic-equivalence.test.ts'],
+  T115: ['tests/integration/coverage-audit.test.ts'],
+};
+
+export function fileOk(rel, root = ROOT) {
+  const full = join(root, rel);
   if (!existsSync(full) || !statSync(full).isFile()) return false;
   const content = readFileSync(full, 'utf-8');
   return content.includes('it(') || content.includes('test(') || content.includes('describe(');
 }
 
-let frOk = 0;
-let scOk = 0;
-const missing = [];
-
-console.log('# T069 — FR / SC Coverage Audit');
-console.log('映射目标均为仓库中真实存在且含测试用例的文件。');
-console.log('');
-console.log('## Functional Requirements (17)');
-console.log('');
-console.log('| Requirement | Test files | Status |');
-console.log('|---|---|---|');
-for (const [id, files] of Object.entries(FR)) {
-  const bad = files.filter((f) => !fileOk(f));
-  if (bad.length > 0) {
-    missing.push(`${id}: ${bad.join(', ')}`);
-    console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
-  } else {
-    frOk++;
-    console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
+function checkSection(label, mapping, root, missing) {
+  let ok = 0;
+  const total = Object.keys(mapping).length;
+  for (const [id, files] of Object.entries(mapping)) {
+    const bad = files.filter((f) => !fileOk(f, root));
+    if (bad.length > 0) {
+      missing.push(`[${label}] ${id}: ${bad.join(', ')}`);
+    } else {
+      ok++;
+    }
   }
+  return { label, ok, total };
 }
 
-console.log('');
-console.log('## Success Criteria (8)');
-console.log('');
-console.log('| Criterion | Test files | Status |');
-console.log('|---|---|---|');
-for (const [id, files] of Object.entries(SC)) {
-  const bad = files.filter((f) => !fileOk(f));
-  if (bad.length > 0) {
-    missing.push(`${id}: ${bad.join(', ')}`);
-    console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
-  } else {
-    scOk++;
-    console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
+export function audit(root = ROOT) {
+  const missing = [];
+  const sections = [
+    checkSection('Slice 1 FR', FR, root, missing),
+    checkSection('Slice 1 SC', SC, root, missing),
+    checkSection('Slice 2 FR', FR_002, root, missing),
+    checkSection('Slice 2 SC', SC_002, root, missing),
+    checkSection('Slice 2 Acceptance', ACCEPTANCE_002, root, missing),
+    checkSection('Slice 5 FR', FR_006, root, missing),
+    checkSection('Slice 5 SC', SC_006, root, missing),
+    checkSection('Slice 5 Acceptance', ACCEPTANCE_006, root, missing),
+    checkSection('Slice 5 Findings', FINDINGS_006, root, missing),
+    checkSection('Slice 5 Reopened Tasks', REOPENED_TASKS_006, root, missing),
+  ];
+  return { missing, sections };
+}
+
+function printSection(section) {
+  console.log(`${section.label}: ${section.ok}/${section.total}`);
+}
+
+function main() {
+  const { missing, sections } = audit(ROOT);
+  console.log('# FR / SC / Acceptance substantive coverage audit');
+  console.log('');
+  for (const section of sections) printSection(section);
+  console.log('');
+  console.log(`missing = ${missing.length}`);
+  if (missing.length > 0) {
+    for (const m of missing) console.log(`  MISSING ${m}`);
+    console.log('coverage-audit: FAIL');
+    process.exit(1);
   }
+  const totalOk = sections.reduce((sum, s) => sum + s.ok, 0);
+  const total = sections.reduce((sum, s) => sum + s.total, 0);
+  console.log(`coverage-audit: PASS (${totalOk}/${total}, missing = 0)`);
 }
 
-// ── Slice 2 report ─────────────────────────────────────────
-console.log('');
-console.log('# 002-case-core — FR / SC / Acceptance Coverage Audit');
-console.log('');
-let fr2Ok = 0;
-let sc2Ok = 0;
-let acc2Ok = 0;
-const missing2 = [];
-
-console.log('## Functional Requirements (25)');
-console.log('');
-console.log('| Requirement | Test files | Status |');
-console.log('|---|---|---|');
-for (const [id, files] of Object.entries(FR_002)) {
-  const bad = files.filter((f) => !fileOk(f));
-  if (bad.length > 0) {
-    missing2.push(`${id}: ${bad.join(', ')}`);
-    console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
-  } else {
-    fr2Ok++;
-    console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
-  }
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
 }
-
-console.log('');
-console.log('## Success Criteria (11)');
-console.log('');
-console.log('| Criterion | Test files | Status |');
-console.log('|---|---|---|');
-for (const [id, files] of Object.entries(SC_002)) {
-  const bad = files.filter((f) => !fileOk(f));
-  if (bad.length > 0) {
-    missing2.push(`${id}: ${bad.join(', ')}`);
-    console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
-  } else {
-    sc2Ok++;
-    console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
-  }
-}
-
-console.log('');
-console.log('## Acceptance Evidence (18 rows in spec.md)');
-console.log('');
-console.log('| Acceptance item | Test files | Status |');
-console.log('|---|---|---|');
-for (const [id, files] of Object.entries(ACCEPTANCE_002)) {
-  const bad = files.filter((f) => !fileOk(f));
-  if (bad.length > 0) {
-    missing2.push(`${id}: ${bad.join(', ')}`);
-    console.log(`| ${id} | ${files.join(', ')} | MISSING (${bad.join(', ')}) |`);
-  } else {
-    acc2Ok++;
-    console.log(`| ${id} | ${files.join(', ')} | COVERED |`);
-  }
-}
-
-const fr2Total = Object.keys(FR_002).length;
-const sc2Total = Object.keys(SC_002).length;
-const acc2Total = Object.keys(ACCEPTANCE_002).length;
-console.log('');
-console.log(`FR ${fr2Ok}/${fr2Total}`);
-console.log(`SC ${sc2Ok}/${sc2Total}`);
-console.log(`Acceptance ${acc2Ok}/${acc2Total}`);
-console.log(`missing = ${missing2.length}`);
-if (missing2.length > 0) {
-  for (const m of missing2) console.log(`  MISSING ${m}`);
-  console.log('coverage-audit: FAIL');
-  process.exit(1);
-}
-
-const frTotal = Object.keys(FR).length;
-const scTotal = Object.keys(SC).length;
-console.log('');
-console.log(`FR ${frOk}/${frTotal}`);
-console.log(`SC ${scOk}/${scTotal}`);
-console.log(`missing = ${missing.length}`);
-if (missing.length > 0) {
-  for (const m of missing) console.log(`  MISSING ${m}`);
-  console.log('coverage-audit: FAIL');
-  process.exit(1);
-}
-console.log(`coverage-audit: PASS (FR ${frOk}/${frTotal}, SC ${scOk}/${scTotal}, missing = 0)`);

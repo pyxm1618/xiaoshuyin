@@ -117,15 +117,15 @@ export function registerIdentityBindingRoutes(
   app.post('/api/v1/identity-bindings/candidate-decision', async (req, reply) => {
     const parsed = BindingCandidateDecisionRequest.safeParse(req.body);
     if (!parsed.success) return validationError(reply);
-    if (parsed.data.decision === 'AFFIRM' && !parsed.data.confirmationVersion) {
-      return validationError(reply);
-    }
     const result = await submitCandidateDecision(
       { pool: deps.pool },
       {
         contextToken: contextToken(req),
         decision: parsed.data.decision,
-        confirmationVersion: parsed.data.confirmationVersion ?? undefined,
+        // Only the AFFIRM branch declares the frozen literal; REJECT / CANCEL
+        // must omit it entirely (strict object, 422 otherwise).
+        confirmationVersion:
+          parsed.data.decision === 'AFFIRM' ? parsed.data.confirmationVersion : undefined,
         idempotencyKey: parsed.data.idempotencyKey,
       }
     );

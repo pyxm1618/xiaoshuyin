@@ -34,7 +34,8 @@ import {
   hashToken,
 } from './crypto.js';
 import {
-  clearOpenid,
+  clearOpenidForAttempt,
+  clearOpenidForNoAttemptIdentity,
   createContext,
   linkAttempt,
   markCommitted,
@@ -128,7 +129,7 @@ export async function bootstrap(
         openid,
       });
       if (authorizationDenied) {
-        await clearOpenid(tx, context.id);
+        await clearOpenidForNoAttemptIdentity(tx, identityDigest);
         return { kind: 'GENERIC', pendingContextToken: token };
       }
 
@@ -200,9 +201,15 @@ export async function bootstrap(
               return { kind: 'COMMITTED' };
             }
             if (attempt.state === 'TERMINAL') {
-              await clearOpenid(tx, context.id);
+              await clearOpenidForNoAttemptIdentity(tx, identityDigest);
             }
           }
+        } else {
+          // Replay of a pre-attempt (no authoritative attempt) operation, e.g.
+          // an invalid invitation: the fresh transport context must not retain
+          // decryptable material, and neither may any earlier replay context in
+          // the same identity scope (F-05).
+          await clearOpenidForNoAttemptIdentity(tx, identityDigest);
         }
         return { kind: 'GENERIC', pendingContextToken: token };
       }
@@ -256,7 +263,7 @@ export async function bootstrap(
           terminalReason: 'INVITATION_TERMINAL',
           candidateIdentityDigest: identityDigest,
         });
-        await clearOpenid(tx, context.id);
+        await clearOpenidForNoAttemptIdentity(tx, identityDigest);
         return { kind: 'GENERIC', pendingContextToken: token };
       }
 
@@ -305,7 +312,7 @@ export async function bootstrap(
           terminalReason: 'IDENTITY_CONFLICT',
           candidateIdentityDigest: identityDigest,
         });
-        await clearOpenid(tx, context.id);
+        await clearOpenidForNoAttemptIdentity(tx, identityDigest);
         return { kind: 'GENERIC', pendingContextToken: token };
       }
 
@@ -330,18 +337,46 @@ export async function bootstrap(
           terminalReason: reason,
           candidateIdentityDigest: identityDigest,
         });
-        await clearOpenid(tx, context.id);
+        await clearOpenidForNoAttemptIdentity(tx, identityDigest);
         return { kind: 'GENERIC', pendingContextToken: token };
       }
 
       // ── Phase B: create or converge the single live attempt ──
-      const { attempt, created } = await createAttempt(tx, {
+      const { attempt, created, expired } = await createAttempt(tx, {
         targetPersonId: invitation.targetPersonId,
         targetFamilyId: invitation.targetFamilyId,
         invitationParticipationId: invitation.participationId,
         candidateIdentityDigest: identityDigest,
         ttlSeconds: deps.attemptTtlSeconds,
       });
+
+      // F-07: an expired PENDING attempt was materialized to TERMINAL before
+      // the new attempt was created. Only the transaction that flipped the row
+      // receives it, so the expiry audit is written exactly once and every
+      // transport context of the old attempt loses its decryptable OpenID
+      // before the new attempt becomes visible.
+      for (const before of expired) {
+        await setBindingAttemptContext(tx, {
+          attemptId: before.id,
+          identityDigest: before.candidateIdentityDigest,
+          invitationId: before.invitationParticipationId,
+          targetPersonId: before.targetPersonId,
+          targetFamilyId: before.targetFamilyId,
+          purpose: 'IDENTITY_BINDING_GATE',
+        });
+        await appendAudit(tx, {
+          correlationId,
+          attemptId: before.id,
+          targetPersonId: before.targetPersonId,
+          targetFamilyId: before.targetFamilyId,
+          invitationParticipationId: before.invitationParticipationId,
+          candidateIdentityDigest: identityDigest,
+          eventType: 'BINDING_TERMINAL',
+          result: 'TERMINAL',
+          terminalReason: 'ATTEMPT_EXPIRED',
+        });
+        await clearOpenidForAttempt(tx, before.id);
+      }
 
       // Bind the operation key to the authoritative attempt in the same
       // transaction that creates / converges it. From this point an exact

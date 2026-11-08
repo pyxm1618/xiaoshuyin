@@ -358,3 +358,38 @@ export async function getPersonWithProfile(tx: Tx, accountId: string) {
   );
   return rows[0] ?? null;
 }
+
+// ── Identity binding Gate 2 concurrency boundary (F-01) ─────
+
+/**
+ * Lock the authoritative rows Gate 2 reads, in a fixed order:
+ * persons → person_compliance_profiles → consent_records → family_members →
+ * families. A concurrent invalidating change either commits before this point
+ * (and is observed by the Gate) or waits until the binding transaction ends.
+ */
+export async function lockBindingGateRows(
+  tx: Tx,
+  targetPersonId: string,
+  targetFamilyId: string
+): Promise<void> {
+  await tx.query('SELECT id FROM persons WHERE id = $1 FOR UPDATE', [targetPersonId]);
+  await tx.query(
+    'SELECT person_id FROM person_compliance_profiles WHERE person_id = $1 FOR UPDATE',
+    [targetPersonId]
+  );
+  await tx.query(
+    `SELECT id FROM consent_records
+      WHERE id = (
+        SELECT guardian_consent_record_id
+          FROM person_compliance_profiles
+         WHERE person_id = $1
+      )
+      FOR UPDATE`,
+    [targetPersonId]
+  );
+  await tx.query(
+    'SELECT person_id FROM family_members WHERE person_id = $1 FOR UPDATE',
+    [targetPersonId]
+  );
+  await tx.query('SELECT id FROM families WHERE id = $1 FOR UPDATE', [targetFamilyId]);
+}

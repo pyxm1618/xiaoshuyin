@@ -752,9 +752,18 @@ export interface components {
             idempotencyKey: string;
         };
         BindingCandidateDecisionRequest: {
-            /** @enum {string} */
-            decision: "AFFIRM" | "REJECT" | "CANCEL";
-            confirmationVersion?: "candidate-binding-v1" | null;
+            /** @constant */
+            decision: "AFFIRM";
+            /** @constant */
+            confirmationVersion: "candidate-binding-v1";
+            idempotencyKey: string;
+        } | {
+            /** @constant */
+            decision: "REJECT";
+            idempotencyKey: string;
+        } | {
+            /** @constant */
+            decision: "CANCEL";
             idempotencyKey: string;
         };
         BindingConfirmerDecisionRequest: {

@@ -3440,38 +3440,70 @@
         "additionalProperties": false
       },
       "BindingCandidateDecisionRequest": {
-        "type": "object",
-        "properties": {
-          "decision": {
-            "type": "string",
-            "enum": [
-              "AFFIRM",
-              "REJECT",
-              "CANCEL"
-            ]
-          },
-          "confirmationVersion": {
-            "anyOf": [
-              {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "const": "AFFIRM"
+              },
+              "confirmationVersion": {
                 "type": "string",
                 "const": "candidate-binding-v1"
               },
-              {
-                "type": "null"
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
               }
-            ]
+            },
+            "required": [
+              "decision",
+              "confirmationVersion",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
           },
-          "idempotencyKey": {
-            "type": "string",
-            "minLength": 8,
-            "maxLength": 128
+          {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "const": "REJECT"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "decision",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "const": "CANCEL"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "decision",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "decision",
-          "idempotencyKey"
-        ],
-        "additionalProperties": false
+        ]
       },
       "BindingConfirmerDecisionRequest": {
         "type": "object",

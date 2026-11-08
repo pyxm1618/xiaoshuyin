@@ -184,4 +184,105 @@ describe('Gate 2 commit-time recheck (T073)', () => {
       await pool.end();
     }
   });
+
+  it('concurrent consent revoke committed before the linearization point blocks the commit (F-01)', async () => {
+    const target = await createTarget(h, 'g2_race', { ageBand: 'UNDER_14' });
+    const code = `g2_race_${randomUUID()}`;
+    const { attemptId } = await startBinding(h, target, code);
+    expect(target.consentId).toBeTruthy();
+
+    // A committed candidate Account exists before the commit transaction; it is
+    // the row used as the pre-linearization barrier below.
+    await h.admin.query(
+      'INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0)',
+      [`fake_${code}`]
+    );
+
+    const accountCount = async () =>
+      (
+        await h.admin.query('SELECT count(*)::int AS n FROM accounts WHERE wechat_openid = $1', [
+          `fake_${code}`,
+        ])
+      ).rows[0].n;
+    const before = await accountCount();
+
+    // A completed second-party confirmation is required for the commit to
+    // reach Gate 2 / the binding mutation; the candidate already affirmed.
+    await h.admin.query(
+      `INSERT INTO binding_confirmations
+         (attempt_id, kind, actor_account_id, actor_person_id, authority,
+          target_confirmed, candidate_recognized, statement_version)
+       VALUES ($1, 'SECOND_PARTY', $2, $3, 'GUARDIAN', true, true, 'second-party-recognition-v1')`,
+      [attemptId, target.guardian.accountId, target.guardian.personId]
+    );
+
+    // Hold P1's row lock so the commit transaction parks before its binding
+    // linearization point. With the F-01 boundary the commit has NOT evaluated
+    // Gate 2 yet (it locks the authoritative facts first); the legacy flow
+    // evaluated Gate 2 before this lock and would race through.
+    const locker = await h.admin.connect();
+    const commitPool = createAppPool(1);
+    try {
+      await locker.query('BEGIN');
+      await locker.query(
+        'SELECT id FROM accounts WHERE wechat_openid = $1 FOR UPDATE',
+        [`fake_${code}`]
+      );
+
+      const commitPromise = commitAttempt(
+        {
+          pool: commitPool,
+          invitationPort: h.port,
+          identityBindingSecret: process.env['IDENTITY_BINDING_SECRET']!,
+        },
+        {
+          attemptId,
+          targetPersonId: target.targetPersonId,
+          targetFamilyId: target.familyId,
+          actorAccountId: target.guardian.accountId,
+        }
+      );
+
+      // Let the commit reach the barrier (eventually blocked on the P1 row).
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      // Authoritative invalidating change commits while binding is parked.
+      const revoke = await revokeConsent(
+        h.app,
+        target.guardian.token,
+        'g2_race',
+        target.consentId!
+      );
+      expect([200, 201]).toContain(revoke.statusCode);
+
+      await locker.query('COMMIT');
+
+      const outcome = await commitPromise;
+      expect(outcome.outcome).toBe('TERMINAL');
+      expect(outcome).toMatchObject({
+        outcome: 'TERMINAL',
+        reason: 'GUARDIAN_CONSENT_INVALID',
+      });
+
+      await assertTerminal(attemptId, target.targetPersonId, 'GUARDIAN_CONSENT_INVALID');
+
+      const committedAudit = await h.admin.query(
+        `SELECT count(*)::int AS n FROM identity_binding_audit_events
+          WHERE attempt_id = $1 AND event_type = 'BINDING_COMMITTED'`,
+        [attemptId]
+      );
+      expect(committedAudit.rows[0].n).toBe(0);
+
+      const after = await accountCount();
+      expect(after).toBe(before);
+    } finally {
+      try {
+        await locker.query('ROLLBACK');
+      } catch {
+        // Already committed.
+      }
+      locker.release();
+      await commitPool.end();
+    }
+  });
 });

@@ -37,8 +37,7 @@ import {
 } from './attempt-repository.js';
 import { appendSecondParty, hasKind } from './confirmation-repository.js';
 import {
-  clearOpenid,
-  findByAttemptIdForUpdate,
+  clearOpenidForAttempt,
 } from './pending-context-repository.js';
 import { appendAudit } from './audit-repository.js';
 import {
@@ -134,6 +133,7 @@ export async function listPendingBindings(
           result: 'TERMINAL',
           terminalReason: 'ATTEMPT_EXPIRED',
         });
+        await clearOpenidForAttempt(tx, expired.id);
       }
 
       const attempts = await listPendingByPerson(tx, input.targetPersonId);
@@ -175,6 +175,10 @@ export async function submitConfirmerDecision(
   input: ConfirmerDecisionInput
 ): Promise<ConfirmerDecisionResult> {
   const requestHash = hashPayload({
+    // The canonical request identity of a SECOND_PARTY_DECISION includes the
+    // path attemptId (F-02). Reusing an old key against a later attempt URL is
+    // therefore a payload mismatch, not a replay of the old operation.
+    attemptId: input.attemptId,
     personId: input.targetPersonId,
     decision: input.decision,
     targetConfirmed: input.targetConfirmed,
@@ -219,22 +223,6 @@ export async function submitConfirmerDecision(
       if (!allowed) throw bindingError('BINDING_NOT_FOUND');
       const authority = allowed.basis.authority as BindingConfirmerAuthority;
 
-      const attempt = await findByIdForUpdate(tx, input.attemptId);
-      if (!attempt || attempt.targetPersonId !== input.targetPersonId) {
-        throw bindingError('BINDING_NOT_FOUND');
-      }
-
-      // Attempt-scoped visibility for confirmations / pending context. The
-      // target policy already exposed the attempt; this narrows it to one id.
-      await setBindingAttemptContext(tx, {
-        attemptId: attempt.id,
-        identityDigest: attempt.candidateIdentityDigest,
-        invitationId: attempt.invitationParticipationId,
-        targetPersonId: attempt.targetPersonId,
-        targetFamilyId: attempt.targetFamilyId,
-        purpose: 'IDENTITY_BINDING_GATE',
-      });
-
       const scope: BindingOperationScope = computeOperationScope({
         commandType: 'SECOND_PARTY_DECISION',
         accountId: input.accountId,
@@ -257,7 +245,29 @@ export async function submitConfirmerDecision(
         requestHash
       );
       if (op.action === 'MISMATCH') throw bindingError('IDEMPOTENCY_PAYLOAD_MISMATCH');
+      // The operation key's attempt binding is authoritative. A key that
+      // belongs to attempt A never operates on a different attempt URL, even if
+      // the semantic body is identical (F-02).
+      if (existing?.attemptId && existing.attemptId !== input.attemptId) {
+        throw bindingError('IDEMPOTENCY_PAYLOAD_MISMATCH');
+      }
       const replayed = op.action === 'REPLAY';
+
+      const attempt = await findByIdForUpdate(tx, input.attemptId);
+      if (!attempt || attempt.targetPersonId !== input.targetPersonId) {
+        throw bindingError('BINDING_NOT_FOUND');
+      }
+
+      // Attempt-scoped visibility for confirmations / pending context. The
+      // target policy already exposed the attempt; this narrows it to one id.
+      await setBindingAttemptContext(tx, {
+        attemptId: attempt.id,
+        identityDigest: attempt.candidateIdentityDigest,
+        invitationId: attempt.invitationParticipationId,
+        targetPersonId: attempt.targetPersonId,
+        targetFamilyId: attempt.targetFamilyId,
+        purpose: 'IDENTITY_BINDING_GATE',
+      });
 
       const correlationId = randomUUID();
 
@@ -287,6 +297,7 @@ export async function submitConfirmerDecision(
           result: 'TERMINAL',
           terminalReason: 'ATTEMPT_EXPIRED',
         });
+        await clearOpenidForAttempt(tx, expired.id);
         if (!replayed) await recordOperation(tx, scope, input, requestHash, expired.id);
         return {
           state: 'TERMINAL',
@@ -358,8 +369,7 @@ export async function submitConfirmerDecision(
           result: 'TERMINAL',
           terminalReason: reason,
         });
-        const context = await findByAttemptIdForUpdate(tx, attempt.id);
-        if (context) await clearOpenid(tx, context.id);
+        await clearOpenidForAttempt(tx, attempt.id);
       }
       if (!replayed) await recordOperation(tx, scope, input, requestHash, attempt.id);
       return {

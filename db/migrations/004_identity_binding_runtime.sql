@@ -592,6 +592,7 @@ CREATE POLICY identity_binding_audit_insert_scope ON identity_binding_audit_even
 -- ── Step 11: additive purpose-scoped Slice 1 policies ───────
 
 CREATE POLICY persons_binding_target_read ON persons
+  FOR SELECT
   USING (
     app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
     AND id = app_binding_target_person_id()
@@ -604,12 +605,14 @@ CREATE POLICY persons_binding_target_read ON persons
 -- data to the candidate. The GATE purpose is required because Gate 1 is the
 -- first stage where the conflict is known.
 CREATE POLICY persons_binding_candidate_account_read ON persons
+  FOR SELECT
   USING (
     app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
     AND account_id = app_binding_candidate_account_id()
   );
 
 CREATE POLICY persons_binding_commit_update ON persons
+  FOR UPDATE
   USING (
     app_current_purpose() = 'IDENTITY_BINDING_COMMIT'
     AND id = app_binding_target_person_id()
@@ -622,28 +625,49 @@ CREATE POLICY persons_binding_commit_update ON persons
   );
 
 CREATE POLICY families_binding_read ON families
+  FOR SELECT
   USING (
     app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
     AND id = app_binding_target_family_id()
   );
 
 CREATE POLICY family_members_binding_read ON family_members
+  FOR SELECT
   USING (
     app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
     AND person_id = app_binding_target_person_id()
   );
 
 CREATE POLICY pcp_binding_read ON person_compliance_profiles
+  FOR SELECT
   USING (
     app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
     AND person_id = app_binding_target_person_id()
   );
 
 CREATE POLICY consent_binding_read ON consent_records
+  FOR SELECT
   USING (
     app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
     AND family_id = app_binding_target_family_id()
     AND bound_person_id = app_binding_target_person_id()
+  );
+
+-- Pre-attempt (attempt_id IS NULL) transport contexts are the only rows left
+-- behind by blocked bootstrap branches. Repeated replay must not accumulate
+-- decryptable OpenIDs, so the candidate's own identity scope may clear those
+-- sensitive columns. This is UPDATE-only; reads stay token-scoped (F-05).
+CREATE POLICY binding_context_no_attempt_identity_scope ON binding_pending_contexts
+  FOR UPDATE
+  USING (
+    app_current_purpose() = 'IDENTITY_BINDING_PENDING'
+    AND attempt_id IS NULL
+    AND candidate_identity_digest = app_binding_identity_digest()
+  )
+  WITH CHECK (
+    app_current_purpose() = 'IDENTITY_BINDING_PENDING'
+    AND attempt_id IS NULL
+    AND candidate_identity_digest = app_binding_identity_digest()
   );
 
 
