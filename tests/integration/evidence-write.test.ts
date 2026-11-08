@@ -46,6 +46,7 @@ function ctx() {
     caseId: fx.caseId,
     actorAccountId: fx.accountId,
     actorPersonId: fx.managerPersonId,
+    purpose: 'FAMILY_MANAGEMENT' as const,
   };
 }
 
@@ -607,6 +608,14 @@ async function seed(admin: pg.Client): Promise<Fixture> {
     a.familyId,
     guardianPersonId,
   ]);
+  // COLD-002: the source Person is also processed, so it needs its own
+  // compliance profile (ADULT → ALLOW).
+  await admin.query(
+    `INSERT INTO person_compliance_profiles
+       (person_id, age_band, minor_mode, verified_source)
+     VALUES ($1, 'ADULT', false, 'SELF_STATEMENT')`,
+    [guardianPersonId]
+  );
   await admin.query(
     `INSERT INTO person_compliance_profiles
        (person_id, age_band, minor_mode, guardian_person_id, verified_source)

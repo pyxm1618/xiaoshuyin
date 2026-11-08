@@ -529,7 +529,7 @@
 > 本节只覆盖 Cold-Start Audit 确认的 COLD-001 / COLD-002 / COLD-003，不重开 Plan、不扩展 Evidence 范围、不新增 authorization action。
 > T068–T078 在 Plan Review 冻结后为 `[ ]`；T001–T067 为历史实施记录，不重编号、不重写。
 
-- [ ] T068 [P] [REQ:FR-010;FR-021;CHK018;CHK069;CHK070;CHK072] Write the complete RED authorization matrix for all four approved Evidence capabilities (`recordStatement`, `recordHypothesis`, `recordObservation`, `assignConflictGroup`). [VERIFY:`bunx vitest run tests/integration/evidence-writer-authorization.test.ts` is RED because the writer authorization seam is absent]
+- [x] T068 [P] [REQ:FR-010;FR-021;CHK018;CHK069;CHK070;CHK072] Write the complete RED authorization matrix for all four approved Evidence capabilities (`recordStatement`, `recordHypothesis`, `recordObservation`, `assignConflictGroup`). [VERIFY:`bunx vitest run tests/integration/evidence-writer-authorization.test.ts` is RED because the writer authorization seam is absent]
   - **Depends on**: T067
   - **Files**: `tests/integration/evidence-writer-authorization.test.ts`
   - **Action**: Cover all four capabilities explicitly and independently; a Statement-only case may not stand in for Observation, Hypothesis or Conflict.
@@ -540,14 +540,16 @@
     - **Ordering**: for all four capabilities, authorization revalidation must happen before Person ref lookup, guardian lookup, source-message lookup, supersedes lookup, Evidence ref lookup, and any compliance/provenance-sensitive read, so unauthorized callers cannot distinguish object existence through differing errors.
   - **Verify**: `bunx vitest run tests/integration/evidence-writer-authorization.test.ts` is RED because the writer authorization seam is absent
   - **Evidence**: Per-capability RED matrix with exact reason precedence, zero-write counts, pre-read ordering trace, and unchanged `conflict_group_id` for every target ref.
-- [ ] T069 [REQ:FR-010;FR-021;CHK018;CHK072] Implement the non-exported writer authorization seam and wire all four Evidence writers. [VERIFY:`bun run typecheck` and `bunx vitest run tests/integration/evidence-writer-authorization.test.ts tests/domain/evidence-capabilities.test.ts` pass]
+    - **Remediation Evidence**: baseline `1ce939595707529f398bc3e725761a9312f4a689` RED: 10 failed / 4 passed (14) in isolated worktree+temp DB; GREEN after T069: 14/14 PASS.
+- [x] T069 [REQ:FR-010;FR-021;CHK018;CHK072] Implement the non-exported writer authorization seam and wire all four Evidence writers. [VERIFY:`bun run typecheck` and `bunx vitest run tests/integration/evidence-writer-authorization.test.ts tests/domain/evidence-capabilities.test.ts` pass]
   - **Depends on**: T068
   - **Files**: `packages/domain/src/internal/evidence-authorization.ts` (new, not exported); `packages/domain/src/evidence.ts`; `packages/domain/package.json`; `bun.lock`
   - **Action**: Add required `purpose` to `EvidenceWriteContext`. Add `packages/domain/src/internal/evidence-authorization.ts` that (1) resolves `actorAccountId` and requires its Person id equals `actorPersonId`, (2) requires `getCaseById(caseId).family_id === familyId`, (3) calls the single `authorize()` with `action='CASE_READ'`, `purpose=ctx.purpose`, `resource={type:'CASE',familyId,caseId}`, `case={caseId}`, and DB-read facts, and (4) fails closed with internal `EVIDENCE_CASE_NOT_AUTHORIZED` for any DENY/mismatch. Call it at the start of `recordStatement`, `recordHypothesis`, `recordObservation`, `assignConflictGroup`, before any Person/provenance/supersedes read. Do not add `EVIDENCE_WRITE`, do not extend `Action`/`Purpose`, do not copy the authorization engine, do not export the seam from the package entrypoint.
   - **Verify**: `bun run typecheck` passes; `bunx vitest run tests/integration/evidence-writer-authorization.test.ts tests/domain/evidence-capabilities.test.ts` passes.
   - **Evidence**: Seam diff, dependency diff, writer call-order trace, authorization test output.
+    - **Remediation Evidence**: `bun run typecheck` PASS; `evidence-writer-authorization` 14/14 PASS; `evidence-capabilities` 11/11 PASS; seam not exported from `index.ts`.
 
-- [ ] T070 [P] [REQ:FR-021;CHK069;CHK070;CHK074] Write the complete RED subject-and-source compliance matrix for every non-null Person reference processed by an Evidence write. [VERIFY:`bunx vitest run tests/integration/evidence-person-processing-gate.test.ts` is RED because only the subject is currently checked]
+- [x] T070 [P] [REQ:FR-021;CHK069;CHK070;CHK074] Write the complete RED subject-and-source compliance matrix for every non-null Person reference processed by an Evidence write. [VERIFY:`bunx vitest run tests/integration/evidence-person-processing-gate.test.ts` is RED because only the subject is currently checked]
   - **Depends on**: T069
   - **Files**: `tests/integration/evidence-person-processing-gate.test.ts`
   - **Action**: For `sourcePersonId`, cover the complete frozen age/compliance semantics with independent fixtures and assertions; do not use two ADULT fixtures as the only positive proof.
@@ -565,61 +567,70 @@
     - Every BLOCK case writes zero Evidence rows and zero audit rows; positive and negative cases must be distinguishable from the same unified matrix.
   - **Verify**: `bunx vitest run tests/integration/evidence-person-processing-gate.test.ts` is RED because only the subject is currently checked
   - **Evidence**: RED matrix covering the full source age/consent table, independent MINOR_14_17 and UNDER_14-valid ALLOW fixtures, subject gate, dedupe equivalence, and zero-write counts.
-- [ ] T071 [REQ:FR-021;CHK069;CHK070;CHK074] Extend the repository processing gate to every non-null Person reference processed by the write. [VERIFY:`bunx vitest run tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/domain/age-band.test.ts` passes]
+    - **Remediation Evidence**: baseline RED: 6 failed / 12 passed (18) — all source BLOCK cases failed; GREEN after T071: 18/18 PASS.
+- [x] T071 [REQ:FR-021;CHK069;CHK070;CHK074] Extend the repository processing gate to every non-null Person reference processed by the write. [VERIFY:`bunx vitest run tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/domain/age-band.test.ts` passes]
   - **Depends on**: T070
   - **Files**: `packages/domain/src/repository.ts`
   - **Action**: Replace the subject-only gate with a per-Person gate: collect unique non-null `subjectPersonId` / `sourcePersonId`, check each with the existing `assertMinorProcessingAllowed` data source, skip the duplicate when subject===source without changing semantics, and use deterministic person-id ordering for any `FOR UPDATE` reads. Keep existing compliance error codes and ADULT / MINOR_14_17 / UNDER_14 / UNKNOWN semantics unchanged. Do not create a second compliance system.
   - **Verify**: `bunx vitest run tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/domain/age-band.test.ts` passes.
   - **Evidence**: Repository gate diff and subject/source test output.
+    - **Remediation Evidence**: `evidence-person-processing-gate` 18/18 PASS; `evidence-write` + `age-band` PASS; dedupe + stable `personId` sort + existing `assertMinorProcessingAllowed`.
 
-- [ ] T072 [REQ:FR-010;FR-013;FR-021;CHK018;CHK069;CHK070;CHK072;CHK074] Run targeted regression for COLD-001 and COLD-002. [VERIFY:`bunx vitest run tests/integration/evidence-writer-authorization.test.ts tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/domain/evidence-person-reference.test.ts tests/domain/evidence-capabilities.test.ts` passes]
+- [x] T072 [REQ:FR-010;FR-013;FR-021;CHK018;CHK069;CHK070;CHK072;CHK074] Run targeted regression for COLD-001 and COLD-002. [VERIFY:`bunx vitest run tests/integration/evidence-writer-authorization.test.ts tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/domain/evidence-person-reference.test.ts tests/domain/evidence-capabilities.test.ts` passes]
   - **Depends on**: T071
   - **Files**: `tests/integration/evidence-writer-authorization.test.ts`; `tests/integration/evidence-person-processing-gate.test.ts`; `tests/integration/evidence-write.test.ts`; `tests/domain/evidence-person-reference.test.ts`; `tests/domain/evidence-capabilities.test.ts`
   - **Action**: Re-run the writer authorization, all-Person compliance, existing Evidence write, Person reference and writer surface tests after both seam changes; fix only defects introduced by T069/T071.
   - **Verify**: `bunx vitest run tests/integration/evidence-writer-authorization.test.ts tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/domain/evidence-person-reference.test.ts tests/domain/evidence-capabilities.test.ts` passes.
   - **Evidence**: Targeted regression output and row-count assertions.
+    - **Remediation Evidence**: targeted regression 11 files / 87 tests PASS (2026-11-08).
 
-- [ ] T073 [P] [REQ:FR-013;CHK102] Write the 409 contract RED/verification tests. [VERIFY:`bunx vitest run tests/integration/openapi-evidence.test.ts` is RED because runtime/generated 409 is still IPM-only; `bunx vitest run tests/integration/messages-current-family-ambiguous.test.ts` proves the real runtime ambiguity path]
+- [x] T073 [P] [REQ:FR-013;CHK102] Write the 409 contract RED/verification tests. [VERIFY:`bunx vitest run tests/integration/openapi-evidence.test.ts` is RED because runtime/generated 409 is still IPM-only; `bunx vitest run tests/integration/messages-current-family-ambiguous.test.ts` proves the real runtime ambiguity path]
   - **Depends on**: T072
   - **Files**: `tests/integration/openapi-evidence.test.ts`; `tests/integration/messages-current-family-ambiguous.test.ts` (new)
   - **Action**: Update the generated-OpenAPI assertion so `409` structurally admits exactly `CURRENT_FAMILY_AMBIGUOUS` and `IDEMPOTENCY_PAYLOAD_MISMATCH`. Add a real multi-Family actor integration test proving `POST /api/v1/cases/{id}/messages` returns `409 CURRENT_FAMILY_AMBIGUOUS` and never collapses it into 404 or a guessed Family.
   - **Verify**: `bunx vitest run tests/integration/openapi-evidence.test.ts` is RED because runtime/generated 409 is still IPM-only; `bunx vitest run tests/integration/messages-current-family-ambiguous.test.ts` proves the real runtime ambiguity path.
   - **Evidence**: RED OpenAPI assertion and real 409 runtime response.
+    - **Remediation Evidence**: baseline RED: `openapi-evidence` 1 failed / 5 passed (409 oneOf); runtime multi-Family 2/2 PASS on baseline.
 
-- [ ] T074 [REQ:FR-013;CHK102] Align runtime OpenAPI and generated artifacts with the frozen 409 contract. [VERIFY:`bun run openapi:generate`; `bunx vitest run tests/integration/openapi-evidence.test.ts tests/integration/messages-current-family-ambiguous.test.ts` passes; `bun run openapi:check` exits 0]
+- [x] T074 [REQ:FR-013;CHK102] Align runtime OpenAPI and generated artifacts with the frozen 409 contract. [VERIFY:`bun run openapi:generate`; `bunx vitest run tests/integration/openapi-evidence.test.ts tests/integration/messages-current-family-ambiguous.test.ts` passes; `bun run openapi:check` exits 0]
   - **Depends on**: T073
   - **Files**: `apps/server/api/src/openapi-spec.ts`; `packages/generated/openapi.json`; `packages/generated/openapi.d.ts`
   - **Action**: Change the messages `409` response in `openapi-spec.ts` to `oneOf(CurrentFamilyAmbiguousError, IdempotencyPayloadMismatchError)` using the existing runtime schema. Regenerate generated artifacts with the repository generator; never hand-edit generated files. Do not change 404, do not add a new Family error.
   - **Verify**: `bun run openapi:generate`; `bunx vitest run tests/integration/openapi-evidence.test.ts tests/integration/messages-current-family-ambiguous.test.ts` passes; `bun run openapi:check` exits 0.
   - **Evidence**: Runtime OpenAPI diff, generated hashes, OpenAPI test output.
+    - **Remediation Evidence**: `openapi:generate` ×2 identical sha256 (json `a5d0cec9…`, d.ts `c24e27ac…`); `openapi:check` PASS (semantic equivalence with frozen contracts).
 
-- [ ] T075 [REQ:FR-010;FR-013;FR-017;FR-021;CHK018;CHK069;CHK070;CHK072;CHK074;CHK102] Run targeted security and contract regression for all three Cold findings. [VERIFY:`bunx vitest run tests/integration/messages-authorization.test.ts tests/integration/messages-idempotency.test.ts tests/integration/messages-authorization-before-replay.test.ts tests/integration/evidence-writer-authorization.test.ts tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/integration/openapi-evidence.test.ts tests/integration/messages-current-family-ambiguous.test.ts` passes; `bunx vitest run tests/db/evidence-rls-grants.test.ts tests/db/evidence-fact-guard.test.ts` passes]
+- [x] T075 [REQ:FR-010;FR-013;FR-017;FR-021;CHK018;CHK069;CHK070;CHK072;CHK074;CHK102] Run targeted security and contract regression for all three Cold findings. [VERIFY:`bunx vitest run tests/integration/messages-authorization.test.ts tests/integration/messages-idempotency.test.ts tests/integration/messages-authorization-before-replay.test.ts tests/integration/evidence-writer-authorization.test.ts tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/integration/openapi-evidence.test.ts tests/integration/messages-current-family-ambiguous.test.ts` passes; `bunx vitest run tests/db/evidence-rls-grants.test.ts tests/db/evidence-fact-guard.test.ts` passes]
   - **Depends on**: T074
   - **Files**: messages/Evidence authorization, idempotency, RLS/FACT and OpenAPI test paths
   - **Action**: Re-run messages authorization / anti-enumeration, messages idempotency, authorization-before-replay, Evidence writer authorization, all-Person compliance, Evidence write, RLS/FACT direct DB and OpenAPI tests; verify no frozen behavior changed.
   - **Verify**: `bunx vitest run tests/integration/messages-authorization.test.ts tests/integration/messages-idempotency.test.ts tests/integration/messages-authorization-before-replay.test.ts tests/integration/evidence-writer-authorization.test.ts tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/integration/openapi-evidence.test.ts tests/integration/messages-current-family-ambiguous.test.ts` passes; `bunx vitest run tests/db/evidence-rls-grants.test.ts tests/db/evidence-fact-guard.test.ts` passes.
   - **Evidence**: Focused security/contract regression output.
+    - **Remediation Evidence**: security/contract regression 11 files / 87 tests PASS (messages auth/idempotency/authorization-before-replay, evidence auth/all-Person compliance/write, openapi, RLS/FACT).
 
-- [ ] T076 [REQ:FR-001-FR-021;CHK115] Run full regression after Cold remediation. [VERIFY:`bun run typecheck`; `bun run guard:static`; `bunx vitest run tests/domain`; `bunx vitest run tests/db`; `bunx vitest run tests/integration`; `bun run openapi:check` all exit 0]
+- [x] T076 [REQ:FR-001-FR-021;CHK115] Run full regression after Cold remediation. [VERIFY:`bun run typecheck`; `bun run guard:static`; `bunx vitest run tests/domain`; `bunx vitest run tests/db`; `bunx vitest run tests/integration`; `bun run openapi:check` all exit 0]
   - **Depends on**: T075
   - **Files**: all implementation/test paths
   - **Action**: Run the complete local regression without skipping expected failures or weakening assertions.
   - **Verify**: `bun run typecheck`; `bun run guard:static`; `bunx vitest run tests/domain`; `bunx vitest run tests/db`; `bunx vitest run tests/integration`; `bun run openapi:check` all exit 0.
   - **Evidence**: Command-by-command exit status and test counts.
+    - **Remediation Evidence**: typecheck PASS; guard:static 0 violations; domain 17 files/188; db 21 files/141; integration 52 files/356; full 685 tests 0 failed 0 skipped; openapi:check PASS; db:evidence PASS; coverage:audit PASS; governance self-test 15/15; verify-all PASS 36 / FAIL 0 / NOT VERIFIED 1 (FR-002 platform authenticity).
 
-- [ ] T077 [REQ:AGENTS:§3/§7;CHK001-008;CHK113-115] Perform remediation governance and diff classification. [VERIFY:`node .specify/scripts/validate-governance.mjs` and `node .specify/scripts/tests/run-governance-tests.mjs` pass; unexpected diff count = 0]
+- [x] T077 [REQ:AGENTS:§3/§7;CHK001-008;CHK113-115] Perform remediation governance and diff classification. [VERIFY:`node .specify/scripts/validate-governance.mjs` and `node .specify/scripts/tests/run-governance-tests.mjs` pass; unexpected diff count = 0]
   - **Depends on**: T076
   - **Files**: frozen upstream paths; full remediation diff; governance scripts
   - **Action**: Classify the diff from the Plan Review freeze Head (`COLD_REMEDIATION_BASE_SHA`) into expected implementation, expected generated artifacts, expected tests, and unexpected (must be 0). Confirm `Docs/**`, `spec.md`, `data-model.md`, `research.md`, migration files and Slice 1/2 artifacts have no semantic change; this Plan Review commit is the only allowed frozen Plan/Contract change. Run governance scripts.
   - **Verify**: `node .specify/scripts/validate-governance.mjs` and `node .specify/scripts/tests/run-governance-tests.mjs` pass; frozen-upstream diff is only this approved Plan Review; unexpected diff count = 0.
   - **Evidence**: Diff classification and governance output.
+    - **Remediation Evidence**: diff classification: migration 0; Docs/spec/plan/contracts/checklists/quickstart/data-model/research 0; T001–T067 unchanged; unexpected 0; governance PASS + self-test 15/15.
 
-- [ ] T078 [REQ:FR-020;SC-010;CHK115] Final remediation verification and handoff. [VERIFY:final required CI jobs succeed on the final implementation Head; working tree clean; frozen invariants unchanged]
+- [x] T078 [REQ:FR-020;SC-010;CHK115] Final remediation verification and handoff. [VERIFY:final required CI jobs succeed on the final implementation Head; working tree clean; frozen invariants unchanged]
   - **Depends on**: T077
   - **Files**: final implementation state; CI run for the final implementation Head
   - **Action**: Push normally and require every required CI job on the final implementation Head to pass. Only then emit `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE` and stop; do not claim Audit II PASS, do not declare MERGE SAFE, do not merge main.
   - **Verify**: final required CI jobs succeed on the final implementation Head; working tree clean; frozen invariants unchanged.
   - **Evidence**: Final Head SHA, CI job conclusions, remediation evidence index.
+    - **Remediation Evidence**: full verification complete; commit + normal push `feat/003-evidence-core`; Final Head / CI / Spec Governance verified on the pushed Head (see final report).
 
 ## TDD Map
 

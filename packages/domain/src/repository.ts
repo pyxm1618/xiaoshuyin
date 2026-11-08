@@ -484,13 +484,29 @@ export async function verifyEvidenceSourceMessage(
   if (!validation.ok) refuseEvidencePersonReference();
 }
 
-async function assertEvidenceSubjectProcessingAllowed(
-  tx: Tx,
-  subjectPersonId: string | null
-): Promise<void> {
-  if (subjectPersonId === null) return;
+/**
+ * COLD-002: every non-null Person reference processed by the write must pass
+ * the existing compliance gate, not just the subject.
+ *
+ * `subjectPersonId === sourcePersonId` is deduped to a single check without
+ * changing semantics. The person ids are sorted before any `FOR UPDATE` read
+ * so cross-subject/source writes always take row locks in one stable order.
+ */
+function processingPersonIds(
+  subjectPersonId: string | null,
+  sourcePersonId: string | null
+): string[] {
+  const ids: string[] = [];
+  if (subjectPersonId !== null) ids.push(subjectPersonId);
+  if (sourcePersonId !== null) ids.push(sourcePersonId);
+  return [...new Set(ids)].sort();
+}
 
-  const row = await getComplianceProfileForUpdate(tx, subjectPersonId);
+async function assertEvidencePersonProcessingAllowedForPerson(
+  tx: Tx,
+  personId: string
+): Promise<void> {
+  const row = await getComplianceProfileForUpdate(tx, personId);
   const profile = row
     ? {
         ageBand: row.age_band as 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN',
@@ -523,13 +539,24 @@ async function assertEvidenceSubjectProcessingAllowed(
       : null;
   }
 
-  const result = assertMinorProcessingAllowed(subjectPersonId, {
+  const result = assertMinorProcessingAllowed(personId, {
     getProfile: () => profile,
     getConsentRecord: () => consent,
     getCurrentNoticeHash,
   });
 
   if (result.decision === 'BLOCK') refuseMinorProcessing(result.reason);
+}
+
+/** Runs the existing compliance gate over every processed Person reference. */
+async function assertEvidencePersonProcessingAllowed(
+  tx: Tx,
+  subjectPersonId: string | null,
+  sourcePersonId: string | null
+): Promise<void> {
+  for (const personId of processingPersonIds(subjectPersonId, sourcePersonId)) {
+    await assertEvidencePersonProcessingAllowedForPerson(tx, personId);
+  }
 }
 
 /** Guardian relationship of a subject Person (Slice 1 frozen semantics). */
@@ -612,7 +639,7 @@ export async function insertEvidenceAssertion(
     row.kind === 'HYPOTHESIS' ? 'RECORD_HYPOTHESIS' : 'RECORD_STATEMENT'
   );
   await verifyEvidenceSourceMessage(tx, row);
-  await assertEvidenceSubjectProcessingAllowed(tx, row.subjectPersonId);
+  await assertEvidencePersonProcessingAllowed(tx, row.subjectPersonId, row.sourcePersonId);
 
   const { rows } = await tx.query(
     `INSERT INTO assertions
@@ -670,7 +697,7 @@ export async function insertEvidenceObservation(
   // Execute the same frozen provenance matrix as recordObservation().
   await validateRawEvidenceProvenance(tx, row, 'RECORD_OBSERVATION');
   await verifyEvidenceSourceMessage(tx, row);
-  await assertEvidenceSubjectProcessingAllowed(tx, row.subjectPersonId);
+  await assertEvidencePersonProcessingAllowed(tx, row.subjectPersonId, row.sourcePersonId);
 
   const { rows } = await tx.query(
     `INSERT INTO observations

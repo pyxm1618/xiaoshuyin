@@ -498,6 +498,23 @@ async function seed(admin: pg.Client): Promise<Fixture> {
     );
   }
 
+  // COLD-002: every source Person processed by the raw writer needs a profile.
+  await admin.query(
+    `INSERT INTO person_compliance_profiles
+       (person_id, age_band, minor_mode, verified_source)
+     VALUES ($1, 'ADULT', false, 'SELF_STATEMENT')`,
+    [otherMemberPersonId]
+  );
+
+  // COLD-002: the raw writer processes both subject and source Persons, so the
+  // ADULT source (actor) needs its own compliance profile.
+  await admin.query(
+    `INSERT INTO person_compliance_profiles
+       (person_id, age_band, minor_mode, verified_source)
+     VALUES ($1, 'ADULT', false, 'SELF_STATEMENT')`,
+    [actorPersonId]
+  );
+
   // Real frozen guardian relation: the source must equal this persisted
   // guardian_person_id for GUARDIAN_RELAY / GUARDIAN_OBSERVATION.
   await admin.query(

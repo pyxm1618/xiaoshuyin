@@ -19,6 +19,8 @@ import {
   type EvidenceProvenanceWriter,
   type ProvenanceSource,
 } from './provenance.js';
+import type { Purpose } from '@xiaoshuyin/authorization';
+import { assertEvidenceCaseAuthorized } from './internal/evidence-authorization.js';
 import type { Tx } from './repository.js';
 import {
   getAssertionRef,
@@ -61,6 +63,7 @@ export type EvidenceWriter = EvidenceProvenanceWriter;
 // ── Errors ──────────────────────────────────────────────────
 
 export type EvidenceErrorCode =
+  | 'EVIDENCE_CASE_NOT_AUTHORIZED'
   | 'EVIDENCE_CONTENT_INVALID'
   | 'EVIDENCE_PROVENANCE_INVALID'
   | 'EVIDENCE_PERSON_REFERENCE_INVALID'
@@ -73,6 +76,7 @@ export type EvidenceErrorCode =
   | 'EVIDENCE_SERVER_OWNED_FIELD';
 
 const ERROR_MESSAGES: Record<EvidenceErrorCode, string> = {
+  EVIDENCE_CASE_NOT_AUTHORIZED: 'Evidence case is not authorized',
   EVIDENCE_CONTENT_INVALID: 'Evidence content is invalid',
   EVIDENCE_PROVENANCE_INVALID: 'Evidence provenance is not admissible',
   EVIDENCE_PERSON_REFERENCE_INVALID: 'Evidence person reference is invalid',
@@ -444,6 +448,11 @@ export interface EvidenceWriteContext {
   actorAccountId: string;
   /** Already-authorized actor Person (Case authorization happened first). */
   actorPersonId: string;
+  /**
+   * Authorization purpose revalidated by the writer seam. Current Slice only
+   * admits `FAMILY_MANAGEMENT` (with `CASE_READ` on the specific Case).
+   */
+  purpose: Purpose;
 }
 
 export interface EvidenceWriteResult {
@@ -512,19 +521,28 @@ export async function recordStatement(
   ctx: EvidenceWriteContext,
   draft: AssertionDraft
 ): Promise<EvidenceWriteResult> {
+  await assertEvidenceCaseAuthorized(tx, ctx);
   return writeAssertion(tx, ctx, draft, 'STATEMENT', 'RECORD_STATEMENT');
 }
 
 /**
  * Future-facing capability contract only. This Slice has no admissible
- * hypothesis provenance (no AI caller / AI runtime), so the function always
- * fails closed before touching the transaction.
+ * hypothesis provenance (no AI caller / AI runtime), so the capability always
+ * fails closed with EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE.
+ *
+ * COLD-001: authorization revalidation runs first and therefore reads inside
+ * the caller's transaction. Only an authorized manager reaches the capability-
+ * level fail-closed result below; production-disabled semantics are unchanged.
  */
 export async function recordHypothesis(
-  _tx: Tx,
-  _ctx: EvidenceWriteContext,
+  tx: Tx,
+  ctx: EvidenceWriteContext,
   draft: AssertionDraft
 ): Promise<EvidenceWriteResult> {
+  // COLD-001: authorization precedence is fixed. An unauthorized caller must
+  // receive EVIDENCE_CASE_NOT_AUTHORIZED first and never observe the
+  // capability-level EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE result.
+  await assertEvidenceCaseAuthorized(tx, ctx);
   const validation = validateProvenance({
     writer: 'RECORD_HYPOTHESIS',
     sourceKind: draft.sourceKind,
@@ -641,6 +659,7 @@ export async function recordObservation(
   ctx: EvidenceWriteContext,
   draft: ObservationDraft
 ): Promise<EvidenceWriteResult> {
+  await assertEvidenceCaseAuthorized(tx, ctx);
   const serverOwned = assertNoServerOwnedFields(draft);
   if (!serverOwned.ok) throw new EvidenceDomainError(serverOwned.code);
 
@@ -752,6 +771,11 @@ export async function assignConflictGroup(
   ctx: EvidenceWriteContext,
   refs: ConflictGroupRef[]
 ): Promise<ConflictGroupResult> {
+  // COLD-001: authorization must precede every Evidence ref read, so an
+  // unauthorized caller cannot probe object existence through a different
+  // error (e.g. EVIDENCE_CONFLICT_INVALID).
+  await assertEvidenceCaseAuthorized(tx, ctx);
+
   if (!Array.isArray(refs) || refs.length < 2) {
     throw new EvidenceDomainError('EVIDENCE_CONFLICT_INVALID');
   }

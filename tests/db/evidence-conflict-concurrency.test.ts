@@ -170,6 +170,7 @@ describe('Conflict group concurrency (AUD-II-002)', () => {
               caseId: fx.caseId,
               actorAccountId: fx.accountId,
               actorPersonId: fx.personId,
+              purpose: 'FAMILY_MANAGEMENT',
             },
             refs
           );

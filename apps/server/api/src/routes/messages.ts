@@ -209,6 +209,7 @@ export function registerMessageRoutes(app: FastifyInstance, pool: pg.Pool) {
                 caseId,
                 actorAccountId: accountId,
                 actorPersonId: personId,
+                purpose: PURPOSE,
               },
               content
             );

@@ -1570,13 +1570,13 @@ export interface operations {
                     "application/json": components["schemas"]["CurrentFamilyNotFoundError"] | components["schemas"]["CaseNotFoundError"];
                 };
             };
-            /** @description `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH` */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IdempotencyPayloadMismatchError"];
+                    "application/json": components["schemas"]["CurrentFamilyAmbiguousError"] | components["schemas"]["IdempotencyPayloadMismatchError"];
                 };
             };
             /** @description `VALIDATION_ERROR` */

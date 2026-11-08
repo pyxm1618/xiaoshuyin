@@ -408,9 +408,14 @@ export function buildOpenApiDocument() {
           '404': jsonResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`', {
             oneOf: [ref('CurrentFamilyNotFoundError'), ref('CaseNotFoundError')],
           }),
-          '409': refResponse(
-            '`IDEMPOTENCY_PAYLOAD_MISMATCH`',
-            'IdempotencyPayloadMismatchError'
+          '409': jsonResponse(
+            '`CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH`',
+            {
+              oneOf: [
+                ref('CurrentFamilyAmbiguousError'),
+                ref('IdempotencyPayloadMismatchError'),
+              ],
+            }
           ),
           '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
           '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),

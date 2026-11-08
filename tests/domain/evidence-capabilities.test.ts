@@ -71,24 +71,58 @@ describe('Evidence capability surface (T018)', () => {
     }
   });
 
-  it('recordHypothesis rejects before touching any transaction', async () => {
-    const hostileTx = {
-      query() {
-        throw new Error('transaction must not be used');
+  it('recordHypothesis authorizes before the production-disabled result', async () => {
+    // COLD-001: authorization precedence is fixed. An unauthorized caller gets
+    // EVIDENCE_CASE_NOT_AUTHORIZED, never the capability-level result.
+    const statements: string[] = [];
+    const unauthorizedTx = {
+      async query(sql: string) {
+        statements.push(sql);
+        if (sql.includes('FROM persons')) return { rows: [{ id: 'someone-else' }] };
+        return { rows: [] };
       },
     };
     await expect(
       evidence.recordHypothesis(
-        hostileTx as any,
+        unauthorizedTx as any,
         {
           familyId: 'f',
           caseId: 'c',
           actorAccountId: 'a',
           actorPersonId: 'p',
+          purpose: 'FAMILY_MANAGEMENT',
+        },
+        { content: 'candidate hypothesis' } as any
+      )
+    ).rejects.toMatchObject({ code: 'EVIDENCE_CASE_NOT_AUTHORIZED' });
+
+    // Authorized manager still reaches the frozen fail-closed capability result
+    // and performs no Evidence write.
+    const authorizedStatements: string[] = [];
+    const authorizedTx = {
+      async query(sql: string) {
+        authorizedStatements.push(sql);
+        if (sql.includes('FROM persons')) return { rows: [{ id: 'p' }] };
+        if (sql.includes('FROM cases')) return { rows: [{ id: 'c', family_id: 'f' }] };
+        if (sql.includes('FROM family_members')) return { rows: [{ id: 'p' }] };
+        if (sql.includes('FROM families')) return { rows: [{ created_by_person_id: 'p' }] };
+        return { rows: [] };
+      },
+    };
+    await expect(
+      evidence.recordHypothesis(
+        authorizedTx as any,
+        {
+          familyId: 'f',
+          caseId: 'c',
+          actorAccountId: 'a',
+          actorPersonId: 'p',
+          purpose: 'FAMILY_MANAGEMENT',
         },
         { content: 'candidate hypothesis' } as any
       )
     ).rejects.toMatchObject({ code: 'EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE' });
+    expect(authorizedStatements.filter((sql) => /INSERT\s+INTO/i.test(sql))).toEqual([]);
   });
 });
 /**
@@ -146,14 +180,22 @@ describe('Evidence production export boundary (AUD-II-001)', () => {
     'SOURCE_CONFIRMED',
   ] as const;
 
-  /** Minimal tx stub: memberships exist, guardian lookup returns none. */
+  /**
+   * Minimal tx stub that satisfies the writer authorization seam (COLD-001):
+   * actor binding, Case-in-Family and manager facts are all present, while
+   * guardian lookup returns none so the provenance matrix is what fails.
+   */
   function stubTx() {
     return {
       async query(sql: string) {
+        if (sql.includes('FROM persons')) return { rows: [{ id: 'p' }] };
+        if (sql.includes('FROM cases')) return { rows: [{ id: 'c', family_id: 'f' }] };
+        if (sql.includes('FROM family_members')) return { rows: [{ id: 'p' }] };
+        if (sql.includes('FROM families')) return { rows: [{ created_by_person_id: 'p' }] };
         if (sql.includes('person_compliance_profiles')) {
           return { rows: [{ guardian_person_id: null }] };
         }
-        return { rows: [{ id: 'member' }] };
+        return { rows: [] };
       },
     } as any;
   }
@@ -179,6 +221,7 @@ describe('Evidence production export boundary (AUD-II-001)', () => {
             caseId: 'c',
             actorAccountId: 'a',
             actorPersonId: 'p',
+            purpose: 'FAMILY_MANAGEMENT',
           },
           statementDraft(sourceKind)
         ),
@@ -197,6 +240,7 @@ describe('Evidence production export boundary (AUD-II-001)', () => {
             caseId: 'c',
             actorAccountId: 'a',
             actorPersonId: 'p',
+            purpose: 'FAMILY_MANAGEMENT',
           },
           {
             ...statementDraft(sourceKind),

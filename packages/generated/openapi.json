@@ -1118,11 +1118,18 @@
             }
           },
           "409": {
-            "description": "`IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "description": "`CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH`",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IdempotencyPayloadMismatchError"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CurrentFamilyAmbiguousError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdempotencyPayloadMismatchError"
+                    }
+                  ]
                 }
               }
             }

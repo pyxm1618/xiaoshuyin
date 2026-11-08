@@ -83,10 +83,14 @@ describe('Generated OpenAPI — Message operation (T028)', () => {
     expect(JSON.stringify(schema)).not.toContain('content');
   });
 
-  it('mechanically fixes the five error codes and the 404 oneOf', () => {
+  it('mechanically fixes the five error codes and the 404 / 409 oneOf sets', () => {
     const op = spec.paths[PATH].post;
     expect(literalCodes(schemaOf(op, '401'))).toEqual(['UNAUTHENTICATED']);
-    expect(literalCodes(schemaOf(op, '409'))).toEqual(['IDEMPOTENCY_PAYLOAD_MISMATCH']);
+    // COLD-003: the Message 409 set is exactly the frozen pair.
+    expect(literalCodes(schemaOf(op, '409')).sort()).toEqual([
+      'CURRENT_FAMILY_AMBIGUOUS',
+      'IDEMPOTENCY_PAYLOAD_MISMATCH',
+    ]);
     expect(literalCodes(schemaOf(op, '422'))).toEqual(['VALIDATION_ERROR']);
     expect(literalCodes(schemaOf(op, '500'))).toEqual(['INTERNAL_ERROR']);
     expect(literalCodes(schemaOf(op, '404')).sort()).toEqual([

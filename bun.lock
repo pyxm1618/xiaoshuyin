@@ -68,6 +68,7 @@
       "name": "@xiaoshuyin/domain",
       "version": "0.0.0",
       "dependencies": {
+        "@xiaoshuyin/authorization": "workspace:*",
         "@xiaoshuyin/compliance": "workspace:*",
         "@xiaoshuyin/contracts": "workspace:*",
       },
