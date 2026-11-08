@@ -17,22 +17,92 @@ import { buildApp } from '../../apps/server/api/src/app.js';
 import {
   denyToError,
   isKnownAuthorizationDenial,
+  requireFamilyAction,
 } from '../../apps/server/api/src/authz.js';
+import {
+  withIdentityTransaction,
+  withRlsTransaction,
+} from '../../apps/server/api/src/db/tx.js';
+import { requireCurrentFamily } from '../../apps/server/api/src/family-context.js';
 import { createAdminPool } from '../setup/db.js';
 
 const STATEMENT_TIMEOUT_MS = 1500;
+const FAULT_SCHEMA = 'ult002_authz_fault';
 
 let admin: pg.Pool;
 let app: Awaited<ReturnType<typeof buildApp>>;
 let faultApp: Awaited<ReturnType<typeof buildApp>>;
+let faultProbePool: pg.Pool;
 let faultUrl: string;
 let logs = '';
 let seq = 0;
 
-function withStatementTimeout(url: string, ms: number): string {
+function withAuthorizationFactFault(url: string, ms: number): string {
   const parsed = new URL(url);
-  parsed.searchParams.set('options', `-c statement_timeout=${ms}`);
+  parsed.searchParams.set(
+    'options',
+    `-c statement_timeout=${ms} -c search_path=${FAULT_SCHEMA},public`
+  );
   return parsed.toString();
+}
+
+async function installAuthorizationFactFault(): Promise<void> {
+  await admin.query(`DROP SCHEMA IF EXISTS ${FAULT_SCHEMA} CASCADE`);
+  await admin.query(`CREATE SCHEMA ${FAULT_SCHEMA}`);
+  await admin.query(
+    `CREATE TABLE ${FAULT_SCHEMA}.control (
+       singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+       enabled boolean NOT NULL
+     )`
+  );
+  await admin.query(
+    `INSERT INTO ${FAULT_SCHEMA}.control (singleton, enabled) VALUES (true, true)`
+  );
+  await admin.query(
+    `CREATE FUNCTION ${FAULT_SCHEMA}.pause_authorization_family_read()
+     RETURNS boolean
+     LANGUAGE plpgsql
+     VOLATILE
+     SECURITY INVOKER
+     AS $
+     DECLARE fault_enabled boolean;
+     BEGIN
+       SELECT enabled INTO fault_enabled
+       FROM ${FAULT_SCHEMA}.control
+       WHERE singleton = true;
+
+       IF COALESCE(fault_enabled, false)
+          AND NULLIF(current_setting('app.family_id', true), '') IS NOT NULL THEN
+         PERFORM pg_sleep(5);
+       END IF;
+
+       RETURN true;
+     END
+     $`
+  );
+  await admin.query(
+    `CREATE VIEW ${FAULT_SCHEMA}.families
+       WITH (security_invoker = true)
+     AS
+       SELECT f.*
+       FROM public.families AS f
+       WHERE ${FAULT_SCHEMA}.pause_authorization_family_read()`
+  );
+  await admin.query(`GRANT USAGE ON SCHEMA ${FAULT_SCHEMA} TO xiaoshuyin_app`);
+  await admin.query(
+    `GRANT SELECT ON ${FAULT_SCHEMA}.control, ${FAULT_SCHEMA}.families TO xiaoshuyin_app`
+  );
+  await admin.query(
+    `GRANT EXECUTE ON FUNCTION ${FAULT_SCHEMA}.pause_authorization_family_read()
+     TO xiaoshuyin_app`
+  );
+}
+
+async function setFaultEnabled(enabled: boolean): Promise<void> {
+  await admin.query(
+    `UPDATE ${FAULT_SCHEMA}.control SET enabled = $1 WHERE singleton = true`,
+    [enabled]
+  );
 }
 
 async function login(target: typeof app, label: string) {
@@ -110,7 +180,15 @@ describe('ULT-002 authorization error classification', () => {
     app = await buildApp();
     await app.ready();
 
-    faultUrl = withStatementTimeout(process.env['DATABASE_URL']!, STATEMENT_TIMEOUT_MS);
+    admin = createAdminPool();
+    await installAuthorizationFactFault();
+
+    faultUrl = withAuthorizationFactFault(
+      process.env['DATABASE_URL']!,
+      STATEMENT_TIMEOUT_MS
+    );
+    faultProbePool = new pg.Pool({ connectionString: faultUrl, max: 1 });
+
     const stream = new Writable({
       write(chunk, _encoding, callback) {
         logs += chunk.toString();
@@ -122,14 +200,14 @@ describe('ULT-002 authorization error classification', () => {
       loggerStream: stream,
     });
     await faultApp.ready();
-
-    admin = createAdminPool();
   });
 
   afterAll(async () => {
-    await cleanup();
-    await admin.end();
+    await faultProbePool.end();
     await faultApp.close();
+    await cleanup();
+    await admin.query(`DROP SCHEMA IF EXISTS ${FAULT_SCHEMA} CASCADE`);
+    await admin.end();
     await app.close();
   });
 
@@ -156,80 +234,109 @@ describe('ULT-002 authorization error classification', () => {
     expect(after.audits).toBe(before.audits);
   });
 
-  it('classifies a real PostgreSQL 57014 as infrastructure, never as a denial', async () => {
-    const probe = new pg.Client({ connectionString: faultUrl });
-    await probe.connect();
+  it('injects real 57014 at requireFamilyAction -> readFacts, not current-family resolution', async () => {
+    const victim = await setup('stage');
+
+    // Same fault connection and search_path: identity/current-family resolution
+    // must complete normally because app.family_id is not set in this phase.
+    const resolvedFamilyId = await withIdentityTransaction(
+      faultProbePool,
+      { accountId: victim.accountId, purpose: 'FAMILY_MANAGEMENT' },
+      (tx) => requireCurrentFamily(tx, victim.personId)
+    );
+    expect(resolvedFamilyId).toBe(victim.familyId);
+
+    // After set_family_context(), the test-only families view sleeps. The only
+    // callback work is requireFamilyAction(), whose first readFacts query is
+    // getFamilyById(); statement_timeout therefore raises a real PG 57014 at
+    // the authorization-facts stage.
+    let sqlstate: string | undefined;
     try {
-      let sqlstate: string | undefined;
-      try {
-        await probe.query('SELECT pg_sleep(5)');
-      } catch (err) {
-        sqlstate = (err as { code?: string }).code;
-        expect(isKnownAuthorizationDenial(err), 'pg 57014 must not be a denial').toBe(false);
-      }
-      expect(sqlstate).toBe('57014');
-    } finally {
-      await probe.end();
+      await withRlsTransaction(
+        faultProbePool,
+        {
+          familyId: victim.familyId,
+          accountId: victim.accountId,
+          personId: victim.personId,
+          purpose: 'FAMILY_MANAGEMENT',
+        },
+        (tx) =>
+          requireFamilyAction(tx, {
+            accountId: victim.accountId,
+            personId: victim.personId,
+            familyId: victim.familyId,
+            action: 'CASE_READ',
+            purpose: 'FAMILY_MANAGEMENT',
+            resource: {
+              type: 'CASE',
+              familyId: victim.familyId,
+              caseId: victim.caseId,
+            },
+            caseId: victim.caseId,
+          })
+      );
+    } catch (err) {
+      sqlstate = (err as { code?: string }).code;
+      expect(isKnownAuthorizationDenial(err)).toBe(false);
     }
 
-    // A real business denial is marked, a 401 authentication failure is not.
+    expect(sqlstate).toBe('57014');
     expect(isKnownAuthorizationDenial(denyToError('NOT_FAMILY_MANAGER'))).toBe(true);
     expect(isKnownAuthorizationDenial(denyToError('NO_ACTOR'))).toBe(false);
   });
 
-  it('answers 500 INTERNAL_ERROR for an authorization DB timeout and rolls back', async () => {
+  it('maps authorization-fact 57014 to 500, rolls back, then the same request succeeds after fault removal', async () => {
+    await setFaultEnabled(true);
     const victim = await setup('fault');
     const key = `ult002-fault-${Date.now()}`;
+    const content = 'ult002 exact same request';
     const before = await counts(victim.familyId, key);
     logs = '';
 
-    const lock = await admin.connect();
-    try {
-      await lock.query('BEGIN');
-      // Blocks the message route's authorization preflight DB reads (current
-      // Family resolution / Case authorization facts) with a real table lock.
-      await lock.query('LOCK TABLE families IN ACCESS EXCLUSIVE MODE');
+    const failed = await postMessage(
+      faultApp,
+      victim.token,
+      victim.caseId,
+      key,
+      content
+    );
 
-      const res = await postMessage(faultApp, victim.token, victim.caseId, key);
+    expect(failed.statusCode).toBe(500);
+    expect(failed.json()).toEqual({
+      code: 'INTERNAL_ERROR',
+      message: 'An internal error occurred',
+    });
+    expect(failed.statusCode).not.toBe(403);
+    expect(failed.statusCode).not.toBe(404);
 
-      expect(res.statusCode).toBe(500);
-      expect(res.json()).toEqual({
-        code: 'INTERNAL_ERROR',
-        message: 'An internal error occurred',
-      });
-      expect(res.statusCode).not.toBe(403);
-      expect(res.statusCode).not.toBe(404);
-    } finally {
-      await lock.query('ROLLBACK').catch(() => {});
-      lock.release();
-    }
+    const afterFailure = await counts(victim.familyId, key);
+    expect(afterFailure.messages).toBe(before.messages);
+    expect(afterFailure.audits).toBe(before.audits);
+    expect(afterFailure.idempotency).toBe(0);
 
-    const after = await counts(victim.familyId, key);
-    expect(after.messages).toBe(before.messages);
-    expect(after.audits).toBe(before.audits);
-    // No idempotency business result may be committed for the failed command.
-    expect(after.idempotency).toBe(0);
-  });
-
-  it('logs the unexpected error without leaking SQL or credentials', async () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(logs).toContain('57014');
     expect(logs).not.toMatch(/pg_sleep|LOCK TABLE|SELECT .*FROM/i);
     expect(logs).not.toContain('slice3app');
-  });
 
-  it('succeeds normally once the infrastructure failure is gone', async () => {
-    const victim = await setup('recovered');
-    const key = `ult002-recovered-${Date.now()}`;
-    const res = await postMessage(faultApp, victim.token, victim.caseId, key, 'after recovery');
+    // Remove only the PostgreSQL fault. Retry the exact same valid request:
+    // same actor, case, idempotency key and content.
+    await setFaultEnabled(false);
+    const recovered = await postMessage(
+      faultApp,
+      victim.token,
+      victim.caseId,
+      key,
+      content
+    );
 
-    expect(res.statusCode).toBe(201);
-    expect(res.json().caseId).toBe(victim.caseId);
+    expect(recovered.statusCode).toBe(201);
+    expect(recovered.json().caseId).toBe(victim.caseId);
 
-    const after = await counts(victim.familyId, key);
-    expect(after.messages).toBe(1);
-    expect(after.audits).toBeGreaterThanOrEqual(1);
-    expect(after.idempotency).toBe(1);
+    const afterRecovery = await counts(victim.familyId, key);
+    expect(afterRecovery.messages).toBe(before.messages + 1);
+    expect(afterRecovery.audits).toBeGreaterThan(before.audits);
+    expect(afterRecovery.idempotency).toBe(1);
   });
 });
 
