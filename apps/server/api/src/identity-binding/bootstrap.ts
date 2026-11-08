@@ -72,7 +72,8 @@ export interface BootstrapInput {
 
 export type BootstrapResult =
   | { kind: 'GENERIC'; pendingContextToken: string }
-  | { kind: 'REUSED'; sessionToken: string; accountId: string; personId: string };
+  | { kind: 'REUSED'; sessionToken: string; accountId: string; personId: string }
+  | { kind: 'COMMITTED' };
 
 export async function bootstrap(
   deps: BootstrapDeps,
@@ -89,7 +90,9 @@ export async function bootstrap(
   const identityDigest = deriveIdentityDigest(deps.identityBindingSecret, openid);
 
   // Single authorization entry (plan D-12). The actor is the just-authenticated
-  // WeChat identity; a denial fails closed before any DB write.
+  // WeChat identity. A denial is NOT a WeChat authentication failure: it must
+  // stay anti-enumeration and produce the same frozen generic bootstrap shape
+  // as every other pre-attempt outcome (plan D-10.3 / D-11.1).
   const bootstrapDecision = authorize({
     actor: { kind: 'WECHAT_CANDIDATE', candidateIdentityDigest: identityDigest },
     product: 'V1',
@@ -99,9 +102,7 @@ export async function bootstrap(
     action: 'IDENTITY_BINDING_BOOTSTRAP',
     purpose: 'IDENTITY_BINDING',
   });
-  if (bootstrapDecision.decision !== 'ALLOW') {
-    throw bindingError('WECHAT_AUTH_FAILED');
-  }
+  const authorizationDenied = bootstrapDecision.decision !== 'ALLOW';
 
   const token = createContextToken();
   const tokenHash = hashToken(token);
@@ -115,6 +116,19 @@ export async function bootstrap(
     deps.pool,
     { contextHash: tokenHash, identityDigest },
     async (tx): Promise<BootstrapResult> => {
+      // The pending context is the transport credential for every generic
+      // outcome, including authorization denial. No operation key, attempt,
+      // confirmation or business audit is written on a DENY.
+      const context = await createPendingContext(tx, deps, {
+        identityDigest,
+        tokenHash,
+        openid,
+      });
+      if (authorizationDenied) {
+        await clearOpenid(tx, context.id);
+        return { kind: 'GENERIC', pendingContextToken: token };
+      }
+
       const invitation = await deps.invitationPort.resolveByToken(tx, input.invitationToken);
       const scope: BindingOperationScope = computeOperationScope({
         commandType: 'BOOTSTRAP',
@@ -143,12 +157,6 @@ export async function bootstrap(
         throw bindingError('IDEMPOTENCY_PAYLOAD_MISMATCH');
       }
 
-      const context = await createPendingContext(tx, deps, {
-        identityDigest,
-        tokenHash,
-        openid,
-      });
-
       // Exact replay: no duplicate attempt / confirmation / audit. A fresh
       // opaque context token is issued and linked to the authoritative attempt
       // when one exists, so status / session remain usable.
@@ -170,10 +178,13 @@ export async function bootstrap(
           });
           if (attempt) {
             await linkAttempt(tx, context.id, attempt.id, invitation.participationId);
-            // A settled COMMITTED replay must make status / session usable
-            // without re-executing the commit.
+            // Historical settled replay: the authoritative attempt is already
+            // COMMITTED. Return the frozen `{ binding: "COMMITTED" }` without
+            // re-executing commit, reviving the invitation, creating a
+            // session, or writing a second business audit.
             if (attempt.state === 'COMMITTED' && attempt.committedAccountId) {
               await markCommitted(tx, context.id, attempt.committedAccountId);
+              return { kind: 'COMMITTED' };
             }
           }
         }

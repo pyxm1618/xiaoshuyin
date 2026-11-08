@@ -42,6 +42,7 @@ import {
   BindingConfirmerDecisionRequest,
   BindingBootstrapGenericResponse,
   BindingBootstrapReusedResponse,
+  BindingBootstrapCommittedResponse,
   BindingGenericResponse,
   BindingStatusResponse,
   BindingSessionCommittedResponse,
@@ -156,6 +157,7 @@ export function buildOpenApiDocument() {
     BindingConfirmerDecisionRequest: toJsonSchema(BindingConfirmerDecisionRequest),
     BindingBootstrapGenericResponse: toJsonSchema(BindingBootstrapGenericResponse),
     BindingBootstrapReusedResponse: toJsonSchema(BindingBootstrapReusedResponse),
+    BindingBootstrapCommittedResponse: toJsonSchema(BindingBootstrapCommittedResponse),
     BindingGenericResponse: toJsonSchema(BindingGenericResponse),
     BindingStatusResponse: toJsonSchema(BindingStatusResponse),
     BindingSessionCommittedResponse: toJsonSchema(BindingSessionCommittedResponse),
@@ -423,10 +425,11 @@ export function buildOpenApiDocument() {
         operationId: 'bootstrapIdentityBinding',
         requestBody: refBody('BindingBootstrapRequest'),
         responses: {
-          '200': jsonResponse('generic 或 Case B 复用', {
+          '200': jsonResponse('generic / Case B 复用 / COMMITTED settled replay', {
             oneOf: [
               ref('BindingBootstrapGenericResponse'),
               ref('BindingBootstrapReusedResponse'),
+              ref('BindingBootstrapCommittedResponse'),
             ],
           }),
           '401': errorResponse('`WECHAT_AUTH_FAILED`'),

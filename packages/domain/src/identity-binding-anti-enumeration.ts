@@ -19,6 +19,17 @@ export interface CandidateBootstrapReusedResponse {
   person: { id: string };
 }
 
+/**
+ * Historical settled replay of the same BOOTSTRAP operation key whose
+ * authoritative attempt is already COMMITTED (plan D-10.2 / D-5.3).
+ *
+ * This is NOT the Case B `REUSED` branch: the candidate is already P1, and no
+ * session is issued here. Ordinary session exchange remains the only path.
+ */
+export interface CandidateBootstrapCommittedResponse {
+  binding: 'COMMITTED';
+}
+
 export interface CandidateDecisionResponse {
   binding: 'NOT_COMPLETED';
 }
@@ -55,6 +66,10 @@ export function candidateBootstrapReusedResponse(input: {
     account: { id: input.accountId },
     person: { id: input.personId },
   };
+}
+
+export function candidateBootstrapCommittedResponse(): CandidateBootstrapCommittedResponse {
+  return { binding: 'COMMITTED' };
 }
 
 export function candidateDecisionResponse(): CandidateDecisionResponse {

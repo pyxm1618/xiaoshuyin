@@ -185,15 +185,7 @@ export function evaluateBindingGate(input: BindingGateInput): BindingGateResult 
   if (!input.confirmations?.candidate) return PENDING;
   if (!input.confirmations?.secondParty) return PENDING;
 
-  if (input.targetAccountId !== null) return block('TARGET_ALREADY_BOUND');
-  if (
-    input.candidateAccountId !== null &&
-    input.candidateAccountBoundPersonId !== null &&
-    input.candidateAccountBoundPersonId !== input.targetPersonId
-  ) {
-    return block('IDENTITY_CONFLICT');
-  }
-
+  // 7. Confirmer authority must still hold on current facts (plan D-8.2).
   if (authority === 'GUARDIAN') {
     if (!confirmerMatches(input, input.guardianPersonId)) {
       return block('WRONG_CONFIRMER');
@@ -202,6 +194,17 @@ export function evaluateBindingGate(input: BindingGateInput): BindingGateResult 
     if (!confirmerMatches(input, input.familyCreatedByPersonId)) {
       return block('WRONG_CONFIRMER');
     }
+  }
+
+  // 8. P1 must still be unbound, and the candidate Account must not already
+  //    belong to another Person (ordinary-login-first conflict).
+  if (input.targetAccountId !== null) return block('TARGET_ALREADY_BOUND');
+  if (
+    input.candidateAccountId !== null &&
+    input.candidateAccountBoundPersonId !== null &&
+    input.candidateAccountBoundPersonId !== input.targetPersonId
+  ) {
+    return block('IDENTITY_CONFLICT');
   }
 
   return pass(ageBand, authority);

@@ -52,6 +52,15 @@ export const BindingBootstrapReusedResponse = z.strictObject({
   person: z.strictObject({ id: z.string().uuid() }),
 });
 
+/**
+ * Historical settled replay of the same BOOTSTRAP operation key whose
+ * authoritative attempt is COMMITTED (plan D-10.2). Strictly only
+ * `{ binding: "COMMITTED" }` — no token, attempt, account or person.
+ */
+export const BindingBootstrapCommittedResponse = z.strictObject({
+  binding: z.literal('COMMITTED'),
+});
+
 export const BindingStatusResponse = z.strictObject({
   binding: z.enum(['NOT_COMPLETED', 'COMMITTED']),
 });

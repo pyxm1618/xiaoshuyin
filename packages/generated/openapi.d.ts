@@ -786,6 +786,10 @@ export interface components {
                 id: string;
             };
         };
+        BindingBootstrapCommittedResponse: {
+            /** @constant */
+            binding: "COMMITTED";
+        };
         BindingGenericResponse: {
             /** @constant */
             binding: "NOT_COMPLETED";
@@ -1733,13 +1737,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description generic 或 Case B 复用 */
+            /** @description generic / Case B 复用 / COMMITTED settled replay */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BindingBootstrapGenericResponse"] | components["schemas"]["BindingBootstrapReusedResponse"];
+                    "application/json": components["schemas"]["BindingBootstrapGenericResponse"] | components["schemas"]["BindingBootstrapReusedResponse"] | components["schemas"]["BindingBootstrapCommittedResponse"];
                 };
             };
             /** @description `WECHAT_AUTH_FAILED` */

@@ -26,7 +26,7 @@ import { evaluateGateForTarget } from './gate.js';
 import {
   clearOpenid,
   findByAttemptIdForUpdate,
-  markCommitted,
+  markCommittedForAttempt,
   type PendingContextRow,
 } from './pending-context-repository.js';
 import {
@@ -240,7 +240,9 @@ async function commitInTransaction(
     throw new RetryableOperationError();
   }
 
-  await markCommitted(tx, context.id, account.id);
+  // All transport contexts linked to this attempt become session-exchangeable
+// (bootstrap replay is allowed to mint a new context for the same attempt).
+  await markCommittedForAttempt(tx, attempt.id, account.id);
   await appendAudit(tx, {
     correlationId,
     attemptId: settled.id,
@@ -296,7 +298,9 @@ async function bestEffortRetryableAudit(deps: CommitDeps, input: CommitInput): P
           attemptId: input.attemptId,
           targetPersonId: input.targetPersonId,
           targetFamilyId: input.targetFamilyId,
-          eventType: 'BINDING_TERMINAL',
+          // RETRYABLE is an operation-level outcome, never an attempt state and
+          // never `BINDING_TERMINAL` (plan D-15.2).
+          eventType: 'BINDING_OPERATION_RETRYABLE',
           result: 'RETRYABLE',
           metadata: { outcome: 'RETRYABLE_OPERATION_FAILURE' },
         });

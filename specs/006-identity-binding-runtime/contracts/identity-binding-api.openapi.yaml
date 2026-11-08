@@ -17,13 +17,14 @@ paths:
               $ref: '#/components/schemas/BindingBootstrapRequest'
       responses:
         '200':
-          description: generic 或 Case B 复用
+          description: generic / Case B 复用 / COMMITTED settled replay
           content:
             application/json:
               schema:
                 oneOf:
                   - $ref: '#/components/schemas/BindingBootstrapGenericResponse'
                   - $ref: '#/components/schemas/BindingBootstrapReusedResponse'
+                  - $ref: '#/components/schemas/BindingBootstrapCommittedResponse'
         '401':
           description: WeChat authentication failed
           content:
@@ -321,6 +322,14 @@ components:
               format: uuid
           required: [id]
       required: [binding, sessionToken, account, person]
+    BindingBootstrapCommittedResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        binding:
+          type: string
+          const: COMMITTED
+      required: [binding]
     BindingStatusResponse:
       type: object
       additionalProperties: false

@@ -181,7 +181,8 @@ CREATE TABLE identity_binding_audit_events (
                                 'BINDING_SECOND_PARTY_CONFIRMED',
                                 'BINDING_SECOND_PARTY_REJECTED',
                                 'BINDING_COMMITTED',
-                                'BINDING_TERMINAL'
+                                'BINDING_TERMINAL',
+                                'BINDING_OPERATION_RETRYABLE'
                               )),
   result                      text NOT NULL CHECK (result IN ('PENDING','COMMITTED','TERMINAL','RETRYABLE')),
   terminal_reason             text,
@@ -552,9 +553,15 @@ CREATE POLICY persons_binding_target_read ON persons
     AND id = app_binding_target_person_id()
   );
 
+-- Purpose-scoped read of the Person already bound to the authenticated
+-- candidate Account. It exists ONLY to decide the ordinary-login-first
+-- IDENTITY_CONFLICT at Gate 1 / Gate 2 (plan D-6.3, D-13.3, no-P2). It is never
+-- an arbitrary person lookup, never widens Family scope, and never returns P2
+-- data to the candidate. The GATE purpose is required because Gate 1 is the
+-- first stage where the conflict is known.
 CREATE POLICY persons_binding_candidate_account_read ON persons
   USING (
-    app_current_purpose() = 'IDENTITY_BINDING_COMMIT'
+    app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
     AND account_id = app_binding_candidate_account_id()
   );
 

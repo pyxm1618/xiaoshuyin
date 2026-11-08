@@ -1139,7 +1139,7 @@
         },
         "responses": {
           "200": {
-            "description": "generic 或 Case B 复用",
+            "description": "generic / Case B 复用 / COMMITTED settled replay",
             "content": {
               "application/json": {
                 "schema": {
@@ -1149,6 +1149,9 @@
                     },
                     {
                       "$ref": "#/components/schemas/BindingBootstrapReusedResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BindingBootstrapCommittedResponse"
                     }
                   ]
                 }
@@ -3575,6 +3578,19 @@
           "sessionToken",
           "account",
           "person"
+        ],
+        "additionalProperties": false
+      },
+      "BindingBootstrapCommittedResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "COMMITTED"
+          }
+        },
+        "required": [
+          "binding"
         ],
         "additionalProperties": false
       },

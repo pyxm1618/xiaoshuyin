@@ -61,6 +61,30 @@ const RLS_TABLES = [
   'person_compliance_profiles', 'person_profile_values', 'persons',
 ];
 
+// Slice 006 (repo feature 006 / business Slice 5) additive objects. Evidence
+// must cover them without weakening the Slice 1 baseline checks below.
+const SLICE5_TABLES = [
+  'binding_pending_contexts', 'binding_attempts', 'binding_confirmations',
+  'binding_operation_keys', 'identity_binding_audit_events',
+].sort();
+const SLICE5_ENUMS = [
+  'binding_attempt_state', 'binding_confirmation_kind', 'binding_confirmer_authority',
+  'binding_operation_command', 'binding_operation_scope',
+].sort();
+const SLICE5_POLICIES = [
+  'binding_context_token_scope', 'binding_context_attempt_scope',
+  'binding_attempts_identity_scope', 'binding_attempts_target_scope',
+  'binding_attempts_commit_scope', 'binding_confirmations_attempt_scope',
+  'binding_confirmations_target_scope', 'binding_operation_keys_scope',
+  'identity_binding_audit_insert_scope', 'persons_binding_target_read',
+  'persons_binding_candidate_account_read', 'persons_binding_commit_update',
+  'families_binding_read', 'family_members_binding_read', 'pcp_binding_read',
+  'consent_binding_read',
+];
+const SLICE5_TRIGGERS = [
+  'binding_confirmations_no_update_delete', 'identity_binding_audit_no_update_delete',
+];
+
 const EXPECTED_TABLES = [
   'accounts', 'business_audit_events', 'case_events', 'cases', 'consent_records',
   'families', 'family_members', 'guardian_consent_requests', 'idempotency_keys',
@@ -168,6 +192,12 @@ function verifyStructure(label, d) {
   check('11 张业务表 relrowsecurity/relforcerowsecurity', 'true/true × 11',
     rlsFlags,
     (a) => a.length === 11 && a.every((s) => s.endsWith('=true/true')));
+  const slice5RlsFlags = SLICE5_TABLES.map(
+    (t) => `${t}=${rlsMap[t]?.relrowsecurity}/${rlsMap[t]?.relforcerowsecurity}`
+  );
+  check('5 张 006 binding 表 relrowsecurity/relforcerowsecurity', 'true/true × 5',
+    slice5RlsFlags,
+    (a) => a.length === 5 && a.every((s) => s.endsWith('=true/true')));
   check('accounts 无 RLS', 'false/false',
     `${rlsMap['accounts']?.relrowsecurity}/${rlsMap['accounts']?.relforcerowsecurity}`);
 
@@ -181,15 +211,18 @@ function verifyStructure(label, d) {
   check('xiaoshuyin_migrator rolbypassrls', 'false', migratorRole?.rolbypassrls);
 
   const uuidTables = d.uuidv7.map((r) => r.table_name).sort();
-  check('uuidv7() 默认值的 11 张 id 表', JSON.stringify(EXPECTED_UUIDV7_TABLES), uuidTables,
-    (a) => JSON.stringify(a) === JSON.stringify(EXPECTED_UUIDV7_TABLES));
+  const expectedUuidTables = [...EXPECTED_UUIDV7_TABLES, ...SLICE5_TABLES].sort();
+  check('uuidv7() 默认值表覆盖 Slice 1 + 006', JSON.stringify(expectedUuidTables), uuidTables,
+    (a) => expectedUuidTables.every((t) => a.includes(t)));
   check('uuidv7 默认值表达式', 'uuidv7() × 11',
     [...new Set(d.uuidv7.map((r) => r.column_default))],
     (a) => a.length === 1 && a[0] === 'uuidv7()');
 
-  check('枚举数量与名称（10）', JSON.stringify(EXPECTED_ENUMS),
-    d.enums.map((r) => r.typname).sort(),
-    (a) => JSON.stringify(a) === JSON.stringify(EXPECTED_ENUMS));
+  const actualEnums = d.enums.map((r) => r.typname).sort();
+  const expectedEnums = [...EXPECTED_ENUMS, ...SLICE5_ENUMS].sort();
+  check('枚举覆盖 Slice 1 + 006（15）', JSON.stringify(expectedEnums),
+    actualEnums,
+    (a) => expectedEnums.every((e) => a.includes(e)));
   const ageBand = d.enums.find((r) => r.typname === 'age_band');
   check('age_band enum', 'ADULT,MINOR_14_17,UNDER_14,UNKNOWN', labelsOf(ageBand).join(','));
   const profileAttr = d.enums.find((r) => r.typname === 'profile_attribute');
@@ -197,14 +230,22 @@ function verifyStructure(label, d) {
   check('不存在 RELATION_DESCRIPTOR enum label', 0,
     d.enums.flatMap(labelsOf).filter((l) => l === 'RELATION_DESCRIPTOR').length);
 
-  check('业务表数量（12）', JSON.stringify(EXPECTED_TABLES),
-    d.tables.map((r) => r.tablename),
-    (a) => JSON.stringify(a) === JSON.stringify(EXPECTED_TABLES));
+  const actualTables = d.tables.map((r) => r.tablename).sort();
+  check('业务表覆盖 Slice 1（12）+ 006（5）', JSON.stringify([...EXPECTED_TABLES, ...SLICE5_TABLES].sort()),
+    actualTables,
+    (a) => [...EXPECTED_TABLES, ...SLICE5_TABLES].every((t) => a.includes(t)));
   check('不存在 assertions / observations 表', '0',
     d.tables.filter((r) => ['assertions', 'observations'].includes(r.tablename)).length);
-  check('RLS policy 数量（11）', 11, d.policies.length);
-  check('consent 不可变触发器', '["consent_records_guard"]',
-    d.triggers.map((r) => r.tgname));
+  const actualPolicies = d.policies.map((r) => r.policyname);
+  check('RLS policy 覆盖 006 追加策略', JSON.stringify(SLICE5_POLICIES),
+    actualPolicies.filter((p) => SLICE5_POLICIES.includes(p)).sort(),
+    (a) => SLICE5_POLICIES.every((p) => a.includes(p)));
+  check('RLS policy 总数 >= Slice 1 基线（11）', '>= 11', d.policies.length,
+    (n) => Number(n) >= 11);
+  const actualTriggers = d.triggers.map((r) => r.tgname);
+  check('consent + binding 不可变触发器', JSON.stringify(['consent_records_guard', ...SLICE5_TRIGGERS]),
+    actualTriggers,
+    (a) => ['consent_records_guard', ...SLICE5_TRIGGERS].every((t) => a.includes(t)));
 
   const personCols = d.personsCols.map((r) => r.column_name);
   check('persons 无 family_id / source_kind / role', '0',

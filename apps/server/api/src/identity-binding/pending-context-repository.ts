@@ -143,6 +143,28 @@ export async function markCommitted(
   );
 }
 
+/**
+ * Mark every transport context linked to the same authoritative attempt.
+ *
+ * Bootstrap replay may create a fresh pending context for the same attempt
+ * (plan D-3.4); after Phase C commit all of those tokens must be able to
+ * exchange an ordinary session without re-executing the commit, and none may
+ * retain a decryptable openid.
+ */
+export async function markCommittedForAttempt(
+  tx: pg.PoolClient,
+  attemptId: string,
+  accountId: string
+): Promise<void> {
+  await tx.query(
+    `UPDATE binding_pending_contexts
+     SET committed_account_id = $2,
+         openid_ciphertext = NULL, openid_nonce = NULL, openid_tag = NULL
+     WHERE attempt_id = $1`,
+    [attemptId, accountId]
+  );
+}
+
 /** Clear decryptable openid on every pre-attempt block / settled attempt. */
 export async function clearOpenid(tx: pg.PoolClient, contextId: string): Promise<void> {
   await tx.query(

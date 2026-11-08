@@ -21,6 +21,7 @@ import {
 import {
   candidateBootstrapResponse,
   candidateBootstrapReusedResponse,
+  candidateBootstrapCommittedResponse,
   candidateDecisionResponse,
   candidateSessionResponse,
   candidateStatusResponse,
@@ -65,7 +66,9 @@ function contextToken(req: FastifyRequest): string {
 
 function validationError(reply: FastifyReply) {
   const err = toHttpError('VALIDATION_ERROR', 'Invalid request body');
-  return reply.status(err.statusCode).send(err);
+  // Send the frozen error envelope only; the transport status code is not part
+  // of the body (same shape as errorHandler-generated 422s).
+  return reply.status(err.statusCode).send({ code: err.code, message: err.message });
 }
 
 export function registerIdentityBindingRoutes(
@@ -93,6 +96,9 @@ export function registerIdentityBindingRoutes(
     if (!parsed.success) return validationError(reply);
 
     const result = await bootstrap(bootstrapDeps, parsed.data);
+    if (result.kind === 'COMMITTED') {
+      return reply.status(200).send(candidateBootstrapCommittedResponse());
+    }
     if (result.kind === 'REUSED') {
       return reply
         .status(200)
