@@ -34,6 +34,110 @@ export const EVIDENCE_DISABLED_SOURCES: readonly ProvenanceSource[] = [
   'SOURCE_CONFIRMED',
 ];
 
+export type EvidenceProvenanceWriter =
+  | 'RECORD_STATEMENT'
+  | 'RECORD_OBSERVATION'
+  | 'RECORD_HYPOTHESIS';
+
+export interface EvidenceProvenanceFacts {
+  writer: EvidenceProvenanceWriter;
+  sourceKind: ProvenanceSource;
+  subjectPersonId: string | null;
+  sourcePersonId: string | null;
+  subjectIsFamilyMember: boolean;
+  sourceIsFamilyMember: boolean;
+  sourceIsGuardianOfSubject: boolean;
+}
+
+export type EvidenceProvenanceErrorCode =
+  | 'EVIDENCE_PROVENANCE_INVALID'
+  | 'EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE';
+
+export type EvidenceProvenanceCheck =
+  | { ok: true }
+  | { ok: false; code: EvidenceProvenanceErrorCode };
+
+function provenanceFail(code: EvidenceProvenanceErrorCode): EvidenceProvenanceCheck {
+  return { ok: false, code };
+}
+
+/**
+ * Frozen Evidence provenance validation seam.
+ *
+ * This is intentionally pure and repository-free so both the four controlled
+ * Evidence writers and the package-internal raw repository writers execute the
+ * exact same source/subject/membership/guardian matrix.
+ */
+export function validateEvidenceProvenance(
+  facts: EvidenceProvenanceFacts
+): EvidenceProvenanceCheck {
+  const { writer, sourceKind } = facts;
+
+  // No production-admissible hypothesis source exists in this Slice.
+  if (writer === 'RECORD_HYPOTHESIS') {
+    return provenanceFail('EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE');
+  }
+
+  if (!EVIDENCE_WRITABLE_SOURCES.includes(sourceKind)) {
+    return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+  }
+
+  // Every writable source requires concrete, in-Family subject/source Persons.
+  if (!facts.subjectPersonId || !facts.sourcePersonId) {
+    return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+  }
+  if (!facts.subjectIsFamilyMember || !facts.sourceIsFamilyMember) {
+    return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+  }
+
+  switch (sourceKind) {
+    case 'SELF_STATEMENT':
+      if (writer !== 'RECORD_STATEMENT') {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (facts.sourcePersonId !== facts.subjectPersonId) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      return { ok: true };
+
+    case 'GUARDIAN_OBSERVATION':
+      if (writer !== 'RECORD_OBSERVATION') {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (facts.sourcePersonId === facts.subjectPersonId) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (!facts.sourceIsGuardianOfSubject) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      return { ok: true };
+
+    case 'GUARDIAN_RELAY':
+      if (writer !== 'RECORD_STATEMENT') {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (facts.sourcePersonId === facts.subjectPersonId) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (!facts.sourceIsGuardianOfSubject) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      return { ok: true };
+
+    case 'OTHER_MEMBER_RELAY':
+      if (writer !== 'RECORD_STATEMENT') {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (facts.sourcePersonId === facts.subjectPersonId) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      return { ok: true };
+
+    default:
+      return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+  }
+}
+
 export type ProfileAttribute = 'DISPLAY_NAME';
 
 export type ValueStatus = 'RECORDED' | 'SUPERSEDED' | 'RETRACTED';
