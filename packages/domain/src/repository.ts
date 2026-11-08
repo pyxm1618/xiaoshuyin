@@ -5,7 +5,14 @@
 
 import type { PoolClient } from 'pg';
 import {
+  assertMinorProcessingAllowed,
+  getComplianceProfileForUpdate,
+  getConsentRecordForGate,
+  getCurrentNoticeHash,
+} from '@xiaoshuyin/compliance';
+import {
   validateEvidenceProvenance,
+  validateEvidenceSourceMessage,
   type EvidenceProvenanceWriter,
   type ProvenanceSource,
 } from './provenance.js';
@@ -433,6 +440,98 @@ async function validateRawEvidenceProvenance(
   if (!validation.ok) refuseEvidenceWrite(validation.code);
 }
 
+function refuseEvidencePersonReference(): never {
+  throw Object.assign(new Error('Evidence person reference is invalid'), {
+    name: 'EvidenceDomainError',
+    code: 'EVIDENCE_PERSON_REFERENCE_INVALID',
+  });
+}
+
+function refuseMinorProcessing(reason: string): never {
+  throw Object.assign(new Error(reason), {
+    name: 'ComplianceError',
+    code: reason,
+  });
+}
+
+async function validateRawEvidenceSourceMessage(
+  tx: Tx,
+  row: {
+    familyId: string;
+    caseId: string;
+    sourcePersonId: string | null;
+    sourceMessageId: string | null;
+  }
+): Promise<void> {
+  if (row.sourceMessageId === null) return;
+
+  const message = await getDialogueMessageById(tx, row.sourceMessageId);
+  const validation = validateEvidenceSourceMessage({
+    sourceMessageId: row.sourceMessageId,
+    sourcePersonId: row.sourcePersonId,
+    message: message
+      ? {
+          id: message.id,
+          familyId: message.family_id,
+          caseId: message.case_id,
+          sourcePersonId: message.source_person_id,
+        }
+      : null,
+    familyId: row.familyId,
+    caseId: row.caseId,
+  });
+
+  if (!validation.ok) refuseEvidencePersonReference();
+}
+
+async function assertEvidenceSubjectProcessingAllowed(
+  tx: Tx,
+  subjectPersonId: string | null
+): Promise<void> {
+  if (subjectPersonId === null) return;
+
+  const row = await getComplianceProfileForUpdate(tx, subjectPersonId);
+  const profile = row
+    ? {
+        ageBand: row.age_band as 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN',
+        minorMode: row.minor_mode as boolean,
+        guardianPersonId: (row.guardian_person_id ?? null) as string | null,
+        guardianConsentRecordId: (row.guardian_consent_record_id ?? null) as string | null,
+        guardianConsentVersion: (row.guardian_consent_version ?? null) as number | null,
+        verifiedSource: row.verified_source as string,
+      }
+    : null;
+
+  let consent: {
+    id: string;
+    decision: 'GRANTED' | 'REVOKED';
+    boundPersonId: string | null;
+    noticeHash: string;
+    guardianPersonId: string;
+  } | null = null;
+
+  if (profile?.guardianConsentRecordId) {
+    const c = await getConsentRecordForGate(tx, profile.guardianConsentRecordId);
+    consent = c
+      ? {
+          id: c.id,
+          decision: c.decision,
+          boundPersonId: c.bound_person_id,
+          noticeHash: c.notice_hash,
+          guardianPersonId: c.guardian_person_id,
+        }
+      : null;
+  }
+
+  const result = assertMinorProcessingAllowed(subjectPersonId, {
+    getProfile: () => profile,
+    getConsentRecord: () => consent,
+    getCurrentNoticeHash,
+  });
+
+  if (result.decision === 'BLOCK') refuseMinorProcessing(result.reason);
+}
+
 /** Guardian relationship of a subject Person (Slice 1 frozen semantics). */
 export async function getGuardianPersonId(
   tx: Tx,
@@ -512,6 +611,8 @@ export async function insertEvidenceAssertion(
     row,
     row.kind === 'HYPOTHESIS' ? 'RECORD_HYPOTHESIS' : 'RECORD_STATEMENT'
   );
+  await validateRawEvidenceSourceMessage(tx, row);
+  await assertEvidenceSubjectProcessingAllowed(tx, row.subjectPersonId);
 
   const { rows } = await tx.query(
     `INSERT INTO assertions
@@ -568,6 +669,8 @@ export async function insertEvidenceObservation(
 ): Promise<EvidenceInsertResult> {
   // Execute the same frozen provenance matrix as recordObservation().
   await validateRawEvidenceProvenance(tx, row, 'RECORD_OBSERVATION');
+  await validateRawEvidenceSourceMessage(tx, row);
+  await assertEvidenceSubjectProcessingAllowed(tx, row.subjectPersonId);
 
   const { rows } = await tx.query(
     `INSERT INTO observations

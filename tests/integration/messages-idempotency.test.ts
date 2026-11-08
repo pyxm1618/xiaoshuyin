@@ -114,6 +114,32 @@ describe('Message idempotency (T025/T048)', () => {
     expect(JSON.stringify(rows[0].response_body)).not.toContain('same content');
   });
 
+  it('stores valid supplementary Unicode exactly and replays the same key stably', async () => {
+    const owner = await setup('unicode-replay');
+    const key = `t025-unicode-${Date.now()}`;
+    const content =
+      'supplementary ' + String.fromCodePoint(0x1f600) + ' ' +
+      String.fromCodePoint(0x2070e) + ' exact';
+
+    const first = await postMessage(owner.token, owner.caseId, key, content);
+    const second = await postMessage(owner.token, owner.caseId, key, content);
+
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    expect(second.json()).toEqual(first.json());
+    expect(await counts(owner.familyId)).toEqual({ messages: 1, audits: 1 });
+
+    const stored = await verifyPool.query(
+      'SELECT content FROM dialogue_messages WHERE id = $1',
+      [first.json().id]
+    );
+    expect(stored.rows[0].content).toBe(content);
+
+    const rows = await idempotencyRows(owner.accountId, key);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].response_status).toBe(201);
+  });
+
   it('same key + different content is 409 with zero new business writes', async () => {
     const owner = await setup('mismatch');
     const key = `t025-mismatch-${Date.now()}`;

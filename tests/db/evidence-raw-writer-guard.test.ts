@@ -84,6 +84,7 @@ function assertionRow(
     subjectPersonId: string | null;
     sourcePersonId: string | null;
     kind: 'STATEMENT' | 'HYPOTHESIS' | 'FACT';
+    sourceMessageId: string | null;
   }> = {}
 ) {
   return {
@@ -110,6 +111,7 @@ function observationRow(
   overrides: Partial<{
     subjectPersonId: string | null;
     sourcePersonId: string | null;
+    sourceMessageId: string | null;
   }> = {}
 ) {
   return {
@@ -288,6 +290,110 @@ describe('ULT-001 raw Evidence writer fail-closed', () => {
     expectNoRowsAdded(before, await rowCounts());
   });
 
+  it('binds raw source_message_id to the same Family, Case and source Person', async () => {
+    const before = await rowCounts();
+
+    const { rows: otherCase } = await admin.query(
+      `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
+       VALUES ($1, $2, 'OPEN', 'INTAKE', false, 1) RETURNING id`,
+      [fx.familyId, fx.actorPersonId]
+    );
+    const { rows: otherFamily } = await admin.query(
+      `INSERT INTO families (display_name, created_by_person_id)
+       VALUES ('t_ult001_wrong_family', $1) RETURNING id`,
+      [fx.actorPersonId]
+    );
+    await admin.query(
+      'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
+      [otherFamily[0].id, fx.actorPersonId]
+    );
+    const { rows: otherFamilyCase } = await admin.query(
+      `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
+       VALUES ($1, $2, 'OPEN', 'INTAKE', true, 1) RETURNING id`,
+      [otherFamily[0].id, fx.actorPersonId]
+    );
+
+    const makeMessage = async (
+      familyId: string,
+      caseId: string,
+      sourcePersonId: string,
+      content: string
+    ) => {
+      const { rows } = await admin.query(
+        `INSERT INTO dialogue_messages
+           (family_id, case_id, actor_account_id, source_person_id, content)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [familyId, caseId, fx.accountId, sourcePersonId, content]
+      );
+      return rows[0].id as string;
+    };
+
+    const correct = await makeMessage(fx.familyId, fx.caseId, fx.actorPersonId, 'raw correct');
+    const wrongSource = await makeMessage(
+      fx.familyId, fx.caseId, fx.otherMemberPersonId, 'raw wrong source'
+    );
+    const wrongCase = await makeMessage(
+      fx.familyId, otherCase[0].id, fx.actorPersonId, 'raw wrong case'
+    );
+    const wrongFamily = await makeMessage(
+      otherFamily[0].id, otherFamilyCase[0].id, fx.actorPersonId, 'raw wrong family'
+    );
+    const missing = '00000000-0000-7000-8000-000000000001';
+
+    for (const [label, sourceMessageId] of [
+      ['wrong source Person', wrongSource],
+      ['wrong Case', wrongCase],
+      ['wrong Family', wrongFamily],
+      ['missing message', missing],
+    ] as const) {
+      await withContext(async (client) => {
+        await expect(
+          insertEvidenceAssertion(
+            client,
+            assertionRow('GUARDIAN_RELAY', {
+              sourcePersonId: fx.actorPersonId,
+              sourceMessageId,
+            }) as any
+          ),
+          'assertion ' + label
+        ).rejects.toMatchObject({ code: 'EVIDENCE_PERSON_REFERENCE_INVALID' });
+      });
+      await withContext(async (client) => {
+        await expect(
+          insertEvidenceObservation(
+            client,
+            observationRow('GUARDIAN_OBSERVATION', {
+              sourcePersonId: fx.actorPersonId,
+              sourceMessageId,
+            }) as any
+          ),
+          'observation ' + label
+        ).rejects.toMatchObject({ code: 'EVIDENCE_PERSON_REFERENCE_INVALID' });
+      });
+    }
+
+    await withContext(async (client) => {
+      expect((await insertEvidenceAssertion(
+        client,
+        assertionRow('GUARDIAN_RELAY', {
+          sourcePersonId: fx.actorPersonId,
+          sourceMessageId: correct,
+        }) as any
+      )).id).toBeTruthy();
+    });
+    await withContext(async (client) => {
+      expect((await insertEvidenceObservation(
+        client,
+        observationRow('GUARDIAN_OBSERVATION', {
+          sourcePersonId: fx.actorPersonId,
+          sourceMessageId: correct,
+        }) as any
+      )).id).toBeTruthy();
+    });
+
+    expectNoRowsAdded(before, await rowCounts());
+  });
+
   it('FACT remains rejected by the database hard guard with rows +0', async () => {
     const before = await rowCounts();
     await withContext(async (client) => {
@@ -422,24 +528,24 @@ async function seed(admin: pg.Client): Promise<Fixture> {
 async function cleanup(admin: pg.Client) {
   try {
     await admin.query(
-      `DELETE FROM assertions WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
+      `DELETE FROM assertions WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't_ult001%')`
     );
     await admin.query(
-      `DELETE FROM observations WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
+      `DELETE FROM observations WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't_ult001%')`
     );
     await admin.query(
-      `DELETE FROM dialogue_messages WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
+      `DELETE FROM dialogue_messages WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't_ult001%')`
     );
     await admin.query(
-      `DELETE FROM business_audit_events WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
+      `DELETE FROM business_audit_events WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't_ult001%')`
     );
     await admin.query(
-      `DELETE FROM cases WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
+      `DELETE FROM cases WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't_ult001%')`
     );
     await admin.query(
-      `DELETE FROM family_members WHERE family_id IN (SELECT id FROM families WHERE display_name = 't_ult001')`
+      `DELETE FROM family_members WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't_ult001%')`
     );
-    await admin.query(`DELETE FROM families WHERE display_name = 't_ult001'`);
+    await admin.query(`DELETE FROM families WHERE display_name LIKE 't_ult001%'`);
     await admin.query(
       `DELETE FROM person_compliance_profiles
        WHERE person_id IN (

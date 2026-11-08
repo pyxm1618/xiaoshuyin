@@ -138,6 +138,46 @@ export function validateEvidenceProvenance(
   }
 }
 
+// ── Evidence source-message binding ────────────────────────
+
+export interface EvidenceSourceMessageFacts {
+  sourceMessageId: string | null;
+  sourcePersonId: string | null;
+  message: {
+    id: string;
+    familyId: string;
+    caseId: string;
+    sourcePersonId: string;
+  } | null;
+  familyId: string;
+  caseId: string;
+}
+
+export type EvidenceSourceMessageCheck =
+  | { ok: true }
+  | { ok: false; code: 'EVIDENCE_PERSON_REFERENCE_INVALID' };
+
+export function validateEvidenceSourceMessage(
+  facts: EvidenceSourceMessageFacts
+): EvidenceSourceMessageCheck {
+  if (facts.sourceMessageId === null || facts.sourceMessageId === undefined) {
+    return { ok: true };
+  }
+
+  const { message } = facts;
+  if (
+    !message ||
+    message.id !== facts.sourceMessageId ||
+    message.familyId !== facts.familyId ||
+    message.caseId !== facts.caseId ||
+    message.sourcePersonId !== facts.sourcePersonId
+  ) {
+    return { ok: false, code: 'EVIDENCE_PERSON_REFERENCE_INVALID' };
+  }
+
+  return { ok: true };
+}
+
 export type ProfileAttribute = 'DISPLAY_NAME';
 
 export type ValueStatus = 'RECORDED' | 'SUPERSEDED' | 'RETRACTED';

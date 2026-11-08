@@ -171,6 +171,34 @@ describe('Message create (T023)', () => {
     expect(await counts(actor.familyId)).toEqual(before);
   });
 
+  it('rejects unpaired UTF-16 surrogates with 422 and zero writes', async () => {
+    const actor = await setup('unicode-invalid');
+    const before = await counts(actor.familyId);
+
+    for (const [label, content] of [
+      ['high', String.fromCharCode(0xd800)],
+      ['low', String.fromCharCode(0xdc00)],
+    ] as const) {
+      const key = `t023-unicode-${label}-${Date.now()}-${seq++}`;
+      const res = await postMessage(actor.token, actor.caseId, key, { content });
+      expect(res.statusCode, label).toBe(422);
+      expect(res.json(), label).toEqual({
+        code: 'VALIDATION_ERROR',
+        message: 'Invalid request body',
+      });
+      const { rows } = await verifyPool.query(
+        `SELECT count(*)::int AS count
+           FROM idempotency_keys
+          WHERE actor_account_id = $1
+            AND command_type = 'CASE_MESSAGE_CREATE'
+            AND idempotency_key = $2`,
+        [actor.accountId, key]
+      );
+      expect(rows[0].count, label).toBe(0);
+    }
+    expect(await counts(actor.familyId)).toEqual(before);
+  });
+
   it('rejects missing / too short / too long Idempotency-Key with 422 and zero writes', async () => {
     const actor = await setup('key');
     const before = await counts(actor.familyId);

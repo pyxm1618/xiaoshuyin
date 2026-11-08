@@ -15,6 +15,7 @@ import {
   assignConflictGroup,
 } from '../../packages/domain/src/evidence.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
 
 const ADMIN_URL = process.env['TEST_ADMIN_DATABASE_URL']!;
 const APP_URL = process.env['DATABASE_URL']!;
@@ -26,6 +27,8 @@ interface Fixture {
   managerPersonId: string;
   childPersonId: string;
   guardianPersonId: string;
+  under14PersonId: string;
+  under14ConsentId: string;
   messageId: string;
   familyB: string;
   caseB: string;
@@ -317,6 +320,148 @@ describe('Internal Evidence writers (T027)', () => {
     });
   });
 
+  it('revalidates current UNDER_14 consent before the final Evidence insert', async () => {
+    const allowed = await runWrite((tx) =>
+      recordStatement(
+        tx,
+        ctx(),
+        statementDraft({
+          subjectPersonId: fx.under14PersonId,
+          sourceKind: 'GUARDIAN_RELAY',
+          sourcePersonId: fx.guardianPersonId,
+          content: 'under14 valid consent',
+        })
+      )
+    );
+    expect(allowed.id).toBeTruthy();
+
+    const validEvidence = JSON.stringify({
+      channel: 'TEST',
+      accepted_text_hash: 'a'.repeat(64),
+      declared_age_band: 'UNDER_14',
+      client_ip_hash: 'b'.repeat(64),
+      user_agent_hash: 'c'.repeat(64),
+    });
+
+    const { rows: revoked } = await admin.query(
+      `INSERT INTO consent_records
+         (family_id, guardian_person_id, guardian_account_id, purpose, decision,
+          version, onboarding_request_id, bound_person_id, bound_at,
+          notice_version, notice_hash, policy_version, evidence)
+       VALUES ($1, $2, $3, 'UNDER_14_GUARDIAN_CONSENT', 'REVOKED',
+               2, NULL, $4, now(), 'v1', $5, 'v1', $6::jsonb)
+       RETURNING id`,
+      [
+        fx.familyId, fx.guardianPersonId, fx.accountId, fx.under14PersonId,
+        getCurrentNoticeHash(), validEvidence,
+      ]
+    );
+    await admin.query(
+      `UPDATE person_compliance_profiles
+       SET guardian_consent_record_id = $1, guardian_consent_version = 2
+       WHERE person_id = $2`,
+      [revoked[0].id, fx.under14PersonId]
+    );
+
+    let before = await counts(fx.familyId);
+    await expect(
+      runWrite((tx) =>
+        recordObservation(
+          tx,
+          ctx(),
+          observationDraft({
+            subjectPersonId: fx.under14PersonId,
+            sourcePersonId: fx.guardianPersonId,
+            content: 'blocked after revoke',
+          })
+        )
+      )
+    ).rejects.toMatchObject({ code: 'GUARDIAN_CONSENT_REVOKED' });
+    expect(await counts(fx.familyId)).toEqual(before);
+
+    const insertGrantedConsent = async (
+      version: number,
+      noticeHash: string,
+      evidence: string
+    ) => {
+      const { rows: request } = await admin.query(
+        `INSERT INTO guardian_consent_requests
+           (family_id, guardian_person_id, subject_person_id, declared_age_band,
+            notice_version, notice_hash, status, expires_at, completed_at)
+         VALUES ($1, $2, $3, 'UNDER_14', 'v1', $4, 'GRANTED',
+                 now() + interval '1 hour', now())
+         RETURNING id`,
+        [fx.familyId, fx.guardianPersonId, fx.under14PersonId, noticeHash]
+      );
+      const { rows } = await admin.query(
+        `INSERT INTO consent_records
+           (family_id, guardian_person_id, guardian_account_id, purpose, decision,
+            version, onboarding_request_id, bound_person_id, bound_at,
+            notice_version, notice_hash, policy_version, evidence)
+         VALUES ($1, $2, $3, 'UNDER_14_GUARDIAN_CONSENT', 'GRANTED',
+                 $4, $5, $6, now(), 'v1', $7, 'v1', $8::jsonb)
+         RETURNING id`,
+        [
+          fx.familyId, fx.guardianPersonId, fx.accountId, version, request[0].id,
+          fx.under14PersonId, noticeHash, evidence,
+        ]
+      );
+      return rows[0].id as string;
+    };
+
+    const staleId = await insertGrantedConsent(3, '0'.repeat(64), validEvidence);
+    await admin.query(
+      `UPDATE person_compliance_profiles
+       SET guardian_consent_record_id = $1, guardian_consent_version = 3
+       WHERE person_id = $2`,
+      [staleId, fx.under14PersonId]
+    );
+    before = await counts(fx.familyId);
+    await expect(
+      runWrite((tx) =>
+        recordStatement(
+          tx,
+          ctx(),
+          statementDraft({
+            subjectPersonId: fx.under14PersonId,
+            sourceKind: 'GUARDIAN_RELAY',
+            sourcePersonId: fx.guardianPersonId,
+            content: 'blocked stale consent',
+          })
+        )
+      )
+    ).rejects.toMatchObject({ code: 'NOTICE_VERSION_MISMATCH' });
+    expect(await counts(fx.familyId)).toEqual(before);
+
+    const unusableId = await insertGrantedConsent(
+      4,
+      getCurrentNoticeHash(),
+      JSON.stringify({ accepted: true })
+    );
+    await admin.query(
+      `UPDATE person_compliance_profiles
+       SET guardian_consent_record_id = $1, guardian_consent_version = 4
+       WHERE person_id = $2`,
+      [unusableId, fx.under14PersonId]
+    );
+    before = await counts(fx.familyId);
+    await expect(
+      runWrite((tx) =>
+        recordStatement(
+          tx,
+          ctx(),
+          statementDraft({
+            subjectPersonId: fx.under14PersonId,
+            sourceKind: 'GUARDIAN_RELAY',
+            sourcePersonId: fx.guardianPersonId,
+            content: 'blocked missing usable consent',
+          })
+        )
+      )
+    ).rejects.toMatchObject({ code: 'GUARDIAN_CONSENT_REQUIRED' });
+    expect(await counts(fx.familyId)).toEqual(before);
+  });
+
   it('appends a superseding row while preserving the old row', async () => {
     const old = await runWrite((tx) =>
       recordStatement(tx, ctx(), statementDraft({ content: 'old assertion' }))
@@ -421,6 +566,12 @@ async function seed(admin: pg.Client): Promise<Fixture> {
       'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
       [fam[0].id, person[0].id]
     );
+    await admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id, age_band, minor_mode, verified_source)
+       VALUES ($1, 'ADULT', false, 'SELF_STATEMENT')`,
+      [person[0].id]
+    );
     const { rows: c } = await admin.query(
       `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
        VALUES ($1, $2, 'OPEN', 'INTAKE', true, 1) RETURNING id`,
@@ -463,6 +614,55 @@ async function seed(admin: pg.Client): Promise<Fixture> {
     [childPersonId, guardianPersonId]
   );
 
+  const { rows: under14 } = await admin.query(
+    'INSERT INTO persons (created_by_account_id) VALUES ($1) RETURNING id',
+    [a.accountId]
+  );
+  const under14PersonId = under14[0].id as string;
+  await admin.query(
+    'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
+    [a.familyId, under14PersonId]
+  );
+
+  const currentNoticeHash = getCurrentNoticeHash();
+  const { rows: consentRequest } = await admin.query(
+    `INSERT INTO guardian_consent_requests
+       (family_id, guardian_person_id, subject_person_id, declared_age_band,
+        notice_version, notice_hash, status, expires_at, completed_at)
+     VALUES ($1, $2, $3, 'UNDER_14', 'v1', $4, 'GRANTED',
+             now() + interval '1 hour', now())
+     RETURNING id`,
+    [a.familyId, guardianPersonId, under14PersonId, currentNoticeHash]
+  );
+  const consentEvidence = JSON.stringify({
+    channel: 'TEST',
+    accepted_text_hash: 'a'.repeat(64),
+    declared_age_band: 'UNDER_14',
+    client_ip_hash: 'b'.repeat(64),
+    user_agent_hash: 'c'.repeat(64),
+  });
+  const { rows: consent } = await admin.query(
+    `INSERT INTO consent_records
+       (family_id, guardian_person_id, guardian_account_id, purpose, decision,
+        version, onboarding_request_id, bound_person_id, bound_at,
+        notice_version, notice_hash, policy_version, evidence)
+     VALUES ($1, $2, $3, 'UNDER_14_GUARDIAN_CONSENT', 'GRANTED',
+             1, $4, $5, now(), 'v1', $6, 'v1', $7::jsonb)
+     RETURNING id`,
+    [
+      a.familyId, guardianPersonId, a.accountId, consentRequest[0].id,
+      under14PersonId, currentNoticeHash, consentEvidence,
+    ]
+  );
+  const under14ConsentId = consent[0].id as string;
+  await admin.query(
+    `INSERT INTO person_compliance_profiles
+       (person_id, age_band, minor_mode, guardian_person_id,
+        guardian_consent_version, guardian_consent_record_id, verified_source)
+     VALUES ($1, 'UNDER_14', true, $2, 1, $3, 'GUARDIAN_RELAY')`,
+    [under14PersonId, guardianPersonId, under14ConsentId]
+  );
+
   const { rows: msg } = await admin.query(
     `INSERT INTO dialogue_messages (family_id, case_id, actor_account_id, source_person_id, content)
      VALUES ($1, $2, $3, $4, 'raw guardian message') RETURNING id`,
@@ -476,6 +676,8 @@ async function seed(admin: pg.Client): Promise<Fixture> {
     managerPersonId: a.personId,
     childPersonId,
     guardianPersonId,
+    under14PersonId,
+    under14ConsentId,
     messageId: msg[0].id,
     familyB: b.familyId,
     caseB: b.caseId,
@@ -508,6 +710,14 @@ async function cleanup(admin: pg.Client) {
       `DELETE FROM person_compliance_profiles WHERE person_id IN (
          SELECT person_id FROM family_members WHERE family_id IN (
            SELECT id FROM families WHERE display_name LIKE 't027%'))`
+    );
+    await admin.query(
+      `DELETE FROM consent_records WHERE family_id IN (
+         SELECT id FROM families WHERE display_name LIKE 't027%')`
+    );
+    await admin.query(
+      `DELETE FROM guardian_consent_requests WHERE family_id IN (
+         SELECT id FROM families WHERE display_name LIKE 't027%')`
     );
     await admin.query(
       `DELETE FROM family_members WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't027%')`

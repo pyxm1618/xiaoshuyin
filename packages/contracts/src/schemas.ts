@@ -1,5 +1,20 @@
 import { z } from 'zod';
 
+function hasOnlyPairedUtf16Surrogates(value: string): boolean {
+  for (let i = 0; i < value.length; i += 1) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      if (i + 1 >= value.length) return false;
+      const next = value.charCodeAt(i + 1);
+      if (next < 0xdc00 || next > 0xdfff) return false;
+      i += 1;
+      continue;
+    }
+    if (code >= 0xdc00 && code <= 0xdfff) return false;
+  }
+  return true;
+}
+
 // ── Primitive types ─────────────────────────────────────────
 
 export const AgeBand = z.enum(['ADULT', 'MINOR_14_17', 'UNDER_14', 'UNKNOWN']);
@@ -305,7 +320,7 @@ export type CaseListResponseType = z.infer<typeof CaseListResponse>;
 // snapshot must not become a second copy of the message).
 
 export const CreateCaseMessageRequest = z.strictObject({
-  content: z.string().min(1).max(8000),
+  content: z.string().min(1).max(8000).refine(hasOnlyPairedUtf16Surrogates),
 });
 export type CreateCaseMessageRequestType = z.infer<typeof CreateCaseMessageRequest>;
 

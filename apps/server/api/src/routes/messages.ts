@@ -87,7 +87,8 @@ interface CaseContext {
  * Every *known authorization denial* is the same 404 body (anti-enumeration).
  *
  * ULT-002: only explicit business denials are collapsed into 404. Unknown
- * failures (PostgreSQL `57014` statement timeout, connection loss, unexpected
+ * failures (PostgreSQL `42501` insufficient privilege, `57014` statement timeout,
+ * connection loss, unexpected
  * infrastructure errors) propagate unchanged so the global error handler
  * answers 500 INTERNAL_ERROR instead of misreporting "Case not found".
  */
@@ -192,7 +193,7 @@ export function registerMessageRoutes(app: FastifyInstance, pool: pg.Pool) {
               await setFamilyContext(tx, familyId, personId, PURPOSE);
               await requireAuthorizedCase(tx, ctx);
             } catch (err: any) {
-              if (err?.code === 'CASE_NOT_FOUND' || err?.code === '42501') {
+              if (err?.code === 'CASE_NOT_FOUND') {
                 throw caseNotFound();
               }
               throw err;

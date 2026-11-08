@@ -3,7 +3,8 @@
  *
  * Frozen rule: only an explicit, known authorization denial is collapsed into
  * the anti-enumeration `404 CASE_NOT_FOUND`. Unknown infrastructure failures
- * (real PostgreSQL `57014` statement timeout, connection loss) MUST propagate
+ * (real PostgreSQL `42501` insufficient privilege, `57014` statement timeout,
+ * connection loss) MUST propagate
  * to the global 500 INTERNAL_ERROR handler.
  *
  * The failure is injected with a real PostgreSQL statement timeout on an
@@ -52,30 +53,35 @@ async function installAuthorizationFactFault(): Promise<void> {
   await admin.query(
     `CREATE TABLE ${FAULT_SCHEMA}.control (
        singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-       enabled boolean NOT NULL
+       mode text NOT NULL CHECK (mode IN ('off', 'timeout', 'privilege')),
+       calls integer NOT NULL DEFAULT 0
      )`
   );
   await admin.query(
-    `INSERT INTO ${FAULT_SCHEMA}.control (singleton, enabled) VALUES (true, true)`
+    `INSERT INTO ${FAULT_SCHEMA}.control (singleton, mode, calls)
+     VALUES (true, 'off', 0)`
   );
+  await admin.query(`CREATE TABLE ${FAULT_SCHEMA}.secret (marker integer NOT NULL)`);
+  await admin.query(`INSERT INTO ${FAULT_SCHEMA}.secret (marker) VALUES (1)`);
   await admin.query(
-    `CREATE FUNCTION ${FAULT_SCHEMA}.pause_authorization_family_read()
+    `CREATE FUNCTION ${FAULT_SCHEMA}.apply_authorization_family_read_fault()
      RETURNS boolean
      LANGUAGE plpgsql
      VOLATILE
      SECURITY INVOKER
      AS $ult002$
-     DECLARE fault_enabled boolean;
+     DECLARE fault_mode text; fault_calls integer;
      BEGIN
-       SELECT enabled INTO fault_enabled
-       FROM ${FAULT_SCHEMA}.control
-       WHERE singleton = true;
+       UPDATE ${FAULT_SCHEMA}.control
+          SET calls = calls + 1
+        WHERE singleton = true
+        RETURNING mode, calls INTO fault_mode, fault_calls;
 
-       IF COALESCE(fault_enabled, false)
-          AND NULLIF(current_setting('app.family_id', true), '') IS NOT NULL THEN
+       IF fault_mode = 'timeout' THEN
          PERFORM pg_sleep(5);
+       ELSIF fault_mode = 'privilege' AND fault_calls >= 2 THEN
+         PERFORM marker FROM ${FAULT_SCHEMA}.secret LIMIT 1;
        END IF;
-
        RETURN true;
      END;
      $ult002$`
@@ -86,21 +92,25 @@ async function installAuthorizationFactFault(): Promise<void> {
      AS
        SELECT f.*
        FROM public.families AS f
-       WHERE ${FAULT_SCHEMA}.pause_authorization_family_read()`
+       WHERE CASE
+         WHEN NULLIF(current_setting('app.family_id', true), '') IS NULL THEN true
+         WHEN f.id <> current_setting('app.family_id')::uuid THEN false
+         ELSE ${FAULT_SCHEMA}.apply_authorization_family_read_fault()
+       END`
   );
   await admin.query(`GRANT USAGE ON SCHEMA ${FAULT_SCHEMA} TO xiaoshuyin_app`);
+  await admin.query(`GRANT SELECT, UPDATE ON ${FAULT_SCHEMA}.control TO xiaoshuyin_app`);
+  await admin.query(`GRANT SELECT ON ${FAULT_SCHEMA}.families TO xiaoshuyin_app`);
   await admin.query(
-    `GRANT SELECT ON ${FAULT_SCHEMA}.control, ${FAULT_SCHEMA}.families TO xiaoshuyin_app`
-  );
-  await admin.query(
-    `GRANT EXECUTE ON FUNCTION ${FAULT_SCHEMA}.pause_authorization_family_read()
+    `GRANT EXECUTE ON FUNCTION ${FAULT_SCHEMA}.apply_authorization_family_read_fault()
      TO xiaoshuyin_app`
   );
 }
-async function setFaultEnabled(enabled: boolean): Promise<void> {
+
+async function setFaultMode(mode: 'off' | 'timeout' | 'privilege'): Promise<void> {
   await admin.query(
-    `UPDATE ${FAULT_SCHEMA}.control SET enabled = $1 WHERE singleton = true`,
-    [enabled]
+    `UPDATE ${FAULT_SCHEMA}.control SET mode = $1, calls = 0 WHERE singleton = true`,
+    [mode]
   );
 }
 
@@ -234,6 +244,7 @@ describe('ULT-002 authorization error classification', () => {
   });
 
   it('injects real 57014 at requireFamilyAction -> readFacts, not current-family resolution', async () => {
+    await setFaultMode('timeout');
     const victim = await setup('stage');
 
     // Same fault connection and search_path: identity/current-family resolution
@@ -282,10 +293,11 @@ describe('ULT-002 authorization error classification', () => {
     expect(sqlstate).toBe('57014');
     expect(isKnownAuthorizationDenial(denyToError('NOT_FAMILY_MANAGER'))).toBe(true);
     expect(isKnownAuthorizationDenial(denyToError('NO_ACTOR'))).toBe(false);
+    await setFaultMode('off');
   });
 
   it('maps authorization-fact 57014 to 500, rolls back, then the same request succeeds after fault removal', async () => {
-    await setFaultEnabled(true);
+    await setFaultMode('timeout');
     const victim = await setup('fault');
     const key = `ult002-fault-${Date.now()}`;
     const content = 'ult002 exact same request';
@@ -320,7 +332,7 @@ describe('ULT-002 authorization error classification', () => {
 
     // Remove only the PostgreSQL fault. Retry the exact same valid request:
     // same actor, case, idempotency key and content.
-    await setFaultEnabled(false);
+    await setFaultMode('off');
     const recovered = await postMessage(
       faultApp,
       victim.token,
@@ -329,6 +341,43 @@ describe('ULT-002 authorization error classification', () => {
       content
     );
 
+    expect(recovered.statusCode).toBe(201);
+    expect(recovered.json().caseId).toBe(victim.caseId);
+
+    const afterRecovery = await counts(victim.familyId, key);
+    expect(afterRecovery.messages).toBe(before.messages + 1);
+    expect(afterRecovery.audits).toBeGreaterThan(before.audits);
+    expect(afterRecovery.idempotency).toBe(1);
+  });
+  it('maps EXECUTE authorization 42501 to 500, rolls back, then succeeds after fault removal', async () => {
+    await setFaultMode('privilege');
+    const victim = await setup('privilege');
+    const key = `ult002-privilege-${Date.now()}`;
+    const content = 'ult002 exact privilege request';
+    const before = await counts(victim.familyId, key);
+    logs = '';
+
+    const failed = await postMessage(faultApp, victim.token, victim.caseId, key, content);
+
+    expect(failed.statusCode).toBe(500);
+    expect(failed.json()).toEqual({
+      code: 'INTERNAL_ERROR',
+      message: 'An internal error occurred',
+    });
+    expect(failed.statusCode).not.toBe(404);
+
+    const afterFailure = await counts(victim.familyId, key);
+    expect(afterFailure.messages).toBe(before.messages);
+    expect(afterFailure.audits).toBe(before.audits);
+    expect(afterFailure.idempotency).toBe(0);
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(logs).toContain('42501');
+
+    await setFaultMode('off');
+    const recovered = await postMessage(
+      faultApp, victim.token, victim.caseId, key, content
+    );
     expect(recovered.statusCode).toBe(201);
     expect(recovered.json().caseId).toBe(victim.caseId);
 

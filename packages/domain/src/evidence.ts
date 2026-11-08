@@ -14,6 +14,7 @@
 
 import {
   validateEvidenceProvenance,
+  validateEvidenceSourceMessage,
   type EvidenceProvenanceFacts,
   type EvidenceProvenanceWriter,
   type ProvenanceSource,
@@ -350,20 +351,8 @@ export interface SourceMessageInput {
 export function validateSourceMessage(
   input: SourceMessageInput
 ): EvidenceCheck {
-  if (input.sourceMessageId === null || input.sourceMessageId === undefined) {
-    return { ok: true };
-  }
-  const { message } = input;
-  if (
-    !message ||
-    message.id !== input.sourceMessageId ||
-    message.familyId !== input.familyId ||
-    message.caseId !== input.caseId ||
-    message.sourcePersonId !== input.sourcePersonId
-  ) {
-    return fail('EVIDENCE_PERSON_REFERENCE_INVALID');
-  }
-  return { ok: true };
+  const validation = validateEvidenceSourceMessage(input);
+  return validation.ok ? { ok: true } : fail(validation.code);
 }
 
 // ── Conflict group ──────────────────────────────────────────
