@@ -240,18 +240,37 @@ components:
           type: string
       required: [code, invitationToken, idempotencyKey]
     BindingCandidateDecisionRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        decision:
-          type: string
-          enum: [AFFIRM, REJECT, CANCEL]
-        confirmationVersion:
-          type: [string, 'null']
-          const: candidate-binding-v1
-        idempotencyKey:
-          type: string
-      required: [decision, idempotencyKey]
+      oneOf:
+        - type: object
+          additionalProperties: false
+          properties:
+            decision:
+              type: string
+              const: AFFIRM
+            confirmationVersion:
+              type: string
+              const: candidate-binding-v1
+            idempotencyKey:
+              type: string
+          required: [decision, confirmationVersion, idempotencyKey]
+        - type: object
+          additionalProperties: false
+          properties:
+            decision:
+              type: string
+              const: REJECT
+            idempotencyKey:
+              type: string
+          required: [decision, idempotencyKey]
+        - type: object
+          additionalProperties: false
+          properties:
+            decision:
+              type: string
+              const: CANCEL
+            idempotencyKey:
+              type: string
+          required: [decision, idempotencyKey]
     BindingConfirmerDecisionRequest:
       type: object
       additionalProperties: false

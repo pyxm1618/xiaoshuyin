@@ -255,23 +255,45 @@
 - [x] CHK189 Is 审计一的 20 项检查（Spec→Plan 漂移、语义改变、FR/SC/AS 漏项、负向场景、不可执行 Task、并发证明、RETRYABLE、幂等、永久唯一、P2、Account orphan、RLS、authorization/recognition 混淆、candidate 泄露、invitation 侵入、Slice 4 侵入、runtime 依赖未标 BLOCKED、Task 顺序、测试映射、开发 AI 可直接实施）逐项在 Plan / Checklist 中有落点？[Auditability, plan D-1—D-22 / checklist CHK001—CHK188]
 - [x] CHK190 Is Checklist 自身明确「PASS 不等于 Implement Gate OPEN」，且 dependency blocker 不会被误记为 Plan FAIL？[Clarity, checklist header / plan D-22.3]
 
+- [x] CHK191 Is F-04 pairing 有真实可执行的现有 API path：S0 snapshot → recognized candidate fresh bootstrap → S1，仅 exact-one delta 可选；0/>1 fail closed，不靠 displayName / nickname / AI / membership 猜？[Executability, F-04 / plan D-9.2]
+
+- [x] CHK192 Is pairing 保持 identity-proof boundary：candidate 无 attemptId、不分享 pendingContextToken；attemptId / token 都不是 identity proof，second party 仍独立认证并亲自 recognition？[Security, 005 §5.3 / F-04]
+
+- [x] CHK193 Is Gate2 “current” 明确与 binding mutation 共享 concurrency-safe consistency / linearization boundary，并要求真实 Gate2 PASS→consent revoke commit→binding0 race？[Concurrency, F-01 / plan D-8.4]
+
+- [x] CHK194 Is SECOND_PARTY operation hash 含 attemptId、operation.attempt_id 为 replay authoritative attempt、old key A→B fail-closed 且 B 零 mutation？[Idempotency, F-02 / plan D-5.4]
+
+- [x] CHK195 Are read RLS policies explicit FOR SELECT、commit policy explicit FOR UPDATE，并要求 pg_policy.polcmd + runtime-role SELECT-positive/write-negative matrix？[Security, F-03 / plan D-13.3]
+
+- [x] CHK196 Is cleanup scope 明确为 settled attempt 全 contexts、blocked/no-attempt 同 identity 全 no-attempt decryptable contexts，同时保留 non-secret history？[Security, F-05 / plan D-3.3]
+
+- [x] CHK197 Is create/converge 前先物化 old expired PENDING→ATTEMPT_EXPIRED + audit once + cleanup，再允许 new attempt，且不得 link old row？[Consistency, F-07 / plan D-14]
+
+- [x] CHK198 Is confirmationVersion 唯一无矛盾：AFFIRM required literal；REJECT/CANCEL omit；null always invalid；handwritten OpenAPI decision-discriminated？[Contract, F-06 / plan D-10.2]
+
+- [x] CHK199 Is openapi-check remediation 明确 RED→FIX→GREEN，能区分 nullable+const、true union、decision-union真实语义，不会 normalizer 造假？[Contract, F-06 / plan D-19.4]
+
+- [x] CHK200 Is F-08 closeout 覆盖 rollback matrix、两条MINOR success E2E、true Case B mismatch、historical confirmer replay、RLS write negatives、pairing E2E、OpenAPI semantics及substantive coverage:audit？[Measurability, F-08 / plan D-19.4]
+
+
 ---
 
 ## Review Log
 
 - 2026-11-07：Plan 完成后首次 Checklist authoring。全部条目按 Spec / 005 / Docs / Slice 1 schema / Slice 4 contract 独立核对；未发现需要修改冻结 Spec 的缺口。
 - 已知非 Checklist FAIL 的真实 blocker（历史记录，已失效）：`plan.md` D-22.1 H1（Slice 1 `authorize()` 占位 / 无最终 Converge PASS）曾是本 Slice（业务 Slice 5，repo feature 006）core implementation 的 hard blocker；H3（Slice 4 runtime 未 merge）只阻塞 `T121–T124` 的真实 adapter / E2E closeout，不阻塞 core implementation，也不构成循环依赖。当时状态为 `IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY`，不影响 Plan 冻结。
-- 2026-11-07 Dependency Gate correction：将 Slice 4 runtime 从「core Implement blocker」降级为「late E2E blocker」；明确 `本 Slice core ← Slice 1`、`Slice 4 implementation ← 本 Slice core runtime`、`本 Slice T121–T124 ← Slice 4 runtime` 的分阶段交接，不存在循环硬依赖。条目总数仍为 190，未新增/删除。- 2026-11-07 Targeted Plan Remediation（实施中发现冻结 Plan 内部缺口，仅最小定点修正）：
+- 2026-11-07 Dependency Gate correction：将 Slice 4 runtime 从「core Implement blocker」降级为「late E2E blocker」；明确 `本 Slice core ← Slice 1`、`Slice 4 implementation ← 本 Slice core runtime`、`本 Slice T121–T124 ← Slice 4 runtime` 的分阶段交接，不存在循环硬依赖。当时条目总数为 190，未新增/删除。- 2026-11-07 Targeted Plan Remediation（实施中发现冻结 Plan 内部缺口，仅最小定点修正）：
   - **M3 candidate-account RLS**：D-8.1 要求 ordinary-login-first / candidate Account conflict，而 D-13.3 / D-13.4 原无合法读取路径且明确 `actorAccountId` 不用于读取 candidate Person。已冻结最小 purpose-scoped 读取：GUC `app.binding_candidate_account_id` + policy `persons_binding_candidate_account_read`（仅 GATE / COMMIT，只读该 authenticated candidate Account 已绑定的 Person，仅用于 `IDENTITY_CONFLICT`，不返回 candidate-facing P2 信息）。复核 CHK018 / CHK128 / CHK130 / CHK133 / CHK178。
   - **M3 其余额外对象裁定**：`binding_context_attempt_scope`、`app.set_binding_target_context` / `withBindingTargetTransaction` 经判定为冻结 D-6.1（commit 必须在同一事务锁定 context）与 D-9.2（targetFamilyId 需先由 P1 membership 解析）所必需，已最小写入 Plan：前者仅 GATE / COMMIT purpose + `attempt_id = app_binding_attempt_id()`，后者仅 target-person GUC、purpose GATE、Family 解析前不得读 profile / consent；两者均不扩大 Family scope、不构成第二 authorization engine。复核 CHK127 / CHK128 / CHK130 / CHK164。
   - **M3 single migration**：D-18.1 保持「单个 reviewed additive migration」；开发分支现有 004 + 005 且均未 merge 时，必须把 005 批准内容 fold 回唯一 006 migration、删除 005、普通 commit，不 rebase / force push / 改已 merge migration，并重跑 fresh / upgrade / second-apply / DB evidence。复核 CHK163–CHK168。
   - **M6 COMMITTED bootstrap replay**：D-10.2 / D-11.1 / D-5.3 明确同一 BOOTSTRAP operation key 在 attempt 已 COMMITTED 后返回 historical `{ binding:"COMMITTED" }`；不写成 `REUSED`，不重新 commit、不 revive invitation、不自动 accept、不重建 authorization；OpenAPI / schema 增加 strict `BindingBootstrapCommittedResponse`。复核 CHK079 / CHK154 / CHK176。
   - **M13 RETRYABLE audit**：D-15.1 event_type 闭集新增 `BINDING_OPERATION_RETRYABLE`，D-15.2 要求 `result='RETRYABLE'` 且不改变 attempt state、不用 `BINDING_TERMINAL` 冒充、不扩展 `business_audit_events`。复核 CHK142 / CHK188。
   - **M5 bootstrap replay context clarification**：在 token 明文不落库、operation key 不存 response body 的冻结约束下，D-3.4 明确 same-key bootstrap replay 允许新建 transport context / token，但必须 link 同一 authoritative attempt；`new transport context ≠ new attempt ≠ duplicate business side effect`。复核 CHK056 / CHK176。
-  - 条目总数仍为 190（未新增/删除）；`spec.md`、`Docs/**`、`specs/005/**`、`apps/**`、`packages/**`、`db/**`、`tests/**` 只读。- 2026-11-07 Final Plan/Tasks Closeout（C1–C5，仅 `plan.md` / `tasks.md` / 本 Checklist；`spec.md` 未改）：
+  - 当时条目总数为 190（未新增/删除）；`spec.md`、`Docs/**`、`specs/005/**`、`apps/**`、`packages/**`、`db/**`、`tests/**` 只读。- 2026-11-07 Final Plan/Tasks Closeout（C1–C5，仅 `plan.md` / `tasks.md` / 本 Checklist；`spec.md` 未改）：
   - **C1 Case B 口径**：D-10.2 / D-17.2 明确「bootstrap endpoint 被调用」≠「进入 Case C identity bootstrap state machine」；Case B 误调 bootstrap 时在 WeChat authentication 后直接 `REUSED`，不建 attempt / confirmation、不进 Gate 1→Phase C、不要求双确认；canonical flow 仍为 Case B → ordinary authenticated path、Case C → invitation-aware bootstrap。复核 CHK015。
   - **C2 authorize DENY 映射**：D-10.3 冻结 `401 WECHAT_AUTH_FAILED` 只用于真实 `code2session` 失败；`IDENTITY_BINDING_BOOTSTRAP` 的 `authorize()` DENY → 200 generic（冻结 bootstrap response shape），不暴露 authorization reason / P1 / Family / guardian / consent / age / invitation state，不新增 candidate-facing authorization error code；D-11.1 增加对应 matrix 行；D-12 同步；T095 / T096 增加断言与实现边界。复核 CHK107 / CHK149 邻近项。
   - **C3 invalid invitation pipeline**：D-11.3 改为两条 normalized pipeline（invitation 可解析 → 真实 Gate 1；不可解析 / 无可信 P1 → pre-attempt blocked classification + audit + 同一 serializer），禁止 immediate early return，禁止 fake query 不存在的 P1，禁止人为 delay / padding；T101 / T102 同步。复核 CHK112。
   - **C4 test layering**：D-19.1 将 app-layer DB-backed facts builder 落到 `tests/db/identity-binding-facts.test.ts`，`tests/domain/**` 明确为纯 domain（不依赖 `DATABASE_URL`、不访问真实 PostgreSQL、禁止 silent skip），`bun run vitest run tests/domain` 必须在无 DB 环境可执行；T047 / T048 / T107 / T108 同步文件与 `[VERIFY]`。复核 CHK169。
   - **C5 stale facts**：D-22.1 H1 更新为 SATISFIED（Slice 1 Final Independent Audit II PASS → PR #13 merge main → post-merge CI PASS → CLOSED，`origin/main` = `f4ef602`，`MINOR_PROCESSING` 实分支，converge 36 PASS / 0 FAIL）；D-22.2 记录 Slice 2 已经 PR #14 merge main；D-22.3 当前状态改为 `PLAN FROZEN / READY FOR CORE IMPLEMENTATION`（`T121–T124` 仍 blocked）；repo feature 006 的业务称呼统一为「本 Slice（业务 Slice 5，repo feature 006）」。复核 CHK149 / CHK150 / CHK152。
-  - 条目总数仍为 190（未新增/删除）；`spec.md`、`Docs/**`、`specs/005/**`、`apps/**`、`packages/**`、`db/**`、`tests/**` diff = 0。
+  - 当时条目总数为 190（未新增/删除）；`spec.md`、`Docs/**`、`specs/005/**`、`apps/**`、`packages/**`、`db/**`、`tests/**` diff = 0。
+- 2026-11-08 Ultimate Audit Targeted Remediation：新增 CHK191—CHK200；F-04 冻结现有 6 API 的 S0→fresh bootstrap→S1 exact-delta ceremony；F-06 冻结 AFFIRM required literal、REJECT/CANCEL omit、null invalid 并修 handwritten OpenAPI；F-01/F-02/F-03/F-05/F-07/F-08 均有可执行 contract / task / proof。当前 Checklist **200 条**。Checklist PASS 只表示计划/合同问题已回答，不表示 26 个 remediation tasks 已实现；T121–T124 仍 BLOCKED。

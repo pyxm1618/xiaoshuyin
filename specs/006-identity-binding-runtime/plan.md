@@ -82,6 +82,85 @@
 
 ---
 
+## Ultimate Audit Targeted Remediation（F-01—F-08）
+
+本节是 Ultimate Final Independent Re-audit 后的 authoritative targeted remediation contract。它只收敛 F-01—F-08，不重新设计已 PASS 的 five-table model、ordinary login、no-P2、single authorize、single migration、attempt 三态、RETRYABLE operation-only、bootstrap authoritative attempt mapping、Case B defensive REUSED、candidate-account conflict purpose、Slice 3 / Slice 4 边界。
+
+| Finding | Plan | Tasks | Checklist | Handwritten OpenAPI | Runtime later |
+|---|---|---|---|---|---|
+| F-01 Gate 2 TOCTOU | D-6 / D-8 / D-14 | T073 / T074 / T081 / T110 | CHK193 | 无 | commit / concurrency |
+| F-02 confirmer old key → new attempt | D-5 | T037 / T039 / T065 / T066 / T106 | CHK194 | 无 | confirmer / operation key |
+| F-03 read RLS 可写 | D-13 / D-18 | T013 / T103 / T104 | CHK195 | 无 | migration / DB tests |
+| F-04 pairing path | D-9.2 / D-10 | T065 / T085 | CHK191 / CHK192 | 无 shape 变化 | confirmer workflow / E2E |
+| F-05 sensitive context cleanup | D-3.3 / D-6 / D-14 | T050 / T059 / T060 / T068 / T080 | CHK196 | 无 | repositories / terminal paths |
+| F-06 confirmationVersion semantics | D-10.2 / D-19 | T059 / T060 / T091 / T092 / T097 / T112 | CHK198 / CHK199 | 是 | Zod / generated / checker |
+| F-07 expiry before create/converge | D-2.2 / D-14 | T036 / T055 / T056 | CHK197 | 无 | attempt repository / bootstrap |
+| F-08 verification gaps | D-19.4 | T081 / T085 / T101 / T103 / T106 / T112 / T115 | CHK200 | 无 | tests / coverage tooling |
+
+### F-01 — Gate 2 concurrency contract
+
+“Gate 2 uses current state”不等于“刚刚 SELECT 过一次”。Gate 2 current-state check 与最终 `persons.account_id` binding mutation MUST 共享 concurrency-safe consistency / linearization boundary。Implement 可锁住 / 串行化会改变 Gate 2 决策的 authoritative rows，或在已经建立的事务 / 锁边界内于 binding linearization point 前再次 re-evaluate Gate 2；Plan 不预设具体锁序。
+
+冻结不变量：如果 consent revoke、guardian / confirmer authority 变化、invitation terminal、membership / multi-family 变化、candidate conflict 等 invalidating change 在 binding linearization point 前已经 commit，则本次 binding mutation = 0，attempt 不得 COMMITTED。必须有真实 DB barrier race：`Gate2 read/PASS → concurrent consent revoke commits → commit resumes`，最终 P1 未绑定、attempt 非 COMMITTED。顺序执行“先 revoke 再 commit”不能替代该 proof。
+
+### F-02 — SECOND_PARTY_DECISION idempotency contract
+
+`SECOND_PARTY_DECISION` 的 canonical request identity / request hash MUST 包含 path `attemptId`。operation key 首次绑定 `attempt_id=A` 后，existing `operation.attempt_id` 就是 replay authoritative attempt，且映射不可改。
+
+唯一冻结的 cross-attempt old-key 行为：key K 首次作用 A 后，若 A TERMINAL、同三元组后续出现 B，对 B URL 重用 K → **409 `IDEMPOTENCY_PAYLOAD_MISMATCH` fail closed**；B 的 confirmation / audit / state / commit 均不得变化。同 key + same canonical request replay A 时始终只回读 A，不得漂移到 B。B 需要新的 idempotency key。
+
+### F-03 — RLS command contract
+
+所有 intended read-only Slice 1 policies 必须显式 `FOR SELECT`；特别是 `persons_binding_target_read` 与 `persons_binding_candidate_account_read`。唯一 Person binding write policy `persons_binding_commit_update` 必须显式 `FOR UPDATE`。不得依赖 PostgreSQL 默认 `ALL`。
+
+真实 DB 验收必须使用 runtime role：GATE purpose + exact target / candidate GUC 下，SELECT 按设计允许；UPDATE / INSERT / DELETE 必须拒绝。只有 COMMIT purpose + exact target-person GUC + exact commit-account GUC 下的 `persons_binding_commit_update` 才允许合法 `persons.account_id` UPDATE。测试同时检查 `pg_policy.polcmd`。
+
+### F-04 — Pairing contract
+
+Docs / 005 / 006 Spec 冻结的是：second-party independent authentication、target confirmation、candidate recognition，以及 same attempt / P1 / candidate identity / invitation 一致性；上游**没有要求 candidate 必须获得 attemptId**，且具体 pairing interaction 属 Plan-level decision。
+
+冻结最小机制：使用现有 6 API 做 **snapshot → fresh bootstrap → delta** 的同屏 / 线下 ceremony，不新增 QR / PIN / pairing code / endpoint。
+
+1. 已独立认证且处于明确 P1 上下文的 confirmer 先调用现有 `GET /identity-bindings/pending?personId=P1`，记录 baseline pending attempt-id set `S0`。
+2. confirmer 在现场亲自辨认 candidate；candidate **在 S0 之后**从自己的 invitation flow 发起 Case C fresh bootstrap。Gate 1 PASS 后服务端创建 / 收敛 fresh PENDING attempt。candidate 继续只持自己的 `X-Binding-Context`，不得把 `pendingContextToken` 分享给 confirmer。
+3. confirmer 刷新同一 pending list 得到 `S1`，计算 `D = S1 - S0`。**只有 `|D| = 1`** 时，该唯一 attemptId 才可作为本次 confirmer-facing selector。若 `|D| = 0` 或 `> 1`，必须 fail closed；不得按 createdAt、displayName、nickname、Family membership、AI 或系统推断选择。
+4. 如果 candidate 在 baseline 前已经有 live attempt，则该 id 属于 S0，不能被本次 ceremony 选中；candidate 必须先 CANCEL / 使旧 attempt terminal，并在 invitation 仍 valid 且允许 new attempt 的前提下重新开始。
+5. exact attempt 选中后，candidate AFFIRM 仍只通过自己的 context 落到该 attempt；confirmer 对同一 exact attempt 作 target confirmation + candidate recognition；后端继续验证 same attempt / P1 / candidate identity / invitation。
+
+Candidate pairing information：**无新的 identifier**。candidate 在已被 confirmer 亲自辨认的现场于 S0 后执行 fresh bootstrap，这个时序事件只是 pairing signal，不是 identity proof。attemptId 只是 confirmer-facing opaque selector，也不是 identity proof；`pendingContextToken` 是 bearer-like candidate credential，禁止分享。selector 只在该 attempt `PENDING && expires_at > now()` 时有效。F-04 不改变现有 endpoint 数、pending-list schema 或 candidate-facing response，因此无 handwritten OpenAPI shape impact。
+
+### F-05 — Sensitive context cleanup contract
+
+必须区分 transport context / attempt / operation：
+
+- authoritative attempt 一旦进入 `COMMITTED` 或任意 `TERMINAL`（含 expiry / candidate reject / cancel / confirmer reject / Gate 2 block / concurrency loser），必须在 settlement consistency boundary 内清空**该 attempt 关联的全部 contexts**的 `openid_ciphertext / openid_nonce / openid_tag`，不是只清当前 context。
+- pre-attempt blocked / no-attempt（bootstrap authorize DENY、invalid invitation、Case B mismatch、Gate 1 fail）完成后，必须清空该 candidate identity 下所有仍为 `attempt_id IS NULL` 的 decryptable contexts。Gate 1 PASS 的合法 context 在同一 transaction 内 link attempt，因此 no-attempt context 不再是 Phase C 所需 secret。
+- 单个 context 自身过期至少清理自身；若同时物化 attempt expiry，则按 attempt scope 清理该 attempt 全部 contexts。
+- 只清 secret，不删历史事实：context row 及 attempt / operation / audit 的 non-secret linkage 保留。
+
+### F-06 — Candidate confirmationVersion contract
+
+唯一冻结语义：
+
+- AFFIRM：`confirmationVersion` MUST 存在且只能是 `"candidate-binding-v1"`。
+- REJECT：`confirmationVersion` MUST omitted。
+- CANCEL：`confirmationVersion` MUST omitted。
+- `null` 在三种 decision 下均不合法。AFFIRM omitted / null / wrong literal → 422；REJECT / CANCEL 显式 null 或任何 present version → 422。
+
+手写 OpenAPI 必须用真正的 decision-discriminated `oneOf` 表达，禁止 `type: [string, 'null'] + const`。Runtime/Zod/generated 在开发 remediation 中同步。OpenAPI checker 必须先有 RED semantic regression，证明 nullable+const、true const-or-null 与 decision-discriminated union 的真实语义不可被错误归一化为等价；随后最小修 normalizer，再 GREEN。
+
+### F-07 — Expiration-before-create contract
+
+fresh create / converge same triple 之前，必须先锁定并检查 existing PENDING attempt。若 `expires_at <= now()`：先 materialize 为 TERMINAL / `ATTEMPT_EXPIRED`，audit exactly once，清理 old attempt 全部 sensitive contexts；之后才允许 new attempt。新的 transport context 不得继续 link 已过期 PENDING。
+
+### F-08 — Verification closeout
+
+D-19.4 / Tasks 必须补齐：F-01 Gate2 race、F-02 historical confirmer old-key→new-attempt、F-03 RLS write denial、F-05 cleanup matrix、F-07 expiry-before-new-bootstrap、F-04 real pairing E2E、F-06 handwritten/runtime semantic equivalence + checker RED/FIX/GREEN、rollback failure-injection matrix、两条 MINOR_14_17 legal success E2E、true Case B mismatch，以及 substantive Slice-5 `coverage:audit`。
+
+**Governance**：F-04 / F-06 均可在 Docs → 005 → 006 Spec 已授权的 Plan-level decision 范围内解决；无需修改 `Docs/**`、`specs/005/**` 或 `spec.md`。
+
+---
+
 ## Design Decisions Index
 
 | ID | 决策 |
@@ -212,7 +291,7 @@ CREATE INDEX binding_attempts_invitation_idx
 | `COMMITTED` | `state = 'COMMITTED'`，`committed_account_id` 非空，`settled_at` 非空 | binding 成功，`Account A ↔ P1` |
 | `TERMINAL` | `state = 'TERMINAL'`，`terminal_reason` 非空，`settled_at` 非空 | attempt 永不能再成功 |
 | `RETRYABLE` | **不落表、不是 attempt state** | 只存在于 operation 结果；由 response 表达，retry / read-back 解析回 authoritative attempt state |
-| expiration | `expires_at` + 访问时条件物化 | 到期后任何 commit / 确认 / 新 attempt 创建都先条件更新为 `TERMINAL` + `ATTEMPT_EXPIRED`，不是后台 job |
+| expiration | `expires_at` + 访问时条件物化 | commit / 确认 / fresh create-converge 前均先 materialize expiry；old expired PENDING 先 TERMINAL + `ATTEMPT_EXPIRED` + exactly-once audit + all-context cleanup，之后才允许 new attempt；不得继续 link expired PENDING。不是后台 job。 |
 
 **为什么 RETRYABLE 不能成为 attempt settled state**：005 §5.5 明确 RETRYABLE 是 operation 维度；若落成 attempt 状态，会错误冻结 attempt，使 timeout 后的合法重试无法推进，并违反 `PENDING → COMMITTED` 的合法路径。
 
@@ -294,7 +373,7 @@ tokenHash      = sha256hex(token)
 ```
 
 - 加密：AES-256-GCM，12-byte random nonce，AAD = `context.id::text`。
-- **ciphertext 清理**：commit 成功、attempt terminal、以及任何 pre-attempt 阻断（invalid invitation / Case B mismatch / Gate 1 fail）后，必须清空 `openid_ciphertext / nonce / tag`；不得为失败路径保留可解密 openid。
+- **ciphertext 清理按 F-05 scope contract**：attempt settled / expired 时 scrub 该 attempt 全部 contexts；pre-attempt blocked / no-attempt scrub 同 identity 全部 no-attempt decryptable contexts；保留 non-secret historical linkage。不得只清当前 context，也不得把 decryptable secret 留给未来 lifecycle cleanup。
 - 不记录 key、token、openid、ciphertext 到日志 / audit / response。
 - 不在本 Slice 设计 KMS / keyring / key rotation；secret 变更属 operational compatibility event，必须 fail-safe，不得静默产生不同 digest / 不可解密旧 context。
 
@@ -424,6 +503,7 @@ CREATE TABLE binding_operation_keys (
 | same key + same payload（未 settled） | 返回当前 attempt 状态；无重复副作用；不创建第二 attempt / 第二 confirmation / 第二次 commit |
 | same key + same payload（已 settled） | 返回历史 settled outcome；不重新执行 commit；不改 outcome |
 | same key + different payload | 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原 attempt / 原结果 |
+| `SECOND_PARTY_DECISION` same key、URL attempt A→B | canonical request hash 含 `attemptId`；409 fail-closed；B 零 mutation；existing `operation.attempt_id` 仍 authoritative A |
 | same key concurrent | 事务级 advisory lock（`pg_advisory_xact_lock(hashtextextended(scope, key))`）+ 唯一约束；第二个等待后重读，只产生一个业务结果 |
 | different key + same semantic operation，已有 PENDING attempt | 收敛到同一 attempt（部分唯一索引 + `SELECT ... FOR UPDATE`）；不创建第二个 live attempt |
 | different key + same semantic operation，旧 attempt terminal 且 invitation valid | 允许 new attempt；new attempt 是 new identity；旧 attempt replay 仍返回旧结果 |
@@ -435,9 +515,10 @@ CREATE TABLE binding_operation_keys (
 
 ### D-5.4 operation key 与 attempt identity 的边界
 
-- `binding_operation_keys.attempt_id` 可以为 NULL（Gate 1 阻断 / invalid invitation 的 bootstrap）。
-- operation key 不表达任何 attempt 状态；attempt 状态只在 `binding_attempts.state`。
-- 任何 replay / read-back 都先读 attempt，再决定 response；不得从 operation key 推断成功 / 失败。
+- `binding_operation_keys.attempt_id` 可以为 NULL（Gate 1 阻断 / invalid invitation 的 bootstrap）；一旦绑定 attempt，映射不可改。
+- operation key 不表达 attempt 状态；attempt state 只在 `binding_attempts.state`。
+- replay 的 attempt 选择来自 existing operation 的 **authoritative `attempt_id`**，不是当前 URL、latest attempt 或 same-triple lookup。
+- `SECOND_PARTY_DECISION` canonical request hash MUST 包含 path `attemptId`。old key A 对 B URL = 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；B 不得被读取后推进、确认、terminalize 或 commit。same-key / same-request replay A 始终只回读 A。
 
 ---
 
@@ -449,7 +530,7 @@ CREATE TABLE binding_operation_keys (
 BEGIN
   SELECT attempt FROM binding_attempts WHERE id = $attempt FOR UPDATE
   SELECT context FROM binding_pending_contexts WHERE id = $context FOR UPDATE
-  -- Gate 2 recheck（D-8）
+  -- Gate 2 current-state check MUST 与最终 binding mutation 共享 concurrency-safe consistency boundary（D-8.4）
   -- 1. P1 仍存在且 account_id 仍为 NULL
   -- 2. P1 仅属于 target family
   -- 3. age / guardian / consent / compliance 当前值通过
@@ -474,7 +555,8 @@ BEGIN
   UPDATE binding_pending_contexts
     SET committed_account_id = $accountId,
         openid_ciphertext = NULL, openid_nonce = NULL, openid_tag = NULL
-    WHERE id = $context
+    WHERE attempt_id = $attempt
+  -- scrub 该 attempt 全部 transport contexts，不只当前 context
   INSERT INTO identity_binding_audit_events (... event_type='BINDING_COMMITTED' ...)
 COMMIT
 ```
@@ -505,7 +587,7 @@ COMMIT
 - `accounts.wechat_openid UNIQUE`：一个 openid 只有一个 Account。
 - `UPDATE persons ... WHERE account_id IS NULL`：条件更新，影响行数 ≤ 1；第二个 attempt 不可能覆盖。
 - `UPDATE binding_attempts ... WHERE state='PENDING'`：条件更新，影响行数 ≤ 1。
-- 行锁 `FOR UPDATE` on P1 / attempt / account：同一 P1 / account 的 commit 串行化。
+- P1 / attempt / account 行锁继续承担 binding / account 收敛；另按 F-01 建立 Gate2 authoritative facts 与 binding mutation 的 concurrency-safe consistency boundary。Plan 不预设唯一锁序 / SQL；不得用“先 SELECT current consent，稍后只锁 Person”声称满足 current-state。
 - 事务隔离级别：`READ COMMITTED` + 上述行锁 / 条件更新 / 唯一约束即可；不使用 `SERIALIZABLE`，不依赖应用层锁。
 
 ---
@@ -627,12 +709,12 @@ type BindingGateResult =
 - Gate 1 失败时：pending context 仍可存在（无 attempt、无 invitation id、无 P1 id），审计记录 gate1 blocked；response 与 PENDING 完全一致。
 - Gate 1 通过后、attempt 创建的同一事务内才写 `attempt_id` 与 `invitation_participation_id` 到 context。
 
-### D-8.4 Gate 2 不使用 stale snapshot
+### D-8.4 Gate 2 current-state + concurrency contract
 
-- Gate 2 每次 commit 都重新读取 current profile / consent / membership / invitation / confirmer authority。
-- 不缓存 Gate 1 结果；不把 Gate 1 的 `BindingGateResult` 传给 Gate 2 复用。
-- consent 在 Gate 1 后撤回 → Gate 2 `GUARDIAN_CONSENT_INVALID` → `TERMINAL`，不 PENDING。
-- invitation 在 Gate 1 后 terminal → Gate 2 `INVITATION_TERMINAL` → `TERMINAL`。
+- Gate 2 每次 commit 都重新读取 current profile / consent / membership / invitation / confirmer authority；不复用 Gate 1 snapshot。
+- fresh SELECT 本身不充分：Gate 2 check 与最终 binding mutation MUST 共享 F-01 的 concurrency-safe consistency / linearization boundary。
+- invalidating change 在 binding linearization point 前已 commit → binding mutation = 0、attempt 不得 COMMITTED；consent revoke → `GUARDIAN_CONSENT_INVALID`，invitation terminal → `INVITATION_TERMINAL`。
+- 必须有真实 DB barrier race：`Gate2 read/PASS → concurrent consent revoke commits → binding resumes`。顺序 revoke 测试不能替代。
 
 ---
 
@@ -653,7 +735,7 @@ type BindingGateResult =
 - 不返回 candidate 昵称、openid、age、guardian、consent、Family 名称、Case 信息。
 - 授权：先 `authorize(IDENTITY_BINDING_CONFIRMER_LIST)`，facts = `{ targetPersonId, targetFamilyId, targetAgeBand, guardianPersonId, familyCreatedByPersonId, membership? }`；未授权 / P1 不存在 / P1 多 Family / 非目标 Family 统一 404 `BINDING_NOT_FOUND`。targetFamilyId 由服务端读取 P1 的唯一 `family_members` 行得到；多行或无行 → 404 generic，不选择任一 Family。读取使用 D-13.4 的 `withBindingTargetTransaction`（只设置 target-person GUC），在 Family 解析完成前 MUST NOT 读取 profile / consent。
 - guardian 不要求是 Family member；manager 必须是 `families.created_by_person_id`。`targetIsFamilyMember` 必须为 true（由 invitation + Gate 保证）。
-- confirmer 如何知道哪个 attempt 对应真实孩子：attempt id 由 candidate 端展示，candidate 与 confirmer 线下 / 同屏配对；Plan 不新增 QR / PIN / pairing code / 生物识别 / 电话 / 视频 / KYC。attempt id 是 opaque UUID，不是身份证明。
+- confirmer exact-attempt pairing 使用 F-04 的 `S0 snapshot → recognized candidate fresh bootstrap → S1 → exact delta` ceremony；candidate 不获得 attemptId、不分享 `pendingContextToken`。`|S1-S0| != 1` 必须 fail closed；attemptId 仅是 confirmer-facing opaque selector，不是 identity proof。Plan 不新增 QR / PIN / pairing code / 生物识别 / 电话 / 视频 / KYC。
 
 ### D-9.3 独立认证
 
@@ -714,17 +796,17 @@ type BindingGateResult =
 #### 2. Candidate decision
 
 ```json
-// request
-{
-  "decision": "AFFIRM" | "REJECT" | "CANCEL",
-  "confirmationVersion": "candidate-binding-v1", // AFFIRM 必需
-  "idempotencyKey": ">=8 chars"
-}
+// request is decision-discriminated
+// AFFIRM: confirmationVersion required literal "candidate-binding-v1"
+// REJECT/CANCEL: confirmationVersion MUST be omitted
+// null is never valid
 
 // response（所有内部结果一致）
 { "binding": "NOT_COMPLETED" }
 ```
 
+- AFFIRM：`confirmationVersion` required 且只能为 `candidate-binding-v1`；omitted / null / wrong → 422。
+- REJECT / CANCEL：`confirmationVersion` 必须 omitted；显式 null 或任何 present value → 422。null 在三种 decision 下均不合法。
 - 无 attempt / 跨 identity / 已 terminal / attempt 过期 / invitation terminal → 同一 200 body。
 - REJECT / CANCEL 只终止 attempt，不改变 invitation。
 - 401 仅 `X-Binding-Context` 无效 / 过期。
@@ -979,15 +1061,15 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 
 | 表 | 新 policy | 语义 |
 |---|---|---|
-| `persons` | `persons_binding_target_read` | `USING (id = app_binding_target_person_id())`，仅 GATE / COMMIT |
-| `persons` | `persons_binding_candidate_account_read` | `USING (account_id = app_binding_candidate_account_id())`，仅 `IDENTITY_BINDING_GATE` / `IDENTITY_BINDING_COMMIT` purpose；只读取当前 authenticated candidate Account 已绑定的 Person，用于 `IDENTITY_CONFLICT` 判定；禁止任意 person 查询；不返回 candidate-facing P2 信息 |
-| `persons` | `persons_binding_commit_update` | `USING (id = app_binding_target_person_id() AND account_id IS NULL)`；`WITH CHECK (id = app_binding_target_person_id() AND account_id = app_binding_commit_account_id())`，仅 COMMIT |
-| `families` | `families_binding_read` | `USING (id = app_binding_target_family_id())`，仅 GATE / COMMIT |
-| `family_members` | `family_members_binding_read` | `USING (person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
-| `person_compliance_profiles` | `pcp_binding_read` | `USING (person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
-| `consent_records` | `consent_binding_read` | `USING (family_id = app_binding_target_family_id() AND bound_person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+| `persons` | `persons_binding_target_read` | **`FOR SELECT`**；`USING (id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+| `persons` | `persons_binding_candidate_account_read` | **`FOR SELECT`**；`USING (account_id = app_binding_candidate_account_id())`，仅 GATE / COMMIT；只用于 authenticated candidate Account 的 `IDENTITY_CONFLICT` 判定 |
+| `persons` | `persons_binding_commit_update` | **`FOR UPDATE`**；`USING (id = app_binding_target_person_id() AND account_id IS NULL)`；`WITH CHECK (id = app_binding_target_person_id() AND account_id = app_binding_commit_account_id())`，仅 COMMIT |
+| `families` | `families_binding_read` | **`FOR SELECT`**；`USING (id = app_binding_target_family_id())`，仅 GATE / COMMIT |
+| `family_members` | `family_members_binding_read` | **`FOR SELECT`**；`USING (person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+| `person_compliance_profiles` | `pcp_binding_read` | **`FOR SELECT`**；`USING (person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
+| `consent_records` | `consent_binding_read` | **`FOR SELECT`**；`USING (family_id = app_binding_target_family_id() AND bound_person_id = app_binding_target_person_id())`，仅 GATE / COMMIT |
 
-- 新 policy 均为 **permissive append**，不改变既有 policy 语义；只在 binding purpose + 对应 GUC 下生效。
+- 新 policy 均为 **permissive append**，不改变既有 policy 语义；只在 binding purpose + 对应 GUC 下生效。所有 intended read-only policy 必须显式 `FOR SELECT`，唯一 Person binding write policy 必须显式 `FOR UPDATE`。
 - `family_members` 的 `person_id = target_person_id` 允许读取 P1 的全部 membership，用于 multi-family BLOCK；这些 Family 名称不返回 candidate。
 - `persons_binding_commit_update` 需要新增 GUC `app.binding_commit_account_id`。
 - 不通过 `app.family_id` / `app.person_id` 建立 binding 上下文；不冒充 P1；pending context 不设置 family scope。
@@ -1014,6 +1096,7 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 - 无上下文：新表 0 行 / 写拒绝；Slice 1 表既有行为不变。
 - 错误 Family / 错误 account / 错误 attempt：0 行。
 - `persons_binding_candidate_account_read` 只在该 candidate Account GUC 下返回该 Account 绑定的单个 Person；未设置 GUC / 非 binding purpose / 其它 Account → 0 行；不得成为任意 person lookup。
+- RLS DB proof 必须 introspect `pg_policy.polcmd`，并用真实 `xiaoshuyin_app` 做 GATE/exact-GUC SELECT positive + UPDATE/INSERT/DELETE negative；只有 COMMIT + exact target / commit-account GUC 下的 `persons_binding_commit_update FOR UPDATE` 可合法 bind。
 - `pg_class.relrowsecurity` / `relforcerowsecurity` = true；`pg_roles.rolbypassrls` = false；owner ≠ app。
 - 审计表 runtime `SELECT` 被拒绝；migrator / test admin 可读。
 
@@ -1030,9 +1113,10 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 | Second-party REJECT | `FOR UPDATE` attempt → 条件更新 PENDING→TERMINAL + reason → audit → commit | 失败回滚 |
 | Status / pending list | 只读事务；`FOR UPDATE` 不需要 | 读失败 → 500，不改变状态 |
 | Session exchange | 只读事务：读 context / attempt / account / person / epoch → 事务外签名（纯计算） | 读失败 → 500；不签发 |
-| Attempt expiry materialization | 在访问事务内 `FOR UPDATE` + `UPDATE ... WHERE state='PENDING' AND now() >= expires_at`；affected rows = 1 才写 audit | 0 行 → 读当前状态；不重复 audit |
+| Attempt expiry materialization | 在访问事务内 `FOR UPDATE` + conditional UPDATE；affected rows = 1 才写 audit；create/converge same triple 前也必须先执行，并 scrub old attempt contexts | 0 行 → 读当前状态；不重复 audit；不得 link 已过期 PENDING |
 
 - 幂等记录与业务写入同一事务。
+- settled attempt 的 all-context secret cleanup 与 settlement 同 consistency boundary；pre-attempt blocked / no-attempt cleanup 在返回前完成。
 - Second-party AFFIRM 的事务 A（confirmation）与事务 B（commit）分离是 Phase B confirmation 与 Phase C commit 的分离：事务 A 只写 Phase B confirmation + audit，不写 Account / binding / attempt settled；事务 B 只写 Phase C commit 事实。事务 A 已提交但事务 B 因基础设施失败回滚时，attempt 仍 PENDING、confirmation 保留，retry 解析到 authoritative outcome；这不构成 Account / binding / attempt 的跨事务拼装。
 - 中途不跨事务拼接 Account / binding / attempt / audit。
 - 审计表失败 → 业务回滚（audit 是核心事务的一部分）。
@@ -1301,6 +1385,25 @@ participation invitation 打开
 
 ---
 
+### D-19.4 Ultimate Audit remediation verification matrix
+
+必须新增 / 修正且不得降级为 unit mock：
+
+1. F-01：真实 PostgreSQL barrier，Gate2 read/PASS → concurrent consent revoke commits → commit resumes → binding 0 / 非 COMMITTED。
+2. F-02：attempt A + key K → A terminal → new B → K 对 B URL = 409 / B 0 mutation；same-request replay K 只读 A。
+3. F-03：`pg_policy.polcmd` + runtime-role SELECT positive / UPDATE-INSERT-DELETE negative。
+4. F-04：真实 existing-API `S0 → recognized candidate fresh bootstrap → S1 → exact one delta → candidate AFFIRM + confirmer recognition`；delta 0 / >1 fail closed。
+5. F-05：COMMITTED、所有 TERMINAL、expiry、multi-context replay、invalid-invitation/no-attempt replay 后 decryptable secrets 按 F-05 scope 全清。
+6. F-06：AFFIRM missing/null/wrong → 422；REJECT/CANCEL omitted → valid；REJECT/CANCEL null/present version → 422；handwritten/Zod/generated 语义等价。
+7. F-06 checker：先 RED 证明 nullable+const 与 true union / decision union 不等价，再修 normalizer、GREEN。
+8. F-07：old expired PENDING + same triple new operation → old TERMINAL/ATTEMPT_EXPIRED + audit once + cleanup → new attempt id。
+9. F-08 rollback：Gate2 / Account / Person update / attempt settle / cleanup / audit failure injection 全部无 partial success。
+10. F-08 MINOR success：`MINOR_14_17 + guardian` guardian confirmer success；`MINOR_14_17 + no guardian` Family manager confirmer success。
+11. F-08 anti-enum：true Case B mismatch（P1 已绑定 A，candidate authenticates different identity B）与 generic matrix 比较。
+12. `coverage:audit` 必须 substantive 覆盖 Slice 5 required acceptance suites / mapping；删除任一 required proof 应 FAIL，不能只靠总体百分比。
+
+---
+
 ## D-20 Explicit exclusions / structure checks
 
 Implement 必须能机械证明以下不存在（CI / guard / grep / schema introspection）：
@@ -1352,10 +1455,10 @@ Implement 必须能机械证明以下不存在（CI / guard / grep / schema intr
 ### D-22.3 Implement Gate 状态机与循环依赖排除
 
 ```text
-当前（2026-11-07，B1 已解除）：
-PLAN FROZEN
-READY FOR CORE IMPLEMENTATION
-允许开发 AI 执行所有不依赖 Slice 4 runtime 的任务（Phase 1–14）
+当前（2026-11-08，Ultimate Audit targeted remediation 后）：
+TARGETED PLAN / CONTRACT REMEDIATION FROZEN
+READY FOR DEVELOPMENT REMEDIATION
+T001–T120 中被 Ultimate Audit 推翻 acceptance 的 26 tasks 已恢复 unchecked；只执行明确 remediation，不重做已 PASS 项
 T121–T124 继续 BLOCKED BY SLICE 4 RUNTIME
 
 Slice 4 runtime available 后：
@@ -1421,7 +1524,7 @@ Slice 4 implementation                                       ← 依赖本 Slice
 ## API / Contract Impact
 
 - 新增 `specs/006-identity-binding-runtime/contracts/identity-binding-api.openapi.yaml`（Implement 创建）。
-- 新 route 必须加入手写 OpenAPI；`openapi:generate` / `openapi:check` 必须 PASS。
+- 新 route 必须加入手写 OpenAPI；candidate-decision request 按 F-06 / D-10.2 使用 decision-discriminated `oneOf`；`openapi:generate` / remediated `openapi:check` 必须 PASS。
 - 普通 `/auth/wechat` schema / 行为不变。
 
 ## AI / RAG / Eval Impact
@@ -1481,9 +1584,9 @@ tests/
 | TypeScript | `bun run typecheck`（`node scripts/typecheck-all.mjs`） | 0 error |
 | Unit / integration / DB | `bun run vitest run` | 全 PASS，0 skipped（除显式 BLOCKED 项） |
 | 静态 guard | `bun run guard:static` | PASS |
-| OpenAPI | `bun run openapi:check` | 手写契约与 generated 一致 |
+| OpenAPI | `bun run openapi:check` + semantic regression | handwritten/generated 真实 JSON Schema 语义一致；normalizer 不得抹平 nullable/const/oneOf 差异 |
 | Migration | `bun run db:migrate` + `db:evidence` | 可重放，RLS / role / schema 证据 |
-| Coverage | `bun run coverage:audit` | 阈值 PASS |
+| Coverage | `bun run coverage:audit` | 阈值 PASS + substantive Slice 5 acceptance mapping；删除 required proof 时 FAIL |
 | Governance | `node .specify/scripts/validate-governance.mjs` + `node .specify/scripts/tests/run-governance-tests.mjs` | governance PASS、self-test 全 PASS、`Docs/**` diff = 0 |
 | Full | `bun run verify-all` | 归档全 PASS |
 | Blocked E2E | Slice 4 runtime 未 merge | 必须报 `BLOCKED`，不得 PASS |
@@ -1494,7 +1597,7 @@ tests/
 
 - Migration additive；回滚顺序见 D-18.2。
 - 业务回滚：commit 事务失败 → 全回滚；attempt 可保持 PENDING 或已 TERMINAL；不得删除历史 confirmation / audit。
-- Pending context 过期：无后台清理；下次访问拒绝；ciphertext 保留至过期或清理策略（未来数据生命周期）。
+- Pending context / attempt 无后台清理 job；访问时物化 expiry。单 context 过期 scrub 自身；attempt settled / expired 按 F-05 全 scope scrub；pre-attempt blocked / no-attempt 返回前 scrub。不得保留 decryptable ciphertext 等待未来 lifecycle。
 - 不实现数据删除 / unlink / merge / rebind。
 
 ---
