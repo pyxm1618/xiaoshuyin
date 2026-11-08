@@ -78,86 +78,7 @@ async function installAuthorizationFactFault(): Promise<void> {
 
        RETURN true;
      END;
-     $ult002/**
- * ULT-002 — Message authorization error classification.
- *
- * Frozen rule: only an explicit, known authorization denial is collapsed into
- * the anti-enumeration `404 CASE_NOT_FOUND`. Unknown infrastructure failures
- * (real PostgreSQL `57014` statement timeout, connection loss) MUST propagate
- * to the global 500 INTERNAL_ERROR handler.
- *
- * The failure is injected with a real PostgreSQL statement timeout on an
- * isolated app pool (no mocks / stubs).
- */
-
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import pg from 'pg';
-import { Writable } from 'node:stream';
-import { buildApp } from '../../apps/server/api/src/app.js';
-import {
-  denyToError,
-  isKnownAuthorizationDenial,
-  requireFamilyAction,
-} from '../../apps/server/api/src/authz.js';
-import {
-  withIdentityTransaction,
-  withRlsTransaction,
-} from '../../apps/server/api/src/db/tx.js';
-import { requireCurrentFamily } from '../../apps/server/api/src/family-context.js';
-import { createAdminPool } from '../setup/db.js';
-
-const STATEMENT_TIMEOUT_MS = 1500;
-const FAULT_SCHEMA = 'ult002_authz_fault';
-
-let admin: pg.Pool;
-let app: Awaited<ReturnType<typeof buildApp>>;
-let faultApp: Awaited<ReturnType<typeof buildApp>>;
-let faultProbePool: pg.Pool;
-let faultUrl: string;
-let logs = '';
-let seq = 0;
-
-function withAuthorizationFactFault(url: string, ms: number): string {
-  const parsed = new URL(url);
-  parsed.searchParams.set(
-    'options',
-    `-c statement_timeout=${ms} -c search_path=${FAULT_SCHEMA},public`
-  );
-  return parsed.toString();
-}
-
-async function installAuthorizationFactFault(): Promise<void> {
-  await admin.query(`DROP SCHEMA IF EXISTS ${FAULT_SCHEMA} CASCADE`);
-  await admin.query(`CREATE SCHEMA ${FAULT_SCHEMA}`);
-  await admin.query(
-    `CREATE TABLE ${FAULT_SCHEMA}.control (
-       singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
-       enabled boolean NOT NULL
-     )`
-  );
-  await admin.query(
-    `INSERT INTO ${FAULT_SCHEMA}.control (singleton, enabled) VALUES (true, true)`
-  );
-  await admin.query(
-    `CREATE FUNCTION ${FAULT_SCHEMA}.pause_authorization_family_read()
-     RETURNS boolean
-     LANGUAGE plpgsql
-     VOLATILE
-     SECURITY INVOKER
-     AS $ult002$
-     DECLARE fault_enabled boolean;
-     BEGIN
-       SELECT enabled INTO fault_enabled
-       FROM ${FAULT_SCHEMA}.control
-       WHERE singleton = true;
-
-       IF COALESCE(fault_enabled, false)
-          AND NULLIF(current_setting('app.family_id', true), '') IS NOT NULL THEN
-         PERFORM pg_sleep(5);
-       END IF;
-
-
-
+     $ult002$`
   );
   await admin.query(
     `CREATE VIEW ${FAULT_SCHEMA}.families
@@ -176,7 +97,6 @@ async function installAuthorizationFactFault(): Promise<void> {
      TO xiaoshuyin_app`
   );
 }
-
 async function setFaultEnabled(enabled: boolean): Promise<void> {
   await admin.query(
     `UPDATE ${FAULT_SCHEMA}.control SET enabled = $1 WHERE singleton = true`,
