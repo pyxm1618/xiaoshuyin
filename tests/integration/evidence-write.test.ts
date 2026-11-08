@@ -379,6 +379,29 @@ describe('Internal Evidence writers (T027)', () => {
     ).rejects.toMatchObject({ code: 'GUARDIAN_CONSENT_REVOKED' });
     expect(await counts(fx.familyId)).toEqual(before);
 
+    await admin.query(
+      `UPDATE person_compliance_profiles
+       SET guardian_consent_record_id = NULL, guardian_consent_version = NULL
+       WHERE person_id = $1`,
+      [fx.under14PersonId]
+    );
+    before = await counts(fx.familyId);
+    await expect(
+      runWrite((tx) =>
+        recordStatement(
+          tx,
+          ctx(),
+          statementDraft({
+            subjectPersonId: fx.under14PersonId,
+            sourceKind: 'GUARDIAN_RELAY',
+            sourcePersonId: fx.guardianPersonId,
+            content: 'blocked missing consent',
+          })
+        )
+      )
+    ).rejects.toMatchObject({ code: 'GUARDIAN_CONSENT_REQUIRED' });
+    expect(await counts(fx.familyId)).toEqual(before);
+
     const insertGrantedConsent = async (
       version: number,
       noticeHash: string,
