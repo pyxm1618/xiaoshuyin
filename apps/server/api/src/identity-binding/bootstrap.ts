@@ -22,6 +22,7 @@ import { signToken } from '../auth/session-token.js';
 import { findAccountByOpenid } from '../auth/binding-account.js';
 import type { WechatAuthProvider } from '../auth/wechat-provider.js';
 import {
+  setBindingAttemptContext,
   setBindingCandidateAccountId,
   setBindingGateContext,
   withBindingBootstrapTransaction,
@@ -41,13 +42,15 @@ import {
 } from './pending-context-repository.js';
 import {
   createAttempt,
-  findLatestByTriple,
+  findById,
 } from './attempt-repository.js';
 import { appendAudit } from './audit-repository.js';
 import {
   find as findOperationKey,
+  findBootstrapByRequestHash,
   insert as insertOperationKey,
   lockScope,
+  mapAttempt,
   setScope,
 } from './operation-key-repository.js';
 import { bindingError } from './errors.js';
@@ -146,12 +149,22 @@ export async function bootstrap(
         idempotencyKey: input.idempotencyKey,
       });
 
-      const existing = await findOperationKey(tx, {
+      const scopedExisting = await findOperationKey(tx, {
         scopeKind: scope.scopeKind,
         scopeKey: scope.scopeKey,
         commandType: 'BOOTSTRAP',
         idempotencyKey: input.idempotencyKey,
       });
+      // An invitation becoming terminal changes the derived scope key
+      // (participation id → token hash). Exact replay must still reach its
+      // original operation key, so fall back to the invariant request
+      // fingerprint (token + identity) before deciding EXECUTE.
+      const existing =
+        scopedExisting ??
+        (await findBootstrapByRequestHash(tx, {
+          idempotencyKey: input.idempotencyKey,
+          requestHash,
+        }));
       const decision = decideBindingOperation(existing ? { requestHash: existing.requestHash } : null, requestHash);
       if (decision.action === 'MISMATCH') {
         throw bindingError('IDEMPOTENCY_PAYLOAD_MISMATCH');
@@ -159,25 +172,25 @@ export async function bootstrap(
 
       // Exact replay: no duplicate attempt / confirmation / audit. A fresh
       // opaque context token is issued and linked to the authoritative attempt
-      // when one exists, so status / session remain usable.
+      // recorded on the operation key, never to whatever attempt happens to be
+      // latest for the triple (M-01). A new invitation state or a later
+      // attempt must not change the identity of an existing operation.
       if (decision.action === 'REPLAY') {
-        if (invitation.status === 'VALID') {
-          // Attempt visibility requires the invitation GUC in addition to the
-          // identity digest set by the bootstrap wrapper. Set the target Gate
-          // context BEFORE reading the authoritative attempt (H3).
-          await setBindingGateContext(tx, {
-            targetPersonId: invitation.targetPersonId,
-            targetFamilyId: invitation.targetFamilyId,
-            invitationId: invitation.participationId,
-            actorAccountId: null,
+        if (existing?.attemptId) {
+          // Attempt visibility is identity-bound and exact-id bound; for a
+          // terminal invitation the participation id is no longer derivable,
+          // so the id from the operation key is the only authoritative link.
+          await setBindingAttemptContext(tx, {
+            attemptId: existing.attemptId,
+            identityDigest,
+            // The operation key is the authoritative link. The current
+            // invitation state may differ from the creation-time state, so it
+            // must not narrow or redirect attempt visibility.
+            invitationId: null,
           });
-          const attempt = await findLatestByTriple(tx, {
-            targetPersonId: invitation.targetPersonId,
-            candidateIdentityDigest: identityDigest,
-            invitationParticipationId: invitation.participationId,
-          });
+          const attempt = await findById(tx, existing.attemptId);
           if (attempt) {
-            await linkAttempt(tx, context.id, attempt.id, invitation.participationId);
+            await linkAttempt(tx, context.id, attempt.id, attempt.invitationParticipationId);
             // Historical settled replay: the authoritative attempt is already
             // COMMITTED. Return the frozen `{ binding: "COMMITTED" }` without
             // re-executing commit, reviving the invitation, creating a
@@ -186,13 +199,17 @@ export async function bootstrap(
               await markCommitted(tx, context.id, attempt.committedAccountId);
               return { kind: 'COMMITTED' };
             }
+            if (attempt.state === 'TERMINAL') {
+              await clearOpenid(tx, context.id);
+            }
           }
         }
         return { kind: 'GENERIC', pendingContextToken: token };
       }
 
+      let operationKeyId: string | null = null;
       if (existing === null) {
-        await insertOperationKey(tx, {
+        const inserted = await insertOperationKey(tx, {
           scopeKind: scope.scopeKind,
           scopeKey: scope.scopeKey,
           commandType: 'BOOTSTRAP',
@@ -200,6 +217,27 @@ export async function bootstrap(
           requestHash,
           attemptId: null,
         });
+        operationKeyId = inserted?.id ?? null;
+        if (!inserted) {
+          // Defensive convergence for a concurrent insert into a different
+          // scope row: bind the key that already exists instead of creating a
+          // second business operation.
+          const converged =
+            (await findOperationKey(tx, {
+              scopeKind: scope.scopeKind,
+              scopeKey: scope.scopeKey,
+              commandType: 'BOOTSTRAP',
+              idempotencyKey: input.idempotencyKey,
+            })) ??
+            (await findBootstrapByRequestHash(tx, {
+              idempotencyKey: input.idempotencyKey,
+              requestHash,
+            }));
+          operationKeyId = converged?.id ?? null;
+          if (converged && converged.requestHash !== requestHash) {
+            throw bindingError('IDEMPOTENCY_PAYLOAD_MISMATCH');
+          }
+        }
       }
 
       await appendAudit(tx, {
@@ -304,6 +342,23 @@ export async function bootstrap(
         candidateIdentityDigest: identityDigest,
         ttlSeconds: deps.attemptTtlSeconds,
       });
+
+      // Bind the operation key to the authoritative attempt in the same
+      // transaction that creates / converges it. From this point an exact
+      // replay of this key always resolves THIS attempt, even after a later
+      // attempt for the same triple exists. The operation-key domain keeps its
+      // PENDING purpose and exact-attempt scope for this write.
+      await setBindingAttemptContext(tx, {
+        attemptId: attempt.id,
+        identityDigest,
+        invitationId: attempt.invitationParticipationId,
+        targetPersonId: attempt.targetPersonId,
+        targetFamilyId: attempt.targetFamilyId,
+        purpose: 'IDENTITY_BINDING_PENDING',
+      });
+      if (operationKeyId) {
+        await mapAttempt(tx, { operationKeyId, attemptId: attempt.id });
+      }
 
       await linkAttempt(tx, context.id, attempt.id, invitation.participationId);
 

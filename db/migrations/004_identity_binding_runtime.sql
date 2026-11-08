@@ -256,6 +256,16 @@ LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('app.binding_operation_scope', true), '')
 $$;
 
+-- Operation-key fingerprint used ONLY by BOOTSTRAP replay: an invitation may
+-- become terminal between the original call and an exact replay, which changes
+-- the derived scope key (resolved participation id → unresolved token hash).
+-- The request fingerprint (token + identity digest) is stable across that
+-- transition and lets replay find its original operation key → attempt.
+CREATE FUNCTION app_binding_bootstrap_request_hash() RETURNS text
+LANGUAGE sql STABLE AS $$
+  SELECT NULLIF(current_setting('app.binding_bootstrap_request_hash', true), '')
+$$;
+
 CREATE FUNCTION app_binding_commit_account_id() RETURNS uuid
 LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('app.binding_commit_account_id', true), '')::uuid
@@ -380,6 +390,15 @@ BEGIN
   PERFORM set_config('app.binding_operation_scope', p_scope, true);
 END $$;
 
+CREATE FUNCTION app.set_binding_bootstrap_request_hash(p_hash text)
+RETURNS void LANGUAGE plpgsql SECURITY INVOKER AS $$
+BEGIN
+  IF p_hash IS NULL OR p_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'RLS_CONTEXT_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+  PERFORM set_config('app.binding_bootstrap_request_hash', p_hash, true);
+END $$;
+
 CREATE FUNCTION app.set_binding_candidate_account_id(p_account uuid)
 RETURNS void LANGUAGE plpgsql SECURITY INVOKER AS $$
 BEGIN
@@ -451,6 +470,17 @@ CREATE POLICY binding_attempts_identity_scope ON binding_attempts
     AND candidate_identity_digest = app_binding_identity_digest()
     AND invitation_participation_id = app_binding_invitation_id()
     AND (app_binding_attempt_id() IS NULL OR id = app_binding_attempt_id())
+  );
+
+-- Bootstrap replay must read the authoritative attempt reached through its
+-- operation key even when the invitation is already terminal (no participation
+-- id GUC is derivable). Exposure is still identity-bound and exact-id bound.
+CREATE POLICY binding_attempts_operation_replay ON binding_attempts
+  FOR SELECT
+  USING (
+    app_current_purpose() = 'IDENTITY_BINDING_PENDING'
+    AND id = app_binding_attempt_id()
+    AND candidate_identity_digest = app_binding_identity_digest()
   );
 
 CREATE POLICY binding_attempts_target_scope ON binding_attempts
@@ -529,6 +559,20 @@ CREATE POLICY binding_operation_keys_scope ON binding_operation_keys
     OR (scope_kind = 'ACCOUNT'
       AND app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
       AND scope_key = app_account_id()::text)
+  );
+
+-- BOOTSTRAP replay after the invitation became terminal: the scope key derived
+-- from the resolved participation id is no longer derivable, but the request
+-- fingerprint (invitation token + candidate identity) is stable. This policy is
+-- READ-ONLY and exposes only BOOTSTRAP keys matching that fingerprint; the
+-- caller must still match the idempotency key in the query.
+CREATE POLICY binding_operation_keys_bootstrap_fingerprint ON binding_operation_keys
+  FOR SELECT
+  USING (
+    app_current_purpose() = 'IDENTITY_BINDING_PENDING'
+    AND scope_kind = 'CANDIDATE_CONTEXT'
+    AND command_type = 'BOOTSTRAP'
+    AND request_hash = app_binding_bootstrap_request_hash()
   );
 
 CREATE POLICY identity_binding_audit_insert_scope ON identity_binding_audit_events
@@ -633,7 +677,11 @@ GRANT SELECT, INSERT, UPDATE ON
 TO xiaoshuyin_app;
 
 GRANT SELECT, INSERT ON
-  binding_confirmations,
+  binding_confirmations
+TO xiaoshuyin_app;
+
+-- Operation keys may only be updated to bind the immutable attempt identity.
+GRANT SELECT, INSERT, UPDATE ON
   binding_operation_keys
 TO xiaoshuyin_app;
 
@@ -654,6 +702,7 @@ GRANT EXECUTE ON FUNCTION app_binding_attempt_id()         TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app_binding_target_person_id()   TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app_binding_target_family_id()   TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app_binding_operation_scope()    TO xiaoshuyin_app;
+GRANT EXECUTE ON FUNCTION app_binding_bootstrap_request_hash() TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app_binding_commit_account_id()  TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app_binding_candidate_account_id() TO xiaoshuyin_app;
 
@@ -664,4 +713,6 @@ GRANT EXECUTE ON FUNCTION app.set_binding_target_context(uuid, uuid) TO xiaoshuy
 GRANT EXECUTE ON FUNCTION app.set_binding_attempt_context(uuid, text, uuid, uuid, uuid, text) TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app.set_binding_commit_context(uuid, uuid, uuid, uuid, uuid) TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app.set_binding_operation_scope(text)               TO xiaoshuyin_app;
-GRANT EXECUTE ON FUNCTION app.set_binding_commit_account_id(uuid)             TO xiaoshuyin_app;GRANT EXECUTE ON FUNCTION app.set_binding_candidate_account_id(uuid)         TO xiaoshuyin_app;
+GRANT EXECUTE ON FUNCTION app.set_binding_bootstrap_request_hash(text)        TO xiaoshuyin_app;
+GRANT EXECUTE ON FUNCTION app.set_binding_commit_account_id(uuid)             TO xiaoshuyin_app;
+GRANT EXECUTE ON FUNCTION app.set_binding_candidate_account_id(uuid)          TO xiaoshuyin_app;
