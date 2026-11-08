@@ -1,0 +1,57 @@
+name: Slice 3 Verify All Retry
+
+on:
+  push:
+    branches:
+      - feat/003-evidence-core
+    paths:
+      - .github/workflows/slice3-verify-all-retry.yml
+
+jobs:
+  verify-all:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xiaoshuyin_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://xiaoshuyin_app:ci_app_pw@localhost:5432/xiaoshuyin_test
+      MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:ci_migrator_pw@localhost:5432/xiaoshuyin_test
+      TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/xiaoshuyin_test
+      NO_COLOR: '1'
+      FORCE_COLOR: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26.13.0'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Bootstrap roles
+        run: bash db/init/01-roles.sh
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: xiaoshuyin_test
+          POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
+          POSTGRES_APP_PASSWORD: ci_app_pw
+      - name: Migrate
+        run: bun run db:migrate
+      - name: Verify all
+        run: bun run verify-all
