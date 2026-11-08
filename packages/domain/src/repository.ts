@@ -5,8 +5,8 @@
 
 import type { PoolClient } from 'pg';
 import {
-  EVIDENCE_OBSERVATION_SOURCES,
-  EVIDENCE_WRITABLE_SOURCES,
+  validateEvidenceProvenance,
+  type EvidenceProvenanceWriter,
   type ProvenanceSource,
 } from './provenance.js';
 
@@ -393,8 +393,44 @@ function refuseEvidenceWrite(
   });
 }
 
-function isWritableSource(sourceKind: string): boolean {
-  return EVIDENCE_WRITABLE_SOURCES.includes(sourceKind as ProvenanceSource);
+async function validateRawEvidenceProvenance(
+  tx: Tx,
+  row: {
+    familyId: string;
+    subjectPersonId: string | null;
+    sourceKind: string;
+    sourcePersonId: string | null;
+  },
+  writer: EvidenceProvenanceWriter
+): Promise<void> {
+  const subjectPersonId = row.subjectPersonId ?? null;
+  const sourcePersonId = row.sourcePersonId ?? null;
+
+  const subjectIsFamilyMember = subjectPersonId
+    ? await isFamilyMember(tx, row.familyId, subjectPersonId)
+    : false;
+  const sourceIsFamilyMember = sourcePersonId
+    ? await isFamilyMember(tx, row.familyId, sourcePersonId)
+    : false;
+
+  let sourceIsGuardianOfSubject = false;
+  if (subjectPersonId && sourcePersonId) {
+    const guardianPersonId = await getGuardianPersonId(tx, subjectPersonId);
+    sourceIsGuardianOfSubject =
+      guardianPersonId !== null && guardianPersonId === sourcePersonId;
+  }
+
+  const validation = validateEvidenceProvenance({
+    writer,
+    sourceKind: row.sourceKind as ProvenanceSource,
+    subjectPersonId,
+    sourcePersonId,
+    subjectIsFamilyMember,
+    sourceIsFamilyMember,
+    sourceIsGuardianOfSubject,
+  });
+
+  if (!validation.ok) refuseEvidenceWrite(validation.code);
 }
 
 /** Guardian relationship of a subject Person (Slice 1 frozen semantics). */
@@ -468,15 +504,14 @@ export async function insertEvidenceAssertion(
   tx: Tx,
   row: AssertionInsertRow
 ): Promise<EvidenceInsertResult> {
-  // No production hypothesis source exists in this Slice; no writer may
-  // persist HYPOTHESIS, and a STATEMENT carrying a disabled provenance source
-  // is refused before any SQL runs.
-  if (row.kind === 'HYPOTHESIS') {
-    refuseEvidenceWrite('EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE');
-  }
-  if (row.kind === 'STATEMENT' && !isWritableSource(row.sourceKind)) {
-    refuseEvidenceWrite('EVIDENCE_PROVENANCE_INVALID');
-  }
+  // Execute the same frozen provenance matrix as the controlled writer.
+  // FACT still reaches the database hard guard when its provenance is otherwise
+  // admissible; HYPOTHESIS fails closed in the shared seam.
+  await validateRawEvidenceProvenance(
+    tx,
+    row,
+    row.kind === 'HYPOTHESIS' ? 'RECORD_HYPOTHESIS' : 'RECORD_STATEMENT'
+  );
 
   const { rows } = await tx.query(
     `INSERT INTO assertions
@@ -531,10 +566,8 @@ export async function insertEvidenceObservation(
   tx: Tx,
   row: ObservationInsertRow
 ): Promise<EvidenceInsertResult> {
-  // The observation writer admits exactly one provenance source.
-  if (!EVIDENCE_OBSERVATION_SOURCES.includes(row.sourceKind as ProvenanceSource)) {
-    refuseEvidenceWrite('EVIDENCE_PROVENANCE_INVALID');
-  }
+  // Execute the same frozen provenance matrix as recordObservation().
+  await validateRawEvidenceProvenance(tx, row, 'RECORD_OBSERVATION');
 
   const { rows } = await tx.query(
     `INSERT INTO observations
