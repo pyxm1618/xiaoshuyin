@@ -334,6 +334,128 @@ async function rebuildFromEmpty() {
   }
 }
 
+async function upgradeFrom003() {
+  log('');
+  log('## 001–003 基线库 → 004 upgrade（真实 db:migrate，非手工执行 004）');
+
+  const adminUrl = process.env['TEST_ADMIN_DATABASE_URL'];
+  const migrationUrl = process.env['MIGRATION_DATABASE_URL'];
+  if (!adminUrl || !migrationUrl) {
+    throw new Error('TEST_ADMIN_DATABASE_URL and MIGRATION_DATABASE_URL are required for upgrade evidence');
+  }
+
+  const tmpDb = `xiaoshuyin_evidence_${Date.now()}`;
+  const parsed = new URL(migrationUrl);
+  const migratorRole = decodeURIComponent(parsed.username);
+  const tmpUrl = new URL(migrationUrl);
+  tmpUrl.pathname = `/${tmpDb}`;
+
+  const admin = new pg.Client({ connectionString: adminUrl });
+  await admin.connect();
+  await admin.query(`CREATE DATABASE ${quoteIdent(tmpDb)} OWNER ${quoteIdent(migratorRole)}`);
+  await admin.end();
+  log(`  CREATE DATABASE ${tmpDb} OWNER ${migratorRole} — OK`);
+
+  let client;
+  try {
+    // Construct the real pre-004 state from the reviewed 001–003 files using
+    // the same BEGIN → apply → record sequence as the runner. 004 is NOT
+    // applied here: the normal db:migrate runner below must apply it, which
+    // is exactly the upgrade path under test.
+    client = new pg.Client({ connectionString: tmpUrl.toString() });
+    await client.connect();
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        filename   text PRIMARY KEY,
+        applied_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    for (const file of ['001_initial_schema.sql', '002_case_core.sql', '003_case_idempotency_key_bytes.sql']) {
+      const sql = readFileSync(join(ROOT, 'db', 'migrations', file), 'utf-8');
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
+      await client.query('COMMIT');
+      log(`  PRE-004 APPLY ${file}`);
+    }
+    const beforeRecords = await client.query(
+      'SELECT filename, applied_at FROM schema_migrations ORDER BY filename'
+    );
+    const beforeFingerprint = await objectFingerprint(client);
+    const beforeRoles = await client.query(
+      "SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname IN ('xiaoshuyin_app','xiaoshuyin_migrator') ORDER BY rolname"
+    );
+    await client.end();
+    client = undefined;
+
+    const output = execFileSync('node', ['scripts/db-migrate.mjs'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: { ...process.env, MIGRATION_DATABASE_URL: tmpUrl.toString() },
+    });
+    log('  第一次 db:migrate（数据库状态 = 001–003 applied、004 未应用）:');
+    output.trim().split('\n').forEach((l) => log(`    ${l}`));
+    check(
+      'upgrade 前三条 migration 被 SKIP（未重新执行）',
+      true,
+      /SKIP 001_initial_schema\.sql/.test(output) &&
+        /SKIP 002_case_core\.sql/.test(output) &&
+        /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
+    );
+    check('upgrade 仅 APPLY 004', true, /APPLY 004_identity_binding_runtime\.sql/.test(output));
+    check(
+      'upgrade 结果为 1 new / 3 previously applied',
+      true,
+      /Migration complete: 1 new, 3 previously applied\./.test(output)
+    );
+
+    client = new pg.Client({ connectionString: tmpUrl.toString() });
+    await client.connect();
+    const afterRecords = await client.query(
+      'SELECT filename, applied_at FROM schema_migrations ORDER BY filename'
+    );
+    check('schema_migrations 追加 004 记录', [
+      '001_initial_schema.sql',
+      '002_case_core.sql',
+      '003_case_idempotency_key_bytes.sql',
+      '004_identity_binding_runtime.sql',
+    ], afterRecords.rows.map((r) => r.filename));
+    check(
+      '001–003 历史记录时间戳未被改写',
+      true,
+      beforeRecords.rows.every(
+        (r) => afterRecords.rows.find((a) => a.filename === r.filename)?.applied_at?.getTime() === r.applied_at.getTime()
+      )
+    );
+
+    const d = await collect(client);
+    verifyStructure('001–003 → 004 upgrade 结果', d);
+
+    const afterFingerprint = await objectFingerprint(client);
+    const afterSet = new Set(afterFingerprint.split('|'));
+    check(
+      '001–003 既有对象无破坏性重写',
+      true,
+      beforeFingerprint.split('|').every((entry) => afterSet.has(entry))
+    );
+    const afterRoles = await client.query(
+      "SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname IN ('xiaoshuyin_app','xiaoshuyin_migrator') ORDER BY rolname"
+    );
+    check(
+      'roles 与 upgrade 前一致',
+      beforeRoles.rows.map((r) => `${r.rolname}=${r.rolbypassrls}`).join(','),
+      afterRoles.rows.map((r) => `${r.rolname}=${r.rolbypassrls}`).join(',')
+    );
+  } finally {
+    if (client) { try { await client.end(); } catch { /* ignore */ } }
+    const cleanup = new pg.Client({ connectionString: adminUrl });
+    await cleanup.connect();
+    await cleanup.query(`DROP DATABASE IF EXISTS ${quoteIdent(tmpDb)} WITH (FORCE)`);
+    await cleanup.end();
+    log(`  DROP DATABASE ${tmpDb} — OK`);
+  }
+}
+
 async function archiveT011T012() {
   log('');
   log('## T011 / T012 红灯测试转绿（真实命令输出归档）');
@@ -370,6 +492,7 @@ async function main() {
   }
 
   await rebuildFromEmpty();
+  await upgradeFrom003();
   await archiveT011T012();
 
   log('');

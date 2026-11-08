@@ -273,7 +273,9 @@ async function main() {
   log('');
   log('说明：每条均真实启动命令并捕获 stdout/stderr、退出码与耗时。');
   log('plan.md 中未落地的测试文件名以 MAPPED 标注并给出承接文件，不静默跳过；');
-  log('T001–T120 属于本 Slice Core verified 范围；T121–T124 只能按冻结 Tasks 标注 BLOCKED（Slice 4 runtime / 真实平台），不计入 verified，也不伪装为 PASS。');
+  log('本 runner 只证明 Verification Plan 中的命令被真实执行、输出被捕获且失败会传播；');
+  log('T001–T120 的逐任务 acceptance 由各自 designated tests / evidence 证明，不由本 runner 推导。');
+  log('T121–T124 按冻结 Tasks 标注 BLOCKED（Slice 4 runtime / 真实平台），不计入 verified，也不伪装为 PASS。');
   log('');
 
   rows.forEach((row, i) => {
@@ -331,7 +333,8 @@ async function main() {
   log('## 汇总');
   log('');
   log(`- Verification Plan 行数: 26（执行 ${26 - blocked} 条，BLOCKED ${blocked} 条）`);
-  log(`- T001–T120 verified: ${blocked === 0 ? 'PASS' : 'PASS（命令层）'}`);
+  log(`- Full regression command: ${fail === 0 ? 'PASS' : 'FAIL'}`);
+  log('- Task-specific acceptance (T001–T120): proven by designated tests/evidence, not derived by this runner');
   log(`- T121–T124 explicit BLOCKED: ${blocked} 条（Slice 4 runtime / 真实平台）`);
   log(`- NOT VERIFIED: ${notVerified} 条（冻结 T118 要求 0 条）`);
   log(`- 命令 PASS: ${pass}`);
