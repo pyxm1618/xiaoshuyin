@@ -78,7 +78,7 @@
 - **切片刻度**：006 不实现 Slice 2 / 3 / 4 的业务；只消费 Slice 4 合同与 Slice 1 基线。
 - **冻结语义**：Phase 顺序、Case B/C、Age Matrix、PENDING 边界、no-P2、anti-enumeration、invitation 生命周期归属全部原样保留。
 - **验证证据**：每个 Task 必须有可执行验证；不能以「设计存在」代替「代码真实可用」。
-- **依赖诚实**：Slice 1 的 `authorize()` 在 `origin/main` 仍是占位实现；这是 Slice 6 **core implementation 的唯一 hard blocker**。Slice 4 runtime 不是 core blocker：Slice 6 core 可基于冻结 contract + port + fixture 完成；Slice 4 runtime 只阻塞 `T121–T124` 的真实 adapter / E2E closeout。不得把 Slice 4 runtime 与 Slice 6 core 写成循环硬依赖。
+- **依赖诚实**：Slice 1（`001-family-identity-core`）已于 2026-11-07 Final Independent Audit II PASS → PR #13 merge main → post-merge CI PASS → CLOSED；`origin/main`（`f4ef602`）的 `authorize()` 已是真实实现（`MINOR_PROCESSING` 为实分支），B1 已 SATISFIED。Slice 4 runtime 不是 core blocker：本 Slice（业务 Slice 5，repo feature 006）core 可基于冻结 contract + port + fixture 完成；Slice 4 runtime 只阻塞 `T121–T124` 的真实 adapter / E2E closeout。不得把 Slice 4 runtime 与本 Slice core 写成循环硬依赖。
 
 ---
 
@@ -707,7 +707,8 @@ type BindingGateResult =
 - 只有 `binding` 与 token 字段；无 `attemptId`、`personId`、`familyId`、`ageBand`、`guardian`、`consent`、`reason`。
 - `COMMITTED` 是 historical settled replay（005 §5.5 / spec settled replay）：MUST NOT 使用 `REUSED`（Case B 专用）；MUST NOT 重新 commit、revive invitation、恢复 participation accept、重建 authorization；response 不含 `pendingContextToken` / `sessionToken` / `attemptId`。candidate 此时已是 P1，故不属于未绑定阶段 anti-enumeration generic。普通 session 仍只通过 `POST /api/v1/identity-bindings/session` 兑换。
 - **OpenAPI / schema expectation**：bootstrap 200 response 的 `oneOf` 必须包含 `BindingBootstrapCommittedResponse`（strict object，`binding: const "COMMITTED"`，`additionalProperties: false`，无其它字段）。冻结 YAML 与 generated OpenAPI 的同步属于 Implement（T092 / T097），Plan 回合不改 contracts。
-- WeChat `code2session` 失败 → 401 `WECHAT_AUTH_FAILED`（不涉及 P1 信息）。
+- **防御性 endpoint fallback（不是 canonical flow）**：客户端误把 Case B 调用到 `POST /api/v1/identity-bindings/bootstrap` 时，服务端在 WeChat authentication 之后确认 `authenticated Account == P1 existing Account`，MUST 直接返回 `REUSED`（同上面 Case B 分支），且 MUST NOT 创建 pending binding attempt、MUST NOT 创建 confirmation、MUST NOT 进入 Gate 1 → Phase B → Gate 2 → Phase C 的 Case C 状态机、MUST NOT 要求双确认。**「bootstrap endpoint 被调用」≠「进入 Case C identity bootstrap state machine」。** canonical client flow 仍 MUST 为：Case B → ordinary authenticated path → reuse；Case C → invitation-aware bootstrap（D-17.2）。该 fallback 只消除「endpoint 被误调用」的歧义，不改变 Spec FR-003。
+- WeChat `code2session` 失败 → 401 `WECHAT_AUTH_FAILED`（不涉及 P1 信息）。`WECHAT_AUTH_FAILED` **只表示真实 WeChat `code2session` authentication failure**，MUST NOT 用于 `authorize()` DENY；authorization DENY 的 candidate-facing 映射见 D-10.3。
 - 普通 `POST /api/v1/auth/wechat` 完全不改。
 
 #### 2. Candidate decision
@@ -808,6 +809,13 @@ type BindingGateResult =
 - candidate-facing 业务分支不使用 `BINDING_NOT_FOUND` / `BINDING_STATE_CONFLICT`；统一 200 generic。
 - 任何 error body 不含 P1 / Family / guardian / consent / age / attempt 细节。
 
+**Authorization denial 映射（冻结）**：
+
+- `401 WECHAT_AUTH_FAILED` **只能**用于真实 WeChat `code2session` authentication failure；MUST NOT 用于 `authorize()` DENY。
+- `IDENTITY_BINDING_BOOTSTRAP` 的 `authorize()` DENY 在 candidate-facing 层 MUST 保持 anti-enumeration：HTTP 200 + 冻结 generic bootstrap response `{ "binding": "NOT_COMPLETED", "pendingContextToken": "..." }`。实现 MUST 在返回前完成 pending context 创建，使 response shape 与所有其它 generic 分支一致（D-11.1 / D-11.3）。
+- MUST NOT 暴露 authorization reason、P1、Family、guardian、consent、age、invitation state；MUST NOT 新增公开 candidate-facing authorization error code。
+- 其余 5 个 binding action 的 DENY 沿用其所属 surface 的冻结语义：candidate surface 统一 200 generic；confirmer surface 统一 404 `BINDING_NOT_FOUND`（D-11.2）。
+
 ### D-10.4 Auth plugin 修改边界
 
 - `apps/server/api/src/plugins/auth.ts`：
@@ -828,6 +836,7 @@ type BindingGateResult =
 | invitation 不存在 / 不可解析 | 200 | `{ binding:"NOT_COMPLETED", pendingContextToken }` | 固定 | status / decision 可用，但 generic |
 | invitation expired / consumed / terminal | 200 | 同上 | 固定 | 同上 |
 | P1 不存在 | 200 | 同上 | 固定 | 同上 |
+| `IDENTITY_BINDING_BOOTSTRAP` 的 `authorize()` DENY（防御分支） | 200 | 同上 | 固定 | 同上 |
 | P1 多 Family / 不属于目标 Family | 200 | 同上 | 固定 | 同上 |
 | UNDER_14 无 guardian | 200 | 同上 | 固定 | 同上 |
 | UNDER_14 consent invalid / revoked / expired | 200 | 同上 | 固定 | 同上 |
@@ -861,9 +870,14 @@ type BindingGateResult =
 
 ### D-11.3 Timing / side-channel 边界
 
-- 所有 generic 分支在返回前必须完成：WeChat auth → pending context 创建 → invitation resolution → Gate 1 评估 → audit 写入 → 序列化。禁止在 invitation 解析失败时提前 return（必须走同一 response serializer）。
-- 不承诺密码学常量时间；不新增 padding / fake query / 人为延迟。响应形状不可区分是强制项；timing 只要求不出现明显的「提前 return → 0 查询」分支。
-- 不扩展到通用 side-channel 项目（CPU cache、TLS、连接复用等）。
+- 所有 candidate generic 分支 MUST 走同一 normalized control-flow 与同一 response serializer，且不得存在明显 immediate early return。两种形态：
+  1. **invitation 可解析（存在可信 `targetPersonId` / `targetFamilyId`）**：WeChat auth → pending context 创建 → invitation resolution → 真实 Gate 1 评估 → audit 写入 → 统一 serializer。
+  2. **invitation 不可解析 / 无可信 P1**：WeChat auth → pending context 创建 → invitation resolution failure → pre-attempt blocked classification → security audit（`BINDING_GATE1_BLOCKED`，target 为空，D-15.2）→ 同一统一 serializer。
+- MUST NOT 存在 `invalid invitation → 立即 return` 之类跳过 pending context / audit / serializer 的分支。
+- MUST NOT 因内部原因导致 response shape / status / header / next-action 不同。
+- MUST NOT 为了伪装 timing 去 fake query 一个不存在 / 不可信的 P1；无可信 P1 时不执行 P1-specific Gate 1 DB 查询，只完成 pre-attempt blocked classification。
+- MUST NOT 引入人为 delay / padding。
+- 目标 = normalized observable behavior，而不是对不存在 P1 执行虚假 Gate 1。响应形状不可区分是强制项；不承诺密码学常量时间，也不扩展到通用 side-channel 项目（CPU cache、TLS、连接复用等）。
 
 ---
 
@@ -924,7 +938,7 @@ export interface AuthorizeFacts {
 
 ### D-12.3 兼容性
 
-- 既有 action / purpose / resource 行为不变；新增枚举值前必须先合并 Slice 1 的实际 `authorize()`（当前 main 仍是占位实现，见 D-22）。
+- 既有 action / purpose / resource 行为不变；Slice 1 的真实 `authorize()` 已 merge main（`f4ef602`，见 D-22），新增枚举值按其现任 shape（object Resource + facts）增量扩展。
 - 普通登录、Family、Consent、Compliance 端点不传 binding facts，行为不变。
 - 新增动作必须有 allow / deny 双分支测试。
 
@@ -1146,7 +1160,10 @@ export interface InvitationResolutionPort {
 ```text
 participation invitation 打开
 → 若目标 Person 已有 Account（Case B）：
-   普通登录或 bootstrap 复用；不进入双确认
+   ordinary authenticated path 复用；不进入双确认
+   （客户端误调 POST /identity-bindings/bootstrap 时，服务端在 WeChat authentication 后识别
+     authenticated Account == P1 existing Account，直接返回 REUSED；「endpoint 被调用」
+     ≠「进入 Case C identity bootstrap state machine」，见 D-10.2）
 → 若目标 Person 无 Account（Case C）：
    在调用普通 /auth/wechat 之前调用 POST /identity-bindings/bootstrap
    → 得到 pendingContextToken + binding:NOT_COMPLETED
@@ -1217,6 +1234,7 @@ participation invitation 打开
 | Domain / Unit | `tests/domain/identity-binding-crypto.test.ts` | token hash、HKDF、AES-GCM、无明文 openid |
 | Domain / Unit | `tests/domain/identity-binding-anti-enumeration.test.ts` | generic serializer、body keys、无 attemptId / reason |
 | Database | `tests/db/identity-binding-schema.test.ts` | 表 / enum / CHECK / 部分唯一索引 / 无永久唯一 / audit `event_type` 闭集含 `BINDING_OPERATION_RETRYABLE` |
+| Database | `tests/db/identity-binding-facts.test.ts` | app-layer gate facts builder（DB 读取 P1 / family / profile / consent / membership + `assertMinorProcessingAllowed`）；纯 facts shape / `evaluateBindingGate` 留在 `tests/domain/identity-binding-gate.test.ts` |
 | Database | `tests/db/identity-binding-rls.test.ts` | 新表 FORCE RLS、无上下文 0 行、错误 family / attempt 0 行、audit runtime 不可读、candidate-account read policy 只返回该 Account 绑定的 Person |
 | Database | `tests/db/identity-binding-concurrency.test.ts` | 并发 commit ∈ {0,1}、double confirmation、account / person conflict、0 commit |
 | Integration | `tests/integration/identity-binding-bootstrap.test.ts` | Case B / C、Gate 1、invalid invitation、pending context、no session |
@@ -1232,6 +1250,8 @@ participation invitation 打开
 | Contract | `tests/integration/identity-binding-openapi.test.ts` | 6 条 route、schema、错误 envelope；无 participant route |
 | Governance | `node scripts/validate-governance.mjs` / `run-governance-tests.mjs` / `guard-static` / `typecheck` / `openapi:check` / `coverage:audit` | 治理 / 静态 / 类型 / 契约 / 覆盖 |
 | **BLOCKED** | `tests/integration/identity-binding-slice4-e2e.test.ts` | 真实 Slice 4 invitation → bootstrap → binding → accept；**BLOCKED BY SLICE 4 RUNTIME** |
+
+- **Domain suite 约束（冻结）**：`tests/domain/**` MUST 为纯 domain / unit，MUST NOT 依赖 `DATABASE_URL`、MUST NOT 访问真实 PostgreSQL；DB-backed 行为（repository、facts builder、RLS、concurrency、migration、route integration）只放 `tests/db/**` / `tests/integration/**`。禁止在 domain suite 中 silent skip 或靠环境变量条件跳过。`bun run vitest run tests/domain` MUST 能在无 DB 环境下作为真正 domain suite 执行。
 
 ### D-19.2 FR / AS / SC 映射
 
@@ -1318,26 +1338,21 @@ Implement 必须能机械证明以下不存在（CI / guard / grep / schema intr
 
 ### D-22.1 Dependency classification
 
-| # | 类别 | 依赖 | 当前事实 | 对 Slice 6 的影响 |
+| # | 类别 | 依赖 | 当前事实 | 对本 Slice（业务 Slice 5，repo feature 006）的影响 |
 |---|---|---|---|---|
-| H1 | **Hard core Implement blocker** | Slice 1 runtime：真实 `authorize()`（fail-closed、facts、manager / guardian 判定）、RLS helper、幂等、审计基线 | `origin/main` = `ed0d5fb`；`packages/authorization/src/authorize.ts` 对 `MANAGER_ACTIONS` 与 `MINOR_PROCESSING` 仍是占位 `return ALLOW`；真实实现只在未合并的 `origin/fix/slice1-final-audit-remediation`（`af6bb0c`）；`tests/evidence/converge.md` 没有最终 INDEPENDENT CONVERGE PASS 记录 | **BLOCKED**：必须先 `Slice 1 final remediation → 审计二 PASS → merge main`；在此之前 Slice 6 core implementation 不得启动 |
-| H2 | **Hard core contract** | 005 Identity Binding Contract | merged main（`ed0d5fb`） | SATISFIED（语义） |
-| H3 | **Contract-only dependency + late E2E blocker** | Slice 4 participant contract（invitation valid / terminal-unusable + P1 + target Family） | `origin/feat/004-case-participant-core` = `a2d82c73b5d134f6559ea9247ee19eda15cb0f16`，**not merged main**；Slice 4 runtime 未实现 | **不阻塞 core implementation**：Slice 6 以冻结 contract + `InvitationResolutionPort` + contract fixture / test double 完成 schema / domain / pending auth / attempt / confirmation / Gate / idempotency / concurrency / authorization / RLS / audit / API / transaction / retry / contract-level tests；**只阻塞**真实 production adapter 与真实 Case C E2E，即 `T121–T124 = BLOCKED BY SLICE 4 RUNTIME` |
+| H1 | **Hard core Implement blocker → SATISFIED** | Slice 1 runtime：真实 `authorize()`（fail-closed、facts、manager / guardian 判定）、RLS helper、幂等、审计基线 | 已解除：Slice 1 于 2026-11-07 Final Independent Audit II PASS → PR #13 merge main → post-merge CI PASS → CLOSED；`origin/main` = `f4ef60265e1bc4aec7a458ccf924af85eef7debe`；`packages/authorization/src/authorize.ts` 的 `MINOR_PROCESSING` 已是真实分支（非占位 `return ALLOW`）；`tests/evidence/converge.md` 归档 36 PASS / 0 FAIL | **SATISFIED**：不再阻塞 core implementation；当前状态为 `READY FOR CORE IMPLEMENTATION`，仅 `T121–T124` 继续 `BLOCKED BY SLICE 4 RUNTIME` |
+| H2 | **Hard core contract** | 005 Identity Binding Contract | merged main（Slice 2 merge 后 main = `f4ef602`） | SATISFIED（语义） |
+| H3 | **Contract-only dependency + late E2E blocker** | Slice 4 participant contract（invitation valid / terminal-unusable + P1 + target Family） | `origin/feat/004-case-participant-core` = `a2d82c73b5d134f6559ea9247ee19eda15cb0f16`，**not merged main**；Slice 4 runtime 未实现 | **不阻塞 core implementation**：本 Slice 以冻结 contract + `InvitationResolutionPort` + contract fixture / test double 完成 schema / domain / pending auth / attempt / confirmation / Gate / idempotency / concurrency / authorization / RLS / audit / API / transaction / retry / contract-level tests；**只阻塞**真实 production adapter 与真实 Case C E2E，即 `T121–T124 = BLOCKED BY SLICE 4 RUNTIME` |
 
 ### D-22.2 Non-dependencies
 
-- Slice 2 `002-case-core`：不依赖；不读 Case 内容；当前 `origin/feat/002-case-core` = `9ac76f7`，未 merge main，不影响 006 domain / schema。
-- Slice 3 `003-evidence-core`：明确不写 Evidence；不是依赖。
+- Slice 2 `002-case-core`：不依赖；不读 Case 内容。已由 PR #14 merge main（`origin/main` = `f4ef602`；`specs/002-case-core` 已在 main），不影响本 Slice domain / schema。
+- Slice 3 `003-evidence-core`：明确不写 Evidence；不是依赖（当前未 merge main，`specs/003` 不在 main）。
 
 ### D-22.3 Implement Gate 状态机与循环依赖排除
 
 ```text
-当前（B1 未解决）：
-PLAN FROZEN
-IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY
-T121–T124 = BLOCKED BY SLICE 4 RUNTIME
-
-B1 解决后（Slice 1 remediation → 审计二 PASS → merge main）：
+当前（2026-11-07，B1 已解除）：
 PLAN FROZEN
 READY FOR CORE IMPLEMENTATION
 允许开发 AI 执行所有不依赖 Slice 4 runtime 的任务（Phase 1–14）
@@ -1345,34 +1360,36 @@ T121–T124 继续 BLOCKED BY SLICE 4 RUNTIME
 
 Slice 4 runtime available 后：
 执行 T121–T124 → real adapter / real Slice 4 integration / full Case C E2E
-→ Slice 6 Implement complete → 审计二
+→ 本 Slice（业务 Slice 5，repo feature 006）Implement complete → 审计二
 ```
+
+> 历史状态（不得再作为当前事实）：B1 未解除时为 `IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY`；Slice 1 CLOSED 后该状态已失效。
 
 **B1 / B2 的精确定义**
 
-1. **B1 — Slice 1 真实 `authorize()` 未合并 / 未 Converge PASS**：这是 Slice 6 **core implementation 的唯一 hard blocker**；B1 未解决时 `IMPLEMENT BLOCKED`。
-2. **B2 — Slice 4 runtime 未 merge**：这是 **Slice 4 runtime 的 late E2E blocker**，不是 Slice 6 core implementation 的 hard blocker。B2 只冻结 `T121–T124`，不得冻结 Phase 1–14。
+1. **B1 — Slice 1 真实 `authorize()` 未合并 / 未 Converge PASS**：曾是本 Slice **core implementation 的唯一 hard blocker**；现已解除（Slice 1 CLOSED，`origin/main` = `f4ef602`，`MINOR_PROCESSING` 实分支，converge 36 PASS / 0 FAIL）。
+2. **B2 — Slice 4 runtime 未 merge**：这是 **Slice 4 runtime 的 late E2E blocker**，不是本 Slice core implementation 的 hard blocker。B2 只冻结 `T121–T124`，不得冻结 Phase 1–14。
 
 **为什么不存在循环硬依赖**
 
 ```text
-Slice 6 core implementation ← 只依赖 Slice 1（B1）
-Slice 4 implementation       ← 依赖 Slice 6 core runtime available
-Slice 6 T121–T124 closeout   ← 依赖 Slice 4 runtime
+本 Slice（业务 Slice 5，repo feature 006）core implementation ← 只依赖 Slice 1（B1，已 SATISFIED）
+Slice 4 implementation                                       ← 依赖本 Slice core runtime available
+本 Slice T121–T124 closeout                                  ← 依赖 Slice 4 runtime
 ```
 
 这是**分阶段交接**，不是循环：
 
-- Slice 6 core **不等待** Slice 4 runtime；
-- Slice 4 等待的是 Slice 6 **core runtime available**，不是 Slice 6 的 `T121–T124` full closeout；
-- Slice 6 只在 **late closeout** 阶段等待 Slice 4 runtime；
-- Slice 6 core 与 Slice 4 runtime 之间不存在互相等待的边。
+- 本 Slice core **不等待** Slice 4 runtime；
+- Slice 4 等待的是本 Slice **core runtime available**，不是本 Slice 的 `T121–T124` full closeout；
+- 本 Slice 只在 **late closeout** 阶段等待 Slice 4 runtime；
+- 本 Slice core 与 Slice 4 runtime 之间不存在互相等待的边。
 
-**直接回答「Slice 6 是否必须等待 Slice 2 / Slice 3 / Slice 4 实现后才能开始开发？」**
+**直接回答「本 Slice 是否必须等待 Slice 2 / Slice 3 / Slice 4 实现后才能开始开发？」**
 
 - 不需要等待 Slice 2、Slice 3。
-- **不需要等待 Slice 4 runtime 才能开始 Slice 6 core implementation**。Slice 6 core 使用冻结 contract + port + fixture 完成；禁止私建第二套 invitation runtime，禁止伪造 Slice 4 production implementation。
-- 必须等待 Slice 1 final remediation + 审计二 PASS + merge main；这是 B1。
+- **不需要等待 Slice 4 runtime 才能开始本 Slice core implementation**。core 使用冻结 contract + port + fixture 完成；禁止私建第二套 invitation runtime，禁止伪造 Slice 4 production implementation。
+- Slice 1 的 hard dependency 已 SATISFIED（PR #13 merged main）。
 - `T121–T124` 必须等待 Slice 4 runtime；这是 B2，只影响 late E2E closeout。
 
 ---
