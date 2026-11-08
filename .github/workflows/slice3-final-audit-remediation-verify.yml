@@ -58,6 +58,7 @@ jobs:
       - name: Final audit targeted regressions
         run: |
           bunx vitest run \
+            tests/domain/age-band.test.ts \
             tests/db/evidence-raw-writer-guard.test.ts \
             tests/integration/evidence-write.test.ts \
             tests/integration/messages-create.test.ts \
@@ -66,3 +67,5 @@ jobs:
             tests/db/migration-upgrade-evidence.test.ts
       - name: Verify all
         run: bun run verify-all
+      - name: Working tree clean
+        run: test -z "$(git status --porcelain)"
