@@ -13,6 +13,12 @@
  * The gate reuses the existing `assertMinorProcessingAllowed` data source.
  * BLOCK writes zero Evidence rows and zero audit rows.
  *
+ * `missing consent` and `malformed/unusable consent` are mechanically distinct:
+ * the missing fixture keeps a real consent row in another Family so the
+ * authoritative repository resolves null under the write's RLS context; the
+ * malformed fixture keeps a same-Family consent whose evidence fails the
+ * frozen ConsentEvidence schema.
+ *
  * This file is RED before the repository gate covers `sourcePersonId`.
  */
 
@@ -20,6 +26,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { recordStatement } from '../../packages/domain/src/evidence.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { getConsentRecordForGate } from '../../packages/compliance/src/repository.js';
 import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
 
 const ADMIN_URL = process.env['TEST_ADMIN_DATABASE_URL']!;
@@ -41,6 +48,8 @@ interface Fixture {
   under14MalformedPersonId: string;
   unknownPersonId: string;
   missingProfilePersonId: string;
+  orphanConsentFamilyId: string;
+  missingConsentRecordId: string;
 }
 
 let admin: pg.Client;
@@ -161,6 +170,37 @@ describe('T070 — all processed Persons compliance gate (COLD-002)', () => {
     });
 
     it('source = UNDER_14 + missing consent → BLOCK', async () => {
+      // Mechanically prove the authoritative missing state: UNDER_14 profile,
+      // real guardian, non-null pointer, but the consent row lives in another
+      // Family and is unresolvable under the write's RLS context.
+      const { rows: profileRows } = await admin.query(
+        `SELECT age_band, guardian_person_id, guardian_consent_record_id
+           FROM person_compliance_profiles WHERE person_id = $1`,
+        [fx.under14MissingPersonId]
+      );
+      expect(profileRows[0].age_band, 'missing fixture is UNDER_14').toBe('UNDER_14');
+      expect(profileRows[0].guardian_person_id, 'guardian exists').toBeTruthy();
+      expect(
+        profileRows[0].guardian_consent_record_id,
+        'consent pointer is non-null (DB CHECK)'
+      ).toBe(fx.missingConsentRecordId);
+
+      const { rows: consentRows } = await admin.query(
+        'SELECT family_id FROM consent_records WHERE id = $1',
+        [fx.missingConsentRecordId]
+      );
+      expect(consentRows[0].family_id, 'consent exists but in another Family').toBe(
+        fx.orphanConsentFamilyId
+      );
+      expect(consentRows[0].family_id).not.toBe(fx.familyId);
+
+      // The authoritative production repository returns null in the write's
+      // family context: no usable current consent record.
+      const resolved = await runWrite((tx) =>
+        getConsentRecordForGate(tx, fx.missingConsentRecordId)
+      );
+      expect(resolved, 'authoritative current usable consent = NONE').toBeNull();
+
       await expectBlocked(
         fx.managerPersonId,
         fx.under14MissingPersonId,
@@ -390,7 +430,8 @@ async function seed(client: pg.Client): Promise<Fixture> {
     decision: 'GRANTED' | 'REVOKED',
     noticeHash: string,
     evidence: string,
-    version: number
+    version: number,
+    targetFamilyId: string = familyId
   ): Promise<string> => {
     // Frozen constraint: GRANTED requires an onboarding request, REVOKED must
     // not carry one.
@@ -403,7 +444,7 @@ async function seed(client: pg.Client): Promise<Fixture> {
          VALUES ($1, $2, $3, 'UNDER_14', 'v1', $4, 'GRANTED',
                  now() + interval '1 hour', now())
          RETURNING id`,
-        [familyId, guardianPersonId, subjectPersonId, noticeHash]
+        [targetFamilyId, guardianPersonId, subjectPersonId, noticeHash]
       );
       onboardingRequestId = request[0].id as string;
     }
@@ -416,7 +457,7 @@ async function seed(client: pg.Client): Promise<Fixture> {
                $5, $6, $7, now(), 'v1', $8, 'v1', $9::jsonb)
        RETURNING id`,
       [
-        familyId,
+        targetFamilyId,
         guardianPersonId,
         accountId,
         decision,
@@ -444,19 +485,30 @@ async function seed(client: pg.Client): Promise<Fixture> {
   });
 
   const under14MissingPersonId = await makePerson();
-  // The pointer exists (DB CHECK), but the stored consent belongs to a
-  // different guardian than the profile, so no usable current consent exists.
-  const orphanConsentId = await insertConsent(
+  // MEDIUM-01: the frozen DB CHECK forbids a NULL consent pointer on an
+  // UNDER_14 profile, so "missing consent" cannot be a dangling pointer. This
+  // isolated fixture keeps the pointer non-null but stores the consent row in a
+  // different Family: the authoritative repository `getConsentRecordForGate`
+  // runs under the Evidence write's family RLS context and therefore genuinely
+  // returns null — there is no usable current consent record.
+  const { rows: orphanFamily } = await client.query(
+    `INSERT INTO families (display_name, created_by_person_id)
+     VALUES ('t070-orphan', $1) RETURNING id`,
+    [guardianPersonId2]
+  );
+  const orphanConsentFamilyId = orphanFamily[0].id as string;
+  const missingConsentRecordId = await insertConsent(
     under14MissingPersonId,
     'GRANTED',
     NOTICE_HASH,
     validEvidence,
-    5
+    5,
+    orphanConsentFamilyId
   );
   await insertProfile(under14MissingPersonId, 'UNDER_14', {
-    consentRecordId: orphanConsentId,
+    consentRecordId: missingConsentRecordId,
     consentVersion: 5,
-    guardianPersonId: guardianPersonId2,
+    guardianPersonId: guardianPersonId,
   });
 
   const under14RevokedPersonId = await makePerson();
@@ -524,38 +576,40 @@ async function seed(client: pg.Client): Promise<Fixture> {
     under14MalformedPersonId,
     unknownPersonId,
     missingProfilePersonId,
+    orphanConsentFamilyId,
+    missingConsentRecordId,
   };
 }
 
 async function cleanup(client: pg.Client) {
   try {
     await client.query(
-      `DELETE FROM assertions WHERE family_id IN (SELECT id FROM families WHERE display_name = 't070')`
+      `DELETE FROM assertions WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't070%')`
     );
     await client.query(
-      `DELETE FROM observations WHERE family_id IN (SELECT id FROM families WHERE display_name = 't070')`
+      `DELETE FROM observations WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't070%')`
     );
     await client.query(
-      `DELETE FROM business_audit_events WHERE family_id IN (SELECT id FROM families WHERE display_name = 't070')`
+      `DELETE FROM business_audit_events WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't070%')`
     );
     await client.query(
-      `DELETE FROM cases WHERE family_id IN (SELECT id FROM families WHERE display_name = 't070')`
+      `DELETE FROM cases WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't070%')`
     );
     await client.query(
       `DELETE FROM person_compliance_profiles WHERE person_id IN (
          SELECT person_id FROM family_members WHERE family_id IN (
-           SELECT id FROM families WHERE display_name = 't070'))`
+           SELECT id FROM families WHERE display_name LIKE 't070%'))`
     );
     await client.query(
-      `DELETE FROM consent_records WHERE family_id IN (SELECT id FROM families WHERE display_name = 't070')`
+      `DELETE FROM consent_records WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't070%')`
     );
     await client.query(
-      `DELETE FROM guardian_consent_requests WHERE family_id IN (SELECT id FROM families WHERE display_name = 't070')`
+      `DELETE FROM guardian_consent_requests WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't070%')`
     );
     await client.query(
-      `DELETE FROM family_members WHERE family_id IN (SELECT id FROM families WHERE display_name = 't070')`
+      `DELETE FROM family_members WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't070%')`
     );
-    await client.query(`DELETE FROM families WHERE display_name = 't070'`);
+    await client.query(`DELETE FROM families WHERE display_name LIKE 't070%'`);
     await client.query(
       `DELETE FROM persons WHERE created_by_account_id IN (
          SELECT id FROM accounts WHERE wechat_openid LIKE 't070\\_%')`

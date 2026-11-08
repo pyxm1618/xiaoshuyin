@@ -568,6 +568,7 @@
   - **Verify**: `bunx vitest run tests/integration/evidence-person-processing-gate.test.ts` is RED because only the subject is currently checked
   - **Evidence**: RED matrix covering the full source age/consent table, independent MINOR_14_17 and UNDER_14-valid ALLOW fixtures, subject gate, dedupe equivalence, and zero-write counts.
     - **Remediation Evidence**: baseline RED: 6 failed / 12 passed (18) — all source BLOCK cases failed; GREEN after T071: 18/18 PASS.
+    - **Code Re-audit MEDIUM-01 Evidence**: the missing-consent fixture is now mechanically independent — UNDER_14 profile + real guardian + non-null `guardian_consent_record_id`, with the consent row persisted in a separate `t070-orphan` Family. The authoritative `getConsentRecordForGate` genuinely returns null under the write's family RLS context (asserted in-test), the writer fails with `GUARDIAN_CONSENT_REQUIRED`, and Evidence/audit stay +0. The malformed fixture remains distinct (same-Family consent with schema-invalid evidence). Targeted re-run: 18/18 PASS.
 - [x] T071 [REQ:FR-021;CHK069;CHK070;CHK074] Extend the repository processing gate to every non-null Person reference processed by the write. [VERIFY:`bunx vitest run tests/integration/evidence-person-processing-gate.test.ts tests/integration/evidence-write.test.ts tests/domain/age-band.test.ts` passes]
   - **Depends on**: T070
   - **Files**: `packages/domain/src/repository.ts`
@@ -614,7 +615,8 @@
   - **Action**: Run the complete local regression without skipping expected failures or weakening assertions.
   - **Verify**: `bun run typecheck`; `bun run guard:static`; `bunx vitest run tests/domain`; `bunx vitest run tests/db`; `bunx vitest run tests/integration`; `bun run openapi:check` all exit 0.
   - **Evidence**: Command-by-command exit status and test counts.
-    - **Remediation Evidence**: typecheck PASS; guard:static 0 violations; domain 17 files/188; db 21 files/141; integration 52 files/356; full 685 tests 0 failed 0 skipped; openapi:check PASS; db:evidence PASS; coverage:audit PASS; governance self-test 15/15; verify-all PASS 36 / FAIL 0 / NOT VERIFIED 1 (FR-002 platform authenticity).
+    - **Remediation Evidence**: typecheck PASS; guard:static 0 violations; domain 17 files/188; db 21 files/141; integration 52 files/356; full 685 tests 0 failed 0 skipped; openapi:check PASS; db:evidence PASS (fresh 001→004 + replay + upgrade evidence tests); coverage:audit PASS; governance self-test 15/15.
+    - **Code Re-audit LOW-01 Evidence**: `bun run verify-all --archive` re-executed on the current remediation Head (2026-11-08T09:30:03Z): PASS 36 / FAIL 0 / NOT VERIFIED 1 (FR-002 platform authenticity); the archived log reflects 4 migrations plus `assertions` / `observations` / `dialogue_messages`, and repo-absolute paths are normalized.
 
 - [x] T077 [REQ:AGENTS:§3/§7;CHK001-008;CHK113-115] Perform remediation governance and diff classification. [VERIFY:`node .specify/scripts/validate-governance.mjs` and `node .specify/scripts/tests/run-governance-tests.mjs` pass; unexpected diff count = 0]
   - **Depends on**: T076
