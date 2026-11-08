@@ -97,7 +97,6 @@ async function installAuthorizationFactFault(): Promise<void> {
      TO xiaoshuyin_app`
   );
 }
-
 async function setFaultEnabled(enabled: boolean): Promise<void> {
   await admin.query(
     `UPDATE ${FAULT_SCHEMA}.control SET enabled = $1 WHERE singleton = true`,
