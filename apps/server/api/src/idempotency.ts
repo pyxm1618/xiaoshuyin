@@ -25,7 +25,9 @@ import {
   insertIdempotencyKey,
   lockIdempotencyKey,
   type IdempotencyCommandType,
+  deriveParticipationInviteToken,
 } from '@xiaoshuyin/domain';
+import { CreateParticipationInviteResponse } from '@xiaoshuyin/contracts';
 import { withTransactionClient } from './db/tx.js';
 import { toHttpError } from './plugins/error-handler.js';
 
@@ -148,6 +150,47 @@ export async function runIdempotentCommand(
 
     return { action: 'EXECUTED', status: response.status, body: response.body };
   });
+}
+
+export function participationInviteSnapshot(response: CommandResponse): unknown {
+  const parsed = CreateParticipationInviteResponse.safeParse(response.body);
+  if (!parsed.success) {
+    throw Object.assign(new Error('Invalid participation invite response'), {
+      statusCode: 500,
+      code: 'INTERNAL_ERROR',
+    });
+  }
+  const { inviteToken: _secret, ...snapshot } = parsed.data;
+  return snapshot;
+}
+
+export function rehydrateParticipationInviteReplay(
+  outcome: CommandOutcome,
+  secret: string
+): CommandOutcome {
+  if (outcome.action !== 'REPLAY') return outcome;
+  if (
+    typeof outcome.body !== 'object' ||
+    outcome.body === null ||
+    typeof (outcome.body as { participationId?: unknown }).participationId !== 'string'
+  ) {
+    throw Object.assign(new Error('Invalid participation invite replay snapshot'), {
+      statusCode: 500,
+      code: 'INTERNAL_ERROR',
+    });
+  }
+  const participationId = (outcome.body as { participationId: string }).participationId;
+  const hydrated = CreateParticipationInviteResponse.safeParse({
+    ...(outcome.body as Record<string, unknown>),
+    inviteToken: deriveParticipationInviteToken(secret, participationId),
+  });
+  if (!hydrated.success) {
+    throw Object.assign(new Error('Invalid participation invite replay snapshot'), {
+      statusCode: 500,
+      code: 'INTERNAL_ERROR',
+    });
+  }
+  return { ...outcome, body: hydrated.data };
 }
 
 export function sendCommandOutcome(reply: FastifyReply, outcome: CommandOutcome) {
