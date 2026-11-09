@@ -255,19 +255,19 @@
 - [x] CHK189 Is 审计一的 20 项检查（Spec→Plan 漂移、语义改变、FR/SC/AS 漏项、负向场景、不可执行 Task、并发证明、RETRYABLE、幂等、永久唯一、P2、Account orphan、RLS、authorization/recognition 混淆、candidate 泄露、invitation 侵入、Slice 4 侵入、runtime 依赖未标 BLOCKED、Task 顺序、测试映射、开发 AI 可直接实施）逐项在 Plan / Checklist 中有落点？[Auditability, plan D-1—D-22 / checklist CHK001—CHK188]
 - [x] CHK190 Is Checklist 自身明确「PASS 不等于 Implement Gate OPEN」，且 dependency blocker 不会被误记为 Plan FAIL？[Clarity, checklist header / plan D-22.3]
 
-- [x] CHK191 Is H-01 root cause explicitly frozen: S0/S1 delta、createdAt、unique-pending、attemptId、invitation possession均不能证明现场recognized human = authenticated candidate？[Security, H-01 / plan H-01]
+- [x] CHK191 Is Decision A threat boundary explicit and non-contradictory: S0/S1 delta、createdAt、unique-pending、attemptId、invitation possession、pairingChallenge possession均不能证明 onsite recognized human = authenticated candidate；confirmer仍负有independent authentication + personal recognition + target confirmation责任；authenticated candidate intentional realtime relay/collusion明确OUT OF SCOPE而非blocking acceptance？[Security, Decision A / H-01 / plan H-01]
 
-- [x] CHK192 Is pairing generator唯一明确为server，challenge只在candidate自己的AFFIRM surface获得，并由candidate现场主动展示/传递给confirmer，而不是系统猜测？[Executability, plan D-3.5 / D-9.2]
+- [x] CHK192 Is pairing generator唯一明确为server，challenge只在candidate自己的AFFIRM surface获得，并由candidate现场主动展示/传递给亲自辨认他的confirmer；系统从challenge验证exact authenticated identity↔pending context↔attempt↔P1↔invitation↔current issuance，而不是靠pending list/timing/system guess？[Executability, plan D-3.5 / D-9.2]
 
-- [x] CHK193 Is valid pairingChallenge cryptographically bound to exact candidate context + authenticated identity + attempt + P1 + invitation + expiry，且challenge possession本身仍不是identity proof？[Security, 005 §5.3 / plan D-3.5]
+- [x] CHK193 Is valid pairingChallenge cryptographically bound to exact candidate context + authenticated identity + attempt + P1 + invitation + current issuance + expiry，且pairingChallenge/material possession本身仍不是identity proof；005 trust assumption同时冻结candidate不得主动relay给collusive presenter？[Security, 005 §4.1A/§5.3 / plan D-3.5]
 
-- [x] CHK194 Are pairing replay / expiry / consumption / wrong-P1 / wrong-invitation / wrong-candidate / wrong-attempt / two-candidate / two-confirmer concurrency all fail-closed or exactly-once，且original attacker race有direct acceptance？[Security/Concurrency, H-01 / plan D-19.4]
+- [x] CHK194 Are pairing replay semantics mechanically unique: same candidate AFFIRM + same key + same issuance returns exact original challenge bytes；rotation creates different bytes/digest；old challenge invalid；old key + rotated challenge→409；wrong-P1 / wrong-invitation / wrong-candidate / wrong-attempt / expired / consumed / two-candidate / two-confirmer cases fail-closed or exactly-once；non-collusive attacker matrix has direct acceptance，而intentional relay不被偷偷重新加入？[Security/Concurrency, Decision A / H-01 / plan D-3.5/D-5.4/D-19.4]
 
 - [x] CHK195 Is H-02 Gate2 boundary明确保护所有会改变Gate2结果的authoritative facts，至少profile/age-band、Consent、guardian、membership/authority、invitation、P1 binding conflict、candidate-account conflict？[Completeness, H-02 / plan D-8.4]
 
 - [x] CHK196 Does H-02 acceptance require real xiaoshuyin_app runtime-role barrier behavior，explicitly reject “FOR UPDATE exists in source” or “FOR UPDATE returns 0 rows” as proof？[Measurability, H-02 / plan D-8.4 / D-19.4]
 
-- [x] CHK197 Is candidate AFFIRM required to re-evaluate current dynamic eligibility before confirmation and before valid challenge issuance，with stale consent/age/guardian/membership/invitation/binding conflicts terminalizing rather than remaining PENDING？[Consistency, M-01 / plan D-8.5]
+- [x] CHK197 Is candidate AFFIRM required to re-evaluate current dynamic eligibility before confirmation and before valid challenge issuance，with stale consent/age/guardian/membership/invitation/binding conflicts terminalizing rather than remaining PENDING；valid/decoy仍保持same 192-char external representation？[Consistency, M-01 / plan D-8.5/D-3.5]
 
 - [x] CHK198 Does bootstrap replay cleanup explicitly cover COMMITTED、TERMINAL、pre-attempt、Case B REUSED fresh transport contexts and directly require ciphertext/nonce/tag NULL independent of linkAttempt order？[Security, M-02 / plan D-14]
 
@@ -275,9 +275,9 @@
 
 - [x] CHK200 Is Phase C ATTEMPT_EXPIRED owned by one authoritative settlement path that atomically reaches TERMINAL + reason + exactly-one audit + all-context scrub + no binding/orphan Account？[Atomicity, M-04 / plan D-14 / D-19.4]
 
-- [x] CHK201 Is coverage:audit substantive fail-closed: required acceptance→stable proof ID→exact executable proof，with RED self-tests for delete、rename、unexecute、unrelated-test substitution causing non-zero？[Measurability, M-05 / plan D-19.5]
+- [x] CHK201 Is coverage:audit substantive fail-closed: required acceptance→stable proof ID→exact executable proof，且H-01 proof必须覆盖Decision A boundary、exact-byte replay/rotation、valid-vs-decoy exact format/length、OpenAPI AFFIRM=true/true 与 REJECT=false/false；RED self-tests for delete、rename、unexecute、unrelated-test substitution causing non-zero？[Measurability, M-05 / Decision A / plan D-19.5]
 
-- [x] CHK202 Is canonical verify-all provenance frozen to repo-root node scripts/verify-all.mjs with exact branch/HEAD/origin-main/clean tree/env-presence/child exits/final exit，and historical unexplained failure allowed only as unresolved rather than invented explanation？[Reproducibility, M-06 / plan D-19.6]
+- [x] CHK202 Is canonical verify-all provenance frozen to repo-root node scripts/verify-all.mjs with exact branch/HEAD/origin-main/clean tree/env-presence/child exits/final exit；并记录本次 Decision A remediation baseline，使后续development不得把Docs/005/006 threat contract漂移伪装成实现修复；historical unexplained failure仍只能标unresolved？[Reproducibility, M-06 / Decision A / plan D-19.6]
 
 ---
 
@@ -301,3 +301,4 @@
   - 当时条目总数为 190（未新增/删除）；`spec.md`、`Docs/**`、`specs/005/**`、`apps/**`、`packages/**`、`db/**`、`tests/**` diff = 0。
 - 2026-11-08 Ultimate Audit Targeted Remediation（历史，已被下一条SUPERSEDED）：当时CHK191—CHK200采用S0/S1 exact-delta pairing；Ultimate Final Independent Re-audit随后证明该机制不安全，因此该历史口径不得再作为当前acceptance。
 - 2026-11-09 Ultimate Audit Targeted Plan/Contract Remediation：CHK191—CHK202重写为H-01/H-02/M-01—M-06；H-01冻结server-generated candidate-presented one-time pairing challenge，S0/S1 pairing正式废止；H-02要求真实runtime-role barrier；M-01—M-06均有direct observable contract。Checklist当前202条。Checklist PASS只表示Plan/Contract可审，不表示reopened Tasks已实现；T121–T124仍BLOCKED。
+- 2026-11-09 Security Decision A Upstream Contract Remediation：intentional realtime relay / intentional collusion by authenticated candidate明确OUT OF SCOPE；pairing material possession仍不是identity proof；CHK191—CHK194冻结confirmer responsibility + exact digital binding + exact-byte replay/rotation，CHK201冻结192-char valid/decoy与AFFIRM/REJECT schema proof。旧S0/S1及“必须阻断主动relay”口径均SUPERSEDED。
