@@ -171,15 +171,21 @@ paths:
       description: >-
         Second-party confirmation bound to the exact authenticated candidate by
         a server-generated, candidate-presented, short-lived pairing challenge.
-        The confirmer MUST independently authenticate and personally recognize
-        the human presenting the challenge. Challenge possession alone,
-        invitation possession, pending-list selection, attemptId, nickname,
-        displayName, Family membership, timestamps, or automated inference are
-        not identity proof. The server resolves the exact candidate context,
-        authenticated identity, attempt, P1 and invitation from the validated
-        challenge. A successful business operation consumes the pairing
+        The confirmer MUST independently authenticate, personally recognize the
+        onsite human as P1, and confirm that the recognized candidate is using
+        or presenting pairing material from that candidate's own current
+        authenticated binding session. Challenge possession alone, invitation
+        possession, pending-list selection, attemptId, nickname, displayName,
+        Family membership, timestamps, or automated inference are not identity
+        proof. The server resolves and validates the exact candidate context,
+        authenticated identity, attempt, P1, invitation and current issuance
+        from the challenge. A successful business operation consumes the pairing
         material semantically; a different operation cannot reuse an expired or
-        consumed challenge.
+        consumed challenge. Slice 5 V1 explicitly does not claim resistance to
+        intentional realtime relay or collusion in which the authenticated
+        candidate deliberately forwards current pairing material to another
+        onsite presenter; that threat-model exclusion does not weaken the
+        confirmer recognition responsibility above.
       security:
         - bearerAuth: []
       requestBody:
@@ -290,41 +296,92 @@ components:
               type: string
           required: [decision, idempotencyKey]
     BindingConfirmerDecisionRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        personId:
-          type: string
-          format: uuid
-        pairingChallenge:
-          type: string
-          minLength: 32
-          maxLength: 512
+      oneOf:
+        - type: object
+          additionalProperties: false
           description: >-
-            Opaque server-authenticated, short-lived candidate-presented pairing
-            material. It is bound to the candidate authentication context,
-            authenticated candidate identity, exact attempt, P1, invitation and
-            expiry. It is not identity proof by itself and MUST NOT be logged.
-        decision:
-          type: string
-          enum: [AFFIRM, REJECT]
-        targetConfirmed:
-          type: boolean
-        candidateRecognized:
-          type: boolean
-        confirmationVersion:
-          type: string
-          const: second-party-recognition-v1
-        idempotencyKey:
-          type: string
-      required:
-        - personId
-        - pairingChallenge
-        - decision
-        - targetConfirmed
-        - candidateRecognized
-        - confirmationVersion
-        - idempotencyKey
+            AFFIRM means the independently authenticated confirmer personally
+            recognizes the onsite candidate as P1 and confirms that the
+            recognized candidate is using/presenting that candidate's own
+            current authenticated binding-session pairing material.
+          properties:
+            personId:
+              type: string
+              format: uuid
+            pairingChallenge:
+              type: string
+              minLength: 192
+              maxLength: 192
+              pattern: '^[A-Za-z0-9_-]{192}$'
+              description: >-
+                Exact unpadded base64url representation of the opaque
+                server-authenticated, short-lived candidate-presented pairing
+                material. The material is bound to candidate context,
+                authenticated identity, exact attempt, P1, invitation, current
+                issuance and expiry. Possession is not identity proof by itself.
+            decision:
+              type: string
+              const: AFFIRM
+            targetConfirmed:
+              type: boolean
+              const: true
+            candidateRecognized:
+              type: boolean
+              const: true
+            confirmationVersion:
+              type: string
+              const: second-party-recognition-v1
+            idempotencyKey:
+              type: string
+          required:
+            - personId
+            - pairingChallenge
+            - decision
+            - targetConfirmed
+            - candidateRecognized
+            - confirmationVersion
+            - idempotencyKey
+        - type: object
+          additionalProperties: false
+          description: >-
+            Canonical REJECT. The confirmer does not make the complete
+            recognition/target attestation. Mixed boolean combinations and
+            REJECT with true/true are invalid rather than alternate semantics.
+          properties:
+            personId:
+              type: string
+              format: uuid
+            pairingChallenge:
+              type: string
+              minLength: 192
+              maxLength: 192
+              pattern: '^[A-Za-z0-9_-]{192}$'
+              description: >-
+                Exact unpadded base64url pairing material identifying the
+                challenge-bound attempt to reject; invalid, expired, consumed
+                or mismatched material receives the generic 404 response.
+            decision:
+              type: string
+              const: REJECT
+            targetConfirmed:
+              type: boolean
+              const: false
+            candidateRecognized:
+              type: boolean
+              const: false
+            confirmationVersion:
+              type: string
+              const: second-party-recognition-v1
+            idempotencyKey:
+              type: string
+          required:
+            - personId
+            - pairingChallenge
+            - decision
+            - targetConfirmed
+            - candidateRecognized
+            - confirmationVersion
+            - idempotencyKey
     BindingGenericResponse:
       type: object
       additionalProperties: false
@@ -340,22 +397,30 @@ components:
         Fixed candidate-facing AFFIRM shape. For a currently eligible live
         attempt, pairingChallenge is valid and short-lived; for hidden business
         failures it is an indistinguishable decoy that cannot resolve to a live
-        attempt. Challenge presence therefore MUST NOT disclose eligibility,
-        consent, guardian, Family, P1 existence, invitation state or binding
-        state. A replay MUST NOT extend the original challenge expiry.
+        attempt. Valid and decoy use the same unpadded base64url encoding,
+        exact 192-character length/alphabet, response keys, HTTP status,
+        content type and structural validation, with no visible expiry metadata.
+        Challenge presence therefore MUST NOT disclose eligibility, consent,
+        guardian, Family, P1 existence, invitation state or binding state.
+        Implementations MUST NOT intentionally create a fast/slow business-path
+        discriminator. Same candidate AFFIRM + same idempotency key + same
+        issuance replays the exact original pairingChallenge bytes and MUST NOT
+        extend the original challenge expiry; rotation creates different bytes.
       properties:
         binding:
           type: string
           const: NOT_COMPLETED
         pairingChallenge:
           type: string
-          minLength: 32
-          maxLength: 512
+          minLength: 192
+          maxLength: 192
+          pattern: '^[A-Za-z0-9_-]{192}$'
           description: >-
-            Opaque material for the candidate to present directly to the
-            independently authenticated human confirmer who is recognizing the
-            candidate in person. It contains no readable P1, identity,
-            invitation or attempt data.
+            Exact unpadded base64url opaque material for the candidate to
+            present directly to the independently authenticated human confirmer
+            who is personally recognizing the candidate onsite. It contains no
+            readable P1, identity, invitation or attempt data. Possession alone
+            is not identity proof.
       required: [binding, pairingChallenge]
     BindingBootstrapGenericResponse:
       type: object
