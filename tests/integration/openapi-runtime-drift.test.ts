@@ -21,6 +21,7 @@ const CASE_OPERATIONS: Record<string, string> = {
   'GET /api/v1/cases': '/api/v1/cases',
   'GET /api/v1/cases/:id': '/api/v1/cases/{id}',
   'POST /api/v1/cases/:id/messages': '/api/v1/cases/{id}/messages',
+  'POST /api/v1/cases/:id/switch-primary': '/api/v1/cases/{id}/switch-primary',
 };
 
 describe('Runtime route status == generated OpenAPI status (MEDIUM-01)', () => {

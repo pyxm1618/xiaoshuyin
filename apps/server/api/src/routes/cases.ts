@@ -22,6 +22,8 @@ import {
   CreateCaseRequest,
   CaseResponse,
   CaseListResponse,
+  SwitchPrimaryCaseRequest,
+  SwitchPrimaryCaseResponse,
   ErrorSchema,
 } from '@xiaoshuyin/contracts';
 import {
@@ -39,6 +41,15 @@ import {
   reserveIdempotency,
   getReservedIdempotency,
   completeIdempotency,
+  acquireIdempotencySlot,
+  decideSwitchPrimary,
+  getCurrentPrimaryForUpdate,
+  getCaseForUpdate,
+  demotePrimaryCase,
+  promotePrimaryCase,
+  insertPrimaryAssignedEvent,
+  insertPrimaryRevokedEvent,
+  insertPrimarySwitchAudit,
   type CaseRow,
 } from '@xiaoshuyin/domain';
 import { withIdentityTransaction, withRlsTransaction } from '../db/tx.js';
@@ -465,6 +476,201 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
       } catch (err: any) {
         // 4xx keep their frozen contract body; anything 5xx is rethrown so the
         // single generic INTERNAL_ERROR contract in errorHandler answers.
+        if (err?.statusCode && err.statusCode < 500) {
+          return reply.status(err.statusCode).send({ code: err.code, message: err.message });
+        }
+        throw err;
+      }
+    }
+  );
+
+  // ── POST /api/v1/cases/:id/switch-primary ────────────────
+  app.post(
+    '/api/v1/cases/:id/switch-primary',
+    {
+      onRequest: app.authenticate,
+      schema: {
+        operationId: 'switchPrimaryCase',
+        summary: 'Switch the current primary Case',
+        tags: CASE_TAG,
+        security: BEARER_SECURITY,
+        params: CaseIdParams,
+        body: SwitchPrimaryCaseRequest,
+        response: {
+          200: SwitchPrimaryCaseResponse,
+          401: ErrorSchema,
+          404: CaseDetailNotFound,
+          409: ErrorSchema,
+          422: ErrorSchema,
+          500: ErrorSchema,
+        },
+      },
+    },
+    async (req, reply: FastifyReply) => {
+      const actor = req.actor;
+      if (!actor?.accountId || !actor.personId) {
+        const err = toHttpError('UNAUTHENTICATED');
+        return reply.status(err.statusCode).send(err);
+      }
+      const accountId = actor.accountId;
+      const personId = actor.personId;
+      const rawCaseId = (req.params as { id: string }).id;
+
+      // Idempotency-Key is a transport header, never a body field (G10/R-11).
+      const logicalKey = readIdempotencyKey(req);
+      const keyBytes = caseIdempotencyKeyBytes(logicalKey);
+
+      // Strict schema decides 422 before any state read, so a shape error can
+      // never be masked by a stale-view 409 (Acceptance 13).
+      const parsed = SwitchPrimaryCaseRequest.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return reply.status(422).send({
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid request body',
+        });
+      }
+
+      // UUIDs compare lower-case in the view and in the canonical hash.
+      const caseId = rawCaseId.toLowerCase();
+      const expectedCaseId = parsed.data.expectedPrimaryCaseId?.toLowerCase() ?? null;
+
+      const familyId = await withIdentityTransaction(
+        pool,
+        { accountId, purpose: 'FAMILY_MANAGEMENT' },
+        (tx) => requireCurrentFamily(tx, personId)
+      );
+
+      const requestHash = hashPayload({
+        familyId,
+        targetCaseId: caseId,
+        reason: parsed.data.reason,
+        expectedPrimaryCaseId: expectedCaseId,
+        expectedPrimaryVersion: parsed.data.expectedPrimaryVersion,
+      });
+
+      try {
+        const result = await withRlsTransaction(
+          pool,
+          { familyId, accountId, personId, purpose: 'FAMILY_MANAGEMENT' },
+          async (tx) => {
+            try {
+              await requireFamilyAction(tx, {
+                accountId,
+                personId,
+                familyId,
+                action: 'CASE_SWITCH_PRIMARY',
+                purpose: 'FAMILY_MANAGEMENT',
+                resource: { type: 'CASE', familyId, caseId },
+                caseId,
+              });
+            } catch (err) {
+              // Explicit denial and unknown infrastructure failures are
+              // classified exactly like GET /cases/:id.
+              if (!isKnownAuthorizationDenial(err)) throw err;
+              throw httpError('CASE_NOT_FOUND', 'Case not found');
+            }
+
+            // A malformed id can never match a real row (D-4 detail 4).
+            if (!UUID_PATTERN.test(caseId)) {
+              throw httpError('CASE_NOT_FOUND', 'Case not found');
+            }
+
+            // Slot acquisition precedes every state read: a concurrent replay
+            // must observe the original outcome, not the rewritten world.
+            const slot = await acquireIdempotencySlot(tx, {
+              actorAccountId: accountId,
+              commandType: 'CASE_SWITCH_PRIMARY',
+              keyBytes,
+              requestHash,
+            });
+            if (slot.kind === 'REPLAY') {
+              return { status: slot.status, body: slot.body };
+            }
+            if (slot.kind === 'MISMATCH') {
+              throw httpError(
+                'IDEMPOTENCY_PAYLOAD_MISMATCH',
+                'Idempotency payload mismatch'
+              );
+            }
+            if (slot.kind === 'POISONED' || slot.kind === 'CONTENTION') {
+              throw httpError('INTERNAL_ERROR', 'Idempotency slot unavailable');
+            }
+
+            const locked = await lockFamilyForPrimaryDecision(tx, familyId);
+            if (!locked) throw httpError('INTERNAL_ERROR', 'Family not visible');
+
+            const primaries = await getCurrentPrimaryForUpdate(tx, familyId);
+            if (primaries.length > 1) {
+              throw httpError('INTERNAL_ERROR', 'Multiple open primaries');
+            }
+            const current = primaries[0] ?? null;
+
+            const target = await getCaseForUpdate(tx, caseId);
+            if (!target) throw httpError('CASE_NOT_FOUND', 'Case not found');
+
+            const decision = decideSwitchPrimary({
+              current: current
+                ? { caseId: current.id, status: current.status, version: current.version }
+                : null,
+              target: { caseId: target.id, status: target.status, version: target.version },
+              expected: {
+                caseId: expectedCaseId,
+                version: parsed.data.expectedPrimaryVersion,
+              },
+            });
+            if (decision.kind === 'DENY') throw httpError(decision.code);
+
+            let demoted: CaseRow | null = null;
+            if (decision.demote !== null) {
+              demoted = await demotePrimaryCase(tx, decision.demote.caseId);
+            }
+            const promoted = await promotePrimaryCase(tx, decision.promote.caseId);
+
+            if (demoted !== null) {
+              await insertPrimaryRevokedEvent(tx, {
+                familyId,
+                caseId: demoted.id,
+                actorAccountId: accountId,
+                version: demoted.version,
+                newPrimaryCaseId: promoted.id,
+                reason: parsed.data.reason,
+              });
+            }
+            await insertPrimaryAssignedEvent(tx, {
+              familyId,
+              caseId: promoted.id,
+              actorAccountId: accountId,
+              version: promoted.version,
+              previousPrimaryCaseId: demoted?.id ?? null,
+              reason: parsed.data.reason,
+            });
+            await insertPrimarySwitchAudit(tx, {
+              familyId,
+              targetCaseId: promoted.id,
+              actorAccountId: accountId,
+              previousPrimaryCaseId: demoted?.id ?? null,
+              reason: parsed.data.reason,
+            });
+
+            const body = {
+              primary: toCaseResponse(promoted),
+              previousPrimary: demoted === null ? null : toCaseResponse(demoted),
+              switchedAt: new Date(promoted.updated_at).toISOString(),
+            };
+
+            await completeIdempotency(tx, {
+              actorAccountId: accountId,
+              commandType: 'CASE_SWITCH_PRIMARY',
+              keyBytes,
+              status: 200,
+              body,
+            });
+
+            return { status: 200, body };
+          }
+        );
+        return reply.status(result.status).send(result.body);
+      } catch (err: any) {
         if (err?.statusCode && err.statusCode < 500) {
           return reply.status(err.statusCode).send({ code: err.code, message: err.message });
         }

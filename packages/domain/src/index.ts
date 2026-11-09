@@ -45,6 +45,7 @@ export type {
 } from './repository.js';
 
 export * from './cases.js';
+export * from './case-primary-switch.js';
 export * from './evidence.js';
 export * from './identity-binding.js';
 export * from './identity-binding-gate.js';

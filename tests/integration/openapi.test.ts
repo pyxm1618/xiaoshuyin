@@ -75,6 +75,8 @@ const FROZEN_SCHEMAS = [
   'ProfileAttribute',
   'ProfileValue',
   'ProvenanceValueInput',
+  'SwitchPrimaryCaseRequest',
+  'SwitchPrimaryCaseResponse',
   'UnauthenticatedError',
   'UpdateMemberRequest',
   'ValidationError',
@@ -114,7 +116,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-  it('contains exactly the 23 frozen business operations (16 + Slice 3 message + business Slice 5 six)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+  it('contains exactly the 24 frozen business operations (16 + Slice 3 message + business Slice 5 six + Slice 7 switch)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
@@ -138,6 +140,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'POST /api/v1/auth/wechat',
       'POST /api/v1/cases',
       'POST /api/v1/cases/{id}/messages',
+      'POST /api/v1/cases/{id}/switch-primary',
       'POST /api/v1/compliance/guardian-consents',
       'POST /api/v1/compliance/guardian-consents/requests',
       'POST /api/v1/consents/{id}/revoke',
@@ -161,6 +164,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       ['post', '/api/v1/consents/{id}/revoke'],
       ['post', '/api/v1/cases'],
       ['post', '/api/v1/cases/{id}/messages'],
+      ['post', '/api/v1/cases/{id}/switch-primary'],
     ] as const;
     for (const [method, path] of commands) {
       const params = spec.paths[path][method].parameters ?? [];
@@ -201,6 +205,8 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       '/api/v1/identity-bindings/pairing-decision',
       // Slice 3 (003-evidence-core) — the single approved message POST.
       '/api/v1/cases/{id}/messages',
+      // Slice 7 (007-case-primary-switch) — the single approved switch POST.
+      '/api/v1/cases/{id}/switch-primary',
     ]);
     for (const path of Object.keys(spec.paths)) {
       expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);

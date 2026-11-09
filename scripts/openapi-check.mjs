@@ -49,7 +49,6 @@ const FROZEN_DOCS = [
     ),
   },
   {
-
     label: '006-identity-binding-runtime',
     path: join(
       ROOT,
@@ -57,6 +56,16 @@ const FROZEN_DOCS = [
       '006-identity-binding-runtime',
       'contracts',
       'identity-binding-api.openapi.yaml'
+    ),
+  },
+  {
+    label: '007-case-primary-switch',
+    path: join(
+      ROOT,
+      'specs',
+      '007-case-primary-switch',
+      'contracts',
+      'case-primary-switch-api.openapi.yaml'
     ),
   },
 ];

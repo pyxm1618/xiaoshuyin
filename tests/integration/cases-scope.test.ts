@@ -17,7 +17,7 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
   '/cases/current',
   '/pause',
   '/resume',
-  '/switch-primary',
+
   '/close',
   '/recurrences',
   '/assessments',
@@ -68,7 +68,7 @@ describe('Case scope guard (T031)', () => {
     await app.close();
   });
 
-  it('exposes exactly the three frozen Case operations', () => {
+  it('exposes exactly the approved Case operations (Slice 2 + Slice 3 + Slice 7)', () => {
     const routes = app.printRoutes({ commonPrefix: false });
     // Collection: POST + GET (+ implicit HEAD). Detail: GET (+ HEAD).
     expect(routes).toContain('/api/v1/cases (POST, GET)');
@@ -76,9 +76,21 @@ describe('Case scope guard (T031)', () => {
     expect(caseBlock).toContain('/:id (GET)');
     // Slice 3 adds exactly one approved nested public operation.
     expect(caseBlock).toContain('/messages (POST)');
+    // Slice 7 adds exactly one approved nested public operation.
+    expect(caseBlock).toContain('/switch-primary (POST)');
     // Exactly one Case subtree: no second `/cases/...` root line.
     const roots = routes.split('\n').filter((line) => line.includes('/api/v1/cases'));
     expect(roots.length).toBe(1);
+  });
+
+  it('allows only POST /api/v1/cases/:id/switch-primary as a transition route', () => {
+    const routes = app.printRoutes({ commonPrefix: false });
+    expect(routes).toContain('/switch-primary (POST)');
+    // No other method is registered on the Slice 7 transition sub-path.
+    expect(routes).not.toContain('/switch-primary (GET');
+    expect(routes).not.toContain('/switch-primary (PUT');
+    expect(routes).not.toContain('/switch-primary (PATCH');
+    expect(routes).not.toContain('/switch-primary (DELETE');
   });
 
   it('does not register any out-of-scope Case route', () => {
@@ -153,7 +165,7 @@ describe('Case scope guard (T031)', () => {
     }
   });
 
-  it('case_events exposes only CASE_CREATED and no read-audit vocabulary', async () => {
+  it('case_events exposes only the frozen event vocabulary and no read-audit vocabulary', async () => {
     const { rows } = await verifyPool.query(`
       SELECT pg_get_constraintdef(oid) AS def
       FROM pg_constraint
@@ -161,6 +173,9 @@ describe('Case scope guard (T031)', () => {
     `);
     const text = rows.map((r: any) => r.def).join(' ');
     expect(text).toContain('CASE_CREATED');
+    // Slice 7 adds exactly two lifecycle event types (no read audit).
+    expect(text).toContain('CASE_PRIMARY_ASSIGNED');
+    expect(text).toContain('CASE_PRIMARY_REVOKED');
     for (const forbidden of ['CASE_VIEWED', 'CASE_LISTED', 'CASE_ACCESSED']) {
       expect(text).not.toContain(forbidden);
     }

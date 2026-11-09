@@ -122,7 +122,9 @@ describe('Slice 1+2 -> Slice 3 migration upgrade (AUD-II-003)', () => {
     expect(output).toContain('SKIP 003_case_idempotency_key_bytes.sql');
     expect(output).toContain('APPLY 004_evidence_core.sql');
     expect(output).toContain('APPLY 004_identity_binding_runtime.sql');
-    expect(output).toMatch(/Migration complete: 2 new, 3 previously applied\./);
+    // Slice 7 adds one reviewed migration; it must apply in the same upgrade.
+    expect(output).toContain('APPLY 005_case_primary_switch.sql');
+    expect(output).toMatch(/Migration complete: 3 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -186,6 +188,7 @@ describe('Slice 1+2 -> Slice 3 migration upgrade (AUD-II-003)', () => {
       '003_case_idempotency_key_bytes.sql',
       '004_evidence_core.sql',
       '004_identity_binding_runtime.sql',
+      '005_case_primary_switch.sql',
     ]);
 
     // New Evidence schema exists.
@@ -295,9 +298,10 @@ describe('Slice 1+2 -> Slice 3 migration upgrade (AUD-II-003)', () => {
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 5 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 6 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
+    expect(output).not.toContain('APPLY 005_case_primary_switch.sql');
     expect(await fingerprint(migrator)).toEqual(before);
   }, 120_000);
 });

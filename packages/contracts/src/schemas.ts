@@ -313,6 +313,44 @@ export const CaseListResponse = z.strictObject({
 });
 export type CaseListResponseType = z.infer<typeof CaseListResponse>;
 
+// ── SwitchPrimaryCase schemas (Slice 7) ─────────────────────
+// Strict three-field request. Both view keys are required and must agree
+// (both null or both present). `reason` keeps its raw length; only the
+// blank check trims. The idempotency key travels in the HTTP header only.
+
+export const SwitchPrimaryCaseRequest = z
+  .strictObject({
+    reason: z
+      .string()
+      .min(1)
+      .max(500)
+      .refine((value) => value.trim().length > 0, {
+        message: 'reason must not be blank',
+      }),
+    expectedPrimaryCaseId: z.string().uuid().nullable(),
+    expectedPrimaryVersion: z.number().int().min(1).nullable(),
+  })
+  .superRefine((value, ctx) => {
+    const idPresent = value.expectedPrimaryCaseId !== null;
+    const versionPresent = value.expectedPrimaryVersion !== null;
+    if (idPresent !== versionPresent) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'expectedPrimaryCaseId and expectedPrimaryVersion must both be null or both be present',
+        path: ['expectedPrimaryCaseId'],
+      });
+    }
+  });
+export type SwitchPrimaryCaseRequestType = z.infer<typeof SwitchPrimaryCaseRequest>;
+
+export const SwitchPrimaryCaseResponse = z.strictObject({
+  primary: CaseResponse,
+  previousPrimary: CaseResponse.nullable(),
+  switchedAt: z.string().datetime(),
+});
+export type SwitchPrimaryCaseResponseType = z.infer<typeof SwitchPrimaryCaseResponse>;
+
 // ── Evidence Core message schemas (Slice 3) ─────────────────
 // `content` is the only legal business field. The idempotency key travels in
 // the `Idempotency-Key` HTTP header and is rejected inside the body. The

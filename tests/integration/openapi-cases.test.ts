@@ -48,12 +48,13 @@ function literalCodes(schema: any): string[] {
 }
 
 describe('Generated OpenAPI — Case operations (T078)', () => {
-  it('contains exactly the four approved Case operations', () => {
+  it('contains exactly the approved Case operations (Slice 2 + Slice 3 + Slice 7)', () => {
     const casePaths = Object.keys(spec.paths).filter((p) => p.startsWith('/api/v1/cases'));
     expect(casePaths.sort()).toEqual([
       '/api/v1/cases',
       '/api/v1/cases/{id}',
       '/api/v1/cases/{id}/messages',
+      '/api/v1/cases/{id}/switch-primary',
     ]);
 
     const operations: string[] = [];
@@ -68,6 +69,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'GET /api/v1/cases/{id}',
       'POST /api/v1/cases',
       'POST /api/v1/cases/{id}/messages',
+      'POST /api/v1/cases/{id}/switch-primary',
     ]);
   });
 
@@ -76,6 +78,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'post /api/v1/cases': { op: 'createCase' },
       'get /api/v1/cases': { op: 'listCases' },
       'get /api/v1/cases/{id}': { op: 'getCase' },
+      'post /api/v1/cases/{id}/switch-primary': { op: 'switchPrimaryCase' },
     };
     for (const [key, { op }] of Object.entries(expected)) {
       const [method, path] = key.split(' ');
@@ -109,10 +112,14 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
     expect(header.schema).toMatchObject({ type: 'string', minLength: 8, maxLength: 128 });
   });
 
-  it('does not expose /cases/current or transition endpoints', () => {
-    for (const forbidden of ['current', 'pause', 'resume', 'switch-primary', 'close', 'recurrences']) {
+  it('does not expose /cases/current or non-Slice-7 transition endpoints', () => {
+    for (const forbidden of ['current', 'pause', 'resume', 'close', 'recurrences']) {
       expect(JSON.stringify(spec.paths)).not.toContain(`/api/v1/cases/${forbidden}`);
     }
+    // Slice 7 adds exactly one approved transition endpoint.
+    expect(spec.paths['/api/v1/cases/{id}/switch-primary'].post.operationId).toBe(
+      'switchPrimaryCase'
+    );
   });
 
   it('CreateCaseRequest is a strict empty business object', () => {

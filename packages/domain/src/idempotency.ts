@@ -19,6 +19,7 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   'GUARDIAN_CONSENT_REVOKE',
   'CASE_CREATE',
   'CASE_MESSAGE_CREATE',
+  'CASE_SWITCH_PRIMARY',
 ] as const;
 
 export type IdempotencyCommandType = (typeof IDEMPOTENCY_COMMAND_TYPES)[number];

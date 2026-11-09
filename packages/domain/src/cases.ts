@@ -296,3 +296,199 @@ export async function completeIdempotency(
     ]
   );
 }
+// ── SwitchPrimaryCase persistence (Slice 7, plan D-3 / D-4) ──
+
+/**
+ * Re-read the current un-closed primary after the Family lock. At most one row
+ * is expected (partial unique index); the caller turns >1 into INTERNAL_ERROR.
+ */
+export async function getCurrentPrimaryForUpdate(
+  tx: Tx,
+  familyId: string
+): Promise<CaseRow[]> {
+  const { rows } = await tx.query<CaseRow>(
+    `SELECT id, family_id, created_by_person_id, status, phase,
+            is_primary, version, created_at, updated_at
+     FROM cases
+     WHERE family_id = $1 AND is_primary AND status <> 'CLOSED'
+     ORDER BY id
+     FOR UPDATE`,
+    [familyId]
+  );
+  return rows;
+}
+
+/** Lock the requested target Case. RLS hides rows of another Family. */
+export async function getCaseForUpdate(tx: Tx, caseId: string): Promise<CaseRow | null> {
+  const { rows } = await tx.query<CaseRow>(
+    `SELECT id, family_id, created_by_person_id, status, phase,
+            is_primary, version, created_at, updated_at
+     FROM cases
+     WHERE id = $1
+     FOR UPDATE`,
+    [caseId]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Demote first, then promote: the zero-primary intermediate state is not
+ * visible to other transactions and the partial unique index allows 0 rows.
+ * `version` increments in SQL; `status` / `phase` are never written.
+ */
+export async function demotePrimaryCase(tx: Tx, caseId: string): Promise<CaseRow> {
+  const { rows } = await tx.query<CaseRow>(
+    `UPDATE cases
+        SET is_primary = false, version = version + 1, updated_at = now()
+      WHERE id = $1
+      RETURNING id, family_id, created_by_person_id, status, phase,
+                is_primary, version, created_at, updated_at`,
+    [caseId]
+  );
+  const row = rows[0];
+  if (!row) throw new Error('CASE_DEMOTE_RETURNED_NO_ROW');
+  return row;
+}
+
+export async function promotePrimaryCase(tx: Tx, caseId: string): Promise<CaseRow> {
+  const { rows } = await tx.query<CaseRow>(
+    `UPDATE cases
+        SET is_primary = true, version = version + 1, updated_at = now()
+      WHERE id = $1
+      RETURNING id, family_id, created_by_person_id, status, phase,
+                is_primary, version, created_at, updated_at`,
+    [caseId]
+  );
+  const row = rows[0];
+  if (!row) throw new Error('CASE_PROMOTE_RETURNED_NO_ROW');
+  return row;
+}
+
+export async function insertPrimaryAssignedEvent(
+  tx: Tx,
+  input: {
+    familyId: string;
+    caseId: string;
+    actorAccountId: string;
+    version: number;
+    previousPrimaryCaseId: string | null;
+    reason: string;
+  }
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO case_events (family_id, case_id, actor_account_id, event_type, metadata)
+     VALUES ($1, $2, $3, 'CASE_PRIMARY_ASSIGNED', $4::jsonb)`,
+    [
+      input.familyId,
+      input.caseId,
+      input.actorAccountId,
+      JSON.stringify({
+        primary: true,
+        version: input.version,
+        previousPrimaryCaseId: input.previousPrimaryCaseId,
+        reason: input.reason,
+      }),
+    ]
+  );
+}
+
+export async function insertPrimaryRevokedEvent(
+  tx: Tx,
+  input: {
+    familyId: string;
+    caseId: string;
+    actorAccountId: string;
+    version: number;
+    newPrimaryCaseId: string;
+    reason: string;
+  }
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO case_events (family_id, case_id, actor_account_id, event_type, metadata)
+     VALUES ($1, $2, $3, 'CASE_PRIMARY_REVOKED', $4::jsonb)`,
+    [
+      input.familyId,
+      input.caseId,
+      input.actorAccountId,
+      JSON.stringify({
+        primary: false,
+        version: input.version,
+        newPrimaryCaseId: input.newPrimaryCaseId,
+        reason: input.reason,
+      }),
+    ]
+  );
+}
+
+export async function insertPrimarySwitchAudit(
+  tx: Tx,
+  input: {
+    familyId: string;
+    targetCaseId: string;
+    actorAccountId: string;
+    previousPrimaryCaseId: string | null;
+    reason: string;
+  }
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO business_audit_events
+       (family_id, actor_account_id, event_type, resource_type, resource_id, metadata)
+     VALUES ($1, $2, 'CASE_PRIMARY_SWITCHED', 'CASE', $3, $4::jsonb)`,
+    [
+      input.familyId,
+      input.actorAccountId,
+      input.targetCaseId,
+      JSON.stringify({
+        targetCaseId: input.targetCaseId,
+        previousPrimaryCaseId: input.previousPrimaryCaseId,
+        reason: input.reason,
+      }),
+    ]
+  );
+}
+
+export type IdempotencySlot =
+  | { kind: 'OWNED' }
+  | { kind: 'REPLAY'; status: number; body: unknown }
+  | { kind: 'MISMATCH' }
+  | { kind: 'POISONED' }
+  | { kind: 'CONTENTION' };
+
+/**
+ * Bounded two-attempt slot acquisition (plan D-7.5). A 23505 from the reserve
+ * insert is never swallowed here: reserve uses ON CONFLICT DO NOTHING, so a
+ * real unique violation is an infrastructure failure that must propagate.
+ */
+export async function acquireIdempotencySlot(
+  tx: Tx,
+  input: {
+    actorAccountId: string;
+    commandType: string;
+    keyBytes: Buffer;
+    requestHash: string;
+  }
+): Promise<IdempotencySlot> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const owned = await reserveIdempotency(tx, {
+      actorAccountId: input.actorAccountId,
+      commandType: input.commandType,
+      keyBytes: input.keyBytes,
+      requestHash: input.requestHash,
+    });
+    if (owned) return { kind: 'OWNED' };
+
+    const row = await getReservedIdempotency(tx, {
+      actorAccountId: input.actorAccountId,
+      commandType: input.commandType,
+      keyBytes: input.keyBytes,
+      legacyKeyText: null,
+    });
+    if (row === null) continue;
+    if (row.response_status === 0) return { kind: 'POISONED' };
+    if (row.request_hash === input.requestHash) {
+      return { kind: 'REPLAY', status: row.response_status, body: row.response_body };
+    }
+    return { kind: 'MISMATCH' };
+  }
+  return { kind: 'CONTENTION' };
+}

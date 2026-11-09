@@ -54,6 +54,8 @@ import {
   BindingContextInvalidError,
   CreateCaseMessageRequest,
   CaseMessageResponse,
+  SwitchPrimaryCaseRequest,
+  SwitchPrimaryCaseResponse,
   UnauthenticatedError,
   IdempotencyPayloadMismatchError,
   ValidationError,
@@ -160,6 +162,8 @@ export function buildOpenApiDocument() {
     CaseNotFoundError: toJsonSchema(CaseNotFoundErrorSchema),
     CreateCaseMessageRequest: toJsonSchema(CreateCaseMessageRequest),
     CaseMessageResponse: toJsonSchema(CaseMessageResponse),
+    SwitchPrimaryCaseRequest: toJsonSchema(SwitchPrimaryCaseRequest),
+    SwitchPrimaryCaseResponse: toJsonSchema(SwitchPrimaryCaseResponse),
     UnauthenticatedError: toJsonSchema(UnauthenticatedError),
     IdempotencyPayloadMismatchError: toJsonSchema(IdempotencyPayloadMismatchError),
     ValidationError: toJsonSchema(ValidationError),
@@ -412,6 +416,35 @@ export function buildOpenApiDocument() {
           '403': refResponse('`CASE_ACCESS_DENIED`', 'CaseAccessDeniedError'),
           '404': refResponse('`CURRENT_FAMILY_NOT_FOUND`', 'CurrentFamilyNotFoundError'),
           '409': errorResponse('`CURRENT_FAMILY_AMBIGUOUS`'),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/switch-primary': {
+      post: {
+        tags: ['case'],
+        operationId: 'switchPrimaryCase',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('SwitchPrimaryCaseRequest'),
+        responses: {
+          '200': refResponse('主线 Case 已切换', 'SwitchPrimaryCaseResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': jsonResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`', {
+            oneOf: [ref('CurrentFamilyNotFoundError'), ref('CaseNotFoundError')],
+          }),
+          '409': errorResponse(
+            '`CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH` / `CASE_ALREADY_PRIMARY` / `CASE_CLOSED` / `SAFETY_HOLD_BLOCKED` / `STALE_PRIMARY_VIEW`'
+          ),
+          '422': errorResponse('`VALIDATION_ERROR`'),
           '500': errorResponse('`INTERNAL_ERROR`'),
         },
       },

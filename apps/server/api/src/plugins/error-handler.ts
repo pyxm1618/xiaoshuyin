@@ -35,6 +35,11 @@ const ERROR_MAP: Record<string, number> = {
   CURRENT_FAMILY_AMBIGUOUS: 409,
   CASE_NOT_FOUND: 404,
   CASE_ACCESS_DENIED: 403,
+  // Slice 7 — SwitchPrimaryCase state conflicts (not validation).
+  CASE_ALREADY_PRIMARY: 409,
+  CASE_CLOSED: 409,
+  SAFETY_HOLD_BLOCKED: 409,
+  STALE_PRIMARY_VIEW: 409,
   // Slice 006 identity binding.
   WECHAT_AUTH_FAILED: 401,
   BINDING_CONTEXT_INVALID: 401,
