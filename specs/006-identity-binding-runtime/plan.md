@@ -322,6 +322,8 @@ CREATE TABLE binding_pending_contexts (
   openid_ciphertext           bytea,
   openid_nonce                bytea,
   openid_tag                  bytea,
+  pairing_issued_at           timestamptz,
+  pairing_expires_at          timestamptz,
   created_at                  timestamptz NOT NULL DEFAULT now(),
   last_used_at                timestamptz,
   expires_at                  timestamptz NOT NULL,
@@ -335,6 +337,13 @@ CREATE TABLE binding_pending_contexts (
   ),
   CONSTRAINT binding_context_committed_requires_attempt CHECK (
     committed_account_id IS NULL OR attempt_id IS NOT NULL
+  ),
+  CONSTRAINT binding_context_pairing_timestamps_complete CHECK (
+    (pairing_issued_at IS NULL AND pairing_expires_at IS NULL)
+    OR
+    (pairing_issued_at IS NOT NULL AND pairing_expires_at IS NOT NULL
+      AND pairing_expires_at > pairing_issued_at
+      AND pairing_expires_at <= expires_at)
   )
 );
 
@@ -406,8 +415,10 @@ Pairing challenge是H-01最小authenticated binding material，不新增Person /
 - delivery：只返回candidate自己的candidate-decision response；candidate现场主动展示/传递给confirmer。
 - cryptographic binding至少认证 context_id + candidate_identity_digest + attempt_id + target_person_id + invitation_participation_id + pairing_expires_at；外部表示opaque，不可读出这些字段。
 - construction使用IDENTITY_BINDING_SECRET的domain-separated MAC/AEAD或等价authenticated construction，effective security至少128 bits。raw challenge不持久化、不写audit/log；服务器从authenticated material解析/验证locator并回读authoritative rows。
-- pairing_expires_at不晚于 candidate_confirmation.created_at + IDENTITY_BINDING_PAIRING_TTL_SECONDS、context.expires_at、attempt.expires_at三者最早者。TTL required positive、无client override、replay不得延长。
-- valid only while：context/attempt/P1/invitation/identity mapping仍一致，candidate confirmation存在，attempt PENDING且未过期。
+- issuance state只在exact candidate context上持久化 pairing_issued_at + pairing_expires_at；raw challenge不落库。pairing_expires_at = min(pairing_issued_at + IDENTITY_BINDING_PAIRING_TTL_SECONDS, context.expires_at, attempt.expires_at)。
+- 若当前issuance仍未过期且尚无SECOND_PARTY confirmation，same/repeated AFFIRM只重建/返回同一authenticated challenge语义，不延长pairing_expires_at、不重复candidate confirmation。
+- 若pairing_expires_at已过期，但context/attempt仍live、无SECOND_PARTY confirmation且D-8.5重新PASS，则新的合法AFFIRM operation可以原子更新pairing_issued_at/pairing_expires_at并发行新challenge；old challenge因issuance timestamp不再匹配current context而失效。该rotation不得延长context或attempt本身。
+- valid only while：token-bound issuance timestamps等于context current issuance，context/attempt/P1/invitation/identity mapping一致，candidate confirmation存在，attempt PENDING且未过期，且无SECOND_PARTY confirmation。
 - single-use semantic：SECOND_PARTY confirmation存在或attempt settled后，challenge不能作为新的business operation再次使用；same idempotency replay只回读原operation。
 - decoy：candidate hidden failure返回同格式material，但不得解析到live attempt；confirmer side统一404、零mutation。
 - challenge possession不等于identity proof，必须与独立confirmer authentication + human recognition + target confirmation共同成立。
@@ -1468,7 +1479,7 @@ Slice 4 implementation                                       ← 依赖本 Slice
 
 ## Data and Migration Impact
 
-- 新增 5 张表、5 个 enum、若干索引 / 部分唯一索引 / CHECK、19 个 context getter / setter 函数、9 条新表 policy、7 条 Slice 1 表追加 policy（含 `persons_binding_candidate_account_read`）、2 个 append-only trigger、GRANT。
+- 新增5张表、5个enum、若干索引/部分唯一索引/CHECK、context getter/setter functions、新表policy、Slice1增量policy、append-only triggers与GRANT。H-01仅在既有 binding_pending_contexts 增加 nullable pairing_issued_at / pairing_expires_at 两列及完整性CHECK；不新增第6张表。
 - 全部 006-owned schema 只通过**一个** reviewed additive migration 落地（D-18.1）。
 - 不修改 Slice 1 表结构、列、既有约束、既有 policy、既有 enum、既有 audit / idempotency 数据。
 - 新增 6 条 HTTP route、新增 OpenAPI 文件、generated 产物由脚本生成。
