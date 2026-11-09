@@ -19,6 +19,38 @@ import {
 
 export type Tx = PoolClient;
 
+export interface TransactionIdentityContext {
+  accountId: string | null;
+  personId: string | null;
+  familyId: string | null;
+  purpose: string | null;
+}
+
+/**
+ * Read the authoritative RLS identity bound to the current PostgreSQL
+ * transaction. This is package-internal state: callers must compare it before
+ * any family/person/Evidence business read rather than trusting a supplied
+ * TypeScript context object.
+ */
+export async function getCurrentTransactionIdentityContext(
+  tx: Tx
+): Promise<TransactionIdentityContext> {
+  const { rows } = await tx.query(
+    `SELECT
+       app_account_id()::text AS account_id,
+       app_person_id()::text AS person_id,
+       app_family_id()::text AS family_id,
+       app_current_purpose() AS purpose`
+  );
+  const row = rows[0] ?? {};
+  return {
+    accountId: row.account_id ?? null,
+    personId: row.person_id ?? null,
+    familyId: row.family_id ?? null,
+    purpose: row.purpose ?? null,
+  };
+}
+
 // ── Person ──────────────────────────────────────────────────
 
 export interface PersonRow {
