@@ -61,16 +61,35 @@ describe('Slice 4 participation concurrency', () => {
   it('different create keys cannot produce two live rows for one Case/Person', async () => {
     const f=await createParticipationFixture(h,'race-invite',{target:'manager'});
     const target=await addBoundAdultTargetToFamily(h,f.familyId,'race-invite');
+    const keyA='race-invite-a';
+    const keyB='race-invite-b';
     const [a,b]=await Promise.all([
-      invite(h.app,f.manager.token,f.caseId,target.personId,'race-invite-a'),
-      invite(h.app,f.manager.token,f.caseId,target.personId,'race-invite-b'),
+      invite(h.app,f.manager.token,f.caseId,target.personId,keyA),
+      invite(h.app,f.manager.token,f.caseId,target.personId,keyB),
     ]);
     expect([a.statusCode,b.statusCode].sort()).toEqual([201,409]);
+
+    const loser=a.statusCode===409?{res:a,key:keyA}:{res:b,key:keyB};
+    const replay=await invite(
+      h.app,f.manager.token,f.caseId,target.personId,loser.key
+    );
+    expect(replay.statusCode).toBe(409);
+    expect(replay.json()).toEqual(loser.res.json());
+
     const count=(await h.admin.query(
       `SELECT count(*)::int AS n FROM case_participants
        WHERE case_id=$1 AND person_id=$2 AND state IN ('PENDING','ACTIVE')`,
       [f.caseId,target.personId]
     )).rows[0].n;
     expect(count).toBe(1);
+
+    const recorded=(await h.admin.query(
+      `SELECT count(*)::int AS n FROM idempotency_keys
+       WHERE actor_account_id=$1
+         AND command_type='PARTICIPATION_INVITE_CREATE'
+         AND idempotency_key IN ($2,$3)`,
+      [f.manager.accountId,keyA,keyB]
+    )).rows[0].n;
+    expect(recorded).toBe(2);
   });
 });
