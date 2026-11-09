@@ -82,82 +82,84 @@
 
 ---
 
-## Ultimate Audit Targeted Remediation（F-01—F-08）
+## Ultimate Audit Targeted Plan / Contract Remediation（H-01 / H-02 / M-01—M-06）
 
-本节是 Ultimate Final Independent Re-audit 后的 authoritative targeted remediation contract。它只收敛 F-01—F-08，不重新设计已 PASS 的 five-table model、ordinary login、no-P2、single authorize、single migration、attempt 三态、RETRYABLE operation-only、bootstrap authoritative attempt mapping、Case B defensive REUSED、candidate-account conflict purpose、Slice 3 / Slice 4 边界。
+本节是 failed Head f96bc94538212d74edcf46a53962114e8cfb88a5 的 Ultimate Final Independent Re-audit 之后的 authoritative remediation overlay。它取代上一轮 F-01—F-08 overlay 中已被 Ultimate Audit 推翻的 pairing / concurrency / cleanup / verification 口径；不重新 Specify / Clarify，不改 Docs / 005 / 006 Spec，不扩展普通 Auth、Family、Invitation、Participant、Case、Evidence 或 UI。
 
-| Finding | Plan | Tasks | Checklist | Handwritten OpenAPI | Runtime later |
-|---|---|---|---|---|---|
-| F-01 Gate 2 TOCTOU | D-6 / D-8 / D-14 | T073 / T074 / T081 / T110 | CHK193 | 无 | commit / concurrency |
-| F-02 confirmer old key → new attempt | D-5 | T037 / T039 / T065 / T066 / T106 | CHK194 | 无 | confirmer / operation key |
-| F-03 read RLS 可写 | D-13 / D-18 | T013 / T103 / T104 | CHK195 | 无 | migration / DB tests |
-| F-04 pairing path | D-9.2 / D-10 | T065 / T085 | CHK191 / CHK192 | 无 shape 变化 | confirmer workflow / E2E |
-| F-05 sensitive context cleanup | D-3.3 / D-6 / D-14 | T050 / T059 / T060 / T068 / T080 | CHK196 | 无 | repositories / terminal paths |
-| F-06 confirmationVersion semantics | D-10.2 / D-19 | T059 / T060 / T091 / T092 / T097 / T112 | CHK198 / CHK199 | 是 | Zod / generated / checker |
-| F-07 expiry before create/converge | D-2.2 / D-14 | T036 / T055 / T056 | CHK197 | 无 | attempt repository / bootstrap |
-| F-08 verification gaps | D-19.4 | T081 / T085 / T101 / T103 / T106 / T112 / T115 | CHK200 | 无 | tests / coverage tooling |
+| Finding | 冻结 contract | 主要 reopen tasks | Checklist | OpenAPI |
+|---|---|---|---|---|
+| H-01 recognition→identity pairing | D-3.5 / D-9.2 / D-10 / D-11 | T027—T032、T059—T066、T085、T091—T094、T112 | CHK191—CHK194 | YES |
+| H-02 Gate2 locking / linearization | D-8.4 / D-13.5 / D-14 / D-19.4 | T013、T073、T074、T081、T103、T104、T110 | CHK195—CHK196 | NO |
+| M-01 candidate dynamic eligibility | D-8.5 / D-10.2 / D-14 | T059、T060、T073、T074、T085 | CHK197 | H-01 response shape |
+| M-02 bootstrap replay cleanup | D-3.4 / D-14 | T031、T032、T049、T050 | CHK198 | NO |
+| M-03 status/context expiry cleanup | D-3.2 / D-14 | T031、T032、T061、T062、T080 | CHK199 | NO |
+| M-04 Phase C expiry settlement | D-2.2 / D-14 / D-19.4 | T073、T074、T079—T081 | CHK200 | NO |
+| M-05 substantive coverage fail-closed | D-19.5 / Verification Plan | T115 | CHK201 | NO |
+| M-06 verify-all provenance | D-19.6 / Verification Plan | T118、T120 | CHK202 | NO |
 
-### F-01 — Gate 2 concurrency contract
+### H-01 — root cause and replacement pairing contract
 
-“Gate 2 uses current state”不等于“刚刚 SELECT 过一次”。Gate 2 current-state check 与最终 `persons.account_id` binding mutation MUST 共享 concurrency-safe consistency / linearization boundary。Implement 可锁住 / 串行化会改变 Gate 2 决策的 authoritative rows，或在已经建立的事务 / 锁边界内于 binding linearization point 前再次 re-evaluate Gate 2；Plan 不预设具体锁序。
+上一轮 S0 → fresh bootstrap → S1 → |S1-S0|=1 机制废止。它只能证明时间窗口内出现了唯一新 attempt，不能证明该 attempt 的 authenticated candidate 就是 confirmer 现场辨认的人；pending-list delta、createdAt、attemptId、invitation possession 均不得作为 recognition→identity proof。
 
-冻结不变量：如果 consent revoke、guardian / confirmer authority 变化、invitation terminal、membership / multi-family 变化、candidate conflict 等 invalidating change 在 binding linearization point 前已经 commit，则本次 binding mutation = 0，attempt 不得 COMMITTED。必须有真实 DB barrier race：`Gate2 read/PASS → concurrent consent revoke commits → commit resumes`，最终 P1 未绑定、attempt 非 COMMITTED。顺序执行“先 revoke 再 commit”不能替代该 proof。
+唯一冻结机制：server-generated candidate-presented one-time pairing challenge。
 
-### F-02 — SECOND_PARTY_DECISION idempotency contract
+1. Candidate 先通过自己的 invitation-aware bootstrap、独立 WeChat authentication、Gate 1，并处于 exact Phase-B attempt / pending context。
+2. Candidate 对 P1 执行 AFFIRM 时，服务端必须先执行 M-01 current dynamic eligibility re-evaluation。只有仍合法的 exact context/attempt 才能产生有效 pairing challenge。
+3. Pairing challenge 由服务端生成，只返回 candidate 自己；candidate 在现场主动展示/传递给正在亲自辨认自己的 confirmer。系统不得根据 pending list、时间、昵称、displayName、Family membership、createdAt、IP、User-Agent、AI 或旁路去猜。
+4. Challenge 必须是 opaque、短寿命、不可预测/不可伪造的 authenticated material，cryptographically bound 至少覆盖 candidate pending context、candidate authenticated identity digest、exact attempt、P1、invitation participation、pairing expiry。不得向 client 暴露明文 P1 / identity / invitation / OpenID；raw challenge 不写 audit / log。
+5. Challenge 不是 identity proof 本身。合法确认必须同时具备：confirmer 独立认证 + confirmer 基于现实家庭关系亲自 human recognition + target confirmation + candidate 现场提供的 exact challenge + 服务端验证 challenge 对应的 authenticated candidate/context/attempt/P1/invitation。
+6. Confirmer decision 不再用 attemptId path selector。服务端从 pairingChallenge 解析/验证 exact context/attempt；pending list 可以保留为 authorized operational view，但不得参与 recognition pairing 或 attempt selection。
+7. Challenge expiry 必须不晚于 context 与 attempt expiry；pairing TTL 来自 required positive config，candidate/confirmer 不可覆盖或延长。同一 AFFIRM idempotent replay不得延长原 challenge；过期后只有 attempt/context 仍合法且再次通过 current eligibility 才可得到新 valid challenge。
+8. Challenge 是 single-use semantic material：成功 second-party decision 与 confirmation / terminal decision 在同一 consistency boundary 内消费；same idempotency replay只回读 authoritative outcome，不产生第二 confirmation。different operation 使用 consumed challenge必须 fail closed。
+9. Invalid / expired / consumed / wrong-P1 / wrong-invitation / wrong-candidate / wrong-attempt challenge 对 confirmer 统一 404 BINDING_NOT_FOUND，零 confirmation / state / binding mutation。existing operation-key mismatch仍为 409 IDEMPOTENCY_PAYLOAD_MISMATCH。
+10. Candidate anti-enumeration：对语法合法且 binding context 仍可用的 AFFIRM，response shape 固定为 { binding: NOT_COMPLETED, pairingChallenge: opaque }。若 current eligibility 已失效、attempt settled 或其它 hidden business reason 不能发行 valid challenge，则返回同形状、不可解析到 live attempt 的 decoy challenge。REJECT/CANCEL 仍返回 { binding: NOT_COMPLETED }；该差异来自 candidate 自己的 decision，不来自 hidden fact。
 
-`SECOND_PARTY_DECISION` 的 canonical request identity / request hash MUST 包含 path `attemptId`。operation key 首次绑定 `attempt_id=A` 后，existing `operation.attempt_id` 就是 replay authoritative attempt，且映射不可改。
+原攻击重新判定：现场 candidate 因冲突等原因未形成/维持合法 attempt，则不会拥有可被服务器解析为 live exact attempt 的 valid challenge；远端攻击者即使凭同 invitation 建立自己的 attempt，也只会得到自己的 challenge。confirmer 不再从 pending delta 选择“唯一新增 attempt”，而只提交现场被辨认 candidate 设备展示的 challenge。因此攻击者不能仅凭 invitation + timing 抢占 recognition；现场 candidate 的 invalid/decoy challenge在 confirmer side fail closed，binding = 0。
 
-唯一冻结的 cross-attempt old-key 行为：key K 首次作用 A 后，若 A TERMINAL、同三元组后续出现 B，对 B URL 重用 K → **409 `IDEMPOTENCY_PAYLOAD_MISMATCH` fail closed**；B 的 confirmation / audit / state / commit 均不得变化。同 key + same canonical request replay A 时始终只回读 A，不得漂移到 B。B 需要新的 idempotency key。
+### H-02 — Gate2 authoritative concurrency / linearization contract
 
-### F-03 — RLS command contract
+Gate 2 正确性以真实 runtime role 下的数据库行为为准，不以源码中出现 SELECT ... FOR UPDATE 为准。
 
-所有 intended read-only Slice 1 policies 必须显式 `FOR SELECT`；特别是 `persons_binding_target_read` 与 `persons_binding_candidate_account_read`。唯一 Person binding write policy `persons_binding_commit_update` 必须显式 `FOR UPDATE`。不得依赖 PostgreSQL 默认 `ALL`。
+- Gate2 check 与最终 Person binding mutation 必须共享可证明的 linearization / validation boundary，覆盖所有会改变 Gate2 结果的 authoritative facts。
+- 至少覆盖 profile / age-band、guardian relationship、Consent、Family membership / confirmer authority、invitation current state、P1 binding conflict、candidate-account conflict。
+- Implement 可以使用 row lock、version / optimistic check、advisory serialization、isolation 或其它 DB-safe 等价机制；Plan 不强制唯一 SQL。
+- 必须在真实 runtime role（xiaoshuyin_app、NOBYPASSRLS / FORCE RLS）下证明锁/序列化/检测真实生效。FOR UPDATE 返回 0 行、只校验 SQL 字符串、或只做顺序测试都不算证明。
+- barrier acceptance：Gate2 reads/PASS → pause → concurrent invalidating mutation authoritative commit/linearize → resume binding。若 invalidation 在线性化上先成立，最终必须 P1 binding 0、attempt 非 COMMITTED、无 partial Account/binding；terminal reason/audit/cleanup与对应业务原因一致。
+- invitation production barrier 的最终 proof 等 Slice 4 runtime；core fixture/port proof不得冒充真实 adapter proof。
 
-真实 DB 验收必须使用 runtime role：GATE purpose + exact target / candidate GUC 下，SELECT 按设计允许；UPDATE / INSERT / DELETE 必须拒绝。只有 COMMIT purpose + exact target-person GUC + exact commit-account GUC 下的 `persons_binding_commit_update` 才允许合法 `persons.account_id` UPDATE。测试同时检查 `pg_policy.polcmd`。
+### M-01 — candidate AFFIRM current dynamic eligibility
 
-### F-04 — Pairing contract
+在写 candidate confirmation 之前、在发行 valid pairing challenge 之前，必须 current-read 并重新评估：P1 still exists、target Family membership 唯一且匹配、profile / age-band、guardian relationship、required/applicable Consent + Compliance、invitation still valid、P1 Account仍满足 Case-C 前提、candidate identity/account conflict未出现。
 
-Docs / 005 / 006 Spec 冻结的是：second-party independent authentication、target confirmation、candidate recognition，以及 same attempt / P1 / candidate identity / invitation 一致性；上游**没有要求 candidate 必须获得 attemptId**，且具体 pairing interaction 属 Plan-level decision。
+仍合法 → 写/复用唯一 candidate confirmation并发行 valid challenge。任一 required eligibility失效 → attempt authoritative TERMINAL；不得写新的 candidate confirmation，不得发行 valid challenge；candidate仍收到 fixed AFFIRM shape + decoy challenge；settlement必须 exactly-one terminal audit + attempt-scope secret scrub。至少有 consent revoked after bootstrap before AFFIRM 的 direct regression，并覆盖 age/profile、guardian、membership、invitation、binding conflict矩阵。
 
-冻结最小机制：使用现有 6 API 做 **snapshot → fresh bootstrap → delta** 的同屏 / 线下 ceremony，不新增 QR / PIN / pairing code / endpoint。
+### M-02 — bootstrap settled/pre-attempt replay cleanup
 
-1. 已独立认证且处于明确 P1 上下文的 confirmer 先调用现有 `GET /identity-bindings/pending?personId=P1`，记录 baseline pending attempt-id set `S0`。
-2. confirmer 在现场亲自辨认 candidate；candidate **在 S0 之后**从自己的 invitation flow 发起 Case C fresh bootstrap。Gate 1 PASS 后服务端创建 / 收敛 fresh PENDING attempt。candidate 继续只持自己的 `X-Binding-Context`，不得把 `pendingContextToken` 分享给 confirmer。
-3. confirmer 刷新同一 pending list 得到 `S1`，计算 `D = S1 - S0`。**只有 `|D| = 1`** 时，该唯一 attemptId 才可作为本次 confirmer-facing selector。若 `|D| = 0` 或 `> 1`，必须 fail closed；不得按 createdAt、displayName、nickname、Family membership、AI 或系统推断选择。
-4. 如果 candidate 在 baseline 前已经有 live attempt，则该 id 属于 S0，不能被本次 ceremony 选中；candidate 必须先 CANCEL / 使旧 attempt terminal，并在 invitation 仍 valid 且允许 new attempt 的前提下重新开始。
-5. exact attempt 选中后，candidate AFFIRM 仍只通过自己的 context 落到该 attempt；confirmer 对同一 exact attempt 作 target confirmation + candidate recognition；后端继续验证 same attempt / P1 / candidate identity / invitation。
+COMMITTED replay、TERMINAL replay、pre-attempt blocked replay、Case B REUSED replay中，任何 fresh transport context只要不再需要 OpenID完成 Phase C，response前必须满足 openid_ciphertext/openid_nonce/openid_tag 全部 NULL。不得因先 linkAttempt 后调用只匹配 attempt_id IS NULL 的 cleanup而漏掉 fresh replay context。验收必须直接读取新 context row。
 
-Candidate pairing information：**无新的 identifier**。candidate 在已被 confirmer 亲自辨认的现场于 S0 后执行 fresh bootstrap，这个时序事件只是 pairing signal，不是 identity proof。attemptId 只是 confirmer-facing opaque selector，也不是 identity proof；`pendingContextToken` 是 bearer-like candidate credential，禁止分享。selector 只在该 attempt `PENDING && expires_at > now()` 时有效。F-04 不改变现有 endpoint 数、pending-list schema 或 candidate-facing response，因此无 handwritten OpenAPI shape impact。
+### M-03 — status / context expiry cleanup
 
-### F-05 — Sensitive context cleanup contract
+status materialize attempt expiry → TERMINAL / ATTEMPT_EXPIRED + exactly-one terminal audit + 该 attempt 所有 contexts secret scrub。context自身 expiry至少 scrub current context；若 attempt仍 live，不凭 context expiry伪造 terminal audit。若同时 materialize attempt expiry，则使用 attempt-scope settlement。必须有 multi-context regression及 state/reason/audit/secret/binding DB observables。
 
-必须区分 transport context / attempt / operation：
+### M-04 — Phase C expiry authoritative settlement
 
-- authoritative attempt 一旦进入 `COMMITTED` 或任意 `TERMINAL`（含 expiry / candidate reject / cancel / confirmer reject / Gate 2 block / concurrency loser），必须在 settlement consistency boundary 内清空**该 attempt 关联的全部 contexts**的 `openid_ciphertext / openid_nonce / openid_tag`，不是只清当前 context。
-- pre-attempt blocked / no-attempt（bootstrap authorize DENY、invalid invitation、Case B mismatch、Gate 1 fail）完成后，必须清空该 candidate identity 下所有仍为 `attempt_id IS NULL` 的 decryptable contexts。Gate 1 PASS 的合法 context 在同一 transaction 内 link attempt，因此 no-attempt context 不再是 Phase C 所需 secret。
-- 单个 context 自身过期至少清理自身；若同时物化 attempt expiry，则按 attempt scope 清理该 attempt 全部 contexts。
-- 只清 secret，不删历史事实：context row 及 attempt / operation / audit 的 non-secret linkage 保留。
+ATTEMPT_EXPIRED 只有一个 authoritative settlement path负责 state transition + terminal reason + exactly-one terminal audit + attempt-scope cleanup。禁止先 materialize state 再二次 conditional terminalize导致 audit/cleanup跳过。验收：PENDING在 Phase C 到期 → TERMINAL/ATTEMPT_EXPIRED、audit=1、all contexts scrubbed、no binding、no orphan/partial Account；并发/replay仍只 settle once。
 
-### F-06 — Candidate confirmationVersion contract
+### M-05 — substantive coverage fail-closed
 
-唯一冻结语义：
+coverage:audit 必须升级为 required acceptance → stable proof identifier → exact executable proof。required set至少包括 historical F-01/F-02、H-01、H-02、M-01—M-04、HTTP confirmationVersion matrix、RLS negative writes、rollback matrix、两条 MINOR success、true Case B mismatch。删除、重命名、从执行集合移除 required proof，或替换成 unrelated passing proof，coverage audit必须 non-zero；coverage gate本身必须有 RED self-test覆盖这四种破坏。总体百分比不能替代 substantive proof。
 
-- AFFIRM：`confirmationVersion` MUST 存在且只能是 `"candidate-binding-v1"`。
-- REJECT：`confirmationVersion` MUST omitted。
-- CANCEL：`confirmationVersion` MUST omitted。
-- `null` 在三种 decision 下均不合法。AFFIRM omitted / null / wrong literal → 422；REJECT / CANCEL 显式 null 或任何 present version → 422。
+### M-06 — canonical verify-all provenance
 
-手写 OpenAPI 必须用真正的 decision-discriminated `oneOf` 表达，禁止 `type: [string, 'null'] + const`。Runtime/Zod/generated 在开发 remediation 中同步。OpenAPI checker 必须先有 RED semantic regression，证明 nullable+const、true const-or-null 与 decision-discriminated union 的真实语义不可被错误归一化为等价；随后最小修 normalizer，再 GREEN。
+Canonical final invocation固定为仓库根目录 node scripts/verify-all.mjs。PASS要求：
+1. 运行前记录 exact repo / branch / HEAD / origin/main；tracked working tree clean。
+2. 记录 required toolchain/dependencies与 required env名称+存在性（不记录 secret value），至少含 DB test env、IDENTITY_BINDING_SECRET、context TTL、attempt TTL、pairing TTL。
+3. 每个 required child command的 exact command + exit code进入 evidence；任一 required child non-zero → verify-all non-zero。
+4. 只有 canonical invocation final exit 0才 PASS。
+5. final evidence记录 cwd、timestamp、Head、origin/main、child exit matrix、final exit。
+6. 历史 exit 1若无法复原，记录 historical provenance unresolved；不得编造归因。
 
-### F-07 — Expiration-before-create contract
-
-fresh create / converge same triple 之前，必须先锁定并检查 existing PENDING attempt。若 `expires_at <= now()`：先 materialize 为 TERMINAL / `ATTEMPT_EXPIRED`，audit exactly once，清理 old attempt 全部 sensitive contexts；之后才允许 new attempt。新的 transport context 不得继续 link 已过期 PENDING。
-
-### F-08 — Verification closeout
-
-D-19.4 / Tasks 必须补齐：F-01 Gate2 race、F-02 historical confirmer old-key→new-attempt、F-03 RLS write denial、F-05 cleanup matrix、F-07 expiry-before-new-bootstrap、F-04 real pairing E2E、F-06 handwritten/runtime semantic equivalence + checker RED/FIX/GREEN、rollback failure-injection matrix、两条 MINOR_14_17 legal success E2E、true Case B mismatch，以及 substantive Slice-5 `coverage:audit`。
-
-**Governance**：F-04 / F-06 均可在 Docs → 005 → 006 Spec 已授权的 Plan-level decision 范围内解决；无需修改 `Docs/**`、`specs/005/**` 或 `spec.md`。
+Governance：以上均在 Docs → 005 → 006 Spec 留给 Plan/runtime的实现空间内。Docs、005、006 Spec保持只读。
 
 ---
 
