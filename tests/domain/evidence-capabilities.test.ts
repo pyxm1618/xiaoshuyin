@@ -78,6 +78,16 @@ describe('Evidence capability surface (T018)', () => {
     const unauthorizedTx = {
       async query(sql: string) {
         statements.push(sql);
+        if (sql.includes('app_account_id()')) {
+          return {
+            rows: [{
+              account_id: 'a',
+              person_id: 'p',
+              family_id: 'f',
+              purpose: 'FAMILY_MANAGEMENT',
+            }],
+          };
+        }
         if (sql.includes('FROM persons')) return { rows: [{ id: 'someone-else' }] };
         return { rows: [] };
       },
@@ -102,6 +112,16 @@ describe('Evidence capability surface (T018)', () => {
     const authorizedTx = {
       async query(sql: string) {
         authorizedStatements.push(sql);
+        if (sql.includes('app_account_id()')) {
+          return {
+            rows: [{
+              account_id: 'a',
+              person_id: 'p',
+              family_id: 'f',
+              purpose: 'FAMILY_MANAGEMENT',
+            }],
+          };
+        }
         if (sql.includes('FROM persons')) return { rows: [{ id: 'p' }] };
         if (sql.includes('FROM cases')) return { rows: [{ id: 'c', family_id: 'f' }] };
         if (sql.includes('FROM family_members')) return { rows: [{ id: 'p' }] };
@@ -188,6 +208,16 @@ describe('Evidence production export boundary (AUD-II-001)', () => {
   function stubTx() {
     return {
       async query(sql: string) {
+        if (sql.includes('app_account_id()')) {
+          return {
+            rows: [{
+              account_id: 'a',
+              person_id: 'p',
+              family_id: 'f',
+              purpose: 'FAMILY_MANAGEMENT',
+            }],
+          };
+        }
         if (sql.includes('FROM persons')) return { rows: [{ id: 'p' }] };
         if (sql.includes('FROM cases')) return { rows: [{ id: 'c', family_id: 'f' }] };
         if (sql.includes('FROM family_members')) return { rows: [{ id: 'p' }] };
