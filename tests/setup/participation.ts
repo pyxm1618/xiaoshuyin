@@ -104,6 +104,35 @@ export async function createParticipationFixture(
   };
 }
 
+export async function addBoundAdultNonManagerToFamily(
+  h: ParticipationHarness,
+  familyId: string,
+  label: string
+): Promise<LoginResult> {
+  const target = await loginWithLabel(h.app, `s4-non-manager-${label}`);
+  await h.admin.query(
+    `INSERT INTO person_compliance_profiles
+       (person_id,age_band,minor_mode,guardian_person_id,
+        guardian_consent_version,guardian_consent_record_id,verified_source)
+     VALUES ($1,'ADULT',false,NULL,NULL,NULL,'SELF_STATEMENT')
+     ON CONFLICT (person_id) DO UPDATE
+       SET age_band='ADULT',
+           minor_mode=false,
+           guardian_person_id=NULL,
+           guardian_consent_version=NULL,
+           guardian_consent_record_id=NULL,
+           verified_source='SELF_STATEMENT',
+           updated_at=now()`,
+    [target.personId]
+  );
+  await h.admin.query(
+    `INSERT INTO family_members (family_id, person_id)
+     VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+    [familyId, target.personId]
+  );
+  return target;
+}
+
 export async function addBoundAdultTargetToFamily(
   h: ParticipationHarness,
   familyId: string,
