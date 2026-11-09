@@ -118,6 +118,19 @@ function referencesAnySchemaName(value, names) {
   return Object.values(value).some((item) => referencesAnySchemaName(item, names));
 }
 
+function resolveLocalRef(value, root) {
+  if (!value || typeof value !== 'object' || typeof value.$ref !== 'string') {
+    return value;
+  }
+  if (!value.$ref.startsWith('#/')) return value;
+
+  let current = root;
+  for (const part of value.$ref.slice(2).split('/')) {
+    current = current?.[part.replace(/~1/g, '/').replace(/~0/g, '~')];
+  }
+  return current ?? value;
+}
+
 function collectCollidingSchemaNames(frozenDocs) {
   const firstShapeByName = new Map();
   const collisions = new Set();
@@ -181,8 +194,10 @@ function compareSubset(frozen, generated, label, collidingSchemaNames) {
     // colliding schemas cannot be validated globally, so their real use sites
     // MUST be compared here to avoid creating a governance blind spot.
     for (const status of frozenStatuses) {
-      const frozenSchema = f.responses?.[status]?.content?.['application/json']?.schema;
-      const generatedSchema = g.responses?.[status]?.content?.['application/json']?.schema;
+      const frozenResponse = resolveLocalRef(f.responses?.[status], frozen);
+      const generatedResponse = resolveLocalRef(g.responses?.[status], generated);
+      const frozenSchema = frozenResponse?.content?.['application/json']?.schema;
+      const generatedSchema = generatedResponse?.content?.['application/json']?.schema;
       const mustCompareBody =
         label === '004-case-participant-core' ||
         referencesAnySchemaName(frozenSchema, collidingSchemaNames);
