@@ -190,6 +190,9 @@ async function rehydrateVerifiedInviteReplay(
   }
 
   const hydrated=rehydrateParticipationInviteReplay(outcome,input.secret);
+  if (hydrated.action !== 'REPLAY') {
+    throw typedError('INTERNAL_ERROR', 'Invalid participation invite replay outcome');
+  }
   const token=(hydrated.body as { inviteToken?: unknown }).inviteToken;
   if (
     typeof token !== 'string' ||
