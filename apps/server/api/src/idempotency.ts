@@ -26,6 +26,7 @@ import {
   lockIdempotencyKey,
   type IdempotencyCommandType,
   deriveParticipationInviteToken,
+  hashParticipationInviteToken,
 } from '@xiaoshuyin/domain';
 import { CreateParticipationInviteResponse } from '@xiaoshuyin/contracts';
 import { withTransactionClient } from './db/tx.js';
@@ -171,7 +172,8 @@ export function participationInviteSnapshot(response: CommandResponse): unknown 
 
 export function rehydrateParticipationInviteReplay(
   outcome: CommandOutcome,
-  secret: string
+  secret: string,
+  expectedTokenHash?: string
 ): CommandOutcome {
   // Only successful create replays need bearer-token reconstruction. A
   // replayed 4xx business outcome must remain byte-for-byte the stored error.
@@ -187,9 +189,24 @@ export function rehydrateParticipationInviteReplay(
     });
   }
   const participationId = (outcome.body as { participationId: string }).participationId;
+  const inviteToken = deriveParticipationInviteToken(secret, participationId);
+
+  // The redacted idempotency snapshot intentionally does not persist the
+  // bearer token or its hash. Verify the current secret against the
+  // authoritative participation row before returning a replay token.
+  if (
+    !expectedTokenHash ||
+    hashParticipationInviteToken(inviteToken) !== expectedTokenHash
+  ) {
+    throw Object.assign(new Error('Participation invite token secret drift'), {
+      statusCode: 500,
+      code: 'INTERNAL_ERROR',
+    });
+  }
+
   const hydrated = CreateParticipationInviteResponse.safeParse({
     ...(outcome.body as Record<string, unknown>),
-    inviteToken: deriveParticipationInviteToken(secret, participationId),
+    inviteToken,
   });
   if (!hydrated.success) {
     throw Object.assign(new Error('Invalid participation invite replay snapshot'), {
