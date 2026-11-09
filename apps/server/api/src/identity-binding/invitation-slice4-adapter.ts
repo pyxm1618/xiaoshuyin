@@ -46,9 +46,9 @@ export class Slice4InvitationAdapter implements InvitationResolutionPort {
       target_person_id: string | null;
       target_family_id: string | null;
     }>(
-      \`SELECT
+      `SELECT
          app_binding_target_person_id()::text AS target_person_id,
-         app_binding_target_family_id()::text AS target_family_id\`
+         app_binding_target_family_id()::text AS target_family_id`
     );
     const context = rows[0];
     if (!context?.target_person_id || !context.target_family_id) {
