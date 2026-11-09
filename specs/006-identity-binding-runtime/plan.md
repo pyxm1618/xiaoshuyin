@@ -1050,27 +1050,30 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 
 ---
 
-## D-14 Transaction boundary
+## D-14 Transaction / settlement boundary
 
-| 操作 | 事务内容 | 失败语义 |
-|---|---|---|
-| Bootstrap | WeChat auth 在 DB 外；DB 事务内：创建 pending context（加密 openid）→ invitation resolution → Gate 1 → 创建 / 收敛 attempt → context 关联 → audit → commit | 任一写失败 → 整体回滚；返回 `RETRYABLE`（若 attempt 仍合法）或 generic（业务失败）；不留下 partial context / attempt |
-| Candidate decision AFFIRM | `FOR UPDATE` attempt → 校验 context identity → 插入 candidate confirmation → audit → commit | 失败回滚；无 partial confirmation / audit |
-| Candidate REJECT / CANCEL | `FOR UPDATE` attempt → 条件更新 PENDING→TERMINAL + reason → audit → commit | 失败回滚；attempt 保持 PENDING 或已 terminal（由其它事务） |
-| Second-party decision AFFIRM | **事务 A（Phase B confirmation）**：`FOR UPDATE` attempt → 校验当前 authority → `INSERT binding_confirmations (SECOND_PARTY)` → audit `PENDING` → commit。**事务 B（Phase C commit）**：按 D-6.1 重新执行 Gate 2 → Account 创建 / 复用 → `UPDATE persons` → `UPDATE attempt COMMITTED` → context 清理 → audit → commit | 事务 A 失败 → 回滚；事务 B 业务失败 → 同事务写 TERMINAL + audit；事务 B 基础设施失败 → 回滚，事务 A 的 confirmation 保留，返回 `RETRYABLE`；retry 解析到 authoritative outcome，不 double commit |
-| Second-party REJECT | `FOR UPDATE` attempt → 条件更新 PENDING→TERMINAL + reason → audit → commit | 失败回滚 |
-| Status / pending list | 只读事务；`FOR UPDATE` 不需要 | 读失败 → 500，不改变状态 |
-| Session exchange | 只读事务：读 context / attempt / account / person / epoch → 事务外签名（纯计算） | 读失败 → 500；不签发 |
-| Attempt expiry materialization | 在访问事务内 `FOR UPDATE` + conditional UPDATE；affected rows = 1 才写 audit；create/converge same triple 前也必须先执行，并 scrub old attempt contexts | 0 行 → 读当前状态；不重复 audit；不得 link 已过期 PENDING |
+| 操作 | authoritative transaction requirement |
+|---|---|
+| Bootstrap | context → invitation/Gate1 → create/converge attempt → link context → audit；settled/pre-attempt replay fresh-context cleanup在response前完成 |
+| Candidate AFFIRM | lock/validate context+attempt → D-8.5 current eligibility → candidate confirmation insert/reuse → valid challenge issuance facts；失效则同事务terminal settle + audit + attempt-scope cleanup |
+| Candidate REJECT / CANCEL | conditional PENDING→TERMINAL + reason + exactly-one audit + attempt-scope cleanup |
+| Pairing decision AFFIRM | verify independent actor + exact challenge + current authority → SECOND_PARTY confirmation → Phase C Gate2/commit；challenge single-use与attempt/confirmation uniqueness共享consistency boundary |
+| Pairing decision REJECT | verify exact challenge + authority → authoritative terminal settlement + audit + attempt-scope cleanup |
+| Status / context access | 不是永远只读：context expiry至少scrub current context；attempt expiry必须调用唯一terminal settlement path，all-context scrub + audit exactly once |
+| Phase C | Gate2 H-02 linearization boundary → Account create/reuse → Person binding → attempt COMMITTED → all-context scrub → committed audit；不得partial success |
+| ATTEMPT_EXPIRED | 只有一个settlement primitive/path拥有 PENDING→TERMINAL/ATTEMPT_EXPIRED + reason + exactly-one terminal audit + all-context scrub；caller不得先materialize state再二次terminalize |
+| Session exchange | 只读committed facts；事务外签session token；不写binding |
 
-- 幂等记录与业务写入同一事务。
-- settled attempt 的 all-context secret cleanup 与 settlement 同 consistency boundary；pre-attempt blocked / no-attempt cleanup 在返回前完成。
-- Second-party AFFIRM 的事务 A（confirmation）与事务 B（commit）分离是 Phase B confirmation 与 Phase C commit 的分离：事务 A 只写 Phase B confirmation + audit，不写 Account / binding / attempt settled；事务 B 只写 Phase C commit 事实。事务 A 已提交但事务 B 因基础设施失败回滚时，attempt 仍 PENDING、confirmation 保留，retry 解析到 authoritative outcome；这不构成 Account / binding / attempt 的跨事务拼装。
-- 中途不跨事务拼接 Account / binding / attempt / audit。
-- 审计表失败 → 业务回滚（audit 是核心事务的一部分）。
-- 唯一例外：RETRYABLE operation 的 best-effort audit 在失败的独立事务之后尝试；失败不改变 retryable 结果，不伪造成功 / 终态。
+General rules：
+- core audit属于settlement transaction；audit write失败 → 业务回滚。
+- cleanup失败 → settlement/commit不得报告成功；rollback/failure-injection必须证明无partial binding与无terminal-with-retained-secret。
+- repeated/concurrent terminalization通过conditional transition/unique proof收敛：最终一个authoritative terminal audit，cleanup达成。
+- M-02 fresh replay context cleanup不得依赖 attempt_id IS NULL 的调用顺序；caller按authoritative outcome选择cleanup scope。
+- H-02 Gate2保护以真实runtime-role DB behavior为验收，不以repository helper名或SQL文本为证。
 
 ---
+
+## D-15 Audit / provenance
 
 ## D-15 Audit / provenance
 
@@ -1333,24 +1336,40 @@ participation invitation 打开
 
 ---
 
-### D-19.4 Ultimate Audit remediation verification matrix
+### D-19.4 Ultimate targeted remediation verification matrix
 
-必须新增 / 修正且不得降级为 unit mock：
+不得降级为unit mock：
 
-1. F-01：真实 PostgreSQL barrier，Gate2 read/PASS → concurrent consent revoke commits → commit resumes → binding 0 / 非 COMMITTED。
-2. F-02：attempt A + key K → A terminal → new B → K 对 B URL = 409 / B 0 mutation；same-request replay K 只读 A。
-3. F-03：`pg_policy.polcmd` + runtime-role SELECT positive / UPDATE-INSERT-DELETE negative。
-4. F-04：真实 existing-API `S0 → recognized candidate fresh bootstrap → S1 → exact one delta → candidate AFFIRM + confirmer recognition`；delta 0 / >1 fail closed。
-5. F-05：COMMITTED、所有 TERMINAL、expiry、multi-context replay、invalid-invitation/no-attempt replay 后 decryptable secrets 按 F-05 scope 全清。
-6. F-06：AFFIRM missing/null/wrong → 422；REJECT/CANCEL omitted → valid；REJECT/CANCEL null/present version → 422；handwritten/Zod/generated 语义等价。
-7. F-06 checker：先 RED 证明 nullable+const 与 true union / decision union 不等价，再修 normalizer、GREEN。
-8. F-07：old expired PENDING + same triple new operation → old TERMINAL/ATTEMPT_EXPIRED + audit once + cleanup → new attempt id。
-9. F-08 rollback：Gate2 / Account / Person update / attempt settle / cleanup / audit failure injection 全部无 partial success。
-10. F-08 MINOR success：`MINOR_14_17 + guardian` guardian confirmer success；`MINOR_14_17 + no guardian` Family manager confirmer success。
-11. F-08 anti-enum：true Case B mismatch（P1 已绑定 A，candidate authenticates different identity B）与 generic matrix 比较。
-12. `coverage:audit` 必须 substantive 覆盖 Slice 5 required acceptance suites / mapping；删除任一 required proof 应 FAIL，不能只靠总体百分比。
+1. H-01 original attack：onsite candidate不能形成/维持valid pairing；attacker同invitation建立live attempt；attacker challenge未由onsite recognized candidate展示；confirmer提交onsite candidate material → 404/0 mutation；pending list唯一新attempt不得被自动选中。
+2. H-01 exact binding：challenge A用于B attempt/P1/invitation/candidate identity全部fail closed；attemptId/pending-list不能替代challenge。
+3. H-01 replay/expiry/concurrency：expired/consumed challenge 0 mutation；same idempotency replay stable；two confirmer race最多一份SECOND_PARTY confirmation/一次commit；two candidates挑战不串线。
+4. H-02 runtime-role barrier matrix：profile/age-band、consent、guardian、membership/authority、invitation、P1 binding conflict及candidate-account conflict逐类barrier；invalidating mutation在线性化上先成立 → no commit。必须证明xiaoshuyin_app下锁/版本/serialization真实生效。
+5. M-01：至少 consent revoked after bootstrap before candidate AFFIRM → TERMINAL、candidate confirmation +0、valid pairing +0、terminal audit=1、all contexts scrub、candidate fixed AFFIRM shape；其余dynamic facts按同一矩阵。
+6. M-02：COMMITTED replay、TERMINAL replay、pre-attempt replay、Case B REUSED replay的fresh context三secret columns全部NULL。
+7. M-03：status materializes expired attempt with >=2 contexts → terminal audit=1、all contexts scrub；context-only expiry至少current scrub。
+8. M-04：Phase C expiry barrier → ATTEMPT_EXPIRED、audit exactly1、all contexts scrub、binding0、no orphan Account。
+9. historical F-02：operation key map A；new challenge resolves B + same key → 409/B零mutation；same replay只读A。
+10. confirmationVersion：AFFIRM required literal；REJECT/CANCEL omitted；null invalid；handwritten/runtime/generated semantic equivalence。
+11. RLS negative writes：runtime role intended SELECT与UPDATE/INSERT/DELETE boundary真实验证。
+12. rollback matrix：Gate2 / Account / Person update / attempt settlement / cleanup / audit failure injection均无partial success。
+13. MINOR success：MINOR_14_17 + guardian；MINOR_14_17 no guardian + Family manager。
+14. true Case B mismatch：P1 bound A，candidate authenticates different identity/account B；与generic matrix逐字段/status/header/readback比较。
+
+### D-19.5 Substantive coverage audit
+
+维护machine-readable required-proof mapping：required acceptance ID → stable proof ID → exact test name/verification command → executed PASS evidence。
+
+coverage gate必须验证proof被执行且对应assertion仍在，不能只检查文件存在、it/test/describe字符串、suite存在或总体百分比。required set至少含D-19.4的H-01、H-02、M-01—M-04、confirmationVersion、RLS、rollback、MINOR、Case B。
+
+coverage:audit自身必须有RED self-test：删除required proof、重命名required proof、从execution set移除proof、把mapping替换成unrelated passing proof，四种均必须使audit non-zero；真实mapping恢复后GREEN。
+
+### D-19.6 verify-all provenance
+
+Canonical closeout command = node scripts/verify-all.mjs from repo root。final evidence必须记录branch / HEAD / origin/main / clean tracked tree、required env names+presence、每个required child exact command+exit、final exit。任何required child non-zero → verify-all non-zero；只有final exit 0可PASS。历史失败无法还原时记录 historical provenance unresolved。
 
 ---
+
+## D-20 Explicit exclusions / structure checks
 
 ## D-20 Explicit exclusions / structure checks
 
@@ -1371,7 +1390,7 @@ Implement 必须能机械证明以下不存在（CI / guard / grep / schema intr
 13. 后台 job / 定时器 / 通用 workflow engine / 第二套通用审计框架。
 14. V2–V5 capabilities。
 
-**结构枚举**：006 新表只有 5 张；新端点只有 6 条；新 enum 只有 5 个；没有 `case_*` / `evidence_*` / `assessment_*` / `intervention_*` / `notification_*` / `ai_*` 表。
+**结构枚举**：006新表仍只有5张；binding HTTP surface仍为6条（原attemptId decision被pairing-decision取代，不新增第7条）；新enum仍只有5个；没有case/evidence/assessment/intervention/notification/ai表。
 
 ---
 
@@ -1471,9 +1490,13 @@ Slice 4 implementation                                       ← 依赖本 Slice
 
 ## API / Contract Impact
 
-- 新增 `specs/006-identity-binding-runtime/contracts/identity-binding-api.openapi.yaml`（Implement 创建）。
-- 新 route 必须加入手写 OpenAPI；candidate-decision request 按 F-06 / D-10.2 使用 decision-discriminated `oneOf`；`openapi:generate` / remediated `openapi:check` 必须 PASS。
-- 普通 `/auth/wechat` schema / 行为不变。
+- H-01明确改变handwritten HTTP contract：candidate AFFIRM 200 response增加required pairingChallenge；原 POST /identity-bindings/{attemptId}/decision 改为 POST /identity-bindings/pairing-decision，request增加candidate-presented pairingChallenge且不再接受attemptId path selector。
+- GET /pending保留，但明确not pairing selector。
+- AFFIRM hidden outcomes使用valid/decoy challenge同shape维持anti-enumeration；confirmer invalid/expired/consumed/mismatched challenge统一404。
+- candidate decision confirmationVersion仍为decision-discriminated oneOf；runtime Zod/generated OpenAPI由开发同步，generated不得hand-edit。
+- 普通 /auth/wechat schema/behavior不变。
+
+## AI / RAG / Eval Impact
 
 ## AI / RAG / Eval Impact
 
@@ -1493,11 +1516,11 @@ apps/server/api/src/
     gate.ts                      # app-layer Gate facts + assertMinorProcessingAllowed composition
     bootstrap.ts                 # Phase A / Gate 1 / attempt creation
     candidate-decision.ts        # candidate AFFIRM / REJECT / CANCEL
-    confirmer.ts                 # list / decision + authority
+    confirmer.ts                 # pending operational view / pairing-decision + authority
     commit.ts                    # Gate 2 + Phase C
     session-exchange.ts          # COMMITTED → ordinary session
     anti-enumeration.ts          # generic serializer
-    crypto.ts                    # HKDF / AES-GCM / token hash
+    crypto.ts                    # HKDF / AES-GCM / context token + pairing challenge authentication
     invitation-port.ts           # Slice 4 consumer port
     errors.ts                    # binding error codes
   routes/identity-bindings.ts    # 6 routes
@@ -1527,25 +1550,31 @@ tests/
 
 ## Verification Plan
 
-| 验证 | 命令 | 证据 |
+| 验证 | Canonical requirement | 证据 |
 |---|---|---|
-| TypeScript | `bun run typecheck`（`node scripts/typecheck-all.mjs`） | 0 error |
-| Unit / integration / DB | `bun run vitest run` | 全 PASS，0 skipped（除显式 BLOCKED 项） |
-| 静态 guard | `bun run guard:static` | PASS |
-| OpenAPI | `bun run openapi:check` + semantic regression | handwritten/generated 真实 JSON Schema 语义一致；normalizer 不得抹平 nullable/const/oneOf 差异 |
-| Migration | `bun run db:migrate` + `db:evidence` | 可重放，RLS / role / schema 证据 |
-| Coverage | `bun run coverage:audit` | 阈值 PASS + substantive Slice 5 acceptance mapping；删除 required proof 时 FAIL |
-| Governance | `node .specify/scripts/validate-governance.mjs` + `node .specify/scripts/tests/run-governance-tests.mjs` | governance PASS、self-test 全 PASS、`Docs/**` diff = 0 |
-| Full | `bun run verify-all` | 归档全 PASS |
-| Blocked E2E | Slice 4 runtime 未 merge | 必须报 `BLOCKED`，不得 PASS |
+| TypeScript | bun run typecheck | 0 error |
+| Unit / integration / DB | targeted required suites + aggregate | 全PASS，0 skipped（除explicit BLOCKED） |
+| H-01 | original attack + exact binding + replay/expiry/concurrency | D-19.4 #1—#3 |
+| H-02 | real PostgreSQL runtime-role barrier matrix | D-19.4 #4；source-text lock不算 |
+| M-01—M-04 | direct regression + DB observable + audit/cleanup | D-19.4 #5—#8 |
+| OpenAPI | handwritten/runtime/generated semantic comparison | pairing shape + confirmationVersion matrix |
+| Migration/RLS | migrate + db evidence + runtime-role behavior | replayable + FORCE RLS + actual behavior |
+| Coverage | coverage:audit | required proof mapping + RED self-test；missing/renamed/unexecuted/unrelated proof → non-zero |
+| Governance | governance validators | Docs/005/006 Spec diff=0 |
+| Full | node scripts/verify-all.mjs from repo root | exact HEAD/env-presence/child-exit/final-exit provenance；final 0才PASS |
+| Blocked E2E | Slice4 runtime unavailable | T121–T124 = BLOCKED，不得伪造PASS |
+
+Canonical verify-all final run前tracked working tree必须clean；required env只记录name/presence，不得记录secret value。历史non-zero provenance无法复原时如实写unresolved。
 
 ---
 
 ## Rollback / Recovery
 
+## Rollback / Recovery
+
 - Migration additive；回滚顺序见 D-18.2。
 - 业务回滚：commit 事务失败 → 全回滚；attempt 可保持 PENDING 或已 TERMINAL；不得删除历史 confirmation / audit。
-- Pending context / attempt 无后台清理 job；访问时物化 expiry。单 context 过期 scrub 自身；attempt settled / expired 按 F-05 全 scope scrub；pre-attempt blocked / no-attempt 返回前 scrub。不得保留 decryptable ciphertext 等待未来 lifecycle。
+- Pending context / attempt无后台cleanup job；访问时物化expiry。单context expiry scrub自身；attempt settled/expired使用D-14唯一authoritative settlement完成all-context scrub + exactly-one audit；pre-attempt/settled replay fresh context在response前scrub。不得保留decryptable secret等待未来lifecycle。
 - 不实现数据删除 / unlink / merge / rebind。
 
 ---
@@ -1558,7 +1587,7 @@ tests/
 | 新增审计表 | `business_audit_events` NOT NULL / 封闭 event_type 无法承载 pre-account 结果 | 单表、append-only、write-only runtime |
 | 新增 5 个 binding 事务 wrapper | 需要 purpose-scoped RLS 上下文，且不得冒充 P1 / 设置 family scope | 复用 `tx.ts`，不新建 framework |
 | AES-GCM 加密 openid | pending context 需要原始 openid 在 Phase C 创建 Account；明文短期落库不符合最小暴露 | 只加密 pending context；commit 后清零；不引入 KMS |
-| 6 条端点 | bootstrap / candidate / confirmer 的最小闭环 + status / session | 无 participant / UI / 通知 |
+| 6 条端点 | 不增加surface；H-01仅把confirmer attemptId-path decision替换为candidate-presented pairing-decision | 无participant/UI/notification；pending list不是pairing selector |
 
 ---
 
@@ -1566,5 +1595,5 @@ tests/
 
 1. **Slice 1 真实 `authorize()` 形状**：本 Plan 按 remediated 版本（object Resource + facts）设计；若最终合并版本不同，Implement 前必须回 Plan 对齐，不得临场发明第二套授权入口。
 2. **Slice 4 production adapter 的最终文件位置**：由 Slice 4 实现决定；006 只冻结 port 接口，不在本 Slice 写 adapter。
-3. **TTL 数值**：属 RELEASE / POLICY GATE；Plan 只要求 required positive env，不写具体秒数。
+3. **TTL 数值**：context / attempt / pairing TTL均属RELEASE / POLICY GATE；Plan只要求required positive env，不写具体秒数；pairing TTL必须被context/attempt expiry上界夹住。
 4. **`IDENTITY_BINDING_SECRET` 轮换**：属 operational compatibility；本 Slice 只要求 fail-safe，不设计 KMS / keyring。
