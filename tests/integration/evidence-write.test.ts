@@ -119,6 +119,72 @@ async function idempotencyCount(actorAccountId: string): Promise<number> {
   return rows[0].c;
 }
 
+interface InjectedObjectResidue {
+  trigger_residue: number;
+  function_residue: number;
+}
+
+async function injectedObjectResidue(
+  adminClient: pg.Client,
+  triggerName: string,
+  functionName: string
+): Promise<InjectedObjectResidue> {
+  const { rows } = await adminClient.query(
+    `SELECT
+       (SELECT count(*)::int FROM pg_trigger WHERE tgname = $1) AS trigger_residue,
+       (SELECT count(*)::int FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE p.proname = $2 AND n.nspname = 'public') AS function_residue`,
+    [triggerName, functionName]
+  );
+  return rows[0];
+}
+
+function describeError(error: unknown): string {
+  const value = error as { code?: string; message?: string };
+  return `${value.code ?? 'NO_CODE'} ${value.message ?? String(error)}`;
+}
+
+async function finalizeInjectedObjects(
+  adminClient: pg.Client,
+  triggerName: string,
+  functionName: string,
+  businessFailure?: { code?: string; message?: string } | null
+): Promise<void> {
+  const failures: string[] = [];
+
+  try {
+    await adminClient.query(
+      `DROP TRIGGER IF EXISTS ${triggerName} ON business_audit_events`
+    );
+  } catch (error) {
+    failures.push(`DROP TRIGGER: ${describeError(error)}`);
+  }
+
+  try {
+    await adminClient.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+  } catch (error) {
+    failures.push(`DROP FUNCTION: ${describeError(error)}`);
+  }
+
+  const residue = await injectedObjectResidue(adminClient, triggerName, functionName);
+  if (residue.trigger_residue !== 0) {
+    failures.push(`trigger residue = ${residue.trigger_residue}`);
+  }
+  if (residue.function_residue !== 0) {
+    failures.push(`function residue = ${residue.function_residue}`);
+  }
+
+  if (failures.length > 0) {
+    const original = businessFailure
+      ? ` | original business failure: ${businessFailure.code ?? 'NO_CODE'} ${
+          businessFailure.message ?? ''
+        }`
+      : '';
+    throw new Error(`S3M01 cleanup failed: ${failures.join(' ; ')}${original}`);
+  }
+}
+
 describe('Internal Evidence writers (T027)', () => {
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: ADMIN_URL });
@@ -538,17 +604,15 @@ describe('Internal Evidence writers (T027)', () => {
   });
 
   it('rolls the evidence row back when the audit write fails', async () => {
+    const suffix = randomUUID().replace(/-/g, '');
     const marker = `S3M01_${randomUUID()}`;
-    const triggerName = 's3m01_audit_failure';
-    const functionName = 's3m01_audit_failure_fn';
+    const triggerName = `s3m01_audit_failure_${suffix}`;
+    const functionName = `s3m01_audit_failure_fn_${suffix}`;
 
-    // Test-only failure injection. The trigger is created idempotently, only
-    // raises inside a transaction that opts in with the local GUC below, and is
-    // dropped in `finally` so neither the schema contract nor other suites are
-    // affected.
+    // Test-only failure injection. Names are unique per run, the trigger only
+    // raises inside a transaction that opts in with the local GUC below, and
+    // both objects are dropped in `finally` with residue verification.
     const installAuditFailure = async () => {
-      await admin.query(`DROP TRIGGER IF EXISTS ${triggerName} ON business_audit_events`);
-      await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
       await admin.query(
         `CREATE FUNCTION ${functionName}() RETURNS trigger
          LANGUAGE plpgsql AS $fn$
@@ -569,18 +633,12 @@ describe('Internal Evidence writers (T027)', () => {
       );
     };
 
-    const removeAuditFailure = async () => {
-      await admin
-        .query(`DROP TRIGGER IF EXISTS ${triggerName} ON business_audit_events`)
-        .catch(() => {});
-      await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`).catch(() => {});
-    };
-
     const before = await counts(fx.familyId);
     const idempotencyBefore = await idempotencyCount(fx.accountId);
     let callbackEntered = false;
     let identityAtCallback: Record<string, unknown> | null = null;
     let failure: any = null;
+    let cleanupFailure: Error | null = null;
 
     try {
       await installAuditFailure();
@@ -601,8 +659,22 @@ describe('Internal Evidence writers (T027)', () => {
         failure = error;
       }
     } finally {
-      await removeAuditFailure();
+      try {
+        await finalizeInjectedObjects(admin, triggerName, functionName, failure);
+      } catch (error) {
+        cleanupFailure = error as Error;
+      }
     }
+
+    // Cleanup is fail-closed: both DROPs are attempted, errors are never
+    // swallowed, and the exact per-run objects must be gone. When cleanup fails
+    // the thrown message also carries the original business failure, so the two
+    // failure classes stay distinguishable instead of masking each other.
+    expect(cleanupFailure).toBeNull();
+    expect(await injectedObjectResidue(admin, triggerName, functionName)).toEqual({
+      trigger_residue: 0,
+      function_residue: 0,
+    });
 
     // The transaction identity gate and family binding really passed.
     expect(callbackEntered).toBe(true);
@@ -640,6 +712,45 @@ describe('Internal Evidence writers (T027)', () => {
       [fx.familyId]
     );
     expect(leakedAudit.rows[0].c).toBe(0);
+  });
+
+  it('fails closed when test-side cleanup cannot remove its own objects', async () => {
+    const suffix = randomUUID().replace(/-/g, '');
+    const functionName = `s3m01_cleanup_negative_fn_${suffix}`;
+    const viewName = `s3m01_cleanup_negative_view_${suffix}`;
+    const missingTrigger = `s3m01_cleanup_negative_trigger_${suffix}`;
+
+    try {
+      // A view depends on the function, so DROP FUNCTION fails closed with
+      // PostgreSQL 2BP01 while DROP TRIGGER still runs and reports success.
+      await admin.query(
+        `CREATE FUNCTION ${functionName}() RETURNS integer LANGUAGE sql AS $$ SELECT 1 $$`
+      );
+      await admin.query(`CREATE VIEW ${viewName} AS SELECT ${functionName}() AS value`);
+
+      const cleanupError = await finalizeInjectedObjects(
+        admin,
+        missingTrigger,
+        functionName,
+        { code: 'P0001', message: 'S3M01_AUDIT_STAGE_FAILURE:cleanup-negative-marker' }
+      ).catch((error) => error);
+
+      expect(cleanupError).toBeInstanceOf(Error);
+      expect(String(cleanupError.message)).toContain('S3M01 cleanup failed');
+      expect(String(cleanupError.message)).toContain('2BP01');
+      expect(String(cleanupError.message)).toContain('function residue = 1');
+      expect(String(cleanupError.message)).toContain(
+        'S3M01_AUDIT_STAGE_FAILURE:cleanup-negative-marker'
+      );
+    } finally {
+      await admin.query(`DROP VIEW IF EXISTS ${viewName}`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+    }
+
+    expect(await injectedObjectResidue(admin, missingTrigger, functionName)).toEqual({
+      trigger_residue: 0,
+      function_residue: 0,
+    });
   });
 });
 
