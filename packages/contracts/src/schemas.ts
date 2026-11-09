@@ -454,6 +454,12 @@ export const ParticipationNotFoundError = z.strictObject({
   code: z.enum(['PARTICIPATION_NOT_FOUND']),
   message: z.string(),
 });
+export const ParticipationValidationError = z.strictObject({
+  code: z.enum(['VALIDATION_ERROR']),
+  message: z.string(),
+});
+export type ParticipationValidationErrorType = z.infer<typeof ParticipationValidationError>;
+
 export const ParticipationStateConflictError = z.strictObject({
   code: z.enum(['PARTICIPATION_STATE_CONFLICT']),
   message: z.string(),
