@@ -109,7 +109,7 @@ describe('case primary switch idempotency (T728)', () => {
 
   it('replays the original body even after the target is already primary', async () => {
     const owner = await login('replay');
-    await family(owner.token, 'replay');
+    const famId = await family(owner.token, 'replay');
     const a = await createCase(owner.token, 'replay-a');
     const b = await createCase(owner.token, 'replay-b');
     const key = `t728-replay-${Date.now()}-${seq++}`;
@@ -128,11 +128,64 @@ describe('case primary switch idempotency (T728)', () => {
     const { rows } = await admin.query(
       `SELECT
          (SELECT count(*)::int FROM case_events WHERE case_id = $1) AS events,
-         (SELECT count(*)::int FROM cases WHERE id = $1 AND version = $2) AS versions`,
-      [b.id, first.json().primary.version]
+         (SELECT count(*)::int FROM cases WHERE id = $1 AND version = $2) AS versions,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE family_id = $3 AND event_type = 'CASE_PRIMARY_SWITCHED') AS audits`,
+      [b.id, first.json().primary.version, famId]
     );
     expect(rows[0].events).toBe(2);
     expect(rows[0].versions).toBe(1);
+    // H01 requirement 5: a replay never appends a second business audit.
+    expect(rows[0].audits).toBe(1);
+  });
+
+  it('treats a differently-cased uuid as the same canonical payload (REPLAY)', async () => {
+    const owner = await login('casing');
+    const famId = await family(owner.token, 'casing');
+    const a = await createCase(owner.token, 'casing-a');
+    const b = await createCase(owner.token, 'casing-b');
+    const key = `t728-casing-${Date.now()}-${seq++}`;
+    const reason = '大小写归一';
+
+    // First request: upper-case path id AND upper-case expected view id.
+    const first = await switchPrimary(
+      owner.token,
+      b.id.toUpperCase(),
+      {
+        reason,
+        expectedPrimaryCaseId: a.id.toUpperCase(),
+        expectedPrimaryVersion: a.version,
+      },
+      key
+    );
+    expect(first.statusCode).toBe(200);
+
+    // Same key, same payload with lower-case ids must REPLAY, not MISMATCH.
+    const replay = await switchPrimary(
+      owner.token,
+      b.id,
+      {
+        reason,
+        expectedPrimaryCaseId: a.id,
+        expectedPrimaryVersion: a.version,
+      },
+      key
+    );
+    expect(replay.statusCode).toBe(200);
+    expect(replay.body).toBe(first.body);
+
+    const { rows } = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE family_id = $1 AND event_type = 'CASE_PRIMARY_SWITCHED') AS audits,
+         (SELECT count(*)::int FROM case_events
+           WHERE family_id = $1 AND event_type <> 'CASE_CREATED') AS events,
+         (SELECT version FROM cases WHERE id = $2) AS target_version`,
+      [famId, b.id]
+    );
+    expect(rows[0].audits).toBe(1);
+    expect(rows[0].events).toBe(2);
+    expect(rows[0].target_version).toBe(b.version + 1);
   });
 
   it('rejects same key with a different target / reason / view as 409 mismatch', async () => {

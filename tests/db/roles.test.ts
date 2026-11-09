@@ -158,4 +158,76 @@ describe('Database Roles (T012 RED)', () => {
       expect(rows[0].has, `app should have USAGE on enum ${enumName}`).toBe(true);
     }
   });
+
+  // ── Slice 7 (T778): column-level UPDATE on `cases` ────────
+  // The switch command may only write `is_primary` / `version` / `updated_at`.
+  // The table-level privilege MUST stay false: PostgreSQL decides table and
+  // column privileges independently, so a column-level GRANT never promotes
+  // `has_table_privilege(..., 'UPDATE')` to true (plan D-9.5 / R-7).
+
+  it('Slice 7: cases table-level UPDATE stays false (column-level GRANT only)', async () => {
+    const { rows } = await client.query(
+      `SELECT has_table_privilege('xiaoshuyin_app', 'cases', 'UPDATE') AS has`
+    );
+    expect(rows[0].has).toBe(false);
+  });
+
+  it('Slice 7: cases allows column UPDATE only on is_primary / version / updated_at', async () => {
+    const allowed = ['is_primary', 'version', 'updated_at'];
+    const denied = [
+      'id',
+      'family_id',
+      'created_by_person_id',
+      'status',
+      'phase',
+      'created_at',
+    ];
+
+    for (const column of allowed) {
+      const { rows } = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'cases', $1, 'UPDATE') AS has`,
+        [column]
+      );
+      expect(rows[0].has, `app should have column UPDATE on cases.${column}`).toBe(true);
+    }
+
+    for (const column of denied) {
+      const { rows } = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'cases', $1, 'UPDATE') AS has`,
+        [column]
+      );
+      expect(rows[0].has, `app must NOT have column UPDATE on cases.${column}`).toBe(false);
+    }
+  });
+
+  it('Slice 7: case_events stays append-only at both table and column level', async () => {
+    // Table level: SELECT / INSERT only (already asserted above); UPDATE,
+    // DELETE and TRUNCATE remain denied.
+    for (const priv of ['UPDATE', 'DELETE', 'TRUNCATE']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'case_events', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `app must NOT have ${priv} on case_events`).toBe(false);
+    }
+
+    // Column level: no UPDATE grant may exist on any case_events column.
+    const { rows } = await client.query(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'case_events'
+        ORDER BY ordinal_position`
+    );
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const check = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'case_events', $1, 'UPDATE') AS has`,
+        [row.column_name]
+      );
+      expect(
+        check.rows[0].has,
+        `app must NOT have column UPDATE on case_events.${row.column_name}`
+      ).toBe(false);
+    }
+  });
 });

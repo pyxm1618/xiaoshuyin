@@ -111,15 +111,21 @@ export function buildRevokedEventMetadata(input: {
   };
 }
 
-/** `business_audit_events` metadata for `CASE_PRIMARY_SWITCHED`. */
+/** `business_audit_events` metadata for `CASE_PRIMARY_SWITCHED` (plan D-2.3). */
 export function buildSwitchAuditMetadata(input: {
   targetCaseId: string;
   previousPrimaryCaseId: string | null;
+  newPrimaryCaseId: string;
+  previousVersion: number | null;
+  newVersion: number;
   reason: string;
 }) {
   return {
     targetCaseId: input.targetCaseId,
     previousPrimaryCaseId: input.previousPrimaryCaseId,
+    newPrimaryCaseId: input.newPrimaryCaseId,
+    previousVersion: input.previousVersion,
+    newVersion: input.newVersion,
     reason: input.reason,
   };
 }

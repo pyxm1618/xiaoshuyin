@@ -145,6 +145,8 @@ describe('case primary switch atomicity (T729)', () => {
          (SELECT is_primary FROM cases WHERE id = $2) AS b_primary,
          (SELECT version FROM cases WHERE id = $2) AS b_version,
          (SELECT count(*)::int FROM case_events WHERE family_id = $3) AS events,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE family_id = $3 AND event_type = 'CASE_PRIMARY_SWITCHED') AS audits,
          (SELECT count(*)::int FROM idempotency_keys WHERE actor_account_id = $4 AND command_type = 'CASE_SWITCH_PRIMARY') AS idem`,
       [caseA.id, caseB.id, familyId, accountId]
     );

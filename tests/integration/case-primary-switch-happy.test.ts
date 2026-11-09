@@ -100,7 +100,7 @@ describe('case primary switch happy paths (T725)', () => {
 
   it('first switch moves primary and preserves status/phase', async () => {
     const owner = await login('happy');
-    await family(owner.token, 'happy');
+    const famId = await family(owner.token, 'happy');
     const a = await createCase(owner.token, 'happy-a');
     const b = await createCase(owner.token, 'happy-b');
     expect(a.primary).toBe(true);
@@ -124,6 +124,67 @@ describe('case primary switch happy paths (T725)', () => {
     expect(body.previousPrimary.version).toBe(a.version + 1);
     expect(body.primary.version).toBe(b.version + 1);
     expect(typeof body.switchedAt).toBe('string');
+
+    // T762: exactly two domain events, one per side, with the frozen key
+    // sets (plan D-9.3).
+    const { rows: events } = await admin.query(
+      `SELECT event_type, metadata
+         FROM case_events
+        WHERE family_id = $1 AND event_type <> 'CASE_CREATED'
+        ORDER BY occurred_at, id`,
+      [famId]
+    );
+    expect(events.map((row: any) => row.event_type)).toEqual([
+      'CASE_PRIMARY_REVOKED',
+      'CASE_PRIMARY_ASSIGNED',
+    ]);
+    expect(events[0].metadata).toEqual({
+      primary: false,
+      version: a.version + 1,
+      newPrimaryCaseId: b.id,
+      reason: '转到新主线',
+    });
+    expect(events[1].metadata).toEqual({
+      primary: true,
+      version: b.version + 1,
+      previousPrimaryCaseId: a.id,
+      reason: '转到新主线',
+    });
+
+    // H02-B: the business audit is the cross-resource record of the switch.
+    // Read the real row and assert every frozen field, one row only.
+    const { rows: audits } = await admin.query(
+      `SELECT family_id, actor_account_id, event_type, resource_type,
+              resource_id, metadata, occurred_at
+         FROM business_audit_events
+        WHERE family_id = $1
+        ORDER BY occurred_at, id`,
+      [famId]
+    );
+    const switchAudits = audits.filter(
+      (row: any) => row.event_type === 'CASE_PRIMARY_SWITCHED'
+    );
+    expect(switchAudits).toHaveLength(1);
+    const audit = switchAudits[0];
+    expect(audit.family_id).toBe(famId);
+    expect(audit.actor_account_id).toBe(owner.accountId);
+    expect(audit.event_type).toBe('CASE_PRIMARY_SWITCHED');
+    expect(audit.resource_type).toBe('CASE');
+    expect(audit.resource_id).toBe(b.id);
+    expect(audit.occurred_at).toBeInstanceOf(Date);
+    // Six frozen metadata fields. Versions are the real post-UPDATE
+    // `RETURNING` values, never the request's expected version.
+    expect(audit.metadata).toEqual({
+      targetCaseId: b.id,
+      previousPrimaryCaseId: a.id,
+      newPrimaryCaseId: b.id,
+      previousVersion: a.version + 1,
+      newVersion: b.version + 1,
+      reason: '转到新主线',
+    });
+    expect(audit.metadata.previousVersion).not.toBe(a.version);
+    expect(body.previousPrimary.version).toBe(audit.metadata.previousVersion);
+    expect(body.primary.version).toBe(audit.metadata.newVersion);
 
     const listRes = await list(owner.token);
     const items = listRes.json().items as Array<{ id: string; primary: boolean }>;
@@ -182,6 +243,24 @@ describe('case primary switch happy paths (T725)', () => {
     expect(res.json().primary.id).toBe(a.id);
     expect(res.json().primary.status).toBe(a.status);
     expect(res.json().primary.phase).toBe(a.phase);
+
+    // H01 requirement 3: the promotion branch keeps nullable old-primary
+    // semantics. No fabricated previous Case, no fabricated old version.
+    const { rows } = await admin.query(
+      `SELECT metadata FROM business_audit_events
+        WHERE family_id = $1 AND event_type = 'CASE_PRIMARY_SWITCHED'`,
+      [famId]
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].metadata).toEqual({
+      targetCaseId: a.id,
+      previousPrimaryCaseId: null,
+      newPrimaryCaseId: a.id,
+      previousVersion: null,
+      newVersion: a.version + 1,
+      reason: '推进主线',
+    });
+    expect(res.json().primary.version).toBe(rows[0].metadata.newVersion);
   });
 
   it('does not expose /cases/current', async () => {

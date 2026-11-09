@@ -9,6 +9,7 @@
  */
 
 import type { PoolClient } from 'pg';
+import { buildSwitchAuditMetadata } from './case-primary-switch.js';
 
 type Tx = PoolClient;
 
@@ -318,6 +319,75 @@ export async function getCurrentPrimaryForUpdate(
   return rows;
 }
 
+export interface SwitchPrimaryLockSnapshot {
+  /** The locked current un-closed primary, or null (promotion branch). */
+  current: CaseRow | null;
+  /** The locked requested target, or null (missing / hidden by RLS). */
+  target: CaseRow | null;
+  /** Number of un-closed primary rows observed; >1 is INTERNAL_ERROR. */
+  currentCount: number;
+}
+
+/**
+ * Lock the current primary and the requested target in ONE deterministic
+ * order (plan D-3.3).
+ *
+ * Steps, frozen:
+ *   1. collect the current un-closed primary id(s) for the Family;
+ *   2. collect the target id;
+ *   3. de-duplicate;
+ *   4. sort Case ids ascending;
+ *   5. lock every row with a single `WHERE id = ANY(...) ORDER BY id
+ *      FOR UPDATE` statement (PostgreSQL acquires the row locks in the sorted
+ *      order, so two transactions can never build a lock cycle);
+ *   6. re-map the rows back to `current` / `target`.
+ *
+ * The Family row lock is already held by the caller, and every primary write
+ * command takes it first (`CASE_CREATE` and `SwitchPrimaryCase`), so the set
+ * collected in step 1 cannot change before step 5.
+ *
+ * `current` / `target` may be the same row when the target already is the
+ * primary; the decision function then reports `CASE_ALREADY_PRIMARY`.
+ * A target of another Family is hidden by RLS and yields `target === null`.
+ */
+export async function lockCasesForSwitchPrimary(
+  tx: Tx,
+  input: { familyId: string; targetCaseId: string }
+): Promise<SwitchPrimaryLockSnapshot> {
+  const { rows: primaryRows } = await tx.query<{ id: string }>(
+    `SELECT id
+       FROM cases
+      WHERE family_id = $1 AND is_primary AND status <> 'CLOSED'`,
+    [input.familyId]
+  );
+
+  const ids = Array.from(
+    new Set([...primaryRows.map((row) => row.id), input.targetCaseId])
+  ).sort();
+
+  const { rows } = await tx.query<CaseRow>(
+    `SELECT id, family_id, created_by_person_id, status, phase,
+            is_primary, version, created_at, updated_at
+       FROM cases
+      WHERE id = ANY($1::uuid[])
+      ORDER BY id
+      FOR UPDATE`,
+    [ids]
+  );
+
+  const target = rows.find((row) => row.id === input.targetCaseId) ?? null;
+  const primaries = rows.filter(
+    (row) =>
+      row.family_id === input.familyId && row.is_primary && row.status !== 'CLOSED'
+  );
+
+  return {
+    current: primaries[0] ?? null,
+    target,
+    currentCount: primaries.length,
+  };
+}
+
 /** Lock the requested target Case. RLS hides rows of another Family. */
 export async function getCaseForUpdate(tx: Tx, caseId: string): Promise<CaseRow | null> {
   const { rows } = await tx.query<CaseRow>(
@@ -427,23 +497,27 @@ export async function insertPrimarySwitchAudit(
     targetCaseId: string;
     actorAccountId: string;
     previousPrimaryCaseId: string | null;
+    newPrimaryCaseId: string;
+    previousVersion: number | null;
+    newVersion: number;
     reason: string;
   }
 ): Promise<void> {
+  // Frozen metadata (plan D-2.3): all six fields are required. Versions come
+  // from the `UPDATE ... RETURNING` rows, never from a client view or +1 math.
+  const metadata = buildSwitchAuditMetadata({
+    targetCaseId: input.targetCaseId,
+    previousPrimaryCaseId: input.previousPrimaryCaseId,
+    newPrimaryCaseId: input.newPrimaryCaseId,
+    previousVersion: input.previousVersion,
+    newVersion: input.newVersion,
+    reason: input.reason,
+  });
   await tx.query(
     `INSERT INTO business_audit_events
        (family_id, actor_account_id, event_type, resource_type, resource_id, metadata)
      VALUES ($1, $2, 'CASE_PRIMARY_SWITCHED', 'CASE', $3, $4::jsonb)`,
-    [
-      input.familyId,
-      input.actorAccountId,
-      input.targetCaseId,
-      JSON.stringify({
-        targetCaseId: input.targetCaseId,
-        previousPrimaryCaseId: input.previousPrimaryCaseId,
-        reason: input.reason,
-      }),
-    ]
+    [input.familyId, input.actorAccountId, input.targetCaseId, JSON.stringify(metadata)]
   );
 }
 

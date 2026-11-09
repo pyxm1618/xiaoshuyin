@@ -43,8 +43,7 @@ import {
   completeIdempotency,
   acquireIdempotencySlot,
   decideSwitchPrimary,
-  getCurrentPrimaryForUpdate,
-  getCaseForUpdate,
+  lockCasesForSwitchPrimary,
   demotePrimaryCase,
   promotePrimaryCase,
   insertPrimaryAssignedEvent,
@@ -599,13 +598,20 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
             const locked = await lockFamilyForPrimaryDecision(tx, familyId);
             if (!locked) throw httpError('INTERNAL_ERROR', 'Family not visible');
 
-            const primaries = await getCurrentPrimaryForUpdate(tx, familyId);
-            if (primaries.length > 1) {
+            // Plan D-3.3: current + target Case rows are locked by ONE
+            // deterministic statement (`id = ANY(...) ORDER BY id FOR UPDATE`).
+            // Never re-introduce two unordered row locks here: a future
+            // command locking the same pair in the opposite order would form
+            // a lock cycle.
+            const snapshot = await lockCasesForSwitchPrimary(tx, {
+              familyId,
+              targetCaseId: caseId,
+            });
+            if (snapshot.currentCount > 1) {
               throw httpError('INTERNAL_ERROR', 'Multiple open primaries');
             }
-            const current = primaries[0] ?? null;
-
-            const target = await getCaseForUpdate(tx, caseId);
+            const current = snapshot.current;
+            const target = snapshot.target;
             if (!target) throw httpError('CASE_NOT_FOUND', 'Case not found');
 
             const decision = decideSwitchPrimary({
@@ -649,6 +655,11 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
               targetCaseId: promoted.id,
               actorAccountId: accountId,
               previousPrimaryCaseId: demoted?.id ?? null,
+              newPrimaryCaseId: promoted.id,
+              // Versions are the real post-UPDATE `RETURNING` values; the
+              // promotion branch keeps the nullable previous-primary semantics.
+              previousVersion: demoted?.version ?? null,
+              newVersion: promoted.version,
               reason: parsed.data.reason,
             });
 
