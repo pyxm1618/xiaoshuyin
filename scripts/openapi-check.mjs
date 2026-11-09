@@ -104,6 +104,20 @@ function collectOperations(spec) {
   return ops;
 }
 
+function referencesAnySchemaName(value, names) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) {
+    return value.some((item) => referencesAnySchemaName(item, names));
+  }
+  if (typeof value.$ref === 'string') {
+    const prefix = '#/components/schemas/';
+    if (value.$ref.startsWith(prefix) && names.has(value.$ref.slice(prefix.length))) {
+      return true;
+    }
+  }
+  return Object.values(value).some((item) => referencesAnySchemaName(item, names));
+}
+
 function compareSubset(frozen, generated, label, collidingSchemaNames = new Set()) {
   const frozenOps = collectOperations(frozen);
   const generatedOps = collectOperations(generated);
@@ -142,27 +156,32 @@ function compareSubset(frozen, generated, label, collidingSchemaNames = new Set(
       fail(`[${label}] ${key}: response status set differs (${frozenStatuses} vs ${generatedStatuses})`);
     }
 
-    // Slice 4 adds response-body verification because its frozen contract has
-    // an intentional same-name ValidationError projection collision with
-    // Slice 3. Keep prior slices on their existing checker semantics so this
-    // implementation does not broaden unrelated governance behavior.
-    if (label === '004-case-participant-core') {
-      for (const status of frozenStatuses) {
-        const frozenSchema = f.responses?.[status]?.content?.['application/json']?.schema;
-        const generatedSchema = g.responses?.[status]?.content?.['application/json']?.schema;
-        if (Boolean(frozenSchema) !== Boolean(generatedSchema)) {
-          fail(`[${label}] ${key}: response ${status} schema presence differs`);
-        }
-        if (
-          frozenSchema &&
-          generatedSchema &&
-          !equal(
-            normalize(frozenSchema, frozen),
-            normalize(generatedSchema, generated)
-          )
-        ) {
-          fail(`[${label}] ${key}: response ${status} schema differs`);
-        }
+    // Slice 4 requires full response-body equivalence. For older slices, keep
+    // the historical checker scope except when a response references a
+    // same-name component whose shape collides across frozen contracts. Those
+    // colliding schemas cannot be validated globally, so their real use sites
+    // MUST be compared here to avoid creating a governance blind spot.
+    for (const status of frozenStatuses) {
+      const frozenSchema = f.responses?.[status]?.content?.['application/json']?.schema;
+      const generatedSchema = g.responses?.[status]?.content?.['application/json']?.schema;
+      const mustCompareBody =
+        label === '004-case-participant-core' ||
+        referencesAnySchemaName(frozenSchema, collidingSchemaNames);
+
+      if (!mustCompareBody) continue;
+
+      if (Boolean(frozenSchema) !== Boolean(generatedSchema)) {
+        fail(`[${label}] ${key}: response ${status} schema presence differs`);
+      }
+      if (
+        frozenSchema &&
+        generatedSchema &&
+        !equal(
+          normalize(frozenSchema, frozen),
+          normalize(generatedSchema, generated)
+        )
+      ) {
+        fail(`[${label}] ${key}: response ${status} schema differs`);
       }
     }
   }
