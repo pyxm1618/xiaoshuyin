@@ -72,6 +72,7 @@ import {
   ParticipationTargetIneligibleError,
   InvitationNotAvailableError,
   ParticipationNotFoundError,
+  ParticipationValidationError,
 } from '@xiaoshuyin/contracts';
 
 type JsonSchema = Record<string, unknown>;
