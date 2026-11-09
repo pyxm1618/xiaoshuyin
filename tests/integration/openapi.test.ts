@@ -66,6 +66,7 @@ const FROZEN_SCHEMAS = [
   'CurrentFamilyAmbiguousError',
   'CurrentFamilyNotFoundError',
   'Error',
+  'ErrorResponse',
   'FamilyResponse',
   'GrantConsentRequest',
   'IdempotencyPayloadMismatchError',
