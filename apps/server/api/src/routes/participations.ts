@@ -43,6 +43,7 @@ import {
   isParticipationProcessingAllowed,
   lockParticipationById,
   materializeParticipationExpiry,
+  PARTICIPATION_NOTICE,
   planParticipationCommand,
   withdrawParticipation,
   type LockedParticipationRow,
@@ -502,12 +503,7 @@ export function registerParticipationRoutes(
         participationId: row.participation_id,
         state: 'PENDING',
         expiresAt: new Date(row.expires_at).toISOString(),
-        notice: {
-          version: 'participation-notice-v1',
-          title: '参与邀请',
-          body:
-            '你被邀请参与一个已经存在的 Case。参与是有限的：你可以查看本次参与说明，选择接受或拒绝。拒绝不是失败，也不会关闭 Case。接受后你只能访问明确允许给你的内容。',
-        },
+        notice: PARTICIPATION_NOTICE,
       });
     }
   );
