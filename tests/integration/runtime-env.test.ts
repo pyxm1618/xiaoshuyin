@@ -44,6 +44,22 @@ describe('Production runtime env boundary (F1)', () => {
     await expect(buildApp({ env })).rejects.toThrow(/SESSION_SECRET/);
   });
 
+  it('participation invite secret uses UTF-8 byte length at the real runtime boundary', async () => {
+    const multibyte = '密'.repeat(11); // 33 UTF-8 bytes, only 11 JS characters.
+    const app = await buildApp({
+      env: {
+        ...FULL_ENV,
+        NODE_ENV: 'test',
+        PARTICIPATION_INVITE_TOKEN_SECRET: multibyte,
+      },
+    });
+    try {
+      await app.ready();
+    } finally {
+      await app.close();
+    }
+  });
+
   it('production + full env → fake provider is NOT selected (startup fails)', async () => {
     await expect(
       buildApp({ env: { ...FULL_ENV, NODE_ENV: 'production' } })
