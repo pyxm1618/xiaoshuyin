@@ -99,7 +99,7 @@ describe('contract-level invitation seam (T098)', () => {
     const tables = await h.admin.query(
       `SELECT tablename FROM pg_tables
         WHERE schemaname = 'public'
-          AND (tablename LIKE '%invitation%' OR tablename LIKE '%participation%')
+          AND (tablename LIKE '%invitation%' OR tablename LIKE '%participation%' OR tablename LIKE '%participant%')
         ORDER BY tablename`
     );
     expect(tables.rows.map((r:any)=>r.tablename)).toEqual(['case_participants']);
