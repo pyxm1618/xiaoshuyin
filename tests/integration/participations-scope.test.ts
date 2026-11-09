@@ -54,7 +54,11 @@ describe('Slice 4 scope boundary', () => {
       url:`/api/v1/cases/${f.caseId}`,
       headers:{authorization:`Bearer ${target.token}`},
     });
-    expect([403,404,409]).toContain(caseRead.statusCode);
+    expect(caseRead.statusCode).toBe(404);
+    expect(caseRead.json()).toEqual({
+      code:'CASE_NOT_FOUND',
+      message:'Case not found',
+    });
     expect(JSON.stringify(caseRead.json())).not.toContain(f.caseId);
   });
 });
