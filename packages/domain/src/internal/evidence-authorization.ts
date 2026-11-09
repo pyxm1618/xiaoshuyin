@@ -26,6 +26,7 @@
 import { authorize, type Purpose } from '@xiaoshuyin/authorization';
 import { getCaseById } from '../cases.js';
 import {
+  getCurrentTransactionIdentityContext,
   getFamilyById,
   getPersonByAccountId,
   isFamilyMember,
@@ -61,6 +62,18 @@ export async function assertEvidenceCaseAuthorized(
   tx: Tx,
   ctx: EvidenceAuthorizationContext
 ): Promise<void> {
+  // UFA-001: bind the claimed writer context to the identity actually installed
+  // in this PostgreSQL transaction before any Person / Case / Evidence read.
+  const transactionIdentity = await getCurrentTransactionIdentityContext(tx);
+  if (
+    transactionIdentity.accountId !== ctx.actorAccountId ||
+    transactionIdentity.personId !== ctx.actorPersonId ||
+    transactionIdentity.familyId !== ctx.familyId ||
+    transactionIdentity.purpose !== ctx.purpose
+  ) {
+    notAuthorized();
+  }
+
   const actor = await getPersonByAccountId(tx, ctx.actorAccountId);
   if (!actor || actor.id !== ctx.actorPersonId) notAuthorized();
 
