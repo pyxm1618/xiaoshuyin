@@ -8,8 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@xiaoshuyin/contracts": "workspace:*",
-    "@xiaoshuyin/domain": "workspace:*"
+    "@xiaoshuyin/contracts": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.0"

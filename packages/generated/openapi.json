@@ -1,175 +1,4102 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Xiaoshuyin API",
-    "version": "1.0.0"
+    "title": "Xiaoshuyin V1 — Identity & Family Core API",
+    "version": "0.1.0-plan"
   },
-  "components": {
-    "schemas": {}
-  },
-  "paths": {
-    "/healthz": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      }
+  "tags": [
+    {
+      "name": "auth"
     },
+    {
+      "name": "identity"
+    },
+    {
+      "name": "family"
+    },
+    {
+      "name": "consent"
+    },
+    {
+      "name": "compliance"
+    },
+    {
+      "name": "case"
+    }
+  ],
+  "paths": {
     "/api/v1/auth/wechat": {
       "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "loginWithWechat",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "登录成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/auth/logout": {
       "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
-          "200": {
-            "description": "Default Response"
+          "204": {
+            "description": "已登出"
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/me": {
       "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "getMe",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "当前身份",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/families": {
       "post": {
+        "tags": [
+          "family"
+        ],
+        "operationId": "createFamily",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFamilyRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "200": {
-            "description": "Default Response"
+          "201": {
+            "description": "家庭已建立",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`FAMILY_ALREADY_OWNED` / `IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/families/current": {
       "get": {
+        "tags": [
+          "family"
+        ],
+        "operationId": "getCurrentFamily",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "当前家庭",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`CURRENT_FAMILY_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/families/{id}/members": {
       "post": {
-        "parameters": [
+        "tags": [
+          "family"
+        ],
+        "operationId": "createMember",
+        "security": [
           {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
+            "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FamilyIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMemberRequest"
+              }
+            }
+          }
+        },
         "responses": {
-          "200": {
-            "description": "Default Response"
+          "201": {
+            "description": "成员已建立",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`MEMBER_ALREADY_EXISTS` / `GUARDIAN_CONSENT_ALREADY_BOUND` / `IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/families/{id}/members/{personId}": {
       "patch": {
+        "tags": [
+          "family"
+        ],
+        "operationId": "updateMemberProfile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
           {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
+            "$ref": "#/components/parameters/FamilyIdPath"
           },
           {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "personId",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      }
-    },
-    "/api/v1/compliance/guardian-consents/requests": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      }
-    },
-    "/api/v1/compliance/guardian-consents": {
-      "post": {
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        }
-      }
-    },
-    "/api/v1/consents/{id}/revoke": {
-      "post": {
-        "parameters": [
+            "$ref": "#/components/parameters/PersonIdPath"
+          },
           {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "id",
-            "required": true
+            "$ref": "#/components/parameters/IdempotencyKey"
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMemberRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "已更新",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/consents": {
       "get": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "listConsents",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "同意记录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConsentRecord"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/consents/{id}/revoke": {
+      "post": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "revokeConsent",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "已撤回",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentRecord"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/compliance/profile": {
       "get": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "getOwnComplianceProfile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "自己的 profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComplianceProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
     },
     "/api/v1/compliance/notices": {
       "get": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "listComplianceNotices",
         "responses": {
           "200": {
-            "description": "Default Response"
+            "description": "告知目录",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "notices"
+                  ],
+                  "properties": {
+                    "notices": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Notice"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
+      }
+    },
+    "/api/v1/compliance/guardian-consents/requests": {
+      "post": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "createGuardianConsentRequest",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConsentRequestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "onboarding 已发起",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentRequestResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`CURRENT_FAMILY_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/guardian-consents": {
+      "post": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "grantGuardianConsent",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantConsentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "同意已成立",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentRecord"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`FORBIDDEN`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases": {
+      "post": {
+        "tags": [
+          "case"
+        ],
+        "operationId": "createCase",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Case 已创建（或幂等重放原结果）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`CASE_ACCESS_DENIED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAccessDeniedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`CURRENT_FAMILY_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentFamilyNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`（current Family 无法唯一解析，真实可达） / `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同；当前 public HTTP command shape 下不可达）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "case"
+        ],
+        "operationId": "listCases",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "当前家庭的 Case 集合（可能为空）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`CASE_ACCESS_DENIED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAccessDeniedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`CURRENT_FAMILY_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentFamilyNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{id}/messages": {
+      "post": {
+        "tags": [
+          "case"
+        ],
+        "operationId": "createCaseMessage",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKeyHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCaseMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Message recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseMessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CurrentFamilyNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CaseNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CurrentFamilyAmbiguousError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdempotencyPayloadMismatchError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{id}": {
+      "get": {
+        "tags": [
+          "case"
+        ],
+        "operationId": "getCase",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CaseIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Case 详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CaseNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CurrentFamilyNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`CURRENT_FAMILY_AMBIGUOUS`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentFamilyAmbiguousError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/bootstrap": {
+      "post": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "bootstrapIdentityBinding",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingBootstrapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "generic / Case B 复用 / COMMITTED settled replay",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BindingBootstrapGenericResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BindingBootstrapReusedResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BindingBootstrapCommittedResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`WECHAT_AUTH_FAILED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/candidate-decision": {
+      "post": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "submitCandidateBindingDecision",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingContextHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingCandidateDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "candidate AFFIRM fixed shape / REJECT-CANCEL generic",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BindingGenericResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BindingCandidatePairingResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`BINDING_CONTEXT_INVALID`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingContextInvalidError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/status": {
+      "get": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "getCandidateBindingStatus",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingContextHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "candidate 可见状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`BINDING_CONTEXT_INVALID`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingContextInvalidError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/session": {
+      "post": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "exchangeBindingSession",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingContextHeader"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "未 COMMITTED generic / COMMITTED 普通会话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BindingGenericResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BindingSessionCommittedResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`BINDING_CONTEXT_INVALID`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingContextInvalidError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/pending": {
+      "get": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "listPendingBindings",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/BindingPersonIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "最小 attempts 列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingPendingListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`BINDING_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingNotFoundError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identity-bindings/pairing-decision": {
+      "post": {
+        "tags": [
+          "identity-binding"
+        ],
+        "operationId": "submitSecondPartyBindingPairingDecision",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BindingConfirmerDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "确认后 attempt 状态",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingConfirmerDecisionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`BINDING_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BindingNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`BINDING_STATE_CONFLICT` / `IDEMPOTENCY_PAYLOAD_MISMATCH`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque-session-token"
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "关键命令幂等键（§8.5）。同 key 不同 payload → 409。",
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128
+        }
+      },
+      "FamilyIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "PersonIdPath": {
+        "name": "personId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "IdempotencyKeyHeader": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "关键命令幂等键（§8.5）。同 key 不同 payload → 409。",
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128
+        }
+      },
+      "CaseIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "Case UUID（待验证参数；存在不代表有权访问）。",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "BindingContextHeader": {
+        "name": "X-Binding-Context",
+        "in": "header",
+        "required": true,
+        "description": "opaque pending authentication context；不是普通会话。",
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 256
+        }
+      },
+      "BindingPersonIdQuery": {
+        "name": "personId",
+        "in": "query",
+        "required": true,
+        "description": "待验证的 target Person P1；服务端读取唯一 Family。",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "AgeBand": {
+        "type": "string",
+        "enum": [
+          "ADULT",
+          "MINOR_14_17",
+          "UNDER_14",
+          "UNKNOWN"
+        ]
+      },
+      "WritableSource": {
+        "type": "string",
+        "enum": [
+          "SELF_STATEMENT",
+          "GUARDIAN_OBSERVATION",
+          "GUARDIAN_RELAY",
+          "OTHER_MEMBER_RELAY"
+        ]
+      },
+      "ProfileAttribute": {
+        "type": "string",
+        "enum": [
+          "DISPLAY_NAME"
+        ]
+      },
+      "ProvenanceValueInput": {
+        "type": "object",
+        "properties": {
+          "attribute": {
+            "type": "string",
+            "enum": [
+              "DISPLAY_NAME"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "SELF_STATEMENT",
+              "GUARDIAN_OBSERVATION",
+              "GUARDIAN_RELAY",
+              "OTHER_MEMBER_RELAY"
+            ]
+          },
+          "providedByPersonId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "attribute",
+          "value",
+          "source"
+        ],
+        "additionalProperties": false
+      },
+      "ProfileValue": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "attribute": {
+            "type": "string",
+            "enum": [
+              "DISPLAY_NAME"
+            ]
+          },
+          "value": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "SELF_STATEMENT",
+              "GUARDIAN_OBSERVATION",
+              "GUARDIAN_RELAY",
+              "OTHER_MEMBER_RELAY"
+            ]
+          },
+          "providedByPersonId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "RECORDED",
+              "SUPERSEDED",
+              "RETRACTED"
+            ]
+          },
+          "supersedesId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "attribute",
+          "value",
+          "source",
+          "recordedAt",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "ComplianceProfileSummary": {
+        "type": "object",
+        "properties": {
+          "ageBand": {
+            "type": "string",
+            "enum": [
+              "ADULT",
+              "MINOR_14_17",
+              "UNDER_14",
+              "UNKNOWN"
+            ]
+          },
+          "minorMode": {
+            "type": "boolean"
+          },
+          "guardianPersonId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guardianConsentVersion": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verifiedSource": {
+            "type": "string"
+          },
+          "effectiveAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "ageBand",
+          "minorMode",
+          "verifiedSource"
+        ],
+        "additionalProperties": false
+      },
+      "PersonSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "accountBound": {
+            "type": "boolean"
+          },
+          "profile": {
+            "type": "object",
+            "properties": {
+              "ageBand": {
+                "type": "string",
+                "enum": [
+                  "ADULT",
+                  "MINOR_14_17",
+                  "UNDER_14",
+                  "UNKNOWN"
+                ]
+              },
+              "minorMode": {
+                "type": "boolean"
+              },
+              "guardianPersonId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "guardianConsentVersion": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "verifiedSource": {
+                "type": "string"
+              },
+              "effectiveAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              }
+            },
+            "required": [
+              "ageBand",
+              "minorMode",
+              "verifiedSource"
+            ],
+            "additionalProperties": false
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "attribute": {
+                  "type": "string",
+                  "enum": [
+                    "DISPLAY_NAME"
+                  ]
+                },
+                "value": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "SELF_STATEMENT",
+                    "GUARDIAN_OBSERVATION",
+                    "GUARDIAN_RELAY",
+                    "OTHER_MEMBER_RELAY"
+                  ]
+                },
+                "providedByPersonId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "observedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recordedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "RECORDED",
+                    "SUPERSEDED",
+                    "RETRACTED"
+                  ]
+                },
+                "supersedesId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "attribute",
+                "value",
+                "source",
+                "recordedAt",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "id",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "sessionToken": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "person": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "accountBound": {
+                "type": "boolean"
+              },
+              "profile": {
+                "type": "object",
+                "properties": {
+                  "ageBand": {
+                    "type": "string",
+                    "enum": [
+                      "ADULT",
+                      "MINOR_14_17",
+                      "UNDER_14",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "minorMode": {
+                    "type": "boolean"
+                  },
+                  "guardianPersonId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "guardianConsentVersion": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "verifiedSource": {
+                    "type": "string"
+                  },
+                  "effectiveAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "ageBand",
+                  "minorMode",
+                  "verifiedSource"
+                ],
+                "additionalProperties": false
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "attribute": {
+                      "type": "string",
+                      "enum": [
+                        "DISPLAY_NAME"
+                      ]
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "SELF_STATEMENT",
+                        "GUARDIAN_OBSERVATION",
+                        "GUARDIAN_RELAY",
+                        "OTHER_MEMBER_RELAY"
+                      ]
+                    },
+                    "providedByPersonId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "observedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "recordedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "RECORDED",
+                        "SUPERSEDED",
+                        "RETRACTED"
+                      ]
+                    },
+                    "supersedesId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "attribute",
+                    "value",
+                    "source",
+                    "recordedAt",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "accountId",
+          "sessionToken",
+          "expiresAt",
+          "person"
+        ],
+        "additionalProperties": false
+      },
+      "MeResponse": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "DISABLED"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "createdAt",
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          "person": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              "accountBound": {
+                "type": "boolean"
+              },
+              "profile": {
+                "type": "object",
+                "properties": {
+                  "ageBand": {
+                    "type": "string",
+                    "enum": [
+                      "ADULT",
+                      "MINOR_14_17",
+                      "UNDER_14",
+                      "UNKNOWN"
+                    ]
+                  },
+                  "minorMode": {
+                    "type": "boolean"
+                  },
+                  "guardianPersonId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "uuid",
+                        "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "guardianConsentVersion": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "verifiedSource": {
+                    "type": "string"
+                  },
+                  "effectiveAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "ageBand",
+                  "minorMode",
+                  "verifiedSource"
+                ],
+                "additionalProperties": false
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "attribute": {
+                      "type": "string",
+                      "enum": [
+                        "DISPLAY_NAME"
+                      ]
+                    },
+                    "value": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "SELF_STATEMENT",
+                        "GUARDIAN_OBSERVATION",
+                        "GUARDIAN_RELAY",
+                        "OTHER_MEMBER_RELAY"
+                      ]
+                    },
+                    "providedByPersonId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "observedAt": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "recordedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "RECORDED",
+                        "SUPERSEDED",
+                        "RETRACTED"
+                      ]
+                    },
+                    "supersedesId": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid",
+                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "attribute",
+                    "value",
+                    "source",
+                    "recordedAt",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "account",
+          "person"
+        ],
+        "additionalProperties": false
+      },
+      "CreatorInput": {
+        "type": "object",
+        "properties": {
+          "ageBand": {
+            "type": "string",
+            "enum": [
+              "ADULT",
+              "MINOR_14_17",
+              "UNDER_14",
+              "UNKNOWN"
+            ]
+          },
+          "ageBandSource": {
+            "type": "string",
+            "enum": [
+              "SELF_STATEMENT",
+              "GUARDIAN_OBSERVATION",
+              "GUARDIAN_RELAY",
+              "OTHER_MEMBER_RELAY"
+            ]
+          },
+          "values": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attribute": {
+                  "type": "string",
+                  "enum": [
+                    "DISPLAY_NAME"
+                  ]
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "SELF_STATEMENT",
+                    "GUARDIAN_OBSERVATION",
+                    "GUARDIAN_RELAY",
+                    "OTHER_MEMBER_RELAY"
+                  ]
+                },
+                "providedByPersonId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                }
+              },
+              "required": [
+                "attribute",
+                "value",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "ageBand",
+          "ageBandSource"
+        ],
+        "additionalProperties": false
+      },
+      "CreateFamilyRequest": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "creator": {
+            "type": "object",
+            "properties": {
+              "ageBand": {
+                "type": "string",
+                "enum": [
+                  "ADULT",
+                  "MINOR_14_17",
+                  "UNDER_14",
+                  "UNKNOWN"
+                ]
+              },
+              "ageBandSource": {
+                "type": "string",
+                "enum": [
+                  "SELF_STATEMENT",
+                  "GUARDIAN_OBSERVATION",
+                  "GUARDIAN_RELAY",
+                  "OTHER_MEMBER_RELAY"
+                ]
+              },
+              "values": {
+                "maxItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "attribute": {
+                      "type": "string",
+                      "enum": [
+                        "DISPLAY_NAME"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "SELF_STATEMENT",
+                        "GUARDIAN_OBSERVATION",
+                        "GUARDIAN_RELAY",
+                        "OTHER_MEMBER_RELAY"
+                      ]
+                    },
+                    "providedByPersonId": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "observedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    }
+                  },
+                  "required": [
+                    "attribute",
+                    "value",
+                    "source"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "ageBand",
+              "ageBandSource"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "creator"
+        ],
+        "additionalProperties": false
+      },
+      "FamilyResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "isManager": {
+            "type": "boolean"
+          },
+          "memberCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "isManager"
+        ],
+        "additionalProperties": false
+      },
+      "CreateMemberRequest": {
+        "type": "object",
+        "properties": {
+          "ageBand": {
+            "type": "string",
+            "enum": [
+              "ADULT",
+              "MINOR_14_17",
+              "UNDER_14",
+              "UNKNOWN"
+            ]
+          },
+          "ageBandSource": {
+            "type": "string",
+            "enum": [
+              "SELF_STATEMENT",
+              "GUARDIAN_OBSERVATION",
+              "GUARDIAN_RELAY",
+              "OTHER_MEMBER_RELAY"
+            ]
+          },
+          "values": {
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attribute": {
+                  "type": "string",
+                  "enum": [
+                    "DISPLAY_NAME"
+                  ]
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "SELF_STATEMENT",
+                    "GUARDIAN_OBSERVATION",
+                    "GUARDIAN_RELAY",
+                    "OTHER_MEMBER_RELAY"
+                  ]
+                },
+                "providedByPersonId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                }
+              },
+              "required": [
+                "attribute",
+                "value",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "guardianConsentId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "ageBand",
+          "ageBandSource"
+        ],
+        "additionalProperties": false
+      },
+      "UpdateMemberRequest": {
+        "type": "object",
+        "properties": {
+          "values": {
+            "minItems": 1,
+            "maxItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attribute": {
+                  "type": "string",
+                  "enum": [
+                    "DISPLAY_NAME"
+                  ]
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "SELF_STATEMENT",
+                    "GUARDIAN_OBSERVATION",
+                    "GUARDIAN_RELAY",
+                    "OTHER_MEMBER_RELAY"
+                  ]
+                },
+                "providedByPersonId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "observedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                }
+              },
+              "required": [
+                "attribute",
+                "value",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "values"
+        ],
+        "additionalProperties": false
+      },
+      "MemberResponse": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "familyId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "accountBound": {
+            "type": "boolean"
+          },
+          "profile": {
+            "type": "object",
+            "properties": {
+              "ageBand": {
+                "type": "string",
+                "enum": [
+                  "ADULT",
+                  "MINOR_14_17",
+                  "UNDER_14",
+                  "UNKNOWN"
+                ]
+              },
+              "minorMode": {
+                "type": "boolean"
+              },
+              "guardianPersonId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "guardianConsentVersion": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "verifiedSource": {
+                "type": "string"
+              },
+              "effectiveAt": {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              }
+            },
+            "required": [
+              "ageBand",
+              "minorMode",
+              "verifiedSource"
+            ],
+            "additionalProperties": false
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "attribute": {
+                  "type": "string",
+                  "enum": [
+                    "DISPLAY_NAME"
+                  ]
+                },
+                "value": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "SELF_STATEMENT",
+                    "GUARDIAN_OBSERVATION",
+                    "GUARDIAN_RELAY",
+                    "OTHER_MEMBER_RELAY"
+                  ]
+                },
+                "providedByPersonId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "observedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "recordedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "RECORDED",
+                    "SUPERSEDED",
+                    "RETRACTED"
+                  ]
+                },
+                "supersedesId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "attribute",
+                "value",
+                "source",
+                "recordedAt",
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "personId",
+          "familyId",
+          "profile",
+          "values"
+        ],
+        "additionalProperties": false
+      },
+      "CreateConsentRequestRequest": {
+        "type": "object",
+        "properties": {
+          "declaredAgeBand": {
+            "type": "string",
+            "enum": [
+              "UNDER_14"
+            ]
+          },
+          "noticeVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "channel": {
+            "type": "string",
+            "enum": [
+              "MINIPROGRAM",
+              "TEST"
+            ]
+          },
+          "existingSubjectPersonId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        },
+        "required": [
+          "declaredAgeBand",
+          "noticeVersion",
+          "channel"
+        ],
+        "additionalProperties": false
+      },
+      "ConsentRequestResponse": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "declaredAgeBand": {
+            "type": "string",
+            "enum": [
+              "UNDER_14"
+            ]
+          },
+          "noticeVersion": {
+            "type": "string"
+          },
+          "noticeHash": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "GRANTED",
+              "EXPIRED",
+              "ABANDONED"
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "declaredAgeBand",
+          "noticeVersion",
+          "noticeHash",
+          "expiresAt",
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "GrantConsentRequest": {
+        "type": "object",
+        "properties": {
+          "onboardingRequestId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "noticeVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "accepted": {
+            "type": "boolean",
+            "const": true
+          }
+        },
+        "required": [
+          "onboardingRequestId",
+          "noticeVersion",
+          "accepted"
+        ],
+        "additionalProperties": false
+      },
+      "ConsentRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "UNDER_14_GUARDIAN_CONSENT"
+            ]
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "GRANTED",
+              "REVOKED"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "guardianPersonId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "onboardingRequestId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "boundPersonId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "boundAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "noticeVersion": {
+            "type": "string"
+          },
+          "noticeHash": {
+            "type": "string"
+          },
+          "policyVersion": {
+            "type": "string"
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "supersedesId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "purpose",
+          "decision",
+          "version",
+          "decidedAt"
+        ],
+        "additionalProperties": false
+      },
+      "ComplianceProfile": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "ageBand": {
+            "type": "string",
+            "enum": [
+              "ADULT",
+              "MINOR_14_17",
+              "UNDER_14",
+              "UNKNOWN"
+            ]
+          },
+          "minorMode": {
+            "type": "boolean"
+          },
+          "guardianPersonId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guardianConsentVersion": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guardianConsentRecordId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verifiedSource": {
+            "type": "string"
+          },
+          "effectiveAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "personId",
+          "ageBand",
+          "minorMode",
+          "verifiedSource",
+          "effectiveAt"
+        ],
+        "additionalProperties": false
+      },
+      "Notice": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string",
+            "enum": [
+              "UNDER_14_GUARDIAN_CONSENT"
+            ]
+          },
+          "effectiveAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "version",
+          "hash",
+          "title",
+          "purpose",
+          "effectiveAt"
+        ],
+        "additionalProperties": false
+      },
+      "CreateCaseRequest": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "CaseResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "WAITING",
+              "PAUSED",
+              "LOST_CONTACT",
+              "SAFETY_HOLD",
+              "CLOSED"
+            ]
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "INTAKE",
+              "ASSESSMENT",
+              "PROBLEM_FORMULATION",
+              "GOALS",
+              "PLANNING",
+              "EXECUTION",
+              "REVIEW",
+              "MAINTENANCE",
+              "CLOSED"
+            ]
+          },
+          "primary": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "phase",
+          "primary",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "CaseListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "OPEN",
+                    "WAITING",
+                    "PAUSED",
+                    "LOST_CONTACT",
+                    "SAFETY_HOLD",
+                    "CLOSED"
+                  ]
+                },
+                "phase": {
+                  "type": "string",
+                  "enum": [
+                    "INTAKE",
+                    "ASSESSMENT",
+                    "PROBLEM_FORMULATION",
+                    "GOALS",
+                    "PLANNING",
+                    "EXECUTION",
+                    "REVIEW",
+                    "MAINTENANCE",
+                    "CLOSED"
+                  ]
+                },
+                "primary": {
+                  "type": "boolean"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                }
+              },
+              "required": [
+                "id",
+                "status",
+                "phase",
+                "primary",
+                "version",
+                "createdAt",
+                "updatedAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
+      "CaseStatus": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "WAITING",
+          "PAUSED",
+          "LOST_CONTACT",
+          "SAFETY_HOLD",
+          "CLOSED"
+        ]
+      },
+      "CasePhase": {
+        "type": "string",
+        "enum": [
+          "INTAKE",
+          "ASSESSMENT",
+          "PROBLEM_FORMULATION",
+          "GOALS",
+          "PLANNING",
+          "EXECUTION",
+          "REVIEW",
+          "MAINTENANCE",
+          "CLOSED"
+        ]
+      },
+      "CaseAccessDeniedError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "CASE_ACCESS_DENIED"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "CaseNotFoundError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "CASE_NOT_FOUND"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "CreateCaseMessageRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "CaseMessageResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "id",
+          "caseId",
+          "recordedAt"
+        ],
+        "additionalProperties": false
+      },
+      "UnauthenticatedError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "UNAUTHENTICATED"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "IdempotencyPayloadMismatchError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "IDEMPOTENCY_PAYLOAD_MISMATCH"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "VALIDATION_ERROR"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "InternalError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INTERNAL_ERROR"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "CurrentFamilyNotFoundError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "CURRENT_FAMILY_NOT_FOUND"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "CurrentFamilyAmbiguousError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "CURRENT_FAMILY_AMBIGUOUS"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "BindingBootstrapRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "invitationToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "code",
+          "invitationToken",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "BindingCandidateDecisionRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "const": "AFFIRM"
+              },
+              "confirmationVersion": {
+                "type": "string",
+                "const": "candidate-binding-v1"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "decision",
+              "confirmationVersion",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "const": "REJECT"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "decision",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "decision": {
+                "type": "string",
+                "const": "CANCEL"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "decision",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "BindingConfirmerDecisionRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "personId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "pairingChallenge": {
+                "type": "string",
+                "minLength": 192,
+                "maxLength": 192,
+                "pattern": "^[A-Za-z0-9_-]{192}$"
+              },
+              "decision": {
+                "type": "string",
+                "const": "AFFIRM"
+              },
+              "targetConfirmed": {
+                "type": "boolean",
+                "const": true
+              },
+              "candidateRecognized": {
+                "type": "boolean",
+                "const": true
+              },
+              "confirmationVersion": {
+                "type": "string",
+                "const": "second-party-recognition-v1"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "personId",
+              "pairingChallenge",
+              "decision",
+              "targetConfirmed",
+              "candidateRecognized",
+              "confirmationVersion",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "personId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "pairingChallenge": {
+                "type": "string",
+                "minLength": 192,
+                "maxLength": 192,
+                "pattern": "^[A-Za-z0-9_-]{192}$"
+              },
+              "decision": {
+                "type": "string",
+                "const": "REJECT"
+              },
+              "targetConfirmed": {
+                "type": "boolean",
+                "const": false
+              },
+              "candidateRecognized": {
+                "type": "boolean",
+                "const": false
+              },
+              "confirmationVersion": {
+                "type": "string",
+                "const": "second-party-recognition-v1"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "personId",
+              "pairingChallenge",
+              "decision",
+              "targetConfirmed",
+              "candidateRecognized",
+              "confirmationVersion",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "BindingBootstrapGenericResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "NOT_COMPLETED"
+          },
+          "pendingContextToken": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "binding",
+          "pendingContextToken"
+        ],
+        "additionalProperties": false
+      },
+      "BindingBootstrapReusedResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "REUSED"
+          },
+          "sessionToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "person": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "binding",
+          "sessionToken",
+          "account",
+          "person"
+        ],
+        "additionalProperties": false
+      },
+      "BindingBootstrapCommittedResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "COMMITTED"
+          }
+        },
+        "required": [
+          "binding"
+        ],
+        "additionalProperties": false
+      },
+      "BindingCandidatePairingResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "NOT_COMPLETED"
+          },
+          "pairingChallenge": {
+            "type": "string",
+            "minLength": 192,
+            "maxLength": 192,
+            "pattern": "^[A-Za-z0-9_-]{192}$"
+          }
+        },
+        "required": [
+          "binding",
+          "pairingChallenge"
+        ],
+        "additionalProperties": false
+      },
+      "BindingGenericResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "NOT_COMPLETED"
+          }
+        },
+        "required": [
+          "binding"
+        ],
+        "additionalProperties": false
+      },
+      "BindingStatusResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "enum": [
+              "NOT_COMPLETED",
+              "COMMITTED"
+            ]
+          }
+        },
+        "required": [
+          "binding"
+        ],
+        "additionalProperties": false
+      },
+      "BindingSessionCommittedResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "COMMITTED"
+          },
+          "sessionToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "person": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "binding",
+          "sessionToken",
+          "account",
+          "person"
+        ],
+        "additionalProperties": false
+      },
+      "BindingPendingListResponse": {
+        "type": "object",
+        "properties": {
+          "attempts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attemptId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "expiresAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                }
+              },
+              "required": [
+                "attemptId",
+                "createdAt",
+                "expiresAt"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "attempts"
+        ],
+        "additionalProperties": false
+      },
+      "BindingConfirmerDecisionResponse": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "COMMITTED",
+              "TERMINAL"
+            ]
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "additionalProperties": false
+      },
+      "BindingNotFoundError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "BINDING_NOT_FOUND"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "BindingContextInvalidError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "const": "BINDING_CONTEXT_INVALID"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
       }
     }
   }

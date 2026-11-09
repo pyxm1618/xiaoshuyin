@@ -1,12 +1,15 @@
 # T070 — quickstart.md §2 端到端主路径（真实请求记录）
 
-执行时间: 2026-11-05T09:34:42.061Z
+Audited / executed Head: `0480e38bae411348214ec911e64a18bbeb7c8bfb`
+
+执行时间: 2026-11-07T05:55:07.696Z
+运行环境: NODE_ENV=test；runtimeConsentChannel=TEST
 
 说明：通过 Fastify `app.inject` 调用真实路由（与 integration 测试同一套 handler / auth hook / RLS 事务 / PostgreSQL）；
-每个状态码与响应字段均来自实际响应，数据库断言来自真实 SQL 查询；token 仅显示前缀。
+每个状态码、请求头、请求体与响应字段均来自实际响应；DB 断言来自真实 SQL 查询；token 仅显示前缀。
 
-> 传输方式偏差：本机 :8787 被沙箱网络代理拦截（curl 返回 `502 upstream connect failed`），
-> 因此未使用 quickstart §2 的 curl，改用进程内真实 HTTP 语义注入。见文末偏差表。
+契约基线：冻结 OpenAPI `identity-family-api.openapi.yaml` 与 `packages/contracts/src/schemas.ts`。
+所有 mutating command 均使用 HTTP header `Idempotency-Key`，请求/响应形状与冻结 OpenAPI 完全一致。
 
 ### 段 1 — 登录（quickstart §2.1 ①）
 
@@ -19,28 +22,28 @@ content-type: application/json
 
 ```json
 {
-  "code": "qs-parent-a-1793871282163"
+  "code": "qs-parent-a-1794030907833"
 }
 ```
 
-**真实状态码**: `201`
+**真实状态码**: `200`
 
 **关键响应字段（实际）**
 
 ```json
 {
-  "statusCode": 201,
-  "accountId": "01a1ab0f-802a-7644-874c-0d742a064f27",
-  "personId": "01a1ab0f-802c-7355-ac74-77f2dab2dac0",
-  "personProfile": null,
-  "token": "eyJhY2NvdW50…(150 chars)",
+  "accountId": "01a1b493-31e5-743a-bafa-2f3db6df70ad",
+  "personId": "01a1b493-31ec-74b0-a9e2-3b500c78476e",
+  "personCreatedAt": "2026-11-07T05:55:07.870Z",
+  "profilePresent": false,
+  "sessionToken": "eyJhY2NvdW50…(150 chars)",
   "wechatOpenidPresent": false
 }
 ```
 
-**quickstart 预期**: 200/201；person 非空、profile 尚未写入；响应不出现 wechat_openid
+**预期**: 200；accountId / person 非空、profile 尚未写入；响应不出现 wechat_openid
 
-**实际**: 实际 201；Account 01a1ab0f-802a-7644-874c-0d742a064f27 与 Person 01a1ab0f-802c-7355-ac74-77f2dab2dac0 由登录建立，profile=null，响应不含 wechat_openid
+**实际**: 实际 200；Account 01a1b493-31e5-743a-bafa-2f3db6df70ad 与 Person 01a1b493-31ec-74b0-a9e2-3b500c78476e 由登录建立，profile 未写入，响应不含 wechat_openid
 
 **判定**: PASS
 
@@ -50,15 +53,25 @@ content-type: application/json
 
 ```http
 POST /api/v1/families
+authorization: Bearer ***
+idempotency-key: qs-fam-1794030907833
 content-type: application/json
 ```
 
 ```json
 {
   "displayName": "A 家",
-  "ageBand": "ADULT",
-  "ageBandSource": "SELF_STATEMENT",
-  "idempotencyKey": "qs-fam-1793871282163"
+  "creator": {
+    "ageBand": "ADULT",
+    "ageBandSource": "SELF_STATEMENT",
+    "values": [
+      {
+        "attribute": "DISPLAY_NAME",
+        "value": "家长 A",
+        "source": "SELF_STATEMENT"
+      }
+    ]
+  }
 }
 ```
 
@@ -74,27 +87,14 @@ content-type: application/json
   },
   "createFamily": {
     "status": 201,
-    "id": "e81c28b0-d20c-466d-94be-cfee4b4744d5",
-    "isManager": true
+    "id": "01a1b493-320c-7957-8940-cd41f42acb15",
+    "isManager": true,
+    "createdAt": "2026-11-07T05:55:07.914Z"
   },
   "me": {
     "status": 200,
-    "body": {
-      "account": {
-        "id": "01a1ab0f-802a-7644-874c-0d742a064f27",
-        "createdAt": "2026-11-05T09:34:42.216Z",
-        "lastLoginAt": null
-      },
-      "person": {
-        "id": "01a1ab0f-802c-7355-ac74-77f2dab2dac0",
-        "profile": {
-          "ageBand": "ADULT",
-          "minorMode": false,
-          "verifiedSource": "SELF_STATEMENT"
-        },
-        "values": []
-      }
-    }
+    "accountId": "01a1b493-31e5-743a-bafa-2f3db6df70ad",
+    "personId": "01a1b493-31ec-74b0-a9e2-3b500c78476e"
   },
   "replaySameKey": {
     "status": 201,
@@ -107,7 +107,7 @@ content-type: application/json
 }
 ```
 
-**quickstart 预期**: 空态 404 CURRENT_FAMILY_NOT_FOUND；建家庭 201 且 isManager=true；/me 不出现 wechat_openid；同 key 重放返回同一家庭；同 key 改 payload → 409
+**预期**: 空态 404 CURRENT_FAMILY_NOT_FOUND；建家庭 201 且 isManager=true；/me 不出现 wechat_openid；同 key 重放返回同一家庭；同 key 改 payload → 409
 
 **实际**: 实际：空态 404/CURRENT_FAMILY_NOT_FOUND；建家庭 201；/me 200；重放 201（同 id=true）；改 payload 409/IDEMPOTENCY_PAYLOAD_MISMATCH
 
@@ -118,7 +118,9 @@ content-type: application/json
 **真实请求**
 
 ```http
-POST /api/v1/families/e81c28b0-d20c-466d-94be-cfee4b4744d5/members
+POST /api/v1/families/01a1b493-320c-7957-8940-cd41f42acb15/members
+authorization: Bearer ***
+idempotency-key: qs-mem-1794030907833
 content-type: application/json
 ```
 
@@ -126,14 +128,13 @@ content-type: application/json
 {
   "ageBand": "MINOR_14_17",
   "ageBandSource": "GUARDIAN_OBSERVATION",
-  "profileValues": [
+  "values": [
     {
       "attribute": "DISPLAY_NAME",
-      "valueText": "小雨",
-      "sourceKind": "GUARDIAN_RELAY"
+      "value": "小雨",
+      "source": "GUARDIAN_RELAY"
     }
-  ],
-  "idempotencyKey": "qs-mem-1793871282163"
+  ]
 }
 ```
 
@@ -145,26 +146,68 @@ content-type: application/json
 {
   "createMember": {
     "status": 201,
-    "personId": "b0281890-02f4-420c-8fa3-03d04d533f33",
-    "accountBound": false
+    "personId": "01a1b493-3230-7396-b05e-9a84108218b6",
+    "familyId": "01a1b493-320c-7957-8940-cd41f42acb15",
+    "accountBound": false,
+    "values": [
+      {
+        "id": "01a1b493-3232-7348-acb7-722855465a80",
+        "attribute": "DISPLAY_NAME",
+        "value": "小雨",
+        "source": "GUARDIAN_RELAY",
+        "providedByPersonId": "01a1b493-31ec-74b0-a9e2-3b500c78476e",
+        "observedAt": null,
+        "recordedAt": "2026-11-07T05:55:07.949Z",
+        "status": "RECORDED",
+        "supersedesId": null
+      }
+    ]
   },
   "patchSecondSource": {
-    "status": 200
+    "status": 200,
+    "values": [
+      {
+        "id": "01a1b493-3232-7348-acb7-722855465a80",
+        "attribute": "DISPLAY_NAME",
+        "value": "小雨",
+        "source": "GUARDIAN_RELAY",
+        "providedByPersonId": "01a1b493-31ec-74b0-a9e2-3b500c78476e",
+        "observedAt": null,
+        "recordedAt": "2026-11-07T05:55:07.949Z",
+        "status": "RECORDED",
+        "supersedesId": null
+      },
+      {
+        "id": "01a1b493-323f-7306-811c-6d04c21ac604",
+        "attribute": "DISPLAY_NAME",
+        "value": "小雨",
+        "source": "SELF_STATEMENT",
+        "providedByPersonId": "01a1b493-3230-7396-b05e-9a84108218b6",
+        "observedAt": null,
+        "recordedAt": "2026-11-07T05:55:07.962Z",
+        "status": "RECORDED",
+        "supersedesId": null
+      }
+    ]
   },
   "recordedValuesInDb": [
     {
       "source_kind": "SELF_STATEMENT",
-      "status": "RECORDED"
+      "status": "RECORDED",
+      "provided_by_person_id": "01a1b493-3230-7396-b05e-9a84108218b6",
+      "observed_at": null
     },
     {
       "source_kind": "GUARDIAN_RELAY",
-      "status": "RECORDED"
+      "status": "RECORDED",
+      "provided_by_person_id": "01a1b493-31ec-74b0-a9e2-3b500c78476e",
+      "observed_at": null
     }
   ]
 }
 ```
 
-**quickstart 预期**: 201，accountBound=false；PATCH 后 DISPLAY_NAME 两条 RECORDED 来源并存（GUARDIAN_RELAY 与 SELF_STATEMENT）
+**预期**: 201，accountBound=false；PATCH 后 DISPLAY_NAME 两条 RECORDED 来源并存（GUARDIAN_RELAY 与 SELF_STATEMENT）
 
 **实际**: 实际：建成员 201（accountBound=false）；PATCH 200；库中 RECORDED 来源 = [SELF_STATEMENT/RECORDED, GUARDIAN_RELAY/RECORDED]
 
@@ -176,13 +219,16 @@ content-type: application/json
 
 ```http
 POST /api/v1/compliance/guardian-consents/requests
+authorization: Bearer ***
+idempotency-key: qs-req-1794030907833
 content-type: application/json
 ```
 
 ```json
 {
+  "declaredAgeBand": "UNDER_14",
   "noticeVersion": "v1",
-  "idempotencyKey": "qs-req-1793871282163"
+  "channel": "TEST"
 }
 ```
 
@@ -194,13 +240,16 @@ content-type: application/json
 {
   "noticeCatalog": {
     "status": 200,
-    "version": "v1"
+    "version": "v1",
+    "purpose": "UNDER_14_GUARDIAN_CONSENT"
   },
   "onboardingRequest": {
     "status": 201,
-    "id": "01a1ab0f-8064-7632-881b-f84443ce9067",
+    "requestId": "01a1b493-324d-7075-9b90-e6837c253eb0",
+    "declaredAgeBand": "UNDER_14",
+    "noticeHash": "2f8bf14402d5a32ba9e399477567fe763a859a64af416fa68c7784485e2246bf",
     "statusField": "PENDING",
-    "expiresAt": "2026-11-06T09:34:42.274Z"
+    "expiresAt": "2026-11-08T05:55:07.977Z"
   },
   "withoutConsent": {
     "status": 403,
@@ -209,30 +258,38 @@ content-type: application/json
   },
   "grant": {
     "status": 201,
-    "id": "01a1ab0f-8072-723d-9dde-e9e55e94ab26",
+    "id": "01a1b493-3260-71ee-97dc-d0761e0fff11",
     "decision": "GRANTED",
     "version": 1,
-    "boundPersonId": null
+    "boundPersonId": null,
+    "onboardingRequestId": "01a1b493-324d-7075-9b90-e6837c253eb0"
   },
   "childCreated": {
     "status": 201,
-    "personId": "3b4e0557-1703-4051-8277-6a61956feeaf",
+    "personId": "01a1b493-3272-7c4b-a082-63d28f975353",
     "ageBand": "UNDER_14"
   },
   "childProfileInDb": {
     "age_band": "UNDER_14",
     "minor_mode": true,
     "verified_source": "GUARDIAN_RELAY",
-    "guardian_person_id": "01a1ab0f-802c-7355-ac74-77f2dab2dac0",
+    "guardian_person_id": "01a1b493-31ec-74b0-a9e2-3b500c78476e",
     "guardian_consent_version": 1,
-    "guardian_consent_record_id": "01a1ab0f-8072-723d-9dde-e9e55e94ab26"
+    "guardian_consent_record_id": "01a1b493-3260-71ee-97dc-d0761e0fff11"
+  },
+  "consentEvidenceInDb": {
+    "channel": "TEST",
+    "client_ip_hash": "15e7a0019709781c2804a7a600dea7967d094d6594a1337e738301578cb82862",
+    "user_agent_hash": "6d2df5793997843cb3c32465d1845c434c029fb4bebfa90b743bd514bba66ccf",
+    "declared_age_band": "UNDER_14",
+    "accepted_text_hash": "86a9679a0d9f135ddf3d2485fab6906c0f7d5450d177d324d216024bc1cc3bdb"
   }
 }
 ```
 
-**quickstart 预期**: request 201 且无儿童资料；无 guardianConsentId 建 UNDER_14 → 403 且不建 Person/profile；grant 201 GRANTED v1；带 consent 建档 201，profile.ageBand=UNDER_14、guardian 与 consent 版本一致
+**预期**: request 201 且无儿童资料、channel 与运行环境一致；无 guardianConsentId 建 UNDER_14 → 403 且不建 Person/profile；grant 201 GRANTED v1；带 consent 建档 201，profile.ageBand=UNDER_14、guardian 与 consent 版本一致；evidence.channel 与运行环境一致
 
-**实际**: 实际：request 201；无同意建档 403/GUARDIAN_CONSENT_REQUIRED（family_members 仍 2 行）；grant 201/GRANTED v1；建档 201，profile={"age_band":"UNDER_14","minor_mode":true,"verified_source":"GUARDIAN_RELAY","guardian_person_id":"01a1ab0f-802c-7355-ac74-77f2dab2dac0","guardian_consent_version":1,"guardian_consent_record_id":"01a1ab0f-8072-723d-9dde-e9e55e94ab26"}
+**实际**: 实际：request 201（requestId=01a1b493-324d-7075-9b90-e6837c253eb0）；无同意建档 403/GUARDIAN_CONSENT_REQUIRED（family_members 仍 2 行）；grant 201/GRANTED v1；建档 201，profile={"age_band":"UNDER_14","minor_mode":true,"verified_source":"GUARDIAN_RELAY","guardian_person_id":"01a1b493-31ec-74b0-a9e2-3b500c78476e","guardian_consent_version":1,"guardian_consent_record_id":"01a1b493-3260-71ee-97dc-d0761e0fff11"}，evidence.channel=TEST
 
 **判定**: PASS
 
@@ -241,13 +298,15 @@ content-type: application/json
 **真实请求**
 
 ```http
-POST /api/v1/consents/01a1ab0f-8072-723d-9dde-e9e55e94ab26/revoke
+POST /api/v1/consents/01a1b493-3260-71ee-97dc-d0761e0fff11/revoke
+authorization: Bearer ***
+idempotency-key: qs-revoke-1794030907833
 content-type: application/json
 ```
 
 ```json
 {
-  "idempotencyKey": "qs-revoke-1793871282163"
+  "reason": "quickstart evidence revoke"
 }
 ```
 
@@ -259,34 +318,35 @@ content-type: application/json
 {
   "revoke": {
     "status": 200,
-    "id": "01a1ab0f-8084-76b1-8848-1ba4064ba3ac",
+    "id": "01a1b493-3284-7def-95e7-8ad3bea86a83",
     "decision": "REVOKED",
-    "version": 2
+    "version": 2,
+    "supersedesId": "01a1b493-3260-71ee-97dc-d0761e0fff11"
   },
   "consentChainInDb": [
     {
       "decision": "GRANTED",
       "version": 1,
-      "onboarding_request_id": "01a1ab0f-8064-7632-881b-f84443ce9067",
+      "onboarding_request_id": "01a1b493-324d-7075-9b90-e6837c253eb0",
       "supersedes_id": null,
-      "bound_person_id": "3b4e0557-1703-4051-8277-6a61956feeaf"
+      "bound_person_id": "01a1b493-3272-7c4b-a082-63d28f975353"
     },
     {
       "decision": "REVOKED",
       "version": 2,
       "onboarding_request_id": null,
-      "supersedes_id": "01a1ab0f-8072-723d-9dde-e9e55e94ab26",
-      "bound_person_id": "3b4e0557-1703-4051-8277-6a61956feeaf"
+      "supersedes_id": "01a1b493-3260-71ee-97dc-d0761e0fff11",
+      "bound_person_id": "01a1b493-3272-7c4b-a082-63d28f975353"
     }
   ],
   "profilePointer": {
-    "guardian_consent_record_id": "01a1ab0f-8084-76b1-8848-1ba4064ba3ac",
+    "guardian_consent_record_id": "01a1b493-3284-7def-95e7-8ad3bea86a83",
     "guardian_consent_version": 2
   }
 }
 ```
 
-**quickstart 预期**: 200 REVOKED v2；v1 GRANTED 保留不变；v2 supersedes_id 指向 v1 且 onboarding_request_id 为 NULL；profile 指针前移
+**预期**: 200 REVOKED v2；v1 GRANTED 保留不变；v2 supersedes_id 指向 v1 且 onboarding_request_id 为 NULL；profile 指针前移
 
 **实际**: 实际：200/REVOKED v2；链 = [GRANTED v1 → REVOKED v2]；profile 指针 v2
 
@@ -297,20 +357,21 @@ content-type: application/json
 **真实请求**
 
 ```http
-PATCH /api/v1/families/e81c28b0-d20c-466d-94be-cfee4b4744d5/members/b0281890-02f4-420c-8fa3-03d04d533f33
+PATCH /api/v1/families/01a1b493-320c-7957-8940-cd41f42acb15/members/01a1b493-3230-7396-b05e-9a84108218b6
+authorization: Bearer ***
+idempotency-key: qs-cross-1794030907833
 content-type: application/json
 ```
 
 ```json
 {
-  "profileValues": [
+  "values": [
     {
       "attribute": "DISPLAY_NAME",
-      "valueText": "hack",
-      "sourceKind": "GUARDIAN_RELAY"
+      "value": "hack",
+      "source": "GUARDIAN_RELAY"
     }
-  ],
-  "idempotencyKey": "qs-cross-1793871282163"
+  ]
 }
 ```
 
@@ -320,16 +381,15 @@ content-type: application/json
 
 ```json
 {
-  "secondActorLogin": 201,
+  "secondActorLogin": 200,
   "secondFamily": {
     "status": 201,
-    "id": "2c1fac76-70f5-475e-b720-1a15ea7ac59d"
+    "id": "01a1b493-3291-7349-babe-629f40bed0c6"
   },
   "crossFamilyPatch": {
     "status": 403,
     "code": "NOT_FAMILY_MEMBER",
     "body": {
-      "statusCode": 403,
       "code": "NOT_FAMILY_MEMBER",
       "message": "NOT_FAMILY_MEMBER"
     }
@@ -338,26 +398,24 @@ content-type: application/json
 }
 ```
 
-**quickstart 预期**: 403（统一拒绝码），响应体不含 A 家 / 成员的任何 id 或字段
+**预期**: 403（统一拒绝码），响应体不含 A 家 / 成员的任何 id 或字段
 
 **实际**: 实际：B 家 201；跨家庭 PATCH 403/NOT_FAMILY_MEMBER；响应体含目标 id=false
 
 **判定**: PASS
 
-## 与 quickstart.md §2 文本的偏差（真实观察）
+## 契约一致性与偏差说明
 
-quickstart.md 是 Plan 阶段产物，其 curl 示例使用早期字段名；本轮按**冻结契约** `packages/contracts/src/schemas.ts` 与已生成的 OpenAPI 发起请求。以下均为实际请求/响应中观察到的事实，未修改任何冻结文档：
-
-| quickstart §2 写法 | 实际 | 说明 |
+| 项 | 当前执行 | 说明 |
 |---|---|---|
-| `curl localhost:8787` | `app.inject` 进程内真实路由 | 本机 :8787 被沙箱网络代理拦截（`502 upstream connect failed`），改用与 integration 测试同一套真实 handler / RLS / PG |
-| `Idempotency-Key` HTTP header | body 字段 `idempotencyKey` | 六类命令的 Zod schema 均要求 body 内必填 |
-| `values` / `value` / `source` | `profileValues` / `valueText` / `sourceKind` | `ProvenanceValueInput` 的字段名 |
-| `noticeVersion: "2026-11-v1"` | `noticeVersion: "v1"` | `packages/compliance/src/notices.ts` 目录当前只有 v1 |
-| `declaredAgeBand` / `channel` / `requestId` | 请求仅 `noticeVersion` / `subjectPersonId`；响应为 `id` | 最小 onboarding 不采集儿童资料 |
-| `onboardingRequestId` | `consentRequestId` | `GrantConsentRequest` 字段名 |
-| `reason` (revoke) | 仅 `idempotencyKey` | `RevokeConsentRequest` 无 reason 字段 |
-| 响应含 `supersedesId` / `guardianPersonId` | 响应不含；在 `consent_records` / `person_compliance_profiles` 表中 | 已用真实 SQL 查询证明（见段 4、段 5） |
+| `Idempotency-Key` | HTTP header | 与冻结 OpenAPI 的 header parameter 完全一致 |
+| 建家庭 | `creator { ageBand, ageBandSource, values }` | 与冻结 `CreateFamilyRequest` 完全一致 |
+| 成员 / PATCH | `values[] { attribute, value, source, observedAt? }` | 与冻结 `ProvenanceValueInput` / `UpdateMemberRequest` 完全一致 |
+| consent request | `declaredAgeBand, noticeVersion, channel, existingSubjectPersonId?` | 与冻结 `CreateConsentRequestRequest` 一致；`channel` 必须等于运行环境 channel |
+| grant | `onboardingRequestId, noticeVersion, accepted: true` | 与冻结 `GrantConsentRequest` 完全一致 |
+| revoke | header key + 可选 `reason` | 与冻结 `RevokeConsentRequest` 一致 |
+| 传输 | Fastify `app.inject` | 与 integration 测试同一套真实 handler / auth hook / RLS / PostgreSQL；未使用 curl 仅为规避本机网络代理限制 |
+| `noticeVersion` | `v1` | `packages/compliance/src/notices.ts` 当前目录只有 v1 |
 
 ## 六段结果汇总
 

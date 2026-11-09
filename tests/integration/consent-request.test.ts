@@ -1,16 +1,24 @@
 /**
  * Consent request integration tests (T052 RED→GREEN).
- * POST /api/v1/compliance/guardian-consents/requests
- * - No family → 404
- * - Create request 201, subject_person_id IS NULL
- * - Response and DB contain no child name/birth/nickname
- * - Expired request unusable
+ *
+ * Frozen OpenAPI:
+ *   CreateConsentRequestRequest = { declaredAgeBand, noticeVersion, channel,
+ *                                    existingSubjectPersonId? }
+ *   ConsentRequestResponse      = { requestId, declaredAgeBand, noticeVersion,
+ *                                    noticeHash, expiresAt, status }
+ *   `Idempotency-Key` is an HTTP header.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
+import {
+  commandHeaders,
+  createConsentRequest,
+  createFamily,
+  loginWithLabel,
+} from '../setup/api.js';
 
 let verifyPool: pg.Pool;
 
@@ -33,72 +41,36 @@ describe('Consent Request Integration (T052)', () => {
   });
 
   async function setupManagerAndFamily(label: string) {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `cr_${label}_${Date.now()}` },
-    });
-    const { token, person } = loginRes.json();
-
-    const famRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        displayName: `家庭-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `fam-cr-${label}-${Date.now()}`,
-      },
-    });
-    const family = famRes.json();
-    return { token, personId: person.id, familyId: family.id };
+    const { token, personId } = await loginWithLabel(app, `cr_${label}`);
+    const famRes = await createFamily(app, token, label);
+    expect(famRes.statusCode).toBe(201);
+    return { token, personId, familyId: famRes.json().id as string };
   }
 
   it('T052: no family → 404', async () => {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `cr_nofam_${Date.now()}` },
-    });
-    const { token } = loginRes.json();
+    const { token } = await loginWithLabel(app, 'cr_nofam');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        noticeVersion: 'v1',
-        idempotencyKey: `cr-key-nofam-${Date.now()}`,
-      },
-    });
+    const res = await createConsentRequest(app, token, 'cr_nofam');
     expect(res.statusCode).toBe(404);
     expect(res.json().code).toBe('CURRENT_FAMILY_NOT_FOUND');
   });
 
   it('T052: create request 201, subject_person_id IS NULL', async () => {
-    const { token, familyId } = await setupManagerAndFamily('t052a');
+    const { token } = await setupManagerAndFamily('t052a');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        noticeVersion: 'v1',
-        idempotencyKey: `cr-key-a-${Date.now()}`,
-      },
-    });
+    const res = await createConsentRequest(app, token, 't052a');
     expect(res.statusCode).toBe(201);
     const body = res.json();
-    expect(body.id).toBeDefined();
+    expect(body.requestId).toBeDefined();
+    expect(body.declaredAgeBand).toBe('UNDER_14');
     expect(body.status).toBe('PENDING');
     expect(body.noticeVersion).toBe('v1');
+    expect(body.noticeHash).toMatch(/^[0-9a-f]{64}$/);
     expect(body.expiresAt).toBeDefined();
 
-    // Verify subject_person_id IS NULL in DB
     const { rows } = await queryDb(
       'SELECT subject_person_id, status FROM guardian_consent_requests WHERE id = $1',
-      [body.id]
+      [body.requestId]
     );
     expect(rows.length).toBe(1);
     expect(rows[0].subject_person_id).toBeNull();
@@ -106,21 +78,12 @@ describe('Consent Request Integration (T052)', () => {
   });
 
   it('T052: response and DB contain no child PII', async () => {
-    const { token, familyId } = await setupManagerAndFamily('t052b');
+    const { token } = await setupManagerAndFamily('t052b');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        noticeVersion: 'v1',
-        idempotencyKey: `cr-key-b-${Date.now()}`,
-      },
-    });
+    const res = await createConsentRequest(app, token, 't052b');
     expect(res.statusCode).toBe(201);
     const body = res.json();
 
-    // Response should not contain child PII fields
     const bodyStr = JSON.stringify(body);
     expect(bodyStr).not.toContain('name');
     expect(bodyStr).not.toContain('birth');
@@ -128,54 +91,58 @@ describe('Consent Request Integration (T052)', () => {
     expect(bodyStr).not.toContain('姓名');
     expect(bodyStr).not.toContain('生日');
 
-    // DB row should not have child PII columns
     const { rows } = await queryDb(
       'SELECT * FROM guardian_consent_requests WHERE id = $1',
-      [body.id]
+      [body.requestId]
     );
     const row = rows[0];
     expect(row.subject_person_id).toBeNull();
-    // No name/birth/nickname columns should exist or be populated
     expect(row.child_name).toBeUndefined();
     expect(row.child_birth_date).toBeUndefined();
     expect(row.child_nickname).toBeUndefined();
   });
 
-  it('T052: expired request unusable', async () => {
-    const { token, familyId } = await setupManagerAndFamily('t052c');
+  it('C1: channel must match the server runtime', async () => {
+    const { token } = await setupManagerAndFamily('t052channel');
 
+    const wrongChannel = process.env['NODE_ENV'] === 'test' ? 'MINIPROGRAM' : 'TEST';
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
+      headers: commandHeaders(token, 'cr-channel'),
       payload: {
+        declaredAgeBand: 'UNDER_14',
         noticeVersion: 'v1',
-        idempotencyKey: `cr-key-c-${Date.now()}`,
+        channel: wrongChannel,
       },
     });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().code).toBe('VALIDATION_ERROR');
+  });
+
+  it('T052: expired request unusable', async () => {
+    const { token, familyId } = await setupManagerAndFamily('t052c');
+
+    const res = await createConsentRequest(app, token, 't052c');
     expect(res.statusCode).toBe(201);
     const body = res.json();
 
-    // Manually expire the request in DB (set created_at to satisfy constraint)
     await queryDb(
       `UPDATE guardian_consent_requests SET created_at = now() - interval '25 hours', expires_at = now() - interval '1 hour' WHERE id = $1`,
-      [body.id]
+      [body.requestId]
     );
 
-    // Try to grant consent on expired request
     const grantRes = await app.inject({
       method: 'POST',
       url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
+      headers: commandHeaders(token, 'cg-expired'),
       payload: {
-        consentRequestId: body.id,
+        onboardingRequestId: body.requestId,
         accepted: true,
         noticeVersion: 'v1',
-        noticeHash: 'a'.repeat(64), // dummy hash
-        idempotencyKey: `cg-key-c-${Date.now()}`,
       },
     });
-    // Should be rejected (expired)
-    expect([403, 409]).toContain(grantRes.statusCode);
+    expect(grantRes.statusCode).toBe(403);
+    expect(familyId).toBeTruthy();
   });
 });

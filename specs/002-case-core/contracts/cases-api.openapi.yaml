@@ -1,0 +1,448 @@
+openapi: 3.1.0
+info:
+  title: Xiaoshuyin V1 — Case Core API
+  version: 0.1.0-plan
+  description: |
+    Slice 002-case-core 的接口契约（Plan 阶段产物，未实现）。
+
+    上游：`Docs/V1技术设计.md` §28.3（`POST /api/v1/cases`、`GET /api/v1/cases`、
+    `GET /api/v1/cases/:id`）、§6.1 / §6.2（Status / Phase 独立词汇）、
+    §8.1（单 primary）、§8.5（幂等）、§8.6（version）、§9 / §9.1（授权与 RLS）。
+
+    本 Slice 刻意只暴露三个端点：
+    - 不实现 `/cases/current`（当前主要 Case 由列表中的 `primary` 字段表达，单一真相源）；
+    - 不实现 pause / resume / switch-primary / close / recurrences / messages /
+      assessments / participants / scene / problem-formulations 等任何转换或未来端点；
+    - 不实现 PATCH / If-Match / 任何修改 Case 的命令。
+
+    `familyId` 由服务端从已验证的当前家庭上下文解析，客户端不得提交。
+    客户端提交 `familyId`、`status`、`phase`、`primary`、`version`、creator 或任何内容字段
+    一律 422（strict schema，显式拒绝而不是静默忽略）。
+
+    幂等键由 **`Idempotency-Key` HTTP header** 承载（8–128 字符），与 Slice 1 Final
+    的六个 mutating command 完全一致；JSON 请求体**不包含** `idempotencyKey`。
+    理由见 `plan.md` D-5、Frozen Technical Decision R1 与 `research.md` R-3。
+
+servers:
+  - url: http://localhost:8787
+    description: Stage A local
+
+tags:
+  - name: case
+
+paths:
+  /api/v1/cases:
+    post:
+      tags: [case]
+      operationId: createCase
+      summary: 创建 Case 容器
+      description: |
+        为当前已解析的目标 Family 创建一个真实 Case 容器。
+
+        服务端固定写入：
+        - `status = OPEN`
+        - `phase = INTAKE`
+        - `is_primary`：Family 尚无当前 primary 未结 Case 时为 `true`，否则为 `false`
+        - `version = 1`
+        - `created_by_person_id` = 已验证 actor
+        - `family_id` = 当前目标 Family
+
+        客户端不能指定上述任何值，也不能提交 title / summary / description /
+        problem_description / 任何 evidence-like 文本。任何未声明字段都会导致
+        `422 VALIDATION_ERROR`，且**零业务写入**：不创建 Case、不写 case_event、
+        不写 business_audit_event、不留新的业务幂等结果。
+
+        同一事务内原子写入 Case、`case_event`（CASE_CREATED）、
+        `business_audit_event`（CASE_CREATED / CASE）与幂等响应快照。
+
+        幂等：相同 key + 相同 canonical payload 返回原 201 响应，不新建 Case、不追加事件/审计；
+        shared idempotency 合同对相同 scope key + 不同 canonical payload hash 仍映射
+        `409 IDEMPOTENCY_PAYLOAD_MISMATCH`。
+
+        可达性说明：在**当前 V1 管理语义 + 同一 actor + 同一 current Family canonical context**
+        下，business body 恒为 `{}`（`Idempotency-Key` 在 header，不进入 body），`familyId` 又由
+        服务端 current Family 唯一解析，因此本 Slice 的 public HTTP API
+        **不存在可达的 different-payload 请求**；409 合同保留在 shared idempotency 基础设施层验证，
+        不得通过切换 actor（会改变 scope）或新增无业务意义字段伪造该场景。
+        canonical hash 仍保留 `{ familyId, body }`；未来若正式语义允许同一 actor 在多个 Family
+        执行 CASE_CREATE，相同 scope key + 不同 `familyId` 会得到不同 hash 并正确进入 mismatch。
+
+        授权：仅当前目标 Family 的 V1 管理主体（创建该 Family 的 adult Person）。
+        普通 membership、guardian relationship、已知 case_id 均不构成访问资格。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKeyHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCaseRequest" }
+      responses:
+        "201":
+          description: Case 已创建（或幂等重放原结果）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CaseResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/CaseAccessDenied"
+        "404":
+          $ref: "#/components/responses/CurrentFamilyNotFound"
+        "409":
+          description: |
+            `CURRENT_FAMILY_AMBIGUOUS`：current Family 无法唯一解析（真实可达，沿用
+            Slice 1 Final 多 Family 语义，响应不含 Case 字段）。
+            `IDEMPOTENCY_PAYLOAD_MISMATCH`：相同 actor + CASE_CREATE + idempotencyKey
+            但 canonical payload hash 不同；保留共享幂等合同，当前 public HTTP command
+            shape 下不可达。
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                currentFamilyAmbiguous:
+                  value: { code: CURRENT_FAMILY_AMBIGUOUS, message: Current family is ambiguous }
+                idempotencyPayloadMismatch:
+                  value: { code: IDEMPOTENCY_PAYLOAD_MISMATCH, message: IDEMPOTENCY_PAYLOAD_MISMATCH }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    get:
+      tags: [case]
+      operationId: listCases
+      summary: 列出当前家庭的 Case 集合
+      description: |
+        返回当前目标 Family 的全部 Case，按 `primary DESC, createdAt ASC, id ASC` 稳定排序。
+        `primary` 字段是识别当前主要 Case 的唯一依据，排序不构成第二真相源。
+
+        无 Case 时返回真实空集合 `{ "items": [] }`，不伪造 placeholder / 默认 Case。
+
+        本 Slice 不实现分页：正式需求（U04 / §28.3）未给出分页约束，
+        返回全部 Case 才能无条件保证 primary 可识别。未来增加可选分页参数不破坏本契约。
+
+        授权：当前目标 Family 的 V1 管理主体；非管理主体返回 403，且不返回任何 Case 数据。
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: 当前家庭的 Case 集合（可能为空）
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CaseListResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/CaseAccessDenied"
+        "404":
+          $ref: "#/components/responses/CurrentFamilyNotFound"
+        "409":
+          $ref: "#/components/responses/CurrentFamilyAmbiguous"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/v1/cases/{id}:
+    get:
+      tags: [case]
+      operationId: getCase
+      summary: 读取单个 Case
+      description: |
+        返回该 Case 的独立 `status` 与 `phase` 字段（不得合并、不得互相推导）。
+
+        反枚举语义：以下三种情形统一返回 `404 CASE_NOT_FOUND`，
+        响应体逐字节一致，不含 Family ID、status、phase、primary、version、creator
+        或任何其它 Case 字段：
+        (a) Case ID 不存在；
+        (b) Case 属于其他 Family；
+        (c) actor 对该 Case 无访问资格。
+
+        该统一 404 不削弱 RLS：无上下文或错误 Family 上下文下，数据库仍返回零行 / 拒绝写入。
+
+        若当前目标 Family 本身未能合法解析（actor 尚无 Family 等），沿用 Slice 1 的
+        Family 语义（`404 CURRENT_FAMILY_NOT_FOUND`），不定义第二套 Family 错误码。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CaseIdPath"
+      responses:
+        "200":
+          description: Case 详情
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CaseResponse" }
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/CaseNotFound"
+        "409":
+          $ref: "#/components/responses/CurrentFamilyAmbiguousDetail"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Slice 1 签发的 session token。
+
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        §8.5 关键命令幂等键，与 Slice 1 Final 的六个 mutating command 使用同一 header
+        transport。长度 8–128；缺失 / 非法 → 422 VALIDATION_ERROR。scope =
+        (actor_account_id, CASE_CREATE, logical idempotencyKey)；header 不进入 body，
+        也不进入 canonical payload hash（已在 scope 中）。
+      schema: { type: string, minLength: 8, maxLength: 128 }
+    CaseIdPath:
+      name: id
+      in: path
+      required: true
+      description: Case UUID（待验证参数；存在不代表有权访问）。
+      schema: { type: string, format: uuid }
+
+  schemas:
+    CreateCaseRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        严格 schema（`additionalProperties: false`）。业务 body **不包含任何字段**：
+        不得出现 idempotencyKey、familyId、status、phase、primary、version、creator、
+        title、description 等；任何未声明字段都会导致 422 VALIDATION_ERROR，且零业务写入
+        （Case / case_event / business_audit_event / 新幂等结果均无新增），而不是被静默忽略。
+        幂等键由 `Idempotency-Key` header 承载，不在 body 中。
+      properties: {}
+
+    CaseResponse:
+      type: object
+      additionalProperties: false
+      required: [id, status, phase, primary, version, createdAt, updatedAt]
+      description: |
+        Case 容器的最小可见投影。不含任何内容字段（title / summary / description /
+        problem_description），不含 familyId（由请求上下文确定），不含 creator（本 Slice 无消费方）。
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/CaseStatus"
+        phase:
+          $ref: "#/components/schemas/CasePhase"
+        primary:
+          type: boolean
+          description: |
+            是否为当前家庭的主要 Case。首个成功创建的 Case 为 true；已有当前 primary
+            未结 Case 时后续 Case 为 false（候选）。客户端不可指定。
+            `primary = true` 仅表示“当前 primary assignment”，不是“历史上曾经当过
+            primary”；未来 Close / switch-primary 等 Slice 必须在自身事务内清除或转移
+            旧 primary 的 is_primary，历史事实由领域事件表达。本 Slice 所有 Case 只能
+            OPEN，因此最多一个 primary = true。
+        version:
+          type: integer
+          minimum: 1
+          description: |
+            乐观锁版本基线。创建时固定为 1；本 Slice 无更新命令，因此读取后不会变化。
+        createdAt:
+          type: string
+          format: date-time
+          description: 服务端创建时间（ISO 8601 / UTC）。
+        updatedAt:
+          type: string
+          format: date-time
+          description: 服务端最后更新时间；本 Slice 创建时等于 createdAt。
+
+    CaseListResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: |
+            当前家庭的 Case 集合，按 `primary DESC, createdAt ASC, id ASC` 排序。
+            本 Slice 不分页。`primary = true` 唯一表示当前 primary；历史 primary 不得
+            以 `primary = true` 暴露（未来转换 Slice 必须在自身事务内清除 / 转移 is_primary）。
+          items: { $ref: "#/components/schemas/CaseResponse" }
+
+    CaseStatus:
+      type: string
+      description: |
+        §6.1 Case Status。本 Slice 创建固定 OPEN；数据库承载完整词汇，
+        但本 Slice 没有任何可达路径写入其他值。
+      enum: [OPEN, WAITING, PAUSED, LOST_CONTACT, SAFETY_HOLD, CLOSED]
+
+    CasePhase:
+      type: string
+      description: |
+        §6.2 Phase。本 Slice 创建固定 INTAKE；与 status 独立存储、独立返回，
+        不得合并成组合枚举或互相推导。
+      enum:
+        - INTAKE
+        - ASSESSMENT
+        - PROBLEM_FORMULATION
+        - GOALS
+        - PLANNING
+        - EXECUTION
+        - REVIEW
+        - MAINTENANCE
+        - CLOSED
+
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    CaseAccessDeniedError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: 403 错误体；`code` 由结构固定为 `CASE_ACCESS_DENIED`，不依赖 example。
+      properties:
+        code:
+          type: string
+          enum: [CASE_ACCESS_DENIED]
+        message:
+          type: string
+
+    CurrentFamilyAmbiguousError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: current Family 无法唯一解析；`code` 由结构固定为 `CURRENT_FAMILY_AMBIGUOUS`。
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_AMBIGUOUS]
+        message:
+          type: string
+
+    CaseNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: 详情 404 的 Case 错误体；`code` 由结构固定为 `CASE_NOT_FOUND`，不依赖 example。
+      properties:
+        code:
+          type: string
+          enum: [CASE_NOT_FOUND]
+        message:
+          type: string
+
+    CurrentFamilyNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: Slice 1 Family 错误体；`code` 由结构固定为 `CURRENT_FAMILY_NOT_FOUND`。
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_NOT_FOUND]
+        message:
+          type: string
+
+  responses:
+    Unauthenticated:
+      description: 缺少或无效的 session token。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: UNAUTHENTICATED, message: UNAUTHENTICATED }
+
+    CaseAccessDenied:
+      description: |
+        当前目标 Family 已合法解析，但 actor 不是该 Family 的 V1 管理主体
+        （包括 guardian 同时是该 Family 成员的情形）。
+        不返回 Family 内任何 Case 数据，也不创建 Case。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CaseAccessDeniedError" }
+          example: { code: CASE_ACCESS_DENIED, message: Case access denied }
+
+    CurrentFamilyAmbiguous:
+      description: |
+        current Family 无法唯一解析（actor 属于多个 Family 且无法唯一确定 current Family）。
+        沿用 Slice 1 Final 的 409 `CURRENT_FAMILY_AMBIGUOUS`；响应不含 Family / Case 字段。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: CURRENT_FAMILY_AMBIGUOUS, message: Current family is ambiguous }
+
+    CurrentFamilyAmbiguousDetail:
+      description: |
+        Case 详情的 409：current Family 无法唯一解析。不得与 404 `CASE_NOT_FOUND` 合并，
+        保持 Slice 1 Final 的 409 语义；响应不含 Family / Case 字段。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CurrentFamilyAmbiguousError" }
+          example: { code: CURRENT_FAMILY_AMBIGUOUS, message: Current family is ambiguous }
+
+    CurrentFamilyNotFound:
+      description: |
+        当前目标 Family 未能合法解析（例如 actor 尚无任何 Family，或 actor 不是目标
+        Family 成员 / 仅有 guardian relationship）。
+        沿用 Slice 1 的 Family 语义，不定义第二套 Family 错误码；响应不含 Case 字段。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/CurrentFamilyNotFoundError" }
+          example: { code: CURRENT_FAMILY_NOT_FOUND, message: CURRENT_FAMILY_NOT_FOUND }
+
+    CaseNotFound:
+      description: |
+        Case 详情 404。两种合法语义由结构约束：
+        - Family 已解析 → `code = CASE_NOT_FOUND`（Case 不存在 / 跨 Family / 无访问资格，三者响应体一致）；
+        - Family 未解析 → `code = CURRENT_FAMILY_NOT_FOUND`（沿用 Slice 1 Family 语义）。
+        两种响应均不含任何 Case 字段，不泄露存在性。
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: "#/components/schemas/CaseNotFoundError"
+              - $ref: "#/components/schemas/CurrentFamilyNotFoundError"
+          examples:
+            caseNotFound:
+              value: { code: CASE_NOT_FOUND, message: Case not found }
+            currentFamilyNotFound:
+              value: { code: CURRENT_FAMILY_NOT_FOUND, message: CURRENT_FAMILY_NOT_FOUND }
+
+    ValidationError:
+      description: |
+        请求体不符合 strict schema（含任何未声明字段）。
+        零业务写入：不创建 Case、不写 case_event、不写 business_audit_event、
+        不留新的业务幂等结果。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: VALIDATION_ERROR, message: Invalid request body }
+
+    IdempotencyPayloadMismatch:
+      description: |
+        相同 actor + CASE_CREATE + idempotencyKey，但 canonical payload hash 不同。
+        不修改原 Case、不追加事件/审计。
+
+        当前 Slice 在同一 actor + 同一 current Family canonical context 下，business body 恒为
+        `{}`（`Idempotency-Key` 在 header，不进入 body），`familyId` 又由服务端 current Family
+        唯一解析，因此本响应在当前 public HTTP command shape 下**不可达**；合同保留并在
+        shared idempotency domain / repository contract 层验证。
+        canonical hash 仍保留 `{ familyId, body }`：未来若同一 actor 可在多个 Family 执行
+        CASE_CREATE，不同 `familyId` 会产生不同 hash 并正确进入本分支。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: IDEMPOTENCY_PAYLOAD_MISMATCH, message: IDEMPOTENCY_PAYLOAD_MISMATCH }
+
+    InternalError:
+      description: 未预期错误（含数据库不变量被破坏等真实失败）。
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { code: INTERNAL_ERROR, message: An internal error occurred }

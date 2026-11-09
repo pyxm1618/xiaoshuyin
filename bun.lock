@@ -49,7 +49,6 @@
       "version": "0.0.0",
       "dependencies": {
         "@xiaoshuyin/contracts": "workspace:*",
-        "@xiaoshuyin/domain": "workspace:*",
       },
       "devDependencies": {
         "typescript": "^5.9.0",
@@ -69,6 +68,8 @@
       "name": "@xiaoshuyin/domain",
       "version": "0.0.0",
       "dependencies": {
+        "@xiaoshuyin/authorization": "workspace:*",
+        "@xiaoshuyin/compliance": "workspace:*",
         "@xiaoshuyin/contracts": "workspace:*",
       },
       "devDependencies": {

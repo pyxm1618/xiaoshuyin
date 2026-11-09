@@ -19,26 +19,45 @@
 
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import os from 'node:os';
 import { join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const ARCHIVE = process.argv.includes('--archive');
+const EXECUTION_EVIDENCE =
+  process.env['COVERAGE_EXECUTION_EVIDENCE'] ??
+  join(os.tmpdir(), `xiaoshuyin-vitest-results-${process.pid}.json`);
 const lines = [];
 let pass = 0;
 let fail = 0;
 let notVerified = 0;
+let blocked = 0;
+let provenanceOk = true;
 
 function log(line = '') {
   console.log(line);
   lines.push(line);
 }
 
-function runCommand(exec, args) {
+/** Keep committed evidence free of host-specific absolute paths. */
+function sanitize(value) {
+  const home = process.env['HOME'] ?? '';
+  const host = os.hostname();
+  let out = value;
+  if (ROOT) out = out.split(ROOT).join('<repo>');
+  if (home) out = out.split(home).join('~');
+  if (host) out = out.split(host).join('<host>');
+  out = out.replace(/"pid":\d+/g, '"pid":<pid>');
+  out = out.replace(/xiaoshuyin_evidence_\d+/g, 'xiaoshuyin_evidence_<tmp>');
+  return out;
+}
+
+function runCommand(exec, args, extraEnv) {
   const started = Date.now();
   const r = spawnSync(exec, args, {
     cwd: ROOT,
     encoding: 'utf8',
-    env: process.env,
+    env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
     maxBuffer: 16 * 1024 * 1024,
     // The full suite runs with bounded forks (vitest.config.ts maxWorkers) and
     // needs ~5-6 minutes; 300s killed it with ETIMEDOUT/143 mid-run.
@@ -53,7 +72,7 @@ function show(prefix, exec, args, r) {
   log(`${prefix} $ ${exec} ${args.join(' ')}`);
   log(`${prefix} exit=${r.code} duration=${(r.ms / 1000).toFixed(1)}s${r.error ? ` error=${r.error}` : ''}`);
   log(`${prefix} --- real output begin ---`);
-  r.output.trimEnd().split('\n').forEach((l) => log(`${prefix} | ${l}`));
+  sanitize(r.output).trimEnd().split('\n').forEach((l) => log(`${prefix} | ${l}`));
   log(`${prefix} --- real output end ---`);
 }
 
@@ -76,10 +95,10 @@ const rows = [
   },
   {
     req: 'FR-002 平台真实性',
-    plan: '—（本 Slice 明确 NOT VERIFIED）',
+    plan: '—（BLOCKED BY T121–T124：真实平台 / Slice 4 runtime）',
     exec: null, args: [],
-    map: 'NOT VERIFIED', reason: '真实 code2session 属 §40 Platform 门槛，本 Slice 只验适配器契约；不伪造通过',
-    expected: '明确记录 NOT VERIFIED',
+    map: 'BLOCKED', blockedBy: 'T121–T124', reason: '真实 code2session 属 §40 Platform 门槛，本 Slice 只验适配器契约；按冻结 Tasks 明确 BLOCKED，不伪造通过',
+    expected: '明确记录 BLOCKED（不属于 T001–T120 verified 范围）',
   },
   {
     req: 'FR-005 / 场景 2 / US1（建家庭 + 管理主体 + 幂等）',
@@ -234,14 +253,34 @@ const rows = [
 
 /** Additional final gates (user-required commands not fully covered above). */
 const gates = [
-  { label: 'G1 全量测试套件', exec: 'bunx', args: ['vitest', 'run'] },
+  {
+    label: 'G1 全量测试套件',
+    exec: 'bunx',
+    args: [
+      'vitest',
+      'run',
+      '--reporter=default',
+      '--reporter=json',
+      `--outputFile.json=${EXECUTION_EVIDENCE}`,
+    ],
+    env: { COVERAGE_EXECUTION_EVIDENCE: EXECUTION_EVIDENCE },
+  },
   { label: 'G2 静态守卫', exec: 'bun', args: ['run', 'guard:static'] },
   { label: 'G3 typecheck（base 工程）', exec: 'bunx', args: ['tsc', '-p', 'tsconfig.base.json', '--noEmit'] },
   { label: 'G4 typecheck（api 工程）', exec: 'bunx', args: ['tsc', '--noEmit'], cwd: join(ROOT, 'apps', 'server', 'api') },
   { label: 'G5 OpenAPI 生成', exec: 'bun', args: ['run', 'openapi:generate'] },
   { label: 'G6 OpenAPI 漂移检查', exec: 'bun', args: ['run', 'openapi:check'] },
-  { label: 'G7 DB 结构证据', exec: 'bun', args: ['run', 'db:evidence'] },
-  { label: 'G8 FR/SC 覆盖审计', exec: 'bun', args: ['run', 'coverage:audit'] },
+  {
+    label: 'G7 DB 结构证据',
+    exec: 'node',
+    args: ['scripts/db-evidence.mjs', '--no-archive'],
+  },
+  {
+    label: 'G8 FR/SC 覆盖审计',
+    exec: 'bun',
+    args: ['run', 'coverage:audit'],
+    env: { COVERAGE_EXECUTION_EVIDENCE: EXECUTION_EVIDENCE },
+  },
 ];
 
 const governance = [
@@ -258,7 +297,78 @@ async function main() {
   log('');
   log('说明：每条均真实启动命令并捕获 stdout/stderr、退出码与耗时。');
   log('plan.md 中未落地的测试文件名以 MAPPED 标注并给出承接文件，不静默跳过；');
-  log('FR-002 平台真实性按 Plan 明确标注 NOT VERIFIED，不伪造通过。');
+  log('本 runner 只证明 Verification Plan 中的命令被真实执行、输出被捕获且失败会传播；');
+  log('T001–T120 的逐任务 acceptance 由各自 designated tests / evidence 证明，不由本 runner 推导。');
+  log('T121–T124 按冻结 Tasks 标注 BLOCKED（Slice 4 runtime / 真实平台），不计入 verified，也不伪装为 PASS。');
+  log('');
+
+  // M-06 canonical provenance. Record the exact repository state and required
+  // environment NAMES / presence before any child runs. Secret values are never
+  // printed. Any provenance failure makes the canonical run non-zero.
+  const git = (args) => {
+    const r = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+    if (r.status !== 0) {
+      provenanceOk = false;
+      notVerified++;
+      return `ERROR(${r.status})`;
+    }
+    return r.stdout.trim();
+  };
+  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const head = git(['rev-parse', 'HEAD']);
+  const originMain = git(['rev-parse', 'origin/main']);
+  const startTree = git(['status', '--porcelain', '--untracked-files=no']);
+  const startClean = startTree === '';
+  const githubSha = process.env['GITHUB_SHA'] ?? '';
+  log('## Provenance');
+  log(`- cwd: ${ROOT}`);
+  log(`- branch: ${branch}`);
+  log(`- HEAD: ${head}`);
+  log(`- origin/main: ${originMain}`);
+  log(`- DECISION_A_REMEDIATION_BASELINE_SHA: d74813333449376e48c071abba8103f4aac92b39`);
+  log(`- tracked working tree (start): ${startClean ? 'clean' : 'dirty'}`);
+  log(`- archive mode: ${ARCHIVE ? 'yes (local auxiliary, NOT authoritative)' : 'no (canonical)'}`);
+  log(`- GITHUB_SHA: ${githubSha || '<absent>'}`);
+  log(`- GITHUB_REF: ${process.env['GITHUB_REF'] ?? '<absent>'}`);
+  log(`- GITHUB_HEAD_REF: ${process.env['GITHUB_HEAD_REF'] ?? '<absent>'}`);
+  log(`- GITHUB_RUN_ID: ${process.env['GITHUB_RUN_ID'] ?? '<absent>'}`);
+  log(`- GITHUB_RUN_ATTEMPT: ${process.env['GITHUB_RUN_ATTEMPT'] ?? '<absent>'}`);
+  if (!head || !originMain) {
+    provenanceOk = false;
+    notVerified++;
+  }
+  if (githubSha && head !== githubSha) {
+    provenanceOk = false;
+    notVerified++;
+  }
+  if (!startClean && !ARCHIVE) {
+    provenanceOk = false;
+    notVerified++;
+  }
+  const requiredEnv = [
+    'DATABASE_URL',
+    'MIGRATION_DATABASE_URL',
+    'TEST_ADMIN_DATABASE_URL',
+    'IDENTITY_BINDING_SECRET',
+    'IDENTITY_BINDING_CONTEXT_TTL_SECONDS',
+    'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS',
+    'IDENTITY_BINDING_PAIRING_TTL_SECONDS',
+  ];
+  const fixtureProvided = new Set([
+    'IDENTITY_BINDING_SECRET',
+    'IDENTITY_BINDING_CONTEXT_TTL_SECONDS',
+    'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS',
+    'IDENTITY_BINDING_PAIRING_TTL_SECONDS',
+  ]);
+  for (const name of requiredEnv) {
+    const present = Boolean(process.env[name]);
+    const fixture = !present && fixtureProvided.has(name);
+    log(`- env ${name}: ${present ? 'present' : fixture ? 'present(test-fixture)' : 'MISSING'}`);
+    if (!present && !fixture) {
+      provenanceOk = false;
+      notVerified++;
+    }
+  }
   log('');
 
   rows.forEach((row, i) => {
@@ -266,12 +376,12 @@ async function main() {
     log(`## [${n}/26] ${row.req}`);
     log('');
     log(`- Plan 命令: \`${row.plan}\``);
-    if (row.map === 'NOT VERIFIED') {
-      log(`- 状态: NOT VERIFIED（不执行命令）`);
+    if (row.map === 'BLOCKED') {
+      log(`- 状态: BLOCKED BY ${row.blockedBy}（不执行命令）`);
       log(`- 原因: ${row.reason}`);
       log(`- 期望: ${row.expected}`);
-      log(`- 结果: NOT VERIFIED（按 Plan 明确不作为已通过）`);
-      notVerified++;
+      log(`- 结果: BLOCKED（明确归属 T121–T124，不属于 T001–T120 verified 范围）`);
+      blocked++;
       log('');
       return;
     }
@@ -302,32 +412,54 @@ async function main() {
     const r = g.cwd
       ? (() => {
           const started = Date.now();
-          const x = spawnSync(g.exec, g.args, { cwd: g.cwd, encoding: 'utf8', env: process.env, maxBuffer: 16 * 1024 * 1024, timeout: 600000 });
+          const x = spawnSync(g.exec, g.args, {
+            cwd: g.cwd,
+            encoding: 'utf8',
+            env: g.env ? { ...process.env, ...g.env } : process.env,
+            maxBuffer: 16 * 1024 * 1024,
+            timeout: 600000,
+          });
           const output = `${x.stdout ?? ''}${x.stderr ?? ''}`;
           return { code: x.status === null ? 124 : x.status, output, ms: Date.now() - started, error: x.error?.message };
         })()
-      : runCommand(g.exec, g.args);
+      : runCommand(g.exec, g.args, g.env);
     show(`  [${g.label}]`, g.exec, g.args, r);
     if (r.code === 0) pass++; else fail++;
     log(`  [${g.label}] 结果: ${r.code === 0 ? 'PASS' : 'FAIL'}`);
     log('');
   }
 
+  const endTree = git(['status', '--porcelain', '--untracked-files=no']);
+  const endClean = endTree === '';
   log('## 汇总');
   log('');
-  log(`- Verification Plan 行数: 26（执行 ${26 - notVerified} 条，NOT VERIFIED ${notVerified} 条）`);
-  log(`- 命令 PASS: ${pass}`);
-  log(`- 命令 FAIL: ${fail}`);
-  log(`- verify-all: ${fail === 0 ? 'PASS' : 'FAIL'}`);
+  log(`- Verification Plan 行数: 26（执行 ${26 - blocked} 条，BLOCKED ${blocked} 条）`);
+  log(`- Full regression command: ${fail === 0 ? 'PASS' : 'FAIL'}`);
+  log('- Task-specific acceptance (T001–T120): proven by designated tests/evidence, not derived by this runner');
+  log(`- T121–T124 explicit BLOCKED: ${blocked} 条（Slice 4 runtime / 真实平台）`);
+  log(`- NOT VERIFIED: ${notVerified} 条（冻结 T118 要求 0 条）`);
+  log(`- provenance: ${provenanceOk ? 'PASS' : 'FAIL'}`);
+  log(`- tracked working tree (end): ${endClean ? 'clean' : 'dirty'}`);
+  log(`- command PASS: ${pass}`);
+  log(`- command FAIL: ${fail}`);
+  const finalOk = fail === 0 && notVerified === 0 && provenanceOk;
+  log(`- verify-all: ${finalOk ? 'PASS' : 'FAIL'}`);
   log('');
   log('注：MAPPED 行使用承接测试文件，原因逐条列于上文；未修改任何冻结文档。');
+  log('注：本日志在归档前已将本机绝对路径归一化为 <repo> / ~。');
+  log(`注：canonical execution evidence: ${EXECUTION_EVIDENCE}`);
+
+  if (!endClean && !ARCHIVE) {
+    log('注：canonical run 结束时 tracked tree 不是 clean，provenance FAIL。');
+  }
 
   if (ARCHIVE) {
     mkdirSync(join(ROOT, 'tests', 'evidence'), { recursive: true });
     writeFileSync(join(ROOT, 'tests', 'evidence', 'verify-all.log'), lines.join('\n') + '\n');
   }
-  if (fail > 0) process.exit(1);
+  if (!finalOk || (!ARCHIVE && !endClean)) process.exit(1);
 }
+
 
 main().catch((err) => {
   log(`verify-all: ERROR — ${err.message}`);

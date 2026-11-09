@@ -1,18 +1,22 @@
 /**
  * Consent grant integration tests (T054 RED→GREEN).
- * POST /api/v1/compliance/guardian-consents
- * - accepted=true required
- * - notice mismatch → 403
- * - expired → 403
- * - duplicate grant → 409
- * - success writes GRANTED v1 with bound_person_id IS NULL
+ *
+ * Frozen OpenAPI:
+ *   GrantConsentRequest = { onboardingRequestId, noticeVersion, accepted: true }
+ *   `Idempotency-Key` is an HTTP header.
+ *   Response = ConsentRecord.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
-import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
+import {
+  commandHeaders,
+  createConsentRequest,
+  createFamily,
+  loginWithLabel,
+} from '../setup/api.js';
 
 let verifyPool: pg.Pool;
 
@@ -35,164 +39,107 @@ describe('Consent Grant Integration (T054)', () => {
   });
 
   async function setupManagerAndFamily(label: string) {
-    const loginRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/auth/wechat',
-      payload: { code: `cg_${label}_${Date.now()}` },
-    });
-    const { token, person } = loginRes.json();
-
-    const famRes = await app.inject({
-      method: 'POST',
-      url: '/api/v1/families',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        displayName: `家庭-${label}`,
-        ageBand: 'ADULT',
-        ageBandSource: 'SELF_STATEMENT',
-        idempotencyKey: `fam-cg-${label}-${Date.now()}`,
-      },
-    });
-    const family = famRes.json();
-    return { token, personId: person.id, familyId: family.id };
+    const { token, personId } = await loginWithLabel(app, `cg_${label}`);
+    const famRes = await createFamily(app, token, label);
+    expect(famRes.statusCode).toBe(201);
+    return { token, personId, familyId: famRes.json().id as string };
   }
 
-  async function createConsentRequest(token: string, label: string) {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents/requests',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        noticeVersion: 'v1',
-        idempotencyKey: `cr-${label}-${Date.now()}`,
-      },
-    });
+  async function createRequest(token: string, label: string) {
+    const res = await createConsentRequest(app, token, label);
+    expect(res.statusCode).toBe(201);
     return res.json();
+  }
+
+  function grant(token: string, label: string, payload: Record<string, unknown>) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/v1/compliance/guardian-consents',
+      headers: commandHeaders(token, `cg-${label}`),
+      payload,
+    });
   }
 
   it('T054: accepted=true required', async () => {
     const { token } = await setupManagerAndFamily('t054a');
-    const request = await createConsentRequest(token, 't054a');
+    const request = await createRequest(token, 't054a');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        consentRequestId: request.id,
-        accepted: false, // not true
-        noticeVersion: 'v1',
-        noticeHash: getCurrentNoticeHash(),
-        idempotencyKey: `cg-key-a-${Date.now()}`,
-      },
+    const res = await grant(token, 't054a', {
+      onboardingRequestId: request.requestId,
+      noticeVersion: 'v1',
+      accepted: false,
     });
-    // Schema requires accepted: true (literal), so validation fails
     expect(res.statusCode).toBe(422);
   });
 
   it('T054: notice mismatch → 403', async () => {
     const { token } = await setupManagerAndFamily('t054b');
-    const request = await createConsentRequest(token, 't054b');
+    const request = await createRequest(token, 't054b');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        consentRequestId: request.id,
-        accepted: true,
-        noticeVersion: 'v1',
-        noticeHash: 'b'.repeat(64), // wrong hash
-        idempotencyKey: `cg-key-b-${Date.now()}`,
-      },
+    const res = await grant(token, 't054b', {
+      onboardingRequestId: request.requestId,
+      noticeVersion: 'v999',
+      accepted: true,
     });
     expect(res.statusCode).toBe(403);
   });
 
   it('T054: expired → 403', async () => {
     const { token } = await setupManagerAndFamily('t054c');
-    const request = await createConsentRequest(token, 't054c');
+    const request = await createRequest(token, 't054c');
 
-    // Expire the request (set created_at to satisfy constraint)
     await queryDb(
       `UPDATE guardian_consent_requests SET created_at = now() - interval '25 hours', expires_at = now() - interval '1 hour' WHERE id = $1`,
-      [request.id]
+      [request.requestId]
     );
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        consentRequestId: request.id,
-        accepted: true,
-        noticeVersion: 'v1',
-        noticeHash: getCurrentNoticeHash(),
-        idempotencyKey: `cg-key-c-${Date.now()}`,
-      },
+    const res = await grant(token, 't054c', {
+      onboardingRequestId: request.requestId,
+      noticeVersion: 'v1',
+      accepted: true,
     });
     expect(res.statusCode).toBe(403);
   });
 
   it('T054: duplicate grant → 409', async () => {
     const { token } = await setupManagerAndFamily('t054d');
-    const request = await createConsentRequest(token, 't054d');
+    const request = await createRequest(token, 't054d');
 
-    // First grant succeeds
-    const res1 = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        consentRequestId: request.id,
-        accepted: true,
-        noticeVersion: 'v1',
-        noticeHash: getCurrentNoticeHash(),
-        idempotencyKey: `cg-key-d1-${Date.now()}`,
-      },
+    const res1 = await grant(token, 't054d-1', {
+      onboardingRequestId: request.requestId,
+      noticeVersion: 'v1',
+      accepted: true,
     });
     expect(res1.statusCode).toBe(201);
 
-    // Second grant on same request → 409
-    const res2 = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        consentRequestId: request.id,
-        accepted: true,
-        noticeVersion: 'v1',
-        noticeHash: getCurrentNoticeHash(),
-        idempotencyKey: `cg-key-d2-${Date.now()}`,
-      },
+    const res2 = await grant(token, 't054d-2', {
+      onboardingRequestId: request.requestId,
+      noticeVersion: 'v1',
+      accepted: true,
     });
     expect(res2.statusCode).toBe(409);
   });
 
   it('T054: success writes GRANTED v1 with bound_person_id IS NULL', async () => {
     const { token } = await setupManagerAndFamily('t054e');
-    const request = await createConsentRequest(token, 't054e');
+    const request = await createRequest(token, 't054e');
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/compliance/guardian-consents',
-      headers: { authorization: `Bearer ${token}` },
-      payload: {
-        consentRequestId: request.id,
-        accepted: true,
-        noticeVersion: 'v1',
-        noticeHash: getCurrentNoticeHash(),
-        idempotencyKey: `cg-key-e-${Date.now()}`,
-      },
+    const res = await grant(token, 't054e', {
+      onboardingRequestId: request.requestId,
+      noticeVersion: 'v1',
+      accepted: true,
     });
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.id).toBeDefined();
+    expect(body.purpose).toBe('UNDER_14_GUARDIAN_CONSENT');
     expect(body.decision).toBe('GRANTED');
     expect(body.version).toBe(1);
     expect(body.boundPersonId).toBeNull();
+    expect(body.onboardingRequestId).toBe(request.requestId);
+    expect(body.policyVersion).toBe('v1');
+    expect(body.supersedesId).toBeNull();
 
-    // Verify in DB
     const { rows } = await queryDb(
       `SELECT decision, version, bound_person_id, bound_at, notice_version, notice_hash
        FROM consent_records WHERE id = $1`,
@@ -204,6 +151,6 @@ describe('Consent Grant Integration (T054)', () => {
     expect(rows[0].bound_person_id).toBeNull();
     expect(rows[0].bound_at).toBeNull();
     expect(rows[0].notice_version).toBe('v1');
-    expect(rows[0].notice_hash).toBe(getCurrentNoticeHash());
+    expect(rows[0].notice_hash).toBe(request.noticeHash);
   });
 });
