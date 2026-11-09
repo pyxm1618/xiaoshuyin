@@ -55,6 +55,26 @@ describe('Slice 4 participation idempotency', () => {
     expect(rows.map((r:any)=>r.person_id)).toEqual([t1.personId]);
   });
 
+  it('same-key duplicate business error replays 409 instead of becoming INTERNAL_ERROR', async () => {
+    const f=await createParticipationFixture(h,'idem-duplicate-error',{target:'manager'});
+    const target=await addBoundAdultTargetToFamily(h,f.familyId,'idem-duplicate-error');
+    const first=await invite(
+      h.app,f.manager.token,f.caseId,target.personId,'idem-duplicate-first'
+    );
+    expect(first.statusCode).toBe(201);
+
+    const key='idem-duplicate-error-key';
+    const duplicate=await invite(h.app,f.manager.token,f.caseId,target.personId,key);
+    const replay=await invite(h.app,f.manager.token,f.caseId,target.personId,key);
+    for (const res of [duplicate,replay]) {
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({
+        code:'PARTICIPATION_ALREADY_EXISTS',
+        message:'Participation already exists',
+      });
+    }
+  });
+
   it('concurrent same-key create converges to one row and one token', async () => {
     const f=await createParticipationFixture(h,'idem-concurrent',{target:'manager'});
     const target=await addBoundAdultTargetToFamily(h,f.familyId,'idem-concurrent');
