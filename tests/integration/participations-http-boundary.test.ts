@@ -40,7 +40,7 @@ describe('Slice 4 participation HTTP boundary', () => {
       memberPayload('ADULT', 'GUARDIAN_RELAY')
     );
     expect(member.statusCode).toBe(201);
-    targetPersonId = member.json().person.id;
+    targetPersonId = member.json().personId;
 
     const c = await app.inject({
       method: 'POST',
