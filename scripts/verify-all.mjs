@@ -455,6 +455,14 @@ async function main() {
 
   if (!endClean && !ARCHIVE) {
     log('注：canonical run 结束时 tracked tree 不是 clean，provenance FAIL。');
+    log('注：tracked diff:');
+    endTree.split('\n').filter(Boolean).forEach((line) => log(`  ${line}`));
+    const generatedDiff = git(['diff', '--', 'packages/generated/openapi.json', 'packages/generated/openapi.d.ts']);
+    if (generatedDiff) {
+      log('注：generated OpenAPI diff begin');
+      generatedDiff.split('\n').forEach((line) => log(line));
+      log('注：generated OpenAPI diff end');
+    }
   }
 
   if (ARCHIVE) {
