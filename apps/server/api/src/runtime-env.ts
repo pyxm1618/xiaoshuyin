@@ -58,6 +58,14 @@ function required(env: NodeJS.ProcessEnv, key: string, minLength = 1): string {
   return value;
 }
 
+function requiredBytes(env: NodeJS.ProcessEnv, key: string, minBytes: number): string {
+  const value = env[key];
+  if (!value || Buffer.byteLength(value, 'utf8') < minBytes) {
+    fail('RUNTIME_ENV_INVALID', `${key} is missing or shorter than ${minBytes} bytes`);
+  }
+  return value;
+}
+
 export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const mode = runtimeMode(env);
 
@@ -71,7 +79,7 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   const attemptTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS');
   const pairingTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_PAIRING_TTL_SECONDS');
   const participationInviteTtl = requiredPositiveInt(env, 'PARTICIPATION_INVITE_TTL_SECONDS');
-  const participationInviteTokenSecret = required(env, 'PARTICIPATION_INVITE_TOKEN_SECRET', 32);
+  const participationInviteTokenSecret = requiredBytes(env, 'PARTICIPATION_INVITE_TOKEN_SECRET', 32);
 
   return {
     mode,
