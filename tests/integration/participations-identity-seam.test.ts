@@ -11,7 +11,7 @@ import type {
 } from '../../apps/server/api/src/identity-binding/invitation-port.js';
 import {
   acceptInvite,
-  addBoundAdultTargetToFamily,
+  addBoundAdultNonManagerToFamily,
   buildParticipationApp,
   createParticipationFixture,
   getParticipation,
@@ -176,7 +176,7 @@ describe('Slice 4 ↔ Slice 5 identity seam', () => {
 
   it('Case B: correct existing Account is reused; wrong Account does not rebind; neither path auto-accepts', async () => {
     const f=await createParticipationFixture(h,'identity-case-b',{target:'manager'});
-    const target=await addBoundAdultTargetToFamily(h,f.familyId,'identity-case-b');
+    const target=await addBoundAdultNonManagerToFamily(h,f.familyId,'identity-case-b');
     const created=await invite(
       h.app,f.manager.token,f.caseId,target.personId,'identity-case-b-invite'
     );
