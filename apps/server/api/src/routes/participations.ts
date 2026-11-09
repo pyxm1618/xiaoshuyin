@@ -66,6 +66,7 @@ import {
   participationInviteSnapshot,
   rehydrateParticipationInviteReplay,
   runIdempotentCommand,
+  runIdempotentCommandInTransaction,
   sendCommandOutcome,
   type CommandResponse,
 } from '../idempotency.js';
@@ -429,23 +430,22 @@ export function registerParticipationRoutes(
         personId: parsed.data.personId,
       });
 
-      const outcome = await runIdempotentCommand(
+      const outcome = await withRlsTransaction(
         pool,
         {
+          familyId,
           accountId: actor.accountId,
           personId: actor.personId,
           purpose: 'FAMILY_MANAGEMENT',
-          commandType: 'PARTICIPATION_INVITE_CREATE',
-          idempotencyKey: parsed.data.idempotencyKey,
-          requestHash,
-          persistResponseBody: participationInviteSnapshot,
         },
         async (tx) => {
-          await setFamilyContext(tx, familyId, actor.personId!, 'FAMILY_MANAGEMENT');
-
-          const caseRow = await getCaseById(tx, caseId);
-          if (!caseRow) throw caseNotFound();
-
+          // Frozen create-invite order
+          // (contracts/authorization-rls-and-idempotency.md §6.1 steps 3–5):
+          // read the current Family manager fact and authorize
+          // PARTICIPATION_INVITE_CREATE BEFORE any idempotency REPLAY /
+          // MISMATCH decision. An unexpected authorization-fact failure
+          // therefore propagates to the generic 500 handler and can never be
+          // bypassed by an already-persisted exact replay snapshot.
           try {
             await requireFamilyAction(tx, {
               accountId: actor.accountId,
@@ -461,67 +461,86 @@ export function registerParticipationRoutes(
             throw error;
           }
 
-          const targetMember = await isFamilyMember(tx, familyId, parsed.data.personId);
-          if (!targetMember) throw targetIneligible();
-          if (!(await isParticipationProcessingAllowed(tx, parsed.data.personId))) {
-            throw targetIneligible();
-          }
-
-          if (await hasLiveParticipation(tx, caseId, parsed.data.personId)) {
-            return {
-              status: 409,
-              body: {
-                code: 'PARTICIPATION_ALREADY_EXISTS',
-                message: 'Participation already exists',
-              },
-            };
-          }
-
-          const participationId = await allocateParticipationId(tx);
-          const inviteToken = deriveParticipationInviteToken(
-            options.inviteTokenSecret,
-            participationId
-          );
-          const inviteTokenHash = hashParticipationInviteToken(inviteToken);
-
-          let row: ParticipationRow;
-          try {
-            row = await insertParticipationInvite(tx, {
-              id: participationId,
-              familyId,
-              caseId,
-              personId: parsed.data.personId,
-              inviteTokenHash,
-              ttlSeconds: options.inviteTtlSeconds,
-              createdByPersonId: actor.personId!,
-            });
-          } catch (error) {
-            if (isLiveUniqueViolation(error)) {
-              return {
-                status: 409,
-                body: {
-                  code: 'PARTICIPATION_ALREADY_EXISTS',
-                  message: 'Participation already exists',
-                },
-              };
-            }
-            throw error;
-          }
-
-          await insertParticipationAudit(tx, {
-            familyId,
-            actorAccountId: actor.accountId,
-            participationId: row.id,
-            eventType: 'PARTICIPATION_INVITE_CREATED',
-            metadata: {
-              caseId: row.case_id,
-              personId: row.person_id,
-              state: 'PENDING',
-              expiresAt: new Date(row.invite_expires_at).toISOString(),
+          // Only after authorization: idempotency lock → lookup → decision,
+          // then the business mutation in this same RLS transaction.
+          return runIdempotentCommandInTransaction(
+            tx,
+            {
+              accountId: actor.accountId,
+              personId: actor.personId!,
+              purpose: 'FAMILY_MANAGEMENT',
+              commandType: 'PARTICIPATION_INVITE_CREATE',
+              idempotencyKey: parsed.data.idempotencyKey,
+              requestHash,
+              persistResponseBody: participationInviteSnapshot,
             },
-          });
+            async (tx) => {
+              const caseRow = await getCaseById(tx, caseId);
+              if (!caseRow) throw caseNotFound();
 
-          return { status: 201, body: inviteCreateBody(row, inviteToken) };
+              const targetMember = await isFamilyMember(tx, familyId, parsed.data.personId);
+              if (!targetMember) throw targetIneligible();
+              if (!(await isParticipationProcessingAllowed(tx, parsed.data.personId))) {
+                throw targetIneligible();
+              }
+
+              if (await hasLiveParticipation(tx, caseId, parsed.data.personId)) {
+                return {
+                  status: 409,
+                  body: {
+                    code: 'PARTICIPATION_ALREADY_EXISTS',
+                    message: 'Participation already exists',
+                  },
+                };
+              }
+
+              const participationId = await allocateParticipationId(tx);
+              const inviteToken = deriveParticipationInviteToken(
+                options.inviteTokenSecret,
+                participationId
+              );
+              const inviteTokenHash = hashParticipationInviteToken(inviteToken);
+
+              let row: ParticipationRow;
+              try {
+                row = await insertParticipationInvite(tx, {
+                  id: participationId,
+                  familyId,
+                  caseId,
+                  personId: parsed.data.personId,
+                  inviteTokenHash,
+                  ttlSeconds: options.inviteTtlSeconds,
+                  createdByPersonId: actor.personId!,
+                });
+              } catch (error) {
+                if (isLiveUniqueViolation(error)) {
+                  return {
+                    status: 409,
+                    body: {
+                      code: 'PARTICIPATION_ALREADY_EXISTS',
+                      message: 'Participation already exists',
+                    },
+                  };
+                }
+                throw error;
+              }
+
+              await insertParticipationAudit(tx, {
+                familyId,
+                actorAccountId: actor.accountId,
+                participationId: row.id,
+                eventType: 'PARTICIPATION_INVITE_CREATED',
+                metadata: {
+                  caseId: row.case_id,
+                  personId: row.person_id,
+                  state: 'PENDING',
+                  expiresAt: new Date(row.invite_expires_at).toISOString(),
+                },
+              });
+
+              return { status: 201, body: inviteCreateBody(row, inviteToken) };
+            }
+          );
         }
       );
 
