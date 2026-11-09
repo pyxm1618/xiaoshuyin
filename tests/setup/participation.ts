@@ -7,6 +7,7 @@
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import type { InvitationResolutionPort } from '../../apps/server/api/src/identity-binding/invitation-port.js';
 import { createAdminPool } from './db.js';
 import {
   auth,
@@ -32,8 +33,12 @@ export interface ParticipationFixture {
   targetPersonId: string;
 }
 
-export async function buildParticipationApp(): Promise<ParticipationHarness> {
-  const app = await buildApp();
+export async function buildParticipationApp(
+  invitationPort?: InvitationResolutionPort
+): Promise<ParticipationHarness> {
+  const app = await buildApp(
+    invitationPort ? { identityBinding: { invitationPort } } : undefined
+  );
   await app.ready();
   const admin = createAdminPool();
   return {
