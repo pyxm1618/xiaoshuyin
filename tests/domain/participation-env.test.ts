@@ -32,6 +32,13 @@ describe('Slice 4 participation environment', () => {
     expect(parsed.PARTICIPATION_INVITE_TOKEN_SECRET).toBe(multibyte);
   });
 
+  it('uses the same numeric coercion contract as runtime for integer-like env values', () => {
+    expect(validateEnv({
+      ...validEnv,
+      PARTICIPATION_INVITE_TTL_SECONDS: '1e3',
+    }).PARTICIPATION_INVITE_TTL_SECONDS).toBe(1000);
+  });
+
   it('has no defaults: each participation setting is required', () => {
     const { PARTICIPATION_INVITE_TTL_SECONDS: _ttl, ...withoutTtl } = validEnv;
     const { PARTICIPATION_INVITE_TOKEN_SECRET: _secret, ...withoutSecret } = validEnv;
