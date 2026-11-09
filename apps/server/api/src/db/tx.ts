@@ -465,8 +465,8 @@ export async function setFamilyContext(
  * Slice 006 binding commit). The generic Family/Person/Purpose settings are
  * restored before control returns, so they cannot widen later RLS visibility.
  *
- * If the callback fails, the owning transaction is expected to roll back and
- * no restoration query is attempted against a potentially aborted transaction.
+ * Callback failures keep their original error. Restoration is best-effort in
+ * that path because a SQL error may already have aborted the transaction.
  */
 export async function withTemporaryFamilyContext<T>(
   tx: TxClient,
@@ -485,22 +485,30 @@ export async function withTemporaryFamilyContext<T>(
   );
   const previous = rows[0] ?? { family_id: '', person_id: '', purpose: '' };
 
-  await setFamilyContext(tx, opts.familyId, opts.personId, opts.purpose);
-  let result: T;
-  try {
-    result = await fn();
-  } catch (error) {
-    throw error;
-  }
+  const restore = async () => {
+    await tx.query(
+      `SELECT
+         set_config('app.family_id', $1, true),
+         set_config('app.person_id', $2, true),
+         set_config('app.purpose', $3, true)`,
+      [previous.family_id, previous.person_id, previous.purpose]
+    );
+  };
 
-  await tx.query(
-    `SELECT
-       set_config('app.family_id', $1, true),
-       set_config('app.person_id', $2, true),
-       set_config('app.purpose', $3, true)`,
-    [previous.family_id, previous.person_id, previous.purpose]
-  );
-  return result;
+  await setFamilyContext(tx, opts.familyId, opts.personId, opts.purpose);
+  try {
+    const result = await fn();
+    await restore();
+    return result;
+  } catch (originalError) {
+    try {
+      await restore();
+    } catch {
+      // A SQL failure may already have aborted the transaction. Preserve the
+      // original callback failure; the owning wrapper will roll back.
+    }
+    throw originalError;
+  }
 }
 
 
