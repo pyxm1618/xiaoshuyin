@@ -369,6 +369,55 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
     }
   }
 
+/** App-role membership INSERT (the real runtime path). */
+  async function appMembershipInsert(input: {
+    familyId: string;
+    actorAccountId: string;
+    actorPersonId: string;
+    targetPersonId: string;
+    immediateConstraints?: boolean;
+    commit?: boolean;
+  }): Promise<{ blocked: boolean; code?: string }> {
+    const pool = createAppPool(1);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT app.set_identity_context($1, $2)', [
+        input.actorAccountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await client.query('SELECT app.set_family_context($1, $2, $3)', [
+        input.familyId,
+        input.actorPersonId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      if (input.immediateConstraints) {
+        await client.query('SET CONSTRAINTS ALL IMMEDIATE');
+      }
+      if (!input.commit) {
+        await client.query(`SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`);
+      }
+      try {
+        await client.query(
+          'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
+          [input.familyId, input.targetPersonId]
+        );
+        if (input.commit) {
+          await client.query('COMMIT');
+        } else {
+          await client.query('ROLLBACK');
+        }
+        return { blocked: false };
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        return { blocked: err.code === '55P03', code: err.code };
+      }
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  }
+
   /** Open a real admin transaction that holds the invalidation lock. */
   async function adminInvalidator(sql: string, params: unknown[]) {
     const client = await h.admin.connect();
@@ -761,11 +810,13 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
       attemptId,
       tag: 'h02_member_insert',
       invalidate: () =>
-        adminBlocked(
-          'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
-          [otherFamilyId, target.targetPersonId],
-          { immediateConstraints: true }
-        ),
+        appMembershipInsert({
+          familyId: otherFamilyId,
+          actorAccountId: otherOwner.accountId,
+          actorPersonId: otherOwner.personId,
+          targetPersonId: target.targetPersonId,
+          immediateConstraints: true,
+        }),
     });
 
     // The invalidator rolled back, so the second membership only becomes
@@ -813,11 +864,16 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
-    // The second Family membership linearizes first.
-    await h.admin.query(
-      'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
-      [otherFamilyId, target.targetPersonId]
-    );
+    // The second Family membership linearizes first using the real app role.
+    const inserted = await appMembershipInsert({
+      familyId: otherFamilyId,
+      actorAccountId: otherOwner.accountId,
+      actorPersonId: otherOwner.personId,
+      targetPersonId: target.targetPersonId,
+      commit: true,
+    });
+    expect(inserted.blocked).toBe(false);
+    expect(inserted.code).toBeUndefined();
 
     const commitPool = createAppPool(1);
     try {
