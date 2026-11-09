@@ -8,7 +8,7 @@ import {
   getBindingInvitationByTrustedTarget,
   hashParticipationInviteToken,
 } from '@xiaoshuyin/domain';
-import { setInviteTokenContext, withTemporaryFamilyContext } from '../db/tx.js';
+import { withTemporaryFamilyContext, withTemporaryInviteTokenContext } from '../db/tx.js';
 import type {
   InvitationResolution,
   InvitationResolutionPort,
@@ -34,8 +34,11 @@ export class Slice4InvitationAdapter implements InvitationResolutionPort {
       return { status: 'TERMINAL_UNUSABLE' };
     }
     const tokenHash = hashParticipationInviteToken(invitationToken);
-    await setInviteTokenContext(tx, tokenHash);
-    return valid(await getBindingInvitationByTokenHash(tx, tokenHash));
+    return withTemporaryInviteTokenContext(
+      tx,
+      tokenHash,
+      async () => valid(await getBindingInvitationByTokenHash(tx, tokenHash))
+    );
   }
 
   async resolveByParticipationId(
