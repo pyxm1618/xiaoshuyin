@@ -24,7 +24,7 @@ Ultimate Final Independent Re-audit at f96bc945 判定 H-01 / H-02 / M-01—M-06
 H-01 authoritative pairing 已从 S0/S1 delta 改为 server-generated candidate-presented one-time pairing challenge；原 S0/S1 / exact-one-delta acceptance 全部失效。HTTP surface仍为6条，但 confirmer decision由 :attemptId path 改为 /pairing-decision，candidate AFFIRM response增加 pairingChallenge。
 
 当前重新打开集合：
-T013
+T007 T008 T013 T016
 T024 T025 T027 T028 T029 T030 T031 T032 T039
 T049 T050
 T059 T060 T061 T062
@@ -79,8 +79,8 @@ T001 / T002 / T005 PASS，且 Slice 4 runtime available
 
 ## Phase 1 — Schema Tests & Additive Migration
 
-- [x] T007 — 写 schema RED 测试：5 张表、5 个 enum、attempt 三态、terminal_reason CHECK、partial unique live index、无永久三元组唯一、pending context CHECK、confirmation CHECK、audit append-only、audit `event_type` 闭集含 `BINDING_OPERATION_RETRYABLE`、`persons_binding_candidate_account_read` policy。 **Files**: `tests/db/identity-binding-schema.test.ts` **Depends**: T006 **Acceptance**: 预期 RED；文件覆盖 plan D-2 / D-3 / D-4 / D-5 / D-13.3 / D-15 全部结构断言 [REQ:FR-012 / AS-19 / CHK037—CHK050] [VERIFY:bun run vitest run tests/db/identity-binding-schema.test.ts]
-- [x] T008 — 写 additive migration：5 个 enum + `binding_pending_contexts` + `binding_attempts`。不改 `001_initial_schema.sql`。 **Files**: `db/migrations/00X_identity_binding_runtime.sql` **Depends**: T006 **Acceptance**: migration 文件 review；enum / 两张表定义与 plan D-2 / D-3 一致 [REQ:FR-012 / plan D-18.1 / CHK163—CHK166] [VERIFY:node scripts/db-migrate.mjs]
+- [ ] T007 — schema RED扩展H-01：binding_pending_contexts必须含nullable pairing_issued_at / pairing_expires_at；两者all-null或all-present，expires>issued且pairing_expires_at<=context.expires_at；仍只5张表/5 enums。保留原schema assertions。 **Files**: tests/db/identity-binding-schema.test.ts **Acceptance**: failed Head旧schema RED [REQ:H-01 / plan D-3.1/D-3.5] [VERIFY:bun run vitest run tests/db/identity-binding-schema.test.ts]
+- [ ] T008 — 在唯一006 additive migration内给既有binding_pending_contexts定义pairing_issued_at/pairing_expires_at及CHECK；不新增表、不新增第二migration。其余原migration contract保持。 **Files**: db/migrations/00X_identity_binding_runtime.sql **Depends**: T007 **Acceptance**: schema test + migration evidence GREEN [REQ:H-01] [VERIFY:node scripts/db-migrate.mjs && bun run vitest run tests/db/identity-binding-schema.test.ts]
 - [x] T009 — 同 migration 追加 `binding_confirmations` + `binding_operation_keys` + `identity_binding_audit_events`。 **Files**: 同上 **Depends**: T008 **Acceptance**: 表结构、CHECK、UNIQUE 与 plan D-4 / D-5 / D-15 一致 [REQ:FR-012 / FR-022 / FR-023] [VERIFY:node scripts/db-migrate.mjs]
 - [x] T010 — 同 migration 追加 indexes：partial unique live key、attempt target / invitation、context attempt、audit attempt / person / correlation。 **Files**: 同上 **Depends**: T009 **Acceptance**: partial index 谓词严格 `WHERE state = 'PENDING'`；无永久唯一 [REQ:FR-017 / plan D-2.1 / CHK044] [VERIFY:node scripts/db-migrate.mjs]
 - [x] T011 — 同 migration 追加 context getter / setter functions：`app_binding_*()`、`app.set_binding_*_context()`、`app.set_binding_target_context()`、`app.set_binding_operation_scope()`、`app.set_binding_commit_account_id()`、`app.set_binding_candidate_account_id()`（SECURITY INVOKER，只 set_config + 参数校验）。 **Files**: 同上 **Depends**: T010 **Acceptance**: 函数签名与 plan D-13.1 / D-13.4 一致；不新建 context framework [REQ:FR-024 / plan D-13.1 / D-13.4] [VERIFY:node scripts/db-migrate.mjs]
@@ -88,7 +88,7 @@ T001 / T002 / T005 PASS，且 Slice 4 runtime available
 - [ ] T013 — re-audit RLS migration contract：保留intended read policies显式FOR SELECT与Person commit policy显式FOR UPDATE；同时不得把FOR SELECT/FOR UPDATE文本当H-02 proof。chosen Gate2 concurrency机制若需要policy/migration支持，必须在唯一006 migration内最小调整，并由T103真实runtime-role behavior证明。 **Files**: unique006 migration **Acceptance**: polcmd正确 + 不阻断chosen H-02 linearization proof [REQ:H-02 / plan D-13.5] [VERIFY:node scripts/db-evidence.mjs && bun run vitest run tests/db/identity-binding-rls.test.ts]
 - [x] T014 — 同 migration 追加 append-only / immutable triggers：confirmations 拒绝 UPDATE / DELETE；audit 拒绝 UPDATE / DELETE。 **Files**: 同上 **Depends**: T013 **Acceptance**: trigger 存在；UPDATE / DELETE 抛异常 [REQ:plan D-4.3 / D-15.2 / CHK140] [VERIFY:node scripts/db-migrate.mjs && node scripts/db-evidence.mjs]
 - [x] T015 — 同 migration 追加 GRANT：attempts / contexts / confirmations / operation keys 的最小 DML；audit 仅 INSERT；enum USAGE；functions EXECUTE。 **Files**: 同上 **Depends**: T014 **Acceptance**: `has_table_privilege` 输出符合 plan D-18.1 [REQ:plan D-18.1 / CHK167] [VERIFY:node scripts/db-migrate.mjs && bun run vitest run tests/db/identity-binding-schema.test.ts]
-- [x] T016 — 运行 migration + schema test，记录 real output；最终**只允许一个 006-owned additive migration**：若存在第二个未 merge 的 006 migration，先将其批准内容 fold 回主 migration 并删除额外文件（普通 commit，不 rebase / 不 force push / 不改已 merge migration）；若 migration 编号冲突，按最新 main 重新分配后重跑。 **Files**: migration、`tests/db/identity-binding-schema.test.ts` **Depends**: T007—T015 **Acceptance**: `bun run db:migrate` PASS；schema test PASS；006-owned migration 计数 = 1 [REQ:FR-012 / plan D-18.1] [VERIFY:bun run db:migrate]
+- [ ] T016 — remediation后重新验证唯一006 migration：fresh / upgrade / second-apply、schema新pairing timestamp columns/checks、RLS与migration count=1。 **Files**: unique006 migration + schema test **Depends**: T007—T015 **Acceptance**: all GREEN；no second 006 migration [REQ:H-01/H-02] [VERIFY:bun run db:migrate && bun run vitest run tests/db/identity-binding-schema.test.ts && node scripts/db-evidence.mjs]
 
 ---
 
@@ -302,8 +302,8 @@ Phase 15 late closeout（不 gate Phase 1–14）— 等待 Slice 4 runtime；T1
 | 类别 | 数量 / 状态 |
 |---|---|
 | Total tasks | 124（T001—T124） |
-| T001—T120 currently checked | 61 |
-| T001—T120 reopened by H-01/H-02/M-01—M-06 | 59 |
+| T001—T120 currently checked | 58 |
+| T001—T120 reopened by H-01/H-02/M-01—M-06 | 62 |
 | T121—T124 | 4，全部 BLOCKED BY SLICE 4 RUNTIME |
 
 不得用旧“94/26/4”数字替代当前checkbox事实。reopened task只有开发完成新的RED→FIX→GREEN及对应proof后才能重新勾选。
