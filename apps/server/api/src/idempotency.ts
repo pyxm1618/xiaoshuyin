@@ -153,6 +153,11 @@ export async function runIdempotentCommand(
 }
 
 export function participationInviteSnapshot(response: CommandResponse): unknown {
+  // Only a successful create response contains bearer secret material.
+  // Business-error outcomes (for example PARTICIPATION_ALREADY_EXISTS) are
+  // persisted verbatim so same-key replay preserves the original 4xx result.
+  if (response.status !== 201) return response.body;
+
   const parsed = CreateParticipationInviteResponse.safeParse(response.body);
   if (!parsed.success) {
     throw Object.assign(new Error('Invalid participation invite response'), {
@@ -168,7 +173,9 @@ export function rehydrateParticipationInviteReplay(
   outcome: CommandOutcome,
   secret: string
 ): CommandOutcome {
-  if (outcome.action !== 'REPLAY') return outcome;
+  // Only successful create replays need bearer-token reconstruction. A
+  // replayed 4xx business outcome must remain byte-for-byte the stored error.
+  if (outcome.action !== 'REPLAY' || outcome.status !== 201) return outcome;
   if (
     typeof outcome.body !== 'object' ||
     outcome.body === null ||
