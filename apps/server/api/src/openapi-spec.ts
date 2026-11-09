@@ -475,7 +475,7 @@ export function buildOpenApiDocument() {
               ],
             }
           ),
-          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
           '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
         },
       },
@@ -519,7 +519,7 @@ export function buildOpenApiDocument() {
               ref('IdempotencyPayloadMismatchError'),
             ],
           }),
-          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
           '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
         },
       },
@@ -550,7 +550,7 @@ export function buildOpenApiDocument() {
           '409': jsonResponse('State conflict / idempotency mismatch', {
             oneOf: [ref('ParticipationStateConflictError'), ref('IdempotencyPayloadMismatchError')],
           }),
-          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
           '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
         },
       },
@@ -569,7 +569,7 @@ export function buildOpenApiDocument() {
           '409': jsonResponse('State conflict / idempotency mismatch', {
             oneOf: [ref('ParticipationStateConflictError'), ref('IdempotencyPayloadMismatchError')],
           }),
-          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
           '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
         },
       },
@@ -588,7 +588,7 @@ export function buildOpenApiDocument() {
           '409': jsonResponse('State conflict / idempotency mismatch', {
             oneOf: [ref('ParticipationStateConflictError'), ref('IdempotencyPayloadMismatchError')],
           }),
-          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
           '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
         },
       },
