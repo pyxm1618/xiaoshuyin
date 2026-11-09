@@ -92,6 +92,18 @@ export function normalize(node, root) {
         : normalized;
   }
 
+  // OpenAPI 3.0 `nullable: true` and JSON Schema's
+  // `type: [T, 'null']` are equivalent for an unconstrained typed schema.
+  // Canonicalize both to the JSON-Schema form so frozen OAS 3.0 documents can
+  // be compared losslessly with Zod 4 generated schemas.
+  if (out.nullable === true && out.type !== undefined && !isLiteralMember(out)) {
+    const baseType = out.type;
+    out.type = Array.isArray(baseType)
+      ? [...new Set([...baseType, 'null'])]
+      : [baseType, 'null'];
+    delete out.nullable;
+  }
+
   if (
     'additionalProperties' in out &&
     out.additionalProperties &&
