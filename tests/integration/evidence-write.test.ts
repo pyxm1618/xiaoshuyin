@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import {
   recordStatement,
@@ -108,6 +109,14 @@ async function counts(familyId: string) {
     [familyId]
   );
   return rows[0];
+}
+
+async function idempotencyCount(actorAccountId: string): Promise<number> {
+  const { rows } = await admin.query(
+    `SELECT count(*)::int AS c FROM idempotency_keys WHERE actor_account_id = $1`,
+    [actorAccountId]
+  );
+  return rows[0].c;
 }
 
 describe('Internal Evidence writers (T027)', () => {
@@ -529,22 +538,108 @@ describe('Internal Evidence writers (T027)', () => {
   });
 
   it('rolls the evidence row back when the audit write fails', async () => {
-    const before = await counts(fx.familyId);
-    const broken = {
-      ...ctx(),
-      actorAccountId: '00000000-0000-7000-8000-000000000000',
+    const marker = `S3M01_${randomUUID()}`;
+    const triggerName = 's3m01_audit_failure';
+    const functionName = 's3m01_audit_failure_fn';
+
+    // Test-only failure injection. The trigger is created idempotently, only
+    // raises inside a transaction that opts in with the local GUC below, and is
+    // dropped in `finally` so neither the schema contract nor other suites are
+    // affected.
+    const installAuditFailure = async () => {
+      await admin.query(`DROP TRIGGER IF EXISTS ${triggerName} ON business_audit_events`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+      await admin.query(
+        `CREATE FUNCTION ${functionName}() RETURNS trigger
+         LANGUAGE plpgsql AS $fn$
+         BEGIN
+           IF current_setting('app.s3m01_audit_fail', true) = 'on' THEN
+             IF EXISTS (SELECT 1 FROM assertions WHERE content = 'must roll back') THEN
+               RAISE EXCEPTION 'S3M01_AUDIT_STAGE_FAILURE:${marker}' USING ERRCODE = 'P0001';
+             END IF;
+             RAISE EXCEPTION 'S3M01_EVIDENCE_STAGE_NOT_REACHED:${marker}' USING ERRCODE = 'P0001';
+           END IF;
+           RETURN NEW;
+         END;
+         $fn$;`
+      );
+      await admin.query(
+        `CREATE TRIGGER ${triggerName} BEFORE INSERT ON business_audit_events
+           FOR EACH ROW EXECUTE FUNCTION ${functionName}()`
+      );
     };
-    await expect(
-      runWrite(
-        (tx) => recordStatement(tx, broken, statementDraft({ content: 'must roll back' })),
-        broken
-      )
-    ).rejects.toThrow();
+
+    const removeAuditFailure = async () => {
+      await admin
+        .query(`DROP TRIGGER IF EXISTS ${triggerName} ON business_audit_events`)
+        .catch(() => {});
+      await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`).catch(() => {});
+    };
+
+    const before = await counts(fx.familyId);
+    const idempotencyBefore = await idempotencyCount(fx.accountId);
+    let callbackEntered = false;
+    let identityAtCallback: Record<string, unknown> | null = null;
+    let failure: any = null;
+
+    try {
+      await installAuditFailure();
+      try {
+        await runWrite(async (tx) => {
+          callbackEntered = true;
+          const { rows } = await tx.query(
+            `SELECT app_account_id()::text AS account_id,
+                    app_person_id()::text  AS person_id,
+                    app_family_id()::text  AS family_id,
+                    app_current_purpose()  AS purpose`
+          );
+          identityAtCallback = rows[0];
+          await tx.query(`SELECT set_config('app.s3m01_audit_fail', 'on', true)`);
+          return recordStatement(tx, ctx(), statementDraft({ content: 'must roll back' }));
+        });
+      } catch (error) {
+        failure = error;
+      }
+    } finally {
+      await removeAuditFailure();
+    }
+
+    // The transaction identity gate and family binding really passed.
+    expect(callbackEntered).toBe(true);
+    expect(identityAtCallback).toMatchObject({
+      account_id: fx.accountId,
+      person_id: fx.managerPersonId,
+      family_id: fx.familyId,
+      purpose: 'FAMILY_MANAGEMENT',
+    });
+
+    // The failure came from the audit stage, after Evidence INSERT succeeded.
+    // It is not `42501`, not an authorization denial, and not a domain error.
+    expect(failure).not.toBeNull();
+    expect(failure.code).toBe('P0001');
+    expect(failure.message).toContain(`S3M01_AUDIT_STAGE_FAILURE:${marker}`);
+    expect(failure.message).not.toContain('S3M01_EVIDENCE_STAGE_NOT_REACHED');
+    expect(failure.code).not.toBe('42501');
+    expect(failure.code).not.toBe('EVIDENCE_CASE_NOT_AUTHORIZED');
+    expect(String(failure.message)).not.toMatch(/row-level security/i);
+
+    // Nothing was committed: assertion, observation, audit and case_event all +0.
     expect(await counts(fx.familyId)).toEqual(before);
+    expect(await idempotencyCount(fx.accountId)).toBe(idempotencyBefore);
+
     const leaked = await admin.query(
       `SELECT count(*)::int AS c FROM assertions WHERE content = 'must roll back'`
     );
     expect(leaked.rows[0].c).toBe(0);
+
+    const leakedAudit = await admin.query(
+      `SELECT count(*)::int AS c FROM business_audit_events
+        WHERE family_id = $1
+          AND event_type = 'ASSERTION_RECORDED'
+          AND resource_id NOT IN (SELECT id FROM assertions)`,
+      [fx.familyId]
+    );
+    expect(leakedAudit.rows[0].c).toBe(0);
   });
 });
 

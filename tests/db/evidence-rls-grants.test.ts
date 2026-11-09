@@ -24,8 +24,12 @@ interface Fixture {
   familyB: string;
   caseB: string;
   managerB: string;
+  subjectB: string;
   accountA: string;
   accountB: string;
+  victimMessageB: string;
+  victimAssertionB: string;
+  victimObservationB: string;
 }
 
 describe('Evidence RLS / grants (T015)', () => {
@@ -54,11 +58,12 @@ describe('Evidence RLS / grants (T015)', () => {
     client: pg.PoolClient,
     familyId: string,
     personId: string,
-    fn: () => Promise<T>
+    fn: () => Promise<T>,
+    accountId: string = fx.accountA
   ): Promise<T> {
     await client.query('BEGIN');
     await client.query('SELECT app.set_identity_context($1, $2)', [
-      fx.accountA,
+      accountId,
       'FAMILY_MANAGEMENT',
     ]);
     await client.query('SELECT app.set_family_context($1, $2, $3)', [
@@ -202,16 +207,62 @@ describe('Evidence RLS / grants (T015)', () => {
     }
   });
 
-  it('wrong Family context: SELECT 0 rows and write denied', async () => {
+  it('wrong Family context cannot see populated victim rows and cannot write', async () => {
+    // Authoritative setup: Family B really owns rows in all three tables.
+    const victimCounts = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM dialogue_messages WHERE family_id = $1) AS dialogue_messages,
+         (SELECT count(*)::int FROM assertions        WHERE family_id = $1) AS assertions,
+         (SELECT count(*)::int FROM observations      WHERE family_id = $1) AS observations`,
+      [fx.familyB]
+    );
+    expect(victimCounts.rows[0].dialogue_messages).toBeGreaterThanOrEqual(1);
+    expect(victimCounts.rows[0].assertions).toBeGreaterThanOrEqual(1);
+    expect(victimCounts.rows[0].observations).toBeGreaterThanOrEqual(1);
+
+    const victimRows: Array<[string, string]> = [
+      ['dialogue_messages', fx.victimMessageB],
+      ['assertions', fx.victimAssertionB],
+      ['observations', fx.victimObservationB],
+    ];
+
     const client = await app.connect();
     try {
+      // Positive control: the rightful Family B runtime context reads its rows.
+      await inAppFamily(
+        client,
+        fx.familyB,
+        fx.managerB,
+        async () => {
+          for (const [table, id] of victimRows) {
+            const byId = await client.query(
+              `SELECT count(*)::int AS c FROM ${table} WHERE id = $1`,
+              [id]
+            );
+            expect(byId.rows[0].c, `${table} owner by id`).toBe(1);
+            const byFamily = await client.query(
+              `SELECT count(*)::int AS c FROM ${table} WHERE family_id = $1`,
+              [fx.familyB]
+            );
+            expect(byFamily.rows[0].c, `${table} owner by family`).toBeGreaterThanOrEqual(1);
+          }
+        },
+        fx.accountB
+      );
+
+      // Negative: Family A context sees nothing of the now-populated Family B.
       await inAppFamily(client, fx.familyA, fx.managerA, async () => {
-        for (const table of NEW_TABLES) {
-          const sel = await client.query(
+        for (const [table, id] of victimRows) {
+          const byFamily = await client.query(
             `SELECT count(*)::int AS c FROM ${table} WHERE family_id = $1`,
             [fx.familyB]
           );
-          expect(sel.rows[0].c, table).toBe(0);
+          expect(byFamily.rows[0].c, `${table} wrong family`).toBe(0);
+          const byId = await client.query(
+            `SELECT count(*)::int AS c FROM ${table} WHERE id = $1`,
+            [id]
+          );
+          expect(byId.rows[0].c, `${table} wrong family by id`).toBe(0);
         }
         const insert = assertionInsertSql(fx.familyB, fx.caseB, fx.managerB, 'STATEMENT');
         await expect(client.query(insert.sql, insert.params)).rejects.toThrow(
@@ -316,6 +367,60 @@ async function seed(admin: pg.Client): Promise<Fixture> {
     out['familyA'],
     guardian[0].id,
   ]);
+
+  // S3-L01: Family B owns real Evidence rows so the wrong-Family SELECT can
+  // distinguish "RLS hides existing data" from "the victim tables are empty".
+  const { rows: subjectB } = await admin.query(
+    `INSERT INTO persons (created_by_account_id) VALUES ($1) RETURNING id`,
+    [out['accountB']]
+  );
+  out['subjectB'] = subjectB[0].id;
+  await admin.query(`INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)`, [
+    out['familyB'],
+    subjectB[0].id,
+  ]);
+  await admin.query(
+    `INSERT INTO person_compliance_profiles
+       (person_id, age_band, minor_mode, guardian_person_id, verified_source)
+     VALUES ($1, 'MINOR_14_17', true, $2, 'GUARDIAN_RELAY')`,
+    [subjectB[0].id, out['managerB']]
+  );
+  await admin.query(
+    `INSERT INTO person_compliance_profiles
+       (person_id, age_band, minor_mode, verified_source)
+     VALUES ($1, 'ADULT', false, 'SELF_STATEMENT')`,
+    [out['managerB']]
+  );
+
+  const { rows: victimMessage } = await admin.query(
+    `INSERT INTO dialogue_messages
+       (family_id, case_id, actor_account_id, source_person_id, content)
+     VALUES ($1, $2, $3, $4, 't015 family B victim message') RETURNING id`,
+    [out['familyB'], out['caseB'], out['accountB'], out['managerB']]
+  );
+  out['victimMessageB'] = victimMessage[0].id;
+  const { rows: victimAssertion } = await admin.query(
+    `INSERT INTO assertions
+       (family_id, case_id, subject_person_id, source_kind, source_person_id,
+        occurred_time_state, occurred_at, confirmation_status, kind, content)
+     VALUES ($1, $2, $3, 'GUARDIAN_RELAY', $4, 'UNKNOWN', NULL, 'UNCONFIRMED',
+             'STATEMENT', 't015 family B victim assertion')
+     RETURNING id`,
+    [out['familyB'], out['caseB'], subjectB[0].id, out['managerB']]
+  );
+  out['victimAssertionB'] = victimAssertion[0].id;
+  const { rows: victimObservation } = await admin.query(
+    `INSERT INTO observations
+       (family_id, case_id, subject_person_id, source_kind, source_person_id,
+        occurred_time_state, occurred_at, confirmation_status, observation_code,
+        value_state, value_type, value_number, unit)
+     VALUES ($1, $2, $3, 'GUARDIAN_OBSERVATION', $4, 'UNKNOWN', NULL, 'UNCONFIRMED',
+             'sleep_hours', 'KNOWN', 'NUMBER', 8, 'hours')
+     RETURNING id`,
+    [out['familyB'], out['caseB'], subjectB[0].id, out['managerB']]
+  );
+  out['victimObservationB'] = victimObservation[0].id;
+
   return out as unknown as Fixture;
 }
 
@@ -332,6 +437,11 @@ async function cleanup(admin: pg.Client) {
     );
     await admin.query(
       `DELETE FROM cases WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't015%')`
+    );
+    await admin.query(
+      `DELETE FROM person_compliance_profiles WHERE person_id IN (
+         SELECT person_id FROM family_members WHERE family_id IN (
+           SELECT id FROM families WHERE display_name LIKE 't015%'))`
     );
     await admin.query(
       `DELETE FROM family_members WHERE family_id IN (SELECT id FROM families WHERE display_name LIKE 't015%')`
