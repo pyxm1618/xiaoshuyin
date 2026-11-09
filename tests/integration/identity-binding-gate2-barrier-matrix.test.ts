@@ -30,7 +30,7 @@ import {
   type BindingHarness,
   type TargetFixture,
 } from '../setup/identity-binding.js';
-import { login } from '../setup/api.js';
+import { createFamily, login, loginWithLabel } from '../setup/api.js';
 import {
   InMemoryInvitationPort,
   type InvitationResolution,
@@ -134,14 +134,15 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
   async function seedSecondPartyConfirmation(
     target: TargetFixture,
     confirmerPersonId: string,
-    attemptId: string
+    attemptId: string,
+    authority: 'GUARDIAN' | 'FAMILY_MANAGER' = 'GUARDIAN'
   ): Promise<void> {
     await h.admin.query(
       `INSERT INTO binding_confirmations
          (attempt_id, kind, actor_account_id, actor_person_id, authority,
           target_confirmed, candidate_recognized, statement_version)
-       VALUES ($1, 'SECOND_PARTY', $2, $3, 'GUARDIAN', true, true, 'second-party-recognition-v1')`,
-      [attemptId, target.guardian.accountId, confirmerPersonId]
+       VALUES ($1, 'SECOND_PARTY', $2, $3, $4, true, true, 'second-party-recognition-v1')`,
+      [attemptId, target.guardian.accountId, confirmerPersonId, authority]
     );
   }
 
@@ -214,6 +215,9 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
       'SELECT state, terminal_reason, committed_account_id FROM binding_attempts WHERE id = $1',
       [attemptId]
     );
+    expect(attempt.rows[0].state).toBe('TERMINAL');
+    expect(attempt.rows[0].terminal_reason).toBe(reason);
+    expect(attempt.rows[0].committed_account_id).toBeNull();
     expect(attempt.rows[0]).toMatchObject({
       state: 'TERMINAL',
       terminal_reason: reason,
@@ -290,9 +294,7 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
       );
 
       const blocked = await input.invalidate();
-      expect(blocked.blocked, `invalidator was not blocked by the Gate lock (${blocked.code})`).toBe(
-        true
-      );
+      expect(blocked.blocked).toBe(true);
 
       release();
       released = true;
@@ -306,10 +308,21 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
   }
 
   /** Admin DML with a bounded lock wait; returns whether it was blocked. */
-  async function adminBlocked(sql: string, params: unknown[]): Promise<{ blocked: boolean; code?: string }> {
+  async function adminBlocked(
+    sql: string,
+    params: unknown[],
+    opts: { immediateConstraints?: boolean } = {}
+  ): Promise<{ blocked: boolean; code?: string }> {
     const client = await h.admin.connect();
     try {
       await client.query('BEGIN');
+      if (opts.immediateConstraints) {
+        // family_members.person_id FK is DEFERRABLE INITIALLY DEFERRED. Forcing
+        // immediate constraint checking makes the concurrent INSERT itself take
+        // the P1 FOR KEY SHARE and therefore collide with the binding
+        // transaction's P1 FOR UPDATE.
+        await client.query('SET CONSTRAINTS ALL IMMEDIATE');
+      }
       await client.query(`SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`);
       try {
         await client.query(sql, params as any[]);
@@ -354,6 +367,84 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
       client.release();
       await pool.end();
     }
+  }
+
+  /** Open a real admin transaction that holds the invalidation lock. */
+  async function adminInvalidator(sql: string, params: unknown[]) {
+    const client = await h.admin.connect();
+    await client.query('BEGIN');
+    await client.query(sql, params as any[]);
+    return {
+      pid: client.processID as number,
+      commit: async () => {
+        await client.query('COMMIT');
+      },
+      rollback: async () => {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          // Already committed.
+        } finally {
+          client.release();
+        }
+      },
+    };
+  }
+
+  /**
+   * Invalidation-first: the invalidator holds the authoritative fact lock, the
+   * binding transaction is observably parked on it (`pg_blocking_pids`), then
+   * the invalidator commits and the binding must settle TERMINAL with no write.
+   */
+  async function runInvalidationFirst(input: {
+    target: TargetFixture;
+    attemptId: string;
+    tag: string;
+    openInvalidator: () => Promise<{
+      pid: number;
+      commit: () => Promise<void>;
+      rollback: () => Promise<void>;
+    }>;
+    reason: string;
+  }): Promise<void> {
+    const invalidator = await input.openInvalidator();
+    const commitPool = await taggedAppPool(input.tag);
+    let commit: Promise<any> | null = null;
+    try {
+      commit = commitAttempt(
+        {
+          pool: commitPool,
+          invitationPort: h.port,
+          identityBindingSecret: process.env['IDENTITY_BINDING_SECRET']!,
+        },
+        {
+          attemptId: input.attemptId,
+          targetPersonId: input.target.targetPersonId,
+          targetFamilyId: input.target.familyId,
+          actorAccountId: input.target.guardian.accountId,
+        }
+      );
+
+      const waiting = await waitFor(async () => {
+        const backend = await backendOf(input.tag);
+        if (!backend) return null;
+        return backend.wait_event_type === 'Lock' ? backend : null;
+      }, `binding transaction blocked on ${input.tag}`);
+      expect(waiting.usename).toBe('xiaoshuyin_app');
+      const blockers = await h.admin.query('SELECT pg_blocking_pids($1) AS pids', [waiting.pid]);
+      expect(blockers.rows[0].pids).toContain(invalidator.pid);
+
+      await invalidator.commit();
+      const outcome = await commit;
+      expect(outcome.outcome).toBe('TERMINAL');
+      expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: input.reason });
+    } finally {
+      await invalidator.rollback();
+      if (commit) await commit.catch(() => {});
+      await commitPool.end();
+    }
+
+    await assertTerminalNoBinding(input.target, input.attemptId, input.reason);
   }
 
   it('profile / age-band: Gate lock blocks the concurrent profile UPDATE', async () => {
@@ -641,5 +732,192 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
       [attemptId]
     );
     expect(committed.rows[0].n).toBe(0);
+  });
+
+  it('membership insert: binding-first second-family INSERT cannot cross the linearization point', async () => {
+    const target = await createTarget(h, 'h02_member_insert', { ageBand: 'MINOR_14_17' });
+    const otherOwner = await loginWithLabel(
+      h.app,
+      `h02_mi_${randomUUID().slice(0, 8)}`
+    );
+    const otherFamily = await createFamily(
+      h.app,
+      otherOwner.token,
+      `h02_mi_${randomUUID().slice(0, 8)}`
+    );
+    expect(otherFamily.statusCode).toBe(201);
+    const otherFamilyId = otherFamily.json().id as string;
+
+    const { attemptId } = await startBinding(
+      h,
+      target,
+      `h02_member_insert_${randomUUID()}`
+    );
+    await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
+    await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
+
+    await runBindingFirst({
+      target,
+      attemptId,
+      tag: 'h02_member_insert',
+      invalidate: () =>
+        adminBlocked(
+          'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
+          [otherFamilyId, target.targetPersonId],
+          { immediateConstraints: true }
+        ),
+    });
+
+    // The invalidator rolled back, so the second membership only becomes
+    // possible AFTER the binding linearization point.
+    const before = await h.admin.query(
+      'SELECT count(*)::int AS n FROM family_members WHERE person_id = $1',
+      [target.targetPersonId]
+    );
+    expect(before.rows[0].n).toBe(1);
+    await h.admin.query(
+      'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
+      [otherFamilyId, target.targetPersonId]
+    );
+    const after = await h.admin.query(
+      'SELECT count(*)::int AS n FROM family_members WHERE person_id = $1',
+      [target.targetPersonId]
+    );
+    expect(after.rows[0].n).toBe(2);
+
+    const committed = await h.admin.query(
+      `SELECT count(*)::int AS n FROM identity_binding_audit_events
+        WHERE attempt_id = $1 AND event_type = 'BINDING_COMMITTED'`,
+      [attemptId]
+    );
+    expect(committed.rows[0].n).toBe(1);
+    expect(await terminalAuditCount(attemptId, 'MULTI_FAMILY_BLOCK')).toBe(0);
+  });
+
+  it('membership insert: invalidation-first second-family INSERT settles MULTI_FAMILY_BLOCK with zero commit', async () => {
+    const target = await createTarget(h, 'h02_member_insert_first', { ageBand: 'MINOR_14_17' });
+    const otherOwner = await loginWithLabel(
+      h.app,
+      `h02_mif_${randomUUID().slice(0, 8)}`
+    );
+    const otherFamily = await createFamily(
+      h.app,
+      otherOwner.token,
+      `h02_mif_${randomUUID().slice(0, 8)}`
+    );
+    expect(otherFamily.statusCode).toBe(201);
+    const otherFamilyId = otherFamily.json().id as string;
+    const code = `h02_member_insert_first_${randomUUID()}`;
+
+    const { attemptId } = await startBinding(h, target, code);
+    await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
+    await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
+
+    // The second Family membership linearizes first.
+    await h.admin.query(
+      'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
+      [otherFamilyId, target.targetPersonId]
+    );
+
+    const commitPool = createAppPool(1);
+    try {
+      const outcome = await commitAttempt(
+        {
+          pool: commitPool,
+          invitationPort: h.port,
+          identityBindingSecret: process.env['IDENTITY_BINDING_SECRET']!,
+        },
+        {
+          attemptId,
+          targetPersonId: target.targetPersonId,
+          targetFamilyId: target.familyId,
+          actorAccountId: target.guardian.accountId,
+        }
+      );
+      expect(outcome.outcome).toBe('TERMINAL');
+      expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'MULTI_FAMILY_BLOCK' });
+    } finally {
+      await commitPool.end();
+    }
+
+    await assertTerminalNoBinding(target, attemptId, 'MULTI_FAMILY_BLOCK');
+    const accounts = await h.admin.query(
+      'SELECT count(*)::int AS n FROM accounts WHERE wechat_openid = $1',
+      [`fake_${code}`]
+    );
+    expect(accounts.rows[0].n).toBe(0);
+  });
+
+  it('guardian authority: invalidation-first guardian change yields TERMINAL / WRONG_CONFIRMER', async () => {
+    const target = await createTarget(h, 'h02_guardian_inv', { ageBand: 'MINOR_14_17' });
+    const alt = await createTarget(h, 'h02_guardian_inv_alt', { ageBand: 'MINOR_14_17' });
+    await h.admin.query(
+      'UPDATE person_compliance_profiles SET guardian_person_id = $1 WHERE person_id = $2',
+      [target.guardian.personId, target.targetPersonId]
+    );
+    const { attemptId } = await startBinding(h, target, `h02_guardian_inv_${randomUUID()}`);
+    await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
+    await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
+
+    await runInvalidationFirst({
+      target,
+      attemptId,
+      tag: 'h02_guardian_inv',
+      reason: 'WRONG_CONFIRMER',
+      openInvalidator: () =>
+        adminInvalidator(
+          'UPDATE person_compliance_profiles SET guardian_person_id = $1 WHERE person_id = $2',
+          [alt.guardian.personId, target.targetPersonId]
+        ),
+    });
+  });
+
+  it('family manager authority: binding-first family creator UPDATE cannot cross the linearization point', async () => {
+    const target = await createTarget(h, 'h02_fm_lock', { ageBand: 'MINOR_14_17' });
+    const alt = await loginWithLabel(h.app, `h02_fm_lock_alt_${randomUUID()}`);
+    const { attemptId } = await startBinding(h, target, `h02_fm_lock_${randomUUID()}`);
+    await seedSecondPartyConfirmation(
+      target,
+      target.guardian.personId,
+      attemptId,
+      'FAMILY_MANAGER'
+    );
+    await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
+
+    await runBindingFirst({
+      target,
+      attemptId,
+      tag: 'h02_fm_lock',
+      invalidate: () =>
+        adminBlocked('UPDATE families SET created_by_person_id = $1 WHERE id = $2', [
+          alt.personId,
+          target.familyId,
+        ]),
+    });
+  });
+
+  it('family manager authority: invalidation-first family creator change yields TERMINAL / WRONG_CONFIRMER', async () => {
+    const target = await createTarget(h, 'h02_fm_inv', { ageBand: 'MINOR_14_17' });
+    const alt = await loginWithLabel(h.app, `h02_fm_inv_alt_${randomUUID()}`);
+    const { attemptId } = await startBinding(h, target, `h02_fm_inv_${randomUUID()}`);
+    await seedSecondPartyConfirmation(
+      target,
+      target.guardian.personId,
+      attemptId,
+      'FAMILY_MANAGER'
+    );
+    await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
+
+    await runInvalidationFirst({
+      target,
+      attemptId,
+      tag: 'h02_fm_inv',
+      reason: 'WRONG_CONFIRMER',
+      openInvalidator: () =>
+        adminInvalidator('UPDATE families SET created_by_person_id = $1 WHERE id = $2', [
+          alt.personId,
+          target.familyId,
+        ]),
+    });
   });
 });

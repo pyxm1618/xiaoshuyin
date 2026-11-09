@@ -2,11 +2,12 @@
  * F-08 / T115 / MEDIUM-03 — coverage audit is substantive and fails closed.
  *
  * A proof is only accepted when all of the following hold:
- *   exact test name + still-executable body + required assertion(s)
- *   + executed PASS evidence.
+ *   exact test name + still-executable body + requirement-specific assertion
+ *   contract + executed PASS evidence.
  *
- * Empty `it('name', () => {})`, assertion removal, unexecuted tests and mapping
- * to an unrelated passing test must all make the audit fail closed.
+ * Empty `it('name', () => {})`, a missing/removed requirement assertion,
+ * unexecuted tests and mapping to an unrelated passing test must all make the
+ * audit fail closed. There is no "any expect()" fallback.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -19,21 +20,31 @@ import {
   audit,
   fileOk,
   proofOk,
+  PROOF_ASSERTIONS,
   SUBSTANTIVE_PROOFS,
 } from '../../scripts/coverage-audit.mjs';
 
 const ROOT = process.cwd();
 
+const ROTATION_ASSERTIONS = [
+  'expect(challengeB).not.toBe(challengeA);',
+  "expect(current.json().state).toBe('COMMITTED');",
+];
+const REPLAY_ASSERTIONS = [
+  "expect(replay.json().state).toBe('COMMITTED');",
+  'expect(after).toEqual(before);',
+];
+
 function fullExecution() {
   return {
-    testResults: Object.values(SUBSTANTIVE_PROOFS as Record<string, { file: string; test: string }>).map(
-      (proof) => ({
-        name: `/repo/${proof.file}`,
-        assertionResults: [
-          { title: proof.test, fullName: `suite > ${proof.test}`, status: 'passed' },
-        ],
-      })
-    ),
+    testResults: Object.values(
+      SUBSTANTIVE_PROOFS as Record<string, { file: string; test: string }>
+    ).map((proof) => ({
+      name: `/repo/${proof.file}`,
+      assertionResults: [
+        { title: proof.test, fullName: `suite > ${proof.test}`, status: 'passed' },
+      ],
+    })),
   };
 }
 
@@ -70,7 +81,29 @@ describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
         'Slice 5 Substantive Proofs',
       ])
     );
-    expect(result.missing).toEqual([]);
+  });
+
+  it('SUBSTANTIVE_PROOFS and PROOF_ASSERTIONS are exactly 41/41 with equal keys', () => {
+    const proofIds = Object.keys(SUBSTANTIVE_PROOFS).sort();
+    const assertionIds = Object.keys(PROOF_ASSERTIONS).sort();
+    expect(proofIds).toHaveLength(41);
+    expect(assertionIds).toHaveLength(41);
+    expect(assertionIds).toEqual(proofIds);
+  });
+
+  it('every proof declares a non-empty, requirement-specific assertion contract', () => {
+    for (const [id, cfg] of Object.entries(
+      PROOF_ASSERTIONS as Record<string, { assertions?: string[]; helperAssertions?: string[] }>
+    )) {
+      const all = [...(cfg.assertions ?? []), ...(cfg.helperAssertions ?? [])];
+      expect(all.length, id).toBeGreaterThan(0);
+      for (const assertion of all) {
+        expect(assertion.trim(), id).not.toBe('expect(');
+        expect(assertion.trim(), id).not.toBe('toBe(');
+        expect(assertion.trim(), id).not.toBe('toEqual(');
+        expect(assertion, id).toContain('expect(');
+      }
+    }
   });
 
   it('fileOk rejects a missing or empty test file', () => {
@@ -83,26 +116,53 @@ describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
     expect(fileOk('tests/integration/real.test.ts', dir)).toBe(true);
   });
 
-  it('A: assertion removal fails closed (empty test body)', () => {
+  it('A: removing the requirement-specific assertion fails closed', () => {
     const { dir, rel } = writeFixture(
       'empty-assertion.test.ts',
-      "it('required proof H-01', () => {});\n"
+      "it('rotation proof', () => { expect(1).toBe(1); });\n"
     );
     const result = proofOk(
       rel,
-      { id: 'plain-proof', test: 'required proof H-01' },
+      { id: 'H-01-rotation-new-bytes', test: 'rotation proof' },
       dir,
-      executionFor(rel, 'required proof H-01')
+      executionFor(rel, 'rotation proof')
     );
-    expect(result).toEqual({ ok: false, reason: 'no-assertion' });
+    expect(result).toEqual({ ok: false, reason: 'assertion-removed' });
   });
 
-  it('B: mapping to an unrelated passing test fails closed', () => {
+  it('A2: a proof without an assertion contract fails closed', () => {
+    const { dir, rel } = writeFixture(
+      'no-contract.test.ts',
+      "it('plain proof', () => { expect(1).toBe(1); });\n"
+    );
+    const result = proofOk(
+      rel,
+      { id: 'not-a-configured-proof', test: 'plain proof' },
+      dir,
+      executionFor(rel, 'plain proof')
+    );
+    expect(result).toEqual({ ok: false, reason: 'missing-proof-assertion' });
+  });
+
+  it('B: mapping a non-H-02 proof to an unrelated real passing test fails closed', () => {
+    const { dir, rel } = writeFixture(
+      'unrelated-normal.test.ts',
+      "it('unrelated passing proof', () => { expect(1).toBe(1); expect(2).toBe(2); });\n"
+    );
+    const result = proofOk(
+      rel,
+      { id: 'MEDIUM-01-replay-committed', test: 'unrelated passing proof' },
+      dir,
+      executionFor(rel, 'unrelated passing proof')
+    );
+    expect(result).toEqual({ ok: false, reason: 'assertion-removed' });
+  });
+
+  it('B2: mapping an H-02 proof to an unrelated passing test fails closed', () => {
     const { dir, rel } = writeFixture(
       'unrelated.test.ts',
       "it('unrelated passing proof', () => { expect(1).toBe(1); });\n"
     );
-    // H-02 requires helper assertions that the unrelated proof does not carry.
     const result = proofOk(
       rel,
       { id: 'H-02-profile-age-barrier', test: 'unrelated passing proof' },
@@ -115,27 +175,27 @@ describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
   it('C: existing test without executed PASS evidence is unexecuted', () => {
     const { dir, rel } = writeFixture(
       'not-executed.test.ts',
-      "it('required proof H-01', () => { expect(1).toBe(1); });\n"
+      `it('replay proof', () => {\n  ${REPLAY_ASSERTIONS.join('\n  ')}\n});\n`
     );
     const result = proofOk(
       rel,
-      { id: 'plain-proof', test: 'required proof H-01' },
+      { id: 'MEDIUM-01-replay-committed', test: 'replay proof' },
       dir,
       executionFor(rel, 'another test')
     );
     expect(result).toEqual({ ok: false, reason: 'unexecuted' });
   });
 
-  it('D: mapping + assertion + executed PASS evidence passes', () => {
+  it('D: mapping + requirement assertion + executed PASS evidence passes', () => {
     const { dir, rel } = writeFixture(
       'good.test.ts',
-      "it('required proof H-01', () => { expect(1).toBe(1); });\n"
+      `it('replay proof', () => {\n  ${REPLAY_ASSERTIONS.join('\n  ')}\n});\n`
     );
     const result = proofOk(
       rel,
-      { id: 'plain-proof', test: 'required proof H-01' },
+      { id: 'MEDIUM-01-replay-committed', test: 'replay proof' },
       dir,
-      executionFor(rel, 'required proof H-01')
+      executionFor(rel, 'replay proof')
     );
     expect(result).toEqual({ ok: true });
   });
@@ -143,27 +203,32 @@ describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
   it('delete / rename / skip remain fail-closed', () => {
     const { dir, rel } = writeFixture(
       'proof.test.ts',
-      "it('required proof H-01', () => { expect(1).toBe(1); });\n"
+      `it('rotation proof', () => {\n  ${ROTATION_ASSERTIONS.join('\n  ')}\n});\n`
     );
-    const execution = executionFor(rel, 'required proof H-01');
+    const execution = executionFor(rel, 'rotation proof');
 
     expect(
-      proofOk(rel, { id: 'plain-proof', test: 'required proof H-01' }, dir, execution).ok
+      proofOk(rel, { id: 'H-01-rotation-new-bytes', test: 'rotation proof' }, dir, execution).ok
     ).toBe(true);
     expect(
-      proofOk(rel, { id: 'plain-proof', test: 'renamed proof' }, dir, execution).ok
+      proofOk(rel, { id: 'H-01-rotation-new-bytes', test: 'renamed proof' }, dir, execution).ok
     ).toBe(false);
 
     writeFileSync(
       join(dir, rel),
-      "it.skip('required proof H-01', () => { expect(1).toBe(1); });\n"
+      `it.skip('rotation proof', () => {\n  ${ROTATION_ASSERTIONS.join('\n  ')}\n});\n`
     );
     expect(
-      proofOk(rel, { id: 'plain-proof', test: 'required proof H-01' }, dir, execution).ok
+      proofOk(rel, { id: 'H-01-rotation-new-bytes', test: 'rotation proof' }, dir, execution).ok
     ).toBe(false);
 
     expect(
-      proofOk('tests/integration/missing.test.ts', { id: 'plain-proof', test: 'required proof H-01' }, dir, execution).ok
+      proofOk(
+        'tests/integration/missing.test.ts',
+        { id: 'H-01-rotation-new-bytes', test: 'rotation proof' },
+        dir,
+        execution
+      ).ok
     ).toBe(false);
   });
 

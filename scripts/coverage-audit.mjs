@@ -358,7 +358,7 @@ export const SUBSTANTIVE_PROOFS = {
   },
   'H-02-membership-authority-barrier': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'membership: Gate lock blocks the concurrent membership DELETE',
+    test: 'membership insert: binding-first second-family INSERT cannot cross the linearization point',
   },
   'H-02-P1-conflict-barrier': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
@@ -418,92 +418,286 @@ export const SUBSTANTIVE_PROOFS = {
  * closed instead of accepting an empty `it('name', () => {})`.
  */
 export const PROOF_ASSERTIONS = {
+  // ── H-01 direct proofs ──────────────────────────────────────
+  'H-01-valid-decoy': {
+    assertions: [
+      "expect(Object.keys(res.json()).sort()).toEqual(['binding', 'pairingChallenge']);",
+      'expect(res.json().pairingChallenge).toMatch(/^[A-Za-z0-9_-]{192}$/);',
+    ],
+  },
+  'H-01-challenge-envelope': {
+    assertions: [
+      'expect(challenge).toHaveLength(192);',
+      'expect(isPairingChallengeShape(challenge)).toBe(true);',
+    ],
+  },
+  'H-01-exact-byte-replay': {
+    assertions: [
+      'expect(replay.json().pairingChallenge).toBe(first.json().pairingChallenge);',
+      'expect(secondExpiry.rows[0].pairing_expires_at).toEqual(firstExpiry.rows[0].pairing_expires_at);',
+    ],
+  },
+  'H-01-confirmer-exact-binding': {
+    assertions: [
+      'expect(await snapshotB()).toEqual(before);',
+      "expect(attemptA.rows[0].state).toBe('PENDING');",
+    ],
+  },
+  'H-01-rotation-new-bytes': {
+    assertions: [
+      'expect(challengeB).not.toBe(challengeA);',
+      "expect(current.json().state).toBe('COMMITTED');",
+    ],
+  },
+  'H-01-old-issuance-invalid': {
+    assertions: [
+      "expect(old.json().code).toBe('BINDING_NOT_FOUND');",
+      'expect(await secondPartyCount(h, attemptId)).toBe(0);',
+    ],
+  },
+  'H-01-consumed-new-key-404': {
+    assertions: [
+      "expect(reused.json().code).toBe('BINDING_NOT_FOUND');",
+      'expect(await secondPartyCount(h, attemptId)).toBe(before.confirmations);',
+    ],
+  },
+  'H-01-same-key-rotated-409': {
+    assertions: [
+      "expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');",
+      "expect(state.rows[0].state).toBe('PENDING');",
+    ],
+  },
+  'H-01-two-confirmer-concurrency': {
+    assertions: [
+      'expect(await secondPartyCount(h, attemptId)).toBe(1);',
+      'expect(committedAudit.rows[0].n).toBe(1);',
+    ],
+  },
+
+  // ── H-02 direct barrier proofs ──────────────────────────────
+  'H-02-gate2-barrier': {
+    assertions: [
+      "expect(outcome.outcome).toBe('TERMINAL');",
+      'expect(committedAudit.rows[0].n).toBe(0);',
+    ],
+  },
+  'H-02-runtime-lock': {
+    assertions: ['expect(result.rowCount).toBeGreaterThanOrEqual(1);'],
+  },
   'H-02-profile-age-barrier': {
     helperAssertions: [
+      'expect(blocked.blocked).toBe(true);',
       "expect(outcome.outcome).toBe('COMMITTED');",
     ],
   },
   'H-02-profile-missing-barrier': {
     helperAssertions: [
+      'expect(blocked.blocked).toBe(true);',
       "expect(outcome.outcome).toBe('COMMITTED');",
     ],
   },
   'H-02-consent-barrier': {
     helperAssertions: [
+      'expect(blocked.blocked).toBe(true);',
       "expect(outcome.outcome).toBe('COMMITTED');",
     ],
   },
   'H-02-guardian-barrier': {
     helperAssertions: [
+      'expect(blocked.blocked).toBe(true);',
       "expect(outcome.outcome).toBe('COMMITTED');",
+      "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: input.reason });",
     ],
   },
   'H-02-membership-authority-barrier': {
     helperAssertions: [
+      'expect(blocked.blocked).toBe(true);',
       "expect(outcome.outcome).toBe('COMMITTED');",
+      "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'MULTI_FAMILY_BLOCK' });",
+      'expect(committed.rows[0].n).toBe(0);',
     ],
   },
   'H-02-P1-conflict-barrier': {
     helperAssertions: [
+      'expect(blocked.blocked).toBe(true);',
       "expect(outcome.outcome).toBe('COMMITTED');",
     ],
   },
   'H-02-candidate-account-conflict': {
     helperAssertions: [
       "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'IDENTITY_CONFLICT' });",
+      "expect(attempt.rows[0].state).toBe('TERMINAL');",
     ],
   },
   'H-02-invitation-seam': {
     helperAssertions: [
       "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'INVITATION_TERMINAL' });",
+      'expect(attempt.rows[0].terminal_reason).toBe(reason);',
+    ],
+  },
+
+  // ── M-01 direct eligibility proofs ──────────────────────────
+  'M-01-consent-revoked': {
+    assertions: [
+      'expect(confirmations.rows[0].n).toBe(0);',
+      'expect(audit.rows[0].n).toBe(1);',
+      'expect(contexts.rows[0].n).toBe(0);',
+    ],
+  },
+  'M-01-fact-matrix': {
+    assertions: [
+      "expect(attempt.rows[0].state).toBe('TERMINAL');",
+      'expect(attempt.rows[0].terminal_reason).toBe(c.reason);',
     ],
   },
   'M-01-profile': {
     helperAssertions: [
+      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
       'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
+      'expect(allContexts.rows[0].n, input.label).toBe(0);',
       'expect(attempt.rows[0], input.label).toMatchObject({',
     ],
   },
   'M-01-age-band': {
     helperAssertions: [
+      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
       'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
+      'expect(allContexts.rows[0].n, input.label).toBe(0);',
       'expect(attempt.rows[0], input.label).toMatchObject({',
     ],
   },
   'M-01-guardian': {
     helperAssertions: [
+      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
       'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
+      'expect(allContexts.rows[0].n, input.label).toBe(0);',
       'expect(attempt.rows[0], input.label).toMatchObject({',
     ],
   },
   'M-01-consent': {
     helperAssertions: [
+      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
       'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
+      'expect(allContexts.rows[0].n, input.label).toBe(0);',
       'expect(attempt.rows[0], input.label).toMatchObject({',
     ],
   },
   'M-01-membership': {
     helperAssertions: [
+      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
       'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
+      'expect(allContexts.rows[0].n, input.label).toBe(0);',
       'expect(attempt.rows[0], input.label).toMatchObject({',
     ],
   },
   'M-01-invitation': {
     helperAssertions: [
+      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
       'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
+      'expect(allContexts.rows[0].n, input.label).toBe(0);',
       'expect(attempt.rows[0], input.label).toMatchObject({',
     ],
   },
   'M-01-P1-conflict': {
     helperAssertions: [
+      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
       'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      "expect(person.rows[0].account_id, input.label).toBe(",
+      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
+      'expect(allContexts.rows[0].n, input.label).toBe(0);',
+      'expect(person.rows[0].account_id, input.label).toBe(',
     ],
   },
   'M-01-candidate-account-conflict': {
     helperAssertions: [
+      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
       'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
+      'expect(allContexts.rows[0].n, input.label).toBe(0);',
       'expect(attempt.rows[0], input.label).toMatchObject({',
+    ],
+  },
+
+  // ── M-02 / M-03 / M-04 + contract / RLS / rollback / MINOR / Case B ──
+  'M-02-replay-cleanup': {
+    assertions: [
+      'expect(rows).toHaveLength(1);',
+      "expect(reused.json().binding).toBe('REUSED');",
+    ],
+  },
+  'M-03-status-expiry': {
+    assertions: [
+      'expect(secrets.rows[0].n).toBe(0);',
+      'expect(audit.rows[0].n).toBe(1);',
+    ],
+  },
+  'M-04-settlement': {
+    assertions: [
+      "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'ATTEMPT_EXPIRED' });",
+      "expect(await auditCount(attemptId, 'BINDING_TERMINAL')).toBe(1);",
+      'expect(secrets.rows[0].n).toBe(0);',
+      'expect(binding.rows[0].account_id).toBeNull();',
+    ],
+  },
+  'confirmationVersion-matrix': {
+    assertions: [
+      'expect(omitted.statusCode).toBe(422);',
+      'expect(wrong.statusCode).toBe(422);',
+      'expect(present.statusCode).toBe(422);',
+    ],
+  },
+  'RLS-negative-writes': {
+    assertions: ['expect(result.read).toBe(1);', 'expect(denied).toBe(true);'],
+  },
+  'rollback-matrix': {
+    assertions: [
+      'expect(accountsAfter.rows[0].n).toBe(0);',
+      'expect(person.rows[0].account_id).toBeNull();',
+    ],
+  },
+  'MINOR-guardian': {
+    assertions: [
+      "expect(confirm.json().state).toBe('COMMITTED');",
+      'expect(p2.rows[0].cnt).toBe(0);',
+    ],
+  },
+  'true-CaseB-mismatch': {
+    assertions: [
+      'expect(mismatch).toEqual(baseline);',
+      'expect(attempts.rows[0].n).toBe(0);',
+      'expect(confirmations.rows[0].n).toBe(0);',
+    ],
+  },
+
+  // ── MEDIUM-01 historical replay proofs ──────────────────────
+  'MEDIUM-01-replay-committed': {
+    assertions: [
+      "expect(replay.json().state).toBe('COMMITTED');",
+      'expect(after).toEqual(before);',
+    ],
+  },
+  'MEDIUM-01-replay-terminal': {
+    assertions: [
+      "expect(replay.json().state).toBe('TERMINAL');",
+      'expect(after).toEqual(before);',
+    ],
+  },
+  'MEDIUM-01-replay-pending-continuation': {
+    assertions: [
+      "expect(replay.json().state).toBe('TERMINAL');",
+      'expect(after.confirmations).toBe(2);',
+      'expect(terminalAudit.rows[0].n).toBe(1);',
+    ],
+  },
+  'MEDIUM-01-replay-payload-mismatch': {
+    assertions: [
+      "expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');",
+      'expect(await mutationSnapshot(h, attemptId, target.targetPersonId)).toEqual(before);',
     ],
   },
 };
@@ -572,10 +766,16 @@ function executedPassed(evidence, rel, testName) {
   return false;
 }
 
+const BROAD_ASSERTIONS = new Set(['expect(', 'toBe(', 'toEqual(']);
+
 /**
  * Exact substantive proof check:
- *   file + exact test name + still-executable body + required assertion(s)
- *   + executed PASS evidence.
+ *   file + exact test name + still-executable body + requirement-specific
+ *   assertion contract + executed PASS evidence.
+ *
+ * There is no "any expect()" fallback: a proof without an explicit assertion
+ * contract fails closed, and each configured assertion must be a real
+ * requirement assertion rather than a generic token.
  */
 export function proofOk(rel, proof, root = ROOT, execution = null) {
   const full = join(root, rel);
@@ -586,17 +786,26 @@ export function proofOk(rel, proof, root = ROOT, execution = null) {
   const body = extractTestBody(content, proof.test);
   if (body === null) return { ok: false, reason: 'missing-or-skipped-test' };
 
-  const cfg = PROOF_ASSERTIONS[proof.id] ?? {};
+  const cfg = PROOF_ASSERTIONS[proof.id];
+  if (!cfg) return { ok: false, reason: 'missing-proof-assertion' };
+  const allAssertions = [...(cfg.assertions ?? []), ...(cfg.helperAssertions ?? [])];
+  if (allAssertions.length === 0) {
+    return { ok: false, reason: 'no-requirement-assertion' };
+  }
+  for (const assertion of allAssertions) {
+    const trimmed = assertion.trim();
+    if (BROAD_ASSERTIONS.has(trimmed)) {
+      return { ok: false, reason: 'broad-assertion' };
+    }
+    if (!trimmed.includes('expect(')) {
+      return { ok: false, reason: 'not-an-assertion' };
+    }
+  }
   for (const assertion of cfg.assertions ?? []) {
     if (!body.includes(assertion)) return { ok: false, reason: 'assertion-removed' };
   }
   for (const assertion of cfg.helperAssertions ?? []) {
     if (!content.includes(assertion)) return { ok: false, reason: 'helper-assertion-removed' };
-  }
-  const hasBodyAssertion = body.includes('expect(');
-  const hasHelperAssertion = (cfg.helperAssertions ?? []).length > 0;
-  if (!hasBodyAssertion && !hasHelperAssertion) {
-    return { ok: false, reason: 'no-assertion' };
   }
   if (!execution) return { ok: false, reason: 'unexecuted-no-evidence' };
   if (!executedPassed(execution, rel, proof.test)) {
@@ -638,6 +847,14 @@ function checkSection(label, mapping, root, missing) {
 export function audit(root = ROOT, options = {}) {
   const missing = [];
   const execution = options.execution ?? null;
+  const proofIds = Object.keys(SUBSTANTIVE_PROOFS).sort();
+  const assertionIds = Object.keys(PROOF_ASSERTIONS).sort();
+  if (JSON.stringify(proofIds) !== JSON.stringify(assertionIds)) {
+    missing.push(
+      `[Slice 5 Substantive Proofs] assertion-contract keys must equal proof keys ` +
+        `(proofs=${proofIds.length}, assertions=${assertionIds.length})`
+    );
+  }
   const sections = [
     checkSection('Slice 1 FR', FR, root, missing),
     checkSection('Slice 1 SC', SC, root, missing),
