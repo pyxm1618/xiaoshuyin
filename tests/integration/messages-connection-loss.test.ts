@@ -8,8 +8,12 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
+import { rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import pg from 'pg';
 
 const DATABASE_URL = process.env['DATABASE_URL']!;
@@ -22,6 +26,7 @@ let baseUrl = '';
 let nodeStdout = '';
 let nodeStderr = '';
 let seq = 0;
+const nodeBundlePath = join(tmpdir(), `xiaoshuyin-ufa002-${process.pid}-${Date.now()}.mjs`);
 
 function childDatabaseUrl(): string {
   const url = new URL(DATABASE_URL);
@@ -30,8 +35,34 @@ function childDatabaseUrl(): string {
 }
 
 async function startNodeApi(): Promise<string> {
+  // The repository uses NodeNext .js specifiers in TypeScript source. A raw
+  // Node process cannot resolve those specifiers back to .ts, so first produce
+  // a Node-targeted JS artifact, then execute that artifact with the project's
+  // production baseline Node runtime. Runtime execution is Node, not Bun.
+  const build = spawnSync(
+    'bun',
+    [
+      'build',
+      'apps/server/api/src/app.ts',
+      '--target=node',
+      '--format=esm',
+      `--outfile=${nodeBundlePath}`,
+    ],
+    {
+      cwd: process.cwd(),
+      env: process.env,
+      encoding: 'utf8',
+    }
+  );
+  if (build.status !== 0) {
+    throw new Error(
+      `Failed to build Node API artifact\nstdout:\n${build.stdout}\nstderr:\n${build.stderr}`
+    );
+  }
+
+  const bundleUrl = pathToFileURL(nodeBundlePath).href;
   const script = `
-    import { buildApp } from './apps/server/api/src/app.ts';
+    import { buildApp } from ${JSON.stringify(bundleUrl)};
     const app = await buildApp();
     const address = await app.listen({ port: 0, host: '127.0.0.1' });
     process.stdout.write('UFA002_NODE_API=' + address + '\\n');
@@ -260,6 +291,7 @@ describe.sequential('UFA-002 — real Node + PostgreSQL backend termination', ()
       await once(nodeProcess, 'exit');
     }
     await admin.end();
+    rmSync(nodeBundlePath, { force: true });
   });
 
   it('authorization-phase connection loss returns 500, leaves zero residue, and Node survives', async () => {
