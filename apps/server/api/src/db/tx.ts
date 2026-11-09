@@ -459,6 +459,50 @@ export async function setFamilyContext(
   await tx.query('SELECT app.set_family_context($1, $2, $3)', [familyId, personId, purpose]);
 }
 
+/**
+ * Narrow bridge for cross-slice adapters that need one Family-scoped query
+ * inside a transaction owned by another context framework (for example the
+ * Slice 006 binding commit). The generic Family/Person/Purpose settings are
+ * restored before control returns, so they cannot widen later RLS visibility.
+ *
+ * If the callback fails, the owning transaction is expected to roll back and
+ * no restoration query is attempted against a potentially aborted transaction.
+ */
+export async function withTemporaryFamilyContext<T>(
+  tx: TxClient,
+  opts: { familyId: string; personId: string; purpose: string },
+  fn: () => Promise<T>
+): Promise<T> {
+  const { rows } = await tx.query<{
+    family_id: string;
+    person_id: string;
+    purpose: string;
+  }>(
+    `SELECT
+       COALESCE(current_setting('app.family_id', true), '') AS family_id,
+       COALESCE(current_setting('app.person_id', true), '') AS person_id,
+       COALESCE(current_setting('app.purpose', true), '') AS purpose`
+  );
+  const previous = rows[0] ?? { family_id: '', person_id: '', purpose: '' };
+
+  await setFamilyContext(tx, opts.familyId, opts.personId, opts.purpose);
+  let result: T;
+  try {
+    result = await fn();
+  } catch (error) {
+    throw error;
+  }
+
+  await tx.query(
+    `SELECT
+       set_config('app.family_id', $1, true),
+       set_config('app.person_id', $2, true),
+       set_config('app.purpose', $3, true)`,
+    [previous.family_id, previous.person_id, previous.purpose]
+  );
+  return result;
+}
+
 
 // ── Slice 4 participation invitation context ────────────────
 
