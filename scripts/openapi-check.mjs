@@ -49,6 +49,16 @@ const FROZEN_DOCS = [
     ),
   },
   {
+    label: '004-case-participant-core',
+    path: join(
+      ROOT,
+      'specs',
+      '004-case-participant-core',
+      'contracts',
+      'participation-api.openapi.yaml'
+    ),
+  },
+  {
 
     label: '006-identity-binding-runtime',
     path: join(
