@@ -2,7 +2,7 @@
  * Slice 4 Case Participant Core.
  *
  * This is the single repository for case_participants SQL. Identity binding
- * remains owned by Slice 5; this module never reads or writes persons.account_id.
+ * remains owned by Slice 5; this module never reads or writes the Person↔Account binding column.
  */
 
 import { createHash, createHmac } from 'node:crypto';
