@@ -53,9 +53,9 @@ import { authorize } from '@xiaoshuyin/authorization';
 import {
   setFamilyContext,
   withIdentityTransaction,
+  setInviteTokenContext,
   withInviteTokenTransaction,
   withRlsTransaction,
-  withTemporaryInviteTokenContext,
 } from '../db/tx.js';
 import { requireCurrentFamily } from '../family-context.js';
 import {
@@ -262,12 +262,10 @@ async function resolveOwnByToken(
   const row = await withIdentityTransaction(
     pool,
     { accountId, purpose: 'PARTICIPATION' },
-    (tx) =>
-      withTemporaryInviteTokenContext(
-        tx,
-        tokenHash,
-        () => getOwnParticipationByTokenHash(tx, tokenHash)
-      )
+    async (tx) => {
+      await setInviteTokenContext(tx, tokenHash);
+      return getOwnParticipationByTokenHash(tx, tokenHash);
+    }
   );
   if (!row) throw participationNotFound();
   requireSelfDecision(accountId, personId, row, 'PARTICIPATION_ACCEPT_SELF');
@@ -619,11 +617,8 @@ export function registerParticipationRoutes(
           requestHash,
         },
         async (tx) => {
-          const current = await withTemporaryInviteTokenContext(
-            tx,
-            inviteTokenHash,
-            () => getOwnParticipationByTokenHash(tx, inviteTokenHash)
-          );
+          await setInviteTokenContext(tx, inviteTokenHash);
+          const current = await getOwnParticipationByTokenHash(tx, inviteTokenHash);
           if (!current || current.id !== prelim.id) throw participationNotFound();
           return runSelfStateCommand(tx, {
             accountId: actor.accountId,
