@@ -486,53 +486,106 @@ export const PROOF_ASSERTIONS = {
   },
   'H-02-profile-age-barrier': {
     helperAssertions: [
-      'expect(blocked.blocked).toBe(true);',
-      "expect(outcome.outcome).toBe('COMMITTED');",
+      {
+        helper: 'runBindingFirst',
+        assertions: [
+          'expect(blocked.blocked).toBe(true);',
+          "expect(outcome.outcome).toBe('COMMITTED');",
+        ],
+      },
     ],
   },
   'H-02-profile-missing-barrier': {
     helperAssertions: [
-      'expect(blocked.blocked).toBe(true);',
-      "expect(outcome.outcome).toBe('COMMITTED');",
+      {
+        helper: 'runBindingFirst',
+        assertions: [
+          'expect(blocked.blocked).toBe(true);',
+          "expect(outcome.outcome).toBe('COMMITTED');",
+        ],
+      },
     ],
   },
   'H-02-consent-barrier': {
     helperAssertions: [
-      'expect(blocked.blocked).toBe(true);',
-      "expect(outcome.outcome).toBe('COMMITTED');",
+      {
+        helper: 'runBindingFirst',
+        assertions: [
+          'expect(blocked.blocked).toBe(true);',
+          "expect(outcome.outcome).toBe('COMMITTED');",
+        ],
+      },
     ],
   },
   'H-02-guardian-barrier': {
     helperAssertions: [
-      'expect(blocked.blocked).toBe(true);',
-      "expect(outcome.outcome).toBe('COMMITTED');",
-      "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: input.reason });",
+      {
+        helper: 'runBindingFirst',
+        assertions: [
+          'expect(blocked.blocked).toBe(true);',
+          "expect(outcome.outcome).toBe('COMMITTED');",
+        ],
+      },
     ],
   },
   'H-02-membership-authority-barrier': {
+    assertions: [
+      'expect(before.rows[0].n).toBe(1);',
+      'expect(after.rows[0].n).toBe(2);',
+      'expect(committed.rows[0].n).toBe(1);',
+      "expect(await terminalAuditCount(attemptId, 'MULTI_FAMILY_BLOCK')).toBe(0);",
+    ],
     helperAssertions: [
-      'expect(blocked.blocked).toBe(true);',
-      "expect(outcome.outcome).toBe('COMMITTED');",
-      "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'MULTI_FAMILY_BLOCK' });",
-      'expect(committed.rows[0].n).toBe(0);',
+      {
+        helper: 'runBindingFirst',
+        assertions: [
+          'expect(blocked.blocked).toBe(true);',
+          "expect(outcome.outcome).toBe('COMMITTED');",
+        ],
+      },
     ],
   },
   'H-02-P1-conflict-barrier': {
     helperAssertions: [
-      'expect(blocked.blocked).toBe(true);',
-      "expect(outcome.outcome).toBe('COMMITTED');",
+      {
+        helper: 'runBindingFirst',
+        assertions: [
+          'expect(blocked.blocked).toBe(true);',
+          "expect(outcome.outcome).toBe('COMMITTED');",
+        ],
+      },
     ],
   },
   'H-02-candidate-account-conflict': {
-    helperAssertions: [
+    assertions: [
+      "expect(outcome.outcome).toBe('TERMINAL');",
       "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'IDENTITY_CONFLICT' });",
-      "expect(attempt.rows[0].state).toBe('TERMINAL');",
+    ],
+    helperAssertions: [
+      {
+        helper: 'assertTerminalNoBinding',
+        assertions: [
+          "expect(attempt.rows[0].state).toBe('TERMINAL');",
+          'expect(attempt.rows[0].terminal_reason).toBe(reason);',
+          'expect(attempt.rows[0].committed_account_id).toBeNull();',
+        ],
+      },
     ],
   },
   'H-02-invitation-seam': {
-    helperAssertions: [
+    assertions: [
+      "expect(outcome.outcome).toBe('TERMINAL');",
       "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'INVITATION_TERMINAL' });",
-      'expect(attempt.rows[0].terminal_reason).toBe(reason);',
+    ],
+    helperAssertions: [
+      {
+        helper: 'assertTerminalNoBinding',
+        assertions: [
+          "expect(attempt.rows[0].state).toBe('TERMINAL');",
+          'expect(attempt.rows[0].terminal_reason).toBe(reason);',
+          'expect(attempt.rows[0].committed_account_id).toBeNull();',
+        ],
+      },
     ],
   },
 
@@ -552,74 +605,115 @@ export const PROOF_ASSERTIONS = {
   },
   'M-01-profile': {
     helperAssertions: [
-      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
-      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
-      'expect(allContexts.rows[0].n, input.label).toBe(0);',
-      'expect(attempt.rows[0], input.label).toMatchObject({',
+      {
+        helper: 'runHiddenFailure',
+        assertions: [
+          "expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();",
+          "expect(candidateConfirmation.rows[0].n, input.label).toBe(0);",
+          "expect(terminalAudit.rows[0].n, input.label).toBe(1);",
+          "expect(allContexts.rows[0].n, input.label).toBe(0);",
+          "expect(attempt.rows[0], input.label).toMatchObject({",
+        ],
+      },
     ],
   },
   'M-01-age-band': {
     helperAssertions: [
-      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
-      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
-      'expect(allContexts.rows[0].n, input.label).toBe(0);',
-      'expect(attempt.rows[0], input.label).toMatchObject({',
+      {
+        helper: 'runHiddenFailure',
+        assertions: [
+          "expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();",
+          "expect(candidateConfirmation.rows[0].n, input.label).toBe(0);",
+          "expect(terminalAudit.rows[0].n, input.label).toBe(1);",
+          "expect(allContexts.rows[0].n, input.label).toBe(0);",
+          "expect(attempt.rows[0], input.label).toMatchObject({",
+        ],
+      },
     ],
   },
   'M-01-guardian': {
     helperAssertions: [
-      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
-      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
-      'expect(allContexts.rows[0].n, input.label).toBe(0);',
-      'expect(attempt.rows[0], input.label).toMatchObject({',
+      {
+        helper: 'runHiddenFailure',
+        assertions: [
+          "expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();",
+          "expect(candidateConfirmation.rows[0].n, input.label).toBe(0);",
+          "expect(terminalAudit.rows[0].n, input.label).toBe(1);",
+          "expect(allContexts.rows[0].n, input.label).toBe(0);",
+          "expect(attempt.rows[0], input.label).toMatchObject({",
+        ],
+      },
     ],
   },
   'M-01-consent': {
     helperAssertions: [
-      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
-      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
-      'expect(allContexts.rows[0].n, input.label).toBe(0);',
-      'expect(attempt.rows[0], input.label).toMatchObject({',
+      {
+        helper: 'runHiddenFailure',
+        assertions: [
+          "expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();",
+          "expect(candidateConfirmation.rows[0].n, input.label).toBe(0);",
+          "expect(terminalAudit.rows[0].n, input.label).toBe(1);",
+          "expect(allContexts.rows[0].n, input.label).toBe(0);",
+          "expect(attempt.rows[0], input.label).toMatchObject({",
+        ],
+      },
     ],
   },
   'M-01-membership': {
     helperAssertions: [
-      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
-      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
-      'expect(allContexts.rows[0].n, input.label).toBe(0);',
-      'expect(attempt.rows[0], input.label).toMatchObject({',
+      {
+        helper: 'runHiddenFailure',
+        assertions: [
+          "expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();",
+          "expect(candidateConfirmation.rows[0].n, input.label).toBe(0);",
+          "expect(terminalAudit.rows[0].n, input.label).toBe(1);",
+          "expect(allContexts.rows[0].n, input.label).toBe(0);",
+          "expect(attempt.rows[0], input.label).toMatchObject({",
+        ],
+      },
     ],
   },
   'M-01-invitation': {
     helperAssertions: [
-      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
-      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
-      'expect(allContexts.rows[0].n, input.label).toBe(0);',
-      'expect(attempt.rows[0], input.label).toMatchObject({',
+      {
+        helper: 'runHiddenFailure',
+        assertions: [
+          "expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();",
+          "expect(candidateConfirmation.rows[0].n, input.label).toBe(0);",
+          "expect(terminalAudit.rows[0].n, input.label).toBe(1);",
+          "expect(allContexts.rows[0].n, input.label).toBe(0);",
+          "expect(attempt.rows[0], input.label).toMatchObject({",
+        ],
+      },
     ],
   },
   'M-01-P1-conflict': {
     helperAssertions: [
-      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
-      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
-      'expect(allContexts.rows[0].n, input.label).toBe(0);',
-      'expect(person.rows[0].account_id, input.label).toBe(',
+      {
+        helper: 'runHiddenFailure',
+        assertions: [
+          "expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();",
+          "expect(candidateConfirmation.rows[0].n, input.label).toBe(0);",
+          "expect(terminalAudit.rows[0].n, input.label).toBe(1);",
+          "expect(allContexts.rows[0].n, input.label).toBe(0);",
+          "expect(attempt.rows[0], input.label).toMatchObject({",
+          "expect(person.rows[0].account_id, input.label).toBe(",
+        ],
+      },
     ],
   },
   'M-01-candidate-account-conflict': {
     helperAssertions: [
-      'expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();',
-      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
-      'expect(terminalAudit.rows[0].n, input.label).toBe(1);',
-      'expect(allContexts.rows[0].n, input.label).toBe(0);',
-      'expect(attempt.rows[0], input.label).toMatchObject({',
+      {
+        helper: 'runHiddenFailure',
+        assertions: [
+          "expect(context.rows[0].pairing_issuance_id, input.label).toBeNull();",
+          "expect(candidateConfirmation.rows[0].n, input.label).toBe(0);",
+          "expect(terminalAudit.rows[0].n, input.label).toBe(1);",
+          "expect(allContexts.rows[0].n, input.label).toBe(0);",
+          "expect(attempt.rows[0], input.label).toMatchObject({",
+        ],
+      },
     ],
   },
 
@@ -709,15 +803,23 @@ export function fileOk(rel, root = ROOT) {
   return content.includes('it(') || content.includes('test(') || content.includes('describe(');
 }
 
-/** Extract the exact test function body via the TypeScript AST, or null. */
-export function extractTestBody(content, testName) {
-  const source = ts.createSourceFile(
+function parseSource(content) {
+  return ts.createSourceFile(
     'proof.ts',
     content,
     ts.ScriptTarget.Latest,
     true,
     ts.ScriptKind.TS
   );
+}
+
+/**
+ * Locate the exact executable `it/test(name, fn)` call. Property-access forms
+ * (it.skip / it.only / it.todo / it.concurrent / it.each) are deliberately not
+ * identified, so they fail closed as "missing-or-skipped-test".
+ */
+export function findTestCall(content, testName) {
+  const source = parseSource(content);
   let found = null;
   const visit = (node) => {
     if (found) return;
@@ -725,17 +827,66 @@ export function extractTestBody(content, testName) {
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
       (node.expression.text === 'it' || node.expression.text === 'test') &&
-      node.arguments.length >= 2
+      node.arguments.length >= 2 &&
+      ts.isStringLiteral(node.arguments[0]) &&
+      node.arguments[0].text === testName
     ) {
-      const name = node.arguments[0];
-      if (ts.isStringLiteral(name) && name.text === testName) {
-        found = node.arguments[1].getText(source);
+      found = node;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found ? { source, node: found } : null;
+}
+
+/** Names of functions invoked inside the exact test callback. */
+export function collectCalleeNames(node) {
+  const names = new Set();
+  const visit = (n) => {
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+      names.add(n.expression.text);
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(node);
+  return names;
+}
+
+/** Bodies of a helper declared as `function name(){}` or `const name = () => {}`. */
+export function findHelperBodies(source, helperName) {
+  const bodies = [];
+  const visit = (node) => {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      node.name &&
+      node.name.text === helperName &&
+      node.body
+    ) {
+      bodies.push(node.body.getText(source));
+    }
+    if (ts.isVariableStatement(node)) {
+      for (const decl of node.declarationList.declarations) {
+        if (
+          ts.isIdentifier(decl.name) &&
+          decl.name.text === helperName &&
+          decl.initializer &&
+          (ts.isArrowFunction(decl.initializer) || ts.isFunctionExpression(decl.initializer)) &&
+          decl.initializer.body
+        ) {
+          bodies.push(decl.initializer.body.getText(source));
+        }
       }
     }
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return found;
+  return bodies;
+}
+
+/** Extract the exact test function body via the TypeScript AST, or null. */
+export function extractTestBody(content, testName) {
+  const found = findTestCall(content, testName);
+  return found ? found.node.arguments[1].getText(found.source) : null;
 }
 
 export function loadExecutionEvidence(path) {
@@ -783,12 +934,18 @@ export function proofOk(rel, proof, root = ROOT, execution = null) {
     return { ok: false, reason: 'missing-file' };
   }
   const content = readFileSync(full, 'utf-8');
-  const body = extractTestBody(content, proof.test);
-  if (body === null) return { ok: false, reason: 'missing-or-skipped-test' };
+  const found = findTestCall(content, proof.test);
+  if (!found) return { ok: false, reason: 'missing-or-skipped-test' };
+  const body = found.node.arguments[1].getText(found.source);
 
   const cfg = PROOF_ASSERTIONS[proof.id];
   if (!cfg) return { ok: false, reason: 'missing-proof-assertion' };
-  const allAssertions = [...(cfg.assertions ?? []), ...(cfg.helperAssertions ?? [])];
+  const directAssertions = cfg.assertions ?? [];
+  const helperEntries = cfg.helperAssertions ?? [];
+  const allAssertions = [
+    ...directAssertions,
+    ...helperEntries.flatMap((entry) => entry.assertions ?? []),
+  ];
   if (allAssertions.length === 0) {
     return { ok: false, reason: 'no-requirement-assertion' };
   }
@@ -801,12 +958,31 @@ export function proofOk(rel, proof, root = ROOT, execution = null) {
       return { ok: false, reason: 'not-an-assertion' };
     }
   }
-  for (const assertion of cfg.assertions ?? []) {
+  for (const assertion of directAssertions) {
     if (!body.includes(assertion)) return { ok: false, reason: 'assertion-removed' };
   }
-  for (const assertion of cfg.helperAssertions ?? []) {
-    if (!content.includes(assertion)) return { ok: false, reason: 'helper-assertion-removed' };
+
+  // A helper assertion is only valid when the EXACT test actually calls the
+  // named helper and that helper body carries the requirement assertion. A
+  // matching string elsewhere in the same file is NOT enough.
+  const callees = collectCalleeNames(found.node.arguments[1]);
+  for (const entry of helperEntries) {
+    if (!entry.helper || typeof entry.helper !== 'string') {
+      return { ok: false, reason: 'missing-helper-name' };
+    }
+    if (!callees.has(entry.helper)) {
+      return { ok: false, reason: 'helper-not-called' };
+    }
+    const helperBodies = findHelperBodies(found.source, entry.helper);
+    if (helperBodies.length === 0) return { ok: false, reason: 'helper-not-found' };
+    if (helperBodies.length > 1) return { ok: false, reason: 'helper-ambiguous' };
+    for (const assertion of entry.assertions ?? []) {
+      if (!helperBodies[0].includes(assertion)) {
+        return { ok: false, reason: 'helper-assertion-removed' };
+      }
+    }
   }
+
   if (!execution) return { ok: false, reason: 'unexecuted-no-evidence' };
   if (!executedPassed(execution, rel, proof.test)) {
     return { ok: false, reason: 'unexecuted' };

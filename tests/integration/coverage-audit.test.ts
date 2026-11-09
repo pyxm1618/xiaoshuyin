@@ -5,9 +5,9 @@
  *   exact test name + still-executable body + requirement-specific assertion
  *   contract + executed PASS evidence.
  *
- * Empty `it('name', () => {})`, a missing/removed requirement assertion,
- * unexecuted tests and mapping to an unrelated passing test must all make the
- * audit fail closed. There is no "any expect()" fallback.
+ * For helper-based proofs the exact test must actually call the named helper,
+ * and the requirement assertion must live in that helper body. A matching
+ * string elsewhere in the same file is not accepted.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -33,6 +33,10 @@ const ROTATION_ASSERTIONS = [
 const REPLAY_ASSERTIONS = [
   "expect(replay.json().state).toBe('COMMITTED');",
   'expect(after).toEqual(before);',
+];
+const BINDING_HELPER_ASSERTIONS = [
+  'expect(blocked.blocked).toBe(true);',
+  "expect(outcome.outcome).toBe('COMMITTED');",
 ];
 
 function fullExecution() {
@@ -66,6 +70,21 @@ function writeFixture(name: string, content: string) {
   return { dir, rel: `tests/integration/${name}` };
 }
 
+function helperFile(call: string, helperBody = BINDING_HELPER_ASSERTIONS): string {
+  return [
+    'async function runBindingFirst() {',
+    ...helperBody.map((line) => `  ${line}`),
+    '}',
+    "it('helper proof', async () => {",
+    `  ${call}`,
+    '});',
+    "it('unrelated passing proof', () => {",
+    '  expect(1).toBe(1);',
+    '});',
+    '',
+  ].join('\n');
+}
+
 describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
   it('the real repository satisfies every mapping with executed PASS evidence', () => {
     const result = audit(ROOT, { execution: fullExecution() });
@@ -93,15 +112,27 @@ describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
 
   it('every proof declares a non-empty, requirement-specific assertion contract', () => {
     for (const [id, cfg] of Object.entries(
-      PROOF_ASSERTIONS as Record<string, { assertions?: string[]; helperAssertions?: string[] }>
+      PROOF_ASSERTIONS as Record<
+        string,
+        {
+          assertions?: string[];
+          helperAssertions?: { helper?: string; assertions?: string[] }[];
+        }
+      >
     )) {
-      const all = [...(cfg.assertions ?? []), ...(cfg.helperAssertions ?? [])];
+      const direct = cfg.assertions ?? [];
+      const helpers = cfg.helperAssertions ?? [];
+      const all = [...direct, ...helpers.flatMap((entry) => entry.assertions ?? [])];
       expect(all.length, id).toBeGreaterThan(0);
       for (const assertion of all) {
         expect(assertion.trim(), id).not.toBe('expect(');
         expect(assertion.trim(), id).not.toBe('toBe(');
         expect(assertion.trim(), id).not.toBe('toEqual(');
         expect(assertion, id).toContain('expect(');
+      }
+      for (const entry of helpers) {
+        expect(entry.helper, id).toBeTruthy();
+        expect((entry.assertions ?? []).length, id).toBeGreaterThan(0);
       }
     }
   });
@@ -116,7 +147,63 @@ describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
     expect(fileOk('tests/integration/real.test.ts', dir)).toBe(true);
   });
 
-  it('A: removing the requirement-specific assertion fails closed', () => {
+  it('RED-1: same-file unrelated passing test cannot satisfy a helper proof', () => {
+    const { dir, rel } = writeFixture(
+      'same-file-unrelated.test.ts',
+      helperFile('await runBindingFirst();')
+    );
+    const result = proofOk(
+      rel,
+      { id: 'H-02-profile-age-barrier', test: 'unrelated passing proof' },
+      dir,
+      executionFor(rel, 'unrelated passing proof')
+    );
+    expect(result).toEqual({ ok: false, reason: 'helper-not-called' });
+  });
+
+  it('RED-2: removing the helper call from the exact test fails closed', () => {
+    const { dir, rel } = writeFixture(
+      'helper-call-removed.test.ts',
+      helperFile('expect(1).toBe(1);')
+    );
+    const result = proofOk(
+      rel,
+      { id: 'H-02-profile-age-barrier', test: 'helper proof' },
+      dir,
+      executionFor(rel, 'helper proof')
+    );
+    expect(result).toEqual({ ok: false, reason: 'helper-not-called' });
+  });
+
+  it('RED-3: removing the helper requirement assertion fails closed', () => {
+    const { dir, rel } = writeFixture(
+      'helper-assertion-removed.test.ts',
+      helperFile('await runBindingFirst();', ['expect(blocked.blocked).toBe(true);'])
+    );
+    const result = proofOk(
+      rel,
+      { id: 'H-02-profile-age-barrier', test: 'helper proof' },
+      dir,
+      executionFor(rel, 'helper proof')
+    );
+    expect(result).toEqual({ ok: false, reason: 'helper-assertion-removed' });
+  });
+
+  it('RED-4: restored helper call + assertion + executed PASS is GREEN', () => {
+    const { dir, rel } = writeFixture(
+      'helper-restored.test.ts',
+      helperFile('await runBindingFirst();')
+    );
+    const result = proofOk(
+      rel,
+      { id: 'H-02-profile-age-barrier', test: 'helper proof' },
+      dir,
+      executionFor(rel, 'helper proof')
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('A: removing a direct requirement-specific assertion fails closed', () => {
     const { dir, rel } = writeFixture(
       'empty-assertion.test.ts',
       "it('rotation proof', () => { expect(1).toBe(1); });\n"
@@ -156,20 +243,6 @@ describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
       executionFor(rel, 'unrelated passing proof')
     );
     expect(result).toEqual({ ok: false, reason: 'assertion-removed' });
-  });
-
-  it('B2: mapping an H-02 proof to an unrelated passing test fails closed', () => {
-    const { dir, rel } = writeFixture(
-      'unrelated.test.ts',
-      "it('unrelated passing proof', () => { expect(1).toBe(1); });\n"
-    );
-    const result = proofOk(
-      rel,
-      { id: 'H-02-profile-age-barrier', test: 'unrelated passing proof' },
-      dir,
-      executionFor(rel, 'unrelated passing proof')
-    );
-    expect(result).toEqual({ ok: false, reason: 'helper-assertion-removed' });
   });
 
   it('C: existing test without executed PASS evidence is unexecuted', () => {
