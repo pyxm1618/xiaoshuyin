@@ -1,3 +1,4 @@
+import { buildApp } from '../../apps/server/api/src/app.js';
 import {
   acceptInvite,
   addBoundAdultNonManagerToFamily,
@@ -37,6 +38,39 @@ describe('Slice 4 participation idempotency', () => {
     expect(idem).toHaveLength(1);
     expect(JSON.stringify(idem[0].response_body)).not.toContain(first.json().inviteToken);
     expect(idem[0].response_body.inviteToken).toBeUndefined();
+  });
+
+  it('fails closed instead of re-deriving a different bearer token after secret drift', async () => {
+    const f=await createParticipationFixture(h,'idem-secret-drift',{target:'manager'});
+    const target=await addBoundAdultTargetToFamily(h,f.familyId,'idem-secret-drift');
+    const key='idem-secret-drift-key';
+    const first=await invite(h.app,f.manager.token,f.caseId,target.personId,key);
+    expect(first.statusCode).toBe(201);
+
+    const changedSecretApp=await buildApp({
+      env:{
+        ...process.env,
+        PARTICIPATION_INVITE_TOKEN_SECRET:'r'.repeat(32),
+      },
+    });
+    await changedSecretApp.ready();
+    try {
+      const replay=await invite(
+        changedSecretApp,
+        f.manager.token,
+        f.caseId,
+        target.personId,
+        key
+      );
+      expect(replay.statusCode).toBe(500);
+      expect(replay.json()).toEqual({
+        code:'INTERNAL_ERROR',
+        message:'An internal error occurred',
+      });
+      expect(JSON.stringify(replay.json())).not.toContain(first.json().inviteToken);
+    } finally {
+      await changedSecretApp.close();
+    }
   });
 
   it('same key + different canonical payload is 409 and creates no second participation', async () => {
