@@ -107,10 +107,6 @@ function invitationUnavailable(): Error {
   return typedError('INVITATION_NOT_AVAILABLE', 'Invitation not available');
 }
 
-function alreadyExists(): Error {
-  return typedError('PARTICIPATION_ALREADY_EXISTS', 'Participation already exists');
-}
-
 function stateConflict(state: ParticipationRow['state']): CommandResponse {
   return {
     status: 409,
@@ -497,7 +493,15 @@ export function registerParticipationRoutes(
               createdByPersonId: actor.personId!,
             });
           } catch (error) {
-            if (isLiveUniqueViolation(error)) throw alreadyExists();
+            if (isLiveUniqueViolation(error)) {
+              return {
+                status: 409,
+                body: {
+                  code: 'PARTICIPATION_ALREADY_EXISTS',
+                  message: 'Participation already exists',
+                },
+              };
+            }
             throw error;
           }
 
