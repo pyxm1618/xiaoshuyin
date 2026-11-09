@@ -12,6 +12,7 @@ import { registerConsentRoutes } from './routes/consents.js';
 import { registerCaseRoutes } from './routes/cases.js';
 import { registerIdentityBindingRoutes } from './routes/identity-bindings.js';
 import { registerMessageRoutes } from './routes/messages.js';
+import { registerParticipationRoutes } from './routes/participations.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import {
   createWechatProvider,
@@ -139,6 +140,10 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerConsentRoutes(app, pool);
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
+  registerParticipationRoutes(app, pool, {
+    inviteTtlSeconds: runtime.participationInviteTtlSeconds,
+    inviteTokenSecret: runtime.participationInviteTokenSecret,
+  });
 
   // Slice 006: exactly six identity-binding capability routes.
   registerIdentityBindingRoutes(app, {
