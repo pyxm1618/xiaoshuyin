@@ -480,12 +480,15 @@ async function archiveT011T012() {
   const result = spawnSync('bunx', ['vitest', 'run', 'tests/db/migration-repro.test.ts', 'tests/db/roles.test.ts'], {
     cwd: ROOT,
     encoding: 'utf8',
-    env: process.env,
+    env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
   output.trim().split('\n').forEach((l) => log(`    ${l}`));
+  // GitHub Actions may still inject ANSI colour codes; strip them before the
+  // mechanical "2 passed" assertion so the evidence is host-independent.
+  const plain = output.replace(/\u001b\[[0-9;]*m/g, '');
   check('T011 migration-repro + T012 roles exit code', 0, result.status);
-  check('T011/T012 测试全绿', 'true', /Test Files\s+2 passed/.test(output));
+  check('T011/T012 测试全绿', 'true', /Test Files\s+2 passed/.test(plain));
 }
 
 async function main() {
