@@ -523,7 +523,7 @@ CREATE TABLE binding_operation_keys (
 | same key + same payload（未 settled） | 返回当前 attempt 状态；无重复副作用；不创建第二 attempt / 第二 confirmation / 第二次 commit |
 | same key + same payload（已 settled） | 返回历史 settled outcome；不重新执行 commit；不改 outcome |
 | same key + different payload | 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原 attempt / 原结果 |
-| `SECOND_PARTY_DECISION` same key、URL attempt A→B | canonical request hash 含 `attemptId`；409 fail-closed；B 零 mutation；existing `operation.attempt_id` 仍 authoritative A |
+| `SECOND_PARTY_DECISION` same key、pairing challenge A→B | canonical request hash覆盖 pairingChallenge（或其canonical digest）与decision fields；key已map A而新challenge解析B → 409 fail-closed；B零mutation；existing operation.attempt_id仍authoritative A |
 | same key concurrent | 事务级 advisory lock（`pg_advisory_xact_lock(hashtextextended(scope, key))`）+ 唯一约束；第二个等待后重读，只产生一个业务结果 |
 | different key + same semantic operation，已有 PENDING attempt | 收敛到同一 attempt（部分唯一索引 + `SELECT ... FOR UPDATE`）；不创建第二个 live attempt |
 | different key + same semantic operation，旧 attempt terminal 且 invitation valid | 允许 new attempt；new attempt 是 new identity；旧 attempt replay 仍返回旧结果 |
@@ -538,7 +538,7 @@ CREATE TABLE binding_operation_keys (
 - `binding_operation_keys.attempt_id` 可以为 NULL（Gate 1 阻断 / invalid invitation 的 bootstrap）；一旦绑定 attempt，映射不可改。
 - operation key 不表达 attempt 状态；attempt state 只在 `binding_attempts.state`。
 - replay 的 attempt 选择来自 existing operation 的 **authoritative `attempt_id`**，不是当前 URL、latest attempt 或 same-triple lookup。
-- `SECOND_PARTY_DECISION` canonical request hash MUST 包含 path `attemptId`。old key A 对 B URL = 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；B 不得被读取后推进、确认、terminalize 或 commit。same-key / same-request replay A 始终只回读 A。
+- `SECOND_PARTY_DECISION` canonical request hash MUST覆盖 pairingChallenge（或其canonical digest）与全部decision fields；challenge解析出的exact attempt必须与existing operation.attempt_id一致。old key A 对 B URL = 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；B 不得被读取后推进、确认、terminalize 或 commit。same-key / same-request replay A 始终只回读 A。
 
 ---
 
@@ -796,153 +796,81 @@ Candidate AFFIRM是Phase B推进点，不得沿用bootstrap时的eligibility sna
 
 | # | Method / Path | 使用方 | Auth | 幂等 |
 |---|---|---|---|---|
-| 1 | `POST /api/v1/identity-bindings/bootstrap` | candidate | 无 session；body 含 WeChat `code` + `invitationToken` + `idempotencyKey` | `BOOTSTRAP` |
-| 2 | `POST /api/v1/identity-bindings/candidate-decision` | candidate | `X-Binding-Context` | `CANDIDATE_DECISION` |
-| 3 | `GET /api/v1/identity-bindings/status` | candidate | `X-Binding-Context` | 读；无幂等键 |
-| 4 | `POST /api/v1/identity-bindings/session` | candidate | `X-Binding-Context` | 读 + session 签发；无业务幂等键 |
-| 5 | `GET /api/v1/identity-bindings/pending?personId=P1` | authorized confirmer | `Authorization: Bearer` | 读 |
-| 6 | `POST /api/v1/identity-bindings/:attemptId/decision` | authorized confirmer | `Authorization: Bearer` | `SECOND_PARTY_DECISION` |
+| 1 | POST /api/v1/identity-bindings/bootstrap | candidate | no session；WeChat code + invitationToken | BOOTSTRAP |
+| 2 | POST /api/v1/identity-bindings/candidate-decision | candidate | X-Binding-Context | CANDIDATE_DECISION |
+| 3 | GET /api/v1/identity-bindings/status | candidate | X-Binding-Context | read |
+| 4 | POST /api/v1/identity-bindings/session | candidate | X-Binding-Context | read + session exchange |
+| 5 | GET /api/v1/identity-bindings/pending?personId=P1 | authorized confirmer | Bearer | read；not pairing selector |
+| 6 | POST /api/v1/identity-bindings/pairing-decision | authorized confirmer | Bearer | SECOND_PARTY_DECISION |
 
-**明确不实现**：`POST /api/v1/participations/.../accept|decline|withdraw`、`POST /api/v1/cases/.../participation-invites`、任何 participant / Case / Evidence / UI / 通知端点。
+不增加第7个API。原 POST /api/v1/identity-bindings/:attemptId/decision 被 pairing-decision 取代；attemptId不再由confirmer client选择。
+
+明确不实现 participant / invitation creation / Case / Evidence / UI / notification端点。
 
 ### D-10.2 请求 / 响应
 
 #### 1. Bootstrap
 
-```json
-// request
-{ "code": "wechat-code", "invitationToken": "opaque-invitation-token", "idempotencyKey": ">=8 chars" }
-
-// response: generic（Gate 1 fail / Case C PENDING / Case B mismatch / invitation invalid）
-{ "binding": "NOT_COMPLETED", "pendingContextToken": "43-char base64url" }
-
-// response: Case B 正确 Account（唯一未绑定阶段可区分的成功分支）
-{ "binding": "REUSED", "sessionToken": "...", "account": { "id": "uuid" }, "person": { "id": "uuid" } }
-
-// response: 同一 BOOTSTRAP operation key / 同一 attempt 已 COMMITTED 的 settled replay
-{ "binding": "COMMITTED" }
-```
-
-- 只有 `binding` 与 token 字段；无 `attemptId`、`personId`、`familyId`、`ageBand`、`guardian`、`consent`、`reason`。
-- `COMMITTED` 是 historical settled replay（005 §5.5 / spec settled replay）：MUST NOT 使用 `REUSED`（Case B 专用）；MUST NOT 重新 commit、revive invitation、恢复 participation accept、重建 authorization；response 不含 `pendingContextToken` / `sessionToken` / `attemptId`。candidate 此时已是 P1，故不属于未绑定阶段 anti-enumeration generic。普通 session 仍只通过 `POST /api/v1/identity-bindings/session` 兑换。
-- **OpenAPI / schema expectation**：bootstrap 200 response 的 `oneOf` 必须包含 `BindingBootstrapCommittedResponse`（strict object，`binding: const "COMMITTED"`，`additionalProperties: false`，无其它字段）。本 targeted Plan / Contract remediation 已按 F-06 修正 handwritten YAML；runtime Zod 与 generated OpenAPI 的同步、checker semantic remediation 仍属于 Implement（T091 / T097），generated 不得 hand-edit。
-- **防御性 endpoint fallback（不是 canonical flow）**：客户端误把 Case B 调用到 `POST /api/v1/identity-bindings/bootstrap` 时，服务端在 WeChat authentication 之后确认 `authenticated Account == P1 existing Account`，MUST 直接返回 `REUSED`（同上面 Case B 分支），且 MUST NOT 创建 pending binding attempt、MUST NOT 创建 confirmation、MUST NOT 进入 Gate 1 → Phase B → Gate 2 → Phase C 的 Case C 状态机、MUST NOT 要求双确认。**「bootstrap endpoint 被调用」≠「进入 Case C identity bootstrap state machine」。** canonical client flow 仍 MUST 为：Case B → ordinary authenticated path → reuse；Case C → invitation-aware bootstrap（D-17.2）。该 fallback 只消除「endpoint 被误调用」的歧义，不改变 Spec FR-003。
-- WeChat `code2session` 失败 → 401 `WECHAT_AUTH_FAILED`（不涉及 P1 信息）。`WECHAT_AUTH_FAILED` **只表示真实 WeChat `code2session` authentication failure**，MUST NOT 用于 `authorize()` DENY；authorization DENY 的 candidate-facing 映射见 D-10.3。
-- 普通 `POST /api/v1/auth/wechat` 完全不改。
+Bootstrap request、Case B REUSED、COMMITTED replay语义保持不变。generic仍为 { binding: NOT_COMPLETED, pendingContextToken: opaque }。不得返回attemptId / P1 / Family / gate reason。普通POST /api/v1/auth/wechat完全不改。
 
 #### 2. Candidate decision
 
-```json
-// request is decision-discriminated
-// AFFIRM: confirmationVersion required literal "candidate-binding-v1"
-// REJECT/CANCEL: confirmationVersion MUST be omitted
-// null is never valid
+AFFIRM request：decision=AFFIRM、confirmationVersion=candidate-binding-v1、idempotencyKey required。
 
-// response（所有内部结果一致）
-{ "binding": "NOT_COMPLETED" }
-```
+AFFIRM response：所有hidden business outcomes使用固定shape { binding: NOT_COMPLETED, pairingChallenge: opaque }。
 
-- AFFIRM：`confirmationVersion` required 且只能为 `candidate-binding-v1`；omitted / null / wrong → 422。
-- REJECT / CANCEL：`confirmationVersion` 必须 omitted；显式 null 或任何 present value → 422。null 在三种 decision 下均不合法。
-- 无 attempt / 跨 identity / 已 terminal / attempt 过期 / invitation terminal → 同一 200 body。
-- REJECT / CANCEL 只终止 attempt，不改变 invitation。
-- 401 仅 `X-Binding-Context` 无效 / 过期。
+- eligible live attempt → pairingChallenge是D-3.5 valid candidate-presented challenge。
+- dynamic ineligible / terminal / hidden business failure → 同格式decoy challenge；不得解析到live attempt。
+- AFFIRM omitted/null/wrong confirmationVersion → 422。
+- REJECT/CANCEL必须omit confirmationVersion；显式null或present value → 422；response仍为 { binding: NOT_COMPLETED }。
+- valid challenge只能在D-8.5 current eligibility PASS后发行；不得泄露P1 / identity / attempt / invitation。
+- challenge replay不得延长expiry；expired后只有仍合法attempt/context并重新current eligibility PASS才可取得新valid challenge。
+- 401只用于binding context credential本身无效/过期；hidden business eligibility仍是200 fixed shape。
 
 #### 3. Status
 
-```json
-{ "binding": "NOT_COMPLETED" }
-// 或 committed 后
-{ "binding": "COMMITTED" }
-```
-
-- 未提交前不得返回 `attemptId` / reason / age / guardian / consent / multi-family / other binding。
-- committed 后返回 COMMITTED 不构成 oracle：此时 candidate 已是 P1。
+返回 { binding: NOT_COMPLETED }，或committed后 { binding: COMMITTED }。status如果访问时materialize context/attempt expiry，必须执行M-03 / D-14 cleanup + audit，不再被定义为纯read。
 
 #### 4. Session exchange
 
-```json
-{ "binding": "NOT_COMPLETED" }
-// 或
-{ "binding": "COMMITTED", "sessionToken": "...", "account": { "id": "uuid" }, "person": { "id": "uuid" } }
-```
-
-- 只有 attempt COMMITTED 且 context identity digest 与 attempt 一致才签发。
-- Session exchange 是 capability → ordinary session 的桥接，不是 mutating business command：不创建 Account / Person / binding，不改变 attempt / participation；不需要业务 idempotency key。相同 committed attempt 重复 exchange 得到同一 account / person（token 字符串可因签发时间不同而不同，身份不变）。
-- 不创建 Account / Person；只读取 `committed_account_id` / P1 / current `session_epoch`。
-- 不 bump `session_epoch`；签发普通 session token（与登录同格式）。
-- 未 committed → 200 generic，不 409。
+保持原合同：只有attempt COMMITTED且context identity一致才返回ordinary session；否则200 generic。不得在此创建或改变binding。
 
 #### 5. Confirmer pending list
 
-```json
-{ "attempts": [ { "attemptId": "uuid", "createdAt": "iso", "expiresAt": "iso" } ] }
-```
+返回minimal attempts，仅operational visibility；不得用于pairing target selection。authorized无pending → 200空数组；unauthorized/invalid target → 404 generic。
 
-- 0 条 → 200 空数组（authorized 但当前没有 PENDING）。
-- 未授权 / P1 不存在 / 非目标 Family → 404 `{ "code": "BINDING_NOT_FOUND", "message": "Binding not found" }`。
+#### 6. Pairing decision
 
-#### 6. Confirmer decision
+Request fields：
+- personId
+- pairingChallenge
+- decision = AFFIRM | REJECT
+- targetConfirmed
+- candidateRecognized
+- confirmationVersion = second-party-recognition-v1
+- idempotencyKey
 
-```json
-// request
-{
-  "personId": "uuid",                 // 待验证参数；服务端必须与 attempt.target_person_id 一致
-  "decision": "AFFIRM" | "REJECT",
-  "targetConfirmed": true | false,
-  "candidateRecognized": true | false,
-  "confirmationVersion": "second-party-recognition-v1",
-  "idempotencyKey": ">=8 chars"
-}
-
-// response（authorized）
-{ "state": "PENDING" | "COMMITTED" | "TERMINAL" }
-```
-
-- `personId` 是待验证参数：服务端先由它解析唯一 target family / authority，再读取 `attemptId AND target_person_id = personId` 的 attempt；不匹配 → 404 generic。
-- AFFIRM 要求 `targetConfirmed=true` 且 `candidateRecognized=true`；否则 422 `VALIDATION_ERROR`。
-- REJECT 可 `candidateRecognized=false`；attempt terminal。
-- 未授权 / attempt 不属于该 P1 / P1 不存在 → 404 `BINDING_NOT_FOUND`。
-- same key different payload → 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`。
-- 已在 terminal 的 attempt → 200 `{ state: "TERMINAL" }`（authorized replay / 状态读取），不重开。
+Contract：
+- server在authenticated confirmer context下解析personId authority，再验证challenge，并从challenge解析 exact context/identity/attempt/P1/invitation；personId必须等于challenge-bound P1。
+- AFFIRM要求targetConfirmed=true且candidateRecognized=true。REJECT表达无法辨认/不确认，也必须提交exact challenge才可作用到对应attempt。
+- valid challenge + authority + current attempt consistency才允许写second-party confirmation或terminal decision。
+- invalid / expired / consumed / mismatched challenge、wrong P1/invitation/candidate/attempt、unauthorized confirmer统一404 BINDING_NOT_FOUND，零mutation。
+- same operation key + exact same request replay读取mapped authoritative attempt outcome；same key + different challenge/payload → 409 IDEMPOTENCY_PAYLOAD_MISMATCH。
+- valid authorized operation response仍为 state=PENDING | COMMITTED | TERMINAL。
+- same challenge concurrent different-key最多一个business effect；不得第二confirmation或double commit。
 
 ### D-10.3 Error envelope
 
-沿用 Slice 1 `toHttpError`：
+沿用Slice 1 error envelope。candidate business failure统一200 generic；confirmer pairing invalidity统一404。409只用于idempotency mismatch或authorized state conflict；422只用于schema/semantic validation。
 
-```json
-{ "code": "STRING", "message": "STRING", "details": { } }
-```
-
-新增映射：
-
-| code | HTTP | 使用方 |
-|---|---|---|
-| `WECHAT_AUTH_FAILED` | 401 | bootstrap |
-| `BINDING_CONTEXT_INVALID` | 401 | candidate 路由 |
-| `BINDING_NOT_FOUND` | 404 | confirmer 路由 |
-| `BINDING_STATE_CONFLICT` | 409 | authorized confirmer 的非法状态（非 candidate） |
-| `IDEMPOTENCY_PAYLOAD_MISMATCH` | 409 | 所有命令 |
-| `VALIDATION_ERROR` | 422 | schema / AFFIRM 字段不完整 |
-
-- candidate-facing 业务分支不使用 `BINDING_NOT_FOUND` / `BINDING_STATE_CONFLICT`；统一 200 generic。
-- 任何 error body 不含 P1 / Family / guardian / consent / age / attempt 细节。
-
-**Authorization denial 映射（冻结）**：
-
-- `401 WECHAT_AUTH_FAILED` **只能**用于真实 WeChat `code2session` authentication failure；MUST NOT 用于 `authorize()` DENY。
-- `IDENTITY_BINDING_BOOTSTRAP` 的 `authorize()` DENY 在 candidate-facing 层 MUST 保持 anti-enumeration：HTTP 200 + 冻结 generic bootstrap response `{ "binding": "NOT_COMPLETED", "pendingContextToken": "..." }`。实现 MUST 在返回前完成 pending context 创建，使 response shape 与所有其它 generic 分支一致（D-11.1 / D-11.3）。
-- MUST NOT 暴露 authorization reason、P1、Family、guardian、consent、age、invitation state；MUST NOT 新增公开 candidate-facing authorization error code。
-- 其余 5 个 binding action 的 DENY 沿用其所属 surface 的冻结语义：candidate surface 统一 200 generic；confirmer surface 统一 404 `BINDING_NOT_FOUND`（D-11.2）。
+WECHAT_AUTH_FAILED 401只表示真实code2session failure；BINDING_CONTEXT_INVALID 401只表示candidate context credential无效/过期。
 
 ### D-10.4 Auth plugin 修改边界
 
-- `apps/server/api/src/plugins/auth.ts`：
-  - exempt 列表新增 `/api/v1/identity-bindings/bootstrap`（无 session）。
-  - 对 `/api/v1/identity-bindings/candidate-decision`、`/status`、`/session`：若存在 `X-Binding-Context`，跳过普通 Bearer 校验，交给 binding preHandler；若不存在，返回 401 `BINDING_CONTEXT_INVALID`。
-  - 对 `/pending`、`/:attemptId/decision`：继续要求 Bearer；若同时存在 `X-Binding-Context`，返回 401，禁止 candidate 代持。
-- 普通 `POST /api/v1/auth/wechat` 的 schema、路径、行为不变。
-- 不新增 `mode` / `inviteMode` / `binding=true` / 特殊 header 到普通登录。
+- bootstrap无ordinary session。
+- candidate-decision / status / session只接受binding-context semantics；普通Bearer不能替代。
+- pending / pairing-decision只接受独立ordinary Bearer confirmer session；同时带candidate X-Binding-Context必须拒绝。
+- 普通 /api/v1/auth/wechat schema、path、behavior不变；不得新增mode或hidden invite switch。
 
 ---
 
@@ -950,55 +878,38 @@ Candidate AFFIRM是Phase B推进点，不得沿用bootstrap时的eligibility sna
 
 ### D-11.1 Candidate-facing matrix（冻结）
 
-| 内部事实 | HTTP | Body | Headers | 可继续动作 |
-|---|---|---|---|---|
-| invitation 不存在 / 不可解析 | 200 | `{ binding:"NOT_COMPLETED", pendingContextToken }` | 固定 | status / decision 可用，但 generic |
-| invitation expired / consumed / terminal | 200 | 同上 | 固定 | 同上 |
-| P1 不存在 | 200 | 同上 | 固定 | 同上 |
-| `IDENTITY_BINDING_BOOTSTRAP` 的 `authorize()` DENY（防御分支） | 200 | 同上 | 固定 | 同上 |
-| P1 多 Family / 不属于目标 Family | 200 | 同上 | 固定 | 同上 |
-| UNDER_14 无 guardian | 200 | 同上 | 固定 | 同上 |
-| UNDER_14 consent invalid / revoked / expired | 200 | 同上 | 固定 | 同上 |
-| ADULT / UNKNOWN | 200 | 同上 | 固定 | 同上 |
-| Case B 错误 Account | 200 | 同上 | 固定 | 同上 |
-| candidate Account 已绑定 P2 | 200 | 同上 | 固定 | 同上 |
-| attempt PENDING | 200 | 同上 | 固定 | 同上 |
-| attempt TERMINAL / expired | 200 | 同上 | 固定 | 同上 |
-| candidate decision 任何内部结果 | 200 | `{ binding:"NOT_COMPLETED" }` | 固定 | 无 |
-| status 未 committed | 200 | `{ binding:"NOT_COMPLETED" }` | 固定 | 无 |
-| session 未 committed | 200 | `{ binding:"NOT_COMPLETED" }` | 固定 | 无 |
-| Case B 正确 Account | 200 | `{ binding:"REUSED", sessionToken, account, person }` | 固定 | 可继续 Slice 4 accept / decline |
-| attempt COMMITTED（candidate 已是 P1，含同一 BOOTSTRAP operation key 的 settled replay） | 200 | bootstrap replay `{ binding:"COMMITTED" }`；status `{ binding:"COMMITTED" }`；session `{ binding:"COMMITTED", sessionToken, account, person }` | 固定 | 可 exchange session |
+| surface / internal fact | HTTP | Body |
+|---|---|---|
+| bootstrap hidden failure / Gate1 blocked / Case C PENDING | 200 | NOT_COMPLETED + pendingContextToken |
+| candidate AFFIRM + eligible live attempt | 200 | NOT_COMPLETED + pairingChallenge（valid） |
+| candidate AFFIRM + dynamic ineligible / terminal / hidden failure | 200 | 同shape NOT_COMPLETED + pairingChallenge（decoy） |
+| candidate REJECT / CANCEL | 200 | NOT_COMPLETED |
+| status / session before commit | 200 | generic NOT_COMPLETED |
+| Case B correct account | 200 | REUSED success |
+| committed candidate | 200 | COMMITTED / session success |
 
-**不可区分性检查项**：HTTP status、body key 集合、字段值（除随机 token）、error code（不出现）、`Set-Cookie`（无）、`Location` / redirect（无）、`X-*` 业务 header（无）、read-back 结果（status / session 均 generic）、endpoint availability（全部挂载）。未绑定阶段唯一可区分的成功分支是 Case B 正确 Account；attempt COMMITTED 后的 `COMMITTED` / session 也属于授权成功分支，因为此时 candidate 已是 P1。
+对同一个candidate-selected AFFIRM action，valid与decoy的HTTP status、key set、格式/长度类别、headers、next-action不得成为hidden eligibility oracle。challenge不得含可读P1/attempt/identity/invitation。
 
 ### D-11.2 Confirmer-facing matrix
 
-| 内部事实 | HTTP | Body |
+| internal fact | HTTP | Body |
 |---|---|---|
-| 未认证 | 401 | `{ code:"UNAUTHENTICATED" }` |
-| 未授权 confirmer / P1 不存在 / 非目标 Family | 404 | `{ code:"BINDING_NOT_FOUND", message:"Binding not found" }` |
-| authorized、无 PENDING attempt | 200 | `{ attempts: [] }` |
-| authorized、有 PENDING attempt | 200 | 最小列表 |
-| authorized decision AFFIRM | 200 | `{ state }` |
-| authorized decision REJECT | 200 | `{ state:"TERMINAL" }` |
-| same key different payload | 409 | `{ code:"IDEMPOTENCY_PAYLOAD_MISMATCH" }` |
+| unauthenticated | 401 | generic auth error |
+| unauthorized confirmer / P1 unavailable | 404 | BINDING_NOT_FOUND |
+| invalid / expired / consumed / mismatched pairing challenge | 404 | same BINDING_NOT_FOUND |
+| authorized pending-list | 200 | minimal attempts；not pairing selector |
+| valid pairing AFFIRM / REJECT | 200 | { state } |
+| same idempotency key + different request/challenge | 409 | IDEMPOTENCY_PAYLOAD_MISMATCH |
 
-- 404 body 不含 `personId`、`familyId`、`ageBand`、`guardian`、`consent`。
-- confirmer 可见性只限完成确认所需的最小字段，不扩散给 candidate。
+404不得包含person/family/age/guardian/consent/attempt/challenge-validity reason。
 
 ### D-11.3 Timing / side-channel 边界
 
-- 所有 candidate generic 分支 MUST 走同一 normalized control-flow 与同一 response serializer，且不得存在明显 immediate early return。两种形态：
-  1. **invitation 可解析（存在可信 `targetPersonId` / `targetFamilyId`）**：WeChat auth → pending context 创建 → invitation resolution → 真实 Gate 1 评估 → audit 写入 → 统一 serializer。
-  2. **invitation 不可解析 / 无可信 P1**：WeChat auth → pending context 创建 → invitation resolution failure → pre-attempt blocked classification → security audit（`BINDING_GATE1_BLOCKED`，target 为空，D-15.2）→ 同一统一 serializer。
-- MUST NOT 存在 `invalid invitation → 立即 return` 之类跳过 pending context / audit / serializer 的分支。
-- MUST NOT 因内部原因导致 response shape / status / header / next-action 不同。
-- MUST NOT 为了伪装 timing 去 fake query 一个不存在 / 不可信的 P1；无可信 P1 时不执行 P1-specific Gate 1 DB 查询，只完成 pre-attempt blocked classification。
-- MUST NOT 引入人为 delay / padding。
-- 目标 = normalized observable behavior，而不是对不存在 P1 执行虚假 Gate 1。响应形状不可区分是强制项；不承诺密码学常量时间，也不扩展到通用 side-channel 项目（CPU cache、TLS、连接复用等）。
+Bootstrap继续normalized pipeline，不得因invalid invitation/gate reason形成observable early-return差异。Candidate AFFIRM valid/decoy challenge generation也必须共享serializer与response shape。不得fake-query不可信P1、不得人为delay/padding；不宣称密码学constant-time。
 
 ---
+
+## D-12 Authorization 扩展
 
 ## D-12 Authorization 扩展
 
@@ -1047,7 +958,7 @@ export interface AuthorizeFacts {
 | `IDENTITY_BINDING_STATUS_SELF` | `BINDING_CONTEXT` | 同上 |
 | `IDENTITY_BINDING_SESSION_EXCHANGE` | `BINDING_CONTEXT` | 同上；committed 由 domain 再判（authorize 不读 attempt） |
 | `IDENTITY_BINDING_CONFIRMER_LIST` | `ACCOUNT` | facts 必须齐全；UNDER_14 → `actor.personId === guardianPersonId`；MINOR 有 guardian → 同上；MINOR 无 guardian → `actor.personId === familyCreatedByPersonId`；ADULT / UNKNOWN → DENY；`targetIsFamilyMember` 必须 true |
-| `IDENTITY_BINDING_SECOND_PARTY_DECIDE` | `ACCOUNT` | 同 confirmer list；另要求 resource `BINDING` 且 `attemptId` 非空 |
+| `IDENTITY_BINDING_SECOND_PARTY_DECIDE` | `ACCOUNT` | 同 confirmer list；resource attemptId 由服务端验证 pairingChallenge 后解析，caller不得声明/选择 attemptId |
 
 新增 deny reasons：`BINDING_CONTEXT_INVALID`、`NOT_BINDING_AUTHORIZED_CONFIRMER`、`BINDING_AGE_UNSUPPORTED`、`BINDING_TARGET_INVALID`。
 
