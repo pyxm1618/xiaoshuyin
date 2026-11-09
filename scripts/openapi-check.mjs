@@ -118,7 +118,7 @@ function referencesAnySchemaName(value, names) {
   return Object.values(value).some((item) => referencesAnySchemaName(item, names));
 }
 
-function compareSubset(frozen, generated, label, collidingSchemaNames = new Set()) {
+function compareSubset(frozen, generated, label) {
   const frozenOps = collectOperations(frozen);
   const generatedOps = collectOperations(generated);
 
@@ -192,11 +192,13 @@ function compareSubset(frozen, generated, label, collidingSchemaNames = new Set(
   for (const name of Object.keys(frozenSchemas)) {
     if (!(name in generatedSchemas)) fail(`[${label}] missing components.schemas.${name}`);
 
-    // A global OpenAPI components namespace cannot represent two different
-    // schemas with the same name. When frozen slices collide on a name, their
-    // actual operation response schemas are validated above; component-level
-    // equality is intentionally not double-imposed here.
-    if (collidingSchemaNames.has(name)) continue;
+    // Slice 3 and Slice 4 both froze a component named ValidationError
+    // with different shapes. The generated global component intentionally
+    // remains the Slice 3 shape; Slice 4's stricter 422 projection is validated
+    // at its actual response use sites above.
+    if (label === '004-case-participant-core' && name === 'ValidationError') {
+      continue;
+    }
 
     if (!equal(normalize(frozenSchemas[name], frozen), normalize(generatedSchemas[name], generated))) {
       console.error('  frozen:', JSON.stringify(stable(normalize(frozenSchemas[name], frozen)), null, 2));
@@ -230,32 +232,10 @@ function main() {
     spec: Bun.YAML.parse(readFileSync(doc.path, 'utf-8')),
   }));
 
-  // Detect same-name component collisions across frozen slice contracts.
-  // These are validated at their actual request/response use sites instead.
-  const schemaShapes = new Map();
-  for (const doc of frozenDocs) {
-    for (const [name, schema] of Object.entries(doc.spec.components?.schemas ?? {})) {
-      const shape = JSON.stringify(stable(normalize(schema, doc.spec)));
-      const shapes = schemaShapes.get(name) ?? new Set();
-      shapes.add(shape);
-      schemaShapes.set(name, shapes);
-    }
-  }
-  const collidingSchemaNames = new Set(
-    [...schemaShapes.entries()]
-      .filter(([, shapes]) => shapes.size > 1)
-      .map(([name]) => name)
-  );
-
   const unionOps = new Set();
   const unionSchemas = new Set();
   for (const doc of frozenDocs) {
-    const result = compareSubset(
-      doc.spec,
-      generated,
-      doc.label,
-      collidingSchemaNames
-    );
+    const result = compareSubset(doc.spec, generated, doc.label);
     for (const op of result.operations) unionOps.add(op);
     for (const name of result.schemas) unionSchemas.add(name);
   }
