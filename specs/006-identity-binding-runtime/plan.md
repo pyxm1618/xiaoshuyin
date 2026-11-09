@@ -1431,7 +1431,7 @@ Implement 必须能机械证明以下不存在（CI / guard / grep / schema intr
 当前（2026-11-09，Security Decision A upstream contract remediation 后）：
 DECISION A / THREAT MODEL / PAIRING CONTRACT REMEDIATED
 READY FOR TARGETED PLAN RE-AUDIT
-T001–T120 当前真实 checkbox：58 checked / 62 reopened；不得再使用旧“26 tasks reopened”
+T001–T120 当前真实 checkbox：58 checked / 62 reopened；任何旧 remediation count 均已废止
 T121–T124 继续 BLOCKED BY SLICE 4 RUNTIME
 Targeted Audit I PASS 之前不得进入 development remediation
 
