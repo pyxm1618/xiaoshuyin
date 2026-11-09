@@ -186,8 +186,11 @@ describe('T068 — Evidence writer authorization (COLD-001)', () => {
     it('actorAccountId ↔ actorPersonId mismatch is rejected with zero writes', async () => {
       const before = await counts(fx.familyId);
       const mismatched = context({ actorPersonId: fx.memberPersonId });
+      // Keep the PostgreSQL transaction identity valid and separate from the
+      // spoofed writer claim; otherwise withRlsTransaction itself correctly
+      // rejects the account/person splice before the writer can run.
       await expectNoWrite(
-        runWrite((tx) => recordStatement(tx, mismatched, statementDraft()), mismatched)
+        runWrite((tx) => recordStatement(tx, mismatched, statementDraft()), context())
       );
       expect(await counts(fx.familyId)).toEqual(before);
     });
@@ -359,6 +362,113 @@ describe('T068 — Evidence writer authorization (COLD-001)', () => {
         context()
       );
       expect(result.conflictGroupId).toBeTruthy();
+    });
+  });
+
+  describe('UFA-001 — transaction identity binding', () => {
+    it('rejects a real manager writer context when the actual transaction actor is an ordinary member for all four capabilities', async () => {
+      const claimedManager = context();
+      const actualMember = memberContext();
+
+      const beforeStatement = await counts(fx.familyId);
+      await expectNoWrite(
+        runWrite(
+          (tx) => recordStatement(tx, claimedManager, statementDraft({ content: 'ufa001 spoof statement' })),
+          actualMember
+        )
+      );
+      expect(await counts(fx.familyId)).toEqual(beforeStatement);
+
+      const beforeObservation = await counts(fx.familyId);
+      await expectNoWrite(
+        runWrite(
+          (tx) => recordObservation(
+            tx,
+            claimedManager,
+            observationDraft({ observationCode: 'ufa001_spoof_observation' })
+          ),
+          actualMember
+        )
+      );
+      expect(await counts(fx.familyId)).toEqual(beforeObservation);
+
+      const beforeHypothesis = await counts(fx.familyId);
+      const hypothesisError = await expectNoWrite(
+        runWrite(
+          (tx) => recordHypothesis(
+            tx,
+            claimedManager,
+            statementDraft({ content: 'ufa001 spoof hypothesis' })
+          ),
+          actualMember
+        )
+      );
+      expect(hypothesisError.code).toBe('EVIDENCE_CASE_NOT_AUTHORIZED');
+      expect(hypothesisError.code).not.toBe('EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE');
+      expect(await counts(fx.familyId)).toEqual(beforeHypothesis);
+
+      const refs = await seedConflictRowsForOrdering();
+      const beforeConflictCounts = await counts(fx.familyId);
+      const beforeAssertion = await admin.query(
+        'SELECT conflict_group_id FROM assertions WHERE id = $1',
+        [refs.assertionId]
+      );
+      const beforeObservationRef = await admin.query(
+        'SELECT conflict_group_id FROM observations WHERE id = $1',
+        [refs.observationId]
+      );
+
+      await expectNoWrite(
+        runWrite(
+          (tx) =>
+            assignConflictGroup(tx, claimedManager, [
+              { kind: 'ASSERTION', id: refs.assertionId },
+              { kind: 'OBSERVATION', id: refs.observationId },
+            ]),
+          actualMember
+        )
+      );
+
+      const afterAssertion = await admin.query(
+        'SELECT conflict_group_id FROM assertions WHERE id = $1',
+        [refs.assertionId]
+      );
+      const afterObservationRef = await admin.query(
+        'SELECT conflict_group_id FROM observations WHERE id = $1',
+        [refs.observationId]
+      );
+      expect(afterAssertion.rows[0].conflict_group_id).toBe(
+        beforeAssertion.rows[0].conflict_group_id
+      );
+      expect(afterObservationRef.rows[0].conflict_group_id).toBe(
+        beforeObservationRef.rows[0].conflict_group_id
+      );
+      expect(await counts(fx.familyId)).toEqual(beforeConflictCounts);
+    });
+
+    it('withRlsTransaction rejects account/person splicing before family context is established', async () => {
+      let callbackReached = false;
+      let error: any = null;
+      try {
+        await withRlsTransaction(
+          pool,
+          {
+            familyId: fx.familyId,
+            accountId: fx.memberAccountId,
+            personId: fx.managerPersonId,
+            purpose: 'FAMILY_MANAGEMENT',
+          },
+          async () => {
+            callbackReached = true;
+          }
+        );
+      } catch (err) {
+        error = err;
+      }
+
+      expect(callbackReached).toBe(false);
+      expect(error).not.toBeNull();
+      expect(error.code).toBe('42501');
     });
   });
 
