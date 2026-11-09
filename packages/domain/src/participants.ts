@@ -234,12 +234,16 @@ export async function getParticipationById(
   return rows[0] ?? null;
 }
 
+export interface LockedParticipationRow extends ParticipationRow {
+  database_now: Date;
+}
+
 export async function lockParticipationById(
   tx: PoolClient,
   participationId: string
-): Promise<ParticipationRow | null> {
-  const { rows } = await tx.query<ParticipationRow>(
-    `SELECT ${PARTICIPATION_COLUMNS}
+): Promise<LockedParticipationRow | null> {
+  const { rows } = await tx.query<LockedParticipationRow>(
+    `SELECT ${PARTICIPATION_COLUMNS}, now() AS database_now
      FROM case_participants
      WHERE id=$1
      FOR UPDATE`,
