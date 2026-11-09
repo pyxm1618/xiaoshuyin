@@ -46,10 +46,18 @@ export interface BuildAppOptions {
  * `LOG_LEVEL=info`. Raw client IP and User-Agent must never reach logs, so the
  * serializer keeps only non-sensitive routing fields.
  */
+export function sanitizeRequestUrlForLogs(url: unknown): unknown {
+  if (typeof url !== 'string') return url;
+  return url.replace(
+    /(\/api\/v1\/participation-invites\/)[^/?#]+/g,
+    '$1[REDACTED]'
+  );
+}
+
 export function requestLogSerializer(req: any) {
   return {
     method: req?.method,
-    url: req?.url,
+    url: sanitizeRequestUrlForLogs(req?.url),
     host: req?.headers?.host,
     requestId: req?.id,
   };
