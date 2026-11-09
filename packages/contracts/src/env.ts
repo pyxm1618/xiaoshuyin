@@ -24,6 +24,15 @@ export const envSchema = z.object({
     .number()
     .int()
     .positive('IDENTITY_BINDING_PAIRING_TTL_SECONDS must be a positive integer'),
+  // Slice 4 participation invitations. Required with no defaults.
+  PARTICIPATION_INVITE_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive('PARTICIPATION_INVITE_TTL_SECONDS must be a positive integer'),
+  PARTICIPATION_INVITE_TOKEN_SECRET: z.string().refine(
+    (value) => Buffer.byteLength(value, 'utf8') >= 32,
+    'PARTICIPATION_INVITE_TOKEN_SECRET must be at least 32 bytes'
+  ),
 });
 
 export type Env = z.infer<typeof envSchema>;
