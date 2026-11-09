@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Xiaoshuyin V1 — Identity Binding Runtime API
-  version: 0.1.0-plan
+  version: 0.2.0-plan
 tags:
   - name: identity-binding
 paths:
@@ -57,11 +57,19 @@ paths:
               $ref: '#/components/schemas/BindingCandidateDecisionRequest'
       responses:
         '200':
-          description: 统一 generic 结果
+          description: >-
+            Candidate decision result. AFFIRM always returns the same
+            NOT_COMPLETED + pairingChallenge shape while the binding context is
+            valid: a live eligible attempt receives a valid short-lived
+            candidate-presented challenge; hidden business failures receive an
+            indistinguishable decoy challenge that cannot resolve to a live
+            attempt. REJECT/CANCEL return the generic NOT_COMPLETED shape.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BindingGenericResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/BindingGenericResponse'
+                  - $ref: '#/components/schemas/BindingCandidatePairingResponse'
         '401':
           description: Binding context invalid
           content:
@@ -130,7 +138,10 @@ paths:
         - $ref: '#/components/parameters/BindingPersonIdQuery'
       responses:
         '200':
-          description: 最小 attempts 列表
+          description: >-
+            Authorized operational view of minimal pending attempts. This list
+            MUST NOT be used as recognition pairing material or as a
+            second-party decision selector; attemptId is not identity proof.
           content:
             application/json:
               schema:
@@ -153,14 +164,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
-  /api/v1/identity-bindings/{attemptId}/decision:
+  /api/v1/identity-bindings/pairing-decision:
     post:
       tags: [identity-binding]
-      operationId: submitSecondPartyBindingDecision
+      operationId: submitSecondPartyBindingPairingDecision
+      description: >-
+        Second-party confirmation bound to the exact authenticated candidate by
+        a server-generated, candidate-presented, short-lived pairing challenge.
+        The confirmer MUST independently authenticate and personally recognize
+        the human presenting the challenge. Challenge possession alone,
+        invitation possession, pending-list selection, attemptId, nickname,
+        displayName, Family membership, timestamps, or automated inference are
+        not identity proof. The server resolves the exact candidate context,
+        authenticated identity, attempt, P1 and invitation from the validated
+        challenge. A successful business operation consumes the pairing
+        material semantically; a different operation cannot reuse an expired or
+        consumed challenge.
       security:
         - bearerAuth: []
-      parameters:
-        - $ref: '#/components/parameters/BindingAttemptIdPath'
       requestBody:
         required: true
         content:
@@ -169,7 +190,7 @@ paths:
               $ref: '#/components/schemas/BindingConfirmerDecisionRequest'
       responses:
         '200':
-          description: 确认后 attempt 状态
+          description: Authorized valid pairing decision; authoritative attempt state
           content:
             application/json:
               schema:
@@ -181,13 +202,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '404':
-          description: Binding not found
+          description: >-
+            Generic not-found response for unauthorized target or invalid,
+            expired, consumed, wrong-P1, wrong-invitation, wrong-candidate or
+            otherwise mismatched pairing material. The response MUST NOT reveal
+            which condition failed.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/BindingNotFoundError'
         '409':
-          description: State conflict / idempotency mismatch
+          description: State conflict / idempotency payload mismatch
           content:
             application/json:
               schema:
@@ -217,13 +242,6 @@ components:
       in: query
       required: true
       description: 待验证的 target Person P1；服务端读取唯一 Family。
-      schema:
-        type: string
-        format: uuid
-    BindingAttemptIdPath:
-      name: attemptId
-      in: path
-      required: true
       schema:
         type: string
         format: uuid
@@ -278,6 +296,15 @@ components:
         personId:
           type: string
           format: uuid
+        pairingChallenge:
+          type: string
+          minLength: 32
+          maxLength: 512
+          description: >-
+            Opaque server-authenticated, short-lived candidate-presented pairing
+            material. It is bound to the candidate authentication context,
+            authenticated candidate identity, exact attempt, P1, invitation and
+            expiry. It is not identity proof by itself and MUST NOT be logged.
         decision:
           type: string
           enum: [AFFIRM, REJECT]
@@ -292,6 +319,7 @@ components:
           type: string
       required:
         - personId
+        - pairingChallenge
         - decision
         - targetConfirmed
         - candidateRecognized
@@ -305,6 +333,30 @@ components:
           type: string
           const: NOT_COMPLETED
       required: [binding]
+    BindingCandidatePairingResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        Fixed candidate-facing AFFIRM shape. For a currently eligible live
+        attempt, pairingChallenge is valid and short-lived; for hidden business
+        failures it is an indistinguishable decoy that cannot resolve to a live
+        attempt. Challenge presence therefore MUST NOT disclose eligibility,
+        consent, guardian, Family, P1 existence, invitation state or binding
+        state. A replay MUST NOT extend the original challenge expiry.
+      properties:
+        binding:
+          type: string
+          const: NOT_COMPLETED
+        pairingChallenge:
+          type: string
+          minLength: 32
+          maxLength: 512
+          description: >-
+            Opaque material for the candidate to present directly to the
+            independently authenticated human confirmer who is recognizing the
+            candidate in person. It contains no readable P1, identity,
+            invitation or attempt data.
+      required: [binding, pairingChallenge]
     BindingBootstrapGenericResponse:
       type: object
       additionalProperties: false
