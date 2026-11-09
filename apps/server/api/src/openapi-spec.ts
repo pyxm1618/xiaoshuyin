@@ -502,10 +502,7 @@ export function buildOpenApiDocument() {
         tags: ['participation'],
         operationId: 'createParticipationInvite',
         security: [{ bearerAuth: [] }],
-        parameters: [{
-          name: 'id', in: 'path', required: true,
-          schema: { type: 'string', format: 'uuid' },
-        }],
+        parameters: [paramRef('CaseIdPath')],
         requestBody: refBody('CreateParticipationInviteRequest'),
         responses: {
           '201': refResponse('Participation invitation created', 'CreateParticipationInviteResponse'),
@@ -530,10 +527,7 @@ export function buildOpenApiDocument() {
       get: {
         tags: ['participation'],
         operationId: 'getParticipationInvite',
-        parameters: [{
-          name: 'token', in: 'path', required: true,
-          schema: { type: 'string', minLength: 1, maxLength: 256 },
-        }],
+        parameters: [paramRef('InviteTokenPath')],
         responses: {
           '200': refResponse('Minimal safe invitation view', 'ParticipationInvitePublicView'),
           '404': refResponse('`INVITATION_NOT_AVAILABLE`', 'InvitationNotAvailableError'),
@@ -546,10 +540,7 @@ export function buildOpenApiDocument() {
         tags: ['participation'],
         operationId: 'acceptParticipationInvite',
         security: [{ bearerAuth: [] }],
-        parameters: [{
-          name: 'token', in: 'path', required: true,
-          schema: { type: 'string', minLength: 1, maxLength: 256 },
-        }],
+        parameters: [paramRef('InviteTokenPath')],
         requestBody: refBody('AcceptParticipationRequest'),
         responses: {
           '200': refResponse('Participation active or converged', 'ParticipationResource'),
@@ -568,10 +559,7 @@ export function buildOpenApiDocument() {
         tags: ['participation'],
         operationId: 'declineParticipation',
         security: [{ bearerAuth: [] }],
-        parameters: [{
-          name: 'id', in: 'path', required: true,
-          schema: { type: 'string', format: 'uuid' },
-        }],
+        parameters: [paramRef('ParticipationIdPath')],
         requestBody: refBody('DeclineParticipationRequest'),
         responses: {
           '200': refResponse('Participation declined or converged', 'ParticipationResource'),
@@ -590,10 +578,7 @@ export function buildOpenApiDocument() {
         tags: ['participation'],
         operationId: 'withdrawParticipation',
         security: [{ bearerAuth: [] }],
-        parameters: [{
-          name: 'id', in: 'path', required: true,
-          schema: { type: 'string', format: 'uuid' },
-        }],
+        parameters: [paramRef('ParticipationIdPath')],
         requestBody: refBody('WithdrawParticipationRequest'),
         responses: {
           '200': refResponse('Participation withdrawn or converged', 'ParticipationResource'),
@@ -612,10 +597,7 @@ export function buildOpenApiDocument() {
         tags: ['participation'],
         operationId: 'getParticipation',
         security: [{ bearerAuth: [] }],
-        parameters: [{
-          name: 'id', in: 'path', required: true,
-          schema: { type: 'string', format: 'uuid' },
-        }],
+        parameters: [paramRef('ParticipationIdPath')],
         responses: {
           '200': refResponse('Minimal participation state', 'ParticipationResource'),
           '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
@@ -770,6 +752,20 @@ export function buildOpenApiDocument() {
           in: 'path',
           required: true,
           description: 'Case UUID（待验证参数；存在不代表有权访问）。',
+          schema: { type: 'string', format: 'uuid' },
+        },
+        InviteTokenPath: {
+          name: 'token',
+          in: 'path',
+          required: true,
+          description: '不透明邀请 token；只作为 bearer capability，不构成 identity proof。',
+          schema: { type: 'string', minLength: 1, maxLength: 256 },
+        },
+        ParticipationIdPath: {
+          name: 'id',
+          in: 'path',
+          required: true,
+          description: 'participation UUID（待验证参数；存在不代表有权访问）。',
           schema: { type: 'string', format: 'uuid' },
         },
         BindingContextHeader: {
