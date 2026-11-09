@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import pg from 'pg';
+import { Slice4InvitationAdapter } from '../../apps/server/api/src/identity-binding/invitation-slice4-adapter.js';
+import { withTransactionClient } from '../../apps/server/api/src/db/tx.js';
 import {
   acceptInvite,
   addBoundAdultTargetToFamily,
@@ -28,6 +31,53 @@ describe('Slice 4 ↔ Slice 5 identity seam', () => {
     binding=h as unknown as BindingHarness;
   });
   afterAll(async()=>{await h.close();});
+
+  it('Gate 2 adapter restores the binding transaction generic RLS context after its authoritative read', async () => {
+    const f=await createParticipationFixture(
+      h,'identity-context-restore',{target:'member',ageBand:'MINOR_14_17'}
+    );
+    const created=await invite(
+      h.app,f.manager.token,f.caseId,f.targetPersonId,'identity-context-restore-invite'
+    );
+    expect(created.statusCode).toBe(201);
+
+    const pool=new pg.Pool({connectionString:process.env['DATABASE_URL']});
+    try {
+      await withTransactionClient(pool, async(tx)=>{
+        await tx.query(
+          'SELECT app.set_binding_gate_context($1,$2,$3,$4)',
+          [f.targetPersonId,f.familyId,created.json().participationId,null]
+        );
+
+        const before=(await tx.query(
+          `SELECT
+             COALESCE(current_setting('app.family_id',true),'') AS family_id,
+             COALESCE(current_setting('app.person_id',true),'') AS person_id,
+             COALESCE(current_setting('app.purpose',true),'') AS purpose`
+        )).rows[0];
+
+        const resolved=await new Slice4InvitationAdapter().resolveByParticipationId(
+          tx,created.json().participationId
+        );
+        expect(resolved).toMatchObject({
+          status:'VALID',
+          participationId:created.json().participationId,
+          targetPersonId:f.targetPersonId,
+          targetFamilyId:f.familyId,
+        });
+
+        const after=(await tx.query(
+          `SELECT
+             COALESCE(current_setting('app.family_id',true),'') AS family_id,
+             COALESCE(current_setting('app.person_id',true),'') AS person_id,
+             COALESCE(current_setting('app.purpose',true),'') AS purpose`
+        )).rows[0];
+        expect(after).toEqual(before);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
 
   it('Case C: real Slice 4 invitation drives Slice 5 binding, but explicit participation accept is still required', async () => {
     const f=await createParticipationFixture(h,'identity-case-c',{target:'member',ageBand:'MINOR_14_17'});
