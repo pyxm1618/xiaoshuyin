@@ -74,7 +74,7 @@
 
 ## Constitution Check
 
-- **Spec 治理**：本次 **Decision A upstream contract remediation** 被明确授权修改 `Docs/**`、005、006 Spec、Plan / Tasks / Checklist / handwritten OpenAPI，仅用于冻结 threat boundary 与已知 Plan findings；从本 remediation final head 起，后续 Implement 不得再自行改写这些上游语义。
+- **Spec 治理**：本次 **Decision A upstream contract remediation** 对 `Docs/**`、005、006 Spec、Plan / Tasks / Checklist / handwritten OpenAPI 的修改构成合法历史 baseline，仅用于冻结 threat boundary 与已知 Plan findings；后续 development scope check 以 Decision A remediation final Head 为比较基线，只要求相对该 baseline 无新增 upstream drift，不再要求这些文件相对 `origin/main` diff=0；除非重新进入正式 Plan / Contract remediation，后续 Implement 不得再自行改写这些上游语义。
 - **切片刻度**：006 不实现 Slice 2 / 3 / 4 的业务；只消费 Slice 4 合同与 Slice 1 基线。
 - **冻结语义**：Phase 顺序、Case B/C、Age Matrix、PENDING 边界、no-P2、anti-enumeration、invitation 生命周期归属全部原样保留。
 - **验证证据**：每个 Task 必须有可执行验证；不能以「设计存在」代替「代码真实可用」。
@@ -1565,7 +1565,7 @@ tests/
 | OpenAPI | handwritten/runtime/generated semantic comparison | pairing shape + confirmationVersion matrix |
 | Migration/RLS | migrate + db evidence + runtime-role behavior | replayable + FORCE RLS + actual behavior |
 | Coverage | coverage:audit | required proof mapping + RED self-test；missing/renamed/unexecuted/unrelated proof → non-zero |
-| Governance | governance validators | Docs/005/006 Spec diff=0 |
+| Governance | governance validators | Decision A remediation final Head 作为合法冻结上游 baseline；development final Head 相对该 baseline 无新增 Docs/005/006 contract drift（pre-baseline upstream changes 合法；不再要求相对 origin/main diff=0） |
 | Full | node scripts/verify-all.mjs from repo root | exact HEAD/env-presence/child-exit/final-exit provenance；final 0才PASS |
 | Blocked E2E | Slice4 runtime unavailable | T121–T124 = BLOCKED，不得伪造PASS |
 

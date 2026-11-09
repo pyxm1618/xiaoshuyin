@@ -244,7 +244,7 @@
 
 ## 18. Governance, Exclusions, Observability
 
-- [x] CHK181 Is 本轮只改 `specs/006-identity-binding-runtime/**`，且 `Docs/**` / `specs/001~005/**` / `apps/**` / `packages/**` / `db/**` / `tests/**` diff = 0？[Governance, plan Constitution Check]
+- [x] CHK181 Is Security Decision A upstream remediation 对 `Docs/**` / 005 / 006 contract 的修改被承认为合法历史 baseline，且后续 development 只要求相对该 Decision A remediation final Head 无新增 upstream drift，不再要求 `Docs/**` / `specs/001~005/**` 相对 `origin/main` diff = 0？[Governance, Decision A / plan Constitution Check / CHK202]
 - [x] CHK182 Is Explicit Exclusions 的 14 类可机械证明（route / schema / capability enumeration），而不是原则声明？[Completeness, plan D-20]
 - [x] CHK183 Is 明确没有 KYC / government-ID / 人脸 / 视频 / 电话 / 外部身份证明？[Security, plan D-20]
 - [x] CHK184 Is 明确没有后台 job / 定时器 / workflow engine / 第二套 audit？[Consistency, plan D-20 / Async Impact]
