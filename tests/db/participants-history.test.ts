@@ -50,8 +50,11 @@ describe('Slice 4 participation terminal history', () => {
     const row=(await h.admin.query(
       `INSERT INTO case_participants
         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,
-         created_by_person_id,accepted_at)
-       VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 hour',$5,now()-interval '1 minute')
+         created_by_person_id,created_at,accepted_at)
+       VALUES (
+         $1,$2,$3,'ACTIVE',$4,now()+interval '1 hour',$5,
+         now()-interval '2 minutes',now()-interval '1 minute'
+       )
        RETURNING id,accepted_at`,
       [f.familyId,f.caseId,f.targetPersonId,'3'.repeat(64),f.manager.personId]
     )).rows[0];
