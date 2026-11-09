@@ -180,6 +180,75 @@ describe('Slice 4 ↔ Slice 5 identity seam', () => {
     expect(row.state).toBe('PENDING');
   });
 
+  it('ADULT with no Account cannot use Case C invitation to create a new binding path', async () => {
+    const f=await createParticipationFixture(h,'identity-adult-case-c',{target:'member',ageBand:'ADULT'});
+    const created=await invite(
+      h.app,f.manager.token,f.caseId,f.targetPersonId,'identity-adult-case-c-invite'
+    );
+    expect(created.statusCode).toBe(201);
+    expect(await personAccountId(binding,f.targetPersonId)).toBeNull();
+
+    const target: TargetFixture={
+      guardian:f.manager,
+      familyId:f.familyId,
+      targetPersonId:f.targetPersonId,
+      invitationToken:created.json().inviteToken,
+      participationId:created.json().participationId,
+    };
+    const boot=await bootstrap(
+      binding,
+      target.invitationToken,
+      `s4_adult_case_c_${Date.now()}_${crypto.randomUUID()}`,
+      'identity-adult-case-c-bootstrap'
+    );
+    expect(boot.statusCode).toBe(200);
+    expect(boot.json().binding).toBe('NOT_COMPLETED');
+    expect(await personAccountId(binding,f.targetPersonId)).toBeNull();
+
+    const row=(await h.admin.query(
+      'SELECT state FROM case_participants WHERE id=$1',
+      [created.json().participationId]
+    )).rows[0];
+    expect(row.state).toBe('PENDING');
+  });
+
+  it('multi-family Case C is blocked generically and creates no committed binding', async () => {
+    const f=await createParticipationFixture(h,'identity-multifamily',{target:'member',ageBand:'MINOR_14_17'});
+    const created=await invite(
+      h.app,f.manager.token,f.caseId,f.targetPersonId,'identity-multifamily-invite'
+    );
+    expect(created.statusCode).toBe(201);
+
+    const otherOwner=await (async()=>{
+      const { loginWithLabel, createFamily }=await import('../setup/api.js');
+      const owner=await loginWithLabel(h.app,`s4-multifamily-owner-${crypto.randomUUID()}`);
+      const family=await createFamily(h.app,owner.token,`s4-multifamily-${crypto.randomUUID()}`);
+      expect(family.statusCode).toBe(201);
+      return {owner,familyId:family.json().id as string};
+    })();
+    await h.admin.query(
+      'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2)',
+      [otherOwner.familyId,f.targetPersonId]
+    );
+
+    const res=await bootstrap(
+      binding,
+      created.json().inviteToken,
+      `s4_multifamily_${Date.now()}_${crypto.randomUUID()}`,
+      'identity-multifamily-bootstrap'
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.json().binding).toBe('NOT_COMPLETED');
+    expect(await personAccountId(binding,f.targetPersonId)).toBeNull();
+
+    const committed=(await h.admin.query(
+      `SELECT count(*)::int AS n FROM binding_attempts
+       WHERE target_person_id=$1 AND state='COMMITTED'`,
+      [f.targetPersonId]
+    )).rows[0].n;
+    expect(committed).toBe(0);
+  });
+
   it('terminal/expired real invitation is generic and cannot create a binding attempt or P2', async () => {
     const f=await createParticipationFixture(h,'identity-terminal',{target:'member'});
     const created=await invite(
