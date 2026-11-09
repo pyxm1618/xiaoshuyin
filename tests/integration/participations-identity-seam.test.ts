@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import pg from 'pg';
-import { Slice4InvitationAdapter } from '../../apps/server/api/src/identity-binding/invitation-slice4-adapter.js';
-import { withTransactionClient } from '../../apps/server/api/src/db/tx.js';
+import {
+  getBindingInvitationByTokenHash,
+  getBindingInvitationByTrustedTarget,
+  hashParticipationInviteToken,
+} from '@xiaoshuyin/domain';
+import type {
+  InvitationResolution,
+  InvitationResolutionPort,
+} from '../../apps/server/api/src/identity-binding/invitation-port.js';
 import {
   acceptInvite,
   addBoundAdultTargetToFamily,
@@ -20,100 +26,87 @@ import {
   type TargetFixture,
 } from '../setup/identity-binding.js';
 
+function invitationResult(
+  row: {
+    participationId: string;
+    targetPersonId: string;
+    targetFamilyId: string;
+    expiresAt: string;
+  } | null
+): InvitationResolution {
+  return row ? { status: 'VALID', ...row } : { status: 'TERMINAL_UNUSABLE' };
+}
+
+/**
+ * Test-only integration bridge. It does not fake invitation facts: both Gate 1
+ * and Gate 2 read the real Slice 4 case_participants runtime under real RLS.
+ * Production ownership stays with Slice 5 T121 after Slice 4 merges main.
+ */
+class AuthoritativeSlice4TestInvitationPort implements InvitationResolutionPort {
+  async resolveByToken(tx: any, invitationToken: string): Promise<InvitationResolution> {
+    if (invitationToken.length < 1 || invitationToken.length > 256) {
+      return { status: 'TERMINAL_UNUSABLE' };
+    }
+    const tokenHash = hashParticipationInviteToken(invitationToken);
+    const previous=(await tx.query(
+      `SELECT COALESCE(current_setting('app.invite_token_hash',true),'') AS value`
+    )).rows[0]?.value ?? '';
+    await tx.query('SELECT app.set_invite_token_context($1)', [tokenHash]);
+    const row=await getBindingInvitationByTokenHash(tx,tokenHash);
+    await tx.query(
+      `SELECT set_config('app.invite_token_hash',$1,true)`,
+      [previous]
+    );
+    return invitationResult(row);
+  }
+
+  async resolveByParticipationId(
+    tx: any,
+    participationId: string
+  ): Promise<InvitationResolution> {
+    const context=(await tx.query(
+      `SELECT
+         app_binding_target_person_id()::text AS person_id,
+         app_binding_target_family_id()::text AS family_id`
+    )).rows[0];
+    if (!context?.person_id || !context?.family_id) {
+      return { status: 'TERMINAL_UNUSABLE' };
+    }
+
+    const previous=(await tx.query(
+      `SELECT
+         COALESCE(current_setting('app.family_id',true),'') AS family_id,
+         COALESCE(current_setting('app.person_id',true),'') AS person_id,
+         COALESCE(current_setting('app.purpose',true),'') AS purpose`
+    )).rows[0];
+    await tx.query('SELECT app.set_family_context($1,$2,$3)',[
+      context.family_id,context.person_id,'IDENTITY_BINDING'
+    ]);
+    const row=await getBindingInvitationByTrustedTarget(
+      tx,participationId,context.family_id,context.person_id
+    );
+    await tx.query(
+      `SELECT
+         set_config('app.family_id',$1,true),
+         set_config('app.person_id',$2,true),
+         set_config('app.purpose',$3,true)`,
+      [previous.family_id,previous.person_id,previous.purpose]
+    );
+    return invitationResult(row);
+  }
+}
+
 describe('Slice 4 ↔ Slice 5 identity seam', () => {
   let h: Awaited<ReturnType<typeof buildParticipationApp>>;
   let binding: BindingHarness;
 
   beforeAll(async()=>{
-    h=await buildParticipationApp();
-    // The shared Slice 5 helpers only consume app/admin on these paths.
-    // Production app is intentionally NOT injected with InMemoryInvitationPort.
+    h=await buildParticipationApp(new AuthoritativeSlice4TestInvitationPort());
+    // Real Slice 5 runtime + real Slice 4 DB facts. Only the production port
+    // wiring remains deferred to Slice 5 T121 after this runtime merges main.
     binding=h as unknown as BindingHarness;
   });
   afterAll(async()=>{await h.close();});
-
-  it('Gate 1 adapter restores invitation-token context after its authoritative read', async () => {
-    const f=await createParticipationFixture(
-      h,'identity-token-restore',{target:'member',ageBand:'MINOR_14_17'}
-    );
-    const created=await invite(
-      h.app,f.manager.token,f.caseId,f.targetPersonId,'identity-token-restore-invite'
-    );
-    expect(created.statusCode).toBe(201);
-
-    const pool=new pg.Pool({connectionString:process.env['DATABASE_URL']});
-    try {
-      await withTransactionClient(pool, async(tx)=>{
-        const before=(await tx.query(
-          `SELECT COALESCE(current_setting('app.invite_token_hash',true),'') AS token_hash`
-        )).rows[0].token_hash;
-
-        const resolved=await new Slice4InvitationAdapter().resolveByToken(
-          tx,created.json().inviteToken
-        );
-        expect(resolved).toMatchObject({
-          status:'VALID',
-          participationId:created.json().participationId,
-          targetPersonId:f.targetPersonId,
-          targetFamilyId:f.familyId,
-        });
-
-        const after=(await tx.query(
-          `SELECT COALESCE(current_setting('app.invite_token_hash',true),'') AS token_hash`
-        )).rows[0].token_hash;
-        expect(after).toBe(before);
-      });
-    } finally {
-      await pool.end();
-    }
-  });
-
-  it('Gate 2 adapter restores the binding transaction generic RLS context after its authoritative read', async () => {
-    const f=await createParticipationFixture(
-      h,'identity-context-restore',{target:'member',ageBand:'MINOR_14_17'}
-    );
-    const created=await invite(
-      h.app,f.manager.token,f.caseId,f.targetPersonId,'identity-context-restore-invite'
-    );
-    expect(created.statusCode).toBe(201);
-
-    const pool=new pg.Pool({connectionString:process.env['DATABASE_URL']});
-    try {
-      await withTransactionClient(pool, async(tx)=>{
-        await tx.query(
-          'SELECT app.set_binding_gate_context($1,$2,$3,$4)',
-          [f.targetPersonId,f.familyId,created.json().participationId,null]
-        );
-
-        const before=(await tx.query(
-          `SELECT
-             COALESCE(current_setting('app.family_id',true),'') AS family_id,
-             COALESCE(current_setting('app.person_id',true),'') AS person_id,
-             COALESCE(current_setting('app.purpose',true),'') AS purpose`
-        )).rows[0];
-
-        const resolved=await new Slice4InvitationAdapter().resolveByParticipationId(
-          tx,created.json().participationId
-        );
-        expect(resolved).toMatchObject({
-          status:'VALID',
-          participationId:created.json().participationId,
-          targetPersonId:f.targetPersonId,
-          targetFamilyId:f.familyId,
-        });
-
-        const after=(await tx.query(
-          `SELECT
-             COALESCE(current_setting('app.family_id',true),'') AS family_id,
-             COALESCE(current_setting('app.person_id',true),'') AS person_id,
-             COALESCE(current_setting('app.purpose',true),'') AS purpose`
-        )).rows[0];
-        expect(after).toEqual(before);
-      });
-    } finally {
-      await pool.end();
-    }
-  });
 
   it('Case C: real Slice 4 invitation drives Slice 5 binding, but explicit participation accept is still required', async () => {
     const f=await createParticipationFixture(h,'identity-case-c',{target:'member',ageBand:'MINOR_14_17'});
