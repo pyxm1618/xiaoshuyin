@@ -187,6 +187,77 @@ describe('Slice 4 participation compliance gate', () => {
     expect(withdrawn.json().state).toBe('WITHDRAWN');
   });
 
+  it('UNKNOWN current profile fails closed at invite creation with zero participation write', async () => {
+    const f=await createParticipationFixture(h,'compliance-unknown-create',{target:'manager'});
+    const target=await addBoundAdultNonManagerToFamily(h,f.familyId,'compliance-unknown-create');
+    await h.admin.query(
+      `UPDATE person_compliance_profiles
+       SET age_band='UNKNOWN',
+           minor_mode=false,
+           guardian_person_id=NULL,
+           guardian_consent_record_id=NULL,
+           guardian_consent_version=NULL,
+           verified_source='SELF_STATEMENT',
+           updated_at=now()
+       WHERE person_id=$1`,
+      [target.personId]
+    );
+
+    const before=(await h.admin.query(
+      'SELECT count(*)::int AS n FROM case_participants WHERE case_id=$1 AND person_id=$2',
+      [f.caseId,target.personId]
+    )).rows[0].n;
+    const res=await invite(
+      h.app,f.manager.token,f.caseId,target.personId,'compliance-unknown-create-invite'
+    );
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({
+      code:'PARTICIPATION_TARGET_INELIGIBLE',
+      message:'Participation target is not eligible',
+    });
+    const after=(await h.admin.query(
+      'SELECT count(*)::int AS n FROM case_participants WHERE case_id=$1 AND person_id=$2',
+      [f.caseId,target.personId]
+    )).rows[0].n;
+    expect(after).toBe(before);
+  });
+
+  it('accept re-reads current profile and fails closed if it becomes UNKNOWN', async () => {
+    const f=await createParticipationFixture(h,'compliance-unknown-accept',{target:'manager'});
+    const target=await addBoundAdultNonManagerToFamily(h,f.familyId,'compliance-unknown-accept');
+    const created=await invite(
+      h.app,f.manager.token,f.caseId,target.personId,'compliance-unknown-accept-invite'
+    );
+    expect(created.statusCode).toBe(201);
+
+    await h.admin.query(
+      `UPDATE person_compliance_profiles
+       SET age_band='UNKNOWN',
+           minor_mode=false,
+           guardian_person_id=NULL,
+           guardian_consent_record_id=NULL,
+           guardian_consent_version=NULL,
+           verified_source='SELF_STATEMENT',
+           updated_at=now()
+       WHERE person_id=$1`,
+      [target.personId]
+    );
+
+    const accepted=await acceptInvite(
+      h.app,target.token,created.json().inviteToken,'compliance-unknown-accept-command'
+    );
+    expect(accepted.statusCode).toBe(404);
+    expect(accepted.json()).toEqual({
+      code:'PARTICIPATION_NOT_FOUND',message:'Participation not found',
+    });
+    const row=(await h.admin.query(
+      'SELECT state,accepted_at FROM case_participants WHERE id=$1',
+      [created.json().participationId]
+    )).rows[0];
+    expect(row.state).toBe('PENDING');
+    expect(row.accepted_at).toBeNull();
+  });
+
   it('MINOR_14_17 current profile is allowed in minor mode without UNDER_14 consent', async () => {
     const f=await createParticipationFixture(h,'compliance-minor',{target:'manager'});
     const target=await addBoundAdultNonManagerToFamily(h,f.familyId,'compliance-minor');
