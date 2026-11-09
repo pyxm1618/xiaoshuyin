@@ -408,7 +408,7 @@ export const CreateParticipationInviteResponse = z.strictObject({
   participationId: z.string().uuid(),
   caseId: z.string().uuid(),
   personId: z.string().uuid(),
-  state: z.literal('PENDING'),
+  state: z.enum(['PENDING']),
   inviteToken: z.string().min(1).max(256),
   expiresAt: z.string().datetime(),
   createdAt: z.string().datetime(),
@@ -418,7 +418,7 @@ export type CreateParticipationInviteResponseType =
 
 export const ParticipationInvitePublicView = z.strictObject({
   participationId: z.string().uuid(),
-  state: z.literal('PENDING'),
+  state: z.enum(['PENDING']),
   expiresAt: z.string().datetime(),
   notice: ParticipationNotice,
 });
@@ -439,23 +439,23 @@ export const ParticipationResource = z.strictObject({
 export type ParticipationResourceType = z.infer<typeof ParticipationResource>;
 
 export const ParticipationAlreadyExistsError = z.strictObject({
-  code: z.literal('PARTICIPATION_ALREADY_EXISTS'),
+  code: z.enum(['PARTICIPATION_ALREADY_EXISTS']),
   message: z.string(),
 });
 export const ParticipationTargetIneligibleError = z.strictObject({
-  code: z.literal('PARTICIPATION_TARGET_INELIGIBLE'),
+  code: z.enum(['PARTICIPATION_TARGET_INELIGIBLE']),
   message: z.string(),
 });
 export const InvitationNotAvailableError = z.strictObject({
-  code: z.literal('INVITATION_NOT_AVAILABLE'),
+  code: z.enum(['INVITATION_NOT_AVAILABLE']),
   message: z.string(),
 });
 export const ParticipationNotFoundError = z.strictObject({
-  code: z.literal('PARTICIPATION_NOT_FOUND'),
+  code: z.enum(['PARTICIPATION_NOT_FOUND']),
   message: z.string(),
 });
 export const ParticipationStateConflictError = z.strictObject({
-  code: z.literal('PARTICIPATION_STATE_CONFLICT'),
+  code: z.enum(['PARTICIPATION_STATE_CONFLICT']),
   message: z.string(),
   currentState: CaseParticipationState,
 });
