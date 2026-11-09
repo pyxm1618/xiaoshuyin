@@ -62,9 +62,11 @@ describe('identity binding audit (T099)', () => {
     const { attemptId } = await startBinding(h, target, `audit_retry_${randomUUID()}`);
 
     injection.failPhaseC = true;
+    const retryKey = `audit-retry-${randomUUID()}`;
     const failed = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'AFFIRM',
+      idempotencyKey: retryKey,
     });
     expect(failed.statusCode).toBe(500);
     expect(failed.json()).toEqual({
@@ -111,6 +113,7 @@ describe('identity binding audit (T099)', () => {
     const retry = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'AFFIRM',
+      idempotencyKey: retryKey,
     });
     expect(retry.json().state).toBe('COMMITTED');
     const committed = await h.admin.query(

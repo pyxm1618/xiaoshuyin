@@ -20,6 +20,10 @@ export const envSchema = z.object({
     .number()
     .int()
     .positive('IDENTITY_BINDING_ATTEMPT_TTL_SECONDS must be a positive integer'),
+  IDENTITY_BINDING_PAIRING_TTL_SECONDS: z.coerce
+    .number()
+    .int()
+    .positive('IDENTITY_BINDING_PAIRING_TTL_SECONDS must be a positive integer'),
 });
 
 export type Env = z.infer<typeof envSchema>;

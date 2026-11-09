@@ -278,6 +278,42 @@ async function main() {
   log('T121–T124 按冻结 Tasks 标注 BLOCKED（Slice 4 runtime / 真实平台），不计入 verified，也不伪装为 PASS。');
   log('');
 
+  // M-06 canonical provenance. Record the exact repository state and required
+  // environment NAMES / presence before any child runs. Secret values are never
+  // printed.
+  const git = (args) => {
+    const r = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+    return r.status === 0 ? r.stdout.trim() : `ERROR(${r.status})`;
+  };
+  log('## Provenance');
+  log(`- cwd: ${ROOT}`);
+  log(`- branch: ${git(['rev-parse', '--abbrev-ref', 'HEAD'])}`);
+  log(`- HEAD: ${git(['rev-parse', 'HEAD'])}`);
+  log(`- origin/main: ${git(['rev-parse', 'origin/main'])}`);
+  log(`- tracked working tree: ${git(['status', '--porcelain', '--untracked-files=no']) === '' ? 'clean' : 'dirty'}`);
+  const requiredEnv = [
+    'DATABASE_URL',
+    'MIGRATION_DATABASE_URL',
+    'TEST_ADMIN_DATABASE_URL',
+    'IDENTITY_BINDING_SECRET',
+    'IDENTITY_BINDING_CONTEXT_TTL_SECONDS',
+    'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS',
+    'IDENTITY_BINDING_PAIRING_TTL_SECONDS',
+  ];
+  const fixtureProvided = new Set([
+    'IDENTITY_BINDING_SECRET',
+    'IDENTITY_BINDING_CONTEXT_TTL_SECONDS',
+    'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS',
+    'IDENTITY_BINDING_PAIRING_TTL_SECONDS',
+  ]);
+  for (const name of requiredEnv) {
+    const present = Boolean(process.env[name]);
+    const fixture = !present && fixtureProvided.has(name);
+    log(`- env ${name}: ${present ? 'present' : fixture ? 'present(fixture)' : 'MISSING'}`);
+    if (!present && !fixture) fail++;
+  }
+  log('');
+
   rows.forEach((row, i) => {
     const n = String(i + 1).padStart(2, '0');
     log(`## [${n}/26] ${row.req}`);

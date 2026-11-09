@@ -372,12 +372,36 @@ export async function lockBindingGateRows(
   targetPersonId: string,
   targetFamilyId: string
 ): Promise<void> {
-  await tx.query('SELECT id FROM persons WHERE id = $1 FOR UPDATE', [targetPersonId]);
-  await tx.query(
+  // Every SELECT ... FOR UPDATE below runs under the runtime role and the
+  // additive FOR UPDATE lock policies. A zero-row result is NEVER treated as a
+  // successful lock: if a required fact row is not lockable, the caller fails
+  // closed instead of evaluating a stale snapshot (H-02).
+  const person = await tx.query('SELECT id FROM persons WHERE id = $1 FOR UPDATE', [
+    targetPersonId,
+  ]);
+  if ((person.rowCount ?? 0) !== 1) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
+
+  const family = await tx.query('SELECT id FROM families WHERE id = $1 FOR UPDATE', [
+    targetFamilyId,
+  ]);
+  if ((family.rowCount ?? 0) !== 1) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
+
+  const memberships = await tx.query(
+    'SELECT person_id FROM family_members WHERE person_id = $1 FOR UPDATE',
+    [targetPersonId]
+  );
+  if ((memberships.rowCount ?? 0) === 0) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
+
+  // Profile / consent are optional fact rows: their absence is a Gate 2
+  // business block (COMPLIANCE_BLOCKED), not an infrastructure failure. If the
+  // row exists, however, it must be lockable.
+  const profile = await tx.query(
     'SELECT person_id FROM person_compliance_profiles WHERE person_id = $1 FOR UPDATE',
     [targetPersonId]
   );
-  await tx.query(
+  if ((profile.rowCount ?? 0) > 1) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
+
+  const consent = await tx.query(
     `SELECT id FROM consent_records
       WHERE id = (
         SELECT guardian_consent_record_id
@@ -387,9 +411,5 @@ export async function lockBindingGateRows(
       FOR UPDATE`,
     [targetPersonId]
   );
-  await tx.query(
-    'SELECT person_id FROM family_members WHERE person_id = $1 FOR UPDATE',
-    [targetPersonId]
-  );
-  await tx.query('SELECT id FROM families WHERE id = $1 FOR UPDATE', [targetFamilyId]);
+  if ((consent.rowCount ?? 0) > 1) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
 }

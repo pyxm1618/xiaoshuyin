@@ -118,7 +118,7 @@ describe('F-05 sensitive context cleanup', () => {
     const res = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'REJECT',
-      candidateRecognized: true,
+
     });
     expect(res.json().state).toBe('TERMINAL');
     expect(await attemptSecrets(h, attemptId)).toBe(0);

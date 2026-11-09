@@ -9,10 +9,12 @@ import {
   buildBindingApp,
   candidateDecision,
   confirmerDecision,
+  createAppPool,
   createTarget,
   startBinding,
   type BindingHarness,
 } from '../setup/identity-binding.js';
+import { commitAttempt } from '../../apps/server/api/src/identity-binding/commit.js';
 
 describe('attempt settle + audit (T079)', () => {
   let h: BindingHarness;
@@ -116,5 +118,60 @@ describe('attempt settle + audit (T079)', () => {
       [attemptId]
     );
     expect(context.rows[0].openid_ciphertext).toBeNull();
+  });
+
+  it('M-04: Phase C expiry uses one settlement for state, audit and cleanup', async () => {
+    const target = await createTarget(h, 'settle_m04', { ageBand: 'UNDER_14' });
+    const { attemptId } = await startBinding(h, target, `settle_m04_${randomUUID()}`);
+
+    await h.admin.query(
+      `INSERT INTO binding_confirmations
+         (attempt_id, kind, actor_account_id, actor_person_id, authority,
+          target_confirmed, candidate_recognized, statement_version)
+       VALUES ($1, 'SECOND_PARTY', $2, $3, 'GUARDIAN', true, true,
+               'second-party-recognition-v1')`,
+      [attemptId, target.guardian.accountId, target.guardian.personId]
+    );
+    await h.admin.query(
+      `UPDATE binding_attempts
+          SET created_at = now() - interval '2 hours',
+              expires_at = now() - interval '1 second'
+        WHERE id = $1`,
+      [attemptId]
+    );
+
+    const pool = createAppPool(1);
+    try {
+      const outcome = await commitAttempt(
+        {
+          pool,
+          invitationPort: h.port,
+          identityBindingSecret: process.env['IDENTITY_BINDING_SECRET']!,
+        },
+        {
+          attemptId,
+          targetPersonId: target.targetPersonId,
+          targetFamilyId: target.familyId,
+          actorAccountId: target.guardian.accountId,
+        }
+      );
+      expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'ATTEMPT_EXPIRED' });
+    } finally {
+      await pool.end();
+    }
+
+    expect(await auditCount(attemptId, 'BINDING_TERMINAL')).toBe(1);
+    const secrets = await h.admin.query(
+      `SELECT count(*)::int AS n FROM binding_pending_contexts
+        WHERE attempt_id = $1
+          AND (openid_ciphertext IS NOT NULL OR openid_nonce IS NOT NULL OR openid_tag IS NOT NULL)`,
+      [attemptId]
+    );
+    expect(secrets.rows[0].n).toBe(0);
+    const binding = await h.admin.query(
+      'SELECT account_id FROM persons WHERE id = $1',
+      [target.targetPersonId]
+    );
+    expect(binding.rows[0].account_id).toBeNull();
   });
 });

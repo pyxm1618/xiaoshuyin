@@ -43,6 +43,7 @@ import {
   BindingBootstrapGenericResponse,
   BindingBootstrapReusedResponse,
   BindingBootstrapCommittedResponse,
+  BindingCandidatePairingResponse,
   BindingGenericResponse,
   BindingStatusResponse,
   BindingSessionCommittedResponse,
@@ -158,6 +159,7 @@ export function buildOpenApiDocument() {
     BindingBootstrapGenericResponse: toJsonSchema(BindingBootstrapGenericResponse),
     BindingBootstrapReusedResponse: toJsonSchema(BindingBootstrapReusedResponse),
     BindingBootstrapCommittedResponse: toJsonSchema(BindingBootstrapCommittedResponse),
+    BindingCandidatePairingResponse: toJsonSchema(BindingCandidatePairingResponse),
     BindingGenericResponse: toJsonSchema(BindingGenericResponse),
     BindingStatusResponse: toJsonSchema(BindingStatusResponse),
     BindingSessionCommittedResponse: toJsonSchema(BindingSessionCommittedResponse),
@@ -445,7 +447,12 @@ export function buildOpenApiDocument() {
         parameters: [paramRef('BindingContextHeader')],
         requestBody: refBody('BindingCandidateDecisionRequest'),
         responses: {
-          '200': refResponse('统一 generic 结果', 'BindingGenericResponse'),
+          '200': jsonResponse('candidate AFFIRM fixed shape / REJECT-CANCEL generic', {
+            oneOf: [
+              ref('BindingGenericResponse'),
+              ref('BindingCandidatePairingResponse'),
+            ],
+          }),
           '401': refResponse('`BINDING_CONTEXT_INVALID`', 'BindingContextInvalidError'),
           '409': errorResponse('`IDEMPOTENCY_PAYLOAD_MISMATCH`'),
           '422': errorResponse('`VALIDATION_ERROR`'),
@@ -493,12 +500,11 @@ export function buildOpenApiDocument() {
         },
       },
     },
-    '/api/v1/identity-bindings/{attemptId}/decision': {
+    '/api/v1/identity-bindings/pairing-decision': {
       post: {
         tags: ['identity-binding'],
-        operationId: 'submitSecondPartyBindingDecision',
+        operationId: 'submitSecondPartyBindingPairingDecision',
         security: [{ bearerAuth: [] }],
-        parameters: [paramRef('BindingAttemptIdPath')],
         requestBody: refBody('BindingConfirmerDecisionRequest'),
         responses: {
           '200': refResponse('确认后 attempt 状态', 'BindingConfirmerDecisionResponse'),
@@ -575,12 +581,7 @@ export function buildOpenApiDocument() {
           description: '待验证的 target Person P1；服务端读取唯一 Family。',
           schema: { type: 'string', format: 'uuid' },
         },
-        BindingAttemptIdPath: {
-          name: 'attemptId',
-          in: 'path',
-          required: true,
-          schema: { type: 'string', format: 'uuid' },
-        },
+
       },
       schemas: {
 

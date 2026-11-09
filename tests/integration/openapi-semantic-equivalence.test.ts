@@ -86,6 +86,56 @@ describe('OpenAPI semantic normalizer (T097)', () => {
     }
   });
 
+  it('generated contract exposes /pairing-decision and no attemptId selector route', () => {
+    const generated = JSON.parse(
+      readFileSync(join(ROOT, 'packages/generated/openapi.json'), 'utf-8')
+    ) as any;
+    const paths = Object.keys(generated.paths);
+    expect(paths).toContain('/api/v1/identity-bindings/pairing-decision');
+    expect(paths).not.toContain('/api/v1/identity-bindings/{attemptId}/decision');
+    expect(
+      paths.filter((p) => p.startsWith('/api/v1/identity-bindings/'))
+    ).toHaveLength(6);
+  });
+
+  it('generated pairing request is a strict two-branch decision union', () => {
+    const generated = JSON.parse(
+      readFileSync(join(ROOT, 'packages/generated/openapi.json'), 'utf-8')
+    ) as any;
+    const schema = generated.components.schemas.BindingConfirmerDecisionRequest;
+    expect(schema.oneOf).toHaveLength(2);
+    const byDecision = new Map<string, any>(
+      schema.oneOf.map((branch: any) => [branch.properties.decision.const, branch])
+    );
+    const affirm = byDecision.get('AFFIRM')!;
+    const reject = byDecision.get('REJECT')!;
+    expect(affirm.properties.targetConfirmed.const).toBe(true);
+    expect(affirm.properties.candidateRecognized.const).toBe(true);
+    expect(reject.properties.targetConfirmed.const).toBe(false);
+    expect(reject.properties.candidateRecognized.const).toBe(false);
+    expect(affirm.required).toContain('pairingChallenge');
+    expect(reject.required).toContain('pairingChallenge');
+    expect(affirm.properties.pairingChallenge.pattern).toBe('^[A-Za-z0-9_-]{192}$');
+    expect(reject.properties.pairingChallenge.pattern).toBe('^[A-Za-z0-9_-]{192}$');
+    for (const branch of [affirm, reject]) {
+      expect(branch.required).toContain('confirmationVersion');
+      expect(branch.properties.confirmationVersion.const).toBe(
+        'second-party-recognition-v1'
+      );
+    }
+  });
+
+  it('generated candidate AFFIRM response carries the fixed 192-char challenge', () => {
+    const generated = JSON.parse(
+      readFileSync(join(ROOT, 'packages/generated/openapi.json'), 'utf-8')
+    ) as any;
+    const schema = generated.components.schemas.BindingCandidatePairingResponse;
+    expect(schema.required).toEqual(expect.arrayContaining(['binding', 'pairingChallenge']));
+    expect(schema.properties.pairingChallenge.minLength).toBe(192);
+    expect(schema.properties.pairingChallenge.maxLength).toBe(192);
+    expect(schema.properties.pairingChallenge.pattern).toBe('^[A-Za-z0-9_-]{192}$');
+  });
+
   it('a bad fixture that folds the true union is rejected by the comparator', () => {
     // `openapi-check` already proves the frozen YAML equals the generated
     // three-branch union, so the generated schema stands in for the frozen

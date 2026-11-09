@@ -31,10 +31,11 @@ describe('independent confirmer authentication', () => {
 
     const decision = await h.app.inject({
       method: 'POST',
-      url: `/api/v1/identity-bindings/${attemptId}/decision`,
+      url: '/api/v1/identity-bindings/pairing-decision',
       headers: { 'x-binding-context': contextToken },
       payload: {
         personId: target.targetPersonId,
+        pairingChallenge: 'A'.repeat(192),
         decision: 'AFFIRM',
         targetConfirmed: true,
         candidateRecognized: true,

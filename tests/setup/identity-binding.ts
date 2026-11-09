@@ -14,6 +14,7 @@ import {
   InMemoryInvitationPort,
   type InvitationResolution,
 } from '../../apps/server/api/src/identity-binding/invitation-port.js';
+import { encodePairingChallenge } from '../../apps/server/api/src/identity-binding/crypto.js';
 import { createAdminPool } from './db.js';
 import {
   createConsentRequest,
@@ -30,6 +31,13 @@ export interface BindingHarness {
   admin: pg.Pool;
   close(): Promise<void>;
 }
+
+/**
+ * Test-only replay memory: the real server never persists raw challenge bytes,
+ * so a replay test that wants to submit the exact original request must keep
+ * the candidate-presented value it received. Keyed by authoritative attempt id.
+ */
+const issuedChallenges = new Map<string, string>();
 
 /** Application-role pool (NOBYPASSRLS), for direct repository / RLS tests. */
 export function createAppPool(max = 4): pg.Pool {
@@ -204,30 +212,92 @@ export async function confirmerList(
   });
 }
 
+/**
+ * Test harness convenience: the argument is either an exact 192-character
+ * pairing challenge or an attemptId for legacy tests/setup helpers. In the
+ * latter case the harness reconstructs the current issuance envelope from the
+ * real DB row and the test secret; the production route still accepts ONLY the
+ * pairingChallenge.
+ */
 export async function confirmerDecision(
   h: BindingHarness,
   token: string,
-  attemptId: string,
+  selector: string,
   input: {
     personId: string;
     decision: 'AFFIRM' | 'REJECT';
     targetConfirmed?: boolean;
     candidateRecognized?: boolean;
+    confirmationVersion?: string;
     idempotencyKey?: string;
   }
 ) {
+  let pairingChallenge = selector;
+  if (!/^[A-Za-z0-9_-]{192}$/.test(pairingChallenge)) {
+    const cached = issuedChallenges.get(pairingChallenge);
+    if (cached) {
+      pairingChallenge = cached;
+    } else {
+      const { rows } = await h.admin.query(
+        `SELECT b.id AS attempt_id, b.target_person_id, b.candidate_identity_digest,
+                b.invitation_participation_id, c.id AS context_id,
+                c.pairing_issuance_id, c.pairing_issued_at, c.pairing_expires_at
+           FROM binding_attempts b
+           JOIN binding_pending_contexts c ON c.attempt_id = b.id
+          WHERE b.id = $1 AND c.pairing_issuance_id IS NOT NULL
+          ORDER BY c.created_at DESC LIMIT 1`,
+        [selector]
+      );
+      if (!rows[0]) {
+        return h.app.inject({
+          method: 'POST',
+          url: '/api/v1/identity-bindings/pairing-decision',
+          headers: { authorization: `Bearer ${token}` },
+          payload: {
+            personId: input.personId,
+            pairingChallenge: 'A'.repeat(192),
+            decision: input.decision,
+            targetConfirmed: input.targetConfirmed ?? input.decision === 'AFFIRM',
+            candidateRecognized: input.candidateRecognized ?? input.decision === 'AFFIRM',
+            confirmationVersion: input.confirmationVersion ?? 'second-party-recognition-v1',
+            idempotencyKey: input.idempotencyKey ?? `sp-${randomUUID()}`,
+          },
+        });
+      }
+      pairingChallenge = encodePairingChallenge(
+        process.env['IDENTITY_BINDING_SECRET']!,
+        {
+          contextId: rows[0].context_id,
+          candidateIdentityDigest: rows[0].candidate_identity_digest,
+          attemptId: rows[0].attempt_id,
+          targetPersonId: rows[0].target_person_id,
+          invitationParticipationId: rows[0].invitation_participation_id,
+          pairingIssuanceId: rows[0].pairing_issuance_id,
+          pairingIssuedAt: rows[0].pairing_issued_at,
+          pairingExpiresAt: rows[0].pairing_expires_at,
+        }
+      );
+      issuedChallenges.set(selector, pairingChallenge);
+    }
+  } else {
+    // Learn the attempt binding for later replays of this exact challenge.
+    const { rows } = await h.admin.query(
+      'SELECT id FROM binding_attempts WHERE target_person_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [input.personId]
+    );
+    if (rows[0]?.id) issuedChallenges.set(rows[0].id as string, pairingChallenge);
+  }
   return h.app.inject({
     method: 'POST',
-    url: `/api/v1/identity-bindings/${attemptId}/decision`,
+    url: '/api/v1/identity-bindings/pairing-decision',
     headers: { authorization: `Bearer ${token}` },
     payload: {
       personId: input.personId,
+      pairingChallenge,
       decision: input.decision,
-      targetConfirmed:
-        input.targetConfirmed ?? input.decision === 'AFFIRM',
-      candidateRecognized:
-        input.candidateRecognized ?? input.decision === 'AFFIRM',
-      confirmationVersion: 'second-party-recognition-v1',
+      targetConfirmed: input.targetConfirmed ?? input.decision === 'AFFIRM',
+      candidateRecognized: input.candidateRecognized ?? input.decision === 'AFFIRM',
+      confirmationVersion: input.confirmationVersion ?? 'second-party-recognition-v1',
       idempotencyKey: input.idempotencyKey ?? `sp-${randomUUID()}`,
     },
   });
@@ -250,7 +320,7 @@ export async function startBinding(
   h: BindingHarness,
   target: TargetFixture,
   code: string
-): Promise<{ contextToken: string; attemptId: string }> {
+): Promise<{ contextToken: string; attemptId: string; pairingChallenge: string }> {
   const boot = await bootstrap(h, target.invitationToken, code);
   if (boot.statusCode !== 200) {
     throw new Error(`bootstrap failed: ${boot.statusCode} ${boot.body}`);
@@ -265,7 +335,14 @@ export async function startBinding(
     [target.targetPersonId]
   );
   if (!rows[0]) throw new Error('no attempt created');
-  return { contextToken, attemptId: rows[0].id as string };
+  const attemptId = rows[0].id as string;
+  const pairingChallenge = decision.json().pairingChallenge as string;
+  if (pairingChallenge) issuedChallenges.set(attemptId, pairingChallenge);
+  return {
+    contextToken,
+    attemptId,
+    pairingChallenge,
+  };
 }
 
 export function invitation(

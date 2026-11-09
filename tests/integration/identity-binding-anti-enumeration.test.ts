@@ -234,7 +234,8 @@ describe('candidate-facing anti-enumeration', () => {
 
     const decision = await candidateDecision(h, token, 'AFFIRM', undefined, 'candidate-binding-v1');
     expect(decision.statusCode).toBe(200);
-    expect(decision.json()).toEqual({ binding: 'NOT_COMPLETED' });
+    expect(decision.json().binding).toBe('NOT_COMPLETED');
+    expect(decision.json().pairingChallenge).toMatch(/^[A-Za-z0-9_-]{192}$/);
 
     const status = await candidateStatus(h, token);
     expect(status.statusCode).toBe(200);
@@ -243,6 +244,47 @@ describe('candidate-facing anti-enumeration', () => {
     const session = await candidateSession(h, token);
     expect(session.statusCode).toBe(200);
     expect(session.json()).toEqual({ binding: 'NOT_COMPLETED' });
+  });
+
+  it('H-01: valid and decoy AFFIRM challenges are externally indistinguishable', async () => {
+    const eligible = await createTarget(h, 'enum_valid', { ageBand: 'UNDER_14' });
+    const eligibleBoot = await bootstrap(
+      h,
+      eligible.invitationToken,
+      `enum_valid_${randomUUID()}`
+    );
+    const validRes = await candidateDecision(
+      h,
+      eligibleBoot.json().pendingContextToken as string,
+      'AFFIRM',
+      `enum-valid-${randomUUID()}`,
+      'candidate-binding-v1'
+    );
+
+    const hidden = await createTarget(h, 'enum_hidden', { ageBand: 'UNDER_14' });
+    const hiddenBoot = await bootstrap(
+      h,
+      hidden.invitationToken,
+      `enum_hidden_${randomUUID()}`
+    );
+    await revokeConsent(h.app, hidden.guardian.token, 'enum_hidden', hidden.consentId!);
+    const decoyRes = await candidateDecision(
+      h,
+      hiddenBoot.json().pendingContextToken as string,
+      'AFFIRM',
+      `enum-hidden-${randomUUID()}`,
+      'candidate-binding-v1'
+    );
+
+    for (const res of [validRes, decoyRes]) {
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('application/json');
+      expect(Object.keys(res.json()).sort()).toEqual(['binding', 'pairingChallenge']);
+      expect(res.json().binding).toBe('NOT_COMPLETED');
+      expect(res.json().pairingChallenge).toMatch(/^[A-Za-z0-9_-]{192}$/);
+      expect(res.json()).not.toHaveProperty('expiresAt');
+      expect(res.json()).not.toHaveProperty('pairingExpiresAt');
+    }
   });
 
   it('true Case B mismatch (P1 bound to A, candidate authenticates as B) is generically indistinguishable', async () => {

@@ -65,7 +65,9 @@ describe('integration idempotency matrix (T106)', () => {
     expect(first.statusCode).toBe(200);
     const replay = await candidateDecision(h, contextToken, 'AFFIRM', key, 'candidate-binding-v1');
     expect(replay.statusCode).toBe(200);
-    expect(replay.json()).toEqual({ binding: 'NOT_COMPLETED' });
+    expect(replay.json()).toEqual(first.json());
+    expect(replay.json().binding).toBe('NOT_COMPLETED');
+    expect(String(replay.json().pairingChallenge)).toHaveLength(192);
 
     const confirmations = await h.admin.query(
       "SELECT count(*)::int AS n FROM binding_confirmations WHERE attempt_id = $1 AND kind = 'CANDIDATE'",
@@ -374,10 +376,11 @@ describe('integration idempotency matrix (T106)', () => {
     const { attemptId } = await startBinding(h, target, code);
 
     injection.failBinding = true;
+    const retryKey = `retry-${randomUUID()}`;
     const failed = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'AFFIRM',
-      idempotencyKey: `retry-a-${randomUUID()}`,
+      idempotencyKey: retryKey,
     });
     injection.failBinding = false;
     expect(failed.statusCode).toBe(500);
@@ -392,7 +395,7 @@ describe('integration idempotency matrix (T106)', () => {
     const retry = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'AFFIRM',
-      idempotencyKey: `retry-b-${randomUUID()}`,
+      idempotencyKey: retryKey,
     });
     expect(retry.statusCode).toBe(200);
     expect(retry.json().state).toBe('COMMITTED');
@@ -401,7 +404,7 @@ describe('integration idempotency matrix (T106)', () => {
     const readBack = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'AFFIRM',
-      idempotencyKey: `retry-c-${randomUUID()}`,
+      idempotencyKey: retryKey,
     });
     expect(readBack.statusCode).toBe(200);
     expect(readBack.json().state).toBe('COMMITTED');

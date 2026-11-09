@@ -180,8 +180,14 @@ export function evaluateBindingGate(input: BindingGateInput): BindingGateResult 
   // 5. Gate 1 stops here: no P1-specific confirmation is required yet.
   if (input.stage === 'GATE_1') return pass(ageBand, authority);
 
-  // 6. Gate 2 rechecks expiry, confirmations, authority and conflicts.
+  // 6. Gate 2 rechecks expiry, P1 binding conflict, confirmations and authority.
   if (input.attemptExpired === true) return block('ATTEMPT_EXPIRED');
+
+  // P1 binding conflict is checked before the "await confirmation" branch so a
+  // candidate AFFIRM dynamic-eligibility recheck sees it as a terminal block,
+  // not as an optimistic PENDING (M-01 / D-8.5).
+  if (input.targetAccountId !== null) return block('TARGET_ALREADY_BOUND');
+
   if (!input.confirmations?.candidate) return PENDING;
   if (!input.confirmations?.secondParty) return PENDING;
 
@@ -196,9 +202,8 @@ export function evaluateBindingGate(input: BindingGateInput): BindingGateResult 
     }
   }
 
-  // 8. P1 must still be unbound, and the candidate Account must not already
-  //    belong to another Person (ordinary-login-first conflict).
-  if (input.targetAccountId !== null) return block('TARGET_ALREADY_BOUND');
+  // 8. The candidate Account must not already belong to another Person
+  //    (ordinary-login-first conflict). P1 binding conflict was checked above.
   if (
     input.candidateAccountId !== null &&
     input.candidateAccountBoundPersonId !== null &&

@@ -34,6 +34,16 @@ export interface CandidateDecisionResponse {
   binding: 'NOT_COMPLETED';
 }
 
+/**
+ * Candidate AFFIRM response. The pairing challenge is the ONLY variable field;
+ * eligible and hidden-ineligible outcomes share the exact same key set, HTTP
+ * status and (for the challenge) fixed length / alphabet / content type.
+ */
+export interface CandidateAffirmResponse {
+  binding: 'NOT_COMPLETED';
+  pairingChallenge: string;
+}
+
 export interface CandidateStatusResponse {
   binding: 'NOT_COMPLETED' | 'COMMITTED';
 }
@@ -74,6 +84,11 @@ export function candidateBootstrapCommittedResponse(): CandidateBootstrapCommitt
 
 export function candidateDecisionResponse(): CandidateDecisionResponse {
   return { binding: 'NOT_COMPLETED' };
+}
+
+/** Fixed-shape AFFIRM response for both a valid and a decoy challenge. */
+export function candidateAffirmResponse(pairingChallenge: string): CandidateAffirmResponse {
+  return { binding: 'NOT_COMPLETED', pairingChallenge };
 }
 
 export function candidateStatusResponse(

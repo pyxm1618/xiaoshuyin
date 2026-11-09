@@ -227,11 +227,119 @@ const REOPENED_TASKS_006 = {
   T115: ['tests/integration/coverage-audit.test.ts'],
 };
 
+/**
+ * M-05 substantive required proofs. An ID is only satisfied when the exact
+ * named executable test exists and is not skipped. File existence / arbitrary
+ * `it()` / coverage percentages are NOT accepted.
+ */
+export const SUBSTANTIVE_PROOFS = {
+  'H-01-valid-decoy': {
+    file: 'tests/integration/identity-binding-anti-enumeration.test.ts',
+    test: 'H-01: valid and decoy AFFIRM challenges are externally indistinguishable',
+  },
+  'H-01-challenge-envelope': {
+    file: 'tests/domain/identity-binding-crypto.test.ts',
+    test: 'pairing challenge is exactly 192 unpadded base64url characters',
+  },
+  'H-01-exact-byte-replay': {
+    file: 'tests/integration/identity-binding-candidate.test.ts',
+    test: 'AFFIRM same key + same issuance replays the exact original challenge bytes',
+  },
+  'H-01-confirmer-exact-binding': {
+    file: 'tests/integration/identity-binding-confirmer.test.ts',
+    test: 'H-01: wrong challenge bindings fail closed with zero mutation',
+  },
+  'H-02-gate2-barrier': {
+    file: 'tests/integration/identity-binding-commit-gate2.test.ts',
+    test: 'concurrent consent revoke committed before the linearization point blocks the commit (F-01)',
+  },
+  'H-02-runtime-lock': {
+    file: 'tests/db/identity-binding-rls.test.ts',
+    test: 'H-02: runtime role locks authoritative Gate rows and blocks concurrent invalidation',
+  },
+  'M-01-consent-revoked': {
+    file: 'tests/integration/identity-binding-candidate.test.ts',
+    test: 'M-01: consent revoked after bootstrap blocks AFFIRM and scrubs every context',
+  },
+  'M-01-fact-matrix': {
+    file: 'tests/integration/identity-binding-candidate.test.ts',
+    test: 'M-01: terminal invitation, P1 bound externally and multi-family all block AFFIRM',
+  },
+  'M-02-replay-cleanup': {
+    file: 'tests/integration/identity-binding-bootstrap.test.ts',
+    test: 'M-02: settled, pre-attempt and Case B replay contexts retain no OpenID secret',
+  },
+  'M-03-status-expiry': {
+    file: 'tests/integration/identity-binding-status.test.ts',
+    test: 'M-03: status expiry settles once and scrubs every attempt context',
+  },
+  'M-04-settlement': {
+    file: 'tests/integration/identity-binding-commit-settle.test.ts',
+    test: 'M-04: Phase C expiry uses one settlement for state, audit and cleanup',
+  },
+  'confirmationVersion-matrix': {
+    file: 'tests/integration/identity-binding-candidate.test.ts',
+    test: 'confirmationVersion matrix is preserved for AFFIRM and REJECT/CANCEL',
+  },
+  'RLS-negative-writes': {
+    file: 'tests/db/identity-binding-rls.test.ts',
+    test: 'GATE purpose reads the target but cannot write it (F-03 negative matrix)',
+  },
+  'rollback-matrix': {
+    file: 'tests/integration/identity-binding-rollback.test.ts',
+    test: 'rolls back the newly created Account when the P1 binding update loses',
+  },
+  'MINOR-guardian': {
+    file: 'tests/integration/identity-binding-commit.test.ts',
+    test: 'binds Account A ↔ existing P1 exactly once; no Person increment',
+  },
+  'true-CaseB-mismatch': {
+    file: 'tests/integration/identity-binding-anti-enumeration.test.ts',
+    test: 'true Case B mismatch (P1 bound to A, candidate authenticates as B) is generically indistinguishable',
+  },
+};
+
 export function fileOk(rel, root = ROOT) {
   const full = join(root, rel);
   if (!existsSync(full) || !statSync(full).isFile()) return false;
   const content = readFileSync(full, 'utf-8');
   return content.includes('it(') || content.includes('test(') || content.includes('describe(');
+}
+
+/**
+ * Exact executable proof check. The named test must be present with a normal
+ * `it`/`test` call and must not be skipped. This is what makes a deleted,
+ * renamed, unexecuted or unrelated mapping fail closed.
+ */
+export function proofOk(rel, testName, root = ROOT) {
+  const full = join(root, rel);
+  if (!existsSync(full) || !statSync(full).isFile()) return false;
+  const content = readFileSync(full, 'utf-8');
+  const quoted = [
+    `it('${testName}'`,
+    `it("${testName}"`,
+    `test('${testName}'`,
+    `test("${testName}"`,
+  ];
+  const present = quoted.some((needle) => content.includes(needle));
+  if (!present) return false;
+  const skipped = quoted.some((needle) =>
+    content.includes(needle.replace(/^(it|test)/, '$1.skip'))
+  );
+  return !skipped;
+}
+
+function checkProofs(root, missing) {
+  let ok = 0;
+  const total = Object.keys(SUBSTANTIVE_PROOFS).length;
+  for (const [id, proof] of Object.entries(SUBSTANTIVE_PROOFS)) {
+    if (!proofOk(proof.file, proof.test, root)) {
+      missing.push(`[Slice 5 Substantive Proofs] ${id}: ${proof.file} :: ${proof.test}`);
+    } else {
+      ok++;
+    }
+  }
+  return { label: 'Slice 5 Substantive Proofs', ok, total };
 }
 
 function checkSection(label, mapping, root, missing) {
@@ -261,6 +369,7 @@ export function audit(root = ROOT) {
     checkSection('Slice 5 Acceptance', ACCEPTANCE_006, root, missing),
     checkSection('Slice 5 Findings', FINDINGS_006, root, missing),
     checkSection('Slice 5 Reopened Tasks', REOPENED_TASKS_006, root, missing),
+    checkProofs(root, missing),
   ];
   return { missing, sections };
 }

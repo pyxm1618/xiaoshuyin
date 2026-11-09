@@ -133,6 +133,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     identityBindingSecret: runtime.identityBindingSecret,
     contextTtlSeconds: runtime.identityBindingContextTtlSeconds,
     attemptTtlSeconds: runtime.identityBindingAttemptTtlSeconds,
+    pairingTtlSeconds: runtime.identityBindingPairingTtlSeconds,
     sessionSecret: runtime.sessionSecret,
   });
 

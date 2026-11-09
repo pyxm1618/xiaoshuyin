@@ -18,6 +18,9 @@ export interface PendingContextRow {
   createdAt: Date;
   lastUsedAt: Date | null;
   expiresAt: Date;
+  pairingIssuedAt: Date | null;
+  pairingExpiresAt: Date | null;
+  pairingIssuanceId: string | null;
 }
 
 function mapRow(row: any): PendingContextRow {
@@ -34,12 +37,16 @@ function mapRow(row: any): PendingContextRow {
     createdAt: row.created_at,
     lastUsedAt: row.last_used_at ?? null,
     expiresAt: row.expires_at,
+    pairingIssuedAt: row.pairing_issued_at ?? null,
+    pairingExpiresAt: row.pairing_expires_at ?? null,
+    pairingIssuanceId: row.pairing_issuance_id ?? null,
   };
 }
 
 const COLUMNS = `id, token_hash, candidate_identity_digest, attempt_id,
   invitation_participation_id, committed_account_id, openid_ciphertext,
-  openid_nonce, openid_tag, created_at, last_used_at, expires_at`;
+  openid_nonce, openid_tag, created_at, last_used_at, expires_at,
+  pairing_issued_at, pairing_expires_at, pairing_issuance_id`;
 
 export interface CreateContextInput {
   id: string;
@@ -205,6 +212,66 @@ export async function clearOpenidForNoAttemptIdentity(
        AND candidate_identity_digest = $1`,
     [identityDigest]
   );
+}
+
+/** Persist / rotate the current pairing issuance (non-secret replay material). */
+export async function setPairingIssuance(
+  tx: pg.PoolClient,
+  contextId: string,
+  input: { pairingIssuanceId: string; pairingIssuedAt: Date; pairingExpiresAt: Date }
+): Promise<PendingContextRow | null> {
+  const { rows } = await tx.query(
+    `UPDATE binding_pending_contexts
+        SET pairing_issuance_id = $2,
+            pairing_issued_at = $3,
+            pairing_expires_at = $4
+      WHERE id = $1
+      RETURNING ${COLUMNS}`,
+    [contextId, input.pairingIssuanceId, input.pairingIssuedAt, input.pairingExpiresAt]
+  );
+  return rows[0] ? mapRow(rows[0]) : null;
+}
+
+/** Consume / invalidate the current issuance without touching secrets. */
+export async function clearPairingIssuance(
+  tx: pg.PoolClient,
+  contextId: string
+): Promise<void> {
+  await tx.query(
+    `UPDATE binding_pending_contexts
+        SET pairing_issuance_id = NULL,
+            pairing_issued_at = NULL,
+            pairing_expires_at = NULL
+      WHERE id = $1`,
+    [contextId]
+  );
+}
+
+/** Consume every issuance belonging to one settled attempt. */
+export async function clearPairingForAttempt(
+  tx: pg.PoolClient,
+  attemptId: string
+): Promise<void> {
+  await tx.query(
+    `UPDATE binding_pending_contexts
+        SET pairing_issuance_id = NULL,
+            pairing_issued_at = NULL,
+            pairing_expires_at = NULL
+      WHERE attempt_id = $1`,
+    [attemptId]
+  );
+}
+
+/**
+ * M-02: scrub the freshly-minted replay context by exact id, regardless of
+ * whether it was linked to an attempt before cleanup. This is deliberately
+ * independent of the attempt_id IS NULL scope used for older replay contexts.
+ */
+export async function clearOpenidForFreshContext(
+  tx: pg.PoolClient,
+  contextId: string
+): Promise<void> {
+  await clearOpenid(tx, contextId);
 }
 
 export function isExpired(row: PendingContextRow, now: Date = new Date()): boolean {

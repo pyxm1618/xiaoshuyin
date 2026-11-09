@@ -23,6 +23,7 @@ const testDefaults: Record<string, string> = {
   IDENTITY_BINDING_SECRET: 'test-identity-binding-secret-fixture-32chars',
   IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
   IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
+  IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300',
 };
 for (const [key, value] of Object.entries(testDefaults)) {
   if (!process.env[key]) process.env[key] = value;

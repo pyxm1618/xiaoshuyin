@@ -1214,11 +1214,18 @@
         },
         "responses": {
           "200": {
-            "description": "统一 generic 结果",
+            "description": "candidate AFFIRM fixed shape / REJECT-CANCEL generic",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BindingGenericResponse"
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/BindingGenericResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BindingCandidatePairingResponse"
+                    }
+                  ]
                 }
               }
             }
@@ -1393,20 +1400,15 @@
         }
       }
     },
-    "/api/v1/identity-bindings/{attemptId}/decision": {
+    "/api/v1/identity-bindings/pairing-decision": {
       "post": {
         "tags": [
           "identity-binding"
         ],
-        "operationId": "submitSecondPartyBindingDecision",
+        "operationId": "submitSecondPartyBindingPairingDecision",
         "security": [
           {
             "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/BindingAttemptIdPath"
           }
         ],
         "requestBody": {
@@ -1549,15 +1551,6 @@
         "in": "query",
         "required": true,
         "description": "待验证的 target Person P1；服务端读取唯一 Family。",
-        "schema": {
-          "type": "string",
-          "format": "uuid"
-        }
-      },
-      "BindingAttemptIdPath": {
-        "name": "attemptId",
-        "in": "path",
-        "required": true,
         "schema": {
           "type": "string",
           "format": "uuid"
@@ -3506,45 +3499,102 @@
         ]
       },
       "BindingConfirmerDecisionRequest": {
-        "type": "object",
-        "properties": {
-          "personId": {
-            "type": "string",
-            "format": "uuid",
-            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "personId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "pairingChallenge": {
+                "type": "string",
+                "minLength": 192,
+                "maxLength": 192,
+                "pattern": "^[A-Za-z0-9_-]{192}$"
+              },
+              "decision": {
+                "type": "string",
+                "const": "AFFIRM"
+              },
+              "targetConfirmed": {
+                "type": "boolean",
+                "const": true
+              },
+              "candidateRecognized": {
+                "type": "boolean",
+                "const": true
+              },
+              "confirmationVersion": {
+                "type": "string",
+                "const": "second-party-recognition-v1"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "personId",
+              "pairingChallenge",
+              "decision",
+              "targetConfirmed",
+              "candidateRecognized",
+              "confirmationVersion",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
           },
-          "decision": {
-            "type": "string",
-            "enum": [
-              "AFFIRM",
-              "REJECT"
-            ]
-          },
-          "targetConfirmed": {
-            "type": "boolean"
-          },
-          "candidateRecognized": {
-            "type": "boolean"
-          },
-          "confirmationVersion": {
-            "type": "string",
-            "const": "second-party-recognition-v1"
-          },
-          "idempotencyKey": {
-            "type": "string",
-            "minLength": 8,
-            "maxLength": 128
+          {
+            "type": "object",
+            "properties": {
+              "personId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "pairingChallenge": {
+                "type": "string",
+                "minLength": 192,
+                "maxLength": 192,
+                "pattern": "^[A-Za-z0-9_-]{192}$"
+              },
+              "decision": {
+                "type": "string",
+                "const": "REJECT"
+              },
+              "targetConfirmed": {
+                "type": "boolean",
+                "const": false
+              },
+              "candidateRecognized": {
+                "type": "boolean",
+                "const": false
+              },
+              "confirmationVersion": {
+                "type": "string",
+                "const": "second-party-recognition-v1"
+              },
+              "idempotencyKey": {
+                "type": "string",
+                "minLength": 8,
+                "maxLength": 128
+              }
+            },
+            "required": [
+              "personId",
+              "pairingChallenge",
+              "decision",
+              "targetConfirmed",
+              "candidateRecognized",
+              "confirmationVersion",
+              "idempotencyKey"
+            ],
+            "additionalProperties": false
           }
-        },
-        "required": [
-          "personId",
-          "decision",
-          "targetConfirmed",
-          "candidateRecognized",
-          "confirmationVersion",
-          "idempotencyKey"
-        ],
-        "additionalProperties": false
+        ]
       },
       "BindingBootstrapGenericResponse": {
         "type": "object",
@@ -3623,6 +3673,26 @@
         },
         "required": [
           "binding"
+        ],
+        "additionalProperties": false
+      },
+      "BindingCandidatePairingResponse": {
+        "type": "object",
+        "properties": {
+          "binding": {
+            "type": "string",
+            "const": "NOT_COMPLETED"
+          },
+          "pairingChallenge": {
+            "type": "string",
+            "minLength": 192,
+            "maxLength": 192,
+            "pattern": "^[A-Za-z0-9_-]{192}$"
+          }
+        },
+        "required": [
+          "binding",
+          "pairingChallenge"
         ],
         "additionalProperties": false
       },

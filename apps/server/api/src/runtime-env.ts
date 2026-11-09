@@ -29,6 +29,7 @@ export interface RuntimeConfig {
   identityBindingSecret: string;
   identityBindingContextTtlSeconds: number;
   identityBindingAttemptTtlSeconds: number;
+  identityBindingPairingTtlSeconds: number;
 }
 
 function fail(code: string, detail: string): never {
@@ -65,6 +66,7 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   const identityBindingSecret = required(env, 'IDENTITY_BINDING_SECRET', 32);
   const contextTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_CONTEXT_TTL_SECONDS');
   const attemptTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS');
+  const pairingTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_PAIRING_TTL_SECONDS');
 
   return {
     mode,
@@ -76,6 +78,7 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     identityBindingSecret,
     identityBindingContextTtlSeconds: contextTtl,
     identityBindingAttemptTtlSeconds: attemptTtl,
+    identityBindingPairingTtlSeconds: pairingTtl,
   };
 }
 

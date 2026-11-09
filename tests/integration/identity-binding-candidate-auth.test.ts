@@ -94,10 +94,11 @@ describe('candidate route authentication (T063)', () => {
 
     const decisionWithContext = await h.app.inject({
       method: 'POST',
-      url: `/api/v1/identity-bindings/${attemptId}/decision`,
+      url: '/api/v1/identity-bindings/pairing-decision',
       headers: { 'x-binding-context': contextToken },
       payload: {
         personId: target.targetPersonId,
+        pairingChallenge: 'A'.repeat(192),
         decision: 'AFFIRM',
         targetConfirmed: true,
         candidateRecognized: true,
@@ -124,10 +125,11 @@ describe('candidate route authentication (T063)', () => {
 
     const decision = await h.app.inject({
       method: 'POST',
-      url: `/api/v1/identity-bindings/${attemptId}/decision`,
+      url: '/api/v1/identity-bindings/pairing-decision',
       headers: { authorization: `Bearer ${outsider.token}` },
       payload: {
         personId: target.targetPersonId,
+        pairingChallenge: 'A'.repeat(192),
         decision: 'AFFIRM',
         targetConfirmed: true,
         candidateRecognized: true,

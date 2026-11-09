@@ -12,6 +12,7 @@ const BINDING_PATHS = [
   '/api/v1/identity-bindings/status',
   '/api/v1/identity-bindings/session',
   '/api/v1/identity-bindings/pending',
+  '/api/v1/identity-bindings/pairing-decision',
 ];
 
 describe('identity binding route surface', () => {
@@ -28,7 +29,7 @@ describe('identity binding route surface', () => {
   it('exposes exactly six binding routes', () => {
     const tree = h.app.printRoutes({ commonPrefix: false });
     for (const path of BINDING_PATHS) expect(tree).toContain(path.slice(1));
-    expect(tree).toContain('identity-bindings/:attemptId/decision');
+    expect(tree).not.toContain('attemptId/decision');
 
     const nodes = tree
       .split('\n')

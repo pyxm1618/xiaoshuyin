@@ -137,4 +137,32 @@ describe('Identity binding happy path (AS-01)', () => {
     expect(await personAccountId(h, target.targetPersonId)).not.toBeNull();
   });
 
+  it('H-01: candidate-presented challenge binds the exact attempt and cannot cross candidates', async () => {
+    const targetA = await createTarget(h, 'h01_e2e_a', { ageBand: 'UNDER_14' });
+    const targetB = await createTarget(h, 'h01_e2e_b', { ageBand: 'UNDER_14' });
+    const a = await startBinding(h, targetA, `h01_e2e_a_${Date.now()}`);
+    const b = await startBinding(h, targetB, `h01_e2e_b_${Date.now()}`);
+    expect(a.pairingChallenge).not.toBe(b.pairingChallenge);
+
+    const cross = await confirmerDecision(h, targetB.guardian.token, a.pairingChallenge, {
+      personId: targetB.targetPersonId,
+      decision: 'AFFIRM',
+    });
+    expect(cross.statusCode).toBe(404);
+    const bState = await h.admin.query(
+      'SELECT state FROM binding_attempts WHERE id = $1',
+      [b.attemptId]
+    );
+    expect(bState.rows[0].state).toBe('PENDING');
+
+    const committed = await confirmerDecision(h, targetA.guardian.token, a.pairingChallenge, {
+      personId: targetA.targetPersonId,
+      decision: 'AFFIRM',
+    });
+    expect(committed.statusCode).toBe(200);
+    expect(committed.json().state).toBe('COMMITTED');
+    expect(await personAccountId(h, targetA.targetPersonId)).not.toBeNull();
+    expect(await personAccountId(h, targetB.targetPersonId)).toBeNull();
+  });
+
 });

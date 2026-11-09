@@ -66,19 +66,10 @@ describe('confirmer authority', () => {
     const { attemptId: attemptA } = await startBinding(h, target, code);
     const key = `sp-old-${randomUUID()}`;
 
-    // Settle A TERMINAL first so a later attempt B can legitimately exist.
-    const reject = await confirmerDecision(h, target.guardian.token, attemptA, {
-      personId: target.targetPersonId,
-      decision: 'REJECT',
-      candidateRecognized: true,
-    });
-    expect(reject.statusCode).toBe(200);
-    expect(reject.json().state).toBe('TERMINAL');
-
-    // K is recorded against attempt A (historical TERMINAL outcome).
+    // K is recorded against attempt A as a canonical REJECT (false/false).
     const aRes = await confirmerDecision(h, target.guardian.token, attemptA, {
       personId: target.targetPersonId,
-      decision: 'AFFIRM',
+      decision: 'REJECT',
       idempotencyKey: key,
     });
     expect(aRes.statusCode).toBe(200);
@@ -135,11 +126,12 @@ describe('confirmer authority', () => {
     expect(after.attempt.state).toBe('PENDING');
     expect(after.attempt.committed_account_id).toBeNull();
 
-    // The same key replayed against attempt A still returns A's historical
-    // COMMITTED outcome and never touches B.
+    // The same key replayed against attempt A with the exact same canonical
+    // REJECT request still returns A's historical TERMINAL outcome and never
+    // touches B.
     const replayA = await confirmerDecision(h, target.guardian.token, attemptA, {
       personId: target.targetPersonId,
-      decision: 'AFFIRM',
+      decision: 'REJECT',
       idempotencyKey: key,
     });
     expect(replayA.statusCode).toBe(200);
@@ -158,5 +150,76 @@ describe('confirmer authority', () => {
     });
     expect(res.statusCode).toBe(404);
     expect(res.json().code).toBe('BINDING_NOT_FOUND');
+  });
+
+  it('H-01: wrong challenge bindings fail closed with zero mutation', async () => {
+    const targetA = await createTarget(h, 'h01_a', { ageBand: 'UNDER_14' });
+    const targetB = await createTarget(h, 'h01_b', { ageBand: 'UNDER_14' });
+    const a = await startBinding(h, targetA, `h01_a_${randomUUID()}`);
+    const b = await startBinding(h, targetB, `h01_b_${randomUUID()}`);
+
+    const snapshotB = async () => {
+      const attempt = await h.admin.query(
+        'SELECT state, committed_account_id FROM binding_attempts WHERE id = $1',
+        [b.attemptId]
+      );
+      const confirmations = await h.admin.query(
+        "SELECT count(*)::int AS n FROM binding_confirmations WHERE attempt_id = $1 AND kind = 'SECOND_PARTY'",
+        [b.attemptId]
+      );
+      return { attempt: attempt.rows[0], confirmations: confirmations.rows[0].n };
+    };
+    const before = await snapshotB();
+
+    const attempts = [
+      // Challenge A submitted with Person B.
+      await confirmerDecision(h, targetA.guardian.token, a.pairingChallenge, {
+        personId: targetB.targetPersonId,
+        decision: 'AFFIRM',
+      }),
+      // Challenge A submitted by B's guardian for B's Person.
+      await confirmerDecision(h, targetB.guardian.token, a.pairingChallenge, {
+        personId: targetB.targetPersonId,
+        decision: 'AFFIRM',
+      }),
+      // Unrelated challenge B submitted for Person A.
+      await confirmerDecision(h, targetA.guardian.token, b.pairingChallenge, {
+        personId: targetA.targetPersonId,
+        decision: 'AFFIRM',
+      }),
+      // Tampered challenge.
+      await confirmerDecision(
+        h,
+        targetA.guardian.token,
+        `${a.pairingChallenge.slice(0, 191)}${a.pairingChallenge.endsWith('A') ? 'B' : 'A'}`,
+        { personId: targetA.targetPersonId, decision: 'AFFIRM' }
+      ),
+      // Expired / no longer current issuance on A.
+      await (async () => {
+        await h.admin.query(
+          "UPDATE binding_pending_contexts SET pairing_issued_at = now() - interval '10 seconds', pairing_expires_at = now() - interval '1 second' WHERE attempt_id = $1",
+          [a.attemptId]
+        );
+        return confirmerDecision(h, targetA.guardian.token, a.pairingChallenge, {
+          personId: targetA.targetPersonId,
+          decision: 'AFFIRM',
+        });
+      })(),
+    ];
+
+    for (const res of attempts) {
+      expect(res.statusCode).toBe(404);
+      expect(res.json()).toEqual({
+        code: 'BINDING_NOT_FOUND',
+        message: 'Binding not found',
+      });
+    }
+    expect(await snapshotB()).toEqual(before);
+
+    const attemptA = await h.admin.query(
+      'SELECT state FROM binding_attempts WHERE id = $1',
+      [a.attemptId]
+    );
+    expect(attemptA.rows[0].state).toBe('PENDING');
   });
 });

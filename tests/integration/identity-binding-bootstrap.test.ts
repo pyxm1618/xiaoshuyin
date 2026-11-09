@@ -14,7 +14,7 @@ import {
   type BindingHarness,
 } from '../setup/identity-binding.js';
 import { loginWithLabel } from '../setup/api.js';
-import { deriveIdentityDigest } from '../../apps/server/api/src/identity-binding/crypto.js';
+import { deriveIdentityDigest, hashToken } from '../../apps/server/api/src/identity-binding/crypto.js';
 
 describe('bootstrap orchestration (T049)', () => {
   let h: BindingHarness;
@@ -185,5 +185,72 @@ describe('bootstrap orchestration (T049)', () => {
       [attempts.rows[0].id]
     );
     expect(created.rows[0].n).toBe(1);
+  });
+
+  it('M-02: settled, pre-attempt and Case B replay contexts retain no OpenID secret', async () => {
+    const secretsOf = async (token: string) => {
+      const { rows } = await h.admin.query(
+        `SELECT openid_ciphertext, openid_nonce, openid_tag
+           FROM binding_pending_contexts WHERE token_hash = $1`,
+        [hashToken(token)]
+      );
+      expect(rows).toHaveLength(1);
+      return rows[0];
+    };
+
+    // Pre-attempt blocked replay.
+    const missingToken = `missing-${randomUUID()}`;
+    const pre = await bootstrap(h, missingToken, `m02_pre_${randomUUID()}`);
+    expect(pre.statusCode).toBe(200);
+    expect(await secretsOf(pre.json().pendingContextToken as string)).toEqual({
+      openid_ciphertext: null,
+      openid_nonce: null,
+      openid_tag: null,
+    });
+
+    // TERMINAL replay.
+    const terminalTarget = await createTarget(h, 'm02_terminal', { ageBand: 'UNDER_14' });
+    const key = `m02-term-${randomUUID()}`;
+    const code = `m02_term_${randomUUID()}`;
+    const boot = await bootstrap(h, terminalTarget.invitationToken, code, key);
+    await candidateDecision(
+      h,
+      boot.json().pendingContextToken as string,
+      'REJECT',
+      `m02-rej-${randomUUID()}`
+    );
+    const replay = await bootstrap(h, terminalTarget.invitationToken, code, key);
+    expect(replay.statusCode).toBe(200);
+    expect(await secretsOf(replay.json().pendingContextToken as string)).toEqual({
+      openid_ciphertext: null,
+      openid_nonce: null,
+      openid_tag: null,
+    });
+
+    // Case B REUSED fresh context.
+    const caseB = await createTarget(h, 'm02_caseb', { ageBand: 'UNDER_14' });
+    const caseBCode = `m02_caseb_${randomUUID()}`;
+    const account = await h.admin.query(
+      'INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0) RETURNING id',
+      [`fake_${caseBCode}`]
+    );
+    await h.admin.query('UPDATE persons SET account_id = $1 WHERE id = $2', [
+      account.rows[0].id,
+      caseB.targetPersonId,
+    ]);
+    const reused = await bootstrap(h, caseB.invitationToken, caseBCode);
+    expect(reused.json().binding).toBe('REUSED');
+    const reusedRow = await h.admin.query(
+      `SELECT openid_ciphertext, openid_nonce, openid_tag
+         FROM binding_pending_contexts
+        WHERE candidate_identity_digest = $1
+        ORDER BY created_at DESC LIMIT 1`,
+      [deriveIdentityDigest(process.env['IDENTITY_BINDING_SECRET']!, `fake_${caseBCode}`)]
+    );
+    expect(reusedRow.rows[0]).toEqual({
+      openid_ciphertext: null,
+      openid_nonce: null,
+      openid_tag: null,
+    });
   });
 });

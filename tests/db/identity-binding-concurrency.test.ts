@@ -177,8 +177,11 @@ describe('binding commit concurrency', () => {
         idempotencyKey: `dc-b-${randomUUID()}`,
       }),
     ]);
-    expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
-    expect([a.json().state, b.json().state]).toEqual(['COMMITTED', 'COMMITTED']);
+    const outcomes = [a, b].map((r) => ({ status: r.statusCode, state: r.json().state }));
+    expect(outcomes.filter((o) => o.status === 200).map((o) => o.state)).toEqual([
+      'COMMITTED',
+    ]);
+    expect(outcomes.filter((o) => o.status === 404)).toHaveLength(1);
 
     const confirmations = await h.admin.query(
       "SELECT count(*)::int AS n FROM binding_confirmations WHERE attempt_id = $1 AND kind = 'SECOND_PARTY'",
@@ -227,7 +230,10 @@ describe('binding commit concurrency', () => {
         idempotencyKey: `af-b-${randomUUID()}`,
       }),
     ]);
-    expect(results.map((r) => r.json().state)).toEqual(['TERMINAL', 'TERMINAL']);
+    const failed = results
+      .map((r) => (r.statusCode === 200 ? r.json().state : `HTTP_${r.statusCode}`))
+      .sort();
+    expect(failed).toEqual(['HTTP_404', 'TERMINAL']);
 
     const committed = await h.admin.query(
       "SELECT count(*)::int AS n FROM binding_attempts WHERE target_person_id = $1 AND state = 'COMMITTED'",

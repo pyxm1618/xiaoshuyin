@@ -67,7 +67,7 @@ describe('identity binding error envelope (T095)', () => {
 
     const missing = await h.app.inject({
       method: 'POST',
-      url: `/api/v1/identity-bindings/${attemptId}/decision`,
+      url: '/api/v1/identity-bindings/pairing-decision',
       headers: { authorization: `Bearer ${target.guardian.token}` },
       payload: {
         decision: 'AFFIRM',
@@ -82,10 +82,11 @@ describe('identity binding error envelope (T095)', () => {
 
     const unknown = await h.app.inject({
       method: 'POST',
-      url: `/api/v1/identity-bindings/${randomUUID()}/decision`,
+      url: '/api/v1/identity-bindings/pairing-decision',
       headers: { authorization: `Bearer ${target.guardian.token}` },
       payload: {
         personId: target.targetPersonId,
+        pairingChallenge: 'A'.repeat(192),
         decision: 'AFFIRM',
         targetConfirmed: true,
         candidateRecognized: true,
@@ -155,7 +156,8 @@ describe('identity binding error envelope (T095)', () => {
       'candidate-binding-v1'
     );
     expect(decision.statusCode).toBe(200);
-    expect(decision.json()).toEqual({ binding: 'NOT_COMPLETED' });
+    expect(Object.keys(decision.json()).sort()).toEqual(['binding', 'pairingChallenge']);
+    expect(decision.json().pairingChallenge).toMatch(/^[A-Za-z0-9_-]{192}$/);
     expect(decision.json()).not.toHaveProperty('code');
   });
 });

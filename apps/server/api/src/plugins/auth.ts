@@ -40,7 +40,7 @@ const BINDING_CANDIDATE_PATHS = new Set([
 
 function isBindingConfirmerPath(pathname: string): boolean {
   if (pathname === '/api/v1/identity-bindings/pending') return true;
-  return /^\/api\/v1\/identity-bindings\/[^/]+\/decision$/.test(pathname);
+  return pathname === '/api/v1/identity-bindings/pairing-decision';
 }
 
 function hasBindingContext(req: FastifyRequest): boolean {

@@ -88,7 +88,24 @@ CREATE TABLE binding_pending_contexts (
   created_at                  timestamptz NOT NULL DEFAULT now(),
   last_used_at                timestamptz,
   expires_at                  timestamptz NOT NULL,
+  -- D-3.5 pairing issuance facts. Only the server may read them; the external
+  -- challenge is a deterministic authenticated envelope over these facts plus
+  -- the cryptographic bindings. Raw challenge bytes are never stored.
+  pairing_issued_at           timestamptz,
+  pairing_expires_at          timestamptz,
+  pairing_issuance_id         uuid,
   CONSTRAINT binding_context_expiry_after_creation CHECK (expires_at > created_at),
+  CONSTRAINT binding_context_pairing_complete CHECK (
+    (pairing_issued_at IS NULL AND pairing_expires_at IS NULL AND pairing_issuance_id IS NULL)
+    OR (pairing_issued_at IS NOT NULL AND pairing_expires_at IS NOT NULL AND pairing_issuance_id IS NOT NULL)
+  ),
+  CONSTRAINT binding_context_pairing_window CHECK (
+    pairing_issued_at IS NULL
+    OR (
+      pairing_expires_at > pairing_issued_at
+      AND pairing_expires_at <= expires_at
+    )
+  ),
   CONSTRAINT binding_context_encryption_complete CHECK (
     (openid_ciphertext IS NULL AND openid_nonce IS NULL AND openid_tag IS NULL)
     OR (openid_ciphertext IS NOT NULL AND openid_nonce IS NOT NULL AND openid_tag IS NOT NULL)
@@ -652,6 +669,69 @@ CREATE POLICY consent_binding_read ON consent_records
     AND family_id = app_binding_target_family_id()
     AND bound_person_id = app_binding_target_person_id()
   );
+
+-- ── H-02: row-lock visibility policies ──────────────────────
+-- PostgreSQL applies UPDATE policies to `SELECT ... FOR UPDATE`. The intended
+-- read policies above are deliberately SELECT-only, so without these lock
+-- policies a runtime-role `FOR UPDATE` would silently return zero rows and the
+-- Gate would evaluate a stale snapshot while believing it held a lock.
+--
+-- These policies exist ONLY to make the exact target rows lockable. Their
+-- WITH CHECK(false) guarantees they cannot write: any real UPDATE under the
+-- Gate purpose is still rejected, and the only Person write path remains
+-- `persons_binding_commit_update` under the COMMIT purpose.
+CREATE POLICY persons_binding_lock ON persons
+  FOR UPDATE
+  USING (
+    app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
+    AND id = app_binding_target_person_id()
+  )
+  WITH CHECK (false);
+
+-- Candidate-account conflict locking: an ordinary-login bind of the same
+-- Account must not slip between Gate 2's candidate-account read and the Phase C
+-- mutation. This policy only makes the already-bound Person row lockable under
+-- the candidate Account GUC; it cannot write (WITH CHECK false).
+CREATE POLICY persons_binding_candidate_lock ON persons
+  FOR UPDATE
+  USING (
+    app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
+    AND account_id = app_binding_candidate_account_id()
+  )
+  WITH CHECK (false);
+
+CREATE POLICY families_binding_lock ON families
+  FOR UPDATE
+  USING (
+    app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
+    AND id = app_binding_target_family_id()
+  )
+  WITH CHECK (false);
+
+CREATE POLICY family_members_binding_lock ON family_members
+  FOR UPDATE
+  USING (
+    app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
+    AND person_id = app_binding_target_person_id()
+  )
+  WITH CHECK (false);
+
+CREATE POLICY pcp_binding_lock ON person_compliance_profiles
+  FOR UPDATE
+  USING (
+    app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
+    AND person_id = app_binding_target_person_id()
+  )
+  WITH CHECK (false);
+
+CREATE POLICY consent_binding_lock ON consent_records
+  FOR UPDATE
+  USING (
+    app_current_purpose() IN ('IDENTITY_BINDING_GATE', 'IDENTITY_BINDING_COMMIT')
+    AND family_id = app_binding_target_family_id()
+    AND bound_person_id = app_binding_target_person_id()
+  )
+  WITH CHECK (false);
 
 -- Pre-attempt (attempt_id IS NULL) transport contexts are the only rows left
 -- behind by blocked bootstrap branches. Repeated replay must not accumulate

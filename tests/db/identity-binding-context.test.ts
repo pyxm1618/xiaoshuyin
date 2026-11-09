@@ -14,7 +14,9 @@ import {
 import { withBindingContextTransaction } from '../../apps/server/api/src/db/tx.js';
 import {
   clearOpenid,
+  clearPairingIssuance,
   findByTokenHash,
+  setPairingIssuance,
 } from '../../apps/server/api/src/identity-binding/pending-context-repository.js';
 import { hashToken } from '../../apps/server/api/src/identity-binding/crypto.js';
 import { requireContext } from '../../apps/server/api/src/identity-binding/context.js';
@@ -111,5 +113,59 @@ describe('pending context repository', () => {
         requireContext(tx, token)
       )
     ).rejects.toMatchObject({ code: 'BINDING_CONTEXT_INVALID', statusCode: 401 });
+
+    // M-03: context-only expiry scrubs its own decryptable OpenID and does not
+    // fabricate an attempt terminal audit.
+    const scrubbed = await h.admin.query(
+      `SELECT openid_ciphertext, openid_nonce, openid_tag, attempt_id
+         FROM binding_pending_contexts WHERE token_hash = $1`,
+      [hashToken(token)]
+    );
+    expect(scrubbed.rows[0]).toMatchObject({
+      openid_ciphertext: null,
+      openid_nonce: null,
+      openid_tag: null,
+    });
+    const audits = await h.admin.query(
+      'SELECT count(*)::int AS n FROM identity_binding_audit_events WHERE attempt_id = $1 AND event_type = $2',
+      [scrubbed.rows[0]?.attempt_id ?? null, 'BINDING_TERMINAL']
+    );
+    // The attempt (if any) is not terminalized by context-only expiry.
+    expect(audits.rows[0].n).toBe(0);
+  });
+
+  it('stores and consumes pairing issuance material without storing raw bytes', async () => {
+    const target = await createTarget(h, 'ctx_pairing', { ageBand: 'UNDER_14' });
+    const res = await bootstrap(h, target.invitationToken, `ctxp_${Date.now()}`);
+    const token = res.json().pendingContextToken as string;
+    const row = await h.admin.query(
+      'SELECT id FROM binding_pending_contexts WHERE token_hash = $1',
+      [hashToken(token)]
+    );
+    const id = row.rows[0].id as string;
+    const issuanceId = '01a1b5c0-0000-7000-8000-0000000000aa';
+    const issuedAt = new Date();
+    const expiresAt = new Date(issuedAt.getTime() + 300_000);
+
+    await withBindingContextTransaction(pool, { tokenHash: hashToken(token) }, async (tx) => {
+      const updated = await setPairingIssuance(tx, id, {
+        pairingIssuanceId: issuanceId,
+        pairingIssuedAt: issuedAt,
+        pairingExpiresAt: expiresAt,
+      });
+      expect(updated?.pairingIssuanceId).toBe(issuanceId);
+      await clearPairingIssuance(tx, id);
+    });
+
+    const after = await h.admin.query(
+      `SELECT pairing_issuance_id, pairing_issued_at, pairing_expires_at
+         FROM binding_pending_contexts WHERE id = $1`,
+      [id]
+    );
+    expect(after.rows[0]).toEqual({
+      pairing_issuance_id: null,
+      pairing_issued_at: null,
+      pairing_expires_at: null,
+    });
   });
 });

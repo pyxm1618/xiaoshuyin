@@ -12,6 +12,7 @@ describe('env contract', () => {
     IDENTITY_BINDING_SECRET: 'test-identity-binding-secret-32chars',
     IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
     IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
+    IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300',
   };
 
   it('accepts valid environment', () => {

@@ -96,6 +96,8 @@ const SLICE5_POLICIES = [
   'persons_binding_candidate_account_read', 'persons_binding_commit_update',
   'families_binding_read', 'family_members_binding_read', 'pcp_binding_read',
   'consent_binding_read',
+  'persons_binding_lock', 'persons_binding_candidate_lock', 'families_binding_lock',
+  'family_members_binding_lock', 'pcp_binding_lock', 'consent_binding_lock',
 ];
 const SLICE5_TRIGGERS = [
   'binding_confirmations_no_update_delete', 'identity_binding_audit_no_update_delete',
@@ -193,6 +195,12 @@ async function collect(client) {
       SELECT e.enumlabel FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
        WHERE t.typname = 'profile_attribute'
     `),
+    pairingCols: await q(client, `
+      SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'binding_pending_contexts'
+         AND column_name LIKE 'pairing%'
+       ORDER BY column_name
+    `),
   };
 }
 
@@ -258,6 +266,10 @@ function verifyStructure(label, d) {
     (a) => SLICE5_POLICIES.every((p) => a.includes(p)));
   check('RLS policy 总数 >= Slice 1 基线（11）', '>= 11', d.policies.length,
     (n) => Number(n) >= 11);
+  const pairingCols = (d.pairingCols ?? []).map((r) => r.column_name).sort();
+  check('H-01 pairing issuance columns', 'pairing_expires_at,pairing_issued_at,pairing_issuance_id',
+    pairingCols, (a) => a.length === 3 && a.includes('pairing_issued_at') &&
+      a.includes('pairing_expires_at') && a.includes('pairing_issuance_id'));
   const actualTriggers = d.triggers.map((r) => r.tgname);
   check('consent + binding 不可变触发器', JSON.stringify(['consent_records_guard', ...SLICE5_TRIGGERS]),
     actualTriggers,

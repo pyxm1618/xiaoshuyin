@@ -236,4 +236,70 @@ describe('binding RLS isolation', () => {
     expect(result.read).toBeGreaterThanOrEqual(1);
     expect(result.update === 0 || typeof result.update === 'string').toBe(true);
   });
+
+  it('H-02: runtime role locks authoritative Gate rows and blocks concurrent invalidation', async () => {
+    const target = await createTarget(h, 'rls_h02_lock', { ageBand: 'UNDER_14' });
+    const lockClient = await pool.connect();
+    const invalidation = await pool.connect();
+    try {
+      await lockClient.query('BEGIN');
+      await lockClient.query('SELECT app.set_binding_gate_context($1, $2, NULL, NULL)', [
+        target.targetPersonId,
+        target.familyId,
+      ]);
+      const person = await lockClient.query(
+        'SELECT id FROM persons WHERE id = $1 FOR UPDATE',
+        [target.targetPersonId]
+      );
+      const profile = await lockClient.query(
+        'SELECT person_id FROM person_compliance_profiles WHERE person_id = $1 FOR UPDATE',
+        [target.targetPersonId]
+      );
+      const consent = await lockClient.query(
+        'SELECT id FROM consent_records WHERE id = $1 FOR UPDATE',
+        [target.consentId]
+      );
+      const member = await lockClient.query(
+        'SELECT person_id FROM family_members WHERE person_id = $1 FOR UPDATE',
+        [target.targetPersonId]
+      );
+      const family = await lockClient.query(
+        'SELECT id FROM families WHERE id = $1 FOR UPDATE',
+        [target.familyId]
+      );
+      for (const result of [person, profile, consent, member, family]) {
+        expect(result.rowCount).toBeGreaterThanOrEqual(1);
+      }
+
+      // A real runtime-role invalidation must wait for the lock. If the lock
+      // silently returned 0 rows (the H-02 root cause), this UPDATE would
+      // succeed immediately and the test would fail.
+      await invalidation.query('BEGIN');
+      await invalidation.query('SELECT app.set_identity_context($1, $2)', [
+        target.guardian.accountId,
+        'GUARDIAN_CONSENT',
+      ]);
+      await invalidation.query('SELECT app.set_family_context($1, $2, $3)', [
+        target.familyId,
+        target.guardian.personId,
+        'GUARDIAN_CONSENT',
+      ]);
+      await invalidation.query("SET LOCAL statement_timeout = '250ms'");
+      await expect(
+        invalidation.query(
+          'UPDATE consent_records SET bound_at = bound_at WHERE id = $1',
+          [target.consentId]
+        )
+      ).rejects.toThrow();
+    } finally {
+      try {
+        await invalidation.query('ROLLBACK');
+      } catch {}
+      try {
+        await lockClient.query('ROLLBACK');
+      } catch {}
+      invalidation.release();
+      lockClient.release();
+    }
+  });
 });

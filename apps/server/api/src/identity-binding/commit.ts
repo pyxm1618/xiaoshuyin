@@ -24,17 +24,15 @@ import {
 import { decryptOpenid, deriveIdentityDigest } from './crypto.js';
 import { evaluateGateForTarget, lockBindingGateFacts } from './gate.js';
 import {
-  clearOpenidForAttempt,
+  clearPairingForAttempt,
   findByAttemptIdForUpdate,
   markCommittedForAttempt,
-  type PendingContextRow,
 } from './pending-context-repository.js';
 import {
   findByIdForUpdate,
-  materializeExpired,
   settleCommitted,
-  settleTerminal,
 } from './attempt-repository.js';
+import { settleExpiredAttempt, settleTerminalAttempt } from './settlement.js';
 import { listByAttempt } from './confirmation-repository.js';
 import { appendAudit } from './audit-repository.js';
 import { RetryableOperationError } from './errors.js';
@@ -95,6 +93,13 @@ async function commitInTransaction(
   // Plan D-6.1 lock order: attempt first, then the linked pending context.
   const attempt = await findByIdForUpdate(tx, input.attemptId);
   if (!attempt) throw new RetryableOperationError();
+  // The commit wrapper does not carry the candidate identity GUC. The single
+  // settlement primitive writes the candidate digest into the terminal audit,
+  // so bind the exact attempt identity under the COMMIT purpose first.
+  await tx.query('SELECT app.set_binding_identity_context($1, $2)', [
+    attempt.candidateIdentityDigest,
+    'IDENTITY_BINDING_COMMIT',
+  ]);
 
   const context = await findByAttemptIdForUpdate(tx, input.attemptId);
   if (!context) throw new RetryableOperationError();
@@ -116,12 +121,18 @@ async function commitInTransaction(
     attempt.targetPersonId !== input.targetPersonId ||
     attempt.targetFamilyId !== input.targetFamilyId
   ) {
-    return terminalize(tx, attempt, context, 'IDENTITY_CONFLICT', correlationId);
+    return terminalize(tx, attempt, 'IDENTITY_CONFLICT', correlationId);
   }
 
-  const expired = await materializeExpired(tx, attempt.id);
+  // M-04: expiry is settled by the single authoritative primitive. Do NOT
+  // transition the state here and then terminalize again (that would skip the
+  // exactly-once terminal audit and cleanup).
+  const expired = await settleExpiredAttempt(tx, {
+    attemptId: attempt.id,
+    correlationId,
+  });
   if (expired) {
-    return terminalize(tx, expired, context, 'ATTEMPT_EXPIRED', correlationId);
+    return { outcome: 'TERMINAL', reason: 'ATTEMPT_EXPIRED' };
   }
 
   const confirmations = await listByAttempt(tx, attempt.id);
@@ -156,7 +167,7 @@ async function commitInTransaction(
     deriveIdentityDigest(deps.identityBindingSecret, openid) !==
     attempt.candidateIdentityDigest
   ) {
-    return terminalize(tx, attempt, context, 'IDENTITY_CONFLICT', correlationId);
+    return terminalize(tx, attempt, 'IDENTITY_CONFLICT', correlationId);
   }
 
   const candidateAccount = await findAccountByOpenid(tx, openid);
@@ -177,6 +188,15 @@ async function commitInTransaction(
   // here instead of racing the Gate evaluation.
   if (candidateAccount) {
     await tx.query('SELECT id FROM accounts WHERE id = $1 FOR UPDATE', [candidateAccount.id]);
+    const boundBeforeLock = await getPersonByAccountId(tx, candidateAccount.id);
+    if (boundBeforeLock) {
+      // Lock the Person row reachable through the candidate-account read
+      // policy. This is the row an ordinary login would update; holding it
+      // orders a concurrent bind before or after this linearization point.
+      await tx.query('SELECT id FROM persons WHERE id = $1 FOR UPDATE', [
+        boundBeforeLock.id,
+      ]);
+    }
   }
 
   await lockBindingGateFacts(tx, attempt.targetPersonId, attempt.targetFamilyId);
@@ -207,16 +227,16 @@ async function commitInTransaction(
 
   if (gate.result.decision === 'PENDING') return { outcome: 'PENDING' };
   if (gate.result.decision === 'BLOCK') {
-    return terminalize(tx, attempt, context, gate.result.reason, correlationId);
+    return terminalize(tx, attempt, gate.result.reason, correlationId);
   }
 
   // ── Lock P1 and enforce the 1:1 / 0..1 invariants ──
   const person = await lockPersonForBinding(tx, attempt.targetPersonId);
   if (!person) {
-    return terminalize(tx, attempt, context, 'IDENTITY_CONFLICT', correlationId);
+    return terminalize(tx, attempt, 'IDENTITY_CONFLICT', correlationId);
   }
   if (person.account_id !== null) {
-    return terminalize(tx, attempt, context, 'TARGET_ALREADY_BOUND', correlationId);
+    return terminalize(tx, attempt, 'TARGET_ALREADY_BOUND', correlationId);
   }
 
   // H4: Account creation and the P1 binding share a savepoint. If the
@@ -230,12 +250,12 @@ async function commitInTransaction(
   if (boundPerson && boundPerson.id !== attempt.targetPersonId) {
     await tx.query('ROLLBACK TO SAVEPOINT binding_phase_c');
     await tx.query('RELEASE SAVEPOINT binding_phase_c');
-    return terminalize(tx, attempt, context, 'IDENTITY_CONFLICT', correlationId);
+    return terminalize(tx, attempt, 'IDENTITY_CONFLICT', correlationId);
   }
   if (boundPerson && boundPerson.id === attempt.targetPersonId) {
     await tx.query('ROLLBACK TO SAVEPOINT binding_phase_c');
     await tx.query('RELEASE SAVEPOINT binding_phase_c');
-    return terminalize(tx, attempt, context, 'TARGET_ALREADY_BOUND', correlationId);
+    return terminalize(tx, attempt, 'TARGET_ALREADY_BOUND', correlationId);
   }
 
   await setBindingCommitAccountId(tx, account.id);
@@ -243,7 +263,7 @@ async function commitInTransaction(
   if (rowCount !== 1) {
     await tx.query('ROLLBACK TO SAVEPOINT binding_phase_c');
     await tx.query('RELEASE SAVEPOINT binding_phase_c');
-    return terminalize(tx, attempt, context, 'CONCURRENCY_LOSER', correlationId);
+    return terminalize(tx, attempt, 'CONCURRENCY_LOSER', correlationId);
   }
   await tx.query('RELEASE SAVEPOINT binding_phase_c');
 
@@ -262,6 +282,8 @@ async function commitInTransaction(
   // All transport contexts linked to this attempt become session-exchangeable
 // (bootstrap replay is allowed to mint a new context for the same attempt).
   await markCommittedForAttempt(tx, attempt.id, account.id);
+  // Single-use: a committed attempt can never re-use any pairing issuance.
+  await clearPairingForAttempt(tx, attempt.id);
   await appendAudit(tx, {
     correlationId,
     attemptId: settled.id,
@@ -280,24 +302,16 @@ async function commitInTransaction(
 async function terminalize(
   tx: pg.PoolClient,
   attempt: BindingAttemptRow,
-  context: PendingContextRow,
   reason: BindingTerminalReason,
   correlationId: string
 ): Promise<CommitOutcome> {
-  const settled = await settleTerminal(tx, attempt.id, reason);
-  if (settled) {
-    await appendAudit(tx, {
-      correlationId,
-      attemptId: settled.id,
-      targetPersonId: settled.targetPersonId,
-      targetFamilyId: settled.targetFamilyId,
-      invitationParticipationId: settled.invitationParticipationId,
-        eventType: 'BINDING_TERMINAL',
-      result: 'TERMINAL',
-      terminalReason: reason,
-    });
-    await clearOpenidForAttempt(tx, attempt.id);
-  }
+  // State transition + exactly-one audit + attempt-scope secret scrub are one
+  // primitive and share this transaction boundary (D-14 / M-04).
+  await settleTerminalAttempt(tx, {
+    attemptId: attempt.id,
+    reason,
+    correlationId,
+  });
   return { outcome: 'TERMINAL', reason };
 }
 

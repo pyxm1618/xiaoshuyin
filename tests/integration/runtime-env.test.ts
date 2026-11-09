@@ -18,6 +18,7 @@ const FULL_ENV: NodeJS.ProcessEnv = {
   IDENTITY_BINDING_SECRET: 'test-identity-binding-secret-fixture-32chars',
   IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
   IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
+  IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300',
 };
 
 describe('Production runtime env boundary (F1)', () => {

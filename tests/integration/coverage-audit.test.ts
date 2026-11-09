@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // @ts-expect-error - plain .mjs verification helper without type declarations
-import { audit, fileOk } from '../../scripts/coverage-audit.mjs';
+import { audit, fileOk, proofOk } from '../../scripts/coverage-audit.mjs';
 
 const ROOT = process.cwd();
 
@@ -45,6 +45,27 @@ describe('coverage audit substantive gate (T115)', () => {
     const real = join(dir, 'tests', 'integration', 'real.test.ts');
     writeFileSync(real, "describe('x', () => { it('y', () => {}); });\n");
     expect(fileOk('tests/integration/real.test.ts', dir)).toBe(true);
+  });
+
+  it('proofOk fails closed on delete / rename / unexecute / unrelated proof', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'coverage-proof-'));
+    mkdirSync(join(dir, 'tests', 'integration'), { recursive: true });
+    const proof = join(dir, 'tests', 'integration', 'proof.test.ts');
+    writeFileSync(proof, "it('required proof H-01', () => {});\n");
+
+    // Exact required proof executes.
+    expect(proofOk('tests/integration/proof.test.ts', 'required proof H-01', dir)).toBe(true);
+
+    // Rename / unrelated proof.
+    expect(proofOk('tests/integration/proof.test.ts', 'renamed proof', dir)).toBe(false);
+    expect(proofOk('tests/integration/proof.test.ts', 'unrelated passing proof', dir)).toBe(false);
+
+    // Unexecute.
+    writeFileSync(proof, "it.skip('required proof H-01', () => {});\n");
+    expect(proofOk('tests/integration/proof.test.ts', 'required proof H-01', dir)).toBe(false);
+
+    // Delete.
+    expect(proofOk('tests/integration/missing.test.ts', 'required proof H-01', dir)).toBe(false);
   });
 
   it('deleting one required proof fails the audit closed', () => {

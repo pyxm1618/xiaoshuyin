@@ -96,9 +96,46 @@ describe('identity binding schema', () => {
     expect(defs).toContain('binding_confirmation_second_party_shape');
     expect(defs).toContain('binding_confirmation_one_per_kind');
     expect(defs).toContain('binding_context_encryption_complete');
+    expect(defs).toContain('binding_context_pairing_complete');
+    expect(defs).toContain('binding_context_pairing_window');
     expect(defs).toContain('binding_context_invitation_requires_attempt');
     expect(defs).toContain('binding_context_committed_requires_attempt');
     expect(defs).toContain('binding_attempt_expiry_after_creation');
+  });
+
+  it('stores the H-01 pairing issuance columns with all-null / all-present shape', async () => {
+    const { rows } = await admin.query(
+      `SELECT column_name, is_nullable, data_type
+         FROM information_schema.columns
+        WHERE table_name = 'binding_pending_contexts'
+          AND column_name IN ('pairing_issued_at','pairing_expires_at','pairing_issuance_id')`
+    );
+    expect(rows.map((r) => r.column_name).sort()).toEqual([
+      'pairing_expires_at',
+      'pairing_issuance_id',
+      'pairing_issued_at',
+    ]);
+    for (const row of rows) expect(row.is_nullable).toBe('YES');
+
+    const defs = await admin.query(
+      `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+        WHERE conrelid = 'binding_pending_contexts'::regclass`
+    );
+    const text = defs.rows.map((r) => r.def).join('\n');
+    expect(text).toContain('pairing_issued_at IS NULL');
+    expect(text).toContain('pairing_expires_at <= expires_at');
+  });
+
+  it('adds H-02 lock policies on the authoritative Gate facts', async () => {
+    const { rows } = await admin.query(
+      `SELECT polname, polcmd FROM pg_policy
+        WHERE polname IN (
+          'persons_binding_lock','persons_binding_candidate_lock','families_binding_lock',
+          'family_members_binding_lock','pcp_binding_lock','consent_binding_lock'
+        )`
+    );
+    expect(rows).toHaveLength(6);
+    for (const row of rows) expect(row.polcmd).toBe('w');
   });
 
   it('has the partial unique live index and no permanent triple uniqueness', async () => {

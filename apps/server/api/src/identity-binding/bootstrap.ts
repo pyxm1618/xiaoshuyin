@@ -35,6 +35,7 @@ import {
 } from './crypto.js';
 import {
   clearOpenidForAttempt,
+  clearOpenidForFreshContext,
   clearOpenidForNoAttemptIdentity,
   createContext,
   linkAttempt,
@@ -201,6 +202,11 @@ export async function bootstrap(
               return { kind: 'COMMITTED' };
             }
             if (attempt.state === 'TERMINAL') {
+              // M-02: the fresh replay context is already linked to the
+              // terminal attempt, so the attempt_id IS NULL cleanup would miss
+              // it. Scrub the exact fresh context (and older pre-attempt
+              // contexts) before responding.
+              await clearOpenidForFreshContext(tx, context.id);
               await clearOpenidForNoAttemptIdentity(tx, identityDigest);
             }
           }
@@ -297,6 +303,8 @@ export async function bootstrap(
             },
             deps.sessionSecret
           );
+          // M-02: Case B REUSED no longer needs the fresh OpenID.
+          await clearOpenidForFreshContext(tx, context.id);
           return {
             kind: 'REUSED',
             sessionToken,

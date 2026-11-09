@@ -324,7 +324,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/identity-bindings/{attemptId}/decision": {
+    "/api/v1/identity-bindings/pairing-decision": {
         parameters: {
             query?: never;
             header?: never;
@@ -333,7 +333,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["submitSecondPartyBindingDecision"];
+        post: operations["submitSecondPartyBindingPairingDecision"];
         delete?: never;
         options?: never;
         head?: never;
@@ -769,10 +769,26 @@ export interface components {
         BindingConfirmerDecisionRequest: {
             /** Format: uuid */
             personId: string;
-            /** @enum {string} */
-            decision: "AFFIRM" | "REJECT";
-            targetConfirmed: boolean;
-            candidateRecognized: boolean;
+            pairingChallenge: string;
+            /** @constant */
+            decision: "AFFIRM";
+            /** @constant */
+            targetConfirmed: true;
+            /** @constant */
+            candidateRecognized: true;
+            /** @constant */
+            confirmationVersion: "second-party-recognition-v1";
+            idempotencyKey: string;
+        } | {
+            /** Format: uuid */
+            personId: string;
+            pairingChallenge: string;
+            /** @constant */
+            decision: "REJECT";
+            /** @constant */
+            targetConfirmed: false;
+            /** @constant */
+            candidateRecognized: false;
             /** @constant */
             confirmationVersion: "second-party-recognition-v1";
             idempotencyKey: string;
@@ -798,6 +814,11 @@ export interface components {
         BindingBootstrapCommittedResponse: {
             /** @constant */
             binding: "COMMITTED";
+        };
+        BindingCandidatePairingResponse: {
+            /** @constant */
+            binding: "NOT_COMPLETED";
+            pairingChallenge: string;
         };
         BindingGenericResponse: {
             /** @constant */
@@ -859,7 +880,6 @@ export interface components {
         BindingContextHeader: string;
         /** @description 待验证的 target Person P1；服务端读取唯一 Family。 */
         BindingPersonIdQuery: string;
-        BindingAttemptIdPath: string;
     };
     requestBodies: never;
     headers: never;
@@ -1800,13 +1820,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 统一 generic 结果 */
+            /** @description candidate AFFIRM fixed shape / REJECT-CANCEL generic */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BindingGenericResponse"];
+                    "application/json": components["schemas"]["BindingGenericResponse"] | components["schemas"]["BindingCandidatePairingResponse"];
                 };
             };
             /** @description `BINDING_CONTEXT_INVALID` */
@@ -1952,13 +1972,11 @@ export interface operations {
             };
         };
     };
-    submitSecondPartyBindingDecision: {
+    submitSecondPartyBindingPairingDecision: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                attemptId: components["parameters"]["BindingAttemptIdPath"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {

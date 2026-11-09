@@ -9,7 +9,6 @@
 import { z } from 'zod';
 
 export const BindingCandidateDecision = z.enum(['AFFIRM', 'REJECT', 'CANCEL']);
-export const BindingConfirmerDecision = z.enum(['AFFIRM', 'REJECT']);
 export const BindingVisibleState = z.enum(['PENDING', 'COMMITTED', 'TERMINAL']);
 
 export const BindingBootstrapRequest = z.strictObject({
@@ -43,17 +42,45 @@ export const BindingCandidateDecisionRequest = z.discriminatedUnion('decision', 
   }),
 ]);
 
-export const BindingConfirmerDecisionRequest = z.strictObject({
-  personId: z.string().uuid(),
-  decision: BindingConfirmerDecision,
-  targetConfirmed: z.boolean(),
-  candidateRecognized: z.boolean(),
-  confirmationVersion: z.literal('second-party-recognition-v1'),
-  idempotencyKey: z.string().min(8).max(128),
-});
+export const BindingPairingChallenge = z
+  .string()
+  .length(192, 'pairingChallenge must be 192 unpadded base64url characters')
+  .regex(/^[A-Za-z0-9_-]{192}$/, 'pairingChallenge must be 192 unpadded base64url characters');
+
+/**
+ * Second-party decision is a strict decision-discriminated union. The boolean
+ * proposition is part of the branch identity: AFFIRM is only true/true and
+ * REJECT is only false/false. Mixed booleans, a REJECT with true/true, or a
+ * missing / different confirmationVersion are all 422 with zero mutation.
+ */
+export const BindingConfirmerDecisionRequest = z.discriminatedUnion('decision', [
+  z.strictObject({
+    personId: z.string().uuid(),
+    pairingChallenge: BindingPairingChallenge,
+    decision: z.literal('AFFIRM'),
+    targetConfirmed: z.literal(true),
+    candidateRecognized: z.literal(true),
+    confirmationVersion: z.literal('second-party-recognition-v1'),
+    idempotencyKey: z.string().min(8).max(128),
+  }),
+  z.strictObject({
+    personId: z.string().uuid(),
+    pairingChallenge: BindingPairingChallenge,
+    decision: z.literal('REJECT'),
+    targetConfirmed: z.literal(false),
+    candidateRecognized: z.literal(false),
+    confirmationVersion: z.literal('second-party-recognition-v1'),
+    idempotencyKey: z.string().min(8).max(128),
+  }),
+]);
 
 export const BindingGenericResponse = z.strictObject({
   binding: z.literal('NOT_COMPLETED'),
+});
+
+export const BindingCandidatePairingResponse = z.strictObject({
+  binding: z.literal('NOT_COMPLETED'),
+  pairingChallenge: BindingPairingChallenge,
 });
 
 export const BindingBootstrapGenericResponse = z.strictObject({

@@ -10,9 +10,8 @@ import {
   withBindingContextTransaction,
 } from '../db/tx.js';
 import { requireContext } from './context.js';
-import { findById, materializeExpired } from './attempt-repository.js';
-import { appendAudit } from './audit-repository.js';
-import { clearOpenid } from './pending-context-repository.js';
+import { findById } from './attempt-repository.js';
+import { settleExpiredAttempt } from './settlement.js';
 import { hashToken } from './crypto.js';
 
 export interface CandidateStatusDeps {
@@ -62,25 +61,15 @@ export async function getCandidateStatus(
         invitationId: initial.invitationParticipationId,
         targetPersonId: initial.targetPersonId,
         targetFamilyId: initial.targetFamilyId,
+        purpose: 'IDENTITY_BINDING_GATE',
       });
 
       if (initial.state === 'PENDING') {
-        const expired = await materializeExpired(tx, initial.id);
-        if (expired) {
-          await appendAudit(tx, {
-            correlationId: randomUUID(),
-            attemptId: expired.id,
-            targetPersonId: expired.targetPersonId,
-            targetFamilyId: expired.targetFamilyId,
-            invitationParticipationId: expired.invitationParticipationId,
-            candidateIdentityDigest: context.candidateIdentityDigest,
-            eventType: 'BINDING_TERMINAL',
-            result: 'TERMINAL',
-            terminalReason: 'ATTEMPT_EXPIRED',
-          });
-          await clearOpenid(tx, context.id);
-          return { binding: 'NOT_COMPLETED' };
-        }
+        const expired = await settleExpiredAttempt(tx, {
+          attemptId: initial.id,
+          correlationId: randomUUID(),
+        });
+        if (expired) return { binding: 'NOT_COMPLETED' };
       }
 
       return {

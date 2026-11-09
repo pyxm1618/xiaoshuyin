@@ -45,7 +45,9 @@ describe('confirmer authorization ordering (H2)', () => {
 
     const outsider = await loginWithLabel(h.app, 'conf_order_outsider');
     const beforeKeys = await h.admin.query(
-      `SELECT count(*)::int AS n FROM binding_operation_keys WHERE command_type = 'SECOND_PARTY_DECISION'`
+      `SELECT count(*)::int AS n FROM binding_operation_keys
+        WHERE command_type = 'SECOND_PARTY_DECISION' AND attempt_id = $1`,
+      [attemptId]
     );
     const beforeAudit = await h.admin.query(
       `SELECT count(*)::int AS n FROM identity_binding_audit_events WHERE attempt_id = $1`,
@@ -72,7 +74,9 @@ describe('confirmer authorization ordering (H2)', () => {
     expect(attempt.rows[0].settled_at).toBeNull();
 
     const afterKeys = await h.admin.query(
-      `SELECT count(*)::int AS n FROM binding_operation_keys WHERE command_type = 'SECOND_PARTY_DECISION'`
+      `SELECT count(*)::int AS n FROM binding_operation_keys
+        WHERE command_type = 'SECOND_PARTY_DECISION' AND attempt_id = $1`,
+      [attemptId]
     );
     expect(afterKeys.rows[0].n).toBe(beforeKeys.rows[0].n);
 

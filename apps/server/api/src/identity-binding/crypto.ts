@@ -16,6 +16,7 @@ import {
   createHmac,
   hkdfSync,
   randomBytes,
+  timingSafeEqual,
 } from 'node:crypto';
 
 export const CONTEXT_TOKEN_BYTES = 32;
@@ -23,6 +24,12 @@ export const AES_GCM_NONCE_BYTES = 12;
 
 const IDENTITY_LABEL = 'identity-binding:openid-digest:v1';
 const AES_LABEL = 'identity-binding:pending-openid:v1';
+const PAIRING_LABEL = 'xiaoshuyin:identity-binding:pairing:v1';
+
+/** Fixed authenticated envelope: 128 payload bytes + 16-byte authenticator. */
+export const PAIRING_ENVELOPE_BYTES = 144;
+export const PAIRING_CHALLENGE_LENGTH = 192;
+export const PAIRING_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{192}$/;
 
 export function createContextToken(): string {
   return randomBytes(CONTEXT_TOKEN_BYTES).toString('base64url');
@@ -87,4 +94,137 @@ export function decryptOpenid(
     decipher.update(encrypted.ciphertext),
     decipher.final(),
   ]).toString('utf8');
+}
+// ── Candidate-presented pairing challenge (D-3.5) ────────────
+
+export interface PairingChallengeFacts {
+  contextId: string;
+  candidateIdentityDigest: string;
+  attemptId: string;
+  targetPersonId: string;
+  invitationParticipationId: string;
+  pairingIssuanceId: string;
+  pairingIssuedAt: Date;
+  pairingExpiresAt: Date;
+}
+
+function uuidToBytes(value: string): Buffer {
+  const hex = value.replace(/-/g, '');
+  if (!/^[0-9a-fA-F]{32}$/.test(hex)) throw new Error('PAIRING_UUID_INVALID');
+  return Buffer.from(hex, 'hex');
+}
+
+function bytesToUuid(bytes: Buffer): string {
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function digestToBytes(value: string): Buffer {
+  if (!/^[0-9a-f]{64}$/.test(value)) throw new Error('PAIRING_DIGEST_INVALID');
+  return Buffer.from(value, 'hex');
+}
+
+function writeTimestamp(target: Buffer, offset: number, date: Date): void {
+  target.writeBigUInt64BE(BigInt(date.getTime()), offset);
+}
+
+function readTimestamp(source: Buffer, offset: number): Date {
+  return new Date(Number(source.readBigUInt64BE(offset)));
+}
+
+function pairingKey(secret: string): Buffer {
+  return deriveKey(secret, PAIRING_LABEL);
+}
+
+function pairingPayload(facts: PairingChallengeFacts): Buffer {
+  const payload = Buffer.alloc(128);
+  let offset = 0;
+  uuidToBytes(facts.pairingIssuanceId).copy(payload, offset);
+  offset += 16;
+  digestToBytes(facts.candidateIdentityDigest).copy(payload, offset);
+  offset += 32;
+  uuidToBytes(facts.contextId).copy(payload, offset);
+  offset += 16;
+  uuidToBytes(facts.attemptId).copy(payload, offset);
+  offset += 16;
+  uuidToBytes(facts.targetPersonId).copy(payload, offset);
+  offset += 16;
+  uuidToBytes(facts.invitationParticipationId).copy(payload, offset);
+  offset += 16;
+  writeTimestamp(payload, offset, facts.pairingIssuedAt);
+  offset += 8;
+  writeTimestamp(payload, offset, facts.pairingExpiresAt);
+  return payload;
+}
+
+function pairingTag(secret: string, payload: Buffer): Buffer {
+  return createHmac('sha256', pairingKey(secret))
+    .update(payload)
+    .digest()
+    .subarray(0, 16);
+}
+
+/**
+ * Deterministic authenticated envelope. Reconstructing the same issuance
+ * produces the exact same 192-character representation; rotation changes the
+ * issuance id (and expiry), so it produces different bytes.
+ */
+export function encodePairingChallenge(
+  secret: string,
+  facts: PairingChallengeFacts
+): string {
+  const payload = pairingPayload(facts);
+  return Buffer.concat([payload, pairingTag(secret, payload)]).toString('base64url');
+}
+
+export function isPairingChallengeShape(value: unknown): value is string {
+  return typeof value === 'string' && PAIRING_CHALLENGE_PATTERN.test(value);
+}
+
+/**
+ * Verify the authenticated envelope. Returns null for any structural /
+ * authentication / expiry failure. The caller maps every null to the frozen
+ * generic 404; no reason is exposed.
+ */
+export function decodePairingChallenge(
+  secret: string,
+  challenge: string,
+  now: Date = new Date()
+): PairingChallengeFacts | null {
+  if (!isPairingChallengeShape(challenge)) return null;
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(challenge, 'base64url');
+  } catch {
+    return null;
+  }
+  if (bytes.length !== PAIRING_ENVELOPE_BYTES) return null;
+
+  const payload = bytes.subarray(0, 128);
+  const tag = bytes.subarray(128);
+  const expected = pairingTag(secret, payload);
+  if (tag.length !== expected.length || !timingSafeEqual(tag, expected)) return null;
+
+  const facts: PairingChallengeFacts = {
+    pairingIssuanceId: bytesToUuid(payload.subarray(0, 16)),
+    candidateIdentityDigest: payload.subarray(16, 48).toString('hex'),
+    contextId: bytesToUuid(payload.subarray(48, 64)),
+    attemptId: bytesToUuid(payload.subarray(64, 80)),
+    targetPersonId: bytesToUuid(payload.subarray(80, 96)),
+    invitationParticipationId: bytesToUuid(payload.subarray(96, 112)),
+    pairingIssuedAt: readTimestamp(payload, 112),
+    pairingExpiresAt: readTimestamp(payload, 120),
+  };
+  if (facts.pairingExpiresAt.getTime() <= facts.pairingIssuedAt.getTime()) return null;
+  if (now.getTime() >= facts.pairingExpiresAt.getTime()) return null;
+  return facts;
+}
+
+/**
+ * Same fixed-width, same-alphabet material for hidden business failures. It is
+ * deliberately not a valid authenticated envelope, so it can never resolve to
+ * a live attempt.
+ */
+export function createDecoyPairingChallenge(): string {
+  return randomBytes(PAIRING_ENVELOPE_BYTES).toString('base64url');
 }

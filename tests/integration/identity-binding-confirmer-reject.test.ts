@@ -60,22 +60,14 @@ describe('confirmer reject', () => {
   it('rejects after an affirmative confirmation with 409 and no state change', async () => {
     const target = await createTarget(h, 'conf_rej_after', { ageBand: 'UNDER_14' });
     const code = `conf_rej_after_${Date.now()}`;
-    // Bootstrap only: candidate has NOT confirmed yet, so the second-party
-    // AFFIRM leaves the attempt PENDING (commit waits for the candidate).
-    const boot = await bootstrap(h, target.invitationToken, code);
-    expect(boot.statusCode).toBe(200);
-    const attemptRow = await h.admin.query(
-      'SELECT id FROM binding_attempts WHERE target_person_id = $1 ORDER BY created_at DESC LIMIT 1',
-      [target.targetPersonId]
-    );
-    const attemptId = attemptRow.rows[0].id as string;
+    const { attemptId } = await startBinding(h, target, code);
 
     const affirm = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'AFFIRM',
     });
     expect(affirm.statusCode).toBe(200);
-    expect(affirm.json().state).toBe('PENDING');
+    expect(affirm.json().state).toBe('COMMITTED');
 
     const reject = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
@@ -88,6 +80,6 @@ describe('confirmer reject', () => {
       'SELECT state FROM binding_attempts WHERE id = $1',
       [attemptId]
     );
-    expect(attempt.rows[0].state).toBe('PENDING');
+    expect(attempt.rows[0].state).toBe('COMMITTED');
   });
 });

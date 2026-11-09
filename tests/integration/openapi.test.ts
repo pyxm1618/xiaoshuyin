@@ -34,6 +34,7 @@ const FROZEN_SCHEMAS = [
   'BindingBootstrapRequest',
   'BindingBootstrapReusedResponse',
   'BindingCandidateDecisionRequest',
+  'BindingCandidatePairingResponse',
   'BindingConfirmerDecisionRequest',
   'BindingConfirmerDecisionResponse',
   'BindingContextInvalidError',
@@ -139,7 +140,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'POST /api/v1/identity-bindings/bootstrap',
       'POST /api/v1/identity-bindings/candidate-decision',
       'POST /api/v1/identity-bindings/session',
-      'POST /api/v1/identity-bindings/{attemptId}/decision',
+      'POST /api/v1/identity-bindings/pairing-decision',
     ].sort());
   });
 
@@ -190,7 +191,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       '/api/v1/identity-bindings/status',
       '/api/v1/identity-bindings/session',
       '/api/v1/identity-bindings/pending',
-      '/api/v1/identity-bindings/{attemptId}/decision',
+      '/api/v1/identity-bindings/pairing-decision',
     ]);
     for (const path of Object.keys(spec.paths)) {
       expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);

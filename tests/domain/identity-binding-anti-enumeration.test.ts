@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  candidateAffirmResponse,
   candidateBootstrapReusedResponse,
   candidateBootstrapResponse,
   candidateDecisionResponse,
@@ -44,6 +45,21 @@ describe('candidate anti-enumeration serializers', () => {
     expect(Object.keys(candidateStatusResponse(false))).toEqual(['binding']);
     expect(Object.keys(candidateSessionResponse(false))).toEqual(['binding']);
     expect(candidateStatusResponse(false).binding).toBe('NOT_COMPLETED');
+  });
+
+  it('AFFIRM valid and decoy challenges share the exact external shape', () => {
+    const valid = candidateAffirmResponse('a'.repeat(192));
+    const decoy = candidateAffirmResponse('b'.repeat(192));
+    expect(Object.keys(valid)).toEqual(['binding', 'pairingChallenge']);
+    expect(Object.keys(decoy)).toEqual(['binding', 'pairingChallenge']);
+    expect(valid.binding).toBe('NOT_COMPLETED');
+    expect(decoy.binding).toBe('NOT_COMPLETED');
+    expect(valid.pairingChallenge).toHaveLength(192);
+    expect(decoy.pairingChallenge).toHaveLength(192);
+    expect(valid.pairingChallenge).toMatch(/^[A-Za-z0-9_-]{192}$/);
+    expect(decoy.pairingChallenge).toMatch(/^[A-Za-z0-9_-]{192}$/);
+    expect(valid).not.toHaveProperty('expiresAt');
+    expect(decoy).not.toHaveProperty('expiresAt');
   });
 
   it('Case B reuse and COMMITTED session are the only distinguishable successes', () => {

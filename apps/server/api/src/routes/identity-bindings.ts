@@ -6,7 +6,7 @@
  *   3 GET  /api/v1/identity-bindings/status
  *   4 POST /api/v1/identity-bindings/session
  *   5 GET  /api/v1/identity-bindings/pending
- *   6 POST /api/v1/identity-bindings/:attemptId/decision
+ *   6 POST /api/v1/identity-bindings/pairing-decision
  *
  * No participant / Case / Evidence / notification / UI route exists here.
  */
@@ -19,6 +19,7 @@ import {
   BindingConfirmerDecisionRequest,
 } from '@xiaoshuyin/contracts';
 import {
+  candidateAffirmResponse,
   candidateBootstrapResponse,
   candidateBootstrapReusedResponse,
   candidateBootstrapCommittedResponse,
@@ -50,6 +51,7 @@ export interface IdentityBindingRouteDeps {
   identityBindingSecret: string;
   contextTtlSeconds: number;
   attemptTtlSeconds: number;
+  pairingTtlSeconds: number;
   sessionSecret: string;
 }
 
@@ -89,6 +91,12 @@ export function registerIdentityBindingRoutes(
     invitationPort: deps.invitationPort,
     identityBindingSecret: deps.identityBindingSecret,
   };
+  const candidateDeps = {
+    pool: deps.pool,
+    invitationPort: deps.invitationPort,
+    identityBindingSecret: deps.identityBindingSecret,
+    pairingTtlSeconds: deps.pairingTtlSeconds,
+  };
 
   // 1. Bootstrap — independent from ordinary login; no session required.
   app.post('/api/v1/identity-bindings/bootstrap', async (req, reply) => {
@@ -118,7 +126,7 @@ export function registerIdentityBindingRoutes(
     const parsed = BindingCandidateDecisionRequest.safeParse(req.body);
     if (!parsed.success) return validationError(reply);
     const result = await submitCandidateDecision(
-      { pool: deps.pool },
+      candidateDeps,
       {
         contextToken: contextToken(req),
         decision: parsed.data.decision,
@@ -129,6 +137,9 @@ export function registerIdentityBindingRoutes(
         idempotencyKey: parsed.data.idempotencyKey,
       }
     );
+    if (result.pairingChallenge) {
+      return reply.status(200).send(candidateAffirmResponse(result.pairingChallenge));
+    }
     return reply.status(200).send(candidateDecisionResponse());
   });
 
@@ -187,11 +198,11 @@ export function registerIdentityBindingRoutes(
     }
   );
 
-  // 6. Confirmer decision — Bearer only.
-  app.post('/api/v1/identity-bindings/:attemptId/decision', async (req, reply) => {
-    const params = z.object({ attemptId: z.string().uuid() }).safeParse(req.params);
+  // 6. Pairing decision — independent Bearer only. The pairingChallenge is the
+  // only attempt selector; no attemptId path / body field exists.
+  app.post('/api/v1/identity-bindings/pairing-decision', async (req, reply) => {
     const body = BindingConfirmerDecisionRequest.safeParse(req.body);
-    if (!params.success || !body.success) return validationError(reply);
+    if (!body.success) return validationError(reply);
     const actor = req.actor;
     if (!actor?.accountId || !actor.personId) {
       throw Object.assign(new Error('UNAUTHENTICATED'), toHttpError('UNAUTHENTICATED'));
@@ -199,8 +210,8 @@ export function registerIdentityBindingRoutes(
     const result = await submitConfirmerDecision(commitDeps, {
       accountId: actor.accountId,
       personId: actor.personId,
-      attemptId: params.data.attemptId,
       targetPersonId: body.data.personId,
+      pairingChallenge: body.data.pairingChallenge,
       decision: body.data.decision,
       targetConfirmed: body.data.targetConfirmed,
       candidateRecognized: body.data.candidateRecognized,

@@ -121,7 +121,16 @@ export async function withBindingContextTransaction<T>(
     await client.query('COMMIT');
     return result;
   } catch (err) {
-    await client.query('ROLLBACK');
+    // M-03: an expired pending context is scrubbed inside this transaction
+    // before the error is raised. Rolling back would resurrect the decryptable
+    // OpenID, so the scrub-only exit path commits the cleanup and nothing else.
+    if (
+      (err as { bindingContextScrubbed?: boolean }).bindingContextScrubbed === true
+    ) {
+      await client.query('COMMIT');
+    } else {
+      await client.query('ROLLBACK');
+    }
     throw err;
   } finally {
     client.release();

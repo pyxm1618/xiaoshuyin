@@ -350,10 +350,11 @@ describe('no-P2 invariants (T105)', () => {
     const before = await snapshot(code, target.targetPersonId);
 
     injection.failBinding = true;
+    const retryKey = `nop2-retry-${randomUUID()}`;
     const failed = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'AFFIRM',
-      idempotencyKey: `nop2-retry-a-${randomUUID()}`,
+      idempotencyKey: retryKey,
     });
     injection.failBinding = false;
     expect(failed.statusCode).toBe(500);
@@ -384,7 +385,7 @@ describe('no-P2 invariants (T105)', () => {
     const retry = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,
       decision: 'AFFIRM',
-      idempotencyKey: `nop2-retry-b-${randomUUID()}`,
+      idempotencyKey: retryKey,
     });
     expect(retry.statusCode).toBe(200);
     expect(retry.json().state).toBe('COMMITTED');

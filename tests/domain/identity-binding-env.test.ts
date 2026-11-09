@@ -11,6 +11,7 @@ const BASE = {
   IDENTITY_BINDING_SECRET: 'c'.repeat(32),
   IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
   IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
+  IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300',
 };
 
 describe('identity binding env contract', () => {
@@ -30,6 +31,7 @@ describe('identity binding env contract', () => {
     for (const key of [
       'IDENTITY_BINDING_CONTEXT_TTL_SECONDS',
       'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS',
+      'IDENTITY_BINDING_PAIRING_TTL_SECONDS',
     ]) {
       const { [key]: _omit, ...missing } = BASE;
       expect(() => validateEnv(missing)).toThrow();
