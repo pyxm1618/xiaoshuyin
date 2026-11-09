@@ -9,7 +9,7 @@
  *   1. create a throw-away database owned by the migrator role
  *   2. apply only 001–003 and record them in schema_migrations
  *   3. insert representative Slice 1 + Slice 2 rows and capture invariants
- *   4. run the real migrator, which applies exactly 004_evidence_core.sql
+ *   4. run the real migrator, which applies the additive post-003 migrations
  *   5. assert old data/invariants survive and the new Evidence schema exists
  *   6. run the migrator again and require a 0-new no-op
  *   7. drop the throw-away database
@@ -122,7 +122,7 @@ describe('Slice 1+2 -> Slice 3 migration upgrade (AUD-II-003)', () => {
     expect(output).toContain('SKIP 003_case_idempotency_key_bytes.sql');
     expect(output).toContain('APPLY 004_evidence_core.sql');
     expect(output).toContain('APPLY 004_identity_binding_runtime.sql');
-    expect(output).toMatch(/Migration complete: 2 new, 3 previously applied\./);
+    expect(output).toMatch(/Migration complete: 3 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -186,6 +186,7 @@ describe('Slice 1+2 -> Slice 3 migration upgrade (AUD-II-003)', () => {
       '003_case_idempotency_key_bytes.sql',
       '004_evidence_core.sql',
       '004_identity_binding_runtime.sql',
+      '005_case_participant_core.sql',
     ]);
 
     // New Evidence schema exists.
@@ -239,7 +240,7 @@ describe('Slice 1+2 -> Slice 3 migration upgrade (AUD-II-003)', () => {
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(45);
+    expect(policyRows[0].count).toBe(48);
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
@@ -295,9 +296,10 @@ describe('Slice 1+2 -> Slice 3 migration upgrade (AUD-II-003)', () => {
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 5 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 6 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
+    expect(output).not.toContain('APPLY 005_case_participant_core.sql');
     expect(await fingerprint(migrator)).toEqual(before);
   }, 120_000);
 });
