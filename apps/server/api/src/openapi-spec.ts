@@ -58,6 +58,20 @@ import {
   IdempotencyPayloadMismatchError,
   ValidationError,
   InternalError,
+  CaseParticipationState,
+  ParticipationNotice,
+  CreateParticipationInviteRequest,
+  CreateParticipationInviteResponse,
+  ParticipationInvitePublicView,
+  AcceptParticipationRequest,
+  DeclineParticipationRequest,
+  WithdrawParticipationRequest,
+  ParticipationResource,
+  ParticipationStateConflictError,
+  ParticipationAlreadyExistsError,
+  ParticipationTargetIneligibleError,
+  InvitationNotAvailableError,
+  ParticipationNotFoundError,
 } from '@xiaoshuyin/contracts';
 
 type JsonSchema = Record<string, unknown>;
@@ -180,6 +194,20 @@ export function buildOpenApiDocument() {
     BindingConfirmerDecisionResponse: toJsonSchema(BindingConfirmerDecisionResponse),
     BindingNotFoundError: toJsonSchema(BindingNotFoundError),
     BindingContextInvalidError: toJsonSchema(BindingContextInvalidError),
+    CaseParticipationState: toJsonSchema(CaseParticipationState),
+    ParticipationNotice: toJsonSchema(ParticipationNotice),
+    CreateParticipationInviteRequest: toJsonSchema(CreateParticipationInviteRequest),
+    CreateParticipationInviteResponse: toJsonSchema(CreateParticipationInviteResponse),
+    ParticipationInvitePublicView: toJsonSchema(ParticipationInvitePublicView),
+    AcceptParticipationRequest: toJsonSchema(AcceptParticipationRequest),
+    DeclineParticipationRequest: toJsonSchema(DeclineParticipationRequest),
+    WithdrawParticipationRequest: toJsonSchema(WithdrawParticipationRequest),
+    ParticipationResource: toJsonSchema(ParticipationResource),
+    ParticipationStateConflictError: toJsonSchema(ParticipationStateConflictError),
+    ParticipationAlreadyExistsError: toJsonSchema(ParticipationAlreadyExistsError),
+    ParticipationTargetIneligibleError: toJsonSchema(ParticipationTargetIneligibleError),
+    InvitationNotAvailableError: toJsonSchema(InvitationNotAvailableError),
+    ParticipationNotFoundError: toJsonSchema(ParticipationNotFoundError),
   };
 
   const paths: Record<string, unknown> = {
@@ -468,6 +496,134 @@ export function buildOpenApiDocument() {
         },
       },
     },
+    // ── Slice 4 Case Participant Core: exactly six surfaces ──
+    '/api/v1/cases/{id}/participation-invites': {
+      post: {
+        tags: ['participation'],
+        operationId: 'createParticipationInvite',
+        security: [{ bearerAuth: [] }],
+        parameters: [{
+          name: 'id', in: 'path', required: true,
+          schema: { type: 'string', format: 'uuid' },
+        }],
+        requestBody: refBody('CreateParticipationInviteRequest'),
+        responses: {
+          '201': refResponse('Participation invitation created', 'CreateParticipationInviteResponse'),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '403': refResponse('`PARTICIPATION_TARGET_INELIGIBLE`', 'ParticipationTargetIneligibleError'),
+          '404': jsonResponse('`CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND`', {
+            oneOf: [ref('CaseNotFoundError'), ref('CurrentFamilyNotFoundError')],
+          }),
+          '409': jsonResponse('Already exists / current-family ambiguity / idempotency mismatch', {
+            oneOf: [
+              ref('ParticipationAlreadyExistsError'),
+              ref('CurrentFamilyAmbiguousError'),
+              ref('IdempotencyPayloadMismatchError'),
+            ],
+          }),
+          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/participation-invites/{token}': {
+      get: {
+        tags: ['participation'],
+        operationId: 'getParticipationInvite',
+        parameters: [{
+          name: 'token', in: 'path', required: true,
+          schema: { type: 'string', minLength: 1, maxLength: 256 },
+        }],
+        responses: {
+          '200': refResponse('Minimal safe invitation view', 'ParticipationInvitePublicView'),
+          '404': refResponse('`INVITATION_NOT_AVAILABLE`', 'InvitationNotAvailableError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/participation-invites/{token}/accept': {
+      post: {
+        tags: ['participation'],
+        operationId: 'acceptParticipationInvite',
+        security: [{ bearerAuth: [] }],
+        parameters: [{
+          name: 'token', in: 'path', required: true,
+          schema: { type: 'string', minLength: 1, maxLength: 256 },
+        }],
+        requestBody: refBody('AcceptParticipationRequest'),
+        responses: {
+          '200': refResponse('Participation active or converged', 'ParticipationResource'),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': refResponse('`PARTICIPATION_NOT_FOUND`', 'ParticipationNotFoundError'),
+          '409': jsonResponse('State conflict / idempotency mismatch', {
+            oneOf: [ref('ParticipationStateConflictError'), ref('IdempotencyPayloadMismatchError')],
+          }),
+          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/participations/{id}/decline': {
+      post: {
+        tags: ['participation'],
+        operationId: 'declineParticipation',
+        security: [{ bearerAuth: [] }],
+        parameters: [{
+          name: 'id', in: 'path', required: true,
+          schema: { type: 'string', format: 'uuid' },
+        }],
+        requestBody: refBody('DeclineParticipationRequest'),
+        responses: {
+          '200': refResponse('Participation declined or converged', 'ParticipationResource'),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': refResponse('`PARTICIPATION_NOT_FOUND`', 'ParticipationNotFoundError'),
+          '409': jsonResponse('State conflict / idempotency mismatch', {
+            oneOf: [ref('ParticipationStateConflictError'), ref('IdempotencyPayloadMismatchError')],
+          }),
+          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/participations/{id}/withdraw': {
+      post: {
+        tags: ['participation'],
+        operationId: 'withdrawParticipation',
+        security: [{ bearerAuth: [] }],
+        parameters: [{
+          name: 'id', in: 'path', required: true,
+          schema: { type: 'string', format: 'uuid' },
+        }],
+        requestBody: refBody('WithdrawParticipationRequest'),
+        responses: {
+          '200': refResponse('Participation withdrawn or converged', 'ParticipationResource'),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': refResponse('`PARTICIPATION_NOT_FOUND`', 'ParticipationNotFoundError'),
+          '409': jsonResponse('State conflict / idempotency mismatch', {
+            oneOf: [ref('ParticipationStateConflictError'), ref('IdempotencyPayloadMismatchError')],
+          }),
+          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/participations/{id}': {
+      get: {
+        tags: ['participation'],
+        operationId: 'getParticipation',
+        security: [{ bearerAuth: [] }],
+        parameters: [{
+          name: 'id', in: 'path', required: true,
+          schema: { type: 'string', format: 'uuid' },
+        }],
+        responses: {
+          '200': refResponse('Minimal participation state', 'ParticipationResource'),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': refResponse('`PARTICIPATION_NOT_FOUND`', 'ParticipationNotFoundError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
     // ── Slice 006 identity binding: exactly six surfaces ──
     '/api/v1/identity-bindings/bootstrap': {
       post: {
@@ -575,6 +731,7 @@ export function buildOpenApiDocument() {
       { name: 'consent' },
       { name: 'compliance' },
       { name: 'case' },
+      { name: 'participation' },
     ],
     paths,
     components: {
