@@ -538,7 +538,7 @@ CREATE TABLE binding_operation_keys (
 - `binding_operation_keys.attempt_id` 可以为 NULL（Gate 1 阻断 / invalid invitation 的 bootstrap）；一旦绑定 attempt，映射不可改。
 - operation key 不表达 attempt 状态；attempt state 只在 `binding_attempts.state`。
 - replay 的 attempt 选择来自 existing operation 的 **authoritative `attempt_id`**，不是当前 URL、latest attempt 或 same-triple lookup。
-- `SECOND_PARTY_DECISION` canonical request hash MUST覆盖 pairingChallenge（或其canonical digest）与全部decision fields；challenge解析出的exact attempt必须与existing operation.attempt_id一致。old key A 对 B URL = 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；B 不得被读取后推进、确认、terminalize 或 commit。same-key / same-request replay A 始终只回读 A。
+- `SECOND_PARTY_DECISION` canonical request hash MUST覆盖 pairingChallenge（或其canonical digest）与全部decision fields；challenge解析出的exact attempt必须与existing operation.attempt_id一致。old key A + challenge resolving B = 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；B不得被读取后推进、确认、terminalize或commit。same-key / same-request replay A 始终只回读 A。
 
 ---
 
@@ -752,8 +752,6 @@ Candidate AFFIRM是Phase B推进点，不得沿用bootstrap时的eligibility sna
 
 ## D-9 Second-party authorization 与确认者发现
 
-## D-9 Second-party authorization 与确认者发现
-
 ### D-9.1 确认主体（唯一矩阵投影）
 
 | age_band | confirmer | 禁止 |
@@ -771,8 +769,6 @@ Candidate AFFIRM是Phase B推进点，不得沿用bootstrap时的eligibility sna
 - confirmer独立登录后，把现场被辨认candidate所展示的challenge提交给 POST /api/v1/identity-bindings/pairing-decision。服务端验证challenge并解析 exact context / authenticated identity / attempt / P1 / invitation；caller不提交attemptId。
 - pending list authorization仍使用 IDENTITY_BINDING_CONFIRMER_LIST；未授权 / P1不存在 / P1多Family / 非目标Family统一404。guardian不要求Family member；manager必须是families.created_by_person_id。
 - attemptId、invitation token、pendingContextToken、pairingChallenge任一单独存在都不是identity proof。pendingContextToken仍只属于candidate，禁止分享给confirmer。
-
-### D-9.3 独立认证
 
 ### D-9.3 独立认证
 
@@ -911,8 +907,6 @@ Bootstrap继续normalized pipeline，不得因invalid invitation/gate reason形�
 
 ## D-12 Authorization 扩展
 
-## D-12 Authorization 扩展
-
 ### D-12.1 `authorize()` 目标形状
 
 在 Slice 1 最终 `authorize()`（含 `facts` / object `Resource` 的 remediated 版本）基础上增量扩展：
@@ -1045,6 +1039,7 @@ Purpose：`IDENTITY_BINDING_PENDING`、`IDENTITY_BINDING_GATE`、`IDENTITY_BINDI
 - 错误 Family / 错误 account / 错误 attempt：0 行。
 - `persons_binding_candidate_account_read` 只在该 candidate Account GUC 下返回该 Account 绑定的单个 Person；未设置 GUC / 非 binding purpose / 其它 Account → 0 行；不得成为任意 person lookup。
 - RLS DB proof 必须 introspect `pg_policy.polcmd`，并用真实 `xiaoshuyin_app` 做 GATE/exact-GUC SELECT positive + UPDATE/INSERT/DELETE negative；只有 COMMIT + exact target / commit-account GUC 下的 `persons_binding_commit_update FOR UPDATE` 可合法 bind。
+- H-02额外要求behavioral concurrency proof：read policy为FOR SELECT本身不等于可锁。若chosen implementation依赖row lock，必须证明xiaoshuyin_app实际取得目标lockable rows且并发authoritative mutation按预期等待/冲突；若采用version/optimistic/advisory/isolation，则必须证明对应检测/serialization在runtime role下生效。SELECT FOR UPDATE=0 rows不得被当作linearization success。
 - `pg_class.relrowsecurity` / `relforcerowsecurity` = true；`pg_roles.rolbypassrls` = false；owner ≠ app。
 - 审计表 runtime `SELECT` 被拒绝；migrator / test admin 可读。
 
@@ -1072,8 +1067,6 @@ General rules：
 - H-02 Gate2保护以真实runtime-role DB behavior为验收，不以repository helper名或SQL文本为证。
 
 ---
-
-## D-15 Audit / provenance
 
 ## D-15 Audit / provenance
 
@@ -1202,8 +1195,10 @@ participation invitation 打开
 → 若目标 Person 无 Account（Case C）：
    在调用普通 /auth/wechat 之前调用 POST /identity-bindings/bootstrap
    → 得到 pendingContextToken + binding:NOT_COMPLETED
-   → candidate 在本端确认
-   → authorized confirmer 在独立会话确认
+   → candidate AFFIRM；服务端current eligibility recheck
+   → candidate得到server-generated short-lived pairingChallenge（hidden failure同shape decoy）
+   → candidate现场把challenge展示/传递给亲自辨认自己的authorized confirmer
+   → confirmer独立登录并调用 /pairing-decision；服务端由challenge绑定exact authenticated candidate/attempt
    → candidate 轮询 status
    → COMMITTED 后 POST /session 换取普通 session
    → 继续 Slice 4 的 accept / decline
@@ -1371,8 +1366,6 @@ Canonical closeout command = node scripts/verify-all.mjs from repo root。final 
 
 ## D-20 Explicit exclusions / structure checks
 
-## D-20 Explicit exclusions / structure checks
-
 Implement 必须能机械证明以下不存在（CI / guard / grep / schema introspection）：
 
 1. 普通登录改造、`mode=invite`、`inviteMode`、`binding=true`、隐藏 invitation 参数。
@@ -1498,8 +1491,6 @@ Slice 4 implementation                                       ← 依赖本 Slice
 
 ## AI / RAG / Eval Impact
 
-## AI / RAG / Eval Impact
-
 - 无。006 不调用 AI、不做身份判断、不做 fuzzy matching、不写 Memory / Evidence。
 
 ## Async / Notification / Side-Effect Impact
@@ -1567,8 +1558,6 @@ tests/
 Canonical verify-all final run前tracked working tree必须clean；required env只记录name/presence，不得记录secret value。历史non-zero provenance无法复原时如实写unresolved。
 
 ---
-
-## Rollback / Recovery
 
 ## Rollback / Recovery
 
