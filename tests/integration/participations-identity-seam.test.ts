@@ -32,6 +32,42 @@ describe('Slice 4 ↔ Slice 5 identity seam', () => {
   });
   afterAll(async()=>{await h.close();});
 
+  it('Gate 1 adapter restores invitation-token context after its authoritative read', async () => {
+    const f=await createParticipationFixture(
+      h,'identity-token-restore',{target:'member',ageBand:'MINOR_14_17'}
+    );
+    const created=await invite(
+      h.app,f.manager.token,f.caseId,f.targetPersonId,'identity-token-restore-invite'
+    );
+    expect(created.statusCode).toBe(201);
+
+    const pool=new pg.Pool({connectionString:process.env['DATABASE_URL']});
+    try {
+      await withTransactionClient(pool, async(tx)=>{
+        const before=(await tx.query(
+          `SELECT COALESCE(current_setting('app.invite_token_hash',true),'') AS token_hash`
+        )).rows[0].token_hash;
+
+        const resolved=await new Slice4InvitationAdapter().resolveByToken(
+          tx,created.json().inviteToken
+        );
+        expect(resolved).toMatchObject({
+          status:'VALID',
+          participationId:created.json().participationId,
+          targetPersonId:f.targetPersonId,
+          targetFamilyId:f.familyId,
+        });
+
+        const after=(await tx.query(
+          `SELECT COALESCE(current_setting('app.invite_token_hash',true),'') AS token_hash`
+        )).rows[0].token_hash;
+        expect(after).toBe(before);
+      });
+    } finally {
+      await pool.end();
+    }
+  });
+
   it('Gate 2 adapter restores the binding transaction generic RLS context after its authoritative read', async () => {
     const f=await createParticipationFixture(
       h,'identity-context-restore',{target:'member',ageBand:'MINOR_14_17'}
