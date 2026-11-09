@@ -17,10 +17,19 @@ const validEnv = {
 };
 
 describe('Slice 4 participation environment', () => {
-  it('accepts required positive TTL and >=32 character token secret', () => {
+  it('accepts required positive TTL and >=32-byte token secret', () => {
     const parsed = validateEnv(validEnv);
     expect(parsed.PARTICIPATION_INVITE_TTL_SECONDS).toBe(86400);
     expect(parsed.PARTICIPATION_INVITE_TOKEN_SECRET).toBe(validEnv.PARTICIPATION_INVITE_TOKEN_SECRET);
+  });
+
+  it('accepts multibyte secrets by UTF-8 byte length, not JS character count', () => {
+    const multibyte = '密'.repeat(11); // 33 UTF-8 bytes, 11 JS characters.
+    const parsed = validateEnv({
+      ...validEnv,
+      PARTICIPATION_INVITE_TOKEN_SECRET: multibyte,
+    });
+    expect(parsed.PARTICIPATION_INVITE_TOKEN_SECRET).toBe(multibyte);
   });
 
   it('has no defaults: each participation setting is required', () => {
@@ -36,7 +45,7 @@ describe('Slice 4 participation environment', () => {
     });
   }
 
-  it('rejects token secrets shorter than 32 characters', () => {
+  it('rejects token secrets shorter than 32 bytes', () => {
     expect(() => validateEnv({
       ...validEnv,
       PARTICIPATION_INVITE_TOKEN_SECRET: 'short-secret',
