@@ -459,59 +459,6 @@ export async function setFamilyContext(
   await tx.query('SELECT app.set_family_context($1, $2, $3)', [familyId, personId, purpose]);
 }
 
-/**
- * Narrow bridge for cross-slice adapters that need one Family-scoped query
- * inside a transaction owned by another context framework (for example the
- * Slice 006 binding commit). The generic Family/Person/Purpose settings are
- * restored before control returns, so they cannot widen later RLS visibility.
- *
- * Callback failures keep their original error. Restoration is best-effort in
- * that path because a SQL error may already have aborted the transaction.
- */
-export async function withTemporaryFamilyContext<T>(
-  tx: TxClient,
-  opts: { familyId: string; personId: string; purpose: string },
-  fn: () => Promise<T>
-): Promise<T> {
-  const { rows } = await tx.query<{
-    family_id: string;
-    person_id: string;
-    purpose: string;
-  }>(
-    `SELECT
-       COALESCE(current_setting('app.family_id', true), '') AS family_id,
-       COALESCE(current_setting('app.person_id', true), '') AS person_id,
-       COALESCE(current_setting('app.purpose', true), '') AS purpose`
-  );
-  const previous = rows[0] ?? { family_id: '', person_id: '', purpose: '' };
-
-  const restore = async () => {
-    await tx.query(
-      `SELECT
-         set_config('app.family_id', $1, true),
-         set_config('app.person_id', $2, true),
-         set_config('app.purpose', $3, true)`,
-      [previous.family_id, previous.person_id, previous.purpose]
-    );
-  };
-
-  await setFamilyContext(tx, opts.familyId, opts.personId, opts.purpose);
-  try {
-    const result = await fn();
-    await restore();
-    return result;
-  } catch (originalError) {
-    try {
-      await restore();
-    } catch {
-      // A SQL failure may already have aborted the transaction. Preserve the
-      // original callback failure; the owning wrapper will roll back.
-    }
-    throw originalError;
-  }
-}
-
-
 // ── Slice 4 participation invitation context ────────────────
 
 export async function setInviteTokenContext(
@@ -519,42 +466,6 @@ export async function setInviteTokenContext(
   tokenHash: string
 ): Promise<void> {
   await tx.query('SELECT app.set_invite_token_context($1)', [tokenHash]);
-}
-
-/**
- * Borrow the invitation-token RLS capability for one controlled query inside
- * a transaction owned by another subsystem, then restore its previous value.
- */
-export async function withTemporaryInviteTokenContext<T>(
-  tx: TxClient,
-  tokenHash: string,
-  fn: () => Promise<T>
-): Promise<T> {
-  const { rows } = await tx.query<{ token_hash: string }>(
-    `SELECT COALESCE(current_setting('app.invite_token_hash', true), '') AS token_hash`
-  );
-  const previous = rows[0]?.token_hash ?? '';
-
-  const restore = async () => {
-    await tx.query(
-      `SELECT set_config('app.invite_token_hash', $1, true)`,
-      [previous]
-    );
-  };
-
-  await setInviteTokenContext(tx, tokenHash);
-  try {
-    const result = await fn();
-    await restore();
-    return result;
-  } catch (originalError) {
-    try {
-      await restore();
-    } catch {
-      // Preserve the original error if SQL already aborted the transaction.
-    }
-    throw originalError;
-  }
 }
 
 /**
