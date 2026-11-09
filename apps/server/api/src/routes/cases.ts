@@ -44,7 +44,7 @@ import {
 import { withIdentityTransaction, withRlsTransaction } from '../db/tx.js';
 import { requireCurrentFamily } from '../family-context.js';
 import { readIdempotencyKey } from '../idempotency.js';
-import { requireFamilyAction } from '../authz.js';
+import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import type pg from 'pg';
 
@@ -174,7 +174,13 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
                 purpose: 'FAMILY_MANAGEMENT',
                 resource: { type: 'FAMILY', familyId },
               });
-            } catch {
+            } catch (err) {
+              // Only an explicit business denial (denyToError) maps to the
+              // frozen 403. Unknown infrastructure failures — PostgreSQL
+              // 57014 / 42501, connection loss, unexpected error — MUST
+              // propagate so the global handler answers generic 500 and the
+              // redacted unexpected-error log runs.
+              if (!isKnownAuthorizationDenial(err)) throw err;
               // Family resolved but actor is not the V1 management subject.
               throw httpError('CASE_ACCESS_DENIED', 'Case access denied');
             }
@@ -355,7 +361,11 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
                 purpose: 'FAMILY_MANAGEMENT',
                 resource: { type: 'FAMILY', familyId },
               });
-            } catch {
+            } catch (err) {
+              // Only an explicit business denial (denyToError) maps to the
+              // frozen 403. Unknown infrastructure failures propagate to the
+              // generic 500 handler.
+              if (!isKnownAuthorizationDenial(err)) throw err;
               // Family resolved but actor is not the V1 management subject.
               throw httpError('CASE_ACCESS_DENIED', 'Case access denied');
             }
@@ -428,7 +438,11 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
                 resource: { type: 'CASE', familyId, caseId },
                 caseId,
               });
-            } catch {
+            } catch (err) {
+              // Only an explicit business denial maps to the anti-enumeration
+              // 404. Unknown infrastructure failures must not be reported as
+              // "Case not found": they propagate to the generic 500 handler.
+              if (!isKnownAuthorizationDenial(err)) throw err;
               // Anti-enumeration: "no access", "malformed id" and "does not
               // exist" are the same 404 body.
               throw httpError('CASE_NOT_FOUND', 'Case not found');
