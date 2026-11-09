@@ -19,7 +19,7 @@
 
 ## Ultimate Audit Targeted Plan / Contract Remediation Overlay（2026-11-09）
 
-Ultimate Final Independent Re-audit at f96bc945 判定 H-01 / H-02 / M-01—M-06 未关闭。本文件不再保留“94 checked / 26 remediation-open”作为当前事实；所有受新合同实质影响的 task 必须重新 unchecked，开发必须先 RED → minimal remediation → targeted GREEN → aggregate GREEN。
+Ultimate Final Independent Re-audit at f96bc945 判定 H-01 / H-02 / M-01—M-06 未关闭。任何旧 remediation count 均不再作为当前事实；当前唯一数字事实是 58 checked / 62 reopened / T121–T124 blocked。所有受新合同实质影响的 task 必须保持当前真实 checkbox，未来开发必须先 RED → minimal remediation → targeted GREEN → aggregate GREEN。
 
 H-01 authoritative pairing 已从 S0/S1 delta 改为 server-generated candidate-presented one-time pairing challenge；原 S0/S1 / exact-one-delta acceptance 全部失效。Security Decision A 同时冻结：intentional realtime relay / collusion by authenticated candidate **OUT OF SCOPE FOR V1**，不得继续作为 blocking acceptance；pairingChallenge possession alone仍不是identity proof。HTTP surface仍为6条，但 confirmer decision由 :attemptId path 改为 /pairing-decision，candidate AFFIRM response增加固定192-char base64url pairingChallenge。
 
@@ -308,7 +308,7 @@ Phase 15 late closeout（不 gate Phase 1–14）— 等待 Slice 4 runtime；T1
 | T001—T120 reopened by H-01/H-02/M-01—M-06 | 62 |
 | T121—T124 | 4，全部 BLOCKED BY SLICE 4 RUNTIME |
 
-不得用旧“94/26/4”数字替代当前checkbox事实。reopened task只有开发完成新的RED→FIX→GREEN及对应proof后才能重新勾选。
+不得用任何旧 remediation count 替代当前 checkbox 事实。reopened task只有开发完成新的RED→FIX→GREEN及对应proof后才能重新勾选。
 
 **`[P]` 任务（8 个，全部为纯 domain 单元测试，不同文件）**：T018、T020、T022、T024、T027、T029、T041、T045。
 
