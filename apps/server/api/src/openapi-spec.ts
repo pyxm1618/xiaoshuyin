@@ -516,8 +516,8 @@ export function buildOpenApiDocument() {
           '409': jsonResponse('Already exists / current-family ambiguity / idempotency mismatch', {
             oneOf: [
               ref('ParticipationAlreadyExistsError'),
-              ref('CurrentFamilyAmbiguousError'),
               ref('IdempotencyPayloadMismatchError'),
+              ref('CurrentFamilyAmbiguousError'),
             ],
           }),
           '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
