@@ -13,6 +13,7 @@ import {
   confirmerDecision,
   type BindingHarness,
 } from '../setup/identity-binding.js';
+import { deriveIdentityDigest } from '../../apps/server/api/src/identity-binding/crypto.js';
 
 describe('identity binding audit', () => {
   let h: BindingHarness;
@@ -69,16 +70,22 @@ describe('identity binding audit', () => {
 
   it('Phase A blocks have no target person / family / invitation association', async () => {
     const target = await createTarget(h, 'audit_block', { ageBand: 'ADULT' });
-    const res = await bootstrap(h, target.invitationToken, `audit_block_${Date.now()}`);
+    const code = `audit_block_${Date.now()}`;
+    const res = await bootstrap(h, target.invitationToken, code);
     expect(res.statusCode).toBe(200);
     expect(res.json().binding).toBe('NOT_COMPLETED');
 
+    const digest = deriveIdentityDigest(
+      process.env['IDENTITY_BINDING_SECRET']!,
+      `fake_${code}`
+    );
     const { rows } = await h.admin.query(
       `SELECT target_person_id, target_family_id, invitation_participation_id,
               terminal_reason, candidate_identity_digest
        FROM identity_binding_audit_events
-       WHERE event_type = 'BINDING_GATE1_BLOCKED'
-       ORDER BY occurred_at DESC LIMIT 1`
+       WHERE event_type = 'BINDING_GATE1_BLOCKED' AND candidate_identity_digest = $1
+       ORDER BY occurred_at DESC LIMIT 1`,
+      [digest]
     );
     expect(rows[0].target_person_id).toBeNull();
     expect(rows[0].target_family_id).toBeNull();
@@ -88,13 +95,19 @@ describe('identity binding audit', () => {
   });
 
   it('invalid invitation is audited without target association', async () => {
-    const res = await bootstrap(h, `missing_${Date.now()}`, `audit_inv_${Date.now()}`);
+    const code = `audit_inv_${Date.now()}`;
+    const res = await bootstrap(h, `missing_${Date.now()}`, code);
     expect(res.statusCode).toBe(200);
+    const digest = deriveIdentityDigest(
+      process.env['IDENTITY_BINDING_SECRET']!,
+      `fake_${code}`
+    );
     const { rows } = await h.admin.query(
       `SELECT target_person_id, target_family_id, invitation_participation_id, terminal_reason
        FROM identity_binding_audit_events
-       WHERE event_type = 'BINDING_GATE1_BLOCKED'
-       ORDER BY occurred_at DESC LIMIT 1`
+       WHERE event_type = 'BINDING_GATE1_BLOCKED' AND candidate_identity_digest = $1
+       ORDER BY occurred_at DESC LIMIT 1`,
+      [digest]
     );
     expect(rows[0]).toEqual({
       target_person_id: null,

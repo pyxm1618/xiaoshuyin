@@ -1,5 +1,5 @@
 # T067 — Database / RLS / Migration Evidence
-生成时间: 2026-11-09T04:22:01.576Z
+生成时间: 2026-11-09T04:24:19.600Z
 
 说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
 空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
@@ -130,15 +130,15 @@
   $ bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts
     RUN  v3.2.7 ~/Projects/xiaoshuyin-006-security-decision-a-implementation
     
-     ✓ tests/db/migration-repro.test.ts (7 tests) 55ms
-     ✓ tests/db/roles.test.ts (9 tests) 74ms
+     ✓ tests/db/migration-repro.test.ts (7 tests) 50ms
+     ✓ tests/db/roles.test.ts (9 tests) 68ms
     
      Test Files  2 passed (2)
           Tests  16 passed (16)
-       Start at  12:22:02
-       Duration  214ms (transform 23ms, setup 12ms, collect 37ms, tests 129ms, environment 0ms, prepare 64ms)
+       Start at  12:24:20
+       Duration  221ms (transform 23ms, setup 12ms, collect 41ms, tests 118ms, environment 0ms, prepare 63ms)
     
-    (node:69965) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+    (node:73473) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
     (Use `node --trace-deprecation ...` to show where the warning was created)
 | T011 migration-repro + T012 roles exit code | 0 | 0 | PASS |
 | T011/T012 测试全绿 | true | true | PASS |
