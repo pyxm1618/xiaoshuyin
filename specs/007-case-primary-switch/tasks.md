@@ -296,9 +296,22 @@
 | `origin/main`（Implement 时） | `6af4ce87762abbdfd1a38c95616c9cc92d9d4776` |
 | Slice 2 final head | PR #17 head `0c01c4db709628660086fba6b409a840ea973ae4`（merge commit `6af4ce8`；PR #14 `f4ef6026` 亦为祖先） |
 | 迁移文件名 | `db/migrations/005_case_primary_switch.sql` |
-| `has_table_privilege('cases','UPDATE')` 实测 | `false`；`has_column_privilege` `is_primary`/`version`/`updated_at` = `true`，`status` = `false`（005 列级 GRANT，upgrade 库实测） |
-| 全量回归结果 | 164 files / 1079 tests / 0 failed / 0 skipped；`verify-all` 36 PASS / 0 FAIL / NOT VERIFIED 0 / provenance PASS |
-| FR / Acceptance 覆盖 | FR-001–FR-020 全覆盖（新建 14 个 direct test 文件 + 既有收窄断言）；Acceptance 1–23 全覆盖 |
+| `has_table_privilege('cases','UPDATE')` 实测 | `false`；`has_column_privilege` `is_primary`/`version`/`updated_at` = `true`，`id`/`family_id`/`created_by_person_id`/`status`/`phase`/`created_at` = `false`（005 列级 GRANT，fresh + upgrade 库实测） |
+| 全量回归结果 | 166 files / 1089 tests / 0 failed / 0 skipped；`verify-all` 36 PASS / 0 FAIL / NOT VERIFIED 0 / provenance PASS（fresh DB，Final Head） |
+| FR / Acceptance 覆盖 | FR-001–FR-020 全覆盖（新建 15 个 direct test 文件 + 既有收窄断言）；Acceptance 1–23 全覆盖 |
+
+### Post-Audit Remediation（2026-11-09）
+
+| 项 | 结论 / 证据 |
+|---|---|
+| Remediation Base | `96ce56c9caa3ef23b8a58fdd9979d28754dba397`（`origin/main` = `6af4ce8`） |
+| **S7-H01** Business audit metadata | CLOSED。`CASE_PRIMARY_SWITCHED.metadata` 恰为 `{targetCaseId, previousPrimaryCaseId, newPrimaryCaseId, previousVersion, newVersion, reason}`；`previousVersion` / `newVersion` 取自两侧 `UPDATE ... RETURNING`；晋升分支为 `null`。`insertPrimarySwitchAudit` 共用 `buildSwitchAuditMetadata` 单一事实源 |
+| **S7-H02** 测试落地 | CLOSED。H02-A `tests/db/roles.test.ts` 新增表级 UPDATE=false + 六列否定 / 三列正向 + `case_events` 表/列级 append-only；H02-B `tests/integration/case-primary-switch-happy.test.ts` 真实读取 `business_audit_events` 逐字段断言（含 promotion nullable）；H02-C 新增 `tests/integration/case-primary-switch-authorization-fault.test.ts`（真实 `57014` → 500，known denial → 404） |
+| **S7-M01** 确定性锁顺序 | CLOSED。`lockCasesForSwitchPrimary` 收集 → 去重 → 升序 → 单一 `WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`，路由不再调用逐行双锁；`tests/db/case-primary-switch-concurrency.test.ts` 用 `pg_blocking_pids` 机械证明小 id 先被持有，`tests/domain/case-primary-switch-lock-order.test.ts` 固定实现形状 |
+| Audit 幂等 / 原子性 | 重放后 `CASE_PRIMARY_SWITCHED` 计数仍为 1；审计写失败注入后 audit count delta = 0、事件 / 版本 / 幂等占位全部回滚 |
+| Targeted tests | 17 files / 98 tests PASS（含 roles、happy、authorization、authorization-fault、concurrency、atomicity、idempotency、schema、rls、scope、openapi、domain） |
+| Migration 三态 | fresh（6 APPLY）→ replay（0 new，全 SKIP）→ upgrade（001–003 已应用后仅 APPLY 004×2 + 005）：`db-evidence` PASS |
+| Frozen drift | `git diff 96ce56c..HEAD -- Docs specs/007-case-primary-switch/spec.md specs/007-case-primary-switch/plan.md` 为空 |
 
 ---
 
