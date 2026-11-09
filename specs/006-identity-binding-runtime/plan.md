@@ -74,7 +74,7 @@
 
 ## Constitution Check
 
-- **Spec 治理**：本 Plan 不修改 `Docs/**`、`specs/001~005/**`、`spec.md`。`Docs/**` diff 必须为 0。
+- **Spec 治理**：本次 **Decision A upstream contract remediation** 被明确授权修改 `Docs/**`、005、006 Spec、Plan / Tasks / Checklist / handwritten OpenAPI，仅用于冻结 threat boundary 与已知 Plan findings；从本 remediation final head 起，后续 Implement 不得再自行改写这些上游语义。
 - **切片刻度**：006 不实现 Slice 2 / 3 / 4 的业务；只消费 Slice 4 合同与 Slice 1 基线。
 - **冻结语义**：Phase 顺序、Case B/C、Age Matrix、PENDING 边界、no-P2、anti-enumeration、invitation 生命周期归属全部原样保留。
 - **验证证据**：每个 Task 必须有可执行验证；不能以「设计存在」代替「代码真实可用」。
@@ -84,7 +84,7 @@
 
 ## Ultimate Audit Targeted Plan / Contract Remediation（H-01 / H-02 / M-01—M-06）
 
-本节是 failed Head f96bc94538212d74edcf46a53962114e8cfb88a5 的 Ultimate Final Independent Re-audit 之后的 authoritative remediation overlay。它取代上一轮 F-01—F-08 overlay 中已被 Ultimate Audit 推翻的 pairing / concurrency / cleanup / verification 口径；不重新 Specify / Clarify，不改 Docs / 005 / 006 Spec，不扩展普通 Auth、Family、Invitation、Participant、Case、Evidence 或 UI。
+本节是 failed Head f96bc94538212d74edcf46a53962114e8cfb88a5 的 Ultimate Final Independent Re-audit 之后的 authoritative remediation overlay，并已由上游产品负责人通过 **Security Decision A** 补充 threat model。它取代上一轮 F-01—F-08 overlay 中已被 Ultimate Audit 推翻的 pairing / concurrency / cleanup / verification 口径；本轮只做经授权的 Docs / 005 / 006 Spec / Plan / Tasks / Checklist / handwritten OpenAPI contract remediation，不扩展普通 Auth、Family、Invitation、Participant、Case、Evidence 或 UI，也不进入 production implementation。
 
 | Finding | 冻结 contract | 主要 reopen tasks | Checklist | OpenAPI |
 |---|---|---|---|---|
@@ -98,6 +98,8 @@
 | M-06 verify-all provenance | D-19.6 / Verification Plan | T118、T120 | CHK202 | NO |
 
 ### H-01 — root cause and replacement pairing contract
+
+**Decision A threat boundary**：Slice 5 V1 不要求检测或阻断 authenticated candidate 主动与第三人串通实施的 intentional realtime relay / intentional challenge forwarding / collusive presenter substitution。该排除项不得被当作 pairing possession 即 identity proof；confirmer 仍必须独立认证、亲自辨认现场 candidate，并确认眼前被辨认的人正在使用 / 展示其本人当前 authenticated binding session 的 pairing material。pairingChallenge possession itself **IS NOT identity proof**。
 
 上一轮 S0 → fresh bootstrap → S1 → |S1-S0|=1 机制废止。它只能证明时间窗口内出现了唯一新 attempt，不能证明该 attempt 的 authenticated candidate 就是 confirmer 现场辨认的人；pending-list delta、createdAt、attemptId、invitation possession 均不得作为 recognition→identity proof。
 
@@ -114,7 +116,7 @@
 9. Invalid / expired / consumed / wrong-P1 / wrong-invitation / wrong-candidate / wrong-attempt challenge 对 confirmer 统一 404 BINDING_NOT_FOUND，零 confirmation / state / binding mutation。existing operation-key mismatch仍为 409 IDEMPOTENCY_PAYLOAD_MISMATCH。
 10. Candidate anti-enumeration：对语法合法且 binding context 仍可用的 AFFIRM，response shape 固定为 { binding: NOT_COMPLETED, pairingChallenge: opaque }。若 current eligibility 已失效、attempt settled 或其它 hidden business reason 不能发行 valid challenge，则返回同形状、不可解析到 live attempt 的 decoy challenge。REJECT/CANCEL 仍返回 { binding: NOT_COMPLETED }；该差异来自 candidate 自己的 decision，不来自 hidden fact。
 
-原攻击重新判定：现场 candidate 因冲突等原因未形成/维持合法 attempt，则不会拥有可被服务器解析为 live exact attempt 的 valid challenge；远端攻击者即使凭同 invitation 建立自己的 attempt，也只会得到自己的 challenge。confirmer 不再从 pending delta 选择“唯一新增 attempt”，而只提交现场被辨认 candidate 设备展示的 challenge。因此攻击者不能仅凭 invitation + timing 抢占 recognition；现场 candidate 的 invalid/decoy challenge在 confirmer side fail closed，binding = 0。
+H-01 的 V1 acceptance 只覆盖**非串通攻击**：攻击者不能仅凭 same invitation、timing、pending-list position、attemptId、createdAt、自己的 unrelated challenge、wrong P1、wrong identity、wrong invitation 或 replay 抢占 recognition / binding。服务端必须验证 exact challenge ↔ current issuance ↔ authenticated identity/context/attempt/P1/invitation；不匹配一律 fail closed。**authenticated candidate 主动把其当前 valid challenge 实时转发给另一现场 presenter 的 intentional realtime relay / collusion，不是 Slice 5 V1 required fail-closed acceptance case**；不得再用“attacker challenge 未由 onsite candidate 展示”作为 H-01 blocking test premise。
 
 ### H-02 — Gate2 authoritative concurrency / linearization contract
 
@@ -413,15 +415,18 @@ Pairing challenge是H-01最小authenticated binding material，不新增Person /
 - generator：server only。
 - issuance：candidate AFFIRM经D-8.5 current eligibility PASS后。
 - delivery：只返回candidate自己的candidate-decision response；candidate现场主动展示/传递给confirmer。
-- cryptographic binding至少认证 context_id + candidate_identity_digest + attempt_id + target_person_id + invitation_participation_id + pairing_expires_at；外部表示opaque，不可读出这些字段。
-- construction使用IDENTITY_BINDING_SECRET的domain-separated MAC/AEAD或等价authenticated construction，effective security至少128 bits。raw challenge不持久化、不写audit/log；服务器从authenticated material解析/验证locator并回读authoritative rows。
-- issuance state只在exact candidate context上持久化 pairing_issued_at + pairing_expires_at；raw challenge不落库。pairing_expires_at = min(pairing_issued_at + IDENTITY_BINDING_PAIRING_TTL_SECONDS, context.expires_at, attempt.expires_at)。
-- 若当前issuance仍未过期且尚无SECOND_PARTY confirmation，same/repeated AFFIRM只重建/返回同一authenticated challenge语义，不延长pairing_expires_at、不重复candidate confirmation。
-- 若pairing_expires_at已过期，但context/attempt仍live、无SECOND_PARTY confirmation且D-8.5重新PASS，则新的合法AFFIRM operation可以原子更新pairing_issued_at/pairing_expires_at并发行新challenge；old challenge因issuance timestamp不再匹配current context而失效。该rotation不得延长context或attempt本身。
-- valid only while：token-bound issuance timestamps等于context current issuance，context/attempt/P1/invitation/identity mapping一致，candidate confirmation存在，attempt PENDING且未过期，且无SECOND_PARTY confirmation。
-- single-use semantic：SECOND_PARTY confirmation存在或attempt settled后，challenge不能作为新的business operation再次使用；same idempotency replay只回读原operation。
-- decoy：candidate hidden failure返回同格式material，但不得解析到live attempt；confirmer side统一404、零mutation。
+- cryptographic binding至少认证 context_id + candidate_identity_digest + attempt_id + target_person_id + invitation_participation_id + pairing_issued_at + pairing_expires_at；外部表示opaque，不可读出这些字段。
+- construction使用IDENTITY_BINDING_SECRET的domain-separated authenticated construction，effective authentication security至少128 bits。domain separation string固定为 `xiaoshuyin:identity-binding:pairing:v1`（或密码学等价的固定 domain tag）；不得复用 pending-context token domain。
+- **唯一 external representation**：un-padded base64url，alphabet 仅 `A-Z a-z 0-9 _ -`，**exact length = 192 ASCII characters**，regex `^[A-Za-z0-9_-]{192}$`。valid 与 decoy MUST 使用完全相同的 encoding、exact length、alphabet、response key、HTTP 200、`application/json` content type 与 structural validation；candidate response不得暴露 expiry metadata。
+- 192-character representation 对应固定 144-byte authenticated envelope。具体 primitive 可由 Implement 选择等价的 AEAD / encrypt-then-MAC construction，但 envelope MUST fixed-width；若使用 nonce，nonce / equivalent issuance replay material 必须由 server 生成并作为**最小 replay material**随 issuance state 持久化或可确定性重建。raw challenge plaintext/string仍不得写 audit/log。
+- pairing_expires_at = min(pairing_issued_at + IDENTITY_BINDING_PAIRING_TTL_SECONDS, context.expires_at, attempt.expires_at)；issuance state 必须能够唯一标识当前 issuance，rotation 时必须产生新的 issuance identity/material。
+- **operation-authoritative replay output**：same candidate AFFIRM + same idempotency key + same issuance MUST return the **exact authoritative original pairingChallenge bytes**。不得重新随机生成“语义相同但 bytes 不同”的 challenge。当前 issuance 未过期且尚无 SECOND_PARTY confirmation 时，repeated AFFIRM 必须复用当前 issuance 并重建/返回同一 192-byte-string output，不延长 expiry、不重复 candidate confirmation。
+- **rotation**：pairing_expires_at 已过期但 context/attempt仍live、无SECOND_PARTY confirmation且D-8.5重新PASS时，新的合法 AFFIRM operation原子创建 new issuance；new issuance MUST produce different pairingChallenge bytes。old challenge因不再等于 current issuance而失效；rotation不得延长context或attempt本身。
+- valid only while：token-bound issuance identity/timestamps等于context current issuance，context/attempt/P1/invitation/identity mapping一致，candidate confirmation存在，attempt PENDING且未过期，且无SECOND_PARTY confirmation。
+- single-use semantic：SECOND_PARTY confirmation存在或attempt settled后，challenge不能作为新的business operation再次使用；same idempotency replay只回读原operation authoritative outcome。
+- **decoy**：hidden business failure MUST 使用同一 fixed-width serializer / authenticated-envelope shape 生成 192-char base64url material，但该 material不得解析到live attempt。valid/decoy不得有 intentionally designed fast/slow discriminator；不要求证明绝对 constant-time network behavior，但不得故意通过不同业务分支、不同serializer或人工 fast/slow path 创建明显 timing oracle。confirmer side统一404、零mutation。
 - challenge possession不等于identity proof，必须与独立confirmer authentication + human recognition + target confirmation共同成立。
+- Decision A：authenticated candidate 主动把 current valid challenge 实时 relay 给 collusive onsite presenter 的场景不在 V1 抵抗范围；这不改变上述 protocol integrity 与 confirmer responsibility。
 
 ---
 
@@ -534,7 +539,7 @@ CREATE TABLE binding_operation_keys (
 | same key + same payload（未 settled） | 返回当前 attempt 状态；无重复副作用；不创建第二 attempt / 第二 confirmation / 第二次 commit |
 | same key + same payload（已 settled） | 返回历史 settled outcome；不重新执行 commit；不改 outcome |
 | same key + different payload | 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；不改原 attempt / 原结果 |
-| `SECOND_PARTY_DECISION` same key、pairing challenge A→B | canonical request hash覆盖 pairingChallenge（或其canonical digest）与decision fields；key已map A而新challenge解析B → 409 fail-closed；B零mutation；existing operation.attempt_id仍authoritative A |
+| `SECOND_PARTY_DECISION` same key、pairing challenge A→B | canonical request hash MUST覆盖 `SHA-256(exact received pairingChallenge ASCII bytes)` 与全部 decision fields；192-char unpadded base64url 已是唯一 canonical external representation，禁止 decode→re-encode 或其它别名 canonicalization。key已map A而new issuance/challenge B产生不同bytes/digest → 409 fail-closed；B零mutation；existing operation.attempt_id仍authoritative A |
 | same key concurrent | 事务级 advisory lock（`pg_advisory_xact_lock(hashtextextended(scope, key))`）+ 唯一约束；第二个等待后重读，只产生一个业务结果 |
 | different key + same semantic operation，已有 PENDING attempt | 收敛到同一 attempt（部分唯一索引 + `SELECT ... FOR UPDATE`）；不创建第二个 live attempt |
 | different key + same semantic operation，旧 attempt terminal 且 invitation valid | 允许 new attempt；new attempt 是 new identity；旧 attempt replay 仍返回旧结果 |
@@ -549,7 +554,7 @@ CREATE TABLE binding_operation_keys (
 - `binding_operation_keys.attempt_id` 可以为 NULL（Gate 1 阻断 / invalid invitation 的 bootstrap）；一旦绑定 attempt，映射不可改。
 - operation key 不表达 attempt 状态；attempt state 只在 `binding_attempts.state`。
 - replay 的 attempt 选择来自 existing operation 的 **authoritative `attempt_id`**，不是当前 URL、latest attempt 或 same-triple lookup。
-- `SECOND_PARTY_DECISION` canonical request hash MUST覆盖 pairingChallenge（或其canonical digest）与全部decision fields；challenge解析出的exact attempt必须与existing operation.attempt_id一致。old key A + challenge resolving B = 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；B不得被读取后推进、确认、terminalize或commit。same-key / same-request replay A 始终只回读 A。
+- `SECOND_PARTY_DECISION` canonical request hash MUST覆盖 `SHA-256(exact received pairingChallenge ASCII bytes)` 与全部decision fields。因为 external representation 唯一固定为 192-char unpadded base64url，same bytes → same digest；rotation/new issuance → different bytes → different digest。challenge解析出的exact attempt必须与existing operation.attempt_id一致。old key A + new challenge B = 409 `IDEMPOTENCY_PAYLOAD_MISMATCH`；B不得被读取后推进、确认、terminalize或commit。same-key / same-request replay A 始终只回读 A。
 
 ---
 
@@ -789,9 +794,9 @@ Candidate AFFIRM是Phase B推进点，不得沿用bootstrap时的eligibility sna
 
 ### D-9.4 确认命题
 
-- `target confirmation + candidate recognition` 同时为 true 才允许 affirm。
-- `candidateRecognized=false` 或 `targetConfirmed=false` 是 explicit rejection → attempt `TERMINAL` `RECOGNITION_REJECTED` / `CONFIRMER_REJECTED`，不写 affirmative confirmation。
-- 无法独立辨认 → confirmer 必须选择 REJECT；不得以 Family membership / manager role / verified_source / 昵称自动 confirm。
+- AFFIRM 只有一个合法语义：`targetConfirmed=true` AND `candidateRecognized=true` AND `confirmationVersion=second-party-recognition-v1`；三者全部 required。
+- REJECT 也只有一个合法语义：`targetConfirmed=false` AND `candidateRecognized=false` AND `confirmationVersion=second-party-recognition-v1`；三者全部 required。REJECT + true/true、true/false、false/true 均为 schema/semantic invalid → 422，不得产生 attempt mutation。
+- 无法独立辨认、无法确认眼前 candidate 正在使用/展示其本人当前 authenticated binding session material、或不愿作出完整 affirmative proposition → confirmer 必须选择上述 canonical REJECT；不得以 Family membership / manager role / verified_source / 昵称自动 confirm。
 - **不允许 second-party 在 affirmative 后撤销**：一旦 `binding_confirmations (SECOND_PARTY)` 已存在，后续 REJECT → `409 BINDING_STATE_CONFLICT`，不改变 attempt，不删除 / 覆盖 confirmation。Candidate 在 PENDING 期间仍可 REJECT / CANCEL；attempt 转 TERMINAL，但已记录的 candidate confirmation 不被删除。该决定不使用 Spec 保留给 Plan 的「commit 前明确撤销」选项，保持 affirmative 为历史事实。
 - confirmation 不等于 Consent；不写 `consent_records`。
 
@@ -831,7 +836,7 @@ AFFIRM response：所有hidden business outcomes使用固定shape { binding: NOT
 - AFFIRM omitted/null/wrong confirmationVersion → 422。
 - REJECT/CANCEL必须omit confirmationVersion；显式null或present value → 422；response仍为 { binding: NOT_COMPLETED }。
 - valid challenge只能在D-8.5 current eligibility PASS后发行；不得泄露P1 / identity / attempt / invitation。
-- challenge replay不得延长expiry；expired后只有仍合法attempt/context并重新current eligibility PASS才可取得新valid challenge。
+- same candidate AFFIRM + same idempotency key + same issuance MUST replay the exact original 192-character pairingChallenge bytes；不得重新随机生成。challenge replay不得延长expiry；expired后只有仍合法attempt/context并重新current eligibility PASS才可创建new issuance并取得different bytes的新valid challenge。
 - 401只用于binding context credential本身无效/过期；hidden business eligibility仍是200 fixed shape。
 
 #### 3. Status
@@ -848,18 +853,15 @@ AFFIRM response：所有hidden business outcomes使用固定shape { binding: NOT
 
 #### 6. Pairing decision
 
-Request fields：
-- personId
-- pairingChallenge
-- decision = AFFIRM | REJECT
-- targetConfirmed
-- candidateRecognized
-- confirmationVersion = second-party-recognition-v1
-- idempotencyKey
+Request 是 decision-discriminated strict union：
+
+- **AFFIRM**：personId、pairingChallenge、decision=AFFIRM、targetConfirmed=true、candidateRecognized=true、confirmationVersion=second-party-recognition-v1、idempotencyKey；全部 required，additional fields forbidden。
+- **REJECT**：personId、pairingChallenge、decision=REJECT、targetConfirmed=false、candidateRecognized=false、confirmationVersion=second-party-recognition-v1、idempotencyKey；全部 required，additional fields forbidden。
+- pairingChallenge 必须是 exact 192-character unpadded base64url representation；其它长度、padding、alphabet或格式 → 422 structural validation。
 
 Contract：
-- server在authenticated confirmer context下解析personId authority，再验证challenge，并从challenge解析 exact context/identity/attempt/P1/invitation；personId必须等于challenge-bound P1。
-- AFFIRM要求targetConfirmed=true且candidateRecognized=true。REJECT表达无法辨认/不确认，也必须提交exact challenge才可作用到对应attempt。
+- server在authenticated confirmer context下解析personId authority，再验证challenge，并从challenge解析 exact context/identity/attempt/P1/invitation/current issuance；personId必须等于challenge-bound P1。
+- AFFIRM / REJECT semantic booleans 由上述 strict union唯一表达；REJECT不能携带 true/true 或任何 mixed boolean combination。
 - valid challenge + authority + current attempt consistency才允许写second-party confirmation或terminal decision。
 - invalid / expired / consumed / mismatched challenge、wrong P1/invitation/candidate/attempt、unauthorized confirmer统一404 BINDING_NOT_FOUND，零mutation。
 - same operation key + exact same request replay读取mapped authoritative attempt outcome；same key + different challenge/payload → 409 IDEMPOTENCY_PAYLOAD_MISMATCH。
@@ -1346,16 +1348,16 @@ participation invitation 打开
 
 不得降级为unit mock：
 
-1. H-01 original attack：onsite candidate不能形成/维持valid pairing；attacker同invitation建立live attempt；attacker challenge未由onsite recognized candidate展示；confirmer提交onsite candidate material → 404/0 mutation；pending list唯一新attempt不得被自动选中。
-2. H-01 exact binding：challenge A用于B attempt/P1/invitation/candidate identity全部fail closed；attemptId/pending-list不能替代challenge。
-3. H-01 replay/expiry/concurrency：expired/consumed challenge 0 mutation；same idempotency replay stable；two confirmer race最多一份SECOND_PARTY confirmation/一次commit；two candidates挑战不串线。
+1. H-01 non-collusive attacker matrix：攻击者不能仅凭 same invitation、timing、pending-list position、attemptId、createdAt 或自己的 unrelated challenge 赢得 pairing；wrong P1 / wrong identity / wrong invitation / wrong attempt / replay 全部 404/0 mutation，pending list不得自动选择 attempt。**intentional realtime relay / collusion by the authenticated candidate is explicitly out of scope and MUST NOT be used as a required fail-closed test premise。**
+2. H-01 exact binding：challenge A用于B attempt/P1/invitation/candidate identity/current issuance全部fail closed；attemptId/pending-list不能替代challenge；pairingChallenge possession alone不是identity proof，confirmer responsibility仍包含independent auth + personal recognition + target confirmation。
+3. H-01 replay/expiry/concurrency：same candidate AFFIRM + same key + same issuance exact bytes相等；rotation bytes/digest不同；old challenge失效；expired/consumed challenge 0 mutation；old key + rotated challenge → 409 IDEMPOTENCY_PAYLOAD_MISMATCH；two confirmer race最多一份SECOND_PARTY confirmation/一次commit；two candidates挑战不串线。
 4. H-02 runtime-role barrier matrix：profile/age-band、consent、guardian、membership/authority、invitation、P1 binding conflict及candidate-account conflict逐类barrier；invalidating mutation在线性化上先成立 → no commit。必须证明xiaoshuyin_app下锁/版本/serialization真实生效。
 5. M-01：至少 consent revoked after bootstrap before candidate AFFIRM → TERMINAL、candidate confirmation +0、valid pairing +0、terminal audit=1、all contexts scrub、candidate fixed AFFIRM shape；其余dynamic facts按同一矩阵。
 6. M-02：COMMITTED replay、TERMINAL replay、pre-attempt replay、Case B REUSED replay的fresh context三secret columns全部NULL。
 7. M-03：status materializes expired attempt with >=2 contexts → terminal audit=1、all contexts scrub；context-only expiry至少current scrub。
 8. M-04：Phase C expiry barrier → ATTEMPT_EXPIRED、audit exactly1、all contexts scrub、binding0、no orphan Account。
 9. historical F-02：operation key map A；new challenge resolves B + same key → 409/B零mutation；same replay只读A。
-10. confirmationVersion：AFFIRM required literal；REJECT/CANCEL omitted；null invalid；handwritten/runtime/generated semantic equivalence。
+10. confirmationVersion / decision schema：second-party AFFIRM required literal + targetConfirmed=true + candidateRecognized=true；second-party REJECT required literal + targetConfirmed=false + candidateRecognized=false；mixed / true+true REJECT invalid 422；candidate REJECT/CANCEL仍按candidate schema omit confirmationVersion；handwritten/runtime/generated semantic equivalence。
 11. RLS negative writes：runtime role intended SELECT与UPDATE/INSERT/DELETE boundary真实验证。
 12. rollback matrix：Gate2 / Account / Person update / attempt settlement / cleanup / audit failure injection均无partial success。
 13. MINOR success：MINOR_14_17 + guardian；MINOR_14_17 no guardian + Family manager。
@@ -1426,11 +1428,12 @@ Implement 必须能机械证明以下不存在（CI / guard / grep / schema intr
 ### D-22.3 Implement Gate 状态机与循环依赖排除
 
 ```text
-当前（2026-11-08，Ultimate Audit targeted remediation 后）：
-TARGETED PLAN / CONTRACT REMEDIATION FROZEN
-READY FOR DEVELOPMENT REMEDIATION
-T001–T120 中被 Ultimate Audit 推翻 acceptance 的 26 tasks 已恢复 unchecked；只执行明确 remediation，不重做已 PASS 项
+当前（2026-11-09，Security Decision A upstream contract remediation 后）：
+DECISION A / THREAT MODEL / PAIRING CONTRACT REMEDIATED
+READY FOR TARGETED PLAN RE-AUDIT
+T001–T120 当前真实 checkbox：58 checked / 62 reopened；不得再使用旧“26 tasks reopened”
 T121–T124 继续 BLOCKED BY SLICE 4 RUNTIME
+Targeted Audit I PASS 之前不得进入 development remediation
 
 Slice 4 runtime available 后：
 执行 T121–T124 → real adapter / real Slice 4 integration / full Case C E2E
