@@ -35,7 +35,7 @@ describe('Slice 4 participation audit', () => {
 
     const rows=await events(created.json().participationId);
     expect(rows.map((r:any)=>r.event_type)).toEqual([
-      'PARTICIPATION_ACCEPTED','PARTICIPATION_INVITE_CREATED',
+      'PARTICIPATION_INVITE_CREATED','PARTICIPATION_ACCEPTED',
     ]);
     const inviteEvent=rows.find((r:any)=>r.event_type==='PARTICIPATION_INVITE_CREATED');
     const acceptEvent=rows.find((r:any)=>r.event_type==='PARTICIPATION_ACCEPTED');
