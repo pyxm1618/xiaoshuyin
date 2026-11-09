@@ -24,11 +24,15 @@ import { join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const ARCHIVE = process.argv.includes('--archive');
+const EXECUTION_EVIDENCE =
+  process.env['COVERAGE_EXECUTION_EVIDENCE'] ??
+  join(os.tmpdir(), `xiaoshuyin-vitest-results-${process.pid}.json`);
 const lines = [];
 let pass = 0;
 let fail = 0;
 let notVerified = 0;
 let blocked = 0;
+let provenanceOk = true;
 
 function log(line = '') {
   console.log(line);
@@ -48,12 +52,12 @@ function sanitize(value) {
   return out;
 }
 
-function runCommand(exec, args) {
+function runCommand(exec, args, extraEnv) {
   const started = Date.now();
   const r = spawnSync(exec, args, {
     cwd: ROOT,
     encoding: 'utf8',
-    env: process.env,
+    env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
     maxBuffer: 16 * 1024 * 1024,
     // The full suite runs with bounded forks (vitest.config.ts maxWorkers) and
     // needs ~5-6 minutes; 300s killed it with ETIMEDOUT/143 mid-run.
@@ -249,14 +253,34 @@ const rows = [
 
 /** Additional final gates (user-required commands not fully covered above). */
 const gates = [
-  { label: 'G1 全量测试套件', exec: 'bunx', args: ['vitest', 'run'] },
+  {
+    label: 'G1 全量测试套件',
+    exec: 'bunx',
+    args: [
+      'vitest',
+      'run',
+      '--reporter=default',
+      '--reporter=json',
+      `--outputFile.json=${EXECUTION_EVIDENCE}`,
+    ],
+    env: { COVERAGE_EXECUTION_EVIDENCE: EXECUTION_EVIDENCE },
+  },
   { label: 'G2 静态守卫', exec: 'bun', args: ['run', 'guard:static'] },
   { label: 'G3 typecheck（base 工程）', exec: 'bunx', args: ['tsc', '-p', 'tsconfig.base.json', '--noEmit'] },
   { label: 'G4 typecheck（api 工程）', exec: 'bunx', args: ['tsc', '--noEmit'], cwd: join(ROOT, 'apps', 'server', 'api') },
   { label: 'G5 OpenAPI 生成', exec: 'bun', args: ['run', 'openapi:generate'] },
   { label: 'G6 OpenAPI 漂移检查', exec: 'bun', args: ['run', 'openapi:check'] },
-  { label: 'G7 DB 结构证据', exec: 'bun', args: ['run', 'db:evidence'] },
-  { label: 'G8 FR/SC 覆盖审计', exec: 'bun', args: ['run', 'coverage:audit'] },
+  {
+    label: 'G7 DB 结构证据',
+    exec: 'node',
+    args: ['scripts/db-evidence.mjs', '--no-archive'],
+  },
+  {
+    label: 'G8 FR/SC 覆盖审计',
+    exec: 'bun',
+    args: ['run', 'coverage:audit'],
+    env: { COVERAGE_EXECUTION_EVIDENCE: EXECUTION_EVIDENCE },
+  },
 ];
 
 const governance = [
@@ -280,17 +304,47 @@ async function main() {
 
   // M-06 canonical provenance. Record the exact repository state and required
   // environment NAMES / presence before any child runs. Secret values are never
-  // printed.
+  // printed. Any provenance failure makes the canonical run non-zero.
   const git = (args) => {
     const r = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
-    return r.status === 0 ? r.stdout.trim() : `ERROR(${r.status})`;
+    if (r.status !== 0) {
+      provenanceOk = false;
+      notVerified++;
+      return `ERROR(${r.status})`;
+    }
+    return r.stdout.trim();
   };
+  const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const head = git(['rev-parse', 'HEAD']);
+  const originMain = git(['rev-parse', 'origin/main']);
+  const startTree = git(['status', '--porcelain', '--untracked-files=no']);
+  const startClean = startTree === '';
+  const githubSha = process.env['GITHUB_SHA'] ?? '';
   log('## Provenance');
   log(`- cwd: ${ROOT}`);
-  log(`- branch: ${git(['rev-parse', '--abbrev-ref', 'HEAD'])}`);
-  log(`- HEAD: ${git(['rev-parse', 'HEAD'])}`);
-  log(`- origin/main: ${git(['rev-parse', 'origin/main'])}`);
-  log(`- tracked working tree: ${git(['status', '--porcelain', '--untracked-files=no']) === '' ? 'clean' : 'dirty'}`);
+  log(`- branch: ${branch}`);
+  log(`- HEAD: ${head}`);
+  log(`- origin/main: ${originMain}`);
+  log(`- DECISION_A_REMEDIATION_BASELINE_SHA: d74813333449376e48c071abba8103f4aac92b39`);
+  log(`- tracked working tree (start): ${startClean ? 'clean' : 'dirty'}`);
+  log(`- archive mode: ${ARCHIVE ? 'yes (local auxiliary, NOT authoritative)' : 'no (canonical)'}`);
+  log(`- GITHUB_SHA: ${githubSha || '<absent>'}`);
+  log(`- GITHUB_REF: ${process.env['GITHUB_REF'] ?? '<absent>'}`);
+  log(`- GITHUB_HEAD_REF: ${process.env['GITHUB_HEAD_REF'] ?? '<absent>'}`);
+  log(`- GITHUB_RUN_ID: ${process.env['GITHUB_RUN_ID'] ?? '<absent>'}`);
+  log(`- GITHUB_RUN_ATTEMPT: ${process.env['GITHUB_RUN_ATTEMPT'] ?? '<absent>'}`);
+  if (!head || !originMain) {
+    provenanceOk = false;
+    notVerified++;
+  }
+  if (githubSha && head !== githubSha) {
+    provenanceOk = false;
+    notVerified++;
+  }
+  if (!startClean && !ARCHIVE) {
+    provenanceOk = false;
+    notVerified++;
+  }
   const requiredEnv = [
     'DATABASE_URL',
     'MIGRATION_DATABASE_URL',
@@ -309,8 +363,11 @@ async function main() {
   for (const name of requiredEnv) {
     const present = Boolean(process.env[name]);
     const fixture = !present && fixtureProvided.has(name);
-    log(`- env ${name}: ${present ? 'present' : fixture ? 'present(fixture)' : 'MISSING'}`);
-    if (!present && !fixture) fail++;
+    log(`- env ${name}: ${present ? 'present' : fixture ? 'present(test-fixture)' : 'MISSING'}`);
+    if (!present && !fixture) {
+      provenanceOk = false;
+      notVerified++;
+    }
   }
   log('');
 
@@ -355,17 +412,25 @@ async function main() {
     const r = g.cwd
       ? (() => {
           const started = Date.now();
-          const x = spawnSync(g.exec, g.args, { cwd: g.cwd, encoding: 'utf8', env: process.env, maxBuffer: 16 * 1024 * 1024, timeout: 600000 });
+          const x = spawnSync(g.exec, g.args, {
+            cwd: g.cwd,
+            encoding: 'utf8',
+            env: g.env ? { ...process.env, ...g.env } : process.env,
+            maxBuffer: 16 * 1024 * 1024,
+            timeout: 600000,
+          });
           const output = `${x.stdout ?? ''}${x.stderr ?? ''}`;
           return { code: x.status === null ? 124 : x.status, output, ms: Date.now() - started, error: x.error?.message };
         })()
-      : runCommand(g.exec, g.args);
+      : runCommand(g.exec, g.args, g.env);
     show(`  [${g.label}]`, g.exec, g.args, r);
     if (r.code === 0) pass++; else fail++;
     log(`  [${g.label}] 结果: ${r.code === 0 ? 'PASS' : 'FAIL'}`);
     log('');
   }
 
+  const endTree = git(['status', '--porcelain', '--untracked-files=no']);
+  const endClean = endTree === '';
   log('## 汇总');
   log('');
   log(`- Verification Plan 行数: 26（执行 ${26 - blocked} 条，BLOCKED ${blocked} 条）`);
@@ -373,19 +438,28 @@ async function main() {
   log('- Task-specific acceptance (T001–T120): proven by designated tests/evidence, not derived by this runner');
   log(`- T121–T124 explicit BLOCKED: ${blocked} 条（Slice 4 runtime / 真实平台）`);
   log(`- NOT VERIFIED: ${notVerified} 条（冻结 T118 要求 0 条）`);
-  log(`- 命令 PASS: ${pass}`);
-  log(`- 命令 FAIL: ${fail}`);
-  log(`- verify-all: ${fail === 0 && notVerified === 0 ? 'PASS' : 'FAIL'}`);
+  log(`- provenance: ${provenanceOk ? 'PASS' : 'FAIL'}`);
+  log(`- tracked working tree (end): ${endClean ? 'clean' : 'dirty'}`);
+  log(`- command PASS: ${pass}`);
+  log(`- command FAIL: ${fail}`);
+  const finalOk = fail === 0 && notVerified === 0 && provenanceOk;
+  log(`- verify-all: ${finalOk ? 'PASS' : 'FAIL'}`);
   log('');
   log('注：MAPPED 行使用承接测试文件，原因逐条列于上文；未修改任何冻结文档。');
   log('注：本日志在归档前已将本机绝对路径归一化为 <repo> / ~。');
+  log(`注：canonical execution evidence: ${EXECUTION_EVIDENCE}`);
+
+  if (!endClean && !ARCHIVE) {
+    log('注：canonical run 结束时 tracked tree 不是 clean，provenance FAIL。');
+  }
 
   if (ARCHIVE) {
     mkdirSync(join(ROOT, 'tests', 'evidence'), { recursive: true });
     writeFileSync(join(ROOT, 'tests', 'evidence', 'verify-all.log'), lines.join('\n') + '\n');
   }
-  if (fail > 0) process.exit(1);
+  if (!finalOk || (!ARCHIVE && !endClean)) process.exit(1);
 }
+
 
 main().catch((err) => {
   log(`verify-all: ERROR — ${err.message}`);

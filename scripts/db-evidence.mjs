@@ -21,6 +21,7 @@ import os from 'node:os';
 import { join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
+const NO_ARCHIVE = process.argv.includes('--no-archive');
 const lines = [];
 let failures = 0;
 
@@ -513,16 +514,23 @@ async function main() {
   log('');
   log(`db-evidence: ${failures === 0 ? 'PASS' : `FAIL (${failures} checks failed)`}`);
 
-  mkdirSync(join(ROOT, 'tests', 'evidence'), { recursive: true });
-  writeFileSync(join(ROOT, 'tests', 'evidence', 'db-evidence.log'), lines.join('\n') + '\n');
+  // `--no-archive` keeps the canonical verify-all run on a clean tracked tree:
+  // the full output is captured by the caller (Actions log / artifact) instead
+  // of rewriting a tracked evidence file.
+  if (!NO_ARCHIVE) {
+    mkdirSync(join(ROOT, 'tests', 'evidence'), { recursive: true });
+    writeFileSync(join(ROOT, 'tests', 'evidence', 'db-evidence.log'), lines.join('\n') + '\n');
+  }
 
   if (failures > 0) process.exit(1);
 }
 
 main().catch((err) => {
   log(`db-evidence: ERROR — ${err.message}`);
-  mkdirSync(join(ROOT, 'tests', 'evidence'), { recursive: true });
-  writeFileSync(join(ROOT, 'tests', 'evidence', 'db-evidence.log'), lines.join('\n') + '\n');
+  if (!NO_ARCHIVE) {
+    mkdirSync(join(ROOT, 'tests', 'evidence'), { recursive: true });
+    writeFileSync(join(ROOT, 'tests', 'evidence', 'db-evidence.log'), lines.join('\n') + '\n');
+  }
   console.error(err);
   process.exit(1);
 });

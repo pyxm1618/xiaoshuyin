@@ -11,6 +11,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 
@@ -341,35 +342,35 @@ export const SUBSTANTIVE_PROOFS = {
   // ── H-02 direct DB barrier matrix (runtime role, per fact class) ──
   'H-02-profile-age-barrier': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'profile / age-band barrier blocks the commit',
+    test: 'profile / age-band: Gate lock blocks the concurrent profile UPDATE',
   },
   'H-02-profile-missing-barrier': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'missing compliance profile barrier blocks the commit',
+    test: 'missing compliance profile: Gate lock blocks the concurrent profile DELETE',
   },
   'H-02-consent-barrier': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'consent barrier blocks the commit',
+    test: 'consent: Gate lock blocks the concurrent runtime-role consent UPDATE',
   },
   'H-02-guardian-barrier': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'guardian relationship barrier blocks the commit',
+    test: 'guardian relationship: Gate lock blocks the concurrent guardian UPDATE',
   },
   'H-02-membership-authority-barrier': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'membership barrier blocks the commit',
+    test: 'membership: Gate lock blocks the concurrent membership DELETE',
   },
   'H-02-P1-conflict-barrier': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'P1 binding conflict barrier blocks the commit',
+    test: 'P1 binding conflict: Gate lock blocks the concurrent P1 binding UPDATE',
   },
   'H-02-candidate-account-conflict': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'candidate Account conflict barrier blocks the commit',
+    test: 'candidate Account conflict: stale Gate PASS still fails closed in Phase C',
   },
   'H-02-invitation-seam': {
     file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
-    test: 'invitation seam barrier blocks the commit (CONTRACT-SEAM PROOF ONLY)',
+    test: 'invitation seam: invalidation-first fails closed (CONTRACT-SEAM PROOF ONLY)',
   },
 
   // ── M-01 direct eligibility matrix ──
@@ -407,6 +408,106 @@ export const SUBSTANTIVE_PROOFS = {
   },
 };
 
+/**
+ * Substantive assertions per stable proof ID.
+ *
+ * `assertions` must appear inside the exact test function body. For tests that
+ * delegate to a shared helper (Gate 2 barrier / M-01 eligibility), the critical
+ * terminal assertions live in that helper, so `helperAssertions` must appear in
+ * the same file. Removing the key assertion therefore makes the audit fail
+ * closed instead of accepting an empty `it('name', () => {})`.
+ */
+export const PROOF_ASSERTIONS = {
+  'H-02-profile-age-barrier': {
+    helperAssertions: [
+      "expect(outcome.outcome).toBe('COMMITTED');",
+    ],
+  },
+  'H-02-profile-missing-barrier': {
+    helperAssertions: [
+      "expect(outcome.outcome).toBe('COMMITTED');",
+    ],
+  },
+  'H-02-consent-barrier': {
+    helperAssertions: [
+      "expect(outcome.outcome).toBe('COMMITTED');",
+    ],
+  },
+  'H-02-guardian-barrier': {
+    helperAssertions: [
+      "expect(outcome.outcome).toBe('COMMITTED');",
+    ],
+  },
+  'H-02-membership-authority-barrier': {
+    helperAssertions: [
+      "expect(outcome.outcome).toBe('COMMITTED');",
+    ],
+  },
+  'H-02-P1-conflict-barrier': {
+    helperAssertions: [
+      "expect(outcome.outcome).toBe('COMMITTED');",
+    ],
+  },
+  'H-02-candidate-account-conflict': {
+    helperAssertions: [
+      "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'IDENTITY_CONFLICT' });",
+    ],
+  },
+  'H-02-invitation-seam': {
+    helperAssertions: [
+      "expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'INVITATION_TERMINAL' });",
+    ],
+  },
+  'M-01-profile': {
+    helperAssertions: [
+      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(attempt.rows[0], input.label).toMatchObject({',
+    ],
+  },
+  'M-01-age-band': {
+    helperAssertions: [
+      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(attempt.rows[0], input.label).toMatchObject({',
+    ],
+  },
+  'M-01-guardian': {
+    helperAssertions: [
+      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(attempt.rows[0], input.label).toMatchObject({',
+    ],
+  },
+  'M-01-consent': {
+    helperAssertions: [
+      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(attempt.rows[0], input.label).toMatchObject({',
+    ],
+  },
+  'M-01-membership': {
+    helperAssertions: [
+      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(attempt.rows[0], input.label).toMatchObject({',
+    ],
+  },
+  'M-01-invitation': {
+    helperAssertions: [
+      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(attempt.rows[0], input.label).toMatchObject({',
+    ],
+  },
+  'M-01-P1-conflict': {
+    helperAssertions: [
+      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      "expect(person.rows[0].account_id, input.label).toBe(",
+    ],
+  },
+  'M-01-candidate-account-conflict': {
+    helperAssertions: [
+      'expect(candidateConfirmation.rows[0].n, input.label).toBe(0);',
+      'expect(attempt.rows[0], input.label).toMatchObject({',
+    ],
+  },
+};
+
 export function fileOk(rel, root = ROOT) {
   const full = join(root, rel);
   if (!existsSync(full) || !statSync(full).isFile()) return false;
@@ -414,40 +515,110 @@ export function fileOk(rel, root = ROOT) {
   return content.includes('it(') || content.includes('test(') || content.includes('describe(');
 }
 
-/**
- * Exact executable proof check. The named test must be present with a normal
- * `it`/`test` call and must not be skipped. This is what makes a deleted,
- * renamed, unexecuted or unrelated mapping fail closed.
- */
-export function proofOk(rel, testName, root = ROOT) {
-  const full = join(root, rel);
-  if (!existsSync(full) || !statSync(full).isFile()) return false;
-  const content = readFileSync(full, 'utf-8');
-  const quoted = [
-    `it('${testName}'`,
-    `it("${testName}"`,
-    `test('${testName}'`,
-    `test("${testName}"`,
-  ];
-  const present = quoted.some((needle) => content.includes(needle));
-  if (!present) return false;
-  const skipped = quoted.some((needle) =>
-    content.includes(needle.replace(/^(it|test)/, '$1.skip'))
+/** Extract the exact test function body via the TypeScript AST, or null. */
+export function extractTestBody(content, testName) {
+  const source = ts.createSourceFile(
+    'proof.ts',
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS
   );
-  return !skipped;
+  let found = null;
+  const visit = (node) => {
+    if (found) return;
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      (node.expression.text === 'it' || node.expression.text === 'test') &&
+      node.arguments.length >= 2
+    ) {
+      const name = node.arguments[0];
+      if (ts.isStringLiteral(name) && name.text === testName) {
+        found = node.arguments[1].getText(source);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return found;
 }
 
-function checkProofs(root, missing) {
+export function loadExecutionEvidence(path) {
+  if (!path || !existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function executedPassed(evidence, rel, testName) {
+  const target = rel.replace(/^\.\//, '').replace(/\\/g, '/');
+  for (const file of evidence.testResults ?? []) {
+    const name = String(file.name ?? '').replace(/\\/g, '/');
+    if (!name.endsWith(target)) continue;
+    for (const assertion of file.assertionResults ?? []) {
+      const title = String(assertion.title ?? '');
+      const full = String(assertion.fullName ?? '');
+      if (
+        assertion.status === 'passed' &&
+        (title === testName || full === testName || full.endsWith(` > ${testName}`))
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Exact substantive proof check:
+ *   file + exact test name + still-executable body + required assertion(s)
+ *   + executed PASS evidence.
+ */
+export function proofOk(rel, proof, root = ROOT, execution = null) {
+  const full = join(root, rel);
+  if (!existsSync(full) || !statSync(full).isFile()) {
+    return { ok: false, reason: 'missing-file' };
+  }
+  const content = readFileSync(full, 'utf-8');
+  const body = extractTestBody(content, proof.test);
+  if (body === null) return { ok: false, reason: 'missing-or-skipped-test' };
+
+  const cfg = PROOF_ASSERTIONS[proof.id] ?? {};
+  for (const assertion of cfg.assertions ?? []) {
+    if (!body.includes(assertion)) return { ok: false, reason: 'assertion-removed' };
+  }
+  for (const assertion of cfg.helperAssertions ?? []) {
+    if (!content.includes(assertion)) return { ok: false, reason: 'helper-assertion-removed' };
+  }
+  const hasBodyAssertion = body.includes('expect(');
+  const hasHelperAssertion = (cfg.helperAssertions ?? []).length > 0;
+  if (!hasBodyAssertion && !hasHelperAssertion) {
+    return { ok: false, reason: 'no-assertion' };
+  }
+  if (!execution) return { ok: false, reason: 'unexecuted-no-evidence' };
+  if (!executedPassed(execution, rel, proof.test)) {
+    return { ok: false, reason: 'unexecuted' };
+  }
+  return { ok: true };
+}
+
+function checkProofs(root, missing, execution) {
   let ok = 0;
   const total = Object.keys(SUBSTANTIVE_PROOFS).length;
   for (const [id, proof] of Object.entries(SUBSTANTIVE_PROOFS)) {
-    if (!proofOk(proof.file, proof.test, root)) {
-      missing.push(`[Slice 5 Substantive Proofs] ${id}: ${proof.file} :: ${proof.test}`);
+    const result = proofOk(proof.file, { ...proof, id }, root, execution);
+    if (!result.ok) {
+      missing.push(
+        `[Slice 5 Substantive Proofs] ${id}: ${proof.file} :: ${proof.test} (${result.reason})`
+      );
     } else {
       ok++;
     }
   }
-  return { label: 'Slice 5 Substantive Proofs', ok, total };
+  return { label: 'Slice 5 Substantive Proofs', ok, total, substantive: true };
 }
 
 function checkSection(label, mapping, root, missing) {
@@ -461,11 +632,12 @@ function checkSection(label, mapping, root, missing) {
       ok++;
     }
   }
-  return { label, ok, total };
+  return { label, ok, total, substantive: false };
 }
 
-export function audit(root = ROOT) {
+export function audit(root = ROOT, options = {}) {
   const missing = [];
+  const execution = options.execution ?? null;
   const sections = [
     checkSection('Slice 1 FR', FR, root, missing),
     checkSection('Slice 1 SC', SC, root, missing),
@@ -477,19 +649,30 @@ export function audit(root = ROOT) {
     checkSection('Slice 5 Acceptance', ACCEPTANCE_006, root, missing),
     checkSection('Slice 5 Findings', FINDINGS_006, root, missing),
     checkSection('Slice 5 Reopened Tasks', REOPENED_TASKS_006, root, missing),
-    checkProofs(root, missing),
+    checkProofs(root, missing, execution),
   ];
-  return { missing, sections };
+  return { missing, sections, executionProvided: Boolean(execution) };
 }
 
 function printSection(section) {
-  console.log(`${section.label}: ${section.ok}/${section.total}`);
+  const suffix = section.substantive ? ' (substantive)' : ' (structural, not substantive)';
+  console.log(`${section.label}: ${section.ok}/${section.total}${suffix}`);
 }
 
 function main() {
-  const { missing, sections } = audit(ROOT);
+  const executionPath = process.env['COVERAGE_EXECUTION_EVIDENCE'];
+  const execution = loadExecutionEvidence(executionPath);
+  const { missing, sections } = audit(ROOT, { execution });
   console.log('# FR / SC / Acceptance substantive coverage audit');
   console.log('');
+  if (!execution) {
+    console.log(`execution evidence: MISSING (${executionPath ?? '<not provided>'})`);
+    console.log('  substantive proofs cannot PASS without executed PASS evidence.');
+    console.log('');
+  } else {
+    console.log(`execution evidence: ${executionPath}`);
+    console.log('');
+  }
   for (const section of sections) printSection(section);
   console.log('');
   console.log(`missing = ${missing.length}`);

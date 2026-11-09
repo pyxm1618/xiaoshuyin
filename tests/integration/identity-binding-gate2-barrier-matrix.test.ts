@@ -1,14 +1,23 @@
 /**
- * MEDIUM-02 — H-02 direct barrier matrix on the REAL PostgreSQL runtime role.
+ * MEDIUM-02 — H-02 post-Gate2 concurrency barrier matrix.
  *
- * Each authoritative fact class is proven independently:
- *   1. Gate 2 reads healthy current facts and returns PASS.
- *   2. The binding transaction is parked before its Gate 2 read.
- *   3. A concurrent invalidating transaction commits / linearizes.
- *   4. The binding transaction resumes and MUST fail closed.
+ * The binding transaction is paused INSIDE Gate 2, after
+ * `lockBindingGateFacts()` has taken the authoritative row locks but before
+ * `evaluateGateForTarget()` reads current facts. The pause point is the
+ * invitation port (commit.ts calls it between the lock acquisition and the Gate
+ * evaluation), so no production code is modified for the test.
  *
- * The invitation row is a CONTRACT-SEAM proof only (in-memory invitation port).
- * It is NOT a production Slice 4 barrier and does not close T121–T124.
+ * For each fact class we prove one of:
+ *   - binding-first: the concurrent invalidating DML is REAL and BLOCKED by the
+ *     Gate lock (PostgreSQL 55P03 under lock_timeout); the binding then commits.
+ *   - invalidation-first: the invalidator holds the row lock first, the binding
+ *     transaction is observably blocked on it (`pg_blocking_pids`), and after
+ *     the invalidator commits the binding fails closed.
+ *   - candidate conflict: Gate 2 saw a stale PASS, but Phase C must still fail
+ *     closed and never COMMIT.
+ *
+ * Invitation state is a CONTRACT-SEAM proof only (in-memory port fixture).
+ * It is NOT a production Slice 4 barrier; T121–T124 remain BLOCKED.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -21,37 +30,87 @@ import {
   type BindingHarness,
   type TargetFixture,
 } from '../setup/identity-binding.js';
-import { loginWithLabel, revokeConsent } from '../setup/api.js';
+import { login } from '../setup/api.js';
+import {
+  InMemoryInvitationPort,
+  type InvitationResolution,
+  type InvitationResolutionPort,
+} from '../../apps/server/api/src/identity-binding/invitation-port.js';
 import { commitAttempt } from '../../apps/server/api/src/identity-binding/commit.js';
 import { evaluateGateForTarget } from '../../apps/server/api/src/identity-binding/gate.js';
 import { withBindingGateTransaction } from '../../apps/server/api/src/db/tx.js';
+
+const LOCK_TIMEOUT_MS = 500;
+const WAIT_MS = 8000;
+
+class BarrierPort implements InvitationResolutionPort {
+  private hook: (() => Promise<void>) | null = null;
+  private reachedResolve!: () => void;
+  readonly reached = new Promise<void>((resolve) => {
+    this.reachedResolve = resolve;
+  });
+
+  constructor(private readonly inner: InMemoryInvitationPort) {}
+
+  arm(hook: () => Promise<void>): void {
+    this.hook = hook;
+  }
+
+  async resolveByToken(_tx: any, invitationToken: string): Promise<InvitationResolution> {
+    return this.inner.resolveByToken(_tx, invitationToken);
+  }
+
+  async resolveByParticipationId(tx: any, participationId: string): Promise<InvitationResolution> {
+    const resolution = await this.inner.resolveByParticipationId(tx, participationId);
+    const hook = this.hook;
+    if (hook) {
+      this.hook = null;
+      this.reachedResolve();
+      await hook();
+    }
+    return resolution;
+  }
+}
 
 function requireValidInvitation(invitation: { status: string }) {
   expect(invitation.status).toBe('VALID');
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor<T>(check: () => Promise<T | null>, label: string): Promise<T> {
+  const deadline = Date.now() + WAIT_MS;
+  while (Date.now() < deadline) {
+    const value = await check();
+    if (value !== null) return value;
+    await sleep(50);
+  }
+  throw new Error(`timeout waiting for ${label}`);
+}
+
 describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
   let h: BindingHarness;
-  let pool: ReturnType<typeof createAppPool>;
+  let appPool: ReturnType<typeof createAppPool>;
 
   beforeAll(async () => {
     h = await buildBindingApp();
-    pool = createAppPool();
+    appPool = createAppPool();
   });
 
   afterAll(async () => {
-    await pool.end();
+    await appPool.end();
     await h.close();
   });
 
-  /** Prove the Gate 2 initial read is a healthy PASS on the current facts. */
   async function assertGate2InitialPass(
     target: TargetFixture,
     confirmerPersonId: string,
     confirmerAccountId: string
   ): Promise<void> {
     const result = await withBindingGateTransaction(
-      pool,
+      appPool,
       { targetPersonId: target.targetPersonId, targetFamilyId: target.familyId },
       async (tx) => {
         const invitation = await h.port.resolveByParticipationId(tx, target.participationId);
@@ -86,12 +145,52 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
     );
   }
 
-  async function countTerminalAudit(attemptId: string, reason?: string): Promise<number> {
+  async function taggedAppPool(tag: string) {
+    const pool = createAppPool(1);
+    const client = await pool.connect();
+    await client.query(`SET application_name = '${tag}'`);
+    client.release();
+    return pool;
+  }
+
+  async function backendOf(tag: string) {
+    const { rows } = await h.admin.query(
+      `SELECT pid, usename, state, wait_event_type, wait_event
+         FROM pg_stat_activity WHERE application_name = $1
+        ORDER BY backend_start DESC LIMIT 1`,
+      [tag]
+    );
+    return rows[0] ?? null;
+  }
+
+  async function gateLockRelations(pid: number): Promise<string[]> {
+    const { rows } = await h.admin.query(
+      `SELECT DISTINCT c.relname
+         FROM pg_locks l
+         JOIN pg_class c ON c.oid = l.relation
+        WHERE l.pid = $1
+          AND l.locktype = 'relation'
+          AND c.relname = ANY($2::text[])`,
+      [
+        pid,
+        [
+          'persons',
+          'families',
+          'family_members',
+          'person_compliance_profiles',
+          'consent_records',
+        ],
+      ]
+    );
+    return rows.map((r: any) => r.relname as string);
+  }
+
+  async function terminalAuditCount(attemptId: string, reason: string): Promise<number> {
     const { rows } = await h.admin.query(
       `SELECT count(*)::int AS n FROM identity_binding_audit_events
         WHERE attempt_id = $1 AND event_type = 'BINDING_TERMINAL'
-          ${reason ? 'AND terminal_reason = $2' : ''}`,
-      reason ? [attemptId, reason] : [attemptId]
+          AND terminal_reason = $2`,
+      [attemptId, reason]
     );
     return rows[0].n as number;
   }
@@ -106,35 +205,59 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
     expect(rows[0].n).toBe(0);
   }
 
+  async function assertTerminalNoBinding(
+    target: TargetFixture,
+    attemptId: string,
+    reason: string
+  ): Promise<void> {
+    const attempt = await h.admin.query(
+      'SELECT state, terminal_reason, committed_account_id FROM binding_attempts WHERE id = $1',
+      [attemptId]
+    );
+    expect(attempt.rows[0]).toMatchObject({
+      state: 'TERMINAL',
+      terminal_reason: reason,
+      committed_account_id: null,
+    });
+    const person = await h.admin.query('SELECT account_id FROM persons WHERE id = $1', [
+      target.targetPersonId,
+    ]);
+    expect(person.rows[0].account_id).toBeNull();
+    expect(await terminalAuditCount(attemptId, reason)).toBe(1);
+    await assertNoResidualSecret(attemptId);
+    const committed = await h.admin.query(
+      `SELECT count(*)::int AS n FROM identity_binding_audit_events
+        WHERE attempt_id = $1 AND event_type = 'BINDING_COMMITTED'`,
+      [attemptId]
+    );
+    expect(committed.rows[0].n).toBe(0);
+  }
+
   /**
-   * Park the binding transaction on the attempt row, let a concurrent
-   * invalidating transaction commit, then release and assert a fail-closed
-   * settlement with no binding / no partial Account.
+   * Binding-first: commit is paused inside Gate 2 holding the Gate locks.
+   * `invalidate` must be real DML that is blocked by those locks.
    */
-  async function runBarrier(input: {
-    label: string;
+  async function runBindingFirst(input: {
     target: TargetFixture;
     attemptId: string;
-    reason: string;
-    mutate: () => Promise<void>;
-    candidateOpenid?: string;
-    candidateBoundPersonId?: string;
-    /** Set when the invalidation itself is an external binding of P1. */
-    expectedP1AccountId?: string;
+    tag: string;
+    invalidate: () => Promise<{ blocked: boolean; code?: string }>;
   }): Promise<void> {
-    const locker = await h.admin.connect();
-    const commitPool = createAppPool(1);
-    let outcome: Awaited<ReturnType<typeof commitAttempt>> | undefined;
-    try {
-      await locker.query('BEGIN');
-      await locker.query('SELECT id FROM binding_attempts WHERE id = $1 FOR UPDATE', [
-        input.attemptId,
-      ]);
+    const port = new BarrierPort(h.port);
+    let release!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    port.arm(() => paused);
 
-      const pending = commitAttempt(
+    const commitPool = await taggedAppPool(input.tag);
+    let commit: Promise<any> | null = null;
+    let released = false;
+    try {
+      commit = commitAttempt(
         {
           pool: commitPool,
-          invitationPort: h.port,
+          invitationPort: port,
           identityBindingSecret: process.env['IDENTITY_BINDING_SECRET']!,
         },
         {
@@ -145,262 +268,378 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
         }
       );
 
-      // Let the binding transaction reach the parked attempt lock.
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await Promise.race([
+        port.reached,
+        sleep(WAIT_MS).then(() => {
+          throw new Error('binding transaction never reached the Gate 2 pause point');
+        }),
+      ]);
 
-      // The invalidation commits / linearizes while the binding transaction is
-      // paused before its Gate 2 read.
-      await input.mutate();
+      const backend = await waitFor(() => backendOf(input.tag), `backend ${input.tag}`);
+      expect(backend.usename).toBe('xiaoshuyin_app');
+      // The binding transaction already holds relation locks for the Gate facts.
+      const lockedRelations = await gateLockRelations(backend.pid);
+      expect(lockedRelations).toEqual(
+        expect.arrayContaining([
+          'persons',
+          'families',
+          'family_members',
+          'person_compliance_profiles',
+          'consent_records',
+        ])
+      );
 
-      await locker.query('COMMIT');
-      outcome = await pending;
+      const blocked = await input.invalidate();
+      expect(blocked.blocked, `invalidator was not blocked by the Gate lock (${blocked.code})`).toBe(
+        true
+      );
+
+      release();
+      released = true;
+      const outcome = await commit;
+      expect(outcome.outcome).toBe('COMMITTED');
     } finally {
-      try {
-        await locker.query('ROLLBACK');
-      } catch {
-        // Already committed.
-      }
-      locker.release();
+      if (!released) release();
+      if (commit) await commit.catch(() => {});
       await commitPool.end();
     }
+  }
 
-    expect(outcome, input.label).toMatchObject({ outcome: 'TERMINAL', reason: input.reason });
-
-    const attempt = await h.admin.query(
-      'SELECT state, terminal_reason, committed_account_id FROM binding_attempts WHERE id = $1',
-      [input.attemptId]
-    );
-    expect(attempt.rows[0], input.label).toMatchObject({
-      state: 'TERMINAL',
-      terminal_reason: input.reason,
-      committed_account_id: null,
-    });
-
-    const person = await h.admin.query('SELECT account_id FROM persons WHERE id = $1', [
-      input.target.targetPersonId,
-    ]);
-    expect(person.rows[0].account_id, input.label).toBe(input.expectedP1AccountId ?? null);
-    expect(await countTerminalAudit(input.attemptId, input.reason), input.label).toBe(1);
-    await assertNoResidualSecret(input.attemptId);
-
-    const committedAudit = await h.admin.query(
-      `SELECT count(*)::int AS n FROM identity_binding_audit_events
-        WHERE attempt_id = $1 AND event_type = 'BINDING_COMMITTED'`,
-      [input.attemptId]
-    );
-    expect(committedAudit.rows[0].n).toBe(0);
-
-    if (input.candidateOpenid) {
-      const accounts = await h.admin.query(
-        'SELECT id FROM accounts WHERE wechat_openid = $1',
-        [input.candidateOpenid]
-      );
-      if (input.candidateBoundPersonId) {
-        // The pre-existing conflicting Account is not duplicated and its other
-        // Person binding is untouched: no orphan / partial Account.
-        expect(accounts.rows).toHaveLength(1);
-        const other = await h.admin.query('SELECT account_id FROM persons WHERE id = $1', [
-          input.candidateBoundPersonId,
-        ]);
-        expect(other.rows[0].account_id).toBe(accounts.rows[0].id);
-      } else {
-        expect(accounts.rows).toHaveLength(0);
+  /** Admin DML with a bounded lock wait; returns whether it was blocked. */
+  async function adminBlocked(sql: string, params: unknown[]): Promise<{ blocked: boolean; code?: string }> {
+    const client = await h.admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`);
+      try {
+        await client.query(sql, params as any[]);
+        await client.query('ROLLBACK');
+        return { blocked: false };
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        return { blocked: err.code === '55P03', code: err.code };
       }
+    } finally {
+      client.release();
     }
   }
 
-  function minorFixture(label: string) {
-    return createTarget(h, label, { ageBand: 'MINOR_14_17' });
+  /** App-role consent DML with bounded lock wait (runtime role). */
+  async function appConsentBlocked(target: TargetFixture): Promise<{ blocked: boolean; code?: string }> {
+    const pool = createAppPool(1);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT app.set_identity_context($1, $2)', [
+        target.guardian.accountId,
+        'GUARDIAN_CONSENT',
+      ]);
+      await client.query('SELECT app.set_family_context($1, $2, $3)', [
+        target.familyId,
+        target.guardian.personId,
+        'GUARDIAN_CONSENT',
+      ]);
+      await client.query(`SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`);
+      try {
+        await client.query('UPDATE consent_records SET bound_at = bound_at WHERE id = $1', [
+          target.consentId,
+        ]);
+        await client.query('ROLLBACK');
+        return { blocked: false };
+      } catch (err: any) {
+        await client.query('ROLLBACK');
+        return { blocked: err.code === '55P03', code: err.code };
+      }
+    } finally {
+      client.release();
+      await pool.end();
+    }
   }
-  void minorFixture;
 
-  it('profile / age-band barrier blocks the commit', async () => {
-    const target = await createTarget(h, 'h02_age', { ageBand: 'MINOR_14_17' });
-    const { attemptId } = await startBinding(h, target, `h02_age_${randomUUID()}`);
+  it('profile / age-band: Gate lock blocks the concurrent profile UPDATE', async () => {
+    const target = await createTarget(h, 'h02_age_lock', { ageBand: 'MINOR_14_17' });
+    const { attemptId } = await startBinding(h, target, `h02_age_lock_${randomUUID()}`);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
-    await runBarrier({
-      label: 'age-band',
+    await runBindingFirst({
       target,
       attemptId,
-      reason: 'AGE_BAND_ADULT_UNSUPPORTED',
-      mutate: async () => {
-        await h.admin.query(
+      tag: 'h02_age_lock',
+      invalidate: () =>
+        adminBlocked(
           "UPDATE person_compliance_profiles SET age_band = 'ADULT', minor_mode = false WHERE person_id = $1",
           [target.targetPersonId]
-        );
-      },
+        ),
     });
   });
 
-  it('missing compliance profile barrier blocks the commit', async () => {
-    const target = await createTarget(h, 'h02_profile', { ageBand: 'MINOR_14_17' });
-    const { attemptId } = await startBinding(h, target, `h02_profile_${randomUUID()}`);
+  it('missing compliance profile: Gate lock blocks the concurrent profile DELETE', async () => {
+    const target = await createTarget(h, 'h02_profile_lock', { ageBand: 'MINOR_14_17' });
+    const { attemptId } = await startBinding(h, target, `h02_profile_lock_${randomUUID()}`);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
-    await runBarrier({
-      label: 'profile',
+    await runBindingFirst({
       target,
       attemptId,
-      reason: 'COMPLIANCE_BLOCKED',
-      mutate: async () => {
-        await h.admin.query('DELETE FROM person_compliance_profiles WHERE person_id = $1', [
+      tag: 'h02_profile_lock',
+      invalidate: () =>
+        adminBlocked('DELETE FROM person_compliance_profiles WHERE person_id = $1', [
           target.targetPersonId,
-        ]);
-      },
+        ]),
     });
   });
 
-  it('consent barrier blocks the commit', async () => {
-    const target = await createTarget(h, 'h02_consent', { ageBand: 'UNDER_14' });
-    const { attemptId } = await startBinding(h, target, `h02_consent_${randomUUID()}`);
+  it('consent: Gate lock blocks the concurrent runtime-role consent UPDATE', async () => {
+    const target = await createTarget(h, 'h02_consent_lock', { ageBand: 'UNDER_14' });
+    const { attemptId } = await startBinding(h, target, `h02_consent_lock_${randomUUID()}`);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
-    await runBarrier({
-      label: 'consent',
+    await runBindingFirst({
       target,
       attemptId,
-      reason: 'GUARDIAN_CONSENT_INVALID',
-      mutate: async () => {
-        const revoke = await revokeConsent(
-          h.app,
-          target.guardian.token,
-          'h02_consent',
-          target.consentId!
-        );
-        expect([200, 201]).toContain(revoke.statusCode);
-      },
+      tag: 'h02_consent_lock',
+      invalidate: () => appConsentBlocked(target),
     });
   });
 
-  it('guardian relationship barrier blocks the commit', async () => {
-    const target = await createTarget(h, 'h02_guardian', { ageBand: 'MINOR_14_17' });
-    const alt = await createTarget(h, 'h02_guardian_alt', { ageBand: 'MINOR_14_17' });
-    // Give the minor a current guardian so the Gate authority is GUARDIAN.
+  it('guardian relationship: Gate lock blocks the concurrent guardian UPDATE', async () => {
+    const target = await createTarget(h, 'h02_guardian_lock', { ageBand: 'MINOR_14_17' });
+    const alt = await createTarget(h, 'h02_guardian_lock_alt', { ageBand: 'MINOR_14_17' });
     await h.admin.query(
       'UPDATE person_compliance_profiles SET guardian_person_id = $1 WHERE person_id = $2',
       [target.guardian.personId, target.targetPersonId]
     );
-    const { attemptId } = await startBinding(h, target, `h02_guardian_${randomUUID()}`);
+    const { attemptId } = await startBinding(h, target, `h02_guardian_lock_${randomUUID()}`);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
-    await runBarrier({
-      label: 'guardian',
+    await runBindingFirst({
       target,
       attemptId,
-      reason: 'WRONG_CONFIRMER',
-      mutate: async () => {
-        await h.admin.query(
+      tag: 'h02_guardian_lock',
+      invalidate: () =>
+        adminBlocked(
           'UPDATE person_compliance_profiles SET guardian_person_id = $1 WHERE person_id = $2',
           [alt.guardian.personId, target.targetPersonId]
-        );
-      },
+        ),
     });
   });
 
-  it('membership barrier blocks the commit', async () => {
-    const target = await createTarget(h, 'h02_member', { ageBand: 'MINOR_14_17' });
-    const other = await createTarget(h, 'h02_member_other', { ageBand: 'MINOR_14_17' });
-    const { attemptId } = await startBinding(h, target, `h02_member_${randomUUID()}`);
+  it('membership: Gate lock blocks the concurrent membership DELETE', async () => {
+    const target = await createTarget(h, 'h02_member_lock', { ageBand: 'MINOR_14_17' });
+    const { attemptId } = await startBinding(h, target, `h02_member_lock_${randomUUID()}`);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
-    await runBarrier({
-      label: 'membership',
+    await runBindingFirst({
       target,
       attemptId,
-      reason: 'MULTI_FAMILY_BLOCK',
-      mutate: async () => {
-        await h.admin.query(
-          'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
-          [other.familyId, target.targetPersonId]
-        );
-      },
+      tag: 'h02_member_lock',
+      invalidate: () =>
+        adminBlocked('DELETE FROM family_members WHERE family_id = $1 AND person_id = $2', [
+          target.familyId,
+          target.targetPersonId,
+        ]),
     });
   });
 
-  it('P1 binding conflict barrier blocks the commit', async () => {
-    const target = await createTarget(h, 'h02_p1_race', { ageBand: 'MINOR_14_17' });
-    const { attemptId } = await startBinding(h, target, `h02_p1_race_${randomUUID()}`);
+  it('P1 binding conflict: Gate lock blocks the concurrent P1 binding UPDATE', async () => {
+    const target = await createTarget(h, 'h02_p1_lock', { ageBand: 'MINOR_14_17' });
+    const { attemptId } = await startBinding(h, target, `h02_p1_lock_${randomUUID()}`);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
     const external = await h.admin.query(
       'INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0) RETURNING id',
-      [`h02_p1_race_${randomUUID()}`]
+      [`h02_p1_lock_${randomUUID()}`]
     );
-    const externalAccountId = external.rows[0].id as string;
 
-    await runBarrier({
-      label: 'P1-conflict',
+    await runBindingFirst({
       target,
       attemptId,
-      reason: 'TARGET_ALREADY_BOUND',
-      expectedP1AccountId: externalAccountId,
-      mutate: async () => {
-        await h.admin.query('UPDATE persons SET account_id = $1 WHERE id = $2', [
-          externalAccountId,
+      tag: 'h02_p1_lock',
+      invalidate: () =>
+        adminBlocked('UPDATE persons SET account_id = $1 WHERE id = $2', [
+          external.rows[0].id,
           target.targetPersonId,
-        ]);
-      },
+        ]),
     });
   });
 
-  it('candidate Account conflict barrier blocks the commit', async () => {
-    const target = await createTarget(h, 'h02_cand_conflict', { ageBand: 'MINOR_14_17' });
-    const other = await createTarget(h, 'h02_cand_conflict_other', { ageBand: 'MINOR_14_17' });
-    const code = `h02_cand_conflict_${randomUUID()}`;
+  it('candidate Account conflict: stale Gate PASS still fails closed in Phase C', async () => {
+    const target = await createTarget(h, 'h02_cand_lock', { ageBand: 'MINOR_14_17' });
+    const code = `h02_cand_lock_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
-    const candidateOpenid = `fake_${code}`;
-    await runBarrier({
-      label: 'candidate-account-conflict',
-      target,
-      attemptId,
-      reason: 'IDENTITY_CONFLICT',
-      candidateOpenid,
-      candidateBoundPersonId: other.targetPersonId,
-      mutate: async () => {
-        const account = await h.admin.query(
-          'SELECT id FROM accounts WHERE wechat_openid = $1',
-          [candidateOpenid]
-        );
-        // The candidate's WeChat identity becomes an Account bound to another
-        // Person by an ordinary path, concurrently with the binding.
-        await h.admin.query('UPDATE persons SET account_id = $1 WHERE id = $2', [
-          account.rows[0]?.id ??
-            (
-              await h.admin.query(
-                'INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0) RETURNING id',
-                [candidateOpenid]
-              )
-            ).rows[0].id,
-          other.targetPersonId,
-        ]);
-      },
+    const port = new BarrierPort(h.port);
+    let release!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      release = resolve;
     });
+    port.arm(() => paused);
+
+    const commitPool = await taggedAppPool('h02_cand_lock');
+    let commit: Promise<any> | null = null;
+    let released = false;
+    try {
+      commit = commitAttempt(
+        {
+          pool: commitPool,
+          invitationPort: port,
+          identityBindingSecret: process.env['IDENTITY_BINDING_SECRET']!,
+        },
+        {
+          attemptId,
+          targetPersonId: target.targetPersonId,
+          targetFamilyId: target.familyId,
+          actorAccountId: target.guardian.accountId,
+        }
+      );
+      await Promise.race([
+        port.reached,
+        sleep(WAIT_MS).then(() => {
+          throw new Error('binding transaction never reached the Gate 2 pause point');
+        }),
+      ]);
+
+      // Real ordinary login for the candidate's WeChat identity, concurrently
+      // binding that Account to another Person. It does not touch the frozen
+      // Gate lock set (new rows), so Gate 2 already saw a stale PASS.
+      await login(h.app, code);
+
+      release();
+      released = true;
+      const outcome = await commit;
+      expect(outcome.outcome).toBe('TERMINAL');
+      expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'IDENTITY_CONFLICT' });
+    } finally {
+      if (!released) release();
+      if (commit) await commit.catch(() => {});
+      await commitPool.end();
+    }
+
+    await assertTerminalNoBinding(target, attemptId, 'IDENTITY_CONFLICT');
   });
 
-  it('invitation seam barrier blocks the commit (CONTRACT-SEAM PROOF ONLY)', async () => {
-    const target = await createTarget(h, 'h02_invite', { ageBand: 'MINOR_14_17' });
-    const { attemptId } = await startBinding(h, target, `h02_invite_${randomUUID()}`);
+  it('invitation seam: invalidation-first fails closed (CONTRACT-SEAM PROOF ONLY)', async () => {
+    const target = await createTarget(h, 'h02_invite_seam', { ageBand: 'MINOR_14_17' });
+    const { attemptId } = await startBinding(h, target, `h02_invite_seam_${randomUUID()}`);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
     await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
 
-    await runBarrier({
-      label: 'invitation-seam',
-      target,
-      attemptId,
-      reason: 'INVITATION_TERMINAL',
-      mutate: async () => {
-        h.port.remove(target.invitationToken);
-      },
+    h.port.remove(target.invitationToken);
+
+    const commitPool = createAppPool(1);
+    try {
+      const outcome = await commitAttempt(
+        {
+          pool: commitPool,
+          invitationPort: h.port,
+          identityBindingSecret: process.env['IDENTITY_BINDING_SECRET']!,
+        },
+        {
+          attemptId,
+          targetPersonId: target.targetPersonId,
+          targetFamilyId: target.familyId,
+          actorAccountId: target.guardian.accountId,
+        }
+      );
+      expect(outcome.outcome).toBe('TERMINAL');
+      expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'INVITATION_TERMINAL' });
+    } finally {
+      await commitPool.end();
+    }
+
+    await assertTerminalNoBinding(target, attemptId, 'INVITATION_TERMINAL');
+  });
+
+  it('invalidation-first: the binding transaction observably waits on the Gate fact lock', async () => {
+    const target = await createTarget(h, 'h02_p1_wait', { ageBand: 'MINOR_14_17' });
+    const { attemptId } = await startBinding(h, target, `h02_p1_wait_${randomUUID()}`);
+    await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
+    await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
+
+    const external = await h.admin.query(
+      'INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0) RETURNING id',
+      [`h02_p1_wait_${randomUUID()}`]
+    );
+
+    const invalidator = await h.admin.connect();
+    const commitPool = await taggedAppPool('h02_p1_wait');
+    let commit: Promise<any> | null = null;
+    try {
+      await invalidator.query('BEGIN');
+      await invalidator.query('UPDATE persons SET account_id = $1 WHERE id = $2', [
+        external.rows[0].id,
+        target.targetPersonId,
+      ]);
+
+      commit = commitAttempt(
+        {
+          pool: commitPool,
+          invitationPort: h.port,
+          identityBindingSecret: process.env['IDENTITY_BINDING_SECRET']!,
+        },
+        {
+          attemptId,
+          targetPersonId: target.targetPersonId,
+          targetFamilyId: target.familyId,
+          actorAccountId: target.guardian.accountId,
+        }
+      );
+
+      const waiting = await waitFor(async () => {
+        const backend = await backendOf('h02_p1_wait');
+        if (!backend) return null;
+        return backend.wait_event_type === 'Lock' ? backend : null;
+      }, 'binding transaction blocked on the Gate fact lock');
+      expect(waiting.usename).toBe('xiaoshuyin_app');
+
+      const blockers = await h.admin.query('SELECT pg_blocking_pids($1) AS pids', [waiting.pid]);
+      expect(blockers.rows[0].pids).toContain(invalidator.processID);
+
+      await invalidator.query('COMMIT');
+      const outcome = await commit;
+      expect(outcome.outcome).toBe('TERMINAL');
+      expect(outcome).toMatchObject({ outcome: 'TERMINAL', reason: 'TARGET_ALREADY_BOUND' });
+    } finally {
+      try {
+        await invalidator.query('ROLLBACK');
+      } catch {
+        // Already committed.
+      }
+      invalidator.release();
+      if (commit) await commit.catch(() => {});
+      await commitPool.end();
+    }
+
+    const attempt = await h.admin.query(
+      'SELECT state, terminal_reason, committed_account_id FROM binding_attempts WHERE id = $1',
+      [attemptId]
+    );
+    expect(attempt.rows[0]).toMatchObject({
+      state: 'TERMINAL',
+      terminal_reason: 'TARGET_ALREADY_BOUND',
+      committed_account_id: null,
     });
+    const person = await h.admin.query('SELECT account_id FROM persons WHERE id = $1', [
+      target.targetPersonId,
+    ]);
+    // The invalidation linearized first: P1 keeps the external binding, while
+    // the binding transaction itself never writes a second/partial binding.
+    expect(person.rows[0].account_id).toBe(external.rows[0].id);
+    expect(await terminalAuditCount(attemptId, 'TARGET_ALREADY_BOUND')).toBe(1);
+    await assertNoResidualSecret(attemptId);
+    const committed = await h.admin.query(
+      `SELECT count(*)::int AS n FROM identity_binding_audit_events
+        WHERE attempt_id = $1 AND event_type = 'BINDING_COMMITTED'`,
+      [attemptId]
+    );
+    expect(committed.rows[0].n).toBe(0);
   });
 });

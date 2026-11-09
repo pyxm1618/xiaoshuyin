@@ -1,10 +1,12 @@
 /**
- * F-08 / T115 — coverage audit is substantive and fails closed.
+ * F-08 / T115 / MEDIUM-03 — coverage audit is substantive and fails closed.
  *
- * The audit must map every Slice-5 FR / SC / Acceptance item and every
- * Ultimate Audit finding to a real, non-empty test file. Deleting any required
- * proof (or pointing it at a non-test file) must make the audit return missing
- * entries instead of silently passing on total file counts.
+ * A proof is only accepted when all of the following hold:
+ *   exact test name + still-executable body + required assertion(s)
+ *   + executed PASS evidence.
+ *
+ * Empty `it('name', () => {})`, assertion removal, unexecuted tests and mapping
+ * to an unrelated passing test must all make the audit fail closed.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -13,13 +15,49 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // @ts-expect-error - plain .mjs verification helper without type declarations
-import { audit, fileOk, proofOk, SUBSTANTIVE_PROOFS } from '../../scripts/coverage-audit.mjs';
+import {
+  audit,
+  fileOk,
+  proofOk,
+  SUBSTANTIVE_PROOFS,
+} from '../../scripts/coverage-audit.mjs';
 
 const ROOT = process.cwd();
 
-describe('coverage audit substantive gate (T115)', () => {
-  it('the real repository satisfies every Slice 1/2/5 mapping', () => {
-    const result = audit(ROOT);
+function fullExecution() {
+  return {
+    testResults: Object.values(SUBSTANTIVE_PROOFS as Record<string, { file: string; test: string }>).map(
+      (proof) => ({
+        name: `/repo/${proof.file}`,
+        assertionResults: [
+          { title: proof.test, fullName: `suite > ${proof.test}`, status: 'passed' },
+        ],
+      })
+    ),
+  };
+}
+
+function executionFor(file: string, test: string, status = 'passed') {
+  return {
+    testResults: [
+      {
+        name: `/repo/${file}`,
+        assertionResults: [{ title: test, fullName: `suite > ${test}`, status }],
+      },
+    ],
+  };
+}
+
+function writeFixture(name: string, content: string) {
+  const dir = mkdtempSync(join(tmpdir(), 'coverage-proof-'));
+  mkdirSync(join(dir, 'tests', 'integration'), { recursive: true });
+  writeFileSync(join(dir, 'tests', 'integration', name), content);
+  return { dir, rel: `tests/integration/${name}` };
+}
+
+describe('coverage audit substantive gate (T115 / MEDIUM-03)', () => {
+  it('the real repository satisfies every mapping with executed PASS evidence', () => {
+    const result = audit(ROOT, { execution: fullExecution() });
     expect(result.missing).toEqual([]);
     const labels = result.sections.map((s: { label: string }) => s.label);
     expect(labels).toEqual(
@@ -29,17 +67,15 @@ describe('coverage audit substantive gate (T115)', () => {
         'Slice 5 Acceptance',
         'Slice 5 Findings',
         'Slice 5 Reopened Tasks',
+        'Slice 5 Substantive Proofs',
       ])
     );
+    expect(result.missing).toEqual([]);
   });
 
   it('fileOk rejects a missing or empty test file', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'coverage-audit-'));
-    mkdirSync(join(dir, 'tests', 'integration'), { recursive: true });
+    const { dir } = writeFixture('empty.test.ts', '// no test cases here\n');
     expect(fileOk('tests/integration/does-not-exist.test.ts', dir)).toBe(false);
-
-    const empty = join(dir, 'tests', 'integration', 'empty.test.ts');
-    writeFileSync(empty, '// no test cases here\n');
     expect(fileOk('tests/integration/empty.test.ts', dir)).toBe(false);
 
     const real = join(dir, 'tests', 'integration', 'real.test.ts');
@@ -47,25 +83,88 @@ describe('coverage audit substantive gate (T115)', () => {
     expect(fileOk('tests/integration/real.test.ts', dir)).toBe(true);
   });
 
-  it('proofOk fails closed on delete / rename / unexecute / unrelated proof', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'coverage-proof-'));
-    mkdirSync(join(dir, 'tests', 'integration'), { recursive: true });
-    const proof = join(dir, 'tests', 'integration', 'proof.test.ts');
-    writeFileSync(proof, "it('required proof H-01', () => {});\n");
+  it('A: assertion removal fails closed (empty test body)', () => {
+    const { dir, rel } = writeFixture(
+      'empty-assertion.test.ts',
+      "it('required proof H-01', () => {});\n"
+    );
+    const result = proofOk(
+      rel,
+      { id: 'plain-proof', test: 'required proof H-01' },
+      dir,
+      executionFor(rel, 'required proof H-01')
+    );
+    expect(result).toEqual({ ok: false, reason: 'no-assertion' });
+  });
 
-    // Exact required proof executes.
-    expect(proofOk('tests/integration/proof.test.ts', 'required proof H-01', dir)).toBe(true);
+  it('B: mapping to an unrelated passing test fails closed', () => {
+    const { dir, rel } = writeFixture(
+      'unrelated.test.ts',
+      "it('unrelated passing proof', () => { expect(1).toBe(1); });\n"
+    );
+    // H-02 requires helper assertions that the unrelated proof does not carry.
+    const result = proofOk(
+      rel,
+      { id: 'H-02-profile-age-barrier', test: 'unrelated passing proof' },
+      dir,
+      executionFor(rel, 'unrelated passing proof')
+    );
+    expect(result).toEqual({ ok: false, reason: 'helper-assertion-removed' });
+  });
 
-    // Rename / unrelated proof.
-    expect(proofOk('tests/integration/proof.test.ts', 'renamed proof', dir)).toBe(false);
-    expect(proofOk('tests/integration/proof.test.ts', 'unrelated passing proof', dir)).toBe(false);
+  it('C: existing test without executed PASS evidence is unexecuted', () => {
+    const { dir, rel } = writeFixture(
+      'not-executed.test.ts',
+      "it('required proof H-01', () => { expect(1).toBe(1); });\n"
+    );
+    const result = proofOk(
+      rel,
+      { id: 'plain-proof', test: 'required proof H-01' },
+      dir,
+      executionFor(rel, 'another test')
+    );
+    expect(result).toEqual({ ok: false, reason: 'unexecuted' });
+  });
 
-    // Unexecute.
-    writeFileSync(proof, "it.skip('required proof H-01', () => {});\n");
-    expect(proofOk('tests/integration/proof.test.ts', 'required proof H-01', dir)).toBe(false);
+  it('D: mapping + assertion + executed PASS evidence passes', () => {
+    const { dir, rel } = writeFixture(
+      'good.test.ts',
+      "it('required proof H-01', () => { expect(1).toBe(1); });\n"
+    );
+    const result = proofOk(
+      rel,
+      { id: 'plain-proof', test: 'required proof H-01' },
+      dir,
+      executionFor(rel, 'required proof H-01')
+    );
+    expect(result).toEqual({ ok: true });
+  });
 
-    // Delete.
-    expect(proofOk('tests/integration/missing.test.ts', 'required proof H-01', dir)).toBe(false);
+  it('delete / rename / skip remain fail-closed', () => {
+    const { dir, rel } = writeFixture(
+      'proof.test.ts',
+      "it('required proof H-01', () => { expect(1).toBe(1); });\n"
+    );
+    const execution = executionFor(rel, 'required proof H-01');
+
+    expect(
+      proofOk(rel, { id: 'plain-proof', test: 'required proof H-01' }, dir, execution).ok
+    ).toBe(true);
+    expect(
+      proofOk(rel, { id: 'plain-proof', test: 'renamed proof' }, dir, execution).ok
+    ).toBe(false);
+
+    writeFileSync(
+      join(dir, rel),
+      "it.skip('required proof H-01', () => { expect(1).toBe(1); });\n"
+    );
+    expect(
+      proofOk(rel, { id: 'plain-proof', test: 'required proof H-01' }, dir, execution).ok
+    ).toBe(false);
+
+    expect(
+      proofOk('tests/integration/missing.test.ts', { id: 'plain-proof', test: 'required proof H-01' }, dir, execution).ok
+    ).toBe(false);
   });
 
   it('every required H-01 / H-02 / M-01 / MEDIUM-01 direct proof is individually mapped', () => {
@@ -105,9 +204,8 @@ describe('coverage audit substantive gate (T115)', () => {
   });
 
   it('deleting one required proof fails the audit closed', () => {
-
     const emptyRoot = mkdtempSync(join(tmpdir(), 'coverage-audit-empty-'));
-    const result = audit(emptyRoot);
+    const result = audit(emptyRoot, { execution: fullExecution() });
     expect(result.missing.length).toBeGreaterThan(0);
     expect(result.missing).toEqual(
       expect.arrayContaining([
@@ -116,5 +214,11 @@ describe('coverage audit substantive gate (T115)', () => {
         expect.stringContaining('T115'),
       ])
     );
+  });
+
+  it('audit fails closed when execution evidence is absent', () => {
+    const result = audit(ROOT, { execution: null });
+    expect(result.missing.length).toBeGreaterThan(0);
+    expect(result.missing.some((m: string) => m.includes('unexecuted-no-evidence'))).toBe(true);
   });
 });
