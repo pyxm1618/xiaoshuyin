@@ -260,6 +260,102 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{id}/participation-invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createParticipationInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/participation-invites/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getParticipationInvite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/participation-invites/{token}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["acceptParticipationInvite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/participations/{id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["declineParticipation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/participations/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["withdrawParticipation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/participations/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getParticipation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/identity-bindings/bootstrap": {
         parameters: {
             query?: never;
@@ -361,6 +457,13 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Error: {
+            code: string;
+            message: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        ErrorResponse: {
             code: string;
             message: string;
             details?: {
@@ -915,6 +1018,98 @@ export interface components {
             code: "BINDING_CONTEXT_INVALID";
             message: string;
         };
+        /** @enum {string} */
+        CaseParticipationState: "PENDING" | "ACTIVE" | "DECLINED" | "EXPIRED" | "WITHDRAWN";
+        ParticipationNotice: {
+            version: string;
+            title: string;
+            body: string;
+        };
+        CreateParticipationInviteRequest: {
+            /** Format: uuid */
+            personId: string;
+            idempotencyKey: string;
+        };
+        CreateParticipationInviteResponse: {
+            /** Format: uuid */
+            participationId: string;
+            /** Format: uuid */
+            caseId: string;
+            /** Format: uuid */
+            personId: string;
+            /** @enum {string} */
+            state: "PENDING";
+            inviteToken: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ParticipationInvitePublicView: {
+            /** Format: uuid */
+            participationId: string;
+            /** @enum {string} */
+            state: "PENDING";
+            /** Format: date-time */
+            expiresAt: string;
+            notice: {
+                version: string;
+                title: string;
+                body: string;
+            };
+        };
+        AcceptParticipationRequest: {
+            idempotencyKey: string;
+        };
+        DeclineParticipationRequest: {
+            idempotencyKey: string;
+        };
+        WithdrawParticipationRequest: {
+            idempotencyKey: string;
+        };
+        ParticipationResource: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            caseId: string;
+            /** Format: uuid */
+            personId: string;
+            /** @enum {string} */
+            state: "PENDING" | "ACTIVE" | "DECLINED" | "EXPIRED" | "WITHDRAWN";
+            /** Format: date-time */
+            createdAt: string;
+            acceptedAt?: string | null;
+            declinedAt?: string | null;
+            expiredAt?: string | null;
+            withdrawnAt?: string | null;
+        };
+        ParticipationStateConflictError: {
+            /** @enum {string} */
+            code: "PARTICIPATION_STATE_CONFLICT";
+            message: string;
+            /** @enum {string} */
+            currentState: "PENDING" | "ACTIVE" | "DECLINED" | "EXPIRED" | "WITHDRAWN";
+        };
+        ParticipationAlreadyExistsError: {
+            /** @enum {string} */
+            code: "PARTICIPATION_ALREADY_EXISTS";
+            message: string;
+        };
+        ParticipationTargetIneligibleError: {
+            /** @enum {string} */
+            code: "PARTICIPATION_TARGET_INELIGIBLE";
+            message: string;
+        };
+        InvitationNotAvailableError: {
+            /** @enum {string} */
+            code: "INVITATION_NOT_AVAILABLE";
+            message: string;
+        };
+        ParticipationNotFoundError: {
+            /** @enum {string} */
+            code: "PARTICIPATION_NOT_FOUND";
+            message: string;
+        };
     };
     responses: never;
     parameters: {
@@ -926,6 +1121,10 @@ export interface components {
         IdempotencyKeyHeader: string;
         /** @description Case UUID（待验证参数；存在不代表有权访问）。 */
         CaseIdPath: string;
+        /** @description 不透明邀请 token；只作为 bearer capability，不构成 identity proof。 */
+        InviteTokenPath: string;
+        /** @description participation UUID（待验证参数；存在不代表有权访问）。 */
+        ParticipationIdPath: string;
         /** @description opaque pending authentication context；不是普通会话。 */
         BindingContextHeader: string;
         /** @description 待验证的 target Person P1；服务端读取唯一 Family。 */
@@ -1873,6 +2072,410 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createParticipationInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Case UUID（待验证参数；存在不代表有权访问）。 */
+                id: components["parameters"]["CaseIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateParticipationInviteRequest"];
+            };
+        };
+        responses: {
+            /** @description Participation invitation created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateParticipationInviteResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `PARTICIPATION_TARGET_INELIGIBLE` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationTargetIneligibleError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseNotFoundError"] | components["schemas"]["CurrentFamilyNotFoundError"];
+                };
+            };
+            /** @description Already exists / current-family ambiguity / idempotency mismatch */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationAlreadyExistsError"] | components["schemas"]["IdempotencyPayloadMismatchError"] | components["schemas"]["CurrentFamilyAmbiguousError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    getParticipationInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 不透明邀请 token；只作为 bearer capability，不构成 identity proof。 */
+                token: components["parameters"]["InviteTokenPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Minimal safe invitation view */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationInvitePublicView"];
+                };
+            };
+            /** @description `INVITATION_NOT_AVAILABLE` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationNotAvailableError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    acceptParticipationInvite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 不透明邀请 token；只作为 bearer capability，不构成 identity proof。 */
+                token: components["parameters"]["InviteTokenPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptParticipationRequest"];
+            };
+        };
+        responses: {
+            /** @description Participation active or converged */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationResource"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `PARTICIPATION_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationNotFoundError"];
+                };
+            };
+            /** @description State conflict / idempotency mismatch */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationStateConflictError"] | components["schemas"]["IdempotencyPayloadMismatchError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    declineParticipation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description participation UUID（待验证参数；存在不代表有权访问）。 */
+                id: components["parameters"]["ParticipationIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeclineParticipationRequest"];
+            };
+        };
+        responses: {
+            /** @description Participation declined or converged */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationResource"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `PARTICIPATION_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationNotFoundError"];
+                };
+            };
+            /** @description State conflict / idempotency mismatch */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationStateConflictError"] | components["schemas"]["IdempotencyPayloadMismatchError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    withdrawParticipation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description participation UUID（待验证参数；存在不代表有权访问）。 */
+                id: components["parameters"]["ParticipationIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WithdrawParticipationRequest"];
+            };
+        };
+        responses: {
+            /** @description Participation withdrawn or converged */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationResource"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `PARTICIPATION_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationNotFoundError"];
+                };
+            };
+            /** @description State conflict / idempotency mismatch */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationStateConflictError"] | components["schemas"]["IdempotencyPayloadMismatchError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    getParticipation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description participation UUID（待验证参数；存在不代表有权访问）。 */
+                id: components["parameters"]["ParticipationIdPath"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Minimal participation state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationResource"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `PARTICIPATION_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ParticipationNotFoundError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
                 };
             };
         };
