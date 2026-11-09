@@ -49,8 +49,8 @@ export interface BuildAppOptions {
  * `LOG_LEVEL=info`. Raw client IP and User-Agent must never reach logs, so the
  * serializer keeps only non-sensitive routing fields.
  */
-export function sanitizeRequestUrlForLogs(url: unknown): unknown {
-  if (typeof url !== 'string') return url;
+export function sanitizeRequestUrlForLogs(url: unknown): string {
+  if (typeof url !== 'string') return '';
   return url.replace(
     /(\/api\/v1\/participation-invites\/)[^/?#]+/g,
     '$1[REDACTED]'
