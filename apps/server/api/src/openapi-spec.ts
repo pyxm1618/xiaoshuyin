@@ -144,6 +144,7 @@ const CurrentFamilyAmbiguousErrorSchema = z.strictObject({
 export function buildOpenApiDocument() {
   const schemas: Record<string, JsonSchema> = {
     Error: toJsonSchema(ErrorSchema),
+    ErrorResponse: toJsonSchema(ErrorSchema),
     AgeBand: toJsonSchema(AgeBand),
     WritableSource: toJsonSchema(WritableSource),
     ProfileAttribute: toJsonSchema(ProfileAttribute),
