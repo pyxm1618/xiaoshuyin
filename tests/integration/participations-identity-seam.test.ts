@@ -30,7 +30,7 @@ describe('Slice 4 ↔ Slice 5 identity seam', () => {
   afterAll(async()=>{await h.close();});
 
   it('Case C: real Slice 4 invitation drives Slice 5 binding, but explicit participation accept is still required', async () => {
-    const f=await createParticipationFixture(h,'identity-case-c',{target:'member'});
+    const f=await createParticipationFixture(h,'identity-case-c',{target:'member',ageBand:'MINOR_14_17'});
     const created=await invite(
       h.app,f.manager.token,f.caseId,f.targetPersonId,'identity-case-c-invite'
     );
