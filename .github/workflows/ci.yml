@@ -141,6 +141,8 @@ jobs:
           IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600'
           IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900'
           IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300'
+          PARTICIPATION_INVITE_TTL_SECONDS: '86400'
+          PARTICIPATION_INVITE_TOKEN_SECRET: ci-participation-invite-secret-32chars
           COVERAGE_EXECUTION_EVIDENCE: ${{ runner.temp }}/vitest-results.json
       - name: Upload verify-all provenance
         if: always()
