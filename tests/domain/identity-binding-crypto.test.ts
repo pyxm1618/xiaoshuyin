@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import {
+  PAIRING_ENVELOPE_BYTES,
   createContextToken,
   createDecoyPairingChallenge,
   decodePairingChallenge,
@@ -8,6 +9,7 @@ import {
   deriveAesKey,
   deriveIdentityDigest,
   deriveIdentityPepper,
+  derivePairingIssuanceNonce,
   encodePairingChallenge,
   encryptOpenid,
   hashToken,
@@ -30,6 +32,34 @@ function facts(overrides: Partial<PairingChallengeFacts> = {}): PairingChallenge
     pairingExpiresAt: new Date(now.getTime() + 300_000),
     ...overrides,
   };
+}
+
+function fixedFacts(): PairingChallengeFacts {
+  return facts({
+    contextId: '018f3a56-7b0c-7d21-9f3e-1a2b3c4d5e6f',
+    attemptId: '018f3a57-1234-7abc-8def-0123456789ab',
+    targetPersonId: '018f3a58-2345-7bcd-8ef0-123456789abc',
+    invitationParticipationId: '018f3a59-3456-7cde-9f01-23456789abcd',
+    pairingIssuanceId: '018f3a5a-4567-7def-a012-3456789abcde',
+    pairingIssuedAt: new Date('2026-11-09T10:00:00.000Z'),
+    pairingExpiresAt: new Date('2026-11-09T10:05:00.000Z'),
+  });
+}
+
+/**
+ * The pre-fix envelope wrote the 128-byte structured payload in the clear. A
+ * current epoch-millisecond timestamp occupied bytes 112..119 and its high
+ * bytes were always zero. This predicate therefore reliably identified a real
+ * issuance without the secret.
+ */
+function legacyStructuredPlaintextDistinguisher(bytes: Buffer): boolean {
+  return (
+    bytes.length === PAIRING_ENVELOPE_BYTES &&
+    bytes[112] === 0x00 &&
+    bytes[113] === 0x00 &&
+    bytes[114] === 0x00 &&
+    bytes[115] === 0x00
+  );
 }
 
 describe('identity binding crypto', () => {
@@ -132,5 +162,97 @@ describe('identity binding crypto', () => {
     const decoy = createDecoyPairingChallenge();
     expect(decoy).toMatch(/^[A-Za-z0-9_-]{192}$/);
     expect(decodePairingChallenge(SECRET, decoy)).toBeNull();
+  });
+
+  // ── Confidentiality / AEAD direct proofs (PR #16 review Finding 1) ──
+
+  it('base64url decode exposes no UUID, digest or timestamp plaintext', () => {
+    const input = fixedFacts();
+    const bytes = Buffer.from(encodePairingChallenge(SECRET, input), 'base64url');
+    expect(bytes).toHaveLength(PAIRING_ENVELOPE_BYTES);
+
+    const hex = bytes.toString('hex');
+    for (const uuid of [
+      input.pairingIssuanceId,
+      input.contextId,
+      input.attemptId,
+      input.targetPersonId,
+      input.invitationParticipationId,
+    ]) {
+      expect(hex).not.toContain(uuid.replace(/-/g, ''));
+      expect(bytes.toString('utf8')).not.toContain(uuid);
+    }
+    expect(hex).not.toContain(input.candidateIdentityDigest);
+
+    const issued = Buffer.alloc(8);
+    issued.writeBigUInt64BE(BigInt(input.pairingIssuedAt.getTime()));
+    const expires = Buffer.alloc(8);
+    expires.writeBigUInt64BE(BigInt(input.pairingExpiresAt.getTime()));
+    expect(hex).not.toContain(issued.toString('hex'));
+    expect(hex).not.toContain(expires.toString('hex'));
+  });
+
+  it('valid AEAD opening recovers every bound field exactly', () => {
+    const input = fixedFacts();
+    const decoded = decodePairingChallenge(
+      SECRET,
+      encodePairingChallenge(SECRET, input),
+      new Date('2026-11-09T10:01:00.000Z')
+    );
+    expect(decoded).not.toBeNull();
+    expect(decoded).toMatchObject({
+      contextId: input.contextId,
+      candidateIdentityDigest: input.candidateIdentityDigest,
+      attemptId: input.attemptId,
+      targetPersonId: input.targetPersonId,
+      invitationParticipationId: input.invitationParticipationId,
+      pairingIssuanceNonce: derivePairingIssuanceNonce(SECRET, input).toString('hex'),
+    });
+    expect(decoded?.pairingIssuedAt.getTime()).toBe(input.pairingIssuedAt.getTime());
+    expect(decoded?.pairingExpiresAt.getTime()).toBe(input.pairingExpiresAt.getTime());
+  });
+
+  it('tampering the nonce, ciphertext or tag all fail authentication', () => {
+    const challenge = encodePairingChallenge(SECRET, fixedFacts());
+    const original = Buffer.from(challenge, 'base64url');
+    const now = new Date('2026-11-09T10:01:00.000Z');
+    for (const offset of [0, 15, 16, 60, 127, 128, 143]) {
+      const tampered = Buffer.from(original);
+      tampered[offset] = (tampered[offset] ?? 0) ^ 0xff;
+      expect(decodePairingChallenge(SECRET, tampered.toString('base64url'), now)).toBeNull();
+    }
+  });
+
+  it('decoy and valid envelopes share length, alphabet and decoded byte shape', () => {
+    const valid = encodePairingChallenge(SECRET, fixedFacts());
+    const decoy = createDecoyPairingChallenge();
+
+    for (const value of [valid, decoy]) {
+      expect(value).toHaveLength(192);
+      expect(value).toMatch(/^[A-Za-z0-9_-]{192}$/);
+      expect(isPairingChallengeShape(value)).toBe(true);
+      expect(Buffer.from(value, 'base64url')).toHaveLength(PAIRING_ENVELOPE_BYTES);
+    }
+    expect(decodePairingChallenge(SECRET, decoy)).toBeNull();
+    expect(
+      decodePairingChallenge(SECRET, valid, new Date('2026-11-09T10:01:00.000Z'))
+    ).not.toBeNull();
+  });
+
+  it('the legacy structured-plaintext distinguisher no longer separates valid from decoy', () => {
+    const validBytes = Buffer.from(
+      encodePairingChallenge(SECRET, fixedFacts()),
+      'base64url'
+    );
+    // The old clear-text payload was always detectable; the AEAD envelope is
+    // uniformly random in the same positions.
+    expect(legacyStructuredPlaintextDistinguisher(validBytes)).toBe(false);
+
+    const decoys = Array.from({ length: 8 }, () =>
+      Buffer.from(createDecoyPairingChallenge(), 'base64url')
+    );
+    for (const decoyBytes of decoys) {
+      expect(legacyStructuredPlaintextDistinguisher(decoyBytes)).toBe(false);
+    }
   });
 });

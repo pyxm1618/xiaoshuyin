@@ -7,7 +7,7 @@
  * never an identity proof or pairing selector.
  */
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type pg from 'pg';
 import {
   authorize,
@@ -38,6 +38,7 @@ import { appendSecondParty, hasKind, listByAttempt } from './confirmation-reposi
 import {
   clearPairingIssuance,
   findByIdForUpdate as findContextByIdForUpdate,
+  type PendingContextRow,
 } from './pending-context-repository.js';
 import { appendAudit } from './audit-repository.js';
 import {
@@ -47,7 +48,11 @@ import {
   setScope,
 } from './operation-key-repository.js';
 import { commitAttempt, type CommitDeps } from './commit.js';
-import { decodePairingChallenge, type PairingChallengeFacts } from './crypto.js';
+import {
+  decodePairingChallenge,
+  derivePairingIssuanceNonce,
+  type DecodedPairingChallenge,
+} from './crypto.js';
 import { settleExpiredForPerson, settleTerminalAttempt } from './settlement.js';
 import type { InvitationResolutionPort } from './invitation-port.js';
 
@@ -150,6 +155,13 @@ interface DecisionTxResult {
   attemptId: string;
   targetPersonId: string;
   targetFamilyId: string;
+  /**
+   * Exact transport context verified for THIS decision. Phase C must use this
+   * context instead of an arbitrary row of the attempt. Null only on an exact
+   * operation replay, where no challenge is re-verified; Phase C then resolves
+   * the deterministic current usable context of the same attempt.
+   */
+  contextId: string | null;
   shouldCommit: boolean;
 }
 
@@ -331,6 +343,7 @@ export async function submitConfirmerDecision(
           attemptId: attempt.id,
           targetPersonId: attempt.targetPersonId,
           targetFamilyId: attempt.targetFamilyId,
+          contextId: challenge.contextId,
           shouldCommit: true,
         };
       }
@@ -375,6 +388,7 @@ export async function submitConfirmerDecision(
         attemptId: attempt.id,
         targetPersonId: attempt.targetPersonId,
         targetFamilyId: attempt.targetFamilyId,
+        contextId: null,
         shouldCommit: false,
       };
     }
@@ -386,6 +400,7 @@ export async function submitConfirmerDecision(
       targetPersonId: txResult.targetPersonId,
       targetFamilyId: txResult.targetFamilyId,
       actorAccountId: input.accountId,
+      contextId: txResult.contextId,
     });
     if (commit.outcome === 'COMMITTED') return { state: 'COMMITTED' };
     if (commit.outcome === 'TERMINAL') return { state: 'TERMINAL' };
@@ -416,6 +431,9 @@ async function replaySecondPartyOperation(
     attemptId: attempt.id,
     targetPersonId: attempt.targetPersonId,
     targetFamilyId: attempt.targetFamilyId,
+    // An exact replay re-verifies nothing. Phase C deterministically resolves
+    // the current usable context of THIS attempt.
+    contextId: null,
     // An AFFIRM retry after an infrastructure failure re-runs Phase C; the
     // commit path is conditional and cannot double confirmation or binding.
     shouldCommit: input.decision === 'AFFIRM' && attempt.state === 'PENDING',
@@ -430,7 +448,7 @@ async function replaySecondPartyOperation(
  */
 async function assertRejectNotAfterAffirmative(
   tx: pg.PoolClient,
-  challenge: PairingChallengeFacts,
+  challenge: DecodedPairingChallenge,
   targetPersonId: string
 ): Promise<void> {
   await setBindingAttemptContext(tx, {
@@ -458,7 +476,7 @@ async function assertRejectNotAfterAffirmative(
 async function verifyChallengeBinding(
   tx: pg.PoolClient,
   deps: ConfirmerDeps,
-  challenge: PairingChallengeFacts,
+  challenge: DecodedPairingChallenge,
   input: ConfirmerDecisionInput,
   targetFamilyId: string
 ): Promise<{
@@ -498,11 +516,12 @@ async function verifyChallengeBinding(
     context.attemptId !== attempt.id ||
     context.candidateIdentityDigest !== attempt.candidateIdentityDigest ||
     context.invitationParticipationId !== attempt.invitationParticipationId ||
-    context.pairingIssuanceId !== challenge.pairingIssuanceId ||
     !context.pairingIssuedAt ||
     !context.pairingExpiresAt ||
+    !context.pairingIssuanceId ||
     context.pairingIssuedAt.getTime() !== challenge.pairingIssuedAt.getTime() ||
-    context.pairingExpiresAt.getTime() !== challenge.pairingExpiresAt.getTime()
+    context.pairingExpiresAt.getTime() !== challenge.pairingExpiresAt.getTime() ||
+    !pairingIssuanceNonceMatches(deps.identityBindingSecret, context, attempt, challenge)
   ) {
     throw bindingError('BINDING_NOT_FOUND');
   }
@@ -526,4 +545,37 @@ async function verifyChallengeBinding(
     candidateIdentityDigest: attempt.candidateIdentityDigest,
     expiresAt: attempt.expiresAt,
   };
+}
+/**
+ * The challenge carries a keyed commitment to the exact issuance instead of the
+ * raw issuance id. Recompute it from the authoritative persisted row and
+ * compare timing-safely. A challenge minted for a different / rotated issuance
+ * therefore cannot select this context.
+ */
+function pairingIssuanceNonceMatches(
+  secret: string,
+  context: PendingContextRow,
+  attempt: {
+    id: string;
+    targetPersonId: string;
+    invitationParticipationId: string;
+    candidateIdentityDigest: string;
+  },
+  challenge: DecodedPairingChallenge
+): boolean {
+  if (!context.pairingIssuanceId || !context.pairingIssuedAt || !context.pairingExpiresAt) {
+    return false;
+  }
+  const expected = derivePairingIssuanceNonce(secret, {
+    pairingIssuanceId: context.pairingIssuanceId,
+    contextId: context.id,
+    attemptId: attempt.id,
+    targetPersonId: attempt.targetPersonId,
+    invitationParticipationId: attempt.invitationParticipationId,
+    candidateIdentityDigest: attempt.candidateIdentityDigest,
+    pairingIssuedAt: context.pairingIssuedAt,
+    pairingExpiresAt: context.pairingExpiresAt,
+  });
+  const provided = Buffer.from(challenge.pairingIssuanceNonce, 'hex');
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
 }

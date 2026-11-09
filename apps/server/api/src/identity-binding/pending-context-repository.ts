@@ -115,6 +115,36 @@ export async function findByAttemptIdForUpdate(
   return rows[0] ? mapRow(rows[0]) : null;
 }
 
+/**
+ * Deterministic authoritative context for a Phase C replay that does not
+ * re-verify a challenge.
+ *
+ * A bootstrap replay may legitimately create a fresh transport context for the
+ * same live attempt while older contexts are already scrubbed (expired). Phase
+ * C must therefore never rely on PostgreSQL heap order: it selects the newest
+ * context of THIS exact attempt that is still usable (decryptable openid and
+ * not expired), ordered by the immutable creation facts. If none exists the
+ * commit fails closed.
+ */
+export async function findCurrentUsableContextForAttemptForUpdate(
+  tx: pg.PoolClient,
+  attemptId: string
+): Promise<PendingContextRow | null> {
+  const { rows } = await tx.query(
+    `SELECT ${COLUMNS} FROM binding_pending_contexts
+      WHERE attempt_id = $1
+        AND openid_ciphertext IS NOT NULL
+        AND openid_nonce IS NOT NULL
+        AND openid_tag IS NOT NULL
+        AND expires_at > now()
+      ORDER BY created_at DESC, id DESC
+      LIMIT 1
+      FOR UPDATE`,
+    [attemptId]
+  );
+  return rows[0] ? mapRow(rows[0]) : null;
+}
+
 export async function touch(tx: pg.PoolClient, id: string): Promise<void> {
   await tx.query('UPDATE binding_pending_contexts SET last_used_at = now() WHERE id = $1', [id]);
 }

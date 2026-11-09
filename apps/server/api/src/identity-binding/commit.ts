@@ -25,7 +25,9 @@ import { decryptOpenid, deriveIdentityDigest } from './crypto.js';
 import { evaluateGateForTarget, lockBindingGateFacts } from './gate.js';
 import {
   clearPairingForAttempt,
-  findByAttemptIdForUpdate,
+  findByIdForUpdate as findContextByIdForUpdate,
+  findCurrentUsableContextForAttemptForUpdate,
+  isExpired,
   markCommittedForAttempt,
 } from './pending-context-repository.js';
 import {
@@ -49,6 +51,12 @@ export interface CommitInput {
   targetPersonId: string;
   targetFamilyId: string;
   actorAccountId: string;
+  /**
+   * Exact transport context verified by the current candidate / confirmer
+   * confirmation and pairing issuance. When absent (exact operation replay),
+   * Phase C resolves the deterministic current usable context of THIS attempt.
+   */
+  contextId?: string | null;
 }
 
 export type CommitOutcome =
@@ -74,6 +82,7 @@ export async function commitAttempt(
         targetPersonId: input.targetPersonId,
         targetFamilyId: input.targetFamilyId,
         actorAccountId: input.actorAccountId,
+        contextId: input.contextId ?? null,
       },
       (tx) => commitInTransaction(deps, tx, input)
     );
@@ -101,16 +110,41 @@ async function commitInTransaction(
     'IDENTITY_BINDING_COMMIT',
   ]);
 
-  const context = await findByAttemptIdForUpdate(tx, input.attemptId);
-  if (!context) throw new RetryableOperationError();
-
-  const correlationId = randomUUID();
-
+  // Settled attempts are terminal facts. Never resolve a transport context for
+  // them: a legitimate replay must return the historical outcome even though
+  // every context has already been scrubbed.
   if (attempt.state === 'COMMITTED') {
     return { outcome: 'COMMITTED', accountId: attempt.committedAccountId! };
   }
   if (attempt.state === 'TERMINAL') {
     return { outcome: 'TERMINAL', reason: attempt.terminalReason! };
+  }
+
+  const correlationId = randomUUID();
+
+  // M-04: expiry is settled by the single authoritative primitive. Do NOT
+  // transition the state here and then terminalize again (that would skip the
+  // exactly-once terminal audit and cleanup).
+  const expired = await settleExpiredAttempt(tx, {
+    attemptId: attempt.id,
+    correlationId,
+  });
+  if (expired) {
+    return { outcome: 'TERMINAL', reason: 'ATTEMPT_EXPIRED' };
+  }
+
+  // Deterministic authoritative transport context. The verified challenge
+  // carries its exact context id; only an exact operation replay (no challenge
+  // re-verification) resolves the newest currently usable context of THIS
+  // attempt. PostgreSQL heap order is never relied upon.
+  const context = input.contextId
+    ? await findContextByIdForUpdate(tx, input.contextId)
+    : await findCurrentUsableContextForAttemptForUpdate(tx, attempt.id);
+  if (!context) throw new RetryableOperationError();
+  // Exact identity / attempt / invitation / staleness binding. A context that
+  // belongs to another attempt is hidden by RLS and therefore also lands here.
+  if (context.attemptId !== attempt.id || isExpired(context)) {
+    throw new RetryableOperationError();
   }
 
   // ── M8: four-element consistency before any Phase C write ──
@@ -122,17 +156,6 @@ async function commitInTransaction(
     attempt.targetFamilyId !== input.targetFamilyId
   ) {
     return terminalize(tx, attempt, 'IDENTITY_CONFLICT', correlationId);
-  }
-
-  // M-04: expiry is settled by the single authoritative primitive. Do NOT
-  // transition the state here and then terminalize again (that would skip the
-  // exactly-once terminal audit and cleanup).
-  const expired = await settleExpiredAttempt(tx, {
-    attemptId: attempt.id,
-    correlationId,
-  });
-  if (expired) {
-    return { outcome: 'TERMINAL', reason: 'ATTEMPT_EXPIRED' };
   }
 
   const confirmations = await listByAttempt(tx, attempt.id);

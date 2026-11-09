@@ -16,7 +16,7 @@ import {
   createHmac,
   hkdfSync,
   randomBytes,
-  timingSafeEqual,
+
 } from 'node:crypto';
 
 export const CONTEXT_TOKEN_BYTES = 32;
@@ -24,10 +24,24 @@ export const AES_GCM_NONCE_BYTES = 12;
 
 const IDENTITY_LABEL = 'identity-binding:openid-digest:v1';
 const AES_LABEL = 'identity-binding:pending-openid:v1';
-const PAIRING_LABEL = 'xiaoshuyin:identity-binding:pairing:v1';
+const PAIRING_AEAD_LABEL = 'xiaoshuyin:identity-binding:pairing-aead:v1';
+const PAIRING_NONCE_LABEL = 'xiaoshuyin:identity-binding:pairing-nonce:v1';
+const PAIRING_AAD = Buffer.from('xiaoshuyin:identity-binding:pairing-aead:v1', 'utf8');
 
-/** Fixed authenticated envelope: 128 payload bytes + 16-byte authenticator. */
-export const PAIRING_ENVELOPE_BYTES = 144;
+/**
+ * Fixed confidential authenticated envelope (144 bytes total):
+ *
+ *   nonce(16) || AES-256-GCM ciphertext(112) || tag(16)
+ *
+ * 144 bytes encode to exactly 192 unpadded base64url characters. No bound
+ * business field is externally visible; the nonce is a keyed deterministic
+ * derivation over the frozen issuance material and therefore looks random.
+ */
+export const PAIRING_NONCE_BYTES = 16;
+export const PAIRING_PAYLOAD_BYTES = 112;
+export const PAIRING_TAG_BYTES = 16;
+export const PAIRING_ENVELOPE_BYTES =
+  PAIRING_NONCE_BYTES + PAIRING_PAYLOAD_BYTES + PAIRING_TAG_BYTES;
 export const PAIRING_CHALLENGE_LENGTH = 192;
 export const PAIRING_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{192}$/;
 
@@ -96,7 +110,14 @@ export function decryptOpenid(
   ]).toString('utf8');
 }
 // ── Candidate-presented pairing challenge (D-3.5) ────────────
+//
+// Confidentiality + integrity: a deterministic authenticated encryption
+// envelope. Only the nonce and the AEAD output are externally visible; every
+// bound field (context, attempt, P1, invitation, identity digest, issuance
+// times) stays inside the ciphertext. A random decoy has exactly the same
+// length, alphabet and externally observable shape.
 
+/** Facts used to ENCODE one issuance (the full issuance id stays private). */
 export interface PairingChallengeFacts {
   contextId: string;
   candidateIdentityDigest: string;
@@ -104,6 +125,23 @@ export interface PairingChallengeFacts {
   targetPersonId: string;
   invitationParticipationId: string;
   pairingIssuanceId: string;
+  pairingIssuedAt: Date;
+  pairingExpiresAt: Date;
+}
+
+/** Facts recovered after successful AEAD opening. */
+export interface DecodedPairingChallenge {
+  contextId: string;
+  candidateIdentityDigest: string;
+  attemptId: string;
+  targetPersonId: string;
+  invitationParticipationId: string;
+  /**
+   * Keyed commitment to the exact issuance. The raw issuance id is NOT carried
+   * in the envelope; the verifier recomputes this value from the authoritative
+   * persisted issuance row and compares it timing-safely.
+   */
+  pairingIssuanceNonce: string;
   pairingIssuedAt: Date;
   pairingExpiresAt: Date;
 }
@@ -132,17 +170,20 @@ function readTimestamp(source: Buffer, offset: number): Date {
   return new Date(Number(source.readBigUInt64BE(offset)));
 }
 
-function pairingKey(secret: string): Buffer {
-  return deriveKey(secret, PAIRING_LABEL);
+/** Independent AEAD key (never the pending-openid key). */
+function pairingAeadKey(secret: string): Buffer {
+  return deriveKey(secret, PAIRING_AEAD_LABEL);
 }
 
-function pairingPayload(facts: PairingChallengeFacts): Buffer {
-  const payload = Buffer.alloc(128);
+/** Independent nonce-derivation key. */
+function pairingNonceKey(secret: string): Buffer {
+  return deriveKey(secret, PAIRING_NONCE_LABEL);
+}
+
+/** 112-byte plaintext: every bound field except the raw issuance id. */
+function pairingPlaintext(facts: PairingChallengeFacts): Buffer {
+  const payload = Buffer.alloc(PAIRING_PAYLOAD_BYTES);
   let offset = 0;
-  uuidToBytes(facts.pairingIssuanceId).copy(payload, offset);
-  offset += 16;
-  digestToBytes(facts.candidateIdentityDigest).copy(payload, offset);
-  offset += 32;
   uuidToBytes(facts.contextId).copy(payload, offset);
   offset += 16;
   uuidToBytes(facts.attemptId).copy(payload, offset);
@@ -151,21 +192,60 @@ function pairingPayload(facts: PairingChallengeFacts): Buffer {
   offset += 16;
   uuidToBytes(facts.invitationParticipationId).copy(payload, offset);
   offset += 16;
+  digestToBytes(facts.candidateIdentityDigest).copy(payload, offset);
+  offset += 32;
   writeTimestamp(payload, offset, facts.pairingIssuedAt);
   offset += 8;
   writeTimestamp(payload, offset, facts.pairingExpiresAt);
   return payload;
 }
 
-function pairingTag(secret: string, payload: Buffer): Buffer {
-  return createHmac('sha256', pairingKey(secret))
-    .update(payload)
-    .digest()
-    .subarray(0, 16);
+/**
+ * 128-byte canonical frozen material. The issuance id makes the derived nonce
+ * unique per issuance; every other byte re-binds the nonce to the exact
+ * attempt / context / target / invitation / identity / validity window.
+ */
+function pairingIssuanceMaterial(facts: PairingChallengeFacts): Buffer {
+  const material = Buffer.alloc(128);
+  let offset = 0;
+  uuidToBytes(facts.pairingIssuanceId).copy(material, offset);
+  offset += 16;
+  uuidToBytes(facts.contextId).copy(material, offset);
+  offset += 16;
+  uuidToBytes(facts.attemptId).copy(material, offset);
+  offset += 16;
+  uuidToBytes(facts.targetPersonId).copy(material, offset);
+  offset += 16;
+  uuidToBytes(facts.invitationParticipationId).copy(material, offset);
+  offset += 16;
+  digestToBytes(facts.candidateIdentityDigest).copy(material, offset);
+  offset += 32;
+  writeTimestamp(material, offset, facts.pairingIssuedAt);
+  offset += 8;
+  writeTimestamp(material, offset, facts.pairingExpiresAt);
+  return material;
 }
 
 /**
- * Deterministic authenticated envelope. Reconstructing the same issuance
+ * Deterministic, per-issuance-unique AEAD nonce. Same frozen issuance material
+ * always yields the same nonce, so an exact replay re-encodes to the exact same
+ * bytes. A rotated issuance has a fresh random issuance id, so its nonce (and
+ * therefore the whole envelope) differs. The nonce is a keyed PRF output and
+ * never discloses the issuance id.
+ */
+export function derivePairingIssuanceNonce(
+  secret: string,
+  facts: PairingChallengeFacts
+): Buffer {
+  return createHmac('sha256', pairingNonceKey(secret))
+    .update(PAIRING_NONCE_LABEL)
+    .update(pairingIssuanceMaterial(facts))
+    .digest()
+    .subarray(0, PAIRING_NONCE_BYTES);
+}
+
+/**
+ * Confidential authenticated envelope. Reconstructing the same issuance
  * produces the exact same 192-character representation; rotation changes the
  * issuance id (and expiry), so it produces different bytes.
  */
@@ -173,8 +253,18 @@ export function encodePairingChallenge(
   secret: string,
   facts: PairingChallengeFacts
 ): string {
-  const payload = pairingPayload(facts);
-  return Buffer.concat([payload, pairingTag(secret, payload)]).toString('base64url');
+  const nonce = derivePairingIssuanceNonce(secret, facts);
+  const cipher = createCipheriv('aes-256-gcm', pairingAeadKey(secret), nonce);
+  cipher.setAAD(PAIRING_AAD);
+  const ciphertext = Buffer.concat([
+    cipher.update(pairingPlaintext(facts)),
+    cipher.final(),
+  ]);
+  const tag = cipher.getAuthTag();
+  if (ciphertext.length !== PAIRING_PAYLOAD_BYTES || tag.length !== PAIRING_TAG_BYTES) {
+    throw new Error('PAIRING_ENVELOPE_INVALID');
+  }
+  return Buffer.concat([nonce, ciphertext, tag]).toString('base64url');
 }
 
 export function isPairingChallengeShape(value: unknown): value is string {
@@ -182,15 +272,15 @@ export function isPairingChallengeShape(value: unknown): value is string {
 }
 
 /**
- * Verify the authenticated envelope. Returns null for any structural /
- * authentication / expiry failure. The caller maps every null to the frozen
- * generic 404; no reason is exposed.
+ * Open the AEAD envelope. Returns null for any structural / authentication /
+ * expiry failure. The caller maps every null to the frozen generic 404; no
+ * reason is exposed.
  */
 export function decodePairingChallenge(
   secret: string,
   challenge: string,
   now: Date = new Date()
-): PairingChallengeFacts | null {
+): DecodedPairingChallenge | null {
   if (!isPairingChallengeShape(challenge)) return null;
   let bytes: Buffer;
   try {
@@ -200,20 +290,34 @@ export function decodePairingChallenge(
   }
   if (bytes.length !== PAIRING_ENVELOPE_BYTES) return null;
 
-  const payload = bytes.subarray(0, 128);
-  const tag = bytes.subarray(128);
-  const expected = pairingTag(secret, payload);
-  if (tag.length !== expected.length || !timingSafeEqual(tag, expected)) return null;
+  const nonce = bytes.subarray(0, PAIRING_NONCE_BYTES);
+  const ciphertext = bytes.subarray(
+    PAIRING_NONCE_BYTES,
+    PAIRING_NONCE_BYTES + PAIRING_PAYLOAD_BYTES
+  );
+  const tag = bytes.subarray(PAIRING_NONCE_BYTES + PAIRING_PAYLOAD_BYTES);
+  if (tag.length !== PAIRING_TAG_BYTES) return null;
 
-  const facts: PairingChallengeFacts = {
-    pairingIssuanceId: bytesToUuid(payload.subarray(0, 16)),
-    candidateIdentityDigest: payload.subarray(16, 48).toString('hex'),
-    contextId: bytesToUuid(payload.subarray(48, 64)),
-    attemptId: bytesToUuid(payload.subarray(64, 80)),
-    targetPersonId: bytesToUuid(payload.subarray(80, 96)),
-    invitationParticipationId: bytesToUuid(payload.subarray(96, 112)),
-    pairingIssuedAt: readTimestamp(payload, 112),
-    pairingExpiresAt: readTimestamp(payload, 120),
+  let payload: Buffer;
+  try {
+    const decipher = createDecipheriv('aes-256-gcm', pairingAeadKey(secret), nonce);
+    decipher.setAAD(PAIRING_AAD);
+    decipher.setAuthTag(tag);
+    payload = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  } catch {
+    return null;
+  }
+  if (payload.length !== PAIRING_PAYLOAD_BYTES) return null;
+
+  const facts: DecodedPairingChallenge = {
+    contextId: bytesToUuid(payload.subarray(0, 16)),
+    attemptId: bytesToUuid(payload.subarray(16, 32)),
+    targetPersonId: bytesToUuid(payload.subarray(32, 48)),
+    invitationParticipationId: bytesToUuid(payload.subarray(48, 64)),
+    candidateIdentityDigest: payload.subarray(64, 96).toString('hex'),
+    pairingIssuedAt: readTimestamp(payload, 96),
+    pairingExpiresAt: readTimestamp(payload, 104),
+    pairingIssuanceNonce: nonce.toString('hex'),
   };
   if (facts.pairingExpiresAt.getTime() <= facts.pairingIssuedAt.getTime()) return null;
   if (now.getTime() >= facts.pairingExpiresAt.getTime()) return null;
@@ -222,8 +326,9 @@ export function decodePairingChallenge(
 
 /**
  * Same fixed-width, same-alphabet material for hidden business failures. It is
- * deliberately not a valid authenticated envelope, so it can never resolve to
- * a live attempt.
+ * a uniformly random 144-byte string: identical length, alphabet and observable
+ * structure to a real AEAD envelope, so a valid issuance cannot be told apart
+ * from a decoy without the secret.
  */
 export function createDecoyPairingChallenge(): string {
   return randomBytes(PAIRING_ENVELOPE_BYTES).toString('base64url');
