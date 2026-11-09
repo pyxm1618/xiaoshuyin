@@ -265,7 +265,7 @@ T001 / T002 / T005 PASS，且 Slice 4 runtime available
 
 ## Phase 15 — Blocked by Slice 4 Runtime（late closeout only）
 
-> 本 Phase 只承载真实 production adapter / 真实 Slice 4 integration / full Case C E2E。它 **不阻塞** Phase 1–14；B1 解决后即进入 `READY FOR CORE IMPLEMENTATION`，本 Phase 继续 BLOCKED，直到 Slice 4 runtime available。
+> 本 Phase 只承载真实 production adapter / 真实 Slice 4 integration / full Case C E2E。它 **不阻塞** Phase 1–14 的依赖关系；但本次 Decision A contract remediation 新增 Targeted Audit I gate，只有该审计 PASS 后 Phase 1–14 才可恢复 implementation。本 Phase 继续 BLOCKED，直到 Slice 4 runtime available。
 
 - [ ] T121 — **BLOCKED BY SLICE 4 RUNTIME**：实现 production `InvitationResolutionPort` adapter，读取 Slice 4 正式 invitation / participation 事实。不得创建 invitation 表、不得写 participation。 **Files**: `apps/server/api/src/identity-binding/invitation-slice4-adapter.ts`（仅当 Slice 4 runtime 已 merge） **Depends**: Slice 4 runtime merged main **Acceptance**: adapter 实现 port、`bun run typecheck` PASS、`tests/integration/identity-binding-invitation-contract.test.ts` PASS；真实 token resolve 由 T122 验证 [REQ:plan D-16.2 / FR-026] [VERIFY:bun run typecheck && bun run vitest run tests/integration/identity-binding-invitation-contract.test.ts]
 - [ ] T122 — **BLOCKED BY SLICE 4 RUNTIME**：真实 invitation token → bootstrap → binding → Slice 4 accept 端到端。 **Files**: `tests/integration/identity-binding-slice4-e2e.test.ts` **Depends**: T121 **Acceptance**: 端到端 PASS；active participation 与 binding 联合断言 [REQ:AS-01 / FR-025 / CHK180] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
