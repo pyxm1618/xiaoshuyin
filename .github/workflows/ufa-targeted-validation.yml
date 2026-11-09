@@ -10,6 +10,7 @@ permissions:
 
 env:
   NODE_VERSION: "26.13.0"
+  NO_COLOR: "1"
   DATABASE_URL: postgres://xiaoshuyin_app:ci_app_pw@localhost:5432/xiaoshuyin_test
   MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:ci_migrator_pw@localhost:5432/xiaoshuyin_test
   TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/xiaoshuyin_test
