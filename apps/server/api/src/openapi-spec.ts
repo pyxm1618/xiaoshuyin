@@ -476,7 +476,7 @@ export function buildOpenApiDocument() {
               ],
             }
           ),
-          '422': jsonResponse('`VALIDATION_ERROR`', toJsonSchema(ParticipationValidationError)),
+          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
           '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
         },
       },
