@@ -1,0 +1,78 @@
+name: UFA Targeted Validation
+
+on:
+  push:
+    branches:
+      - "feat/003-evidence-core"
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "26.13.0"
+  DATABASE_URL: postgres://xiaoshuyin_app:ci_app_pw@localhost:5432/xiaoshuyin_test
+  MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:ci_migrator_pw@localhost:5432/xiaoshuyin_test
+  TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/xiaoshuyin_test
+
+jobs:
+  validate:
+    name: UFA-001 / UFA-002 Evidence Gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: xiaoshuyin_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - name: Bootstrap roles
+        run: bash db/init/01-roles.sh
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: xiaoshuyin_test
+          POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
+          POSTGRES_APP_PASSWORD: ci_app_pw
+      - name: Fresh migration
+        run: bun run db:migrate
+      - name: 001-003 to 004 upgrade + second apply regression
+        run: bunx vitest run tests/db/migration-repro.test.ts
+      - name: OpenAPI generate #1 + deterministic diff
+        run: |
+          bun run openapi:generate
+          git diff --exit-code
+      - name: OpenAPI generate #2 + deterministic diff + check
+        run: |
+          bun run openapi:generate
+          git diff --exit-code
+          bun run openapi:check
+      - name: db:evidence
+        run: bun run db:evidence
+      - name: coverage:audit
+        run: bun run coverage:audit
+      - name: verify-all
+        run: bun run verify-all
+      - name: Governance
+        run: node .specify/scripts/validate-governance.mjs
+      - name: Governance self-test
+        run: node .specify/scripts/tests/run-governance-tests.mjs
