@@ -101,6 +101,7 @@ binding 前不产生普通会话或 active participation
 - **普通注册流程重构**：不修改 `POST /api/v1/auth/wechat` 的 new openid → Account + Person、existing openid → 复用行为；不得引入 `mode=invite`、隐藏参数或任何开关。
 - **OAuth provider 重构 / 新增第三方身份提供方**；**密码 / MFA / 登录方式扩展**。
 - **KYC / 实名 / 法定身份核验**：不引入 government-ID / 证件核验、人脸 / 视频验证、电话身份匹配或任何新的外部身份证明 / 敏感数据来源；强度仅为 family-attested identity association。
+- **Intentional realtime relay / collusion**：authenticated candidate 主动实时转发 pairing challenge / QR / PIN / token / screenshot / message / session proof 给另一个现场 presenter、authenticated holder 主动协助第三人冒用当前 pairing material、双方主动串通的 presenter substitution 均明确不要求 Slice 5 V1 检测或阻断。
 - **Person / Account / Family 基础语义重建**：不改写 Slice 1 的 Person、Account、Family、`family_members`、guardian、Consent、`authorize()`、RLS、幂等、审计基线。
 - **Profile 页面 / Account Settings / 身份中心 UI / 微信小程序页面 / 运营后台 UI**。
 - **Person merge 工具 / 管理后台人工合并 / 批量 identity reconciliation / duplicate Person recovery / unlink**。
@@ -121,6 +122,45 @@ binding 前不产生普通会话或 active participation
 - 不提供「登录后自动识别应绑定哪个 Person」的推断能力；不存在任何自动匹配路径。
 - 不把 binding attempt 生命周期与 invitation / participation / Case 生命周期合并。
 - 不把 candidate recognition 描述或验收为 KYC、实名或政府身份证明。
+
+## Threat Model / Trust Assumptions / Pairing Assurance Boundary（Decision A）
+
+### Runtime MUST resist
+
+Slice 5 V1 runtime 必须 fail closed / exactly-once 地抵抗：
+
+- wrong attempt；
+- wrong P1；
+- wrong authenticated identity / cross-identity；
+- wrong invitation / cross-invitation；
+- cross-attempt / cross-P1 binding；
+- replay、consumed material reuse；
+- stale / expired context、attempt 或 pairing issuance；
+- unauthorized / incorrectly authenticated confirmer；
+- pending-list position、createdAt、attemptId、invitation possession 或其它非 identity evidence 被当成 pairing selector；
+- concurrency races、double confirmation、double commit；
+- anti-enumeration leaks；
+- authorization / RLS boundary bypass；
+- non-atomic Phase C settlement 与 sensitive-data cleanup failure。
+
+### Trust assumption
+
+V1 assumes there is **no intentional realtime relay / collusion between the authenticated candidate and another onsite presenter**。authenticated candidate 不主动把其当前 pairing material / session proof 实时转发给另一现场 presenter，也不主动协助 presenter substitution。
+
+### Runtime need NOT resist in Slice 5 V1
+
+- intentional realtime relay；
+- intentional credential / challenge / QR / PIN / token / screenshot / message forwarding；
+- authenticated holder 主动协助第三人冒用当前 pairing material；
+- collusive presenter substitution。
+
+### Pairing assurance boundary
+
+- pairingChallenge / pairing material possession itself **IS NOT identity proof**；
+- confirmer 必须 independent authentication + personal human recognition + target confirmation，并确认眼前被辨认 candidate 正在使用 / 展示其本人当前 authenticated binding session 的 pairing material；
+- runtime 同时必须 exact-bind authenticated identity ↔ pending context ↔ attempt ↔ P1 ↔ invitation participation ↔ current issuance；
+- Decision A 只排除主动串通 relay，不得被解释为允许仅凭 material possession、pending list、timing、attemptId 或 invitation token 完成 identity association；
+- 不新增 KYC、government ID、face/video、phone identity matching、NFC/BLE、hardware attestation、WebAuthn/passkey requirement 或新 identity provider。
 
 ## Actors
 
