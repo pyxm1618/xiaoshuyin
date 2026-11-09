@@ -1,9 +1,9 @@
 /**
  * Shared Slice 006 integration-test harness.
  *
- * Uses the REAL Fastify app and REAL PostgreSQL. The invitation source is the
- * contract-level `InMemoryInvitationPort` fixture (production adapter is
- * BLOCKED BY SLICE 4 RUNTIME); no invitation table or lifecycle is created.
+ * Uses the REAL Fastify app and REAL PostgreSQL. Slice 5 isolation suites
+ * intentionally inject the contract-level `InMemoryInvitationPort`; production
+ * now uses the Slice 4 case_participants adapter.
  */
 
 import { randomUUID } from 'node:crypto';
