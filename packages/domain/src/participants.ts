@@ -248,6 +248,25 @@ export async function lockParticipationById(
   return rows[0] ?? null;
 }
 
+/**
+ * Authenticated accept lookup. Self RLS is the authority here, so the target
+ * can replay an accept even after the row is ACTIVE and token RLS no longer
+ * exposes it. Wrong Accounts observe zero rows.
+ */
+export async function getOwnParticipationByTokenHash(
+  tx: PoolClient,
+  tokenHash: string
+): Promise<ParticipationRow | null> {
+  const { rows } = await tx.query<ParticipationRow>(
+    `SELECT ${PARTICIPATION_COLUMNS}
+     FROM case_participants
+     WHERE invite_token_hash=$1`,
+    [tokenHash]
+  );
+  if (rows.length > 1) throw new Error('PARTICIPATION_TOKEN_HASH_NOT_UNIQUE');
+  return rows[0] ?? null;
+}
+
 export async function getParticipationByTokenHash(
   tx: PoolClient,
   tokenHash: string
