@@ -522,6 +522,42 @@ export async function setInviteTokenContext(
 }
 
 /**
+ * Borrow the invitation-token RLS capability for one controlled query inside
+ * a transaction owned by another subsystem, then restore its previous value.
+ */
+export async function withTemporaryInviteTokenContext<T>(
+  tx: TxClient,
+  tokenHash: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const { rows } = await tx.query<{ token_hash: string }>(
+    `SELECT COALESCE(current_setting('app.invite_token_hash', true), '') AS token_hash`
+  );
+  const previous = rows[0]?.token_hash ?? '';
+
+  const restore = async () => {
+    await tx.query(
+      `SELECT set_config('app.invite_token_hash', $1, true)`,
+      [previous]
+    );
+  };
+
+  await setInviteTokenContext(tx, tokenHash);
+  try {
+    const result = await fn();
+    await restore();
+    return result;
+  } catch (originalError) {
+    try {
+      await restore();
+    } catch {
+      // Preserve the original error if SQL already aborted the transaction.
+    }
+    throw originalError;
+  }
+}
+
+/**
  * Public invite lookup: token hash is the only RLS credential. No Account,
  * Person or Family identity is fabricated for this transaction.
  */
