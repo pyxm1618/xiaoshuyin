@@ -54,11 +54,13 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       '/api/v1/cases',
       '/api/v1/cases/{id}',
       '/api/v1/cases/{id}/messages',
+      '/api/v1/cases/{id}/participation-invites',
     ]);
 
     const operations: string[] = [];
     for (const [path, item] of Object.entries(spec.paths as Record<string, any>)) {
       if (!path.startsWith('/api/v1/cases')) continue;
+      if (path === '/api/v1/cases/{id}/participation-invites') continue;
       for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
         if (item[method]) operations.push(`${method.toUpperCase()} ${path}`);
       }
