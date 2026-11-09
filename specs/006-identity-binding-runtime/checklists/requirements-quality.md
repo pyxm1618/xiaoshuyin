@@ -203,7 +203,7 @@
 - [x] CHK149 Is Slice 1 真实 `authorize()` 的当前状态被如实更新为 **SATISFIED**（Final Independent Audit II PASS → PR #13 merge main → post-merge CI PASS → CLOSED；`origin/main` = `f4ef602`；`MINOR_PROCESSING` 已是真实分支；`converge.md` 36 PASS / 0 FAIL），且不再被称为当前 hard blocker？[Honesty, plan D-22.1 / D-22.3]
 - [x] CHK150 Is 「本 Slice 是否必须等待 Slice 2 / 3 / 4」给出明确分层答案：core 不等待 Slice 4 runtime、late E2E 才等待、且本 Slice core 与 Slice 4 runtime 不存在循环硬依赖？[Clarity, plan D-22.3]
 - [x] CHK151 Is Slice 2 / Slice 3 明确为 non-dependency，且 006 不读 Case / 不写 Evidence？[Consistency, plan D-22.2]
-- [x] CHK152 Is Gate 状态机明确记录当前为 `PLAN FROZEN / READY FOR CORE IMPLEMENTATION`（`T121–T124` 仍 blocked），并把已失效的 `IMPLEMENT BLOCKED — ONLY BY SLICE 1 HARD DEPENDENCY` 标为历史，不把 Plan PASS 等同于 full Implement Gate OPEN 或 Slice 4 runtime available？[Clarity, plan D-22.3]
+- [x] CHK152 Is Gate 状态机明确记录 Slice 1 dependency 已 SATISFIED，但 Security Decision A upstream remediation 后当前整体状态为 `READY FOR TARGETED PLAN RE-AUDIT`（`T121–T124` 仍 blocked）；Targeted Audit I PASS 前不得进入 implementation，也不得把旧 Plan PASS / dependency satisfaction 等同于 Implement Gate OPEN？[Clarity, Decision A / plan D-22.3]
 
 ## 15. API / Contract Surface
 
@@ -297,7 +297,7 @@
   - **C2 authorize DENY 映射**：D-10.3 冻结 `401 WECHAT_AUTH_FAILED` 只用于真实 `code2session` 失败；`IDENTITY_BINDING_BOOTSTRAP` 的 `authorize()` DENY → 200 generic（冻结 bootstrap response shape），不暴露 authorization reason / P1 / Family / guardian / consent / age / invitation state，不新增 candidate-facing authorization error code；D-11.1 增加对应 matrix 行；D-12 同步；T095 / T096 增加断言与实现边界。复核 CHK107 / CHK149 邻近项。
   - **C3 invalid invitation pipeline**：D-11.3 改为两条 normalized pipeline（invitation 可解析 → 真实 Gate 1；不可解析 / 无可信 P1 → pre-attempt blocked classification + audit + 同一 serializer），禁止 immediate early return，禁止 fake query 不存在的 P1，禁止人为 delay / padding；T101 / T102 同步。复核 CHK112。
   - **C4 test layering**：D-19.1 将 app-layer DB-backed facts builder 落到 `tests/db/identity-binding-facts.test.ts`，`tests/domain/**` 明确为纯 domain（不依赖 `DATABASE_URL`、不访问真实 PostgreSQL、禁止 silent skip），`bun run vitest run tests/domain` 必须在无 DB 环境可执行；T047 / T048 / T107 / T108 同步文件与 `[VERIFY]`。复核 CHK169。
-  - **C5 stale facts**：D-22.1 H1 更新为 SATISFIED（Slice 1 Final Independent Audit II PASS → PR #13 merge main → post-merge CI PASS → CLOSED，`origin/main` = `f4ef602`，`MINOR_PROCESSING` 实分支，converge 36 PASS / 0 FAIL）；D-22.2 记录 Slice 2 已经 PR #14 merge main；D-22.3 当前状态改为 `PLAN FROZEN / READY FOR CORE IMPLEMENTATION`（`T121–T124` 仍 blocked）；repo feature 006 的业务称呼统一为「本 Slice（业务 Slice 5，repo feature 006）」。复核 CHK149 / CHK150 / CHK152。
+  - **C5 stale facts（历史，已被 Security Decision A remediation SUPERSEDED）**：当时仅解除 Slice 1 dependency blocker；其“READY FOR CORE IMPLEMENTATION”状态不再是当前事实。当前以 D-22.3 / CHK152 的 `READY FOR TARGETED PLAN RE-AUDIT` 为唯一状态；`T121–T124` 仍 blocked。
   - 当时条目总数为 190（未新增/删除）；`spec.md`、`Docs/**`、`specs/005/**`、`apps/**`、`packages/**`、`db/**`、`tests/**` diff = 0。
 - 2026-11-08 Ultimate Audit Targeted Remediation（历史，已被下一条SUPERSEDED）：当时CHK191—CHK200采用S0/S1 exact-delta pairing；Ultimate Final Independent Re-audit随后证明该机制不安全，因此该历史口径不得再作为当前acceptance。
 - 2026-11-09 Ultimate Audit Targeted Plan/Contract Remediation：CHK191—CHK202重写为H-01/H-02/M-01—M-06；H-01冻结server-generated candidate-presented one-time pairing challenge，S0/S1 pairing正式废止；H-02要求真实runtime-role barrier；M-01—M-06均有direct observable contract。Checklist当前202条。Checklist PASS只表示Plan/Contract可审，不表示reopened Tasks已实现；T121–T124仍BLOCKED。
