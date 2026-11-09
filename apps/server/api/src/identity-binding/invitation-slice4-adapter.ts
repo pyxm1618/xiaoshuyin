@@ -8,7 +8,7 @@ import {
   getBindingInvitationByTrustedTarget,
   hashParticipationInviteToken,
 } from '@xiaoshuyin/domain';
-import { setFamilyContext, setInviteTokenContext } from '../db/tx.js';
+import { setInviteTokenContext, withTemporaryFamilyContext } from '../db/tx.js';
 import type {
   InvitationResolution,
   InvitationResolutionPort,
@@ -56,20 +56,24 @@ export class Slice4InvitationAdapter implements InvitationResolutionPort {
     }
 
     // Gate 2 supplied these facts from the locked authoritative attempt.
-    // Establish family RLS only from those trusted server-side values.
-    await setFamilyContext(
+    // Borrow the generic Family RLS context only for this exact Slice 4 read;
+    // restore the binding transaction's original context before returning.
+    return withTemporaryFamilyContext(
       tx,
-      context.target_family_id,
-      context.target_person_id,
-      'IDENTITY_BINDING'
-    );
-    return valid(
-      await getBindingInvitationByTrustedTarget(
-        tx,
-        participationId,
-        context.target_family_id,
-        context.target_person_id
-      )
+      {
+        familyId: context.target_family_id,
+        personId: context.target_person_id,
+        purpose: 'IDENTITY_BINDING',
+      },
+      async () =>
+        valid(
+          await getBindingInvitationByTrustedTarget(
+            tx,
+            participationId,
+            context.target_family_id!,
+            context.target_person_id!
+          )
+        )
     );
   }
 }
