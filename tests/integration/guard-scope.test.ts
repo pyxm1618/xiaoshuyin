@@ -1,6 +1,6 @@
 /**
- * Finding 7 — scope guard must reject both the original patterns and the new
- * Case-Core vocabulary, in every DDL form.
+ * Finding 7 — scope guard must reject still-future objects in every DDL form.
+ * Slice 4 now owns case_participants, so that former future-table probe is retired.
  *
  * Each case injects a temporary file, runs the real guard script and requires
  * a non-zero exit; the file is always removed and the guard must end clean.
@@ -41,13 +41,6 @@ function inject(file: string, content: string) {
 }
 
 const SQL_CASES: Array<[string, string]> = [
-  ['bare case_participants mention', '-- case_participants is out of scope\nSELECT 1;\n'],
-  ['CREATE TABLE case_participants', 'CREATE TABLE case_participants (id uuid);\n'],
-  ['CREATE TABLE public.case_participants', 'CREATE TABLE public.case_participants (id uuid);\n'],
-  [
-    'CREATE TABLE IF NOT EXISTS public.case_participants',
-    'CREATE TABLE IF NOT EXISTS public."case_participants" (id uuid);\n',
-  ],
   ['CREATE TABLE evidence_items', 'CREATE TABLE evidence_items (id uuid);\n'],
   ['CREATE TABLE evidence_items (second probe)', 'CREATE TABLE evidence_items (id uuid);\n'],
   ['CREATE TABLE problem_formulations', 'CREATE TABLE problem_formulations (id uuid);\n'],
@@ -150,21 +143,6 @@ describe('Scope guard rejection (finding 7)', () => {
       }
     });
   }
-
-  it("rejects pgTable('case_participants', ...)", async () => {
-    const cleanup = inject(
-      'db/__guard_probe__.ts',
-      "import { pgTable, uuid } from 'drizzle-orm/pg-core';\n" +
-        "export const forbidden = pgTable('case_participants', { id: uuid('id') });\n"
-    );
-    try {
-      const { code, output } = await runGuard();
-      expect(code, output).not.toBe(0);
-      expect(output).toContain('pgTable');
-    } finally {
-      cleanup();
-    }
-  });
 
   it('rejects family-scoped SQL inside apps/ (R4)', async () => {
     const cleanup = inject(
