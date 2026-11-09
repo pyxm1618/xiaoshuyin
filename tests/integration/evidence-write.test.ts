@@ -145,6 +145,44 @@ function describeError(error: unknown): string {
   return `${value.code ?? 'NO_CODE'} ${value.message ?? String(error)}`;
 }
 
+function catalogVerificationFailureClient(
+  realClient: pg.Client,
+  injectedFailure: Error
+): pg.Client {
+  return new Proxy(realClient, {
+    get(target, property) {
+      if (property !== 'query') {
+        return Reflect.get(target, property);
+      }
+      return (first: unknown, second?: unknown): Promise<unknown> => {
+        const text =
+          typeof first === 'string'
+            ? first
+            : String((first as { text?: string } | null)?.text ?? '');
+        if (/pg_trigger|pg_proc/.test(text)) {
+          return Promise.reject(injectedFailure);
+        }
+        const forward = Reflect.get(target, 'query') as (
+          queryTextOrConfig: unknown,
+          values?: unknown
+        ) => Promise<unknown>;
+        return forward.call(target, first, second);
+      };
+    },
+  });
+}
+
+async function s3m01HelperResidue(): Promise<InjectedObjectResidue> {
+  const { rows } = await admin.query(
+    `SELECT
+       (SELECT count(*)::int FROM pg_trigger WHERE tgname LIKE 's3m01\\_%') AS trigger_residue,
+       (SELECT count(*)::int FROM pg_proc p
+          JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE p.proname LIKE 's3m01\\_%' AND n.nspname = 'public') AS function_residue`
+  );
+  return rows[0];
+}
+
 async function finalizeInjectedObjects(
   adminClient: pg.Client,
   triggerName: string,
@@ -167,12 +205,20 @@ async function finalizeInjectedObjects(
     failures.push(`DROP FUNCTION: ${describeError(error)}`);
   }
 
-  const residue = await injectedObjectResidue(adminClient, triggerName, functionName);
-  if (residue.trigger_residue !== 0) {
-    failures.push(`trigger residue = ${residue.trigger_residue}`);
+  let residue: InjectedObjectResidue | null = null;
+  try {
+    residue = await injectedObjectResidue(adminClient, triggerName, functionName);
+  } catch (error) {
+    failures.push(`CATALOG VERIFICATION: ${describeError(error)}`);
   }
-  if (residue.function_residue !== 0) {
-    failures.push(`function residue = ${residue.function_residue}`);
+
+  if (residue !== null) {
+    if (residue.trigger_residue !== 0) {
+      failures.push(`trigger residue = ${residue.trigger_residue}`);
+    }
+    if (residue.function_residue !== 0) {
+      failures.push(`function residue = ${residue.function_residue}`);
+    }
   }
 
   if (failures.length > 0) {
@@ -748,6 +794,112 @@ describe('Internal Evidence writers (T027)', () => {
     }
 
     expect(await injectedObjectResidue(admin, missingTrigger, functionName)).toEqual({
+      trigger_residue: 0,
+      function_residue: 0,
+    });
+  });
+
+  it('fails closed with an aggregated report when catalog residue verification throws', async () => {
+    const suffix = randomUUID().replace(/-/g, '');
+    const triggerName = `s3m01_catalog_failure_${suffix}`;
+    const functionName = `s3m01_catalog_failure_fn_${suffix}`;
+    const catalogMarker = `S3M01_CATALOG_INJECTED:${randomUUID()}`;
+    const businessMarker = `S3M01_AUDIT_STAGE_FAILURE:${randomUUID()}`;
+
+    try {
+      await admin.query(
+        `CREATE FUNCTION ${functionName}() RETURNS trigger
+         LANGUAGE plpgsql AS $fn$
+         BEGIN
+           RETURN NEW;
+         END;
+         $fn$;`
+      );
+      await admin.query(
+        `CREATE TRIGGER ${triggerName} BEFORE INSERT ON business_audit_events
+           FOR EACH ROW EXECUTE FUNCTION ${functionName}()`
+      );
+
+      expect(await injectedObjectResidue(admin, triggerName, functionName)).toEqual({
+        trigger_residue: 1,
+        function_residue: 1,
+      });
+
+      const catalogFailure = Object.assign(new Error(catalogMarker), { code: '55P03' });
+      const cleanupError = await finalizeInjectedObjects(
+        catalogVerificationFailureClient(admin, catalogFailure),
+        triggerName,
+        functionName,
+        { code: 'P0001', message: businessMarker }
+      ).catch((error) => error);
+
+      expect(cleanupError).toBeInstanceOf(Error);
+      const message = String(cleanupError.message);
+      expect(message).toContain('S3M01 cleanup failed');
+      expect(message).toContain(`CATALOG VERIFICATION: 55P03 ${catalogMarker}`);
+      expect(message).toContain('original business failure:');
+      expect(message).toContain('P0001');
+      expect(message).toContain(businessMarker);
+      expect(message).not.toContain('trigger residue');
+      expect(message).not.toContain('function residue');
+      expect(message).not.toContain('DROP TRIGGER:');
+      expect(message).not.toContain('DROP FUNCTION:');
+    } finally {
+      await admin.query(`DROP TRIGGER IF EXISTS ${triggerName} ON business_audit_events`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+    }
+
+    expect(await injectedObjectResidue(admin, triggerName, functionName)).toEqual({
+      trigger_residue: 0,
+      function_residue: 0,
+    });
+    expect(await s3m01HelperResidue()).toEqual({
+      trigger_residue: 0,
+      function_residue: 0,
+    });
+  });
+
+  it('keeps DROP and catalog verification failures in one aggregated report', async () => {
+    const suffix = randomUUID().replace(/-/g, '');
+    const functionName = `s3m01_catalog_cleanup_fn_${suffix}`;
+    const viewName = `s3m01_catalog_cleanup_view_${suffix}`;
+    const missingTrigger = `s3m01_catalog_cleanup_trigger_${suffix}`;
+    const catalogMarker = `S3M01_CATALOG_INJECTED:${randomUUID()}`;
+    const businessMarker = `S3M01_AUDIT_STAGE_FAILURE:${randomUUID()}`;
+
+    try {
+      await admin.query(
+        `CREATE FUNCTION ${functionName}() RETURNS integer LANGUAGE sql AS $$ SELECT 1 $$`
+      );
+      await admin.query(`CREATE VIEW ${viewName} AS SELECT ${functionName}() AS value`);
+
+      const catalogFailure = Object.assign(new Error(catalogMarker), { code: '55P03' });
+      const cleanupError = await finalizeInjectedObjects(
+        catalogVerificationFailureClient(admin, catalogFailure),
+        missingTrigger,
+        functionName,
+        { code: 'P0001', message: businessMarker }
+      ).catch((error) => error);
+
+      expect(cleanupError).toBeInstanceOf(Error);
+      const message = String(cleanupError.message);
+      expect(message).toContain('S3M01 cleanup failed');
+      expect(message).toContain('DROP FUNCTION: 2BP01');
+      expect(message).toContain(`CATALOG VERIFICATION: 55P03 ${catalogMarker}`);
+      expect(message).toContain('P0001');
+      expect(message).toContain(businessMarker);
+      expect(message).not.toContain('DROP TRIGGER:');
+      expect(message).not.toContain('function residue =');
+    } finally {
+      await admin.query(`DROP VIEW IF EXISTS ${viewName}`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
+    }
+
+    expect(await injectedObjectResidue(admin, missingTrigger, functionName)).toEqual({
+      trigger_residue: 0,
+      function_residue: 0,
+    });
+    expect(await s3m01HelperResidue()).toEqual({
       trigger_residue: 0,
       function_residue: 0,
     });
