@@ -118,7 +118,26 @@ function referencesAnySchemaName(value, names) {
   return Object.values(value).some((item) => referencesAnySchemaName(item, names));
 }
 
-function compareSubset(frozen, generated, label) {
+function collectCollidingSchemaNames(frozenDocs) {
+  const firstShapeByName = new Map();
+  const collisions = new Set();
+
+  for (const { spec } of frozenDocs) {
+    for (const [name, schema] of Object.entries(spec.components?.schemas ?? {})) {
+      const shape = JSON.stringify(stable(normalize(schema, spec)));
+      const firstShape = firstShapeByName.get(name);
+      if (firstShape === undefined) {
+        firstShapeByName.set(name, shape);
+      } else if (firstShape !== shape) {
+        collisions.add(name);
+      }
+    }
+  }
+
+  return collisions;
+}
+
+function compareSubset(frozen, generated, label, collidingSchemaNames) {
   const frozenOps = collectOperations(frozen);
   const generatedOps = collectOperations(generated);
 
@@ -232,10 +251,11 @@ function main() {
     spec: Bun.YAML.parse(readFileSync(doc.path, 'utf-8')),
   }));
 
+  const collidingSchemaNames = collectCollidingSchemaNames(frozenDocs);
   const unionOps = new Set();
   const unionSchemas = new Set();
   for (const doc of frozenDocs) {
-    const result = compareSubset(doc.spec, generated, doc.label);
+    const result = compareSubset(doc.spec, generated, doc.label, collidingSchemaNames);
     for (const op of result.operations) unionOps.add(op);
     for (const name of result.schemas) unionSchemas.add(name);
   }
