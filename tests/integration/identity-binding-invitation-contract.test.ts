@@ -1,7 +1,8 @@
 /**
- * T098/T121–T124 — contract-level invitation seam. 006 consumes only VALID /
- * TERMINAL_UNUSABLE from the Slice 4 contract. Slice 4 now owns the single
- * authoritative case_participants lifecycle; Slice 006 keeps no second model.
+ * T098 contract-level invitation seam. 006 consumes only VALID /
+ * TERMINAL_UNUSABLE from the Slice 4 contract. On this Slice 4 feature branch
+ * the authoritative case_participants lifecycle now exists, but the production
+ * adapter remains Slice 5 T121 post-merge work; 006 keeps no second model.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -46,7 +47,7 @@ describe('contract-level invitation seam (T098)', () => {
     expect(Object.keys(terminal)).toEqual(['status']);
   });
 
-  it('explicit unavailable test stub remains fail-closed but is no longer the production default', async () => {
+  it('UnavailableInvitationPort remains fail-closed until Slice 5 T121 post-merge wiring', async () => {
     const port = new UnavailableInvitationPort();
     expect(await port.resolveByToken(undefined as never, 'any')).toEqual({
       status: 'TERMINAL_UNUSABLE',
