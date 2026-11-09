@@ -60,6 +60,21 @@ describe('Production runtime env boundary (F1)', () => {
     }
   });
 
+  it('participation TTL runtime accepts the same integer-like coercion as env schema', async () => {
+    const app = await buildApp({
+      env: {
+        ...FULL_ENV,
+        NODE_ENV: 'test',
+        PARTICIPATION_INVITE_TTL_SECONDS: '1e3',
+      },
+    });
+    try {
+      await app.ready();
+    } finally {
+      await app.close();
+    }
+  });
+
   it('production + full env → fake provider is NOT selected (startup fails)', async () => {
     await expect(
       buildApp({ env: { ...FULL_ENV, NODE_ENV: 'production' } })
