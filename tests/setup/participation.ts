@@ -104,6 +104,28 @@ export async function createParticipationFixture(
   };
 }
 
+export async function addBoundAdultTargetToFamily(
+  h: ParticipationHarness,
+  familyId: string,
+  label: string
+): Promise<LoginResult> {
+  const target = await loginWithLabel(h.app, `s4-bound-target-${label}`);
+  // Use the public Family flow to establish the target's own verified ADULT
+  // compliance profile. The direct membership insert is fixture setup only.
+  const ownFamily = await createFamily(h.app, target.token, `s4-target-own-${label}`);
+  if (ownFamily.statusCode !== 201) {
+    throw new Error(
+      `target family create failed: ${ownFamily.statusCode} ${ownFamily.body}`
+    );
+  }
+  await h.admin.query(
+    `INSERT INTO family_members (family_id, person_id)
+     VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+    [familyId, target.personId]
+  );
+  return target;
+}
+
 export async function invite(
   app: FastifyInstance,
   token: string,
