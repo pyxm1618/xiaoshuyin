@@ -46,6 +46,8 @@ export interface IdempotentCommandConfig {
   commandType: IdempotencyCommandType;
   idempotencyKey: string;
   requestHash: string;
+  /** Optional redaction/serialization transform for persisted replay snapshots. */
+  persistResponseBody?: (response: CommandResponse) => unknown;
 }
 
 const MIN_IDEMPOTENCY_KEY_LENGTH = 8;
@@ -141,7 +143,7 @@ export async function runIdempotentCommand(
       cfg.idempotencyKey,
       cfg.requestHash,
       response.status,
-      JSON.stringify(response.body)
+      JSON.stringify(cfg.persistResponseBody ? cfg.persistResponseBody(response) : response.body)
     );
 
     return { action: 'EXECUTED', status: response.status, body: response.body };
