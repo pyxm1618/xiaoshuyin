@@ -94,9 +94,11 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
   // The Case create contract requires every undeclared business field to be a
   // 422 VALIDATION_ERROR with zero writes, so this parse failure is mapped for
   // that command only. Other endpoints keep the Fastify default (400).
-  const isCaseCreate =
-    req.method === 'POST' && (req.routeOptions?.url ?? req.url) === '/api/v1/cases';
-  if (isCaseCreate && (err as any).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+  const routeUrl = req.routeOptions?.url ?? req.url;
+  const isStrictCreateCommand =
+    req.method === 'POST' &&
+    (routeUrl === '/api/v1/cases' || routeUrl === '/api/v1/cases/:id/messages');
+  if (isStrictCreateCommand && (err as any).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
     return reply.status(422).send({
       code: 'VALIDATION_ERROR',
       message: 'Invalid request body',

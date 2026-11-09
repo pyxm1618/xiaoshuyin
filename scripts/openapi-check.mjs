@@ -39,6 +39,17 @@ const FROZEN_DOCS = [
     ),
   },
   {
+    label: '003-evidence-core',
+    path: join(
+      ROOT,
+      'specs',
+      '003-evidence-core',
+      'contracts',
+      'messages-api.openapi.yaml'
+    ),
+  },
+  {
+
     label: '006-identity-binding-runtime',
     path: join(
       ROOT,

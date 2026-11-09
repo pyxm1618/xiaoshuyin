@@ -71,9 +71,10 @@ function quoteIdent(name) {
 }
 
 const RLS_TABLES = [
-  'business_audit_events', 'case_events', 'cases', 'consent_records', 'families',
-  'family_members', 'guardian_consent_requests', 'idempotency_keys',
-  'person_compliance_profiles', 'person_profile_values', 'persons',
+  'assertions', 'business_audit_events', 'case_events', 'cases', 'consent_records',
+  'dialogue_messages', 'families', 'family_members', 'guardian_consent_requests',
+  'idempotency_keys', 'observations', 'person_compliance_profiles',
+  'person_profile_values', 'persons',
 ];
 
 // Slice 006 (repo feature 006 / business Slice 5) additive objects. Evidence
@@ -106,20 +107,24 @@ const SLICE5_TRIGGERS = [
 ];
 
 const EXPECTED_TABLES = [
-  'accounts', 'business_audit_events', 'case_events', 'cases', 'consent_records',
-  'families', 'family_members', 'guardian_consent_requests', 'idempotency_keys',
+  'accounts', 'assertions', 'business_audit_events', 'case_events', 'cases',
+  'consent_records', 'dialogue_messages', 'families', 'family_members',
+  'guardian_consent_requests', 'idempotency_keys', 'observations',
   'person_compliance_profiles', 'person_profile_values', 'persons',
 ].sort();
 
 const EXPECTED_ENUMS = [
-  'account_status', 'age_band', 'case_phase', 'case_status', 'consent_decision',
-  'consent_purpose', 'consent_request_status', 'profile_attribute',
-  'profile_value_status', 'provenance_source',
+  'account_status', 'age_band', 'assertion_kind', 'case_phase', 'case_status',
+  'consent_decision', 'consent_purpose', 'consent_request_status',
+  'evidence_confirmation_status', 'evidence_time_state', 'observation_value_state',
+  'observation_value_type', 'profile_attribute', 'profile_value_status',
+  'provenance_source',
 ].sort();
 
 const EXPECTED_UUIDV7_TABLES = [
-  'accounts', 'business_audit_events', 'case_events', 'cases', 'consent_records',
-  'families', 'family_members', 'guardian_consent_requests', 'idempotency_keys',
+  'accounts', 'assertions', 'business_audit_events', 'case_events', 'cases',
+  'consent_records', 'dialogue_messages', 'families', 'family_members',
+  'guardian_consent_requests', 'idempotency_keys', 'observations',
   'person_profile_values', 'persons',
 ].sort();
 
@@ -215,9 +220,10 @@ function verifyStructure(label, d) {
 
   const rlsMap = Object.fromEntries(d.rls.map((r) => [r.relname, r]));
   const rlsFlags = RLS_TABLES.map((t) => `${t}=${rlsMap[t]?.relrowsecurity}/${rlsMap[t]?.relforcerowsecurity}`);
-  check('11 张业务表 relrowsecurity/relforcerowsecurity', 'true/true × 11',
+  check(`${RLS_TABLES.length} 张业务表 relrowsecurity/relforcerowsecurity`,
+    `true/true × ${RLS_TABLES.length}`,
     rlsFlags,
-    (a) => a.length === 11 && a.every((s) => s.endsWith('=true/true')));
+    (a) => a.length === RLS_TABLES.length && a.every((s) => s.endsWith('=true/true')));
   const slice5RlsFlags = SLICE5_TABLES.map(
     (t) => `${t}=${rlsMap[t]?.relrowsecurity}/${rlsMap[t]?.relforcerowsecurity}`
   );
@@ -238,15 +244,15 @@ function verifyStructure(label, d) {
 
   const uuidTables = d.uuidv7.map((r) => r.table_name).sort();
   const expectedUuidTables = [...EXPECTED_UUIDV7_TABLES, ...SLICE5_TABLES].sort();
-  check('uuidv7() 默认值表覆盖 Slice 1 + 006', JSON.stringify(expectedUuidTables), uuidTables,
+  check(`uuidv7() 默认值的 ${expectedUuidTables.length} 张 id 表`, JSON.stringify(expectedUuidTables), uuidTables,
     (a) => expectedUuidTables.every((t) => a.includes(t)));
-  check('uuidv7 默认值表达式', 'uuidv7() × 11',
+  check('uuidv7 默认值表达式', `uuidv7() × ${expectedUuidTables.length}`,
     [...new Set(d.uuidv7.map((r) => r.column_default))],
     (a) => a.length === 1 && a[0] === 'uuidv7()');
 
   const actualEnums = d.enums.map((r) => r.typname).sort();
   const expectedEnums = [...EXPECTED_ENUMS, ...SLICE5_ENUMS].sort();
-  check('枚举覆盖 Slice 1 + 006（15）', JSON.stringify(expectedEnums),
+  check(`枚举覆盖 Slice 1 + 3 + 006（${expectedEnums.length}）`, JSON.stringify(expectedEnums),
     actualEnums,
     (a) => expectedEnums.every((e) => a.includes(e)));
   const ageBand = d.enums.find((r) => r.typname === 'age_band');
@@ -257,17 +263,16 @@ function verifyStructure(label, d) {
     d.enums.flatMap(labelsOf).filter((l) => l === 'RELATION_DESCRIPTOR').length);
 
   const actualTables = d.tables.map((r) => r.tablename).sort();
-  check('业务表覆盖 Slice 1（12）+ 006（5）', JSON.stringify([...EXPECTED_TABLES, ...SLICE5_TABLES].sort()),
+  const expectedTables = [...EXPECTED_TABLES, ...SLICE5_TABLES].sort();
+  check(`业务表覆盖 Slice 1 + 3 + 006（${expectedTables.length}）`, JSON.stringify(expectedTables),
     actualTables,
-    (a) => [...EXPECTED_TABLES, ...SLICE5_TABLES].every((t) => a.includes(t)));
-  check('不存在 assertions / observations 表', '0',
-    d.tables.filter((r) => ['assertions', 'observations'].includes(r.tablename)).length);
+    (a) => expectedTables.every((t) => a.includes(t)));
   const actualPolicies = d.policies.map((r) => r.policyname);
   check('RLS policy 覆盖 006 追加策略', JSON.stringify(SLICE5_POLICIES),
     actualPolicies.filter((p) => SLICE5_POLICIES.includes(p)).sort(),
     (a) => SLICE5_POLICIES.every((p) => a.includes(p)));
-  check('RLS policy 总数 >= Slice 1 基线（11）', '>= 11', d.policies.length,
-    (n) => Number(n) >= 11);
+  check('RLS policy 总数 >= Slice 1/3 基线 + 006（45）', '>= 45', d.policies.length,
+    (n) => Number(n) >= 45);
   const pairingCols = (d.pairingCols ?? []).map((r) => r.column_name).sort();
   check('H-01 pairing issuance columns', 'pairing_expires_at,pairing_issued_at,pairing_issuance_id',
     pairingCols, (a) => a.length === 3 && a.includes('pairing_issued_at') &&
@@ -418,11 +423,13 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-    check('upgrade 仅 APPLY 004', true, /APPLY 004_identity_binding_runtime\.sql/.test(output));
+    check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding', true,
+      /APPLY 004_evidence_core\.sql/.test(output) &&
+      /APPLY 004_identity_binding_runtime\.sql/.test(output));
     check(
-      'upgrade 结果为 1 new / 3 previously applied',
+      'upgrade 结果为 2 new / 3 previously applied',
       true,
-      /Migration complete: 1 new, 3 previously applied\./.test(output)
+      /Migration complete: 2 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -434,6 +441,7 @@ async function upgradeFrom003() {
       '001_initial_schema.sql',
       '002_case_core.sql',
       '003_case_idempotency_key_bytes.sql',
+      '004_evidence_core.sql',
       '004_identity_binding_runtime.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(

@@ -45,6 +45,7 @@ const FROZEN_SCHEMAS = [
   'BindingStatusResponse',
   'CaseAccessDeniedError',
   'CaseListResponse',
+  'CaseMessageResponse',
   'CaseNotFoundError',
   'CasePhase',
   'CaseResponse',
@@ -53,6 +54,7 @@ const FROZEN_SCHEMAS = [
   'ComplianceProfileSummary',
   'ConsentRecord',
   'ConsentRequestResponse',
+  'CreateCaseMessageRequest',
   'CreateCaseRequest',
   'CreateConsentRequestRequest',
   'CreateFamilyRequest',
@@ -63,6 +65,8 @@ const FROZEN_SCHEMAS = [
   'Error',
   'FamilyResponse',
   'GrantConsentRequest',
+  'IdempotencyPayloadMismatchError',
+  'InternalError',
   'LoginResponse',
   'MeResponse',
   'MemberResponse',
@@ -71,7 +75,9 @@ const FROZEN_SCHEMAS = [
   'ProfileAttribute',
   'ProfileValue',
   'ProvenanceValueInput',
+  'UnauthenticatedError',
   'UpdateMemberRequest',
+  'ValidationError',
   'WritableSource',
 ];
 
@@ -108,8 +114,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-  it('contains exactly the 22 frozen business operations (16 + business Slice 5 six)', () => {
-    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+  it('contains exactly the 23 frozen business operations (16 + Slice 3 message + business Slice 5 six)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
@@ -132,6 +137,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'POST /api/v1/auth/logout',
       'POST /api/v1/auth/wechat',
       'POST /api/v1/cases',
+      'POST /api/v1/cases/{id}/messages',
       'POST /api/v1/compliance/guardian-consents',
       'POST /api/v1/compliance/guardian-consents/requests',
       'POST /api/v1/consents/{id}/revoke',
@@ -154,6 +160,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       ['post', '/api/v1/compliance/guardian-consents'],
       ['post', '/api/v1/consents/{id}/revoke'],
       ['post', '/api/v1/cases'],
+      ['post', '/api/v1/cases/{id}/messages'],
     ] as const;
     for (const [method, path] of commands) {
       const params = spec.paths[path][method].parameters ?? [];
@@ -182,7 +189,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       '/api/v1/consents',
       '/api/v1/compliance/profile',
       '/api/v1/compliance/notices',
-      // Slice 2 (002-case-core) — exactly three Case operations.
+      // Slice 2 (002-case-core) — three Case operations.
       '/api/v1/cases',
       '/api/v1/cases/{id}',
       // Business Slice 5 (repo feature 006) — exactly six binding surfaces.
@@ -192,6 +199,8 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       '/api/v1/identity-bindings/session',
       '/api/v1/identity-bindings/pending',
       '/api/v1/identity-bindings/pairing-decision',
+      // Slice 3 (003-evidence-core) — the single approved message POST.
+      '/api/v1/cases/{id}/messages',
     ]);
     for (const path of Object.keys(spec.paths)) {
       expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);

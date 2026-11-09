@@ -9,6 +9,175 @@ export type ProvenanceSource =
   | 'OTHER_MEMBER_RELAY' | 'MANUAL_DEVICE_DATA' | 'STAFF_RECORD'
   | 'AI_HYPOTHESIS' | 'SOURCE_CONFIRMED';
 
+/**
+ * ULT-001: single source of truth for the frozen Evidence provenance matrix.
+ *
+ * Both the controlled writers (`evidence.ts`) and the raw repository writers
+ * (`repository.ts`) consume these sets, so defence-in-depth never forks a
+ * second copy of the business rule.
+ */
+export const EVIDENCE_WRITABLE_SOURCES: readonly ProvenanceSource[] = [
+  'SELF_STATEMENT',
+  'GUARDIAN_OBSERVATION',
+  'GUARDIAN_RELAY',
+  'OTHER_MEMBER_RELAY',
+];
+
+export const EVIDENCE_OBSERVATION_SOURCES: readonly ProvenanceSource[] = [
+  'GUARDIAN_OBSERVATION',
+];
+
+export const EVIDENCE_DISABLED_SOURCES: readonly ProvenanceSource[] = [
+  'MANUAL_DEVICE_DATA',
+  'STAFF_RECORD',
+  'AI_HYPOTHESIS',
+  'SOURCE_CONFIRMED',
+];
+
+export type EvidenceProvenanceWriter =
+  | 'RECORD_STATEMENT'
+  | 'RECORD_OBSERVATION'
+  | 'RECORD_HYPOTHESIS';
+
+export interface EvidenceProvenanceFacts {
+  writer: EvidenceProvenanceWriter;
+  sourceKind: ProvenanceSource;
+  subjectPersonId: string | null;
+  sourcePersonId: string | null;
+  subjectIsFamilyMember: boolean;
+  sourceIsFamilyMember: boolean;
+  sourceIsGuardianOfSubject: boolean;
+}
+
+export type EvidenceProvenanceErrorCode =
+  | 'EVIDENCE_PROVENANCE_INVALID'
+  | 'EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE';
+
+export type EvidenceProvenanceCheck =
+  | { ok: true }
+  | { ok: false; code: EvidenceProvenanceErrorCode };
+
+function provenanceFail(code: EvidenceProvenanceErrorCode): EvidenceProvenanceCheck {
+  return { ok: false, code };
+}
+
+/**
+ * Frozen Evidence provenance validation seam.
+ *
+ * This is intentionally pure and repository-free so both the four controlled
+ * Evidence writers and the package-internal raw repository writers execute the
+ * exact same source/subject/membership/guardian matrix.
+ */
+export function validateEvidenceProvenance(
+  facts: EvidenceProvenanceFacts
+): EvidenceProvenanceCheck {
+  const { writer, sourceKind } = facts;
+
+  // No production-admissible hypothesis source exists in this Slice.
+  if (writer === 'RECORD_HYPOTHESIS') {
+    return provenanceFail('EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE');
+  }
+
+  if (!EVIDENCE_WRITABLE_SOURCES.includes(sourceKind)) {
+    return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+  }
+
+  // Every writable source requires concrete, in-Family subject/source Persons.
+  if (!facts.subjectPersonId || !facts.sourcePersonId) {
+    return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+  }
+  if (!facts.subjectIsFamilyMember || !facts.sourceIsFamilyMember) {
+    return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+  }
+
+  switch (sourceKind) {
+    case 'SELF_STATEMENT':
+      if (writer !== 'RECORD_STATEMENT') {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (facts.sourcePersonId !== facts.subjectPersonId) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      return { ok: true };
+
+    case 'GUARDIAN_OBSERVATION':
+      if (writer !== 'RECORD_OBSERVATION') {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (facts.sourcePersonId === facts.subjectPersonId) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (!facts.sourceIsGuardianOfSubject) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      return { ok: true };
+
+    case 'GUARDIAN_RELAY':
+      if (writer !== 'RECORD_STATEMENT') {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (facts.sourcePersonId === facts.subjectPersonId) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (!facts.sourceIsGuardianOfSubject) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      return { ok: true };
+
+    case 'OTHER_MEMBER_RELAY':
+      if (writer !== 'RECORD_STATEMENT') {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      if (facts.sourcePersonId === facts.subjectPersonId) {
+        return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+      }
+      return { ok: true };
+
+    default:
+      return provenanceFail('EVIDENCE_PROVENANCE_INVALID');
+  }
+}
+
+// ── Evidence source-message binding ────────────────────────
+
+export interface EvidenceSourceMessageFacts {
+  sourceMessageId: string | null;
+  sourcePersonId: string | null;
+  message: {
+    id: string;
+    familyId: string;
+    caseId: string;
+    sourcePersonId: string;
+  } | null;
+  familyId: string;
+  caseId: string;
+}
+
+export type EvidenceSourceMessageCheck =
+  | { ok: true }
+  | { ok: false; code: 'EVIDENCE_PERSON_REFERENCE_INVALID' };
+
+export function validateEvidenceSourceMessage(
+  facts: EvidenceSourceMessageFacts
+): EvidenceSourceMessageCheck {
+  if (facts.sourceMessageId === null || facts.sourceMessageId === undefined) {
+    return { ok: true };
+  }
+
+  const { message } = facts;
+  if (
+    !message ||
+    message.id !== facts.sourceMessageId ||
+    message.familyId !== facts.familyId ||
+    message.caseId !== facts.caseId ||
+    message.sourcePersonId !== facts.sourcePersonId
+  ) {
+    return { ok: false, code: 'EVIDENCE_PERSON_REFERENCE_INVALID' };
+  }
+
+  return { ok: true };
+}
+
 export type ProfileAttribute = 'DISPLAY_NAME';
 
 export type ValueStatus = 'RECORDED' | 'SUPERSEDED' | 'RETRACTED';
@@ -99,9 +268,7 @@ export function checkSourceAcceptability(
  * Returns the provider to persist, or the frozen error code
  * `AGE_BAND_SOURCE_NOT_ALLOWED` (422) when the client tried to forge it.
  */
-const WRITABLE_SOURCES: ProvenanceSource[] = [
-  'SELF_STATEMENT', 'GUARDIAN_OBSERVATION', 'GUARDIAN_RELAY', 'OTHER_MEMBER_RELAY',
-];
+const WRITABLE_SOURCES: ProvenanceSource[] = [...EVIDENCE_WRITABLE_SOURCES];
 
 export type ProviderResolution =
   | { kind: 'FIXED'; provider: string }
