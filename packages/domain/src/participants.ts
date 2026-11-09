@@ -9,7 +9,7 @@ import { createHash, createHmac } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import {
   assertMinorProcessingAllowed,
-  getComplianceProfileForGate,
+  getComplianceProfileForUpdate,
   getConsentRecordForGate,
   getCurrentNoticeHash,
 } from '@xiaoshuyin/compliance';
@@ -408,7 +408,9 @@ export async function isParticipationProcessingAllowed(
   tx: PoolClient,
   personId: string
 ): Promise<boolean> {
-  const row = await getComplianceProfileForGate(tx, personId);
+  // Reuse Slice 1's serialization primitive: lock the compliance profile so
+  // consent revocation cannot return and then be followed by a stale allow.
+  const row = await getComplianceProfileForUpdate(tx, personId);
   const profile = row
     ? {
         ageBand: row.age_band as 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN',
