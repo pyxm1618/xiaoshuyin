@@ -30,6 +30,9 @@ export interface RuntimeConfig {
   identityBindingContextTtlSeconds: number;
   identityBindingAttemptTtlSeconds: number;
   identityBindingPairingTtlSeconds: number;
+  // Slice 4 participation invitations. Required in every mode; no fallback.
+  participationInviteTtlSeconds: number;
+  participationInviteTokenSecret: string;
 }
 
 function fail(code: string, detail: string): never {
@@ -67,6 +70,8 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   const contextTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_CONTEXT_TTL_SECONDS');
   const attemptTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS');
   const pairingTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_PAIRING_TTL_SECONDS');
+  const participationInviteTtl = requiredPositiveInt(env, 'PARTICIPATION_INVITE_TTL_SECONDS');
+  const participationInviteTokenSecret = required(env, 'PARTICIPATION_INVITE_TOKEN_SECRET', 32);
 
   return {
     mode,
@@ -79,6 +84,8 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     identityBindingContextTtlSeconds: contextTtl,
     identityBindingAttemptTtlSeconds: attemptTtl,
     identityBindingPairingTtlSeconds: pairingTtl,
+    participationInviteTtlSeconds: participationInviteTtl,
+    participationInviteTokenSecret,
   };
 }
 
