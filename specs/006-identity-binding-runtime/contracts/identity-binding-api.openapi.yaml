@@ -1,0 +1,551 @@
+openapi: 3.1.0
+info:
+  title: Xiaoshuyin V1 — Identity Binding Runtime API
+  version: 0.2.0-plan
+tags:
+  - name: identity-binding
+paths:
+  /api/v1/identity-bindings/bootstrap:
+    post:
+      tags: [identity-binding]
+      operationId: bootstrapIdentityBinding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindingBootstrapRequest'
+      responses:
+        '200':
+          description: generic / Case B 复用 / COMMITTED settled replay
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BindingBootstrapGenericResponse'
+                  - $ref: '#/components/schemas/BindingBootstrapReusedResponse'
+                  - $ref: '#/components/schemas/BindingBootstrapCommittedResponse'
+        '401':
+          description: WeChat authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Idempotency payload mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/identity-bindings/candidate-decision:
+    post:
+      tags: [identity-binding]
+      operationId: submitCandidateBindingDecision
+      parameters:
+        - $ref: '#/components/parameters/BindingContextHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindingCandidateDecisionRequest'
+      responses:
+        '200':
+          description: >-
+            Candidate decision result. AFFIRM always returns the same
+            NOT_COMPLETED + pairingChallenge shape while the binding context is
+            valid: a live eligible attempt receives a valid short-lived
+            candidate-presented challenge; hidden business failures receive an
+            indistinguishable decoy challenge that cannot resolve to a live
+            attempt. REJECT/CANCEL return the generic NOT_COMPLETED shape.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BindingGenericResponse'
+                  - $ref: '#/components/schemas/BindingCandidatePairingResponse'
+        '401':
+          description: Binding context invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingContextInvalidError'
+        '409':
+          description: Idempotency payload mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/identity-bindings/status:
+    get:
+      tags: [identity-binding]
+      operationId: getCandidateBindingStatus
+      parameters:
+        - $ref: '#/components/parameters/BindingContextHeader'
+      responses:
+        '200':
+          description: candidate 可见状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingStatusResponse'
+        '401':
+          description: Binding context invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingContextInvalidError'
+  /api/v1/identity-bindings/session:
+    post:
+      tags: [identity-binding]
+      operationId: exchangeBindingSession
+      parameters:
+        - $ref: '#/components/parameters/BindingContextHeader'
+      responses:
+        '200':
+          description: 未 COMMITTED generic / COMMITTED 普通会话
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/BindingGenericResponse'
+                  - $ref: '#/components/schemas/BindingSessionCommittedResponse'
+        '401':
+          description: Binding context invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingContextInvalidError'
+  /api/v1/identity-bindings/pending:
+    get:
+      tags: [identity-binding]
+      operationId: listPendingBindings
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BindingPersonIdQuery'
+      responses:
+        '200':
+          description: >-
+            Authorized operational view of minimal pending attempts. This list
+            MUST NOT be used as recognition pairing material or as a
+            second-party decision selector; attemptId is not identity proof.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingPendingListResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Binding not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingNotFoundError'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/identity-bindings/pairing-decision:
+    post:
+      tags: [identity-binding]
+      operationId: submitSecondPartyBindingPairingDecision
+      description: >-
+        Second-party confirmation bound to the exact authenticated candidate by
+        a server-generated, candidate-presented, short-lived pairing challenge.
+        The confirmer MUST independently authenticate, personally recognize the
+        onsite human as P1, and confirm that the recognized candidate is using
+        or presenting pairing material from that candidate's own current
+        authenticated binding session. Challenge possession alone, invitation
+        possession, pending-list selection, attemptId, nickname, displayName,
+        Family membership, timestamps, or automated inference are not identity
+        proof. The server resolves and validates the exact candidate context,
+        authenticated identity, attempt, P1, invitation and current issuance
+        from the challenge. A successful business operation consumes the pairing
+        material semantically; a different operation cannot reuse an expired or
+        consumed challenge. Slice 5 V1 explicitly does not claim resistance to
+        intentional realtime relay or collusion in which the authenticated
+        candidate deliberately forwards current pairing material to another
+        onsite presenter; that threat-model exclusion does not weaken the
+        confirmer recognition responsibility above.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindingConfirmerDecisionRequest'
+      responses:
+        '200':
+          description: Authorized valid pairing decision; authoritative attempt state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingConfirmerDecisionResponse'
+        '401':
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: >-
+            Generic not-found response for unauthorized target or invalid,
+            expired, consumed, wrong-P1, wrong-invitation, wrong-candidate or
+            otherwise mismatched pairing material. The response MUST NOT reveal
+            which condition failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindingNotFoundError'
+        '409':
+          description: State conflict / idempotency payload mismatch
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-session-token
+  parameters:
+    BindingContextHeader:
+      name: X-Binding-Context
+      in: header
+      required: true
+      description: opaque pending authentication context；不是普通会话。
+      schema:
+        type: string
+    BindingPersonIdQuery:
+      name: personId
+      in: query
+      required: true
+      description: 待验证的 target Person P1；服务端读取唯一 Family。
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    BindingBootstrapRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        invitationToken:
+          type: string
+        idempotencyKey:
+          type: string
+      required: [code, invitationToken, idempotencyKey]
+    BindingCandidateDecisionRequest:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          properties:
+            decision:
+              type: string
+              const: AFFIRM
+            confirmationVersion:
+              type: string
+              const: candidate-binding-v1
+            idempotencyKey:
+              type: string
+          required: [decision, confirmationVersion, idempotencyKey]
+        - type: object
+          additionalProperties: false
+          properties:
+            decision:
+              type: string
+              const: REJECT
+            idempotencyKey:
+              type: string
+          required: [decision, idempotencyKey]
+        - type: object
+          additionalProperties: false
+          properties:
+            decision:
+              type: string
+              const: CANCEL
+            idempotencyKey:
+              type: string
+          required: [decision, idempotencyKey]
+    BindingConfirmerDecisionRequest:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          description: >-
+            AFFIRM means the independently authenticated confirmer personally
+            recognizes the onsite candidate as P1 and confirms that the
+            recognized candidate is using/presenting that candidate's own
+            current authenticated binding-session pairing material.
+          properties:
+            personId:
+              type: string
+              format: uuid
+            pairingChallenge:
+              type: string
+              minLength: 192
+              maxLength: 192
+              pattern: '^[A-Za-z0-9_-]{192}$'
+              description: >-
+                Exact unpadded base64url representation of the opaque
+                server-authenticated, short-lived candidate-presented pairing
+                material. The material is bound to candidate context,
+                authenticated identity, exact attempt, P1, invitation, current
+                issuance and expiry. Possession is not identity proof by itself.
+            decision:
+              type: string
+              const: AFFIRM
+            targetConfirmed:
+              type: boolean
+              const: true
+            candidateRecognized:
+              type: boolean
+              const: true
+            confirmationVersion:
+              type: string
+              const: second-party-recognition-v1
+            idempotencyKey:
+              type: string
+          required:
+            - personId
+            - pairingChallenge
+            - decision
+            - targetConfirmed
+            - candidateRecognized
+            - confirmationVersion
+            - idempotencyKey
+        - type: object
+          additionalProperties: false
+          description: >-
+            Canonical REJECT. The confirmer does not make the complete
+            recognition/target attestation. Mixed boolean combinations and
+            REJECT with true/true are invalid rather than alternate semantics.
+          properties:
+            personId:
+              type: string
+              format: uuid
+            pairingChallenge:
+              type: string
+              minLength: 192
+              maxLength: 192
+              pattern: '^[A-Za-z0-9_-]{192}$'
+              description: >-
+                Exact unpadded base64url pairing material identifying the
+                challenge-bound attempt to reject; invalid, expired, consumed
+                or mismatched material receives the generic 404 response.
+            decision:
+              type: string
+              const: REJECT
+            targetConfirmed:
+              type: boolean
+              const: false
+            candidateRecognized:
+              type: boolean
+              const: false
+            confirmationVersion:
+              type: string
+              const: second-party-recognition-v1
+            idempotencyKey:
+              type: string
+          required:
+            - personId
+            - pairingChallenge
+            - decision
+            - targetConfirmed
+            - candidateRecognized
+            - confirmationVersion
+            - idempotencyKey
+    BindingGenericResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        binding:
+          type: string
+          const: NOT_COMPLETED
+      required: [binding]
+    BindingCandidatePairingResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        Fixed candidate-facing AFFIRM shape. For a currently eligible live
+        attempt, pairingChallenge is valid and short-lived; for hidden business
+        failures it is an indistinguishable decoy that cannot resolve to a live
+        attempt. Valid and decoy use the same unpadded base64url encoding,
+        exact 192-character length/alphabet, response keys, HTTP status,
+        content type and structural validation, with no visible expiry metadata.
+        Challenge presence therefore MUST NOT disclose eligibility, consent,
+        guardian, Family, P1 existence, invitation state or binding state.
+        Implementations MUST NOT intentionally create a fast/slow business-path
+        discriminator. Same candidate AFFIRM + same idempotency key + same
+        issuance replays the exact original pairingChallenge bytes and MUST NOT
+        extend the original challenge expiry; rotation creates different bytes.
+      properties:
+        binding:
+          type: string
+          const: NOT_COMPLETED
+        pairingChallenge:
+          type: string
+          minLength: 192
+          maxLength: 192
+          pattern: '^[A-Za-z0-9_-]{192}$'
+          description: >-
+            Exact unpadded base64url opaque material for the candidate to
+            present directly to the independently authenticated human confirmer
+            who is personally recognizing the candidate onsite. It contains no
+            readable P1, identity, invitation or attempt data. Possession alone
+            is not identity proof.
+      required: [binding, pairingChallenge]
+    BindingBootstrapGenericResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        binding:
+          type: string
+          const: NOT_COMPLETED
+        pendingContextToken:
+          type: string
+      required: [binding, pendingContextToken]
+    BindingBootstrapReusedResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        binding:
+          type: string
+          const: REUSED
+        sessionToken:
+          type: string
+        account:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+              format: uuid
+          required: [id]
+        person:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+              format: uuid
+          required: [id]
+      required: [binding, sessionToken, account, person]
+    BindingBootstrapCommittedResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        binding:
+          type: string
+          const: COMMITTED
+      required: [binding]
+    BindingStatusResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        binding:
+          type: string
+          enum: [NOT_COMPLETED, COMMITTED]
+      required: [binding]
+    BindingSessionCommittedResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        binding:
+          type: string
+          const: COMMITTED
+        sessionToken:
+          type: string
+        account:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+              format: uuid
+          required: [id]
+        person:
+          type: object
+          additionalProperties: false
+          properties:
+            id:
+              type: string
+              format: uuid
+          required: [id]
+      required: [binding, sessionToken, account, person]
+    BindingPendingListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        attempts:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              attemptId:
+                type: string
+                format: uuid
+              createdAt:
+                type: string
+                format: date-time
+              expiresAt:
+                type: string
+                format: date-time
+            required: [attemptId, createdAt, expiresAt]
+      required: [attempts]
+    BindingConfirmerDecisionResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum: [PENDING, COMMITTED, TERMINAL]
+      required: [state]
+    BindingNotFoundError:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: BINDING_NOT_FOUND
+        message:
+          type: string
+      required: [code, message]
+    BindingContextInvalidError:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          const: BINDING_CONTEXT_INVALID
+        message:
+          type: string
+      required: [code, message]

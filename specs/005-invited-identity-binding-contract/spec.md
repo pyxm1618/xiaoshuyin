@@ -150,10 +150,34 @@ Binding -- Case : dependency
 ## 4.1 安全性
 
 1. **Fail-closed**：必需事实缺失、冲突、未知或不可验证时，binding MUST 失败或 BLOCK；只有 §5.5 定义的合法等待才可 PENDING。
-2. **Candidate recognition 不可替代**：token、nickname、displayName、membership、profile similarity、guardian guess、manager assertion、单方确认、客户端声称、系统自动推断均 MUST NOT 构成 candidate recognition 或 identity proof。
+2. **Candidate recognition 不可替代**：invite token、pairingChallenge / pairing material possession、nickname、displayName、membership、profile similarity、guardian guess、manager assertion、单方确认、客户端声称、系统自动推断均 MUST NOT 构成 candidate recognition 或 identity proof。
 3. **独立认证**：second-party MUST 来自独立认证上下文；不得由 candidate 会话代持或由 AI 代确认。
 4. **最小权限**：binding 只建立 Account A ↔ Person P1，不产生任何授权事实。
 5. **强度声明**：本合同只提供 family-attested identity association，MUST NOT 宣称达到实名 / KYC / 法定身份核验强度。
+
+## 4.1A V1 Pairing Assurance Threat Model（Decision A）
+
+**Required proposition**
+
+- second-party confirmer MUST independently authenticate；
+- confirmer MUST personally recognize the onsite candidate as P1 based on the pre-existing real-world family relationship；
+- confirmer 的 affirmative attestation 必须表示：**被其现场辨认的人就是当前 authenticated candidate，并且正在使用 / 展示该 candidate 自己当前 authenticated binding session 所产生的 pairing material**；
+- system/runtime MUST bind the exact authenticated candidate identity ↔ pending context ↔ binding attempt ↔ P1 ↔ invitation participation。invitation possession alone 与 pairingChallenge / pairing material possession alone 均不是 identity proof。
+
+**Trust assumption**
+
+- Slice 5 V1 assumes the authenticated candidate does **not intentionally relay** the current pairing material / session proof in realtime to another onsite presenter and does not intentionally collude in presenter substitution.
+
+**Explicitly out of scope for Slice 5 V1**
+
+- intentional realtime relay；
+- intentional candidate-to-presenter challenge / QR / PIN / token / screenshot / message / credential forwarding；
+- authenticated holder 主动协助第三人冒用其当前 pairing material / session proof；
+- intentional collusion / collusive presenter substitution。
+
+这些 out-of-scope 项不允许反向削弱 Required proposition；若 confirmer 无法亲自辨认 candidate，或不能确认眼前被辨认的人正在使用 / 展示其本人当前 authenticated binding session 的 material，仍 MUST NOT affirm。
+
+本合同仍禁止把该能力升级为 KYC / real-name verification / government identity proof / face or video identity verification / phone identity matching，也不要求 NFC、BLE distance bounding、hardware attestation、WebAuthn / passkey 或新的 identity provider。
 
 ## 4.2 可靠性与隐私
 
@@ -228,7 +252,7 @@ else:
 ## 5.3 Candidate recognition（唯一权威）
 
 1. **冻结等式**：`second-party confirmation = target confirmation + candidate recognition`。
-2. **Recognized proposition（唯一命题）**：第二方确认的命题是「我基于与 P1 既有的现实家庭关系，独立确认当前这次已认证微信身份的实际使用者就是 P1。」它 MUST NOT 退化为「我批准这个 invitation / binding request」。
+2. **Recognized proposition（唯一命题）**：第二方确认的命题是「我基于与 P1 既有的现实家庭关系，亲自辨认现场这个人为 P1，并确认眼前被我辨认的人正在使用 / 展示其本人当前 authenticated candidate session / pairing material；因此我确认当前这次已认证微信身份的实际使用者就是 P1。」它 MUST NOT 退化为「我批准这个 invitation / binding request」，也 MUST NOT 退化为「这个人拿到了 pairingChallenge，所以就是 P1」。
 3. **独立性**：candidate recognition MUST 独立于 invite token possession、nickname / displayName、Family membership、客户端声称与系统自动推断；MUST 由人工作出。
 4. **性质**：该确认是 family-attested identity association；MUST NOT 被描述或验收为 KYC / legal identity verification / government identity proof。
 5. **同一 attempt + 四要素 + 独立认证**：两方确认 MUST 指向同一 binding attempt，并共同绑定 target Person P1、authenticated WeChat identity、invitation context；两方 MUST 分别独立认证；任一方缺失 MUST NOT commit。两份 confirmation 均属于 Phase B（§5.1）。

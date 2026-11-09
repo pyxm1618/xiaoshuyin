@@ -1,6 +1,23 @@
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+
+// Test-only resolution of workspace packages. Without an explicit alias Vite
+// marks these specifiers as external and Bun resolves them at runtime, which
+// makes `vi.mock('@xiaoshuyin/...')` unable to intercept the module graph.
+// The aliases point at the unchanged source entry points.
+function workspacePath(pkg: string): string {
+  return fileURLToPath(new URL(`./packages/${pkg}/src/index.ts`, import.meta.url));
+}
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@xiaoshuyin/authorization': workspacePath('authorization'),
+      '@xiaoshuyin/compliance': workspacePath('compliance'),
+      '@xiaoshuyin/contracts': workspacePath('contracts'),
+      '@xiaoshuyin/domain': workspacePath('domain'),
+    },
+  },
   test: {
     globals: false,
     environment: 'node',

@@ -59,6 +59,55 @@ export interface PersonRow {
   created_at: Date;
 }
 
+export async function getPersonById(tx: Tx, personId: string): Promise<PersonRow | null> {
+  const { rows } = await tx.query(
+    'SELECT id, account_id, created_at FROM persons WHERE id = $1',
+    [personId]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Identity-binding Gate / Phase C read: the target Person row is locked so a
+ * concurrent binding cannot interleave between Gate 2 and the conditional
+ * update. RLS visibility comes from `persons_binding_target_read`.
+ */
+export async function lockPersonForBinding(tx: Tx, personId: string): Promise<PersonRow | null> {
+  const { rows } = await tx.query(
+    'SELECT id, account_id, created_at FROM persons WHERE id = $1 FOR UPDATE',
+    [personId]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Conditional Phase C binding. `account_id IS NULL` and the database unique
+ * constraint are the final convergence point; the returned row count is the
+ * authoritative outcome (1 = this transaction bound P1, 0 = lost the race).
+ */
+export async function bindPersonAccountIfUnbound(
+  tx: Tx,
+  personId: string,
+  accountId: string
+): Promise<number> {
+  const result = await tx.query(
+    `UPDATE persons
+     SET account_id = $2, updated_at = now()
+     WHERE id = $1 AND account_id IS NULL`,
+    [personId, accountId]
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Every current Family membership of P1 (used for the multi-family BLOCK). */
+export async function getMembershipFamilyIds(tx: Tx, personId: string): Promise<string[]> {
+  const { rows } = await tx.query(
+    'SELECT family_id FROM family_members WHERE person_id = $1',
+    [personId]
+  );
+  return rows.map((row: { family_id: string }) => row.family_id);
+}
+
 export async function getPersonByAccountId(tx: Tx, accountId: string): Promise<PersonRow | null> {
   const { rows } = await tx.query(
     'SELECT id, account_id, created_at FROM persons WHERE account_id = $1',
@@ -352,6 +401,62 @@ export async function getPersonWithProfile(tx: Tx, accountId: string) {
     [accountId]
   );
   return rows[0] ?? null;
+}
+
+// ── Identity binding Gate 2 concurrency boundary (F-01) ─────
+
+/**
+ * Lock the authoritative rows Gate 2 reads, in the canonical fixed order that
+ * every caller uses: persons → families → family_members →
+ * person_compliance_profiles → consent_records. A concurrent invalidating
+ * change either commits before this point (and is observed by the Gate) or
+ * waits until the binding transaction ends.
+ */
+export async function lockBindingGateRows(
+  tx: Tx,
+  targetPersonId: string,
+  targetFamilyId: string
+): Promise<void> {
+  // Every SELECT ... FOR UPDATE below runs under the runtime role and the
+  // additive FOR UPDATE lock policies. A zero-row result is NEVER treated as a
+  // successful lock: if a required fact row is not lockable, the caller fails
+  // closed instead of evaluating a stale snapshot (H-02).
+  const person = await tx.query('SELECT id FROM persons WHERE id = $1 FOR UPDATE', [
+    targetPersonId,
+  ]);
+  if ((person.rowCount ?? 0) !== 1) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
+
+  const family = await tx.query('SELECT id FROM families WHERE id = $1 FOR UPDATE', [
+    targetFamilyId,
+  ]);
+  if ((family.rowCount ?? 0) !== 1) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
+
+  const memberships = await tx.query(
+    'SELECT person_id FROM family_members WHERE person_id = $1 FOR UPDATE',
+    [targetPersonId]
+  );
+  if ((memberships.rowCount ?? 0) === 0) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
+
+  // Profile / consent are optional fact rows: their absence is a Gate 2
+  // business block (COMPLIANCE_BLOCKED), not an infrastructure failure. If the
+  // row exists, however, it must be lockable.
+  const profile = await tx.query(
+    'SELECT person_id FROM person_compliance_profiles WHERE person_id = $1 FOR UPDATE',
+    [targetPersonId]
+  );
+  if ((profile.rowCount ?? 0) > 1) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
+
+  const consent = await tx.query(
+    `SELECT id FROM consent_records
+      WHERE id = (
+        SELECT guardian_consent_record_id
+          FROM person_compliance_profiles
+         WHERE person_id = $1
+      )
+      FOR UPDATE`,
+    [targetPersonId]
+  );
+  if ((consent.rowCount ?? 0) > 1) throw new Error('BINDING_GATE_LOCK_UNVERIFIED');
 }
 
 // ── Evidence Core: dialogue_messages ────────────────────────

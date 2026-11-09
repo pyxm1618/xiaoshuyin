@@ -175,6 +175,7 @@ describe('Audit / idempotency extension (T017)', () => {
     expect(tables.rows.map((r: any) => r.tablename)).toEqual([
       'business_audit_events',
       'idempotency_keys',
+      'identity_binding_audit_events',
     ]);
 
     for (const [table, expected] of [

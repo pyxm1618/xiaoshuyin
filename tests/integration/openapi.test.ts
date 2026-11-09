@@ -29,6 +29,20 @@ const SPEC_PATH = join(ROOT, 'packages', 'generated', 'openapi.json');
 
 const FROZEN_SCHEMAS = [
   'AgeBand',
+  'BindingBootstrapCommittedResponse',
+  'BindingBootstrapGenericResponse',
+  'BindingBootstrapRequest',
+  'BindingBootstrapReusedResponse',
+  'BindingCandidateDecisionRequest',
+  'BindingCandidatePairingResponse',
+  'BindingConfirmerDecisionRequest',
+  'BindingConfirmerDecisionResponse',
+  'BindingContextInvalidError',
+  'BindingGenericResponse',
+  'BindingNotFoundError',
+  'BindingPendingListResponse',
+  'BindingSessionCommittedResponse',
+  'BindingStatusResponse',
   'CaseAccessDeniedError',
   'CaseListResponse',
   'CaseMessageResponse',
@@ -91,12 +105,16 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     expect(Object.keys(schemas).sort()).toEqual([...FROZEN_SCHEMAS].sort());
     for (const name of FROZEN_SCHEMAS) {
       expect(schemas[name], `missing schema ${name}`).toBeDefined();
-      expect(schemas[name].type ?? schemas[name].$ref).toBeDefined();
+      expect(
+        schemas[name].type ??
+          schemas[name].$ref ??
+          schemas[name].oneOf ??
+          schemas[name].anyOf
+      ).toBeDefined();
     }
   });
 
-  it('contains exactly the 17 frozen business operations', () => {
-    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+  it('contains exactly the 23 frozen business operations (16 + Slice 3 message + business Slice 5 six)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
@@ -112,6 +130,8 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'GET /api/v1/compliance/profile',
       'GET /api/v1/consents',
       'GET /api/v1/families/current',
+      'GET /api/v1/identity-bindings/pending',
+      'GET /api/v1/identity-bindings/status',
       'GET /api/v1/me',
       'PATCH /api/v1/families/{id}/members/{personId}',
       'POST /api/v1/auth/logout',
@@ -123,6 +143,10 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'POST /api/v1/consents/{id}/revoke',
       'POST /api/v1/families',
       'POST /api/v1/families/{id}/members',
+      'POST /api/v1/identity-bindings/bootstrap',
+      'POST /api/v1/identity-bindings/candidate-decision',
+      'POST /api/v1/identity-bindings/session',
+      'POST /api/v1/identity-bindings/pairing-decision',
     ].sort());
   });
 
@@ -168,6 +192,13 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       // Slice 2 (002-case-core) — three Case operations.
       '/api/v1/cases',
       '/api/v1/cases/{id}',
+      // Business Slice 5 (repo feature 006) — exactly six binding surfaces.
+      '/api/v1/identity-bindings/bootstrap',
+      '/api/v1/identity-bindings/candidate-decision',
+      '/api/v1/identity-bindings/status',
+      '/api/v1/identity-bindings/session',
+      '/api/v1/identity-bindings/pending',
+      '/api/v1/identity-bindings/pairing-decision',
       // Slice 3 (003-evidence-core) — the single approved message POST.
       '/api/v1/cases/{id}/messages',
     ]);

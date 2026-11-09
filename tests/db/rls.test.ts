@@ -21,8 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('14 tables have ENABLE + FORCE RLS, accounts does not', async () => {
-    const { rows } = await client.query(`
+  it('19 tables have ENABLE + FORCE RLS, accounts does not', async () => {    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -33,20 +32,19 @@ describe('RLS', () => {
     const rlsTables = rows.filter((r: any) => r.relrowsecurity);
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
-    expect(rlsTables.length).toBe(14);
-    expect(noRlsTables.map((r: any) => r.relname)).toContain('accounts');
+    // Slice 1/2 11 + Slice 3 3 + Slice 6 five binding tables (additive).
+    expect(rlsTables.length).toBe(19);    expect(noRlsTables.map((r: any) => r.relname)).toContain('accounts');
 
     for (const t of rlsTables) {
       expect(t.relforcerowsecurity, `${t.relname} FORCE`).toBe(true);
     }
   });
 
-  it('19 policies exist', async () => {
+  it('45 policies exist (Slice 1/2 11 + Slice 3 8 + Slice 6 additive 26)', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(19);
-  });
+    expect(rows.length).toBe(45);  });
 
   it('Slice 2: case policies are Family-scope only', async () => {
     const { rows } = await client.query(

@@ -24,6 +24,12 @@ export interface RuntimeConfig {
   wechatAppId: string;
   wechatAppSecret: string;
   consentChannel: 'MINIPROGRAM' | 'TEST';
+  // Slice 006 identity binding (plan D-3.3). Required in every mode; no
+  // fallback, no default TTL.
+  identityBindingSecret: string;
+  identityBindingContextTtlSeconds: number;
+  identityBindingAttemptTtlSeconds: number;
+  identityBindingPairingTtlSeconds: number;
 }
 
 function fail(code: string, detail: string): never {
@@ -57,6 +63,10 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   const evidencePepper = required(env, 'EVIDENCE_HASH_PEPPER', MIN_SECRET_LENGTH);
   const wechatAppId = required(env, 'WECHAT_APP_ID');
   const wechatAppSecret = required(env, 'WECHAT_APP_SECRET');
+  const identityBindingSecret = required(env, 'IDENTITY_BINDING_SECRET', 32);
+  const contextTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_CONTEXT_TTL_SECONDS');
+  const attemptTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS');
+  const pairingTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_PAIRING_TTL_SECONDS');
 
   return {
     mode,
@@ -65,7 +75,19 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     wechatAppId,
     wechatAppSecret,
     consentChannel: mode === 'test' ? 'TEST' : 'MINIPROGRAM',
+    identityBindingSecret,
+    identityBindingContextTtlSeconds: contextTtl,
+    identityBindingAttemptTtlSeconds: attemptTtl,
+    identityBindingPairingTtlSeconds: pairingTtl,
   };
+}
+
+function requiredPositiveInt(env: NodeJS.ProcessEnv, key: string): number {
+  const raw = env[key];
+  if (!raw || !/^\d+$/.test(raw) || Number(raw) <= 0) {
+    fail('RUNTIME_ENV_INVALID', `${key} must be a positive integer`);
+  }
+  return Number(raw);
 }
 
 /**

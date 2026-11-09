@@ -103,6 +103,9 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          # exact-final-head provenance needs origin/main (not a depth-1 clone).
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -124,12 +127,31 @@ jobs:
         run: bun run db:migrate
         env:
           MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:ci_migrator_pw@localhost:5432/xiaoshuyin_test
-      - name: Run all tests
-        run: bunx vitest run
+      # MEDIUM-04: the canonical verify-all runs on the exact checked-out Head
+      # and writes its complete provenance/output to an Actions artifact.
+      - name: Run canonical verify-all
+        run: |
+          set -o pipefail
+          node scripts/verify-all.mjs 2>&1 | tee "$RUNNER_TEMP/verify-all.log"
         env:
           DATABASE_URL: postgres://xiaoshuyin_app:ci_app_pw@localhost:5432/xiaoshuyin_test
           MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:ci_migrator_pw@localhost:5432/xiaoshuyin_test
           TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/xiaoshuyin_test
+          IDENTITY_BINDING_SECRET: ci-identity-binding-secret-fixture-32chars
+          IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600'
+          IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900'
+          IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300'
+          COVERAGE_EXECUTION_EVIDENCE: ${{ runner.temp }}/vitest-results.json
+      - name: Upload verify-all provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-all-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/verify-all.log
+            ${{ runner.temp }}/vitest-results.json
+          if-no-files-found: warn
+          retention-days: 90
 
   contract:
     name: Contract

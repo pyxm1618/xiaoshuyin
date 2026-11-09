@@ -24,9 +24,19 @@ export type Action =
   | 'MEMBER_CREATE' | 'MEMBER_UPDATE'
   | 'GUARDIAN_CONSENT_REQUEST' | 'GUARDIAN_CONSENT_GRANT' | 'GUARDIAN_CONSENT_REVOKE'
   | 'MINOR_PROCESSING'
-  | 'CASE_CREATE' | 'CASE_LIST' | 'CASE_READ';
+  | 'CASE_CREATE' | 'CASE_LIST' | 'CASE_READ'
+  // Slice 006 identity binding (plan D-12). Registered closed set; every entry
+  // is fail-closed when its actor / facts / resource do not match.
+  | 'IDENTITY_BINDING_BOOTSTRAP'
+  | 'IDENTITY_BINDING_CANDIDATE_DECIDE'
+  | 'IDENTITY_BINDING_STATUS_SELF'
+  | 'IDENTITY_BINDING_SESSION_EXCHANGE'
+  | 'IDENTITY_BINDING_CONFIRMER_LIST'
+  | 'IDENTITY_BINDING_SECOND_PARTY_DECIDE';
 
-export type Purpose = 'SELF_IDENTITY' | 'FAMILY_MANAGEMENT' | 'GUARDIAN_CONSENT';
+export type Purpose =
+  | 'SELF_IDENTITY' | 'FAMILY_MANAGEMENT' | 'GUARDIAN_CONSENT'
+  | 'IDENTITY_BINDING';
 
 /**
  * Structured resource contract (authorization-and-rls.md §2.1).
@@ -38,19 +48,28 @@ export type Resource =
   | { type: 'FAMILY'; familyId: string }
   | { type: 'MEMBER'; familyId: string; personId: string }
   | { type: 'CONSENT'; familyId: string; consentId?: string }
-  | { type: 'CASE'; familyId: string; caseId: string };
+  | { type: 'CASE'; familyId: string; caseId: string }
+  | { type: 'BINDING'; attemptId: string | null; personId: string | null };
 
 export type AgeBandValue = 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN';
 
 export type DenyReason =
   | 'NO_ACTOR' | 'UNSUPPORTED_DIMENSION' | 'UNSUPPORTED_ACTION' | 'UNSUPPORTED_PURPOSE'
   | 'FAMILY_CONTEXT_REQUIRED' | 'NOT_FAMILY_MEMBER' | 'NOT_FAMILY_MANAGER'
-  | 'NOT_GUARDIAN' | 'AGE_BAND_UNKNOWN' | 'CASE_CONTEXT_REQUIRED' | 'AUTHORIZATION_ERROR';
+  | 'NOT_GUARDIAN' | 'AGE_BAND_UNKNOWN' | 'CASE_CONTEXT_REQUIRED' | 'AUTHORIZATION_ERROR'
+  // Slice 006 binding-specific denials.
+  | 'BINDING_CONTEXT_INVALID' | 'NOT_BINDING_AUTHORIZED_CONFIRMER'
+  | 'BINDING_AGE_UNSUPPORTED' | 'BINDING_TARGET_INVALID';
 
 export type Decision =
   | {
       decision: 'ALLOW';
-      basis: { membership: true; manager: boolean; purpose: Purpose };
+      basis: {
+        membership: boolean;
+        manager: boolean;
+        purpose: Purpose;
+        authority?: 'GUARDIAN' | 'FAMILY_MANAGER' | null;
+      };
     }
   | { decision: 'DENY'; reason: DenyReason };
 
@@ -61,6 +80,14 @@ export type Decision =
 export interface AuthorizeFacts {
   /** `family_members(familyId, actor.personId)` exists. */
   membership: boolean;
+  // ── Slice 006 binding facts (all optional; absent = deny) ──
+  targetPersonId?: string | null;
+  targetFamilyId?: string | null;
+  targetAgeBand?: AgeBandValue | null;
+  /** Current guardian relationship of the target Person. */
+  bindingGuardianPersonId?: string | null;
+  /** Target family's `created_by_person_id`. */
+  bindingFamilyCreatedByPersonId?: string | null;
   /** Real `families.created_by_person_id` for the target family. */
   familyCreatedByPersonId: string | null;
   /** Real `person_compliance_profiles.age_band` of the actor; null = no profile. */
@@ -77,8 +104,22 @@ export interface AuthorizeFacts {
   familyId?: string | null;
 }
 
+/**
+ * Actor is a closed union in the Plan (ACCOUNT / BINDING_CONTEXT /
+ * WECHAT_CANDIDATE). It is represented additively here so every Slice 1 caller
+ * keeps passing `{ accountId, personId }` unchanged; `kind` defaults to
+ * `ACCOUNT` when omitted.
+ */
+export interface AuthActor {
+  kind?: 'ACCOUNT' | 'BINDING_CONTEXT' | 'WECHAT_CANDIDATE';
+  accountId?: string;
+  personId?: string;
+  contextId?: string;
+  candidateIdentityDigest?: string;
+}
+
 export interface AuthInput {
-  actor: { accountId: string; personId: string };
+  actor: AuthActor;
   product: 'V1';
   family: { familyId: string } | null;
   case: { caseId: string } | null;
@@ -95,9 +136,20 @@ const REGISTERED_ACTIONS: Action[] = [
   'GUARDIAN_CONSENT_REQUEST', 'GUARDIAN_CONSENT_GRANT', 'GUARDIAN_CONSENT_REVOKE',
   'MINOR_PROCESSING',
   'CASE_CREATE', 'CASE_LIST', 'CASE_READ',
+  'IDENTITY_BINDING_BOOTSTRAP', 'IDENTITY_BINDING_CANDIDATE_DECIDE',
+  'IDENTITY_BINDING_STATUS_SELF', 'IDENTITY_BINDING_SESSION_EXCHANGE',
+  'IDENTITY_BINDING_CONFIRMER_LIST', 'IDENTITY_BINDING_SECOND_PARTY_DECIDE',
 ];
 
-const REGISTERED_PURPOSES: Purpose[] = ['SELF_IDENTITY', 'FAMILY_MANAGEMENT', 'GUARDIAN_CONSENT'];
+const REGISTERED_PURPOSES: Purpose[] = [
+  'SELF_IDENTITY', 'FAMILY_MANAGEMENT', 'GUARDIAN_CONSENT', 'IDENTITY_BINDING',
+];
+
+const BINDING_ACTIONS: Action[] = [
+  'IDENTITY_BINDING_BOOTSTRAP', 'IDENTITY_BINDING_CANDIDATE_DECIDE',
+  'IDENTITY_BINDING_STATUS_SELF', 'IDENTITY_BINDING_SESSION_EXCHANGE',
+  'IDENTITY_BINDING_CONFIRMER_LIST', 'IDENTITY_BINDING_SECOND_PARTY_DECIDE',
+];
 
 /** Actions that only make sense inside a resolved Family scope. */
 const FAMILY_ACTIONS: Action[] = [
@@ -132,8 +184,16 @@ export function isFamilyManager(family: FamilyInfo, actorPersonId: string): bool
   return family.createdByPersonId === actorPersonId;
 }
 
-function allow(manager: boolean, purpose: Purpose): Decision {
-  return { decision: 'ALLOW', basis: { membership: true, manager, purpose } };
+function allow(
+  manager: boolean,
+  purpose: Purpose,
+  membership = true,
+  authority?: 'GUARDIAN' | 'FAMILY_MANAGER' | null
+): Decision {
+  return {
+    decision: 'ALLOW',
+    basis: { membership, manager, purpose, ...(authority !== undefined ? { authority } : {}) },
+  };
 }
 
 function deny(reason: DenyReason): Decision {
@@ -151,6 +211,92 @@ function familyResourceMatches(
   if (input.family === null) return false;
   if (input.resource.type !== target) return false;
   return input.resource.familyId === input.family.familyId;
+}
+
+/**
+ * Binding actions are a separate Gate (plan D-12). They never use Family
+ * membership as authority; candidate actions are context-scoped, confirmer
+ * actions use the frozen age matrix and the target Family's creator / current
+ * guardian. Missing facts deny.
+ */
+function decideBindingAction(input: AuthInput, facts: AuthorizeFacts): Decision {
+  if (input.purpose !== 'IDENTITY_BINDING') return deny('UNSUPPORTED_PURPOSE');
+  if (input.resource.type !== 'BINDING') return deny('BINDING_TARGET_INVALID');
+
+  const actor = input.actor;
+  const kind = actor.kind ?? 'ACCOUNT';
+
+  switch (input.action) {
+    case 'IDENTITY_BINDING_BOOTSTRAP': {
+      if (kind !== 'WECHAT_CANDIDATE' || !actor.candidateIdentityDigest) {
+        return deny('NO_ACTOR');
+      }
+      return allow(false, input.purpose, false, null);
+    }
+
+    case 'IDENTITY_BINDING_CANDIDATE_DECIDE':
+    case 'IDENTITY_BINDING_STATUS_SELF':
+    case 'IDENTITY_BINDING_SESSION_EXCHANGE': {
+      if (kind !== 'BINDING_CONTEXT' || !actor.contextId) {
+        return deny('BINDING_CONTEXT_INVALID');
+      }
+      if (!actor.candidateIdentityDigest) return deny('BINDING_CONTEXT_INVALID');
+      return allow(false, input.purpose, false, null);
+    }
+
+    case 'IDENTITY_BINDING_CONFIRMER_LIST':
+    case 'IDENTITY_BINDING_SECOND_PARTY_DECIDE': {
+      if (kind !== 'ACCOUNT' || !actor.accountId || !actor.personId) {
+        return deny('NO_ACTOR');
+      }
+      if (
+        !facts.targetPersonId ||
+        !facts.targetFamilyId ||
+        !facts.targetAgeBand ||
+        !facts.bindingFamilyCreatedByPersonId ||
+        !facts.targetIsFamilyMember
+      ) {
+        return deny('BINDING_TARGET_INVALID');
+      }
+      if (
+        input.action === 'IDENTITY_BINDING_SECOND_PARTY_DECIDE' &&
+        (!input.resource.attemptId || !input.resource.personId)
+      ) {
+        return deny('BINDING_TARGET_INVALID');
+      }
+      if (input.resource.personId && input.resource.personId !== facts.targetPersonId) {
+        return deny('BINDING_TARGET_INVALID');
+      }
+
+      const ageBand = facts.targetAgeBand;
+      if (ageBand === 'ADULT' || ageBand === 'UNKNOWN') {
+        return deny('BINDING_AGE_UNSUPPORTED');
+      }
+
+      if (ageBand === 'UNDER_14') {
+        if (!facts.bindingGuardianPersonId) return deny('BINDING_TARGET_INVALID');
+        if (actor.personId !== facts.bindingGuardianPersonId) {
+          return deny('NOT_BINDING_AUTHORIZED_CONFIRMER');
+        }
+        return allow(false, input.purpose, false, 'GUARDIAN');
+      }
+
+      // MINOR_14_17
+      if (facts.bindingGuardianPersonId) {
+        if (actor.personId !== facts.bindingGuardianPersonId) {
+          return deny('NOT_BINDING_AUTHORIZED_CONFIRMER');
+        }
+        return allow(false, input.purpose, false, 'GUARDIAN');
+      }
+      if (actor.personId !== facts.bindingFamilyCreatedByPersonId) {
+        return deny('NOT_BINDING_AUTHORIZED_CONFIRMER');
+      }
+      return allow(false, input.purpose, false, 'FAMILY_MANAGER');
+    }
+
+    default:
+      return deny('UNSUPPORTED_ACTION');
+  }
 }
 
 /**
@@ -204,21 +350,28 @@ export function authorize(input: AuthInput): Decision {
     if (!REGISTERED_ACTIONS.includes(input.action)) return deny('UNSUPPORTED_ACTION');
     if (!REGISTERED_PURPOSES.includes(input.purpose)) return deny('UNSUPPORTED_PURPOSE');
 
-    // 2. No authenticated actor → nothing can be authorized.
+    const facts = input.facts ?? EMPTY_FACTS;
+
+    // 2. Binding actions have their own actor kinds (candidate context has no
+    //    Account / Person). They are decided before the Account actor check.
+    if (BINDING_ACTIONS.includes(input.action)) {
+      return decideBindingAction(input, facts);
+    }
+
+    // 3. No authenticated Account actor → nothing else can be authorized.
     if (!input.actor?.accountId || !input.actor?.personId) return deny('NO_ACTOR');
 
     const actorPersonId = input.actor.personId;
-    const facts = input.facts ?? EMPTY_FACTS;
 
-    // 3. Case actions: dedicated branch (D-6.2); Case increment only.
+    // 4. Case actions: dedicated branch (D-6.2); Case increment only.
     if (CASE_ACTIONS.includes(input.action)) {
       return decideCaseAction(input, facts, actorPersonId);
     }
 
-    // 4. Non-Case actions keep Slice 1 fail-closed behavior on the case dimension.
+    // 5. Non-Case actions keep Slice 1 fail-closed behavior on the case dimension.
     if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
 
-    // 5. Family-scoped actions require an explicit family context.
+    // 6. Family-scoped actions require an explicit family context.
     if (FAMILY_ACTIONS.includes(input.action) && input.family === null) {
       return deny('FAMILY_CONTEXT_REQUIRED');
     }

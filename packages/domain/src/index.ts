@@ -20,6 +20,11 @@ export {
   insertFamilyMember,
   isFamilyMember,
   countFamilyMembers,
+  getPersonById,
+  getMembershipFamilyIds,
+  lockBindingGateRows,
+  bindPersonAccountIfUnbound,
+  lockPersonForBinding,
   getProfileValues,
   getProfileValuesWithId,
   getProfileValuesFull,
@@ -41,3 +46,6 @@ export type {
 
 export * from './cases.js';
 export * from './evidence.js';
+export * from './identity-binding.js';
+export * from './identity-binding-gate.js';
+export * from './identity-binding-anti-enumeration.js';
