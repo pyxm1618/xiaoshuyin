@@ -47,6 +47,16 @@ describe('Age Gate (T031/T032)', () => {
     expect(r).toEqual({ decision: 'ALLOW', minorMode: true });
   });
 
+  it('UNDER_14 without current consent → BLOCK', () => {
+    const r = assertMinorProcessingAllowed('p1', makeDeps({
+      ageBand: 'UNDER_14',
+      guardianPersonId: 'g1',
+      guardianConsentRecordId: null,
+      guardianConsentVersion: null,
+    }));
+    expect(r).toEqual({ decision: 'BLOCK', reason: 'GUARDIAN_CONSENT_REQUIRED' });
+  });
+
   it('UNDER_14 with revoked consent → BLOCK', () => {
     const r = assertMinorProcessingAllowed('p1', makeDeps(
       {

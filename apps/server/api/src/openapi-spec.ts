@@ -32,6 +32,32 @@ import {
   ComplianceProfile,
   Notice,
   ErrorSchema,
+  CreateCaseRequest,
+  CaseResponse,
+  CaseListResponse,
+  CaseStatus,
+  CasePhase,
+
+  BindingBootstrapRequest,
+  BindingCandidateDecisionRequest,
+  BindingConfirmerDecisionRequest,
+  BindingBootstrapGenericResponse,
+  BindingBootstrapReusedResponse,
+  BindingBootstrapCommittedResponse,
+  BindingCandidatePairingResponse,
+  BindingGenericResponse,
+  BindingStatusResponse,
+  BindingSessionCommittedResponse,
+  BindingPendingListResponse,
+  BindingConfirmerDecisionResponse,
+  BindingNotFoundError,
+  BindingContextInvalidError,
+  CreateCaseMessageRequest,
+  CaseMessageResponse,
+  UnauthenticatedError,
+  IdempotencyPayloadMismatchError,
+  ValidationError,
+  InternalError,
 } from '@xiaoshuyin/contracts';
 
 type JsonSchema = Record<string, unknown>;
@@ -82,6 +108,25 @@ const consentIdPath = {
 
 const errorResponse = (description: string) => refResponse(description, 'Error');
 
+// Case-specific error bodies are structurally fixed to one code (frozen
+// cases-api.openapi.yaml §components.schemas).
+const CaseAccessDeniedErrorSchema = z.strictObject({
+  code: z.enum(['CASE_ACCESS_DENIED']),
+  message: z.string(),
+});
+const CaseNotFoundErrorSchema = z.strictObject({
+  code: z.enum(['CASE_NOT_FOUND']),
+  message: z.string(),
+});
+const CurrentFamilyNotFoundErrorSchema = z.strictObject({
+  code: z.enum(['CURRENT_FAMILY_NOT_FOUND']),
+  message: z.string(),
+});
+const CurrentFamilyAmbiguousErrorSchema = z.strictObject({
+  code: z.enum(['CURRENT_FAMILY_AMBIGUOUS']),
+  message: z.string(),
+});
+
 export function buildOpenApiDocument() {
   const schemas: Record<string, JsonSchema> = {
     Error: toJsonSchema(ErrorSchema),
@@ -106,6 +151,35 @@ export function buildOpenApiDocument() {
     ConsentRecord: toJsonSchema(ConsentRecord),
     ComplianceProfile: toJsonSchema(ComplianceProfile),
     Notice: toJsonSchema(Notice),
+    CreateCaseRequest: toJsonSchema(CreateCaseRequest),
+    CaseResponse: toJsonSchema(CaseResponse),
+    CaseListResponse: toJsonSchema(CaseListResponse),
+    CaseStatus: toJsonSchema(CaseStatus),
+    CasePhase: toJsonSchema(CasePhase),
+    CaseAccessDeniedError: toJsonSchema(CaseAccessDeniedErrorSchema),
+    CaseNotFoundError: toJsonSchema(CaseNotFoundErrorSchema),
+    CreateCaseMessageRequest: toJsonSchema(CreateCaseMessageRequest),
+    CaseMessageResponse: toJsonSchema(CaseMessageResponse),
+    UnauthenticatedError: toJsonSchema(UnauthenticatedError),
+    IdempotencyPayloadMismatchError: toJsonSchema(IdempotencyPayloadMismatchError),
+    ValidationError: toJsonSchema(ValidationError),
+    InternalError: toJsonSchema(InternalError),
+    CurrentFamilyNotFoundError: toJsonSchema(CurrentFamilyNotFoundErrorSchema),
+    CurrentFamilyAmbiguousError: toJsonSchema(CurrentFamilyAmbiguousErrorSchema),
+    BindingBootstrapRequest: toJsonSchema(BindingBootstrapRequest),
+    BindingCandidateDecisionRequest: toJsonSchema(BindingCandidateDecisionRequest),
+    BindingConfirmerDecisionRequest: toJsonSchema(BindingConfirmerDecisionRequest),
+    BindingBootstrapGenericResponse: toJsonSchema(BindingBootstrapGenericResponse),
+    BindingBootstrapReusedResponse: toJsonSchema(BindingBootstrapReusedResponse),
+    BindingBootstrapCommittedResponse: toJsonSchema(BindingBootstrapCommittedResponse),
+    BindingCandidatePairingResponse: toJsonSchema(BindingCandidatePairingResponse),
+    BindingGenericResponse: toJsonSchema(BindingGenericResponse),
+    BindingStatusResponse: toJsonSchema(BindingStatusResponse),
+    BindingSessionCommittedResponse: toJsonSchema(BindingSessionCommittedResponse),
+    BindingPendingListResponse: toJsonSchema(BindingPendingListResponse),
+    BindingConfirmerDecisionResponse: toJsonSchema(BindingConfirmerDecisionResponse),
+    BindingNotFoundError: toJsonSchema(BindingNotFoundError),
+    BindingContextInvalidError: toJsonSchema(BindingContextInvalidError),
   };
 
   const paths: Record<string, unknown> = {
@@ -309,6 +383,186 @@ export function buildOpenApiDocument() {
         },
       },
     },
+    '/api/v1/cases': {
+      post: {
+        tags: ['case'],
+        operationId: 'createCase',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('IdempotencyKeyHeader')],
+        requestBody: refBody('CreateCaseRequest'),
+        responses: {
+          '201': refResponse('Case 已创建（或幂等重放原结果）', 'CaseResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '403': refResponse('`CASE_ACCESS_DENIED`', 'CaseAccessDeniedError'),
+          '404': refResponse('`CURRENT_FAMILY_NOT_FOUND`', 'CurrentFamilyNotFoundError'),
+          '409': errorResponse(
+            '`CURRENT_FAMILY_AMBIGUOUS`（current Family 无法唯一解析，真实可达） / `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同；当前 public HTTP command shape 下不可达）'
+          ),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+      get: {
+        tags: ['case'],
+        operationId: 'listCases',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': refResponse('当前家庭的 Case 集合（可能为空）', 'CaseListResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '403': refResponse('`CASE_ACCESS_DENIED`', 'CaseAccessDeniedError'),
+          '404': refResponse('`CURRENT_FAMILY_NOT_FOUND`', 'CurrentFamilyNotFoundError'),
+          '409': errorResponse('`CURRENT_FAMILY_AMBIGUOUS`'),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/messages': {
+      post: {
+        tags: ['case'],
+        operationId: 'createCaseMessage',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('CreateCaseMessageRequest'),
+        responses: {
+          '201': refResponse('Message recorded', 'CaseMessageResponse'),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': jsonResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`', {
+            oneOf: [ref('CurrentFamilyNotFoundError'), ref('CaseNotFoundError')],
+          }),
+          '409': jsonResponse(
+            '`CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH`',
+            {
+              oneOf: [
+                ref('CurrentFamilyAmbiguousError'),
+                ref('IdempotencyPayloadMismatchError'),
+              ],
+            }
+          ),
+          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}': {
+      get: {
+        tags: ['case'],
+        operationId: 'getCase',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseIdPath')],
+        responses: {
+          '200': refResponse('Case 详情', 'CaseResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': jsonResponse('`CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND`', {
+            oneOf: [ref('CaseNotFoundError'), ref('CurrentFamilyNotFoundError')],
+          }),
+          '409': refResponse('`CURRENT_FAMILY_AMBIGUOUS`', 'CurrentFamilyAmbiguousError'),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
+    // ── Slice 006 identity binding: exactly six surfaces ──
+    '/api/v1/identity-bindings/bootstrap': {
+      post: {
+        tags: ['identity-binding'],
+        operationId: 'bootstrapIdentityBinding',
+        requestBody: refBody('BindingBootstrapRequest'),
+        responses: {
+          '200': jsonResponse('generic / Case B 复用 / COMMITTED settled replay', {
+            oneOf: [
+              ref('BindingBootstrapGenericResponse'),
+              ref('BindingBootstrapReusedResponse'),
+              ref('BindingBootstrapCommittedResponse'),
+            ],
+          }),
+          '401': errorResponse('`WECHAT_AUTH_FAILED`'),
+          '409': errorResponse('`IDEMPOTENCY_PAYLOAD_MISMATCH`'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/candidate-decision': {
+      post: {
+        tags: ['identity-binding'],
+        operationId: 'submitCandidateBindingDecision',
+        parameters: [paramRef('BindingContextHeader')],
+        requestBody: refBody('BindingCandidateDecisionRequest'),
+        responses: {
+          '200': jsonResponse('candidate AFFIRM fixed shape / REJECT-CANCEL generic', {
+            oneOf: [
+              ref('BindingGenericResponse'),
+              ref('BindingCandidatePairingResponse'),
+            ],
+          }),
+          '401': refResponse('`BINDING_CONTEXT_INVALID`', 'BindingContextInvalidError'),
+          '409': errorResponse('`IDEMPOTENCY_PAYLOAD_MISMATCH`'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/status': {
+      get: {
+        tags: ['identity-binding'],
+        operationId: 'getCandidateBindingStatus',
+        parameters: [paramRef('BindingContextHeader')],
+        responses: {
+          '200': refResponse('candidate 可见状态', 'BindingStatusResponse'),
+          '401': refResponse('`BINDING_CONTEXT_INVALID`', 'BindingContextInvalidError'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/session': {
+      post: {
+        tags: ['identity-binding'],
+        operationId: 'exchangeBindingSession',
+        parameters: [paramRef('BindingContextHeader')],
+        responses: {
+          '200': jsonResponse('未 COMMITTED generic / COMMITTED 普通会话', {
+            oneOf: [
+              ref('BindingGenericResponse'),
+              ref('BindingSessionCommittedResponse'),
+            ],
+          }),
+          '401': refResponse('`BINDING_CONTEXT_INVALID`', 'BindingContextInvalidError'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/pending': {
+      get: {
+        tags: ['identity-binding'],
+        operationId: 'listPendingBindings',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('BindingPersonIdQuery')],
+        responses: {
+          '200': refResponse('最小 attempts 列表', 'BindingPendingListResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': refResponse('`BINDING_NOT_FOUND`', 'BindingNotFoundError'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/identity-bindings/pairing-decision': {
+      post: {
+        tags: ['identity-binding'],
+        operationId: 'submitSecondPartyBindingPairingDecision',
+        security: [{ bearerAuth: [] }],
+        requestBody: refBody('BindingConfirmerDecisionRequest'),
+        responses: {
+          '200': refResponse('确认后 attempt 状态', 'BindingConfirmerDecisionResponse'),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': refResponse('`BINDING_NOT_FOUND`', 'BindingNotFoundError'),
+          '409': errorResponse('`BINDING_STATE_CONFLICT` / `IDEMPOTENCY_PAYLOAD_MISMATCH`'),
+          '422': errorResponse('`VALIDATION_ERROR`'),
+        },
+      },
+    },
   };
 
   return {
@@ -320,6 +574,7 @@ export function buildOpenApiDocument() {
       { name: 'family' },
       { name: 'consent' },
       { name: 'compliance' },
+      { name: 'case' },
     ],
     paths,
     components: {
@@ -346,6 +601,35 @@ export function buildOpenApiDocument() {
           required: true,
           schema: { type: 'string', format: 'uuid' },
         },
+        IdempotencyKeyHeader: {
+          name: 'Idempotency-Key',
+          in: 'header',
+          required: true,
+          description: '关键命令幂等键（§8.5）。同 key 不同 payload → 409。',
+          schema: { type: 'string', minLength: 8, maxLength: 128 },
+        },
+        CaseIdPath: {
+          name: 'id',
+          in: 'path',
+          required: true,
+          description: 'Case UUID（待验证参数；存在不代表有权访问）。',
+          schema: { type: 'string', format: 'uuid' },
+        },
+        BindingContextHeader: {
+          name: 'X-Binding-Context',
+          in: 'header',
+          required: true,
+          description: 'opaque pending authentication context；不是普通会话。',
+          schema: { type: 'string', minLength: 16, maxLength: 256 },
+        },
+        BindingPersonIdQuery: {
+          name: 'personId',
+          in: 'query',
+          required: true,
+          description: '待验证的 target Person P1；服务端读取唯一 Family。',
+          schema: { type: 'string', format: 'uuid' },
+        },
+
       },
       schemas: {
 

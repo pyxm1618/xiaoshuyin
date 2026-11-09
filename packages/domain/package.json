@@ -4,10 +4,15 @@
   "private": true,
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@xiaoshuyin/authorization": "workspace:*",
+    "@xiaoshuyin/compliance": "workspace:*",
     "@xiaoshuyin/contracts": "workspace:*"
   },
   "devDependencies": {

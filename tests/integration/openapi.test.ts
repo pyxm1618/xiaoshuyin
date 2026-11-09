@@ -29,17 +29,44 @@ const SPEC_PATH = join(ROOT, 'packages', 'generated', 'openapi.json');
 
 const FROZEN_SCHEMAS = [
   'AgeBand',
+  'BindingBootstrapCommittedResponse',
+  'BindingBootstrapGenericResponse',
+  'BindingBootstrapRequest',
+  'BindingBootstrapReusedResponse',
+  'BindingCandidateDecisionRequest',
+  'BindingCandidatePairingResponse',
+  'BindingConfirmerDecisionRequest',
+  'BindingConfirmerDecisionResponse',
+  'BindingContextInvalidError',
+  'BindingGenericResponse',
+  'BindingNotFoundError',
+  'BindingPendingListResponse',
+  'BindingSessionCommittedResponse',
+  'BindingStatusResponse',
+  'CaseAccessDeniedError',
+  'CaseListResponse',
+  'CaseMessageResponse',
+  'CaseNotFoundError',
+  'CasePhase',
+  'CaseResponse',
+  'CaseStatus',
   'ComplianceProfile',
   'ComplianceProfileSummary',
   'ConsentRecord',
   'ConsentRequestResponse',
+  'CreateCaseMessageRequest',
+  'CreateCaseRequest',
   'CreateConsentRequestRequest',
   'CreateFamilyRequest',
   'CreateMemberRequest',
   'CreatorInput',
+  'CurrentFamilyAmbiguousError',
+  'CurrentFamilyNotFoundError',
   'Error',
   'FamilyResponse',
   'GrantConsentRequest',
+  'IdempotencyPayloadMismatchError',
+  'InternalError',
   'LoginResponse',
   'MeResponse',
   'MemberResponse',
@@ -48,7 +75,9 @@ const FROZEN_SCHEMAS = [
   'ProfileAttribute',
   'ProfileValue',
   'ProvenanceValueInput',
+  'UnauthenticatedError',
   'UpdateMemberRequest',
+  'ValidationError',
   'WritableSource',
 ];
 
@@ -76,12 +105,16 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     expect(Object.keys(schemas).sort()).toEqual([...FROZEN_SCHEMAS].sort());
     for (const name of FROZEN_SCHEMAS) {
       expect(schemas[name], `missing schema ${name}`).toBeDefined();
-      expect(schemas[name].type ?? schemas[name].$ref).toBeDefined();
+      expect(
+        schemas[name].type ??
+          schemas[name].$ref ??
+          schemas[name].oneOf ??
+          schemas[name].anyOf
+      ).toBeDefined();
     }
   });
 
-  it('contains exactly the 13 frozen business operations', () => {
-    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+  it('contains exactly the 23 frozen business operations (16 + Slice 3 message + business Slice 5 six)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
@@ -91,19 +124,29 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       }
     }
     expect(operations.sort()).toEqual([
+      'GET /api/v1/cases',
+      'GET /api/v1/cases/{id}',
       'GET /api/v1/compliance/notices',
       'GET /api/v1/compliance/profile',
       'GET /api/v1/consents',
       'GET /api/v1/families/current',
+      'GET /api/v1/identity-bindings/pending',
+      'GET /api/v1/identity-bindings/status',
       'GET /api/v1/me',
       'PATCH /api/v1/families/{id}/members/{personId}',
       'POST /api/v1/auth/logout',
       'POST /api/v1/auth/wechat',
+      'POST /api/v1/cases',
+      'POST /api/v1/cases/{id}/messages',
       'POST /api/v1/compliance/guardian-consents',
       'POST /api/v1/compliance/guardian-consents/requests',
       'POST /api/v1/consents/{id}/revoke',
       'POST /api/v1/families',
       'POST /api/v1/families/{id}/members',
+      'POST /api/v1/identity-bindings/bootstrap',
+      'POST /api/v1/identity-bindings/candidate-decision',
+      'POST /api/v1/identity-bindings/session',
+      'POST /api/v1/identity-bindings/pairing-decision',
     ].sort());
   });
 
@@ -116,13 +159,51 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       ['post', '/api/v1/compliance/guardian-consents/requests'],
       ['post', '/api/v1/compliance/guardian-consents'],
       ['post', '/api/v1/consents/{id}/revoke'],
+      ['post', '/api/v1/cases'],
+      ['post', '/api/v1/cases/{id}/messages'],
     ] as const;
     for (const [method, path] of commands) {
       const params = spec.paths[path][method].parameters ?? [];
-      const hasHeader = params.some(
-        (p: any) => p.$ref === '#/components/parameters/IdempotencyKey'
+      const hasHeader = params.some((p: any) =>
+        p.$ref === '#/components/parameters/IdempotencyKey' ||
+        p.$ref === '#/components/parameters/IdempotencyKeyHeader'
       );
       expect(hasHeader, `${method.toUpperCase()} ${path} missing Idempotency-Key`).toBe(true);
+    }
+  });
+
+  it('no unplanned business endpoints', () => {
+    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+    const allowedPaths = new Set([
+      '/healthz',
+      '/api/v1/auth/wechat',
+      '/api/v1/auth/logout',
+      '/api/v1/me',
+      '/api/v1/families',
+      '/api/v1/families/current',
+      '/api/v1/families/{id}/members',
+      '/api/v1/families/{id}/members/{personId}',
+      '/api/v1/compliance/guardian-consents/requests',
+      '/api/v1/compliance/guardian-consents',
+      '/api/v1/consents/{id}/revoke',
+      '/api/v1/consents',
+      '/api/v1/compliance/profile',
+      '/api/v1/compliance/notices',
+      // Slice 2 (002-case-core) — three Case operations.
+      '/api/v1/cases',
+      '/api/v1/cases/{id}',
+      // Business Slice 5 (repo feature 006) — exactly six binding surfaces.
+      '/api/v1/identity-bindings/bootstrap',
+      '/api/v1/identity-bindings/candidate-decision',
+      '/api/v1/identity-bindings/status',
+      '/api/v1/identity-bindings/session',
+      '/api/v1/identity-bindings/pending',
+      '/api/v1/identity-bindings/pairing-decision',
+      // Slice 3 (003-evidence-core) — the single approved message POST.
+      '/api/v1/cases/{id}/messages',
+    ]);
+    for (const path of Object.keys(spec.paths)) {
+      expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);
     }
   });
 

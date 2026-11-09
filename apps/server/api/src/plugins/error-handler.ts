@@ -33,6 +33,13 @@ const ERROR_MAP: Record<string, number> = {
   NOTICE_VERSION_MISMATCH: 403,
   CURRENT_FAMILY_NOT_FOUND: 404,
   CURRENT_FAMILY_AMBIGUOUS: 409,
+  CASE_NOT_FOUND: 404,
+  CASE_ACCESS_DENIED: 403,
+  // Slice 006 identity binding.
+  WECHAT_AUTH_FAILED: 401,
+  BINDING_CONTEXT_INVALID: 401,
+  BINDING_NOT_FOUND: 404,
+  BINDING_STATE_CONFLICT: 409,
   VALIDATION_ERROR: 422,
   AGE_BAND_SOURCE_NOT_ALLOWED: 422,
   IDEMPOTENCY_PAYLOAD_MISMATCH: 409,
@@ -51,19 +58,79 @@ export function toHttpError(code: string, message?: string, details?: Record<str
   };
 }
 
-export function errorHandler(err: Error, _req: FastifyRequest, reply: FastifyReply) {
-  if ('statusCode' in err && 'code' in err) {
-    const httpErr = err as unknown as HttpError;
-    return reply.status(httpErr.statusCode).send({
-      code: httpErr.code,
-      message: httpErr.message,
-      ...(httpErr.details ? { details: httpErr.details } : {}),
-    });
-  }
+/**
+ * Whitelist-only logging for unexpected/5xx failures.
+ *
+ * `pg` errors can carry SQL fragments, parameter values, request-derived
+ * detail and stack frames, so neither the error object nor its message,
+ * detail, query or parameters are logged. Only non-sensitive routing metadata
+ * plus a strictly validated SQLSTATE are recorded.
+ */
+function logUnexpected(req: FastifyRequest, err: Error) {
+  const rawCode = (err as { code?: unknown }).code;
+  const sqlstate =
+    typeof rawCode === 'string' && /^[0-9A-Z]{5}$/.test(rawCode) ? rawCode : undefined;
+  req.log.error(
+    {
+      requestId: req.id,
+      method: req.method,
+      route: req.routeOptions?.url ?? null,
+      ...(sqlstate ? { sqlstate } : {}),
+    },
+    'unhandled request error'
+  );
+}
 
-  // Unexpected error
+/** The only 5xx body shape the API ever returns. */
+function genericInternalError(reply: FastifyReply) {
   return reply.status(500).send({
     code: 'INTERNAL_ERROR',
     message: 'An internal error occurred',
   });
+}
+
+export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyReply) {
+  // Secure JSON parsing rejects prototype-polluting payloads and invalid JSON.
+  // The Case create contract requires every undeclared business field to be a
+  // 422 VALIDATION_ERROR with zero writes, so this parse failure is mapped for
+  // that command only. Other endpoints keep the Fastify default (400).
+  const routeUrl = req.routeOptions?.url ?? req.url;
+  const isStrictCreateCommand =
+    req.method === 'POST' &&
+    (routeUrl === '/api/v1/cases' || routeUrl === '/api/v1/cases/:id/messages');
+  if (isStrictCreateCommand && (err as any).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
+    return reply.status(422).send({
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid request body',
+    });
+  }
+
+  // Route schema validation failures surface as Fastify 400s. The frozen
+  // contract maps every schema violation to `422 VALIDATION_ERROR` with a
+  // single body shape (no leaked field details).
+  if ('validation' in err) {
+    return reply.status(422).send({
+      code: 'VALIDATION_ERROR',
+      message: 'Invalid request body',
+    });
+  }
+
+  if ('statusCode' in err && 'code' in err) {
+    const httpErr = err as unknown as HttpError;
+    // 4xx keep their contract message. Any 5xx — including typed
+    // INTERNAL_ERROR raised by an invariant branch — is reported through the
+    // single generic 500 contract so no internal detail reaches the client.
+    if (httpErr.statusCode < 500) {
+      return reply.status(httpErr.statusCode).send({
+        code: httpErr.code,
+        message: httpErr.message,
+        ...(httpErr.details ? { details: httpErr.details } : {}),
+      });
+    }
+    logUnexpected(req, err);
+    return genericInternalError(reply);
+  }
+
+  logUnexpected(req, err);
+  return genericInternalError(reply);
 }
