@@ -48,9 +48,13 @@ function literalCodes(schema: any): string[] {
 }
 
 describe('Generated OpenAPI — Case operations (T078)', () => {
-  it('contains exactly the three Case operations', () => {
+  it('contains exactly the four approved Case operations', () => {
     const casePaths = Object.keys(spec.paths).filter((p) => p.startsWith('/api/v1/cases'));
-    expect(casePaths.sort()).toEqual(['/api/v1/cases', '/api/v1/cases/{id}']);
+    expect(casePaths.sort()).toEqual([
+      '/api/v1/cases',
+      '/api/v1/cases/{id}',
+      '/api/v1/cases/{id}/messages',
+    ]);
 
     const operations: string[] = [];
     for (const [path, item] of Object.entries(spec.paths as Record<string, any>)) {
@@ -63,6 +67,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'GET /api/v1/cases',
       'GET /api/v1/cases/{id}',
       'POST /api/v1/cases',
+      'POST /api/v1/cases/{id}/messages',
     ]);
   });
 

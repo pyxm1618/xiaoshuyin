@@ -37,8 +37,10 @@ describe('Schema Structure', () => {
     }
 
     expect(Object.keys(enumMap).sort()).toEqual([
-      'account_status', 'age_band', 'case_phase', 'case_status',
+      'account_status', 'age_band', 'assertion_kind', 'case_phase', 'case_status',
       'consent_decision', 'consent_purpose', 'consent_request_status',
+      'evidence_confirmation_status', 'evidence_time_state',
+      'observation_value_state', 'observation_value_type',
       'profile_attribute', 'profile_value_status', 'provenance_source',
     ]);
     expect(enumMap['case_status']).toEqual([

@@ -10,6 +10,7 @@ import { registerMemberRoutes } from './routes/members.js';
 import { registerComplianceRoutes } from './routes/compliance.js';
 import { registerConsentRoutes } from './routes/consents.js';
 import { registerCaseRoutes } from './routes/cases.js';
+import { registerMessageRoutes } from './routes/messages.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import {
   createWechatProvider,
@@ -88,6 +89,20 @@ export async function buildApp(options: BuildAppOptions = {}) {
     max: 10,
   });
 
+  // node-postgres emits idle-client failures on Pool. A listener is required
+  // so an asynchronous backend/network failure cannot become an uncaught
+  // EventEmitter error. Checked-out clients are handled independently by the
+  // transaction lifecycle in db/tx.ts.
+  pool.on('error', (err) => {
+    const rawCode = (err as { code?: unknown }).code;
+    const sqlstate =
+      typeof rawCode === 'string' && /^[0-9A-Z]{5}$/.test(rawCode) ? rawCode : undefined;
+    app.log.error(
+      { ...(sqlstate ? { sqlstate } : {}) },
+      'postgres pool client error'
+    );
+  });
+
   // Production never selects the fake provider (see createWechatProvider).
   const wechatProvider = createWechatProvider(runtime);
 
@@ -107,6 +122,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerComplianceRoutes(app, pool);
   registerConsentRoutes(app, pool);
   registerCaseRoutes(app, pool);
+  registerMessageRoutes(app, pool);
 
   return app;
 }

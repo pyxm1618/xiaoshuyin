@@ -228,6 +228,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{id}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createCaseMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{id}": {
         parameters: {
             query?: never;
@@ -638,6 +654,40 @@ export interface components {
         CaseNotFoundError: {
             /** @enum {string} */
             code: "CASE_NOT_FOUND";
+            message: string;
+        };
+        CreateCaseMessageRequest: {
+            content: string;
+        };
+        CaseMessageResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            caseId: string;
+            /** Format: date-time */
+            recordedAt: string;
+        };
+        UnauthenticatedError: {
+            /** @enum {string} */
+            code: "UNAUTHENTICATED";
+            message: string;
+        };
+        IdempotencyPayloadMismatchError: {
+            /** @enum {string} */
+            code: "IDEMPOTENCY_PAYLOAD_MISMATCH";
+            message: string;
+        };
+        ValidationError: {
+            /** @enum {string} */
+            code: "VALIDATION_ERROR";
+            message: string;
+            details?: {
+                [key: string]: unknown;
+            };
+        };
+        InternalError: {
+            /** @enum {string} */
+            code: "INTERNAL_ERROR";
             message: string;
         };
         CurrentFamilyNotFoundError: {
@@ -1471,6 +1521,80 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createCaseMessage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCaseMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Message recorded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseMessageResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"] | components["schemas"]["CaseNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyAmbiguousError"] | components["schemas"]["IdempotencyPayloadMismatchError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
                 };
             };
         };

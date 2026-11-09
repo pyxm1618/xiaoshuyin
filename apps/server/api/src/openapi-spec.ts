@@ -37,6 +37,12 @@ import {
   CaseListResponse,
   CaseStatus,
   CasePhase,
+  CreateCaseMessageRequest,
+  CaseMessageResponse,
+  UnauthenticatedError,
+  IdempotencyPayloadMismatchError,
+  ValidationError,
+  InternalError,
 } from '@xiaoshuyin/contracts';
 
 type JsonSchema = Record<string, unknown>;
@@ -137,6 +143,12 @@ export function buildOpenApiDocument() {
     CasePhase: toJsonSchema(CasePhase),
     CaseAccessDeniedError: toJsonSchema(CaseAccessDeniedErrorSchema),
     CaseNotFoundError: toJsonSchema(CaseNotFoundErrorSchema),
+    CreateCaseMessageRequest: toJsonSchema(CreateCaseMessageRequest),
+    CaseMessageResponse: toJsonSchema(CaseMessageResponse),
+    UnauthenticatedError: toJsonSchema(UnauthenticatedError),
+    IdempotencyPayloadMismatchError: toJsonSchema(IdempotencyPayloadMismatchError),
+    ValidationError: toJsonSchema(ValidationError),
+    InternalError: toJsonSchema(InternalError),
     CurrentFamilyNotFoundError: toJsonSchema(CurrentFamilyNotFoundErrorSchema),
     CurrentFamilyAmbiguousError: toJsonSchema(CurrentFamilyAmbiguousErrorSchema),
   };
@@ -372,6 +384,41 @@ export function buildOpenApiDocument() {
           '404': refResponse('`CURRENT_FAMILY_NOT_FOUND`', 'CurrentFamilyNotFoundError'),
           '409': errorResponse('`CURRENT_FAMILY_AMBIGUOUS`'),
           '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/messages': {
+      post: {
+        tags: ['case'],
+        operationId: 'createCaseMessage',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', format: 'uuid' },
+          },
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('CreateCaseMessageRequest'),
+        responses: {
+          '201': refResponse('Message recorded', 'CaseMessageResponse'),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': jsonResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`', {
+            oneOf: [ref('CurrentFamilyNotFoundError'), ref('CaseNotFoundError')],
+          }),
+          '409': jsonResponse(
+            '`CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH`',
+            {
+              oneOf: [
+                ref('CurrentFamilyAmbiguousError'),
+                ref('IdempotencyPayloadMismatchError'),
+              ],
+            }
+          ),
+          '422': refResponse('`VALIDATION_ERROR`', 'ValidationError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
         },
       },
     },

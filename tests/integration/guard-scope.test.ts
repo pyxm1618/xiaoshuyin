@@ -48,8 +48,8 @@ const SQL_CASES: Array<[string, string]> = [
     'CREATE TABLE IF NOT EXISTS public.case_participants',
     'CREATE TABLE IF NOT EXISTS public."case_participants" (id uuid);\n',
   ],
-  ['CREATE TABLE assertions', 'CREATE TABLE assertions (id uuid);\n'],
-  ['CREATE TABLE observations', 'CREATE TABLE observations (id uuid);\n'],
+  ['CREATE TABLE evidence_items', 'CREATE TABLE evidence_items (id uuid);\n'],
+  ['CREATE TABLE evidence_items (second probe)', 'CREATE TABLE evidence_items (id uuid);\n'],
   ['CREATE TABLE problem_formulations', 'CREATE TABLE problem_formulations (id uuid);\n'],
   ['CREATE TABLE notifications', 'CREATE TABLE notifications (id uuid);\n'],
   ['CREATE TABLE safety_states', 'CREATE TABLE safety_states (id uuid);\n'],
@@ -60,13 +60,13 @@ const SQL_CASES: Array<[string, string]> = [
   ['CREATE TABLE data_requests', 'CREATE TABLE data_requests (id uuid);\n'],
   ['CREATE TABLE memory_snapshots', 'CREATE TABLE memory_snapshots (id uuid);\n'],
   [
-    'CREATE UNLOGGED TABLE IF NOT EXISTS "public"."observations"',
-    'CREATE UNLOGGED TABLE IF NOT EXISTS "public"."observations" (id uuid);\n',
+    'CREATE UNLOGGED TABLE IF NOT EXISTS "public"."evidence_items"',
+    'CREATE UNLOGGED TABLE IF NOT EXISTS "public"."evidence_items" (id uuid);\n',
   ],
   // Newline-separated DDL (valid PostgreSQL, previously undetected).
   [
-    'CREATE TABLE\n"public"."observations"',
-    'CREATE TABLE\n"public"."observations" (id uuid);\n',
+    'CREATE TABLE\n"public"."evidence_items"',
+    'CREATE TABLE\n"public"."evidence_items" (id uuid);\n',
   ],
   [
     'CREATE\nTABLE\ntasks',
@@ -74,12 +74,12 @@ const SQL_CASES: Array<[string, string]> = [
   ],
   // SQL comments between keywords / before the table name.
   [
-    'CREATE TABLE /* probe */\n"public"."observations"',
-    'CREATE TABLE /* probe */\n"public"."observations" (id uuid);\n',
+    'CREATE TABLE /* probe */\n"public"."evidence_items"',
+    'CREATE TABLE /* probe */\n"public"."evidence_items" (id uuid);\n',
   ],
   [
-    'CREATE /* probe */\nUNLOGGED TABLE IF NOT EXISTS\n"public"."observations"',
-    'CREATE /* probe */\nUNLOGGED TABLE IF NOT EXISTS\n"public"."observations" (id uuid);\n',
+    'CREATE /* probe */\nUNLOGGED TABLE IF NOT EXISTS\n"public"."evidence_items"',
+    'CREATE /* probe */\nUNLOGGED TABLE IF NOT EXISTS\n"public"."evidence_items" (id uuid);\n',
   ],
   [
     'CREATE TABLE /*\nmulti-line\ncomment\n*/ case_followup_schedules',
@@ -87,14 +87,14 @@ const SQL_CASES: Array<[string, string]> = [
   ],
   // Line comment between keywords.
   [
-    'CREATE TABLE -- probe\nobservations',
-    'CREATE TABLE -- probe\nobservations (id uuid);\n',
+    'CREATE TABLE -- probe\nevidence_items',
+    'CREATE TABLE -- probe\nevidence_items (id uuid);\n',
   ],
   // Nested block comments (PostgreSQL nests them; a boolean flag would stop
   // at the first */ and leak the rest of the statement).
   [
     'nested comment before TABLE',
-    'CREATE /* outer /* inner */ tail */\nTABLE public.observations (id uuid);\n',
+    'CREATE /* outer /* inner */ tail */\nTABLE public.evidence_items (id uuid);\n',
   ],
   [
     'triple nested comment',
@@ -102,17 +102,17 @@ const SQL_CASES: Array<[string, string]> = [
   ],
   [
     'nested comment between TABLE and name',
-    'CREATE TABLE /* a /* b */ a */ "public"."observations" (id uuid);\n',
+    'CREATE TABLE /* a /* b */ a */ "public"."evidence_items" (id uuid);\n',
   ],
 ];
 
 // SQL where the forbidden text only appears inside a literal: PostgreSQL does
 // not create a table, so the guard must stay silent.
 const ALLOWED_SQL: Array<[string, string]> = [
-  ['single-quoted literal', "SELECT 'CREATE TABLE observations (id uuid)';\n"],
+  ['single-quoted literal', "SELECT 'CREATE TABLE evidence_items (id uuid)';\n"],
   ['single-quoted literal (tasks)', "SELECT 'CREATE TABLE tasks (id uuid)';\n"],
-  ['single-quoted doubled quote', "SELECT 'CREATE TABLE observations (id uuid)''x';\n"],
-  ['dollar-quoted literal', 'SELECT $$CREATE TABLE observations (id uuid)$$;\n'],
+  ['single-quoted doubled quote', "SELECT 'CREATE TABLE evidence_items (id uuid)''x';\n"],
+  ['dollar-quoted literal', 'SELECT $$CREATE TABLE evidence_items (id uuid)$$;\n'],
   [
     'tagged dollar-quoted literal',
     'SELECT $probe$CREATE TABLE case_followup_schedules (id uuid)$probe$;\n',

@@ -1,0 +1,221 @@
+openapi: 3.1.0
+info:
+  title: Xiaoshuyin Evidence Core Message Contract
+  version: 0.1.0-plan
+  description: >-
+    Plan-stage contract for Slice 003. The only new public route in this Slice is
+    POST /api/v1/cases/{id}/messages. Message write stores raw dialogue only and
+    creates zero Assertions automatically.
+paths:
+  /api/v1/cases/{id}/messages:
+    post:
+      operationId: createCaseMessage
+      summary: Record one raw dialogue message for an authorized Case
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCaseMessageRequest'
+      responses:
+        '201':
+          description: Message recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseMessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '404':
+          $ref: '#/components/responses/CaseOrCurrentFamilyNotFound'
+        '409':
+          $ref: '#/components/responses/CurrentFamilyAmbiguousOrIdempotencyPayloadMismatch'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Required shared idempotency transport key. The key is not part of the JSON request body or canonical payload hash.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  schemas:
+    CreateCaseMessageRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 8000
+          description: Exact raw message. Server validation also rejects whitespace-only values. `idempotencyKey` is not accepted in the body.
+    CaseMessageResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - caseId
+        - recordedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        caseId:
+          type: string
+          format: uuid
+        recordedAt:
+          type: string
+          format: date-time
+
+    UnauthenticatedError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: Reuses the existing UNAUTHENTICATED error taxonomy; code is mechanically fixed.
+      properties:
+        code:
+          type: string
+          enum: [UNAUTHENTICATED]
+        message:
+          type: string
+
+    CurrentFamilyNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: Reuses the Slice 1 current-Family error semantics.
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_NOT_FOUND]
+        message:
+          type: string
+
+    CurrentFamilyAmbiguousError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: Reuses Slice 1 Final current-Family ambiguity semantics; code is mechanically fixed.
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_AMBIGUOUS]
+        message:
+          type: string
+
+    CaseNotFoundError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: Reuses Slice 2 anti-enumeration semantics for missing/cross-Family/unauthorized Case.
+      properties:
+        code:
+          type: string
+          enum: [CASE_NOT_FOUND]
+        message:
+          type: string
+
+    IdempotencyPayloadMismatchError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [IDEMPOTENCY_PAYLOAD_MISMATCH]
+        message:
+          type: string
+
+    ValidationError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [VALIDATION_ERROR]
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    InternalError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      description: Reuses the existing INTERNAL_ERROR taxonomy; code is mechanically fixed.
+      properties:
+        code:
+          type: string
+          enum: [INTERNAL_ERROR]
+        message:
+          type: string
+
+  responses:
+    Unauthenticated:
+      description: Missing or invalid session token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UnauthenticatedError'
+
+    CaseOrCurrentFamilyNotFound:
+      description: >-
+        Current Family cannot be resolved, or the specific Case is not externally
+        distinguishable from missing/cross-Family/unauthorized under Slice 2 semantics.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/CurrentFamilyNotFoundError'
+              - $ref: '#/components/schemas/CaseNotFoundError'
+
+    CurrentFamilyAmbiguousOrIdempotencyPayloadMismatch:
+      description: >-
+        current Family cannot be uniquely resolved under Slice 1 Final semantics
+        (CURRENT_FAMILY_AMBIGUOUS), or the same CASE_MESSAGE_CREATE idempotency key
+        was reused with a different canonical request (IDEMPOTENCY_PAYLOAD_MISMATCH).
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/CurrentFamilyAmbiguousError'
+              - $ref: '#/components/schemas/IdempotencyPayloadMismatchError'
+
+    IdempotencyPayloadMismatch:
+      description: Same CASE_MESSAGE_CREATE idempotency key reused with a different canonical request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/IdempotencyPayloadMismatchError'
+
+    ValidationError:
+      description: Strict request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+
+    InternalError:
+      description: Unexpected internal failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InternalError'

@@ -26,6 +26,7 @@ import {
   lockIdempotencyKey,
   type IdempotencyCommandType,
 } from '@xiaoshuyin/domain';
+import { withTransactionClient } from './db/tx.js';
 import { toHttpError } from './plugins/error-handler.js';
 
 export interface CommandResponse {
@@ -101,21 +102,13 @@ async function peekIdempotency(
   pool: pg.Pool,
   cfg: IdempotentCommandConfig
 ): Promise<CommandOutcome | null> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_identity_context($1, $2)', [cfg.accountId, 'SELF_IDENTITY']);
     const existing = await getIdempotencyKey(
       client, cfg.accountId, cfg.commandType, cfg.idempotencyKey
     );
-    await client.query('COMMIT');
     return decide(existing, cfg.requestHash);
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export async function runIdempotentCommand(
@@ -126,9 +119,7 @@ export async function runIdempotentCommand(
   const early = await peekIdempotency(pool, cfg);
   if (early) return early;
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_identity_context($1, $2)', [cfg.accountId, cfg.purpose]);
 
     // Serialize same-key commands BEFORE the second lookup.
@@ -139,10 +130,7 @@ export async function runIdempotentCommand(
       client, cfg.accountId, cfg.commandType, cfg.idempotencyKey
     );
     const decision = decide(existing, cfg.requestHash);
-    if (decision) {
-      await client.query('COMMIT');
-      return decision;
-    }
+    if (decision) return decision;
 
     const response = await fn(client);
 
@@ -156,14 +144,8 @@ export async function runIdempotentCommand(
       JSON.stringify(response.body)
     );
 
-    await client.query('COMMIT');
     return { action: 'EXECUTED', status: response.status, body: response.body };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  });
 }
 
 export function sendCommandOutcome(reply: FastifyReply, outcome: CommandOutcome) {

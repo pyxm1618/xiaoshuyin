@@ -115,22 +115,56 @@ export function requireSelfAction(
 }
 
 /**
+ * Marker for a *known authorization denial* produced by `denyToError()`.
+ *
+ * ULT-002: routes use this to distinguish an explicit business denial (which an
+ * anti-enumeration route may collapse into 404) from an unknown infrastructure
+ * failure (PostgreSQL `57014` statement timeout, connection loss, unexpected
+ * error), which MUST propagate and reach the global 500 INTERNAL_ERROR handler.
+ */
+const AUTHORIZATION_DENIAL = Symbol.for('xiaoshuyin.authorizationDenial');
+
+export function isKnownAuthorizationDenial(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as Record<symbol, unknown>)[AUTHORIZATION_DENIAL] === true
+  );
+}
+
+/**
  * Single HTTP mapping for authorization denials (contract §3). Denial bodies
  * never contain target object fields.
+ *
+ * `NO_ACTOR` maps to 401 UNAUTHENTICATED and is NOT marked as an
+ * authorization denial: authentication failures keep the existing
+ * authentication path and are never collapsed into an anti-enumeration 404.
  */
 export function denyToError(reason: DenyReason): Error & { statusCode: number; code: string } {
-  switch (reason) {
-    case 'NO_ACTOR':
-      return Object.assign(new Error('UNAUTHENTICATED'), toHttpError('UNAUTHENTICATED'));
-    case 'NOT_FAMILY_MEMBER':
-      return Object.assign(new Error('NOT_FAMILY_MEMBER'), toHttpError('NOT_FAMILY_MEMBER'));
-    case 'NOT_FAMILY_MANAGER':
-      return Object.assign(new Error('NOT_FAMILY_MANAGER'), toHttpError('NOT_FAMILY_MANAGER'));
-    case 'NOT_GUARDIAN':
-      return Object.assign(new Error('NOT_GUARDIAN'), toHttpError('NOT_GUARDIAN'));
-    case 'AGE_BAND_UNKNOWN':
-      return Object.assign(new Error('AGE_BAND_UNKNOWN'), toHttpError('AGE_BAND_UNKNOWN'));
-    default:
-      return Object.assign(new Error(reason), toHttpError('FORBIDDEN', reason));
+  const error = (() => {
+    switch (reason) {
+      case 'NO_ACTOR':
+        return Object.assign(new Error('UNAUTHENTICATED'), toHttpError('UNAUTHENTICATED'));
+      case 'NOT_FAMILY_MEMBER':
+        return Object.assign(new Error('NOT_FAMILY_MEMBER'), toHttpError('NOT_FAMILY_MEMBER'));
+      case 'NOT_FAMILY_MANAGER':
+        return Object.assign(new Error('NOT_FAMILY_MANAGER'), toHttpError('NOT_FAMILY_MANAGER'));
+      case 'NOT_GUARDIAN':
+        return Object.assign(new Error('NOT_GUARDIAN'), toHttpError('NOT_GUARDIAN'));
+      case 'AGE_BAND_UNKNOWN':
+        return Object.assign(new Error('AGE_BAND_UNKNOWN'), toHttpError('AGE_BAND_UNKNOWN'));
+      default:
+        return Object.assign(new Error(reason), toHttpError('FORBIDDEN', reason));
+    }
+  })();
+
+  if (reason !== 'NO_ACTOR') {
+    Object.defineProperty(error, AUTHORIZATION_DENIAL, {
+      value: true,
+      enumerable: false,
+      configurable: true,
+    });
   }
+
+  return error;
 }
