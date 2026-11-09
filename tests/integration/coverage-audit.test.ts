@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 // @ts-expect-error - plain .mjs verification helper without type declarations
-import { audit, fileOk, proofOk } from '../../scripts/coverage-audit.mjs';
+import { audit, fileOk, proofOk, SUBSTANTIVE_PROOFS } from '../../scripts/coverage-audit.mjs';
 
 const ROOT = process.cwd();
 
@@ -68,9 +68,44 @@ describe('coverage audit substantive gate (T115)', () => {
     expect(proofOk('tests/integration/missing.test.ts', 'required proof H-01', dir)).toBe(false);
   });
 
+  it('every required H-01 / H-02 / M-01 / MEDIUM-01 direct proof is individually mapped', () => {
+    const required = [
+      'H-01-exact-byte-replay',
+      'H-01-valid-decoy',
+      'H-01-challenge-envelope',
+      'H-01-confirmer-exact-binding',
+      'H-01-rotation-new-bytes',
+      'H-01-old-issuance-invalid',
+      'H-01-consumed-new-key-404',
+      'H-01-same-key-rotated-409',
+      'H-01-two-confirmer-concurrency',
+      'H-02-profile-age-barrier',
+      'H-02-profile-missing-barrier',
+      'H-02-consent-barrier',
+      'H-02-guardian-barrier',
+      'H-02-membership-authority-barrier',
+      'H-02-P1-conflict-barrier',
+      'H-02-candidate-account-conflict',
+      'H-02-invitation-seam',
+      'M-01-profile',
+      'M-01-age-band',
+      'M-01-guardian',
+      'M-01-consent',
+      'M-01-membership',
+      'M-01-invitation',
+      'M-01-P1-conflict',
+      'M-01-candidate-account-conflict',
+      'MEDIUM-01-replay-committed',
+      'MEDIUM-01-replay-terminal',
+      'MEDIUM-01-replay-pending-continuation',
+      'MEDIUM-01-replay-payload-mismatch',
+    ];
+    const keys = Object.keys(SUBSTANTIVE_PROOFS);
+    for (const id of required) expect(keys, id).toContain(id);
+  });
+
   it('deleting one required proof fails the audit closed', () => {
-    // A root with no files at all: every mapping is missing, so the audit must
-    // report missing > 0 rather than PASS.
+
     const emptyRoot = mkdtempSync(join(tmpdir(), 'coverage-audit-empty-'));
     const result = audit(emptyRoot);
     expect(result.missing.length).toBeGreaterThan(0);

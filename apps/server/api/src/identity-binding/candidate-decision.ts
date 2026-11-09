@@ -43,6 +43,7 @@ import {
 import { appendCandidate, hasKind } from './confirmation-repository.js';
 import {
   clearOpenidForFreshContext,
+  clearPairingForAttemptExcept,
   clearPairingIssuance,
   setPairingIssuance,
   type PendingContextRow,
@@ -410,6 +411,9 @@ async function issueOrReplayChallenge(
       pairingExpiresAt: new Date(desiredExpiry),
     });
     if (!row) return null;
+    // H-01 rotation: a new valid issuance supersedes every older issuance of
+    // the same attempt, so an old challenge can no longer be consumed.
+    await clearPairingForAttemptExcept(tx, attempt.id, context.id);
     issuanceId = row.pairingIssuanceId;
     issuedAt = row.pairingIssuedAt;
     expiresAt = row.pairingExpiresAt;

@@ -362,10 +362,11 @@ export async function getPersonWithProfile(tx: Tx, accountId: string) {
 // ── Identity binding Gate 2 concurrency boundary (F-01) ─────
 
 /**
- * Lock the authoritative rows Gate 2 reads, in a fixed order:
- * persons → person_compliance_profiles → consent_records → family_members →
- * families. A concurrent invalidating change either commits before this point
- * (and is observed by the Gate) or waits until the binding transaction ends.
+ * Lock the authoritative rows Gate 2 reads, in the canonical fixed order that
+ * every caller uses: persons → families → family_members →
+ * person_compliance_profiles → consent_records. A concurrent invalidating
+ * change either commits before this point (and is observed by the Gate) or
+ * waits until the binding transaction ends.
  */
 export async function lockBindingGateRows(
   tx: Tx,

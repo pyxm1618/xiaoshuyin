@@ -197,9 +197,10 @@ export async function resolveTargetFamilyId(
  * changes to either commit before we read (and be observed by the Gate) or wait
  * until this transaction finishes (i.e. after the linearization point).
  *
- * Lock order: persons → person_compliance_profiles → consent_records →
- * family_members → families. Callers must hold the attempt/context locks first
- * (D-6.1) and must not acquire these in a different order.
+ * Lock order (canonical, matches the executed SQL): persons → families →
+ * family_members → person_compliance_profiles → consent_records. Callers must
+ * hold the attempt/context locks first (D-6.1) and must not acquire these in a
+ * different order.
  */
 export async function lockBindingGateFacts(
   tx: pg.PoolClient,

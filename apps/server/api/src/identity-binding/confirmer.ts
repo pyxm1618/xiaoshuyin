@@ -23,6 +23,7 @@ import {
 } from '@xiaoshuyin/domain';
 import {
   setBindingAttemptContext,
+  setBindingConfirmerReplayContext,
   setBindingGateContext,
   withBindingTargetTransaction,
 } from '../db/tx.js';
@@ -172,42 +173,9 @@ export async function submitConfirmerDecision(
     deps.pool,
     { targetPersonId: input.targetPersonId, actorAccountId: input.accountId },
     async (tx): Promise<DecisionTxResult> => {
-      const facts = await readConfirmerFacts(tx, input.targetPersonId, input.accountId);
-      if (!facts) throw bindingError('BINDING_NOT_FOUND');
-      await setBindingGateContext(tx, {
-        targetPersonId: input.targetPersonId,
-        targetFamilyId: facts.targetFamilyId,
-        actorAccountId: input.accountId,
-      });
-
-      // Independent confirmer authorization BEFORE any protected attempt read
-      // or mutation. The attempt id passed to authorize() is resolved
-      // server-side: either from the verified challenge or from the existing
-      // operation-key binding on replay. The client never supplies it.
-      const authorizeDecision = (attemptId: string): BindingConfirmerAuthority => {
-        const decision = authorize({
-          actor: {
-            kind: 'ACCOUNT',
-            accountId: input.accountId,
-            personId: input.personId,
-          },
-          product: 'V1',
-          family: null,
-          case: null,
-          resource: {
-            type: 'BINDING',
-            attemptId,
-            personId: input.targetPersonId,
-          },
-          action: 'IDENTITY_BINDING_SECOND_PARTY_DECIDE',
-          purpose: 'IDENTITY_BINDING',
-          facts,
-        });
-        const allowed = requireConfirmerDecision(decision, true);
-        if (!allowed) throw bindingError('BINDING_NOT_FOUND');
-        return allowed.basis.authority as BindingConfirmerAuthority;
-      };
-
+      // Operation identity is resolved BEFORE any current business facts are
+      // read. An exact replay is answered from the operation key's bound
+      // attempt, not from mutable guardian / manager / membership state.
       const scope: BindingOperationScope = computeOperationScope({
         commandType: 'SECOND_PARTY_DECISION',
         accountId: input.accountId,
@@ -232,11 +200,57 @@ export async function submitConfirmerDecision(
       );
       if (op.action === 'MISMATCH') throw bindingError('IDEMPOTENCY_PAYLOAD_MISMATCH');
 
+      // ── Exact replay: the historical operation is authoritative ──
+      // Same Bearer account, same operation scope, same idempotency key and the
+      // exact same canonical request hash are already established. The bound
+      // attempt id is the authoritative historical mapping, so the replay MUST
+      // NOT re-run the mutable current second-party authority check and MUST NOT
+      // re-derive current target facts. A settled attempt returns its historical
+      // outcome; a PENDING attempt resumes the authoritative Phase C path where
+      // Gate 2 re-evaluates current state.
       if (op.action === 'REPLAY') {
         if (!existing?.attemptId) throw bindingError('BINDING_NOT_FOUND');
-        authorizeDecision(existing.attemptId);
+        await setBindingConfirmerReplayContext(tx, {
+          attemptId: existing.attemptId,
+          targetPersonId: input.targetPersonId,
+        });
         return replaySecondPartyOperation(tx, existing.attemptId, input);
       }
+
+      const facts = await readConfirmerFacts(tx, input.targetPersonId, input.accountId);
+      if (!facts) throw bindingError('BINDING_NOT_FOUND');
+      await setBindingGateContext(tx, {
+        targetPersonId: input.targetPersonId,
+        targetFamilyId: facts.targetFamilyId,
+        actorAccountId: input.accountId,
+      });
+
+      // Independent confirmer authorization BEFORE any protected attempt read
+      // or mutation. The attempt id passed to authorize() is resolved
+      // server-side from the verified challenge. The client never supplies it.
+      const authorizeDecision = (attemptId: string): BindingConfirmerAuthority => {
+        const decision = authorize({
+          actor: {
+            kind: 'ACCOUNT',
+            accountId: input.accountId,
+            personId: input.personId,
+          },
+          product: 'V1',
+          family: null,
+          case: null,
+          resource: {
+            type: 'BINDING',
+            attemptId,
+            personId: input.targetPersonId,
+          },
+          action: 'IDENTITY_BINDING_SECOND_PARTY_DECIDE',
+          purpose: 'IDENTITY_BINDING',
+          facts,
+        });
+        const allowed = requireConfirmerDecision(decision, true);
+        if (!allowed) throw bindingError('BINDING_NOT_FOUND');
+        return allowed.basis.authority as BindingConfirmerAuthority;
+      };
 
       const challenge = decodePairingChallenge(
         deps.identityBindingSecret,

@@ -434,6 +434,24 @@ BEGIN
   PERFORM set_config('app.binding_commit_account_id', p_account::text, true);
 END $$;
 
+-- Exact confirmer operation-key replay must read the historical authoritative
+-- attempt without re-deriving mutable current target facts (guardian /
+-- membership / consent may have changed since the original decision). The
+-- exposure is exact-attempt-id + exact-target-person bound and READ-ONLY; it
+-- grants no family, invitation or identity scope.
+CREATE FUNCTION app.set_binding_confirmer_replay_context(
+  p_attempt uuid, p_target_person uuid
+) RETURNS void
+LANGUAGE plpgsql SECURITY INVOKER AS $$
+BEGIN
+  IF p_attempt IS NULL OR p_target_person IS NULL THEN
+    RAISE EXCEPTION 'RLS_CONTEXT_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+  PERFORM set_config('app.binding_attempt_id', p_attempt::text, true);
+  PERFORM set_config('app.binding_target_person_id', p_target_person::text, true);
+  PERFORM set_config('app.purpose', 'IDENTITY_BINDING_GATE', true);
+END $$;
+
 -- ── Step 10: ENABLE + FORCE RLS + new-table policies ────────
 
 ALTER TABLE binding_pending_contexts      ENABLE ROW LEVEL SECURITY;
@@ -524,6 +542,18 @@ CREATE POLICY binding_attempts_commit_scope ON binding_attempts
     AND id = app_binding_attempt_id()
     AND target_person_id = app_binding_target_person_id()
     AND target_family_id = app_binding_target_family_id()
+  );
+
+-- Exact confirmer operation replay: the operation key's attempt id is the
+-- authoritative historical mapping. Reading it must not depend on current
+-- guardian / manager / membership state, so this policy exposes only that exact
+-- attempt id for the exact target Person. SELECT only.
+CREATE POLICY binding_attempts_confirmer_replay ON binding_attempts
+  FOR SELECT
+  USING (
+    app_current_purpose() = 'IDENTITY_BINDING_GATE'
+    AND id = app_binding_attempt_id()
+    AND target_person_id = app_binding_target_person_id()
   );
 
 CREATE POLICY binding_confirmations_attempt_scope ON binding_confirmations
@@ -819,4 +849,4 @@ GRANT EXECUTE ON FUNCTION app.set_binding_commit_context(uuid, uuid, uuid, uuid,
 GRANT EXECUTE ON FUNCTION app.set_binding_operation_scope(text)               TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app.set_binding_bootstrap_request_hash(text)        TO xiaoshuyin_app;
 GRANT EXECUTE ON FUNCTION app.set_binding_commit_account_id(uuid)             TO xiaoshuyin_app;
-GRANT EXECUTE ON FUNCTION app.set_binding_candidate_account_id(uuid)          TO xiaoshuyin_app;
+GRANT EXECUTE ON FUNCTION app.set_binding_candidate_account_id(uuid)          TO xiaoshuyin_app;GRANT EXECUTE ON FUNCTION app.set_binding_confirmer_replay_context(uuid, uuid) TO xiaoshuyin_app;

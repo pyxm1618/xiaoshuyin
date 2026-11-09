@@ -297,6 +297,114 @@ export const SUBSTANTIVE_PROOFS = {
     file: 'tests/integration/identity-binding-anti-enumeration.test.ts',
     test: 'true Case B mismatch (P1 bound to A, candidate authenticates as B) is generically indistinguishable',
   },
+
+  // ── MEDIUM-01 exact replay must not re-run mutable authority ──
+  'MEDIUM-01-replay-committed': {
+    file: 'tests/integration/identity-binding-confirmer-replay.test.ts',
+    test: 'Case A: a COMMITTED operation replays its historical outcome after the confirmer is revoked',
+  },
+  'MEDIUM-01-replay-terminal': {
+    file: 'tests/integration/identity-binding-confirmer-replay.test.ts',
+    test: 'Case B: a TERMINAL operation replays its historical outcome after the confirmer is revoked',
+  },
+  'MEDIUM-01-replay-pending-continuation': {
+    file: 'tests/integration/identity-binding-confirmer-replay.test.ts',
+    test: 'Case C: a PENDING operation resumes Phase C after authority / consent invalidation',
+  },
+  'MEDIUM-01-replay-payload-mismatch': {
+    file: 'tests/integration/identity-binding-confirmer-replay.test.ts',
+    test: 'same operation key + different payload is still 409 IDEMPOTENCY_PAYLOAD_MISMATCH',
+  },
+
+  // ── H-01 direct proofs (rotation / consumed / rotated mismatch / race) ──
+  'H-01-rotation-new-bytes': {
+    file: 'tests/integration/identity-binding-pairing-rotation.test.ts',
+    test: 'H-01 rotation: a new issuance returns new challenge bytes',
+  },
+  'H-01-old-issuance-invalid': {
+    file: 'tests/integration/identity-binding-pairing-rotation.test.ts',
+    test: 'H-01 rotation: the old issuance is invalid after rotation',
+  },
+  'H-01-consumed-new-key-404': {
+    file: 'tests/integration/identity-binding-pairing-rotation.test.ts',
+    test: 'H-01 consumed challenge + NEW operation key is 404 with zero mutation',
+  },
+  'H-01-same-key-rotated-409': {
+    file: 'tests/integration/identity-binding-pairing-rotation.test.ts',
+    test: 'H-01 same operation key + rotated challenge is 409 IDEMPOTENCY_PAYLOAD_MISMATCH',
+  },
+  'H-01-two-confirmer-concurrency': {
+    file: 'tests/integration/identity-binding-pairing-rotation.test.ts',
+    test: 'H-01 two-confirmer race writes exactly one SECOND_PARTY confirmation and commits once',
+  },
+
+  // ── H-02 direct DB barrier matrix (runtime role, per fact class) ──
+  'H-02-profile-age-barrier': {
+    file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
+    test: 'profile / age-band barrier blocks the commit',
+  },
+  'H-02-profile-missing-barrier': {
+    file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
+    test: 'missing compliance profile barrier blocks the commit',
+  },
+  'H-02-consent-barrier': {
+    file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
+    test: 'consent barrier blocks the commit',
+  },
+  'H-02-guardian-barrier': {
+    file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
+    test: 'guardian relationship barrier blocks the commit',
+  },
+  'H-02-membership-authority-barrier': {
+    file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
+    test: 'membership barrier blocks the commit',
+  },
+  'H-02-P1-conflict-barrier': {
+    file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
+    test: 'P1 binding conflict barrier blocks the commit',
+  },
+  'H-02-candidate-account-conflict': {
+    file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
+    test: 'candidate Account conflict barrier blocks the commit',
+  },
+  'H-02-invitation-seam': {
+    file: 'tests/integration/identity-binding-gate2-barrier-matrix.test.ts',
+    test: 'invitation seam barrier blocks the commit (CONTRACT-SEAM PROOF ONLY)',
+  },
+
+  // ── M-01 direct eligibility matrix ──
+  'M-01-profile': {
+    file: 'tests/integration/identity-binding-candidate-eligibility.test.ts',
+    test: 'M-01: profile invalidation blocks AFFIRM',
+  },
+  'M-01-age-band': {
+    file: 'tests/integration/identity-binding-candidate-eligibility.test.ts',
+    test: 'M-01: age-band invalidation blocks AFFIRM',
+  },
+  'M-01-guardian': {
+    file: 'tests/integration/identity-binding-candidate-eligibility.test.ts',
+    test: 'M-01: guardian relationship invalidation blocks AFFIRM',
+  },
+  'M-01-consent': {
+    file: 'tests/integration/identity-binding-candidate-eligibility.test.ts',
+    test: 'M-01: consent invalidation blocks AFFIRM',
+  },
+  'M-01-membership': {
+    file: 'tests/integration/identity-binding-candidate-eligibility.test.ts',
+    test: 'M-01: membership invalidation blocks AFFIRM',
+  },
+  'M-01-invitation': {
+    file: 'tests/integration/identity-binding-candidate-eligibility.test.ts',
+    test: 'M-01: invitation invalidation blocks AFFIRM',
+  },
+  'M-01-P1-conflict': {
+    file: 'tests/integration/identity-binding-candidate-eligibility.test.ts',
+    test: 'M-01: P1 binding conflict blocks AFFIRM',
+  },
+  'M-01-candidate-account-conflict': {
+    file: 'tests/integration/identity-binding-candidate-eligibility.test.ts',
+    test: 'M-01: candidate identity / account conflict blocks AFFIRM',
+  },
 };
 
 export function fileOk(rel, root = ROOT) {

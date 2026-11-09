@@ -22,7 +22,7 @@ const EXPECTED_ENUMS = 15;
 const EXPECTED_TABLES = 17;
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 4; // set_account_context, set_identity_context, set_family_context, create_family
-const EXPECTED_POLICIES = 36; // Slice 006 remediation adds bootstrap fingerprint + operation replay + H-02 lock policies
+const EXPECTED_POLICIES = 37; // Slice 006 remediation adds bootstrap fingerprint + operation replay + H-02 lock + confirmer replay policies
 const EXPECTED_TRIGGERS = 1; // consent_records_guard
 
 const EXPECTED_ENUM_NAMES = [

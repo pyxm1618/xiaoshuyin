@@ -379,6 +379,24 @@ export async function setBindingCandidateAccountId(
   await tx.query('SELECT app.set_binding_candidate_account_id($1)', [accountId]);
 }
 
+/**
+ * Exact operation-key replay context for the confirmer.
+ *
+ * The operation-key's attempt id is the authoritative historical mapping, so a
+ * replay reads THAT attempt by exact id. It must NOT re-derive mutable current
+ * target facts (guardian / membership / consent) just to make the row visible.
+ * RLS still requires the exact target Person, and the row is SELECT-only.
+ */
+export async function setBindingConfirmerReplayContext(
+  tx: TxClient,
+  opts: { attemptId: string; targetPersonId: string }
+): Promise<void> {
+  await tx.query('SELECT app.set_binding_confirmer_replay_context($1, $2)', [
+    opts.attemptId,
+    opts.targetPersonId,
+  ]);
+}
+
 export async function setBindingOperationScope(
   tx: TxClient,
   scopeKey: string

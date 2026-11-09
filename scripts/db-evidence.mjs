@@ -90,6 +90,7 @@ const SLICE5_POLICIES = [
   'binding_context_no_attempt_identity_scope',
   'binding_attempts_identity_scope', 'binding_attempts_operation_replay',
   'binding_attempts_target_scope', 'binding_attempts_commit_scope',
+  'binding_attempts_confirmer_replay',
   'binding_confirmations_attempt_scope', 'binding_confirmations_target_scope',
   'binding_operation_keys_scope', 'binding_operation_keys_bootstrap_fingerprint',
   'identity_binding_audit_insert_scope', 'persons_binding_target_read',

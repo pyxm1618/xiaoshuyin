@@ -263,6 +263,26 @@ export async function clearPairingForAttempt(
 }
 
 /**
+ * H-01 rotation: when a NEW valid issuance is minted for one attempt (e.g. a
+ * fresh bootstrap replay transport context), every older issuance of the same
+ * attempt becomes invalid. Only the new context keeps its issuance.
+ */
+export async function clearPairingForAttemptExcept(
+  tx: pg.PoolClient,
+  attemptId: string,
+  keepContextId: string
+): Promise<void> {
+  await tx.query(
+    `UPDATE binding_pending_contexts
+        SET pairing_issuance_id = NULL,
+            pairing_issued_at = NULL,
+            pairing_expires_at = NULL
+      WHERE attempt_id = $1 AND id <> $2`,
+    [attemptId, keepContextId]
+  );
+}
+
+/**
  * M-02: scrub the freshly-minted replay context by exact id, regardless of
  * whether it was linked to an attempt before cleanup. This is deliberately
  * independent of the attempt_id IS NULL scope used for older replay contexts.
