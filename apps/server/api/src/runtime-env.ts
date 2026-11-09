@@ -78,7 +78,7 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   const contextTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_CONTEXT_TTL_SECONDS');
   const attemptTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS');
   const pairingTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_PAIRING_TTL_SECONDS');
-  const participationInviteTtl = requiredPositiveInt(env, 'PARTICIPATION_INVITE_TTL_SECONDS');
+  const participationInviteTtl = requiredCoercedPositiveInt(env, 'PARTICIPATION_INVITE_TTL_SECONDS');
   const participationInviteTokenSecret = requiredBytes(env, 'PARTICIPATION_INVITE_TOKEN_SECRET', 32);
 
   return {
@@ -103,6 +103,15 @@ function requiredPositiveInt(env: NodeJS.ProcessEnv, key: string): number {
     fail('RUNTIME_ENV_INVALID', `${key} must be a positive integer`);
   }
   return Number(raw);
+}
+
+function requiredCoercedPositiveInt(env: NodeJS.ProcessEnv, key: string): number {
+  const raw = env[key];
+  const value = raw === undefined ? Number.NaN : Number(raw);
+  if (!raw || !Number.isInteger(value) || value <= 0) {
+    fail('RUNTIME_ENV_INVALID', `${key} must be a positive integer`);
+  }
+  return value;
 }
 
 /**
