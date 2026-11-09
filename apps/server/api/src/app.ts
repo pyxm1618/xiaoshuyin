@@ -20,8 +20,10 @@ import {
   type RuntimeConfig,
 } from './runtime-env.js';
 import type { WechatAuthProvider } from './auth/wechat-provider.js';
-import type { InvitationResolutionPort } from './identity-binding/invitation-port.js';
-import { Slice4InvitationAdapter } from './identity-binding/invitation-slice4-adapter.js';
+import {
+  UnavailableInvitationPort,
+  type InvitationResolutionPort,
+} from './identity-binding/invitation-port.js';
 
 export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
@@ -30,8 +32,9 @@ export interface BuildAppOptions {
   /** Test-only sink to capture real registered route schemas (contract drift). */
   onRoute?: (route: any) => void;
   /**
-   * Identity-binding injection points. Production resolves invitation facts
-   * through the authoritative Slice 4 runtime; tests may inject a fixture.
+   * Identity-binding injection points. The Slice 5 production adapter remains
+   * a post-merge late-closeout task (T121); tests may inject an authoritative
+   * contract implementation without changing production ownership.
    */
   identityBinding?: {
     invitationPort?: InvitationResolutionPort;
@@ -154,7 +157,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerIdentityBindingRoutes(app, {
     pool,
     invitationPort:
-      options.identityBinding?.invitationPort ?? new Slice4InvitationAdapter(),
+      options.identityBinding?.invitationPort ?? new UnavailableInvitationPort(),
     wechatProvider,
     identityBindingSecret: runtime.identityBindingSecret,
     contextTtlSeconds: runtime.identityBindingContextTtlSeconds,
