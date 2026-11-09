@@ -157,6 +157,54 @@ function inviteCreateBody(row: ParticipationRow, token: string) {
   };
 }
 
+async function rehydrateVerifiedInviteReplay(
+  pool: pg.Pool,
+  outcome: Awaited<ReturnType<typeof runIdempotentCommand>>,
+  input: {
+    familyId: string;
+    accountId: string;
+    personId: string;
+    secret: string;
+  }
+) {
+  if (outcome.action !== 'REPLAY' || outcome.status !== 201) return outcome;
+
+  if (
+    typeof outcome.body !== 'object' ||
+    outcome.body === null ||
+    typeof (outcome.body as { participationId?: unknown }).participationId !== 'string'
+  ) {
+    throw typedError('INTERNAL_ERROR', 'Invalid participation invite replay snapshot');
+  }
+
+  const participationId=(outcome.body as { participationId: string }).participationId;
+  const stored=await withRlsTransaction(
+    pool,
+    {
+      familyId: input.familyId,
+      accountId: input.accountId,
+      personId: input.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    },
+    (tx)=>getParticipationById(tx,participationId)
+  );
+  if (!stored) {
+    throw typedError('INTERNAL_ERROR', 'Participation replay resource missing');
+  }
+
+  const hydrated=rehydrateParticipationInviteReplay(outcome,input.secret);
+  const token=(hydrated.body as { inviteToken?: unknown }).inviteToken;
+  if (
+    typeof token !== 'string' ||
+    hashParticipationInviteToken(token) !== stored.invite_token_hash
+  ) {
+    // Deployment secret changed (or snapshot/resource corruption). Never
+    // silently emit a different bearer capability for an old idempotency key.
+    throw typedError('INTERNAL_ERROR', 'Participation replay token mismatch');
+  }
+  return hydrated;
+}
+
 async function recordExpiry(
   tx: pg.PoolClient,
   locked: ParticipationRow,
@@ -468,7 +516,12 @@ export function registerParticipationRoutes(
 
       return sendCommandOutcome(
         reply,
-        rehydrateParticipationInviteReplay(outcome, options.inviteTokenSecret)
+        await rehydrateVerifiedInviteReplay(pool, outcome, {
+          familyId,
+          accountId: actor.accountId,
+          personId: actor.personId,
+          secret: options.inviteTokenSecret,
+        })
       );
     }
   );
