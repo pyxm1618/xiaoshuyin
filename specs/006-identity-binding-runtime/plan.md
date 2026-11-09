@@ -364,6 +364,7 @@ CREATE INDEX binding_context_attempt_idx ON binding_pending_contexts (attempt_id
 | `IDENTITY_BINDING_SECRET` | required，>= 32 bytes，不记录 | HKDF 派生 identity pepper 与 AES key |
 | `IDENTITY_BINDING_CONTEXT_TTL_SECONDS` | required，正整数，无默认值 | pending context TTL |
 | `IDENTITY_BINDING_ATTEMPT_TTL_SECONDS` | required，正整数，无默认值 | attempt TTL |
+| `IDENTITY_BINDING_PAIRING_TTL_SECONDS` | required，正整数，无默认值 | pairing challenge TTL；不得长于 context / attempt |
 
 派生：
 
@@ -393,6 +394,23 @@ new pending transport context on bootstrap replay
 - MUST NOT 因 replay 创建第二个 attempt、第二份 confirmation、第二次 commit、第二条业务 audit 行、第二个 operation key。
 - replay 必须读取 authoritative attempt state：`PENDING` / `TERMINAL` → candidate-facing generic；`COMMITTED` → `{ binding:"COMMITTED" }`（D-10.2）。
 - 新 context 行是幂等记录的 transport 伴生事实，不是 attempt identity，也不是 operation outcome 快照；不得把首次 response body 当作 replay 结果。
+
+---
+
+### D-3.5 Candidate-presented pairing challenge
+
+Pairing challenge是H-01最小authenticated binding material，不新增Person / Account / Family / invitation对象，也不是ordinary session。
+
+- generator：server only。
+- issuance：candidate AFFIRM经D-8.5 current eligibility PASS后。
+- delivery：只返回candidate自己的candidate-decision response；candidate现场主动展示/传递给confirmer。
+- cryptographic binding至少认证 context_id + candidate_identity_digest + attempt_id + target_person_id + invitation_participation_id + pairing_expires_at；外部表示opaque，不可读出这些字段。
+- construction使用IDENTITY_BINDING_SECRET的domain-separated MAC/AEAD或等价authenticated construction，effective security至少128 bits。raw challenge不持久化、不写audit/log；服务器从authenticated material解析/验证locator并回读authoritative rows。
+- pairing_expires_at不晚于 candidate_confirmation.created_at + IDENTITY_BINDING_PAIRING_TTL_SECONDS、context.expires_at、attempt.expires_at三者最早者。TTL required positive、无client override、replay不得延长。
+- valid only while：context/attempt/P1/invitation/identity mapping仍一致，candidate confirmation存在，attempt PENDING且未过期。
+- single-use semantic：SECOND_PARTY confirmation存在或attempt settled后，challenge不能作为新的business operation再次使用；same idempotency replay只回读原operation。
+- decoy：candidate hidden failure返回同格式material，但不得解析到live attempt；confirmer side统一404、零mutation。
+- challenge possession不等于identity proof，必须与独立confirmer authentication + human recognition + target confirmation共同成立。
 
 ---
 
@@ -713,12 +731,26 @@ type BindingGateResult =
 
 ### D-8.4 Gate 2 current-state + concurrency contract
 
-- Gate 2 每次 commit 都重新读取 current profile / consent / membership / invitation / confirmer authority；不复用 Gate 1 snapshot。
-- fresh SELECT 本身不充分：Gate 2 check 与最终 binding mutation MUST 共享 F-01 的 concurrency-safe consistency / linearization boundary。
-- invalidating change 在 binding linearization point 前已 commit → binding mutation = 0、attempt 不得 COMMITTED；consent revoke → `GUARDIAN_CONSENT_INVALID`，invitation terminal → `INVITATION_TERMINAL`。
-- 必须有真实 DB barrier race：`Gate2 read/PASS → concurrent consent revoke commits → binding resumes`。顺序 revoke 测试不能替代。
+- Gate 2 每次 commit 都重新读取 current profile / consent / guardian / membership / invitation / confirmer authority / P1 binding / candidate-account conflict；不复用 Gate 1 snapshot。
+- fresh SELECT 本身不充分。Gate2 check 与最终 binding mutation必须共享 H-02 concurrency-safe linearization / validation boundary。
+- boundary至少覆盖 profile / age-band、guardian relationship、Consent、Family membership / confirmer authority、invitation current state、P1 binding conflict、candidate-account conflict。
+- Implement可用 row lock、version/optimistic validation、advisory serialization、isolation或其它 DB-safe等价机制；但必须在真实 xiaoshuyin_app runtime role下观察到锁/序列化/版本检测实际生效。SQL中出现 FOR UPDATE、或 SELECT FOR UPDATE得到0行，不构成验收。
+- invalidating change在线性化上先成立 → binding mutation=0、attempt不得COMMITTED；terminal audit/cleanup必须完整。
+- barrier matrix必须逐类覆盖 profile/age-band、consent、guardian、membership/authority、invitation、P1 binding conflict，并对 candidate-account conflict做同等并发/版本 proof。
+- invitation production adapter barrier只有 Slice 4 runtime可用后才可最终 VERIFIED；fixture/port proof只能标 contract-level。
+
+### D-8.5 Candidate AFFIRM dynamic eligibility
+
+Candidate AFFIRM是Phase B推进点，不得沿用bootstrap时的eligibility snapshot。每次AFFIRM在写candidate confirmation、发行valid pairing challenge之前，必须current-read并re-evaluate：P1、唯一target Family membership、profile/age band、guardian、required/applicable Consent + Compliance、invitation、P1 binding conflict、candidate identity/account conflict。
+
+- still eligible → candidate confirmation insert-or-reuse，然后发行D-3.5 valid pairing challenge。
+- no longer eligible → attempt authoritative TERMINAL settlement；不得新增candidate confirmation；不得发行可解析valid challenge；candidate返回D-10.2 fixed AFFIRM shape + decoy challenge。
+- terminal settlement = exactly-one audit + attempt-scope OpenID scrub；不得留下stale PENDING等待条件恢复。
+- Gate2仍必须再次current re-evaluate；AFFIRM recheck不替代Gate2。
 
 ---
+
+## D-9 Second-party authorization 与确认者发现
 
 ## D-9 Second-party authorization 与确认者发现
 
@@ -731,13 +763,16 @@ type BindingGateResult =
 | `MINOR_14_17` 无 guardian | `families.created_by_person_id` 对应的已认证 Account / Person | 仅凭管理权限自动批准；membership 推导 |
 | `ADULT` / `UNKNOWN` | 不存在 | 任何确认 |
 
-### D-9.2 确认者发现
+### D-9.2 确认者发现与 exact pairing
 
-- `GET /api/v1/identity-bindings/pending?personId=P1`（Bearer）返回该 P1 当前 **`state='PENDING' AND expires_at > now()`** attempts 的最小列表：`{ attemptId, createdAt, expiresAt }`。过期 attempt 不得出现在列表；访问可条件物化 `TERMINAL / ATTEMPT_EXPIRED` + audit，不依赖后台 job。
-- 不返回 candidate 昵称、openid、age、guardian、consent、Family 名称、Case 信息。
-- 授权：先 `authorize(IDENTITY_BINDING_CONFIRMER_LIST)`，facts = `{ targetPersonId, targetFamilyId, targetAgeBand, guardianPersonId, familyCreatedByPersonId, membership? }`；未授权 / P1 不存在 / P1 多 Family / 非目标 Family 统一 404 `BINDING_NOT_FOUND`。targetFamilyId 由服务端读取 P1 的唯一 `family_members` 行得到；多行或无行 → 404 generic，不选择任一 Family。读取使用 D-13.4 的 `withBindingTargetTransaction`（只设置 target-person GUC），在 Family 解析完成前 MUST NOT 读取 profile / consent。
-- guardian 不要求是 Family member；manager 必须是 `families.created_by_person_id`。`targetIsFamilyMember` 必须为 true（由 invitation + Gate 保证）。
-- confirmer exact-attempt pairing 使用 F-04 的 `S0 snapshot → recognized candidate fresh bootstrap → S1 → exact delta` ceremony；candidate 不获得 attemptId、不分享 `pendingContextToken`。`|S1-S0| != 1` 必须 fail closed；attemptId 仅是 confirmer-facing opaque selector，不是 identity proof。Plan 不新增 QR / PIN / pairing code / 生物识别 / 电话 / 视频 / KYC。
+- GET /api/v1/identity-bindings/pending?personId=P1可以保留为已授权confirmer的最小operational view，仅返回live PENDING attempts的 attemptId / createdAt / expiresAt；不返回candidate nickname、openid、age、guardian、consent、Family或Case信息。
+- pending list不得用于recognition pairing、不得作为identity proof、不得作为second-party decision selector。S0/S1 delta、createdAt matching、唯一pending attempt默认选择全部禁止。
+- pairing唯一入口：candidate在D-8.5合法AFFIRM后从自己的candidate response获得D-3.5 pairingChallenge，并在现场主动展示/传递给亲自辨认他的confirmer。
+- confirmer独立登录后，把现场被辨认candidate所展示的challenge提交给 POST /api/v1/identity-bindings/pairing-decision。服务端验证challenge并解析 exact context / authenticated identity / attempt / P1 / invitation；caller不提交attemptId。
+- pending list authorization仍使用 IDENTITY_BINDING_CONFIRMER_LIST；未授权 / P1不存在 / P1多Family / 非目标Family统一404。guardian不要求Family member；manager必须是families.created_by_person_id。
+- attemptId、invitation token、pendingContextToken、pairingChallenge任一单独存在都不是identity proof。pendingContextToken仍只属于candidate，禁止分享给confirmer。
+
+### D-9.3 独立认证
 
 ### D-9.3 独立认证
 
