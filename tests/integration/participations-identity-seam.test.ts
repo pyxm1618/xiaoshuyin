@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type pg from 'pg';
+import type { PoolClient } from 'pg';
 import {
   getBindingInvitationByTokenHash,
   getBindingInvitationByTrustedTarget,
@@ -44,7 +44,7 @@ function invitationResult(
  * Production ownership stays with Slice 5 T121 after Slice 4 merges main.
  */
 class AuthoritativeSlice4TestInvitationPort implements InvitationResolutionPort {
-  async resolveByToken(tx: pg.PoolClient, invitationToken: string): Promise<InvitationResolution> {
+  async resolveByToken(tx: PoolClient, invitationToken: string): Promise<InvitationResolution> {
     if (invitationToken.length < 1 || invitationToken.length > 256) {
       return { status: 'TERMINAL_UNUSABLE' };
     }
@@ -62,7 +62,7 @@ class AuthoritativeSlice4TestInvitationPort implements InvitationResolutionPort 
   }
 
   async resolveByParticipationId(
-    tx: pg.PoolClient,
+    tx: PoolClient,
     participationId: string
   ): Promise<InvitationResolution> {
     const context=(await tx.query(
