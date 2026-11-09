@@ -44,6 +44,7 @@ const FROZEN_SCHEMAS = [
   'BindingSessionCommittedResponse',
   'BindingStatusResponse',
   'CaseAccessDeniedError',
+  'CaseParticipationState',
   'CaseListResponse',
   'CaseMessageResponse',
   'CaseNotFoundError',
@@ -59,6 +60,8 @@ const FROZEN_SCHEMAS = [
   'CreateConsentRequestRequest',
   'CreateFamilyRequest',
   'CreateMemberRequest',
+  'CreateParticipationInviteRequest',
+  'CreateParticipationInviteResponse',
   'CreatorInput',
   'CurrentFamilyAmbiguousError',
   'CurrentFamilyNotFoundError',
@@ -67,10 +70,18 @@ const FROZEN_SCHEMAS = [
   'GrantConsentRequest',
   'IdempotencyPayloadMismatchError',
   'InternalError',
+  'InvitationNotAvailableError',
   'LoginResponse',
   'MeResponse',
   'MemberResponse',
   'Notice',
+  'ParticipationAlreadyExistsError',
+  'ParticipationInvitePublicView',
+  'ParticipationNotFoundError',
+  'ParticipationNotice',
+  'ParticipationResource',
+  'ParticipationStateConflictError',
+  'ParticipationTargetIneligibleError',
   'PersonSummary',
   'ProfileAttribute',
   'ProfileValue',
@@ -78,6 +89,9 @@ const FROZEN_SCHEMAS = [
   'UnauthenticatedError',
   'UpdateMemberRequest',
   'ValidationError',
+  'WithdrawParticipationRequest',
+  'DeclineParticipationRequest',
+  'AcceptParticipationRequest',
   'WritableSource',
 ];
 
@@ -114,7 +128,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-  it('contains exactly the 23 frozen business operations (16 + Slice 3 message + business Slice 5 six)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+  it('contains exactly the 29 frozen business operations including Slice 4 six participation surfaces)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
@@ -133,11 +147,14 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'GET /api/v1/identity-bindings/pending',
       'GET /api/v1/identity-bindings/status',
       'GET /api/v1/me',
+      'GET /api/v1/participation-invites/{token}',
+      'GET /api/v1/participations/{id}',
       'PATCH /api/v1/families/{id}/members/{personId}',
       'POST /api/v1/auth/logout',
       'POST /api/v1/auth/wechat',
       'POST /api/v1/cases',
       'POST /api/v1/cases/{id}/messages',
+      'POST /api/v1/cases/{id}/participation-invites',
       'POST /api/v1/compliance/guardian-consents',
       'POST /api/v1/compliance/guardian-consents/requests',
       'POST /api/v1/consents/{id}/revoke',
@@ -147,6 +164,9 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       'POST /api/v1/identity-bindings/candidate-decision',
       'POST /api/v1/identity-bindings/session',
       'POST /api/v1/identity-bindings/pairing-decision',
+      'POST /api/v1/participation-invites/{token}/accept',
+      'POST /api/v1/participations/{id}/decline',
+      'POST /api/v1/participations/{id}/withdraw',
     ].sort());
   });
 
@@ -201,6 +221,13 @@ describe('OpenAPI Contract (T066 / F5)', () => {
       '/api/v1/identity-bindings/pairing-decision',
       // Slice 3 (003-evidence-core) — the single approved message POST.
       '/api/v1/cases/{id}/messages',
+      // Slice 4 — exactly six participation surfaces.
+      '/api/v1/cases/{id}/participation-invites',
+      '/api/v1/participation-invites/{token}',
+      '/api/v1/participation-invites/{token}/accept',
+      '/api/v1/participations/{id}/decline',
+      '/api/v1/participations/{id}/withdraw',
+      '/api/v1/participations/{id}',
     ]);
     for (const path of Object.keys(spec.paths)) {
       expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);
