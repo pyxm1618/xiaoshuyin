@@ -76,9 +76,11 @@ describe('case primary switch scope (T730)', () => {
     );
     const names = tables.map((r: any) => r.tablename);
     for (const forbidden of [
+      // `case_participants` is a legitimate Slice 4 table merged into main;
+      // Slice 7's zero-schema-expansion proof is covered by migration-repro
+      // and db:evidence, not by forbidding an already-approved table.
       'risk_events',
       'problem_formulations',
-      'case_participants',
       'scene_node_states',
       'scene_artifacts',
       'referrals',

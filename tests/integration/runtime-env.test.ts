@@ -19,6 +19,8 @@ const FULL_ENV: NodeJS.ProcessEnv = {
   IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
   IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
   IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300',
+  PARTICIPATION_INVITE_TTL_SECONDS: '86400',
+  PARTICIPATION_INVITE_TOKEN_SECRET: 'p'.repeat(32),
 };
 
 describe('Production runtime env boundary (F1)', () => {
@@ -40,6 +42,37 @@ describe('Production runtime env boundary (F1)', () => {
   it('unset NODE_ENV + missing SESSION_SECRET → startup fails (fail-closed)', async () => {
     const { SESSION_SECRET: _omit, ...env } = FULL_ENV;
     await expect(buildApp({ env })).rejects.toThrow(/SESSION_SECRET/);
+  });
+
+  it('participation invite secret uses UTF-8 byte length at the real runtime boundary', async () => {
+    const multibyte = '密'.repeat(11); // 33 UTF-8 bytes, only 11 JS characters.
+    const app = await buildApp({
+      env: {
+        ...FULL_ENV,
+        NODE_ENV: 'test',
+        PARTICIPATION_INVITE_TOKEN_SECRET: multibyte,
+      },
+    });
+    try {
+      await app.ready();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('participation TTL runtime accepts the same integer-like coercion as env schema', async () => {
+    const app = await buildApp({
+      env: {
+        ...FULL_ENV,
+        NODE_ENV: 'test',
+        PARTICIPATION_INVITE_TTL_SECONDS: '1e3',
+      },
+    });
+    try {
+      await app.ready();
+    } finally {
+      await app.close();
+    }
   });
 
   it('production + full env → fake provider is NOT selected (startup fails)', async () => {

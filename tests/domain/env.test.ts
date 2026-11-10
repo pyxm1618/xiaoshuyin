@@ -13,6 +13,8 @@ describe('env contract', () => {
     IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
     IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
     IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300',
+    PARTICIPATION_INVITE_TTL_SECONDS: '86400',
+    PARTICIPATION_INVITE_TOKEN_SECRET: 'p'.repeat(32),
   };
 
   it('accepts valid environment', () => {

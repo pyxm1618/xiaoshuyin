@@ -421,7 +421,7 @@ type SwitchDecision =
 
 **为什么顺序固定**：`CLOSED` 是终态，必须优先于 `SAFETY_HOLD`（Spec §6.3 第 4 条先于第 5 条）；「已是 primary」必须先于「陈旧视图」，否则重复点击会被误报成 `STALE_PRIMARY_VIEW`，掩盖真实的终态无操作冲突（Q1）。
 
-**为什么是纯函数**：Spec Q3a 要求 `SAFETY_HOLD` / `CLOSED` 谓词"用单元测试覆盖全部状态值"，且**不得**通过直接 `UPDATE status` 制造测试前置。6 个 status × 4 类视图 = 24 组合可完全穷举。
+**为什么是纯函数**：Spec Q3a 要求 `SAFETY_HOLD` / `CLOSED` 谓词"用单元测试覆盖全部状态值"，且**不得**通过直接 `UPDATE status` 制造测试前置。5 个 status × 4 类视图 = 20 组合可完全穷举。
 
 **输入不做 I/O，也不接受 `isPrimary` 之外的写入意图**：`demote` / `promote` 只是 id，是否写入由 D-4 决定。
 
@@ -617,8 +617,8 @@ db/migrations/{N+1}_case_primary_switch.sql
 |---|---|---|---|
 | 1 | `case_events_event_type_check` | DROP + ADD | `event_type IN ('CASE_CREATED','CASE_PRIMARY_ASSIGNED','CASE_PRIMARY_REVOKED')` |
 | 2 | `case_events_metadata_shape_check` | DROP + ADD | 按 `event_type` **逐类型分支**（D-9.3） |
-| 3 | `business_audit_events_event_type_check` | DROP + ADD | 原 7 值 + `CASE_PRIMARY_SWITCHED` |
-| 4 | `idempotency_keys_command_type_check` | DROP + ADD | 原 7 值 + `CASE_SWITCH_PRIMARY` |
+| 3 | `business_audit_events_event_type_check` | DROP + ADD | current main 15 值（含 5 个 `PARTICIPATION_*`）+ `CASE_PRIMARY_SWITCHED` = 16 |
+| 4 | `idempotency_keys_command_type_check` | DROP + ADD | current main 12 值（含 4 个 participation command）+ `CASE_SWITCH_PRIMARY` = 13 |
 | 5 | `idempotency_keys_key_representation_check` | DROP + ADD | `CASE_CREATE` 保持"恰有其一"；`CASE_SWITCH_PRIMARY` 收紧为 **bytea-only**（D-9.4） |
 | 6 | `cases` 授权 | `GRANT UPDATE (is_primary, version, updated_at) ON cases TO xiaoshuyin_app` | **列级**，不是表级（D-9.6） |
 
@@ -703,7 +703,7 @@ OR (command_type = 'CASE_SWITCH_PRIMARY'
 
 - 无数据回填，无跨表复制。
 - `db-migrate.mjs` 以 `schema_migrations` 跳过已应用文件；`tests/db/migration-repro.test.ts` 的第二次 apply no-op 断言必须继续成立。
-- 迁移**不改变**表 / 列 / 索引计数 → `EXPECTED_TABLES(12)` / `EXPECTED_ENUMS(10)` / `EXPECTED_POLICIES(11)` 保持原值（"零 schema 扩张"的机器证据）。
+- 迁移**不改变**表 / 列 / 索引计数 → current main baseline `EXPECTED_TABLES(21)` / `EXPECTED_ENUMS(21)` / `EXPECTED_POLICIES(48)` 保持原值（"零 schema 扩张"的机器证据）。
 
 ---
 
@@ -755,7 +755,7 @@ OR (command_type = 'CASE_SWITCH_PRIMARY'
 - 读取 `cases.status` 的现有枚举值 `SAFETY_HOLD`，作为切换守卫的**双向**阻断条件（FR-005）。
 - **不创建**：`safety_states`、`risk_events`、Safety service、Safety 状态机、支持资源、风险词检测、`EnterSafetyHold` / `ResolveRisk`。
 - **不可绕过**：不得通过"先切走再处理"把 `SAFETY_HOLD` 的 Case 变成非主线来规避安全状态（产品 §2.1 第 6 条）。
-- 谓词写成对 `status` 的确定性判定（`status === 'SAFETY_HOLD'`），绝不写常量；由 domain 单测穷举全部 6 个 status。
+- 谓词写成对 `status` 的确定性判定（`status === 'SAFETY_HOLD'`），绝不写常量；由 domain 单测穷举全部 5 个 status。
 - 前向义务：Safety Slice 落地时该谓词自动生效；Safety Slice **不得**重写第二套主线切换守卫（Spec §13.8）。
 
 ---
@@ -808,7 +808,7 @@ OR (command_type = 'CASE_SWITCH_PRIMARY'
 - `packages/contracts/src/schemas.ts` 是代码侧**唯一**事实源；路由通过 `fastify-type-provider-zod` 声明 `schema`。
 - 生成链路不变：`bun run openapi:generate` → `packages/generated/openapi.json` + `openapi.d.ts`；不得 hand-edit。
 - `scripts/openapi-generate.mjs` **无需修改**（新端点在同一 `registerCaseRoutes` 内）。
-- 预期生成结果：Case path 集合由 2 项变 3 项（`/api/v1/cases`、`/api/v1/cases/{id}`、`/api/v1/cases/{id}/switch-primary`）；Case operation 由 3 个变 4 个；既有 3 个 operation 的 operationId / security / tags 不变。
+- 预期生成结果：Case path 集合由 current main baseline 4 项（`/api/v1/cases`、`/api/v1/cases/{id}`、`/api/v1/cases/{id}/messages`、`/api/v1/cases/{id}/participation-invites`）变为 5 项（新增 `/api/v1/cases/{id}/switch-primary`）；Case business operation 由 4 个变 5 个（`participation-invites` 属真实 main 路径但按既有测试口径不计入 4 个 business operations）；既有 operation 的 operationId / security / tags 不变。
 - `Idempotency-Key` 必须以 header parameter 出现在新 operation 上，形状与 Slice 1 的 `components.parameters.IdempotencyKey` 一致（不得另造一个内联 param）。
 
 ---
@@ -835,7 +835,7 @@ OR (command_type = 'CASE_SWITCH_PRIMARY'
 | # | 现有事实 | 本 Slice 的精确处理 | 不得做什么 |
 |---|---|---|---|
 | 1 | `tests/integration/cases-scope.test.ts` 的 `FORBIDDEN_ROUTE_FRAGMENTS` 含 **14** 项，其中 `'/switch-primary'`；并断言 `roots.length === 1`、`caseBlock` 含 `/:id (GET)` | 从列表移除 `'/switch-primary'`（**只减 1 项**），新增"只允许 `POST /api/v1/cases/:id/switch-primary`"的正向断言；`printRoutes` 相关断言**重新实测后**再改（不得假设 `/:id (GET)` 渲染不变） | 删除整个守卫；把断言改成"不再检查越界"；顺手删掉其余 13 项 |
-| 2 | `tests/integration/openapi-cases.test.ts` 断言 `casePaths.sort()` 恰为 2 项、operations 恰为 3 项；另有一个循环把 `switch-primary` 当作禁止片段，检查串是 `/api/v1/cases/switch-primary`（**不会**匹配新路径 `/api/v1/cases/{id}/switch-primary`） | `casePaths` 扩为 3 项、operations 扩为 4 项；把 `switch-primary` 从该禁止循环中移除并改为正向断言（保留 `current` / `pause` / `resume` / `close` / `recurrences`） | 保留一个"存在却仍被列为禁止"的自相矛盾断言；删掉其它禁止项 |
+| 2 | `tests/integration/openapi-cases.test.ts` 在 current main baseline 断言 Case path 4 项、business operation 4 项；另有一个循环把 `switch-primary` 当作禁止片段，检查串是 `/api/v1/cases/switch-primary`（**不会**匹配新路径 `/api/v1/cases/{id}/switch-primary`） | `casePaths` 扩为 5 项、business operations 扩为 5 项（Slice 7 delta = exactly 1）；把 `switch-primary` 从该禁止循环中移除并改为正向断言（保留 `current` / `pause` / `resume` / `close` / `recurrences`） | 保留一个"存在却仍被列为禁止"的自相矛盾断言；删掉其它禁止项 |
 | 3 | `002_case_core.sql` 只 `GRANT SELECT, INSERT ON cases, case_events` | 新 migration 追加**列级** `GRANT UPDATE (is_primary, version, updated_at) ON cases` | 表级 `GRANT UPDATE ON cases`；修改 002 文件 |
 | 4 | `tests/db/cases-schema.test.ts › CASES_COLUMNS` 对 `cases` 做 **9 列全等**断言 | 不新增任何列；理由与历史只落事件 / 审计 | 新增 `switch_reason` / `previous_primary_id` / `primary_since` / `switched_at` |
 | 5 | `case_events_event_type_check` 当前仅允许 `'CASE_CREATED'` | 新 migration 扩为三值白名单 | 放宽为任意字符串 / 去掉 CHECK |
@@ -1029,7 +1029,7 @@ tests/db/cases-events-metadata.test.ts  # 只改用例标题，断言体保留
 |---|---|---|
 | 结构与约束 | `bunx vitest run tests/db/case-primary-switch-schema.test.ts` | 5 个 CHECK 新定义存在；`cases` 仍 9 列；无新表 / 新索引 |
 | 授权矩阵 | `bunx vitest run tests/domain/case-primary-switch-authorization.test.ts` | 6 条 fail-closed 分支全绿；既有 Slice 1/2 授权测试不被削弱 |
-| 契约 | `bunx vitest run tests/domain/case-primary-switch-contracts.test.ts` | strict 拒绝全部未声明字段；视图六态正确 |
+| 契约 | `bunx vitest run tests/domain/case-primary-switch-contracts.test.ts` | strict 拒绝全部未声明字段；视图五态正确 |
 | 决策 | `bunx vitest run tests/domain/case-primary-switch-decision.test.ts` | 6 status × 4 视图全组合 |
 | 幂等占位 | `bunx vitest run tests/domain/case-primary-switch-idempotency.test.ts` | OWNED / REPLAY / MISMATCH / POISONED / CONTENTION 五态；有界重试 ≤2 |
 | 事务 | `bunx vitest run tests/integration/case-primary-switch-atomicity.test.ts` | 审计失败 → 回滚；无半条历史 |

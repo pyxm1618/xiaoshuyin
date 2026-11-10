@@ -18,7 +18,7 @@ const DROP_KEYS = new Set([
   'example',
   'examples',
   'format',
-  'pattern',
+
   'minLength',
   'maxLength',
   'minimum',
@@ -47,27 +47,28 @@ function isLiteralMember(node) {
   );
 }
 
-export function normalize(node, root) {
-  if (Array.isArray(node)) return node.map((item) => normalize(item, root));
+export function normalize(node, root, options = {}) {
+  if (Array.isArray(node)) return node.map((item) => normalize(item, root, options));
   if (!node || typeof node !== 'object') return node;
 
   if (
     typeof node.$ref === 'string' &&
     node.$ref.startsWith('#/components/schemas/')
   ) {
-    return normalize(resolveSchemaRef(node.$ref, root), root);
+    return normalize(resolveSchemaRef(node.$ref, root), root, options);
   }
 
   const out = {};
   for (const [key, value] of Object.entries(node)) {
     if (DROP_KEYS.has(key) || key.startsWith('x-')) continue;
+    if (key === 'pattern' && !options.keepPatterns) continue;
 
     if (key === 'allOf' && Array.isArray(value) && value.length === 1) {
-      return normalize(value[0], root);
+      return normalize(value[0], root, options);
     }
 
     if ((key === 'anyOf' || key === 'oneOf') && Array.isArray(value)) {
-      const items = value.map((item) => normalize(item, root));
+      const items = value.map((item) => normalize(item, root, options));
       const nonNull = items.filter((item) => item && item.type !== 'null');
       const hasNull = items.some((item) => item && item.type === 'null');
       if (hasNull && nonNull.length === 1 && !isLiteralMember(nonNull[0])) {
@@ -85,11 +86,23 @@ export function normalize(node, root) {
       continue;
     }
 
-    const normalized = normalize(value, root);
+    const normalized = normalize(value, root, options);
     out[key] =
       key === 'required' && Array.isArray(normalized)
         ? [...normalized].sort()
         : normalized;
+  }
+
+  // OpenAPI 3.0 `nullable: true` and JSON Schema's
+  // `type: [T, 'null']` are equivalent for an unconstrained typed schema.
+  // Canonicalize both to the JSON-Schema form so frozen OAS 3.0 documents can
+  // be compared losslessly with Zod 4 generated schemas.
+  if (out.nullable === true && out.type !== undefined && !isLiteralMember(out)) {
+    const baseType = out.type;
+    out.type = Array.isArray(baseType)
+      ? [...new Set([...baseType, 'null'])]
+      : [baseType, 'null'];
+    delete out.nullable;
   }
 
   if (

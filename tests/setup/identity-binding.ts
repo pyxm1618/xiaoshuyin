@@ -1,9 +1,10 @@
 /**
  * Shared Slice 006 integration-test harness.
  *
- * Uses the REAL Fastify app and REAL PostgreSQL. The invitation source is the
- * contract-level `InMemoryInvitationPort` fixture (production adapter is
- * BLOCKED BY SLICE 4 RUNTIME); no invitation table or lifecycle is created.
+ * Uses the REAL Fastify app and REAL PostgreSQL. Slice 5 isolation suites
+ * intentionally inject the contract-level `InMemoryInvitationPort`; production
+ * defaults to `Slice4InvitationPort` (T121). `buildParticipationApp()` without
+ * an injected port exercises that real adapter.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -31,6 +32,12 @@ export interface BindingHarness {
   admin: pg.Pool;
   close(): Promise<void>;
 }
+
+/**
+ * Minimal real-runtime view. Suites that use the production Slice 4 adapter
+ * do not inject `port`, but still need the app + admin observer.
+ */
+export type BindingRuntime = Pick<BindingHarness, 'app' | 'admin'>;
 
 /**
  * Test-only replay memory: the real server never persists raw challenge bytes,
@@ -153,7 +160,7 @@ export async function createTarget(
 }
 
 export async function bootstrap(
-  h: BindingHarness,
+  h: BindingRuntime,
   invitationToken: string,
   code: string,
   idempotencyKey = `boot-${randomUUID()}`
@@ -166,7 +173,7 @@ export async function bootstrap(
 }
 
 export async function candidateDecision(
-  h: BindingHarness,
+  h: BindingRuntime,
   contextToken: string,
   decision: 'AFFIRM' | 'REJECT' | 'CANCEL',
   idempotencyKey = `dec-${randomUUID()}`,
@@ -184,7 +191,7 @@ export async function candidateDecision(
   });
 }
 
-export async function candidateStatus(h: BindingHarness, contextToken: string) {
+export async function candidateStatus(h: BindingRuntime, contextToken: string) {
   return h.app.inject({
     method: 'GET',
     url: '/api/v1/identity-bindings/status',
@@ -192,7 +199,7 @@ export async function candidateStatus(h: BindingHarness, contextToken: string) {
   });
 }
 
-export async function candidateSession(h: BindingHarness, contextToken: string) {
+export async function candidateSession(h: BindingRuntime, contextToken: string) {
   return h.app.inject({
     method: 'POST',
     url: '/api/v1/identity-bindings/session',
@@ -201,7 +208,7 @@ export async function candidateSession(h: BindingHarness, contextToken: string) 
 }
 
 export async function confirmerList(
-  h: BindingHarness,
+  h: BindingRuntime,
   token: string,
   targetPersonId: string
 ) {
@@ -220,7 +227,7 @@ export async function confirmerList(
  * pairingChallenge.
  */
 export async function confirmerDecision(
-  h: BindingHarness,
+  h: BindingRuntime,
   token: string,
   selector: string,
   input: {
@@ -304,7 +311,7 @@ export async function confirmerDecision(
 }
 
 export async function personAccountId(
-  h: BindingHarness,
+  h: BindingRuntime,
   personId: string
 ): Promise<string | null> {
   const { rows } = await h.admin.query('SELECT account_id FROM persons WHERE id = $1', [
@@ -317,7 +324,7 @@ export async function personAccountId(
  * Drive bootstrap + candidate AFFIRM and return the pending context + attempt.
  */
 export async function startBinding(
-  h: BindingHarness,
+  h: BindingRuntime,
   target: TargetFixture,
   code: string
 ): Promise<{ contextToken: string; attemptId: string; pairingChallenge: string }> {

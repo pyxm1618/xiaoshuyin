@@ -30,7 +30,6 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
 ];
 
 const FORBIDDEN_TABLES = [
-  'case_participants',
   'participation_invites',
   'problem_formulations',
   'scene_node_states',

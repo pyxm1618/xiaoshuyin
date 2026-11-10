@@ -105,7 +105,7 @@ describe('cases / case_events schema (T021)', () => {
       (map[r.typname] ??= []).push(r.enumlabel);
     }
     expect(map['case_status']).toEqual([
-      'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+      'OPEN', 'WAITING', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
     ]);
     expect(map['case_phase']).toEqual([
       'INTAKE', 'ASSESSMENT', 'PROBLEM_FORMULATION', 'GOALS',

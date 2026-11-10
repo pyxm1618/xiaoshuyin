@@ -49,6 +49,16 @@ const FROZEN_DOCS = [
     ),
   },
   {
+    label: '004-case-participant-core',
+    path: join(
+      ROOT,
+      'specs',
+      '004-case-participant-core',
+      'contracts',
+      'participation-api.openapi.yaml'
+    ),
+  },
+  {
     label: '006-identity-binding-runtime',
     path: join(
       ROOT,
@@ -103,7 +113,53 @@ function collectOperations(spec) {
   return ops;
 }
 
-function compareSubset(frozen, generated, label) {
+function referencesAnySchemaName(value, names) {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) {
+    return value.some((item) => referencesAnySchemaName(item, names));
+  }
+  if (typeof value.$ref === 'string') {
+    const prefix = '#/components/schemas/';
+    if (value.$ref.startsWith(prefix) && names.has(value.$ref.slice(prefix.length))) {
+      return true;
+    }
+  }
+  return Object.values(value).some((item) => referencesAnySchemaName(item, names));
+}
+
+function resolveLocalRef(value, root) {
+  if (!value || typeof value !== 'object' || typeof value.$ref !== 'string') {
+    return value;
+  }
+  if (!value.$ref.startsWith('#/')) return value;
+
+  let current = root;
+  for (const part of value.$ref.slice(2).split('/')) {
+    current = current?.[part.replace(/~1/g, '/').replace(/~0/g, '~')];
+  }
+  return current ?? value;
+}
+
+function collectCollidingSchemaNames(frozenDocs) {
+  const firstShapeByName = new Map();
+  const collisions = new Set();
+
+  for (const { spec } of frozenDocs) {
+    for (const [name, schema] of Object.entries(spec.components?.schemas ?? {})) {
+      const shape = JSON.stringify(stable(normalize(schema, spec)));
+      const firstShape = firstShapeByName.get(name);
+      if (firstShape === undefined) {
+        firstShapeByName.set(name, shape);
+      } else if (firstShape !== shape) {
+        collisions.add(name);
+      }
+    }
+  }
+
+  return collisions;
+}
+
+function compareSubset(frozen, generated, label, collidingSchemaNames, options = {}) {
   const frozenOps = collectOperations(frozen);
   const generatedOps = collectOperations(generated);
 
@@ -115,7 +171,7 @@ function compareSubset(frozen, generated, label) {
       fail(`[${label}] ${key}: operationId differs (${f.operationId} vs ${g.operationId})`);
     }
 
-    if (!equal(normalize(f.parameters ?? [], frozen), normalize(g.parameters ?? [], generated))) {
+    if (!equal(normalize(f.parameters ?? [], frozen, options), normalize(g.parameters ?? [], generated, options))) {
       fail(`[${label}] ${key}: parameters differ`);
     }
 
@@ -130,7 +186,7 @@ function compareSubset(frozen, generated, label) {
       }
       const fs = frozenBody.content?.['application/json']?.schema;
       const gs = generatedBody.content?.['application/json']?.schema;
-      if (!equal(normalize(fs ?? null, frozen), normalize(gs ?? null, generated))) {
+      if (!equal(normalize(fs ?? null, frozen, options), normalize(gs ?? null, generated, options))) {
         fail(`[${label}] ${key}: requestBody schema differs`);
       }
     }
@@ -140,6 +196,38 @@ function compareSubset(frozen, generated, label) {
     if (!equal(frozenStatuses, generatedStatuses)) {
       fail(`[${label}] ${key}: response status set differs (${frozenStatuses} vs ${generatedStatuses})`);
     }
+
+    // Slice 4 requires full response-body equivalence. For older slices, keep
+    // the historical checker scope except when a response references a
+    // same-name component whose shape collides across frozen contracts. Those
+    // colliding schemas cannot be validated globally, so their real use sites
+    // MUST be compared here to avoid creating a governance blind spot.
+    for (const status of frozenStatuses) {
+      const frozenResponse = resolveLocalRef(f.responses?.[status], frozen);
+      const generatedResponse = resolveLocalRef(g.responses?.[status], generated);
+      const frozenSchema = frozenResponse?.content?.['application/json']?.schema;
+      const generatedSchema = generatedResponse?.content?.['application/json']?.schema;
+      const mustCompareBody =
+        label === '004-case-participant-core' ||
+        label === '007-case-primary-switch' ||
+        referencesAnySchemaName(frozenSchema, collidingSchemaNames);
+
+      if (!mustCompareBody) continue;
+
+      if (Boolean(frozenSchema) !== Boolean(generatedSchema)) {
+        fail(`[${label}] ${key}: response ${status} schema presence differs`);
+      }
+      if (
+        frozenSchema &&
+        generatedSchema &&
+        !equal(
+          normalize(frozenSchema, frozen, options),
+          normalize(generatedSchema, generated, options)
+        )
+      ) {
+        fail(`[${label}] ${key}: response ${status} schema differs`);
+      }
+    }
   }
 
   const frozenSchemas = frozen.components?.schemas ?? {};
@@ -147,9 +235,18 @@ function compareSubset(frozen, generated, label) {
 
   for (const name of Object.keys(frozenSchemas)) {
     if (!(name in generatedSchemas)) fail(`[${label}] missing components.schemas.${name}`);
-    if (!equal(normalize(frozenSchemas[name], frozen), normalize(generatedSchemas[name], generated))) {
-      console.error('  frozen:', JSON.stringify(stable(normalize(frozenSchemas[name], frozen)), null, 2));
-      console.error('  generated:', JSON.stringify(stable(normalize(generatedSchemas[name], generated)), null, 2));
+
+    // Slice 3 and Slice 4 both froze a component named ValidationError
+    // with different shapes. The generated global component intentionally
+    // remains the Slice 3 shape; Slice 4's stricter 422 projection is validated
+    // at its actual response use sites above.
+    if (label === '004-case-participant-core' && name === 'ValidationError') {
+      continue;
+    }
+
+    if (!equal(normalize(frozenSchemas[name], frozen, options), normalize(generatedSchemas[name], generated, options))) {
+      console.error('  frozen:', JSON.stringify(stable(normalize(frozenSchemas[name], frozen, options)), null, 2));
+      console.error('  generated:', JSON.stringify(stable(normalize(generatedSchemas[name], generated, options)), null, 2));
       fail(`[${label}] components.schemas.${name} differs`);
     }
   }
@@ -174,12 +271,22 @@ function main() {
   }
 
   const generated = JSON.parse(readFileSync(GENERATED, 'utf-8'));
+  const frozenDocs = FROZEN_DOCS.map((doc) => ({
+    ...doc,
+    spec: Bun.YAML.parse(readFileSync(doc.path, 'utf-8')),
+  }));
 
+  const collidingSchemaNames = collectCollidingSchemaNames(frozenDocs);
   const unionOps = new Set();
   const unionSchemas = new Set();
-  for (const doc of FROZEN_DOCS) {
-    const frozen = Bun.YAML.parse(readFileSync(doc.path, 'utf-8'));
-    const result = compareSubset(frozen, generated, doc.label);
+  for (const doc of frozenDocs) {
+    const result = compareSubset(
+      doc.spec,
+      generated,
+      doc.label,
+      collidingSchemaNames,
+      doc.label === '007-case-primary-switch' ? { keepPatterns: true } : {}
+    );
     for (const op of result.operations) unionOps.add(op);
     for (const name of result.schemas) unionSchemas.add(name);
   }

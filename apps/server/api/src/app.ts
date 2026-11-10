@@ -12,6 +12,7 @@ import { registerConsentRoutes } from './routes/consents.js';
 import { registerCaseRoutes } from './routes/cases.js';
 import { registerIdentityBindingRoutes } from './routes/identity-bindings.js';
 import { registerMessageRoutes } from './routes/messages.js';
+import { registerParticipationRoutes } from './routes/participations.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import {
   createWechatProvider,
@@ -19,10 +20,8 @@ import {
   type RuntimeConfig,
 } from './runtime-env.js';
 import type { WechatAuthProvider } from './auth/wechat-provider.js';
-import {
-  UnavailableInvitationPort,
-  type InvitationResolutionPort,
-} from './identity-binding/invitation-port.js';
+import { Slice4InvitationPort } from './identity-binding/invitation-slice4-adapter.js';
+import type { InvitationResolutionPort } from './identity-binding/invitation-port.js';
 
 export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
@@ -31,9 +30,9 @@ export interface BuildAppOptions {
   /** Test-only sink to capture real registered route schemas (contract drift). */
   onRoute?: (route: any) => void;
   /**
-   * Identity-binding injection points. Production uses the fail-closed
-   * UnavailableInvitationPort until the Slice 4 runtime adapter is merged
-   * (T121); tests inject the contract-level fixture.
+   * Identity-binding injection points. Production defaults to the real
+   * Slice 4 invitation adapter (T121); tests may inject a contract
+   * implementation without changing production ownership.
    */
   identityBinding?: {
     invitationPort?: InvitationResolutionPort;
@@ -48,10 +47,18 @@ export interface BuildAppOptions {
  * `LOG_LEVEL=info`. Raw client IP and User-Agent must never reach logs, so the
  * serializer keeps only non-sensitive routing fields.
  */
+export function sanitizeRequestUrlForLogs(url: unknown): string {
+  if (typeof url !== 'string') return '';
+  return url.replace(
+    /(\/api\/v1\/participation-invites\/)[^/?#]+/g,
+    '$1[REDACTED]'
+  );
+}
+
 export function requestLogSerializer(req: any) {
   return {
     method: req?.method,
-    url: req?.url,
+    url: sanitizeRequestUrlForLogs(req?.url),
     host: req?.headers?.host,
     requestId: req?.id,
   };
@@ -139,12 +146,16 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerConsentRoutes(app, pool);
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
+  registerParticipationRoutes(app, pool, {
+    inviteTtlSeconds: runtime.participationInviteTtlSeconds,
+    inviteTokenSecret: runtime.participationInviteTokenSecret,
+  });
 
   // Slice 006: exactly six identity-binding capability routes.
   registerIdentityBindingRoutes(app, {
     pool,
     invitationPort:
-      options.identityBinding?.invitationPort ?? new UnavailableInvitationPort(),
+      options.identityBinding?.invitationPort ?? new Slice4InvitationPort(),
     wechatProvider,
     identityBindingSecret: runtime.identityBindingSecret,
     contextTtlSeconds: runtime.identityBindingContextTtlSeconds,

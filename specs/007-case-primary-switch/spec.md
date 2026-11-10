@@ -469,7 +469,7 @@ Slice 2 建立了 `cases` 容器与「一个 Family 最多一个当前主要未�
 - **FR-017** [UPSTREAM: V1-C27] 所有失败 MUST 返回真实状态；MUST NOT 用 200 + 未变更状态伪装成功，MUST NOT 用 404 掩盖 500，MUST NOT 把终态冲突写成校验错误，MUST NOT 让 422 被 409 掩盖。
 - **FR-018** [UPSTREAM: §5 不变量 5 / V1-C03] 切换不产生「未知/拒绝/不适用」类业务值；本 Slice MUST NOT 为 Case 或切换结果补造任何默认值、默认理由或默认目标。
 - **FR-019** [UPSTREAM: §2.1 第 3 条 + §29.4「旧主线未来普通 Schedule 取消」/ §24—§26 尚未实现] 当前不存在 Follow-up Schedule / Task / Notification；本 Slice MUST NOT 伪造其迁移、取消或「任务处置」字段。但 MUST 冻结后置不变量：被降级 Case 不得保留「仍会继续普通推进」的语义，并在 §13.7 留下 Phase 4 的显式前向义务。
-- **FR-020** [UPSTREAM: §28.3 / Slice 2 FR-018 的范围性质] 本 Slice 的新增端点是对 Slice 2 **范围限制**的合法收窄，不是对上游需求的改写；Slice 2 的越界守卫断言 MUST 按 Slice 范围精确收窄（仅放行本端点，且 Case 操作总数从 3 变为 4），MUST NOT 被整体删除或削弱为「不再检查越界」。
+- **FR-020** [UPSTREAM: §28.3 / Slice 2 FR-018 的范围性质] 本 Slice 的新增端点是对 Slice 2 **范围限制**的合法收窄，不是对上游需求的改写；Slice 2 的越界守卫断言 MUST 按 Slice 范围精确收窄（仅放行本端点；current main baseline 为 4 个 Case operations，Slice 7 只新增一个 `switch-primary`，因此总数为 5，Slice 7 delta = exactly 1），MUST NOT 被整体删除或削弱为「不再检查越界」。
 
 No requirement may be invented to make implementation easier.
 
@@ -560,7 +560,7 @@ IMPLEMENT BLOCKED BY: Slice 2 (specs/002-case-core) post-Slice-1 reconciliation 
 以下是**已核对的真实代码 / 契约形状**，不是猜测。它们不是需求冲突，也不是允许「改测试让实现通过」；Plan 必须逐条给出增量方案。
 
 1. **越界路由断言**：`tests/integration/cases-scope.test.ts` 的禁止列表包含 `/cases/current`、`/pause`、`/resume`、`/switch-primary`，并对 `/switch-primary` 断言 404。本 Slice 必须把它**精确收窄**为「仅放行 `POST /api/v1/cases/:id/switch-primary`」，其余禁止项（`/cases/current`、`pause`、`resume`、`close`、`recurrences`、`messages`、`assessments`、`participants`、`scene`、`problem-formulations`、`evidence` 等）全部保留。
-2. **OpenAPI Case 操作数**：`tests/integration/openapi-cases.test.ts` 断言「恰好三个 Case operations」，并把 `switch-primary` 列入禁止路径。必须收窄为「恰好四个 operations」，且新增 operation 的 security / error / idempotency header 形状与既有三操作一致。
+2. **OpenAPI Case 操作数**：`tests/integration/openapi-cases.test.ts` 在 current main baseline 上断言既有 Case operations（create / list / get / message / participation-invite），并把 `switch-primary` 列入禁止路径。必须收窄为「current main baseline 4 个 Case business operations + Slice 7 新增的 `switch-primary` = 5 个」，同时保留 `participation-invites` 的真实 main 路径且不计入这 4 个 business operations；新增 operation 的 security / error / idempotency header 形状与既有操作一致。
 3. **`cases` 权限**：`db/migrations/002_case_core.sql` 只授予 `SELECT, INSERT ON cases, case_events`。切换需要更新 `cases.is_primary` / `version` / `updated_at`，必须由**新 migration** 增加**列级** `UPDATE (is_primary, version, updated_at)`，不得升级为表级 UPDATE，不得修改 002 文件。
 4. **`cases` 列集合**：`tests/db/cases-schema.test.ts` 对 `cases` 做 9 列全等断言。本 Slice 不得新增 `switch_reason` / `previous_primary_id` / `primary_since` / `switched_at` 等列；理由与历史只能落在事件 / 审计。
 5. **`case_events_event_type_check`**：当前只允许 `'CASE_CREATED'`。必须由新 migration 扩展为包含两侧切换事件类型，不得放宽为任意字符串。
@@ -641,7 +641,7 @@ IMPLEMENT BLOCKED BY: Slice 2 (specs/002-case-core) post-Slice-1 reconciliation 
 
 21. **RLS 无上下文** — **Given** 数据库连接没有 `app.family_id` / 身份上下文，**When** 读取 `cases` / `case_events` 或尝试写入，**Then** 返回零行 / 写入被拒绝，而不是默认放行。**Upstream**: §9.1、FR-016
 22. **审计原子性** — **Given** 一次成功切换，**When** 让审计/事件写入失败，**Then** 整个事务回滚：主线未改变、无半条历史、无幂等成功快照；接口返回真实失败。**Upstream**: §29.4、§7.8、FR-012
-23. **结构越界** — **Given** 本 Slice 的数据库结构与路由清单，**When** 做结构 / 路由断言，**Then** 除新增的 `switch-primary` 端点与既有 Case 结构外，不存在 `problem_formulations`、`assertions`、`observations`、`case_participants`、`risk_events`、`referrals`、Plan / Task / Schedule / Notification 等越界表或路由，也不存在 `/cases/current`；Case 操作总数为 4。**Upstream**: §7.2、§28.3、FR-014 / FR-020
+23. **结构越界** — **Given** 本 Slice 的数据库结构与路由清单，**When** 做结构 / 路由断言，**Then** 除新增的 `switch-primary` 端点与既有 Case 结构外，不存在 `problem_formulations`、`assertions`、`observations`、`case_participants`、`risk_events`、`referrals`、Plan / Task / Schedule / Notification 等越界表或路由，也不存在 `/cases/current`；Case 操作总数为 5（current main baseline 4 + 本 Slice 新增 1），且 Slice 7 新增的 Case business operation 恰为 1、无其它新增。**Upstream**: §7.2、§28.3、FR-014 / FR-020
 
 ---
 
@@ -665,7 +665,7 @@ IMPLEMENT BLOCKED BY: Slice 2 (specs/002-case-core) post-Slice-1 reconciliation 
 3. 幂等：同 key 重放与同 key 不同目标/不同 reason 的真实 HTTP 证据（mismatch 分支必须可达）；重放在世界变化后仍返回原结果的证据。
 4. 审计：成功切换的两侧事件 + 一条审计；重放与失败零追加；审计失败时整体回滚证据。
 5. 无副作用：切换前后 Plan/Task/Schedule/Notification/Evidence 等对象计数不变（当前应为「不存在」）。
-6. OpenAPI：Case operations 由 3 变 4，新增端点与冻结契约零语义漂移；越界路由断言已精确收窄，其余禁止项仍全部生效。
+6. OpenAPI：Case operations 由 current main baseline 4 变为 5（本 Slice delta = exactly 1），新增端点与冻结契约零语义漂移；越界路由断言已精确收窄，其余禁止项仍全部生效。
 7. 结构：越界表/路由不存在证据（含 `/cases/current`）；`cases` 仍为 9 列；`case_events` 的既有 `CASE_CREATED` metadata 形状未被放宽。
 
 ---
@@ -719,8 +719,8 @@ IMPLEMENT BLOCKED BY: Slice 2 (specs/002-case-core) post-Slice-1 reconciliation 
 **Q14 — 幂等预检与业务前置谁先？**
 **RESOLVED — 授权之后、状态判定之前。** 依据：§8.5「重复相同请求返回原结果」要求重放不被当前世界状态改写；Slice 1 的幂等编排已冻结「replay/mismatch 在任何业务校验之前回答」；同时 §9 要求授权先于重放，避免把旧结果返回给无权请求。上一轮 `plan.md` 的 R-2 已冻结该优先级，本版把它写回 Spec（§6.3A）。
 
-**Q15 — 目标处于 WAITING / PAUSED / LOST_CONTACT 时，是否必须先恢复才能切换？**
-**RESOLVED — 不需要，允许切换，状态保持不变。** 依据：§29.4 只把「目标不得 CLOSED」列为禁止项，未要求目标必须 `OPEN`；§6.6 的 `ResumeCase` / `UserReturned` 是独立状态命令，切换不得代替它们。若要求先恢复，等于让一个控制面命令隐式承担状态转换，违反 §5 不变量 6（ASSESSMENT 之后不得跳过 Formulation 一类的阶段纪律）与 FR-006。切换后目标仍是 `WAITING` / `PAUSED` / `LOST_CONTACT`，直到对应状态命令被真实执行。
+**Q15 — 目标处于 WAITING / LOST_CONTACT 时，是否必须先恢复才能切换？**
+**RESOLVED — 不需要，允许切换，状态保持不变。** 依据：§29.4 只把「目标不得 CLOSED」列为禁止项，未要求目标必须 `OPEN`；§6.6 的 `ResumeCase` / `UserReturned` 是独立状态命令，切换不得代替它们。若要求先恢复，等于让一个控制面命令隐式承担状态转换，违反 §5 不变量 6（ASSESSMENT 之后不得跳过 Formulation 一类的阶段纪律）与 FR-006。切换后目标仍是 `WAITING` / `LOST_CONTACT`，直到对应状态命令被真实执行。
 
 **No blocking product ambiguity remains.**
 
@@ -749,7 +749,7 @@ IMPLEMENT BLOCKED BY: Slice 2 (specs/002-case-core) post-Slice-1 reconciliation 
 
 **NONE**
 
-**Residual blockers**: 无**语义**阻断。唯一阻断是程序性的：Slice 2 未完成 post-Slice-1 reconciliation、未重跑审计二、未 merge main（见 §14.3 / §15）。Spec 可冻结，Implement Gate 未打开。
+**Residual blockers**: 无**语义**阻断。历史 Slice 2 依赖已解除；本轮为 post-audit remediation（S7-II-H01 / H02 / M01 / M02 / L01 与 S7-H03 evidence）。
 
 ---
 
@@ -757,5 +757,6 @@ IMPLEMENT BLOCKED BY: Slice 2 (specs/002-case-core) post-Slice-1 reconciliation 
 
 | 日期 | 变更 | 说明 |
 |---|---|---|
+| 2026-11-10 | Post-audit upstream reconciliation | ① Case Status 六态 → 当前权威五态（case-level `PAUSED` 已由 merged main 的 `006_case_status_paused_removal.sql` 移除；Q15 删 `PAUSED` 字面，结论不变）；② FR-020 / Acceptance 23 / §20.6 的 Case operation 计数按 current main baseline 机械修正为「4 + Slice 7 新增 1 = 5」，保留「Slice 7 delta = exactly 1、无其它新增」的不变量；③ migration 编号由 `005` 机械对齐为 current main 最大值 +1（`007`）；④ 记录 remediation obligations（H01 migration 兼容、H02 JSON boundary、M01 reason Unicode、M02 OpenAPI pattern、L01 evidence），它们不是新增产品 FR。以上 `Product FR semantic change: NONE` / `Acceptance semantic change: NONE` / `Scope change: NONE`。 |
 | 2026-11-07 | 初版 Specify / Clarify | 基于 `Docs/V1产品需求.md` v3.7、`Docs/V1技术设计.md` v3.12；核对 001—006 归属后选定本 Slice |
 | 2026-11-07 | Specify / Clarify 复核（本轮） | ① 修正 Slice 2 的真实状态：T088—T100 全部未执行、未重跑审计二、未 merge main；删除「87/87 已勾选」的误导表述，分支相对 main 更新为 40 ahead / 4 behind。② 把幂等键传输从「Plan 决定」改为「Slice 1 已冻结的 `Idempotency-Key` header」。③ 把 `plan.md` R-2 已冻结的求值顺序写回 §6.3A，消除 §6.3 第 10 条与 §9.1 的字面冲突。④ 把期望视图从「id 或 version」收紧为「id + version」。⑤ 补记 §16 的 11 条真实代码收窄点（越界断言、OpenAPI 3→4、列级 UPDATE、9 列断言、四类 CHECK、Action 联合、DENY→404 覆盖）。⑥ 修复 spec 缺失的 `## Scope` / `## Acceptance Scenarios` / `## Acceptance Evidence` 标题，使 Spec Governance 可通过。以上均不改变已冻结的可观察业务行为。 |

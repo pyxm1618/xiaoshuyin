@@ -24,6 +24,8 @@ const testDefaults: Record<string, string> = {
   IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600',
   IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900',
   IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300',
+  PARTICIPATION_INVITE_TTL_SECONDS: '86400',
+  PARTICIPATION_INVITE_TOKEN_SECRET: 'test-participation-invite-secret-32chars',
 };
 for (const [key, value] of Object.entries(testDefaults)) {
   if (!process.env[key]) process.env[key] = value;

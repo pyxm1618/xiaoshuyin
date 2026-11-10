@@ -17,7 +17,7 @@ import {
 const STATUSES: CaseStatusView[] = [
   'OPEN',
   'WAITING',
-  'PAUSED',
+
   'LOST_CONTACT',
   'SAFETY_HOLD',
   'CLOSED',
@@ -42,11 +42,11 @@ const STALE_ID = { caseId: 'case-other', version: 2 };
 const STALE_VERSION = { caseId: 'case-current', version: 9 };
 
 describe('decideSwitchPrimary (T719)', () => {
-  it('covers all six statuses for the target with a matching view', () => {
+  it('covers all five statuses for the target with a matching view', () => {
     const expected: Record<CaseStatusView, string> = {
       OPEN: 'ALLOW',
       WAITING: 'ALLOW',
-      PAUSED: 'ALLOW',
+
       LOST_CONTACT: 'ALLOW',
       SAFETY_HOLD: 'SAFETY_HOLD_BLOCKED',
       CLOSED: 'CASE_CLOSED',

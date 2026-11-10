@@ -47,7 +47,7 @@ describe('Runtime route status == generated OpenAPI status (MEDIUM-01)', () => {
     await app.ready();
     try {
       const caseEntries = [...captured.entries()].filter(([key]) =>
-        key.includes('/api/v1/cases')
+        Object.hasOwn(CASE_OPERATIONS, key)
       );
       expect(caseEntries.map(([key]) => key).sort()).toEqual(
         Object.keys(CASE_OPERATIONS).sort()

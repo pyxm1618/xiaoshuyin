@@ -271,7 +271,7 @@ components:
       description: |
         §6.1 Case Status。本 Slice 创建固定 OPEN；数据库承载完整词汇，
         但本 Slice 没有任何可达路径写入其他值。
-      enum: [OPEN, WAITING, PAUSED, LOST_CONTACT, SAFETY_HOLD, CLOSED]
+      enum: [OPEN, WAITING, LOST_CONTACT, SAFETY_HOLD, CLOSED]
 
     CasePhase:
       type: string

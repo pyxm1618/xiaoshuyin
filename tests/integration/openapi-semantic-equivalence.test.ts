@@ -157,3 +157,79 @@ describe('OpenAPI semantic normalizer (T097)', () => {
     );
   });
 });
+describe('007 timestamp pattern integrity (S7-II-M02)', () => {
+  const yaml = readFileSync(
+    join(
+      ROOT,
+      'specs/007-case-primary-switch/contracts/case-primary-switch-api.openapi.yaml'
+    ),
+    'utf-8'
+  );
+  const frozenPatterns = [...yaml.matchAll(/pattern: '([^']+)'/g)]
+    .map((match) => match[1])
+    .filter((pattern) => pattern.includes('T(?:'));
+  const generated = JSON.parse(
+    readFileSync(join(ROOT, 'packages/generated/openapi.json'), 'utf-8')
+  ) as unknown;
+
+  function collectPatterns(node: unknown, acc = new Set<string>()): Set<string> {
+    if (!node || typeof node !== 'object') return acc;
+    if (typeof (node as any).pattern === 'string') acc.add((node as any).pattern);
+    for (const value of Object.values(node as Record<string, unknown>)) {
+      collectPatterns(value, acc);
+    }
+    return acc;
+  }
+
+  const generatedPatterns = [...collectPatterns(generated)].filter((pattern) =>
+    pattern.includes('T(?:')
+  );
+
+  it('frozen YAML declares exactly five timestamp patterns', () => {
+    expect(frozenPatterns).toHaveLength(5);
+  });
+
+  it('frozen and generated timestamp pattern strings are identical', () => {
+    expect(new Set(frozenPatterns)).toEqual(new Set(generatedPatterns));
+  });
+
+  it('accepts a real success timestamp in both schemas', () => {
+    const sample = '2026-11-07T08:45:02.000Z';
+    for (const pattern of [...frozenPatterns, ...generatedPatterns]) {
+      expect(new RegExp(pattern).test(sample), pattern).toBe(true);
+    }
+  });
+
+  it('rejects invalid timestamps in both schemas', () => {
+    const invalid = [
+      '2026-13-01T00:00:00Z',
+      '2026-02-30T00:00:00Z',
+      '2026-11-07',
+      '2026-11-07T25:00:00Z',
+    ];
+    for (const value of invalid) {
+      for (const pattern of [...frozenPatterns, ...generatedPatterns]) {
+        expect(new RegExp(pattern).test(value), `${value} / ${pattern}`).toBe(false);
+      }
+    }
+  });
+
+  it('drops pattern by default and keeps it with keepPatterns', () => {
+    expect(normalize({ pattern: '^a$' }, {})).toEqual({});
+    expect(normalize({ pattern: '^a$' }, {}, { keepPatterns: true })).toEqual({
+      pattern: '^a$',
+    });
+  });
+
+  it('detects a drifted pattern as non-equivalent', () => {
+    const frozen = normalize(
+      { pattern: frozenPatterns[0] },
+      {},
+      { keepPatterns: true }
+    );
+    const drifted = { pattern: `${frozenPatterns[0]}x` };
+    expect(stable(frozen)).not.toBe(
+      stable(normalize(drifted, {}, { keepPatterns: true }))
+    );
+  });
+});

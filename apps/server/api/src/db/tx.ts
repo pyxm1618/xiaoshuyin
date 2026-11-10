@@ -458,3 +458,27 @@ export async function setFamilyContext(
 ): Promise<void> {
   await tx.query('SELECT app.set_family_context($1, $2, $3)', [familyId, personId, purpose]);
 }
+
+// ── Slice 4 participation invitation context ────────────────
+
+export async function setInviteTokenContext(
+  tx: TxClient,
+  tokenHash: string
+): Promise<void> {
+  await tx.query('SELECT app.set_invite_token_context($1)', [tokenHash]);
+}
+
+/**
+ * Public invite lookup: token hash is the only RLS credential. No Account,
+ * Person or Family identity is fabricated for this transaction.
+ */
+export async function withInviteTokenTransaction<T>(
+  pool: pg.Pool,
+  opts: { tokenHash: string },
+  fn: (tx: TxClient) => Promise<T>
+): Promise<T> {
+  return withTransactionClient(pool, async (tx) => {
+    await setInviteTokenContext(tx, opts.tokenHash);
+    return fn(tx);
+  });
+}

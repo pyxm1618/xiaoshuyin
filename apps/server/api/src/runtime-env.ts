@@ -30,6 +30,9 @@ export interface RuntimeConfig {
   identityBindingContextTtlSeconds: number;
   identityBindingAttemptTtlSeconds: number;
   identityBindingPairingTtlSeconds: number;
+  // Slice 4 participation invitations. Required in every mode; no fallback.
+  participationInviteTtlSeconds: number;
+  participationInviteTokenSecret: string;
 }
 
 function fail(code: string, detail: string): never {
@@ -55,6 +58,14 @@ function required(env: NodeJS.ProcessEnv, key: string, minLength = 1): string {
   return value;
 }
 
+function requiredBytes(env: NodeJS.ProcessEnv, key: string, minBytes: number): string {
+  const value = env[key];
+  if (!value || Buffer.byteLength(value, 'utf8') < minBytes) {
+    fail('RUNTIME_ENV_INVALID', `${key} is missing or shorter than ${minBytes} bytes`);
+  }
+  return value;
+}
+
 export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const mode = runtimeMode(env);
 
@@ -67,6 +78,8 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
   const contextTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_CONTEXT_TTL_SECONDS');
   const attemptTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS');
   const pairingTtl = requiredPositiveInt(env, 'IDENTITY_BINDING_PAIRING_TTL_SECONDS');
+  const participationInviteTtl = requiredCoercedPositiveInt(env, 'PARTICIPATION_INVITE_TTL_SECONDS');
+  const participationInviteTokenSecret = requiredBytes(env, 'PARTICIPATION_INVITE_TOKEN_SECRET', 32);
 
   return {
     mode,
@@ -79,6 +92,8 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
     identityBindingContextTtlSeconds: contextTtl,
     identityBindingAttemptTtlSeconds: attemptTtl,
     identityBindingPairingTtlSeconds: pairingTtl,
+    participationInviteTtlSeconds: participationInviteTtl,
+    participationInviteTokenSecret,
   };
 }
 
@@ -88,6 +103,15 @@ function requiredPositiveInt(env: NodeJS.ProcessEnv, key: string): number {
     fail('RUNTIME_ENV_INVALID', `${key} must be a positive integer`);
   }
   return Number(raw);
+}
+
+function requiredCoercedPositiveInt(env: NodeJS.ProcessEnv, key: string): number {
+  const raw = env[key];
+  const value = raw === undefined ? Number.NaN : Number(raw);
+  if (!raw || !Number.isInteger(value) || value <= 0) {
+    fail('RUNTIME_ENV_INVALID', `${key} must be a positive integer`);
+  }
+  return value;
 }
 
 /**

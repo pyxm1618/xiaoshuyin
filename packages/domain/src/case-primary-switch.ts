@@ -16,7 +16,7 @@
 export type CaseStatusView =
   | 'OPEN'
   | 'WAITING'
-  | 'PAUSED'
+
   | 'LOST_CONTACT'
   | 'SAFETY_HOLD'
   | 'CLOSED';

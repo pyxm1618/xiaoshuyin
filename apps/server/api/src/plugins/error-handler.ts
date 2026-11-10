@@ -40,6 +40,12 @@ const ERROR_MAP: Record<string, number> = {
   CASE_CLOSED: 409,
   SAFETY_HOLD_BLOCKED: 409,
   STALE_PRIMARY_VIEW: 409,
+  // Slice 4 participation.
+  PARTICIPATION_ALREADY_EXISTS: 409,
+  PARTICIPATION_TARGET_INELIGIBLE: 403,
+  INVITATION_NOT_AVAILABLE: 404,
+  PARTICIPATION_NOT_FOUND: 404,
+  PARTICIPATION_STATE_CONFLICT: 409,
   // Slice 006 identity binding.
   WECHAT_AUTH_FAILED: 401,
   BINDING_CONTEXT_INVALID: 401,
@@ -100,9 +106,17 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
   // 422 VALIDATION_ERROR with zero writes, so this parse failure is mapped for
   // that command only. Other endpoints keep the Fastify default (400).
   const routeUrl = req.routeOptions?.url ?? req.url;
+  const strictJsonCommands = new Set([
+    '/api/v1/cases',
+    '/api/v1/cases/:id/messages',
+    '/api/v1/cases/:id/switch-primary',
+    '/api/v1/cases/:id/participation-invites',
+    '/api/v1/participation-invites/:token/accept',
+    '/api/v1/participations/:id/decline',
+    '/api/v1/participations/:id/withdraw',
+  ]);
   const isStrictCreateCommand =
-    req.method === 'POST' &&
-    (routeUrl === '/api/v1/cases' || routeUrl === '/api/v1/cases/:id/messages');
+    req.method === 'POST' && strictJsonCommands.has(routeUrl);
   if (isStrictCreateCommand && (err as any).code === 'FST_ERR_CTP_INVALID_JSON_BODY') {
     return reply.status(422).send({
       code: 'VALIDATION_ERROR',

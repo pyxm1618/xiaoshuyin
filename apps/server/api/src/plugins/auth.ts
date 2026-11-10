@@ -43,6 +43,13 @@ function isBindingConfirmerPath(pathname: string): boolean {
   return pathname === '/api/v1/identity-bindings/pairing-decision';
 }
 
+function isPublicParticipationInviteLookup(req: FastifyRequest, pathname: string): boolean {
+  return (
+    req.method === 'GET' &&
+    /^\/api\/v1\/participation-invites\/[^/]+$/.test(pathname)
+  );
+}
+
 function hasBindingContext(req: FastifyRequest): boolean {
   const raw = req.headers['x-binding-context'];
   const value = Array.isArray(raw) ? raw[0] : raw;
@@ -120,7 +127,7 @@ export function registerAuthPlugin(app: FastifyInstance, pool: pg.Pool, sessionS
 
   app.addHook('preHandler', async (req: FastifyRequest) => {
     const pathname = req.url.split('?')[0]!;
-    if (PUBLIC_PATHS.has(pathname)) return;
+    if (PUBLIC_PATHS.has(pathname) || isPublicParticipationInviteLookup(req, pathname)) return;
 
     // Candidate capability routes: X-Binding-Context replaces Bearer. A normal
     // session must never be accepted here, and a missing context is a 401.

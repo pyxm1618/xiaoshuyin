@@ -20,6 +20,10 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   'CASE_CREATE',
   'CASE_MESSAGE_CREATE',
   'CASE_SWITCH_PRIMARY',
+  'PARTICIPATION_INVITE_CREATE',
+  'PARTICIPATION_ACCEPT',
+  'PARTICIPATION_DECLINE',
+  'PARTICIPATION_WITHDRAW',
 ] as const;
 
 export type IdempotencyCommandType = (typeof IDEMPOTENCY_COMMAND_TYPES)[number];
@@ -68,6 +72,32 @@ export function buildCaseMessageRequestHash(input: {
     caseId: input.caseId,
     body: { content: input.content },
   });
+}
+
+export function buildParticipationInviteCreateRequestHash(input: {
+  familyId: string;
+  caseId: string;
+  personId: string;
+}): string {
+  return hashPayload({
+    familyId: input.familyId,
+    caseId: input.caseId,
+    personId: input.personId,
+  });
+}
+
+export function buildParticipationAcceptRequestHash(input: {
+  inviteTokenHash: string;
+  participationId: string;
+}): string {
+  return hashPayload({
+    inviteTokenHash: input.inviteTokenHash,
+    participationId: input.participationId,
+  });
+}
+
+export function buildParticipationResourceCommandHash(participationId: string): string {
+  return hashPayload({ participationId });
 }
 
 export function decideIdempotency(

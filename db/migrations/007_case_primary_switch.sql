@@ -1,6 +1,6 @@
 -- ============================================================
 -- Slice 7 — SwitchPrimaryCase
--- Migration: 005_case_primary_switch.sql
+-- Migration: 007_case_primary_switch.sql
 --
 -- Reviewed additive migration. Scope is exactly six statements:
 --   1. case_events event vocabulary (3 values)
@@ -13,11 +13,15 @@
 -- No new table / column / index / enum / policy. `001` / `002` / `003` are not
 -- modified. Rollback notes: plan.md D-9.7.
 --
--- G7 measured baseline on the merged main (2026-11-09): business_audit_events
--- already carries the Slice 3 event types (MESSAGE_RECORDED, ASSERTION_RECORDED,
--- OBSERVATION_RECORDED) and idempotency_keys.command_type already carries
--- CASE_MESSAGE_CREATE. This migration preserves every existing literal and only
--- appends the Slice 7 literal.
+-- Baseline read from origin/main = 2b07c532 (2026-11-10):
+--   business_audit_events.event_type: 15 values, including Slice 3
+--     (MESSAGE_RECORDED, ASSERTION_RECORDED, OBSERVATION_RECORDED) and all five
+--     Slice 4 PARTICIPATION_* literals.
+--   business_audit_events.resource_type: 8 values (not modified here).
+--   idempotency_keys.command_type: 12 values, including CASE_MESSAGE_CREATE and
+--     all four Slice 4 participation commands.
+-- This migration preserves every existing literal and only appends the Slice 7
+-- literals: CASE_PRIMARY_SWITCHED and CASE_SWITCH_PRIMARY.
 -- ============================================================
 
 ALTER TABLE case_events
@@ -112,6 +116,11 @@ ALTER TABLE business_audit_events
       'MESSAGE_RECORDED',
       'ASSERTION_RECORDED',
       'OBSERVATION_RECORDED',
+      'PARTICIPATION_INVITE_CREATED',
+      'PARTICIPATION_ACCEPTED',
+      'PARTICIPATION_DECLINED',
+      'PARTICIPATION_EXPIRED',
+      'PARTICIPATION_WITHDRAWN',
       'CASE_PRIMARY_SWITCHED'
     )
   );
@@ -129,6 +138,10 @@ ALTER TABLE idempotency_keys
       'GUARDIAN_CONSENT_REVOKE',
       'CASE_CREATE',
       'CASE_MESSAGE_CREATE',
+      'PARTICIPATION_INVITE_CREATE',
+      'PARTICIPATION_ACCEPT',
+      'PARTICIPATION_DECLINE',
+      'PARTICIPATION_WITHDRAW',
       'CASE_SWITCH_PRIMARY'
     )
   );

@@ -194,7 +194,7 @@ describe('cases RLS (T022)', () => {
   });
 
   it('runtime role has only the Slice 7 column-level UPDATE grant on cases', async () => {
-    // Allowed: exactly the three columns granted by 005_case_primary_switch.sql.
+    // Allowed: exactly the three columns granted by 007_case_primary_switch.sql.
     const allowed = await app.connect();
     try {
       await allowed.query('BEGIN');

@@ -54,12 +54,14 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       '/api/v1/cases',
       '/api/v1/cases/{id}',
       '/api/v1/cases/{id}/messages',
+'/api/v1/cases/{id}/participation-invites',
       '/api/v1/cases/{id}/switch-primary',
     ]);
 
     const operations: string[] = [];
     for (const [path, item] of Object.entries(spec.paths as Record<string, any>)) {
       if (!path.startsWith('/api/v1/cases')) continue;
+      if (path === '/api/v1/cases/{id}/participation-invites') continue;
       for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
         if (item[method]) operations.push(`${method.toUpperCase()} ${path}`);
       }
@@ -137,7 +139,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'createdAt', 'id', 'phase', 'primary', 'status', 'updatedAt', 'version',
     ]);
     expect(schema.properties.status.enum).toEqual([
-      'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+      'OPEN', 'WAITING', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
     ]);
     expect(schema.properties.phase.enum).toEqual([
       'INTAKE', 'ASSESSMENT', 'PROBLEM_FORMULATION', 'GOALS',

@@ -14,7 +14,7 @@ import { buildSwitchAuditMetadata } from './case-primary-switch.js';
 type Tx = PoolClient;
 
 export type CaseStatusValue =
-  | 'OPEN' | 'WAITING' | 'PAUSED' | 'LOST_CONTACT' | 'SAFETY_HOLD' | 'CLOSED';
+  | 'OPEN' | 'WAITING' | 'LOST_CONTACT' | 'SAFETY_HOLD' | 'CLOSED';
 
 export type CasePhaseValue =
   | 'INTAKE' | 'ASSESSMENT' | 'PROBLEM_FORMULATION' | 'GOALS'

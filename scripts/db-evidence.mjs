@@ -423,14 +423,16 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-    check('upgrade only APPLYs the pending 004 and 005 migrations', true,
+check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006_case_status_paused_removal + 007_case_primary_switch', true,
       /APPLY 004_evidence_core\.sql/.test(output) &&
       /APPLY 004_identity_binding_runtime\.sql/.test(output) &&
-      /APPLY 005_case_primary_switch\.sql/.test(output));
+      /APPLY 005_case_participant_core\.sql/.test(output) &&
+      /APPLY 006_case_status_paused_removal\.sql/.test(output) &&
+      /APPLY 007_case_primary_switch\.sql/.test(output));
     check(
-      'upgrade result is 3 new / 3 previously applied (004x2 + 005)',
+      'upgrade 结果为 5 new / 3 previously applied',
       true,
-      /Migration complete: 3 new, 3 previously applied\./.test(output)
+      /Migration complete: 5 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -444,7 +446,9 @@ async function upgradeFrom003() {
       '003_case_idempotency_key_bytes.sql',
       '004_evidence_core.sql',
       '004_identity_binding_runtime.sql',
-      '005_case_primary_switch.sql',
+      '005_case_participant_core.sql',
+      '006_case_status_paused_removal.sql',
+      '007_case_primary_switch.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',
@@ -455,7 +459,7 @@ async function upgradeFrom003() {
     );
 
     const d = await collect(client);
-    verifyStructure('001–003 → 004 upgrade 结果', d);
+    verifyStructure('001–003 → 004/005 upgrade 结果', d);
 
     const afterFingerprint = await objectFingerprint(client);
     const afterSet = new Set(afterFingerprint.split('|'));
