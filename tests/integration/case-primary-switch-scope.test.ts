@@ -1,10 +1,18 @@
 /**
- * T730 — Case command scope (FR-020, plan D-14.1).
+ * T730 — Case command scope (FR-020, plan D-14.1 / D-14.2).
  *
- * Exactly four Case operations after this Slice:
- *   createCase / listCases / getCase / switchPrimaryCase.
- * Only `POST /api/v1/cases/{id}/switch-primary` is added; every other
- * out-of-scope path, table and `cases` column stays absent.
+ * Real current-main baseline: FOUR Case business operations
+ *   createCase / listCases / getCase / createCaseMessage
+ * Slice 7 adds EXACTLY ONE Case business operation:
+ *   switchPrimaryCase
+ * Final: FIVE Case business operations.
+ *
+ * `createParticipationInvite` is a real current-main Case path operation but is
+ * NOT a Case business operation under the approved frozen Scope classification
+ * (Slice 4). It stays in the real path set and is excluded by operationId only —
+ * never by filtering `/messages` or any other genuine Case path.
+ *
+ * Slice 7 introduces no other Case business operation.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -15,6 +23,58 @@ import { createAdminPool } from '../setup/db.js';
 const spec = JSON.parse(
   readFileSync(new URL('../../packages/generated/openapi.json', import.meta.url), 'utf8')
 );
+
+const CASE_PATH_PREFIX = '/api/v1/cases';
+const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
+
+/** Existing current-main Case business operations (no Slice 7). */
+const BASE_CASE_OPERATION_IDS = [
+  'createCase',
+  'listCases',
+  'getCase',
+  'createCaseMessage',
+] as const;
+
+/** The only Case business operation Slice 7 adds. */
+const SLICE7_ADDED_OPERATION_IDS = ['switchPrimaryCase'] as const;
+
+/** Real Case path operations that are not Case business operations. */
+const NON_BUSINESS_OPERATION_IDS = ['createParticipationInvite'] as const;
+
+/** Real Case paths on current main + Slice 7. */
+const KNOWN_CASE_PATHS = [
+  '/api/v1/cases',
+  '/api/v1/cases/{id}',
+  '/api/v1/cases/{id}/messages',
+  '/api/v1/cases/{id}/participation-invites',
+  '/api/v1/cases/{id}/switch-primary',
+] as const;
+
+interface OperationRef {
+  method: string;
+  path: string;
+  operationId: string;
+}
+
+function casePathKeys(): string[] {
+  return Object.keys(spec.paths).filter(
+    (path) => path === CASE_PATH_PREFIX || path.startsWith(`${CASE_PATH_PREFIX}/`)
+  );
+}
+
+function caseOperations(): OperationRef[] {
+  const operations: OperationRef[] = [];
+  for (const path of casePathKeys()) {
+    const item = spec.paths[path] ?? {};
+    for (const method of HTTP_METHODS) {
+      const operation = item[method];
+      if (operation?.operationId) {
+        operations.push({ method: method.toUpperCase(), path, operationId: operation.operationId });
+      }
+    }
+  }
+  return operations;
+}
 
 describe('case primary switch scope (T730)', () => {
   let admin: pg.Pool;
@@ -27,26 +87,67 @@ describe('case primary switch scope (T730)', () => {
     await admin.end();
   });
 
-  it('registers exactly four Case operations', () => {
-    const casePaths = Object.keys(spec.paths).filter((p) =>
-      p === '/api/v1/cases' ||
-      p === '/api/v1/cases/{id}' ||
-      p === '/api/v1/cases/{id}/switch-primary'
+  it('keeps Base = 4, Slice 7 delta = exactly 1, Final = 5 Case business operations', () => {
+    // Path layer: every real Case path is present, and nothing unexpected was added.
+    const paths = casePathKeys();
+    expect(paths.sort()).toEqual([...KNOWN_CASE_PATHS].sort());
+    expect(paths.filter((path) => !(KNOWN_CASE_PATHS as readonly string[]).includes(path))).toEqual(
+      []
     );
-    expect(casePaths.sort()).toEqual([
-      '/api/v1/cases',
-      '/api/v1/cases/{id}',
-      '/api/v1/cases/{id}/switch-primary',
-    ]);
-    const operations = casePaths.flatMap((p) =>
-      Object.values(spec.paths[p]).map((op: any) => op.operationId)
+
+    // Operation layer: collect every Case path operation by operationId.
+    const operations = caseOperations();
+    expect(operations.map((op) => `${op.method} ${op.path}`).sort()).toEqual(
+      [
+        'GET /api/v1/cases',
+        'GET /api/v1/cases/{id}',
+        'POST /api/v1/cases',
+        'POST /api/v1/cases/{id}/messages',
+        'POST /api/v1/cases/{id}/participation-invites',
+        'POST /api/v1/cases/{id}/switch-primary',
+      ].sort()
     );
-    expect(operations.sort()).toEqual([
-      'createCase',
-      'getCase',
-      'listCases',
-      'switchPrimaryCase',
+
+    // The non-business operation must still be real; excluding it may not shrink
+    // the path set into a false green.
+    const nonBusiness = operations.filter((op) =>
+      (NON_BUSINESS_OPERATION_IDS as readonly string[]).includes(op.operationId)
+    );
+    expect(nonBusiness.map((op) => `${op.method} ${op.path}`)).toEqual([
+      'POST /api/v1/cases/{id}/participation-invites',
     ]);
+
+    const businessOperationIds = operations
+      .filter((op) => !(NON_BUSINESS_OPERATION_IDS as readonly string[]).includes(op.operationId))
+      .map((op) => op.operationId)
+      .sort();
+
+    // Base = 4: every pre-Slice-7 business operation is really present.
+    for (const base of BASE_CASE_OPERATION_IDS) {
+      expect(businessOperationIds, `missing Base operation ${base}`).toContain(base);
+    }
+    expect(BASE_CASE_OPERATION_IDS).toHaveLength(4);
+
+    // Final = 5, exact equality (contains/>= would hide an extra operation).
+    expect(businessOperationIds).toEqual(
+      [...BASE_CASE_OPERATION_IDS, ...SLICE7_ADDED_OPERATION_IDS].sort()
+    );
+    expect(businessOperationIds).toHaveLength(5);
+
+    // Slice 7 delta = exactly 1.
+    const slice7Delta = businessOperationIds.filter(
+      (id) => !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id)
+    );
+    expect(slice7Delta).toEqual(['switchPrimaryCase']);
+    expect(slice7Delta).toHaveLength(1);
+
+    // Unexpected Slice 7-added Case business operations = 0.
+    const unexpected = businessOperationIds.filter(
+      (id) =>
+        !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+    );
+    expect(unexpected).toEqual([]);
   });
 
   it('does not register any out-of-scope Case path', () => {

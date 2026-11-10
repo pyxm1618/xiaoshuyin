@@ -1,6 +1,13 @@
 /**
- * T078 / T079 — generated OpenAPI must describe exactly the three Case
- * operations with the frozen request/response and error shapes.
+ * T078 / T079 — generated OpenAPI must describe the real Case business surface
+ * with the frozen request/response and error shapes.
+ *
+ * Base (current main) = 4 Case business operations:
+ *   createCase / listCases / getCase / createCaseMessage
+ * Slice 7 delta = exactly 1: switchPrimaryCase
+ * Final = 5 Case business operations.
+ * `createParticipationInvite` stays a real Case path operation and is excluded
+ * from the business-operation count by operationId (approved Slice 4 Scope).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -10,6 +17,10 @@ import { join } from 'node:path';
 const spec = JSON.parse(
   readFileSync(join(process.cwd(), 'packages/generated/openapi.json'), 'utf-8')
 );
+
+const CASE_PATH_PREFIX = '/api/v1/cases';
+const CASE_HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
+const NON_BUSINESS_OPERATION_IDS = ['createParticipationInvite'] as const;
 
 function resolveRef(node: any): any {
   if (!node || typeof node !== 'object') return node;
@@ -48,22 +59,29 @@ function literalCodes(schema: any): string[] {
 }
 
 describe('Generated OpenAPI — Case operations (T078)', () => {
-  it('contains exactly the approved Case operations (Slice 2 + Slice 3 + Slice 7)', () => {
-    const casePaths = Object.keys(spec.paths).filter((p) => p.startsWith('/api/v1/cases'));
+  it('contains the real Case paths and exactly five Case business operations (Base 4 + Slice 7 delta 1)', () => {
+    const casePaths = Object.keys(spec.paths).filter(
+      (p) => p === CASE_PATH_PREFIX || p.startsWith(`${CASE_PATH_PREFIX}/`)
+    );
     expect(casePaths.sort()).toEqual([
       '/api/v1/cases',
       '/api/v1/cases/{id}',
       '/api/v1/cases/{id}/messages',
-'/api/v1/cases/{id}/participation-invites',
+      '/api/v1/cases/{id}/participation-invites',
       '/api/v1/cases/{id}/switch-primary',
     ]);
 
     const operations: string[] = [];
     for (const [path, item] of Object.entries(spec.paths as Record<string, any>)) {
-      if (!path.startsWith('/api/v1/cases')) continue;
-      if (path === '/api/v1/cases/{id}/participation-invites') continue;
-      for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
-        if (item[method]) operations.push(`${method.toUpperCase()} ${path}`);
+      if (!(path === CASE_PATH_PREFIX || path.startsWith(`${CASE_PATH_PREFIX}/`))) continue;
+      for (const method of CASE_HTTP_METHODS) {
+        const operation = item[method];
+        if (
+          operation &&
+          !(NON_BUSINESS_OPERATION_IDS as readonly string[]).includes(operation.operationId)
+        ) {
+          operations.push(`${method.toUpperCase()} ${path}`);
+        }
       }
     }
     expect(operations.sort()).toEqual([
@@ -73,6 +91,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'POST /api/v1/cases/{id}/messages',
       'POST /api/v1/cases/{id}/switch-primary',
     ]);
+    expect(operations).toHaveLength(5);
   });
 
   it('每个 operation 声明 frozen operationId 与 bearerAuth', () => {
@@ -80,6 +99,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'post /api/v1/cases': { op: 'createCase' },
       'get /api/v1/cases': { op: 'listCases' },
       'get /api/v1/cases/{id}': { op: 'getCase' },
+      'post /api/v1/cases/{id}/messages': { op: 'createCaseMessage' },
       'post /api/v1/cases/{id}/switch-primary': { op: 'switchPrimaryCase' },
     };
     for (const [key, { op }] of Object.entries(expected)) {
@@ -176,7 +196,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
     expect(schema.properties.code.type).toBe('string');
   });
 
-  it('all three Case operations declare the real 409 status (MEDIUM-01)', () => {
+  it('all pre-Slice-7 Case operations declare the real 409 status (MEDIUM-01)', () => {
     expect(Object.keys(spec.paths['/api/v1/cases'].post.responses).sort()).toEqual([
       '201', '401', '403', '404', '409', '422', '500',
     ]);
@@ -186,6 +206,15 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
     expect(Object.keys(spec.paths['/api/v1/cases/{id}'].get.responses).sort()).toEqual([
       '200', '401', '404', '409', '500',
     ]);
+  });
+
+  it('message and switch-primary operations declare their real response sets', () => {
+    expect(Object.keys(spec.paths['/api/v1/cases/{id}/messages'].post.responses).sort()).toEqual([
+      '201', '401', '404', '409', '422', '500',
+    ]);
+    expect(
+      Object.keys(spec.paths['/api/v1/cases/{id}/switch-primary'].post.responses).sort()
+    ).toEqual(['200', '401', '404', '409', '422', '500']);
   });
 
   it('detail 409 carries the CURRENT_FAMILY_AMBIGUOUS literal (not merged into 404)', () => {

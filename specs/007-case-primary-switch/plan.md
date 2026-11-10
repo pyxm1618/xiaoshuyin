@@ -174,7 +174,7 @@ Spec 映射：FR-001—FR-020（20 条）、Acceptance Scenarios 1—23、Succes
         │ + Idempotency-Key header（Slice 1 冻结）
         ▼
 [Fastify API  apps/server/api]
-        ├─ routes/cases.ts            既有 3 条 + 新增 1 条
+        ├─ routes/cases.ts            既有 3 条 + 新增 1 条（Case business operations 4→5）
         ├─ idempotency.ts             readIdempotencyKey()（复用，不改）
         ├──────────────────────────► [packages/authorization] authorize() + CASE_SWITCH_PRIMARY
         ├──────────────────────────► [packages/domain]        decideSwitchPrimary()（纯函数）
@@ -905,7 +905,7 @@ data backfill                  = 0
 
 ## API / Contract Impact
 
-- 新增 1 个端点契约 + 2 个 Zod schema；**不修改**既有 3 个 Case 端点语义。
+- 新增 1 个端点契约 + 2 个 Zod schema；**不修改**既有 4 个 Case business operation 语义（`createCase` / `listCases` / `getCase` / `createCaseMessage`）。
 - `ERROR_MAP` 新增：`CASE_ALREADY_PRIMARY: 409`、`CASE_CLOSED: 409`、`SAFETY_HOLD_BLOCKED: 409`、`STALE_PRIMARY_VIEW: 409`。
 - OpenAPI 必须可由 Zod 生成且 `openapi:check` 无 drift。
 
@@ -938,7 +938,7 @@ packages/authorization/src/authorize.ts # 新增 CASE_SWITCH_PRIMARY
 packages/domain/src/idempotency.ts      # 新增 CASE_SWITCH_PRIMARY 到 command type 列表
 packages/domain/src/cases.ts            # 新增 repository 函数（不改既有函数语义）
 packages/domain/src/case-primary-switch.ts       # 新增：纯决策函数 + payload 组装
-apps/server/api/src/routes/cases.ts     # 新增 1 个 POST（不动既有 3 个）
+apps/server/api/src/routes/cases.ts     # 新增 1 个 POST（不动既有 4 个 Case business operation：cases.ts 内 3 条 + routes/messages.ts 的 createCaseMessage）
 apps/server/api/src/plugins/error-handler.ts     # 新增 4 个错误码映射
 
 tests/domain/case-primary-switch-decision.test.ts        # 新增
@@ -1021,7 +1021,7 @@ tests/db/cases-events-metadata.test.ts  # 只改用例标题，断言体保留
 | 20 | 陈旧视图 | `conflicts` | 409；零写入 |
 | 21 | RLS 无上下文 | `rls` | SELECT 0 行；UPDATE 0 行；INSERT 被拒 |
 | 22 | 审计原子性 | `atomicity` | 注入审计失败 → 整体回滚；`cases` 未变；无事件；无幂等快照 |
-| 23 | 结构越界 | `scope` | 无越界表 / 路由；`/cases/current` 不存在；Case operation = 4；`case_events` 词汇恰为 3 值 |
+| 23 | 结构越界 | `scope` | 无越界表 / 路由；`/cases/current` 不存在；Case business operation = 5（Base 4 + Slice 7 delta 1）；`case_events` 词汇恰为 3 值 |
 
 ### V-3 命令与期望（Implement 阶段逐条真实执行）
 
@@ -1036,7 +1036,7 @@ tests/db/cases-events-metadata.test.ts  # 只改用例标题，断言体保留
 | 并发 | `bunx vitest run tests/db/case-primary-switch-concurrency.test.ts` | `count(*) <= 1`；无 500；连跑 3 次稳定 |
 | RLS | `bunx vitest run tests/db/case-primary-switch-rls.test.ts` | 无上下文 0 行 / 拒写；错误 Family 0 行 |
 | 越界守卫 | `bunx vitest run tests/integration/cases-scope.test.ts` | 仍禁止 `/cases/current`、pause、resume、close、recurrences…；仅放行新端点 |
-| OpenAPI | `bun run openapi:check` | PASS（no drift）；Case operation = 4；既有 3 个不变 |
+| OpenAPI | `bun run openapi:check` | PASS（no drift）；Case business operation = 5（Base 4 + Slice 7 delta 1）；既有 4 个不变 |
 | 全量回归 | `bunx vitest run` | 全绿；无 skip / expected-fail |
 | 静态守卫 | `bun run guard:static` | `PASS (0 violations)` |
 | 类型 | `bun run typecheck` | base + api 两个工程通过 |

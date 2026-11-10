@@ -95,7 +95,7 @@
 - [x] CHK065 Acceptance 20（陈旧视图 → 409 零写入）是否有落点？[PASS] — V-2 #20；D-6.3
 - [x] CHK066 Acceptance 21（RLS 无上下文 → 0 行 / 拒写）是否有落点？[PASS] — V-2 #21
 - [x] CHK067 Acceptance 22（审计原子性 → 整体回滚）是否有落点？[PASS] — V-2 #22
-- [x] CHK068 Acceptance 23（结构越界、Case operation = 4）是否有落点？[PASS] — V-2 #23；D-12.4
+- [x] CHK068 Acceptance 23（结构越界、Case business operation = 5（Base 4 + Slice 7 delta 1））是否有落点？[PASS] — V-2 #23；D-12.4
 - [x] CHK069 是否存在只有 Acceptance 编号、没有验证手段的场景？[PASS] — 否；V-2 每行都有测试文件 + 关键断言
 - [x] CHK070 是否存在无法在真实环境验证却被写成"已覆盖"的场景？[PASS] — 否；Acceptance 10—12 按 Spec Q3a 明确标注"domain 穷举为证据，不伪造 status"
 
@@ -219,13 +219,13 @@
 ## 13. OpenAPI
 
 - [x] CHK164 是否明确只新增 1 个 path 与 1 个 operation？[PASS] — D-12.4 预期结果
-- [x] CHK165 Case path 集合是否明确由 2 项变 3 项、operation 由 3 变 4？[PASS] — D-12.4；V-2 #23
-- [x] CHK166 既有 3 个 operation 的 operationId / security / tags 是否要求逐条保留？[PASS] — D-12.4 末条；D-14.2
+- [x] CHK165 Case path 集合是否明确由 4 项变 5 项、business operation 由 4 变 5？[PASS] — D-12.4；V-2 #23
+- [x] CHK166 既有 4 个 operation 的 operationId / security / tags 是否要求逐条保留？[PASS] — D-12.4 末条；D-14.2
 - [x] CHK167 `Idempotency-Key` 是否以 header parameter 出现，并复用既有组件而非内联新造？[PASS] — D-12.4 末条
 - [x] CHK168 是否明确 `packages/contracts/src/schemas.ts` 是唯一事实源、生成物不得手改？[PASS] — D-12.4 前两条
 - [x] CHK169 是否确认 `scripts/openapi-generate.mjs` 无需修改？[PASS] — D-12.4 第三条
 - [x] CHK170 `openapi-cases.test.ts` 中"把 `switch-primary` 当禁止片段"的那条断言是否被显式处置（而非假设它会自然通过）？[PASS] — D-14.2 明确"检查串不匹配新路径，必须改为正向断言"
-- [x] CHK171 是否明确新增 operation 的错误响应集合与既有三操作风格一致？[PASS] — D-12.1 错误列表
+- [x] CHK171 是否明确新增 operation 的错误响应集合与既有四操作风格一致？[PASS] — D-12.1 错误列表
 
 ## 14. Regression
 
