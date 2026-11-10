@@ -6,9 +6,10 @@
  *   - TERMINAL_UNUSABLE (not found / expired / declined / withdrawn / accepted
  *     / invalidated)
  *
- * The production adapter is BLOCKED BY SLICE 4 RUNTIME (T121). The in-memory
- * fixture below is contract-level only and MUST NOT be used as a second
- * invitation model in production.
+ * The production implementation is `Slice4InvitationPort`
+ * (`invitation-slice4-adapter.ts`, T121). The in-memory fixture below is
+ * contract-level only and MUST NOT be used as a second invitation model in
+ * production.
  */
 
 import type pg from 'pg';
@@ -36,7 +37,7 @@ export interface InvitationResolutionPort {
   ): Promise<InvitationResolution>;
 }
 
-/** Fail-closed default until the real Slice 4 runtime adapter exists (T121). */
+/** Explicit fail-closed port. Not the production default after T121. */
 export class UnavailableInvitationPort implements InvitationResolutionPort {
   async resolveByToken(): Promise<InvitationResolution> {
     return { status: 'TERMINAL_UNUSABLE' };
