@@ -22,6 +22,14 @@ T121–T124 按冻结 Tasks 标注 BLOCKED（Slice 4 runtime / 真实平台）�
 - GITHUB_HEAD_REF: <absent>
 - GITHUB_RUN_ID: <absent>
 - GITHUB_RUN_ATTEMPT: <absent>
+- 归档性质: **HISTORICAL** — 本文件正文为 HEAD `7da1ace2a1cf75ff6cbc83f030da03885ba3e567` 的 canonical 本地运行，不代表最终 Head
+- exact-head canonical verify-all provenance（final Head）:
+  - HEAD / GITHUB_SHA: `3a2acb1c62a544d559e77f35fb05e416ed282f4c`
+  - origin/main: `2b07c5321b3b10873c503d8f8bb5db61fade096c`
+  - CI run: `42797206415` attempt 2（workflow `CI`，event `push`，conclusion `success`）
+  - archive mode: no (canonical)
+  - artifact: `verify-all-3a2acb1c62a544d559e77f35fb05e416ed282f4c-2`（id `13754657976`，77529 bytes，digest `sha256:5f9fcad96c01d5970e1ba2b2292a34599354835c91ac821f6e8c4ff336ce5c6e`）
+  - 结论: `command PASS: 36` / `command FAIL: 0` / `NOT VERIFIED: 0` / `verify-all: PASS` / `tracked working tree (end): clean`
 - env DATABASE_URL: present
 - env MIGRATION_DATABASE_URL: present
 - env TEST_ADMIN_DATABASE_URL: present
