@@ -66,7 +66,7 @@
 - [x] T726 [P] [REQ:FR-004;FR-005;FR-011;FR-017;plan:D-8] 新增 `tests/integration/case-primary-switch-conflicts.test.ts`：已是 primary → 409 且版本不变、无事件；目标不存在 / 非法 UUID → 404（非 422）；陈旧视图 → 409 零写入；空 / 缺 / 空白 / 超长 reason → 422 且四张表零新增；**形状错误 + 陈旧视图同时存在 → 必须 422 而非 409**；未声明字段（含 body 内 `idempotencyKey`）→ 422 零写入；目标 CLOSED / SAFETY_HOLD 与 domain 覆盖交叉引用。文件：`tests/integration/case-primary-switch-conflicts.test.ts`。依赖：T712。 [VERIFY:`bunx vitest run tests/integration/case-primary-switch-conflicts.test.ts` 预期 RED，保留输出]
 - [x] T727 [P] [REQ:FR-003;plan:D-10.4] 新增 `tests/integration/case-primary-switch-authorization.test.ts`：普通成员 → 404 `CASE_NOT_FOUND`（响应体无 status/phase/primary/version，且与 `GET /cases/:id` 的 404 逐字节一致）；跨家庭 → 404 + 该 Family 上下文直查 0 行；guardian 非成员 → `CURRENT_FAMILY_NOT_FOUND` 且不出现 Case 层错误码；**断言响应中不含 `NOT_FAMILY_MANAGER`**。文件：`tests/integration/case-primary-switch-authorization.test.ts`。依赖：T712。 [VERIFY:`bunx vitest run tests/integration/case-primary-switch-authorization.test.ts` 预期 RED，保留输出]
 - [x] T728 [P] [REQ:FR-010;plan:D-7] 新增 `tests/integration/case-primary-switch-idempotency.test.ts`：**缺 `Idempotency-Key` header → 422**；header 长度 7 / 129 → 422；同 key 同 payload 重放返回原 body 且事件/审计/版本不变（**在 target 已成为 primary 之后重放**，专门锁 R-2）；同 key 不同目标 → 409 mismatch；同 key 不同 reason → 409 mismatch；同 key 不同视图 → 409 mismatch；并发同 key → 1 业务结果；失败请求不留幂等行。文件：`tests/integration/case-primary-switch-idempotency.test.ts`。依赖：T712。 [VERIFY:`bunx vitest run tests/integration/case-primary-switch-idempotency.test.ts` 预期 RED，保留输出]
-- [x] T729 [P] [REQ:FR-012;plan:V-2-22] 新增 `tests/integration/case-primary-switch-atomicity.test.ts`：临时 trigger（按 `resource_id` 精确限定本测试 Family）使 `business_audit_events` 插入失败 → 返回 500 固定体 → `cases.is_primary` / `version` 未变、`case_events` 无新增、`idempotency_keys` 无新增；`afterAll` 必须 drop trigger 并断言已清理。文件：`tests/integration/case-primary-switch-atomicity.test.ts`。依赖：T712。 [VERIFY:`bunx vitest run tests/integration/case-primary-switch-atomicity.test.ts` 预期 RED，保留输出]
+- [x] T729 [P] [REQ:FR-012;plan:V-2-22] `tests/integration/case-primary-switch-atomicity.test.ts`：四类真实 PostgreSQL fault——A `case_events` ASSIGNED 插入失败（已写 REVOKED 也必须回滚）/ B `business_audit_events` 插入失败（按 Family 精确限定临时 trigger）/ C 幂等回填 UPDATE 失败 / D 真实 CHECK 违反（SQLSTATE 23514，`NOT VALID` 且限定 Family）；每类返回 500 固定体 → `cases.is_primary` / `version` / `status` / `updated_at` 未变、`case_events` 与 audit 零新增、`idempotency_keys` 无 completed 或 reserved 残留；`afterAll` 必须 drop 注入物并断言 trigger / function / constraint 残留为 0。文件：`tests/integration/case-primary-switch-atomicity.test.ts`。依赖：T712。 [VERIFY:`bunx vitest run tests/integration/case-primary-switch-atomicity.test.ts` 4/4 PASS；输出含 3×`P0001` 与 1×`23514`；证据 `tests/evidence/007-remediation-iii-slice7-suite.md`]
 - [x] T730 [P] [REQ:FR-020;plan:D-14.1] 新增 `tests/integration/case-primary-switch-scope.test.ts`：Case business operation = 5（current main baseline 4：`createCase` / `listCases` / `getCase` / message；Slice 7 新增 `switchPrimaryCase`；Slice 7 delta = exactly 1）；真实 main 的 `participation-invites` 路径保留但不计入这 4 个 business operations；仅新增 `POST /api/v1/cases/:id/switch-primary`；`/cases/current`、`pause`、`resume`、`close`、`recurrences`、`assessments`、`participants`、`scene`、`problem-formulations`、`evidence`、`statements`、`observations` **仍全部不存在**（`messages` 与 `participation-invites` 属真实 main，不得断言不存在）；DB 越界表仍不存在；`cases` 禁止列仍不存在。文件：`tests/integration/case-primary-switch-scope.test.ts`。依赖：T712。 [VERIFY:`bunx vitest run tests/integration/case-primary-switch-scope.test.ts` 预期 RED，保留输出]
 - [x] T731 [P] [REQ:FR-002;plan:D-12.4] 新增 `tests/integration/openapi-case-primary-switch.test.ts`：`switchPrimaryCase` operation 的 operationId / tags / security / `Idempotency-Key` header parameter / params（`format: uuid`）/ requestBody strict 三字段 / 200 响应三字段 / 409 四类错误码 literal；既有四个 operation（含 `createCaseMessage`）的断言逐条保留。文件：`tests/integration/openapi-case-primary-switch.test.ts`。依赖：T712。 [VERIFY:`bunx vitest run tests/integration/openapi-case-primary-switch.test.ts` 预期 RED，保留输出]
 - [x] T732 [P] [REQ:FR-010;plan:D-7.5;R-14] 新增 `tests/domain/case-primary-switch-idempotency.test.ts`：用受控 fake `tx` 驱动 `acquireIdempotencySlot()` 五态——OWNED / REPLAY（含 body 与 status 原样返回）/ MISMATCH / POISONED（`response_status = 0`）/ CONTENTION（连续两次占位失败且查无行 → 有界重试耗尽，**恰好调用 reserve 2 次**）。文件：`tests/domain/case-primary-switch-idempotency.test.ts`。依赖：T712。 [VERIFY:`bunx vitest run tests/domain/case-primary-switch-idempotency.test.ts` 预期 RED，保留输出；断言 reserve 调用次数被显式记录]
@@ -195,7 +195,7 @@
 - [x] R09 [REQ:remediation:S7-II-L01] tasks / VERIFY / Evidence 精确描述真实代码与命令；历史无证据项标 `DEFERRED / NOT VERIFIED`，不伪造 RED 阶段。 [VERIFY:逐条重跑被校正的 VERIFY；证据文件 `tests/evidence/007-remediation-*.log` 存在且含命令 / exit code]
 - [x] R10 [REQ:remediation:S7-H03] 只补 lock evidence：collect / dedupe / ascending / 单条 `FOR UPDATE` / `pg_blocking_pids`；不重新设计锁。 [VERIFY:`bunx vitest run tests/domain/case-primary-switch-lock-order.test.ts tests/db/case-primary-switch-concurrency.test.ts` 全绿并归档真实输出]
 - [x] R11 [REQ:AGENTS:§5] 全量验证：typecheck / guard:static / openapi:generate / openapi:check / vitest / verify-all / db:evidence / governance。 [VERIFY:全部命令 exit 0；0 failed / 0 skipped / 0 pending / 0 todo（平台 BLOCKED 项如实标注）]
-- [ ] R12 [REQ:AGENTS:§3] 停止在 `REMEDIATION EVIDENCE COMPLETE — PENDING INDEPENDENT AUDIT`；不宣布 PASS / MERGE SAFE / READY TO MERGE，不 merge main。 [VERIFY:最终报告含 Start/Final Main、Start/Final Head、逐项 finding 状态、验证结果]
+- [x] R12 [REQ:AGENTS:§3] 停止在 `REMEDIATION EVIDENCE COMPLETE — PENDING INDEPENDENT AUDIT`；不宣布 PASS / MERGE SAFE / READY TO MERGE，不 merge main。 [VERIFY:最终报告含 Start/Final Main、Start/Final Head、merge base、ahead/behind、S7-III-M01—M04 + L01 状态与逐项真实结果；`tests/evidence/007-remediation-iii-*.md` 归档]
 
 ---
 
@@ -329,7 +329,7 @@
 | **S7-M01** 确定性锁顺序 | CLOSED。`lockCasesForSwitchPrimary` 收集 → 去重 → 升序 → 单一 `WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE`，路由不再调用逐行双锁；`tests/db/case-primary-switch-concurrency.test.ts` 用 `pg_blocking_pids` 机械证明小 id 先被持有，`tests/domain/case-primary-switch-lock-order.test.ts` 固定实现形状 |
 | Audit 幂等 / 原子性 | 重放后 `CASE_PRIMARY_SWITCHED` 计数仍为 1；审计写失败注入后 audit count delta = 0、事件 / 版本 / 幂等占位全部回滚 |
 | Targeted tests | 17 files / 98 tests PASS（含 roles、happy、authorization、authorization-fault、concurrency、atomicity、idempotency、schema、rls、scope、openapi、domain） |
-| Migration 三态 | fresh（6 APPLY）→ replay（0 new，全 SKIP）→ upgrade（001–003 已应用后仅 APPLY 004×2 + 005）：`db-evidence` PASS |
+| Migration 三态（历史，2026-11-09） | fresh（当时 6 个迁移文件 APPLY；`007_case_primary_switch.sql` 尚未创建）→ replay（0 new，全 SKIP）→ upgrade（001–003 已应用后仅 APPLY 004×2 + 005）：`db-evidence` PASS |
 | Frozen drift | `git diff 96ce56c..HEAD -- Docs specs/007-case-primary-switch/spec.md specs/007-case-primary-switch/plan.md` 为空 |
 
 ### Post-Audit Remediation（2026-11-10，本轮真实执行结果）
@@ -338,26 +338,42 @@
 |---|---|
 | Start Head | `008082fb4b3266b60808b91e59b745f33aa0f780` |
 | Start / Final Main | `2b07c5321b3b10873c503d8f8bb5db61fade096c` |
-| Merge base | `6af4ce87762abbdfd1a38c95616c9cc92d9d4776` |
+| Merge base | `2b07c5321b3b10873c503d8f8bb5db61fade096c`（`git merge-base HEAD origin/main` 实测） |
 | Main reconciliation | 普通 `git merge --no-ff origin/main`，8 个冲突文件全部解决；main 的 Slice 3 / Slice 4 / Slice 5 / PAUSED removal 能力保留 |
 | Migration | `db/migrations/007_case_primary_switch.sql`；main 15 个 audit literal + `CASE_PRIMARY_SWITCHED` = 16；main 12 个 command literal + `CASE_SWITCH_PRIMARY` = 13 |
-| Migration 三态 | `bun run db:evidence` PASS：fresh 8 APPLY / replay 0 new / populated upgrade 5 new, 3 previously applied |
-| S7-II-H01 | CLOSED：`tests/db/case-primary-switch-shared-vocabulary.test.ts` 5/5 PASS；`tests/db/migration-upgrade-evidence.test.ts` 2/2 PASS |
+| Migration 三态 | `bun run db:evidence` PASS：fresh 8 APPLY / replay 0 new / populated upgrade 5 new, 3 previously applied（该 upgrade 起点为 **001–003**，随后 APPLY 004×2 / 005 / 006 / 007） |
+| S7-II-H01 | CLOSED：`tests/db/case-primary-switch-shared-vocabulary.test.ts` 5/5 PASS；`tests/db/migration-upgrade-evidence.test.ts` 2/2 PASS（**起点为 001–003**，应用 004×2 / 005 / 006 / 007）。本轮新增 `tests/db/migration-case-primary-switch-upgrade.test.ts` 覆盖 **current-main 001–006 → 仅 APPLY 007** |
 | S7-II-H02 | CLOSED：`tests/integration/case-primary-switch-json-boundary.test.ts` 4/4 PASS（`__proto__` / malformed → 422；401 优先；zero writes；create/message 语义不变） |
 | S7-II-M01 | CLOSED：`tests/domain/case-primary-switch-reason-unicode.test.ts` 5/5 + `tests/integration/case-primary-switch-reason-persistence.test.ts` 2/2 PASS（NUL / 孤立 surrogate → 422；合法 Unicode 原值持久化） |
 | S7-II-M02 | CLOSED：`tests/integration/openapi-semantic-equivalence.test.ts` 13/13 PASS；frozen 与 generated timestamp pattern 严格相等；drift 检测 FAIL |
 | PAUSED reconciliation | `packages/domain/src/case-primary-switch.ts` / contracts / OpenAPI / decision 测试均为五态；case-level `PAUSED` 残留 0 |
-| Full regression | `bunx vitest run`：211 files / 1260 tests / 0 failed / 0 skipped |
-| typecheck / guard / OpenAPI / governance | `bun run typecheck` PASS；`bun run guard:static` PASS（0 violations）；`bun run openapi:check` PASS；`validate-governance.mjs` PASS |
+| Full regression | `bunx vitest run`：212 files / 1266 tests / 0 failed / 0 skipped（证据 `tests/evidence/007-remediation-iii-full-regression.md`） |
+| typecheck / guard / OpenAPI / governance | `bun run typecheck` PASS；`bun run guard:static` PASS（0 violations）；`bun run openapi:generate` 后 generated diff = 0；`bun run openapi:check` PASS；`node scripts/db-evidence.mjs --no-archive` PASS；`node scripts/verify-all.mjs` PASS（36 command PASS / 0 FAIL / NOT VERIFIED 0 / provenance PASS / tree clean）；`validate-governance.mjs` PASS |
 | FR / Acceptance | FR-001–FR-020 语义未变；Acceptance 1–23 语义未变（AC-23 计数机械修正为 5，Slice 7 delta = exactly 1） |
+
+### S7-III Remediation（2026-11-10，Re-Audit III 后）
+
+| Finding | 状态 | 改动 / 真实命令 | 证据 |
+|---|---|---|---|
+| S7-III-M01 Frozen baseline reconciliation | CLOSED | 13 处机械对账：`plan.md` 177/908/941/1024/1039，`checklists/requirements-quality.md` 98/222/223/228，`tasks.md` 71/123/126/165；统一为 Base 4 / Slice 7 delta exactly 1 / Final 5 | `git diff 4fb699d...HEAD -- specs` 仅上述 3 文件、13 处 |
+| S7-III-M02 scope test false-green | CLOSED | `case-primary-switch-scope.test.ts` 改为真实 Base 4（含 `createCaseMessage`）/ delta 1 / Final 5 / unexpected 0；`openapi-cases.test.ts` 补 `createCaseMessage` 与 responses 断言 | `bunx vitest run tests/integration/case-primary-switch-scope.test.ts tests/integration/openapi-cases.test.ts` → 2 files / 18 tests PASS |
+| S7-III-M03 current-main populated upgrade | CLOSED | 新增 `tests/db/migration-case-primary-switch-upgrade.test.ts`：001–006（7 文件）→ populated → 仅 APPLY 007 → replay | `bunx vitest run tests/db/migration-case-primary-switch-upgrade.test.ts` → 2 tests PASS；`tests/evidence/007-remediation-iii-targeted.md` |
+| S7-III-M04 atomicity repository coverage | CLOSED | `case-primary-switch-atomicity.test.ts` 覆盖 A 事件 / B 审计 / C 幂等回填 / D 真实 23514，四类 500 + 全量回滚 | `bunx vitest run tests/integration/case-primary-switch-atomicity.test.ts` → 4 tests PASS；`tests/evidence/007-remediation-iii-slice7-suite.md` |
+| S7-III-L01 Tasks / Evidence truthfulness | CLOSED | 修正旧 merge base、历史 6 APPLY 标注、upgrade 起点 001–003 注记、全量回归真实计数，R12 最后勾选 | `tests/evidence/007-remediation-iii-*.md` |
+
+| 门禁 | 结果 |
+|---|---|
+| Slice 7 targeted 套件 | 21 files / 116 tests PASS（`tests/evidence/007-remediation-iii-slice7-suite.md`） |
+| db:evidence | PASS（`tests/evidence/007-remediation-iii-db-evidence.md`） |
+| canonical verify-all | PASS（`tests/evidence/007-remediation-iii-verify-all.md`）；平台 BLOCKED 1 条 = 既有 T121–T124，与 Slice 7 regression 分开 |
 
 ---
 
 ## 本轮结束状态
 
 ```text
-POST-AUDIT REMEDIATION IN PROGRESS
+REMEDIATION EVIDENCE COMPLETE
 PENDING INDEPENDENT AUDIT
 ```
 
-**未解决计划问题：0。** 本轮允许修改 spec / plan / tasks / contracts / 验证脚本 / 测试 / 生成物；`Docs/**` authored diff 必须为 0。
+**未解决计划问题：0。** 本轮只修改 `plan.md` / `checklists/requirements-quality.md` / `tasks.md`（机械 baseline 对账 + 证据真值化）、Slice 7 测试与 `tests/evidence/007-remediation-iii-*.md`；`Docs/**`、`specs/007-case-primary-switch/spec.md`、`db/migrations/**` authored diff 均为 0。不得表述为 PASS / MERGE SAFE / READY TO MERGE。
