@@ -266,14 +266,16 @@ T001 / T002 / T005 PASS，且 Slice 4 runtime available
 
 ---
 
-## Phase 15 — Blocked by Slice 4 Runtime（late closeout only）
+## Phase 15 — Slice 4 Runtime Available（late closeout only）
 
-> 本 Phase 只承载真实 production adapter / 真实 Slice 4 integration / full Case C E2E。它 **不阻塞** Phase 1–14 的依赖关系；但本次 Decision A contract remediation 新增 Targeted Audit I gate，只有该审计 PASS 后 Phase 1–14 才可恢复 implementation。本 Phase 继续 BLOCKED，直到 Slice 4 runtime available。
+> 2026-11-10 late closeout：Slice 4 `PR #19` 已 merge `main`（`d5ea2613a7c4c94c3dbf5182a6a2ec0f86ad7f29`），T121–T124 的 runtime blocker 已解除。
+> 真实证据：`bun run typecheck` PASS；`tests/integration/identity-binding-invitation-contract.test.ts` 6 tests PASS；`tests/integration/identity-binding-slice4-e2e.test.ts` 5 tests PASS（production `Slice4InvitationPort`，无 mock invitation/participation truth）。
+> T124 仍缺真实微信平台证据：保持未勾选，标记 `NOT VERIFIED — REAL WECHAT PLATFORM EVIDENCE REQUIRED`，不得以本地模拟冒充。
 
-- [ ] T121 — **BLOCKED BY SLICE 4 RUNTIME**：实现 production `InvitationResolutionPort` adapter，读取 Slice 4 正式 invitation / participation 事实。不得创建 invitation 表、不得写 participation。 **Files**: `apps/server/api/src/identity-binding/invitation-slice4-adapter.ts`（仅当 Slice 4 runtime 已 merge） **Depends**: Slice 4 runtime merged main **Acceptance**: adapter 实现 port、`bun run typecheck` PASS、`tests/integration/identity-binding-invitation-contract.test.ts` PASS；真实 token resolve 由 Phase 15 E2E 验证 [REQ:plan D-16.2 / FR-026] [VERIFY:bun run typecheck && bun run vitest run tests/integration/identity-binding-invitation-contract.test.ts]
-- [ ] T122 — **BLOCKED BY SLICE 4 RUNTIME**：真实 invitation token → bootstrap → binding → Slice 4 accept 端到端。 **Files**: `tests/integration/identity-binding-slice4-e2e.test.ts` **Depends**: T121 **Acceptance**: 端到端 PASS；active participation 与 binding 联合断言 [REQ:AS-01 / FR-025 / CHK180] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
-- [ ] T123 — **BLOCKED BY SLICE 4 RUNTIME**：active participation 与 binding COMMITTED / PENDING / TERMINAL 的联合验收（Case C accept 必须显式）。 **Files**: 同上 **Depends**: T122 **Acceptance**: active participation = 0 for PENDING / TERMINAL；COMMITTED 仍需 accept [REQ:FR-025 / SC-012] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
-- [ ] T124 — **BLOCKED BY SLICE 4 RUNTIME**：U11 真实微信平台条件下「拒绝 / 撤回 / 过期 / 越权」联合验收。 **Files**: 同上 **Depends**: T123 **Acceptance**: 真实平台证据；否则 `NOT VERIFIED` [REQ:U11 / FR-026] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
+- [x] T121 — 实现 production `InvitationResolutionPort` adapter，读取 Slice 4 正式 invitation / participation 事实。不得创建 invitation 表、不得写 participation。 **Files**: `apps/server/api/src/identity-binding/invitation-slice4-adapter.ts` **Depends**: Slice 4 runtime merged main **Acceptance**: adapter 实现 port、`bun run typecheck` PASS、`tests/integration/identity-binding-invitation-contract.test.ts` PASS；真实 token resolve 由 Phase 15 E2E 验证 [REQ:plan D-16.2 / FR-026] [VERIFY:bun run typecheck && bun run vitest run tests/integration/identity-binding-invitation-contract.test.ts]
+- [x] T122 — 真实 invitation token → bootstrap → binding → Slice 4 accept 端到端。 **Files**: `tests/integration/identity-binding-slice4-e2e.test.ts` **Depends**: T121 **Acceptance**: 端到端 PASS；active participation 与 binding 联合断言 [REQ:AS-01 / FR-025 / CHK180] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
+- [x] T123 — active participation 与 binding COMMITTED / PENDING / TERMINAL 的联合验收（Case C accept 必须显式）。 **Files**: 同上 **Depends**: T122 **Acceptance**: active participation = 0 for PENDING / TERMINAL；COMMITTED 仍需 accept [REQ:FR-025 / SC-012] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
+- [ ] T124 — **NOT VERIFIED — REAL WECHAT PLATFORM EVIDENCE REQUIRED**：U11 真实微信平台条件下「拒绝 / 撤回 / 过期 / 越权」联合验收。 **Files**: 同上 **Depends**: T123 **Acceptance**: 真实平台证据；否则 `NOT VERIFIED` [REQ:U11 / FR-026] [VERIFY:bun run vitest run tests/integration/identity-binding-slice4-e2e.test.ts]
 
 ---
 
@@ -297,7 +299,7 @@ Phase 1 Schema/Migration
                                      └─ Phase 12 Audit/Anti-enum/RLS
                                           └─ Phase 13 Verification-only tests + suites
                                                └─ Phase 14 Governance/Full verification
-Phase 15 late closeout（不 gate Phase 1–14）— 等待 Slice 4 runtime；T121–T124 只能报告 BLOCKED，不得删除或 mock
+Phase 15 late closeout（不 gate Phase 1–14）— Slice 4 runtime 已 merge main；T121–T123 实现并验证，T124 保持 NOT VERIFIED（缺真实微信平台证据）
 ```
 
 ---
@@ -309,7 +311,7 @@ Phase 15 late closeout（不 gate Phase 1–14）— 等待 Slice 4 runtime；T1
 | Total tasks | 124（T001—T124） |
 | T001—T120 currently checked | 58 |
 | T001—T120 reopened by H-01/H-02/M-01—M-06 | 62 |
-| T121—T124 | 4，全部 BLOCKED BY SLICE 4 RUNTIME |
+| T121—T124 | T121–T123 实现并验证（typecheck / contract / E2E / full regression）；T124 `NOT VERIFIED — REAL WECHAT PLATFORM EVIDENCE REQUIRED` |
 
 不得用任何旧 remediation count 替代当前 checkbox 事实。reopened task只有开发完成新的RED→FIX→GREEN及对应proof后才能重新勾选。
 
