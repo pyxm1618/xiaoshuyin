@@ -4,6 +4,22 @@
 说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
 空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
 
+## Provenance
+
+- Classification: HISTORICAL
+- Repository: pyxm1618/xiaoshuyin
+- Branch: feat/007-case-primary-switch
+- HEAD: NOT RECORDED（运行时 HEAD 未随文记录；仅可证引入 commit 7da1ace2a1cf75ff6cbc83f030da03885ba3e567）
+- Base / Main: 2b07c5321b3b10873c503d8f8bb5db61fade096c
+- Command: node scripts/db-evidence.mjs（runner 输出推断；正文第 139 行含子命令 `bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts`）
+- Result: PASS
+- Exit Code: NOT RECORDED（正文第 152 行仅为 T011/T012 子命令 `exit code 0`，不可外推为 runner 整体退出码）
+- Test Count: 2 files / 19 tests（T011/T012）
+- Source / Provenance: local canonical run（无 GITHUB_SHA / GITHUB_RUN_ID / clean-tree 记录）
+- Provenance Status: HISTORICAL — PROVENANCE NOT FULLY VERIFIED
+
+本文件仅为历史辅助材料，**不是** Current Final Head 的 authoritative evidence；final-head authoritative 见 `tests/evidence/007-remediation-iii-verify-all.md`。
+
 ## 当前主库（已迁移） — quickstart §1 期望表逐项核对（真实查询输出）
 
 | 检查 | 期望 | 实际 | 结果 |

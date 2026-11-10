@@ -1,4 +1,22 @@
 
+ ## Provenance
+
+- Classification: HISTORICAL
+- Repository: pyxm1618/xiaoshuyin
+- Branch: feat/007-case-primary-switch
+- HEAD: NOT RECORDED（运行时 HEAD 未随文记录；仅可证引入 commit 7da1ace2a1cf75ff6cbc83f030da03885ba3e567）
+- Base / Main: 2b07c5321b3b10873c503d8f8bb5db61fade096c
+- Command: NOT RECORDED（正文仅保留全量 vitest 输出，未记录完整命令行）
+- Result: PASS
+- Exit Code: NOT RECORDED
+- Test Count: 212 files / 1266 tests
+- Source / Provenance: local canonical run（无 GITHUB_SHA / GITHUB_RUN_ID / clean-tree 记录）
+- Provenance Status: HISTORICAL — PROVENANCE NOT FULLY VERIFIED
+
+本文件仅为历史辅助材料，**不是** Current Final Head 的 authoritative evidence；final-head authoritative 见 `tests/evidence/007-remediation-iii-verify-all.md`。
+
+---
+
  RUN  v3.2.7 <repo>
 
  ✓ tests/integration/identity-binding-gate2-barrier-matrix.test.ts (14 tests) 6049ms

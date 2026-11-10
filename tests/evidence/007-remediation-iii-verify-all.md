@@ -23,13 +23,45 @@ T121–T124 按冻结 Tasks 标注 BLOCKED（Slice 4 runtime / 真实平台）�
 - GITHUB_RUN_ID: <absent>
 - GITHUB_RUN_ATTEMPT: <absent>
 - 归档性质: **HISTORICAL** — 本文件正文为 HEAD `7da1ace2a1cf75ff6cbc83f030da03885ba3e567` 的 canonical 本地运行，不代表最终 Head
-- exact-head canonical verify-all provenance（final Head）:
-  - HEAD / GITHUB_SHA: `3a2acb1c62a544d559e77f35fb05e416ed282f4c`
-  - origin/main: `2b07c5321b3b10873c503d8f8bb5db61fade096c`
-  - CI run: `42797206415` attempt 2（workflow `CI`，event `push`，conclusion `success`）
-  - archive mode: no (canonical)
-  - artifact: `verify-all-3a2acb1c62a544d559e77f35fb05e416ed282f4c-2`（id `13754657976`，77529 bytes，digest `sha256:5f9fcad96c01d5970e1ba2b2292a34599354835c91ac821f6e8c4ff336ce5c6e`）
-  - 结论: `command PASS: 36` / `command FAIL: 0` / `NOT VERIFIED: 0` / `verify-all: PASS` / `tracked working tree (end): clean`
+
+### Historical / Start Head
+
+- 正文 HEAD（上方 `HEAD:` 行，runner 原始输出）: `7da1ace2a1cf75ff6cbc83f030da03885ba3e567`（运行时点未记录；以引入提交为唯一可证锚点）
+- 轮次 Start Head: `3a2acb1c62a544d559e77f35fb05e416ed282f4c`
+- Base / Main: `2b07c5321b3b10873c503d8f8bb5db61fade096c`
+- Classification: HISTORICAL
+- Repository: pyxm1618/xiaoshuyin
+- Branch: feat/007-case-primary-switch
+- Command: node scripts/verify-all.mjs（canonical，archive=false）
+- Result: PASS
+- Exit Code: NOT RECORDED（正文仅记录子命令 exit 与汇总行）
+- Test Count: 26 条 Verification Plan 命令 / `command PASS: 36`
+- Source / Provenance: 正文 local canonical run；轮次 Start Head 时点 CI run `42797206415` attempt 2（workflow `CI`，event `push`，conclusion `success`）/ artifact `verify-all-3a2acb1c62a544d559e77f35fb05e416ed282f4c-2`（id `13754657976`，77529 bytes，digest `sha256:5f9fcad96c01d5970e1ba2b2292a34599354835c91ac821f6e8c4ff336ce5c6e`）
+- Provenance Status: HISTORICAL — PROVENANCE NOT FULLY VERIFIED
+- `3a2acb1c…` 仅作为轮次起点记录，本段不被用作最终 Head 的权威证据
+
+### Current / Final Head
+
+- Classification: CURRENT
+- Repository: pyxm1618/xiaoshuyin
+- Branch: feat/007-case-primary-switch
+- HEAD: 7003e65c9ac520107061b40cdf99329e48259cc8
+- Main: 2b07c5321b3b10873c503d8f8bb5db61fade096c
+- Merge Base: 2b07c5321b3b10873c503d8f8bb5db61fade096c
+- Ahead: 22
+- Behind: 0
+- Command: node scripts/verify-all.mjs（canonical，archive=false）
+- Result: PASS
+- Exit Code: 0
+- Test Count: 26 条 Verification Plan 命令 / `command PASS: 36`
+- CI Run: 42801880607
+- Artifact: verify-all-7003e65c9ac520107061b40cdf99329e48259cc8-1
+- Artifact ID: 13756312927
+- Artifact Digest: sha256:59ddc95b1ad60b89555b86c7a3607387a51b05bce95b90b952f96bc090b2d7f5
+- Source / Provenance: CI run `42801880607` attempt 1（workflow `CI`，event `push`，conclusion `success`，headSha = Final Head）；artifact 78592 bytes
+- Provenance Status: CURRENT — EXACT-HEAD VERIFIED
+- 汇总（artifact 内 `verify-all.log`）: `command PASS: 36` / `command FAIL: 0` / `NOT VERIFIED: 0` / `provenance: PASS` / `verify-all: PASS` / `tracked working tree (end): clean`
+- **authoritative**：final-head 证据只能是上述 CI run + artifact + digest；本文件正文 `7da1ace` 段与 Start Head 段均为历史辅助材料
 - env DATABASE_URL: present
 - env MIGRATION_DATABASE_URL: present
 - env TEST_ADMIN_DATABASE_URL: present
