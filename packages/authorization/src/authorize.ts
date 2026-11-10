@@ -25,6 +25,11 @@ export type Action =
   | 'GUARDIAN_CONSENT_REQUEST' | 'GUARDIAN_CONSENT_GRANT' | 'GUARDIAN_CONSENT_REVOKE'
   | 'MINOR_PROCESSING'
   | 'CASE_CREATE' | 'CASE_LIST' | 'CASE_READ'
+  // Slice 4 Case Participant Core.
+  | 'PARTICIPATION_INVITE_CREATE'
+  | 'PARTICIPATION_READ_SELF' | 'PARTICIPATION_ACCEPT_SELF'
+  | 'PARTICIPATION_DECLINE_SELF' | 'PARTICIPATION_WITHDRAW_SELF'
+  | 'PARTICIPATION_READ_MANAGER'
   // Slice 006 identity binding (plan D-12). Registered closed set; every entry
   // is fail-closed when its actor / facts / resource do not match.
   | 'IDENTITY_BINDING_BOOTSTRAP'
@@ -36,7 +41,7 @@ export type Action =
 
 export type Purpose =
   | 'SELF_IDENTITY' | 'FAMILY_MANAGEMENT' | 'GUARDIAN_CONSENT'
-  | 'IDENTITY_BINDING';
+  | 'PARTICIPATION' | 'IDENTITY_BINDING';
 
 /**
  * Structured resource contract (authorization-and-rls.md §2.1).
@@ -49,6 +54,7 @@ export type Resource =
   | { type: 'MEMBER'; familyId: string; personId: string }
   | { type: 'CONSENT'; familyId: string; consentId?: string }
   | { type: 'CASE'; familyId: string; caseId: string }
+  | { type: 'PARTICIPATION'; participationId: string }
   | { type: 'BINDING'; attemptId: string | null; personId: string | null };
 
 export type AgeBandValue = 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN';
@@ -56,7 +62,8 @@ export type AgeBandValue = 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN';
 export type DenyReason =
   | 'NO_ACTOR' | 'UNSUPPORTED_DIMENSION' | 'UNSUPPORTED_ACTION' | 'UNSUPPORTED_PURPOSE'
   | 'FAMILY_CONTEXT_REQUIRED' | 'NOT_FAMILY_MEMBER' | 'NOT_FAMILY_MANAGER'
-  | 'NOT_GUARDIAN' | 'AGE_BAND_UNKNOWN' | 'CASE_CONTEXT_REQUIRED' | 'AUTHORIZATION_ERROR'
+  | 'NOT_GUARDIAN' | 'AGE_BAND_UNKNOWN' | 'CASE_CONTEXT_REQUIRED'
+  | 'PARTICIPATION_CONTEXT_REQUIRED' | 'NOT_PARTICIPANT' | 'AUTHORIZATION_ERROR'
   // Slice 006 binding-specific denials.
   | 'BINDING_CONTEXT_INVALID' | 'NOT_BINDING_AUTHORIZED_CONFIRMER'
   | 'BINDING_AGE_UNSUPPORTED' | 'BINDING_TARGET_INVALID';
@@ -123,6 +130,8 @@ export interface AuthInput {
   product: 'V1';
   family: { familyId: string } | null;
   case: { caseId: string } | null;
+  /** Slice 4 target context. Absent is treated exactly like null (fail closed). */
+  participation?: { personId: string; state: 'PENDING' | 'ACTIVE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN' } | null;
   resource: Resource;
   action: Action;
   purpose: Purpose;
@@ -136,13 +145,16 @@ const REGISTERED_ACTIONS: Action[] = [
   'GUARDIAN_CONSENT_REQUEST', 'GUARDIAN_CONSENT_GRANT', 'GUARDIAN_CONSENT_REVOKE',
   'MINOR_PROCESSING',
   'CASE_CREATE', 'CASE_LIST', 'CASE_READ',
+  'PARTICIPATION_INVITE_CREATE', 'PARTICIPATION_READ_SELF',
+  'PARTICIPATION_ACCEPT_SELF', 'PARTICIPATION_DECLINE_SELF',
+  'PARTICIPATION_WITHDRAW_SELF', 'PARTICIPATION_READ_MANAGER',
   'IDENTITY_BINDING_BOOTSTRAP', 'IDENTITY_BINDING_CANDIDATE_DECIDE',
   'IDENTITY_BINDING_STATUS_SELF', 'IDENTITY_BINDING_SESSION_EXCHANGE',
   'IDENTITY_BINDING_CONFIRMER_LIST', 'IDENTITY_BINDING_SECOND_PARTY_DECIDE',
 ];
 
 const REGISTERED_PURPOSES: Purpose[] = [
-  'SELF_IDENTITY', 'FAMILY_MANAGEMENT', 'GUARDIAN_CONSENT', 'IDENTITY_BINDING',
+  'SELF_IDENTITY', 'FAMILY_MANAGEMENT', 'GUARDIAN_CONSENT', 'PARTICIPATION', 'IDENTITY_BINDING',
 ];
 
 const BINDING_ACTIONS: Action[] = [
@@ -164,6 +176,15 @@ const MANAGER_ACTIONS: Action[] = [
 
 /** Case actions (Slice 2 increment, plan D-6.2). */
 const CASE_ACTIONS: Action[] = ['CASE_CREATE', 'CASE_LIST', 'CASE_READ'];
+
+const PARTICIPATION_ACTIONS: Action[] = [
+  'PARTICIPATION_INVITE_CREATE',
+  'PARTICIPATION_READ_SELF',
+  'PARTICIPATION_ACCEPT_SELF',
+  'PARTICIPATION_DECLINE_SELF',
+  'PARTICIPATION_WITHDRAW_SELF',
+  'PARTICIPATION_READ_MANAGER',
+];
 
 const EMPTY_FACTS: AuthorizeFacts = {
   membership: false,
@@ -344,6 +365,52 @@ function decideCaseAction(
   return allow(true, input.purpose);
 }
 
+/**
+ * Slice 4 participation authorization. This decides who may attempt an
+ * operation; lifecycle state transitions stay in the participation domain.
+ */
+function decideParticipationAction(
+  input: AuthInput,
+  facts: AuthorizeFacts,
+  actorPersonId: string
+): Decision {
+  const participation = input.participation ?? null;
+
+  if (input.action === 'PARTICIPATION_INVITE_CREATE') {
+    if (input.purpose !== 'FAMILY_MANAGEMENT') return deny('UNSUPPORTED_PURPOSE');
+    if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
+    if (input.case === null) return deny('CASE_CONTEXT_REQUIRED');
+    if (input.resource.type !== 'CASE') return deny('NOT_FAMILY_MEMBER');
+    if (
+      input.resource.familyId !== input.family.familyId ||
+      input.resource.caseId !== input.case.caseId
+    ) {
+      return deny('NOT_FAMILY_MEMBER');
+    }
+    if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
+    if (facts.familyCreatedByPersonId !== actorPersonId) return deny('NOT_FAMILY_MANAGER');
+    return allow(true, input.purpose);
+  }
+
+  if (input.resource.type !== 'PARTICIPATION') {
+    return deny('PARTICIPATION_CONTEXT_REQUIRED');
+  }
+  if (participation === null) return deny('PARTICIPATION_CONTEXT_REQUIRED');
+
+  if (input.action === 'PARTICIPATION_READ_MANAGER') {
+    if (input.purpose !== 'FAMILY_MANAGEMENT') return deny('UNSUPPORTED_PURPOSE');
+    if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
+    if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
+    if (facts.familyCreatedByPersonId !== actorPersonId) return deny('NOT_FAMILY_MANAGER');
+    return allow(true, input.purpose);
+  }
+
+  if (input.purpose !== 'PARTICIPATION') return deny('UNSUPPORTED_PURPOSE');
+  if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
+  if (participation.personId !== actorPersonId) return deny('NOT_PARTICIPANT');
+  return allow(false, input.purpose, false);
+}
+
 export function authorize(input: AuthInput): Decision {
   try {
     // 1. Closed registries.
@@ -363,12 +430,17 @@ export function authorize(input: AuthInput): Decision {
 
     const actorPersonId = input.actor.personId;
 
-    // 4. Case actions: dedicated branch (D-6.2); Case increment only.
+    // 4. Participation actions use the single authorization entry point.
+    if (PARTICIPATION_ACTIONS.includes(input.action)) {
+      return decideParticipationAction(input, facts, actorPersonId);
+    }
+
+    // 5. Case actions: dedicated branch (D-6.2); Case increment only.
     if (CASE_ACTIONS.includes(input.action)) {
       return decideCaseAction(input, facts, actorPersonId);
     }
 
-    // 5. Non-Case actions keep Slice 1 fail-closed behavior on the case dimension.
+    // 6. Non-Case actions keep Slice 1 fail-closed behavior on the case dimension.
     if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
 
     // 6. Family-scoped actions require an explicit family context.

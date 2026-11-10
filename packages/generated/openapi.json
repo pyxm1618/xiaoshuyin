@@ -22,6 +22,9 @@
     },
     {
       "name": "case"
+    },
+    {
+      "name": "participation"
     }
   ],
   "paths": {
@@ -1234,6 +1237,583 @@
         }
       }
     },
+    "/api/v1/cases/{id}/participation-invites": {
+      "post": {
+        "tags": [
+          "participation"
+        ],
+        "operationId": "createParticipationInvite",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CaseIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateParticipationInviteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Participation invitation created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateParticipationInviteResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`PARTICIPATION_TARGET_INELIGIBLE`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationTargetIneligibleError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`CASE_NOT_FOUND` / `CURRENT_FAMILY_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/CaseNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CurrentFamilyNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Already exists / current-family ambiguity / idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ParticipationAlreadyExistsError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdempotencyPayloadMismatchError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CurrentFamilyAmbiguousError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "VALIDATION_ERROR"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/participation-invites/{token}": {
+      "get": {
+        "tags": [
+          "participation"
+        ],
+        "operationId": "getParticipationInvite",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InviteTokenPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Minimal safe invitation view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationInvitePublicView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`INVITATION_NOT_AVAILABLE`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationNotAvailableError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/participation-invites/{token}/accept": {
+      "post": {
+        "tags": [
+          "participation"
+        ],
+        "operationId": "acceptParticipationInvite",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InviteTokenPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptParticipationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Participation active or converged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`PARTICIPATION_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict / idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ParticipationStateConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdempotencyPayloadMismatchError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "VALIDATION_ERROR"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/participations/{id}/decline": {
+      "post": {
+        "tags": [
+          "participation"
+        ],
+        "operationId": "declineParticipation",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ParticipationIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineParticipationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Participation declined or converged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`PARTICIPATION_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict / idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ParticipationStateConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdempotencyPayloadMismatchError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "VALIDATION_ERROR"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/participations/{id}/withdraw": {
+      "post": {
+        "tags": [
+          "participation"
+        ],
+        "operationId": "withdrawParticipation",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ParticipationIdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WithdrawParticipationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Participation withdrawn or converged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`PARTICIPATION_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationNotFoundError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State conflict / idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ParticipationStateConflictError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/IdempotencyPayloadMismatchError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`VALIDATION_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "VALIDATION_ERROR"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/participations/{id}": {
+      "get": {
+        "tags": [
+          "participation"
+        ],
+        "operationId": "getParticipation",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ParticipationIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Minimal participation state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationResource"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`UNAUTHENTICATED`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthenticatedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`PARTICIPATION_NOT_FOUND`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParticipationNotFoundError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/identity-bindings/bootstrap": {
       "post": {
         "tags": [
@@ -1648,6 +2228,27 @@
           "format": "uuid"
         }
       },
+      "InviteTokenPath": {
+        "name": "token",
+        "in": "path",
+        "required": true,
+        "description": "不透明邀请 token；只作为 bearer capability，不构成 identity proof。",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "ParticipationIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "participation UUID（待验证参数；存在不代表有权访问）。",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
       "BindingContextHeader": {
         "name": "X-Binding-Context",
         "in": "header",
@@ -1672,6 +2273,29 @@
     },
     "schemas": {
       "Error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "ErrorResponse": {
         "type": "object",
         "properties": {
           "code": {
@@ -4087,6 +4711,400 @@
           "code": {
             "type": "string",
             "const": "BINDING_CONTEXT_INVALID"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "CaseParticipationState": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "ACTIVE",
+          "DECLINED",
+          "EXPIRED",
+          "WITHDRAWN"
+        ]
+      },
+      "ParticipationNotice": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "version",
+          "title",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "CreateParticipationInviteRequest": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "personId",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "CreateParticipationInviteResponse": {
+        "type": "object",
+        "properties": {
+          "participationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING"
+            ]
+          },
+          "inviteToken": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          }
+        },
+        "required": [
+          "participationId",
+          "caseId",
+          "personId",
+          "state",
+          "inviteToken",
+          "expiresAt",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "ParticipationInvitePublicView": {
+        "type": "object",
+        "properties": {
+          "participationId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "notice": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "version",
+              "title",
+              "body"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "participationId",
+          "state",
+          "expiresAt",
+          "notice"
+        ],
+        "additionalProperties": false
+      },
+      "AcceptParticipationRequest": {
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "DeclineParticipationRequest": {
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "WithdrawParticipationRequest": {
+        "type": "object",
+        "properties": {
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "idempotencyKey"
+        ],
+        "additionalProperties": false
+      },
+      "ParticipationResource": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "caseId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "ACTIVE",
+              "DECLINED",
+              "EXPIRED",
+              "WITHDRAWN"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+          },
+          "acceptedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "declinedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expiredAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "withdrawnAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "caseId",
+          "personId",
+          "state",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "ParticipationStateConflictError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "PARTICIPATION_STATE_CONFLICT"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "currentState": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "ACTIVE",
+              "DECLINED",
+              "EXPIRED",
+              "WITHDRAWN"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "currentState"
+        ],
+        "additionalProperties": false
+      },
+      "ParticipationAlreadyExistsError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "PARTICIPATION_ALREADY_EXISTS"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "ParticipationTargetIneligibleError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "PARTICIPATION_TARGET_INELIGIBLE"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "InvitationNotAvailableError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "INVITATION_NOT_AVAILABLE"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      },
+      "ParticipationNotFoundError": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "PARTICIPATION_NOT_FOUND"
+            ]
           },
           "message": {
             "type": "string"

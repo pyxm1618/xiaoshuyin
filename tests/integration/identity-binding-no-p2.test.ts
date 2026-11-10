@@ -57,8 +57,8 @@ interface ObjectSnapshot {
   committedAttempts: number;
   /** Pending contexts of this target that already carry a committed Account. */
   boundContexts: number;
-  /** Slice 4 participant table must not exist / never grow. */
-  participantTable: string | null;
+  /** Slice 5 must not create or mutate Slice 4 participation rows. */
+  participantRows: number;
 }
 
 describe('no-P2 invariants (T105)', () => {
@@ -107,7 +107,7 @@ describe('no-P2 invariants (T105)', () => {
             WHERE a.target_person_id = $1 AND c.committed_account_id IS NOT NULL`,
           [targetPersonId]
         ),
-        h.admin.query("SELECT to_regclass('public.case_participants') AS t"),
+        h.admin.query('SELECT count(*)::int AS n FROM case_participants WHERE person_id = $1', [targetPersonId]),
       ]);
     return {
       accounts: accounts.rows[0].n as number,
@@ -116,7 +116,7 @@ describe('no-P2 invariants (T105)', () => {
       p1Bound: p1.rows[0].n as number,
       committedAttempts: committed.rows[0].n as number,
       boundContexts: bound.rows[0].n as number,
-      participantTable: (participant.rows[0].t as string | null) ?? null,
+      participantRows: participant.rows[0].n as number,
     };
   }
 
@@ -136,7 +136,8 @@ describe('no-P2 invariants (T105)', () => {
     // No orphan Account (Phase C atomicity / rollback).
     expect(after.orphanAccounts, `${label}: orphan candidate accounts`).toBe(0);
     // No participant / invitation lifecycle side effect (Slice 4 boundary).
-    expect(after.participantTable, `${label}: participant table`).toBeNull();
+    expect(after.participantRows, `${label}: participant row delta`).toBe(before.participantRows);
+    expect(after.participantRows, `${label}: participant rows`).toBe(0);
 
     if (options.expectCommit) {
       // A successful commit may create exactly one candidate Account; anything
@@ -285,7 +286,8 @@ describe('no-P2 invariants (T105)', () => {
     ] as const) {
       expect(after.persons, `${label}: Person increment`).toBe(before.persons);
       expect(after.orphanAccounts, `${label}: orphan candidate accounts`).toBe(0);
-      expect(after.participantTable, `${label}: participant table`).toBeNull();
+      expect(after.participantRows, `${label}: participant row delta`).toBe(before.participantRows);
+      expect(after.participantRows, `${label}: participant rows`).toBe(0);
     }
 
     // successful commits ∈ {0,1}; binding increase <= 1.
@@ -314,7 +316,7 @@ describe('no-P2 invariants (T105)', () => {
     expect(sessions.statusCode).toBe(200);
   });
 
-  it('bootstrap replay adds no Person / P2 / binding / session, and no participant', async () => {
+  it('bootstrap replay adds no Person / P2 / binding / session, and no participation row', async () => {
     const target = await createTarget(h, 'nop2_replay', { ageBand: 'UNDER_14' });
     const code = `nop2_replay_${randomUUID()}`;
     const key = `nop2-replay-${randomUUID()}`;

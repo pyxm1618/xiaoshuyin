@@ -20,7 +20,6 @@ const APPROVED_TABLES = ['assertions', 'dialogue_messages', 'observations'];
 
 const FORBIDDEN_TABLES = [
   'evidence_items',
-  'case_participants',
   'participation_invites',
   'assessments',
   'problem_formulations',

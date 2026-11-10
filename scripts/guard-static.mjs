@@ -170,10 +170,10 @@ scanDir(ROOT, (file) => {
 });
 
 // ─── Rule 6: Scope guard ───
-// Forbidden out-of-scope tables (specs/002-case-core/data-model.md §8).
-// The list is additive: every table forbidden before stays forbidden.
+// Forbidden tables that remain out of scope after Slice 4 Case Participant Core.
+// `case_participants` is now an explicitly owned Slice 4 table; the remaining
+// future-slice tables stay forbidden.
 const FORBIDDEN_TABLE_PATTERNS = [
-  'case_participants',
   'participation_invites',
   'evidence_items',
   'problem_formulations',
@@ -393,12 +393,6 @@ scanDir(join(ROOT, 'db'), (file) => {
   for (const match of raw.matchAll(FORBIDDEN_PGTABLE)) {
     addViolation('R6-scope-guard', relPath, lineOf(raw, match.index ?? 0),
       `Forbidden out-of-scope table declared via pgTable: ${match[1]}`);
-  }
-  // Unchanged pre-existing rule: a bare reference to the participant table.
-  const bare = /\bcase_participants\b/i.exec(raw);
-  if (bare) {
-    addViolation('R6-scope-guard', relPath, lineOf(raw, bare.index),
-      'Forbidden out-of-scope table reference: case_participants');
   }
 });
 

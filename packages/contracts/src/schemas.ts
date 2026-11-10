@@ -361,3 +361,107 @@ export const InternalError = z.strictObject({
   code: z.enum(['INTERNAL_ERROR']),
   message: z.string(),
 });
+
+
+// ── Case Participant Core schemas (Slice 4) ─────────────────
+// Frozen surface: specs/004-case-participant-core/contracts/participation-api.openapi.yaml.
+// Idempotency is intentionally a request-body field for these four Slice 4
+// commands; client-controlled family/case/state/TTL fields are rejected.
+
+export const CaseParticipationState = z.enum([
+  'PENDING', 'ACTIVE', 'DECLINED', 'EXPIRED', 'WITHDRAWN',
+]);
+export type CaseParticipationStateType = z.infer<typeof CaseParticipationState>;
+
+const ParticipationIdempotencyKey = z.string().min(8).max(128);
+
+export const CreateParticipationInviteRequest = z.strictObject({
+  personId: z.string().uuid(),
+  idempotencyKey: ParticipationIdempotencyKey,
+});
+export type CreateParticipationInviteRequestType =
+  z.infer<typeof CreateParticipationInviteRequest>;
+
+export const AcceptParticipationRequest = z.strictObject({
+  idempotencyKey: ParticipationIdempotencyKey,
+});
+export type AcceptParticipationRequestType = z.infer<typeof AcceptParticipationRequest>;
+
+export const DeclineParticipationRequest = z.strictObject({
+  idempotencyKey: ParticipationIdempotencyKey,
+});
+export type DeclineParticipationRequestType = z.infer<typeof DeclineParticipationRequest>;
+
+export const WithdrawParticipationRequest = z.strictObject({
+  idempotencyKey: ParticipationIdempotencyKey,
+});
+export type WithdrawParticipationRequestType = z.infer<typeof WithdrawParticipationRequest>;
+
+export const ParticipationNotice = z.strictObject({
+  version: z.string().min(1),
+  title: z.string().min(1),
+  body: z.string().min(1),
+});
+export type ParticipationNoticeType = z.infer<typeof ParticipationNotice>;
+
+export const CreateParticipationInviteResponse = z.strictObject({
+  participationId: z.string().uuid(),
+  caseId: z.string().uuid(),
+  personId: z.string().uuid(),
+  state: z.enum(['PENDING']),
+  inviteToken: z.string().min(1).max(256),
+  expiresAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
+});
+export type CreateParticipationInviteResponseType =
+  z.infer<typeof CreateParticipationInviteResponse>;
+
+export const ParticipationInvitePublicView = z.strictObject({
+  participationId: z.string().uuid(),
+  state: z.enum(['PENDING']),
+  expiresAt: z.string().datetime(),
+  notice: ParticipationNotice,
+});
+export type ParticipationInvitePublicViewType =
+  z.infer<typeof ParticipationInvitePublicView>;
+
+export const ParticipationResource = z.strictObject({
+  id: z.string().uuid(),
+  caseId: z.string().uuid(),
+  personId: z.string().uuid(),
+  state: CaseParticipationState,
+  createdAt: z.string().datetime(),
+  acceptedAt: z.string().datetime().nullable().optional(),
+  declinedAt: z.string().datetime().nullable().optional(),
+  expiredAt: z.string().datetime().nullable().optional(),
+  withdrawnAt: z.string().datetime().nullable().optional(),
+});
+export type ParticipationResourceType = z.infer<typeof ParticipationResource>;
+
+export const ParticipationAlreadyExistsError = z.strictObject({
+  code: z.enum(['PARTICIPATION_ALREADY_EXISTS']),
+  message: z.string(),
+});
+export const ParticipationTargetIneligibleError = z.strictObject({
+  code: z.enum(['PARTICIPATION_TARGET_INELIGIBLE']),
+  message: z.string(),
+});
+export const InvitationNotAvailableError = z.strictObject({
+  code: z.enum(['INVITATION_NOT_AVAILABLE']),
+  message: z.string(),
+});
+export const ParticipationNotFoundError = z.strictObject({
+  code: z.enum(['PARTICIPATION_NOT_FOUND']),
+  message: z.string(),
+});
+export const ParticipationValidationError = z.strictObject({
+  code: z.enum(['VALIDATION_ERROR']),
+  message: z.string(),
+});
+export type ParticipationValidationErrorType = z.infer<typeof ParticipationValidationError>;
+
+export const ParticipationStateConflictError = z.strictObject({
+  code: z.enum(['PARTICIPATION_STATE_CONFLICT']),
+  message: z.string(),
+  currentState: CaseParticipationState,
+});

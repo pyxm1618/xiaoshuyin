@@ -1,8 +1,8 @@
 /**
- * T098 — contract-level invitation seam. 006 consumes only VALID /
- * TERMINAL_UNUSABLE from the Slice 4 contract. There is no invitation table,
- * no token service and no second lifecycle model. The production adapter
- * remains BLOCKED BY SLICE 4 RUNTIME (T121).
+ * T098 contract-level invitation seam. 006 consumes only VALID /
+ * TERMINAL_UNUSABLE from the Slice 4 contract. On this Slice 4 feature branch
+ * the authoritative case_participants lifecycle now exists, but the production
+ * adapter remains Slice 5 T121 post-merge work; 006 keeps no second model.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -47,7 +47,7 @@ describe('contract-level invitation seam (T098)', () => {
     expect(Object.keys(terminal)).toEqual(['status']);
   });
 
-  it('production adapter is fail-closed (BLOCKED BY SLICE 4 RUNTIME)', async () => {
+  it('UnavailableInvitationPort remains fail-closed until Slice 5 T121 post-merge wiring', async () => {
     const port = new UnavailableInvitationPort();
     expect(await port.resolveByToken(undefined as never, 'any')).toEqual({
       status: 'TERMINAL_UNUSABLE',
@@ -95,12 +95,13 @@ describe('contract-level invitation seam (T098)', () => {
     expect(contexts.rows[0].n).toBeGreaterThan(0);
   });
 
-  it('no second invitation model exists in the 006 schema', async () => {
+  it('Slice 4 case_participants is the only invitation/participation lifecycle table', async () => {
     const tables = await h.admin.query(
       `SELECT tablename FROM pg_tables
         WHERE schemaname = 'public'
-          AND (tablename LIKE '%invitation%' OR tablename LIKE '%participation%')`
+          AND (tablename LIKE '%invitation%' OR tablename LIKE '%participation%' OR tablename LIKE '%participant%')
+        ORDER BY tablename`
     );
-    expect(tables.rows).toEqual([]);
+    expect(tables.rows.map((r:any)=>r.tablename)).toEqual(['case_participants']);
   });
 });
