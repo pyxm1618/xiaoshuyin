@@ -284,7 +284,7 @@ export type ConsentListResponseType = z.infer<typeof ConsentListResponse>;
 // server can answer 422 with zero business writes.
 
 export const CaseStatus = z.enum([
-  'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+  'OPEN', 'WAITING', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
 ]);
 export type CaseStatusType = z.infer<typeof CaseStatus>;
 

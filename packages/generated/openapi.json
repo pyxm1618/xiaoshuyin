@@ -3917,7 +3917,6 @@
             "enum": [
               "OPEN",
               "WAITING",
-              "PAUSED",
               "LOST_CONTACT",
               "SAFETY_HOLD",
               "CLOSED"
@@ -3985,7 +3984,6 @@
                   "enum": [
                     "OPEN",
                     "WAITING",
-                    "PAUSED",
                     "LOST_CONTACT",
                     "SAFETY_HOLD",
                     "CLOSED"
@@ -4047,7 +4045,6 @@
         "enum": [
           "OPEN",
           "WAITING",
-          "PAUSED",
           "LOST_CONTACT",
           "SAFETY_HOLD",
           "CLOSED"
