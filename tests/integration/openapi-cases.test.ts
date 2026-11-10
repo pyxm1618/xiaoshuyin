@@ -132,7 +132,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'createdAt', 'id', 'phase', 'primary', 'status', 'updatedAt', 'version',
     ]);
     expect(schema.properties.status.enum).toEqual([
-      'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+      'OPEN', 'WAITING', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
     ]);
     expect(schema.properties.phase.enum).toEqual([
       'INTAKE', 'ASSESSMENT', 'PROBLEM_FORMULATION', 'GOALS',

@@ -102,7 +102,7 @@ describe('Case response contracts (T030)', () => {
 
   it('CaseStatus keeps the frozen vocabulary', () => {
     expect(CaseStatus.options).toEqual([
-      'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+      'OPEN', 'WAITING', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
     ]);
   });
 

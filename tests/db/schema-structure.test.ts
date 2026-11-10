@@ -48,7 +48,7 @@ describe('Schema Structure', () => {
       'profile_attribute', 'profile_value_status', 'provenance_source',
     ]);
     expect(enumMap['case_status']).toEqual([
-      'OPEN', 'WAITING', 'PAUSED', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
+      'OPEN', 'WAITING', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
     ]);
     expect(enumMap['case_phase']).toEqual([
       'INTAKE', 'ASSESSMENT', 'PROBLEM_FORMULATION', 'GOALS',
