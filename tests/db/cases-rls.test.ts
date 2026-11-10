@@ -193,11 +193,28 @@ describe('cases RLS (T022)', () => {
     }
   });
 
-  it('runtime role cannot UPDATE cases or DELETE case_events', async () => {
-    // Each attempt runs in its own transaction: a privilege error aborts the
-    // transaction, so they cannot share one.
+  it('runtime role has only the Slice 7 column-level UPDATE grant on cases', async () => {
+    // Allowed: exactly the three columns granted by 007_case_primary_switch.sql.
+    const allowed = await app.connect();
+    try {
+      await allowed.query('BEGIN');
+      await allowed.query('SELECT app.set_identity_context($1, $2)', [accountA, 'FAMILY_MANAGEMENT']);
+      await allowed.query('SELECT app.set_family_context($1, $2, $3)', [familyA, personA, 'FAMILY_MANAGEMENT']);
+      const upd = await allowed.query(
+        `UPDATE cases SET is_primary = false, version = version + 1, updated_at = now()
+         WHERE id = $1 RETURNING id`,
+        [caseA]
+      );
+      expect(upd.rowCount).toBe(1);
+    } finally {
+      await allowed.query('ROLLBACK').catch(() => {});
+      allowed.release();
+    }
+
+    // Rejected: un-granted columns and table-level DELETE / case_events delete.
     for (const statement of [
-      "UPDATE cases SET version = 2 WHERE id = '" + caseA + "'",
+      "UPDATE cases SET status = 'CLOSED' WHERE id = '" + caseA + "'",
+      "DELETE FROM cases WHERE id = '" + caseA + "'",
       "DELETE FROM case_events WHERE case_id = '" + caseA + "'",
     ]) {
       const client = await app.connect();

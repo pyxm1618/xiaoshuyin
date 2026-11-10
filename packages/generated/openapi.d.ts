@@ -228,6 +228,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{id}/switch-primary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["switchPrimaryCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{id}/messages": {
         parameters: {
             query?: never;
@@ -865,6 +881,43 @@ export interface components {
             caseId: string;
             /** Format: date-time */
             recordedAt: string;
+        };
+        SwitchPrimaryCaseRequest: {
+            reason: string;
+            expectedPrimaryCaseId: string | null;
+            expectedPrimaryVersion: number | null;
+        };
+        SwitchPrimaryCaseResponse: {
+            primary: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                status: "OPEN" | "WAITING" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+                /** @enum {string} */
+                phase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
+                primary: boolean;
+                version: number;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            };
+            previousPrimary: {
+                /** Format: uuid */
+                id: string;
+                /** @enum {string} */
+                status: "OPEN" | "WAITING" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+                /** @enum {string} */
+                phase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
+                primary: boolean;
+                version: number;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+            } | null;
+            /** Format: date-time */
+            switchedAt: string;
         };
         UnauthenticatedError: {
             /** @enum {string} */
@@ -1915,6 +1968,80 @@ export interface operations {
                 };
             };
             /** @description `CURRENT_FAMILY_AMBIGUOUS`（current Family 无法唯一解析，真实可达） / `IDEMPOTENCY_PAYLOAD_MISMATCH`（共享幂等合同；当前 public HTTP command shape 下不可达） */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    switchPrimaryCase: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SwitchPrimaryCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description 主线 Case 已切换 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SwitchPrimaryCaseResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"] | components["schemas"]["CaseNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH` / `CASE_ALREADY_PRIMARY` / `CASE_CLOSED` / `SAFETY_HOLD_BLOCKED` / `STALE_PRIMARY_VIEW` */
             409: {
                 headers: {
                     [name: string]: unknown;

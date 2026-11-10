@@ -423,15 +423,16 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-    check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006_case_status_paused_removal', true,
+check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006_case_status_paused_removal + 007_case_primary_switch', true,
       /APPLY 004_evidence_core\.sql/.test(output) &&
       /APPLY 004_identity_binding_runtime\.sql/.test(output) &&
       /APPLY 005_case_participant_core\.sql/.test(output) &&
-      /APPLY 006_case_status_paused_removal\.sql/.test(output));
+      /APPLY 006_case_status_paused_removal\.sql/.test(output) &&
+      /APPLY 007_case_primary_switch\.sql/.test(output));
     check(
-      'upgrade 结果为 4 new / 3 previously applied',
+      'upgrade 结果为 5 new / 3 previously applied',
       true,
-      /Migration complete: 4 new, 3 previously applied\./.test(output)
+      /Migration complete: 5 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -439,7 +440,7 @@ async function upgradeFrom003() {
     const afterRecords = await client.query(
       'SELECT filename, applied_at FROM schema_migrations ORDER BY filename'
     );
-    check('schema_migrations 追加 004 记录', [
+    check('schema_migrations records added for 004 and 005', [
       '001_initial_schema.sql',
       '002_case_core.sql',
       '003_case_idempotency_key_bytes.sql',
@@ -447,6 +448,7 @@ async function upgradeFrom003() {
       '004_identity_binding_runtime.sql',
       '005_case_participant_core.sql',
       '006_case_status_paused_removal.sql',
+      '007_case_primary_switch.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',

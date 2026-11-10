@@ -1,0 +1,222 @@
+openapi: 3.0.3
+info:
+  title: Xiaoshuyin — Slice 7 Case Primary Switch
+  version: 1.0.0
+paths:
+  /api/v1/cases/{id}/switch-primary:
+    post:
+      tags:
+        - case
+      operationId: switchPrimaryCase
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwitchPrimaryCaseRequest'
+      responses:
+        '200':
+          description: 主线 Case 已切换
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SwitchPrimaryCaseResponse'
+        '401':
+          description: '`UNAUTHENTICATED`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: '`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`'
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/CurrentFamilyNotFoundError'
+                  - $ref: '#/components/schemas/CaseNotFoundError'
+        '409':
+          description: '`CURRENT_FAMILY_AMBIGUOUS` / `IDEMPOTENCY_PAYLOAD_MISMATCH` / `CASE_ALREADY_PRIMARY` / `CASE_CLOSED` / `SAFETY_HOLD_BLOCKED` / `STALE_PRIMARY_VIEW`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          description: '`VALIDATION_ERROR`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: '`INTERNAL_ERROR`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  parameters:
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 关键命令幂等键（§8.5）。同 key 不同 payload → 409。
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  schemas:
+    SwitchPrimaryCaseRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+        expectedPrimaryCaseId:
+          anyOf:
+            - type: string
+              format: uuid
+              pattern: '^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$'
+            - type: 'null'
+        expectedPrimaryVersion:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 9007199254740991
+            - type: 'null'
+      required:
+        - reason
+        - expectedPrimaryCaseId
+        - expectedPrimaryVersion
+      additionalProperties: false
+    SwitchPrimaryCaseResponse:
+      type: object
+      properties:
+        primary:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              pattern: '^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$'
+            status:
+              type: string
+              enum: [OPEN, WAITING, LOST_CONTACT, SAFETY_HOLD, CLOSED]
+            phase:
+              type: string
+              enum:
+                - INTAKE
+                - ASSESSMENT
+                - PROBLEM_FORMULATION
+                - GOALS
+                - PLANNING
+                - EXECUTION
+                - REVIEW
+                - MAINTENANCE
+                - CLOSED
+            primary:
+              type: boolean
+            version:
+              type: integer
+              minimum: 1
+              maximum: 9007199254740991
+            createdAt:
+              type: string
+              format: date-time
+              pattern: '^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$'
+            updatedAt:
+              type: string
+              format: date-time
+              pattern: '^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$'
+          required: [id, status, phase, primary, version, createdAt, updatedAt]
+          additionalProperties: false
+        previousPrimary:
+          anyOf:
+            - type: object
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                  pattern: '^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$'
+                status:
+                  type: string
+                  enum: [OPEN, WAITING, LOST_CONTACT, SAFETY_HOLD, CLOSED]
+                phase:
+                  type: string
+                  enum:
+                    - INTAKE
+                    - ASSESSMENT
+                    - PROBLEM_FORMULATION
+                    - GOALS
+                    - PLANNING
+                    - EXECUTION
+                    - REVIEW
+                    - MAINTENANCE
+                    - CLOSED
+                primary:
+                  type: boolean
+                version:
+                  type: integer
+                  minimum: 1
+                  maximum: 9007199254740991
+                createdAt:
+                  type: string
+                  format: date-time
+                  pattern: '^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$'
+                updatedAt:
+                  type: string
+                  format: date-time
+                  pattern: '^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$'
+              required: [id, status, phase, primary, version, createdAt, updatedAt]
+              additionalProperties: false
+            - type: 'null'
+        switchedAt:
+          type: string
+          format: date-time
+          pattern: '^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z))$'
+      required: [primary, previousPrimary, switchedAt]
+      additionalProperties: false
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: {}
+      required: [code, message]
+      additionalProperties: false
+    CurrentFamilyNotFoundError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [CURRENT_FAMILY_NOT_FOUND]
+        message:
+          type: string
+      required: [code, message]
+      additionalProperties: false
+    CaseNotFoundError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum: [CASE_NOT_FOUND]
+        message:
+          type: string
+      required: [code, message]
+      additionalProperties: false

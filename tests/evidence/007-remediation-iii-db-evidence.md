@@ -1,0 +1,171 @@
+# T067 — Database / RLS / Migration Evidence
+生成时间: 2026-11-10T10:03:17.240Z
+
+说明：以下每个数值均来自 pg_catalog / information_schema 的真实查询输出；
+空库重建与 replay 为真实执行的 db:migrate，不是描述性声明。
+
+## Provenance
+
+- Classification: HISTORICAL
+- Repository: pyxm1618/xiaoshuyin
+- Branch: feat/007-case-primary-switch
+- HEAD: NOT RECORDED（运行时 HEAD 未随文记录；仅可证引入 commit 7da1ace2a1cf75ff6cbc83f030da03885ba3e567）
+- Base / Main: 2b07c5321b3b10873c503d8f8bb5db61fade096c
+- Command: node scripts/db-evidence.mjs（runner 输出推断；正文第 139 行含子命令 `bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts`）
+- Result: PASS
+- Exit Code: NOT RECORDED（正文第 152 行仅为 T011/T012 子命令 `exit code 0`，不可外推为 runner 整体退出码）
+- Test Count: 2 files / 19 tests（T011/T012）
+- Source / Provenance: local canonical run（无 GITHUB_SHA / GITHUB_RUN_ID / clean-tree 记录）
+- Provenance Status: HISTORICAL — PROVENANCE NOT FULLY VERIFIED
+
+本文件仅为历史辅助材料，**不是** Current Final Head 的 authoritative evidence；final-head authoritative 见 `tests/evidence/007-remediation-iii-verify-all.md`。
+
+## 当前主库（已迁移） — quickstart §1 期望表逐项核对（真实查询输出）
+
+| 检查 | 期望 | 实际 | 结果 |
+|---|---|---|---|
+| 14 张业务表 relrowsecurity/relforcerowsecurity | true/true × 14 | ["assertions=true/true","business_audit_events=true/true","case_events=true/true","cases=true/true","consent_records=true/true","dialogue_messages=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","observations=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+| 5 张 006 binding 表 relrowsecurity/relforcerowsecurity | true/true × 5 | ["binding_attempts=true/true","binding_confirmations=true/true","binding_operation_keys=true/true","binding_pending_contexts=true/true","identity_binding_audit_events=true/true"] | PASS |
+| accounts 无 RLS | false/false | false/false | PASS |
+| 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
+| xiaoshuyin_app rolbypassrls | false | false | PASS |
+| xiaoshuyin_migrator rolbypassrls | false | false | PASS |
+| uuidv7() 默认值的 19 张 id 表 | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_profile_values","persons"] | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","case_participants","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_profile_values","persons"] | PASS |
+| uuidv7 默认值表达式 | uuidv7() × 19 | ["uuidv7()"] | PASS |
+| 枚举覆盖 Slice 1 + 3 + 006（20） | ["account_status","age_band","assertion_kind","binding_attempt_state","binding_confirmation_kind","binding_confirmer_authority","binding_operation_command","binding_operation_scope","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","assertion_kind","binding_attempt_state","binding_confirmation_kind","binding_confirmer_authority","binding_operation_command","binding_operation_scope","case_participation_state","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | PASS |
+| age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
+| profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
+| 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
+| 业务表覆盖 Slice 1 + 3 + 006（20） | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_compliance_profiles","person_profile_values","persons"] | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","case_participants","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_compliance_profiles","person_profile_values","persons"] | PASS |
+| RLS policy 覆盖 006 追加策略 | ["binding_context_token_scope","binding_context_attempt_scope","binding_context_no_attempt_identity_scope","binding_attempts_identity_scope","binding_attempts_operation_replay","binding_attempts_target_scope","binding_attempts_commit_scope","binding_attempts_confirmer_replay","binding_confirmations_attempt_scope","binding_confirmations_target_scope","binding_operation_keys_scope","binding_operation_keys_bootstrap_fingerprint","identity_binding_audit_insert_scope","persons_binding_target_read","persons_binding_candidate_account_read","persons_binding_commit_update","families_binding_read","family_members_binding_read","pcp_binding_read","consent_binding_read","persons_binding_lock","persons_binding_candidate_lock","families_binding_lock","family_members_binding_lock","pcp_binding_lock","consent_binding_lock"] | ["binding_attempts_commit_scope","binding_attempts_confirmer_replay","binding_attempts_identity_scope","binding_attempts_operation_replay","binding_attempts_target_scope","binding_confirmations_attempt_scope","binding_confirmations_target_scope","binding_context_attempt_scope","binding_context_no_attempt_identity_scope","binding_context_token_scope","binding_operation_keys_bootstrap_fingerprint","binding_operation_keys_scope","consent_binding_lock","consent_binding_read","families_binding_lock","families_binding_read","family_members_binding_lock","family_members_binding_read","identity_binding_audit_insert_scope","pcp_binding_lock","pcp_binding_read","persons_binding_candidate_account_read","persons_binding_candidate_lock","persons_binding_commit_update","persons_binding_lock","persons_binding_target_read"] | PASS |
+| RLS policy 总数 >= Slice 1/3 基线 + 006（45） | >= 45 | 48 | PASS |
+| H-01 pairing issuance columns | pairing_expires_at,pairing_issued_at,pairing_issuance_id | ["pairing_expires_at","pairing_issuance_id","pairing_issued_at"] | PASS |
+| consent + binding 不可变触发器 | ["consent_records_guard","binding_confirmations_no_update_delete","identity_binding_audit_no_update_delete"] | ["binding_confirmations_no_update_delete","consent_records_guard","identity_binding_audit_no_update_delete"] | PASS |
+| persons 无 family_id / source_kind / role | 0 | 0 | PASS |
+| persons.account_id UNIQUE | true | true | PASS |
+| family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
+
+## 空库重建 + migration replay（真实执行）
+  CREATE DATABASE xiaoshuyin_evidence_<tmp> OWNER xiaoshuyin_migrator — OK
+  第一次 db:migrate (空库):
+    APPLY 001_initial_schema.sql
+      APPLY 002_case_core.sql
+      APPLY 003_case_idempotency_key_bytes.sql
+      APPLY 004_evidence_core.sql
+      APPLY 004_identity_binding_runtime.sql
+      APPLY 005_case_participant_core.sql
+      APPLY 006_case_status_paused_removal.sql
+      APPLY 007_case_primary_switch.sql
+    
+    Migration complete: 8 new, 0 previously applied.
+    Verified: app role has no DDL permissions.
+
+## 空库重建结果 — quickstart §1 期望表逐项核对（真实查询输出）
+
+| 检查 | 期望 | 实际 | 结果 |
+|---|---|---|---|
+| 14 张业务表 relrowsecurity/relforcerowsecurity | true/true × 14 | ["assertions=true/true","business_audit_events=true/true","case_events=true/true","cases=true/true","consent_records=true/true","dialogue_messages=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","observations=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+| 5 张 006 binding 表 relrowsecurity/relforcerowsecurity | true/true × 5 | ["binding_attempts=true/true","binding_confirmations=true/true","binding_operation_keys=true/true","binding_pending_contexts=true/true","identity_binding_audit_events=true/true"] | PASS |
+| accounts 无 RLS | false/false | false/false | PASS |
+| 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
+| xiaoshuyin_app rolbypassrls | false | false | PASS |
+| xiaoshuyin_migrator rolbypassrls | false | false | PASS |
+| uuidv7() 默认值的 19 张 id 表 | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_profile_values","persons"] | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","case_participants","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_profile_values","persons"] | PASS |
+| uuidv7 默认值表达式 | uuidv7() × 19 | ["uuidv7()"] | PASS |
+| 枚举覆盖 Slice 1 + 3 + 006（20） | ["account_status","age_band","assertion_kind","binding_attempt_state","binding_confirmation_kind","binding_confirmer_authority","binding_operation_command","binding_operation_scope","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","assertion_kind","binding_attempt_state","binding_confirmation_kind","binding_confirmer_authority","binding_operation_command","binding_operation_scope","case_participation_state","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | PASS |
+| age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
+| profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
+| 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
+| 业务表覆盖 Slice 1 + 3 + 006（20） | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_compliance_profiles","person_profile_values","persons"] | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","case_participants","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_compliance_profiles","person_profile_values","persons"] | PASS |
+| RLS policy 覆盖 006 追加策略 | ["binding_context_token_scope","binding_context_attempt_scope","binding_context_no_attempt_identity_scope","binding_attempts_identity_scope","binding_attempts_operation_replay","binding_attempts_target_scope","binding_attempts_commit_scope","binding_attempts_confirmer_replay","binding_confirmations_attempt_scope","binding_confirmations_target_scope","binding_operation_keys_scope","binding_operation_keys_bootstrap_fingerprint","identity_binding_audit_insert_scope","persons_binding_target_read","persons_binding_candidate_account_read","persons_binding_commit_update","families_binding_read","family_members_binding_read","pcp_binding_read","consent_binding_read","persons_binding_lock","persons_binding_candidate_lock","families_binding_lock","family_members_binding_lock","pcp_binding_lock","consent_binding_lock"] | ["binding_attempts_commit_scope","binding_attempts_confirmer_replay","binding_attempts_identity_scope","binding_attempts_operation_replay","binding_attempts_target_scope","binding_confirmations_attempt_scope","binding_confirmations_target_scope","binding_context_attempt_scope","binding_context_no_attempt_identity_scope","binding_context_token_scope","binding_operation_keys_bootstrap_fingerprint","binding_operation_keys_scope","consent_binding_lock","consent_binding_read","families_binding_lock","families_binding_read","family_members_binding_lock","family_members_binding_read","identity_binding_audit_insert_scope","pcp_binding_lock","pcp_binding_read","persons_binding_candidate_account_read","persons_binding_candidate_lock","persons_binding_commit_update","persons_binding_lock","persons_binding_target_read"] | PASS |
+| RLS policy 总数 >= Slice 1/3 基线 + 006（45） | >= 45 | 48 | PASS |
+| H-01 pairing issuance columns | pairing_expires_at,pairing_issued_at,pairing_issuance_id | ["pairing_expires_at","pairing_issuance_id","pairing_issued_at"] | PASS |
+| consent + binding 不可变触发器 | ["consent_records_guard","binding_confirmations_no_update_delete","identity_binding_audit_no_update_delete"] | ["binding_confirmations_no_update_delete","consent_records_guard","identity_binding_audit_no_update_delete"] | PASS |
+| persons 无 family_id / source_kind / role | 0 | 0 | PASS |
+| persons.account_id UNIQUE | true | true | PASS |
+| family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
+  第二次 db:migrate (replay):
+    SKIP 001_initial_schema.sql (already applied)
+      SKIP 002_case_core.sql (already applied)
+      SKIP 003_case_idempotency_key_bytes.sql (already applied)
+      SKIP 004_evidence_core.sql (already applied)
+      SKIP 004_identity_binding_runtime.sql (already applied)
+      SKIP 005_case_participant_core.sql (already applied)
+      SKIP 006_case_status_paused_removal.sql (already applied)
+      SKIP 007_case_primary_switch.sql (already applied)
+    
+    Migration complete: 0 new, 8 previously applied.
+    Verified: app role has no DDL permissions.
+| migration replay 为 no-op（对象集合不变） | enum:account_status|enum:age_band|enum:assertion_kind|enum:binding_attempt_state|enum:binding_confirmation_kind|enum:binding_confirmer_authority|enum:binding_operation_command|enum:binding_operation_scope|enum:case_participation_state|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:evidence_confirmation_status|enum:evidence_time_state|enum:observation_value_state|enum:observation_value_type|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:assertions_insert|policy:assertions_select|policy:assertions_update|policy:audit_scope|policy:binding_attempts_commit_scope|policy:binding_attempts_confirmer_replay|policy:binding_attempts_identity_scope|policy:binding_attempts_operation_replay|policy:binding_attempts_target_scope|policy:binding_confirmations_attempt_scope|policy:binding_confirmations_target_scope|policy:binding_context_attempt_scope|policy:binding_context_no_attempt_identity_scope|policy:binding_context_token_scope|policy:binding_operation_keys_bootstrap_fingerprint|policy:binding_operation_keys_scope|policy:case_events_family_scope|policy:case_participants_family_scope|policy:case_participants_invite_token_read|policy:case_participants_self_read|policy:cases_family_scope|policy:consent_binding_lock|policy:consent_binding_read|policy:consent_scope|policy:dialogue_messages_insert|policy:dialogue_messages_select|policy:families_binding_lock|policy:families_binding_read|policy:families_scope|policy:family_members_binding_lock|policy:family_members_binding_read|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:identity_binding_audit_insert_scope|policy:observations_insert|policy:observations_select|policy:observations_update|policy:pcp_binding_lock|policy:pcp_binding_read|policy:pcp_scope|policy:persons_binding_candidate_account_read|policy:persons_binding_candidate_lock|policy:persons_binding_commit_update|policy:persons_binding_lock|policy:persons_binding_target_read|policy:persons_scope|policy:ppv_scope|table:accounts|table:assertions|table:binding_attempts|table:binding_confirmations|table:binding_operation_keys|table:binding_pending_contexts|table:business_audit_events|table:case_events|table:case_participants|table:cases|table:consent_records|table:dialogue_messages|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:identity_binding_audit_events|table:observations|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:binding_confirmations_no_update_delete|trigger:consent_records_guard|trigger:identity_binding_audit_no_update_delete | enum:account_status|enum:age_band|enum:assertion_kind|enum:binding_attempt_state|enum:binding_confirmation_kind|enum:binding_confirmer_authority|enum:binding_operation_command|enum:binding_operation_scope|enum:case_participation_state|enum:case_phase|enum:case_status|enum:consent_decision|enum:consent_purpose|enum:consent_request_status|enum:evidence_confirmation_status|enum:evidence_time_state|enum:observation_value_state|enum:observation_value_type|enum:profile_attribute|enum:profile_value_status|enum:provenance_source|policy:assertions_insert|policy:assertions_select|policy:assertions_update|policy:audit_scope|policy:binding_attempts_commit_scope|policy:binding_attempts_confirmer_replay|policy:binding_attempts_identity_scope|policy:binding_attempts_operation_replay|policy:binding_attempts_target_scope|policy:binding_confirmations_attempt_scope|policy:binding_confirmations_target_scope|policy:binding_context_attempt_scope|policy:binding_context_no_attempt_identity_scope|policy:binding_context_token_scope|policy:binding_operation_keys_bootstrap_fingerprint|policy:binding_operation_keys_scope|policy:case_events_family_scope|policy:case_participants_family_scope|policy:case_participants_invite_token_read|policy:case_participants_self_read|policy:cases_family_scope|policy:consent_binding_lock|policy:consent_binding_read|policy:consent_scope|policy:dialogue_messages_insert|policy:dialogue_messages_select|policy:families_binding_lock|policy:families_binding_read|policy:families_scope|policy:family_members_binding_lock|policy:family_members_binding_read|policy:family_members_scope|policy:gcr_scope|policy:idempotency_scope|policy:identity_binding_audit_insert_scope|policy:observations_insert|policy:observations_select|policy:observations_update|policy:pcp_binding_lock|policy:pcp_binding_read|policy:pcp_scope|policy:persons_binding_candidate_account_read|policy:persons_binding_candidate_lock|policy:persons_binding_commit_update|policy:persons_binding_lock|policy:persons_binding_target_read|policy:persons_scope|policy:ppv_scope|table:accounts|table:assertions|table:binding_attempts|table:binding_confirmations|table:binding_operation_keys|table:binding_pending_contexts|table:business_audit_events|table:case_events|table:case_participants|table:cases|table:consent_records|table:dialogue_messages|table:families|table:family_members|table:guardian_consent_requests|table:idempotency_keys|table:identity_binding_audit_events|table:observations|table:person_compliance_profiles|table:person_profile_values|table:persons|trigger:binding_confirmations_no_update_delete|trigger:consent_records_guard|trigger:identity_binding_audit_no_update_delete | PASS |
+| replay 输出声明 0 new | true | true | PASS |
+  DROP DATABASE xiaoshuyin_evidence_<tmp> — OK
+
+## 001–003 基线库 → 004 upgrade（真实 db:migrate，非手工执行 004）
+  CREATE DATABASE xiaoshuyin_evidence_<tmp> OWNER xiaoshuyin_migrator — OK
+  PRE-004 APPLY 001_initial_schema.sql
+  PRE-004 APPLY 002_case_core.sql
+  PRE-004 APPLY 003_case_idempotency_key_bytes.sql
+  第一次 db:migrate（数据库状态 = 001–003 applied、004 未应用）:
+    SKIP 001_initial_schema.sql (already applied)
+      SKIP 002_case_core.sql (already applied)
+      SKIP 003_case_idempotency_key_bytes.sql (already applied)
+      APPLY 004_evidence_core.sql
+      APPLY 004_identity_binding_runtime.sql
+      APPLY 005_case_participant_core.sql
+      APPLY 006_case_status_paused_removal.sql
+      APPLY 007_case_primary_switch.sql
+    
+    Migration complete: 5 new, 3 previously applied.
+    Verified: app role has no DDL permissions.
+| upgrade 前三条 migration 被 SKIP（未重新执行） | true | true | PASS |
+| upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006_case_status_paused_removal + 007_case_primary_switch | true | true | PASS |
+| upgrade 结果为 5 new / 3 previously applied | true | true | PASS |
+| schema_migrations records added for 004 and 005 | ["001_initial_schema.sql","002_case_core.sql","003_case_idempotency_key_bytes.sql","004_evidence_core.sql","004_identity_binding_runtime.sql","005_case_participant_core.sql","006_case_status_paused_removal.sql","007_case_primary_switch.sql"] | ["001_initial_schema.sql","002_case_core.sql","003_case_idempotency_key_bytes.sql","004_evidence_core.sql","004_identity_binding_runtime.sql","005_case_participant_core.sql","006_case_status_paused_removal.sql","007_case_primary_switch.sql"] | PASS |
+| 001–003 历史记录时间戳未被改写 | true | true | PASS |
+
+## 001–003 → 004/005 upgrade 结果 — quickstart §1 期望表逐项核对（真实查询输出）
+
+| 检查 | 期望 | 实际 | 结果 |
+|---|---|---|---|
+| 14 张业务表 relrowsecurity/relforcerowsecurity | true/true × 14 | ["assertions=true/true","business_audit_events=true/true","case_events=true/true","cases=true/true","consent_records=true/true","dialogue_messages=true/true","families=true/true","family_members=true/true","guardian_consent_requests=true/true","idempotency_keys=true/true","observations=true/true","person_compliance_profiles=true/true","person_profile_values=true/true","persons=true/true"] | PASS |
+| 5 张 006 binding 表 relrowsecurity/relforcerowsecurity | true/true × 5 | ["binding_attempts=true/true","binding_confirmations=true/true","binding_operation_keys=true/true","binding_pending_contexts=true/true","identity_binding_audit_events=true/true"] | PASS |
+| accounts 无 RLS | false/false | false/false | PASS |
+| 业务表 owner | xiaoshuyin_migrator | ["xiaoshuyin_migrator"] | PASS |
+| xiaoshuyin_app rolbypassrls | false | false | PASS |
+| xiaoshuyin_migrator rolbypassrls | false | false | PASS |
+| uuidv7() 默认值的 19 张 id 表 | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_profile_values","persons"] | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","case_participants","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_profile_values","persons"] | PASS |
+| uuidv7 默认值表达式 | uuidv7() × 19 | ["uuidv7()"] | PASS |
+| 枚举覆盖 Slice 1 + 3 + 006（20） | ["account_status","age_band","assertion_kind","binding_attempt_state","binding_confirmation_kind","binding_confirmer_authority","binding_operation_command","binding_operation_scope","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | ["account_status","age_band","assertion_kind","binding_attempt_state","binding_confirmation_kind","binding_confirmer_authority","binding_operation_command","binding_operation_scope","case_participation_state","case_phase","case_status","consent_decision","consent_purpose","consent_request_status","evidence_confirmation_status","evidence_time_state","observation_value_state","observation_value_type","profile_attribute","profile_value_status","provenance_source"] | PASS |
+| age_band enum | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | ADULT,MINOR_14_17,UNDER_14,UNKNOWN | PASS |
+| profile_attribute enum | DISPLAY_NAME | DISPLAY_NAME | PASS |
+| 不存在 RELATION_DESCRIPTOR enum label | 0 | 0 | PASS |
+| 业务表覆盖 Slice 1 + 3 + 006（20） | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_compliance_profiles","person_profile_values","persons"] | ["accounts","assertions","binding_attempts","binding_confirmations","binding_operation_keys","binding_pending_contexts","business_audit_events","case_events","case_participants","cases","consent_records","dialogue_messages","families","family_members","guardian_consent_requests","idempotency_keys","identity_binding_audit_events","observations","person_compliance_profiles","person_profile_values","persons"] | PASS |
+| RLS policy 覆盖 006 追加策略 | ["binding_context_token_scope","binding_context_attempt_scope","binding_context_no_attempt_identity_scope","binding_attempts_identity_scope","binding_attempts_operation_replay","binding_attempts_target_scope","binding_attempts_commit_scope","binding_attempts_confirmer_replay","binding_confirmations_attempt_scope","binding_confirmations_target_scope","binding_operation_keys_scope","binding_operation_keys_bootstrap_fingerprint","identity_binding_audit_insert_scope","persons_binding_target_read","persons_binding_candidate_account_read","persons_binding_commit_update","families_binding_read","family_members_binding_read","pcp_binding_read","consent_binding_read","persons_binding_lock","persons_binding_candidate_lock","families_binding_lock","family_members_binding_lock","pcp_binding_lock","consent_binding_lock"] | ["binding_attempts_commit_scope","binding_attempts_confirmer_replay","binding_attempts_identity_scope","binding_attempts_operation_replay","binding_attempts_target_scope","binding_confirmations_attempt_scope","binding_confirmations_target_scope","binding_context_attempt_scope","binding_context_no_attempt_identity_scope","binding_context_token_scope","binding_operation_keys_bootstrap_fingerprint","binding_operation_keys_scope","consent_binding_lock","consent_binding_read","families_binding_lock","families_binding_read","family_members_binding_lock","family_members_binding_read","identity_binding_audit_insert_scope","pcp_binding_lock","pcp_binding_read","persons_binding_candidate_account_read","persons_binding_candidate_lock","persons_binding_commit_update","persons_binding_lock","persons_binding_target_read"] | PASS |
+| RLS policy 总数 >= Slice 1/3 基线 + 006（45） | >= 45 | 48 | PASS |
+| H-01 pairing issuance columns | pairing_expires_at,pairing_issued_at,pairing_issuance_id | ["pairing_expires_at","pairing_issuance_id","pairing_issued_at"] | PASS |
+| consent + binding 不可变触发器 | ["consent_records_guard","binding_confirmations_no_update_delete","identity_binding_audit_no_update_delete"] | ["binding_confirmations_no_update_delete","consent_records_guard","identity_binding_audit_no_update_delete"] | PASS |
+| persons 无 family_id / source_kind / role | 0 | 0 | PASS |
+| persons.account_id UNIQUE | true | true | PASS |
+| family_members 无 role/creator/guardian 列 | 0 | 0 | PASS |
+| 001–003 既有对象无破坏性重写 | true | true | PASS |
+| roles 与 upgrade 前一致 | xiaoshuyin_app=false,xiaoshuyin_migrator=false | xiaoshuyin_app=false,xiaoshuyin_migrator=false | PASS |
+  DROP DATABASE xiaoshuyin_evidence_<tmp> — OK
+
+## T011 / T012 红灯测试转绿（真实命令输出归档）
+  $ bunx vitest run tests/db/migration-repro.test.ts tests/db/roles.test.ts
+    RUN  v3.2.7 ~/Projects/xiaoshuyin-slice7-remediation-iii
+    
+     ✓ tests/db/migration-repro.test.ts (7 tests) 46ms
+     ✓ tests/db/roles.test.ts (12 tests) 92ms
+    
+     Test Files  2 passed (2)
+          Tests  19 passed (19)
+       Start at  18:03:18
+       Duration  265ms (transform 34ms, setup 15ms, collect 43ms, tests 138ms, environment 0ms, prepare 88ms)
+    
+    (node:2142) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+| T011 migration-repro + T012 roles exit code | 0 | 0 | PASS |
+| T011/T012 测试全绿 | true | true | PASS |
+
+db-evidence: PASS

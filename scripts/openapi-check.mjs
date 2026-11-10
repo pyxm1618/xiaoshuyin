@@ -59,7 +59,6 @@ const FROZEN_DOCS = [
     ),
   },
   {
-
     label: '006-identity-binding-runtime',
     path: join(
       ROOT,
@@ -67,6 +66,16 @@ const FROZEN_DOCS = [
       '006-identity-binding-runtime',
       'contracts',
       'identity-binding-api.openapi.yaml'
+    ),
+  },
+  {
+    label: '007-case-primary-switch',
+    path: join(
+      ROOT,
+      'specs',
+      '007-case-primary-switch',
+      'contracts',
+      'case-primary-switch-api.openapi.yaml'
     ),
   },
 ];
@@ -150,7 +159,7 @@ function collectCollidingSchemaNames(frozenDocs) {
   return collisions;
 }
 
-function compareSubset(frozen, generated, label, collidingSchemaNames) {
+function compareSubset(frozen, generated, label, collidingSchemaNames, options = {}) {
   const frozenOps = collectOperations(frozen);
   const generatedOps = collectOperations(generated);
 
@@ -162,7 +171,7 @@ function compareSubset(frozen, generated, label, collidingSchemaNames) {
       fail(`[${label}] ${key}: operationId differs (${f.operationId} vs ${g.operationId})`);
     }
 
-    if (!equal(normalize(f.parameters ?? [], frozen), normalize(g.parameters ?? [], generated))) {
+    if (!equal(normalize(f.parameters ?? [], frozen, options), normalize(g.parameters ?? [], generated, options))) {
       fail(`[${label}] ${key}: parameters differ`);
     }
 
@@ -177,7 +186,7 @@ function compareSubset(frozen, generated, label, collidingSchemaNames) {
       }
       const fs = frozenBody.content?.['application/json']?.schema;
       const gs = generatedBody.content?.['application/json']?.schema;
-      if (!equal(normalize(fs ?? null, frozen), normalize(gs ?? null, generated))) {
+      if (!equal(normalize(fs ?? null, frozen, options), normalize(gs ?? null, generated, options))) {
         fail(`[${label}] ${key}: requestBody schema differs`);
       }
     }
@@ -200,6 +209,7 @@ function compareSubset(frozen, generated, label, collidingSchemaNames) {
       const generatedSchema = generatedResponse?.content?.['application/json']?.schema;
       const mustCompareBody =
         label === '004-case-participant-core' ||
+        label === '007-case-primary-switch' ||
         referencesAnySchemaName(frozenSchema, collidingSchemaNames);
 
       if (!mustCompareBody) continue;
@@ -211,8 +221,8 @@ function compareSubset(frozen, generated, label, collidingSchemaNames) {
         frozenSchema &&
         generatedSchema &&
         !equal(
-          normalize(frozenSchema, frozen),
-          normalize(generatedSchema, generated)
+          normalize(frozenSchema, frozen, options),
+          normalize(generatedSchema, generated, options)
         )
       ) {
         fail(`[${label}] ${key}: response ${status} schema differs`);
@@ -234,9 +244,9 @@ function compareSubset(frozen, generated, label, collidingSchemaNames) {
       continue;
     }
 
-    if (!equal(normalize(frozenSchemas[name], frozen), normalize(generatedSchemas[name], generated))) {
-      console.error('  frozen:', JSON.stringify(stable(normalize(frozenSchemas[name], frozen)), null, 2));
-      console.error('  generated:', JSON.stringify(stable(normalize(generatedSchemas[name], generated)), null, 2));
+    if (!equal(normalize(frozenSchemas[name], frozen, options), normalize(generatedSchemas[name], generated, options))) {
+      console.error('  frozen:', JSON.stringify(stable(normalize(frozenSchemas[name], frozen, options)), null, 2));
+      console.error('  generated:', JSON.stringify(stable(normalize(generatedSchemas[name], generated, options)), null, 2));
       fail(`[${label}] components.schemas.${name} differs`);
     }
   }
@@ -270,7 +280,13 @@ function main() {
   const unionOps = new Set();
   const unionSchemas = new Set();
   for (const doc of frozenDocs) {
-    const result = compareSubset(doc.spec, generated, doc.label, collidingSchemaNames);
+    const result = compareSubset(
+      doc.spec,
+      generated,
+      doc.label,
+      collidingSchemaNames,
+      doc.label === '007-case-primary-switch' ? { keepPatterns: true } : {}
+    );
     for (const op of result.operations) unionOps.add(op);
     for (const name of result.schemas) unionSchemas.add(name);
   }

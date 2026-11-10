@@ -35,6 +35,11 @@ const ERROR_MAP: Record<string, number> = {
   CURRENT_FAMILY_AMBIGUOUS: 409,
   CASE_NOT_FOUND: 404,
   CASE_ACCESS_DENIED: 403,
+  // Slice 7 — SwitchPrimaryCase state conflicts (not validation).
+  CASE_ALREADY_PRIMARY: 409,
+  CASE_CLOSED: 409,
+  SAFETY_HOLD_BLOCKED: 409,
+  STALE_PRIMARY_VIEW: 409,
   // Slice 4 participation.
   PARTICIPATION_ALREADY_EXISTS: 409,
   PARTICIPATION_TARGET_INELIGIBLE: 403,
@@ -104,6 +109,7 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
   const strictJsonCommands = new Set([
     '/api/v1/cases',
     '/api/v1/cases/:id/messages',
+    '/api/v1/cases/:id/switch-primary',
     '/api/v1/cases/:id/participation-invites',
     '/api/v1/participation-invites/:token/accept',
     '/api/v1/participations/:id/decline',
