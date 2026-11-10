@@ -815,7 +815,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            status: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+            status: "OPEN" | "WAITING" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
             /** @enum {string} */
             phase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
             primary: boolean;
@@ -830,7 +830,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 /** @enum {string} */
-                status: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+                status: "OPEN" | "WAITING" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
                 /** @enum {string} */
                 phase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
                 primary: boolean;
@@ -842,7 +842,7 @@ export interface components {
             }[];
         };
         /** @enum {string} */
-        CaseStatus: "OPEN" | "WAITING" | "PAUSED" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
+        CaseStatus: "OPEN" | "WAITING" | "LOST_CONTACT" | "SAFETY_HOLD" | "CLOSED";
         /** @enum {string} */
         CasePhase: "INTAKE" | "ASSESSMENT" | "PROBLEM_FORMULATION" | "GOALS" | "PLANNING" | "EXECUTION" | "REVIEW" | "MAINTENANCE" | "CLOSED";
         CaseAccessDeniedError: {
