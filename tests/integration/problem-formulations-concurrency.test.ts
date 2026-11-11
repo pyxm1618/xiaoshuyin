@@ -108,7 +108,7 @@ describe('problem formulation concurrency (Slice 8)', () => {
       conflicts: [],
       sceneFit: 'family_common_core',
       alternativeExplanations: [],
-      reassessmentConditions: [],
+      reassessmentConditions: [{ text: 'new evidence' }],
       exitConditions: [],
       dependencyRefs: [{ type: 'EVIDENCE' as const, evidence: ref }],
     };
@@ -350,6 +350,8 @@ describe('problem formulation concurrency (Slice 8)', () => {
       ['confirm-dispute', 'confirm', 'dispute'],
       ['confirm-reassess', 'confirm', 'reassess'],
       ['correction-correction', 'correction', 'correction'],
+      ['correction-dispute', 'correction', 'dispute'],
+      ['reassess-confirm', 'reassess', 'confirm'],
     ] as const;
     for (const [label, left, right] of pairs) {
       const p = await prepare(`pair-${label}`);
@@ -374,14 +376,29 @@ describe('problem formulation concurrency (Slice 8)', () => {
         if (kind === 'reassess') return reassessFromFormulation(pool, { ...common, basis: { kind: 'REASSESSMENT_CONDITION', text: 'new evidence' } });
         return correctProblemFormulation(pool, { ...common, changes: { sceneFit: 'family_common_core_v2' } });
       };
+      const beforeRace = await admin.query(
+        `SELECT (SELECT count(*)::int FROM case_events WHERE case_id=$1) AS e,
+                (SELECT count(*)::int FROM business_audit_events WHERE family_id=$2) AS a`,
+        [p.caseId, p.familyId]
+      );
       const results = await Promise.allSettled([invoke(left), invoke(right)]);
       const wins = results.filter((r) => r.status === 'fulfilled' && r.value.status < 300);
       expect(wins, label).toHaveLength(1);
-      const rows = await admin.query(
-        `SELECT count(*)::int AS n FROM problem_formulations WHERE case_id=$1 AND status<>'SUPERSEDED'`,
-        [p.caseId]
+      for (const loser of results.filter(
+        (r) => r.status === 'fulfilled' && r.value.status >= 300
+      )) {
+        expect(loser.status).toBe('fulfilled');
+        if (loser.status === 'fulfilled') expect(loser.value.status).toBe(409);
+      }
+      const afterRace = await admin.query(
+        `SELECT (SELECT count(*)::int FROM case_events WHERE case_id=$1) AS e,
+                (SELECT count(*)::int FROM business_audit_events WHERE family_id=$2) AS a,
+                (SELECT count(*)::int FROM problem_formulations WHERE case_id=$1 AND status<>'SUPERSEDED') AS n`,
+        [p.caseId, p.familyId]
       );
-      expect(rows.rows[0].n).toBe(1);
+      expect(afterRace.rows[0].e - beforeRace.rows[0].e, label).toBe(1);
+      expect(afterRace.rows[0].a - beforeRace.rows[0].a, label).toBe(1);
+      expect(afterRace.rows[0].n).toBe(1);
     }
   });
 
@@ -389,10 +406,6 @@ describe('problem formulation concurrency (Slice 8)', () => {
     for (const kind of ['present', 'confirm'] as const) {
       const p = await prepare(`switch-${kind}`);
       const other = await createCase(p.owner, `switch-${kind}-b`);
-      const view = await app.inject({
-        method: 'GET', url: `/api/v1/cases/${p.caseId}`,
-        headers: { authorization: `Bearer ${p.owner.token}` },
-      });
       const presented = kind === 'confirm'
         ? await presentProblemFormulation(pool, {
             actor: { accountId: p.owner.accountId, personId: p.owner.personId },
@@ -402,6 +415,10 @@ describe('problem formulation concurrency (Slice 8)', () => {
             content: content(p.messageId),
           })
         : null;
+      const view = await app.inject({
+        method: 'GET', url: `/api/v1/cases/${p.caseId}`,
+        headers: { authorization: `Bearer ${p.owner.token}` },
+      });
       const expectedCaseVersion = presented ? presented.body.caseVersion : p.caseVersion;
 
       const business = kind === 'present'
@@ -430,10 +447,20 @@ describe('problem formulation concurrency (Slice 8)', () => {
       ]);
       const businessOk = results[0].status === 'fulfilled' && results[0].value.status < 300;
       if (businessOk) {
+        expect(['PROBLEM_FORMULATION', 'GOALS']).toContain(
+          (await admin.query('SELECT phase FROM cases WHERE id=$1', [p.caseId])).rows[0].phase
+        );
+      } else {
         expect(results[0].status).toBe('fulfilled');
+        if (results[0].status === 'fulfilled') expect(results[0].value.status).toBe(409);
       }
       const caseRows = await admin.query('SELECT phase, version FROM cases WHERE id=$1', [p.caseId]);
       expect(caseRows.rows).toHaveLength(1);
+      const current = await admin.query(
+        `SELECT count(*)::int AS n FROM problem_formulations WHERE case_id=$1 AND status<>'SUPERSEDED'`,
+        [p.caseId]
+      );
+      expect(current.rows[0].n).toBeLessThanOrEqual(1);
     }
   });
 });

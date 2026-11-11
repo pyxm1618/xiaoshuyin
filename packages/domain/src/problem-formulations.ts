@@ -12,6 +12,7 @@
 
 import type { PoolClient } from 'pg';
 import { getCaseForUpdate, type CaseRow, type CasePhaseValue } from './cases.js';
+import { hashPayload } from './idempotency.js';
 
 type Tx = PoolClient;
 
@@ -664,11 +665,7 @@ export async function validateFormulationContent(
       }
     }
   }
-  const caseUnknown = await listCaseUnknownObservationRefs(tx, caseId);
-  for (const member of [
-    ...authoritative.members,
-    ...caseUnknown.map((item) => ({ ...item, ref: item.ref, unknownState: item.state })),
-  ]) {
+  for (const member of authoritative.members) {
     if (member.unknownState === null) continue;
     const covered = content.unknowns.some(
       (unknown) =>
@@ -1142,62 +1139,75 @@ export type ReassessmentBasis =
   | { kind: 'CONFLICT'; topic: string }
   | { kind: 'CORRECTION'; version: number };
 
-export function validateReassessmentBasis(
-  current: ProblemFormulationRow,
+export function canonicalReassessmentBasis(
   basis: ReassessmentBasis
-): string {
-  const normalized = basis.kind === 'CONFLICT' ? basis.topic.trim() : basis.kind === 'CORRECTION' ? '' : basis.text.trim();
-  if (basis.kind !== 'CORRECTION' && normalized.length === 0) {
-    throw pfError('REASSESSMENT_BASIS_INVALID', 'reassessment basis is empty');
-  }
+): { kind: ReassessmentBasis['kind']; value: string } {
   switch (basis.kind) {
     case 'REASSESSMENT_CONDITION':
-      if (!current.reassessment_conditions.some((item) => item.text.trim() === normalized)) {
+    case 'ALTERNATIVE_EXPLANATION':
+      return { kind: basis.kind, value: basis.text.trim() };
+    case 'CONFLICT':
+      return { kind: basis.kind, value: basis.topic.trim() };
+    case 'CORRECTION':
+      return { kind: basis.kind, value: String(basis.version) };
+    default:
+      throw pfError('REASSESSMENT_BASIS_INVALID', 'unsupported reassessment basis');
+  }
+}
+
+export function reassessmentBasisFingerprint(basis: ReassessmentBasis): string {
+  return hashPayload(canonicalReassessmentBasis(basis) as never);
+}
+
+export async function validateReassessmentBasis(
+  tx: Tx,
+  current: ProblemFormulationRow,
+  basis: ReassessmentBasis
+): Promise<string> {
+  const canonical = canonicalReassessmentBasis(basis);
+  if (canonical.kind !== 'CORRECTION' && canonical.value.length === 0) {
+    throw pfError('REASSESSMENT_BASIS_INVALID', 'reassessment basis is empty');
+  }
+  switch (canonical.kind) {
+    case 'REASSESSMENT_CONDITION':
+      if (!current.reassessment_conditions.some((item) => item.text.trim() === canonical.value)) {
         throw pfError('REASSESSMENT_BASIS_INVALID', 'basis is not a current reassessment condition');
       }
-      return `REASSESSMENT_CONDITION:${normalized}`;
+      return `${canonical.kind}:${canonical.value}`;
     case 'ALTERNATIVE_EXPLANATION':
-      if (!current.alternative_explanations.some((item) => item.text.trim() === normalized)) {
+      if (!current.alternative_explanations.some((item) => item.text.trim() === canonical.value)) {
         throw pfError('REASSESSMENT_BASIS_INVALID', 'basis is not a current alternative explanation');
       }
-      return `ALTERNATIVE_EXPLANATION:${normalized}`;
+      return `${canonical.kind}:${canonical.value}`;
     case 'CONFLICT':
-      if (!current.conflicts.some((item) => item.topic.trim() === normalized)) {
+      if (!current.conflicts.some((item) => item.topic.trim() === canonical.value)) {
         throw pfError('REASSESSMENT_BASIS_INVALID', 'basis is not a current conflict');
       }
-      return `CONFLICT:${normalized}`;
-    case 'CORRECTION':
-      if (!Number.isInteger(basis.version) || basis.version < 1) {
+      return `${canonical.kind}:${canonical.value}`;
+    case 'CORRECTION': {
+      const version = Number(canonical.value);
+      if (!Number.isInteger(version) || version < 1) {
         throw pfError('REASSESSMENT_BASIS_INVALID', 'invalid correction version');
       }
-      if (current.supersedes_version !== basis.version) {
+      if (current.supersedes_version !== version) {
         throw pfError('REASSESSMENT_BASIS_INVALID', 'basis correction is not the current version chain');
       }
-      return `CORRECTION:${basis.version}`;
+      const predecessor = await getProblemFormulationByVersion(tx, current.case_id, version);
+      if (
+        !predecessor ||
+        current.user_response?.kind !== 'CORRECTION' ||
+        current.supersedes_version !== version
+      ) {
+        throw pfError(
+          'REASSESSMENT_BASIS_INVALID',
+          'basis version was not produced by a correction'
+        );
+      }
+      return `CORRECTION:${version}`;
+    }
     default:
       throw pfError('REASSESSMENT_BASIS_INVALID', 'unsupported reassessment basis');
   }
 }
 
 
-export async function listCaseUnknownObservationRefs(
-  tx: Tx,
-  caseId: string
-): Promise<{ ref: EvidenceRef; state: UnknownState }[]> {
-  const { rows } = await tx.query(
-    `SELECT o.id, o.value_state
-       FROM observations o
-      WHERE o.case_id = $1
-        AND o.value_state IN ('UNKNOWN', 'NOT_COLLECTED', 'DECLINED')
-        AND NOT EXISTS (
-          SELECT 1 FROM observations successor WHERE successor.supersedes_id = o.id
-        )
-        AND (o.valid_from IS NULL OR o.valid_from <= now())
-        AND (o.valid_until IS NULL OR o.valid_until > now())`,
-    [caseId]
-  );
-  return rows.map((row) => ({
-    ref: { type: 'OBSERVATION' as const, id: row.id },
-    state: row.value_state as UnknownState,
-  }));
-}

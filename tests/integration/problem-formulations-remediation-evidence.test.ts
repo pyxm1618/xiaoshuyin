@@ -121,13 +121,14 @@ describe('S8 remediation evidence rules', () => {
     validFrom?: string | null;
     validUntil?: string | null;
     supersedesId?: string | null;
+    conflictGroupId?: string | null;
   }) {
     const row = await admin.query(
       `INSERT INTO assertions
         (family_id, case_id, subject_person_id, source_kind, source_person_id,
          occurred_time_state, confirmation_status, kind, content, conflict_group_id,
          valid_from, valid_until, supersedes_id)
-       VALUES ($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN',$5,$6,$7,NULL,$8,$9,$10)
+       VALUES ($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN',$5,$6,$7,$8,$9,$10,$11)
        RETURNING id`,
       [
         input.familyId,
@@ -137,6 +138,7 @@ describe('S8 remediation evidence rules', () => {
         input.confirmation ?? 'UNCONFIRMED',
         input.kind ?? 'STATEMENT',
         input.content,
+        input.conflictGroupId ?? null,
         input.validFrom ?? null,
         input.validUntil ?? null,
         input.supersedesId ?? null,
@@ -316,9 +318,10 @@ describe('S8 remediation evidence rules', () => {
       const { p, a } = await unknownPair('partial');
       const content = baseContent(p.messageId);
       content.evidenceRefs.push({ type: 'OBSERVATION', id: a });
+      content.dependencyRefs.push({ type: 'EVIDENCE', evidence: { type: 'OBSERVATION', id: a } });
       content.unknowns.push({ topic: '未知', state: 'UNKNOWN', evidenceRefs: [{ type: 'OBSERVATION', id: a }] });
       const res = await present(p.owner, p.familyId, p.caseId, p.caseVersion, content);
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(200);
     }
 
     // wrong Evidence ref: UNKNOWN item points at a statement ref
@@ -614,5 +617,132 @@ describe('S8 remediation evidence rules', () => {
         code: 'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
       });
     }
+  });
+
+  it('S8-M01-C: unrelated UNKNOWN / DECLINED observations do not block a formulation', async () => {
+    for (const state of ['UNKNOWN', 'DECLINED'] as const) {
+      const p = await prepare(`m01-unrelated-${state.toLowerCase()}`);
+      await insertObservation({
+        familyId: p.familyId,
+        caseId: p.caseId,
+        subjectPersonId: p.owner.personId,
+        sourcePersonId: p.owner.personId,
+        valueState: state,
+      });
+      const res = await present(p.owner, p.familyId, p.caseId, p.caseVersion, baseContent(p.messageId));
+      expect(res.status, state).toBe(200);
+    }
+  });
+
+  it('S8-M03 canonical basis replay, mismatch and conflict basis', async () => {
+    const p = await prepare('m03-fingerprint');
+    const presented = await present(p.owner, p.familyId, p.caseId, p.caseVersion, baseContent(p.messageId));
+    expect(presented.status).toBe(200);
+    const key = `t8rem-fp-${Date.now()}-${seq++}`;
+    const first = await reassessFromFormulation(pool, {
+      actor: actorOf(p.owner), familyId: p.familyId, caseId: p.caseId,
+      expectedCaseVersion: presented.body.caseVersion,
+      idempotencyKey: key,
+      formulationVersion: 1,
+      basis: { kind: 'REASSESSMENT_CONDITION', text: '  出现新证据  ' },
+    });
+    expect(first.status).toBe(200);
+    const replay = await reassessFromFormulation(pool, {
+      actor: actorOf(p.owner), familyId: p.familyId, caseId: p.caseId,
+      expectedCaseVersion: presented.body.caseVersion,
+      idempotencyKey: key,
+      formulationVersion: 1,
+      basis: { kind: 'REASSESSMENT_CONDITION', text: '出现新证据' },
+    });
+    expect(replay.status).toBe(200);
+    expect(replay.body).toEqual(first.body);
+    await expect(
+      reassessFromFormulation(pool, {
+        actor: actorOf(p.owner), familyId: p.familyId, caseId: p.caseId,
+        expectedCaseVersion: presented.body.caseVersion,
+        idempotencyKey: key,
+        formulationVersion: 1,
+        basis: { kind: 'ALTERNATIVE_EXPLANATION', text: '替代解释 A' },
+      })
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
+
+    const q = await prepare('m03-conflict');
+    const groupId = crypto.randomUUID();
+    const a = await insertAssertion({
+      familyId: q.familyId, caseId: q.caseId,
+      subjectPersonId: q.owner.personId, sourcePersonId: q.owner.personId,
+      content: '冲突 A', conflictGroupId: groupId,
+    });
+    const b = await insertAssertion({
+      familyId: q.familyId, caseId: q.caseId,
+      subjectPersonId: q.owner.personId, sourcePersonId: q.owner.personId,
+      content: '冲突 B', conflictGroupId: groupId,
+    });
+    const messageRef = { type: 'DIALOGUE_MESSAGE' as const, id: q.messageId };
+    const conflictContent = baseContent(q.messageId);
+    conflictContent.evidenceRefs.push({ type: 'ASSERTION', id: a }, { type: 'ASSERTION', id: b });
+    conflictContent.dependencyRefs.push(
+      { type: 'EVIDENCE', evidence: { type: 'ASSERTION', id: a } },
+      { type: 'EVIDENCE', evidence: { type: 'ASSERTION', id: b } }
+    );
+    conflictContent.conflicts.push({ topic: '来源冲突' });
+    // group-only form
+    conflictContent.conflicts[0] = { topic: '来源冲突', conflictGroupId: groupId };
+    void messageRef;
+    const conflictPresented = await present(q.owner, q.familyId, q.caseId, q.caseVersion, conflictContent);
+    expect(conflictPresented.status).toBe(200);
+    const conflictReassess = await reassessFromFormulation(pool, {
+      actor: actorOf(q.owner), familyId: q.familyId, caseId: q.caseId,
+      expectedCaseVersion: conflictPresented.body.caseVersion,
+      idempotencyKey: `t8rem-conflict-${Date.now()}-${seq++}`,
+      formulationVersion: 1,
+      basis: { kind: 'CONFLICT', topic: '来源冲突' },
+    });
+    expect(conflictReassess.status).toBe(200);
+  });
+
+  it('S8-M03 correction basis requires a real correction lineage', async () => {
+    const p = await prepare('m03-correction');
+    const presented = await present(p.owner, p.familyId, p.caseId, p.caseVersion, baseContent(p.messageId));
+    expect(presented.status).toBe(200);
+    const corrected = await correctProblemFormulation(pool, {
+      actor: actorOf(p.owner), familyId: p.familyId, caseId: p.caseId,
+      expectedCaseVersion: presented.body.caseVersion,
+      idempotencyKey: `t8rem-m03-corr-${Date.now()}-${seq++}`,
+      formulationVersion: 1,
+      changes: { sceneFit: 'family_common_core_v2' },
+    });
+    expect(corrected.status).toBe(201);
+    const reassess = await reassessFromFormulation(pool, {
+      actor: actorOf(p.owner), familyId: p.familyId, caseId: p.caseId,
+      expectedCaseVersion: corrected.body.caseVersion,
+      idempotencyKey: `t8rem-m03-corr-re-${Date.now()}-${seq++}`,
+      formulationVersion: 2,
+      basis: { kind: 'CORRECTION', version: 1 },
+    });
+    expect(reassess.status).toBe(200);
+
+    const q = await prepare('m03-present-after-reassess');
+    const v1 = await present(q.owner, q.familyId, q.caseId, q.caseVersion, baseContent(q.messageId));
+    expect(v1.status).toBe(200);
+    const reassessed = await reassessFromFormulation(pool, {
+      actor: actorOf(q.owner), familyId: q.familyId, caseId: q.caseId,
+      expectedCaseVersion: v1.body.caseVersion,
+      idempotencyKey: `t8rem-m03-re-${Date.now()}-${seq++}`,
+      formulationVersion: 1,
+      basis: { kind: 'REASSESSMENT_CONDITION', text: '出现新证据' },
+    });
+    expect(reassessed.status).toBe(200);
+    const v2 = await present(q.owner, q.familyId, q.caseId, reassessed.body.caseVersion, baseContent(q.messageId));
+    expect(v2.status).toBe(200);
+    const invalid = await reassessFromFormulation(pool, {
+      actor: actorOf(q.owner), familyId: q.familyId, caseId: q.caseId,
+      expectedCaseVersion: v2.body.caseVersion,
+      idempotencyKey: `t8rem-m03-bad-corr-${Date.now()}-${seq++}`,
+      formulationVersion: 2,
+      basis: { kind: 'CORRECTION', version: 1 },
+    });
+    expect(invalid.status).toBe(422);
+    expect(invalid.body).toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 });

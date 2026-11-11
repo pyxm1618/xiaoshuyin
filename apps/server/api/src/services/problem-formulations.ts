@@ -38,6 +38,7 @@ import {
   toProblemFormulationDto,
   transitionProblemFormulationStatus,
   validateFormulationContent,
+  reassessmentBasisFingerprint,
   validateReassessmentBasis,
   advanceCasePhaseAndVersion,
   pfError,
@@ -1095,7 +1096,7 @@ export async function reassessFromFormulation(
           action: 'CASE_REASSESS_FROM_FORMULATION',
         });
 
-        const validatedBasisFingerprint = hashPayload(input.basis as never);
+        const validatedBasisFingerprint = reassessmentBasisFingerprint(input.basis);
         const hash = requestHash({
           familyId: input.familyId,
           caseId: input.caseId,
@@ -1130,7 +1131,7 @@ export async function reassessFromFormulation(
         if (current.version !== input.formulationVersion) {
           throw pfError('PROBLEM_FORMULATION_VERSION_CONFLICT');
         }
-        validateReassessmentBasis(current, input.basis);
+        await validateReassessmentBasis(tx, current, input.basis);
 
         const authoritative = await revalidateCurrent(tx, input.caseId, current);
         const persons = await processingPersonIds(tx, {

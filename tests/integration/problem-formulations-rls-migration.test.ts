@@ -97,6 +97,118 @@ describe('S8 direct RLS and migration rollback', () => {
       );
       expect(lifecycle.rows[0].status).toBe('DISPUTED');
       await direct.query('ROLLBACK');
+
+      // No family context: INSERT / UPDATE denied.
+      const noCtx = new Client({ connectionString: APP_URL });
+      await noCtx.connect();
+      try {
+        await noCtx.query('BEGIN');
+        await noCtx.query('SELECT app.set_identity_context($1,$2)', [accountId, 'FAMILY_MANAGEMENT']);
+        await noCtx.query('SAVEPOINT n1');
+        await expect(
+          noCtx.query(
+            `INSERT INTO problem_formulations (family_id, case_id, version, status, primary_problem, key_factors, evidence_refs, unknowns, conflicts, scene_fit, alternative_explanations, reassessment_conditions, exit_conditions, dependency_refs)
+             VALUES ($1,$2,2,'DISPUTED','{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'x','[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb)`,
+            [a.familyId, a.caseId]
+          )
+        ).rejects.toMatchObject({ code: '42501' });
+        await noCtx.query('ROLLBACK TO SAVEPOINT n1');
+        await noCtx.query('SAVEPOINT n2');
+        const noCtxUpdate = await noCtx.query(`UPDATE problem_formulations SET status='DISPUTED'`);
+        expect(noCtxUpdate.rowCount).toBe(0);
+        await noCtx.query('ROLLBACK');
+      } finally {
+        await noCtx.end();
+      }
+
+      // Wrong-family INSERT denied; wrong-family UPDATE affects nothing.
+      const wrong = new Client({ connectionString: APP_URL });
+      await wrong.connect();
+      try {
+        await wrong.query('BEGIN');
+        await wrong.query('SELECT app.set_identity_context($1,$2)', [accountId, 'FAMILY_MANAGEMENT']);
+        await wrong.query('SELECT app.set_family_context($1,$2,$3)', [b.familyId, personId, 'FAMILY_MANAGEMENT']);
+        await wrong.query('SAVEPOINT w1');
+        await expect(
+          wrong.query(
+            `INSERT INTO problem_formulations (family_id, case_id, version, status, primary_problem, key_factors, evidence_refs, unknowns, conflicts, scene_fit, alternative_explanations, reassessment_conditions, exit_conditions, dependency_refs)
+             VALUES ($1,$2,3,'DISPUTED','{}'::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'x','[]'::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb)`,
+            [a.familyId, a.caseId]
+          )
+        ).rejects.toMatchObject({ code: '42501' });
+        await wrong.query('ROLLBACK TO SAVEPOINT w1');
+        const wrongUpdate = await wrong.query(
+          `UPDATE problem_formulations SET status='NEEDS_REVIEW' WHERE family_id=$1`,
+          [a.familyId]
+        );
+        expect(wrongUpdate.rowCount).toBe(0);
+        await wrong.query('ROLLBACK');
+      } finally {
+        await wrong.end();
+      }
+
+      // Forbidden column UPDATEs are rejected by column privileges.
+      const cols = new Client({ connectionString: APP_URL });
+      await cols.connect();
+      try {
+        await cols.query('BEGIN');
+        await cols.query('SELECT app.set_identity_context($1,$2)', [accountId, 'FAMILY_MANAGEMENT']);
+        await cols.query('SELECT app.set_family_context($1,$2,$3)', [a.familyId, personId, 'FAMILY_MANAGEMENT']);
+        for (const [idx, sql] of [
+          'UPDATE problem_formulations SET version=2',
+          'UPDATE problem_formulations SET case_id=case_id',
+          'UPDATE problem_formulations SET family_id=family_id',
+          'UPDATE problem_formulations SET supersedes_version=1',
+          'UPDATE problem_formulations SET primary_problem=primary_problem',
+          'UPDATE problem_formulations SET dependency_refs=dependency_refs',
+        ].entries()) {
+          await cols.query(`SAVEPOINT c${idx}`);
+          await expect(cols.query(sql)).rejects.toMatchObject({ code: '42501' });
+          await cols.query(`ROLLBACK TO SAVEPOINT c${idx}`);
+        }
+        await cols.query('ROLLBACK');
+      } finally {
+        await cols.end();
+      }
+
+      // cases keeps least privilege: only phase/version/updated_at columns.
+      const caseCols = new Client({ connectionString: APP_URL });
+      await caseCols.connect();
+      try {
+        await caseCols.query('BEGIN');
+        await caseCols.query('SELECT app.set_identity_context($1,$2)', [accountId, 'FAMILY_MANAGEMENT']);
+        await caseCols.query('SELECT app.set_family_context($1,$2,$3)', [a.familyId, personId, 'FAMILY_MANAGEMENT']);
+        for (const [idx, sql] of [
+          `UPDATE cases SET status='OPEN'`,
+          `UPDATE cases SET created_by_person_id=created_by_person_id`,
+          `UPDATE cases SET family_id=family_id`,
+        ].entries()) {
+          await caseCols.query(`SAVEPOINT k${idx}`);
+          await expect(caseCols.query(sql)).rejects.toMatchObject({ code: '42501' });
+          await caseCols.query(`ROLLBACK TO SAVEPOINT k${idx}`);
+        }
+        const primary = await caseCols.query(
+          `UPDATE cases SET is_primary=is_primary WHERE id=$1 RETURNING is_primary`,
+          [a.caseId]
+        );
+        expect(primary.rows).toHaveLength(1);
+        const phase = await caseCols.query(
+          `UPDATE cases SET phase='GOALS', version=version+1, updated_at=now() WHERE id=$1 RETURNING phase`,
+          [a.caseId]
+        );
+        expect(phase.rows[0].phase).toBe('GOALS');
+        await caseCols.query('ROLLBACK');
+      } finally {
+        await caseCols.end();
+      }
+
+      const meta = await admin.query(
+        `SELECT c.relowner::regrole::text AS owner, r.rolbypassrls
+           FROM pg_class c, pg_roles r
+          WHERE c.relname='problem_formulations' AND r.rolname='xiaoshuyin_app'`
+      );
+      expect(meta.rows[0].owner).toBe('xiaoshuyin_migrator');
+      expect(meta.rows[0].rolbypassrls).toBe(false);
     } finally {
       await direct.end();
       await admin.query('DELETE FROM problem_formulations WHERE family_id = ANY($1)', [[a.familyId, b.familyId]]);
@@ -110,7 +222,7 @@ describe('S8 direct RLS and migration rollback', () => {
     }
   }, 60000);
 
-  it('forced 008 failure leaves no partial enum/table object', async () => {
+  it('forced 008 failure leaves no partial enum/table/policy/grant/CHECK object', async () => {
     const admin = new Client({ connectionString: ADMIN_URL });
     await admin.connect();
     const dbName = `xiaoshuyin_s8_rollback_${Date.now()}`;
@@ -125,14 +237,19 @@ describe('S8 direct RLS and migration rollback', () => {
         if (name >= '008_problem_formulation_core.sql') break;
         await client.query(readFileSync(join(dir, name), 'utf-8'));
       }
-      // Force CREATE TABLE to fail after the enum was created in the same file.
-      await client.query('CREATE TABLE problem_formulations (id uuid)');
+      const before = await client.query(
+        `SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+          WHERE conname IN ('business_audit_events_resource_type_check','business_audit_events_event_type_check','idempotency_keys_command_type_check','case_events_event_type_check')`
+      );
       const eight = new Client({ connectionString: dbUrl });
       await eight.connect();
       let failed = false;
       try {
         await eight.query('BEGIN');
-        await eight.query(readFileSync(join(dir, '008_problem_formulation_core.sql'), 'utf-8'));
+        await eight.query(
+          readFileSync(join(dir, '008_problem_formulation_core.sql'), 'utf-8') +
+            "\nDO $$ BEGIN RAISE EXCEPTION 'T843_FORCED_FAILURE'; END $$;"
+        );
         await eight.query('COMMIT');
       } catch {
         failed = true;
@@ -141,15 +258,30 @@ describe('S8 direct RLS and migration rollback', () => {
         await eight.end();
       }
       expect(failed).toBe(true);
-      const enums = await client.query(
-        `SELECT count(*)::int AS n FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
-         WHERE n.nspname='public' AND t.typname='problem_formulation_status'`
+
+      const residue = await client.query(
+        `SELECT
+          (SELECT count(*)::int FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
+            WHERE n.nspname='public' AND t.typname='problem_formulation_status') AS enums,
+          (SELECT count(*)::int FROM pg_tables WHERE schemaname='public' AND tablename='problem_formulations') AS tables,
+          (SELECT count(*)::int FROM pg_policies WHERE tablename='problem_formulations') AS policies,
+          (SELECT count(*)::int FROM pg_constraint WHERE conrelid='problem_formulations'::regclass) AS constraints`
+      ).catch(() => ({ rows: [{ enums: 0, tables: 0, policies: 0, constraints: 0 }] }));
+      if (residue.rows[0].tables === 0) {
+        expect(residue.rows[0]).toEqual({ enums: 0, tables: 0, policies: 0, constraints: 0 });
+      } else {
+        throw new Error('T843 residue table exists after rollback');
+      }
+      const grants = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app','problem_formulations','SELECT') AS s,
+                has_column_privilege('xiaoshuyin_app','cases','phase','UPDATE') AS c`
+      ).catch(() => ({ rows: [{ s: false, c: false }] }));
+      expect(grants.rows[0]).toEqual({ s: false, c: false });
+      const after = await client.query(
+        `SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
+          WHERE conname IN ('business_audit_events_resource_type_check','business_audit_events_event_type_check','idempotency_keys_command_type_check','case_events_event_type_check')`
       );
-      const policies = await client.query(
-        `SELECT count(*)::int AS n FROM pg_policies WHERE tablename='problem_formulations'`
-      );
-      expect(enums.rows[0].n).toBe(0);
-      expect(policies.rows[0].n).toBe(0);
+      expect(after.rows.sort()).toEqual(before.rows.sort());
     } finally {
       await client.end().catch(() => {});
       const cleanup = new Client({ connectionString: ADMIN_URL });
