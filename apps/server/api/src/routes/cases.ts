@@ -49,6 +49,7 @@ import {
   insertPrimaryAssignedEvent,
   insertPrimaryRevokedEvent,
   insertPrimarySwitchAudit,
+  assertOrdinaryProgressionAllowedRaw,
   type CaseRow,
 } from '@xiaoshuyin/domain';
 import { withIdentityTransaction, withRlsTransaction } from '../db/tx.js';
@@ -625,6 +626,12 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
               },
             });
             if (decision.kind === 'DENY') throw httpError(decision.code);
+
+            // Slice 9: production SwitchPrimary consumes the ONE shared
+            // transaction-backed Safety guard. The frozen precedence above is
+            // unchanged; this re-read adds no lock (target is already locked)
+            // and applies the same fail-closed policy future commands use.
+            await assertOrdinaryProgressionAllowedRaw(tx, { caseId: target.id });
 
             let demoted: CaseRow | null = null;
             if (decision.demote !== null) {

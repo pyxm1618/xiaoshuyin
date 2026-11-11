@@ -18,6 +18,6 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": true
   },
-  "include": ["packages/*/src/**/*.ts"],
+  "include": ["packages/*/src/**/*.ts", "db/schema/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

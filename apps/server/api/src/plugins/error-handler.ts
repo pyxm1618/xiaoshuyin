@@ -40,6 +40,17 @@ const ERROR_MAP: Record<string, number> = {
   CASE_CLOSED: 409,
   SAFETY_HOLD_BLOCKED: 409,
   STALE_PRIMARY_VIEW: 409,
+  // Slice 9 — Safety control foundation (plan §14). No 5xx for expected
+  // Safety business outcomes; production resolver unavailability is a
+  // fail-closed 403, never a success or a 500.
+  SAFETY_HOLD_ALREADY_ACTIVE: 409,
+  STALE_CASE_VERSION: 409,
+  SAFETY_PRECHECK_STALE: 409,
+  SAFETY_PRECHECK_INVALID: 422,
+  SAFETY_REVIEW_EVIDENCE_INVALID: 422,
+  SAFETY_RESOLUTION_AUTHORITY_DENIED: 403,
+  SAFETY_RESOLUTION_AUTHORITY_UNAVAILABLE: 403,
+  SAFETY_HOLD_REQUIRED: 409,
   // Slice 4 participation.
   PARTICIPATION_ALREADY_EXISTS: 409,
   PARTICIPATION_TARGET_INELIGIBLE: 403,
