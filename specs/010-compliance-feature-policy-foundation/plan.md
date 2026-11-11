@@ -397,8 +397,9 @@ The pure function has no I/O.
 
 ### 6.2 Evaluation time
 
-- Production evaluation time comes from trusted server/database time, captured once.
-- Tests inject a fixed evaluation time.
+- Production evaluation time comes from the current authoritative database transaction time, captured once.
+- Runtime repository access evaluates **current** effective policy only; it is not a historical-policy browser.
+- Tests/pure-domain fixtures may inject a fixed historical/future evaluation time without granting the application runtime role historical table visibility.
 - The pure evaluator does not call `Date.now()`.
 
 ### 6.3 Policy selection
@@ -558,22 +559,31 @@ No fake staff identity or compliance-review workflow is created.
 
 `compliance_feature_policies` is global server-owned policy truth, not Family-owned user data.
 
-Planned DB privilege contract:
+Planned DB privilege / RLS contract:
 
 - owner: migrator;
-- runtime: SELECT only;
+- `ENABLE ROW LEVEL SECURITY` and `FORCE ROW LEVEL SECURITY` on `compliance_feature_policies`;
+- this is a **global policy least-privilege RLS policy**, not Family tenancy RLS and it introduces no new family/person session context;
+- runtime RLS SELECT policy exposes only rows effective at the current transaction time:
+  `effective_from <= transaction_timestamp() AND (effective_until IS NULL OR transaction_timestamp() < effective_until)`;
+- runtime receives column-level SELECT only for evaluator-required columns (policy identity, feature identity/revision, policy version, applicability/rules and effective-period fields);
+- runtime receives no SELECT privilege on `decision_basis`, `review_evidence_ref`, approval/publication provenance columns unless a later approved internal contract proves they are required;
 - runtime: no INSERT / UPDATE / DELETE / TRUNCATE;
+- migrator/provisioning role receives the explicit RLS policy/privileges required to review history and perform controlled publication while remaining `NOBYPASSRLS`;
 - no public role grant;
 - no client route exposes table browsing.
 
-Because the table contains no tenant/family data, Family RLS is **not** used as a fake tenant boundary for this global table.
+This RLS policy intentionally allows multiple concurrently-effective rows to remain visible if storage corruption creates an overlap, so the evaluator can detect ambiguity and fail closed instead of RLS hiding the defect.
 
-The RLS requirement applies to the existing Person/consent facts consumed during evaluation; those reads remain inside the existing Family/identity RLS transaction and must not be weakened.
+The existing Family/identity RLS requirement still applies independently to Person/consent facts consumed during evaluation; those reads remain inside the existing Family/identity RLS transaction and must not be weakened.
 
-Database tests must mechanically verify both facts:
+Database tests must mechanically verify:
 
-1. global policy table has least-privilege SELECT-only runtime access;
-2. target Person/consent reads still require valid existing RLS context and cannot cross Family boundaries.
+1. global policy table has `relrowsecurity=true` and `relforcerowsecurity=true`;
+2. runtime can read only currently effective rows and only approved evaluator columns;
+3. runtime cannot read historical decision-basis/review-evidence columns;
+4. runtime cannot INSERT/UPDATE/DELETE/TRUNCATE;
+5. target Person/consent reads still require valid existing RLS context and cannot cross Family boundaries.
 
 ### 9.4 Anti-enumeration
 
@@ -657,8 +667,7 @@ Internal machine semantics must distinguish:
 |---|---|
 | unknown/unregistered feature | COMPLIANCE_FEATURE_UNKNOWN |
 | stale/wrong feature revision | COMPLIANCE_FEATURE_REVISION_STALE |
-| no policy row or only future rows for evaluation time | COMPLIANCE_POLICY_MISSING |
-| policy history exists but all matching rows are expired at evaluation time | COMPLIANCE_POLICY_EXPIRED |
+| no currently effective policy (no row, future-only, or expired history) | COMPLIANCE_POLICY_MISSING |
 | more than one effective policy | COMPLIANCE_POLICY_AMBIGUOUS |
 | malformed/invalid policy version | COMPLIANCE_POLICY_INVALID |
 | applicability UNKNOWN | COMPLIANCE_APPLICABILITY_UNKNOWN |
@@ -788,7 +797,9 @@ The reviewed migration must add:
 - overlap/publication protection;
 - indexes for exact feature/revision/effective-time lookup;
 - migrator ownership;
-- runtime SELECT-only grant;
+- ENABLE/FORCE RLS on the global policy table with active-row runtime SELECT semantics and explicit migrator policy;
+- column-level runtime SELECT grants excluding review/history provenance;
+- no runtime mutation grants;
 - no unrelated destructive DDL.
 
 No production policy decision is seeded unless an already-approved feature-specific review record actually exists at implementation time.
@@ -950,9 +961,12 @@ Required evidence:
 - failure rollback;
 - exact columns/types/nullability/defaults;
 - exact CHECKs/FKs/indexes;
-- runtime SELECT allowed;
+- runtime current-active-row SELECT allowed only for approved columns;
+- runtime expired/future/history rows invisible;
+- runtime decision_basis/review_evidence/publication provenance columns unavailable;
 - runtime INSERT/UPDATE/DELETE/TRUNCATE denied;
-- migrator ownership;
+- policy-table ENABLE/FORCE RLS verified;
+- migrator ownership/provisioning RLS policy verified;
 - Drizzle typed projection parity;
 - no unrelated destructive DDL.
 
@@ -1056,6 +1070,7 @@ Findings:
 | S10-P03 | MEDIUM | effective-period overlap prevention was conceptually specified but left the DB enforcement mechanism open | freeze same-feature advisory-lock + DB trigger overlap guard, no new extension |
 | S10-P04 | LOW | expired-policy and required-but-unsupported downstream obligation mappings were not explicit enough | add COMPLIANCE_POLICY_EXPIRED and server-owned obligation-support guard |
 | S10-P05 | HIGH | final re-audit found that a task dependency accidentally required the Slice 9 Safety guard and that the Drizzle gate did not explicitly recognize an already-merged separate Data Access Remediation path, contradicting the Frozen Spec’s semantic-dependency boundary | make Safety integration conditional/independent and allow exactly the two approved Drizzle-satisfaction paths |
+| S10-P06 | MEDIUM | runtime table-wide SELECT would expose historical policy/review provenance beyond FR-029’s minimum current-policy read need | enable/force global-policy RLS for current-effective rows plus column-level SELECT; map expired/future/no-row uniformly to no-effective-policy fail-closed |
 
 Spec change required: **NO**
 
