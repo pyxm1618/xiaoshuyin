@@ -1,5 +1,19 @@
 # Slice 9 — Safety Hold Control Foundation
 
+## Upstream Traceability
+
+This is a governance-compatible projection only. The authoritative upstream mapping remains unchanged in **§7. Upstream Requirements & Traceability**:
+
+- V1-C24, V1-C25, V1-C27, V1-C28, V1-C34 and V1-C35;
+- V1技术设计 §§5, 6.6, 6.7, 7.7, 8, 9/9.1, 23, 27.1, 27.3, 32, 38, 39 and 41;
+- the existing 总产品需求 / 总体技术架构 Safety-priority and Common-Core constraints.
+
+This section adds no requirement and does not supersede §7.
+
+## Scope
+
+This is a governance-compatible projection only. **In Scope remains exactly §4. In Scope; Out of Scope remains exactly §5. Out of Scope; Non-Goals remain exactly §6. Non-Goals.** No scope item is added, removed or reclassified here.
+
 Status: FROZEN SPEC READY  
 Slice: 009-safety-hold-control-foundation  
 Selected Phase: Phase 1 — Common Core Foundation  
@@ -899,6 +913,10 @@ No blocked/failed Safety operation may return a success state that did not persi
 
 ---
 
+## Acceptance Scenarios
+
+Governance-compatible alias only. The normative Acceptance 1–25 remain exactly those defined in **§18. Acceptance Scenarios** below; no scenario is added, removed, reordered or reinterpreted.
+
 ## 18. Acceptance Scenarios
 
 1. Given an OPEN Case and a valid deterministic ENTER_HOLD decision bound to its current revision, when EnterSafetyHold executes, then status becomes SAFETY_HOLD, phase is unchanged, version advances once, and Risk Event + case event + audit + idempotency result all exist.
@@ -928,6 +946,10 @@ No blocked/failed Safety operation may return a success state that did not persi
 25. Given post-PR #25 Digital Use Docs, no Safety Common Core code introduces a universal age gate, excludes computers, or uses total duration to decide Digital Use Problem/Intervention routing.
 
 ---
+
+## Acceptance Evidence
+
+Governance-compatible alias only. The normative evidence contract remains exactly **§19. Acceptance Evidence** below. This heading exists only for repository-governance recognition and does not weaken, replace or relax any required evidence.
 
 ## 19. Acceptance Evidence
 

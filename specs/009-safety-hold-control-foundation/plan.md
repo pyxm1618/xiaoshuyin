@@ -1,5 +1,47 @@
 # Slice 9 Implementation Plan — 009-safety-hold-control-foundation
 
+## Upstream Traceability
+
+This section is a governance index, not new planning authority.
+
+- Original frozen Slice 9 product/domain baseline: commit `6737b90b7b0809fc12bdb2aae7fa46db45531403`, spec blob `9d11288aa063ae2a3b8e1942334083f9d82a804b`.
+- Requirement projection: the unchanged Slice 9 `FR-001`–`FR-028` plus the existing upstream anchors in spec §7.
+- Plan projection: §§4–20 define the implementation design; §23 maps acceptance to evidence; §24 is the Implement Gate.
+- Task projection: T901–T920 remain the dependency-ordered execution contract.
+- Verification projection: §17 Test Strategy, §18 Failure Injection, §23 Acceptance Mapping and T920 final regression/closeout.
+- The row-level Spec → Plan → Tasks → Evidence mapping remains Appendix A.2.
+
+No requirement, scope item, architecture decision or acceptance contract is created by this section.
+
+## Constitution Check
+
+Checked against `.specify/memory/constitution.md` v1.0.0. **Result: PASS.**
+
+| Constitution principle | Slice 9 planning check | Result |
+|---|---|---|
+| I. Approved Documents Are the Authority | Plan remains a downstream projection of the approved Docs and frozen Slice 9 spec; no upstream semantic override is introduced. | PASS |
+| II. One Source of Truth, Downstream Projections Only | `cases.status` remains the sole current Safety truth; Plan/Tasks add no competing product or runtime truth. | PASS |
+| III. Phase-Bounded, Slice-Bounded Delivery | Scope stays within the Safety Hold control foundation and preserves the existing out-of-scope/Phase 5 exclusions. | PASS |
+| IV. Deterministic Business System Before AI Autonomy | Safety state, guards, authorization, idempotency, concurrency and failure behavior remain deterministic; AI receives no Safety write authority. | PASS |
+| V. Traceability Is Mandatory | FR-001–FR-028 are mapped through Appendix A.2 and T901–T920 to mechanical evidence. | PASS |
+| VI. Tests and Evidence Before Completion | §17, §18, §23 and T920 require fresh deterministic verification and regression evidence. | PASS |
+| VII. Safety, Authorization, Compliance, and Data Boundaries Cannot Be Bypassed | Production release authority remains fail-closed; RLS, authorization, privacy and Safety gates remain independent constraints. | PASS |
+| VIII. Explicit Change Control | This plan does not revise approved product semantics, canonical Digital Use rules, the frozen stack or V1/V2–V5 boundaries. | PASS |
+
+Repository-specific constraints are also satisfied: no Digital Use canonical-flow rewrite, no second Scene, no excluded infrastructure, no duplicate runtime truth, no model-as-business-fact substitution, and no unverified production-capability claim.
+
+## Verification Plan
+
+This heading indexes the existing verification contract without changing it.
+
+- **Unit / Integration / DB:** execute the matrices already defined in §17 Test Strategy.
+- **Failure injection / atomicity:** execute §18 and the T915 rollback matrix.
+- **Acceptance proof:** use §23 Acceptance Mapping and Appendix A.2 to prove every frozen acceptance area / FR has mechanical evidence.
+- **Implementation-gate proof:** re-run the current-main, isolation, Drizzle, authority, scope and shared-surface checks in §24 and T901/T919.
+- **Final closeout:** T920 requires the focused Safety suites, relevant shared RLS/migration regressions, scope-negative checks, `bun run guard:static`, `bun run test -- --run`, `bun run verify-all`, and final changed-file/scope review.
+
+No test, assertion, regression requirement or acceptance threshold is weakened by this governance section.
+
 Status: **PLAN AI 2 COMPLETE / PRE-DEVELOPMENT AUDIT 1 PASS**
 
 This file is planning only. It does not authorize merge, does not implement production code, and does not change the frozen Spec.
