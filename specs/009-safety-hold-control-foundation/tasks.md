@@ -1,5 +1,30 @@
 # Slice 9 Engineering Tasks — 009-safety-hold-control-foundation
 
+## Governance Task Index
+
+These lines are a machine-readable governance index for the existing T901–T920 contracts below. They keep the same Task IDs, order and dependencies. The checkbox syntax is governance metadata only; it does not assert or alter implementation completion state.
+
+- [ ] T901 Development-start environment isolation and input reconciliation [REQ:plan §24 Implement Gate] [VERIFY:clean independent worktree + baseline CI-equivalent verification + latest-main/migration/shared-vocabulary reconciliation]
+- [ ] T902 Establish the narrow Drizzle §7.0 foundation without weakening identity/RLS defence [REQ:FR-027; plan §5 Drizzle Strategy] [VERIFY:Drizzle CLI/config/schema-loading smoke + migrated-DB schema parity + same-client identity/Family/RLS transaction tests]
+- [ ] T903 Add the reviewed Safety migration and Risk Event schema [REQ:FR-001,FR-016,FR-018; plan §§4,12,16] [VERIFY:fresh/upgrade/failed migration + exact grant/RLS evidence + Drizzle schema parity]
+- [ ] T904 Implement Safety domain types and deterministic precheck [REQ:FR-002,FR-003,FR-004,FR-021; plan §6.1] [VERIFY:deterministic unit matrix + malformed/unapproved input tests + no-network/model static dependency scan]
+- [ ] T905 Implement Risk Event, Case Event and Business Audit persistence [REQ:FR-012,FR-016,FR-017; plan §13] [VERIFY:DB constraints/RLS + three-record persistence assertions + raw-content-negative checks]
+- [ ] T906 Extend authorization vocabulary and implement resolver fact sources [REQ:FR-013,FR-014,FR-022; plan §8] [VERIFY:authorization fact/action tests + production composition deny-by-default + infrastructure-error propagation]
+- [ ] T907 Implement EnterSafetyHold [REQ:FR-005,FR-006,FR-007,FR-021,FR-023; plan §6.2] [VERIFY:EnterSafetyHold integration/DB state-event-audit-idempotency assertions + closed/stale/negative paths]
+- [ ] T908 Implement reusable AssertOrdinaryProgressionAllowed [REQ:FR-003,FR-008,FR-010; plan §7] [VERIFY:transaction-backed guard tests proving DB status controls outcome + non-global-write regression]
+- [ ] T909 Integrate shared Safety semantics into SwitchPrimaryCase without regression [REQ:FR-009; plan §§7,15] [VERIFY:existing Slice 7 SwitchPrimary suite + held current/target precedence + auth/idempotency/concurrency regression]
+- [ ] T910 Implement ResolveRisk with production fail-closed authority [REQ:FR-011,FR-012,FR-015,FR-023; plan §6.3] [VERIFY:production fail-closed + controlled resolver success + evidence validation + WAITING/phase/no-autoresume assertions]
+- [ ] T911 Close idempotency integration and vocabulary [REQ:FR-019; plan §10] [VERIFY:same-store replay/mismatch/concurrent-key tests + one idempotency row per command key + no-second-store scan]
+- [ ] T912 Prove RLS, grants and structural isolation with latest-main reconciliation [REQ:FR-018; plan §12] [VERIFY:real runtime role privilege matrix + risk_events ENABLE/FORCE RLS + cross-Family tests + cases-rls/roles regression]
+- [ ] T913 Complete domain/unit error and privacy matrix [REQ:FR-002,FR-004,FR-017,FR-028; plan §§14,17] [VERIFY:table-driven unit error/status mapping + metadata non-leak assertions]
+- [ ] T914 Complete Safety integration behavior and regressions [REQ:FR-007,FR-008,FR-009,FR-014,FR-015,FR-019,FR-028; plan §§15,17,23] [VERIFY:real service-composition Safety integration + DB trace assertions + OpenAPI/public-route negative]
+- [ ] T915 Atomicity and failure-injection suite [REQ:FR-006,FR-027,FR-028; plan §§9,18] [VERIFY:staged fault injection with full rollback and no completed idempotency result]
+- [ ] T916 Concurrency and stale-decision suite [REQ:FR-020,FR-021; plan §11] [VERIFY:real concurrent transaction races + stale N→N+1 precheck rejection]
+- [ ] T917 Close the Slice 8 integration seam [REQ:FR-025; plan §15] [VERIFY:six-command held-block tests if runtime exists, otherwise static/contract six-command guard-seam evidence]
+- [ ] T918 Mechanically enforce unique Safety entry/exit and scope negatives [REQ:FR-001,FR-005,FR-011,FR-022,FR-023,FR-024; plan §§20,24] [VERIFY:changed-path/schema/route/import/export scans + guard:static real-tree PASS and synthetic bypass FAIL]
+- [ ] T919 Reconcile migration, RLS and existing shared-regression evidence after parallel development [REQ:FR-018,FR-019,FR-027; plan §§16,24] [VERIFY:latest-main re-fetch + migration-order/CHECK/grant reconciliation + fresh/upgrade/replay/failed-migration regressions]
+- [ ] T920 Final combined regression, acceptance proof and scope closeout [REQ:FR-001 through FR-028; plan §§17,23,24] [VERIFY:focused Safety suites + shared DB/migration regressions + scope-negative scans + bun run guard:static + bun run test -- --run + bun run verify-all + changed-file review]
+
 Status: **READY FOR DEVELOPMENT after Audit 1 PASS**
 
 These tasks are ordered by dependency. A Development AI executes them; it may not reopen product scope.
