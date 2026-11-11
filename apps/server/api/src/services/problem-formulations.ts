@@ -38,11 +38,13 @@ import {
   toProblemFormulationDto,
   transitionProblemFormulationStatus,
   validateFormulationContent,
+  revalidateStoredEvidenceDependencies,
   reassessmentBasisFingerprint,
   validateReassessmentBasis,
   advanceCasePhaseAndVersion,
   pfError,
   type AuthoritativeEvidenceSet,
+  type DependencyRef,
   type EvidenceRef,
   type ProblemFormulationContent,
   type ProblemFormulationDto,
@@ -238,6 +240,48 @@ function mandatoryDependencies(
       under14Consents: compliance.under14Consents,
     })
   );
+}
+
+/**
+ * S8-FINAL-03: Confirm revalidates every stored dependency that current main
+ * can authoritatively resolve. The server-mandatory subset check alone cannot
+ * prove that an extra stored dependency (e.g. an additional Evidence ref) is
+ * still valid; it only proves the mandatory refs were not omitted.
+ *
+ * EVIDENCE resolution lives in the domain package (single SQL owner).
+ * CONSENT is checked against the existing compliance truth: the record must
+ * still exist, still validate its frozen evidence schema, still be GRANTED,
+ * and still match the stored version when one was pinned. POLICY / PACKAGE /
+ * CONTENT_VERSION stay preserved without a fabricated validator.
+ */
+async function revalidateStoredDependencies(
+  tx: pg.PoolClient,
+  caseId: string,
+  dependencyRefs: readonly DependencyRef[]
+): Promise<void> {
+  await revalidateStoredEvidenceDependencies(tx, caseId, dependencyRefs);
+  for (const dep of dependencyRefs) {
+    if (dep.type !== 'CONSENT') continue;
+    const consent = await getConsentRecordForGate(tx, dep.id);
+    if (!consent) {
+      throw pfError(
+        'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+        'stored Consent dependency is no longer valid'
+      );
+    }
+    if (consent.decision !== 'GRANTED') {
+      throw pfError(
+        'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+        'stored Consent dependency is not GRANTED'
+      );
+    }
+    if (dep.version !== undefined && Number(consent.version) !== dep.version) {
+      throw pfError(
+        'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+        'stored Consent dependency version is stale'
+      );
+    }
+  }
 }
 
 function envelope(caseVersion: number, row: ProblemFormulationRow | null): Envelope {
@@ -729,6 +773,7 @@ export async function confirmProblemFormulation(
         const compliance = await runComplianceGate(tx, persons, 'PUBLIC');
 
         const mandatory = mandatoryDependencies(authoritative, compliance);
+        await revalidateStoredDependencies(tx, input.caseId, current.dependency_refs);
         if (!isDependencySubset(mandatory, current.dependency_refs)) {
           throw pfError(
             'PROBLEM_FORMULATION_DEPENDENCY_INVALID',

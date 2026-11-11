@@ -11,6 +11,14 @@
 --
 -- Baseline read from origin/main = 8e393c99 (2026-11-11). Historical
 -- migrations 001-007 are not modified.
+--
+-- Current-main compatibility reconciliation (S8-FINAL-01): the migrator applies
+-- missing files by filename order. A real current-main database may therefore
+-- already have 009 applied before this 008 is ever applied. Every shared CHECK
+-- rewritten below is the exact UNION of the current-main (Slice 9) vocabulary
+-- and the Slice 8 vocabulary. Applying 008 alone on a database that already
+-- contains legal Slice 9 Safety rows must succeed and must not drop any 009
+-- literal, branch or metadata semantics. No Slice 8 product semantics change.
 -- ============================================================
 
 CREATE TYPE problem_formulation_status AS ENUM (
@@ -178,7 +186,10 @@ ALTER TABLE case_events
       'CASE_PROBLEM_FORMULATION_CONFIRMED',
       'CASE_PROBLEM_FORMULATION_DISPUTED',
       'CASE_PROBLEM_FORMULATION_CORRECTED',
-      'CASE_REASSESSMENT_STARTED'
+      'CASE_REASSESSMENT_STARTED',
+      -- Current-main / Slice 9 Safety literals (preserved verbatim).
+      'CASE_SAFETY_HOLD_ENTERED',
+      'CASE_RISK_RESOLVED'
     )
   );
 
@@ -327,6 +338,33 @@ ALTER TABLE case_events
       AND jsonb_typeof(metadata -> 'formulationVersion') = 'number'
       AND jsonb_typeof(metadata -> 'version') = 'number'
     )
+    -- Current-main / Slice 9 Safety transitions: exactly the state/version pair
+    -- and the risk trace id. Preserved verbatim from
+    -- 009_safety_hold_control_foundation.sql so applying 008 on an
+    -- already-Slice-9 database accepts existing Safety rows.
+    OR (
+      event_type IN ('CASE_SAFETY_HOLD_ENTERED', 'CASE_RISK_RESOLVED')
+      AND jsonb_typeof(metadata) = 'object'
+      AND metadata ? 'fromStatus'
+      AND metadata ? 'toStatus'
+      AND metadata ? 'fromVersion'
+      AND metadata ? 'toVersion'
+      AND metadata ? 'riskEventId'
+      AND metadata - 'fromStatus' - 'toStatus' - 'fromVersion' - 'toVersion'
+                  - 'riskEventId' = '{}'::jsonb
+      AND jsonb_typeof(metadata -> 'fromStatus') = 'string'
+      AND jsonb_typeof(metadata -> 'toStatus') = 'string'
+      AND jsonb_typeof(metadata -> 'riskEventId') = 'string'
+      AND CASE
+            WHEN jsonb_typeof(metadata -> 'fromVersion') = 'number'
+             AND jsonb_typeof(metadata -> 'toVersion') = 'number'
+            THEN (metadata ->> 'fromVersion')::numeric = trunc((metadata ->> 'fromVersion')::numeric)
+                 AND (metadata ->> 'toVersion')::numeric = trunc((metadata ->> 'toVersion')::numeric)
+                 AND (metadata ->> 'fromVersion')::numeric >= 1
+                 AND (metadata ->> 'toVersion')::numeric >= 1
+            ELSE false
+          END
+    )
   );
 
 ALTER TABLE business_audit_events
@@ -355,7 +393,10 @@ ALTER TABLE business_audit_events
       'CASE_PROBLEM_FORMULATION_CONFIRMED',
       'CASE_PROBLEM_FORMULATION_DISPUTED',
       'CASE_PROBLEM_FORMULATION_CORRECTED',
-      'CASE_REASSESSMENT_STARTED'
+      'CASE_REASSESSMENT_STARTED',
+      -- Current-main / Slice 9 Safety audit actions (preserved verbatim).
+      'CASE_SAFETY_HOLD_ENTERED',
+      'CASE_RISK_RESOLVED'
     )
   );
 
@@ -399,7 +440,10 @@ ALTER TABLE idempotency_keys
       'PROBLEM_FORMULATION_CONFIRM',
       'PROBLEM_FORMULATION_DISPUTE',
       'PROBLEM_FORMULATION_CORRECT',
-      'CASE_REASSESS_FROM_FORMULATION'
+      'CASE_REASSESS_FROM_FORMULATION',
+      -- Current-main / Slice 9 Safety commands (preserved verbatim).
+      'CASE_ENTER_SAFETY_HOLD',
+      'CASE_RESOLVE_RISK'
     )
   );
 
@@ -416,7 +460,11 @@ ALTER TABLE idempotency_keys
         'PROBLEM_FORMULATION_CONFIRM',
         'PROBLEM_FORMULATION_DISPUTE',
         'PROBLEM_FORMULATION_CORRECT',
-        'CASE_REASSESS_FROM_FORMULATION'
+        'CASE_REASSESS_FROM_FORMULATION',
+        -- Current-main / Slice 9 Safety commands use the same bytea exact-key
+        -- representation; preserved verbatim.
+        'CASE_ENTER_SAFETY_HOLD',
+        'CASE_RESOLVE_RISK'
       )
       AND idempotency_key IS NOT NULL
       AND idempotency_key_bytes IS NULL
@@ -436,7 +484,9 @@ ALTER TABLE idempotency_keys
         'PROBLEM_FORMULATION_CONFIRM',
         'PROBLEM_FORMULATION_DISPUTE',
         'PROBLEM_FORMULATION_CORRECT',
-        'CASE_REASSESS_FROM_FORMULATION'
+        'CASE_REASSESS_FROM_FORMULATION',
+        'CASE_ENTER_SAFETY_HOLD',
+        'CASE_RESOLVE_RISK'
       )
       AND idempotency_key IS NULL
       AND idempotency_key_bytes IS NOT NULL

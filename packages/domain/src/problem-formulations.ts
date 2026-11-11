@@ -12,7 +12,7 @@
 
 import type { PoolClient } from 'pg';
 import { getCaseForUpdate, type CaseRow, type CasePhaseValue } from './cases.js';
-import { hashPayload } from './idempotency.js';
+import { canonicalJson, hashPayload } from './idempotency.js';
 
 type Tx = PoolClient;
 
@@ -298,6 +298,20 @@ export function assertVersionBound(value: number): void {
   }
 }
 
+/**
+ * S8-FINAL-04: PostgreSQL `cases.version` is a 4-byte integer. Every Slice 8
+ * increment path must reject the maximum value BEFORE constructing the SQL
+ * `version = version + 1`, otherwise the database raises 22003 and the API
+ * leaks a 500. The frozen business-conflict semantics for a non-incrementable
+ * version are `STALE_CASE_VERSION` (409).
+ */
+export function assertCaseVersionIncrementable(value: number): void {
+  assertVersionBound(value);
+  if (value >= PG_INTEGER_MAX) {
+    throw pfError('STALE_CASE_VERSION');
+  }
+}
+
 export function parseIfMatchCaseVersion(header: string | undefined): number {
   if (typeof header !== 'string') throw pfError('STALE_CASE_VERSION');
   const match = /^"case-v([1-9][0-9]{0,9})"$/.exec(header);
@@ -354,7 +368,13 @@ export function mergeCorrection(
     exitConditions: changes.exitConditions ?? current.exitConditions,
     dependencyRefs: changes.dependencyRefs ?? current.dependencyRefs,
   };
-  if (JSON.stringify(merged) === JSON.stringify(current)) {
+  // S8-FINAL-05: a correction is a no-op when the merged content is semantically
+  // identical. Object key order is not semantic (JSONB round-trips reorder keys;
+  // public Zod input preserves caller order), so compare canonical JSON where
+  // object keys are sorted recursively. Array order is preserved because it is
+  // part of the domain structure (`evidenceRefs` snapshot order, conflict sides,
+  // condition lists), never globally sorted.
+  if (canonicalJson(merged) === canonicalJson(current)) {
     throw pfError('CORRECTION_NOOP', 'correction changes nothing');
   }
   return merged;
@@ -682,8 +702,36 @@ export async function validateFormulationContent(
     }
   }
 
+  // S8-FINAL-02: validating each supplied ConflictItem alone is only half of
+  // the frozen §11.4 rule. Every conflict group that is *actually present* in
+  // the authoritative Evidence set must also be represented by a legal
+  // ConflictItem. A caller must not delete the ConflictItem and keep the
+  // conflict-bearing Evidence — including by dropping `conflicts` entirely
+  // while top-level refs still contain both sides of one group.
+  const coveredConflictGroups = new Set<string>();
   for (const conflict of content.conflicts) {
     await validateConflictItem(tx, caseId, conflict, authoritative);
+    if (conflict.conflictGroupId) {
+      coveredConflictGroups.add(lowerId(conflict.conflictGroupId));
+      continue;
+    }
+    for (const ref of canonicalEvidenceRefs(conflict.evidenceRefs ?? [])) {
+      const member = authoritative.members.find(
+        (item) => canonicalEvidenceKey(item.ref) === canonicalEvidenceKey(ref)
+      );
+      if (member?.conflictGroupId) {
+        coveredConflictGroups.add(lowerId(member.conflictGroupId));
+      }
+    }
+  }
+  for (const member of authoritative.members) {
+    if (member.conflictGroupId === null) continue;
+    if (!coveredConflictGroups.has(lowerId(member.conflictGroupId))) {
+      throw pfError(
+        'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+        'conflict-bearing Evidence must be represented in conflicts'
+      );
+    }
   }
 
   return authoritative;
@@ -817,6 +865,54 @@ export function deriveMandatoryDependencyRefs(input: {
     deps.push({ type: 'CONSENT', id: consent.id, version: consent.version });
   }
   return canonicalDependencies(deps);
+}
+
+/**
+ * S8-FINAL-03: Confirm must revalidate every stored dependency that current
+ * main can authoritatively resolve, not only the server-mandatory subset.
+ *
+ * EVIDENCE is always resolvable: the referenced row must still exist in the
+ * same Case, must not be superseded, and must be inside its raw validity
+ * window. Caller-supplied extra Evidence dependencies therefore cannot expire
+ * silently between Present and Confirm.
+ *
+ * POLICY / PACKAGE / CONTENT_VERSION have no authoritative current-main
+ * registry in the pinned base; they are preserved and never falsely reported
+ * as verified. CONSENT is validated by the application service through the
+ * existing compliance truth (`getConsentRecordForGate`).
+ */
+export async function revalidateStoredEvidenceDependencies(
+  tx: Tx,
+  caseId: string,
+  dependencyRefs: readonly DependencyRef[]
+): Promise<void> {
+  const evidenceRefs: EvidenceRef[] = [];
+  for (const dep of dependencyRefs) {
+    if (dep.type === 'EVIDENCE') evidenceRefs.push(dep.evidence);
+  }
+  if (evidenceRefs.length === 0) return;
+
+  const canonical = canonicalEvidenceRefs(evidenceRefs);
+  const resolution = await resolveEvidenceRefs(tx, caseId, canonical);
+  if (resolution.missing.length > 0) {
+    throw pfError(
+      'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+      'stored Evidence dependency no longer exists in this Case'
+    );
+  }
+  for (const ref of canonical) {
+    const member = resolution.members.get(canonicalEvidenceKey(ref));
+    if (
+      !member ||
+      !member.usable ||
+      lowerId(member.caseId) !== lowerId(caseId)
+    ) {
+      throw pfError(
+        'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+        'stored Evidence dependency is no longer current-valid'
+      );
+    }
+  }
 }
 
 export async function resolveActiveCaseParticipantPersonIds(
@@ -1023,6 +1119,7 @@ export async function advanceCasePhaseAndVersion(
     toPhase: CasePhaseValue;
   }
 ): Promise<CaseRow> {
+  assertCaseVersionIncrementable(input.expectedVersion);
   const { rows } = await tx.query<CaseRow>(
     `UPDATE cases
         SET phase = $3, version = version + 1, updated_at = now()
@@ -1040,6 +1137,7 @@ export async function bumpCaseVersionWithoutPhaseChange(
   tx: Tx,
   input: { caseId: string; expectedVersion: number }
 ): Promise<CaseRow> {
+  assertCaseVersionIncrementable(input.expectedVersion);
   const { rows } = await tx.query<CaseRow>(
     `UPDATE cases
         SET version = version + 1, updated_at = now()
