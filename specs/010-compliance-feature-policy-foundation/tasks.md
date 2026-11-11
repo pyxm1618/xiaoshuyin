@@ -1,6 +1,6 @@
 # Slice 10 Engineering Tasks — 010-compliance-feature-policy-foundation
 
-Status: **PLANNING COMPLETE / AUDIT 1 PENDING / IMPLEMENT GATE BLOCKED**
+Status: **PLANNING COMPLETE / AUDIT 1 REMEDIATED / FINAL RE-AUDIT PENDING / IMPLEMENT GATE BLOCKED**
 
 These are future Development AI tasks. They do not authorize implementation now.
 
@@ -23,17 +23,17 @@ Global rules for every task:
 
 - [ ] T1001 [REQ:FR-028,FR-030,V1-C20,V1-C21,§7.0,§38] Reconcile development-start authority, current main, Slice 8/9 state, Drizzle foundation, migration/RLS/compliance baseline before any production edit [VERIFY:git fetch && git status --short && git rev-parse origin/main; compare Frozen Spec blob; inspect current db/schema, lockfile, migrations, authorize/RLS/compliance facts and exact main CI]
 - [ ] T1002 [REQ:FR-028,FR-029,V1-C20,V1-C21,§7.0,§9.1] Consume the verified Slice 9 Drizzle same-client transaction/schema foundation without creating a second data-access path [VERIFY:bun run typecheck; focused Drizzle same-client identity/RLS transaction tests; schema loading/parity evidence]
-- [ ] T1003 [REQ:FR-001,FR-004..FR-010,FR-029,V1-C43,§7.7A] Add reviewed compliance feature-policy persistence, version/effective-period invariants, least-privilege grants and exact Drizzle projection [VERIFY:bun run test -- --run tests/db/*compliance*; bun run db:evidence -- --no-archive; migration fresh/upgrade/replay/rollback introspection]
+- [ ] T1003 [REQ:FR-001,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-029,V1-C43,§7.7A] Add reviewed compliance feature-policy persistence, version/effective-period invariants, least-privilege grants and exact Drizzle projection [VERIFY:bun run test -- --run tests/db/*compliance*; bun run db:evidence -- --no-archive; migration fresh/upgrade/replay/rollback introspection]
 - [ ] T1004 [REQ:FR-002,FR-003,FR-023,V1-C30] Implement server-owned feature identity/contract-revision types and registry/mapping boundary with no Scene-specific product branch [VERIFY:bun run test -- --run tests/domain/*feature*identity*; bun run guard:static; code search proves no client-authoritative feature string or A4003/Digital Use branch in Common Core evaluator]
-- [ ] T1005 [REQ:FR-005..FR-010,FR-016..FR-021,FR-030,V1-C38,V1-C43] Implement pure deterministic policy selection/evaluation and obligation/provenance result semantics [VERIFY:bun run test -- --run tests/domain/*feature*policy*; fixed-time deterministic tests; no network/model imports]
-- [ ] T1006 [REQ:FR-011..FR-015,V1-C39,§7.7A,§27B] Compose the evaluator with existing Compliance Profile, age/minor, guardian relationship and current guardian-consent gate without duplicating truth [VERIFY:bun run test -- --run tests/domain/*compliance* tests/integration/*compliance*; age/guardian/consent matrix passes]
+- [ ] T1005 [REQ:FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-030,V1-C38,V1-C43] Implement pure deterministic policy selection/evaluation and obligation/provenance result semantics [VERIFY:bun run test -- --run tests/domain/*feature*policy*; fixed-time deterministic tests; no network/model imports]
+- [ ] T1006 [REQ:FR-011,FR-012,FR-013,FR-014,FR-015,V1-C39,§7.7A,§27B] Compose the evaluator with existing Compliance Profile, age/minor, guardian relationship and current guardian-consent gate without duplicating truth [VERIFY:bun run test -- --run tests/domain/*compliance* tests/integration/*compliance*; age/guardian/consent matrix passes]
 - [ ] T1007 [REQ:FR-022,FR-027,FR-029,V1-C20,V1-C21,V1-C25,V1-C26,§9,§9.1] Integrate authorization/RLS/anti-enumeration and independent Safety/Compliance gate precedence without new RBAC or Safety behavior [VERIFY:bun run test -- --run tests/integration/*compliance* tests/integration/*scope*; unauthorized/cross-family/fault-injection tests; bun run guard:static]
-- [ ] T1008 [REQ:FR-004,FR-007..FR-010,FR-021,§13A,§27B] Implement controlled reviewed policy publication/supersession representation with no runtime/public admin command and no fake review workflow [VERIFY:migration/provisioning tests prove version history, effective interval closure, overlap rejection, provenance and runtime mutation denial]
-- [ ] T1009 [REQ:FR-008..FR-010,FR-020,FR-021,FR-030,V1-C27,V1-C28] Close concurrency, snapshot, stale-revision and infrastructure-failure semantics for evaluation/publication [VERIFY:concurrent publication test; overlapping-corruption fail-closed test; policy supersession snapshot test; database failure propagation test]
-- [ ] T1010 [REQ:FR-016..FR-019,FR-022..FR-027,V1-C38,V1-C43] Add only the internal compliance service composition/consumer contract required by the foundation and prove no public OpenAPI surface or downstream runtime was added [VERIFY:bun run openapi:check; generated operation set unchanged; diff/static scan contains no timer/notification/export/PIPIA/regulatory/A4003 runtime]
-- [ ] T1011 [REQ:FR-001..FR-030] Complete the full Slice 10 domain/integration/database acceptance matrix and map all 16 Frozen acceptance scenarios to automated evidence [VERIFY:bun run test -- --run; acceptance mapping report shows scenarios 1..16 PASS]
-- [ ] T1012 [REQ:FR-023..FR-030,V1-C30,§38] Add/narrow architecture guards and run combined Slice 1–9 regression against the then-current merged baseline [VERIFY:bun run guard:static; bun run typecheck; bun run openapi:check; bun run db:evidence -- --no-archive; bun run test -- --run]
-- [ ] T1013 [REQ:FR-001..FR-030,Constitution] Perform final exact-head convergence/governance verification and stop for independent post-development audit without merging [VERIFY:node .specify/scripts/validate-governance.mjs; node .specify/scripts/tests/run-governance-tests.mjs; git diff origin/main...HEAD; exact-head CI/check evidence]
+- [ ] T1008 [REQ:FR-004,FR-007,FR-008,FR-009,FR-010,FR-021,§13A,§27B] Implement controlled reviewed policy publication/supersession representation with no runtime/public admin command and no fake review workflow [VERIFY:migration/provisioning tests prove version history, effective interval closure, overlap rejection, provenance and runtime mutation denial]
+- [ ] T1009 [REQ:FR-008,FR-009,FR-010,FR-020,FR-021,FR-030,V1-C27,V1-C28] Close concurrency, snapshot, stale-revision and infrastructure-failure semantics for evaluation/publication [VERIFY:concurrent publication test; overlapping-corruption fail-closed test; policy supersession snapshot test; database failure propagation test]
+- [ ] T1010 [REQ:FR-016,FR-017,FR-018,FR-019,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,V1-C38,V1-C43] Add only the internal compliance service composition/consumer contract required by the foundation and prove no public OpenAPI surface or downstream runtime was added [VERIFY:bun run openapi:check; generated operation set unchanged; diff/static scan contains no timer/notification/export/PIPIA/regulatory/A4003 runtime]
+- [ ] T1011 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030] Complete the full Slice 10 domain/integration/database acceptance matrix and map all 16 Frozen acceptance scenarios to automated evidence [VERIFY:bun run test -- --run; acceptance mapping report shows scenarios 1..16 PASS]
+- [ ] T1012 [REQ:FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,V1-C30,§38] Add/narrow architecture guards and run combined Slice 1–9 regression against the then-current merged baseline [VERIFY:bun run guard:static; bun run typecheck; bun run openapi:check; bun run db:evidence -- --no-archive; bun run test -- --run]
+- [ ] T1013 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,Constitution] Perform final exact-head convergence/governance verification and stop for independent post-development audit without merging [VERIFY:node .specify/scripts/validate-governance.mjs; node .specify/scripts/tests/run-governance-tests.mjs; git diff origin/main...HEAD; exact-head CI/check evidence]
 
 ---
 
@@ -226,7 +226,7 @@ Required invariants:
 - self supersession integrity;
 - unique exact version identity;
 - indexes for exact feature/revision/time selection;
-- publication overlap guard;
+- publication overlap guard implemented as a same-feature PostgreSQL advisory-lock + BEFORE INSERT/UPDATE effective-period trigger that rejects intersecting half-open intervals;
 - immutable judgment fields after publication;
 - lifecycle-only closure allowed to controlled publisher;
 - table owned by migrator;
@@ -341,9 +341,13 @@ Implement mechanically testable policy selection and obligation/provenance seman
 7. NOT_APPLICABLE removes only the anthropomorphic special-rule obligations; it does not disable global/upstream requirements.
 8. BASELINE cannot downgrade upstream requirements.
 9. `MINORS_BLOCKED` is generic and Scene-agnostic.
-10. Return exact feature/revision/policy/applicability/effective-time provenance.
-11. Do not persist an evaluation audit row.
-12. Distinguish business fail-closed decisions from infrastructure exceptions.
+10. REQUIRED must enforce the cross-field contract: AI disclosure REQUIRED and usage reminder REQUIRED.
+11. NOT_APPLICABLE must not carry/emit the anthropomorphic usage-reminder rule; its usage-reminder rule is BASELINE.
+12. UNKNOWN blocks regardless of other stored rule values.
+13. Return exact feature/revision/policy/applicability/effective-time provenance.
+14. Do not persist an evaluation audit row.
+15. Distinguish business fail-closed decisions from infrastructure exceptions.
+16. Provide/use the pure server-owned obligation-support guard so a required obligation unsupported by the consuming command fails closed with COMPLIANCE_CAPABILITY_UNAVAILABLE; supported-obligation declarations are never client input.
 
 **Tests required**
 
@@ -515,7 +519,8 @@ Provide a real reviewed version-publication path without building a public/runti
 - old version preserved;
 - stale version rejected;
 - concurrent conflicting publish serialized/rejected;
-- overlap rejected;
+- overlap rejected by the DB trigger even when a caller skips its precheck;
+- two concurrent first-publish attempts for one feature are serialized by the same trigger/advisory lock;
 - runtime role cannot publish;
 - no public route.
 
@@ -557,9 +562,10 @@ Close races and ensure real failures never become false policy decisions.
 5. Policy supersession after the snapshot does not mutate returned provenance.
 6. Long-running cross-transaction recheck is documented as downstream responsibility, not implemented here.
 7. Overlap/corruption yields ambiguity, never “latest wins”.
-8. Database/transaction failure propagates as infrastructure error.
-9. Rollback/failure does not produce an ALLOW snapshot.
-10. Preserve original error on rollback failure according to shared transaction seam.
+8. A history that exists but is entirely expired maps to COMPLIANCE_POLICY_EXPIRED; future-only/no-row remains COMPLIANCE_POLICY_MISSING.
+9. Database/transaction failure propagates as infrastructure error.
+10. Rollback/failure does not produce an ALLOW snapshot.
+11. Preserve original error on rollback failure according to shared transaction seam.
 
 **Tests required**
 
