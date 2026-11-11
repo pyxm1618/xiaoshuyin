@@ -24,6 +24,10 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   'PARTICIPATION_ACCEPT',
   'PARTICIPATION_DECLINE',
   'PARTICIPATION_WITHDRAW',
+  // Slice 9 — Safety control foundation. Same store, same canonical hashing and
+  // the modern bytea exact-key representation; no second idempotency system.
+  'CASE_ENTER_SAFETY_HOLD',
+  'CASE_RESOLVE_RISK',
 ] as const;
 
 export type IdempotencyCommandType = (typeof IDEMPOTENCY_COMMAND_TYPES)[number];

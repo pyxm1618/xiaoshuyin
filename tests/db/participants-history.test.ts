@@ -4,6 +4,15 @@ import {
   createParticipationFixture,
 } from '../setup/participation.js';
 
+/**
+ * `case_participants.invite_token_hash` is globally unique. Fixed literals
+ * collide across runs and across suites sharing one database, so every fixture
+ * derives a unique 64-hex value from its own Case id.
+ */
+function uniqueToken(seed: string, label: string): string {
+  return `${seed}:${label}`.replace(/[^0-9a-f]/gi, '0').padEnd(64, '0').slice(0, 64);
+}
+
 describe('Slice 4 participation terminal history', () => {
   let h: Awaited<ReturnType<typeof buildParticipationApp>>;
 
@@ -17,7 +26,7 @@ describe('Slice 4 participation terminal history', () => {
         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id)
        VALUES ($1,$2,$3,'PENDING',$4,now()+interval '1 hour',$5)
        RETURNING id`,
-      [f.familyId,f.caseId,f.targetPersonId,'1'.repeat(64),f.manager.personId]
+      [f.familyId,f.caseId,f.targetPersonId,uniqueToken(f.caseId, '1'),f.manager.personId]
     )).rows[0].id as string;
 
     await h.admin.query(
@@ -31,7 +40,7 @@ describe('Slice 4 participation terminal history', () => {
         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id)
        VALUES ($1,$2,$3,'PENDING',$4,now()+interval '1 hour',$5)
        RETURNING id`,
-      [f.familyId,f.caseId,f.targetPersonId,'2'.repeat(64),f.manager.personId]
+      [f.familyId,f.caseId,f.targetPersonId,uniqueToken(f.caseId, '2'),f.manager.personId]
     )).rows[0].id as string;
 
     const {rows}=await h.admin.query(
@@ -56,7 +65,7 @@ describe('Slice 4 participation terminal history', () => {
          now()-interval '2 minutes',now()-interval '1 minute'
        )
        RETURNING id,accepted_at`,
-      [f.familyId,f.caseId,f.targetPersonId,'3'.repeat(64),f.manager.personId]
+      [f.familyId,f.caseId,f.targetPersonId,uniqueToken(f.caseId, '3'),f.manager.personId]
     )).rows[0];
 
     await h.admin.query(
@@ -81,7 +90,7 @@ describe('Slice 4 participation terminal history', () => {
          created_by_person_id,declined_at)
        VALUES ($1,$2,$3,'DECLINED',$4,now()+interval '1 hour',$5,now())
        RETURNING id`,
-      [f.familyId,f.caseId,f.targetPersonId,'4'.repeat(64),f.manager.personId]
+      [f.familyId,f.caseId,f.targetPersonId,uniqueToken(f.caseId, '4'),f.manager.personId]
     )).rows[0];
     await expect(
       h.admin.query(`UPDATE case_participants SET state='ACTIVE' WHERE id=$1`,[row.id])

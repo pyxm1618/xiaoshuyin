@@ -172,13 +172,15 @@ describe('Database Roles (T012 RED)', () => {
     expect(rows[0].has).toBe(false);
   });
 
-  it('Slice 7: cases allows column UPDATE only on is_primary / version / updated_at', async () => {
-    const allowed = ['is_primary', 'version', 'updated_at'];
+  it('Slice 7+9: cases allows column UPDATE only on is_primary / status / version / updated_at', async () => {
+    // Slice 9 adds the narrow `status` capability required for the Safety
+    // transition; `phase` must remain un-writable so a Safety transition can
+    // only ever preserve it.
+    const allowed = ['is_primary', 'status', 'version', 'updated_at'];
     const denied = [
       'id',
       'family_id',
       'created_by_person_id',
-      'status',
       'phase',
       'created_at',
     ];

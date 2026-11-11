@@ -25,6 +25,9 @@ export type Action =
   | 'GUARDIAN_CONSENT_REQUEST' | 'GUARDIAN_CONSENT_GRANT' | 'GUARDIAN_CONSENT_REVOKE'
   | 'MINOR_PROCESSING'
   | 'CASE_CREATE' | 'CASE_LIST' | 'CASE_READ' | 'CASE_SWITCH_PRIMARY'
+  // Slice 9 Safety control foundation. Internal domain commands only: neither
+  // action has a public route.
+  | 'CASE_ENTER_SAFETY_HOLD' | 'CASE_RESOLVE_RISK'
   // Slice 4 Case Participant Core.
   | 'PARTICIPATION_INVITE_CREATE'
   | 'PARTICIPATION_READ_SELF' | 'PARTICIPATION_ACCEPT_SELF'
@@ -64,6 +67,8 @@ export type DenyReason =
   | 'FAMILY_CONTEXT_REQUIRED' | 'NOT_FAMILY_MEMBER' | 'NOT_FAMILY_MANAGER'
   | 'NOT_GUARDIAN' | 'AGE_BAND_UNKNOWN' | 'CASE_CONTEXT_REQUIRED'
   | 'PARTICIPATION_CONTEXT_REQUIRED' | 'NOT_PARTICIPANT' | 'AUTHORIZATION_ERROR'
+  // Slice 9: no separately verified Safety-resolution capability.
+  | 'NOT_SAFETY_RESOLVER'
   // Slice 006 binding-specific denials.
   | 'BINDING_CONTEXT_INVALID' | 'NOT_BINDING_AUTHORIZED_CONFIRMER'
   | 'BINDING_AGE_UNSUPPORTED' | 'BINDING_TARGET_INVALID';
@@ -75,7 +80,7 @@ export type Decision =
         membership: boolean;
         manager: boolean;
         purpose: Purpose;
-        authority?: 'GUARDIAN' | 'FAMILY_MANAGER' | null;
+        authority?: 'GUARDIAN' | 'FAMILY_MANAGER' | 'SAFETY_RESOLVER' | null;
       };
     }
   | { decision: 'DENY'; reason: DenyReason };
@@ -103,6 +108,14 @@ export interface AuthorizeFacts {
   guardianPersonId: string | null;
   /** Real membership of the targeted person in the target family. */
   targetIsFamilyMember: boolean;
+  /**
+   * Slice 9: separately verified Safety-resolution capability fact.
+   *
+   * Absent / `null` / `verified: false` means NO capability. Family manager,
+   * guardian, participant and ordinary Account privileges NEVER produce this
+   * fact; a dedicated fact source must supply it.
+   */
+  safetyResolution?: { verified: boolean; authorityRef: string } | null;
   /**
    * Real `families.id` the facts were read from. Internal (not a frozen
    * contract) and used to prove that `FAMILY_CREATE` is deciding on the row
@@ -145,6 +158,7 @@ const REGISTERED_ACTIONS: Action[] = [
   'GUARDIAN_CONSENT_REQUEST', 'GUARDIAN_CONSENT_GRANT', 'GUARDIAN_CONSENT_REVOKE',
   'MINOR_PROCESSING',
   'CASE_CREATE', 'CASE_LIST', 'CASE_READ', 'CASE_SWITCH_PRIMARY',
+  'CASE_ENTER_SAFETY_HOLD', 'CASE_RESOLVE_RISK',
   'PARTICIPATION_INVITE_CREATE', 'PARTICIPATION_READ_SELF',
   'PARTICIPATION_ACCEPT_SELF', 'PARTICIPATION_DECLINE_SELF',
   'PARTICIPATION_WITHDRAW_SELF', 'PARTICIPATION_READ_MANAGER',
@@ -175,7 +189,14 @@ const MANAGER_ACTIONS: Action[] = [
 ];
 
 /** Case actions (Slice 2 increment, plan D-6.2). */
-const CASE_ACTIONS: Action[] = ['CASE_CREATE', 'CASE_LIST', 'CASE_READ', 'CASE_SWITCH_PRIMARY'];
+const CASE_ACTIONS: Action[] = [
+  'CASE_CREATE',
+  'CASE_LIST',
+  'CASE_READ',
+  'CASE_SWITCH_PRIMARY',
+  'CASE_ENTER_SAFETY_HOLD',
+  'CASE_RESOLVE_RISK',
+];
 
 const PARTICIPATION_ACTIONS: Action[] = [
   'PARTICIPATION_INVITE_CREATE',
@@ -209,7 +230,7 @@ function allow(
   manager: boolean,
   purpose: Purpose,
   membership = true,
-  authority?: 'GUARDIAN' | 'FAMILY_MANAGER' | null
+  authority?: 'GUARDIAN' | 'FAMILY_MANAGER' | 'SAFETY_RESOLVER' | null
 ): Decision {
   return {
     decision: 'ALLOW',
@@ -361,6 +382,22 @@ function decideCaseAction(
     return deny('NOT_FAMILY_MEMBER');
   }
   if (input.resource.caseId !== input.case.caseId) return deny('NOT_FAMILY_MEMBER');
+
+  // g. Slice 9: resolution additionally requires a separately verified Safety
+  //    capability fact. Family manager / guardian / membership privileges never
+  //    imply it; missing facts deny (fail closed).
+  if (input.action === 'CASE_RESOLVE_RISK') {
+    const capability = facts.safetyResolution ?? null;
+    if (
+      capability === null ||
+      capability.verified !== true ||
+      typeof capability.authorityRef !== 'string' ||
+      capability.authorityRef.trim() === ''
+    ) {
+      return deny('NOT_SAFETY_RESOLVER');
+    }
+    return allow(true, input.purpose, true, 'SAFETY_RESOLVER');
+  }
 
   return allow(true, input.purpose);
 }
