@@ -169,14 +169,14 @@ Status values: **PASS / FAIL / N/A**.
 | ID | Check | Status | Evidence / Decision |
 |---|---|---|---|
 | CHK111 | current main Drizzle gap is recognized | PASS | no `db/schema` / no real runtime seam on main |
-| CHK112 | Slice 9 technical dependency is explicit | PASS | Implement Gate BLOCKED |
+| CHK112 | authoritative Drizzle capability dependency is explicit without creating a Slice 9 Safety semantic dependency | PASS | Slice 9 Drizzle or approved Data Access Remediation; Implement Gate currently BLOCKED |
 | CHK113 | Slice 10 does not build a second transaction abstraction | PASS | consume Slice 9 seam |
 | CHK114 | raw-pg-only fallback is forbidden | PASS | hard STOP |
 | CHK115 | reviewed SQL migration remains production schema-change truth | PASS | no push |
 | CHK116 | Drizzle schema is typed projection, not second truth | PASS | parity tests |
 | CHK117 | same-client identity/RLS invariants must survive | PASS | T1002 gate |
-| CHK118 | missing Slice 9 Drizzle on future main causes STOP | PASS | T1001 |
-| CHK119 | failed narrow Drizzle outcome causes Data Access Remediation STOP | PASS | T1001/T1002 |
+| CHK118 | absence of both Slice 9 Drizzle and an approved merged Data Access Remediation on future main causes STOP | PASS | T1001 |
+| CHK119 | failed/unsafe authoritative Drizzle outcome causes Data Access Remediation STOP | PASS | T1001/T1002 |
 | CHK120 | migration number is not frozen now | PASS | T1001 reconciles |
 
 ## L. Migration / database
@@ -256,7 +256,7 @@ Status values: **PASS / FAIL / N/A**.
 | CHK171 | exact schema/grant parity test is planned | PASS | DB introspection |
 | CHK172 | full Slice 1–7 regression is planned | PASS | closeout |
 | CHK173 | Slice 8 regression is conditional on merge | PASS | T1001/T1012 |
-| CHK174 | Slice 9 regression is conditional on merge and mandatory before Slice 10 implement | PASS | dependency gate |
+| CHK174 | Slice 9 regression is required only if Slice 9 is actually merged; a separately merged Data Access Remediation is verified instead when it is the dependency-closing path | PASS | no false semantic dependency |
 | CHK175 | all 16 Frozen acceptance scenarios map to evidence | PASS | plan §18.9 |
 
 ## Q. Development-start dependency gate
@@ -266,14 +266,14 @@ Status values: **PASS / FAIL / N/A**.
 | CHK176 | T1001 re-fetches latest main | PASS | mandatory first task |
 | CHK177 | T1001 rechecks clean branch/worktree where local git exists | PASS | development preflight |
 | CHK178 | T1001 rechecks Slice 8 merge state | PASS | migration/shared vocabulary |
-| CHK179 | T1001 rechecks Slice 9 merge state | PASS | hard dependency |
-| CHK180 | T1001 verifies actual Slice 9 Drizzle files/versions/seam | PASS | no planning assumption accepted |
+| CHK179 | T1001 rechecks Slice 9 merge state and any separate Data Access Remediation state | PASS | exact dependency truth |
+| CHK180 | T1001 verifies actual authoritative Drizzle files/versions/seam from Slice 9 or approved remediation | PASS | no planning assumption accepted |
 | CHK181 | T1001 rechecks migration numbering | PASS | non-frozen |
 | CHK182 | T1001 rechecks compliance/profile/consent schema | PASS | no stale assumptions |
 | CHK183 | T1001 rechecks authorization/RLS/grants | PASS | security baseline |
 | CHK184 | T1001 rechecks CI baseline | PASS | exact-head evidence |
-| CHK185 | absent Slice 9 Drizzle causes STOP before production edits | PASS | Implement Gate BLOCKED |
-| CHK186 | no Development AI waiver exists for the Drizzle dependency | PASS | explicit STOP |
+| CHK185 | absent authoritative Drizzle foundation from both approved paths causes STOP before production edits | PASS | Implement Gate BLOCKED |
+| CHK186 | no Development AI waiver exists for the Drizzle dependency and no Safety implementation is fabricated to satisfy it | PASS | explicit STOP / semantic boundary |
 
 ## R. Audit 1 remediation closure
 
@@ -291,7 +291,8 @@ Audit 1 planning findings S10-P01..S10-P04 were applied only to Plan / Checklist
 - exact FR identifiers replace task-range shorthand;
 - policy cross-field coherence is frozen;
 - overlap enforcement is frozen to the advisory-lock + DB-trigger mechanism;
-- expired-policy and unsupported-obligation error semantics are explicit.
+- expired-policy and unsupported-obligation error semantics are explicit;
+- Slice 9 Safety is no longer an accidental semantic prerequisite, and the approved separate Data Access Remediation path is recognized.
 
 Spec changed: **NO**  
 Docs changed: **NO**  
