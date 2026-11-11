@@ -22,26 +22,37 @@ describe('Slice 4 cross-family boundary', () => {
     const b=await createParticipationFixture(h,'cross-b',{target:'manager'});
     const targetB=await addBoundAdultNonManagerToFamily(h,b.familyId,'cross-target-b');
 
-    const before=(await h.admin.query(
-      `SELECT count(*)::int AS n FROM case_participants`
-    )).rows[0].n;
+    const countScopedParticipation=async(caseId:string,personId:string)=>
+      (await h.admin.query(
+        `SELECT count(*)::int AS n
+         FROM case_participants
+         WHERE case_id=$1 AND person_id=$2`,
+        [caseId,personId]
+      )).rows[0].n;
 
+    const wrongCaseBefore=await countScopedParticipation(
+      b.caseId,a.manager.personId
+    );
     const wrongCase=await invite(
       h.app,a.manager.token,b.caseId,a.manager.personId,'cross-wrong-case'
     );
     expect(wrongCase.statusCode).toBe(404);
     expect(wrongCase.json().code).toBe('CASE_NOT_FOUND');
+    expect(
+      await countScopedParticipation(b.caseId,a.manager.personId)
+    ).toBe(wrongCaseBefore);
 
+    const wrongTargetBefore=await countScopedParticipation(
+      a.caseId,targetB.personId
+    );
     const wrongTarget=await invite(
       h.app,a.manager.token,a.caseId,targetB.personId,'cross-wrong-target'
     );
     expect(wrongTarget.statusCode).toBe(403);
     expect(wrongTarget.json().code).toBe('PARTICIPATION_TARGET_INELIGIBLE');
-
-    const after=(await h.admin.query(
-      `SELECT count(*)::int AS n FROM case_participants`
-    )).rows[0].n;
-    expect(after).toBe(before);
+    expect(
+      await countScopedParticipation(a.caseId,targetB.personId)
+    ).toBe(wrongTargetBefore);
   });
 
   it('client familyId spoof is rejected at strict schema with 422 before business writes', async () => {
