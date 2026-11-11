@@ -43,7 +43,7 @@ function inject(file: string, content: string) {
 const SQL_CASES: Array<[string, string]> = [
   ['CREATE TABLE evidence_items', 'CREATE TABLE evidence_items (id uuid);\n'],
   ['CREATE TABLE evidence_items (second probe)', 'CREATE TABLE evidence_items (id uuid);\n'],
-  ['CREATE TABLE problem_formulations', 'CREATE TABLE problem_formulations (id uuid);\n'],
+  ['CREATE TABLE goals', 'CREATE TABLE goals (id uuid);\n'],
   ['CREATE TABLE notifications', 'CREATE TABLE notifications (id uuid);\n'],
   ['CREATE TABLE safety_states', 'CREATE TABLE safety_states (id uuid);\n'],
   ['CREATE TABLE tasks', 'CREATE TABLE tasks (id uuid);\n'],

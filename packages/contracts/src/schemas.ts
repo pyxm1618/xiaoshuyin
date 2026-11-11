@@ -509,3 +509,204 @@ export const ParticipationStateConflictError = z.strictObject({
   message: z.string(),
   currentState: CaseParticipationState,
 });
+// ── Problem Formulation Core schemas (Slice 8) ─────────────
+// Frozen surface: specs/008-problem-formulation-core/contracts/problem-formulation-api.openapi.yaml.
+// Every DB-backed integer version is bounded to PostgreSQL `integer` (1..2147483647);
+// `If-Match` parsing/range validation is a separate route gate before SQL.
+
+export const PG_INTEGER_MAX = 2147483647;
+
+export const ProblemFormulationStatus = z.enum([
+  'DRAFT', 'PRESENTED', 'CONFIRMED', 'DISPUTED', 'NEEDS_REVIEW', 'SUPERSEDED',
+]);
+export type ProblemFormulationStatusType = z.infer<typeof ProblemFormulationStatus>;
+
+export const EvidenceRef = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('DIALOGUE_MESSAGE'), id: z.string().uuid() }),
+  z.strictObject({ type: z.literal('ASSERTION'), id: z.string().uuid() }),
+  z.strictObject({ type: z.literal('OBSERVATION'), id: z.string().uuid() }),
+]);
+export type EvidenceRefType = z.infer<typeof EvidenceRef>;
+
+export const PrimaryProblem = z.strictObject({
+  text: z.string().min(1),
+  evidenceRefs: z.array(EvidenceRef).min(1),
+});
+export type PrimaryProblemType = z.infer<typeof PrimaryProblem>;
+
+export const KeyFactor = z.strictObject({
+  text: z.string().min(1),
+  evidenceRefs: z.array(EvidenceRef).min(1),
+});
+export type KeyFactorType = z.infer<typeof KeyFactor>;
+
+export const UnknownItem = z.strictObject({
+  topic: z.string().min(1),
+  state: z.enum(['UNKNOWN', 'NOT_COLLECTED', 'DECLINED']),
+  evidenceRefs: z.array(EvidenceRef),
+});
+export type UnknownItemType = z.infer<typeof UnknownItem>;
+
+function refKey(ref: { type: string; id: string }): string {
+  return `${ref.type}:${ref.id.toLowerCase()}`;
+}
+
+export const ConflictItem = z
+  .strictObject({
+    topic: z.string().min(1),
+    conflictGroupId: z.string().uuid().optional(),
+    evidenceRefs: z.array(EvidenceRef).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const refs = value.evidenceRefs ?? [];
+    if (value.conflictGroupId === undefined && refs.length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'evidenceRefs must contain at least two distinct refs when conflictGroupId is absent',
+        path: ['evidenceRefs'],
+      });
+    }
+    const keys = refs.map(refKey);
+    if (new Set(keys).size !== keys.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'evidenceRefs must not contain duplicate refs',
+        path: ['evidenceRefs'],
+      });
+    }
+  });
+export type ConflictItemType = z.infer<typeof ConflictItem>;
+
+export const TextCondition = z.strictObject({
+  text: z.string().min(1),
+});
+export type TextConditionType = z.infer<typeof TextCondition>;
+
+export const UserResponse = z.strictObject({
+  kind: z.enum(['CONFIRM', 'DISPUTE', 'CORRECTION']),
+  actorPersonId: z.string().uuid(),
+  respondedAt: z.string().datetime(),
+  note: z.string().min(1).optional(),
+});
+export type UserResponseType = z.infer<typeof UserResponse>;
+
+export const DependencyRef = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('EVIDENCE'), evidence: EvidenceRef }),
+  z.strictObject({
+    type: z.literal('CONSENT'),
+    id: z.string().uuid(),
+    version: z.number().int().min(1).max(PG_INTEGER_MAX).optional(),
+  }),
+  z.strictObject({
+    type: z.enum(['POLICY', 'PACKAGE', 'CONTENT_VERSION']),
+    key: z.string().min(1),
+    version: z.string().min(1),
+  }),
+]);
+export type DependencyRefType = z.infer<typeof DependencyRef>;
+
+export const ProblemFormulationContent = z.strictObject({
+  primaryProblem: PrimaryProblem,
+  keyFactors: z.array(KeyFactor),
+  evidenceRefs: z.array(EvidenceRef).min(1),
+  unknowns: z.array(UnknownItem),
+  conflicts: z.array(ConflictItem),
+  sceneFit: z.string().min(1),
+  alternativeExplanations: z.array(TextCondition),
+  reassessmentConditions: z.array(TextCondition),
+  exitConditions: z.array(TextCondition),
+  dependencyRefs: z.array(DependencyRef),
+});
+export type ProblemFormulationContentType = z.infer<typeof ProblemFormulationContent>;
+
+export const ProblemFormulation = z.strictObject({
+  id: z.string().uuid(),
+  caseId: z.string().uuid(),
+  version: z.number().int().min(1).max(PG_INTEGER_MAX),
+  status: ProblemFormulationStatus,
+  primaryProblem: PrimaryProblem,
+  keyFactors: z.array(KeyFactor),
+  evidenceRefs: z.array(EvidenceRef).min(1),
+  unknowns: z.array(UnknownItem),
+  conflicts: z.array(ConflictItem),
+  sceneFit: z.string().min(1),
+  alternativeExplanations: z.array(TextCondition),
+  reassessmentConditions: z.array(TextCondition),
+  exitConditions: z.array(TextCondition),
+  userResponse: UserResponse.nullable(),
+  confirmedBy: z.string().uuid().nullable(),
+  confirmedAt: z.string().datetime().nullable(),
+  dependencyRefs: z.array(DependencyRef),
+  supersedesVersion: z.number().int().min(1).max(PG_INTEGER_MAX).nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ProblemFormulationType = z.infer<typeof ProblemFormulation>;
+
+export const ProblemFormulationCurrentResponse = z.strictObject({
+  caseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
+  current: ProblemFormulation.nullable(),
+});
+export type ProblemFormulationCurrentResponseType =
+  z.infer<typeof ProblemFormulationCurrentResponse>;
+
+export const ProblemFormulationResponseRequest = z.strictObject({
+  note: z.string().min(1).optional(),
+});
+export type ProblemFormulationResponseRequestType =
+  z.infer<typeof ProblemFormulationResponseRequest>;
+
+export const ProblemFormulationContentChanges = z
+  .strictObject({
+    primaryProblem: PrimaryProblem.optional(),
+    keyFactors: z.array(KeyFactor).optional(),
+    evidenceRefs: z.array(EvidenceRef).min(1).optional(),
+    unknowns: z.array(UnknownItem).optional(),
+    conflicts: z.array(ConflictItem).optional(),
+    sceneFit: z.string().min(1).optional(),
+    alternativeExplanations: z.array(TextCondition).optional(),
+    reassessmentConditions: z.array(TextCondition).optional(),
+    exitConditions: z.array(TextCondition).optional(),
+    dependencyRefs: z.array(DependencyRef).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'changes must contain at least one field',
+  });
+export type ProblemFormulationContentChangesType =
+  z.infer<typeof ProblemFormulationContentChanges>;
+
+export const ProblemFormulationCorrectionRequest = z.strictObject({
+  changes: ProblemFormulationContentChanges,
+  note: z.string().min(1).optional(),
+});
+export type ProblemFormulationCorrectionRequestType =
+  z.infer<typeof ProblemFormulationCorrectionRequest>;
+export const CurrentFamilyAmbiguousError = z.strictObject({
+  code: z.enum(['CURRENT_FAMILY_AMBIGUOUS']),
+  message: z.string(),
+});
+
+export const ProblemFormulationConflictError = z.strictObject({
+  code: z.enum([
+    'CURRENT_FAMILY_AMBIGUOUS',
+    'IDEMPOTENCY_PAYLOAD_MISMATCH',
+    'CASE_NOT_PRIMARY',
+    'CASE_PHASE_CONFLICT',
+    'STALE_CASE_VERSION',
+    'CASE_CLOSED',
+    'SAFETY_HOLD_BLOCKED',
+    'PROBLEM_FORMULATION_VERSION_CONFLICT',
+    'PROBLEM_FORMULATION_STATE_CONFLICT',
+    'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+  ]),
+  message: z.string(),
+});
+export type ProblemFormulationConflictErrorType =
+  z.infer<typeof ProblemFormulationConflictError>;
+
+export const ProblemFormulationValidationError = z.strictObject({
+  code: z.enum(['VALIDATION_ERROR', 'PROBLEM_FORMULATION_EVIDENCE_INVALID']),
+  message: z.string(),
+});
+export type ProblemFormulationValidationErrorType =
+  z.infer<typeof ProblemFormulationValidationError>;

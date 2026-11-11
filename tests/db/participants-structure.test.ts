@@ -19,7 +19,7 @@ describe('Slice 4 structural scope boundary', () => {
       'participant_responses','participation_responses','participant_roles',
       'intervention_instances','interventions','goals','plans','plan_items',
       'task_assignments','notifications','notification_deliveries',
-      'assessments','problem_formulations','scenes','ai_outputs',
+      'assessments','scenes','ai_outputs',
     ]){
       expect(names,forbidden).not.toContain(forbidden);
     }

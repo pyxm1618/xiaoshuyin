@@ -126,7 +126,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 006_case_status_paused_removal.sql');
     // Slice 7 adds one reviewed migration; it must apply in the same upgrade.
     expect(output).toContain('APPLY 007_case_primary_switch.sql');
-    expect(output).toMatch(/Migration complete: 5 new, 3 previously applied\./);
+    expect(output).toMatch(/Migration complete: 6 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -193,6 +193,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '005_case_participant_core.sql',
       '006_case_status_paused_removal.sql',
       '007_case_primary_switch.sql',
+      '008_problem_formulation_core.sql',
     ]);
 
     // New Evidence schema exists.
@@ -246,7 +247,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(48);
+    expect(policyRows[0].count).toBe(51);
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
@@ -302,7 +303,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-expect(output).toMatch(/Migration complete: 0 new, 8 previously applied\./);
+expect(output).toMatch(/Migration complete: 0 new, 9 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
     expect(output).not.toContain('APPLY 005_case_participant_core.sql');

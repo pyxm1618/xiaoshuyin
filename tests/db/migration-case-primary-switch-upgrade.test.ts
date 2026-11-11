@@ -72,10 +72,35 @@ const EXPECTED_MAIN_IDEMPOTENCY_COMMANDS = [
   'PARTICIPATION_WITHDRAW',
 ];
 
-const SLICE7_APPROVED_LITERALS = {
-  case_events_event_type_check: ['CASE_PRIMARY_ASSIGNED', 'CASE_PRIMARY_REVOKED'],
-  business_audit_events_event_type_check: ['CASE_PRIMARY_SWITCHED'],
-  idempotency_keys_command_type_check: ['CASE_SWITCH_PRIMARY'],
+const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
+  case_events_event_type_check: [
+    'CASE_ASSESSMENT_STARTED',
+    'CASE_PRIMARY_ASSIGNED',
+    'CASE_PRIMARY_REVOKED',
+    'CASE_PROBLEM_FORMULATION_CONFIRMED',
+    'CASE_PROBLEM_FORMULATION_CORRECTED',
+    'CASE_PROBLEM_FORMULATION_DISPUTED',
+    'CASE_PROBLEM_FORMULATION_PRESENTED',
+    'CASE_REASSESSMENT_STARTED',
+  ],
+  business_audit_events_event_type_check: [
+    'CASE_PRIMARY_SWITCHED',
+    'CASE_ASSESSMENT_STARTED',
+    'CASE_PROBLEM_FORMULATION_PRESENTED',
+    'CASE_PROBLEM_FORMULATION_CONFIRMED',
+    'CASE_PROBLEM_FORMULATION_DISPUTED',
+    'CASE_PROBLEM_FORMULATION_CORRECTED',
+    'CASE_REASSESSMENT_STARTED',
+  ],
+  idempotency_keys_command_type_check: [
+    'CASE_SWITCH_PRIMARY',
+    'CASE_START_ASSESSMENT',
+    'PROBLEM_FORMULATION_PRESENT',
+    'PROBLEM_FORMULATION_CONFIRM',
+    'PROBLEM_FORMULATION_DISPUTE',
+    'PROBLEM_FORMULATION_CORRECT',
+    'CASE_REASSESS_FROM_FORMULATION',
+  ],
 };
 
 /** Constraints whose definitions 007 is authorized to rewrite. */
@@ -221,7 +246,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 1 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 2 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -270,14 +295,14 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
 
     // Only the approved Slice 7 literals were added — exactly, not more.
     const added = (after: string[], before: string[]) => after.filter((v) => !before.includes(v));
-    expect(added(afterCaseEventLiterals, beforeCaseEventLiterals)).toEqual(
-      SLICE7_APPROVED_LITERALS.case_events_event_type_check
+    expect([...added(afterCaseEventLiterals, beforeCaseEventLiterals)].sort()).toEqual(
+      [...SLICE7_AND_SLICE8_APPROVED_LITERALS.case_events_event_type_check].sort()
     );
-    expect(added(afterAuditLiterals, beforeAuditLiterals)).toEqual(
-      SLICE7_APPROVED_LITERALS.business_audit_events_event_type_check
+    expect([...added(afterAuditLiterals, beforeAuditLiterals)].sort()).toEqual(
+      [...SLICE7_AND_SLICE8_APPROVED_LITERALS.business_audit_events_event_type_check].sort()
     );
-    expect(added(afterIdempotencyLiterals, beforeIdempotencyLiterals)).toEqual(
-      SLICE7_APPROVED_LITERALS.idempotency_keys_command_type_check
+    expect([...added(afterIdempotencyLiterals, beforeIdempotencyLiterals)].sort()).toEqual(
+      [...SLICE7_AND_SLICE8_APPROVED_LITERALS.idempotency_keys_command_type_check].sort()
     );
 
     // Existing data still satisfies the revalidated constraints (inserts pass).
@@ -288,16 +313,34 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       [ids.familyId, ids.accountId, ids.caseId]
     );
 
-    // Constraint layer change is controlled: exactly the five reviewed names.
+    // Shared CHECK changes are the reviewed Slice 7 names; every pre-existing
+    // constraint name survives, and any newly added name belongs to Slice 8.
+    const beforeConstraintNames = Object.keys(beforeConstraints).sort();
     const afterConstraintNames = Object.keys(afterConstraints).sort();
-    expect(afterConstraintNames).toEqual(Object.keys(beforeConstraints).sort());
-    const changedConstraints = afterConstraintNames.filter(
+    for (const name of beforeConstraintNames) {
+      expect(afterConstraintNames).toContain(name);
+    }
+    const newConstraints = afterConstraintNames.filter(
+      (name) => !beforeConstraintNames.includes(name)
+    );
+    expect(newConstraints.every((name) => name.startsWith('problem_formulations_'))).toBe(true);
+    const changedConstraints = beforeConstraintNames.filter(
       (name) => afterConstraints[name] !== beforeConstraints[name]
     );
-    expect(changedConstraints.sort()).toEqual([...SLICE7_CONSTRAINT_CHANGES].sort());
+    expect(changedConstraints.sort()).toEqual(
+      [...SLICE7_CONSTRAINT_CHANGES, 'business_audit_events_resource_type_check'].sort()
+    );
 
-    // No new table / enum / policy / trigger beyond schema_migrations.
-    expect(await objectFingerprint(seed)).toEqual(beforeObjects);
+    // Slice 8 adds only its own reviewed objects; every legacy fingerprint entry survives.
+    const beforeSet = new Set(beforeObjects.split('|'));
+    const afterFingerprint = await objectFingerprint(seed);
+    const afterSet = new Set(afterFingerprint.split('|'));
+    for (const entry of beforeSet) {
+      expect(afterSet.has(entry), `lost object ${entry}`).toBe(true);
+    }
+    for (const entry of [...afterSet].filter((e) => !beforeSet.has(e))) {
+      expect(entry).toMatch(/problem_formulation/);
+    }
 
     // Column-level UPDATE grant, never table-level.
     const { rows: columnGrants } = await seed.query(
@@ -307,6 +350,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     );
     expect(columnGrants.map((row: any) => row.column_name)).toEqual([
       'is_primary',
+      'phase',
       'updated_at',
       'version',
     ]);
@@ -322,7 +366,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 8 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 9 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
 
     expect(await rowSnapshot(seed)).toEqual(beforeReplayRows);
@@ -335,6 +379,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(applied.map((row: any) => row.filename)).toEqual([
       ...CURRENT_MAIN_MIGRATIONS,
       '007_case_primary_switch.sql',
+      '008_problem_formulation_core.sql',
     ]);
   }, 180_000);
 });

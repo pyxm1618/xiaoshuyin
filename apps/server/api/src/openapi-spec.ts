@@ -736,6 +736,125 @@ export function buildOpenApiDocument() {
         },
       },
     },
+    '/api/v1/cases/{id}/problem-formulations/current': {
+      get: {
+        tags: ['case'],
+        operationId: 'getCurrentProblemFormulation',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseId')],
+        responses: {
+          '200': refResponse(
+            'Current Problem Formulation, or a true empty state for an authorized Case',
+            'ProblemFormulationCurrentResponse'
+          ),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': jsonResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`', {
+            oneOf: [ref('CurrentFamilyNotFoundError'), ref('CaseNotFoundError')],
+          }),
+          '409': refResponse('`CURRENT_FAMILY_AMBIGUOUS`', 'CurrentFamilyAmbiguousError'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/problem-formulations/{version}/confirm': {
+      post: {
+        tags: ['case'],
+        operationId: 'confirmProblemFormulation',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          paramRef('FormulationVersion'),
+          paramRef('IdempotencyKeyHeader'),
+          paramRef('IfMatchCaseVersionHeader'),
+        ],
+        requestBody: refBody('ProblemFormulationResponseRequest'),
+        responses: {
+          '200': refResponse(
+            'Formulation confirmed and Case advanced to GOALS',
+            'ProblemFormulationCurrentResponse'
+          ),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': jsonResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`', {
+            oneOf: [ref('CurrentFamilyNotFoundError'), ref('CaseNotFoundError')],
+          }),
+          '409': refResponse(
+            'State, version, dependency, primary, Safety, Closed, Family ambiguity or idempotency conflict',
+            'ProblemFormulationConflictError'
+          ),
+          '422': refResponse(
+            'Strict request validation or Evidence fidelity failure',
+            'ProblemFormulationValidationError'
+          ),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/problem-formulations/{version}/dispute': {
+      post: {
+        tags: ['case'],
+        operationId: 'disputeProblemFormulation',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          paramRef('FormulationVersion'),
+          paramRef('IdempotencyKeyHeader'),
+          paramRef('IfMatchCaseVersionHeader'),
+        ],
+        requestBody: refBody('ProblemFormulationResponseRequest'),
+        responses: {
+          '200': refResponse(
+            'Formulation disputed; Case remains in PROBLEM_FORMULATION',
+            'ProblemFormulationCurrentResponse'
+          ),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': jsonResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`', {
+            oneOf: [ref('CurrentFamilyNotFoundError'), ref('CaseNotFoundError')],
+          }),
+          '409': refResponse(
+            'State, version, primary, Safety, Closed, Family ambiguity or idempotency conflict',
+            'ProblemFormulationConflictError'
+          ),
+          '422': refResponse(
+            'Strict request validation failure',
+            'ProblemFormulationValidationError'
+          ),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/problem-formulations/{version}/corrections': {
+      post: {
+        tags: ['case'],
+        operationId: 'correctProblemFormulation',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          paramRef('FormulationVersion'),
+          paramRef('IdempotencyKeyHeader'),
+          paramRef('IfMatchCaseVersionHeader'),
+        ],
+        requestBody: refBody('ProblemFormulationCorrectionRequest'),
+        responses: {
+          '201': refResponse(
+            'Complete corrected formulation version created; old version superseded',
+            'ProblemFormulationCurrentResponse'
+          ),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': jsonResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`', {
+            oneOf: [ref('CurrentFamilyNotFoundError'), ref('CaseNotFoundError')],
+          }),
+          '409': refResponse(
+            'State, version, primary, Safety, Closed, Family ambiguity or idempotency conflict',
+            'ProblemFormulationConflictError'
+          ),
+          '422': refResponse(
+            'Empty/no-op correction, strict schema, or full merged-formulation fidelity failure',
+            'ProblemFormulationValidationError'
+          ),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
   };
 
   return {
@@ -817,11 +936,330 @@ export function buildOpenApiDocument() {
           description: '待验证的 target Person P1；服务端读取唯一 Family。',
           schema: { type: 'string', format: 'uuid' },
         },
+        FormulationVersionPath: {
+          name: 'version',
+          in: 'path',
+          required: true,
+          schema: { type: 'integer', minimum: 1, maximum: 2147483647 },
+        },
+        CaseId: {
+          name: 'id',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', format: 'uuid' },
+        },
+        FormulationVersion: {
+          name: 'version',
+          in: 'path',
+          required: true,
+          schema: { type: 'integer', minimum: 1, maximum: 2147483647 },
+        },
+        IfMatchCaseVersionHeader: {
+          name: 'If-Match',
+          in: 'header',
+          required: true,
+          description:
+            'Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version. Runtime must parse the decimal payload and reject values outside 1..2147483647 before repository/SQL access; the regex is only a lexical gate.',
+          schema: {
+            type: 'string',
+            pattern: '^"case-v[1-9][0-9]{0,9}"$',
+            example: '"case-v12"',
+          },
+        },
 
       },
       schemas: {
 
         ...schemas,
+        ProblemFormulationStatus: {
+          type: 'string',
+          enum: ['DRAFT', 'PRESENTED', 'CONFIRMED', 'DISPUTED', 'NEEDS_REVIEW', 'SUPERSEDED'],
+        },
+        DialogueMessageRef: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            type: { type: 'string', enum: ['DIALOGUE_MESSAGE'] },
+            id: { type: 'string', format: 'uuid' },
+          },
+          required: ['type', 'id'],
+        },
+        AssertionRef: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            type: { type: 'string', enum: ['ASSERTION'] },
+            id: { type: 'string', format: 'uuid' },
+          },
+          required: ['type', 'id'],
+        },
+        ObservationRef: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            type: { type: 'string', enum: ['OBSERVATION'] },
+            id: { type: 'string', format: 'uuid' },
+          },
+          required: ['type', 'id'],
+        },
+        EvidenceRef: {
+          oneOf: [ref('DialogueMessageRef'), ref('AssertionRef'), ref('ObservationRef')],
+        },
+        PrimaryProblem: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            text: { type: 'string', minLength: 1 },
+            evidenceRefs: { type: 'array', minItems: 1, items: ref('EvidenceRef') },
+          },
+          required: ['text', 'evidenceRefs'],
+        },
+        KeyFactor: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            text: { type: 'string', minLength: 1 },
+            evidenceRefs: { type: 'array', minItems: 1, items: ref('EvidenceRef') },
+          },
+          required: ['text', 'evidenceRefs'],
+        },
+        UnknownItem: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            topic: { type: 'string', minLength: 1 },
+            state: { type: 'string', enum: ['UNKNOWN', 'NOT_COLLECTED', 'DECLINED'] },
+            evidenceRefs: { type: 'array', items: ref('EvidenceRef') },
+          },
+          required: ['topic', 'state', 'evidenceRefs'],
+        },
+        ConflictItem: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            topic: { type: 'string', minLength: 1 },
+            conflictGroupId: { type: 'string', format: 'uuid' },
+            evidenceRefs: {
+              type: 'array',
+              uniqueItems: true,
+              items: ref('EvidenceRef'),
+            },
+          },
+          required: ['topic'],
+          anyOf: [
+            { required: ['conflictGroupId'] },
+            { required: ['evidenceRefs'], properties: { evidenceRefs: { minItems: 2 } } },
+          ],
+        },
+        TextCondition: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { text: { type: 'string', minLength: 1 } },
+          required: ['text'],
+        },
+        UserResponse: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            kind: { type: 'string', enum: ['CONFIRM', 'DISPUTE', 'CORRECTION'] },
+            actorPersonId: { type: 'string', format: 'uuid' },
+            respondedAt: { type: 'string', format: 'date-time' },
+            note: { type: 'string', minLength: 1 },
+          },
+          required: ['kind', 'actorPersonId', 'respondedAt'],
+        },
+        EvidenceDependencyRef: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            type: { type: 'string', enum: ['EVIDENCE'] },
+            evidence: ref('EvidenceRef'),
+          },
+          required: ['type', 'evidence'],
+        },
+        ConsentDependencyRef: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            type: { type: 'string', enum: ['CONSENT'] },
+            id: { type: 'string', format: 'uuid' },
+            version: { type: 'integer', minimum: 1, maximum: 2147483647 },
+          },
+          required: ['type', 'id'],
+        },
+        VersionedKeyDependencyRef: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            type: { type: 'string', enum: ['POLICY', 'PACKAGE', 'CONTENT_VERSION'] },
+            key: { type: 'string', minLength: 1 },
+            version: { type: 'string', minLength: 1 },
+          },
+          required: ['type', 'key', 'version'],
+        },
+        DependencyRef: {
+          oneOf: [
+            ref('EvidenceDependencyRef'),
+            ref('ConsentDependencyRef'),
+            ref('VersionedKeyDependencyRef'),
+          ],
+        },
+        ProblemFormulationContent: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            primaryProblem: ref('PrimaryProblem'),
+            keyFactors: { type: 'array', items: ref('KeyFactor') },
+            evidenceRefs: { type: 'array', minItems: 1, items: ref('EvidenceRef') },
+            unknowns: { type: 'array', items: ref('UnknownItem') },
+            conflicts: { type: 'array', items: ref('ConflictItem') },
+            sceneFit: { type: 'string', minLength: 1 },
+            alternativeExplanations: { type: 'array', items: ref('TextCondition') },
+            reassessmentConditions: { type: 'array', items: ref('TextCondition') },
+            exitConditions: { type: 'array', items: ref('TextCondition') },
+            dependencyRefs: { type: 'array', items: ref('DependencyRef') },
+          },
+          required: [
+            'primaryProblem',
+            'keyFactors',
+            'evidenceRefs',
+            'unknowns',
+            'conflicts',
+            'sceneFit',
+            'alternativeExplanations',
+            'reassessmentConditions',
+            'exitConditions',
+            'dependencyRefs',
+          ],
+        },
+        ProblemFormulation: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            caseId: { type: 'string', format: 'uuid' },
+            version: { type: 'integer', minimum: 1, maximum: 2147483647 },
+            status: ref('ProblemFormulationStatus'),
+            primaryProblem: ref('PrimaryProblem'),
+            keyFactors: { type: 'array', items: ref('KeyFactor') },
+            evidenceRefs: { type: 'array', minItems: 1, items: ref('EvidenceRef') },
+            unknowns: { type: 'array', items: ref('UnknownItem') },
+            conflicts: { type: 'array', items: ref('ConflictItem') },
+            sceneFit: { type: 'string', minLength: 1 },
+            alternativeExplanations: { type: 'array', items: ref('TextCondition') },
+            reassessmentConditions: { type: 'array', items: ref('TextCondition') },
+            exitConditions: { type: 'array', items: ref('TextCondition') },
+            userResponse: { nullable: true, allOf: [ref('UserResponse')] },
+            confirmedBy: { type: 'string', format: 'uuid', nullable: true },
+            confirmedAt: { type: 'string', format: 'date-time', nullable: true },
+            dependencyRefs: { type: 'array', items: ref('DependencyRef') },
+            supersedesVersion: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 2147483647,
+              nullable: true,
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+          required: [
+            'id',
+            'caseId',
+            'version',
+            'status',
+            'primaryProblem',
+            'keyFactors',
+            'evidenceRefs',
+            'unknowns',
+            'conflicts',
+            'sceneFit',
+            'alternativeExplanations',
+            'reassessmentConditions',
+            'exitConditions',
+            'userResponse',
+            'confirmedBy',
+            'confirmedAt',
+            'dependencyRefs',
+            'supersedesVersion',
+            'createdAt',
+            'updatedAt',
+          ],
+        },
+        ProblemFormulationCurrentResponse: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            caseVersion: { type: 'integer', minimum: 1, maximum: 2147483647 },
+            current: { nullable: true, allOf: [ref('ProblemFormulation')] },
+          },
+          required: ['caseVersion', 'current'],
+        },
+        ProblemFormulationResponseRequest: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { note: { type: 'string', minLength: 1 } },
+        },
+        ProblemFormulationContentChanges: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: {
+            primaryProblem: ref('PrimaryProblem'),
+            keyFactors: { type: 'array', items: ref('KeyFactor') },
+            evidenceRefs: { type: 'array', minItems: 1, items: ref('EvidenceRef') },
+            unknowns: { type: 'array', items: ref('UnknownItem') },
+            conflicts: { type: 'array', items: ref('ConflictItem') },
+            sceneFit: { type: 'string', minLength: 1 },
+            alternativeExplanations: { type: 'array', items: ref('TextCondition') },
+            reassessmentConditions: { type: 'array', items: ref('TextCondition') },
+            exitConditions: { type: 'array', items: ref('TextCondition') },
+            dependencyRefs: { type: 'array', items: ref('DependencyRef') },
+          },
+        },
+        ProblemFormulationCorrectionRequest: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            changes: ref('ProblemFormulationContentChanges'),
+            note: { type: 'string', minLength: 1 },
+          },
+          required: ['changes'],
+        },
+        ProblemFormulationConflictError: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            code: {
+              type: 'string',
+              enum: [
+                'CURRENT_FAMILY_AMBIGUOUS',
+                'IDEMPOTENCY_PAYLOAD_MISMATCH',
+                'CASE_NOT_PRIMARY',
+                'CASE_PHASE_CONFLICT',
+                'STALE_CASE_VERSION',
+                'CASE_CLOSED',
+                'SAFETY_HOLD_BLOCKED',
+                'PROBLEM_FORMULATION_VERSION_CONFLICT',
+                'PROBLEM_FORMULATION_STATE_CONFLICT',
+                'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+              ],
+            },
+            message: { type: 'string' },
+          },
+          required: ['code', 'message'],
+        },
+        ProblemFormulationValidationError: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            code: {
+              type: 'string',
+              enum: ['VALIDATION_ERROR', 'PROBLEM_FORMULATION_EVIDENCE_INVALID'],
+            },
+            message: { type: 'string' },
+          },
+          required: ['code', 'message'],
+        },
       },
     },
   };

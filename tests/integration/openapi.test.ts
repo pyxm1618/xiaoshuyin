@@ -67,6 +67,29 @@ const FROZEN_SCHEMAS = [
   'CurrentFamilyNotFoundError',
   'Error',
   'ErrorResponse',
+  'ProblemFormulationStatus',
+  'DialogueMessageRef',
+  'AssertionRef',
+  'ObservationRef',
+  'EvidenceRef',
+  'PrimaryProblem',
+  'KeyFactor',
+  'UnknownItem',
+  'ConflictItem',
+  'TextCondition',
+  'UserResponse',
+  'EvidenceDependencyRef',
+  'ConsentDependencyRef',
+  'VersionedKeyDependencyRef',
+  'DependencyRef',
+  'ProblemFormulationContent',
+  'ProblemFormulation',
+  'ProblemFormulationCurrentResponse',
+  'ProblemFormulationResponseRequest',
+  'ProblemFormulationContentChanges',
+  'ProblemFormulationCorrectionRequest',
+  'ProblemFormulationConflictError',
+  'ProblemFormulationValidationError',
   'FamilyResponse',
   'GrantConsentRequest',
   'IdempotencyPayloadMismatchError',
@@ -131,7 +154,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-it('contains exactly the 30 frozen business operations including Slice 4 six participation surfaces and Slice 7 switch)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+it('contains exactly the 34 frozen business operations including Slice 4 six participation surfaces, Slice 7 switch and Slice 8 four formulation surfaces)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
@@ -159,6 +182,10 @@ it('contains exactly the 30 frozen business operations including Slice 4 six par
       'POST /api/v1/cases/{id}/messages',
       'POST /api/v1/cases/{id}/participation-invites',
       'POST /api/v1/cases/{id}/switch-primary',
+      'GET /api/v1/cases/{id}/problem-formulations/current',
+      'POST /api/v1/cases/{id}/problem-formulations/{version}/confirm',
+      'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
+      'POST /api/v1/cases/{id}/problem-formulations/{version}/corrections',
       'POST /api/v1/compliance/guardian-consents',
       'POST /api/v1/compliance/guardian-consents/requests',
       'POST /api/v1/consents/{id}/revoke',
@@ -235,6 +262,11 @@ it('contains exactly the 30 frozen business operations including Slice 4 six par
       '/api/v1/participations/{id}',
       // Slice 7 (007-case-primary-switch) — the single approved switch POST.
       '/api/v1/cases/{id}/switch-primary',
+      // Slice 8 (008-problem-formulation-core) — exactly four formulation surfaces.
+      '/api/v1/cases/{id}/problem-formulations/current',
+      '/api/v1/cases/{id}/problem-formulations/{version}/confirm',
+      '/api/v1/cases/{id}/problem-formulations/{version}/dispute',
+      '/api/v1/cases/{id}/problem-formulations/{version}/corrections',
     ]);
     for (const path of Object.keys(spec.paths)) {
       expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);
