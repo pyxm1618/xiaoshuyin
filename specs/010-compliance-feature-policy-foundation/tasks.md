@@ -233,10 +233,15 @@ Required invariants:
 - immutable judgment fields after publication;
 - lifecycle-only closure allowed to controlled publisher;
 - table owned by migrator;
-- app/runtime SELECT only;
+- ENABLE/FORCE RLS on the policy table;
+- runtime RLS policy exposes only currently effective rows at transaction time;
+- app/runtime receives column-level SELECT only for evaluator-required columns;
+- app/runtime cannot SELECT decision_basis/review_evidence/approval/publication history columns;
+- app/runtime has no INSERT/UPDATE/DELETE/TRUNCATE;
+- migrator/provisioning role has the explicit RLS policy required for controlled history/publication while remaining NOBYPASSRLS;
 - no Family/person/consent data duplicated in this table.
 
-The policy table is global truth. Do not fake Family RLS on it; instead preserve existing RLS for Person/consent reads.
+The policy table is global truth. Its RLS policy is an active-row least-privilege boundary, not a Family tenancy model and it must not introduce a second family/person context. Existing Family RLS for Person/consent reads remains independently mandatory.
 
 **Tests required**
 
@@ -246,8 +251,12 @@ The policy table is global truth. Do not fake Family RLS on it; instead preserve
 - failed migration rollback;
 - exact columns/types/checks/FKs/indexes;
 - overlap rejection;
-- runtime SELECT allowed;
+- relrowsecurity / relforcerowsecurity true on policy table;
+- runtime sees only current effective rows;
+- runtime SELECT succeeds only on evaluator-required columns;
+- runtime historical/review-provenance column reads denied;
 - runtime INSERT/UPDATE/DELETE/TRUNCATE denied;
+- migrator controlled publication works through its explicit RLS policy;
 - Drizzle projection parity;
 - no unrelated DDL loss.
 
@@ -567,7 +576,7 @@ Close races and ensure real failures never become false policy decisions.
 5. Policy supersession after the snapshot does not mutate returned provenance.
 6. Long-running cross-transaction recheck is documented as downstream responsibility, not implemented here.
 7. Overlap/corruption yields ambiguity, never “latest wins”.
-8. A history that exists but is entirely expired maps to COMPLIANCE_POLICY_EXPIRED; future-only/no-row remains COMPLIANCE_POLICY_MISSING.
+8. No currently effective row — whether truly missing, future-only, or expired history — maps to COMPLIANCE_POLICY_MISSING at runtime; runtime is not granted historical-policy visibility merely to distinguish those subcases.
 9. Database/transaction failure propagates as infrastructure error.
 10. Rollback/failure does not produce an ALLOW snapshot.
 11. Preserve original error on rollback failure according to shared transaction seam.
@@ -577,6 +586,7 @@ Close races and ensure real failures never become false policy decisions.
 - concurrent publish;
 - overlap corruption;
 - policy supersession during evaluation;
+- expired/future/no-active policy all fail closed without historical-row exposure to runtime;
 - consent/profile change around evaluation;
 - connection error;
 - rollback error/original error preservation where shared seam supports injection.
