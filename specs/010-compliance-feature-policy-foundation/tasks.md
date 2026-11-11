@@ -21,8 +21,8 @@ Global rules for every task:
 
 ## Task Index
 
-- [ ] T1001 [REQ:FR-028,FR-030,V1-C20,V1-C21,§7.0,§38] Reconcile development-start authority, current main, Slice 8/9 state, Drizzle foundation, migration/RLS/compliance baseline before any production edit [VERIFY:git fetch && git status --short && git rev-parse origin/main; compare Frozen Spec blob; inspect current db/schema, lockfile, migrations, authorize/RLS/compliance facts and exact main CI]
-- [ ] T1002 [REQ:FR-028,FR-029,V1-C20,V1-C21,§7.0,§9.1] Consume the verified Slice 9 Drizzle same-client transaction/schema foundation without creating a second data-access path [VERIFY:bun run typecheck; focused Drizzle same-client identity/RLS transaction tests; schema loading/parity evidence]
+- [ ] T1001 [REQ:FR-028,FR-030,V1-C20,V1-C21,§7.0,§38] Reconcile development-start authority, current main, Slice 8/9 state, Slice 9-or-remediation Drizzle foundation, migration/RLS/compliance baseline before any production edit [VERIFY:git fetch && git status --short && git rev-parse origin/main; compare Frozen Spec blob; inspect current db/schema, lockfile, migrations, authorize/RLS/compliance facts and exact main CI]
+- [ ] T1002 [REQ:FR-028,FR-029,V1-C20,V1-C21,§7.0,§9.1] Consume the verified authoritative Drizzle same-client transaction/schema foundation (Slice 9 or approved Data Access Remediation) without creating a second data-access path [VERIFY:bun run typecheck; focused Drizzle same-client identity/RLS transaction tests; schema loading/parity evidence]
 - [ ] T1003 [REQ:FR-001,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-029,V1-C43,§7.7A] Add reviewed compliance feature-policy persistence, version/effective-period invariants, least-privilege grants and exact Drizzle projection [VERIFY:bun run test -- --run tests/db/*compliance*; bun run db:evidence -- --no-archive; migration fresh/upgrade/replay/rollback introspection]
 - [ ] T1004 [REQ:FR-002,FR-003,FR-023,V1-C30] Implement server-owned feature identity/contract-revision types and registry/mapping boundary with no Scene-specific product branch [VERIFY:bun run test -- --run tests/domain/*feature*identity*; bun run guard:static; code search proves no client-authoritative feature string or A4003/Digital Use branch in Common Core evaluator]
 - [ ] T1005 [REQ:FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-030,V1-C38,V1-C43] Implement pure deterministic policy selection/evaluation and obligation/provenance result semantics [VERIFY:bun run test -- --run tests/domain/*feature*policy*; fixed-time deterministic tests; no network/model imports]
@@ -32,7 +32,7 @@ Global rules for every task:
 - [ ] T1009 [REQ:FR-008,FR-009,FR-010,FR-020,FR-021,FR-030,V1-C27,V1-C28] Close concurrency, snapshot, stale-revision and infrastructure-failure semantics for evaluation/publication [VERIFY:concurrent publication test; overlapping-corruption fail-closed test; policy supersession snapshot test; database failure propagation test]
 - [ ] T1010 [REQ:FR-016,FR-017,FR-018,FR-019,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,V1-C38,V1-C43] Add only the internal compliance service composition/consumer contract required by the foundation and prove no public OpenAPI surface or downstream runtime was added [VERIFY:bun run openapi:check; generated operation set unchanged; diff/static scan contains no timer/notification/export/PIPIA/regulatory/A4003 runtime]
 - [ ] T1011 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030] Complete the full Slice 10 domain/integration/database acceptance matrix and map all 16 Frozen acceptance scenarios to automated evidence [VERIFY:bun run test -- --run; acceptance mapping report shows scenarios 1..16 PASS]
-- [ ] T1012 [REQ:FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,V1-C30,§38] Add/narrow architecture guards and run combined Slice 1–9 regression against the then-current merged baseline [VERIFY:bun run guard:static; bun run typecheck; bun run openapi:check; bun run db:evidence -- --no-archive; bun run test -- --run]
+- [ ] T1012 [REQ:FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,V1-C30,§38] Add/narrow architecture guards and run regression against every prior slice/remediation actually merged into the then-current main baseline [VERIFY:bun run guard:static; bun run typecheck; bun run openapi:check; bun run db:evidence -- --no-archive; bun run test -- --run]
 - [ ] T1013 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,Constitution] Perform final exact-head convergence/governance verification and stop for independent post-development audit without merging [VERIFY:node .specify/scripts/validate-governance.mjs; node .specify/scripts/tests/run-governance-tests.mjs; git diff origin/main...HEAD; exact-head CI/check evidence]
 
 ---
@@ -75,12 +75,13 @@ Read-only inspection only:
 5. Verify the Frozen Spec blob is still `a911bcc0c168e00efa015d53d5c120bece28c5a7`.
 6. Verify whether Slice 8 is merged; if merged, inspect its actual migration/shared vocabulary/runtime interfaces.
 7. Verify whether Slice 9 is merged.
-8. Do not accept Slice 9 planning documents as implementation evidence.
-9. Inspect actual `db/schema`.
-10. Inspect actual locked `drizzle-orm` / `drizzle-kit` versions.
-11. Inspect actual shared Drizzle transaction seam and prove same-client identity/RLS semantics.
-12. Re-list all migration prefixes and choose no Slice 10 number yet if dependency is blocked.
-13. Re-read current:
+8. Independently verify whether a separately approved Data Access Remediation has merged and, if so, whether it supplies the same §7.0 same-client/identity/RLS/migration invariants.
+9. Do not accept Slice 9 or remediation planning documents as implementation evidence.
+10. Inspect actual `db/schema`.
+11. Inspect actual locked `drizzle-orm` / `drizzle-kit` versions.
+12. Inspect actual shared Drizzle transaction seam and prove same-client identity/RLS semantics.
+13. Re-list all migration prefixes and choose no Slice 10 number yet if dependency is blocked.
+14. Re-read current:
     - `authorize()`;
     - Person/Family/RLS context;
     - Compliance Profile;
@@ -89,15 +90,15 @@ Read-only inspection only:
     - current DB grants;
     - static scope guards;
     - current CI baseline.
-14. Check whether a new feature-policy consumer has appeared on main and classify compatibility.
+15. Check whether a new feature-policy consumer has appeared on main and classify compatibility.
 
 **Hard STOP conditions**
 
-If Slice 9 Drizzle foundation is not merged:
+If neither the Slice 9 Drizzle foundation nor a separately approved Data Access Remediation is merged and proven on current main:
 
-`T1001 = STOP — IMPLEMENT GATE BLOCKED`
+`T1001 = STOP — IMPLEMENT GATE BLOCKED / DATA ACCESS REMEDIATION REQUIRED`
 
-If Slice 9 implementation demonstrates narrow Drizzle cannot preserve authoritative transaction/RLS semantics:
+If the available authoritative implementation demonstrates narrow Drizzle cannot preserve authoritative transaction/RLS semantics:
 
 `T1001 = STOP — SEPARATE DATA ACCESS REMEDIATION REQUIRED`
 
@@ -116,6 +117,8 @@ No Slice 10 implementation test yet. Run current baseline verification only.
 - input-drift classification;
 - Slice 8 merge/head status;
 - Slice 9 merge/head status;
+- separate Data Access Remediation merge/status if any;
+- exact authoritative Drizzle source path (Slice 9 or remediation);
 - actual Drizzle files/versions/seam evidence;
 - migration list/highest prefix;
 - compliance/profile/consent schema facts;
@@ -131,7 +134,7 @@ No Slice 10 implementation test yet. Run current baseline verification only.
 
 ---
 
-## T1002 — Consume the Slice 9 Drizzle foundation
+## T1002 — Consume the authoritative Drizzle foundation
 
 **Purpose**
 
@@ -140,7 +143,7 @@ Use the one authoritative typed data-access/transaction seam established by Slic
 **Dependencies**
 
 - T1001 PASS;
-- Slice 9 Drizzle foundation present on current main.
+- either Slice 9 Drizzle foundation or a separately approved Data Access Remediation is present on current main and passed T1001.
 
 **Expected files / areas**
 
@@ -437,7 +440,7 @@ Integrate compliance without weakening authorization, tenant isolation or Safety
 - T1002;
 - T1005;
 - T1006;
-- Slice 9 actual Safety guard present on main.
+- no semantic dependency on Slice 9 Safety implementation; if the Safety guard is present on current main, integration tests must compose with it, otherwise Slice 10 proves only the independent Compliance contract and must not fabricate Safety.
 
 **Expected files / areas**
 
@@ -453,22 +456,24 @@ Integrate compliance without weakening authorization, tenant isolation or Safety
 3. Keep Person/consent reads inside existing RLS transaction.
 4. Policy-table global read does not imply Person access.
 5. Unauthorized/cross-family requests preserve existing generic semantics.
-6. Policy-only internal evaluation is not blocked merely because Case is in SAFETY_HOLD.
-7. Ordinary progression preserves existing Safety guard before downstream effect.
-8. Compliance ALLOW does not override Safety/Authorization/Domain block.
-9. Safety ALLOW does not override Compliance UNKNOWN/missing/block.
-10. Do not change Slice 9 state/guard semantics.
-11. Do not expose review evidence or complete policies to client.
-12. Infrastructure/fact-query errors propagate rather than becoming an ordinary denial.
+6. If current main contains the authoritative Safety guard, policy-only internal evaluation is not blocked merely because Case is in SAFETY_HOLD.
+7. If current main contains the authoritative Safety guard, ordinary progression preserves that existing guard before downstream effect.
+8. If Safety is not yet merged because the Drizzle dependency was instead satisfied by an approved Data Access Remediation, Slice 10 does not invent Safety behavior; it preserves the independent integration contract for later consumers.
+9. Compliance ALLOW does not override Safety/Authorization/Domain block.
+10. Safety ALLOW does not override Compliance UNKNOWN/missing/block.
+11. Do not change Slice 9 state/guard semantics if present.
+12. Do not expose review evidence or complete policies to client.
+13. Infrastructure/fact-query errors propagate rather than becoming an ordinary denial.
 
 **Tests required**
 
 - cross-family target;
 - unauthorized actor;
-- held Case + internal policy evaluation;
-- held Case + ordinary progression remains blocked;
-- Compliance ALLOW + Safety block;
-- Compliance block + Safety allow;
+- when Safety is present: held Case + internal policy evaluation;
+- when Safety is present: held Case + ordinary progression remains blocked;
+- when Safety is present: Compliance ALLOW + Safety block;
+- when Safety is present: Compliance block + Safety allow;
+- when Safety is absent but approved Data Access Remediation opened the Drizzle gate: no fabricated Safety state/guard appears in the Slice 10 diff;
 - fact-query/DB failure propagation;
 - no policy/profile enumeration.
 
@@ -687,7 +692,7 @@ Any scenario requiring a new product decision returns to Spec authority.
 
 **Purpose**
 
-Prove Slice 10 did not weaken prior slices or smuggle later-phase runtime into Common Core.
+Prove Slice 10 did not weaken any prior slice/remediation actually merged on current main or smuggle later-phase runtime into Common Core.
 
 **Dependencies**
 
