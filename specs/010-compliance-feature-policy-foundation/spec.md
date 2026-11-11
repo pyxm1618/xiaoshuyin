@@ -16,6 +16,74 @@
 
 ---
 
+<!-- Governance-format index block (non-semantic). Added only so `.specify/scripts/validate-governance.mjs` Stage 1 can locate the four canonical headings. It creates no requirement, no scenario, no scope change and no product semantics. Canonical content remains the existing numbered sections. -->
+
+## Upstream Traceability
+
+**Purpose**: mechanical index for the governance gate. This section names only upstream sources already cited or projected by this Frozen Spec; it restates no product semantics and creates no new requirement.
+
+| Upstream ID / Section | Source | Projected in |
+|---|---|---|
+| V1-C20, V1-C21 | `Docs/V1产品需求.md` | §14 Authorization Semantics; §21 Privacy / Anti-Enumeration |
+| V1-C25 | `Docs/V1产品需求.md` | §16 Safety Interaction |
+| V1-C27, V1-C28 | `Docs/V1产品需求.md` | §18 Concurrency Expectations; §19 Error Semantics |
+| V1-C30 | `Docs/V1产品需求.md` | §11 A4003 Compatibility Boundary |
+| V1-C38 | `Docs/V1产品需求.md` | §12 AI Identity / Generated-Content Boundary |
+| V1-C39 | `Docs/V1产品需求.md` | §10 Minor / Guardian / Age Semantics |
+| V1-C40 | `Docs/V1产品需求.md` | §11 A4003 Compatibility Boundary |
+| V1-C41 | `Docs/V1产品需求.md` | §6.3 Regulatory evidence; §25 Non-Goals |
+| V1-C42 | `Docs/V1产品需求.md` | §12 AI Identity / Generated-Content Boundary; §25 Non-Goals |
+| V1-C43 | `Docs/V1产品需求.md` | §9 Applicability Semantics; §13 Continuous-Use Boundary |
+| §19A, §19A.1 | `Docs/V1产品需求.md` | §1.1 Authority Gate; §2 Problem / Purpose |
+| §7.7A | `Docs/V1技术设计.md` | §6 Business Objects / Truth Sources |
+| §27B | `Docs/V1技术设计.md` | §9 Applicability Semantics; §19 Error Semantics |
+| §32.5A | `Docs/V1技术设计.md` | §24 Acceptance Scenarios |
+| §38 | `Docs/V1技术设计.md` | §1.3 Phase 1 Completion Gate |
+| `Docs/总产品需求.md`, `Docs/总体技术架构.md` | long-term direction and version boundaries | §1.1 Authority Gate |
+
+**Frozen requirement index**: §23 Functional Requirements, FR-001 … FR-030, authoritative in place and not duplicated here.
+
+**Blocking rule**: behavior that cannot be traced to an approved source listed above is `NEEDS UPSTREAM DECISION` and must not be implemented.
+
+## Scope
+
+**Canonical scope remains defined by the existing sections and is unchanged**:
+
+- In scope: §4 In Scope (items 1–18).
+- Out of scope: §5 Out of Scope.
+- Non-goals: §25 Non-Goals.
+
+This section is a pointer only. It neither adds, removes, widens nor narrows any in-scope item, exclusion or non-goal, and it does not restate the scope text.
+
+## Acceptance Scenarios
+
+**The authoritative acceptance scenarios remain §24 Acceptance Scenarios, items 1–16.**
+
+This heading is a locator for the governance gate, not a second scenario set:
+
+| Frozen scenario set | Canonical location | Count |
+|---|---|---|
+| Acceptance Scenarios | §24 Acceptance Scenarios, items 1–16 | 16 |
+
+No scenario is restated, renumbered, reworded, added or removed here. Any change to scenario semantics must happen in §24 under explicit change control.
+
+## Acceptance Evidence
+
+Every Frozen acceptance scenario in §24 items 1–16 MUST be backed by mechanically executable evidence before Slice 10 implementation may be reported complete. This section defines no new verification requirement and no implementation design; it states only the evidence obligation and points at the artifacts that already own the evidence design.
+
+| Evidence obligation | Owning artifact (already frozen in place) |
+|---|---|
+| Per-scenario verification design | `plan.md` — §Verification Plan |
+| Per-task REQ / VERIFY pairing | `tasks.md` — task lines T1001 … T1013 |
+| Deterministic behavior proof | automated tests required by each task `[VERIFY:...]` clause |
+| Schema / migration / RLS proof | database evidence required by each task `[VERIFY:...]` clause |
+| Repository governance proof | `.specify/scripts/validate-governance.mjs` |
+| Exact-head CI proof | repository governance / CI workflow result on the exact head |
+
+**Rule**: no scenario may be claimed PASS on assumption, narrative or partial evidence. Missing or unexecutable evidence is `BLOCKED / NOT VERIFIED`.
+
+---
+
 ## 1. Slice Selection Record
 
 ### 1.1 Authority Gate
