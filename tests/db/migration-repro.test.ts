@@ -18,11 +18,11 @@ import { Client } from 'pg';
 const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATABASE_URL']!;
 
 // Expected final object counts (Slice 1/2 + Case Core + Slice 3 Evidence + Slice 6 binding)
-const EXPECTED_ENUMS = 22;
-const EXPECTED_TABLES = 22;
+const EXPECTED_ENUMS = 22; // + problem_formulation_status (Slice 8)
+const EXPECTED_TABLES = 23; // + problem_formulations (Slice 8) + risk_events (Slice 9)
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 4; // set_account_context, set_identity_context, set_family_context, create_family
-const EXPECTED_POLICIES = 51;
+const EXPECTED_POLICIES = 52; // + 3 problem_formulations (Slice 8) + risk_events_family_scope (Slice 9)
 const EXPECTED_TRIGGERS = 3; // consent_records_guard + 2 binding append-only triggers
 
 const EXPECTED_ENUM_NAMES = [
@@ -73,6 +73,7 @@ const EXPECTED_TABLE_NAMES = [
   'person_profile_values',
   'persons',
   'problem_formulations',
+  'risk_events',
 ].sort();
 
 describe('Migration Reproducibility (T011 RED)', () => {

@@ -31,6 +31,10 @@ const EXPECTED_AUDIT_EVENTS = [
   'CASE_PROBLEM_FORMULATION_DISPUTED',
   'CASE_PROBLEM_FORMULATION_CORRECTED',
   'CASE_REASSESSMENT_STARTED',
+  // Slice 9 Safety control foundation appends two literals; every earlier
+  // value above must survive.
+  'CASE_SAFETY_HOLD_ENTERED',
+  'CASE_RISK_RESOLVED',
 ];
 
 const EXPECTED_COMMANDS = [
@@ -53,6 +57,9 @@ const EXPECTED_COMMANDS = [
   'PROBLEM_FORMULATION_DISPUTE',
   'PROBLEM_FORMULATION_CORRECT',
   'CASE_REASSESS_FROM_FORMULATION',
+  // Slice 9 Safety commands use the same idempotency store/vocabulary.
+  'CASE_ENTER_SAFETY_HOLD',
+  'CASE_RESOLVE_RISK',
 ];
 
 const EXPECTED_RESOURCE_TYPES = [
@@ -108,7 +115,7 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
     expect(new Set(values)).toEqual(new Set(EXPECTED_COMMANDS));
   });
 
-  it('case_events.event_type is exactly CASE_CREATED + the two Slice 7 events', async () => {
+  it('case_events.event_type is exactly CASE_CREATED + the two Slice 7 events + the two Slice 9 events', async () => {
     const values = literalsOf(await definition('case_events_event_type_check'));
     expect(new Set(values)).toEqual(
       new Set([
@@ -121,14 +128,18 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
         'CASE_PROBLEM_FORMULATION_DISPUTED',
         'CASE_PROBLEM_FORMULATION_CORRECTED',
         'CASE_REASSESSMENT_STARTED',
+        'CASE_SAFETY_HOLD_ENTERED',
+        'CASE_RISK_RESOLVED',
       ])
     );
   });
 
-  it('idempotency key representation stays text-only for participation and bytea-only for switch', async () => {
+  it('idempotency key representation stays text-only for participation and bytea-only for switch/Safety commands', async () => {
     const text = await definition('idempotency_keys_key_representation_check');
     expect(text).toContain('CASE_CREATE');
     expect(text).toContain('CASE_SWITCH_PRIMARY');
+    expect(text).toContain('CASE_ENTER_SAFETY_HOLD');
+    expect(text).toContain('CASE_RESOLVE_RISK');
     expect(text).toContain('idempotency_key_bytes');
   });
 });

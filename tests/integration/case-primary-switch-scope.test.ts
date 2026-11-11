@@ -203,10 +203,9 @@ describe('case primary switch scope (T730)', () => {
     );
     const names = tables.map((r: any) => r.tablename);
     for (const forbidden of [
-      // `case_participants` is a legitimate Slice 4 table merged into main;
-      // Slice 7's zero-schema-expansion proof is covered by migration-repro
-      // and db:evidence, not by forbidding an already-approved table.
-      'risk_events',
+      // `case_participants` (Slice 4), `problem_formulations` (Slice 8) and
+      // `risk_events` (Slice 9) are approved tables. Slice 7's zero-schema
+      // expansion proof lives in migration-repro / db:evidence.
       'scene_node_states',
       'scene_artifacts',
       'referrals',
@@ -214,6 +213,8 @@ describe('case primary switch scope (T730)', () => {
     ]) {
       expect(names, forbidden).not.toContain(forbidden);
     }
+    // Slice 9 adds exactly one approved trace table.
+    expect(names).toContain('risk_events');
 
     const { rows: columns } = await admin.query(
       `SELECT column_name FROM information_schema.columns

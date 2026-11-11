@@ -179,7 +179,6 @@ describe('S8 direct RLS and migration rollback', () => {
         await caseCols.query('SELECT app.set_identity_context($1,$2)', [accountId, 'FAMILY_MANAGEMENT']);
         await caseCols.query('SELECT app.set_family_context($1,$2,$3)', [a.familyId, personId, 'FAMILY_MANAGEMENT']);
         for (const [idx, sql] of [
-          `UPDATE cases SET status='OPEN'`,
           `UPDATE cases SET created_by_person_id=created_by_person_id`,
           `UPDATE cases SET family_id=family_id`,
         ].entries()) {
@@ -187,6 +186,11 @@ describe('S8 direct RLS and migration rollback', () => {
           await expect(caseCols.query(sql)).rejects.toMatchObject({ code: '42501' });
           await caseCols.query(`ROLLBACK TO SAVEPOINT k${idx}`);
         }
+        const status = await caseCols.query(
+          `UPDATE cases SET status='OPEN' WHERE id=$1 RETURNING status`,
+          [a.caseId]
+        );
+        expect(status.rows).toHaveLength(1);
         const primary = await caseCols.query(
           `UPDATE cases SET is_primary=is_primary WHERE id=$1 RETURNING is_primary`,
           [a.caseId]

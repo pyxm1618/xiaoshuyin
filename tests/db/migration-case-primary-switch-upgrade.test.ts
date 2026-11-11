@@ -82,6 +82,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_PROBLEM_FORMULATION_DISPUTED',
     'CASE_PROBLEM_FORMULATION_PRESENTED',
     'CASE_REASSESSMENT_STARTED',
+    'CASE_RISK_RESOLVED',
+    'CASE_SAFETY_HOLD_ENTERED',
   ],
   business_audit_events_event_type_check: [
     'CASE_PRIMARY_SWITCHED',
@@ -91,6 +93,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_PROBLEM_FORMULATION_DISPUTED',
     'CASE_PROBLEM_FORMULATION_CORRECTED',
     'CASE_REASSESSMENT_STARTED',
+    'CASE_RISK_RESOLVED',
+    'CASE_SAFETY_HOLD_ENTERED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -100,6 +104,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'PROBLEM_FORMULATION_DISPUTE',
     'PROBLEM_FORMULATION_CORRECT',
     'CASE_REASSESS_FROM_FORMULATION',
+    'CASE_ENTER_SAFETY_HOLD',
+    'CASE_RESOLVE_RISK',
   ],
 };
 
@@ -154,6 +160,26 @@ const SLICE8_NEW_OBJECTS = [
   'policy:problem_formulations_update',
   'table:problem_formulations',
 ].sort();
+
+/** Exactly the constraints Slice 9 risk_events introduces. */
+const SLICE9_RISK_EVENT_CONSTRAINTS = [
+  'risk_events_actor_account_id_not_null',
+  'risk_events_actor_fk',
+  'risk_events_case_family_fk',
+  'risk_events_case_id_not_null',
+  'risk_events_created_at_not_null',
+  'risk_events_decision_case_version_not_null',
+  'risk_events_decision_version_check',
+  'risk_events_event_kind_check',
+  'risk_events_event_kind_not_null',
+  'risk_events_evidence_refs_not_null',
+  'risk_events_family_id_not_null',
+  'risk_events_id_case_family_key',
+  'risk_events_id_not_null',
+  'risk_events_pkey',
+  'risk_events_resolution_same_case_fk',
+  'risk_events_shape_check',
+];
 
 /** Constraints whose definitions 007 is authorized to rewrite. */
 const SLICE7_CONSTRAINT_CHANGES = [
@@ -296,9 +322,11 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       expect(output).toContain(`SKIP ${filename}`);
     }
     expect(output).toContain('APPLY 007_case_primary_switch.sql');
+    // Slice 9 appends one reviewed migration on top of the current main shape.
+    expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 2 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 4 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -365,8 +393,8 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       [ids.familyId, ids.accountId, ids.caseId]
     );
 
-    // Shared CHECK changes are the reviewed Slice 7 names; every pre-existing
-    // constraint name survives, and any newly added name belongs to Slice 8.
+    // Constraint layer: every legacy name survives; the delta is exactly the
+    // reviewed Slice 8 + Slice 9 constraint sets.
     const beforeConstraintNames = Object.keys(beforeConstraints).sort();
     const afterConstraintNames = Object.keys(afterConstraints).sort();
     for (const name of beforeConstraintNames) {
@@ -375,7 +403,9 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const newConstraints = afterConstraintNames.filter(
       (name) => !beforeConstraintNames.includes(name)
     );
-    expect(newConstraints.sort()).toEqual([...SLICE8_NEW_CONSTRAINTS]);
+    expect(newConstraints.sort()).toEqual(
+      [...SLICE8_NEW_CONSTRAINTS, ...SLICE9_RISK_EVENT_CONSTRAINTS].sort()
+    );
     const changedConstraints = beforeConstraintNames.filter(
       (name) => afterConstraints[name] !== beforeConstraints[name]
     );
@@ -383,7 +413,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       [...SLICE7_CONSTRAINT_CHANGES, 'business_audit_events_resource_type_check'].sort()
     );
 
-    // Slice 8 adds only its own reviewed objects; every legacy fingerprint entry survives.
+    // Exactly the reviewed Slice 8 + Slice 9 objects are added; legacy entries survive.
     const beforeSet = new Set(beforeObjects.split('|'));
     const afterFingerprint = await objectFingerprint(seed);
     const afterSet = new Set(afterFingerprint.split('|'));
@@ -392,7 +422,9 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     }
     expect([...afterSet].filter((e) => !beforeSet.has(e)).sort()).toEqual([
       ...SLICE8_NEW_OBJECTS,
-    ]);
+      'policy:risk_events_family_scope',
+      'table:risk_events',
+    ].sort());
 
     // Column-level UPDATE grant, never table-level.
     const { rows: columnGrants } = await seed.query(
@@ -403,6 +435,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(columnGrants.map((row: any) => row.column_name)).toEqual([
       'is_primary',
       'phase',
+      'status',
       'updated_at',
       'version',
     ]);
@@ -418,8 +451,9 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 11 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
+    expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
     expect(await rowSnapshot(seed)).toEqual(beforeReplayRows);
     expect(await constraintDefinitions(seed)).toEqual(beforeReplayConstraints);
@@ -432,6 +466,8 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...CURRENT_MAIN_MIGRATIONS,
       '007_case_primary_switch.sql',
       '008_problem_formulation_core.sql',
+      '009_safety_hold_control_foundation.sql',
+      '010_problem_formulation_safety_vocabulary_reconcile.sql',
     ]);
   }, 180_000);
 });

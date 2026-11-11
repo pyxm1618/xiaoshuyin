@@ -53,3 +53,7 @@ export * from './identity-binding-gate.js';
 export * from './identity-binding-anti-enumeration.js';
 
 export * from './participants.js';
+// Slice 9 Safety control foundation. The typed Drizzle projection is exported
+// as `safetySchema` only; Safety command/persistence primitives are added by
+// their own reviewed tasks.
+export * from './safety/index.js';

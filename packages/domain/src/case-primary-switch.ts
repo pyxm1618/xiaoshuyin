@@ -13,6 +13,8 @@
  *   6. otherwise                → ALLOW
  */
 
+import { isSafetyHoldStatus } from './safety/guard.js';
+
 export type CaseStatusView =
   | 'OPEN'
   | 'WAITING'
@@ -20,6 +22,7 @@ export type CaseStatusView =
   | 'LOST_CONTACT'
   | 'SAFETY_HOLD'
   | 'CLOSED';
+
 
 export interface CaseRowView {
   caseId: string;
@@ -69,8 +72,10 @@ export function decideSwitchPrimary(input: SwitchPrimaryInput): SwitchDecision {
   const { current, target, expected } = input;
 
   if (target.status === 'CLOSED') return deny('CASE_CLOSED');
-  if (target.status === 'SAFETY_HOLD') return deny('SAFETY_HOLD_BLOCKED');
-  if (current?.status === 'SAFETY_HOLD') return deny('SAFETY_HOLD_BLOCKED');
+  // Slice 9: the hold predicate is shared with the reusable ordinary
+  // progression guard (`isSafetyHoldStatus`); precedence is unchanged.
+  if (isSafetyHoldStatus(target.status)) return deny('SAFETY_HOLD_BLOCKED');
+  if (isSafetyHoldStatus(current?.status ?? null)) return deny('SAFETY_HOLD_BLOCKED');
   if (current !== null && current.caseId === target.caseId) {
     return deny('CASE_ALREADY_PRIMARY');
   }

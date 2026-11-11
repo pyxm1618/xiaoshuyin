@@ -40,6 +40,12 @@ export interface FamilyActionRequest {
   guardianPersonId?: string | null;
   /** Target person for MEMBER_UPDATE. */
   targetPersonId?: string | null;
+  /**
+   * Slice 9: separately verified Safety-resolution capability fact, supplied by
+   * the composition's SafetyResolutionAuthoritySource. Absent means NO
+   * capability — family roles never imply it.
+   */
+  safetyResolution?: { verified: boolean; authorityRef: string } | null;
 }
 
 async function readFacts(
@@ -64,6 +70,7 @@ async function readFacts(
     guardianPersonId: req.guardianPersonId ?? null,
     targetIsFamilyMember,
     familyId: family ? req.familyId : null,
+    safetyResolution: req.safetyResolution ?? null,
   };
 }
 
@@ -156,6 +163,13 @@ export function denyToError(reason: DenyReason): Error & { statusCode: number; c
         return Object.assign(new Error('NOT_GUARDIAN'), toHttpError('NOT_GUARDIAN'));
       case 'AGE_BAND_UNKNOWN':
         return Object.assign(new Error('AGE_BAND_UNKNOWN'), toHttpError('AGE_BAND_UNKNOWN'));
+      case 'NOT_SAFETY_RESOLVER':
+        // Slice 9: no separately verified Safety-resolution capability. This is
+        // a business denial with a stable, non-leaking code.
+        return Object.assign(
+          new Error('SAFETY_RESOLUTION_AUTHORITY_DENIED'),
+          toHttpError('SAFETY_RESOLUTION_AUTHORITY_DENIED')
+        );
       default:
         return Object.assign(new Error(reason), toHttpError('FORBIDDEN', reason));
     }

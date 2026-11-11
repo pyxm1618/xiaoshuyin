@@ -172,13 +172,13 @@ describe('Database Roles (T012 RED)', () => {
     expect(rows[0].has).toBe(false);
   });
 
-  it('Slice 7+8: cases allows column UPDATE only on is_primary / version / updated_at / phase', async () => {
-    const allowed = ['is_primary', 'version', 'updated_at', 'phase'];
+  it('Slice 7+8+9: cases allows only is_primary / phase / status / version / updated_at', async () => {
+    const allowed = ['is_primary', 'phase', 'status', 'version', 'updated_at'];
     const denied = [
       'id',
       'family_id',
       'created_by_person_id',
-      'status',
+
       'created_at',
     ];
 

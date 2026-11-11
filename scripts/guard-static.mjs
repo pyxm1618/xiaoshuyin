@@ -396,6 +396,177 @@ scanDir(join(ROOT, 'db'), (file) => {
   }
 });
 
+// ─── Rule 7: Slice 9 — unique Safety entry/exit ───
+// EnterSafetyHold is the only formal production path INTO SAFETY_HOLD;
+// ResolveRisk is the only formal production path OUT of it. Every Case status
+// write must go through the one reviewed transition primitive.
+
+const SAFETY_TRANSITION_FILE = 'packages/domain/src/safety/case-transition.ts';
+const SAFETY_COMMAND_FILES = new Set([
+  'apps/server/api/src/safety/enter-safety-hold.ts',
+  'apps/server/api/src/safety/resolve-risk.ts',
+]);
+
+function checkSafetyUniqueEntry(relPath, content, report) {
+  // Test fixtures may construct state directly; production may not.
+  if (relPath.startsWith('tests/')) return;
+
+  content.split('\n').forEach((line, i) => {
+    if (isComment(line)) return;
+
+    if (relPath !== SAFETY_TRANSITION_FILE) {
+      if (/\bUPDATE\s+cases\b/i.test(line) && /\bstatus\s*=/i.test(line)) {
+        report('R7-safety-unique-entry', relPath, i + 1,
+          'Direct SQL status write on cases outside the reviewed Safety transition');
+      }
+      if (/\.update\(\s*cases\s*\)/.test(line)) {
+        report('R7-safety-unique-entry', relPath, i + 1,
+          'Drizzle cases UPDATE outside the reviewed Safety transition');
+      }
+      if (
+        !SAFETY_COMMAND_FILES.has(relPath) &&
+        /status\s*:\s*'SAFETY_HOLD'/.test(line)
+      ) {
+        report('R7-safety-unique-entry', relPath, i + 1,
+          'SAFETY_HOLD may only be written by EnterSafetyHold');
+      }
+    }
+
+    if (
+      /transitionCaseStatus\s*\(/.test(line) &&
+      relPath !== SAFETY_TRANSITION_FILE &&
+      !SAFETY_COMMAND_FILES.has(relPath) &&
+      !relPath.startsWith('tests/')
+    ) {
+      report('R7-safety-unique-entry', relPath, i + 1,
+        'transitionCaseStatus called outside EnterSafetyHold / ResolveRisk');
+    }
+  });
+}
+
+// ─── Rule 8: Slice 9 — executable scope negatives ───
+const FORBIDDEN_SAFETY_IMPORTS = [
+  'guardrails',
+  'dashscope',
+  'openai',
+  'anthropic',
+  'ollama',
+  'langchain',
+  '@alicloud',
+  'risk_review',
+  'support_resources',
+  'referral',
+  'staff_queue',
+];
+
+function checkSafetyScopeNegatives(relPath, content, report) {
+  if (!/\.(ts|tsx|js|mjs|cjs)$/.test(relPath)) return;
+
+  content.split('\n').forEach((line, i) => {
+    if (isComment(line)) return;
+    const importMatch = /from\s+['"]([^'"]+)['"]/.exec(line);
+    if (importMatch) {
+      const specifier = importMatch[1].toLowerCase();
+      for (const forbidden of FORBIDDEN_SAFETY_IMPORTS) {
+        if (specifier.includes(forbidden)) {
+          report('R8-safety-scope', relPath, i + 1,
+            `Forbidden Safety-adjacent dependency: ${forbidden}`);
+        }
+      }
+    }
+
+    // No public Safety mutation route may be registered.
+    if (
+      relPath.startsWith('apps/') &&
+      /\b(app|server)\.(get|post|put|patch|delete)\s*\(\s*['"`][^'"`]*(safety|enter-hold|resolve-risk)/i.test(line)
+    ) {
+      report('R8-safety-scope', relPath, i + 1,
+        'Public Safety mutation route registered (Slice 9 forbids it)');
+    }
+  });
+}
+
+function runSafetyRules() {
+  scanDir(ROOT, (file) => {
+    const relPath = getRelPath(file);
+    if (!CODE_EXTENSIONS.has(relPath.slice(relPath.lastIndexOf('.')))) return;
+    const content = readFileSync(file, 'utf-8');
+    checkSafetyUniqueEntry(relPath, content, (rule, f, line, message) =>
+      addViolation(rule, f, line, message)
+    );
+    checkSafetyScopeNegatives(relPath, content, (rule, f, line, message) =>
+      addViolation(rule, f, line, message)
+    );
+  }, CODE_EXTENSIONS);
+}
+
+runSafetyRules();
+
+// ─── Self-test: synthetic forbidden bypass fixtures ───
+// `node scripts/guard-static.mjs --self-test` proves the Safety rules detect a
+// bypass even when the real tree is clean. Not part of `bun run guard:static`.
+if (process.argv.includes('--self-test')) {
+  const synthetic = [
+    {
+      name: 'direct SQL status write',
+      path: 'apps/server/api/src/routes/evil.ts',
+      content: "await tx.query(\"UPDATE cases SET status = 'SAFETY_HOLD' WHERE id = $1\", [id]);",
+      rule: 'R7-safety-unique-entry',
+    },
+    {
+      name: 'drizzle cases update',
+      path: 'packages/domain/src/evil.ts',
+      content: 'await tx.update(cases).set({ status: \'WAITING\' });',
+      rule: 'R7-safety-unique-entry',
+    },
+    {
+      name: 'safety hold literal write',
+      path: 'apps/server/api/src/routes/evil2.ts',
+      content: "const patch = { status: 'SAFETY_HOLD' };",
+      rule: 'R7-safety-unique-entry',
+    },
+    {
+      name: 'transition called outside commands',
+      path: 'apps/server/api/src/routes/evil3.ts',
+      content: 'await transitionCaseStatus(tx, input);',
+      rule: 'R7-safety-unique-entry',
+    },
+    {
+      name: 'public safety route',
+      path: 'apps/server/api/src/routes/evil4.ts',
+      content: "app.post('/api/v1/safety/resolve-risk', handler);",
+      rule: 'R8-safety-scope',
+    },
+    {
+      name: 'guardrails dependency',
+      path: 'packages/domain/src/evil5.ts',
+      content: "import { Guard } from '@alibaba/guardrails';",
+      rule: 'R8-safety-scope',
+    },
+  ];
+
+  let selfTestFailures = 0;
+  for (const sample of synthetic) {
+    const hits = [];
+    const report = (rule, file, line, message) => hits.push({ rule, message });
+    if (sample.rule === 'R8-safety-scope') {
+      checkSafetyScopeNegatives(sample.path, sample.content, report);
+    } else {
+      checkSafetyUniqueEntry(sample.path, sample.content, report);
+    }
+    if (!hits.some((hit) => hit.rule === sample.rule)) {
+      selfTestFailures += 1;
+      console.error(`guard-static self-test: MISSED ${sample.name}`);
+    }
+  }
+  if (selfTestFailures === 0) {
+    console.log(`guard-static self-test: PASS (${synthetic.length} synthetic bypass fixtures detected)`);
+    process.exit(0);
+  }
+  console.error(`guard-static self-test: FAIL (${selfTestFailures} missed)`);
+  process.exit(1);
+}
+
 // ─── Report ───
 if (violations.length === 0) {
   console.log('guard-static: PASS (0 violations)');

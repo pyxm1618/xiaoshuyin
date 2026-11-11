@@ -424,17 +424,19 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006_case_status_paused_removal + 007_case_primary_switch + 008_problem_formulation_core', true,
+check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010', true,
       /APPLY 004_evidence_core\.sql/.test(output) &&
       /APPLY 004_identity_binding_runtime\.sql/.test(output) &&
       /APPLY 005_case_participant_core\.sql/.test(output) &&
       /APPLY 006_case_status_paused_removal\.sql/.test(output) &&
       /APPLY 007_case_primary_switch\.sql/.test(output) &&
-      /APPLY 008_problem_formulation_core\.sql/.test(output));
+      /APPLY 008_problem_formulation_core\.sql/.test(output) &&
+      /APPLY 009_safety_hold_control_foundation\.sql/.test(output) &&
+      /APPLY 010_problem_formulation_safety_vocabulary_reconcile\.sql/.test(output));
     check(
-      'upgrade 结果为 6 new / 3 previously applied',
+      'upgrade 结果为 8 new / 3 previously applied',
       true,
-      /Migration complete: 6 new, 3 previously applied\./.test(output)
+      /Migration complete: 8 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -452,6 +454,9 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       '006_case_status_paused_removal.sql',
       '007_case_primary_switch.sql',
       '008_problem_formulation_core.sql',
+      // Slice 9 reviewed Safety migration.
+      '009_safety_hold_control_foundation.sql',
+      '010_problem_formulation_safety_vocabulary_reconcile.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',
