@@ -122,6 +122,8 @@ Consumes server-owned Feature Identity and Compliance evaluation/obligation guar
 
 Reuse current Case/primary/version, Authorization, Consent, Participation, idempotency, business audit and Case event mechanisms. Participant presence alone does not grant Assessment authority.
 
+Consent is an owner boundary, not Scene/Evidence truth. The 01004 accept/decline decision must be represented through the authoritative Consent owner contract with an explicit supplemental-assessment purpose/scope and auditable decision state. Slice 12 must not store a private consent boolean in scene_node_states, scene_artifacts or ordinary Evidence and then treat it as Consent truth. At development reconciliation, if the merged Consent owner cannot represent this purpose-scoped accept/decline without semantic distortion, STOP for an owner-approved narrow Consent seam/schema remediation; Slice 12 may not invent a parallel consent ledger.
+
 ## 5. Development-Start Implement Gate
 
 Planning is allowed; development is currently blocked.
@@ -144,7 +146,9 @@ Current verified dependency state:
 
 IMPLEMENT GATE: BLOCKED.
 
-Special integration gate: pre-merge Slice 8 evidence shows its top-level startAssessment and presentProblemFormulation services own their own transactions. Slice 12 must not compose those as a second sequential/nested transaction around Scene writes. Development may continue only if merged Slice 8 exposes, or owner-approved non-semantic extraction provides, a caller-owned same-transaction seam preserving Slice 8 semantics. Otherwise STOP.
+Special integration gate A — Slice 8 transaction seam: pre-merge Slice 8 evidence shows its top-level startAssessment and presentProblemFormulation services own their own transactions. Slice 12 must not compose those as a second sequential/nested transaction around Scene writes. Development may continue only if merged Slice 8 exposes, or owner-approved non-semantic extraction provides, a caller-owned same-transaction seam preserving Slice 8 semantics. Otherwise STOP.
+
+Special integration gate B — 01004 Consent owner seam: current main Consent persistence is guardian-oriented and cannot be assumed to represent the Frozen Spec's scoped supplemental-assessment accept/decline fact. T1202 must inspect the then-merged authoritative Consent contract. If it already supports the exact scoped decision, consume it. If it does not, STOP for an owner-approved narrow Consent integration/schema remediation before implementing T1212. Do not encode Consent truth as Scene state, artifact metadata, Evidence, or a Slice 12 private table.
 
 ## 6. Planned Project Structure
 
@@ -257,6 +261,22 @@ Node state receives only minimum SELECT/INSERT/column-level UPDATE. Artifacts re
 
 Slice 12 adds no delete endpoint. RESTRICT prevents accidental cascade erasure. Later global data-right deletion remains owner-governed. Consent revocation blocks future affected processing but does not erase historical Evidence/Scene audit history by itself.
 
+### 7.5 01004 Consent persistence boundary
+
+01004 is not ordinary Assessment Evidence. Its accept/decline outcome is a purpose-scoped Consent fact owned by the existing Consent domain.
+
+Development rules:
+
+- use the authoritative Consent owner repository/service and its current version/audit semantics;
+- introduce only the minimum owner-approved purpose/decision vocabulary required to represent supplemental-assessment consent if that vocabulary is not already present after upstream merges;
+- acceptance and refusal must both be auditable without fabricating guardian identity or reusing UNDER_14 guardian-consent semantics;
+- the decision must bind to the authorized actor/subject/Case and exact supplemental-assessment purpose required by 01004;
+- 01004 Consent does not authorize unrelated processing and does not grant Family/Case/Participant access;
+- node state may reference the Consent record/result but cannot become the Consent source of truth;
+- if the owner contract cannot represent this safely, the implementation stops rather than falling back to Evidence or Scene JSON.
+
+No second consent table or Slice 12 consent state machine is permitted.
+
 ## 8. Runtime Transaction Model
 
 All mutations use one authoritative same-client transaction. No nested transaction and no second checked-out client.
@@ -355,8 +375,10 @@ A1000:
 
 01004:
 - explicit purpose/method/use/burden/disclaimer and explicit accept/decline.
+- accept/decline is persisted through the authoritative Consent owner seam under a scoped supplemental-assessment purpose; Scene state stores only the resulting reference/projection.
 - decline terminates/returns without 01000 completion.
 - consent is only supplemental-assessment consent; it cannot replace guardian, identity, AI, sharing or notification consent.
+- if the Consent owner cannot represent this decision at development start, STOP for owner-approved Consent remediation; do not encode a private Scene/Evidence consent truth.
 
 01000:
 - only 情绪测评 and 亲子互动模式测评.
@@ -723,7 +745,9 @@ Audit remediation incorporated:
 1. added explicit FR-001–FR-022 and Acceptance 1–36 task traceability;
 2. standardized Tasks to goal/scope/contracts/verification/prerequisites;
 3. strengthened current-state uniqueness so package versions cannot create two simultaneously-current copies;
-4. added a hard STOP if Slice 8 cannot provide same-transaction StartAssessment/PresentProblemFormulation composition.
+4. added a hard STOP if Slice 8 cannot provide same-transaction StartAssessment/PresentProblemFormulation composition;
+5. made 01004 explicitly consume the authoritative Consent owner and added a STOP rule if the owner cannot represent scoped accept/decline;
+6. added explicit FR/task authority mapping so every engineering task has Frozen Spec authority.
 
 ## 24. Final Pre-Development Re-Audit
 

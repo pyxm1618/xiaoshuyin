@@ -30,6 +30,33 @@ Every task is a closed engineering increment with Goal, Expected scope, Mandator
 - T1219: Full 36-scenario acceptance / no-model / scope / governance convergence — depends on T1218.
 - T1220: Exact-head convergence and independent Audit 2 handoff — depends on T1219.
 
+## Frozen Spec Authority Map
+
+Every task has explicit Frozen Spec authority. This map is normative for scope review; a task may not add behavior outside the listed FR/section authority.
+
+| Task | Frozen Spec authority |
+|---|---|
+| T1201 | §23–§24 Dependencies / Future Implement Gate; FR-022 |
+| T1202 | §6 Ownership; §10–§15 owner integration boundaries; FR-002, FR-014–FR-019, FR-022 |
+| T1203 | §7 Scene Node State; §10 Authorization/RLS; §15 Atomicity; FR-001, FR-015, FR-019 |
+| T1204 | §10–§13 Authorization/API/Idempotency; FR-004, FR-015–FR-017, FR-022 |
+| T1205 | §6–§7 data truth; §10/§14/§15; FR-001, FR-003, FR-015, FR-018, FR-019 |
+| T1206 | §7 state/artifact contract; §8.12–§8.13; FR-001, FR-012, FR-013, FR-019 |
+| T1207 | §8.1 Assessment entry; §10–§15; FR-004, FR-015–FR-019 |
+| T1208 | §7 / §10 / §12 read semantics; FR-001, FR-002, FR-015 |
+| T1209 | §8 canonical runtime; §11–§15; FR-002, FR-003, FR-015–FR-019, FR-021 |
+| T1210 | §8.2–§8.4; FR-005, FR-006 |
+| T1211 | §8.5–§8.7; FR-007, FR-008, FR-020 |
+| T1212 | §8.8 01004/01000 and §11.3 Consent; FR-009, FR-016, FR-020 |
+| T1213 | §8.9–§8.11; FR-010, FR-011 |
+| T1214 | §8.12; FR-012, FR-020 |
+| T1215 | §8.13; FR-013, FR-020 |
+| T1216 | §9 Problem Formulation Handoff; §15 Atomicity; FR-014, FR-019 |
+| T1217 | §12 API Contract Surface; §16 Failure Semantics; FR-004, FR-015–FR-020 |
+| T1218 | §10–§16 security/reliability contracts; FR-015–FR-019 |
+| T1219 | §22 Acceptance Scenarios 1–36; FR-001–FR-022 |
+| T1220 | §24 Future Implement Gate / §26 Frozen Spec Gate; FR-022 |
+
 ## T1201 — Development-start Authority / Dependency / Implement Gate
 
 ### Goal
@@ -60,11 +87,11 @@ Reconcile merged owner contracts and shared vocabularies.
 
 ### Expected scope
 
-- Map merged Slice 8 phase/formulation seams, Slice 9 Drizzle/Safety, Slice 10 Compliance, Slice 11 manifest/router, and current Evidence/Case/idempotency/authorization/audit contracts.
+- Map merged Slice 8 phase/formulation seams, Slice 9 Drizzle/Safety, Slice 10 Compliance, Slice 11 manifest/router, and current Evidence/Case/Consent/idempotency/authorization/audit contracts. Explicitly verify whether the Consent owner can represent 01004 scoped supplemental-assessment accept/decline.
 
 ### Mandatory contracts
 
-- No duplicate owner abstraction. Reuse merged node-code type, same-client transaction, Evidence writers, idempotency and server-owned Compliance feature identity. Do not edit historical migrations.
+- No duplicate owner abstraction. Reuse merged node-code type, same-client transaction, Evidence writers, Consent owner, idempotency and server-owned Compliance feature identity. Do not edit historical migrations. If the Consent owner cannot represent 01004 scoped accept/decline, STOP for owner-approved narrow Consent remediation; never use Scene/Evidence as a private consent ledger.
 
 ### Verification
 
@@ -280,15 +307,15 @@ T1210.
 
 ### Expected scope
 
-- Implement scoped accept/decline, approved category selection, boundary artifact and truthful approved-instrument-unavailable state.
+- Implement scoped accept/decline through the authoritative Consent owner, approved category selection, boundary artifact and truthful approved-instrument-unavailable state.
 
 ### Mandatory contracts
 
-- 01004 consent is isolated from guardian/other purposes. 01000 only 情绪测评 and 亲子互动模式测评; no invented item bank/scoring/diagnosis/model fallback.
+- 01004 consent is an authoritative purpose-scoped Consent record/result, isolated from guardian/other purposes; node state may reference it but cannot own it. No second consent table/state machine. 01000 only 情绪测评 and 亲子互动模式测评; no invented item bank/scoring/diagnosis/model fallback.
 
 ### Verification
 
-- Decline, consent-isolation, category, no-invention, missing-instrument, artifact provenance and no-false-completion tests.
+- Accept/decline persistence through the Consent owner, consent-isolation, refusal auditability, category, no-invention, missing-instrument, artifact provenance and no-false-completion tests.
 
 ### Prerequisites
 

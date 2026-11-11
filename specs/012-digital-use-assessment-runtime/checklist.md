@@ -380,11 +380,14 @@ This is the pre-development quality contract. PASS means the Frozen Spec require
 | CHK313 | No task assumes future runtime is already on main. | PASS |
 | CHK314 | Final remote drift recheck is mandatory. | PASS |
 | CHK315 | Development ends at independent Audit 2 handoff, not self-merge. | PASS |
+| CHK316 | 01004 accept/decline uses the authoritative Consent owner; Scene/Evidence cannot become a private consent truth. | PASS |
+| CHK317 | If the authoritative Consent owner cannot represent scoped supplemental-assessment accept/decline, implementation has an explicit owner-remediation STOP gate. | PASS |
+| CHK318 | Every T1201–T1220 task is mapped to explicit Frozen Spec FR/section authority. | PASS |
 
 ## Checklist Result
 
-Total checks: 315
-PASS: 315
+Total checks: 318
+PASS: 318
 FAIL: 0
 N/A: 0
 Open Planning Decisions: 0
