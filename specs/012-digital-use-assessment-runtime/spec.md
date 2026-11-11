@@ -31,10 +31,12 @@ Selection 时重新核对：
 Current runtime truth and future dependencies are intentionally separated:
 
 - Slice 1–7 implementation runtime is already represented on main, with Slice 005 being a contract-only artifact rather than an implementation slice.
-- Slice 8 Problem Formulation runtime is on draft PR #26, head e23cee82fd6953cb02b3ea139e2c2220ed152d90, and is not merged to main.
-- Slice 9 Safety Hold Control Foundation has frozen/planned/audited artifacts; governance remediation PR #27 is open draft; Safety runtime and its authoritative Drizzle/Data Access outcome are not merged.
-- Slice 10 Compliance Feature Policy Foundation is frozen/planned/Audit 1 passed, but its Implement Gate is blocked on the authoritative Slice 9 Drizzle/Data Access outcome.
+- Slice 8 Problem Formulation runtime is on draft PR #26, current head f61b60dec39f14af9bd99a99525f0e57ae7fa7c3. Its earlier independent Audit 2 produced findings; the development AI remediated them and the PR now reports READY FOR TARGETED INDEPENDENT RE-AUDIT. It is not merged to main.
+- Slice 9 Safety Hold Control Foundation is now implemented on draft PR #28, head c3d095f3cdf812d6b8c0f6246177547185300028. The PR reports T901–T920 complete and is awaiting independent Audit 2. Governance PR #27 is closed as superseded and its remediation commits are integrated into PR #28. Slice 9 runtime / Drizzle outcome is still not current main truth.
+- Slice 10 Compliance Feature Policy Foundation is frozen/planned/Audit 1 passed, but its Implement Gate remains blocked until the authoritative Slice 9 Drizzle/Data Access runtime lands on main.
 - Slice 11 Digital Use Node Manifest / Deterministic Routing Foundation is frozen/planned/Audit 1 passed, but its Implement Gate is blocked; no Slice 11 runtime is on main.
+
+**Selection-time input drift: RECONCILED (NON-SEMANTIC).** During final revalidation, open PR states advanced while origin/main and all four authoritative Docs remained unchanged. The new PR state changes dependency progress only; it does not alter the Slice 12 capability selection or product contract.
 
 Therefore:
 
@@ -1057,11 +1059,14 @@ These are design inputs only until their runtime is merged:
 
 **Slice 8 — Problem Formulation Core**
 - required for the real Assessment → Problem Formulation handoff;
-- PR #26 is not current main runtime.
+- PR #26 is currently at remediated head f61b60dec39f14af9bd99a99525f0e57ae7fa7c3 and awaits targeted independent re-audit;
+- it is not current main runtime.
 
 **Slice 9 — Safety Hold Control Foundation**
 - required for the authoritative ordinary-progression Safety guard;
-- authoritative Drizzle/Data Access foundation also lands through this dependency path.
+- authoritative Drizzle/Data Access foundation also lands through this dependency path;
+- implementation is currently on draft PR #28 at c3d095f3cdf812d6b8c0f6246177547185300028, awaiting independent Audit 2;
+- it is not current main runtime.
 
 **Slice 10 — Compliance Feature Policy Foundation**
 - required for authoritative feature-level compliance evaluation.
@@ -1211,7 +1216,7 @@ Open Product Decisions = **0**.
 ## 26. Frozen Spec Gate
 
 - Authority Gate: **PASS**
-- Input Drift: **NONE**
+- Input Drift: **RECONCILED — NON-SEMANTIC PR-STATE DRIFT; main/Docs unchanged**
 - Selection Gate: **PASS**
 - Selected capability: **Digital Use Assessment Runtime（A1001–A2010 canonical subgraph）**
 - V1 Phase: **Phase 2**
