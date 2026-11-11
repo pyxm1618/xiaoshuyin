@@ -25,11 +25,14 @@ import {
   insertSafetyCaseEvent,
   isSafetyError,
   lockFamilyForPrimaryDecision,
-  transitionCaseStatus,
+
   type ApprovedPolicyIdentity,
   type SafetyPrecheckDecision,
   type SafetyWriteTx,
 } from '@xiaoshuyin/domain';
+// S9-H01: package-internal primitive, deliberately not part of the
+// `@xiaoshuyin/domain` production root export surface.
+import { transitionCaseStatus } from '../../../../../packages/domain/src/safety/case-transition.js';
 import { withDrizzleRlsTransaction, type SafetyDrizzleTx } from '../db/drizzle-tx.js';
 import { withIdentityTransaction } from '../db/tx.js';
 import { requireCurrentFamily } from '../family-context.js';

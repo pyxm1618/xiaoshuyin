@@ -191,4 +191,32 @@ describe('T918 executable scope negatives', () => {
       'packages/domain/src/safety/case-transition.ts',
     ]);
   });
+
+  it('keeps the generic Case status writer out of the production package surface (S9-H01)', () => {
+    const rootBarrel = readFileSync(join(ROOT, 'packages/domain/src/index.ts'), 'utf-8');
+    const safetyBarrel = readFileSync(join(ROOT, 'packages/domain/src/safety/index.ts'), 'utf-8');
+    const packageJson = JSON.parse(
+      readFileSync(join(ROOT, 'packages/domain/package.json'), 'utf-8')
+    ) as { exports: Record<string, string> };
+
+    // 1. The root barrel must not re-export the internal transition module.
+    expect(rootBarrel).not.toMatch(/^\s*export\b[^;\n]*from\s+['"][^'"]*case-transition/m);
+    // 2. The Safety barrel must not re-export it either.
+    expect(safetyBarrel).not.toMatch(/^\s*export\b[^;\n]*from\s+['"][^'"]*case-transition/m);
+    // The Safety surface itself must still be reachable from the root barrel.
+    expect(rootBarrel).toMatch(/from\s+['"]\.\/safety\/index\.js['"]/);
+    // 3. Package exports must not open the internal module as a deep subpath.
+    expect(Object.keys(packageJson.exports)).toEqual(['.']);
+    expect(packageJson.exports['.']).toBe('./src/index.ts');
+
+    // 4. The production package root must expose no generic Case status writer.
+    const exported = domain as Record<string, unknown>;
+    expect(exported.transitionCaseStatus).toBeUndefined();
+    const genericStatusWriters = Object.keys(exported).filter((name) =>
+      /(?:case.*status.*(?:transition|update|set|write|mutate))|(?:(?:transition|update|set|write|mutate).*case.*status)/i.test(
+        name
+      )
+    );
+    expect(genericStatusWriters).toEqual([]);
+  });
 });

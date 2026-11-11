@@ -10,4 +10,7 @@ export * from './errors.js';
 export * from './precheck.js';
 export * from './persistence.js';
 export * from './resolver-authority.js';
-export * from './case-transition.js';export * from './guard.js';
+// S9-H01: `case-transition.ts` is a package-internal primitive shared only by
+// EnterSafetyHold and ResolveRisk. It must never be reachable through the
+// production `@xiaoshuyin/domain` root export surface.
+export * from './guard.js';
