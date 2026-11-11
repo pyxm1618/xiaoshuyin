@@ -143,9 +143,9 @@ Status values: **PASS / FAIL / N/A**.
 | CHK093 | existing `authorize()` remains the sole authorization entry | PASS | no second RBAC |
 | CHK094 | Compliance ALLOW does not authorize access | PASS | explicit |
 | CHK095 | unauthorized/cross-family target is rejected before detail exposure | PASS | anti-enumeration |
-| CHK096 | global feature policy table is not misclassified as Family-owned data | PASS | no family_id |
-| CHK097 | global policy runtime grant is SELECT-only | PASS | planned privilege contract |
-| CHK098 | policy runtime INSERT/UPDATE/DELETE/TRUNCATE are denied | PASS | DB verification |
+| CHK096 | global feature policy table is not misclassified as Family-owned data | PASS | no family_id; policy RLS is active-row least privilege, not Family tenancy |
+| CHK097 | global policy runtime access is FORCE-RLS current-active-row only plus evaluator-column SELECT | PASS | no history/review provenance visibility |
+| CHK098 | policy runtime INSERT/UPDATE/DELETE/TRUNCATE are denied | PASS | DB verification; migrator uses explicit provisioning RLS policy |
 | CHK099 | existing Person/consent reads remain under Family/identity RLS | PASS | same transaction seam |
 | CHK100 | no RLS weakening is planned | PASS | existing policies unchanged |
 | CHK101 | policy evidence/raw sensitive content is not client-exposed | PASS | no public route |
@@ -188,7 +188,7 @@ Status values: **PASS / FAIL / N/A**.
 | CHK123 | effective interval validity is explicit | PASS | end > start |
 | CHK124 | supersession FK is explicit | PASS | self-reference |
 | CHK125 | lookup indexes are explicit | PASS | feature/revision/time |
-| CHK126 | runtime owner is not application role | PASS | migrator owns |
+| CHK126 | runtime owner is not application role and policy table ENABLE/FORCE RLS is explicit | PASS | migrator owns; runtime NOBYPASSRLS |
 | CHK127 | fresh migration test is required | PASS | verification plan |
 | CHK128 | upgrade migration test is required | PASS | verification plan |
 | CHK129 | second apply/replay test is required | PASS | verification plan |
@@ -282,7 +282,7 @@ Status values: **PASS / FAIL / N/A**.
 | CHK187 | NOT_APPLICABLE cannot simultaneously assert the anthropomorphic usage-reminder rule | PASS | usage_reminder_rule must be BASELINE |
 | CHK188 | UNKNOWN remains BLOCK regardless of other rule values | PASS | cross-field coherence |
 | CHK189 | two concurrent first-publish attempts serialize even when no current row exists | PASS | DB trigger obtains exact-feature advisory lock |
-| CHK190 | expired matching policy history is not collapsed into NOT_APPLICABLE/ALLOW | PASS | COMPLIANCE_POLICY_EXPIRED |
+| CHK190 | expired/future/missing policy state is not collapsed into NOT_APPLICABLE/ALLOW and does not require runtime historical read privilege | PASS | no active row → COMPLIANCE_POLICY_MISSING fail-closed |
 
 # Audit 1 Remediation Check
 
@@ -292,7 +292,8 @@ Audit 1 planning findings S10-P01..S10-P04 were applied only to Plan / Checklist
 - policy cross-field coherence is frozen;
 - overlap enforcement is frozen to the advisory-lock + DB-trigger mechanism;
 - expired-policy and unsupported-obligation error semantics are explicit;
-- Slice 9 Safety is no longer an accidental semantic prerequisite, and the approved separate Data Access Remediation path is recognized.
+- Slice 9 Safety is no longer an accidental semantic prerequisite, and the approved separate Data Access Remediation path is recognized;
+- runtime feature-policy access is narrowed to current-active rows and evaluator columns under ENABLE/FORCE RLS, rather than table-wide history SELECT.
 
 Spec changed: **NO**  
 Docs changed: **NO**  
