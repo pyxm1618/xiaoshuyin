@@ -15,119 +15,99 @@ Global rules for every task:
 - no second idempotency system;
 - no raw-pg-only fallback if the Drizzle gate cannot be satisfied.
 
-## T901 — Development-start input reconciliation
+## T901 — Development-start environment isolation and input reconciliation
 
 **Purpose**
 
-Prove the development branch is starting from a still-valid authoritative baseline.
-
-**Files likely touched**
-
-- none for production behavior;
-- development evidence/log only if the repo's normal process requires it.
-
-**Dependencies**
-
-- audited Plan AI 2 head.
+Prove Slice 9 starts from a valid authoritative baseline in its own clean execution environment.
 
 **Implementation requirements**
 
-1. fetch real `origin/main`;
-2. verify frozen Spec commit/blob unchanged;
-3. compare current main to audited main `8e393c990be53c888c2e68d881bd8b23f9c37638`;
-4. re-read current Slice 8 branch/PR state;
-5. re-list migrations and actual shared CHECK definitions;
-6. verify `authorize()`, RLS, idempotency and SwitchPrimary lock/precedence still match the Plan;
-7. run baseline canonical verification before first production edit.
+1. Fetch real origin/main and reconcile only Slice-9-relevant drift.
+2. Verify the Frozen Spec commit/blob remains unchanged.
+3. Re-read current Slice 8 branch, PR, development state and any local WIP before coding.
+4. Re-list migrations and current shared CHECK definitions.
+5. Re-verify authorize(), RLS, idempotency and SwitchPrimary lock/precedence.
+6. Use a separate Slice 9 development branch/worktree based on reconciled latest main.
+7. The Slice 9 worktree must be clean before the first production edit.
+8. No Slice 8 uncommitted or untracked WIP may be present in the Slice 9 worktree.
+9. Do not develop Slice 9 directly on feat/008-problem-formulation-core or any other Slice 8 worktree.
+10. Do not auto-stash, delete, reset or clean Slice 8 WIP to satisfy this gate.
+11. Run baseline CI-equivalent verification before the first production edit.
 
-If material drift affects Safety, Drizzle, auth/RLS, idempotency, Case state, migration or Slice-8 integration, STOP for planning reconciliation.
+If requirements 6–10 are not satisfied: **T901 = STOP**.
 
-**Tests required**
+**Parallel development rule**
 
-- current canonical baseline commands / CI-equivalent local verification.
+Slice 8 + Slice 9 remains allowed only with different branch, different clean worktree, and different Development AI. Whichever branch merges second must rebase latest main, reconcile migrations/shared vocabulary/grants, and run combined regression.
 
 **Acceptance evidence**
 
 - exact main SHA;
-- exact frozen Spec blob;
+- exact Frozen Spec blob;
 - drift classification;
 - Slice 8 state;
+- branch/worktree identity and clean status;
+- explicit proof no Slice 8 WIP is present;
 - migration highest prefix;
-- baseline green or a diagnosed pre-existing blocker.
+- baseline verification result.
 
 **Out of scope**
 
+- changing the Frozen Spec;
 - fixing unrelated baseline defects;
-- changing the frozen Spec.
+- altering or cleaning Slice 8 WIP.
 
----
 
-## T902 — Establish the narrow Drizzle §7.0 foundation
+## T902 — Establish the narrow Drizzle §7.0 foundation without weakening identity/RLS defence
 
 **Purpose**
 
-Turn the current “dependency/config only” state into a real Slice-9-compliant Drizzle schema/query/transaction path without rewriting the whole repository.
+Create the narrow Slice-9 Drizzle schema/query/transaction path while preserving the current identity-context consistency defence.
 
-**Files likely touched**
+**Verified baseline**
 
-- root/package manifest as required;
-- `bun.lock`;
-- `db/drizzle.config.ts` only if needed to make the already-declared schema path real;
-- `db/schema/**`;
-- `apps/server/api/src/db/tx.ts` and/or a narrow `apps/server/api/src/db/drizzle.ts`;
-- focused DB/transaction tests.
-
-**Dependencies**
-
-- T901.
+- apps/server/api/package.json declares drizzle-orm ^0.45.0.
+- current bun.lock resolves drizzle-orm 0.45.4.
+- drizzle-kit is not currently locked.
+- current main apps/server/api/src/db/tx.ts contains assertIdentityContextMatches.
+- official stable Drizzle releases currently expose drizzle-kit 0.31.11; this is a candidate, not a frozen planning pin.
 
 **Implementation requirements**
 
-1. add the missing compatible `drizzle-kit` development dependency;
-2. create the minimal typed Drizzle schema projection used by Slice 9;
-3. preserve reviewed SQL migrations as the production schema-change mechanism;
-4. create a checked-out-`PoolClient` Drizzle transaction seam:
-   - preserve connection-error listener / broken-client eviction behavior;
+1. Re-confirm the then-current drizzle-orm resolution, Bun toolchain and lockfile.
+2. Select and lock an exact drizzle-kit version proven compatible with that toolchain; do not pin 0.31.x from memory.
+3. Prove the exact selection with lockfile plus focused Drizzle CLI/config/schema-loading verification.
+4. Create the minimum typed db/schema projection required by Slice 9.
+5. Reviewed SQL migrations remain the only production schema-change mechanism.
+6. Build a checked-out PoolClient Drizzle transaction seam in which all of the following are true inside one transaction:
+   - Drizzle uses the exact checked-out PoolClient;
    - Drizzle owns BEGIN/COMMIT/ROLLBACK;
-   - RLS identity + Family context are established inside the same transaction;
-   - no nested raw transaction;
-5. prove ordinary Slice-9-owned inserts/updates can use query builder;
-6. allow explicit `sql` only for RLS functions, locking, complex idempotency and introspection;
-7. add schema-parity tests against a migrated DB;
-8. do not run/use `drizzle-kit push`;
-9. do not let a partial Drizzle schema generate destructive unrelated DDL.
+   - app.set_identity_context executes inside the transaction;
+   - the existing assertIdentityContextMatches semantic is reused or preserved before Family context is trusted;
+   - app.set_family_context executes inside the same transaction;
+   - authorization fact reads, retained raw helpers, idempotency and Drizzle query-builder writes stay on that same client;
+   - connection-error listener and broken-client eviction behavior are preserved;
+   - no nested raw transaction and no second checked-out client are introduced.
+7. Use query builder for ordinary Slice-9-owned writes.
+8. Explicit SQL remains limited to justified RLS context, locking, complex idempotency and introspection cases.
+9. Add migrated-DB schema parity tests.
+10. Do not use drizzle-kit push and do not generate destructive unrelated DDL from a partial schema.
 
 **STOP condition**
 
-If a same-transaction Drizzle path cannot coexist with current auth/RLS/idempotency helpers without creating a second transaction, second schema truth, or broad repository rewrite:
+If narrow Drizzle compliance cannot preserve same-client identity/RLS/idempotency semantics without a second transaction, second schema truth, or broad repository rewrite: DRIZZLE GATE BLOCKED — SEPARATE DATA ACCESS REMEDIATION REQUIRED. Do not continue with raw-pg-only Safety code.
 
-`DRIZZLE GATE: BLOCKED — SEPARATE DATA ACCESS REMEDIATION REQUIRED`
+**Required verification**
 
-Do not continue T903+ with raw-pg-only Safety code.
-
-**Tests required**
-
-- Drizzle transaction commit/rollback;
-- RLS context visible inside Drizzle transaction;
-- raw shared fact helper, if retained, demonstrably uses the exact same checked-out connection/transaction;
-- thrown business error rolls back;
-- connection-level failure does not leak/return a known-broken client;
+- commit/rollback;
+- wrong account/person/purpose context rejected before Family-context work;
+- identity context + identity consistency assertion + Family context + RLS all on the same transaction;
+- retained raw helper, if any, uses the exact same checked-out client;
+- connection failure does not return a broken client;
+- exact drizzle-kit version and compatibility smoke output;
 - schema projection parity.
 
-**Acceptance evidence**
-
-- `drizzle-kit` installed;
-- `db/schema` exists;
-- at least one real Drizzle query-builder mutation and one real Drizzle-owned transaction test;
-- no second transaction;
-- no production push command.
-
-**Out of scope**
-
-- migrating pre-existing unrelated repositories to Drizzle;
-- changing business semantics of existing commands.
-
----
 
 ## T903 — Add the reviewed Safety migration and Risk Event schema
 
@@ -635,50 +615,40 @@ Prove Enter/Resolve use the existing exact idempotency system with no semantic f
 
 ---
 
-## T912 — Prove RLS, grants and structural isolation
+## T912 — Prove RLS, grants and structural isolation with latest-main reconciliation
 
 **Purpose**
 
-Make Family isolation and least privilege mechanical.
+Make Family isolation and least privilege mechanical without regressing existing Case grants.
 
-**Files likely touched**
+**Latest-main grant rule**
 
-- `tests/db/safety-*.test.ts`;
-- `tests/db/roles.test.ts`;
-- DB evidence script if it enumerates table/policy counts.
+Before changing expectations, re-read current main. At the currently verified main, cases table-level UPDATE is denied; column UPDATE is allowed on is_primary, version and updated_at; status is denied. Slice 9 adds only the Safety-required narrow status capability. Therefore the current expected post-S9 writable set is is_primary, status, version, updated_at.
 
-**Dependencies**
+If Slice 8 or another authorized main change has legitimately added a Case column grant before development reaches this task, preserve that latest-main grant and test the union. Do not hard-code an old four-column set over a newer main.
 
-- T903.
+**Required checks as the real runtime role**
 
-**Implementation requirements**
-
-Test as the real app role:
-
-- no Family context: Risk Event SELECT zero / INSERT denied;
-- wrong Family: zero / denied;
-- correct Family: allowed only for matching family/case;
-- composite FK rejects cross-Family Case link;
-- resolution self-link cannot cross Case/Family;
-- UPDATE/DELETE/TRUNCATE Risk Event denied;
-- Case table-level UPDATE remains false;
-- only status/version/updated_at Safety columns are newly writable;
-- app remains non-owner/NOBYPASSRLS;
+- risk_events: ENABLE RLS + FORCE RLS;
+- runtime risk_events privileges exactly SELECT + INSERT;
+- risk_events UPDATE, DELETE and TRUNCATE denied;
+- no Family context: Risk Event SELECT empty and INSERT denied;
+- wrong Family: empty/denied;
+- correct Family: only matching Family/Case rows permitted;
+- cross-Family Case link and resolution self-link rejected structurally;
+- app remains non-owner and NOBYPASSRLS;
+- cases table-level UPDATE remains denied;
+- approved column-level UPDATE succeeds and unapproved columns remain denied;
 - case_events remains append-only.
 
-**Tests required**
+**Existing regression reconciliation**
 
-- direct pg_catalog/information_schema assertions plus runtime-role DML attempts.
+Reconcile, do not delete or weaken, tests/db/cases-rls.test.ts and tests/db/roles.test.ts.
 
 **Acceptance evidence**
 
-- exact privilege/policy matrix.
+Exact latest-main-plus-S9 privilege/policy matrix and proof no legitimate existing grant was lost.
 
-**Out of scope**
-
-- authorization business rules in RLS.
-
----
 
 ## T913 — Complete domain/unit error and privacy matrix
 
@@ -935,185 +905,160 @@ If runtime does not exist: static/contract evidence records the six-command list
 
 ---
 
-## T918 — Enforce unique Safety entry/exit and scope statically
+## T918 — Mechanically enforce unique Safety entry/exit and scope negatives
+
+**Unique transition enforcement**
+
+At minimum scan and reconcile:
+
+1. generic Case status update helpers;
+2. direct SQL UPDATE cases SET status patterns;
+3. repository/data-access helpers;
+4. SwitchPrimaryCase paths;
+5. test-support helpers;
+6. migration/test-only utilities;
+7. other Domain Commands;
+8. production imports, exports and re-exports.
+
+Mechanical invariant: EnterSafetyHold is the only formal production Domain transition path into SAFETY_HOLD; ResolveRisk is the only formal production Domain transition path out of SAFETY_HOLD. Test setup/helpers may directly construct fixture state only when they are test-only and cannot be imported into production.
+
+**Executable scope-negative assertions**
+
+Use the appropriate combination of changed-path/git-diff scan, schema enumeration, route/OpenAPI enumeration, package/import/export scan and static guards to prove Slice 9 adds none of:
+
+- support_resources;
+- referrals or Referral runtime;
+- staff queue;
+- operations dashboard;
+- Guardrails integration;
+- risk_review model runtime;
+- Digital Use Scene;
+- node-manifest;
+- excluded routing expansion;
+- Goal, Intervention, Plan, Task, Review or Follow-up runtime;
+- public Safety mutation route;
+- safety_states current-state table.
+
+Keep existing unrelated static prohibitions intact.
+
+**Required tests/evidence**
+
+- guard self-tests with synthetic forbidden bypass fixtures where supported;
+- synthetic direct-SQL/generic-helper/test-helper production-import bypass detection;
+- route/OpenAPI/schema/import inventory with zero forbidden additions;
+- bun run guard:static passes the real tree and fails the synthetic bypass.
+
+
+## T919 — Reconcile migration, RLS and existing shared-regression evidence after parallel development
 
 **Purpose**
 
-Make bypass creation mechanically visible in CI.
-
-**Files likely touched**
-
-- `scripts/guard-static.mjs`;
-- dedicated static tests/governance tests.
-
-**Dependencies**
-
-- T907;
-- T908;
-- T910.
+Close migration/CHECK/grant/vocabulary conflicts and prove existing Case/RLS/migration behavior was not broken.
 
 **Implementation requirements**
 
-Add narrow checks that prove:
+1. Fetch latest main again.
+2. Recompute the actual next migration number. Migration prefix is not frozen.
+3. Ensure Slice 8 and Slice 9 cannot carry the same migration number into main.
+4. If Slice 8 landed first, preserve every Slice 8 Case Event, audit, idempotency, authorization/error vocabulary item and legitimate Case grant.
+5. If Slice 9 lands first, use the real next prefix and require Slice 8 to rebase/renumber later.
+6. Before any complete CHECK replacement, re-read latest-main case_events, business_audit_events, idempotency command/key representation, authorization facts/actions, error vocabulary and cases grants.
+7. Rebuild exact expected table/enum/policy/grant counts.
+8. Do not modify historical migrations.
+9. Run fresh, upgrade, replay and failed-migration evidence.
+10. Keep Frozen Spec and Docs unchanged.
 
-1. no `safety_states` table/projection;
-2. no production public Safety mutation route;
-3. no model/AI module directly writes Case Safety status;
-4. the SAFETY_HOLD entry transition primitive is reachable only from EnterSafetyHold service;
-5. the SAFETY_HOLD -> non-held transition primitive is reachable only from ResolveRisk service;
-6. no generic Case update helper can set arbitrary status;
-7. test-only resolver implementation is absent from production imports/exports;
-8. existing unrelated future-table guards remain intact.
+**Current verified existing regression baseline**
 
-Do not create brittle rules that forbid future legitimate non-Safety lifecycle work globally; scope checks to approved status-transition primitives/module boundaries.
+- tests/db/cases-rls.test.ts
+- tests/db/roles.test.ts
+- tests/db/migration-case-primary-switch-upgrade.test.ts
+- tests/db/migration-upgrade-evidence.test.ts
+- tests/db/migration-repro.test.ts
+- tests/db/case-primary-switch-shared-vocabulary.test.ts
+- relevant Case-primary/idempotency/RLS tests for every touched shared surface
 
-**Tests required**
-
-- guard self-tests with deliberately forbidden fixtures where the governance framework supports them.
-
-**Acceptance evidence**
-
-- `bun run guard:static` detects a synthetic bypass and passes the real tree.
-
-**Out of scope**
-
-- enforcing business authorization solely with regex.
-
----
-
-## T919 — Reconcile migration/governance evidence after parallel development
-
-**Purpose**
-
-Close shared migration/check/CI conflicts with Slice 8 and update exact database evidence.
-
-**Files likely touched**
-
-- final Safety migration filename/content;
-- `tests/db/migration-repro.test.ts`;
-- `tests/db/roles.test.ts`;
-- `scripts/db-evidence.mjs`;
-- shared governance/static tests only as needed.
-
-**Dependencies**
-
-- T903;
-- current integration order with Slice 8.
-
-**Implementation requirements**
-
-1. fetch latest main again;
-2. determine actual migration number;
-3. if Slice 8 has landed, preserve all Slice 8 Case Event/Audit/Idempotency literals and grants;
-4. if Slice 9 is first, ensure its migration is the actual next migration and document that Slice 8 must rebase;
-5. rebuild exact expected table/enum/policy/grant counts;
-6. ensure no historical migration changed;
-7. run fresh/upgrade/replay/failed-migration evidence;
-8. preserve Spec Governance and Docs immutability.
-
-**Tests required**
-
-- migration reproduction;
-- roles/grants;
-- db evidence;
-- static governance.
+Re-read latest main at T919 and add any newer relevant test. Running only new Safety tests is not sufficient.
 
 **Acceptance evidence**
 
-- final migration order and pg_catalog output.
+- final migration order;
+- pg_catalog privilege/CHECK output;
+- existing-regression matrix results;
+- no latest-main vocabulary/grant literal lost.
 
-**Out of scope**
 
-- silently keeping a stale whitelist after conflict resolution.
-
----
-
-## T920 — Final regression, acceptance proof and scope closeout
+## T920 — Final combined regression, acceptance proof and scope closeout
 
 **Purpose**
 
 Produce a development result suitable for independent post-development Audit 2.
 
-**Files likely touched**
-
-- no new behavior should be added at this stage;
-- generated artifacts only if an approved generator legitimately changes them.
-
-**Dependencies**
-
-- T901–T919.
-
-**Implementation requirements**
-
-Run at minimum:
+**Required final matrix**
 
 - focused Safety domain tests;
 - focused Safety integration tests;
 - focused Safety DB/RLS/concurrency/atomicity tests;
-- SwitchPrimary full regression;
-- migration/roles evidence;
-- `bun run typecheck`;
-- `bun run guard:static`;
-- `bun run coverage:audit`;
-- `bun run test -- --run`;
-- `bun run verify-all`;
-- OpenAPI generate/check if any registered-contract artifact is touched (expected public Safety route delta = none);
-- `git diff --check`;
+- all relevant existing RLS tests, including cases-rls and roles coverage;
+- all relevant migration fresh/upgrade/repro tests;
+- SwitchPrimary regression;
+- shared-vocabulary regression;
+- scope-negative static/schema/route/import assertions from T918;
+- bun run typecheck;
+- bun run guard:static;
+- bun run coverage:audit;
+- bun run test -- --run;
+- bun run verify-all;
+- OpenAPI generate/check when a registered contract artifact is touched;
+- git diff --check;
 - final changed-file/scope review.
 
-Mechanically prove:
+If Slice 8 has merged before T920, S8 + S9 combined regression is mandatory and must prove every Slice 8 ordinary progression command is blocked by current SAFETY_HOLD through the shared transaction-backed guard.
 
-- frozen Spec unchanged;
+**Mechanical closeout assertions**
+
+- Frozen Spec unchanged;
 - Docs unchanged;
 - no historical migration changed;
-- no Phase 5 object;
+- no Phase 5/support/referral/staff/operations object;
+- no Guardrails/risk_review/Digital Use/node-manifest/excluded routing/Goal/Intervention/Plan/Task/Review/Follow-up expansion;
 - no public Safety mutation endpoint;
-- no `safety_states`;
-- only `cases.status` is current Safety truth;
+- no safety_states;
+- cases.status remains the only current Safety truth;
 - production resolver remains fail-closed;
-- controlled resolver remains test-only;
+- controlled resolver remains test-only and absent from production import/export graph;
+- EnterSafetyHold is the only formal production entry to hold;
+- ResolveRisk is the only formal production exit from hold;
 - Risk Event contains no raw user text;
 - all FR-001..FR-028 evidence links are satisfied.
 
-Stop at:
+Stop at DEVELOPMENT COMPLETE — READY FOR INDEPENDENT AUDIT 2. Do not self-declare MERGE SAFE.
 
-`DEVELOPMENT COMPLETE — READY FOR INDEPENDENT AUDIT 2`
-
-Do not self-declare MERGE SAFE.
-
-**Tests required**
-
-- complete repository verification plus final exact-head provenance.
-
-**Acceptance evidence**
-
-- exact final head SHA;
-- full command results;
-- FR traceability evidence;
-- clean scope diff.
-
-**Out of scope**
-
-- merge main;
-- independent Audit 2.
-
----
 
 # Shared-file / parallel-development warning
 
-The following are high-conflict surfaces with Slice 8 and must be reconciled after rebase, never resolved by blindly choosing one side:
+Slice 8 + Slice 9 feature development may run in parallel only with different branch, different clean worktree and different Development AI. They may not share a dirty worktree.
+
+High-conflict surfaces that the second branch must rebase and reconcile mechanically:
 
 - migration numbering;
-- Case Event CHECK + metadata CHECK;
-- Business Audit event CHECK;
-- idempotency command/key representation CHECK;
-- `packages/authorization/src/authorize.ts`;
-- `packages/domain/src/idempotency.ts`;
-- `packages/domain/src/index.ts`;
+- case_events event/metadata CHECKs;
+- business_audit_events event/resource CHECKs;
+- idempotency command/key-representation CHECK/vocabulary;
+- cases grants;
+- authorization facts/actions;
 - error vocabulary;
-- `scripts/guard-static.mjs`;
-- `scripts/db-evidence.mjs`;
-- `tests/db/migration-repro.test.ts`;
-- `tests/db/roles.test.ts`.
+- packages/authorization/src/authorize.ts;
+- packages/domain/src/idempotency.ts;
+- packages/domain/src/index.ts;
+- apps/server/api/src/db/tx.ts;
+- scripts/guard-static.mjs;
+- scripts/db-evidence.mjs;
+- tests/db/cases-rls.test.ts;
+- tests/db/roles.test.ts;
+- tests/db/migration-case-primary-switch-upgrade.test.ts;
+- tests/db/migration-upgrade-evidence.test.ts;
+- tests/db/migration-repro.test.ts;
+- tests/db/case-primary-switch-shared-vocabulary.test.ts.
 
-**Parallel development decision: PARTIALLY.** Feature implementation may run in parallel. Final migration/shared-vocabulary integration is serialized and the second branch must rebase.
+**Parallel development decision: ALLOWED WITH ISOLATION.** Final migration/shared-vocabulary/grant integration is serialized; the later branch rebases latest main and runs combined regression.
