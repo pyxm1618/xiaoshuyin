@@ -1,24 +1,36 @@
 /**
- * T919 — migration / shared-contract reconciliation on the real latest main.
+ * T919 — migration / shared-contract reconciliation over the immutable Slice 9
+ * audit range.
  *
- * Proves: the migration set is exactly latest-main + the one Slice 9 file; the
- * number is recomputed (never assumed); a fresh database reproduces the full
- * schema; a second apply is a no-op; and no latest-main CHECK literal was lost.
+ * Proves: Slice 9's own historical delta is exactly the one Slice 9 file and it
+ * edited no pre-Slice-9 migration; the number is recomputed from the pre-merge
+ * base (never assumed); a fresh database reproduces the full schema; a second
+ * apply is a no-op; and no inherited CHECK literal was lost.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Client } from 'pg';
 import { execFileSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const ADMIN_URL = process.env['TEST_ADMIN_DATABASE_URL']!;
 const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL']!;
 const ROOT = new URL('../..', import.meta.url).pathname;
 const SLICE9_MIGRATION = '009_safety_hold_control_foundation.sql';
+// Slice 9 is audited over its immutable historical change range. A mutable
+// "current main" reference cannot express it: after the merge the branch head
+// and main are identical, so every main-relative delta is empty by construction.
+const SLICE9_PRE_MERGE_BASE_SHA = '8e393c990be53c888c2e68d881bd8b23f9c37638';
+const SLICE9_AUDITED_FEATURE_HEAD_SHA = '7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef';
+const SLICE9_HISTORICAL_RANGE = `${SLICE9_PRE_MERGE_BASE_SHA}..${SLICE9_AUDITED_FEATURE_HEAD_SHA}`;
 
 function git(args: string[]): string {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+}
+
+function isHistoricalMigrationEdit(record: string): boolean {
+  return /^[MDRT]\t/.test(record);
 }
 
 function urlForDatabase(baseUrl: string, database: string): string {
@@ -54,8 +66,8 @@ describe('T919 migration reconciliation', () => {
     await admin?.end().catch(() => undefined);
   }, 120_000);
 
-  it('local migration set is exactly latest main + approved Slice 8/9 files', () => {
-    const mainFiles = git(['ls-tree', '--name-only', 'origin/main', 'db/migrations/'])
+  it('Slice 9 historical range 8e393c99..7b4f5796 adds exactly the one Slice 9 migration', () => {
+    const baseFiles = git(['ls-tree', '--name-only', SLICE9_PRE_MERGE_BASE_SHA, 'db/migrations/'])
       .split('\n')
       .map((line) => line.replace('db/migrations/', '').trim())
       .filter(Boolean)
@@ -64,23 +76,42 @@ describe('T919 migration reconciliation', () => {
       .filter((name) => name.endsWith('.sql'))
       .sort();
 
-    const added = localFiles.filter((name) => !mainFiles.includes(name));
-    const removed = mainFiles.filter((name) => !localFiles.includes(name));
-    expect(added).toEqual([
-      '008_problem_formulation_core.sql',
-      '010_problem_formulation_safety_vocabulary_reconcile.sql',
-    ]);
+    // The historical delta is the authoritative statement of what Slice 9 added.
+    const historicalDelta = git([
+      'diff',
+      '--name-status',
+      SLICE9_HISTORICAL_RANGE,
+      '--',
+      'db/migrations/',
+    ])
+      .split('\n')
+      .filter(Boolean);
+    expect(historicalDelta).toEqual([`A\tdb/migrations/${SLICE9_MIGRATION}`]);
+
+    // The audited migration is present in the final repository and was not
+    // silently edited after the audit.
+    expect(existsSync(join(ROOT, 'db/migrations', SLICE9_MIGRATION))).toBe(true);
+    expect(localFiles).toContain(SLICE9_MIGRATION);
+    expect(git(['rev-parse', `HEAD:db/migrations/${SLICE9_MIGRATION}`])).toBe(
+      git(['rev-parse', `${SLICE9_AUDITED_FEATURE_HEAD_SHA}:db/migrations/${SLICE9_MIGRATION}`])
+    );
+
+    // Nothing that existed before Slice 9 may disappear from the working tree.
+    const removed = baseFiles.filter((name) => !localFiles.includes(name));
     expect(removed).toEqual([]);
 
-    // The real next prefix is recomputed from latest main, never assumed.
+    // The real next prefix is recomputed from the pre-merge base, never from the
+    // mutable current main, so a later slice adding 010_*.sql cannot invalidate it.
+    expect(baseFiles).not.toContain(SLICE9_MIGRATION);
     const highestPrefix = Math.max(
-      ...mainFiles.map((name) => Number(name.slice(0, 3)))
+      ...baseFiles.map((name) => Number(name.slice(0, 3)))
     );
-    const localHighestPrefix = Math.max(
-      ...localFiles.map((name) => Number(name.slice(0, 3)))
+    const delta = Number(SLICE9_MIGRATION.slice(0, 3)) - highestPrefix;
+    expect(delta).toBeGreaterThanOrEqual(1);
+    expect(delta).toBeLessThanOrEqual(2); // at most one unused prefix (Slice 8)
+    expect(baseFiles.map((name) => Number(name.slice(0, 3)))).not.toContain(
+      Number(SLICE9_MIGRATION.slice(0, 3))
     );
-    const delta = localHighestPrefix - highestPrefix;
-    expect(delta).toBe(1); // 010 reconciliation follows main's 009
   });
 
   it('fresh database reproduces the full schema and a second apply is a no-op', () => {
@@ -163,20 +194,59 @@ describe('T919 migration reconciliation', () => {
     }
   }, 120_000);
 
-  it('contains no historical migration edit', () => {
-    // Relative to the authoritative main the ONLY change may be the addition of
-    // the one reviewed Slice 9 file. Nothing may be modified, renamed or
-    // deleted, whether the file is committed or still untracked.
-    const status = git(['diff', '--name-status', 'origin/main', '--', 'db/migrations/'])
+  it('contains no historical migration edit in the audited range or the working tree', () => {
+    // Inside the immutable range the ONLY permitted record is the addition of the
+    // one reviewed Slice 9 file; no pre-Slice-9 migration may be modified,
+    // renamed or deleted.
+    const historicalDelta = git([
+      'diff',
+      '--name-status',
+      SLICE9_HISTORICAL_RANGE,
+      '--',
+      'db/migrations/',
+    ])
       .split('\n')
       .filter(Boolean);
+    const rangeEdits = historicalDelta.filter(isHistoricalMigrationEdit);
+    expect(rangeEdits, `historical migration edited inside ${SLICE9_HISTORICAL_RANGE}`).toEqual([]);
+    expect(historicalDelta).toEqual([`A\tdb/migrations/${SLICE9_MIGRATION}`]);
+
+    const baseFiles = git(['ls-tree', '--name-only', SLICE9_PRE_MERGE_BASE_SHA, 'db/migrations/'])
+      .split('\n')
+      .map((line) => line.replace('db/migrations/', '').trim())
+      .filter(Boolean);
+
+    // The working tree is measured against the pre-merge base, not against the
+    // mutable current main, so a later slice's new migration is not a regression.
+    const workingTreeDelta = git([
+      'diff',
+      '--name-status',
+      SLICE9_PRE_MERGE_BASE_SHA,
+      '--',
+      'db/migrations/',
+    ])
+      .split('\n')
+      .filter(Boolean);
+    const workingTreeEdits = workingTreeDelta.filter((record) => {
+      if (!isHistoricalMigrationEdit(record)) return false;
+      const path = record.split('\t')[1] ?? '';
+      return baseFiles.includes(path.replace('db/migrations/', ''));
+    });
+    expect(workingTreeEdits).toEqual([]);
+
+    // An untracked migration is legal only as a later slice's new file; a
+    // shadowing copy of a pre-Slice-9 filename is an edit attempt.
     const untracked = git(['ls-files', '--others', '--exclude-standard', 'db/migrations/'])
       .split('\n')
       .filter(Boolean);
+    const shadowing = untracked.filter((path) =>
+      baseFiles.includes(path.replace('db/migrations/', ''))
+    );
+    expect(shadowing).toEqual([]);
 
-    expect([...status, ...untracked.map((path) => `A\t${path}`)]).toEqual([
-      'A\tdb/migrations/008_problem_formulation_core.sql',
-      'A\tdb/migrations/010_problem_formulation_safety_vocabulary_reconcile.sql',
-    ]);
+    // Future-slice tolerance control: the same predicate accepts a later addition
+    // and still rejects an edit of a pre-Slice-9 migration.
+    expect(isHistoricalMigrationEdit(`A\tdb/migrations/010_example.sql`)).toBe(false);
+    expect(isHistoricalMigrationEdit('M\tdb/migrations/007_case_primary_switch.sql')).toBe(true);
   });
 });

@@ -16,6 +16,15 @@ import { createAdminPool } from '../setup/db.js';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 
+// Slice 9 is audited over its immutable historical change range. A mutable
+// "current main versus HEAD" comparison cannot express it: once the feature
+// branch is merged, the branch head and main are identical, so it is empty by
+// construction.
+const SLICE9_PRE_MERGE_BASE_SHA = '8e393c990be53c888c2e68d881bd8b23f9c37638';
+const SLICE9_AUDITED_FEATURE_HEAD_SHA = '7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef';
+const SLICE9_HISTORICAL_RANGE = `${SLICE9_PRE_MERGE_BASE_SHA}..${SLICE9_AUDITED_FEATURE_HEAD_SHA}`;
+const SLICE9_MIGRATION_PATH = 'db/migrations/009_safety_hold_control_foundation.sql';
+
 const FORBIDDEN_PATH_PATTERNS = [
   /support[_-]?resources?/i,
   /referrals?/i,
@@ -38,10 +47,57 @@ function git(args: string[]): string {
   return execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
 }
 
+function isAncestor(ancestor: string, descendant: string): boolean {
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', ancestor, descendant], { cwd: ROOT });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function assertImmutableSlice9Range(): void {
+  for (const rev of [SLICE9_PRE_MERGE_BASE_SHA, SLICE9_AUDITED_FEATURE_HEAD_SHA]) {
+    try {
+      git(['rev-parse', '--verify', `${rev}^{commit}`]);
+    } catch {
+      throw new Error(
+        `S9PM_RANGE_UNAVAILABLE: ${rev} is not resolvable in this clone. ` +
+          'The immutable Slice 9 audit range requires full history (CI checkout: fetch-depth: 0).'
+      );
+    }
+  }
+
+  expect(
+    isAncestor(SLICE9_PRE_MERGE_BASE_SHA, SLICE9_AUDITED_FEATURE_HEAD_SHA),
+    `S9PM_RANGE_NOT_ANCESTOR: ${SLICE9_PRE_MERGE_BASE_SHA} is not an ancestor of ${SLICE9_AUDITED_FEATURE_HEAD_SHA}`
+  ).toBe(true);
+  expect(
+    isAncestor(SLICE9_AUDITED_FEATURE_HEAD_SHA, 'HEAD'),
+    `S9PM_RANGE_NOT_ANCESTOR: ${SLICE9_AUDITED_FEATURE_HEAD_SHA} is not an ancestor of HEAD`
+  ).toBe(true);
+}
+
 describe('T918 executable scope negatives', () => {
-  it('touches no forbidden path in any changed or added file', () => {
+  it('touches no forbidden path in the audited Slice 9 range 8e393c99..7b4f5796 or the working tree', () => {
+    assertImmutableSlice9Range();
+
+    const historicalChanged = git(['diff', '--name-only', SLICE9_HISTORICAL_RANGE])
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    expect(
+      historicalChanged.length,
+      `S9PM_RANGE_EMPTY: ${SLICE9_HISTORICAL_RANGE} resolved to zero changed paths`
+    ).toBeGreaterThan(0);
+    expect(historicalChanged).toContain(SLICE9_MIGRATION_PATH);
+    expect(historicalChanged.some((path) => path.startsWith('packages/domain/src/safety/'))).toBe(
+      true
+    );
+
     const changed = [
-      ...git(['diff', '--name-only', 'origin/main...HEAD']).split('\n'),
+      ...historicalChanged,
       ...git(['diff', '--name-only']).split('\n'),
       ...git(['ls-files', '--others', '--exclude-standard']).split('\n'),
     ]
@@ -54,6 +110,16 @@ describe('T918 executable scope negatives', () => {
         expect(pattern.test(path), `forbidden path changed: ${path}`).toBe(false);
       }
     }
+
+    // Liveness control: the inherited pattern set must still reject a forbidden
+    // path and accept an in-scope Slice 9 path, so a non-matching regex can never
+    // produce a vacuous PASS.
+    expect(
+      FORBIDDEN_PATH_PATTERNS.some((pattern) => pattern.test('docs/support_resources/example.md'))
+    ).toBe(true);
+    expect(
+      FORBIDDEN_PATH_PATTERNS.some((pattern) => pattern.test('packages/domain/src/safety/guard.ts'))
+    ).toBe(false);
   });
 
   it('adds no forbidden database object', async () => {
