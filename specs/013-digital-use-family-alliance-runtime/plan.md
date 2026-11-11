@@ -50,43 +50,43 @@ Slice 8 implementation/test head advanced, but its Frozen Spec and all four form
 
 The following `S13-FR-*` identifiers are planning-only traceability aliases for Frozen Spec requirements; they are not new product requirements.
 
-| ID | Frozen requirement | Plan | Checklist | Task |
-|---|---|---|---|---|
-| S13-FR-001 | Whole-slice fidelity: exactly 43 canonical FAMILY_ALLIANCE nodes, no range generation | §3, §9 | D/S/T | T1325 |
-| S13-FR-002 | Ownership: consume existing Evidence, Problem Formulation, Safety, Compliance, Consent, Assessment and routing owners | §6, §10 | C/J/L | T1302,T1306 |
-| S13-FR-003 | Legal entry requires authorized current primary/open Case, current package, A2010 boundary, Problem Formulation, Consent, Compliance, Safety and router reachability | §11 | E/L | T1306,T1307 |
-| S13-FR-004 | A3000 is repeatable and non-blocking regardless of self-rating | §9.2, §14.2 | E/Q/S | T1307 |
-| S13-FR-005 | A3001 and A3002/feasibility remain canonically parallel | §9.3 | F/S | T1308,T1321 |
-| S13-FR-006 | A3002 Target List supports selection/confirm/submit/manage/evaluate/record/reselection and is not Goal | §9.4, §14.3 | G/Q | T1309 |
-| S13-FR-007 | All ten target families preserve target/feasibility/progress/help semantics | §9.5 | D/H/I/S | T1310-T1320 |
-| S13-FR-008 | A3033 is canonical sparse numbering; A3023/A3030/A3031/A3032 are forbidden | §9.1, §9.6 | D/T | T1312,T1325 |
-| S13-FR-009 | A3090-A3093 remain canonical | §9.6 | D/T | T1318,T1325 |
-| S13-FR-010 | A3111 remains reachable feasibility and cannot invent professional threshold/scoring | §9.6, §14.4 | D/H/T | T1320,T1325 |
-| S13-FR-011 | Five truth categories remain separate: Evidence, Scene Node State, Scene Artifact/target item, existing Common Core, future downstream | §10 | C/J | T1302-T1306 |
-| S13-FR-012 | Scene state extends Slice 12: one current Case/package/node projection, revisioned, legal reachability, history preserved | §14.1 | J/N/O | T1303,T1305,T1306 |
-| S13-FR-013 | Substantive user facts remain authoritative Evidence with provenance; Scene state references rather than duplicates | §13 | J | T1305-T1320 |
-| S13-FR-014 | Family Alliance artifacts are bounded and versioned; no generic artifact platform | §14 | J/T | T1303,T1305,T1307-T1320 |
-| S13-FR-015 | Feasibility preserves five approved dimensions without universal score/cutoff/diagnosis | §14.4 | H/T | T1310-T1320 |
-| S13-FR-016 | Scene progress is not Phase 4 Task/Checkin/Plan execution/Outcome | §14.5 | I/T | T1310-T1325 |
-| S13-FR-017 | Help/re-entry uses Slice 11 Manifest entry/re-entry metadata only | §14.6, §20 | I/Q | T1310,T1321 |
-| S13-FR-018 | Authorization/RLS enforce Family, Case, primary, participant, purpose, role and anti-enumeration boundaries | §15 | K | T1323 |
-| S13-FR-019 | Slice 9 is the sole Safety authority; ordinary progression is blocked under Safety Hold | §16.4 | L/N | T1306,T1324 |
-| S13-FR-020 | Slice 10 is the sole Compliance feature-policy authority; required UNKNOWN/unavailable fails closed | §16.3 | L | T1302,T1306,T1324 |
-| S13-FR-021 | Consent remains separately owned; revocation blocks future affected processing without erasing history | §16.2 | L/Q | T1302,T1306,T1324 |
-| S13-FR-022 | Slice 8 remains Problem Formulation owner; Slice 13 only validates/reads the confirmed gate | §6.4, §11 | C/E/T | T1302,T1306 |
-| S13-FR-023 | Slice 12 remains Assessment and Scene runtime owner; Slice 13 does not rerun A1001-A2010 | §6.7, §23 | C/T | T1302,T1303 |
-| S13-FR-024 | Slice 11 is the unique node/routing authority; no numeric adjacency/client nextNode/second route table | §6.2, §12 | C/P/T | T1302,T1306,T1322,T1325 |
-| S13-FR-025 | Existing idempotency authority is reused and atomically coupled to business commit | §17 | M/O | T1324 |
-| S13-FR-026 | Concurrency prevents last-write-wins/two-current truths while allowing legal parallel operations | §18 | N | T1324 |
-| S13-FR-027 | Canonical mutation effects are all-or-nothing | §19 | O | T1306,T1324 |
-| S13-FR-028 | Correction/reassessment/reselection/re-entry are additive/superseding and preserve history | §20 | Q | T1307,T1309,T1321 |
-| S13-FR-029 | Minimal server-authoritative API reuses Scene surface, expected revisions and stable errors | §21 + Plan AI 2 mandate | P | T1304,T1322 |
-| S13-FR-030 | Failure semantics distinguish denial, dependency unavailable, stale/conflict and infrastructure failure | §21 | P | T1304,T1322,T1324 |
-| S13-FR-031 | Audit metadata is sufficient without logging raw private narratives | §22 | R | T1304,T1306,T1325 |
-| S13-FR-032 | No AI/LLM/RAG/prompt/model authority in Slice 13 | §8, §26 | T | T1325 |
-| S13-FR-033 | No A4001-A4012 or Phase 4 Goal/Intervention/Plan/Task/Checkin/Review/Outcome runtime | §8, §10.5, §26 | T | T1325 |
-| S13-FR-034 | Development is blocked until Slice 8/10/11/12 runtime owners are audited/merged and reconciled | §24 | B/U | T1301 |
-| S13-FR-035 | All 44 frozen Acceptance Scenarios have future mechanical test evidence | §25 | S | T1307-T1325 |
+| ID | Frozen requirement | Plan | Checklist | Task | Future Test Evidence |
+|---|---|---|---|---|---|
+| S13-FR-001 | Whole-slice fidelity: exactly 43 canonical FAMILY_ALLIANCE nodes, no range generation | §3, §9 | D/S/T | T1325 | manifest exact-inventory + AS-10/11/12/13 + static scope fixture |
+| S13-FR-002 | Ownership: consume existing Evidence, Problem Formulation, Safety, Compliance, Consent, Assessment and routing owners | §6, §10 | C/J/L | T1302,T1306 | owner-seam compile/static audit + integration composition tests |
+| S13-FR-003 | Legal entry requires authorized current primary/open Case, current package, A2010 boundary, Problem Formulation, Consent, Compliance, Safety and router reachability | §11 | E/L | T1306,T1307 | entry integration fixture AS-01 |
+| S13-FR-004 | A3000 is repeatable and non-blocking regardless of self-rating | §9.2, §14.2 | E/Q/S | T1307 | A3000 domain/integration AS-02/03 |
+| S13-FR-005 | A3001 and A3002/feasibility remain canonically parallel | §9.3 | F/S | T1308,T1321 | parallel integration/concurrency AS-04 + HX-02 |
+| S13-FR-006 | A3002 Target List supports selection/confirm/submit/manage/evaluate/record/reselection and is not Goal | §9.4, §14.3 | G/Q | T1309 | A3002 selection/reselection integration AS-05/06/41 |
+| S13-FR-007 | All ten target families preserve target/feasibility/progress/help semantics | §9.5 | D/H/I/S | T1310-T1320 | ten family-path fixtures HX-12 + AS-07/08/09 |
+| S13-FR-008 | A3033 is canonical sparse numbering; A3023/A3030/A3031/A3032 are forbidden | §9.1, §9.6 | D/T | T1312,T1325 | sparse-number manifest/static/acceptance AS-11 |
+| S13-FR-009 | A3090-A3093 remain canonical | §9.6 | D/T | T1318,T1325 | A3090-A3093 reachability/acceptance AS-12 |
+| S13-FR-010 | A3111 remains reachable feasibility and cannot invent professional threshold/scoring | §9.6, §14.4 | D/H/T | T1320,T1325 | A3111 reachability + no-threshold AS-13/HX-13 |
+| S13-FR-011 | Five truth categories remain separate: Evidence, Scene Node State, Scene Artifact/target item, existing Common Core, future downstream | §10 | C/J | T1302-T1306 | ownership/static duplicate-truth guard + repository integration |
+| S13-FR-012 | Scene state extends Slice 12: one current Case/package/node projection, revisioned, legal reachability, history preserved | §14.1 | J/N/O | T1303,T1305,T1306 | scene-state repository/CAS/concurrency tests |
+| S13-FR-013 | Substantive user facts remain authoritative Evidence with provenance; Scene state references rather than duplicates | §13 | J | T1305-T1320 | Evidence provenance/cross-Case/source-fidelity integration |
+| S13-FR-014 | Family Alliance artifacts are bounded and versioned; no generic artifact platform | §14 | J/T | T1303,T1305,T1307-T1320 | artifact/revision repository + scope-negative platform guard |
+| S13-FR-015 | Feasibility preserves five approved dimensions without universal score/cutoff/diagnosis | §14.4 | H/T | T1310-T1320 | feasibility domain matrix + no-score static guard |
+| S13-FR-016 | Scene progress is not Phase 4 Task/Checkin/Plan execution/Outcome | §14.5 | I/T | T1310-T1325 | progress scope-negative Task/Checkin/Outcome tests AS-08/43 |
+| S13-FR-017 | Help/re-entry uses Slice 11 Manifest entry/re-entry metadata only | §14.6, §20 | I/Q | T1310,T1321 | help/re-entry Manifest integration AS-09/38 |
+| S13-FR-018 | Authorization/RLS enforce Family, Case, primary, participant, purpose, role and anti-enumeration boundaries | §15 | K | T1323 | authorization/RLS/security-negative AS-20..24 |
+| S13-FR-019 | Slice 9 is the sole Safety authority; ordinary progression is blocked under Safety Hold | §16.4 | L/N | T1306,T1324 | Safety block/race integration AS-25/26 |
+| S13-FR-020 | Slice 10 is the sole Compliance feature-policy authority; required UNKNOWN/unavailable fails closed | §16.3 | L | T1302,T1306,T1324 | Compliance block/unknown/race AS-27/28 + HX-06 |
+| S13-FR-021 | Consent remains separately owned; revocation blocks future affected processing without erasing history | §16.2 | L/Q | T1302,T1306,T1324 | Consent revoke/race AS-29 + HX-07 |
+| S13-FR-022 | Slice 8 remains Problem Formulation owner; Slice 13 only validates/reads the confirmed gate | §6.4, §11 | C/E/T | T1302,T1306 | Problem Formulation entry/static owner guard AS-01 |
+| S13-FR-023 | Slice 12 remains Assessment and Scene runtime owner; Slice 13 does not rerun A1001-A2010 | §6.7, §23 | C/T | T1302,T1303 | Assessment ownership/scope-negative static guard |
+| S13-FR-024 | Slice 11 is the unique node/routing authority; no numeric adjacency/client nextNode/second route table | §6.2, §12 | C/P/T | T1302,T1306,T1322,T1325 | routing/static/client-nextNode AS-15 + HX-10/14 |
+| S13-FR-025 | Existing idempotency authority is reused and atomically coupled to business commit | §17 | M/O | T1324 | idempotency replay/mismatch AS-31/32 |
+| S13-FR-026 | Concurrency prevents last-write-wins/two-current truths while allowing legal parallel operations | §18 | N | T1324 | concurrency matrix AS-33..36 + HX-01..09 |
+| S13-FR-027 | Canonical mutation effects are all-or-nothing | §19 | O | T1306,T1324 | fault-injection atomicity AS-37 |
+| S13-FR-028 | Correction/reassessment/reselection/re-entry are additive/superseding and preserve history | §20 | Q | T1307,T1309,T1321 | correction/reassessment/reselection/re-entry integration AS-03/06/38 |
+| S13-FR-029 | Minimal server-authoritative API reuses Scene surface, expected revisions and stable errors | §21 + Plan AI 2 mandate | P | T1304,T1322 | contract/OpenAPI route-count/server-authority tests |
+| S13-FR-030 | Failure semantics distinguish denial, dependency unavailable, stale/conflict and infrastructure failure | §21 | P | T1304,T1322,T1324 | error-contract + dependency/infrastructure failure tests HX-11 |
+| S13-FR-031 | Audit metadata is sufficient without logging raw private narratives | §22 | R | T1304,T1306,T1325 | audit/logging metadata/privacy tests |
+| S13-FR-032 | No AI/LLM/RAG/prompt/model authority in Slice 13 | §8, §26 | T | T1325 | AI/RAG/model import and no-network scope-negative AS-44 |
+| S13-FR-033 | No A4001-A4012 or Phase 4 Goal/Intervention/Plan/Task/Checkin/Review/Outcome runtime | §8, §10.5, §26 | T | T1325 | A400/Phase4 scope-negative AS-39..43 |
+| S13-FR-034 | Development is blocked until Slice 8/10/11/12 runtime owners are audited/merged and reconciled | §24 | B/U | T1301 | T1301 remote authority/merge/migration gate evidence |
+| S13-FR-035 | All 44 frozen Acceptance Scenarios have future mechanical test evidence | §25 | S | T1307-T1325 | full AS-01..AS-44 exact-head acceptance matrix |
 
 ## 3. Scope Contract
 
@@ -553,6 +553,8 @@ Only T1301 may start while the current Implement Gate is blocked. T1302+ require
 | No generic workflow/platform overengineering | PASS |
 | Every future mutation task has owner/transaction/revision/verification | PASS |
 | Implement Gate remains hard-blocking | PASS |
+
+**Audit 1 mechanical evidence:** 43/43 canonical nodes referenced; 44/44 Frozen Acceptance IDs present in Plan and Checklist; 25/25 task blocks contain Goal/Expected Scope/Mandatory Contracts/Verification/Prerequisites/Frozen Spec Authority; Checklist = 502 PASS / 0 FAIL; branch diff from Frozen Spec lineage = exactly plan.md/checklist.md/tasks.md.
 
 **Audit 1: FINAL PASS.** No Frozen Spec edit was required.
 
