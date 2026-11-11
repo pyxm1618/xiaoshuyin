@@ -159,14 +159,18 @@ describe('T919 migration reconciliation', () => {
   }, 120_000);
 
   it('contains no historical migration edit', () => {
-    const changed = git(['diff', '--name-only', 'origin/main', '--', 'db/migrations/'])
+    // Relative to the authoritative main the ONLY change may be the addition of
+    // the one reviewed Slice 9 file. Nothing may be modified, renamed or
+    // deleted, whether the file is committed or still untracked.
+    const status = git(['diff', '--name-status', 'origin/main', '--', 'db/migrations/'])
       .split('\n')
       .filter(Boolean);
-    expect(changed).toEqual([]);
-    // Untracked additions are allowed, but only the Slice 9 file.
     const untracked = git(['ls-files', '--others', '--exclude-standard', 'db/migrations/'])
       .split('\n')
       .filter(Boolean);
-    expect(untracked).toEqual([`db/migrations/${SLICE9_MIGRATION}`]);
+
+    expect([...status, ...untracked.map((path) => `A\t${path}`)]).toEqual([
+      `A\tdb/migrations/${SLICE9_MIGRATION}`,
+    ]);
   });
 });
