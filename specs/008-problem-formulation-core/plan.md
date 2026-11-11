@@ -63,6 +63,49 @@ No blocker from the frozen blocker list is open:
 
 ---
 
+## Upstream Traceability
+
+This section is a governance index only. It adds no requirement, scope, design decision, API, data-model rule, or test expectation.
+
+The already-established authority chain remains:
+
+```text
+Docs/总产品需求.md
+→ Docs/V1产品需求.md
+→ Docs/总体技术架构.md
+→ Docs/V1技术设计.md
+→ Frozen Slice 8 Spec (origin commit 6a0df0021cf4dd0f489178a192479a52ea6027f4)
+→ this Plan
+```
+
+The detailed frozen-input and authority reconciliation remains in §0.1–§0.3 above. No downstream Plan statement supersedes the four authoritative Docs or the Frozen Spec.
+
+## Constitution Check
+
+This checklist is a governance projection of the already-frozen Plan against `.specify/memory/constitution.md`; it introduces no new product or technical semantics.
+
+- [x] No new product semantics — §0.2–§0.3 preserve the authority chain, report no material Docs ↔ Frozen Spec conflict, and keep Open Product Decisions at 0.
+- [x] No V2–V5 scope pulled into V1 — §22 keeps later-scene, Goal/Plan/Execution/Review, follow-up, notification, referral, and other deferred capabilities explicitly out of Slice 8.
+- [x] Canonical Digital Use flow not rewritten — §22 explicitly excludes Digital Use Scene / A1001–A5002 from Slice 8.
+- [x] Frozen technical stack respected — §§2, 3, and 19 reuse the existing Case, Evidence, Authorization, RLS, Primary, Idempotency, Event, Audit, server, migration, and OpenAPI structure rather than introducing a competing framework or infrastructure layer.
+- [x] Deterministic business rules remain deterministic — §§4–12 keep state, version, phase, primary, safety, dependency, concurrency, authorization, and idempotency rules explicit and testable.
+- [x] Authorization / Consent / RLS / Safety / Compliance addressed — §§7, 8, and 13 compose the existing authorization, processing-compliance, Case-status, and RLS/least-privilege gates without bypass.
+- [x] Provenance/version/history preserved — §§4, 5, 11, and 14 preserve immutable formulation history, version lineage, Evidence/dependency fidelity, event/audit provenance, and migration history.
+- [x] Failure / UNKNOWN / concurrency / idempotency designed — §§5.3, 10, 12, 15.4, and 17 cover UNKNOWN/conflict preservation, race outcomes, replay/mismatch semantics, explicit failures, and atomic rollback.
+- [x] Verification path exists for every acceptance item — §17.5 maps A–K and requires all 25 Frozen Spec acceptance scenarios to task-level proof; §§18 and 20 define pre-development and final verification gates.
+
+## Verification Plan
+
+This section is an index over the already-defined verification requirements. It does not replace, relax, or invent tests.
+
+- **DB / Migration / RLS:** §§14.1 and 17.1 plus G2/G3/G5/G7 require schema, role, policy, fresh/upgrade/replay/rollback, least-privilege, and direct-SQL evidence.
+- **Domain:** §17.2 requires command, transition, version, Evidence/dependency fidelity, deterministic guard, integer-boundary, authorization, idempotency, and concurrency-decision coverage.
+- **Integration / Compliance / Concurrency / Atomicity:** §17.3 plus §§7.4, 10, and 12 require public/internal flows, consent/compliance gates, real race matrices, replay/mismatch, and transaction fault-injection rollback.
+- **OpenAPI / Runtime surface:** §§15 and 17.4 require exact four-operation contract coverage, generated semantic equivalence, strict bodies, headers, range validation, and negative-space route proof.
+- **Acceptance evidence:** §17.5 maps A–K and retains the requirement to prove all 25 Frozen Spec acceptance scenarios.
+- **Pre-development verification:** §18 retains G1–G11 without change.
+- **Canonical final verification / full regression:** §20 remains the authoritative final command set and repository-wide regression/scope-hygiene gate.
+
 ## 1. Goal and hard scope
 
 Slice 8 establishes the Common Core `Problem Formulation` aggregate: versioned, auditable, correctable, disputable, confirmable, re-enterable into Assessment, primary/Safety guarded, Evidence-faithful, RLS isolated, idempotent and concurrency-safe.

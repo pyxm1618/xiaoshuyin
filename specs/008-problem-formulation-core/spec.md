@@ -147,7 +147,7 @@ Case → Evidence → Assessment → Problem Formulation → Goal → Plan → E
 
 ---
 
-## 3. Scope
+## Scope
 
 ### 3.1 In Scope
 
@@ -203,7 +203,7 @@ Case → Evidence → Assessment → Problem Formulation → Goal → Plan → E
 
 ---
 
-## 4. Upstream Requirements & Traceability
+## Upstream Traceability
 
 ### 4.1 需求映射（区分实现深度）
 
@@ -635,7 +635,7 @@ No requirement may be invented to make implementation easier.
 
 ---
 
-## 16. Acceptance Scenarios
+## Acceptance Scenarios
 
 1. **Given** 一个 primary、`OPEN + INTAKE` 的 Case 且已有至少一条可追溯问题陈述，**When** 管理主体执行 `StartAssessment`，**Then** Case 变为 `ASSESSMENT`，写入成功事件与审计，且不创建 Assessment / Scene / formulation 对象。**Upstream**: §6.7、§23、FR-005、FR-030
 2. **Given** 同一 Case 没有任何可追溯问题陈述，或不是 primary，或为 `SAFETY_HOLD`，**When** 执行 `StartAssessment`，**Then** 返回真实拒绝，phase 保持 `INTAKE`，不产生部分写入。**Upstream**: §6.7、V1-C27
@@ -665,7 +665,7 @@ No requirement may be invented to make implementation easier.
 
 ---
 
-## 17. Acceptance Evidence
+## Acceptance Evidence
 
 | Acceptance item | Verification type | Required evidence |
 |---|---|---|
