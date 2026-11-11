@@ -743,27 +743,27 @@ Development may start only while all are true:
 6. failure of 2–5 means **T901 = STOP**; do not auto-stash/delete/reset/clean Slice 8 WIP;
 7. the existing `assertIdentityContextMatches` semantic remains part of the same-client Drizzle identity/Family/RLS transaction seam;
 8. `drizzle-kit` exact version is selected/locked by compatibility verification, not guessed;
-9. 
-10. Frozen Spec blob is unchanged;
-11. no material Docs drift invalidates Safety semantics;
-12. Drizzle §7.0 narrow path remains implementable;
-13. `drizzle-kit` + `db/schema` + Drizzle transaction are treated as required work, not optional cleanup;
-14. `cases.status` remains the sole current Safety truth;
-15. no current production resolver authority has appeared without an authoritative contract update;
-16. Slice 8 current state is re-read;
-17. migration number/shared CHECK definitions are re-read from latest main;
-18. existing `authorize()`, RLS and idempotency store remain canonical;
-19. SwitchPrimary precedence is unchanged;
-20. no public Safety mutation route is added;
-21. no Phase 5 object appears;
-22. test-only resolver capability remains test-only;
-23. failure injection, concurrency, RLS, unique-entry/exit, scope-negative and existing-regression evidence are executable.
-24. if Slice 8 has merged by final verification, S8 + S9 combined regression proves its ordinary progression commands cannot bypass `SAFETY_HOLD`.
+9. Frozen Spec blob is unchanged;
+10. no material Docs drift invalidates Safety semantics;
+11. Drizzle §7.0 narrow path remains implementable;
+12. `drizzle-kit` + `db/schema` + Drizzle transaction are treated as required work, not optional cleanup;
+13. `cases.status` remains the sole current Safety truth;
+14. no current production resolver authority has appeared without an authoritative contract update;
+15. Slice 8 current state is re-read;
+16. migration number/shared CHECK definitions are re-read from latest main;
+17. existing `authorize()`, RLS and idempotency store remain canonical;
+18. SwitchPrimary precedence is unchanged;
+19. no public Safety mutation route is added;
+20. no Phase 5 object appears;
+21. test-only resolver capability remains test-only;
+22. failure injection, concurrency, RLS, unique-entry/exit, scope-negative and existing-regression evidence are executable;
+23. if Slice 8 has merged by final verification, S8 + S9 combined regression proves its ordinary progression commands cannot bypass `SAFETY_HOLD`.
 
 Any failed gate is a STOP/reconciliation event, not permission to reinterpret the frozen Spec.
 
----
+**READY FOR DEVELOPMENT is conditional on T901 clean/independent-worktree preflight and current-main reconciliation.**
 
+---
 # Appendix A — Pre-Development Audit 1
 
 ## A.1 Result
