@@ -167,7 +167,7 @@ This is not a whole-repository data-layer rewrite. Slice 9 must establish a narr
 
 Development must add:
 
-1. the missing reviewed `drizzle-kit` development dependency;
+1. the missing reviewed `drizzle-kit` development dependency, selected and locked only after compatibility verification against the then-current `drizzle-orm` + Bun toolchain; current `bun.lock` resolves `drizzle-orm@0.45.4`, and official stable releases currently expose `drizzle-kit@0.31.11` as a candidate, not a frozen planning pin;
 2. `db/schema/` with the minimum typed Drizzle projections required by Slice 9:
    - `cases`
    - `risk_events`
@@ -197,6 +197,7 @@ Add a narrow checked-out-client Drizzle transaction seam that:
 - constructs Drizzle on that exact checked-out client;
 - lets **Drizzle own BEGIN/COMMIT/ROLLBACK** for the Slice 9 transaction;
 - establishes identity + Family RLS context inside that Drizzle transaction;
+- preserves the existing `assertIdentityContextMatches` semantic from `apps/server/api/src/db/tx.ts` between identity context establishment and trusted Family context, on that same checked-out `PoolClient`;
 - may expose the same checked-out client only to already-existing shared fact/idempotency helpers that have not yet migrated, never to create a second transaction.
 
 A Safety command may not open a raw nested transaction.
@@ -418,15 +419,18 @@ Isolation remains READ COMMITTED unless an implementation test demonstrates a co
 - ENABLE RLS;
 - FORCE RLS;
 - family-scope USING/WITH CHECK: `family_id = app_family_id()`;
-- runtime SELECT + INSERT only;
-- no UPDATE/DELETE policy/privilege.
+- runtime privileges exactly SELECT + INSERT;
+- UPDATE / DELETE / TRUNCATE denied;
+- runtime remains non-owner and NOBYPASSRLS.
 
 `cases`:
 
 - preserve existing Family RLS;
-- add only column-level UPDATE required by Safety: `status, version, updated_at`;
 - table-level UPDATE must remain false;
-- do not grant phase write for Slice 9.
+- derive allowed column-level UPDATE from latest main, then union only the Safety-required narrow addition;
+- at verified main `8e393c99...`, legal UPDATE columns are exactly `is_primary, version, updated_at`, while `status` is denied, so the current post-S9 expectation is `is_primary, status, version, updated_at`;
+- if Slice 8 or another authorized main change legitimately adds a Case column grant before integration, preserve it rather than replacing it with a stale fixed set;
+- do not grant phase write merely for Slice 9.
 
 `case_events` remains append-only.
 
@@ -504,7 +508,9 @@ No error body exposes another Family's object existence, evidence, risk category
 
 ## 15. Slice 8 Integration Contract
 
-Current Slice 8 is planned but unimplemented. Slice 9 does **not** copy its runtime.
+Current Slice 8 is not on authoritative main. Slice 9 does **not** copy its runtime.
+
+Slice 8 + Slice 9 parallel development is allowed only with a different branch, a different clean worktree, and a different Development AI. A dirty Slice 8 worktree may not be shared or reused for Slice 9; T901 must STOP rather than auto-stash, delete, reset or clean Slice 8 WIP.
 
 When Slice 8 implementation consumes the shared guard, all six ordinary write commands listed in §1.3 must obey:
 
@@ -550,7 +556,9 @@ Both Slice 8 and Slice 9 extend shared CHECK/privilege surfaces, including Case 
 
 Fresh, upgrade, replay and failed-migration rollback evidence are mandatory after final numbering.
 
-**Parallel development: PARTIALLY.** Semantic/code work may proceed in parallel; shared migration/check/vocabulary closeout is serialized.
+Before any complete CHECK replacement, the later branch must re-read latest-main `case_events`, `business_audit_events`, idempotency command/key representation, authorization facts/actions, error vocabulary, `cases` grants and every other touched CHECK. A stale full whitelist from the old 007 baseline may never overwrite literals or grants introduced by the other Slice.
+
+**Parallel development: ALLOWED WITH ISOLATION.** Semantic/code work may proceed in parallel only in separate clean branches/worktrees with separate Development AIs; shared migration/check/vocabulary/grant closeout is serialized. The later merge rebases latest main, reconciles the real next migration number and all shared vocabularies/grants, then runs combined regression.
 
 ## 17. Test Strategy
 
@@ -580,6 +588,8 @@ Fresh, upgrade, replay and failed-migration rollback evidence are mandatory afte
 - no public Safety mutation route.
 
 ### DB
+
+Safety-specific tests do not replace existing shared regressions. T919/T920 must re-read latest main and at minimum reconcile/run the current real files: `tests/db/cases-rls.test.ts`, `tests/db/roles.test.ts`, `tests/db/migration-case-primary-switch-upgrade.test.ts`, `tests/db/migration-upgrade-evidence.test.ts`, `tests/db/migration-repro.test.ts`, and `tests/db/case-primary-switch-shared-vocabulary.test.ts`.
 
 - migration fresh/upgrade/replay;
 - Risk Event constraints, FKs, indexes;
@@ -662,6 +672,8 @@ Explicitly forbidden:
 
 The existing static guard that forbids `safety_states` must remain. Slice 9 must not weaken unrelated future-table prohibitions.
 
+T918/T920 must turn these negatives into executable checks using the appropriate combination of changed-path/git-diff scan, schema enumeration, route/OpenAPI enumeration, package/import/export scan and static guards. Mechanical negatives explicitly cover `support_resources`, referrals, staff queue, operations dashboard, Guardrails, `risk_review` runtime, Digital Use Scene, node-manifest, excluded routing, Goal/Intervention/Plan/Task/Review/Follow-up, public Safety mutation routes and `safety_states`.
+
 ## 21. Implementation Sequence
 
 1. Reverify main, frozen inputs, Slice 8 head and migration state.
@@ -724,20 +736,29 @@ Drizzle:
 Development may start only while all are true:
 
 1. current main is reconciled against this audited planning baseline;
-2. Frozen Spec blob is unchanged;
-3. no material Docs drift invalidates Safety semantics;
-4. Drizzle §7.0 narrow path remains implementable;
-5. `drizzle-kit` + `db/schema` + Drizzle transaction are treated as required work, not optional cleanup;
-6. `cases.status` remains the sole current Safety truth;
-7. no current production resolver authority has appeared without an authoritative contract update;
-8. Slice 8 current state is re-read;
-9. migration number/shared CHECK definitions are re-read;
-10. existing `authorize()`, RLS and idempotency store remain canonical;
-11. SwitchPrimary precedence is unchanged;
-12. no public Safety mutation route is added;
-13. no Phase 5 object appears;
-14. test-only resolver capability remains test-only;
-15. failure injection, concurrency, RLS and unique-exit evidence are executable.
+2. Slice 9 uses an independent development branch/worktree created from reconciled latest main;
+3. that Slice 9 worktree is clean before the first production edit;
+4. no Slice 8 uncommitted/untracked WIP is present there;
+5. Slice 9 is not developed directly on `feat/008-problem-formulation-core` or any other Slice 8 worktree;
+6. failure of 2–5 means **T901 = STOP**; do not auto-stash/delete/reset/clean Slice 8 WIP;
+7. the existing `assertIdentityContextMatches` semantic remains part of the same-client Drizzle identity/Family/RLS transaction seam;
+8. `drizzle-kit` exact version is selected/locked by compatibility verification, not guessed;
+9. 
+10. Frozen Spec blob is unchanged;
+11. no material Docs drift invalidates Safety semantics;
+12. Drizzle §7.0 narrow path remains implementable;
+13. `drizzle-kit` + `db/schema` + Drizzle transaction are treated as required work, not optional cleanup;
+14. `cases.status` remains the sole current Safety truth;
+15. no current production resolver authority has appeared without an authoritative contract update;
+16. Slice 8 current state is re-read;
+17. migration number/shared CHECK definitions are re-read from latest main;
+18. existing `authorize()`, RLS and idempotency store remain canonical;
+19. SwitchPrimary precedence is unchanged;
+20. no public Safety mutation route is added;
+21. no Phase 5 object appears;
+22. test-only resolver capability remains test-only;
+23. failure injection, concurrency, RLS, unique-entry/exit, scope-negative and existing-regression evidence are executable.
+24. if Slice 8 has merged by final verification, S8 + S9 combined regression proves its ordinary progression commands cannot bypass `SAFETY_HOLD`.
 
 Any failed gate is a STOP/reconciliation event, not permission to reinterpret the frozen Spec.
 
@@ -824,21 +845,39 @@ PASS. Production resolver authority is absent/deny-all; controlled capability is
 
 ---
 
-# Appendix B — Shared-file conflict map
+# Appendix B — Shared-file / Shared-contract Conflict Map
 
-Highest rebase risk with Slice 8:
+Highest rebase risk with Slice 8; the later branch must re-read latest main and reconcile mechanically:
 
-- `db/migrations/*problem_formulation* / *safety_hold*` numbering and shared CHECK rewrites
-- `packages/authorization/src/authorize.ts`
-- `packages/domain/src/idempotency.ts`
-- `packages/domain/src/index.ts`
-- Case event vocabulary/check constraints
-- Business audit event vocabulary/check constraints
-- idempotency command/key-representation constraints
-- `apps/server/api/src/plugins/error-handler.ts`
-- `scripts/guard-static.mjs`
-- `scripts/db-evidence.mjs`
-- `tests/db/migration-repro.test.ts`
-- `tests/db/roles.test.ts`
+### Migration / schema / privilege surfaces
 
-The second branch to integrate must rebase and reconcile these mechanically; it must not resolve conflicts by keeping one branch's whitelist and dropping the other's literals.
+- migration numbering for Problem Formulation and Safety migrations;
+- `case_events` event + metadata CHECK constraints;
+- `business_audit_events` event/resource CHECK constraints;
+- `idempotency_keys` command type + key-representation CHECK/vocabulary;
+- `cases` table/column grants, preserving latest-main legal UPDATE columns;
+- `risk_events` SELECT/INSERT-only runtime privileges;
+- authorization facts/actions and error-code vocabulary.
+
+### Code / governance surfaces
+
+- `packages/authorization/src/authorize.ts`;
+- `packages/domain/src/idempotency.ts`;
+- `packages/domain/src/index.ts`;
+- `apps/server/api/src/plugins/error-handler.ts`;
+- `apps/server/api/src/db/tx.ts` identity/RLS transaction semantics;
+- `scripts/guard-static.mjs`;
+- `scripts/db-evidence.mjs`.
+
+### Existing regression surfaces verified on current main
+
+- `tests/db/cases-rls.test.ts`;
+- `tests/db/roles.test.ts`;
+- `tests/db/migration-case-primary-switch-upgrade.test.ts`;
+- `tests/db/migration-upgrade-evidence.test.ts`;
+- `tests/db/migration-repro.test.ts`;
+- `tests/db/case-primary-switch-shared-vocabulary.test.ts`;
+- `tests/db/case-idempotency-representation.test.ts`;
+- relevant Case-primary RLS/concurrency/idempotency tests when touched.
+
+Conflict resolution rule: never keep one branch's complete whitelist or grant expectation and drop the other's literals or legitimate latest-main privileges.
