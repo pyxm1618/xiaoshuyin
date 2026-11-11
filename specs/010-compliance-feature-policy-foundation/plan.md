@@ -510,7 +510,7 @@ Safety is not a prerequisite to *reading/evaluating* the compliance decision its
 
 ### 8.3 Ordinary progression / response release
 
-For an ordinary Case/AI/business progression that already uses the Slice 9 guard:
+For an ordinary Case/AI/business progression **when the existing Safety guard is present in that consumer**:
 
 `Authentication → Authorization/Consent → existing Safety guard → Compliance → business/domain preconditions → downstream execution/release`
 
@@ -522,6 +522,8 @@ Rationale:
 - existing command-specific error precedence remains authoritative; Slice 10 does not rewrite it.
 
 For existing response-generation/release flows, the architecture’s Safety-before-Compliance release validation ordering is preserved.
+
+This is an integration-order contract, **not a Slice 9 semantic dependency for Slice 10**. If a separately approved Data Access Remediation satisfies the Drizzle blocker before Slice 9 Safety implementation reaches main, Slice 10 may still implement its standalone Compliance foundation. It must not fabricate a Safety guard; a later consumer composes the independently owned Safety and Compliance gates once both exist.
 
 ### 8.4 Onboarding / identity paths
 
@@ -600,7 +602,11 @@ Slice 10 has no semantic dependency on Slice 9, but it has a technical data-acce
 
 Future T1001 must re-read latest main.
 
-If Slice 9 Drizzle foundation is merged and proves:
+T1001 may open the data-access dependency through exactly one of two evidence-backed paths:
+
+**Path A — Slice 9 foundation merged**
+
+Slice 9 Drizzle foundation is on current main and proves:
 
 - real `db/schema`;
 - locked compatible drizzle-orm/drizzle-kit;
@@ -608,15 +614,19 @@ If Slice 9 Drizzle foundation is merged and proves:
 - identity consistency assertion;
 - Family RLS context;
 - query-builder writes/typed reads;
-- reviewed SQL migrations remain production truth;
+- reviewed SQL migrations remain production truth.
 
-then Slice 10 consumes that exact foundation.
+**Path B — separately approved Data Access Remediation merged**
 
-If it is absent:
+A distinct remediation is on current main and independently proves the same §7.0 / same-client / identity / RLS / migration invariants. Its presence must be explicit in repository history; planning intent alone is not evidence.
 
-`STOP — IMPLEMENT GATE BLOCKED`
+Slice 10 consumes whichever authoritative path is actually merged. It never builds its own replacement.
 
-If Slice 9 proves narrow Drizzle cannot safely exist:
+If neither Path A nor Path B is present:
+
+`STOP — IMPLEMENT GATE BLOCKED / DATA ACCESS REMEDIATION REQUIRED`
+
+If the available implementation demonstrates that narrow Drizzle cannot safely preserve those invariants:
 
 `STOP — SEPARATE DATA ACCESS REMEDIATION REQUIRED`
 
@@ -1023,11 +1033,13 @@ Planning result:
 
 - Slice 8 semantic dependency: **NO**
 - Slice 9 semantic dependency: **NO**
-- Slice 9 technical Drizzle dependency: **YES**
+- Slice 9 semantic dependency: **NO**
+- authoritative Drizzle capability dependency: **YES**
 - Slice 9 Drizzle implementation currently on main: **NO**
+- separate Data Access Remediation currently observed on main: **NO**
 - Implement Gate: **BLOCKED**
 
-Future development may begin only after T1001 proves the dependency has become real.
+Future development may begin only after T1001 proves either the Slice 9 Drizzle foundation or a separately approved Data Access Remediation has become authoritative on main.
 
 ## Planning Audit 1
 
@@ -1043,6 +1055,7 @@ Findings:
 | S10-P02 | MEDIUM | cross-field semantics did not explicitly forbid a NOT_APPLICABLE policy from simultaneously emitting the anthropomorphic usage-reminder rule | freeze REQUIRED / NOT_APPLICABLE / UNKNOWN cross-field coherence |
 | S10-P03 | MEDIUM | effective-period overlap prevention was conceptually specified but left the DB enforcement mechanism open | freeze same-feature advisory-lock + DB trigger overlap guard, no new extension |
 | S10-P04 | LOW | expired-policy and required-but-unsupported downstream obligation mappings were not explicit enough | add COMPLIANCE_POLICY_EXPIRED and server-owned obligation-support guard |
+| S10-P05 | HIGH | final re-audit found that a task dependency accidentally required the Slice 9 Safety guard and that the Drizzle gate did not explicitly recognize an already-merged separate Data Access Remediation path, contradicting the Frozen Spec’s semantic-dependency boundary | make Safety integration conditional/independent and allow exactly the two approved Drizzle-satisfaction paths |
 
 Spec change required: **NO**
 
