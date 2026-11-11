@@ -85,8 +85,9 @@ Status values: **PASS / FAIL / N/A**.
 | CHK055 | future policy is not selected early | PASS | captured evaluation time |
 | CHK056 | expired policy does not remain effective | PASS | exclusive effective_until |
 | CHK057 | controlled publication serializes exact feature identity | PASS | advisory lock + recheck |
-| CHK058 | storage overlap is rejected | PASS | DB overlap guard |
+| CHK058 | storage overlap is rejected | PASS | same-feature advisory-lock + BEFORE INSERT/UPDATE overlap trigger |
 | CHK059 | evaluator still detects corrupt overlap defensively | PASS | ambiguity path |
+| CHK189 | two concurrent first-publish attempts serialize even when no current row exists | PASS | DB trigger obtains exact-feature advisory lock |
 | CHK060 | no fake production applicability seed is required | PASS | test fixtures only unless approved evidence exists |
 
 ## F. Policy rule semantics / obligations
@@ -103,6 +104,8 @@ Status values: **PASS / FAIL / N/A**.
 | CHK068 | anthropomorphic REQUIRED cannot silently omit AI disclosure | PASS | policy invariant |
 | CHK069 | anthropomorphic REQUIRED cannot silently omit usage-reminder obligation | PASS | policy invariant |
 | CHK070 | actual obligation execution remains downstream | PASS | no timer/export/notification implementation |
+| CHK187 | NOT_APPLICABLE cannot simultaneously assert the anthropomorphic usage-reminder rule | PASS | usage_reminder_rule must be BASELINE |
+| CHK188 | UNKNOWN remains BLOCK regardless of other rule values | PASS | cross-field coherence |
 
 ## G. Existing age / guardian / consent truth
 
@@ -224,8 +227,9 @@ Status values: **PASS / FAIL / N/A**.
 | CHK149 | age UNKNOWN has distinct code | PASS | COMPLIANCE_AGE_UNKNOWN |
 | CHK150 | guardian consent required/invalid remains distinguishable internally | PASS | two internal codes |
 | CHK151 | stricter policy access block is distinct | PASS | COMPLIANCE_FEATURE_BLOCKED |
-| CHK152 | downstream capability unavailable is fail-closed | PASS | COMPLIANCE_CAPABILITY_UNAVAILABLE |
+| CHK152 | downstream capability unavailable is fail-closed | PASS | server-owned obligation-support guard → COMPLIANCE_CAPABILITY_UNAVAILABLE |
 | CHK153 | unauthorized/cross-family uses existing external semantics | PASS | no enumeration oracle |
+| CHK190 | expired matching policy history is not collapsed into NOT_APPLICABLE/ALLOW | PASS | COMPLIANCE_POLICY_EXPIRED |
 | CHK154 | infrastructure failure propagates truthfully | PASS | never ordinary allow/block conversion |
 
 ## O. Audit / traceability
@@ -275,9 +279,22 @@ Status values: **PASS / FAIL / N/A**.
 | CHK185 | absent Slice 9 Drizzle causes STOP before production edits | PASS | Implement Gate BLOCKED |
 | CHK186 | no Development AI waiver exists for the Drizzle dependency | PASS | explicit STOP |
 
+# Audit 1 Remediation Check
+
+Audit 1 planning findings S10-P01..S10-P04 were applied only to Plan / Checklist / Tasks:
+
+- exact FR identifiers replace task-range shorthand;
+- policy cross-field coherence is frozen;
+- overlap enforcement is frozen to the advisory-lock + DB-trigger mechanism;
+- expired-policy and unsupported-obligation error semantics are explicit.
+
+Spec changed: **NO**  
+Docs changed: **NO**  
+Production code changed: **NO**
+
 # Pre-Development Checklist Result
 
-Planning-contract review currently contains no FAIL item.
+Planning-contract review after remediation contains no FAIL item.
 
 - CRITICAL planning blockers discovered by checklist: 0
 - HIGH planning blockers discovered by checklist: 0
