@@ -572,7 +572,7 @@ Where the source has no explicit numeric next edge, Slice 13 consumes Slice 11 u
 
 **Time management** remains in the current canonical inventory because the later formal V1 Digital Use execution contract explicitly preserves the target and Slice 11 freezes A3090–A3093. Earlier raw-mirror wording suggesting deletion does not authorize Slice 13 to remove it.
 
-**A3111** remains a canonical node identity because the current node table and Slice 11 frozen inventory retain it. The detailed Emotion Regulation 2 content explicitly says that a separate feasibility assessment is not to be performed. Slice 13 therefore MUST NOT invent a new Emotion Regulation 2 feasibility questionnaire, threshold or score merely to fill the node. Its runtime behavior must preserve the canonical A3111 identity while honoring the approved N/A/no-separate-feasibility semantics represented by the authoritative product/Manifest contract.
+**A3111** remains a canonical feasibility-node identity. The earlier mirrored detail contains a historical instruction suggesting removal of the separate Emotion Regulation 2 feasibility assessment, but the later formal Digital Use execution contract V1-D12/V1-D14 and the frozen Slice 11 canonical inventory explicitly preserve the actual A3010–A3113 target/feasibility/progress/help structure. Slice 13 therefore follows the later formal execution contract and MUST NOT silently drop or auto-skip A3111. At the same time, it MUST NOT invent any professional threshold, scoring rule or content beyond the approved current product/Manifest contract.
 
 This is fidelity preservation, not a new professional rule.
 
@@ -1172,7 +1172,7 @@ Phase 3/4 work is **not** a prerequisite for implementing this bounded Phase 2 r
 10. **Exact inventory**: exactly the 43 canonical FAMILY_ALLIANCE node identities are addressable; no inferred missing range node exists.
 11. **A3033 fidelity**: exercise help remains A3033; A3023/A3030/A3031/A3032 are rejected.
 12. **Time-management fidelity**: A3090–A3093 remain canonical and are not deleted by earlier raw-mirror wording.
-13. **A3111 fidelity**: A3111 remains a canonical node identity, but no unapproved Emotion Regulation 2 feasibility questionnaire/score/threshold is invented.
+13. **A3111 fidelity**: A3111 remains a reachable canonical feasibility node under the later formal execution contract; it is not silently removed, and no unapproved threshold/scoring rule is invented.
 14. **Target-code attack**: fabricated/noncanonical target code is rejected.
 15. **No numeric adjacency**: a client cannot force the next target/help node merely by choosing the next number.
 
@@ -1348,7 +1348,7 @@ Routing, eligibility owned by this Slice, target selection validation, feasibili
 
 - A3033 is canonical sparse numbering.
 - A3090–A3093 remain canonical under the later formal execution contract.
-- A3111 remains a canonical node identity while honoring the explicit no-separate-feasibility-content exception; no new professional scoring content is invented.
+- A3111 remains a canonical feasibility node because the later formal V1-D12/V1-D14 execution contract and Slice 11 frozen inventory preserve it; earlier mirrored removal wording does not authorize Slice 13 to delete/skip it, and no unapproved scoring rule may be invented.
 
 ### C12 — Does the Scene stream create InterventionInstance?
 
