@@ -28,7 +28,7 @@ Status values: PASS / FAIL / N/A.
 | current main has no `risk_events` table | PASS | verified absence |
 | current main has no `safety_states` current-state table | PASS | verified absence; static guard forbids it |
 | single authorization entry is known | PASS | `authorize()` |
-| RLS transaction/context substrate is known | PASS | app context functions + current tx helpers |
+| RLS transaction/context substrate is known | PASS | current tx helper plus `assertIdentityContextMatches` semantic verified; T902 preserves it inside the same-client Drizzle seam |
 | canonical idempotency store is known | PASS | `idempotency_keys` |
 | Case/Event/Audit persistence surfaces are known | PASS | `cases`, `case_events`, `business_audit_events` |
 | SwitchPrimary lock order and Safety precedence are known | PASS | Family -> sorted Case locks; exact denial ordering recorded |
@@ -40,7 +40,7 @@ Status values: PASS / FAIL / N/A.
 |---|---|---|
 | authoritative requirement is explicit | PASS | Drizzle owns schema/query builder/transaction; SQL exceptions are narrow |
 | current main is correctly classified as not yet compliant | PASS | no `db/schema`, no real Drizzle transaction/query path |
-| missing `drizzle-kit` is explicitly owned | PASS | T902 must add a compatible dev dependency |
+| missing `drizzle-kit` is explicitly owned | PASS | exact version is selected/locked only after current drizzle-orm/Bun compatibility verification; no guessed 0.31.x pin |
 | missing `db/schema` is explicitly owned | PASS | T902 must create the minimum typed projection |
 | missing Drizzle transaction path is explicitly owned | PASS | T902 must add a Drizzle-owned same-client RLS transaction |
 | narrow remediation avoids whole-repo rewrite | PASS | Slice-9-owned path only; existing fact helpers may be reused on same client |
@@ -154,7 +154,7 @@ Status values: PASS / FAIL / N/A.
 | app remains NOBYPASSRLS/non-owner | PASS | T912 |
 | Risk Event UPDATE/DELETE is denied | PASS | runtime SELECT/INSERT only |
 | cases table-level UPDATE remains denied | PASS | column grants only |
-| Safety Case writable columns are minimal | PASS | status/version/updated_at |
+| Safety Case writable columns are minimal | PASS | preserve latest-main legal grants; current post-S9 expectation is is_primary/status/version/updated_at while table UPDATE remains denied |
 | Case Event stays append-only | PASS | regression required |
 | cross-Family Risk links are structurally impossible | PASS | composite FK + RLS |
 
@@ -248,7 +248,28 @@ Status values: PASS / FAIL / N/A.
 | Docs change is required | N/A | no |
 | frozen Spec change is required | N/A | no |
 | CI/Spec Governance baseline is understood | PASS | exact workflows re-read |
-| final full-regression closeout is explicit | PASS | T920 |
+| final full-regression closeout is explicit | PASS | T920 includes existing RLS/migration/shared-vocabulary and S8+S9 combined regression when applicable |
+
+## Q. Plan-remediation execution gates
+
+| Check | Status | Evidence / Decision |
+|---|---|---|
+| independent Slice 9 worktree is mandatory | PASS | T901 requires different branch + clean worktree + no S8 WIP |
+| dirty Slice 8 worktree may be reused | N/A | explicitly forbidden; T901 STOP |
+| automatic stash/reset/delete of S8 WIP is allowed | N/A | explicitly forbidden |
+| Slice 8 + Slice 9 parallel development is preserved | PASS | different branch + different clean worktree + different Development AI |
+| later merge must rebase/reconcile | PASS | migration number + shared CHECK/vocabulary + grants + combined regression |
+| identity-context consistency survives Drizzle seam | PASS | same PoolClient + identity context + identity consistency assertion + Family context + RLS |
+| drizzle-kit version is not guessed | PASS | current lock resolves drizzle-orm 0.45.4; official stable kit 0.31.11 is candidate only; T902 locks exact verified pair |
+| existing cases-rls regression is reconciled | PASS | table UPDATE denied; latest-main legal column grants preserved; Safety adds status narrowly |
+| risk_events privilege contract is explicit | PASS | SELECT+INSERT only; UPDATE/DELETE/TRUNCATE denied; ENABLE/FORCE RLS |
+| unique entry/exit scan is comprehensive | PASS | generic helper/direct SQL/repository/SwitchPrimary/test helpers/migration utilities/Domain Commands/production exports |
+| scope negatives are executable | PASS | diff + schema + route/OpenAPI + import/export + static guard as applicable |
+| current real existing regression files are named | PASS | cases-rls, roles, migration case-primary upgrade, upgrade-evidence, migration-repro, shared-vocabulary |
+| migration number is non-frozen | PASS | recompute real next prefix at development/rebase time |
+| shared CHECK replacement preserves latest main | PASS | re-read Case/Audit/Idempotency/Auth/Error/Grant vocabulary before replacement |
+| Appendix B conflict map is current | PASS | shared contracts and current real test surfaces included |
+| readiness is conditional | PASS | T901 clean independent-worktree preflight + current-main reconciliation are hard preconditions |
 
 # Pre-Development Checklist Result
 
@@ -263,4 +284,4 @@ The current-main Drizzle deficiencies are not waived: they are explicit implemen
 
 **CHECKLIST: PASS**
 
-**READY FOR DEVELOPMENT, subject to plan.md §24 and tasks.md T901 revalidation at development start.**
+**READY FOR DEVELOPMENT — SUBJECT TO T901 CLEAN-WORKTREE / INDEPENDENT-WORKTREE PREFLIGHT AND CURRENT-MAIN RECONCILIATION.**
