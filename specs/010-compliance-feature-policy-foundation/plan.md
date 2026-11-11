@@ -1,6 +1,6 @@
 # Slice 10 Implementation Plan — 010-compliance-feature-policy-foundation
 
-Status: **PLAN AI 2 COMPLETE / PRE-DEVELOPMENT AUDIT 1 PENDING**
+Status: **PLAN AI 2 COMPLETE / AUDIT 1 REMEDIATED / FINAL PRE-DEVELOPMENT RE-AUDIT PENDING**
 
 This file is planning only. It does not authorize implementation, does not modify the Frozen Spec, and does not open the Slice 10 Implement Gate.
 
@@ -333,12 +333,27 @@ It **never** means “disable an upstream/global requirement”.
 
 Therefore a feature policy cannot use BASELINE to downgrade V1-C38 or any other already-applicable upstream gate.
 
+Cross-field coherence is mandatory:
+
 If `anthropomorphic_applicability = REQUIRED`:
 
 - `ai_disclosure_rule` must be REQUIRED;
 - `usage_reminder_rule` must be REQUIRED;
 - minor users still require server-side minor mode through the existing profile baseline;
 - generated-content labeling remains independently governed by content type / policy and is not silently inferred away.
+
+If `anthropomorphic_applicability = NOT_APPLICABLE`:
+
+- `usage_reminder_rule` must be BASELINE because that rule is the anthropomorphic continuous-use obligation in this Slice;
+- the evaluator must not emit REQUIRE_USAGE_REMINDER solely from the anthropomorphic contract;
+- `ai_disclosure_rule` and `generated_content_label_rule` may still be REQUIRED when an independently applicable upstream/content rule requires them;
+- NOT_APPLICABLE never means “disable global AI disclosure/label requirements”.
+
+If `anthropomorphic_applicability = UNKNOWN`:
+
+- release is blocked regardless of the remaining feature-rule fields;
+- the result includes REQUIRE_REGULATORY_EVIDENCE/equivalent unresolved-review obligation;
+- other stored rule values cannot turn UNKNOWN into ALLOW.
 
 ### 5.5 Effective-period invariant
 
@@ -354,15 +369,17 @@ Active means:
 
 with null `effective_until` treated as infinity.
 
-Future DDL must prevent ordinary controlled publication from creating overlaps. The planned enforcement is:
+Future DDL must prevent ordinary controlled publication from creating overlaps. The enforcement mechanism is frozen as follows:
 
-1. controlled publication serializes by exact feature identity using a transaction-scoped per-feature advisory lock;
-2. it locks/rechecks the current open policy;
-3. it closes the current interval and inserts the new version in one transaction;
-4. a database overlap guard rejects intersecting effective periods;
-5. evaluator still detects >1 candidate defensively and fails closed.
+1. a PostgreSQL BEFORE INSERT / BEFORE UPDATE-of-effective-period trigger obtains `pg_advisory_xact_lock(hashtextextended(feature_code || separator || feature_contract_revision, 0))` for the exact feature identity;
+2. after the lock, the trigger queries existing rows for the same feature/revision and rejects any interval intersection using the half-open `[effective_from, effective_until)` rule, excluding the row being lifecycle-closed;
+3. the controlled publication transaction explicitly takes the same per-feature advisory lock before it locks/rechecks the current open row;
+4. it validates the next monotonic policy version and effective start;
+5. it changes only the current row’s `effective_until` / `superseded_by_policy_id` lifecycle metadata and inserts the new immutable judgment in the same transaction;
+6. the trigger makes the overlap rule defensive even if a future internal provisioning path forgets its application-side precheck;
+7. evaluator still queries defensively for multiple candidates and fails closed if corrupted data somehow exists.
 
-No new extension is required solely to implement this invariant.
+This design needs no `btree_gist` or other new extension solely for Slice 10.
 
 ## 6. Deterministic evaluator
 
@@ -413,6 +430,10 @@ with:
 - `applicability`;
 - `evaluatedAt`;
 - effective-period identity.
+
+The internal service also exposes a pure consumer-boundary guard conceptually named `assertComplianceObligationsSupported(result, supportedObligations)`. The supported-obligation set is server-owned consumer configuration, never client input. If the evaluator returns a required obligation that the current consumer cannot actually satisfy, the guard fails closed with `COMPLIANCE_CAPABILITY_UNAVAILABLE` before downstream execution/release.
+
+Slice 10 policy fields currently originate guardian/minor, AI-disclosure, generated-label, usage-reminder and unresolved-review obligations. `REQUIRE_SEPARATE_CONSENT` remains part of the approved architecture vocabulary but is not fabricated by Slice 10 when no approved feature-policy field/source requires it.
 
 Allowed obligations come from the approved architecture vocabulary:
 
@@ -610,6 +631,8 @@ No Development AI may:
 
 The evaluator must use the caller’s existing authoritative transaction where part of a business command.
 
+New Slice 10 feature-policy reads/writes must use the verified Slice 9 Drizzle path. Existing canonical Compliance Profile / consent repository helpers may be reused only through the same checked-out client / transaction while their owning slice remains authoritative; Slice 10 does not perform a broad unrelated repository rewrite and does not add new raw-pg-only policy access.
+
 For standalone internal evaluation, it may use the same shared Drizzle/RLS transaction seam in read mode.
 
 No nested transaction and no second checked-out client.
@@ -624,7 +647,8 @@ Internal machine semantics must distinguish:
 |---|---|
 | unknown/unregistered feature | COMPLIANCE_FEATURE_UNKNOWN |
 | stale/wrong feature revision | COMPLIANCE_FEATURE_REVISION_STALE |
-| no effective policy | COMPLIANCE_POLICY_MISSING |
+| no policy row or only future rows for evaluation time | COMPLIANCE_POLICY_MISSING |
+| policy history exists but all matching rows are expired at evaluation time | COMPLIANCE_POLICY_EXPIRED |
 | more than one effective policy | COMPLIANCE_POLICY_AMBIGUOUS |
 | malformed/invalid policy version | COMPLIANCE_POLICY_INVALID |
 | applicability UNKNOWN | COMPLIANCE_APPLICABILITY_UNKNOWN |
@@ -1007,6 +1031,21 @@ Future development may begin only after T1001 proves the dependency has become r
 
 ## Planning Audit 1
 
-Status: **PENDING**
+Initial result: **FAIL — planning remediation required**
 
-This section is updated only after Plan / Checklist / Tasks have been independently re-read against the Frozen Spec, authority Docs, Constitution, current main, Slice 8 and Slice 9 assumptions.
+Independent re-read covered the Frozen Spec, four authority Docs, Constitution/templates/validators, current main, Slice 8 interface assumptions, Slice 9 Drizzle assumptions, Plan, Checklist and Tasks.
+
+Findings:
+
+| ID | Severity | Finding | Remediation |
+|---|---|---|---|
+| S10-P01 | MEDIUM | task-index requirement ranges such as `FR-004..FR-010` were human-readable but not mechanically exact requirement references | expand task REQ fields to exact FR identifiers |
+| S10-P02 | MEDIUM | cross-field semantics did not explicitly forbid a NOT_APPLICABLE policy from simultaneously emitting the anthropomorphic usage-reminder rule | freeze REQUIRED / NOT_APPLICABLE / UNKNOWN cross-field coherence |
+| S10-P03 | MEDIUM | effective-period overlap prevention was conceptually specified but left the DB enforcement mechanism open | freeze same-feature advisory-lock + DB trigger overlap guard, no new extension |
+| S10-P04 | LOW | expired-policy and required-but-unsupported downstream obligation mappings were not explicit enough | add COMPLIANCE_POLICY_EXPIRED and server-owned obligation-support guard |
+
+Spec change required: **NO**
+
+Docs change required: **NO**
+
+Planning remediation status: **COMPLETE in planning artifacts; final full re-audit required**
