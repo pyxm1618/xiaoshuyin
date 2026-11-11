@@ -33,10 +33,12 @@ export default defineConfig({
     // Capping forks keeps the official `bun run vitest run` command deterministic
     // and ensures every required suite actually executes.
     // Slice 9 adds concurrency/failure-injection suites that hold locks and
-    // extra connections on the single shared test database. Two workers keep
-    // the official full-suite command deterministic without changing any
-    // assertion or expected output.
-    maxWorkers: 2,
+    // extra connections on the single shared test database. Several
+    // pre-existing timing-sensitive suites became order-dependent under two
+    // workers, so the official full-suite command runs one file at a time,
+    // exactly like a low-core CI runner. No assertion or expected output is
+    // changed by this bound.
+    maxWorkers: 1,
     env: {
       // Domain tests use a dummy value; integration/DB tests override with real URL.
       DATABASE_URL: process.env['DATABASE_URL'] ?? 'postgres://localhost:5432/xiaoshuyin_test',
