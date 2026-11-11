@@ -94,7 +94,7 @@ describe('T838 atomicity matrix', () => {
     return { actor, familyId, caseId, caseVersion, content };
   }
 
-  async function snapshot(caseId: string, accountId: string) {
+  async function snapshot(caseId: string, accountId: string, familyId: string) {
     const r = await admin.query(
       `SELECT
         (SELECT count(*)::int FROM problem_formulations WHERE case_id=$1) AS formulations,
@@ -102,19 +102,20 @@ describe('T838 atomicity matrix', () => {
         (SELECT version FROM cases WHERE id=$1) AS version,
         (SELECT phase FROM cases WHERE id=$1) AS phase,
         (SELECT count(*)::int FROM case_events WHERE case_id=$1) AS events,
-        (SELECT count(*)::int FROM business_audit_events WHERE resource_id=$1) AS audits,
+        (SELECT count(*)::int FROM business_audit_events WHERE family_id=$3) AS audits,
         (SELECT count(*)::int FROM idempotency_keys WHERE actor_account_id=$2) AS idem`,
-      [caseId, accountId]
+      [caseId, accountId, familyId]
     );
     return r.rows[0];
   }
 
-  async function inject(table: string, name: string, column: string, value: string) {
+  async function inject(table: string, name: string, mode: 'WRITE' | 'COMPLETE', whenClause: string) {
     await admin.query(`CREATE OR REPLACE FUNCTION ${name}() RETURNS trigger AS $$
       BEGIN RAISE EXCEPTION 'T838_ATOMICITY_INJECTED' USING ERRCODE='P0001'; END; $$ LANGUAGE plpgsql`);
+    const events = mode === 'COMPLETE' ? 'UPDATE' : 'INSERT OR UPDATE';
     await admin.query(
-      `CREATE TRIGGER ${name}_trg BEFORE INSERT OR UPDATE ON ${table}
-       FOR EACH ROW WHEN (NEW.${column} = '${value}') EXECUTE FUNCTION ${name}()`
+      `CREATE TRIGGER ${name}_trg BEFORE ${events} ON ${table}
+       FOR EACH ROW WHEN (${whenClause}) EXECUTE FUNCTION ${name}()`
     );
   }
 
@@ -124,18 +125,21 @@ describe('T838 atomicity matrix', () => {
   }
 
   const seams = [
-    ['after-formulation-write', 'cases', 'family_id', 'case'],
-    ['after-case-write', 'case_events', 'family_id', 'event'],
-    ['after-event-write', 'business_audit_events', 'family_id', 'audit'],
-    ['after-audit-write', 'idempotency_keys', 'actor_account_id', 'idem'],
+    ['after-formulation-write', 'cases', 'WRITE', 'case'],
+    ['after-case-write', 'case_events', 'WRITE', 'event'],
+    ['after-event-write', 'business_audit_events', 'WRITE', 'audit'],
+    ['after-audit-write', 'idempotency_keys', 'COMPLETE', 'idem'],
   ] as const;
 
   it.each(['present', 'confirm', 'correct'] as const)('%s rolls back every write when any seam fails', async (command) => {
     for (const [seam, table, column, kind] of seams) {
       const p = await prepare(`${command}-${seam}`, command);
-      const before = await snapshot(p.caseId, p.actor.accountId);
+      const before = await snapshot(p.caseId, p.actor.accountId, p.familyId);
       const name = `t838_${command}_${kind}_${Date.now()}`;
-      await inject(table, name, column, column === 'actor_account_id' ? p.actor.accountId : p.familyId);
+      const whenClause = kind === 'idem'
+        ? `OLD.actor_account_id = '${p.actor.accountId}' AND OLD.response_status = 0 AND NEW.response_status <> 0`
+        : `NEW.family_id = '${p.familyId}'`;
+      await inject(table, name, kind === 'idem' ? 'COMPLETE' : 'WRITE', whenClause);
       try {
         const call = command === 'present'
           ? presentProblemFormulation(pool, { actor: p.actor, familyId: p.familyId, caseId: p.caseId, expectedCaseVersion: p.caseVersion, idempotencyKey: `t838-x-${Date.now()}-${seq++}`, content: p.content })
@@ -146,7 +150,7 @@ describe('T838 atomicity matrix', () => {
       } finally {
         await remove(table, name);
       }
-      expect(await snapshot(p.caseId, p.actor.accountId), `${command}/${seam}`).toEqual(before);
+      expect(await snapshot(p.caseId, p.actor.accountId, p.familyId), `${command}/${seam}`).toEqual(before);
     }
   });
 });

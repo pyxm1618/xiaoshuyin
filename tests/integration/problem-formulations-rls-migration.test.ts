@@ -263,20 +263,31 @@ describe('S8 direct RLS and migration rollback', () => {
         `SELECT
           (SELECT count(*)::int FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace
             WHERE n.nspname='public' AND t.typname='problem_formulation_status') AS enums,
-          (SELECT count(*)::int FROM pg_tables WHERE schemaname='public' AND tablename='problem_formulations') AS tables,
+          (SELECT count(*)::int FROM pg_tables
+            WHERE schemaname='public' AND tablename='problem_formulations') AS tables,
           (SELECT count(*)::int FROM pg_policies WHERE tablename='problem_formulations') AS policies,
-          (SELECT count(*)::int FROM pg_constraint WHERE conrelid='problem_formulations'::regclass) AS constraints`
-      ).catch(() => ({ rows: [{ enums: 0, tables: 0, policies: 0, constraints: 0 }] }));
-      if (residue.rows[0].tables === 0) {
-        expect(residue.rows[0]).toEqual({ enums: 0, tables: 0, policies: 0, constraints: 0 });
-      } else {
-        throw new Error('T843 residue table exists after rollback');
-      }
+          (SELECT count(*)::int FROM pg_constraint c JOIN pg_class cl ON cl.oid=c.conrelid
+            WHERE cl.relname='problem_formulations') AS constraints`
+      );
+      expect(residue.rows[0]).toEqual({ enums: 0, tables: 0, policies: 0, constraints: 0 });
+
       const grants = await client.query(
-        `SELECT has_table_privilege('xiaoshuyin_app','problem_formulations','SELECT') AS s,
-                has_column_privilege('xiaoshuyin_app','cases','phase','UPDATE') AS c`
-      ).catch(() => ({ rows: [{ s: false, c: false }] }));
-      expect(grants.rows[0]).toEqual({ s: false, c: false });
+        `SELECT
+           CASE WHEN to_regclass('public.problem_formulations') IS NULL THEN false
+                ELSE has_table_privilege('xiaoshuyin_app','problem_formulations','SELECT') END AS s,
+           CASE WHEN to_regclass('public.problem_formulations') IS NULL THEN false
+                ELSE has_table_privilege('xiaoshuyin_app','problem_formulations','INSERT') END AS i,
+           CASE WHEN to_regclass('public.problem_formulations') IS NULL THEN false
+                ELSE has_table_privilege('xiaoshuyin_app','problem_formulations','UPDATE') END AS u,
+           CASE WHEN to_regclass('public.problem_formulations') IS NULL THEN false
+                ELSE has_table_privilege('xiaoshuyin_app','problem_formulations','DELETE') END AS d`
+      );
+      expect(grants.rows[0]).toEqual({ s: false, i: false, u: false, d: false });
+      const leakingGrants = await client.query(
+        `SELECT count(*)::int AS n FROM information_schema.column_privileges
+          WHERE grantee='xiaoshuyin_app' AND table_name='cases' AND column_name='phase' AND privilege_type='UPDATE'`
+      );
+      expect(leakingGrants.rows[0].n).toBe(0);
       const after = await client.query(
         `SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint
           WHERE conname IN ('business_audit_events_resource_type_check','business_audit_events_event_type_check','idempotency_keys_command_type_check','case_events_event_type_check')`

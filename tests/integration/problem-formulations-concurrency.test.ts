@@ -289,59 +289,93 @@ describe('problem formulation concurrency (Slice 8)', () => {
     }
   });
 
-  it('Reassess vs SwitchPrimaryCase leaves one consistent phase', async () => {
-    const { owner, familyId, caseId, caseVersion, messageId } = await prepare('reassess');
-    const presented = await presentProblemFormulation(pool, {
-      actor: { accountId: owner.accountId, personId: owner.personId },
-      familyId,
-      caseId,
-      expectedCaseVersion: caseVersion,
-      idempotencyKey: `t8race-p-${Date.now()}-${seq++}`,
-      content: content(messageId),
+  it('Reassess vs SwitchPrimaryCase races two independently valid commands', async () => {
+    // Prove the fixture is valid on its own before racing.
+    const solo = await prepare('reassess-solo');
+    const soloPresented = await presentProblemFormulation(pool, {
+      actor: { accountId: solo.owner.accountId, personId: solo.owner.personId },
+      familyId: solo.familyId, caseId: solo.caseId,
+      expectedCaseVersion: solo.caseVersion,
+      idempotencyKey: `t8race-solo-p-${Date.now()}-${seq++}`,
+      content: content(solo.messageId),
     });
-    const other = await createCase(owner, 'reassess-b');
+    expect(soloPresented.status).toBe(200);
+    const soloReassess = await reassessFromFormulation(pool, {
+      actor: { accountId: solo.owner.accountId, personId: solo.owner.personId },
+      familyId: solo.familyId, caseId: solo.caseId,
+      expectedCaseVersion: soloPresented.body.caseVersion,
+      idempotencyKey: `t8race-solo-re-${Date.now()}-${seq++}`,
+      formulationVersion: 1,
+      basis: { kind: 'REASSESSMENT_CONDITION', text: 'new evidence' },
+    });
+    expect(soloReassess.status).toBe(200);
+
+    const p = await prepare('reassess');
+    const presented = await presentProblemFormulation(pool, {
+      actor: { accountId: p.owner.accountId, personId: p.owner.personId },
+      familyId: p.familyId, caseId: p.caseId,
+      expectedCaseVersion: p.caseVersion,
+      idempotencyKey: `t8race-p-${Date.now()}-${seq++}`,
+      content: content(p.messageId),
+    });
+    expect(presented.status).toBe(200);
+    const other = await createCase(p.owner, 'reassess-b');
     const viewA = await app.inject({
       method: 'GET',
-      url: `/api/v1/cases/${caseId}`,
-      headers: { authorization: `Bearer ${owner.token}` },
+      url: `/api/v1/cases/${p.caseId}`,
+      headers: { authorization: `Bearer ${p.owner.token}` },
     });
+    const raceStartVersion = viewA.json().version as number;
+    const beforeFormulation = await admin.query(
+      `SELECT status, version FROM problem_formulations WHERE case_id=$1`,
+      [p.caseId]
+    );
 
     const results = await Promise.allSettled([
       reassessFromFormulation(pool, {
-        actor: { accountId: owner.accountId, personId: owner.personId },
-        familyId,
-        caseId,
+        actor: { accountId: p.owner.accountId, personId: p.owner.personId },
+        familyId: p.familyId, caseId: p.caseId,
         expectedCaseVersion: presented.body.caseVersion,
         idempotencyKey: `t8race-re-${Date.now()}-${seq++}`,
-        basis: 'user correction requires reassessment',
+        formulationVersion: 1,
+        basis: { kind: 'REASSESSMENT_CONDITION', text: 'new evidence' },
       }),
       app.inject({
         method: 'POST',
         url: `/api/v1/cases/${other.id}/switch-primary`,
         headers: {
-          authorization: `Bearer ${owner.token}`,
+          authorization: `Bearer ${p.owner.token}`,
           'idempotency-key': `t8race-sw2-${Date.now()}-${seq++}`,
         },
         payload: {
           reason: 'race to other case',
-          expectedPrimaryCaseId: caseId,
-          expectedPrimaryVersion: viewA.json().version,
+          expectedPrimaryCaseId: p.caseId,
+          expectedPrimaryVersion: raceStartVersion,
         },
       }),
     ]);
 
-    const rows = await admin.query(
-      `SELECT phase, is_primary FROM cases WHERE id = $1`,
-      [caseId]
-    );
-    const reassessOk =
-      results[0].status === 'fulfilled' && results[0].value.status < 300;
+    const reassessOk = results[0].status === 'fulfilled' && results[0].value.status < 300;
+    const switchOk = results[1].status === 'fulfilled' && results[1].value.statusCode === 200;
+    expect([reassessOk, switchOk].filter(Boolean)).toHaveLength(1);
+    if (!reassessOk) {
+      expect(results[0].status).toBe('fulfilled');
+      if (results[0].status === 'fulfilled') expect(results[0].value.status).toBe(409);
+    }
+
+    const rows = await admin.query('SELECT phase, is_primary FROM cases WHERE id=$1', [p.caseId]);
+    expect(rows.rows).toHaveLength(1);
     if (reassessOk) {
       expect(rows.rows[0].phase).toBe('ASSESSMENT');
     } else {
-      expect(['PROBLEM_FORMULATION', 'ASSESSMENT']).toContain(rows.rows[0].phase);
+      expect(rows.rows[0].is_primary).toBe(false);
+      expect(rows.rows[0].phase).toBe('PROBLEM_FORMULATION');
     }
-    expect(rows.rows).toHaveLength(1);
+    const afterFormulation = await admin.query(
+      `SELECT status, version FROM problem_formulations WHERE case_id=$1`,
+      [p.caseId]
+    );
+    expect(afterFormulation.rows).toEqual(beforeFormulation.rows);
   });
 
   it('same-current race matrix keeps one legal winner for every command pair', async () => {

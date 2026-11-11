@@ -1,7 +1,10 @@
 /**
- * T835 — six-command idempotency matrix.
- * same key/same request replay, concurrent same key convergence, and
- * no duplicate formulation / Case transition / event / audit rows.
+ * T835 — complete six-command idempotency matrix.
+ *
+ * For Start / Present / Confirm / Dispute / Correction / Reassess this file
+ * proves: same-key replay, same-key mismatch, concurrent same-key convergence,
+ * deterministic post-auth 4xx persistence, and exact event/audit non-duplication
+ * against the command's real audit resource.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -18,8 +21,9 @@ import {
 } from '../../apps/server/api/src/services/problem-formulations.js';
 
 const PREFIX = 't835_';
+type Label = 'start' | 'present' | 'confirm' | 'dispute' | 'correct' | 'reassess';
 
-describe('T835 six-command idempotency', () => {
+describe('T835 complete six-command idempotency', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   let admin: pg.Pool;
   let pool: pg.Pool;
@@ -51,7 +55,7 @@ describe('T835 six-command idempotency', () => {
     await app.close();
   });
 
-  async function prepare(label: string, phase: 'INTAKE' | 'ASSESSMENT' | 'PROBLEM_FORMULATION') {
+  async function prepare(label: string, phase: 'INTAKE' | 'ASSESSMENT' | 'PROBLEM_FORMULATION', withMessage = true) {
     const login = await app.inject({ method: 'POST', url: '/api/v1/auth/wechat', payload: { code: `${PREFIX}${label}_${Date.now()}_${seq++}` } });
     const owner = login.json();
     const fam = await app.inject({
@@ -65,25 +69,29 @@ describe('T835 six-command idempotency', () => {
       headers: { authorization: `Bearer ${owner.sessionToken}`, 'idempotency-key': `t835-c-${label}-${Date.now()}-${seq++}` },
       payload: {},
     });
-    const caseRow = created.json() as { id: string; version: number };
-    const msg = await app.inject({
-      method: 'POST', url: `/api/v1/cases/${caseRow.id}/messages`,
-      headers: { authorization: `Bearer ${owner.sessionToken}`, 'idempotency-key': `t835-m-${label}-${Date.now()}-${seq++}` },
-      payload: { content: '问题陈述' },
-    });
+    const caseId = created.json().id as string;
+    let messageId: string | null = null;
+    if (withMessage) {
+      const msg = await app.inject({
+        method: 'POST', url: `/api/v1/cases/${caseId}/messages`,
+        headers: { authorization: `Bearer ${owner.sessionToken}`, 'idempotency-key': `t835-m-${label}-${Date.now()}-${seq++}` },
+        payload: { content: '问题陈述' },
+      });
+      messageId = msg.json().id as string;
+    }
     const actor = { accountId: owner.accountId as string, personId: owner.person.id as string };
-    let caseVersion = caseRow.version;
+    let caseVersion = created.json().version as number;
     if (phase !== 'INTAKE') {
-      const started = await startAssessment(pool, { actor, familyId, caseId: caseRow.id, expectedCaseVersion: caseVersion, idempotencyKey: `t835-s-${label}-${Date.now()}-${seq++}` });
+      const started = await startAssessment(pool, { actor, familyId, caseId, expectedCaseVersion: caseVersion, idempotencyKey: `t835-s-${label}-${Date.now()}-${seq++}` });
       expect(started.status).toBe(200);
       caseVersion = started.body.caseVersion;
     }
-    const content = () => {
-      const ref = { type: 'DIALOGUE_MESSAGE' as const, id: msg.json().id as string };
+    const content = (variant?: string) => {
+      const ref = { type: 'DIALOGUE_MESSAGE' as const, id: messageId! };
       return {
         primaryProblem: { text: '主问题', evidenceRefs: [ref] },
         keyFactors: [], evidenceRefs: [ref], unknowns: [], conflicts: [],
-        sceneFit: 'family_common_core',
+        sceneFit: variant ?? 'family_common_core',
         alternativeExplanations: [{ text: '替代解释' }],
         reassessmentConditions: [{ text: '出现新证据' }],
         exitConditions: [{ text: '退出条件' }],
@@ -92,20 +100,62 @@ describe('T835 six-command idempotency', () => {
     };
     if (phase === 'PROBLEM_FORMULATION') {
       const presented = await presentProblemFormulation(pool, {
-        actor, familyId, caseId: caseRow.id, expectedCaseVersion: caseVersion,
+        actor, familyId, caseId, expectedCaseVersion: caseVersion,
         idempotencyKey: `t835-p-${label}-${Date.now()}-${seq++}`, content: content(),
       });
       expect(presented.status).toBe(200);
       caseVersion = presented.body.caseVersion;
     }
-    return { actor, familyId, caseId: caseRow.id, caseVersion, content };
+    return { actor, familyId, caseId, caseVersion, content, messageId };
   }
 
-  async function counts(caseId: string) {
+  function call(label: Label, key: string, s: any, variant?: string) {
+    const base = { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key };
+    switch (label) {
+      case 'start':
+        return startAssessment(pool, base);
+      case 'present':
+        return presentProblemFormulation(pool, { ...base, content: s.content(variant) });
+      case 'confirm':
+        return confirmProblemFormulation(pool, { ...base, formulationVersion: 1, body: {} });
+      case 'dispute':
+        return disputeProblemFormulation(pool, { ...base, formulationVersion: 1, body: {} });
+      case 'correct':
+        return correctProblemFormulation(pool, { ...base, formulationVersion: 1, changes: { sceneFit: variant ?? 'family_common_core_v2' } });
+      case 'reassess':
+        return reassessFromFormulation(pool, { ...base, formulationVersion: 1, basis: { kind: 'REASSESSMENT_CONDITION', text: '出现新证据' } });
+    }
+  }
+
+  function phaseFor(label: Label): 'INTAKE' | 'ASSESSMENT' | 'PROBLEM_FORMULATION' {
+    if (label === 'start') return 'INTAKE';
+    if (label === 'present') return 'ASSESSMENT';
+    return 'PROBLEM_FORMULATION';
+  }
+
+  async function auditCount(label: Label, caseId: string, result: any): Promise<number> {
+    const map: Record<Label, { event: string; resource: 'CASE' | 'PROBLEM_FORMULATION' }> = {
+      start: { event: 'CASE_ASSESSMENT_STARTED', resource: 'CASE' },
+      present: { event: 'CASE_PROBLEM_FORMULATION_PRESENTED', resource: 'PROBLEM_FORMULATION' },
+      confirm: { event: 'CASE_PROBLEM_FORMULATION_CONFIRMED', resource: 'PROBLEM_FORMULATION' },
+      dispute: { event: 'CASE_PROBLEM_FORMULATION_DISPUTED', resource: 'PROBLEM_FORMULATION' },
+      correct: { event: 'CASE_PROBLEM_FORMULATION_CORRECTED', resource: 'PROBLEM_FORMULATION' },
+      reassess: { event: 'CASE_REASSESSMENT_STARTED', resource: 'CASE' },
+    };
+    const spec = map[label];
+    const resourceId = spec.resource === 'CASE' ? caseId : result.body.current.id;
+    const row = await admin.query(
+      `SELECT count(*)::int AS n FROM business_audit_events
+        WHERE event_type=$1 AND resource_type=$2 AND resource_id=$3`,
+      [spec.event, spec.resource, resourceId]
+    );
+    return row.rows[0].n;
+  }
+
+  async function businessCounts(caseId: string) {
     const r = await admin.query(
       `SELECT (SELECT count(*)::int FROM problem_formulations WHERE case_id=$1) AS f,
               (SELECT count(*)::int FROM case_events WHERE case_id=$1) AS e,
-              (SELECT count(*)::int FROM business_audit_events WHERE resource_id=$1) AS a,
               (SELECT version FROM cases WHERE id=$1) AS v,
               (SELECT phase FROM cases WHERE id=$1) AS p`,
       [caseId]
@@ -113,82 +163,124 @@ describe('T835 six-command idempotency', () => {
     return r.rows[0];
   }
 
-  async function assertReplayAndConcurrent(
-    make: (key: string, state: any) => Promise<any>,
-    prepareState: () => Promise<any>,
-    label: string
-  ) {
-    const s1 = await prepareState();
-    const key1 = `t835-${label}-replay-${Date.now()}-${seq++}`;
-    const first = await make(key1, s1);
-    expect(first.status, label).toBeGreaterThanOrEqual(200);
-    expect(first.status, label).toBeLessThan(300);
-    const before = await counts(s1.caseId);
-    const replay = await make(key1, s1);
+  const labels: Label[] = ['start', 'present', 'confirm', 'dispute', 'correct', 'reassess'];
+
+  it.each(labels)('%s: same-key replay, concurrent same-key, exact audit', async (label) => {
+    const s = await prepare(`replay-${label}`, phaseFor(label));
+    const key = `t835-${label}-replay-${Date.now()}-${seq++}`;
+    const first = await call(label, key, s);
+    expect(first.status).toBeGreaterThanOrEqual(200);
+    expect(first.status).toBeLessThan(300);
+    expect(await auditCount(label, s.caseId, first)).toBe(1);
+
+    const before = await businessCounts(s.caseId);
+    const replay = await call(label, key, s);
     expect(replay.status).toBe(first.status);
     expect(replay.body).toEqual(first.body);
-    expect(await counts(s1.caseId)).toEqual(before);
+    expect(await businessCounts(s.caseId)).toEqual(before);
+    expect(await auditCount(label, s.caseId, first)).toBe(1);
 
-    const s2 = await prepareState();
+    const s2 = await prepare(`concurrent-${label}`, phaseFor(label));
     const key2 = `t835-${label}-concurrent-${Date.now()}-${seq++}`;
-    const beforeConc = await counts(s2.caseId);
-    const results = await Promise.all([make(key2, s2), make(key2, s2)]);
-    expect(results[0].status).toBeGreaterThanOrEqual(200);
-    expect(results[1].status).toBeGreaterThanOrEqual(200);
-    expect(results[0].status).toBeLessThan(300);
-    expect(results[1].status).toBeLessThan(300);
-    expect(results[0].body).toEqual(results[1].body);
-    const after = await counts(s2.caseId);
-    expect(after.f - beforeConc.f, label).toBeLessThanOrEqual(1);
-    expect(after.e - beforeConc.e, label).toBeLessThanOrEqual(1);
-    expect(after.a - beforeConc.a, label).toBeLessThanOrEqual(1);
-  }
-
-  it('StartAssessment converges on replay and concurrent same key', async () => {
-    await assertReplayAndConcurrent(
-      (key, s) => startAssessment(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key }),
-      () => prepare('start', 'INTAKE'),
-      'start'
-    );
+    const beforeConc = await businessCounts(s2.caseId);
+    const [a, b] = await Promise.all([call(label, key2, s2), call(label, key2, s2)]);
+    expect(a.status).toBeGreaterThanOrEqual(200);
+    expect(b.status).toBeGreaterThanOrEqual(200);
+    expect(a.status).toBeLessThan(300);
+    expect(b.status).toBeLessThan(300);
+    expect(a.body).toEqual(b.body);
+    const after = await businessCounts(s2.caseId);
+    expect(after.f - beforeConc.f).toBeLessThanOrEqual(1);
+    expect(after.e - beforeConc.e).toBeLessThanOrEqual(1);
+    expect(await auditCount(label, s2.caseId, a)).toBe(1);
   });
 
-  it('PresentProblemFormulation converges on replay and concurrent same key', async () => {
-    await assertReplayAndConcurrent(
-      (key, s) => presentProblemFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, content: s.content() }),
-      () => prepare('present', 'ASSESSMENT'),
-      'present'
-    );
+  it.each(labels)('%s: same key + different payload is a mismatch with no mutation', async (label) => {
+    const s = await prepare(`mismatch-${label}`, phaseFor(label));
+    const key = `t835-${label}-mismatch-${Date.now()}-${seq++}`;
+    const first = await call(label, key, s);
+    expect(first.status).toBeLessThan(300);
+    const baseline = await businessCounts(s.caseId);
+    const audits = await auditCount(label, s.caseId, first);
+
+    let mismatch: Promise<any>;
+    switch (label) {
+      case 'start':
+        mismatch = startAssessment(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion + 1, idempotencyKey: key });
+        break;
+      case 'present':
+        mismatch = presentProblemFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, content: s.content('different-scene') });
+        break;
+      case 'confirm':
+        mismatch = confirmProblemFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1, body: { note: 'different' } });
+        break;
+      case 'dispute':
+        mismatch = disputeProblemFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1, body: { note: 'different' } });
+        break;
+      case 'correct':
+        mismatch = correctProblemFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1, changes: { sceneFit: 'different-scene' } });
+        break;
+      case 'reassess':
+        mismatch = reassessFromFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1, basis: { kind: 'ALTERNATIVE_EXPLANATION', text: '替代解释' } });
+        break;
+    }
+    await expect(mismatch).rejects.toMatchObject({ code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
+    expect(await businessCounts(s.caseId)).toEqual(baseline);
+    expect(await auditCount(label, s.caseId, first)).toBe(audits);
   });
 
-  it('ConfirmProblemFormulation converges on replay and concurrent same key', async () => {
-    await assertReplayAndConcurrent(
-      (key, s) => confirmProblemFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1, body: {} }),
-      () => prepare('confirm', 'PROBLEM_FORMULATION'),
-      'confirm'
-    );
-  });
+  it.each(labels)('%s: deterministic post-auth 4xx is persisted and replays after world change', async (label) => {
+    if (label === 'start') {
+      const s = await prepare('det-start', 'INTAKE', false);
+      const payload = { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: `t835-det-${Date.now()}-${seq++}` };
+      const first = await startAssessment(pool, payload);
+      expect(first.status).toBe(422);
+      expect(first.body).toMatchObject({ code: 'TRACEABLE_PROBLEM_STATEMENT_REQUIRED' });
+      const before = await businessCounts(s.caseId);
+      await admin.query(
+        `INSERT INTO dialogue_messages (family_id, case_id, actor_account_id, source_person_id, content)
+         VALUES ($1,$2,$3,$4,'post-failure truth change')`,
+        [s.familyId, s.caseId, s.actor.accountId, s.actor.personId]
+      );
+      const replay = await startAssessment(pool, payload);
+      expect(replay.status).toBe(first.status);
+      expect(replay.body).toEqual(first.body);
+      expect((await businessCounts(s.caseId)).p).toBe(before.p);
+      return;
+    }
 
-  it('DisputeProblemFormulation converges on replay and concurrent same key', async () => {
-    await assertReplayAndConcurrent(
-      (key, s) => disputeProblemFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1, body: {} }),
-      () => prepare('dispute', 'PROBLEM_FORMULATION'),
-      'dispute'
-    );
-  });
+    if (label === 'present') {
+      const s = await prepare('det-present', 'INTAKE');
+      const payload = { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: `t835-det-${Date.now()}-${seq++}`, content: s.content() };
+      const first = await presentProblemFormulation(pool, payload);
+      expect(first.status).toBe(409);
+      expect(first.body).toMatchObject({ code: 'CASE_PHASE_CONFLICT' });
+      await startAssessment(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: `t835-det-s-${Date.now()}-${seq++}` });
+      const replay = await presentProblemFormulation(pool, payload);
+      expect(replay.status).toBe(first.status);
+      expect(replay.body).toEqual(first.body);
+      return;
+    }
 
-  it('CorrectProblemFormulation converges on replay and concurrent same key', async () => {
-    await assertReplayAndConcurrent(
-      (key, s) => correctProblemFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1, changes: { sceneFit: 'family_common_core_v2' } }),
-      () => prepare('correct', 'PROBLEM_FORMULATION'),
-      'correct'
-    );
-  });
-
-  it('ReassessFromFormulation converges on replay and concurrent same key', async () => {
-    await assertReplayAndConcurrent(
-      (key, s) => reassessFromFormulation(pool, { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1, basis: { kind: 'REASSESSMENT_CONDITION', text: '出现新证据' } }),
-      () => prepare('reassess', 'PROBLEM_FORMULATION'),
-      'reassess'
-    );
+    const s = await prepare(`det-${label}`, 'ASSESSMENT');
+    const key = `t835-det-${label}-${Date.now()}-${seq++}`;
+    const payload = { actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion, idempotencyKey: key, formulationVersion: 1 };
+    const invoke = () => label === 'correct'
+      ? correctProblemFormulation(pool, { ...payload, changes: { sceneFit: 'x' } })
+      : label === 'reassess'
+        ? reassessFromFormulation(pool, { ...payload, basis: { kind: 'REASSESSMENT_CONDITION', text: '出现新证据' } })
+        : label === 'confirm'
+          ? confirmProblemFormulation(pool, { ...payload, body: {} })
+          : disputeProblemFormulation(pool, { ...payload, body: {} });
+    const first = await invoke();
+    expect(first.status).toBe(409);
+    expect(first.body).toMatchObject({ code: 'CASE_PHASE_CONFLICT' });
+    await presentProblemFormulation(pool, {
+      actor: s.actor, familyId: s.familyId, caseId: s.caseId, expectedCaseVersion: s.caseVersion,
+      idempotencyKey: `t835-det-present-${Date.now()}-${seq++}`, content: s.content(),
+    });
+    const replay = await invoke();
+    expect(replay.status).toBe(first.status);
+    expect(replay.body).toEqual(first.body);
   });
 });
