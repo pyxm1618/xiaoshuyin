@@ -125,11 +125,17 @@ All `evidenceRefs` must also appear in top-level `evidence_refs`.
 {
   topic: string; // trim() non-empty
   conflictGroupId?: UUID;
-  evidenceRefs: EvidenceRef[]; // >= 2 distinct refs when no group expands the set
+  evidenceRefs?: EvidenceRef[];
 }
 ```
 
-The validator resolves the group/refs and proves the competing sides are retained. It never picks a winner.
+Legal forms are conditional:
+
+- `conflictGroupId` present: the server resolves that real group to at least two distinct conflicting Evidence sides; `evidenceRefs` may be omitted/empty.
+- `conflictGroupId` absent: `evidenceRefs` is required with at least two **distinct** refs that the server proves are conflicting.
+- both present: every explicit ref must belong to the resolved group and must not contradict the server-expanded conflict set.
+
+A missing/unresolvable group, duplicate refs, one explicit ref without a group, cross-Case refs, or group/refs disagreement is invalid. The validator never picks a winner.
 
 ### 4.6 Alternative explanation / reassessment / exit conditions
 
@@ -167,7 +173,7 @@ A later response replaces `user_response` on the same current row because the fr
 ```ts
 type DependencyRef =
   | { type: 'EVIDENCE'; evidence: EvidenceRef }
-  | { type: 'CONSENT'; id: UUID; version?: number }
+  | { type: 'CONSENT'; id: UUID; version?: number /* current-main DB integer: 1..2147483647 when present */ }
   | { type: 'POLICY'; key: string; version: string }
   | { type: 'PACKAGE'; key: string; version: string }
   | { type: 'CONTENT_VERSION'; key: string; version: string };
@@ -176,6 +182,34 @@ type DependencyRef =
 A `DependencyRef` is a traceable identity/version reference, never embedded dependency body text.
 
 `EVIDENCE` dependencies are validated through the same Evidence resolver. Other types are validated whenever authoritative current-main data can determine validity; absence of a registry is not treated as “verified true”.
+
+### 4.9 Server-derived processing Persons and mandatory dependencies
+
+Slice 8 does not store a second Person/dependency graph. For every mutation it derives a sorted/distinct Person set from existing rows:
+
+```text
+actor.personId
+cases.created_by_person_id
+ACTIVE case_participants.person_id for the target Case
+non-null Evidence Person refs:
+  dialogue_messages.source_person_id
+  assertions.subject_person_id / source_person_id
+  observations.subject_person_id / source_person_id
+```
+
+The Evidence refs used are Start's qualifying statement, Present's complete candidate, Confirm/Dispute/Reassess current formulation, or Correction's complete merged candidate respectively. Participant history grants no formulation authority.
+
+Each Person is evaluated with existing `getComplianceProfileForUpdate` + `getConsentRecordForGate` + `getCurrentNoticeHash` feeding existing `assertMinorProcessingAllowed`. An UNDER_14 ALLOW also requires the profile's current Consent id/version to match the returned record id/version.
+
+The mandatory dependency set is then derived without caller discretion:
+
+```text
+all top-level EvidenceRef        -> mandatory EVIDENCE refs
+each processed UNDER_14 Person  -> mandatory current CONSENT {id, version}
+POLICY/PACKAGE/CONTENT_VERSION   -> mandatory only if an authoritative current-main registry actually derives one
+```
+
+The pinned main has no general Policy/Package/Content registry, so Slice 8 does not synthesize those dependencies. Present/Correction require the server mandatory set to be contained in the complete candidate `dependencyRefs`; Confirm re-derives the set and requires it to be contained in the current valid stored dependencies. Thus public Correction cannot decide that a required Consent/Evidence dependency no longer exists.
 
 ---
 
@@ -189,7 +223,7 @@ Planned constraints:
 PRIMARY KEY (id)
 UNIQUE (case_id, version)
 FOREIGN KEY (case_id, family_id) REFERENCES cases(id, family_id) ON DELETE RESTRICT
-CHECK version >= 1
+CHECK version BETWEEN 1 AND 2147483647
 ```
 
 The formulation cannot migrate between Case or Family.
@@ -200,7 +234,9 @@ The formulation cannot migrate between Case or Family.
 CHECK (
   (version = 1 AND supersedes_version IS NULL)
   OR
-  (version > 1 AND supersedes_version = version - 1)
+  (version BETWEEN 2 AND 2147483647
+   AND supersedes_version BETWEEN 1 AND 2147483646
+   AND supersedes_version = version - 1)
 )
 ```
 
@@ -361,12 +397,20 @@ advanceCasePhaseAndVersion(expectedVersion, fromPhase, toPhase)
 bumpCaseVersionWithoutPhaseChange(expectedVersion)
 
 resolveEvidenceRefs(...)
+resolveConflictGroup(...)
+resolveEvidencePersonRefs(...)
+resolveActiveCaseParticipantPersonIds(caseId)
+deriveProcessingPersonIds(...)
+deriveMandatoryDependencyRefs(...)
+validateMandatoryDependencyCompleteness(...)
 findAssertionSuccessors(...)
 findObservationSuccessors(...)
 hasTraceableProblemStatement(caseId)
 ```
 
 Every mutating repository function uses conditional predicates or locked rows and checks affected-row count. A zero-row conditional update is a conflict/invariant signal, never “last write wins”.
+
+The processing/compliance functions above are orchestration/resolution seams only; they must invoke the existing compliance package and must not copy its age/guardian/notice rule tree. All domain/Zod/public versions that map to PostgreSQL `integer` share the 2147483647 maximum, including existing `cases.version` and current-main `consent_records.version`.
 
 ---
 

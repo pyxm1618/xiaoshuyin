@@ -175,7 +175,7 @@ Tests compile against planned exported types or remain intentionally RED with ex
 **Maps:** FR-007, FR-009, FR-026, FR-030; AS-2/4/8/22
 
 **What**  
-Test same-Case refs, superseded/expired refs, unknown states, DECLINED, conflicts, positive support, traceable problem statement and determinable dependency invalidity.
+Test same-Case refs, superseded/expired refs, unknown states, DECLINED, positive support, traceable problem statement and determinable dependency invalidity. Add exact ConflictItem cases (group-only valid, explicit two-distinct-ref valid, one-ref/no-group invalid, unresolvable group invalid, group+refs mismatch invalid) and mandatory-dependency completeness cases (server-required Evidence/Consent omitted, client set incomplete).
 
 **Why**  
 Evidence fidelity is a core invariant, not a later integration detail.
@@ -187,7 +187,7 @@ Evidence fidelity is a core invariant, not a later integration detail.
 T805.
 
 **How to verify**  
-Every frozen Evidence failure mode has an explicit expected domain error/category.
+Every frozen Evidence failure mode has an explicit expected domain error/category; contract/domain tests prove the five ConflictItem forms and prove client dependency refs cannot redefine or omit the server-derived mandatory set.
 
 ---
 
@@ -217,7 +217,7 @@ Tests identify required action registry additions and prove no synthetic princip
 **Maps:** FR-022, FR-024, FR-028; AS-5/20/21
 
 **What**  
-Test exact four public operations, true-empty current envelope, strict bodies, required headers, and absence of Start/Present/Reassess/create/history routes.
+Test exact four public operations, true-empty current envelope, strict bodies, required headers, ConflictItem's conditional group-or-pair contract, PostgreSQL-integer version maxima, and absence of Start/Present/Reassess/create/history routes.
 
 **Why**  
 Public/internal separation is a frozen product boundary.
@@ -262,7 +262,7 @@ T809 becomes green for action matrices; old authorization tests remain green; no
 **Maps:** FR-002, FR-006–FR-012, FR-022, FR-024, FR-026
 
 **What**  
-Define strict EvidenceRef, DependencyRef, content, response, correction, path/header and public envelope schemas matching the planned OpenAPI candidate.
+Define strict EvidenceRef, DependencyRef, content, response, correction, path/header and public envelope schemas matching the planned OpenAPI candidate. Every DB-backed integer version is 1..2147483647. ConflictItem accepts group-only or no-group + >=2 distinct refs; mixed group+refs is structurally accepted but domain consistency-validated. If-Match performs lexical validation plus integer parse/range validation before any repository/SQL call.
 
 **Why**  
 Client/server-owned boundaries and JSON shape must be one executable contract.
@@ -274,7 +274,7 @@ Client/server-owned boundaries and JSON shape must be one executable contract.
 T810.
 
 **How to verify**  
-Schema unit/integration tests reject unknown fields, client status/version/confirmed fields, empty changes, malformed refs and malformed If-Match.
+Schema unit/integration tests reject unknown fields, client status/version/confirmed fields, empty changes, malformed refs and malformed/out-of-range If-Match. Explicit boundaries: 2147483647 accepted; 2147483648 rejected for path formulation version, numeric DB-backed versions/caseVersion where represented, and If-Match before DB access.
 
 ---
 
@@ -305,7 +305,7 @@ T807 green; no Assessment/Scene/Goal/AI import/dependency exists.
 **Maps:** FR-007, FR-009, FR-026, FR-030
 
 **What**  
-Implement read-only resolvers for dialogue/assertion/observation refs, successor/validity classification, conflict/unknown preservation, positive-support proof and traceable-problem-statement check.
+Implement read-only resolvers for dialogue/assertion/observation refs, successor/validity classification, conflict/unknown preservation, positive-support proof and traceable-problem-statement check. Add the server-side conflict-group resolver needed for group-only ConflictItem proof and read-only resolvers that expose Evidence subject/source Person ids for the Slice 8 processing-Person derivation.
 
 **Why**  
 Present/Correction/Confirm must reason from current Slice 3 facts without duplicating Evidence.
@@ -398,7 +398,7 @@ Focused DB tests pass under app/migrator/admin roles and direct-SQL negative cas
 **Maps:** FR-015–FR-021, FR-023
 
 **What**  
-Create the application service transaction skeleton: real user context → RLS transaction → authorize → idempotency slot → Family lock → Case lock → formulation lock → outcome persistence.
+Create the application service transaction skeleton: real user context → RLS transaction → existing requireFamilyAction/authorize → idempotency slot → Family lock → Case lock → formulation lock → server-derived processing-Person set → existing getComplianceProfileForUpdate/getConsentRecordForGate/getCurrentNoticeHash/assertMinorProcessingAllowed gate → command-specific mandatory-dependency check → outcome persistence. Do not duplicate the compliance decision tree.
 
 **Why**  
 All six commands need one canonical ordering and replay policy; duplicated route-level orchestration would drift.
@@ -419,7 +419,7 @@ Unit/integration harness proves lock/helper call order and deterministic 4xx/no-
 **Maps:** FR-005, FR-015–FR-021, FR-023, FR-030; AS-1/2
 
 **What**  
-Implement internal Start command using traceable statement check, primary/Safety/Closed/phase/Case-version gates, Case update, event, audit and idempotency.
+Implement internal Start command using existing requireFamilyAction/authorize, server-resolved traceable statement check, server-derived processing-Person set, existing Consent/minor-processing gate, primary/Safety/Closed/phase/Case-version gates, Case update, event, audit and idempotency.
 
 **Why**  
 It is the minimum legal phase bridge into ASSESSMENT.
@@ -432,7 +432,7 @@ It is the minimum legal phase bridge into ASSESSMENT.
 T818.
 
 **How to verify**  
-Dedicated internal-service integration tests: success, no statement, nonprimary, Safety, wrong phase, stale Case, retry; assert no Assessment/formulation object created.
+Dedicated internal-service integration tests: success, no statement, nonprimary, Safety, wrong phase, stale Case, retry, missing Consent, revoked Consent, stale/notice-mismatched Consent, and UNDER_14 processing blocked. Every blocked compliance case asserts zero phase/event/audit/idempotent-business mutation; no Assessment/formulation object is created.
 
 ---
 
@@ -441,7 +441,7 @@ Dedicated internal-service integration tests: success, no statement, nonprimary,
 **Maps:** FR-006, FR-007, FR-015–FR-021, FR-023, FR-029; AS-3/4/22/24
 
 **What**  
-Implement internal Present with complete content validation, Evidence fidelity, version allocation, optional old-current supersession after Reassess, Case phase/version update and atomic history.
+Implement internal Present with complete content validation, Evidence fidelity, server-derived processing-Person compliance gate, mandatory dependency derivation and completeness proof, version allocation, optional old-current supersession after Reassess, Case phase/version update and atomic history.
 
 **Why**  
 This is the sole internal bridge from ASSESSMENT into a current PRESENTED formulation.
@@ -454,7 +454,7 @@ This is the sole internal bridge from ASSESSMENT into a current PRESENTED formul
 T819.
 
 **How to verify**  
-Version-1 and post-Reassess version-N integration tests; invalid Evidence yields zero rows/phase change; no DRAFT/AI/Scene side effect.
+Version-1 and post-Reassess version-N integration tests; invalid Evidence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted, and client dependency set incomplete all yield zero formulation/phase mutation. No DRAFT/AI/Scene side effect.
 
 ---
 
@@ -463,7 +463,7 @@ Version-1 and post-Reassess version-N integration tests; invalid Evidence yields
 **Maps:** FR-008, FR-009, FR-013–FR-021, FR-023, FR-026; AS-6/7/8/9/11/13/14/24
 
 **What**  
-Implement current PRESENTED confirmation with realtime dependency/Evidence validation, real-user confirmer, Case GOALS/version update, event/audit/idempotency.
+Implement current PRESENTED confirmation with realtime server-truth processing-Person compliance revalidation, mandatory dependency re-derivation + subset proof, determinable stored dependency/Evidence validation, real-user confirmer, Case GOALS/version update, event/audit/idempotency.
 
 **Why**  
 Confirm is the only legal Slice 8 path into GOALS and the highest-authority mutation.
@@ -476,7 +476,7 @@ Confirm is the only legal Slice 8 path into GOALS and the highest-authority muta
 T820.
 
 **How to verify**  
-Internal service tests prove exact guards, AI/system absence, stale current/dependency refusal and atomic outcome.
+Internal service tests prove exact guards, AI/system absence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted from stored current, stale dependency refusal and atomic outcome. Confirm never trusts only the stored/client-supplied dependency list.
 
 ---
 
@@ -485,7 +485,7 @@ Internal service tests prove exact guards, AI/system absence, stale current/depe
 **Maps:** FR-010, FR-014–FR-021, FR-023; AS-10/11
 
 **What**  
-Implement PRESENTED→DISPUTED response with Case version bump but no phase change/reassessment.
+Implement PRESENTED→DISPUTED response with the same server-derived processing-Person Consent/compliance gate, Case version bump but no phase change/reassessment.
 
 **Why**  
 Owner clarification explicitly requires disagreement without automatic reassessment.
@@ -507,7 +507,7 @@ Service test asserts phase unchanged, repeated different-key dispute conflicts, 
 **Maps:** FR-003, FR-004, FR-011, FR-014–FR-021, FR-023, FR-027; AS-12/24/25
 
 **What**  
-Implement strict partial correction input, complete server merge/revalidation, old SUPERSEDED + new PRESENTED full version, no inherited confirmation, Case version bump.
+Implement strict partial correction input, complete server merge/revalidation, server-derived processing-Person compliance gate, mandatory dependency re-derivation on the merged result, old SUPERSEDED + new PRESENTED full version, no inherited confirmation, Case version bump. A patch must not be able to strip a server-required dependency.
 
 **Why**  
 Corrections must preserve immutable history and force re-confirmation.
@@ -520,7 +520,7 @@ Corrections must preserve immutable history and force re-confirmation.
 T822.
 
 **How to verify**  
-DB snapshot proves old content byte-equivalent except lifecycle fields; new row is complete; no-op/empty/GOALS/current-stale paths fail as planned.
+DB snapshot proves old content byte-equivalent except lifecycle fields; new row is complete; no-op/empty/GOALS/current-stale paths fail as planned. Add negative tests for dependency stripped by Correction, newly required dependency omitted after merge, missing/revoked/stale Consent and UNDER_14 processing blocked; every rejection leaves old current untouched.
 
 ---
 
@@ -529,7 +529,7 @@ DB snapshot proves old content byte-equivalent except lifecycle fields; new row 
 **Maps:** FR-012, FR-015–FR-021, FR-023; AS-15
 
 **What**  
-Implement internal PROBLEM_FORMULATION→ASSESSMENT command with domain-validated existing basis, current formulation preserved, Case version bump and audit/event/idempotency.
+Implement internal PROBLEM_FORMULATION→ASSESSMENT command with domain-validated existing basis, the same server-derived processing-Person Consent/compliance gate over the locked current formulation, current formulation preserved, Case version bump and audit/event/idempotency.
 
 **Why**  
 Reassessment is independent from Dispute and must not rewrite history.
@@ -574,7 +574,7 @@ Error-map tests cover every new literal/status and preserve existing mappings; u
 **Maps:** FR-008–FR-011, FR-014, FR-017, FR-022–FR-024; AS-5–14/16/18/19/21/25
 
 **What**  
-Add GET current, POST confirm, POST dispute, POST corrections; parse Idempotency-Key/If-Match/path/body; delegate to the shared service; implement 200-null true empty and ETag.
+Add GET current, POST confirm, POST dispute, POST corrections; parse Idempotency-Key/If-Match/path/body; enforce 1..2147483647 for every DB-backed integer version; parse/range-check If-Match before any repository/SQL call; delegate to the shared service; implement 200-null true empty and ETag.
 
 **Why**  
 Public API must exactly match frozen §28.3/OC-3 and reuse the internal command logic rather than duplicate it.
@@ -586,7 +586,7 @@ Public API must exactly match frozen §28.3/OC-3 and reuse the internal command 
 T812, T821–T825.
 
 **How to verify**  
-Focused route integration tests prove exact status/error bodies and no route-level SQL.
+Focused route integration tests prove exact status/error bodies, no route-level SQL, path version 2147483647 accepted / 2147483648 rejected, and If-Match case-v2147483647 accepted / case-v2147483648 rejected before DB access.
 
 ---
 
@@ -660,7 +660,7 @@ T828.
 **Maps:** FR-022, FR-024; AS-5/20/21
 
 **What**  
-Finalize exact operation, schema, response, header, true-empty and forbidden-route assertions.
+Finalize exact operation, schema, response, header, true-empty and forbidden-route assertions, including ConflictItem group-only/pair conditionality and the 2147483647 version ceiling.
 
 **Why**  
 Both generated contract and real runtime must be mechanically bounded.
@@ -673,7 +673,7 @@ Both generated contract and real runtime must be mechanically bounded.
 T829.
 
 **How to verify**  
-Dedicated tests + `openapi:check` pass and enumerate no fifth route.
+Dedicated tests + `openapi:check` pass and enumerate no fifth route. Contract tests cover group-only valid, evidence-pair valid, single evidence without group invalid, invalid/unresolvable group rejected by domain resolver, and integer boundary 2147483647/2147483648.
 
 ---
 
@@ -815,7 +815,7 @@ Every race asserts one winner (or replay), loser 409 where applicable, one curre
 **Maps:** FR-015, FR-020; AS-19
 
 **What**  
-Race SwitchPrimaryCase against Present, Confirm and Reassess (plus at least one non-phase formulation mutation) using real concurrent requests/service calls.
+Race SwitchPrimaryCase independently against Present, Confirm, **Correct**, and Reassess using real concurrent requests/service calls. Correction is a mandatory standalone race because it SUPERSEDEs the old current, INSERTs a new current and increments Case version. Also cover Dispute/SwitchPrimaryCase if practical, but Dispute does not substitute for Correction.
 
 **Why**  
 Family serialization must prevent stale-primary progression.
@@ -827,7 +827,7 @@ Family serialization must prevent stale-primary progression.
 T824, T826, T834.
 
 **How to verify**  
-If switch serializes first and demotes target, formulation write is 409; if formulation write serializes first, its result is valid before switch. Never a write that observes a post-switch nonprimary Case as primary.
+For each of Present/Switch, Confirm/Switch, Correct/Switch and Reassess/Switch: if switch serializes first and demotes target, the formulation command is 409 with zero business mutation; if the formulation command serializes first, its complete valid result commits before switch. Correction assertions include exactly one current row, intact supersedes chain and correct Case version. Never a write that observes a post-switch nonprimary Case as primary.
 
 ---
 
@@ -859,7 +859,7 @@ After each injected failure, formulation/version/current, Case phase/version, ev
 **Maps:** FR-005–FR-007, FR-015, FR-016, FR-030; AS-1–4; user A/B/G/I/J
 
 **What**  
-Complete integration coverage for success/rejection of Start and Present, including traceable statement, Evidence fidelity, primary/Safety and zero out-of-scope objects.
+Complete integration coverage for success/rejection of Start and Present, including traceable statement, Evidence fidelity, server-truth Consent/compliance, primary/Safety, mandatory dependency completeness and zero out-of-scope objects.
 
 **Where**  
 `tests/integration/problem-formulations-start-present.test.ts`
@@ -868,7 +868,7 @@ Complete integration coverage for success/rejection of Start and Present, includ
 T835–T838.
 
 **How to verify**  
-AS-1–4 and A/B/G/I/J each have named assertions and DB row checks.
+AS-1–4 and A/B/G/I/J each have named assertions and DB row checks, plus named negatives for missing Consent, revoked Consent, stale/notice-mismatched Consent, UNDER_14 processing blocked, mandatory dependency omitted and client dependency set incomplete.
 
 ---
 
@@ -877,7 +877,7 @@ AS-1–4 and A/B/G/I/J each have named assertions and DB row checks.
 **Maps:** FR-008, FR-009, FR-013–FR-018, FR-024, FR-026; AS-5–9/16–19/21; user C/H/I/J
 
 **What**  
-Cover populated/empty current, Confirm success, stale/noncurrent/wrong-status/dependency invalid, wrong family/actor, nonprimary, Safety, AI/system boundary.
+Cover populated/empty current, Confirm success, stale/noncurrent/wrong-status/dependency invalid, server-mandatory dependency completeness, server-truth Consent/compliance revalidation, wrong family/actor, nonprimary, Safety, AI/system boundary.
 
 **Where**  
 `tests/integration/problem-formulations-current-confirm.test.ts`
@@ -886,7 +886,7 @@ Cover populated/empty current, Confirm success, stale/noncurrent/wrong-status/de
 T835–T838.
 
 **How to verify**  
-AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the real actor Person only.
+AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the real actor Person only. Explicit negatives: missing/revoked/stale Consent, UNDER_14 processing blocked, mandatory dependency omitted from stored current, and Confirm-time server mandatory set not contained in current valid dependency set.
 
 ---
 
@@ -895,7 +895,7 @@ AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the 
 **Maps:** FR-003, FR-004, FR-010–FR-012, FR-020, FR-027; AS-10–12/15/25; user D/E/F/K
 
 **What**  
-Cover Dispute phase stability, Confirm-after-dispute conflict, correction complete new version/history, Reassess unchanged formulation, post-Reassess Present and GOALS correction rejection.
+Cover Dispute phase stability, Confirm-after-dispute conflict, correction complete new version/history, Correction dependency anti-strip/incomplete-set rejection, Consent/compliance rejection on Dispute/Correction/Reassess, Reassess unchanged formulation, post-Reassess Present and GOALS correction rejection.
 
 **Where**  
 `tests/integration/problem-formulations-response-flow.test.ts`

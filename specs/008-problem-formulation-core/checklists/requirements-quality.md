@@ -116,10 +116,13 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-060 | assertion/observation current validity checks supersession + validity window | stale Evidence can Confirm |
 | CQ-061 | UNKNOWN/NOT_COLLECTED/DECLINED cannot satisfy positive support | unknown is promoted to fact |
 | CQ-062 | conflicts retain all relevant sides/no winner | one source can silently overwrite conflict |
+| CQ-062A | ConflictItem accepts group-only with server resolver proof or no-group + >=2 distinct refs; mixed group+refs must agree | OpenAPI/domain requires refs unconditionally, accepts one-ref/no-group, or lets group and refs contradict |
 | CQ-063 | primary problem and each key factor require positive support | unsupported deterministic claim can persist |
 | CQ-064 | nested evidence refs are reconciled to top-level snapshot | hidden/untracked support refs can exist |
 | CQ-065 | dependency union is traceable and bounded | dependency payload embeds arbitrary bodies |
 | CQ-066 | Confirm revalidates all determinable dependencies | dependency validation happens only at Present |
+| CQ-066A | **Client cannot strip mandatory dependency**: server derives mandatory Evidence/current UNDER_14 Consent refs and Present/Correction require mandatory ⊆ complete candidate dependency set | caller-provided dependencyRefs are treated as the full truth |
+| CQ-066B | Confirm re-derives server mandatory dependencies and proves mandatory(now) ⊆ current valid stored dependencies | Confirm only loops over whatever refs were previously stored |
 | CQ-067 | unsupported future dependency registry is reported as not currently verifiable, not guessed valid | false verification claim |
 | CQ-068 | NEEDS_REVIEW propagation remains explicitly deferred | future propagation engine is partially invented |
 
@@ -136,6 +139,7 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-073 | Reassess: PROBLEM_FORMULATION→ASSESSMENT only | actual Assessment workflow is executed |
 | CQ-074 | all six successful writes increment existing `cases.version` | stale aggregate changes can be invisible to optimistic concurrency |
 | CQ-075 | public stale Case control uses `If-Match` as a transport of existing Case version only | a second business version is invented |
+| CQ-075A | every DB-backed integer version is capped at 2147483647 and If-Match is parsed/range-checked before SQL; 2147483648 is rejected | JS-safe-integer max leaks into contract or DB overflow can become 500 |
 | CQ-076 | internal commands receive expected Case version | internal path can bypass stale-view protection |
 
 ---
@@ -147,6 +151,9 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-077 | GET current reuses CASE_READ | redundant read action changes permissions |
 | CQ-078 | six mutation actions are additive Case actions under FAMILY_MANAGEMENT | new role/purpose/resource matrix |
 | CQ-079 | authorization uses authoritative same-transaction facts | caller-provided role/manager flag is trusted |
+| CQ-079A | processed Person set is server-derived from actor + Case creator + ACTIVE participants + authoritative Evidence subject/source refs | caller chooses who is subject to processing compliance |
+| CQ-079B | **Consent/Compliance revalidated from server truth** with existing compliance seams for every Slice 8 mutation | authorization success is treated as proof that Consent/compliance is still valid |
+| CQ-079C | **UNDER_14 processing gate cannot be bypassed**; current Consent id/version/notice must still satisfy existing gate | missing/revoked/stale Consent or stripped dependency can continue processing |
 | CQ-080 | recognized no-access cases collapse to CASE_NOT_FOUND without swallowing infrastructure failure | enumeration leak or fake 404 for 5xx |
 | CQ-081 | new table ENABLE + FORCE RLS | RLS optional/not forced |
 | CQ-082 | RLS is Family isolation, not a replacement for authorize() | manager/business policy is duplicated into SQL |
@@ -183,6 +190,7 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-099 | Present/Correction current creation is protected by lock + DB uniqueness | dual current possible |
 | CQ-100 | all required pairwise races have expected loser semantics | “concurrency tested” is generic |
 | CQ-101 | SwitchPrimaryCase races share the Family serialization point | primary guard can race with demotion |
+| CQ-101A | Present/Switch, Confirm/Switch, **Correction/Switch**, and Reassess/Switch are each explicit real-concurrency tests | Correction is hidden behind a generic “non-phase mutation” or substituted by Dispute |
 
 ---
 
@@ -224,6 +232,7 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-119 | GET current has a concrete true-empty response | absence semantics remain undecided |
 | CQ-120 | mutations declare Idempotency-Key + If-Match | retry/stale Case contract absent |
 | CQ-121 | strict schemas reject server-owned fields | client can set status/version/confirmed_by |
+| CQ-121A | OpenAPI/Zod ConflictItem and DB-backed version bounds match the domain rules | contract still requires evidenceRefs for group-only or exposes >2147483647 |
 | CQ-122 | Correction body is patch input but response/new row is complete version | patch-only persistence |
 | CQ-123 | error categories preserve 404 anti-enumeration/409 conflicts/422 validation | semantic categories collapse |
 | CQ-124 | frozen YAML is added to semantic-equivalence union | generated contract can drift silently |
@@ -240,6 +249,7 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-128 | frozen acceptance scenarios 1–25 are all mapped | any scenario has no mechanical evidence |
 | CQ-129 | user-required A–K scenarios are all mapped | any A–K scenario is missing |
 | CQ-130 | wrong family/actor/case/nonprimary/phase/Safety/Closed/stale/superseded/dependency/retry paths exist | major negative path omitted |
+| CQ-130A | named negatives cover missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted, dependency stripped by Correction, client dependency set incomplete, and 2147483647/2147483648 boundaries | any S8-PA-001/003 bypass remains untested |
 | CQ-131 | real concurrent requests are used for race tests | concurrency is mocked/sequential only |
 | CQ-132 | transaction fault injection verifies zero partial writes | atomicity only inferred from BEGIN/COMMIT |
 | CQ-133 | AI/system-confirm negative persistence check exists | only type-level assertion |

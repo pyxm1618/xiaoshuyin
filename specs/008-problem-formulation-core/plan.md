@@ -108,6 +108,8 @@ Existing and reused:
 - `withRlsTransaction()`
 - Family manager fact = `families.created_by_person_id`
 - runtime role `xiaoshuyin_app` is not table owner and has `NOBYPASSRLS`
+- existing minor-processing truth is owned by `@xiaoshuyin/compliance`: `getComplianceProfileForUpdate()`, `getConsentRecordForGate()`, `getCurrentNoticeHash()`, and the pure `assertMinorProcessingAllowed()` gate
+- current Evidence and Participation writers already compose those same compliance seams; Slice 8 must reuse them rather than restating consent validity in a second framework
 
 Slice 8 adds Case-scoped actions to the closed authorization registry; it does not create RBAC, Case roles, a Visibility Matrix, or a new Purpose.
 
@@ -297,6 +299,13 @@ The validator mechanically checks:
 - `primary_problem` and each `key_factor` reference at least one currently valid, non-unknown, non-conflict supporting Evidence ref;
 - nested refs in problem/factors/unknowns/conflicts are members of the top-level `evidence_refs` snapshot.
 
+`ConflictItem` has two and only two legal proof forms:
+
+1. **group form** — `conflictGroupId` is present. `evidenceRefs` may be absent/empty or may carry explicit refs. The server resolver must expand that real Evidence conflict group and prove at least two distinct conflicting sides in the same Family/Case.
+2. **explicit-pair form** — `conflictGroupId` is absent. `evidenceRefs` must contain at least two distinct refs and the resolver must prove they are genuinely conflicting.
+
+If both `conflictGroupId` and `evidenceRefs` are supplied, every explicit ref must resolve into that same group and the explicit set must not contradict the server-expanded group. A missing/unresolvable group, a one-ref no-group item, duplicate refs, cross-Case refs, or group/refs disagreement is invalid. The server never accepts client text as proof of conflict.
+
 ### 5.4 DependencyRef
 
 Structured union:
@@ -310,6 +319,16 @@ CONTENT_VERSION → stable key + version
 ```
 
 Slice 8 persists these refs and validates all targets that current main can authoritatively resolve. Evidence is always revalidated. Consent/Policy/Package/Content refs that current main can prove invalid block confirmation. A ref type for which no authoritative runtime registry exists is preserved but is **not falsely reported as verified**.
+
+Client/caller-supplied `dependencyRefs` are therefore a candidate snapshot, **not** the complete dependency truth. Before Present or Correction persists a candidate, the server independently derives a mandatory set from authoritative current-main facts:
+
+- every top-level formulation `EvidenceRef` produces a mandatory `EVIDENCE` dependency;
+- every processed `UNDER_14` Person that passes the existing minor-processing gate produces a mandatory `CONSENT` dependency using the current `person_compliance_profiles.guardian_consent_record_id + guardian_consent_version`, with that id/version checked against `getConsentRecordForGate()`;
+- `POLICY / PACKAGE / CONTENT_VERSION` become server-mandatory only when an authoritative current-main registry/resolver actually identifies such a dependency. The pinned implementation base has no such general registry, so Slice 8 must not invent one or pretend those client refs are server-proven.
+
+After canonical normalization/deduplication, `serverMandatoryDependencies ⊆ candidate.dependencyRefs` is required. Missing mandatory refs are rejected; the server does not silently let a caller redefine the required set. Correction performs this check on the **complete merged candidate**, so a patch cannot strip a mandatory dependency.
+
+At Confirm, the server re-derives the mandatory set from current Case/Person/Evidence/compliance truth, revalidates every determinable stored dependency, and requires `serverMandatoryDependencies(now) ⊆ currentFormulation.dependencyRefs(valid now)`. Confirm cannot rely only on whatever refs the caller happened to preserve in an earlier version.
 
 The future propagation engine (`Evidence correction / consent withdrawal / policy or package retirement → NEEDS_REVIEW`) remains deferred. No `artifact_dependencies` table is created.
 
@@ -347,6 +366,10 @@ This is a transport representation of `cases.version`, **not** a new business ve
 - GET current and mutation responses expose `caseVersion` and an equivalent `ETag` so clients can submit the next command without a second version source.
 
 Internal commands take `expectedCaseVersion: number` in their application-service input and apply the same locked comparison.
+
+Every version that maps to an existing PostgreSQL `integer` is bounded to `1..2147483647` at the public/Zod/domain boundary: formulation `version`, `supersedesVersion`, `caseVersion` / `expectedCaseVersion`, and current-main versioned Consent dependencies. No Slice 8 migration changes any of those columns to `bigint`.
+
+`If-Match` is a string transport wrapper, so its regex is only the lexical first gate. Before any repository call or SQL parameter is constructed, the route/service must strip the exact `"case-v"` wrapper, parse the decimal integer, require `Number.isInteger` and `1 <= value <= 2147483647`, and reject overflow/out-of-range as `422 VALIDATION_ERROR`. Thus `"case-v2147483647"` is valid syntax/range while `"case-v2147483648"` is rejected before DB access. Path `:version` and JSON numeric versions use the same upper bound.
 
 ---
 
@@ -389,7 +412,49 @@ This makes “AI/system confirms on behalf of user” structurally unreachable t
 
 `withRlsTransaction()` must establish the authenticated identity/Family database context before authorization facts can be read. That infrastructure step is **not** a Problem Formulation business read/write. Inside that transaction, `authorize()` must complete before any target formulation business read or mutation, Evidence-dependent decision, idempotent business outcome, or phase/status write. This preserves the frozen “authorize before business operation” rule while reusing the actual current authorization architecture.
 
-### 7.4 Anti-enumeration
+### 7.4 Existing consent/compliance processing gate
+
+Authorization is necessary but not sufficient for processing. Each Slice 8 mutation, after the Family/Case serialization locks and before any business mutation, derives a server-owned, sorted/distinct `processingPersonIds` set from existing truth only:
+
+```text
+verified actor.personId
++ locked cases.created_by_person_id
++ case_participants.person_id WHERE case_id = target AND state = ACTIVE
++ Person refs on the command's authoritative Evidence set:
+    DIALOGUE_MESSAGE.source_person_id
+    ASSERTION.subject_person_id + source_person_id
+    OBSERVATION.subject_person_id + source_person_id
+```
+
+Nulls are discarded and ids are deduplicated/sorted before compliance row locks. `PENDING / DECLINED / EXPIRED / WITHDRAWN` participation history does not add a Person by itself; if that Person is independently the actor, Case creator, or Evidence subject/source, the other rule still includes them. Participation contributes no formulation visibility or authority.
+
+The authoritative Evidence set is command-specific:
+
+- StartAssessment: the server-resolved traceable statement carrier used to satisfy the Start precondition;
+- PresentProblemFormulation: the complete candidate's top-level `evidenceRefs`;
+- ConfirmProblemFormulation: the locked current formulation's top-level `evidenceRefs`;
+- DisputeProblemFormulation: the locked current formulation's top-level `evidenceRefs`;
+- CorrectProblemFormulation: the complete server-merged candidate's top-level `evidenceRefs`;
+- ReassessFromFormulation: the locked current formulation's top-level `evidenceRefs`.
+
+For every Person id, Slice 8 must call the **existing** seams in the same transaction: `getComplianceProfileForUpdate()`; if the profile points to a consent, `getConsentRecordForGate()`; then the existing pure `assertMinorProcessingAllowed(personId, { getProfile, getConsentRecord, getCurrentNoticeHash })`. Any `BLOCK` fails the command before formulation/Case/event/audit mutation. Slice 8 does not copy the age/guardian/notice decision tree.
+
+For an `UNDER_14` ALLOW, the profile's `guardian_consent_record_id` and `guardian_consent_version` must both be present and must match the returned Consent row id/version. Missing Consent, `REVOKED`, stale/mismatched notice, subject/guardian mismatch, or stale profile-to-consent id/version blocks processing. The ongoing processing gate does **not** invent a new expiry rule from the onboarding-request TTL; “stale/expired” means invalid under the existing processing truth (for example current notice mismatch or stale/missing current Consent pointer/version).
+
+Safety remains the existing locked Case-status predicate, not a new Safety engine: the service reads the authoritative `CaseRow` through the existing Case repository lock seam (`getCaseForUpdate()` / the Slice 8 wrapper that preserves the same row contract) and maps `SAFETY_HOLD` to the existing `SAFETY_HOLD_BLOCKED` error and `CLOSED` to `CASE_CLOSED`.
+
+### 7.5 Command gate matrix
+
+| Command | Authorization seam | Consent / compliance seam | Safety / Closed seam | Mandatory dependency completeness |
+|---|---|---|---|---|
+| StartAssessment | `requireFamilyAction(... CASE_START_ASSESSMENT, FAMILY_MANAGEMENT, CASE ...)` → existing `authorize()` | §7.4 over actor + Case creator + ACTIVE participants + selected traceable-statement Person refs | locked `CaseRow.status` | N/A; no formulation dependency snapshot exists |
+| PresentProblemFormulation | `requireFamilyAction(... CASE_PRESENT_PROBLEM_FORMULATION ...)` | §7.4 over complete candidate Evidence Person refs plus Case/actor/ACTIVE participants | locked `CaseRow.status` | derive server mandatory set; require it to be a subset of candidate `dependencyRefs` before insert |
+| ConfirmProblemFormulation | `requireFamilyAction(... CASE_CONFIRM_PROBLEM_FORMULATION ...)` | §7.4 re-read from current server truth immediately before confirmation | locked `CaseRow.status` | re-derive mandatory set now; require it to be contained in the current valid stored dependency set |
+| DisputeProblemFormulation | `requireFamilyAction(... CASE_DISPUTE_PROBLEM_FORMULATION ...)` | §7.4 over current formulation Evidence Person refs; no consent/compliance bypass merely because content is unchanged | locked `CaseRow.status` | no dependency mutation; Confirm-level completeness is not substituted by Dispute |
+| CorrectProblemFormulation | `requireFamilyAction(... CASE_CORRECT_PROBLEM_FORMULATION ...)` | §7.4 over the **complete merged candidate** | locked `CaseRow.status` | re-derive after merge; a correction that removes/omits any mandatory ref is rejected |
+| ReassessFromFormulation | `requireFamilyAction(... CASE_REASSESS_FROM_FORMULATION ...)` | §7.4 over current formulation Evidence Person refs | locked `CaseRow.status` | no dependency mutation; existing current dependency snapshot remains unchanged |
+
+### 7.6 Anti-enumeration
 
 For the four public routes, after current Family resolution:
 
@@ -451,8 +516,8 @@ For a newly acquired key, deterministic business 4xx outcomes after authorizatio
 | Allowed Case phase | `INTAKE` only |
 | Allowed formulation status | no formulation required; command creates none |
 | Actor | real current Family V1 manager Account/Person |
-| Authorization | `CASE_START_ASSESSMENT`, `FAMILY_MANAGEMENT`, Case resource |
-| Consent/compliance | existing applicable authorization/consent/compliance truth may not be bypassed; no new consent model |
+| Authorization | existing `requireFamilyAction()` → `authorize()` with `CASE_START_ASSESSMENT`, `FAMILY_MANAGEMENT`, Case resource |
+| Consent/compliance | run §7.4 server-derived processed-Person set through existing compliance seams; any BLOCK stops Start |
 | Primary/Safety | primary required; `SAFETY_HOLD`/`CLOSED` blocked |
 | Case version | required `expectedCaseVersion`; locked exact match |
 | Formulation version/current | N/A |
@@ -476,13 +541,13 @@ This command never creates `assessment_sessions`, questionnaires, scene state, A
 | Allowed Case phase | `ASSESSMENT` only |
 | Allowed formulation status | none for first version; an existing current may be `PRESENTED/DISPUTED/NEEDS_REVIEW` only after a prior Reassess |
 | Actor | real current Family V1 manager Account/Person request context |
-| Authorization | `CASE_PRESENT_PROBLEM_FORMULATION` |
-| Consent/compliance | existing applicable truth cannot be bypassed |
+| Authorization | existing `requireFamilyAction()` → `authorize()` with `CASE_PRESENT_PROBLEM_FORMULATION`, `FAMILY_MANAGEMENT`, Case resource |
+| Consent/compliance | run §7.4 on the complete candidate's server-derived Person set; existing minor-processing/Consent truth must ALLOW |
 | Primary/Safety | primary required; Safety/Closed blocked |
 | Case version | required and locked exact match |
 | Formulation version/current | server allocates `1` or `current+1`; caller cannot specify |
 | Input | complete `ProblemFormulationContentInput`; no server-owned fields |
-| Evidence/dependency | full §5 validation, at least one current-valid Evidence ref |
+| Evidence/dependency | full §5 validation, at least one current-valid Evidence ref, plus server-derived mandatory dependency completeness before persistence |
 | Business writes | old current → SUPERSEDED if present; insert complete new PRESENTED version; Case phase/version update |
 | Formulation status effect | new `PRESENTED`; old current `SUPERSEDED` |
 | Case phase effect | `ASSESSMENT → PROBLEM_FORMULATION` |
@@ -502,13 +567,13 @@ No observable/persistent DRAFT is created. Future Assessment/AI is merely a call
 | Allowed Case phase | `PROBLEM_FORMULATION` |
 | Allowed formulation status | current `PRESENTED` only |
 | Actor | real current Family V1 manager; never AI/system |
-| Authorization | `CASE_CONFIRM_PROBLEM_FORMULATION` |
-| Consent/compliance | current determinable dependency/consent/policy validity rechecked |
+| Authorization | existing `requireFamilyAction()` → `authorize()` with `CASE_CONFIRM_PROBLEM_FORMULATION`, `FAMILY_MANAGEMENT`, Case resource |
+| Consent/compliance | re-run §7.4 from current server truth immediately before Confirm, including current UNDER_14 Consent id/version/notice checks |
 | Primary/Safety | primary required; Safety/Closed blocked |
 | Case version | `If-Match` required, locked exact match |
 | Formulation version/current | path version must equal locked current version |
 | Input | strict `{ note?: string }`; no formulation/server fields |
-| Evidence/dependency | realtime revalidation immediately before confirmation |
+| Evidence/dependency | realtime Evidence/dependency validation plus §5 server-mandatory-set re-derivation and subset proof immediately before confirmation |
 | Business writes | status CONFIRMED, confirmed_by verified Person, server confirmed_at, latest user_response=CONFIRM, Case phase/version update |
 | Formulation status effect | `PRESENTED → CONFIRMED` |
 | Case phase effect | `PROBLEM_FORMULATION → GOALS` |
@@ -528,8 +593,8 @@ This is the **only Slice 8 path into `GOALS`**.
 | Allowed Case phase | `PROBLEM_FORMULATION` |
 | Allowed formulation status | current `PRESENTED` only |
 | Actor | real current Family V1 manager |
-| Authorization | `CASE_DISPUTE_PROBLEM_FORMULATION` |
-| Consent/compliance | no bypass of existing gates |
+| Authorization | existing `requireFamilyAction()` → `authorize()` with `CASE_DISPUTE_PROBLEM_FORMULATION`, `FAMILY_MANAGEMENT`, Case resource |
+| Consent/compliance | run §7.4 over the locked current formulation's server-derived Person set before recording Dispute |
 | Primary/Safety | primary required; Safety/Closed blocked |
 | Case version | `If-Match` required |
 | Formulation version/current | path version must be current |
@@ -554,13 +619,13 @@ Dispute does **not** invoke Reassess.
 | Allowed Case phase | `PROBLEM_FORMULATION` |
 | Allowed formulation status | current `PRESENTED / DISPUTED / NEEDS_REVIEW` |
 | Actor | real current Family V1 manager |
-| Authorization | `CASE_CORRECT_PROBLEM_FORMULATION` |
-| Consent/compliance | no bypass; full merged result revalidated |
+| Authorization | existing `requireFamilyAction()` → `authorize()` with `CASE_CORRECT_PROBLEM_FORMULATION`, `FAMILY_MANAGEMENT`, Case resource |
+| Consent/compliance | run §7.4 over the complete merged candidate; caller cannot remove a Person/Consent gate by patching dependencyRefs |
 | Primary/Safety | primary required; Safety/Closed blocked |
 | Case version | `If-Match` required |
 | Formulation version/current | path version must be current; server allocates +1 |
 | Input | strict `{ changes: <partial content>, note?: string }`; at least one substantive changed content field; no server fields |
-| Evidence/dependency | merge then validate the **complete** resulting formulation using the same Present rules |
+| Evidence/dependency | merge then validate the **complete** resulting formulation using the same Present rules; re-derive mandatory dependencies after merge and reject any stripped/omitted mandatory ref |
 | Business writes | old row status→SUPERSEDED; insert full new PRESENTED row with correction user_response and no confirmation; Case version+1 |
 | Formulation status effect | old allowed status→SUPERSEDED; new→PRESENTED |
 | Case phase effect | unchanged `PROBLEM_FORMULATION` |
@@ -579,8 +644,8 @@ The server performs `current complete content + changes → complete candidate �
 | Allowed Case phase | `PROBLEM_FORMULATION` |
 | Allowed formulation status | any existing current formulation status that remains in `PROBLEM_FORMULATION`; `CONFIRMED` is unreachable because its Case phase is GOALS |
 | Actor | real user request context |
-| Authorization | `CASE_REASSESS_FROM_FORMULATION` |
-| Consent/compliance | existing applicable gates not bypassed |
+| Authorization | existing `requireFamilyAction()` → `authorize()` with `CASE_REASSESS_FROM_FORMULATION`, `FAMILY_MANAGEMENT`, Case resource |
+| Consent/compliance | run §7.4 over the locked current formulation's server-derived Person set before phase re-entry |
 | Primary/Safety | primary required; Safety/Closed blocked |
 | Case version | required expected Case version |
 | Formulation version/current | current row must exist and is locked; not modified |
@@ -638,7 +703,9 @@ It is not a new primary mechanism. It reuses Slice 7's serialization point so a 
 | Reassess / Confirm | exactly one phase outcome; loser 409 |
 | Present / SwitchPrimaryCase | Family lock orders them; if switch wins and demotes target, Present is non-primary conflict |
 | Confirm / SwitchPrimaryCase | same; no confirmation on a Case that was already demoted before its serialized turn |
+| Correction / SwitchPrimaryCase | same Family serialization point; if switch wins/demotes first, Correction must return non-primary conflict with zero supersede/insert; if Correction wins first, old→SUPERSEDED + new current + Case version bump complete before switch |
 | Reassess / SwitchPrimaryCase | same; no reassessment on a demoted Case |
+| Dispute / SwitchPrimaryCase | recommended additional coverage; same serialization rule, but it does not substitute for the mandatory Correction race |
 | same key concurrent | exactly one command result; all peers replay it |
 | stale Case version | 409, zero business mutation |
 
@@ -983,7 +1050,10 @@ Must cover every command and pure transition decision:
 - Reassess leaves formulation untouched;
 - state/phase transition matrix;
 - Evidence unknown/conflict/DECLINED fidelity;
-- dependency validity decisions;
+- dependency validity decisions, server-mandatory completeness, and Correction anti-strip behavior;
+- existing consent/compliance gate composition over the server-derived Person set, including missing/revoked/stale Consent and blocked UNDER_14 processing;
+- ConflictItem group-only / explicit-pair / mixed-consistency validation;
+- PostgreSQL-integer version boundaries, including 2147483647 accepted and 2147483648 rejected before repository/SQL;
 - primary/Safety/Closed guards;
 - authorization actions;
 - Case/formulation version checks;
@@ -1019,7 +1089,12 @@ stale Case version
 stale formulation version
 SUPERSEDED / wrong status
 dependency invalid
+mandatory dependency omitted / client dependency set incomplete
+dependency stripped by Correction
+missing / revoked / stale-or-notice-mismatched Consent
+UNDER_14 processing blocked
 Evidence invalid / expired / superseded
+version boundary: 2147483647 valid; 2147483648 rejected before DB for path/body/caseVersion/If-Match as applicable
 retry / same-key replay
 same-key mismatch
 all required races
@@ -1034,6 +1109,8 @@ transaction fault injection / atomic rollback
 - runtime routes match generated OpenAPI;
 - no public Start/Present/Reassess/create/history endpoint;
 - strict bodies reject server-owned/undeclared fields;
+- ConflictItem contract proves group-only valid, explicit distinct pair valid, one-ref/no-group invalid, unresolvable group invalid, and group+refs consistency is a domain requirement;
+- all DB-backed integer version schemas cap at 2147483647; `If-Match` lexical validation is followed by numeric parse/range validation before SQL;
 - `Idempotency-Key` and `If-Match` are declared on mutations;
 - generated types are from the formal generator only.
 
@@ -1081,10 +1158,11 @@ Before the first implementation edit, the Development AI must re-run/record the 
 - Slice 7 Family → Case lock order and `lockFamilyForPrimaryDecision`-equivalent seam remain canonical;
 - no new command has introduced an opposite Case→Family order.
 
-### G5 — authorization/RLS
+### G5 — authorization/RLS + existing processing compliance
 
 - `authorize()` remains the sole business authorization entry;
 - `withRlsTransaction` still establishes identity + Family context;
+- `getComplianceProfileForUpdate()`, `getConsentRecordForGate()`, `getCurrentNoticeHash()` and `assertMinorProcessingAllowed()` remain the current minor-processing truth; no competing consent/compliance framework has appeared;
 - app role remains non-owner/NOBYPASSRLS.
 
 ### G6 — Evidence carrier/validity

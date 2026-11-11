@@ -256,7 +256,7 @@ components:
       schema:
         type: integer
         minimum: 1
-        maximum: 9007199254740991
+        maximum: 2147483647
 
     IdempotencyKeyHeader:
       name: Idempotency-Key
@@ -272,18 +272,18 @@ components:
       name: If-Match
       in: header
       required: true
-      description: Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version.
+      description: Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version. Runtime must parse the decimal payload and reject values outside 1..2147483647 before repository/SQL access; the regex is only a lexical gate.
       schema:
         type: string
-        pattern: '^"case-v[1-9][0-9]*"$'
+        pattern: '^"case-v[1-9][0-9]{0,9}"$'
         example: '"case-v12"'
 
   headers:
     CaseVersionETag:
-      description: ETag derived only from the current cases.version.
+      description: ETag derived only from the current PostgreSQL-integer cases.version (1..2147483647).
       schema:
         type: string
-        pattern: '^"case-v[1-9][0-9]*"$'
+        pattern: '^"case-v[1-9][0-9]{0,9}"$'
         example: '"case-v13"'
 
   schemas:
@@ -395,10 +395,21 @@ components:
           format: uuid
         evidenceRefs:
           type: array
-          minItems: 2
+          uniqueItems: true
           items:
             $ref: '#/components/schemas/EvidenceRef'
-      required: [topic, evidenceRefs]
+      required: [topic]
+      anyOf:
+        - required: [conflictGroupId]
+        - required: [evidenceRefs]
+          properties:
+            evidenceRefs:
+              minItems: 2
+      description: >-
+        Either conflictGroupId is present and the server resolver proves at least
+        two real conflicting sides, or conflictGroupId is absent and evidenceRefs
+        contains at least two distinct refs. If both are present, domain validation
+        must prove every explicit ref is consistent with the resolved group.
 
     TextCondition:
       type: object
@@ -451,7 +462,7 @@ components:
         version:
           type: integer
           minimum: 1
-          maximum: 9007199254740991
+          maximum: 2147483647
       required: [type, id]
 
     VersionedKeyDependencyRef:
@@ -542,7 +553,7 @@ components:
         version:
           type: integer
           minimum: 1
-          maximum: 9007199254740991
+          maximum: 2147483647
         status:
           $ref: '#/components/schemas/ProblemFormulationStatus'
         primaryProblem:
@@ -598,7 +609,7 @@ components:
         supersedesVersion:
           type: integer
           minimum: 1
-          maximum: 9007199254740991
+          maximum: 2147483647
           nullable: true
         createdAt:
           type: string
@@ -635,7 +646,7 @@ components:
         caseVersion:
           type: integer
           minimum: 1
-          maximum: 9007199254740991
+          maximum: 2147483647
         current:
           nullable: true
           allOf:
