@@ -175,7 +175,7 @@ Tests compile against planned exported types or remain intentionally RED with ex
 **Maps:** FR-007, FR-009, FR-026, FR-030; AS-2/4/8/22
 
 **What**  
-Test same-Case refs, superseded/expired refs, unknown states, DECLINED, positive support, traceable problem statement and determinable dependency invalidity. Add exact ConflictItem cases (group-only valid, explicit two-distinct-ref valid, one-ref/no-group invalid, unresolvable group invalid, group+refs mismatch invalid) and mandatory-dependency completeness cases (server-required Evidence/Consent omitted, client set incomplete).
+Test same-Case refs, superseded/expired refs, unknown states, DECLINED, positive support, traceable problem statement and determinable dependency invalidity. Add exact ConflictItem cases (group-only valid, explicit two-distinct-ref valid, one-ref/no-group invalid, unresolvable group invalid, group+refs mismatch invalid). Mechanically prove `authoritativeEvidenceSet = top-level refs UNION every server-resolved conflict-group side`, and prove mandatory-dependency completeness includes group-resolved Evidence/Consent rather than only top-level refs.
 
 **Why**  
 Evidence fidelity is a core invariant, not a later integration detail.
@@ -187,7 +187,7 @@ Evidence fidelity is a core invariant, not a later integration detail.
 T805.
 
 **How to verify**  
-Every frozen Evidence failure mode has an explicit expected domain error/category; contract/domain tests prove the five ConflictItem forms and prove client dependency refs cannot redefine or omit the server-derived mandatory set.
+Every frozen Evidence failure mode has an explicit expected domain error/category; contract/domain tests prove the five ConflictItem forms and prove client dependency refs cannot redefine or omit the server-derived mandatory set. Mandatory cases include group-only conflict → resolved Evidence A/B both present in `authoritativeEvidenceSet`, and omission of either resulting mandatory EVIDENCE dependency is rejected.
 
 ---
 
@@ -305,7 +305,7 @@ T807 green; no Assessment/Scene/Goal/AI import/dependency exists.
 **Maps:** FR-007, FR-009, FR-026, FR-030
 
 **What**  
-Implement read-only resolvers for dialogue/assertion/observation refs, successor/validity classification, conflict/unknown preservation, positive-support proof and traceable-problem-statement check. Add the server-side conflict-group resolver needed for group-only ConflictItem proof and read-only resolvers that expose Evidence subject/source Person ids for the Slice 8 processing-Person derivation.
+Implement read-only resolvers for dialogue/assertion/observation refs, successor/validity classification, conflict/unknown preservation, positive-support proof and traceable-problem-statement check. Add the server-side conflict-group resolver needed for group-only ConflictItem proof and a `deriveAuthoritativeEvidenceSet(content)` seam that canonicalizes/deduplicates `top-level evidenceRefs UNION all Evidence sides returned by every resolveConflictGroup(conflictGroupId)`. Resolver-expanded sides are retained as downstream processing truth, not discarded after ConflictItem validation. Add read-only resolvers that expose subject/source Person ids for every member of that authoritative set.
 
 **Why**  
 Present/Correction/Confirm must reason from current Slice 3 facts without duplicating Evidence.
@@ -441,7 +441,7 @@ Dedicated internal-service integration tests: success, no statement, nonprimary,
 **Maps:** FR-006, FR-007, FR-015–FR-021, FR-023, FR-029; AS-3/4/22/24
 
 **What**  
-Implement internal Present with complete content validation, Evidence fidelity, server-derived processing-Person compliance gate, mandatory dependency derivation and completeness proof, version allocation, optional old-current supersession after Reassess, Case phase/version update and atomic history.
+Implement internal Present with complete content validation, resolve every conflict group into the candidate `authoritativeEvidenceSet`, validate every authoritative Evidence member, derive processing Persons from that set, run the existing compliance gate, derive mandatory dependencies from that set and prove candidate completeness before version allocation, optional old-current supersession after Reassess, Case phase/version update and atomic history.
 
 **Why**  
 This is the sole internal bridge from ASSESSMENT into a current PRESENTED formulation.
@@ -454,7 +454,7 @@ This is the sole internal bridge from ASSESSMENT into a current PRESENTED formul
 T819.
 
 **How to verify**  
-Version-1 and post-Reassess version-N integration tests; invalid Evidence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted, and client dependency set incomplete all yield zero formulation/phase mutation. No DRAFT/AI/Scene side effect.
+Version-1 and post-Reassess version-N integration tests; invalid Evidence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted, and client dependency set incomplete all yield zero formulation/phase mutation. Mandatory group-only cases: a conflict group that expands to an UNDER_14 subject/source executes the existing consent gate; omission of any expanded side's mandatory EVIDENCE dependency rejects Present. No DRAFT/AI/Scene side effect.
 
 ---
 
@@ -463,7 +463,7 @@ Version-1 and post-Reassess version-N integration tests; invalid Evidence, missi
 **Maps:** FR-008, FR-009, FR-013–FR-021, FR-023, FR-026; AS-6/7/8/9/11/13/14/24
 
 **What**  
-Implement current PRESENTED confirmation with realtime server-truth processing-Person compliance revalidation, mandatory dependency re-derivation + subset proof, determinable stored dependency/Evidence validation, real-user confirmer, Case GOALS/version update, event/audit/idempotency.
+Implement current PRESENTED confirmation by re-resolving every stored `conflictGroupId` from current server truth, rebuilding `authoritativeEvidenceSet(now)`, revalidating every authoritative Evidence member, deriving processing Persons and running existing compliance, then re-deriving mandatory dependencies + subset proof before real-user confirmation, Case GOALS/version update, event/audit/idempotency.
 
 **Why**  
 Confirm is the only legal Slice 8 path into GOALS and the highest-authority mutation.
@@ -476,7 +476,7 @@ Confirm is the only legal Slice 8 path into GOALS and the highest-authority muta
 T820.
 
 **How to verify**  
-Internal service tests prove exact guards, AI/system absence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted from stored current, stale dependency refusal and atomic outcome. Confirm never trusts only the stored/client-supplied dependency list.
+Internal service tests prove exact guards, AI/system absence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted from stored current, stale dependency refusal and atomic outcome. Mandatory verification: a current group-only conflict is re-resolved; if an expanded Evidence side/dependency is now stale, invalid or missing from the current valid mandatory dependency set, Confirm is blocked. Confirm never trusts only top-level refs or the stored/client-supplied dependency list.
 
 ---
 
@@ -485,7 +485,7 @@ Internal service tests prove exact guards, AI/system absence, missing/revoked/st
 **Maps:** FR-010, FR-014–FR-021, FR-023; AS-10/11
 
 **What**  
-Implement PRESENTED→DISPUTED response with the same server-derived processing-Person Consent/compliance gate, Case version bump but no phase change/reassessment.
+Implement PRESENTED→DISPUTED response after rebuilding the current formulation `authoritativeEvidenceSet` (including all conflict-group-resolved sides) and running the same server-derived processing-Person Consent/compliance gate, Case version bump but no phase change/reassessment.
 
 **Why**  
 Owner clarification explicitly requires disagreement without automatic reassessment.
@@ -507,7 +507,7 @@ Service test asserts phase unchanged, repeated different-key dispute conflicts, 
 **Maps:** FR-003, FR-004, FR-011, FR-014–FR-021, FR-023, FR-027; AS-12/24/25
 
 **What**  
-Implement strict partial correction input, complete server merge/revalidation, server-derived processing-Person compliance gate, mandatory dependency re-derivation on the merged result, old SUPERSEDED + new PRESENTED full version, no inherited confirmation, Case version bump. A patch must not be able to strip a server-required dependency.
+Implement strict partial correction input, complete server merge/revalidation, resolve every merged conflict group into `authoritativeEvidenceSet`, derive processing Persons from that set, run existing compliance, and re-derive mandatory dependencies from that set before old SUPERSEDED + new PRESENTED full version, no inherited confirmation, Case version bump. A patch must not be able to strip any server-required dependency, including mandatory EVIDENCE refs that exist only because a group-only conflict expanded on the server.
 
 **Why**  
 Corrections must preserve immutable history and force re-confirmation.
@@ -520,7 +520,7 @@ Corrections must preserve immutable history and force re-confirmation.
 T822.
 
 **How to verify**  
-DB snapshot proves old content byte-equivalent except lifecycle fields; new row is complete; no-op/empty/GOALS/current-stale paths fail as planned. Add negative tests for dependency stripped by Correction, newly required dependency omitted after merge, missing/revoked/stale Consent and UNDER_14 processing blocked; every rejection leaves old current untouched.
+DB snapshot proves old content byte-equivalent except lifecycle fields; new row is complete; no-op/empty/GOALS/current-stale paths fail as planned. Add negative tests for dependency stripped by Correction, newly required dependency omitted after merge, missing/revoked/stale Consent and UNDER_14 processing blocked. Mandatory group-only case: merged content contains a group-only conflict whose resolved Evidence A/B are absent from candidate dependencyRefs → Correction rejects and leaves old current untouched.
 
 ---
 
@@ -859,7 +859,7 @@ After each injected failure, formulation/version/current, Case phase/version, ev
 **Maps:** FR-005–FR-007, FR-015, FR-016, FR-030; AS-1–4; user A/B/G/I/J
 
 **What**  
-Complete integration coverage for success/rejection of Start and Present, including traceable statement, Evidence fidelity, server-truth Consent/compliance, primary/Safety, mandatory dependency completeness and zero out-of-scope objects.
+Complete integration coverage for success/rejection of Start and Present, including traceable statement, Evidence fidelity, `authoritativeEvidenceSet` derivation, server-truth Consent/compliance, primary/Safety, mandatory dependency completeness and zero out-of-scope objects.
 
 **Where**  
 `tests/integration/problem-formulations-start-present.test.ts`
@@ -868,7 +868,7 @@ Complete integration coverage for success/rejection of Start and Present, includ
 T835–T838.
 
 **How to verify**  
-AS-1–4 and A/B/G/I/J each have named assertions and DB row checks, plus named negatives for missing Consent, revoked Consent, stale/notice-mismatched Consent, UNDER_14 processing blocked, mandatory dependency omitted and client dependency set incomplete.
+AS-1–4 and A/B/G/I/J each have named assertions and DB row checks, plus named negatives for missing Consent, revoked Consent, stale/notice-mismatched Consent, UNDER_14 processing blocked, mandatory dependency omitted and client dependency set incomplete. Mandatory Test A: group-only conflict expands to an Evidence side whose subject/source is UNDER_14; that Person enters `processingPersonIds` and missing/revoked/stale/notice-mismatched Consent blocks Present. Mandatory Test B: group-only conflict expands Evidence A+B while candidate dependencyRefs omit A or B; Present rejects.
 
 ---
 
@@ -877,7 +877,7 @@ AS-1–4 and A/B/G/I/J each have named assertions and DB row checks, plus named 
 **Maps:** FR-008, FR-009, FR-013–FR-018, FR-024, FR-026; AS-5–9/16–19/21; user C/H/I/J
 
 **What**  
-Cover populated/empty current, Confirm success, stale/noncurrent/wrong-status/dependency invalid, server-mandatory dependency completeness, server-truth Consent/compliance revalidation, wrong family/actor, nonprimary, Safety, AI/system boundary.
+Cover populated/empty current, Confirm success, stale/noncurrent/wrong-status/dependency invalid, server-mandatory dependency completeness, current group-only conflict re-resolution into `authoritativeEvidenceSet(now)`, server-truth Consent/compliance revalidation, wrong family/actor, nonprimary, Safety, AI/system boundary.
 
 **Where**  
 `tests/integration/problem-formulations-current-confirm.test.ts`
@@ -886,7 +886,7 @@ Cover populated/empty current, Confirm success, stale/noncurrent/wrong-status/de
 T835–T838.
 
 **How to verify**  
-AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the real actor Person only. Explicit negatives: missing/revoked/stale Consent, UNDER_14 processing blocked, mandatory dependency omitted from stored current, and Confirm-time server mandatory set not contained in current valid dependency set.
+AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the real actor Person only. Explicit negatives: missing/revoked/stale Consent, UNDER_14 processing blocked, mandatory dependency omitted from stored current, and Confirm-time server mandatory set not contained in current valid dependency set. Mandatory group-only verification: re-resolve current conflict group; if an expanded Evidence mandatory dependency is missing/stale/invalid, Confirm is blocked before business mutation.
 
 ---
 
@@ -895,7 +895,7 @@ AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the 
 **Maps:** FR-003, FR-004, FR-010–FR-012, FR-020, FR-027; AS-10–12/15/25; user D/E/F/K
 
 **What**  
-Cover Dispute phase stability, Confirm-after-dispute conflict, correction complete new version/history, Correction dependency anti-strip/incomplete-set rejection, Consent/compliance rejection on Dispute/Correction/Reassess, Reassess unchanged formulation, post-Reassess Present and GOALS correction rejection.
+Cover Dispute phase stability, Confirm-after-dispute conflict, correction complete new version/history, Correction dependency anti-strip/incomplete-set rejection including group-only resolved Evidence dependencies, Consent/compliance rejection on Dispute/Correction/Reassess using each command's current/merged `authoritativeEvidenceSet`, Reassess unchanged formulation, post-Reassess Present and GOALS correction rejection.
 
 **Where**  
 `tests/integration/problem-formulations-response-flow.test.ts`

@@ -117,12 +117,16 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-061 | UNKNOWN/NOT_COLLECTED/DECLINED cannot satisfy positive support | unknown is promoted to fact |
 | CQ-062 | conflicts retain all relevant sides/no winner | one source can silently overwrite conflict |
 | CQ-062A | ConflictItem accepts group-only with server resolver proof or no-group + >=2 distinct refs; mixed group+refs must agree | OpenAPI/domain requires refs unconditionally, accepts one-ref/no-group, or lets group and refs contradict |
+| CQ-062B | every Evidence side returned by every `conflictGroupId` resolver is included in the server-derived `authoritativeEvidenceSet` | group-only sides are used only for ConflictItem format validation then discarded |
 | CQ-063 | primary problem and each key factor require positive support | unsupported deterministic claim can persist |
 | CQ-064 | nested evidence refs are reconciled to top-level snapshot | hidden/untracked support refs can exist |
+| CQ-064A | for formulation-content commands, `authoritativeEvidenceSet = top-level refs UNION all server-resolved conflict-group sides` is the single Evidence input to validity/fidelity processing | any downstream path falls back to top-level refs alone |
 | CQ-065 | dependency union is traceable and bounded | dependency payload embeds arbitrary bodies |
 | CQ-066 | Confirm revalidates all determinable dependencies | dependency validation happens only at Present |
 | CQ-066A | **Client cannot strip mandatory dependency**: server derives mandatory Evidence/current UNDER_14 Consent refs and Present/Correction require mandatory ⊆ complete candidate dependency set | caller-provided dependencyRefs are treated as the full truth |
 | CQ-066B | Confirm re-derives server mandatory dependencies and proves mandatory(now) ⊆ current valid stored dependencies | Confirm only loops over whatever refs were previously stored |
+| CQ-066C | mandatory EVIDENCE dependencies are derived from every member of `authoritativeEvidenceSet`, including group-only conflict sides | group-resolved sides can be omitted merely because they are absent from top-level refs |
+| CQ-066D | Confirm re-resolves current conflict groups before mandatory completeness/validity checks | Confirm trusts the previously stored top-level Evidence snapshot and misses current group truth |
 | CQ-067 | unsupported future dependency registry is reported as not currently verifiable, not guessed valid | false verification claim |
 | CQ-068 | NEEDS_REVIEW propagation remains explicitly deferred | future propagation engine is partially invented |
 
@@ -154,6 +158,8 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-079A | processed Person set is server-derived from actor + Case creator + ACTIVE participants + authoritative Evidence subject/source refs | caller chooses who is subject to processing compliance |
 | CQ-079B | **Consent/Compliance revalidated from server truth** with existing compliance seams for every Slice 8 mutation | authorization success is treated as proof that Consent/compliance is still valid |
 | CQ-079C | **UNDER_14 processing gate cannot be bypassed**; current Consent id/version/notice must still satisfy existing gate | missing/revoked/stale Consent or stripped dependency can continue processing |
+| CQ-079D | processed Person derivation consumes the complete `authoritativeEvidenceSet`, including subject/source on conflict-group-resolved sides | processing Persons are derived only from top-level refs |
+| CQ-079E | a group-only conflict whose resolved side references an UNDER_14 Person executes the existing minor-processing/Consent gate | omitting `evidenceRefs` from ConflictItem bypasses UNDER_14 processing compliance |
 | CQ-080 | recognized no-access cases collapse to CASE_NOT_FOUND without swallowing infrastructure failure | enumeration leak or fake 404 for 5xx |
 | CQ-081 | new table ENABLE + FORCE RLS | RLS optional/not forced |
 | CQ-082 | RLS is Family isolation, not a replacement for authorize() | manager/business policy is duplicated into SQL |
@@ -250,6 +256,7 @@ The auditor must not “fix” a FAIL inside this checklist. It must return the 
 | CQ-129 | user-required A–K scenarios are all mapped | any A–K scenario is missing |
 | CQ-130 | wrong family/actor/case/nonprimary/phase/Safety/Closed/stale/superseded/dependency/retry paths exist | major negative path omitted |
 | CQ-130A | named negatives cover missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted, dependency stripped by Correction, client dependency set incomplete, and 2147483647/2147483648 boundaries | any S8-PA-001/003 bypass remains untested |
+| CQ-130B | mandatory tests cover group-only conflict + UNDER_14 compliance, group-only conflict + omitted resolved Evidence dependency for Present/Correction, and Confirm-time re-resolution with missing/stale group dependency | the conflict resolver path is not exercised through compliance/dependency closure |
 | CQ-131 | real concurrent requests are used for race tests | concurrency is mocked/sequential only |
 | CQ-132 | transaction fault injection verifies zero partial writes | atomicity only inferred from BEGIN/COMMIT |
 | CQ-133 | AI/system-confirm negative persistence check exists | only type-level assertion |

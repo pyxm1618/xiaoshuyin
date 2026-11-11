@@ -137,6 +137,22 @@ Legal forms are conditional:
 
 A missing/unresolvable group, duplicate refs, one explicit ref without a group, cross-Case refs, or group/refs disagreement is invalid. The validator never picks a winner.
 
+#### 4.5.1 Authoritative Evidence Set
+
+For every complete formulation content value, the server derives:
+
+```text
+authoritativeEvidenceSet
+  = canonicalDistinct(
+      top-level evidence_refs
+      UNION
+      every Evidence side returned by resolveConflictGroup(conflictGroupId)
+      for every conflict item
+    )
+```
+
+This is a derived in-transaction set, not a new persisted model and not a client field. Group-only conflict sides remain in the set after conflict validation and are used by all downstream Evidence validity, subject/source Person, Compliance and mandatory dependency logic. For mixed group+refs, the existing consistency rule is checked before union/deduplication. Explicit nested refs continue to obey the top-level snapshot rule; group-resolved sides are added by server truth even when omitted from `ConflictItem.evidenceRefs`.
+
 ### 4.6 Alternative explanation / reassessment / exit conditions
 
 Each is an explicit array of structured text items:
@@ -197,19 +213,19 @@ non-null Evidence Person refs:
   observations.subject_person_id / source_person_id
 ```
 
-The Evidence refs used are Start's qualifying statement, Present's complete candidate, Confirm/Dispute/Reassess current formulation, or Correction's complete merged candidate respectively. Participant history grants no formulation authority.
+Start uses its qualifying traceable statement carrier. Every formulation-content command instead uses the complete server-derived `authoritativeEvidenceSet`: Present from the candidate, Correction from the complete merged candidate, and Confirm/Dispute/Reassess from the locked current formulation. Confirm re-resolves every current conflict group from current server truth before rebuilding `authoritativeEvidenceSet(now)`. Participant history grants no formulation authority.
 
 Each Person is evaluated with existing `getComplianceProfileForUpdate` + `getConsentRecordForGate` + `getCurrentNoticeHash` feeding existing `assertMinorProcessingAllowed`. An UNDER_14 ALLOW also requires the profile's current Consent id/version to match the returned record id/version.
 
 The mandatory dependency set is then derived without caller discretion:
 
 ```text
-all top-level EvidenceRef        -> mandatory EVIDENCE refs
-each processed UNDER_14 Person  -> mandatory current CONSENT {id, version}
-POLICY/PACKAGE/CONTENT_VERSION   -> mandatory only if an authoritative current-main registry actually derives one
+all authoritativeEvidenceSet Evidence members -> mandatory EVIDENCE refs
+each processed UNDER_14 Person                 -> mandatory current CONSENT {id, version}
+POLICY/PACKAGE/CONTENT_VERSION                  -> mandatory only if an authoritative current-main registry actually derives one
 ```
 
-The pinned main has no general Policy/Package/Content registry, so Slice 8 does not synthesize those dependencies. Present/Correction require the server mandatory set to be contained in the complete candidate `dependencyRefs`; Confirm re-derives the set and requires it to be contained in the current valid stored dependencies. Thus public Correction cannot decide that a required Consent/Evidence dependency no longer exists.
+The pinned main has no general Policy/Package/Content registry, so Slice 8 does not synthesize those dependencies. Present/Correction require the server mandatory set derived from the authoritative Evidence set to be contained in the complete candidate `dependencyRefs`; therefore a group-only conflict cannot hide mandatory Evidence merely by omitting `ConflictItem.evidenceRefs`. Confirm re-resolves conflict groups, rebuilds `authoritativeEvidenceSet(now)`, re-derives the mandatory set and requires it to be contained in the current valid stored dependencies. Thus public Correction or an earlier client snapshot cannot decide that a required Consent/Evidence dependency no longer exists.
 
 ---
 
@@ -398,6 +414,7 @@ bumpCaseVersionWithoutPhaseChange(expectedVersion)
 
 resolveEvidenceRefs(...)
 resolveConflictGroup(...)
+deriveAuthoritativeEvidenceSet(...)
 resolveEvidencePersonRefs(...)
 resolveActiveCaseParticipantPersonIds(caseId)
 deriveProcessingPersonIds(...)

@@ -306,6 +306,22 @@ The validator mechanically checks:
 
 If both `conflictGroupId` and `evidenceRefs` are supplied, every explicit ref must resolve into that same group and the explicit set must not contradict the server-expanded group. A missing/unresolvable group, a one-ref no-group item, duplicate refs, cross-Case refs, or group/refs disagreement is invalid. The server never accepts client text as proof of conflict.
 
+#### 5.3.1 Authoritative Evidence Set
+
+For every formulation-content command, the server derives one canonical `authoritativeEvidenceSet`. It is not caller-controlled and is the single Evidence input to downstream validity, processing-Person and mandatory-dependency logic:
+
+```text
+authoritativeEvidenceSet
+  = canonicalDistinct(topLevelEvidenceRefs
+      UNION
+      every Evidence side returned by resolveConflictGroup(conflictGroupId)
+      for every conflict item in the complete formulation content)
+```
+
+`resolveConflictGroup()` output is therefore not temporary format-validation data. Every resolved side becomes authoritative Evidence for the command even when a legal group-only `ConflictItem` omits `evidenceRefs`. Explicit pair refs remain subject to the existing nested-ref/top-level snapshot rule; mixed group+refs still must be consistent with the server-resolved group.
+
+The server resolves and validates the complete set under the same Family/Case context. Every member must exist, belong to the target Case/Family, satisfy the command's current-validity semantics, and pass the same Evidence fidelity rules applicable to that command. A conflict group cannot introduce an invisible or stale Evidence side that would have failed if supplied explicitly.
+
 ### 5.4 DependencyRef
 
 Structured union:
@@ -322,13 +338,13 @@ Slice 8 persists these refs and validates all targets that current main can auth
 
 Client/caller-supplied `dependencyRefs` are therefore a candidate snapshot, **not** the complete dependency truth. Before Present or Correction persists a candidate, the server independently derives a mandatory set from authoritative current-main facts:
 
-- every top-level formulation `EvidenceRef` produces a mandatory `EVIDENCE` dependency;
+- every Evidence member of the server-derived `authoritativeEvidenceSet` produces a mandatory `EVIDENCE` dependency, including sides expanded from group-only `conflictGroupId` values;
 - every processed `UNDER_14` Person that passes the existing minor-processing gate produces a mandatory `CONSENT` dependency using the current `person_compliance_profiles.guardian_consent_record_id + guardian_consent_version`, with that id/version checked against `getConsentRecordForGate()`;
 - `POLICY / PACKAGE / CONTENT_VERSION` become server-mandatory only when an authoritative current-main registry/resolver actually identifies such a dependency. The pinned implementation base has no such general registry, so Slice 8 must not invent one or pretend those client refs are server-proven.
 
 After canonical normalization/deduplication, `serverMandatoryDependencies ⊆ candidate.dependencyRefs` is required. Missing mandatory refs are rejected; the server does not silently let a caller redefine the required set. Correction performs this check on the **complete merged candidate**, so a patch cannot strip a mandatory dependency.
 
-At Confirm, the server re-derives the mandatory set from current Case/Person/Evidence/compliance truth, revalidates every determinable stored dependency, and requires `serverMandatoryDependencies(now) ⊆ currentFormulation.dependencyRefs(valid now)`. Confirm cannot rely only on whatever refs the caller happened to preserve in an earlier version.
+At Confirm, the server re-resolves every current `conflictGroupId` from current server truth, rebuilds `authoritativeEvidenceSet(now)`, re-derives the mandatory set from current Case/Person/Evidence/compliance truth, revalidates every determinable stored dependency, and requires `serverMandatoryDependencies(now) ⊆ currentFormulation.dependencyRefs(valid now)`. Confirm cannot rely only on top-level refs or whatever dependency refs the caller happened to preserve in an earlier version.
 
 The future propagation engine (`Evidence correction / consent withdrawal / policy or package retirement → NEEDS_REVIEW`) remains deferred. No `artifact_dependencies` table is created.
 
@@ -428,14 +444,16 @@ verified actor.personId
 
 Nulls are discarded and ids are deduplicated/sorted before compliance row locks. `PENDING / DECLINED / EXPIRED / WITHDRAWN` participation history does not add a Person by itself; if that Person is independently the actor, Case creator, or Evidence subject/source, the other rule still includes them. Participation contributes no formulation visibility or authority.
 
-The authoritative Evidence set is command-specific:
+The authoritative Evidence input is derived server-side and never supplied as a separate client field:
 
 - StartAssessment: the server-resolved traceable statement carrier used to satisfy the Start precondition;
-- PresentProblemFormulation: the complete candidate's top-level `evidenceRefs`;
-- ConfirmProblemFormulation: the locked current formulation's top-level `evidenceRefs`;
-- DisputeProblemFormulation: the locked current formulation's top-level `evidenceRefs`;
-- CorrectProblemFormulation: the complete server-merged candidate's top-level `evidenceRefs`;
-- ReassessFromFormulation: the locked current formulation's top-level `evidenceRefs`.
+- PresentProblemFormulation: derive `authoritativeEvidenceSet` from the complete candidate by resolving all top-level refs and every `conflictGroupId`;
+- ConfirmProblemFormulation: derive `authoritativeEvidenceSet(now)` from the locked current formulation and re-resolve every conflict group from current server truth;
+- DisputeProblemFormulation: derive the same `authoritativeEvidenceSet` from the locked current formulation before its processing/compliance gate;
+- CorrectProblemFormulation: derive `authoritativeEvidenceSet` from the complete server-merged candidate after resolving every conflict group;
+- ReassessFromFormulation: derive the same `authoritativeEvidenceSet` from the locked current formulation before its processing/compliance gate.
+
+For the five formulation-content commands, the derivation order is mechanical: resolve explicit/top-level refs → resolve every conflict group → enforce group/pair/mixed consistency → canonical union/deduplication → Evidence validity/fidelity checks → Evidence subject/source Person derivation → existing Compliance gate → mandatory dependency derivation/completeness where applicable. No downstream step may fall back to top-level `evidenceRefs` alone.
 
 For every Person id, Slice 8 must call the **existing** seams in the same transaction: `getComplianceProfileForUpdate()`; if the profile points to a consent, `getConsentRecordForGate()`; then the existing pure `assertMinorProcessingAllowed(personId, { getProfile, getConsentRecord, getCurrentNoticeHash })`. Any `BLOCK` fails the command before formulation/Case/event/audit mutation. Slice 8 does not copy the age/guardian/notice decision tree.
 
@@ -448,11 +466,11 @@ Safety remains the existing locked Case-status predicate, not a new Safety engin
 | Command | Authorization seam | Consent / compliance seam | Safety / Closed seam | Mandatory dependency completeness |
 |---|---|---|---|---|
 | StartAssessment | `requireFamilyAction(... CASE_START_ASSESSMENT, FAMILY_MANAGEMENT, CASE ...)` → existing `authorize()` | §7.4 over actor + Case creator + ACTIVE participants + selected traceable-statement Person refs | locked `CaseRow.status` | N/A; no formulation dependency snapshot exists |
-| PresentProblemFormulation | `requireFamilyAction(... CASE_PRESENT_PROBLEM_FORMULATION ...)` | §7.4 over complete candidate Evidence Person refs plus Case/actor/ACTIVE participants | locked `CaseRow.status` | derive server mandatory set; require it to be a subset of candidate `dependencyRefs` before insert |
-| ConfirmProblemFormulation | `requireFamilyAction(... CASE_CONFIRM_PROBLEM_FORMULATION ...)` | §7.4 re-read from current server truth immediately before confirmation | locked `CaseRow.status` | re-derive mandatory set now; require it to be contained in the current valid stored dependency set |
-| DisputeProblemFormulation | `requireFamilyAction(... CASE_DISPUTE_PROBLEM_FORMULATION ...)` | §7.4 over current formulation Evidence Person refs; no consent/compliance bypass merely because content is unchanged | locked `CaseRow.status` | no dependency mutation; Confirm-level completeness is not substituted by Dispute |
-| CorrectProblemFormulation | `requireFamilyAction(... CASE_CORRECT_PROBLEM_FORMULATION ...)` | §7.4 over the **complete merged candidate** | locked `CaseRow.status` | re-derive after merge; a correction that removes/omits any mandatory ref is rejected |
-| ReassessFromFormulation | `requireFamilyAction(... CASE_REASSESS_FROM_FORMULATION ...)` | §7.4 over current formulation Evidence Person refs | locked `CaseRow.status` | no dependency mutation; existing current dependency snapshot remains unchanged |
+| PresentProblemFormulation | `requireFamilyAction(... CASE_PRESENT_PROBLEM_FORMULATION ...)` | §7.4 over complete candidate `authoritativeEvidenceSet` Person refs plus Case/actor/ACTIVE participants | locked `CaseRow.status` | derive server mandatory set from `authoritativeEvidenceSet`; require it to be a subset of candidate `dependencyRefs` before insert |
+| ConfirmProblemFormulation | `requireFamilyAction(... CASE_CONFIRM_PROBLEM_FORMULATION ...)` | §7.4 re-resolves current conflict groups and rebuilds `authoritativeEvidenceSet(now)` immediately before confirmation | locked `CaseRow.status` | re-derive mandatory set from `authoritativeEvidenceSet(now)`; require it to be contained in the current valid stored dependency set |
+| DisputeProblemFormulation | `requireFamilyAction(... CASE_DISPUTE_PROBLEM_FORMULATION ...)` | §7.4 over current `authoritativeEvidenceSet`; no group-resolved Evidence/consent bypass merely because content is unchanged | locked `CaseRow.status` | no dependency mutation; Confirm-level completeness is not substituted by Dispute |
+| CorrectProblemFormulation | `requireFamilyAction(... CASE_CORRECT_PROBLEM_FORMULATION ...)` | §7.4 over the complete merged candidate `authoritativeEvidenceSet` | locked `CaseRow.status` | re-derive after merge from the authoritative set; a correction that removes/omits any mandatory ref, including group-resolved Evidence, is rejected |
+| ReassessFromFormulation | `requireFamilyAction(... CASE_REASSESS_FROM_FORMULATION ...)` | §7.4 over current `authoritativeEvidenceSet` | locked `CaseRow.status` | no dependency mutation; existing current dependency snapshot remains unchanged |
 
 ### 7.6 Anti-enumeration
 
@@ -1051,7 +1069,9 @@ Must cover every command and pure transition decision:
 - state/phase transition matrix;
 - Evidence unknown/conflict/DECLINED fidelity;
 - dependency validity decisions, server-mandatory completeness, and Correction anti-strip behavior;
+- `authoritativeEvidenceSet = top-level refs UNION all server-resolved conflict-group sides` as the sole formulation Evidence input for validity, processed-Person derivation and mandatory EVIDENCE dependencies;
 - existing consent/compliance gate composition over the server-derived Person set, including missing/revoked/stale Consent and blocked UNDER_14 processing;
+- mandatory group-only tests: resolved UNDER_14 Evidence side must execute the existing compliance gate; omission of group-resolved mandatory Evidence dependencies must reject Present/Correction; Confirm must re-resolve group-only conflicts and block a now-missing/stale mandatory dependency;
 - ConflictItem group-only / explicit-pair / mixed-consistency validation;
 - PostgreSQL-integer version boundaries, including 2147483647 accepted and 2147483648 rejected before repository/SQL;
 - primary/Safety/Closed guards;
