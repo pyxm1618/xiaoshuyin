@@ -96,9 +96,10 @@ async function resolveFamily(
 
 function send(
   reply: FastifyReply,
-  result: { status: number; body: unknown; etag: string }
+  result: { status: number; body: unknown; etag: string | null }
 ) {
-  return reply.header('ETag', result.etag).status(result.status).send(result.body);
+  if (result.etag !== null) reply.header('ETag', result.etag);
+  return reply.status(result.status).send(result.body);
 }
 
 function sendError(reply: FastifyReply, error: unknown): never {

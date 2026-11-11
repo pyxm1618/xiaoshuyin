@@ -38,6 +38,7 @@ import {
   toProblemFormulationDto,
   transitionProblemFormulationStatus,
   validateFormulationContent,
+  validateReassessmentBasis,
   advanceCasePhaseAndVersion,
   pfError,
   type AuthoritativeEvidenceSet,
@@ -45,6 +46,7 @@ import {
   type ProblemFormulationContent,
   type ProblemFormulationDto,
   type ProblemFormulationRow,
+  type ReassessmentBasis,
   type UserResponse,
 } from '@xiaoshuyin/domain';
 import {
@@ -86,6 +88,9 @@ function httpError(code: string, message?: string): Error & { statusCode: number
 
 function mapServiceError(error: unknown): never {
   if (error instanceof ProblemFormulationError) {
+    if (error.code === 'CORRECTION_NOOP' || error.code === 'REASSESSMENT_BASIS_INVALID') {
+      throw httpError('VALIDATION_ERROR', error.message);
+    }
     const base = toHttpError(error.code, error.message);
     throw Object.assign(new Error(base.message), {
       statusCode: base.statusCode,
@@ -133,7 +138,8 @@ interface ComplianceOutcome {
 
 async function runComplianceGate(
   tx: pg.PoolClient,
-  personIds: readonly string[]
+  personIds: readonly string[],
+  mode: 'INTERNAL' | 'PUBLIC' = 'INTERNAL'
 ): Promise<ComplianceOutcome> {
   const under14Consents: { id: string; version: number }[] = [];
 
@@ -173,7 +179,10 @@ async function runComplianceGate(
     });
 
     if (result.decision === 'BLOCK') {
-      throw httpError(result.reason, result.reason);
+      throw httpError(
+        mode === 'PUBLIC' ? 'PROBLEM_FORMULATION_DEPENDENCY_INVALID' : result.reason,
+        result.reason
+      );
     }
 
     if (profile?.ageBand === 'UNDER_14') {
@@ -184,7 +193,12 @@ async function runComplianceGate(
         consent.id.toLowerCase() !== profile.guardianConsentRecordId.toLowerCase() ||
         consent.version !== profile.guardianConsentVersion
       ) {
-        throw httpError('GUARDIAN_CONSENT_REQUIRED', 'Stale consent pointer');
+        throw httpError(
+          mode === 'PUBLIC'
+            ? 'PROBLEM_FORMULATION_DEPENDENCY_INVALID'
+            : 'GUARDIAN_CONSENT_REQUIRED',
+          'Stale consent pointer'
+        );
       }
       under14Consents.push({
         id: profile.guardianConsentRecordId,
@@ -259,6 +273,74 @@ async function acquireSlot(
   return slot;
 }
 
+export interface CommandResult {
+  status: number;
+  body: unknown;
+  etag: string | null;
+}
+
+async function executeIdempotentBusiness(
+  tx: pg.PoolClient,
+  input: {
+    actor: ServiceActor;
+    commandType: string;
+    keyBytes: Buffer;
+    slot: IdempotencySlot;
+  },
+  business: () => Promise<CommandResult>
+): Promise<CommandResult> {
+  if (input.slot.kind === 'REPLAY') {
+    const body = input.slot.body as { caseVersion?: unknown } | null;
+    return {
+      status: input.slot.status,
+      body: input.slot.body,
+      etag:
+        body && typeof body.caseVersion === 'number'
+          ? caseVersionEtag(body.caseVersion)
+          : null,
+    };
+  }
+  await tx.query('SAVEPOINT pf_business');
+  try {
+    const result = await business();
+    await tx.query('RELEASE SAVEPOINT pf_business');
+    await completeIdempotency(tx, {
+      actorAccountId: input.actor.accountId,
+      commandType: input.commandType as never,
+      keyBytes: input.keyBytes,
+      status: result.status,
+      body: result.body,
+    });
+    return result;
+  } catch (error) {
+    const typed =
+      error instanceof ProblemFormulationError
+        ? error.code === 'CORRECTION_NOOP' || error.code === 'REASSESSMENT_BASIS_INVALID'
+          ? { statusCode: 422, code: 'VALIDATION_ERROR', message: error.message }
+          : toHttpError(error.code, error.message)
+        : (error as { statusCode?: number; code?: string; message?: string });
+    if (
+      typeof typed.statusCode === 'number' &&
+      typed.statusCode >= 400 &&
+      typed.statusCode < 500 &&
+      typeof typed.code === 'string'
+    ) {
+      await tx.query('ROLLBACK TO SAVEPOINT pf_business');
+      await tx.query('RELEASE SAVEPOINT pf_business');
+      const body = { code: typed.code, message: typed.message ?? typed.code };
+      await completeIdempotency(tx, {
+        actorAccountId: input.actor.accountId,
+        commandType: input.commandType as never,
+        keyBytes: input.keyBytes,
+        status: typed.statusCode,
+        body,
+      });
+      return { status: typed.statusCode, body, etag: null };
+    }
+    throw error;
+  }
+}
+
 async function lockFamily(
   tx: pg.PoolClient,
   familyId: string
@@ -314,7 +396,7 @@ export async function getCurrentProblemFormulationView(
 export async function startAssessment(
   pool: pg.Pool,
   input: MutationInput
-): Promise<{ status: number; body: Envelope; etag: string }> {
+): Promise<{ status: number; body: unknown; etag: string | null }> {
   try {
     return await withRlsTransaction(
       pool,
@@ -345,26 +427,34 @@ export async function startAssessment(
           keyBytes,
           hash
         );
-        if (slot.kind === 'REPLAY') {
-          return {
-            status: slot.status,
-            body: slot.body as Envelope,
-            etag: caseVersionEtag((slot.body as Envelope).caseVersion),
-          };
-        }
+        return executeIdempotentBusiness(
+          tx,
+          {
+            actor: input.actor,
+            commandType: 'CASE_START_ASSESSMENT',
+            keyBytes,
+            slot,
+          },
+          async () => {
 
         await lockFamily(tx, input.familyId);
         const caseRow = await lockCase(tx, input.caseId);
         assertCaseGuards(caseRow, input.expectedCaseVersion, 'INTAKE');
 
-        if (!(await hasTraceableProblemStatement(tx, input.caseId))) {
-          throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
-        }
         const carrier = await resolveTraceableStatement(tx, input.caseId);
         if (!carrier) throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
 
         const carrierResolution = await resolveEvidenceRefs(tx, input.caseId, [carrier]);
-        const carrierMembers = [...carrierResolution.members.values()];
+        const carrierMember = carrierResolution.members.get(canonicalEvidenceKey(carrier));
+        if (
+          !carrierMember ||
+          !carrierMember.usable ||
+          carrierMember.caseId !== input.caseId ||
+          (carrier.type === 'ASSERTION' && carrierMember.assertionKind !== 'STATEMENT')
+        ) {
+          throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
+        }
+        const carrierMembers = [carrierMember];
         const personIds = deriveProcessingPersonIds({
           actorPersonId: input.actor.personId,
           caseCreatorPersonId: caseRow.created_by_person_id,
@@ -406,14 +496,9 @@ export async function startAssessment(
         });
 
         const body = envelope(updated.version, null);
-        await completeIdempotency(tx, {
-          actorAccountId: input.actor.accountId,
-          commandType: 'CASE_START_ASSESSMENT',
-          keyBytes,
-          status: 200,
-          body,
-        });
         return { status: 200, body, etag: caseVersionEtag(updated.version) };
+          }
+        );
       }
     );
   } catch (error) {
@@ -424,7 +509,7 @@ export async function startAssessment(
 export async function presentProblemFormulation(
   pool: pg.Pool,
   input: MutationInput & { content: ProblemFormulationContent }
-): Promise<{ status: number; body: Envelope; etag: string }> {
+): Promise<{ status: number; body: unknown; etag: string | null }> {
   try {
     return await withRlsTransaction(
       pool,
@@ -456,13 +541,15 @@ export async function presentProblemFormulation(
           keyBytes,
           hash
         );
-        if (slot.kind === 'REPLAY') {
-          return {
-            status: slot.status,
-            body: slot.body as Envelope,
-            etag: caseVersionEtag((slot.body as Envelope).caseVersion),
-          };
-        }
+        return executeIdempotentBusiness(
+          tx,
+          {
+            actor: input.actor,
+            commandType: 'PROBLEM_FORMULATION_PRESENT',
+            keyBytes,
+            slot,
+          },
+          async () => {
 
         await lockFamily(tx, input.familyId);
         const caseRow = await lockCase(tx, input.caseId);
@@ -542,14 +629,9 @@ export async function presentProblemFormulation(
         });
 
         const body = envelope(updated.version, inserted);
-        await completeIdempotency(tx, {
-          actorAccountId: input.actor.accountId,
-          commandType: 'PROBLEM_FORMULATION_PRESENT',
-          keyBytes,
-          status: 200,
-          body,
-        });
         return { status: 200, body, etag: caseVersionEtag(updated.version) };
+          }
+        );
       }
     );
   } catch (error) {
@@ -583,7 +665,7 @@ export async function confirmProblemFormulation(
     formulationVersion: number;
     body: { note?: string };
   }
-): Promise<{ status: number; body: Envelope; etag: string }> {
+): Promise<{ status: number; body: unknown; etag: string | null }> {
   try {
     return await withRlsTransaction(
       pool,
@@ -616,13 +698,15 @@ export async function confirmProblemFormulation(
           keyBytes,
           hash
         );
-        if (slot.kind === 'REPLAY') {
-          return {
-            status: slot.status,
-            body: slot.body as Envelope,
-            etag: caseVersionEtag((slot.body as Envelope).caseVersion),
-          };
-        }
+        return executeIdempotentBusiness(
+          tx,
+          {
+            actor: input.actor,
+            commandType: 'PROBLEM_FORMULATION_CONFIRM',
+            keyBytes,
+            slot,
+          },
+          async () => {
 
         await lockFamily(tx, input.familyId);
         const caseRow = await lockCase(tx, input.caseId);
@@ -641,7 +725,7 @@ export async function confirmProblemFormulation(
           caseRow,
           authoritative,
         });
-        const compliance = await runComplianceGate(tx, persons);
+        const compliance = await runComplianceGate(tx, persons, 'PUBLIC');
 
         const mandatory = mandatoryDependencies(authoritative, compliance);
         if (!isDependencySubset(mandatory, current.dependency_refs)) {
@@ -708,14 +792,9 @@ export async function confirmProblemFormulation(
         });
 
         const body = envelope(updated.version, confirmed);
-        await completeIdempotency(tx, {
-          actorAccountId: input.actor.accountId,
-          commandType: 'PROBLEM_FORMULATION_CONFIRM',
-          keyBytes,
-          status: 200,
-          body,
-        });
         return { status: 200, body, etag: caseVersionEtag(updated.version) };
+          }
+        );
       }
     );
   } catch (error) {
@@ -729,7 +808,7 @@ export async function disputeProblemFormulation(
     formulationVersion: number;
     body: { note?: string };
   }
-): Promise<{ status: number; body: Envelope; etag: string }> {
+): Promise<{ status: number; body: unknown; etag: string | null }> {
   try {
     return await withRlsTransaction(
       pool,
@@ -762,13 +841,15 @@ export async function disputeProblemFormulation(
           keyBytes,
           hash
         );
-        if (slot.kind === 'REPLAY') {
-          return {
-            status: slot.status,
-            body: slot.body as Envelope,
-            etag: caseVersionEtag((slot.body as Envelope).caseVersion),
-          };
-        }
+        return executeIdempotentBusiness(
+          tx,
+          {
+            actor: input.actor,
+            commandType: 'PROBLEM_FORMULATION_DISPUTE',
+            keyBytes,
+            slot,
+          },
+          async () => {
 
         await lockFamily(tx, input.familyId);
         const caseRow = await lockCase(tx, input.caseId);
@@ -786,7 +867,7 @@ export async function disputeProblemFormulation(
           caseRow,
           authoritative,
         });
-        await runComplianceGate(tx, persons);
+        await runComplianceGate(tx, persons, 'PUBLIC');
 
         const response: UserResponse = {
           kind: 'DISPUTE',
@@ -838,14 +919,9 @@ export async function disputeProblemFormulation(
         });
 
         const body = envelope(updated.version, disputed);
-        await completeIdempotency(tx, {
-          actorAccountId: input.actor.accountId,
-          commandType: 'PROBLEM_FORMULATION_DISPUTE',
-          keyBytes,
-          status: 200,
-          body,
-        });
         return { status: 200, body, etag: caseVersionEtag(updated.version) };
+          }
+        );
       }
     );
   } catch (error) {
@@ -860,7 +936,7 @@ export async function correctProblemFormulation(
     changes: Partial<ProblemFormulationContent>;
     note?: string;
   }
-): Promise<{ status: number; body: Envelope; etag: string }> {
+): Promise<{ status: number; body: unknown; etag: string | null }> {
   try {
     return await withRlsTransaction(
       pool,
@@ -894,13 +970,15 @@ export async function correctProblemFormulation(
           keyBytes,
           hash
         );
-        if (slot.kind === 'REPLAY') {
-          return {
-            status: slot.status,
-            body: slot.body as Envelope,
-            etag: caseVersionEtag((slot.body as Envelope).caseVersion),
-          };
-        }
+        return executeIdempotentBusiness(
+          tx,
+          {
+            actor: input.actor,
+            commandType: 'PROBLEM_FORMULATION_CORRECT',
+            keyBytes,
+            slot,
+          },
+          async () => {
 
         await lockFamily(tx, input.familyId);
         const caseRow = await lockCase(tx, input.caseId);
@@ -919,7 +997,7 @@ export async function correctProblemFormulation(
           caseRow,
           authoritative,
         });
-        const compliance = await runComplianceGate(tx, persons);
+        const compliance = await runComplianceGate(tx, persons, 'PUBLIC');
 
         const mandatory = mandatoryDependencies(authoritative, compliance);
         if (!isDependencySubset(mandatory, merged.dependencyRefs)) {
@@ -945,7 +1023,7 @@ export async function correctProblemFormulation(
         const inserted = await insertProblemFormulationVersion(tx, {
           familyId: input.familyId,
           caseId: input.caseId,
-          version: current.version + 1,
+          version: nextFormulationVersion(current),
           content: merged,
           userResponse: response,
           supersedesVersion: current.version,
@@ -986,14 +1064,9 @@ export async function correctProblemFormulation(
         });
 
         const body = envelope(updated.version, inserted);
-        await completeIdempotency(tx, {
-          actorAccountId: input.actor.accountId,
-          commandType: 'PROBLEM_FORMULATION_CORRECT',
-          keyBytes,
-          status: 201,
-          body,
-        });
         return { status: 201, body, etag: caseVersionEtag(updated.version) };
+          }
+        );
       }
     );
   } catch (error) {
@@ -1003,8 +1076,8 @@ export async function correctProblemFormulation(
 
 export async function reassessFromFormulation(
   pool: pg.Pool,
-  input: MutationInput & { basis: string }
-): Promise<{ status: number; body: Envelope; etag: string }> {
+  input: MutationInput & { formulationVersion: number; basis: ReassessmentBasis }
+): Promise<{ status: number; body: unknown; etag: string | null }> {
   try {
     return await withRlsTransaction(
       pool,
@@ -1022,11 +1095,13 @@ export async function reassessFromFormulation(
           action: 'CASE_REASSESS_FROM_FORMULATION',
         });
 
+        const validatedBasisFingerprint = hashPayload(input.basis as never);
         const hash = requestHash({
           familyId: input.familyId,
           caseId: input.caseId,
+          formulationVersion: input.formulationVersion,
           expectedCaseVersion: input.expectedCaseVersion,
-          basis: input.basis,
+          validatedBasisFingerprint,
         });
         const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
         const slot = await acquireSlot(
@@ -1036,13 +1111,15 @@ export async function reassessFromFormulation(
           keyBytes,
           hash
         );
-        if (slot.kind === 'REPLAY') {
-          return {
-            status: slot.status,
-            body: slot.body as Envelope,
-            etag: caseVersionEtag((slot.body as Envelope).caseVersion),
-          };
-        }
+        return executeIdempotentBusiness(
+          tx,
+          {
+            actor: input.actor,
+            commandType: 'CASE_REASSESS_FROM_FORMULATION',
+            keyBytes,
+            slot,
+          },
+          async () => {
 
         await lockFamily(tx, input.familyId);
         const caseRow = await lockCase(tx, input.caseId);
@@ -1050,6 +1127,10 @@ export async function reassessFromFormulation(
 
         const current = await lockCurrentProblemFormulation(tx, input.caseId);
         if (!current) throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
+        if (current.version !== input.formulationVersion) {
+          throw pfError('PROBLEM_FORMULATION_VERSION_CONFLICT');
+        }
+        validateReassessmentBasis(current, input.basis);
 
         const authoritative = await revalidateCurrent(tx, input.caseId, current);
         const persons = await processingPersonIds(tx, {
@@ -1094,14 +1175,9 @@ export async function reassessFromFormulation(
         });
 
         const body = envelope(updated.version, current);
-        await completeIdempotency(tx, {
-          actorAccountId: input.actor.accountId,
-          commandType: 'CASE_REASSESS_FROM_FORMULATION',
-          keyBytes,
-          status: 200,
-          body,
-        });
         return { status: 200, body, etag: caseVersionEtag(updated.version) };
+          }
+        );
       }
     );
   } catch (error) {

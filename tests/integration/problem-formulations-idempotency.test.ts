@@ -177,19 +177,18 @@ describe('problem formulation idempotency (Slice 8)', () => {
       idempotencyKey: `t8idem-a-${Date.now()}-${seq++}`,
       content: content(messageId),
     });
-    await expect(
-      presentProblemFormulation(pool, {
-        actor: { accountId: owner.accountId, personId: owner.personId },
-        familyId,
-        caseId,
-        expectedCaseVersion: caseVersion,
-        idempotencyKey: `t8idem-b-${Date.now()}-${seq++}`,
-        content: content(messageId),
-      })
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      code: expect.stringMatching(/^(CASE_PHASE_CONFLICT|STALE_CASE_VERSION)$/),
+    const second = await presentProblemFormulation(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId,
+      expectedCaseVersion: caseVersion,
+      idempotencyKey: `t8idem-b-${Date.now()}-${seq++}`,
+      content: content(messageId),
     });
+    expect(second.status).toBe(409);
+    expect((second.body as { code: string }).code).toMatch(
+      /^(CASE_PHASE_CONFLICT|STALE_CASE_VERSION)$/
+    );
 
     const rows = await admin.query(
       `SELECT count(*)::int AS n FROM problem_formulations

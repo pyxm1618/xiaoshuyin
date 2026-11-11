@@ -207,16 +207,16 @@ describe('problem formulation authoritative evidence closure (S8-PA-001)', () =>
       { type: 'EVIDENCE', evidence: { type: 'ASSERTION', id: sideB } },
     ];
 
-    await expect(
-      presentProblemFormulation(pool, {
-        actor: { accountId: owner.accountId, personId: owner.personId },
-        familyId,
-        caseId,
-        expectedCaseVersion: caseVersion,
-        idempotencyKey: `t8pa1-u14-${Date.now()}-${seq++}`,
-        content: candidate,
-      })
-    ).rejects.toMatchObject({ code: 'PROFILE_MISSING' });
+    const blocked = await presentProblemFormulation(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId,
+      expectedCaseVersion: caseVersion,
+      idempotencyKey: `t8pa1-u14-${Date.now()}-${seq++}`,
+      content: candidate,
+    });
+    expect(blocked.status).toBe(403);
+    expect(blocked.body).toMatchObject({ code: 'PROFILE_MISSING' });
 
     const rows = await admin.query(
       'SELECT count(*)::int AS n FROM problem_formulations WHERE case_id = $1',
@@ -257,16 +257,18 @@ describe('problem formulation authoritative evidence closure (S8-PA-001)', () =>
       // sideB is deliberately omitted.
     ];
 
-    await expect(
-      presentProblemFormulation(pool, {
-        actor: { accountId: owner.accountId, personId: owner.personId },
-        familyId,
-        caseId,
-        expectedCaseVersion: caseVersion,
-        idempotencyKey: `t8pa1-omit-${Date.now()}-${seq++}`,
-        content: candidate,
-      })
-    ).rejects.toMatchObject({ code: 'PROBLEM_FORMULATION_DEPENDENCY_INVALID' });
+    const omitted = await presentProblemFormulation(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId,
+      expectedCaseVersion: caseVersion,
+      idempotencyKey: `t8pa1-omit-${Date.now()}-${seq++}`,
+      content: candidate,
+    });
+    expect(omitted.status).toBe(409);
+    expect(omitted.body).toMatchObject({
+      code: 'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+    });
 
     const rows = await admin.query(
       'SELECT count(*)::int AS n FROM problem_formulations WHERE case_id = $1',

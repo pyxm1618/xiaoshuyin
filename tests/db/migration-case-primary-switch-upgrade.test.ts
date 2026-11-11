@@ -103,6 +103,58 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
   ],
 };
 
+
+/** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
+const SLICE8_NEW_CONSTRAINTS = [
+  'problem_formulations_alternative_explanations_not_null',
+  'problem_formulations_alternative_explanations_shape_check',
+  'problem_formulations_case_family_fk',
+  'problem_formulations_case_id_not_null',
+  'problem_formulations_case_version_chain_fk',
+  'problem_formulations_case_version_key',
+  'problem_formulations_confirmation_pair_check',
+  'problem_formulations_confirmation_status_check',
+  'problem_formulations_confirmer_fk',
+  'problem_formulations_conflicts_not_null',
+  'problem_formulations_conflicts_shape_check',
+  'problem_formulations_created_at_not_null',
+  'problem_formulations_dependency_refs_not_null',
+  'problem_formulations_dependency_refs_shape_check',
+  'problem_formulations_evidence_refs_not_null',
+  'problem_formulations_evidence_refs_shape_check',
+  'problem_formulations_exit_conditions_not_null',
+  'problem_formulations_exit_conditions_shape_check',
+  'problem_formulations_family_id_not_null',
+  'problem_formulations_id_not_null',
+  'problem_formulations_key_factors_not_null',
+  'problem_formulations_key_factors_shape_check',
+  'problem_formulations_not_draft_check',
+  'problem_formulations_pkey',
+  'problem_formulations_primary_problem_not_null',
+  'problem_formulations_primary_problem_shape_check',
+  'problem_formulations_reassessment_conditions_not_null',
+  'problem_formulations_reassessment_conditions_shape_check',
+  'problem_formulations_scene_fit_check',
+  'problem_formulations_scene_fit_not_null',
+  'problem_formulations_status_not_null',
+  'problem_formulations_unknowns_not_null',
+  'problem_formulations_unknowns_shape_check',
+  'problem_formulations_updated_at_not_null',
+  'problem_formulations_user_response_shape_check',
+  'problem_formulations_version_chain_check',
+  'problem_formulations_version_not_null',
+  'problem_formulations_version_range_check',
+].sort();
+
+/** Exact Slice 8 object-fingerprint delta. */
+const SLICE8_NEW_OBJECTS = [
+  'enum:problem_formulation_status',
+  'policy:problem_formulations_insert',
+  'policy:problem_formulations_select',
+  'policy:problem_formulations_update',
+  'table:problem_formulations',
+].sort();
+
 /** Constraints whose definitions 007 is authorized to rewrite. */
 const SLICE7_CONSTRAINT_CHANGES = [
   'case_events_event_type_check',
@@ -323,7 +375,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const newConstraints = afterConstraintNames.filter(
       (name) => !beforeConstraintNames.includes(name)
     );
-    expect(newConstraints.every((name) => name.startsWith('problem_formulations_'))).toBe(true);
+    expect(newConstraints.sort()).toEqual([...SLICE8_NEW_CONSTRAINTS]);
     const changedConstraints = beforeConstraintNames.filter(
       (name) => afterConstraints[name] !== beforeConstraints[name]
     );
@@ -338,9 +390,9 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     for (const entry of beforeSet) {
       expect(afterSet.has(entry), `lost object ${entry}`).toBe(true);
     }
-    for (const entry of [...afterSet].filter((e) => !beforeSet.has(e))) {
-      expect(entry).toMatch(/problem_formulation/);
-    }
+    expect([...afterSet].filter((e) => !beforeSet.has(e)).sort()).toEqual([
+      ...SLICE8_NEW_OBJECTS,
+    ]);
 
     // Column-level UPDATE grant, never table-level.
     const { rows: columnGrants } = await seed.query(

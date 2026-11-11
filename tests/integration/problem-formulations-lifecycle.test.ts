@@ -241,17 +241,17 @@ describe('problem formulation lifecycle (Slice 8)', () => {
     });
     expect(view.json().phase).toBe('PROBLEM_FORMULATION');
 
-    await expect(
-      confirmProblemFormulation(pool, {
-        actor: { accountId: owner.accountId, personId: owner.personId },
-        familyId,
-        caseId: created.id,
-        expectedCaseVersion: disputed.body.caseVersion,
-        idempotencyKey: key('confirm-after-dispute'),
-        formulationVersion: 1,
-        body: {},
-      })
-    ).rejects.toMatchObject({ code: 'PROBLEM_FORMULATION_STATE_CONFLICT' });
+    const blocked = await confirmProblemFormulation(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId: created.id,
+      expectedCaseVersion: disputed.body.caseVersion,
+      idempotencyKey: key('confirm-after-dispute'),
+      formulationVersion: 1,
+      body: {},
+    });
+    expect(blocked.status).toBe(409);
+    expect(blocked.body).toMatchObject({ code: 'PROBLEM_FORMULATION_STATE_CONFLICT' });
   });
 
   it('Correction supersedes v1, creates v2 PRESENTED, and clears confirmation', async () => {

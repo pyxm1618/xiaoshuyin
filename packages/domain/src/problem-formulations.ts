@@ -148,7 +148,9 @@ export type ProblemFormulationErrorCode =
   | 'STALE_CASE_VERSION'
   | 'CASE_NOT_PRIMARY'
   | 'CASE_CLOSED'
-  | 'SAFETY_HOLD_BLOCKED';
+  | 'SAFETY_HOLD_BLOCKED'
+  | 'CORRECTION_NOOP'
+  | 'REASSESSMENT_BASIS_INVALID';
 
 export class ProblemFormulationError extends Error {
   readonly code: ProblemFormulationErrorCode;
@@ -352,7 +354,7 @@ export function mergeCorrection(
     dependencyRefs: changes.dependencyRefs ?? current.dependencyRefs,
   };
   if (JSON.stringify(merged) === JSON.stringify(current)) {
-    throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT', 'correction changes nothing');
+    throw pfError('CORRECTION_NOOP', 'correction changes nothing');
   }
   return merged;
 }
@@ -367,6 +369,7 @@ export interface ResolvedEvidenceMember {
   unknownState: UnknownState | null;
   conflictGroupId: string | null;
   assertionKind: string | null;
+  confirmationStatus: string | null;
 }
 
 export interface EvidenceResolution {
@@ -422,6 +425,7 @@ export async function resolveEvidenceRefs(
         unknownState: null,
         conflictGroupId: null,
         assertionKind: null,
+        confirmationStatus: null,
       });
     }
   }
@@ -429,7 +433,8 @@ export async function resolveEvidenceRefs(
   if (byType.ASSERTION.length > 0) {
     const { rows } = await tx.query(
       `SELECT id, case_id, family_id, subject_person_id, source_person_id,
-              valid_from, valid_until, supersedes_id, conflict_group_id, kind
+              valid_from, valid_until, supersedes_id, conflict_group_id, kind,
+              confirmation_status
        FROM assertions
        WHERE case_id = $1 AND id = ANY($2::uuid[])`,
       [caseId, byType.ASSERTION]
@@ -450,6 +455,7 @@ export async function resolveEvidenceRefs(
         unknownState: null,
         conflictGroupId: row.conflict_group_id,
         assertionKind: row.kind,
+        confirmationStatus: row.confirmation_status,
       });
     }
   }
@@ -457,7 +463,8 @@ export async function resolveEvidenceRefs(
   if (byType.OBSERVATION.length > 0) {
     const { rows } = await tx.query(
       `SELECT id, case_id, family_id, subject_person_id, source_person_id,
-              valid_from, valid_until, supersedes_id, conflict_group_id, value_state
+              valid_from, valid_until, supersedes_id, conflict_group_id, value_state,
+              confirmation_status
        FROM observations
        WHERE case_id = $1 AND id = ANY($2::uuid[])`,
       [caseId, byType.OBSERVATION]
@@ -484,6 +491,7 @@ export async function resolveEvidenceRefs(
         unknownState,
         conflictGroupId: row.conflict_group_id,
         assertionKind: null,
+        confirmationStatus: row.confirmation_status,
       });
     }
   }
@@ -626,20 +634,53 @@ export async function validateFormulationContent(
     }
   }
 
-  const unknownStates = new Map<UnknownState, Set<string>>([
-    ['UNKNOWN', new Set()],
-    ['NOT_COLLECTED', new Set()],
-    ['DECLINED', new Set()],
-  ]);
   for (const unknown of content.unknowns) {
-    unknownStates.get(unknown.state)!.add(unknown.topic.trim());
+    for (const ref of unknown.evidenceRefs) {
+      const key = canonicalEvidenceKey(ref);
+      if (!topLevelKeys.has(key)) {
+        throw pfError(
+          'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+          'UnknownItem evidence ref is outside the top-level snapshot'
+        );
+      }
+      const member = memberByKey.get(key);
+      if (!member) {
+        throw pfError(
+          'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+          'UnknownItem evidence ref does not exist in this Case'
+        );
+      }
+      if (member.kind !== 'OBSERVATION') {
+        throw pfError(
+          'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+          'UnknownItem evidence ref must be an Observation'
+        );
+      }
+      if (member.unknownState !== unknown.state) {
+        throw pfError(
+          'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+          'UnknownItem state does not match its Evidence state'
+        );
+      }
+    }
   }
-  for (const member of authoritative.members) {
+  const caseUnknown = await listCaseUnknownObservationRefs(tx, caseId);
+  for (const member of [
+    ...authoritative.members,
+    ...caseUnknown.map((item) => ({ ...item, ref: item.ref, unknownState: item.state })),
+  ]) {
     if (member.unknownState === null) continue;
-    if (!unknownStates.get(member.unknownState)!.size) {
+    const covered = content.unknowns.some(
+      (unknown) =>
+        unknown.state === member.unknownState &&
+        unknown.evidenceRefs.some(
+          (ref) => canonicalEvidenceKey(ref) === canonicalEvidenceKey(member.ref)
+        )
+    );
+    if (!covered) {
       throw pfError(
         'PROBLEM_FORMULATION_EVIDENCE_INVALID',
-        `unknown state ${member.unknownState} is not preserved`
+        `unknown state ${member.unknownState} is not represented by its Evidence ref`
       );
     }
   }
@@ -665,6 +706,12 @@ function assertPositiveSupport(member: ResolvedEvidenceMember | undefined): void
     throw pfError(
       'PROBLEM_FORMULATION_EVIDENCE_INVALID',
       'conflict-bearing evidence cannot be positive support'
+    );
+  }
+  if (member.confirmationStatus === 'DISPUTED') {
+    throw pfError(
+      'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+      'DISPUTED evidence cannot be positive support'
     );
   }
 }
@@ -792,14 +839,7 @@ export async function hasTraceableProblemStatement(
   tx: Tx,
   caseId: string
 ): Promise<boolean> {
-  const { rows } = await tx.query(
-    `SELECT 1 FROM dialogue_messages WHERE case_id = $1
-     UNION ALL
-     SELECT 1 FROM assertions WHERE case_id = $1 AND kind = 'STATEMENT'
-     LIMIT 1`,
-    [caseId]
-  );
-  return rows.length > 0;
+  return (await resolveTraceableStatement(tx, caseId)) !== null;
 }
 
 export async function resolveTraceableStatement(
@@ -814,9 +854,16 @@ export async function resolveTraceableStatement(
     return { type: 'DIALOGUE_MESSAGE', id: message.rows[0].id };
   }
   const assertion = await tx.query(
-    `SELECT id FROM assertions
-     WHERE case_id = $1 AND kind = 'STATEMENT'
-     ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+    `SELECT a.id FROM assertions a
+     WHERE a.case_id = $1
+       AND a.kind = 'STATEMENT'
+       AND (a.valid_from IS NULL OR a.valid_from <= now())
+       AND (a.valid_until IS NULL OR a.valid_until > now())
+       AND NOT EXISTS (
+         SELECT 1 FROM assertions successor WHERE successor.supersedes_id = a.id
+       )
+     ORDER BY a.recorded_at DESC, a.id DESC
+     LIMIT 1`,
     [caseId]
   );
   if (assertion.rows[0]) return { type: 'ASSERTION', id: assertion.rows[0].id };
@@ -1087,4 +1134,70 @@ export function contentOf(
     exitConditions: row.exit_conditions,
     dependencyRefs: row.dependency_refs,
   };
+}
+
+export type ReassessmentBasis =
+  | { kind: 'REASSESSMENT_CONDITION'; text: string }
+  | { kind: 'ALTERNATIVE_EXPLANATION'; text: string }
+  | { kind: 'CONFLICT'; topic: string }
+  | { kind: 'CORRECTION'; version: number };
+
+export function validateReassessmentBasis(
+  current: ProblemFormulationRow,
+  basis: ReassessmentBasis
+): string {
+  const normalized = basis.kind === 'CONFLICT' ? basis.topic.trim() : basis.kind === 'CORRECTION' ? '' : basis.text.trim();
+  if (basis.kind !== 'CORRECTION' && normalized.length === 0) {
+    throw pfError('REASSESSMENT_BASIS_INVALID', 'reassessment basis is empty');
+  }
+  switch (basis.kind) {
+    case 'REASSESSMENT_CONDITION':
+      if (!current.reassessment_conditions.some((item) => item.text.trim() === normalized)) {
+        throw pfError('REASSESSMENT_BASIS_INVALID', 'basis is not a current reassessment condition');
+      }
+      return `REASSESSMENT_CONDITION:${normalized}`;
+    case 'ALTERNATIVE_EXPLANATION':
+      if (!current.alternative_explanations.some((item) => item.text.trim() === normalized)) {
+        throw pfError('REASSESSMENT_BASIS_INVALID', 'basis is not a current alternative explanation');
+      }
+      return `ALTERNATIVE_EXPLANATION:${normalized}`;
+    case 'CONFLICT':
+      if (!current.conflicts.some((item) => item.topic.trim() === normalized)) {
+        throw pfError('REASSESSMENT_BASIS_INVALID', 'basis is not a current conflict');
+      }
+      return `CONFLICT:${normalized}`;
+    case 'CORRECTION':
+      if (!Number.isInteger(basis.version) || basis.version < 1) {
+        throw pfError('REASSESSMENT_BASIS_INVALID', 'invalid correction version');
+      }
+      if (current.supersedes_version !== basis.version) {
+        throw pfError('REASSESSMENT_BASIS_INVALID', 'basis correction is not the current version chain');
+      }
+      return `CORRECTION:${basis.version}`;
+    default:
+      throw pfError('REASSESSMENT_BASIS_INVALID', 'unsupported reassessment basis');
+  }
+}
+
+
+export async function listCaseUnknownObservationRefs(
+  tx: Tx,
+  caseId: string
+): Promise<{ ref: EvidenceRef; state: UnknownState }[]> {
+  const { rows } = await tx.query(
+    `SELECT o.id, o.value_state
+       FROM observations o
+      WHERE o.case_id = $1
+        AND o.value_state IN ('UNKNOWN', 'NOT_COLLECTED', 'DECLINED')
+        AND NOT EXISTS (
+          SELECT 1 FROM observations successor WHERE successor.supersedes_id = o.id
+        )
+        AND (o.valid_from IS NULL OR o.valid_from <= now())
+        AND (o.valid_until IS NULL OR o.valid_until > now())`,
+    [caseId]
+  );
+  return rows.map((row) => ({
+    ref: { type: 'OBSERVATION' as const, id: row.id },
+    state: row.value_state as UnknownState,
+  }));
 }

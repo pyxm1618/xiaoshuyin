@@ -89,6 +89,13 @@ describe('problem formulation state policy', () => {
     );
   });
 
+  it('correction uses the same bounded version allocator', () => {
+    expect(nextFormulationVersion(row({ version: 2147483646 }))).toBe(2147483647);
+    expect(() => nextFormulationVersion(row({ version: 2147483647 }))).toThrow(
+      ProblemFormulationError
+    );
+  });
+
   it('canonicalises evidence refs by type and id', () => {
     const refs = [
       { type: 'OBSERVATION' as const, id: 'B' },

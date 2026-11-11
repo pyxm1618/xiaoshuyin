@@ -13,6 +13,7 @@ import { createAdminPool } from '../setup/db.js';
 import {
   confirmProblemFormulation,
   correctProblemFormulation,
+  disputeProblemFormulation,
   presentProblemFormulation,
   reassessFromFormulation,
   startAssessment,
@@ -148,7 +149,9 @@ describe('problem formulation concurrency (Slice 8)', () => {
         content: content(messageId),
       }),
     ]);
-    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const fulfilled = results.filter(
+      (r) => r.status === 'fulfilled' && r.value.status < 300
+    );
     expect(fulfilled).toHaveLength(1);
 
     const rows = await admin.query(
@@ -194,7 +197,9 @@ describe('problem formulation concurrency (Slice 8)', () => {
         body: {},
       }),
     ]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(
+      results.filter((r) => r.status === 'fulfilled' && r.value.status < 300)
+    ).toHaveLength(1);
 
     const cases = await admin.query(
       'SELECT phase, version FROM cases WHERE id = $1',
@@ -271,7 +276,8 @@ describe('problem formulation concurrency (Slice 8)', () => {
     const current = rows.rows.filter((r: any) => r.status !== 'SUPERSEDED');
     expect(current).toHaveLength(1);
 
-    const correctionOk = results[0].status === 'fulfilled';
+    const correctionOk =
+      results[0].status === 'fulfilled' && results[0].value.status < 300;
     if (correctionOk) {
       expect(rows.rows).toHaveLength(2);
       expect(rows.rows[0].status).toBe('SUPERSEDED');
@@ -328,12 +334,106 @@ describe('problem formulation concurrency (Slice 8)', () => {
       `SELECT phase, is_primary FROM cases WHERE id = $1`,
       [caseId]
     );
-    const reassessOk = results[0].status === 'fulfilled';
+    const reassessOk =
+      results[0].status === 'fulfilled' && results[0].value.status < 300;
     if (reassessOk) {
       expect(rows.rows[0].phase).toBe('ASSESSMENT');
     } else {
       expect(['PROBLEM_FORMULATION', 'ASSESSMENT']).toContain(rows.rows[0].phase);
     }
     expect(rows.rows).toHaveLength(1);
+  });
+
+  it('same-current race matrix keeps one legal winner for every command pair', async () => {
+    const pairs = [
+      ['confirm-correction', 'confirm', 'correction'],
+      ['confirm-dispute', 'confirm', 'dispute'],
+      ['confirm-reassess', 'confirm', 'reassess'],
+      ['correction-correction', 'correction', 'correction'],
+    ] as const;
+    for (const [label, left, right] of pairs) {
+      const p = await prepare(`pair-${label}`);
+      const presented = await presentProblemFormulation(pool, {
+        actor: { accountId: p.owner.accountId, personId: p.owner.personId },
+        familyId: p.familyId, caseId: p.caseId,
+        expectedCaseVersion: p.caseVersion,
+        idempotencyKey: `t8race-pair-p-${Date.now()}-${seq++}`,
+        content: content(p.messageId),
+      });
+      expect(presented.status).toBe(200);
+      const invoke = (kind: string) => {
+        const common = {
+          actor: { accountId: p.owner.accountId, personId: p.owner.personId },
+          familyId: p.familyId, caseId: p.caseId,
+          expectedCaseVersion: presented.body.caseVersion,
+          idempotencyKey: `t8race-pair-${kind}-${label}-${Date.now()}-${seq++}`,
+          formulationVersion: 1,
+        };
+        if (kind === 'confirm') return confirmProblemFormulation(pool, { ...common, body: {} });
+        if (kind === 'dispute') return disputeProblemFormulation(pool, { ...common, body: {} });
+        if (kind === 'reassess') return reassessFromFormulation(pool, { ...common, basis: { kind: 'REASSESSMENT_CONDITION', text: 'new evidence' } });
+        return correctProblemFormulation(pool, { ...common, changes: { sceneFit: 'family_common_core_v2' } });
+      };
+      const results = await Promise.allSettled([invoke(left), invoke(right)]);
+      const wins = results.filter((r) => r.status === 'fulfilled' && r.value.status < 300);
+      expect(wins, label).toHaveLength(1);
+      const rows = await admin.query(
+        `SELECT count(*)::int AS n FROM problem_formulations WHERE case_id=$1 AND status<>'SUPERSEDED'`,
+        [p.caseId]
+      );
+      expect(rows.rows[0].n).toBe(1);
+    }
+  });
+
+  it('Present and Confirm serialize against SwitchPrimaryCase', async () => {
+    for (const kind of ['present', 'confirm'] as const) {
+      const p = await prepare(`switch-${kind}`);
+      const other = await createCase(p.owner, `switch-${kind}-b`);
+      const view = await app.inject({
+        method: 'GET', url: `/api/v1/cases/${p.caseId}`,
+        headers: { authorization: `Bearer ${p.owner.token}` },
+      });
+      const presented = kind === 'confirm'
+        ? await presentProblemFormulation(pool, {
+            actor: { accountId: p.owner.accountId, personId: p.owner.personId },
+            familyId: p.familyId, caseId: p.caseId,
+            expectedCaseVersion: p.caseVersion,
+            idempotencyKey: `t8race-sw-p-${Date.now()}-${seq++}`,
+            content: content(p.messageId),
+          })
+        : null;
+      const expectedCaseVersion = presented ? presented.body.caseVersion : p.caseVersion;
+
+      const business = kind === 'present'
+        ? presentProblemFormulation(pool, {
+            actor: { accountId: p.owner.accountId, personId: p.owner.personId },
+            familyId: p.familyId, caseId: p.caseId,
+            expectedCaseVersion,
+            idempotencyKey: `t8race-sw-b-${Date.now()}-${seq++}`,
+            content: content(p.messageId),
+          })
+        : confirmProblemFormulation(pool, {
+            actor: { accountId: p.owner.accountId, personId: p.owner.personId },
+            familyId: p.familyId, caseId: p.caseId,
+            expectedCaseVersion,
+            idempotencyKey: `t8race-sw-b-${Date.now()}-${seq++}`,
+            formulationVersion: 1, body: {},
+          });
+
+      const results = await Promise.allSettled([
+        business,
+        app.inject({
+          method: 'POST', url: `/api/v1/cases/${other.id}/switch-primary`,
+          headers: { authorization: `Bearer ${p.owner.token}`, 'idempotency-key': `t8race-sw-s-${Date.now()}-${seq++}` },
+          payload: { reason: 'race', expectedPrimaryCaseId: p.caseId, expectedPrimaryVersion: view.json().version },
+        }),
+      ]);
+      const businessOk = results[0].status === 'fulfilled' && results[0].value.status < 300;
+      if (businessOk) {
+        expect(results[0].status).toBe('fulfilled');
+      }
+      const caseRows = await admin.query('SELECT phase, version FROM cases WHERE id=$1', [p.caseId]);
+      expect(caseRows.rows).toHaveLength(1);
+    }
   });
 });
