@@ -573,8 +573,8 @@
 ## Checklist Result
 
 Checklist sections: 30  
-Planning checks: 380  
-PASS: 380  
+Planning checks: 410  
+PASS: 410  
 FAIL: 0  
 N/A: 0
 
