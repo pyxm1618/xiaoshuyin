@@ -41,6 +41,8 @@ jobs:
       - run: bun install
       - name: Run unit tests
         run: bunx vitest run tests/domain
+      - name: Run Digital Use Scene foundation tests
+        run: bunx vitest run tests/scenes/digital-use
 
   db-migrate:
     name: DB Migration
