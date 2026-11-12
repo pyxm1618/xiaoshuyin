@@ -181,6 +181,53 @@ const SLICE9_RISK_EVENT_CONSTRAINTS = [
   'risk_events_shape_check',
 ];
 
+/**
+ * Slice 10 reviewed compliance feature-policy constraints (exact catalog names,
+ * including PostgreSQL's 63-character truncation of the longer column names).
+ */
+const SLICE10_NEW_CONSTRAINTS = [
+  'compliance_feature_policies_ai_disclosure_rule_not_null',
+  'compliance_feature_policies_ai_rule_check',
+  'compliance_feature_policies_anthropomorphic_applicabil_not_null',
+  'compliance_feature_policies_applicability_check',
+  'compliance_feature_policies_approved_at_not_null',
+  'compliance_feature_policies_created_at_not_null',
+  'compliance_feature_policies_cross_field_check',
+  'compliance_feature_policies_effective_from_not_null',
+  'compliance_feature_policies_effective_interval_check',
+  'compliance_feature_policies_feature_code_not_null',
+  'compliance_feature_policies_feature_code_shape',
+  'compliance_feature_policies_feature_contract_revision_not_null',
+  'compliance_feature_policies_generated_content_label_ru_not_null',
+  'compliance_feature_policies_id_identity_key',
+  'compliance_feature_policies_id_not_null',
+  'compliance_feature_policies_identity_version_key',
+  'compliance_feature_policies_label_rule_check',
+  'compliance_feature_policies_minor_access_rule_not_null',
+  'compliance_feature_policies_minor_rule_check',
+  'compliance_feature_policies_no_self_supersede',
+  'compliance_feature_policies_pkey',
+  'compliance_feature_policies_policy_version_not_null',
+  'compliance_feature_policies_provenance_check',
+  'compliance_feature_policies_publication_source_check',
+  'compliance_feature_policies_publication_source_ref_not_null',
+  'compliance_feature_policies_revision_shape',
+  'compliance_feature_policies_supersede_closure_check',
+  'compliance_feature_policies_supersede_identity_fk',
+  'compliance_feature_policies_usage_reminder_rule_not_null',
+  'compliance_feature_policies_usage_rule_check',
+  'compliance_feature_policies_version_positive',
+];
+
+const SLICE10_NEW_OBJECTS = [
+  'table:compliance_feature_policies',
+  'policy:compliance_feature_policies_migrator_control',
+  'policy:compliance_feature_policies_runtime_active',
+  'trigger:compliance_feature_policies_guard',
+  'trigger:compliance_feature_policies_overlap_insert',
+  'trigger:compliance_feature_policies_overlap_update',
+];
+
 /** Constraints whose definitions 007 is authorized to rewrite. */
 const SLICE7_CONSTRAINT_CHANGES = [
   'case_events_event_type_check',
@@ -326,7 +373,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 4 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 5 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -404,7 +451,11 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       (name) => !beforeConstraintNames.includes(name)
     );
     expect(newConstraints.sort()).toEqual(
-      [...SLICE8_NEW_CONSTRAINTS, ...SLICE9_RISK_EVENT_CONSTRAINTS].sort()
+      [
+        ...SLICE8_NEW_CONSTRAINTS,
+        ...SLICE9_RISK_EVENT_CONSTRAINTS,
+        ...SLICE10_NEW_CONSTRAINTS,
+      ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
       (name) => afterConstraints[name] !== beforeConstraints[name]
@@ -422,6 +473,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     }
     expect([...afterSet].filter((e) => !beforeSet.has(e)).sort()).toEqual([
       ...SLICE8_NEW_OBJECTS,
+      ...SLICE10_NEW_OBJECTS,
       'policy:risk_events_family_scope',
       'table:risk_events',
     ].sort());
@@ -451,7 +503,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 11 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 12 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -468,6 +520,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '008_problem_formulation_core.sql',
       '009_safety_hold_control_foundation.sql',
       '010_problem_formulation_safety_vocabulary_reconcile.sql',
+      '011_compliance_feature_policy_foundation.sql',
     ]);
   }, 180_000);
 });

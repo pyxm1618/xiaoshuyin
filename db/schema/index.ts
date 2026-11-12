@@ -8,4 +8,4 @@
  * Never duplicate table definitions here: one Drizzle schema truth only.
  */
 
-export * from '../../packages/domain/src/safety/schema.js';
+export * from '../../packages/domain/src/safety/schema.js';export * from '../../packages/domain/src/compliance/schema.js';

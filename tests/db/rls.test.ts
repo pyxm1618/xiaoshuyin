@@ -32,8 +32,8 @@ describe('RLS', () => {
     const rlsTables = rows.filter((r: any) => r.relrowsecurity);
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
-    // Prior slices 19 + Slice 4 + Slice 8 + Slice 9.
-    expect(rlsTables.length).toBe(22);
+    // Prior slices 19 + Slice 4 + Slice 8 + Slice 9 + Slice 10.
+    expect(rlsTables.length).toBe(23);
     expect(noRlsTables.map((r: any) => r.relname)).toContain('accounts');
 
     for (const t of rlsTables) {
@@ -41,11 +41,11 @@ describe('RLS', () => {
     }
   });
 
-  it('52 policies exist after Slice 4 + Slice 8 + Slice 9 increments', async () => {
+  it('54 policies exist after Slice 4 + Slice 8 + Slice 9 + Slice 10 increments', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(52);
+    expect(rows.length).toBe(54);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
