@@ -292,7 +292,8 @@ Same professional owner only; source refs are references/metadata, not a new kno
 - reviewer can inspect sources used for exact definition version;
 - changed/withdrawn source identifies affected versions;
 - material correction creates new definition version/review path;
-- old published/retired source provenance remains historical.
+- old published/retired source provenance remains historical;
+- restricted professional source bodies/internal review material are not automatically exposed to family/runtime surfaces; only approved content and necessary provenance are exposed.
 
 **Verification**  
 Produce a ten-family-or-more inventory tied to the actual current V1 formal Intervention candidates. Each candidate must end in either REVIEWED+PUBLISHED with exact source/reviewer/package evidence or explicit NOT READY/UNPUBLISHED with the missing Contract/source reason. Run source correction/withdrawn-source tests; prove no historical rewrite and no AI/developer auto-fill.
@@ -374,10 +375,15 @@ Eligibility application service plus existing Authorization, Consent, Compliance
 - Compliance transaction-time result independent;
 - Safety hold/block independent and last hard gate before allow;
 - any required BLOCK/UNKNOWN fails closed;
-- publication/approval never bypasses family gates.
+- publication/approval never bypasses family gates;
+- participation requirement is not Consent, parent action cannot imply child Consent, and published definitions cannot imply Consent;
+- definition age/development scope never substitutes for the authoritative Compliance age/minor profile;
+- A4003-specific Compliance remains under its feature policy;
+- Safety Hold cannot be bypassed by selecting another ordinary Intervention;
+- this task never releases Safety and never creates Referral.
 
 **Verification**  
-Wrong actor, participant escalation, Consent present/missing/revoked, Compliance block/unresolved, Safety Hold, professional approval under Safety Hold.
+Wrong actor, participant escalation, Consent present/missing/revoked, parent-action-does-not-imply-child-Consent, published-definition-does-not-imply-Consent, Compliance block/unresolved, age-scope-vs-Compliance-profile independence, A4003 policy non-ownership, Safety Hold, alternate-intervention Safety bypass rejection, no Safety release/Referral write, and professional approval under Safety Hold.
 
 **Mapping**  
 [REQ: FR-029,FR-031,FR-032,FR-035,FR-036,FR-037,FR-038,FR-044] [AS: AS-17,AS-18,AS-19,AS-20,AS-21,AS-22,AS-34,AS-35,AS-36,AS-37,AS-38,AS-39,AS-40] [NS: NS-21]
