@@ -37,9 +37,43 @@ export const ProvenanceSource = z.enum([
 ]);
 
 export const ProfileValueStatus = z.enum(['RECORDED', 'SUPERSEDED', 'RETRACTED']);
-export const ConsentDecision = z.enum(['GRANTED', 'REVOKED']);
+
+/**
+ * Authoritative Consent decision vocabulary (internal).
+ *
+ * `DECLINED` belongs ONLY to `DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT`. The public
+ * guardian consent contract keeps using `GuardianConsentDecision` below, so the
+ * internal enum expansion cannot widen the existing public API.
+ */
+export const ConsentDecision = z.enum(['GRANTED', 'DECLINED', 'REVOKED']);
+export type ConsentDecisionType = z.infer<typeof ConsentDecision>;
+
 export const ConsentRequestStatus = z.enum(['PENDING', 'GRANTED', 'EXPIRED', 'ABANDONED']);
-export const ConsentPurpose = z.enum(['UNDER_14_GUARDIAN_CONSENT']);
+
+/** Authoritative purpose vocabulary (internal). */
+export const ConsentPurpose = z.enum([
+  'UNDER_14_GUARDIAN_CONSENT',
+  'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT',
+]);
+export type ConsentPurposeType = z.infer<typeof ConsentPurpose>;
+
+/**
+ * Public guardian consent surface. Frozen: the pre-existing guardian contract
+ * accepts exactly this purpose and these decisions, nothing more.
+ */
+export const GuardianConsentPurpose = z.enum(['UNDER_14_GUARDIAN_CONSENT']);
+export type GuardianConsentPurposeType = z.infer<typeof GuardianConsentPurpose>;
+export const GuardianConsentDecision = z.enum(['GRANTED', 'REVOKED']);
+export type GuardianConsentDecisionType = z.infer<typeof GuardianConsentDecision>;
+
+/** The one owner-approved Digital Use 01004 purpose. */
+export const SupplementalAssessmentConsentPurpose = z.literal(
+  'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT'
+);
+export type SupplementalAssessmentConsentPurposeType = z.infer<
+  typeof SupplementalAssessmentConsentPurpose
+>;
+
 export const AccountStatus = z.enum(['ACTIVE', 'DISABLED']);
 
 /**
@@ -203,8 +237,8 @@ export type GrantConsentRequestType = z.infer<typeof GrantConsentRequest>;
 
 export const ConsentRecord = z.strictObject({
   id: z.string().uuid(),
-  purpose: ConsentPurpose,
-  decision: ConsentDecision,
+  purpose: GuardianConsentPurpose,
+  decision: GuardianConsentDecision,
   version: z.number().int().min(1),
   guardianPersonId: z.string().uuid().optional(),
   onboardingRequestId: z.string().uuid().nullable().optional(),
@@ -243,6 +277,37 @@ export const ConsentEvidence = z.strictObject({
 });
 export type ConsentEvidenceType = z.infer<typeof ConsentEvidence>;
 
+/**
+ * Purpose-discriminated evidence for `DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT`.
+ *
+ * This is deliberately NOT the guardian `ConsentEvidence` shape. It proves
+ * who (actor == subject), for which Case + purpose, against which approved
+ * disclosure identity, with which confirmation statement, which decision and
+ * when. It never stores Assessment answers, device usage facts, parent
+ * observations, statements, impact narratives, raw IP or raw User-Agent.
+ *
+ * The `evidence_kind` discriminator makes the purpose branch structurally
+ * unambiguous; the database CHECK requires this object to agree with the
+ * authoritative columns.
+ */
+export const SupplementalAssessmentConsentEvidence = z.strictObject({
+  evidence_kind: z.literal('DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT'),
+  purpose: SupplementalAssessmentConsentPurpose,
+  disclosure_reference: z.string().min(1).max(120),
+  disclosure_version: z.string().min(1).max(64),
+  disclosure_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  confirmation_statement_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  decision: z.enum(['GRANTED', 'DECLINED', 'REVOKED']),
+  decision_actor_person_id: z.string().uuid(),
+  case_id: z.string().uuid(),
+  decided_at: z.string().datetime(),
+  client_ip_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  user_agent_hash: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type SupplementalAssessmentConsentEvidenceType = z.infer<
+  typeof SupplementalAssessmentConsentEvidence
+>;
+
 // ── Compliance schemas ──────────────────────────────────────
 
 export const ComplianceProfile = z.strictObject({
@@ -261,7 +326,7 @@ export const Notice = z.strictObject({
   version: z.string(),
   hash: z.string(),
   title: z.string(),
-  purpose: ConsentPurpose,
+  purpose: GuardianConsentPurpose,
   effectiveAt: z.string().datetime(),
 });
 export type NoticeType = z.infer<typeof Notice>;

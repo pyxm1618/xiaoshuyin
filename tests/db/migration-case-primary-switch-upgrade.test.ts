@@ -95,6 +95,9 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_REASSESSMENT_STARTED',
     'CASE_RISK_RESOLVED',
     'CASE_SAFETY_HOLD_ENTERED',
+    'CONSENT_SUPPLEMENTAL_ASSESSMENT_GRANTED',
+    'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
+    'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -276,6 +279,37 @@ interface SeedIds {
   participationId: string;
 }
 
+/**
+ * Slice 1 Consent Owner — 01004 narrow post-merge remediation.
+ *
+ * Three guardian-oriented constraints are intentionally replaced by the
+ * purpose-discriminated branch (Frozen Spec FR-056 / FR-071). Every guardian
+ * clause is re-imposed by `consent_purpose_field_binding`, so no guardian
+ * invariant is dropped or widened.
+ */
+const CONSENT_OWNER_REPLACED_CONSTRAINTS = [
+  'consent_records_guardian_person_id_not_null',
+  'consent_records_guardian_account_id_not_null',
+  'consent_request_binding',
+];
+
+const CONSENT_OWNER_NEW_CONSTRAINTS = [
+  'consent_supplemental_case_fk',
+  'consent_supplemental_case_family_fk',
+  'consent_supplemental_actor_person_fk',
+  'consent_supplemental_actor_account_fk',
+  'consent_purpose_field_binding',
+  'consent_guardian_decision_set',
+  'consent_supplemental_evidence_shape',
+];
+
+const CONSENT_OWNER_NEW_OBJECTS = [
+  'trigger:consent_records_supplemental_insert_guard',
+  'trigger:consent_records_supplemental_update_guard',
+];
+
+const CONSENT_OWNER_CHANGED_CONSTRAINTS = ['business_audit_events_event_type_check'];
+
 describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)', () => {
   let admin: Client;
   let seed: Client;
@@ -373,7 +407,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 5 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 7 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -445,8 +479,20 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeConstraintNames = Object.keys(beforeConstraints).sort();
     const afterConstraintNames = Object.keys(afterConstraints).sort();
     for (const name of beforeConstraintNames) {
+      if (CONSENT_OWNER_REPLACED_CONSTRAINTS.includes(name)) continue;
       expect(afterConstraintNames).toContain(name);
     }
+    // The replaced guardian invariants are re-imposed by the purpose branch.
+    for (const name of CONSENT_OWNER_REPLACED_CONSTRAINTS.slice(0, 2)) {
+      expect(afterConstraintNames).not.toContain(name);
+    }
+    expect(afterConstraintNames).toContain('consent_purpose_field_binding');
+    expect(afterConstraints['consent_purpose_field_binding']).toContain(
+      "guardian_person_id IS NOT NULL"
+    );
+    expect(afterConstraints['consent_purpose_field_binding']).toContain(
+      "guardian_account_id IS NOT NULL"
+    );
     const newConstraints = afterConstraintNames.filter(
       (name) => !beforeConstraintNames.includes(name)
     );
@@ -455,13 +501,23 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE8_NEW_CONSTRAINTS,
         ...SLICE9_RISK_EVENT_CONSTRAINTS,
         ...SLICE10_NEW_CONSTRAINTS,
+        ...CONSENT_OWNER_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
-      (name) => afterConstraints[name] !== beforeConstraints[name]
+      (name) => afterConstraintNames.includes(name) && afterConstraints[name] !== beforeConstraints[name]
     );
+    // `business_audit_events_event_type_check` is already part of the Slice 7
+    // set; the Consent remediation extends that same constraint, so this is a
+    // union of changed constraint names, never a duplicated literal.
     expect(changedConstraints.sort()).toEqual(
-      [...SLICE7_CONSTRAINT_CHANGES, 'business_audit_events_resource_type_check'].sort()
+      [
+        ...new Set([
+          ...SLICE7_CONSTRAINT_CHANGES,
+          'business_audit_events_resource_type_check',
+          ...CONSENT_OWNER_CHANGED_CONSTRAINTS,
+        ]),
+      ].sort()
     );
 
     // Exactly the reviewed Slice 8 + Slice 9 objects are added; legacy entries survive.
@@ -476,6 +532,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...SLICE10_NEW_OBJECTS,
       'policy:risk_events_family_scope',
       'table:risk_events',
+      ...CONSENT_OWNER_NEW_OBJECTS,
     ].sort());
 
     // Column-level UPDATE grant, never table-level.
@@ -503,7 +560,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 12 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 14 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -521,6 +578,8 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '009_safety_hold_control_foundation.sql',
       '010_problem_formulation_safety_vocabulary_reconcile.sql',
       '011_compliance_feature_policy_foundation.sql',
+      '012_consent_01004_supplemental_enums.sql',
+      '013_consent_01004_supplemental_assessment.sql',
     ]);
   }, 180_000);
 });
