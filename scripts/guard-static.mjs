@@ -599,22 +599,22 @@ function checkSceneFoundationFile(relPath, content, report) {
       'Production code must never import/reference the Digital Use canonical test snapshot');
   }
 
-  if (!relPath.startsWith(DIGITAL_USE_SCENE_ROOT)) return;
-
-  if (/node[-_]registry\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath)) {
-    report('R10-scenes-single-truth', relPath, 1,
-      'node-registry is forbidden; node-manifest.ts is the only production node truth');
-  }
-
-  if (relPath !== DIGITAL_USE_MANIFEST) {
+  if (isProduction && relPath !== DIGITAL_USE_MANIFEST) {
     const literalRegistryShape =
       /nodeCode\s*:\s*['"][A0-9]/.test(content) &&
       /sourceNodeCode\s*:\s*['"][A0-9]/.test(content) &&
       /allowedNext\s*:\s*\[/.test(content);
     if (literalRegistryShape) {
       report('R10-scenes-single-truth', relPath, 1,
-        'Second registry-shaped node table detected outside node-manifest.ts');
+        'Second registry-shaped Digital Use node table detected outside node-manifest.ts');
     }
+  }
+
+  if (!relPath.startsWith(DIGITAL_USE_SCENE_ROOT)) return;
+
+  if (/node[-_]registry\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath)) {
+    report('R10-scenes-single-truth', relPath, 1,
+      'node-registry is forbidden; node-manifest.ts is the only production node truth');
   }
 
   if (relPath === DIGITAL_USE_MANIFEST) {
@@ -758,6 +758,25 @@ if (process.argv.includes('--self-test')) {
       rule: 'R10-scenes-single-truth',
     },
     {
+      name: 'apps tree digital-use node registry bypass',
+      path: 'apps/server/api/src/digital-use-node-registry.ts',
+      content: "export const registry = [{ nodeCode: 'A1001', sourceNodeCode: 'A1001', allowedNext: [] }];",
+      rule: 'R10-scenes-single-truth',
+    },
+    {
+      name: 'packages tree digital-use topology bypass',
+      path: 'packages/other/src/digital-use-topology.ts',
+      content: "export const topology = [{ nodeCode: 'A3001', sourceNodeCode: 'A3001', allowedNext: [] }];",
+      rule: 'R10-scenes-single-truth',
+    },
+    {
+      name: 'isolated production node reference remains allowed',
+      path: 'apps/server/api/src/digital-use-link.ts',
+      content: "export const currentNodeCode = 'A3001';\nexport function useNodeCode(nodeCode) { return nodeCode; }",
+      rule: 'R10-scenes-single-truth',
+      expectViolation: false,
+    },
+    {
       name: 'production snapshot import',
       path: 'packages/scenes/digital-use/evil-snapshot.ts',
       content: "import snapshot from '../../../tests/fixtures/digital-use/v1-product-node-manifest.snapshot.json';",
@@ -796,13 +815,17 @@ if (process.argv.includes('--self-test')) {
     } else {
       checkSafetyUniqueEntry(sample.path, sample.content, report);
     }
-    if (!hits.some((hit) => hit.rule === sample.rule)) {
+    const hasExpectedRuleHit = hits.some((hit) => hit.rule === sample.rule);
+    const expectsViolation = sample.expectViolation !== false;
+    if (expectsViolation ? !hasExpectedRuleHit : hasExpectedRuleHit) {
       selfTestFailures += 1;
-      console.error(`guard-static self-test: MISSED ${sample.name}`);
+      console.error(
+        `guard-static self-test: ${expectsViolation ? 'MISSED' : 'FALSE POSITIVE'} ${sample.name}`
+      );
     }
   }
   if (selfTestFailures === 0) {
-    console.log(`guard-static self-test: PASS (${synthetic.length} synthetic bypass fixtures detected)`);
+    console.log(`guard-static self-test: PASS (${synthetic.length} synthetic fixtures validated)`);
     process.exit(0);
   }
   console.error(`guard-static self-test: FAIL (${selfTestFailures} missed)`);
