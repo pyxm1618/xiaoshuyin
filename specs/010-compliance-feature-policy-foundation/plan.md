@@ -1125,7 +1125,9 @@ Fresh full re-audit confirmed:
 - Open Product Decisions remain 0;
 - unresolved planning findings = 0.
 
-Governance Format: **PENDING TARGETED EXECUTION** — the exact validator and self-test commands must exit 0 after this provenance/gate-state commit before final readiness is reported.
+Governance Validator: **PASS** — `node .specify/scripts/validate-governance.mjs` exit status `0`.
+
+Governance Self-tests: **PASS** — `node .specify/scripts/tests/run-governance-tests.mjs` exit status `0`; `15/15` cases passed.
 
 Future Implement Gate: **OPEN** — former Slice 9 Drizzle dependency is now satisfied on main.
 
@@ -1133,4 +1135,4 @@ T1001 still revalidates current main, migration numbering, Drizzle versions/seam
 
 **SLICE 10 — PLAN RE-FROZEN**
 
-**READY FOR DEVELOPMENT AFTER GOVERNANCE EXECUTION PASSES**
+**READY FOR DEVELOPMENT**
