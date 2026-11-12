@@ -319,7 +319,7 @@ Planning-contract review after remediation contains no FAIL item.
 | CHK192 | authoritative Frozen Spec v2 blob remains exact | PASS | `ba38ccdafe85bbb044d994292a6a7237337eb474` |
 | CHK193 | diff from Frozen Spec contains only Plan / Checklist / Tasks | PASS | remote compare |
 | CHK194 | Frozen Spec and Docs remain unchanged | PASS | no spec/doc file in planning diff |
-| CHK195 | governance-required plan headings and canonical task syntax remain valid | PASS | 3 required headings; 13/13 task lines have REQ + VERIFY; exact command execution recorded after commit |
+| CHK195 | governance validator and self-tests execute successfully | PASS | validator exit 0; self-tests exit 0 with 15/15 cases; 13/13 task lines retain REQ + VERIFY |
 | CHK196 | all FR-001..FR-030 have exact task-line traceability | PASS | mechanical scan |
 | CHK197 | no production source / migration / test / dependency / CI file changed | PASS | remote compare |
 | CHK198 | Open Product Decisions / unresolved planning findings are both zero | PASS | Frozen Spec + Audit 1 closeout |
