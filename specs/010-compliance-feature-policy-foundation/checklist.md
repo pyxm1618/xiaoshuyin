@@ -8,15 +8,15 @@ Status values: **PASS / FAIL / N/A**.
 
 | ID | Check | Status | Evidence / Decision |
 |---|---|---|---|
-| CHK001 | current authoritative main was re-read | PASS | `8e393c990be53c888c2e68d881bd8b23f9c37638` |
-| CHK002 | Frozen Spec commit exists | PASS | `20b6eaecf7a1ac24904409f805042759631f5cf0` |
-| CHK003 | Frozen Spec blob matches freeze record | PASS | `a911bcc0c168e00efa015d53d5c120bece28c5a7` |
-| CHK004 | Frozen Spec is one commit ahead / zero behind current main | PASS | remote compare |
-| CHK005 | Frozen Spec commit changes only its `spec.md` | PASS | remote compare |
-| CHK006 | Input Drift is classified | PASS | NONE |
+| CHK001 | current authoritative main was re-read | PASS | `f3f45f3c002eeb9cf169c201d4fae0f74fe03602` |
+| CHK002 | authoritative Frozen Spec v2 commit exists | PASS | `bc12a0d64a9bd2cf09bbc0dfe0d3ffa305da97e1` |
+| CHK003 | authoritative Frozen Spec v2 blob matches freeze record | PASS | `ba38ccdafe85bbb044d994292a6a7237337eb474` |
+| CHK004 | Frozen Spec v2 / current-main divergence is reconciled | PASS | merge-base `95ce77d67a0a489dcbf4f788c4ae04ff364ec0c0`; Slice 8 execution drift only |
+| CHK005 | Frozen Spec v2 re-freeze commit changes only its `spec.md` | PASS | remote commit diff |
+| CHK006 | Input Drift is classified | PASS | RECONCILED — NON-SEMANTIC DEPENDENCY EXECUTION DRIFT (Slice 8 merge) |
 | CHK007 | four authoritative Docs were re-read for Slice 10 semantics | PASS | Compliance / data / auth / Safety / Drizzle sections |
 | CHK008 | V1 product semantics remain owned by `V1产品需求.md` | PASS | no planning override |
-| CHK009 | Frozen Spec was not edited | PASS | planning branch starts from frozen commit |
+| CHK009 | Frozen Spec v2 was not edited by targeted planning remediation | PASS | authority remains commit `bc12a0d64a9bd2cf09bbc0dfe0d3ffa305da97e1` / blob `ba38ccdafe85bbb044d994292a6a7237337eb474` |
 | CHK010 | Docs change is required | N/A | no Docs change |
 
 ## B. Governance format
@@ -35,6 +35,7 @@ Status values: **PASS / FAIL / N/A**.
 | CHK020 | every task line uses checkbox + T-ID + REQ + VERIFY | PASS | tasks.md contract |
 | CHK021 | checklist items are mechanically decidable | PASS | CHK001+ PASS/FAIL/N/A |
 | CHK022 | later artifact exists only with predecessors | PASS | spec → plan → tasks |
+| CHK022A | `S10R01_GOVERNANCE_STAGE1_HEADING_GAP` is closed | PASS | Frozen Spec v2 contains `## Upstream Traceability`, `## Scope`, `## Acceptance Scenarios`, `## Acceptance Evidence` |
 
 ## C. Scope
 
@@ -168,8 +169,8 @@ Status values: **PASS / FAIL / N/A**.
 
 | ID | Check | Status | Evidence / Decision |
 |---|---|---|---|
-| CHK111 | current main Drizzle gap is recognized | PASS | no `db/schema` / no real runtime seam on main |
-| CHK112 | authoritative Drizzle capability dependency is explicit without creating a Slice 9 Safety semantic dependency | PASS | Slice 9 Drizzle or approved Data Access Remediation; Implement Gate currently BLOCKED |
+| CHK111 | current main Drizzle foundation is present | PASS | `db/schema/index.ts`, `db/drizzle.config.ts`, `apps/server/api/src/db/drizzle-tx.ts` |
+| CHK112 | authoritative Drizzle capability dependency is satisfied without creating a Slice 9 Safety semantic dependency | PASS | merged Slice 9 Drizzle seam; Implement Gate OPEN |
 | CHK113 | Slice 10 does not build a second transaction abstraction | PASS | consume Slice 9 seam |
 | CHK114 | raw-pg-only fallback is forbidden | PASS | hard STOP |
 | CHK115 | reviewed SQL migration remains production schema-change truth | PASS | no push |
@@ -314,19 +315,19 @@ Planning-contract review after remediation contains no FAIL item.
 
 | ID | Check | Status | Evidence / Decision |
 |---|---|---|---|
-| CHK191 | current main was re-read at final re-audit | PASS | `8e393c990be53c888c2e68d881bd8b23f9c37638` |
-| CHK192 | Frozen Spec blob remains exact | PASS | `a911bcc0c168e00efa015d53d5c120bece28c5a7` |
+| CHK191 | current main was re-read at final re-audit | PASS | `f3f45f3c002eeb9cf169c201d4fae0f74fe03602` |
+| CHK192 | authoritative Frozen Spec v2 blob remains exact | PASS | `ba38ccdafe85bbb044d994292a6a7237337eb474` |
 | CHK193 | diff from Frozen Spec contains only Plan / Checklist / Tasks | PASS | remote compare |
 | CHK194 | Frozen Spec and Docs remain unchanged | PASS | no spec/doc file in planning diff |
-| CHK195 | governance-required plan headings and canonical task syntax pass direct validator-rule evaluation | PASS | 3 required headings; 13/13 task lines have REQ + VERIFY |
+| CHK195 | governance-required plan headings and canonical task syntax remain valid | PASS | 3 required headings; 13/13 task lines have REQ + VERIFY; exact command execution recorded after commit |
 | CHK196 | all FR-001..FR-030 have exact task-line traceability | PASS | mechanical scan |
 | CHK197 | no production source / migration / test / dependency / CI file changed | PASS | remote compare |
 | CHK198 | Open Product Decisions / unresolved planning findings are both zero | PASS | Frozen Spec + Audit 1 closeout |
-| CHK199 | Slice 9 Drizzle implementation and separate Data Access Remediation are both absent from current main | PASS | Implement Gate remains BLOCKED |
-| CHK200 | final planning result does not authorize implementation while dependency is blocked | PASS | READY FOR DEVELOPMENT WHEN IMPLEMENT GATE OPENS |
+| CHK199 | Slice 9 Drizzle implementation is present on current main | PASS | PR #28 + #29 merged; same-client identity/RLS seam verified; separate remediation not required |
+| CHK200 | final planning result records the satisfied technical dependency without performing implementation | PASS | Implement Gate OPEN / READY FOR DEVELOPMENT |
 
 **FINAL PRE-DEVELOPMENT RE-AUDIT: PASS**
 
 **SLICE 10 — PLAN FROZEN**
 
-This checklist does **not** open implementation. Slice 10 remains technically blocked until the Slice 9 Drizzle foundation is actually merged or a separately approved Data Access Remediation closes the dependency.
+This checklist records the Implement Gate as **OPEN** because the Slice 9 Drizzle foundation is merged and verified on current main. T1001 must revalidate those facts at development start before any production edit.
