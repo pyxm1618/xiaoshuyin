@@ -4,6 +4,7 @@ import { digitalUseNodeManifest } from '../../../packages/scenes/digital-use/nod
 import {
   validateDigitalUseGraph,
   validateDigitalUseParallelFidelity,
+  validateDigitalUseSnapshotFidelity,
 } from '../../../packages/scenes/digital-use/validators.js';
 
 const snapshot = JSON.parse(
@@ -47,6 +48,21 @@ describe('Slice 11 parallel fidelity', () => {
 
     const graph = validateDigitalUseGraph(mutated, expectedCodes);
     expect(graph.orphanNodeCodes).toEqual(expect.arrayContaining(['A4001', 'A4002', 'A4003', 'A4004']));
+  });
+
+  it('fails if an approved parallel relation is silently serialised by an additive completion prerequisite', () => {
+    const mutated = digitalUseNodeManifest.map((node) =>
+      node.nodeCode === 'A3001'
+        ? { ...node, prerequisites: [...node.prerequisites, 'A4001_COMPLETE'] }
+        : { ...node }
+    ) as any[];
+
+    expect(mutated.find((node) => node.nodeCode === 'A3001')?.canRunInParallelWith).toContain('A3002');
+    expect(validateDigitalUseParallelFidelity(mutated, snapshot.parallelRelations).valid).toBe(true);
+
+    const fidelity = validateDigitalUseSnapshotFidelity(mutated, snapshot as any);
+    expect(fidelity.valid).toBe(false);
+    expect(fidelity.issues.map((item) => item.code)).toContain('SNAPSHOT_FIELD_DRIFT');
   });
 
   it('fails if A3001/A3002 parallel work is made one-sided', () => {
