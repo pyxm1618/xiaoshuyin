@@ -271,9 +271,9 @@ Package resolution tests, concurrent publish tests, historical lookup, manifest/
 **Mapping**  
 [REQ: FR-003,FR-010,FR-014,FR-019,FR-020,FR-021] [AS: AS-13,AS-14,AS-15,AS-16,AS-43,AS-52] [NS: NS-22,NS-24]
 
-## T1609 — Professional source provenance, correction and retirement history
+## T1609 — Initial V1 definition set, professional source provenance, correction and retirement history
 **Goal**  
-Make professional source/version provenance inspectable and ensure correction never rewrites published history.
+Inventory the Frozen Spec §7.2 V1 Digital Use formal Intervention families, materialize only source-supported professional definitions, make source/version provenance inspectable, and ensure correction never rewrites published history.
 
 **Prerequisites**  
 T1603–T1608.
@@ -282,15 +282,20 @@ T1603–T1608.
 Same professional owner only; source refs are references/metadata, not a new knowledge/RAG platform.
 
 **Required behavior**
+- inventory at minimum: internal motivation; emotional regulation; sleep/routine; time management/procrastination; family relationship/interaction; parent consistency; rewards/incentives; supervision; parent self-regulation; family communication/parent-response when used as a formal Intervention;
+- do not auto-promote every Phase 2 node/template/example/FAQ/support artifact;
+- for each candidate, record the authoritative source material used and Contract completeness;
+- only complete, real-reviewed candidates may become PUBLISHED and exactly package-bound;
+- insufficient source content or incomplete Contract remains NOT READY / unpublished;
+- developer/model must not invent steps, thresholds, age boundaries, contraindications, review criteria or sources;
 - version-aware professional_source_refs;
 - reviewer can inspect sources used for exact definition version;
 - changed/withdrawn source identifies affected versions;
 - material correction creates new definition version/review path;
-- old published/retired source provenance remains historical;
-- insufficient source content leaves definition unpublished.
+- old published/retired source provenance remains historical.
 
 **Verification**  
-Source correction and withdrawn-source tests; no mutation of historical definition; no AI/developer auto-fill.
+Produce a ten-family-or-more inventory tied to the actual current V1 formal Intervention candidates. Each candidate must end in either REVIEWED+PUBLISHED with exact source/reviewer/package evidence or explicit NOT READY/UNPUBLISHED with the missing Contract/source reason. Run source correction/withdrawn-source tests; prove no historical rewrite and no AI/developer auto-fill.
 
 **Mapping**  
 [REQ: FR-006,FR-015,FR-017,FR-021,FR-052] [AS: AS-11,AS-12,AS-53,AS-60] [NS: NS-07,NS-08,NS-23]
