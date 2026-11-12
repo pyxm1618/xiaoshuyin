@@ -441,8 +441,11 @@ definition created; review submitted; approved; publication attempted; published
 **Required metadata**
 actor; definition/version; command/reason; package; before/after revision; timestamp; reviewer/source provenance; request/trace correlation. Family audit uses IDs/reason codes/revisions, not unnecessary narrative.
 
+**Authority split**
+Successful professional truth changes must write authoritative business audit/event in the same transaction. Denied/failed attempts and eligibility blocks may emit bounded non-authoritative request/observability metadata only after the final outcome is known; they must not claim a lifecycle transition and must not become a second professional truth store.
+
 **Verification**  
-Audit row/event assertions for success and block paths; unauthorized/failing transaction cannot claim success.
+Authoritative audit assertions for successful mutations; bounded observability assertions for denied/block paths; unauthorized/failing transaction cannot claim success.
 
 **Mapping**  
 [REQ: FR-006,FR-012,FR-042,FR-043] [AS: AS-01,AS-07,AS-41,AS-46]
