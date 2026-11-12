@@ -49,7 +49,9 @@ describe('compliance feature-policy migration and schema', () => {
   }, 120_000);
 
   afterAll(async () => {
-    await admin?.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`).catch(() => undefined);
+    // No FORCE: all clients are closed inside each test, so a plain drop never
+    // terminates a neighbouring suite's connection.
+    await admin?.query(`DROP DATABASE IF EXISTS "${database}"`).catch(() => undefined);
     await admin?.end().catch(() => undefined);
   }, 120_000);
 

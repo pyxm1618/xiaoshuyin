@@ -103,18 +103,21 @@ describe('compliance feature-policy publication and concurrency', () => {
     migrator = new Client({ connectionString: migrationUrl });
     app = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await Promise.all([migrator.connect(), app.connect()]);
+    // A dropped throwaway database must never surface as an uncaught pg error.
+    app.on('error', () => undefined);
+    migrator.on('error', () => undefined);
     // Exercise the runtime privilege boundary with the real runtime role.
     await app.query('SET ROLE xiaoshuyin_app');
   }, 120_000);
 
   afterAll(async () => {
-    await Promise.all([
-      admin?.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`).catch(() => undefined),
-      app?.end().catch(() => undefined),
-      migrator?.end().catch(() => undefined),
-    ]).then(async () => {
-      await admin?.end().catch(() => undefined);
-    });
+    // Close the runtime/migrator clients BEFORE dropping the throwaway database:
+    // force-terminating a live connection surfaces as an unhandled 57P01 and
+    // can race neighbouring DB suites in the same worker.
+    await app?.end().catch(() => undefined);
+    await migrator?.end().catch(() => undefined);
+    await admin?.query(`DROP DATABASE IF EXISTS "${database}"`).catch(() => undefined);
+    await admin?.end().catch(() => undefined);
   }, 120_000);
 
   it('publishes the first reviewed version and runtime sees only it', async () => {
