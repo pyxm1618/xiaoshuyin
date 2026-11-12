@@ -176,7 +176,7 @@ scanDir(ROOT, (file) => {
 const FORBIDDEN_TABLE_PATTERNS = [
   'participation_invites',
   'evidence_items',
-  'problem_formulations',
+
   'scene_node_states',
   'scene_artifacts',
   'safety_states',

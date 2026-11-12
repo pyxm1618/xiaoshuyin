@@ -7,7 +7,7 @@
  *   - `risk_events` has ENABLE + FORCE RLS and a Family-scope policy;
  *   - the runtime role has exactly SELECT + INSERT (no UPDATE/DELETE/TRUNCATE);
  *   - `cases` table-level UPDATE stays denied while `status` is now a legal
- *     column-level UPDATE target and `phase` is not;
+ *     column-level UPDATE target and `phase` is a Slice 8 legal column;
  *   - every structural CHECK / FK / unique fence rejects malformed rows.
  */
 
@@ -213,7 +213,7 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
       version_update: true,
       updated_update: true,
       primary_update: true,
-      phase_update: false,
+      phase_update: true,
     });
   });
 

@@ -172,16 +172,13 @@ describe('Database Roles (T012 RED)', () => {
     expect(rows[0].has).toBe(false);
   });
 
-  it('Slice 7+9: cases allows column UPDATE only on is_primary / status / version / updated_at', async () => {
-    // Slice 9 adds the narrow `status` capability required for the Safety
-    // transition; `phase` must remain un-writable so a Safety transition can
-    // only ever preserve it.
-    const allowed = ['is_primary', 'status', 'version', 'updated_at'];
+  it('Slice 7+8+9: cases allows only is_primary / phase / status / version / updated_at', async () => {
+    const allowed = ['is_primary', 'phase', 'status', 'version', 'updated_at'];
     const denied = [
       'id',
       'family_id',
       'created_by_person_id',
-      'phase',
+
       'created_at',
     ];
 
@@ -199,6 +196,47 @@ describe('Database Roles (T012 RED)', () => {
         [column]
       );
       expect(rows[0].has, `app must NOT have column UPDATE on cases.${column}`).toBe(false);
+    }
+  });
+
+  it('Slice 8: problem_formulations SELECT/INSERT allowed, DELETE denied', async () => {
+    for (const priv of ['SELECT', 'INSERT']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'problem_formulations', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `app should have ${priv}`).toBe(true);
+    }
+    for (const priv of ['DELETE', 'TRUNCATE']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'problem_formulations', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `app must NOT have ${priv}`).toBe(false);
+    }
+  });
+
+  it('Slice 8: problem_formulations column UPDATE is lifecycle-only', async () => {
+    const allowed = ['status', 'user_response', 'confirmed_by_person_id', 'confirmed_at', 'updated_at'];
+    const denied = [
+      'id', 'family_id', 'case_id', 'version', 'primary_problem', 'key_factors',
+      'evidence_refs', 'unknowns', 'conflicts', 'scene_fit',
+      'alternative_explanations', 'reassessment_conditions', 'exit_conditions',
+      'dependency_refs', 'supersedes_version', 'created_at',
+    ];
+    for (const column of allowed) {
+      const { rows } = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'problem_formulations', $1, 'UPDATE') AS has`,
+        [column]
+      );
+      expect(rows[0].has, `allowed ${column}`).toBe(true);
+    }
+    for (const column of denied) {
+      const { rows } = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'problem_formulations', $1, 'UPDATE') AS has`,
+        [column]
+      );
+      expect(rows[0].has, `denied ${column}`).toBe(false);
     }
   });
 

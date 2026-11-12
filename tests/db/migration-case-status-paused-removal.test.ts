@@ -262,7 +262,7 @@ describe('006 case_status PAUSED removal', () => {
       const output = runMigrator(upgradeUrl);
       expect(output).toContain('APPLY 006_case_status_paused_removal.sql');
       expect(output).toContain('APPLY 007_case_primary_switch.sql');
-      expect(output).toMatch(/Migration complete: 3 new, 6 previously applied\./);
+      expect(output).toMatch(/Migration complete: 5 new, 6 previously applied\./);
 
       expect(await enumLabels(seed)).toEqual(FIVE_LABELS);
 
@@ -330,7 +330,7 @@ describe('006 case_status PAUSED removal', () => {
       const beforeIndexes = await casesIndexes(seed);
 
       const output = runMigrator(upgradeUrl);
-      expect(output).toMatch(/Migration complete: 0 new, 9 previously applied\./);
+      expect(output).toMatch(/Migration complete: 0 new, 11 previously applied\./);
       expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
       expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
       expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');

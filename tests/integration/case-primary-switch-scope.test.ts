@@ -38,6 +38,14 @@ const BASE_CASE_OPERATION_IDS = [
 /** The only Case business operation Slice 7 adds. */
 const SLICE7_ADDED_OPERATION_IDS = ['switchPrimaryCase'] as const;
 
+/** The four Case business operations Slice 8 adds. */
+const SLICE8_ADDED_OPERATION_IDS = [
+  'getCurrentProblemFormulation',
+  'confirmProblemFormulation',
+  'disputeProblemFormulation',
+  'correctProblemFormulation',
+] as const;
+
 /** Real Case path operations that are not Case business operations. */
 const NON_BUSINESS_OPERATION_IDS = ['createParticipationInvite'] as const;
 
@@ -48,6 +56,10 @@ const KNOWN_CASE_PATHS = [
   '/api/v1/cases/{id}/messages',
   '/api/v1/cases/{id}/participation-invites',
   '/api/v1/cases/{id}/switch-primary',
+  '/api/v1/cases/{id}/problem-formulations/current',
+  '/api/v1/cases/{id}/problem-formulations/{version}/confirm',
+  '/api/v1/cases/{id}/problem-formulations/{version}/dispute',
+  '/api/v1/cases/{id}/problem-formulations/{version}/corrections',
 ] as const;
 
 interface OperationRef {
@@ -105,6 +117,10 @@ describe('case primary switch scope (T730)', () => {
         'POST /api/v1/cases/{id}/messages',
         'POST /api/v1/cases/{id}/participation-invites',
         'POST /api/v1/cases/{id}/switch-primary',
+        'GET /api/v1/cases/{id}/problem-formulations/current',
+        'POST /api/v1/cases/{id}/problem-formulations/{version}/confirm',
+        'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
+        'POST /api/v1/cases/{id}/problem-formulations/{version}/corrections',
       ].sort()
     );
 
@@ -128,24 +144,35 @@ describe('case primary switch scope (T730)', () => {
     }
     expect(BASE_CASE_OPERATION_IDS).toHaveLength(4);
 
-    // Final = 5, exact equality (contains/>= would hide an extra operation).
+    // Final = 9, exact equality (contains/>= would hide an extra operation).
     expect(businessOperationIds).toEqual(
-      [...BASE_CASE_OPERATION_IDS, ...SLICE7_ADDED_OPERATION_IDS].sort()
+      [...BASE_CASE_OPERATION_IDS, ...SLICE7_ADDED_OPERATION_IDS, ...SLICE8_ADDED_OPERATION_IDS].sort()
     );
-    expect(businessOperationIds).toHaveLength(5);
+    expect(businessOperationIds).toHaveLength(9);
 
     // Slice 7 delta = exactly 1.
     const slice7Delta = businessOperationIds.filter(
-      (id) => !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id)
+      (id) =>
+        !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice7Delta).toEqual(['switchPrimaryCase']);
     expect(slice7Delta).toHaveLength(1);
+
+    const slice8Delta = businessOperationIds.filter(
+      (id) =>
+        !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+    );
+    expect(slice8Delta.sort()).toEqual([...SLICE8_ADDED_OPERATION_IDS].sort());
+    expect(slice8Delta).toHaveLength(4);
 
     // Unexpected Slice 7-added Case business operations = 0.
     const unexpected = businessOperationIds.filter(
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(unexpected).toEqual([]);
   });
@@ -162,7 +189,6 @@ describe('case primary switch scope (T730)', () => {
       '/cases/{id}/assessments',
       '/cases/{id}/participants',
       '/cases/{id}/scene',
-      '/cases/{id}/problem-formulations',
       '/cases/{id}/evidence',
       '/cases/{id}/statements',
       '/cases/{id}/observations',
@@ -177,11 +203,9 @@ describe('case primary switch scope (T730)', () => {
     );
     const names = tables.map((r: any) => r.tablename);
     for (const forbidden of [
-      // `case_participants` (Slice 4) and `risk_events` (Slice 9) are
-      // legitimate approved tables; Slice 7's zero-schema-expansion proof is
-      // covered by migration-repro and db:evidence, not by forbidding an
-      // already-approved table.
-      'problem_formulations',
+      // `case_participants` (Slice 4), `problem_formulations` (Slice 8) and
+      // `risk_events` (Slice 9) are approved tables. Slice 7's zero-schema
+      // expansion proof lives in migration-repro / db:evidence.
       'scene_node_states',
       'scene_artifacts',
       'referrals',

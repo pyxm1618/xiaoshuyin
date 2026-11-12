@@ -23,7 +23,6 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
   '/assessments',
   '/participants',
   '/scene',
-  '/problem-formulations',
   '/evidence',
   '/statements',
   '/observations',
@@ -31,7 +30,6 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
 
 const FORBIDDEN_TABLES = [
   'participation_invites',
-  'problem_formulations',
   'scene_node_states',
   'scene_artifacts',
   'safety_states',
