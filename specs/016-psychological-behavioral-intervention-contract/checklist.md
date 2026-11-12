@@ -269,6 +269,14 @@
 | V1F03 | 每个候选只能 REVIEWED+PUBLISHED 或明确 NOT READY/UNPUBLISHED | PASS | Plan §5.1 + T1609 |
 | V1F04 | developer/model 不得为补齐首批定义而发明专业内容 | PASS | Plan §5.1 + T1609 |
 
+| BND01 | restricted professional source body 不自动暴露给 family/runtime surface | PASS | Plan §14 + T1609 |
+| BND02 | participation requirement 与 Consent 保持独立 | PASS | Plan §15 + T1612 |
+| BND03 | parent action 不推导 child Consent；published definition 也不推导 Consent | PASS | Plan §15 + T1612 |
+| BND04 | definition age/development scope 不替代 Compliance age/minor profile | PASS | Plan §15 + T1612 |
+| BND05 | A4003-specific Compliance 不归 Slice 16 所有 | PASS | Plan §15 + T1612 |
+| BND06 | Safety Hold 不可通过换普通 Intervention 绕过 | PASS | Plan §15 + T1612 |
+| BND07 | Slice 16 不释放 Safety、不创建 Referral | PASS | Plan §15 + T1612 |
+
 ## Exact Traceability Checklist
 
 | ID | Gate | Status | Evidence |
@@ -416,7 +424,7 @@
 - Functional Requirements: **52/52**
 - Acceptance Scenarios: **60/60**
 - Negative Scope Scenarios: **25/25**
-- Checklist PASS: **395**
+- Checklist PASS: **402**
 - Checklist FAIL: **0**
 - Checklist N/A: **0**
 
