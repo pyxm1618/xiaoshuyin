@@ -1,0 +1,121 @@
+import type {
+  DigitalUseNodeManifestEntry,
+  DigitalUseValidationIssue,
+  DigitalUseValidationResult,
+} from './types.js';
+
+const CANONICAL_NODE_COUNT = 75;
+const FORBIDDEN_GAP_FILL_IDENTITIES = new Set(['A3023', 'A3030', 'A3031', 'A3032']);
+
+export function normalizeDigitalUseSourceNodeCode(sourceNodeCode: string): string {
+  return sourceNodeCode.trim().replace(/\s+/g, '');
+}
+
+function issue(code: string, detail: string, nodeCode?: string): DigitalUseValidationIssue {
+  return nodeCode === undefined ? { code, detail } : { code, detail, nodeCode };
+}
+
+function isDefaultMarker(value: string): boolean {
+  return /(^|[_\s-])default($|[_\s-])/i.test(value) || value.trim().toUpperCase() === 'DEFAULT';
+}
+
+export function validateDigitalUseManifest(
+  manifest: readonly DigitalUseNodeManifestEntry[],
+  expectedNodeCodes?: readonly string[]
+): DigitalUseValidationResult {
+  const issues: DigitalUseValidationIssue[] = [];
+  const nodeCodes = manifest.map((node) => node.nodeCode);
+  const nodeSet = new Set(nodeCodes);
+
+  if (manifest.length !== CANONICAL_NODE_COUNT) {
+    issues.push(issue('INVENTORY_COUNT', `expected ${CANONICAL_NODE_COUNT} nodes; found ${manifest.length}`));
+  }
+
+  const seenCodes = new Set<string>();
+  const seenSources = new Map<string, string>();
+  for (const node of manifest) {
+    if (seenCodes.has(node.nodeCode)) {
+      issues.push(issue('DUPLICATE_NODE_CODE', `duplicate nodeCode ${node.nodeCode}`, node.nodeCode));
+    }
+    seenCodes.add(node.nodeCode);
+
+    const normalizedSource = normalizeDigitalUseSourceNodeCode(node.sourceNodeCode);
+    const previous = seenSources.get(normalizedSource);
+    if (previous !== undefined) {
+      issues.push(issue('DUPLICATE_SOURCE_IDENTITY', `source identity ${normalizedSource} used by ${previous} and ${node.nodeCode}`, node.nodeCode));
+    } else {
+      seenSources.set(normalizedSource, node.nodeCode);
+    }
+    if (normalizedSource !== node.nodeCode) {
+      issues.push(issue('SOURCE_ROUND_TRIP', `sourceNodeCode ${node.sourceNodeCode} normalizes to ${normalizedSource}, not ${node.nodeCode}`, node.nodeCode));
+    }
+
+    if (node.nodeCode === 'A200401') {
+      issues.push(issue('A200401_IS_NOT_NODE', 'A200401 is record-contract semantics only', node.nodeCode));
+    }
+    if (FORBIDDEN_GAP_FILL_IDENTITIES.has(node.nodeCode)) {
+      issues.push(issue('INVENTED_GAP_FILL_NODE', `${node.nodeCode} is an explicitly forbidden inferred identity`, node.nodeCode));
+    }
+
+    if (
+      node.role.trim() === '' ||
+      node.decisionSchemaRefs.length === 0 ||
+      node.interactionRefs.length === 0 ||
+      node.outputRefs.length === 0 ||
+      node.recordContract.semantics.trim() === '' ||
+      node.entryMode.length === 0 ||
+      node.policyRefs.length === 0 ||
+      node.authorityRefs.length === 0
+    ) {
+      issues.push(issue('MISSING_REQUIRED_FIELD', 'known canonical metadata field/reference is missing', node.nodeCode));
+    }
+
+    for (const route of node.allowedNext) {
+      if (route.reasonCode.trim() === '' || route.reason.trim() === '') {
+        issues.push(issue('MISSING_BRANCH_REASON', 'allowedNext branch requires explicit reason semantics', node.nodeCode));
+      }
+      if (route.conditionRef.trim() === '') {
+        issues.push(issue('MISSING_CONDITION_REF', 'allowedNext branch requires explicit deterministic conditionRef', node.nodeCode));
+      }
+      if (isDefaultMarker(route.reasonCode) || isDefaultMarker(route.conditionRef)) {
+        issues.push(issue('HIDDEN_DEFAULT_BRANCH', 'DEFAULT/fallthrough branch markers are forbidden', node.nodeCode));
+      }
+      if (route.kind === 'NODE' && !nodeSet.has(route.targetNodeCode)) {
+        issues.push(issue('INVALID_NODE_TARGET', `route target ${route.targetNodeCode} is not a manifest node`, node.nodeCode));
+      }
+      if (route.kind === 'TERMINAL') {
+        if (route.terminalCode.trim() === '' || !/^[A-Z][A-Z0-9_]*$/.test(route.terminalCode)) {
+          issues.push(issue('INVALID_TERMINAL_TARGET', `invalid explicit terminal/external target ${route.terminalCode}`, node.nodeCode));
+        }
+        if (/^(?:A\d+|0\d+)$/.test(route.terminalCode)) {
+          issues.push(issue('TERMINAL_LOOKS_LIKE_NODE', `terminal ${route.terminalCode} must not masquerade as a canonical node`, node.nodeCode));
+        }
+      }
+    }
+  }
+
+  if (nodeCodes.filter((code) => code === 'A3033').length !== 1) {
+    issues.push(issue('SPARSE_A3033_FIDELITY', 'A3033 must exist exactly once'));
+  }
+  if (!nodeSet.has('A5001') || !nodeSet.has('A5002')) {
+    issues.push(issue('REVIEW_NODE_SEPARATION', 'A5001 and A5002 must both exist'));
+  } else {
+    const a5001 = manifest.find((node) => node.nodeCode === 'A5001');
+    const a5002 = manifest.find((node) => node.nodeCode === 'A5002');
+    if (a5001?.role === a5002?.role) {
+      issues.push(issue('REVIEW_NODE_COLLAPSE', 'A5001 and A5002 must retain distinct review semantics'));
+    }
+  }
+
+  if (expectedNodeCodes !== undefined) {
+    const expected = new Set(expectedNodeCodes);
+    for (const expectedCode of expected) {
+      if (!nodeSet.has(expectedCode)) issues.push(issue('MISSING_CANONICAL_NODE', `missing canonical node ${expectedCode}`, expectedCode));
+    }
+    for (const actualCode of nodeSet) {
+      if (!expected.has(actualCode)) issues.push(issue('EXTRA_CANONICAL_NODE', `extra/invented node ${actualCode}`, actualCode));
+    }
+  }
+
+  return { valid: issues.length === 0, issues };
+}
