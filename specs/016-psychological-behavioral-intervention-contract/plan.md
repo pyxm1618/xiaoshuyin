@@ -792,36 +792,100 @@ Functional Requirement Coverage planned: **52/52**.
 
 ## 27. Acceptance Scenario Traceability
 
-| Acceptance | Primary task(s) / verification |
-|---|---|
-| AS-01–AS-03 | T1603,T1606,T1607,T1617,T1618 — complete contract succeeds; missing/method-name-only fails |
-| AS-04–AS-09 | T1605–T1608,T1617,T1618 — review/publish/retire lifecycle negatives |
-| AS-10–AS-12 | T1605,T1609,T1617,T1618 — immutable history/new version/source correction |
-| AS-13–AS-16 | T1608,T1618,T1621 — exact package, wrong/stale package, topology isolation |
-| AS-17–AS-22 | T1610,T1612,T1618,T1619 — Authorization/RLS/family/case/Evidence isolation |
-| AS-23–AS-28 | T1610,T1611,T1614,T1617,T1619 — current/stale Formulation, missing Evidence, UNKNOWN/CONFLICT |
-| AS-29–AS-31 | T1611,T1617 — age/exclusion/reassess classification without action |
-| AS-32–AS-33 | T1613,T1617 — combination allowed/conflict |
-| AS-34–AS-40 | T1612,T1619 — Consent/Compliance/Safety independent gates |
-| AS-41–AS-46 | T1607,T1616,T1618,T1619 — idempotency/concurrency/atomic rollback |
-| AS-47–AS-51 | T1620,T1621 — AI/RAG no authority/no network |
-| AS-52–AS-58 | T1605,T1608,T1620,T1621 — historical preservation + Phase 4/generic engine exclusions |
-| AS-59–AS-60 | T1601,T1606,T1609,T1620 — real reviewer/source truthfulness |
+| Acceptance | Primary task(s) | Verification |
+|---|---|---|
+| AS-01 | T1603,T1606,T1607,T1617,T1618 | definition completeness / real review / publish preconditions |
+| AS-02 | T1603,T1606,T1607,T1617,T1618 | definition completeness / real review / publish preconditions |
+| AS-03 | T1603,T1606,T1607,T1617,T1618 | definition completeness / real review / publish preconditions |
+| AS-04 | T1605,T1606,T1607,T1617,T1618 | review/publish/retire lifecycle negatives |
+| AS-05 | T1605,T1606,T1607,T1617,T1618 | review/publish/retire lifecycle negatives |
+| AS-06 | T1605,T1606,T1607,T1617,T1618 | review/publish/retire lifecycle negatives |
+| AS-07 | T1605,T1606,T1607,T1617,T1618 | review/publish/retire lifecycle negatives |
+| AS-08 | T1605,T1606,T1607,T1617,T1618 | review/publish/retire lifecycle negatives |
+| AS-09 | T1605,T1606,T1607,T1617,T1618 | review/publish/retire lifecycle negatives |
+| AS-10 | T1605,T1609,T1617,T1618 | immutability / new version / source correction |
+| AS-11 | T1605,T1609,T1617,T1618 | immutability / new version / source correction |
+| AS-12 | T1605,T1609,T1617,T1618 | immutability / new version / source correction |
+| AS-13 | T1608,T1618,T1621 | exact package / wrong-stale package / topology isolation |
+| AS-14 | T1608,T1618,T1621 | exact package / wrong-stale package / topology isolation |
+| AS-15 | T1608,T1618,T1621 | exact package / wrong-stale package / topology isolation |
+| AS-16 | T1608,T1618,T1621 | exact package / wrong-stale package / topology isolation |
+| AS-17 | T1610,T1612,T1618,T1619 | Authorization/RLS/family/case/Evidence isolation |
+| AS-18 | T1610,T1612,T1618,T1619 | Authorization/RLS/family/case/Evidence isolation |
+| AS-19 | T1610,T1612,T1618,T1619 | Authorization/RLS/family/case/Evidence isolation |
+| AS-20 | T1610,T1612,T1618,T1619 | Authorization/RLS/family/case/Evidence isolation |
+| AS-21 | T1610,T1612,T1618,T1619 | Authorization/RLS/family/case/Evidence isolation |
+| AS-22 | T1610,T1612,T1618,T1619 | Authorization/RLS/family/case/Evidence isolation |
+| AS-23 | T1610,T1611,T1614,T1617,T1619 | Formulation/Evidence/UNKNOWN/staleness |
+| AS-24 | T1610,T1611,T1614,T1617,T1619 | Formulation/Evidence/UNKNOWN/staleness |
+| AS-25 | T1610,T1611,T1614,T1617,T1619 | Formulation/Evidence/UNKNOWN/staleness |
+| AS-26 | T1610,T1611,T1614,T1617,T1619 | Formulation/Evidence/UNKNOWN/staleness |
+| AS-27 | T1610,T1611,T1614,T1617,T1619 | Formulation/Evidence/UNKNOWN/staleness |
+| AS-28 | T1610,T1611,T1614,T1617,T1619 | Formulation/Evidence/UNKNOWN/staleness |
+| AS-29 | T1611,T1617 | age/exclusion/reassess classification without action |
+| AS-30 | T1611,T1617 | age/exclusion/reassess classification without action |
+| AS-31 | T1611,T1617 | age/exclusion/reassess classification without action |
+| AS-32 | T1613,T1617 | combination compatibility/conflict |
+| AS-33 | T1613,T1617 | combination compatibility/conflict |
+| AS-34 | T1612,T1619 | Consent/Compliance/Safety independent gates |
+| AS-35 | T1612,T1619 | Consent/Compliance/Safety independent gates |
+| AS-36 | T1612,T1619 | Consent/Compliance/Safety independent gates |
+| AS-37 | T1612,T1619 | Consent/Compliance/Safety independent gates |
+| AS-38 | T1612,T1619 | Consent/Compliance/Safety independent gates |
+| AS-39 | T1612,T1619 | Consent/Compliance/Safety independent gates |
+| AS-40 | T1612,T1619 | Consent/Compliance/Safety independent gates |
+| AS-41 | T1607,T1616,T1618,T1619 | idempotency/concurrency/atomic rollback |
+| AS-42 | T1607,T1616,T1618,T1619 | idempotency/concurrency/atomic rollback |
+| AS-43 | T1607,T1616,T1618,T1619 | idempotency/concurrency/atomic rollback |
+| AS-44 | T1607,T1616,T1618,T1619 | idempotency/concurrency/atomic rollback |
+| AS-45 | T1607,T1616,T1618,T1619 | idempotency/concurrency/atomic rollback |
+| AS-46 | T1607,T1616,T1618,T1619 | idempotency/concurrency/atomic rollback |
+| AS-47 | T1620,T1621 | AI/RAG no authority and no model dependency |
+| AS-48 | T1620,T1621 | AI/RAG no authority and no model dependency |
+| AS-49 | T1620,T1621 | AI/RAG no authority and no model dependency |
+| AS-50 | T1620,T1621 | AI/RAG no authority and no model dependency |
+| AS-51 | T1620,T1621 | AI/RAG no authority and no model dependency |
+| AS-52 | T1605,T1608,T1620,T1621 | historical preservation / Phase boundary / no generic engine |
+| AS-53 | T1605,T1608,T1620,T1621 | historical preservation / Phase boundary / no generic engine |
+| AS-54 | T1605,T1608,T1620,T1621 | historical preservation / Phase boundary / no generic engine |
+| AS-55 | T1605,T1608,T1620,T1621 | historical preservation / Phase boundary / no generic engine |
+| AS-56 | T1605,T1608,T1620,T1621 | historical preservation / Phase boundary / no generic engine |
+| AS-57 | T1605,T1608,T1620,T1621 | historical preservation / Phase boundary / no generic engine |
+| AS-58 | T1605,T1608,T1620,T1621 | historical preservation / Phase boundary / no generic engine |
+| AS-59 | T1601,T1606,T1609,T1620 | real reviewer/source truthfulness |
+| AS-60 | T1601,T1606,T1609,T1620 | real reviewer/source truthfulness |
 
 Acceptance Scenario Coverage planned: **60/60**.
 
 ## 28. Negative Scope Traceability
 
-| Negative Scope | Mechanical proof |
-|---|---|
-| NS-01–NS-06 | T1620/T1621/T1623 static + DB scope inventory: no Phase 4 business truth/jobs |
-| NS-07–NS-16 | T1620/T1621/T1623: no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
-| NS-17–NS-20 | T1601/T1602/T1620/T1621: no CMS/rule/workflow/intervention engine/new staff-RBAC platform |
-| NS-21 | T1602/T1612/T1621: no duplicate Authorization/Consent/Compliance/Safety |
-| NS-22 | T1602/T1608/T1621: no second node registry/routing truth |
-| NS-23 | T1603/T1609/T1620: no family narrative in professional definitions |
-| NS-24 | T1608/T1620: no floating latest |
-| NS-25 | T1620/T1621/T1623: no Phase 4 leakage justified by testing |
+| Negative Scope | Primary task(s) | Mechanical proof |
+|---|---|---|
+| NS-01 | T1620,T1621,T1623 | static + DB/file scope inventory proves no Phase 4 business truth/jobs |
+| NS-02 | T1620,T1621,T1623 | static + DB/file scope inventory proves no Phase 4 business truth/jobs |
+| NS-03 | T1620,T1621,T1623 | static + DB/file scope inventory proves no Phase 4 business truth/jobs |
+| NS-04 | T1620,T1621,T1623 | static + DB/file scope inventory proves no Phase 4 business truth/jobs |
+| NS-05 | T1620,T1621,T1623 | static + DB/file scope inventory proves no Phase 4 business truth/jobs |
+| NS-06 | T1620,T1621,T1623 | static + DB/file scope inventory proves no Phase 4 business truth/jobs |
+| NS-07 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-08 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-09 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-10 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-11 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-12 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-13 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-14 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-15 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-16 | T1620,T1621,T1623 | file/import/schema inventory proves no knowledge/RAG/vector/Context/AI/Jev/Promptfoo/A4003/execution-AI implementation |
+| NS-17 | T1601,T1602,T1620,T1621 | owner/static review proves no generic CMS/rules/workflow/intervention engine/new staff-RBAC platform |
+| NS-18 | T1601,T1602,T1620,T1621 | owner/static review proves no generic CMS/rules/workflow/intervention engine/new staff-RBAC platform |
+| NS-19 | T1601,T1602,T1620,T1621 | owner/static review proves no generic CMS/rules/workflow/intervention engine/new staff-RBAC platform |
+| NS-20 | T1601,T1602,T1620,T1621 | owner/static review proves no generic CMS/rules/workflow/intervention engine/new staff-RBAC platform |
+| NS-21 | T1602,T1612,T1621 | single-owner/control-plane guard |
+| NS-22 | T1602,T1608,T1621 | Slice 11 manifest/routing single-truth guard |
+| NS-23 | T1603,T1609,T1620 | definition schema/content separation tests |
+| NS-24 | T1608,T1620 | exact-version negative test; no latest authority |
+| NS-25 | T1620,T1621,T1623 | Phase 4 leakage scope guard and changed-file inventory |
 
 Negative Scope Coverage planned: **25/25**.
 
