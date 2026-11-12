@@ -59,7 +59,7 @@ function literalCodes(schema: any): string[] {
 }
 
 describe('Generated OpenAPI — Case operations (T078)', () => {
-  it('contains the real Case paths and exactly five Case business operations (Base 4 + Slice 7 delta 1)', () => {
+  it('contains the real Case paths and exactly nine Case business operations (Base 4 + Slice 7 delta 1 + Slice 8 delta 4)', () => {
     const casePaths = Object.keys(spec.paths).filter(
       (p) => p === CASE_PATH_PREFIX || p.startsWith(`${CASE_PATH_PREFIX}/`)
     );
@@ -69,7 +69,11 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       '/api/v1/cases/{id}/messages',
       '/api/v1/cases/{id}/participation-invites',
       '/api/v1/cases/{id}/switch-primary',
-    ]);
+      '/api/v1/cases/{id}/problem-formulations/current',
+      '/api/v1/cases/{id}/problem-formulations/{version}/confirm',
+      '/api/v1/cases/{id}/problem-formulations/{version}/dispute',
+      '/api/v1/cases/{id}/problem-formulations/{version}/corrections',
+    ].sort());
 
     const operations: string[] = [];
     for (const [path, item] of Object.entries(spec.paths as Record<string, any>)) {
@@ -90,8 +94,12 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'POST /api/v1/cases',
       'POST /api/v1/cases/{id}/messages',
       'POST /api/v1/cases/{id}/switch-primary',
-    ]);
-    expect(operations).toHaveLength(5);
+      'GET /api/v1/cases/{id}/problem-formulations/current',
+      'POST /api/v1/cases/{id}/problem-formulations/{version}/confirm',
+      'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
+      'POST /api/v1/cases/{id}/problem-formulations/{version}/corrections',
+    ].sort());
+    expect(operations).toHaveLength(9);
   });
 
   it('每个 operation 声明 frozen operationId 与 bearerAuth', () => {
@@ -101,6 +109,10 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'get /api/v1/cases/{id}': { op: 'getCase' },
       'post /api/v1/cases/{id}/messages': { op: 'createCaseMessage' },
       'post /api/v1/cases/{id}/switch-primary': { op: 'switchPrimaryCase' },
+      'get /api/v1/cases/{id}/problem-formulations/current': { op: 'getCurrentProblemFormulation' },
+      'post /api/v1/cases/{id}/problem-formulations/{version}/confirm': { op: 'confirmProblemFormulation' },
+      'post /api/v1/cases/{id}/problem-formulations/{version}/dispute': { op: 'disputeProblemFormulation' },
+      'post /api/v1/cases/{id}/problem-formulations/{version}/corrections': { op: 'correctProblemFormulation' },
     };
     for (const [key, { op }] of Object.entries(expected)) {
       const [method, path] = key.split(' ');

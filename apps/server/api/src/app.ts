@@ -13,6 +13,7 @@ import { registerCaseRoutes } from './routes/cases.js';
 import { registerIdentityBindingRoutes } from './routes/identity-bindings.js';
 import { registerMessageRoutes } from './routes/messages.js';
 import { registerParticipationRoutes } from './routes/participations.js';
+import { registerProblemFormulationRoutes } from './routes/problem-formulations.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import {
   createWechatProvider,
@@ -146,6 +147,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerConsentRoutes(app, pool);
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
+  registerProblemFormulationRoutes(app, pool);
   registerParticipationRoutes(app, pool, {
     inviteTtlSeconds: runtime.participationInviteTtlSeconds,
     inviteTokenSecret: runtime.participationInviteTokenSecret,

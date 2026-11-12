@@ -78,6 +78,16 @@ const FROZEN_DOCS = [
       'case-primary-switch-api.openapi.yaml'
     ),
   },
+  {
+    label: '008-problem-formulation-core',
+    path: join(
+      ROOT,
+      'specs',
+      '008-problem-formulation-core',
+      'contracts',
+      'problem-formulation-api.openapi.yaml'
+    ),
+  },
 ];
 
 // Normalization lives in `scripts/lib/openapi-normalize.mjs` so the semantic
@@ -210,6 +220,7 @@ function compareSubset(frozen, generated, label, collidingSchemaNames, options =
       const mustCompareBody =
         label === '004-case-participant-core' ||
         label === '007-case-primary-switch' ||
+        label === '008-problem-formulation-core' ||
         referencesAnySchemaName(frozenSchema, collidingSchemaNames);
 
       if (!mustCompareBody) continue;

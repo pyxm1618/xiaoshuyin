@@ -24,6 +24,13 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   'PARTICIPATION_ACCEPT',
   'PARTICIPATION_DECLINE',
   'PARTICIPATION_WITHDRAW',
+  // Slice 8 Problem Formulation Core.
+  'CASE_START_ASSESSMENT',
+  'PROBLEM_FORMULATION_PRESENT',
+  'PROBLEM_FORMULATION_CONFIRM',
+  'PROBLEM_FORMULATION_DISPUTE',
+  'PROBLEM_FORMULATION_CORRECT',
+  'CASE_REASSESS_FROM_FORMULATION',
   // Slice 9 — Safety control foundation. Same store, same canonical hashing and
   // the modern bytea exact-key representation; no second idempotency system.
   'CASE_ENTER_SAFETY_HOLD',

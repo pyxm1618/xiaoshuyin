@@ -72,29 +72,96 @@ const EXPECTED_MAIN_IDEMPOTENCY_COMMANDS = [
   'PARTICIPATION_WITHDRAW',
 ];
 
-const SLICE7_APPROVED_LITERALS = {
-  // 007 + 009 literals (Slice 9 appends its Safety vocabulary without dropping
-  // any Slice 7 value).
-  // `constraintLiterals()` sorts, so these lists are alphabetical.
+const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
   case_events_event_type_check: [
+    'CASE_ASSESSMENT_STARTED',
     'CASE_PRIMARY_ASSIGNED',
     'CASE_PRIMARY_REVOKED',
+    'CASE_PROBLEM_FORMULATION_CONFIRMED',
+    'CASE_PROBLEM_FORMULATION_CORRECTED',
+    'CASE_PROBLEM_FORMULATION_DISPUTED',
+    'CASE_PROBLEM_FORMULATION_PRESENTED',
+    'CASE_REASSESSMENT_STARTED',
     'CASE_RISK_RESOLVED',
     'CASE_SAFETY_HOLD_ENTERED',
   ],
   business_audit_events_event_type_check: [
     'CASE_PRIMARY_SWITCHED',
+    'CASE_ASSESSMENT_STARTED',
+    'CASE_PROBLEM_FORMULATION_PRESENTED',
+    'CASE_PROBLEM_FORMULATION_CONFIRMED',
+    'CASE_PROBLEM_FORMULATION_DISPUTED',
+    'CASE_PROBLEM_FORMULATION_CORRECTED',
+    'CASE_REASSESSMENT_STARTED',
     'CASE_RISK_RESOLVED',
     'CASE_SAFETY_HOLD_ENTERED',
   ],
   idempotency_keys_command_type_check: [
+    'CASE_SWITCH_PRIMARY',
+    'CASE_START_ASSESSMENT',
+    'PROBLEM_FORMULATION_PRESENT',
+    'PROBLEM_FORMULATION_CONFIRM',
+    'PROBLEM_FORMULATION_DISPUTE',
+    'PROBLEM_FORMULATION_CORRECT',
+    'CASE_REASSESS_FROM_FORMULATION',
     'CASE_ENTER_SAFETY_HOLD',
     'CASE_RESOLVE_RISK',
-    'CASE_SWITCH_PRIMARY',
   ],
 };
 
-/** Exactly the constraints the new Slice 9 risk_events table introduces. */
+
+/** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
+const SLICE8_NEW_CONSTRAINTS = [
+  'problem_formulations_alternative_explanations_not_null',
+  'problem_formulations_alternative_explanations_shape_check',
+  'problem_formulations_case_family_fk',
+  'problem_formulations_case_id_not_null',
+  'problem_formulations_case_version_chain_fk',
+  'problem_formulations_case_version_key',
+  'problem_formulations_confirmation_pair_check',
+  'problem_formulations_confirmation_status_check',
+  'problem_formulations_confirmer_fk',
+  'problem_formulations_conflicts_not_null',
+  'problem_formulations_conflicts_shape_check',
+  'problem_formulations_created_at_not_null',
+  'problem_formulations_dependency_refs_not_null',
+  'problem_formulations_dependency_refs_shape_check',
+  'problem_formulations_evidence_refs_not_null',
+  'problem_formulations_evidence_refs_shape_check',
+  'problem_formulations_exit_conditions_not_null',
+  'problem_formulations_exit_conditions_shape_check',
+  'problem_formulations_family_id_not_null',
+  'problem_formulations_id_not_null',
+  'problem_formulations_key_factors_not_null',
+  'problem_formulations_key_factors_shape_check',
+  'problem_formulations_not_draft_check',
+  'problem_formulations_pkey',
+  'problem_formulations_primary_problem_not_null',
+  'problem_formulations_primary_problem_shape_check',
+  'problem_formulations_reassessment_conditions_not_null',
+  'problem_formulations_reassessment_conditions_shape_check',
+  'problem_formulations_scene_fit_check',
+  'problem_formulations_scene_fit_not_null',
+  'problem_formulations_status_not_null',
+  'problem_formulations_unknowns_not_null',
+  'problem_formulations_unknowns_shape_check',
+  'problem_formulations_updated_at_not_null',
+  'problem_formulations_user_response_shape_check',
+  'problem_formulations_version_chain_check',
+  'problem_formulations_version_not_null',
+  'problem_formulations_version_range_check',
+].sort();
+
+/** Exact Slice 8 object-fingerprint delta. */
+const SLICE8_NEW_OBJECTS = [
+  'enum:problem_formulation_status',
+  'policy:problem_formulations_insert',
+  'policy:problem_formulations_select',
+  'policy:problem_formulations_update',
+  'table:problem_formulations',
+].sort();
+
+/** Exactly the constraints Slice 9 risk_events introduces. */
 const SLICE9_RISK_EVENT_CONSTRAINTS = [
   'risk_events_actor_account_id_not_null',
   'risk_events_actor_fk',
@@ -259,7 +326,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 2 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 4 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -308,14 +375,14 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
 
     // Only the approved Slice 7 literals were added — exactly, not more.
     const added = (after: string[], before: string[]) => after.filter((v) => !before.includes(v));
-    expect(added(afterCaseEventLiterals, beforeCaseEventLiterals)).toEqual(
-      SLICE7_APPROVED_LITERALS.case_events_event_type_check
+    expect([...added(afterCaseEventLiterals, beforeCaseEventLiterals)].sort()).toEqual(
+      [...SLICE7_AND_SLICE8_APPROVED_LITERALS.case_events_event_type_check].sort()
     );
-    expect(added(afterAuditLiterals, beforeAuditLiterals)).toEqual(
-      SLICE7_APPROVED_LITERALS.business_audit_events_event_type_check
+    expect([...added(afterAuditLiterals, beforeAuditLiterals)].sort()).toEqual(
+      [...SLICE7_AND_SLICE8_APPROVED_LITERALS.business_audit_events_event_type_check].sort()
     );
-    expect(added(afterIdempotencyLiterals, beforeIdempotencyLiterals)).toEqual(
-      SLICE7_APPROVED_LITERALS.idempotency_keys_command_type_check
+    expect([...added(afterIdempotencyLiterals, beforeIdempotencyLiterals)].sort()).toEqual(
+      [...SLICE7_AND_SLICE8_APPROVED_LITERALS.idempotency_keys_command_type_check].sort()
     );
 
     // Existing data still satisfies the revalidated constraints (inserts pass).
@@ -326,32 +393,38 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       [ids.familyId, ids.accountId, ids.caseId]
     );
 
-    // Constraint layer change is controlled: the five reviewed rewrites, plus
-    // exactly the new risk_events constraint set. No existing constraint name
-    // may disappear.
+    // Constraint layer: every legacy name survives; the delta is exactly the
+    // reviewed Slice 8 + Slice 9 constraint sets.
     const beforeConstraintNames = Object.keys(beforeConstraints).sort();
     const afterConstraintNames = Object.keys(afterConstraints).sort();
-    expect(
-      afterConstraintNames.filter((name) => !beforeConstraintNames.includes(name))
-    ).toEqual([...SLICE9_RISK_EVENT_CONSTRAINTS].sort());
-    expect(
-      beforeConstraintNames.filter((name) => !afterConstraintNames.includes(name))
-    ).toEqual([]);
-    const changedConstraints = afterConstraintNames.filter(
-      (name) => beforeConstraints[name] !== undefined && afterConstraints[name] !== beforeConstraints[name]
+    for (const name of beforeConstraintNames) {
+      expect(afterConstraintNames).toContain(name);
+    }
+    const newConstraints = afterConstraintNames.filter(
+      (name) => !beforeConstraintNames.includes(name)
     );
-    expect(changedConstraints.sort()).toEqual([...SLICE7_CONSTRAINT_CHANGES].sort());
+    expect(newConstraints.sort()).toEqual(
+      [...SLICE8_NEW_CONSTRAINTS, ...SLICE9_RISK_EVENT_CONSTRAINTS].sort()
+    );
+    const changedConstraints = beforeConstraintNames.filter(
+      (name) => afterConstraints[name] !== beforeConstraints[name]
+    );
+    expect(changedConstraints.sort()).toEqual(
+      [...SLICE7_CONSTRAINT_CHANGES, 'business_audit_events_resource_type_check'].sort()
+    );
 
-    // Exactly the Slice 9 Safety objects are added; nothing else changes.
-    const beforeObjectList = beforeObjects.split('|');
-    const afterObjectList = (await objectFingerprint(seed)).split('|');
-    const addedObjects = afterObjectList.filter((entry) => !beforeObjectList.includes(entry));
-    const removedObjects = beforeObjectList.filter((entry) => !afterObjectList.includes(entry));
-    expect(addedObjects).toEqual([
+    // Exactly the reviewed Slice 8 + Slice 9 objects are added; legacy entries survive.
+    const beforeSet = new Set(beforeObjects.split('|'));
+    const afterFingerprint = await objectFingerprint(seed);
+    const afterSet = new Set(afterFingerprint.split('|'));
+    for (const entry of beforeSet) {
+      expect(afterSet.has(entry), `lost object ${entry}`).toBe(true);
+    }
+    expect([...afterSet].filter((e) => !beforeSet.has(e)).sort()).toEqual([
+      ...SLICE8_NEW_OBJECTS,
       'policy:risk_events_family_scope',
       'table:risk_events',
-    ]);
-    expect(removedObjects).toEqual([]);
+    ].sort());
 
     // Column-level UPDATE grant, never table-level.
     const { rows: columnGrants } = await seed.query(
@@ -361,6 +434,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     );
     expect(columnGrants.map((row: any) => row.column_name)).toEqual([
       'is_primary',
+      'phase',
       'status',
       'updated_at',
       'version',
@@ -377,7 +451,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 11 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -391,7 +465,9 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(applied.map((row: any) => row.filename)).toEqual([
       ...CURRENT_MAIN_MIGRATIONS,
       '007_case_primary_switch.sql',
+      '008_problem_formulation_core.sql',
       '009_safety_hold_control_foundation.sql',
+      '010_problem_formulation_safety_vocabulary_reconcile.sql',
     ]);
   }, 180_000);
 });

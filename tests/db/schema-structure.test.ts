@@ -21,7 +21,7 @@ describe('Schema Structure', () => {
     await client.end();
   });
 
-  it('21 enums exist with exact values (Slice 1 + Case Core + Slice 3 + Slice 4 + Slice 6)', async () => {
+  it('22 enums exist with exact values (Slice 1 + Case Core + Slice 3 + Slice 4 + Slice 6 + Slice 8)', async () => {
     const { rows } = await client.query(`
       SELECT t.typname, e.enumlabel
       FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid
@@ -44,7 +44,7 @@ describe('Schema Structure', () => {
       'case_participation_state', 'case_phase', 'case_status',
       'consent_decision', 'consent_purpose', 'consent_request_status',
       'evidence_confirmation_status', 'evidence_time_state',
-      'observation_value_state', 'observation_value_type',
+      'observation_value_state', 'observation_value_type', 'problem_formulation_status',
       'profile_attribute', 'profile_value_status', 'provenance_source',
     ]);
     expect(enumMap['case_status']).toEqual([

@@ -22,7 +22,6 @@ const FORBIDDEN_TABLES = [
   'evidence_items',
   'participation_invites',
   'assessments',
-  'problem_formulations',
   'scene_node_states',
   'scene_artifacts',
   'safety_states',
@@ -47,7 +46,6 @@ const FORBIDDEN_FRAGMENTS = [
   '/facts',
   '/fact',
   '/assessments',
-  '/problem-formulations',
   '/scene',
   '/participants',
 ];

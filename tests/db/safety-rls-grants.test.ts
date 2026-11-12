@@ -88,11 +88,11 @@ describe('T912 Safety RLS and privilege matrix', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('cases: table UPDATE denied, exactly the four legal columns granted', async () => {
+  it('cases: table UPDATE denied, exactly the five legal columns granted', async () => {
     expect(await privilege(admin, 'table', 'cases', 'UPDATE')).toBe(false);
 
-    const allowed = ['is_primary', 'status', 'version', 'updated_at'];
-    const denied = ['id', 'family_id', 'created_by_person_id', 'phase', 'created_at'];
+    const allowed = ['is_primary', 'phase', 'status', 'version', 'updated_at'];
+    const denied = ['id', 'family_id', 'created_by_person_id', 'created_at'];
     for (const column of allowed) {
       expect(await privilege(admin, 'column', 'cases', 'UPDATE', column), column).toBe(true);
     }

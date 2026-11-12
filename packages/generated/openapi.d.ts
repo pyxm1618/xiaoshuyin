@@ -468,6 +468,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{id}/problem-formulations/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCurrentProblemFormulation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/problem-formulations/{version}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmProblemFormulation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/problem-formulations/{version}/dispute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["disputeProblemFormulation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/problem-formulations/{version}/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["correctProblemFormulation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1163,6 +1227,153 @@ export interface components {
             code: "PARTICIPATION_NOT_FOUND";
             message: string;
         };
+        /** @enum {string} */
+        ProblemFormulationStatus: "DRAFT" | "PRESENTED" | "CONFIRMED" | "DISPUTED" | "NEEDS_REVIEW" | "SUPERSEDED";
+        DialogueMessageRef: {
+            /** @enum {string} */
+            type: "DIALOGUE_MESSAGE";
+            /** Format: uuid */
+            id: string;
+        };
+        AssertionRef: {
+            /** @enum {string} */
+            type: "ASSERTION";
+            /** Format: uuid */
+            id: string;
+        };
+        ObservationRef: {
+            /** @enum {string} */
+            type: "OBSERVATION";
+            /** Format: uuid */
+            id: string;
+        };
+        EvidenceRef: components["schemas"]["DialogueMessageRef"] | components["schemas"]["AssertionRef"] | components["schemas"]["ObservationRef"];
+        PrimaryProblem: {
+            text: string;
+            evidenceRefs: components["schemas"]["EvidenceRef"][];
+        };
+        KeyFactor: {
+            text: string;
+            evidenceRefs: components["schemas"]["EvidenceRef"][];
+        };
+        UnknownItem: {
+            topic: string;
+            /** @enum {string} */
+            state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED";
+            evidenceRefs: components["schemas"]["EvidenceRef"][];
+        };
+        ConflictItem: {
+            topic: string;
+            /** Format: uuid */
+            conflictGroupId?: string;
+            evidenceRefs?: components["schemas"]["EvidenceRef"][];
+        } | unknown | {
+            evidenceRefs: unknown;
+        };
+        TextCondition: {
+            text: string;
+        };
+        UserResponse: {
+            /** @enum {string} */
+            kind: "CONFIRM" | "DISPUTE" | "CORRECTION";
+            /** Format: uuid */
+            actorPersonId: string;
+            /** Format: date-time */
+            respondedAt: string;
+            note?: string;
+        };
+        EvidenceDependencyRef: {
+            /** @enum {string} */
+            type: "EVIDENCE";
+            evidence: components["schemas"]["EvidenceRef"];
+        };
+        ConsentDependencyRef: {
+            /** @enum {string} */
+            type: "CONSENT";
+            /** Format: uuid */
+            id: string;
+            version?: number;
+        };
+        VersionedKeyDependencyRef: {
+            /** @enum {string} */
+            type: "POLICY" | "PACKAGE" | "CONTENT_VERSION";
+            key: string;
+            version: string;
+        };
+        DependencyRef: components["schemas"]["EvidenceDependencyRef"] | components["schemas"]["ConsentDependencyRef"] | components["schemas"]["VersionedKeyDependencyRef"];
+        ProblemFormulationContent: {
+            primaryProblem: components["schemas"]["PrimaryProblem"];
+            keyFactors: components["schemas"]["KeyFactor"][];
+            evidenceRefs: components["schemas"]["EvidenceRef"][];
+            unknowns: components["schemas"]["UnknownItem"][];
+            conflicts: components["schemas"]["ConflictItem"][];
+            sceneFit: string;
+            alternativeExplanations: components["schemas"]["TextCondition"][];
+            reassessmentConditions: components["schemas"]["TextCondition"][];
+            exitConditions: components["schemas"]["TextCondition"][];
+            dependencyRefs: components["schemas"]["DependencyRef"][];
+        };
+        ProblemFormulation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            caseId: string;
+            version: number;
+            status: components["schemas"]["ProblemFormulationStatus"];
+            primaryProblem: components["schemas"]["PrimaryProblem"];
+            keyFactors: components["schemas"]["KeyFactor"][];
+            evidenceRefs: components["schemas"]["EvidenceRef"][];
+            unknowns: components["schemas"]["UnknownItem"][];
+            conflicts: components["schemas"]["ConflictItem"][];
+            sceneFit: string;
+            alternativeExplanations: components["schemas"]["TextCondition"][];
+            reassessmentConditions: components["schemas"]["TextCondition"][];
+            exitConditions: components["schemas"]["TextCondition"][];
+            userResponse: components["schemas"]["UserResponse"] | null;
+            /** Format: uuid */
+            confirmedBy: string | null;
+            /** Format: date-time */
+            confirmedAt: string | null;
+            dependencyRefs: components["schemas"]["DependencyRef"][];
+            supersedesVersion: number | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ProblemFormulationCurrentResponse: {
+            caseVersion: number;
+            current: components["schemas"]["ProblemFormulation"] | null;
+        };
+        ProblemFormulationResponseRequest: {
+            note?: string;
+        };
+        ProblemFormulationContentChanges: {
+            primaryProblem?: components["schemas"]["PrimaryProblem"];
+            keyFactors?: components["schemas"]["KeyFactor"][];
+            evidenceRefs?: components["schemas"]["EvidenceRef"][];
+            unknowns?: components["schemas"]["UnknownItem"][];
+            conflicts?: components["schemas"]["ConflictItem"][];
+            sceneFit?: string;
+            alternativeExplanations?: components["schemas"]["TextCondition"][];
+            reassessmentConditions?: components["schemas"]["TextCondition"][];
+            exitConditions?: components["schemas"]["TextCondition"][];
+            dependencyRefs?: components["schemas"]["DependencyRef"][];
+        };
+        ProblemFormulationCorrectionRequest: {
+            changes: components["schemas"]["ProblemFormulationContentChanges"];
+            note?: string;
+        };
+        ProblemFormulationConflictError: {
+            /** @enum {string} */
+            code: "CURRENT_FAMILY_AMBIGUOUS" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "STALE_CASE_VERSION" | "CASE_CLOSED" | "SAFETY_HOLD_BLOCKED" | "PROBLEM_FORMULATION_VERSION_CONFLICT" | "PROBLEM_FORMULATION_STATE_CONFLICT" | "PROBLEM_FORMULATION_DEPENDENCY_INVALID";
+            message: string;
+        };
+        ProblemFormulationValidationError: {
+            /** @enum {string} */
+            code: "VALIDATION_ERROR" | "PROBLEM_FORMULATION_EVIDENCE_INVALID";
+            message: string;
+        };
     };
     responses: never;
     parameters: {
@@ -1182,6 +1393,11 @@ export interface components {
         BindingContextHeader: string;
         /** @description 待验证的 target Person P1；服务端读取唯一 Family。 */
         BindingPersonIdQuery: string;
+        FormulationVersionPath: number;
+        CaseId: string;
+        FormulationVersion: number;
+        /** @description Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version. Runtime must parse the decimal payload and reject values outside 1..2147483647 before repository/SQL access; the regex is only a lexical gate. */
+        IfMatchCaseVersionHeader: string;
     };
     requestBodies: never;
     headers: never;
@@ -2882,6 +3098,295 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCurrentProblemFormulation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current Problem Formulation, or a true empty state for an authorized Case */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationCurrentResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"] | components["schemas"]["CaseNotFoundError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_AMBIGUOUS` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyAmbiguousError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    confirmProblemFormulation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+                /** @description Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version. Runtime must parse the decimal payload and reject values outside 1..2147483647 before repository/SQL access; the regex is only a lexical gate. */
+                "If-Match": components["parameters"]["IfMatchCaseVersionHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                version: components["parameters"]["FormulationVersion"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProblemFormulationResponseRequest"];
+            };
+        };
+        responses: {
+            /** @description Formulation confirmed and Case advanced to GOALS */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationCurrentResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"] | components["schemas"]["CaseNotFoundError"];
+                };
+            };
+            /** @description State, version, dependency, primary, Safety, Closed, Family ambiguity or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationConflictError"];
+                };
+            };
+            /** @description Strict request validation or Evidence fidelity failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationValidationError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    disputeProblemFormulation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+                /** @description Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version. Runtime must parse the decimal payload and reject values outside 1..2147483647 before repository/SQL access; the regex is only a lexical gate. */
+                "If-Match": components["parameters"]["IfMatchCaseVersionHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                version: components["parameters"]["FormulationVersion"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProblemFormulationResponseRequest"];
+            };
+        };
+        responses: {
+            /** @description Formulation disputed; Case remains in PROBLEM_FORMULATION */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationCurrentResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"] | components["schemas"]["CaseNotFoundError"];
+                };
+            };
+            /** @description State, version, primary, Safety, Closed, Family ambiguity or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationConflictError"];
+                };
+            };
+            /** @description Strict request validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationValidationError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    correctProblemFormulation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+                /** @description Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version. Runtime must parse the decimal payload and reject values outside 1..2147483647 before repository/SQL access; the regex is only a lexical gate. */
+                "If-Match": components["parameters"]["IfMatchCaseVersionHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                version: components["parameters"]["FormulationVersion"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProblemFormulationCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Complete corrected formulation version created; old version superseded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationCurrentResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentFamilyNotFoundError"] | components["schemas"]["CaseNotFoundError"];
+                };
+            };
+            /** @description State, version, primary, Safety, Closed, Family ambiguity or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationConflictError"];
+                };
+            };
+            /** @description Empty/no-op correction, strict schema, or full merged-formulation fidelity failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemFormulationValidationError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
                 };
             };
         };

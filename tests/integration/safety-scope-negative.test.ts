@@ -40,7 +40,6 @@ const FORBIDDEN_PATH_PATTERNS = [
   /tasks?\.(ts|sql)$/i,
   /reviews?\.(ts|sql)$/i,
   /follow[_-]?up/i,
-  /problem[_-]?formulations?\.(ts|sql)$/i,
   /safety[_-]?states?/i,
 ];
 
@@ -141,7 +140,6 @@ describe('T918 executable scope negatives', () => {
         'plan_versions',
         'tasks',
         'reviews',
-        'problem_formulations',
         'scene_node_states',
       ]) {
         expect(names, forbidden).not.toContain(forbidden);

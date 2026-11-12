@@ -193,9 +193,9 @@ describe('cases RLS (T022)', () => {
     }
   });
 
-  it('runtime role has only the Slice 7 + Slice 9 column-level UPDATE grants on cases', async () => {
-    // Allowed: the Slice 7 columns (007_case_primary_switch.sql) plus the
-    // Slice 9 narrow `status` capability (009_safety_hold_control_foundation).
+  it('runtime role has only the Slice 7 + Slice 8 + Slice 9 column-level UPDATE grants on cases', async () => {
+    // Allowed: Slice 7 columns, the Slice 8 `phase` bridge
+    // (008_problem_formulation_core.sql) and the Slice 9 narrow `status`.
     const allowed = await app.connect();
     try {
       await allowed.query('BEGIN');
@@ -213,6 +213,12 @@ describe('cases RLS (T022)', () => {
         [caseA]
       );
       expect(statusUpd.rowCount).toBe(1);
+      const phaseUpd = await allowed.query(
+        `UPDATE cases SET phase = 'ASSESSMENT', version = version + 1, updated_at = now()
+         WHERE id = $1 RETURNING id`,
+        [caseA]
+      );
+      expect(phaseUpd.rowCount).toBe(1);
     } finally {
       await allowed.query('ROLLBACK').catch(() => {});
       allowed.release();
@@ -220,7 +226,6 @@ describe('cases RLS (T022)', () => {
 
     // Rejected: un-granted columns and table-level DELETE / case_events delete.
     for (const statement of [
-      "UPDATE cases SET phase = 'ASSESSMENT' WHERE id = '" + caseA + "'",
       "DELETE FROM cases WHERE id = '" + caseA + "'",
       "DELETE FROM case_events WHERE case_id = '" + caseA + "'",
     ]) {

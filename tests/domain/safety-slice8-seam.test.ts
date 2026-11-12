@@ -62,17 +62,28 @@ describe('T917 Slice 8 integration seam', () => {
     expect(guard).toContain('SAFETY_HOLD_BLOCKED');
   });
 
-  it('does not pre-implement Slice 8 runtime or duplicate its commands', () => {
-    for (const file of productionFiles) {
-      const rel = relative(ROOT, file);
-      const content = read(file);
-      for (const command of SLICE8_ORDINARY_COMMANDS) {
-        expect(content, `${rel} must not implement ${command}`).not.toContain(command);
-      }
+  it('integrates with the merged Slice 8 runtime without duplicating its commands', () => {
+    const service = read(join(ROOT, 'apps/server/api/src/services/problem-formulations.ts'));
+    const implementations: Record<(typeof SLICE8_ORDINARY_COMMANDS)[number], string> = {
+      StartAssessment: 'startAssessment',
+      PresentProblemFormulation: 'presentProblemFormulation',
+      ConfirmProblemFormulation: 'confirmProblemFormulation',
+      DisputeProblemFormulation: 'disputeProblemFormulation',
+      CorrectProblemFormulation: 'correctProblemFormulation',
+      ReassessFromFormulation: 'reassessFromFormulation',
+    };
+    for (const command of SLICE8_ORDINARY_COMMANDS) {
+      expect(service, `Slice 8 service must implement ${command}`).toContain(
+        implementations[command]
+      );
     }
-    // No Problem Formulation migration exists on this baseline.
+    const guard = read(join(ROOT, 'packages/domain/src/safety/guard.ts'));
+    for (const command of SLICE8_ORDINARY_COMMANDS) {
+      expect(guard, `Safety guard must not duplicate ${command}`).not.toContain(command);
+    }
     const migrations = readdirSync(join(ROOT, 'db/migrations'));
-    expect(migrations.filter((name) => /problem.?formulation/i.test(name))).toHaveLength(0);
+    expect(migrations).toContain('008_problem_formulation_core.sql');
+    expect(migrations).toContain('010_problem_formulation_safety_vocabulary_reconcile.sql');
   });
 
   it('keeps the guard usable by an external ordinary-progression command', async () => {
