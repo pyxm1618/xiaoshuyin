@@ -455,17 +455,17 @@ Audit scope: Frozen Spec vs Plan vs Checklist vs Tasks. This audit proves planni
 
 | Question | Result | Final evidence |
 |---|---|---|
-| Q1 — Frozen Spec Integrity | PASS | blob remains `a6cd9fd723f9339b575757279703be554afaf0f6`; planning diff does not modify `spec.md` |
-| Q2 — Requirement Coverage | PASS | FR-001–FR-052 = 52/52 with explicit Plan, Checklist, Task and Verification mapping |
-| Q3 — Acceptance Coverage | PASS | AS-01–AS-60 = 60/60 with explicit Plan, Task and assertion mapping |
-| Q4 — Negative Scope Coverage | PASS | NS-01–NS-25 = 25/25 with static/test/review-gate proof |
-| Q5 — Ownership | PASS | no second Case/Evidence/Formulation/Authorization/Consent/Compliance/Safety/Scene/Audit/Idempotency/professional truth owner |
-| Q6 — Phase Boundary | PASS | no InterventionInstance/Goal/Plan/Task/Checkin/Common Core Review/Outcome/Schedule/Notification runtime is authorized |
-| Q7 — AI Boundary | PASS | AI/RAG receive no professional hard-gate authority |
-| Q8 — Professional Review Truth | PASS | no fake reviewer/automatic approval; absent real reviewer authority keeps T1601 BLOCKED |
-| Q9 — Executability | PASS | T1601–T1624 are dependency-ordered, bounded, file/module-scoped, verified and mapped |
-| Q10 — Dependency Fidelity | PASS | Planning COMPLETE is explicitly separate from runtime availability |
-| Q11 — Implement Gate | PASS | runtime gate remains BLOCKED until Slice 12–15 Audit2+merge and all owner/reviewer prerequisites are real |
+| Q1 — Frozen Spec Integrity | SATISFIED | blob remains `a6cd9fd723f9339b575757279703be554afaf0f6`; planning diff does not modify `spec.md` |
+| Q2 — Requirement Coverage | SATISFIED | FR-001–FR-052 = 52/52 with explicit Plan, Checklist, Task and Verification mapping |
+| Q3 — Acceptance Coverage | SATISFIED | AS-01–AS-60 = 60/60 with explicit Plan, Task and assertion mapping |
+| Q4 — Negative Scope Coverage | SATISFIED | NS-01–NS-25 = 25/25 with static/test/review-gate proof |
+| Q5 — Ownership | SATISFIED | no second Case/Evidence/Formulation/Authorization/Consent/Compliance/Safety/Scene/Audit/Idempotency/professional truth owner |
+| Q6 — Phase Boundary | SATISFIED | no InterventionInstance/Goal/Plan/Task/Checkin/Common Core Review/Outcome/Schedule/Notification runtime is authorized |
+| Q7 — AI Boundary | SATISFIED | AI/RAG receive no professional hard-gate authority |
+| Q8 — Professional Review Truth | SATISFIED | no fake reviewer/automatic approval; absent real reviewer authority keeps T1601 BLOCKED |
+| Q9 — Executability | SATISFIED | T1601–T1624 are dependency-ordered, bounded, file/module-scoped, verified and mapped |
+| Q10 — Dependency Fidelity | SATISFIED | Planning COMPLETE is explicitly separate from runtime availability |
+| Q11 — Implement Gate | SATISFIED | runtime gate remains BLOCKED until Slice 12–15 Audit2+merge and all owner/reviewer prerequisites are real |
 
 ### Audit 1 remediation history
 
