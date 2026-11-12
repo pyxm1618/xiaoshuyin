@@ -1,6 +1,6 @@
 # Slice 10 Engineering Tasks — 010-compliance-feature-policy-foundation
 
-Status: **PLANNING COMPLETE / AUDIT 1 PASS AFTER REMEDIATION / FINAL RE-AUDIT PASS / PLAN FROZEN / IMPLEMENT GATE BLOCKED**
+Status: **PLANNING COMPLETE / TARGETED AUDIT 1 PASS / FINAL RE-AUDIT PASS / PLAN RE-FROZEN / IMPLEMENT GATE OPEN**
 
 These are future Development AI tasks. They do not authorize implementation now.
 
@@ -72,7 +72,7 @@ Read-only inspection only:
 2. Verify branch/worktree is a clean Slice 10 development environment if local git is available.
 3. Recompute input drift from the Frozen Spec base to latest main.
 4. Re-read any relevant drift without altering Frozen product semantics.
-5. Verify the Frozen Spec blob is still `a911bcc0c168e00efa015d53d5c120bece28c5a7`.
+5. Verify the authoritative Frozen Spec v2 commit/blob are still `bc12a0d64a9bd2cf09bbc0dfe0d3ffa305da97e1` / `ba38ccdafe85bbb044d994292a6a7237337eb474`.
 6. Verify whether Slice 8 is merged; if merged, inspect its actual migration/shared vocabulary/runtime interfaces.
 7. Verify whether Slice 9 is merged.
 8. Independently verify whether a separately approved Data Access Remediation has merged and, if so, whether it supplies the same §7.0 same-client/identity/RLS/migration invariants.
@@ -830,10 +830,14 @@ Open Product Decisions: **0**
 
 Unresolved Planning Findings: **0**
 
-Implement Gate: **BLOCKED**
+Implement Gate: **OPEN**
 
-Reason: current main does not yet contain either the Slice 9 Drizzle foundation or a separately approved Data Access Remediation satisfying the frozen §7.0 same-client / identity / RLS / migration contract.
+Reason: former Slice 9 Drizzle dependency is now satisfied on current main; PR #28 and post-merge remediation PR #29 are merged, and the authoritative Drizzle same-client / identity / RLS transaction foundation is present.
 
-**SLICE 10 — PLAN FROZEN**
+`S10R01_GOVERNANCE_STAGE1_HEADING_GAP`: **CLOSED** — authoritative Frozen Spec v2 contains all four canonical Stage 1 headings.
 
-**READY FOR DEVELOPMENT WHEN IMPLEMENT GATE OPENS**
+Historical Frozen Spec v1 commit/blob are non-authoritative. Authoritative provenance is Frozen Spec v2 commit `bc12a0d64a9bd2cf09bbc0dfe0d3ffa305da97e1` / blob `ba38ccdafe85bbb044d994292a6a7237337eb474`.
+
+**SLICE 10 — PLAN RE-FROZEN**
+
+**READY FOR DEVELOPMENT AFTER GOVERNANCE EXECUTION PASSES**
