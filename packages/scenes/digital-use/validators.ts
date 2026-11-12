@@ -219,3 +219,41 @@ export function validateDigitalUseGraph(
     deadEndNodeCodes,
   };
 }
+
+
+export interface DigitalUseParallelExpectation {
+  readonly left: string;
+  readonly right: string;
+  readonly semantics: string;
+}
+
+export function validateDigitalUseParallelFidelity(
+  manifest: readonly DigitalUseNodeManifestEntry[],
+  expectedRelations: readonly DigitalUseParallelExpectation[]
+): DigitalUseValidationResult {
+  const issues: DigitalUseValidationIssue[] = [];
+  const byCode = new Map(manifest.map((node) => [node.nodeCode, node] as const));
+
+  for (const relation of expectedRelations) {
+    const left = byCode.get(relation.left);
+    const right = byCode.get(relation.right);
+    if (left === undefined || right === undefined) {
+      issues.push(issue('MISSING_PARALLEL_NODE', `parallel relation references missing node: ${relation.left} / ${relation.right}`));
+      continue;
+    }
+    if (!left.canRunInParallelWith.includes(relation.right)) {
+      issues.push(issue('MISSING_PARALLEL_RELATION', `${relation.left} must run in parallel with ${relation.right}`, relation.left));
+    }
+    if (!right.canRunInParallelWith.includes(relation.left)) {
+      issues.push(issue('ASYMMETRIC_PARALLEL_RELATION', `${relation.right} must reciprocally identify ${relation.left}`, relation.right));
+    }
+  }
+
+  const a5001 = byCode.get('A5001');
+  const a5002 = byCode.get('A5002');
+  if (a5001?.stream !== 'FAMILY_ALLIANCE_REVIEW' || a5002?.stream !== 'PHONE_USE_CONTRACT_REVIEW') {
+    issues.push(issue('REVIEW_STREAM_FIDELITY', 'A5001 and A5002 must review their distinct intervention streams'));
+  }
+
+  return { valid: issues.length === 0, issues };
+}
