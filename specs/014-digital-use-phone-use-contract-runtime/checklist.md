@@ -40,7 +40,7 @@
 | S14-B011 | Slice 13 is checked only for mechanical migration/shared-seam collision. | PASS |
 | S14-B012 | Phase 3 AI is not an Implement Gate prerequisite. | PASS |
 | S14-B013 | Phase 4 execution infrastructure is not an Implement Gate prerequisite. | PASS |
-| S14-B014 | Current open PR #32 is treated as dependency-execution drift, not product authority. | PASS |
+| S14-B014 | PR #32 final state is revalidated at planning closeout; its merge is classified as non-semantic dependency-execution drift, not product authority. | PASS |
 | S14-B015 | Current Implement Gate is truthfully BLOCKED by Slice 12 runtime absence. | PASS |
 
 ## C. Ownership
