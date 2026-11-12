@@ -298,11 +298,6 @@ function sameStringSet(actual: readonly string[], expected: readonly string[]): 
   return JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort());
 }
 
-function containsAll(actual: readonly string[], expected: readonly string[]): boolean {
-  const actualSet = new Set(actual);
-  return expected.every((value) => actualSet.has(value));
-}
-
 function routeProjection(route: DigitalUseNodeManifestEntry['allowedNext'][number]): DigitalUseSnapshotRouteProjection {
   return route.kind === 'NODE'
     ? {
@@ -351,8 +346,8 @@ export function validateDigitalUseSnapshotFidelity(
       ['policyRefs', actual.policyRefs, expected.policyRefs],
       ['authorityRefs', actual.authorityRefs, expected.authorityRefs],
     ] as const) {
-      if (!containsAll(actualRefs, expectedRefs)) {
-        issues.push(issue('SNAPSHOT_FIELD_DRIFT', `${field} lost expected semantic references`, expected.nodeCode));
+      if (!sameStringSet(actualRefs, expectedRefs)) {
+        issues.push(issue('SNAPSHOT_FIELD_DRIFT', `${field} semantic references drifted`, expected.nodeCode));
       }
     }
 
