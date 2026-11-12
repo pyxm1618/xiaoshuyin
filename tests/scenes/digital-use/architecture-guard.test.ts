@@ -11,12 +11,13 @@ describe('Slice 11 static architecture guard', () => {
     expect(result.stdout + result.stderr).toContain('guard-static: PASS');
   });
 
-  it('mechanically detects second truth, snapshot import, impure routing and numeric generation fixtures', () => {
+  it('detects cross-tree second truth bypasses without flagging isolated node references', () => {
     const result = spawnSync(process.execPath, ['scripts/guard-static.mjs', '--self-test'], {
       cwd: process.cwd(),
       encoding: 'utf8',
     });
     expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout + result.stderr).toContain('guard-static self-test: PASS');
+    expect(result.stdout + result.stderr).toContain('synthetic fixtures validated');
   });
 });
