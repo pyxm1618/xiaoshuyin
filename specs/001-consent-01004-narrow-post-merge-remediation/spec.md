@@ -1,6 +1,6 @@
-# Slice 14 — Consent Supplemental Assessment Owner Seam (Digital Use 01004)
+# Slice 1 Consent Owner — 01004 Narrow Post-Merge Remediation
 
-**Feature Directory**: `specs/014-consent-supplemental-assessment-owner-seam`
+**Feature Directory**: `specs/001-consent-01004-narrow-post-merge-remediation`
 **Created**: 2026-11-12
 **Revised**: 2026-11-12（Consent Owner Review 后的精准修订；本轮关闭 Subject Authority，仍不进入 Plan / Tasks / 实现 / migration / 独立审计）
 **Status**: **SPEC REVISION COMPLETE / READY FOR INDEPENDENT SPEC AUDIT**
@@ -141,10 +141,10 @@
 
 本 Spec 同时明确两个与 Disclosure 相关的独立 Gate（它们与已关闭的 Subject Authority 相互独立）：
 
-1. **Slice 14 Owner Capability Gate**：owner seam 只接受 server-resolved、approved 的 disclosure reference/version/hash；缺失时 fail closed。
-2. **Slice 12 Integration Gate**：即使 Slice 14 owner remediation 完成，Slice 12 仍必须另外证明存在 approved 01004 disclosure authority，才能执行 01004。
+1. **Consent Owner Capability Gate**：owner seam 只接受 server-resolved、approved 的 disclosure reference/version/hash；缺失时 fail closed。
+2. **Slice 12 Integration Gate**：即使 Slice 1 Consent owner remediation 完成，Slice 12 仍必须另外证明存在 approved 01004 disclosure authority，才能执行 01004。
 
-`Slice 14 owner capability ready ≠ Slice 12 01004 fully ready`。
+`Consent owner capability ready ≠ Slice 12 01004 fully ready`。
 
 ---
 
@@ -242,8 +242,8 @@
 - **FR-029** THE SYSTEM SHALL NOT reuse the existing UNDER_14 `ConsentEvidence` shape for supplemental decisions, and SHALL NOT relax the guardian evidence contract.
 - **FR-030** THE SYSTEM SHALL NOT persist raw client IP or raw User-Agent; if the existing design uses HMAC/hash discipline, the same privacy discipline SHALL continue.
 - **FR-031** THE SYSTEM SHALL NOT store Assessment answers, device-usage facts, parent observations, statements or impact narratives inside Consent evidence.
-- **FR-067** THE SYSTEM SHALL NOT accept disclosure content authored by the caller, generated temporarily by a model, copied from the guardian notice, or treated as an approved notice merely because it is plain text. Disclosure content and approval ownership are outside Slice 14.
-- **FR-068** THE SYSTEM SHALL NOT treat Slice 14 owner-capability completion as sufficient to execute 01004. Slice 12 SHALL separately prove that an approved 01004 disclosure authority exists before the 01004 Consent Gate can pass.
+- **FR-067** THE SYSTEM SHALL NOT accept disclosure content authored by the caller, generated temporarily by a model, copied from the guardian notice, or treated as an approved notice merely because it is plain text. Disclosure content and approval ownership are outside this Consent owner remediation.
+- **FR-068** THE SYSTEM SHALL NOT treat Consent owner-capability completion as sufficient to execute 01004. Slice 12 SHALL separately prove that an approved 01004 disclosure authority exists before the 01004 Consent Gate can pass.
 
 ### 5.6 不伪造 guardian 事实与 purpose 不变量
 
@@ -277,7 +277,7 @@
 - **FR-048** WHILE two supplemental decisions race for the same logical scope, THE SYSTEM SHALL ensure at most one legal current decision survives; the losing request SHALL fail closed.
 - **FR-049** WHEN two `GRANTED` decisions race, THE SYSTEM SHALL NOT leave two current `GRANTED` truths.
 - **FR-050** IF a caller-owned transaction later fails and rolls back, THEN THE SYSTEM SHALL leave no supplemental consent row, no supplemental audit event and no idempotency/result residue attributable to the rolled-back command.
-- **FR-070** THE SYSTEM SHALL keep the outer `POST /api/v1/cases/:id/scene/nodes/:nodeCode/responses` command and its idempotency/result orchestration under Slice 12 ownership. The Slice 14 seam SHALL NOT establish a second idempotency table, a second `runIdempotentCommand` boundary, or a nested idempotency command; it SHALL be replay-safe only through DB uniqueness / version / concurrency invariants.
+- **FR-070** THE SYSTEM SHALL keep the outer `POST /api/v1/cases/:id/scene/nodes/:nodeCode/responses` command and its idempotency/result orchestration under Slice 12 ownership. The Consent owner seam SHALL NOT establish a second idempotency table, a second `runIdempotentCommand` boundary, or a nested idempotency command; it SHALL be replay-safe only through DB uniqueness / version / concurrency invariants.
 
 ### 5.10 审计
 
@@ -689,20 +689,20 @@ family_id + case_id + purpose = DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT + actor_pers
 
 ### 12.2 Disclosure Authority — 两个独立 Gate（非 Product Decision）
 
-**Slice 14 Owner Capability Gate（本 Spec 可定义）**
+**Consent Owner Capability Gate（本 Spec 可定义）**
 
 - Consent owner seam 只接受 server-resolved、approved、versioned 的 01004 disclosure reference / version / hash。
 - 无有效 approved disclosure 时：`FAIL CLOSED`。
 - 客户端提交 disclosure、模型临时生成 disclaimer、复用 guardian notice、把普通文案当正式 notice：全部禁止。
-- Disclosure 内容本身不属于 Slice 14 ownership。
+- Disclosure 内容本身不属于 Consent owner remediation ownership。
 
 **Slice 12 Integration Gate（必须在 Slice 12 另行证明）**
 
-- 即使 Slice 14 owner remediation 完成，Slice 12 仍不得自动解除 Consent Gate。
+- 即使 Slice 1 Consent owner remediation 完成，Slice 12 仍不得自动解除 Consent Gate。
 - Slice 12 必须另外证明 approved 01004 disclosure authority 存在，才能真正执行 01004。
-- `Slice 14 owner capability ready ≠ Slice 12 01004 fully ready`。
+- `Consent owner capability ready ≠ Slice 12 01004 fully ready`。
 
-当前仓库 `packages/compliance/src/notices.ts` 只有 `UNDER_14_GUARDIAN_CONSENT` notice；不存在 approved 01004 disclosure artifact。该事实不阻塞 Slice 14 的 owner capability 定义，但阻塞 01004 的真实执行。
+当前仓库 `packages/compliance/src/notices.ts` 只有 `UNDER_14_GUARDIAN_CONSENT` notice；不存在 approved 01004 disclosure artifact。该事实不阻塞 Consent owner remediation 的 owner capability 定义，但阻塞 01004 的真实执行。
 
 ### 12.3 公开读取投影
 
@@ -725,7 +725,7 @@ family_id + case_id + purpose = DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT + actor_pers
 | No second Consent truth | **CLOSED** | §4、§9 |
 | No generic Consent platform expansion | **CLOSED** | §3、§9 |
 | Open Product Decisions | **0** | Subject Authority 已关闭；Disclosure dependency 属集成依赖而非 product decision |
-| Disclosure Integration Dependency | **OPEN（不阻塞 Slice 14 owner remediation 设计）** | §12.2 |
+| Disclosure Integration Dependency | **OPEN（不阻塞 Consent owner remediation 设计）** | §12.2 |
 
 **当前结论**：`SPEC REVISION COMPLETE / READY FOR INDEPENDENT SPEC AUDIT`。
 
