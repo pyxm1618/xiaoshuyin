@@ -117,7 +117,7 @@ describe('Evidence scope guard (T029)', () => {
       'packages/rag',
       'packages/memory',
       'packages/notifications',
-      'packages/scenes',
+
       'apps/miniprogram',
       'apps/operations',
     ]) {

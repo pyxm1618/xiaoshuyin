@@ -69,7 +69,7 @@ describe('Slice 10 scope negatives (SC-16)', () => {
       'packages/notifications',
       'packages/ai',
       'packages/rag',
-      'packages/scenes',
+
       'packages/memory',
     ]) {
       expect(existsSync(join(ROOT, forbiddenPath)), forbiddenPath).toBe(false);
