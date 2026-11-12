@@ -263,12 +263,155 @@
 | TR05 | NS-01–NS-25 全覆盖 | PASS | Plan §28 |
 | TR06 | Open Product Decisions=0 / Open Planning Decisions=0 | PASS | Plan §29 |
 
+
+## Exact Traceability Checklist
+
+| ID | Gate | Status | Evidence |
+|---|---|---|---|
+| FRM001 | FR-001 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM002 | FR-002 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM003 | FR-003 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM004 | FR-004 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM005 | FR-005 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM006 | FR-006 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM007 | FR-007 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM008 | FR-008 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM009 | FR-009 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM010 | FR-010 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM011 | FR-011 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM012 | FR-012 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM013 | FR-013 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM014 | FR-014 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM015 | FR-015 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM016 | FR-016 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM017 | FR-017 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM018 | FR-018 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM019 | FR-019 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM020 | FR-020 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM021 | FR-021 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM022 | FR-022 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM023 | FR-023 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM024 | FR-024 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM025 | FR-025 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM026 | FR-026 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM027 | FR-027 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM028 | FR-028 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM029 | FR-029 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM030 | FR-030 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM031 | FR-031 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM032 | FR-032 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM033 | FR-033 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM034 | FR-034 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM035 | FR-035 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM036 | FR-036 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM037 | FR-037 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM038 | FR-038 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM039 | FR-039 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM040 | FR-040 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM041 | FR-041 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM042 | FR-042 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM043 | FR-043 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM044 | FR-044 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM045 | FR-045 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM046 | FR-046 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM047 | FR-047 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM048 | FR-048 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM049 | FR-049 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM050 | FR-050 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM051 | FR-051 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| FRM052 | FR-052 has explicit Plan + Task + Verification mapping | PASS | Plan §26 + Tasks exact [REQ] tag |
+| ASM01 | AS-01 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM02 | AS-02 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM03 | AS-03 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM04 | AS-04 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM05 | AS-05 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM06 | AS-06 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM07 | AS-07 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM08 | AS-08 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM09 | AS-09 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM10 | AS-10 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM11 | AS-11 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM12 | AS-12 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM13 | AS-13 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM14 | AS-14 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM15 | AS-15 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM16 | AS-16 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM17 | AS-17 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM18 | AS-18 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM19 | AS-19 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM20 | AS-20 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM21 | AS-21 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM22 | AS-22 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM23 | AS-23 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM24 | AS-24 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM25 | AS-25 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM26 | AS-26 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM27 | AS-27 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM28 | AS-28 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM29 | AS-29 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM30 | AS-30 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM31 | AS-31 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM32 | AS-32 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM33 | AS-33 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM34 | AS-34 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM35 | AS-35 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM36 | AS-36 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM37 | AS-37 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM38 | AS-38 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM39 | AS-39 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM40 | AS-40 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM41 | AS-41 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM42 | AS-42 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM43 | AS-43 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM44 | AS-44 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM45 | AS-45 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM46 | AS-46 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM47 | AS-47 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM48 | AS-48 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM49 | AS-49 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM50 | AS-50 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM51 | AS-51 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM52 | AS-52 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM53 | AS-53 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM54 | AS-54 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM55 | AS-55 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM56 | AS-56 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM57 | AS-57 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM58 | AS-58 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM59 | AS-59 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| ASM60 | AS-60 has explicit Plan + Task + assertion mapping | PASS | Plan §27 + Tasks exact [AS] tag |
+| NSM01 | NS-01 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM02 | NS-02 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM03 | NS-03 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM04 | NS-04 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM05 | NS-05 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM06 | NS-06 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM07 | NS-07 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM08 | NS-08 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM09 | NS-09 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM10 | NS-10 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM11 | NS-11 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM12 | NS-12 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM13 | NS-13 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM14 | NS-14 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM15 | NS-15 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM16 | NS-16 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM17 | NS-17 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM18 | NS-18 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM19 | NS-19 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM20 | NS-20 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM21 | NS-21 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM22 | NS-22 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM23 | NS-23 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM24 | NS-24 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+| NSM25 | NS-25 has explicit Plan + Task + mechanical guard mapping | PASS | Plan §28 + Tasks exact [NS] tag |
+
 ## Coverage Summary
 
 - Functional Requirements: **52/52**
 - Acceptance Scenarios: **60/60**
 - Negative Scope Scenarios: **25/25**
-- Checklist PASS: **254**
+- Checklist PASS: **391**
 - Checklist FAIL: **0**
 - Checklist N/A: **0**
 
