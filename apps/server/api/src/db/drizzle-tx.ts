@@ -42,6 +42,13 @@ export interface DrizzleRlsTransactionOptions {
   accountId: string;
   personId: string;
   purpose: string;
+  /**
+   * Optional caller-requested isolation for a multi-read decision that must
+   * observe ONE authoritative snapshot (e.g. policy + Person + guardian
+   * consent). Existing business commands keep the PostgreSQL default
+   * (READ COMMITTED) because they omit this option.
+   */
+  isolationLevel?: 'REPEATABLE READ';
 }
 
 function identityContextMismatch(): never {
@@ -119,7 +126,14 @@ export async function withDrizzleRlsTransaction<T>(
   const db = drizzle(client, { schema: safetySchema });
 
   try {
-    // Drizzle owns BEGIN / COMMIT / ROLLBACK for this whole callback.
+    // Drizzle owns BEGIN / COMMIT / ROLLBACK for this whole callback. The
+    // isolation level is applied by the same seam; no second transaction
+    // abstraction and no second checked-out client are introduced.
+    const transactionConfig =
+      opts.isolationLevel === 'REPEATABLE READ'
+        ? ({ isolationLevel: 'repeatable read' } as const)
+        : undefined;
+
     return await db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT app.set_identity_context(${opts.accountId}, ${opts.purpose})`
@@ -129,7 +143,7 @@ export async function withDrizzleRlsTransaction<T>(
         sql`SELECT app.set_family_context(${opts.familyId}, ${opts.personId}, ${opts.purpose})`
       );
       return fn(tx, client);
-    });
+    }, transactionConfig);
   } catch (error) {
     broken = broken || isBrokenClientError(error);
     throw error;

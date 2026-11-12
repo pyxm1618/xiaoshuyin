@@ -287,6 +287,8 @@ describe('compliance feature-policy migration and schema', () => {
         app_evidence: boolean;
         app_approved: boolean;
         app_source: boolean;
+        app_superseded: boolean;
+        app_created_at: boolean;
       }>(
         `SELECT
            has_table_privilege('xiaoshuyin_app','compliance_feature_policies','INSERT') AS app_insert,
@@ -297,7 +299,9 @@ describe('compliance feature-policy migration and schema', () => {
            has_column_privilege('xiaoshuyin_app','compliance_feature_policies','decision_basis','SELECT') AS app_basis,
            has_column_privilege('xiaoshuyin_app','compliance_feature_policies','review_evidence_ref','SELECT') AS app_evidence,
            has_column_privilege('xiaoshuyin_app','compliance_feature_policies','approved_at','SELECT') AS app_approved,
-           has_column_privilege('xiaoshuyin_app','compliance_feature_policies','publication_source_ref','SELECT') AS app_source`
+           has_column_privilege('xiaoshuyin_app','compliance_feature_policies','publication_source_ref','SELECT') AS app_source,
+           has_column_privilege('xiaoshuyin_app','compliance_feature_policies','superseded_by_policy_id','SELECT') AS app_superseded,
+           has_column_privilege('xiaoshuyin_app','compliance_feature_policies','created_at','SELECT') AS app_created_at`
       );
       expect(privileges.rows[0]).toEqual({
         app_insert: false,
@@ -309,7 +313,32 @@ describe('compliance feature-policy migration and schema', () => {
         app_evidence: false,
         app_approved: false,
         app_source: false,
+        app_superseded: false,
+        app_created_at: false,
       });
+
+      // Exact runtime SELECT allow-list: evaluator-required columns only.
+      const allowedColumns = await client.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.column_privileges
+          WHERE grantee = 'xiaoshuyin_app'
+            AND table_schema = 'public'
+            AND table_name = 'compliance_feature_policies'
+            AND privilege_type = 'SELECT'
+          ORDER BY column_name`
+      );
+      expect(allowedColumns.rows.map((row) => row.column_name)).toEqual([
+        'ai_disclosure_rule',
+        'anthropomorphic_applicability',
+        'effective_from',
+        'effective_until',
+        'feature_code',
+        'feature_contract_revision',
+        'generated_content_label_rule',
+        'id',
+        'minor_access_rule',
+        'policy_version',
+        'usage_reminder_rule',
+      ]);
 
       const allowedColumn = await client.query<{ ok: boolean }>(
         `SELECT has_column_privilege('xiaoshuyin_app','compliance_feature_policies','feature_code','SELECT') AS ok`

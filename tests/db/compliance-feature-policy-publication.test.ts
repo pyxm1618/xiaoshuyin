@@ -198,6 +198,64 @@ describe('compliance feature-policy publication and concurrency', () => {
     expect(runtime.rows).toEqual([{ policy_version: 2 }]);
   });
 
+  it('rejects a version below the historical maximum after the open row was explicitly expired', async () => {
+    const code = featureCode('EXPIRED_HISTORY');
+
+    await publish(migrator, {
+      code,
+      expectedVersion: null,
+      version: 1,
+      effectiveFrom: new Date(Date.now() - 180_000),
+    });
+
+    const v2 = await publish(migrator, {
+      code,
+      expectedVersion: 1,
+      version: 2,
+      effectiveFrom: new Date(Date.now() - 120_000),
+    });
+
+    // Legal lifecycle closure without a successor: the feature now has history
+    // but no open row.
+    await migrator.query(
+      `UPDATE compliance_feature_policies SET effective_until = now() WHERE id = $1`,
+      [v2]
+    );
+    const openRows = await migrator.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM compliance_feature_policies
+        WHERE feature_code = $1 AND effective_until IS NULL`,
+      [code]
+    );
+    expect(openRows.rows[0]).toEqual({ n: 0 });
+
+    // Neither v1 nor v2 may be re-published as a "first publication".
+    for (const version of [1, 2]) {
+      await expect(
+        publish(migrator, {
+          code,
+          expectedVersion: null,
+          version,
+          effectiveFrom: new Date(Date.now() + 1000),
+        })
+      ).rejects.toMatchObject({ code: '23514' });
+    }
+
+    const v3 = await publish(migrator, {
+      code,
+      expectedVersion: null,
+      version: 3,
+      effectiveFrom: new Date(Date.now() + 1000),
+    });
+
+    const versions = await migrator.query<{ policy_version: number }>(
+      `SELECT policy_version FROM compliance_feature_policies
+        WHERE feature_code = $1 ORDER BY policy_version`,
+      [code]
+    );
+    expect(versions.rows.map((row) => row.policy_version)).toEqual([1, 2, 3]);
+    expect(v3).toBeTruthy();
+  });
+
   it('rejects a stale expected current version without changing history', async () => {
     const code = featureCode('STALE');
     await publish(migrator, {

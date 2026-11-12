@@ -275,9 +275,7 @@ GRANT SELECT (
   generated_content_label_rule,
   usage_reminder_rule,
   effective_from,
-  effective_until,
-  superseded_by_policy_id,
-  created_at
+  effective_until
 ) ON compliance_feature_policies TO xiaoshuyin_app;
 
 -- Controlled provisioning role: full history read + publish (no delete/truncate).
@@ -309,6 +307,7 @@ LANGUAGE plpgsql SECURITY INVOKER AS $$
 DECLARE
   v_current_id      uuid;
   v_current_version integer;
+  v_max_version     integer;
   v_new_id          uuid;
 BEGIN
   IF p_feature_code IS NULL OR p_feature_contract_revision IS NULL
@@ -343,7 +342,22 @@ BEGIN
     IF p_policy_version <= v_current_version THEN
       RAISE EXCEPTION 'COMPLIANCE_POLICY_VERSION_NOT_MONOTONIC' USING ERRCODE = '23514';
     END IF;
+  END IF;
 
+  -- Monotonic policy version is a property of the whole reviewed history, not
+  -- only the current open row. An explicitly expired history (no open row) must
+  -- never be mistaken for a first publication.
+  SELECT MAX(policy_version)
+    INTO v_max_version
+    FROM compliance_feature_policies
+   WHERE feature_code = p_feature_code
+     AND feature_contract_revision = p_feature_contract_revision;
+
+  IF v_max_version IS NOT NULL AND p_policy_version <= v_max_version THEN
+    RAISE EXCEPTION 'COMPLIANCE_POLICY_VERSION_NOT_MONOTONIC' USING ERRCODE = '23514';
+  END IF;
+
+  IF v_current_id IS NOT NULL THEN
     UPDATE compliance_feature_policies
        SET effective_until = p_effective_from
      WHERE id = v_current_id;
