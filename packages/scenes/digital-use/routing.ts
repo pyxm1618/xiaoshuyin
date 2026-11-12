@@ -36,6 +36,12 @@ function conditionState(
   return input.conditions[route.conditionRef];
 }
 
+function conditionStateIsUnresolved(
+  state: ReturnType<typeof conditionState>
+): state is 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'CONFLICT' {
+  return state === 'UNKNOWN' || state === 'NOT_COLLECTED' || state === 'DECLINED' || state === 'CONFLICT';
+}
+
 /**
  * Pure topology routing only.
  *
@@ -71,12 +77,24 @@ export function routeDigitalUseTopology(
   }
 
   const priorityRef = priorityConditionFor(node.nodeCode);
-  const priorityMatched =
-    priorityRef !== null &&
-    node.allowedNext.some(
-      (route) => route.conditionRef === priorityRef && conditionState(input, route) === true
-    );
+  const priorityRoute =
+    priorityRef === null
+      ? undefined
+      : node.allowedNext.find((route) => route.conditionRef === priorityRef);
+  const priorityState =
+    priorityRoute === undefined ? undefined : conditionState(input, priorityRoute);
 
+  if (conditionStateIsUnresolved(priorityState)) {
+    return {
+      kind: 'UNKNOWN',
+      authority: 'TOPOLOGY_ONLY',
+      fromNodeCode: node.nodeCode,
+      code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION',
+      packageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    };
+  }
+
+  const priorityMatched = priorityState === true;
   const candidateRoutes = priorityMatched
     ? node.allowedNext.filter((route) => route.conditionRef === priorityRef)
     : node.allowedNext;
