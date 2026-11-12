@@ -119,3 +119,103 @@ export function validateDigitalUseManifest(
 
   return { valid: issues.length === 0, issues };
 }
+
+
+export interface DigitalUseGraphValidationResult extends DigitalUseValidationResult {
+  readonly reachableNodeCodes: readonly string[];
+  readonly orphanNodeCodes: readonly string[];
+  readonly deadEndNodeCodes: readonly string[];
+}
+
+function nonLinearAnchorIsReachable(
+  ref: string,
+  reachable: ReadonlySet<string>
+): boolean {
+  const nodePrefix = /^(A\d+)/.exec(ref)?.[1];
+  if (nodePrefix !== undefined) return reachable.has(nodePrefix);
+  if (ref === 'TARGET_HELP_REENTRY') return reachable.has('A3002');
+  if (ref === 'USER_TIMELINE' || ref === 'USER_TIMELINE_REVIEW') return reachable.has('A2007');
+  if (ref === 'CONTRACT_PREPARATION_COMPLETE') return reachable.has('A4004');
+  if (ref === 'CONTRACT_EXECUTION_SUPPORT') return reachable.has('A4010');
+  return false;
+}
+
+/**
+ * Typed reachability: routed edges + explicit parallel activation + traceable
+ * USER_INITIATED/SCHEDULED/help/re-entry anchors. It never infers numeric
+ * adjacency or fabricates an edge to make the graph pass.
+ */
+export function validateDigitalUseGraph(
+  manifest: readonly DigitalUseNodeManifestEntry[],
+  expectedNodeCodes?: readonly string[]
+): DigitalUseGraphValidationResult {
+  const structural = validateDigitalUseManifest(manifest, expectedNodeCodes);
+  const issues = [...structural.issues];
+  const nodeSet = new Set(manifest.map((node) => node.nodeCode));
+  const reachable = new Set<string>();
+
+  if (nodeSet.has('A1001')) reachable.add('A1001');
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const node of manifest) {
+      if (reachable.has(node.nodeCode)) {
+        for (const route of node.allowedNext) {
+          if (route.kind === 'NODE' && nodeSet.has(route.targetNodeCode) && !reachable.has(route.targetNodeCode)) {
+            reachable.add(route.targetNodeCode);
+            changed = true;
+          }
+        }
+        for (const peer of node.canRunInParallelWith) {
+          if (nodeSet.has(peer) && !reachable.has(peer)) {
+            reachable.add(peer);
+            changed = true;
+          }
+        }
+      }
+
+      if (!reachable.has(node.nodeCode)) {
+        const hasNonLinearMode =
+          node.entryMode.includes('USER_INITIATED') || node.entryMode.includes('SCHEDULED');
+        const anchored = node.helpOrReentryRefs.some((ref) => nonLinearAnchorIsReachable(ref, reachable));
+        if (hasNonLinearMode && anchored) {
+          reachable.add(node.nodeCode);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  const orphanNodeCodes = manifest
+    .filter((node) => !reachable.has(node.nodeCode))
+    .map((node) => node.nodeCode);
+
+  for (const nodeCode of orphanNodeCodes) {
+    issues.push(issue('ORPHAN_NODE', 'node has no routed, parallel, user/scheduled or help/re-entry reachability', nodeCode));
+  }
+
+  const deadEndNodeCodes = manifest
+    .filter((node) => {
+      if (!reachable.has(node.nodeCode)) return false;
+      const hasExplicitExit = node.allowedNext.length > 0;
+      const hasIntentionalNonLinearContinuation =
+        node.helpOrReentryRefs.length > 0 &&
+        (node.entryMode.includes('USER_INITIATED') || node.entryMode.includes('SCHEDULED'));
+      const hasParallelSupport = node.canRunInParallelWith.length > 0;
+      return !hasExplicitExit && !hasIntentionalNonLinearContinuation && !hasParallelSupport;
+    })
+    .map((node) => node.nodeCode);
+
+  for (const nodeCode of deadEndNodeCodes) {
+    issues.push(issue('ACCIDENTAL_DEAD_END', 'reachable non-terminal node has no approved onward/exit/re-entry semantics', nodeCode));
+  }
+
+  return {
+    valid: issues.length === 0,
+    issues,
+    reachableNodeCodes: [...reachable].sort(),
+    orphanNodeCodes,
+    deadEndNodeCodes,
+  };
+}
