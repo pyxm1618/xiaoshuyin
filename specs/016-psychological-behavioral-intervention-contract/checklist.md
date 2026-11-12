@@ -264,6 +264,11 @@
 | TR06 | Open Product Decisions=0 / Open Planning Decisions=0 | PASS | Plan §29 |
 
 
+| V1F01 | Frozen Spec §7.2 的 10 类最低 Intervention family inventory 已显式进入 Plan/Task | PASS | Plan §5.1 + T1609 |
+| V1F02 | Phase 2 node/template/example/FAQ/support artifact 不会自动升级为 InterventionDefinition | PASS | Plan §5.1 + T1609 |
+| V1F03 | 每个候选只能 REVIEWED+PUBLISHED 或明确 NOT READY/UNPUBLISHED | PASS | Plan §5.1 + T1609 |
+| V1F04 | developer/model 不得为补齐首批定义而发明专业内容 | PASS | Plan §5.1 + T1609 |
+
 ## Exact Traceability Checklist
 
 | ID | Gate | Status | Evidence |
@@ -411,7 +416,7 @@
 - Functional Requirements: **52/52**
 - Acceptance Scenarios: **60/60**
 - Negative Scope Scenarios: **25/25**
-- Checklist PASS: **391**
+- Checklist PASS: **395**
 - Checklist FAIL: **0**
 - Checklist N/A: **0**
 
