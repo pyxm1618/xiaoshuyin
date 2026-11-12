@@ -103,6 +103,36 @@ describe('pure compliance feature-policy evaluator', () => {
     expect(result.obligations).toContain('REQUIRE_USAGE_REMINDER');
   });
 
+  it('SC-02 / SC-11: REQUIRED on a minor composes minor mode, AI disclosure, label and usage reminder', () => {
+    const minor = {
+      ...ADULT,
+      ageBand: 'MINOR_14_17' as const,
+      minorMode: true,
+    };
+
+    const result = evaluateCompliance(
+      snapshot(
+        [
+          policy({
+            anthropomorphicApplicability: 'REQUIRED',
+            aiDisclosureRule: 'REQUIRED',
+            generatedContentLabelRule: 'REQUIRED',
+            usageReminderRule: 'REQUIRED',
+          }),
+        ],
+        { personProcessingRequired: true, person: minor }
+      )
+    );
+
+    expect(result.gate).toBe('ALLOW');
+    expect(result.obligations).toEqual([
+      'REQUIRE_MINOR_MODE',
+      'REQUIRE_AI_DISCLOSURE',
+      'REQUIRE_GENERATED_CONTENT_LABEL',
+      'REQUIRE_USAGE_REMINDER',
+    ]);
+  });
+
   it('SC-03: UNKNOWN fails closed and is never NOT_APPLICABLE/ALLOW', () => {
     const result = evaluateCompliance(
       snapshot([policy({ anthropomorphicApplicability: 'UNKNOWN' })])
