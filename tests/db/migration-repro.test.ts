@@ -19,10 +19,10 @@ const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATA
 
 // Expected final object counts (Slice 1/2 + Case Core + Slice 3 Evidence + Slice 6 binding)
 const EXPECTED_ENUMS = 22; // + problem_formulation_status (Slice 8)
-const EXPECTED_TABLES = 23; // + problem_formulations (Slice 8) + risk_events (Slice 9)
+const EXPECTED_TABLES = 24; // + compliance_feature_policies (Slice 10)
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 4; // set_account_context, set_identity_context, set_family_context, create_family
-const EXPECTED_POLICIES = 52; // + 3 problem_formulations (Slice 8) + risk_events_family_scope (Slice 9)
+const EXPECTED_POLICIES = 54; // + 2 compliance_feature_policies RLS policies (Slice 10)
 const EXPECTED_TRIGGERS = 3; // consent_records_guard + 2 binding append-only triggers
 
 const EXPECTED_ENUM_NAMES = [
@@ -61,6 +61,7 @@ const EXPECTED_TABLE_NAMES = [
   'case_events',
   'case_participants',
   'cases',
+  'compliance_feature_policies',
   'consent_records',
   'dialogue_messages',
   'families',

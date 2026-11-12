@@ -502,6 +502,88 @@ function runSafetyRules() {
 
 runSafetyRules();
 
+// ─── Rule 9: Slice 10 — compliance feature-policy scope negatives ───
+// Narrow mechanical negatives. They forbid shipping a policy product or a
+// later-phase runtime, without forbidding future Scene-owned descriptor
+// registration (which enters only as data).
+const FORBIDDEN_COMPLIANCE_TABLES = [
+  'interaction_usage_sessions',
+  'usage_sessions',
+  'compliance_release_evidence',
+  'pipia_assessments',
+  'pipia_reviews',
+  'feature_policy_admin_users',
+  'compliance_policy_reviews',
+];
+const FORBIDDEN_COMPLIANCE_TABLE_NAME = FORBIDDEN_COMPLIANCE_TABLES.join('|');
+const FORBIDDEN_COMPLIANCE_CREATE_TABLE = new RegExp(
+  `\\bCREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?` +
+    `(?:${SQL_IDENT}\\s*\\.\\s*)?["'\`]?(${FORBIDDEN_COMPLIANCE_TABLE_NAME})["'\`]?`,
+  'gi'
+);
+const FORBIDDEN_COMPLIANCE_PGTABLE = new RegExp(
+  `pgTable\\s*\\(\\s*["'\`](${FORBIDDEN_COMPLIANCE_TABLE_NAME})["'\`]`,
+  'gi'
+);
+
+function checkComplianceScopeNegatives(relPath, content, report) {
+  content.split('\n').forEach((line, i) => {
+    if (isComment(line)) return;
+
+    if (
+      relPath.startsWith('apps/') &&
+      /\b(app|server)\.(get|post|put|patch|delete)\s*\(\s*['"`][^'"`]*(?:feature-polic|compliance-polic|\/polic(?:y|ies))/i.test(line)
+    ) {
+      report('R9-compliance-scope', relPath, i + 1,
+        'Public compliance policy route registered (Slice 10 forbids it)');
+    }
+
+    if (
+      relPath.startsWith('apps/server/api/src/routes/') &&
+      /\bfeatureCode\b|\bfeature_code\b/.test(line)
+    ) {
+      report('R9-compliance-scope', relPath, i + 1,
+        'Client route must not accept a feature code as policy authority');
+    }
+
+    if (
+      relPath.startsWith('packages/compliance/src/') &&
+      /===\s*['"](?:A4003|DIGITAL_USE_[A-Z0-9_]*)['"]/.test(line)
+    ) {
+      report('R9-compliance-scope', relPath, i + 1,
+        'Scene-specific product branch in Common Core compliance evaluator');
+    }
+  });
+
+  if (relPath.startsWith('db/')) {
+    const normalized = normalizeSql(content);
+    for (const match of normalized.matchAll(FORBIDDEN_COMPLIANCE_CREATE_TABLE)) {
+      report('R9-compliance-scope', relPath, lineOf(normalized, match.index ?? 0),
+        `Forbidden later-phase table definition: ${match[1]}`);
+    }
+  }
+
+  if (relPath.startsWith('packages/') && content.includes('pgTable')) {
+    for (const match of content.matchAll(FORBIDDEN_COMPLIANCE_PGTABLE)) {
+      report('R9-compliance-scope', relPath, lineOf(content, match.index ?? 0),
+        `Forbidden later-phase table declared via pgTable: ${match[1]}`);
+    }
+  }
+}
+
+function runComplianceRules() {
+  scanDir(ROOT, (file) => {
+    const relPath = getRelPath(file);
+    if (!CODE_EXTENSIONS.has(relPath.slice(relPath.lastIndexOf('.')))) return;
+    const content = readFileSync(file, 'utf-8');
+    checkComplianceScopeNegatives(relPath, content, (rule, f, line, message) =>
+      addViolation(rule, f, line, message)
+    );
+  }, CODE_EXTENSIONS);
+}
+
+runComplianceRules();
+
 // ─── Self-test: synthetic forbidden bypass fixtures ───
 // `node scripts/guard-static.mjs --self-test` proves the Safety rules detect a
 // bypass even when the real tree is clean. Not part of `bun run guard:static`.
@@ -543,6 +625,30 @@ if (process.argv.includes('--self-test')) {
       content: "import { Guard } from '@alibaba/guardrails';",
       rule: 'R8-safety-scope',
     },
+    {
+      name: 'public compliance policy route',
+      path: 'apps/server/api/src/routes/evil6.ts',
+      content: "app.get('/api/v1/compliance/feature-policy', handler);",
+      rule: 'R9-compliance-scope',
+    },
+    {
+      name: 'client-authoritative feature code',
+      path: 'apps/server/api/src/routes/evil7.ts',
+      content: 'const featureCode = request.body.featureCode;',
+      rule: 'R9-compliance-scope',
+    },
+    {
+      name: 'scene branch in common core',
+      path: 'packages/compliance/src/evil8.ts',
+      content: "if (featureCode === 'A4003') { return true; }",
+      rule: 'R9-compliance-scope',
+    },
+    {
+      name: 'usage runtime table',
+      path: 'db/migrations/evil9.sql',
+      content: 'CREATE TABLE usage_sessions (id uuid PRIMARY KEY);',
+      rule: 'R9-compliance-scope',
+    },
   ];
 
   let selfTestFailures = 0;
@@ -551,6 +657,8 @@ if (process.argv.includes('--self-test')) {
     const report = (rule, file, line, message) => hits.push({ rule, message });
     if (sample.rule === 'R8-safety-scope') {
       checkSafetyScopeNegatives(sample.path, sample.content, report);
+    } else if (sample.rule === 'R9-compliance-scope') {
+      checkComplianceScopeNegatives(sample.path, sample.content, report);
     } else {
       checkSafetyUniqueEntry(sample.path, sample.content, report);
     }

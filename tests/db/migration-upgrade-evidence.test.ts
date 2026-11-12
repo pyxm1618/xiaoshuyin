@@ -128,7 +128,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 007_case_primary_switch.sql');
     // Slice 9 adds one reviewed migration; it must apply in the same upgrade.
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 8 new, 3 previously applied\./);
+    expect(output).toMatch(/Migration complete: 9 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -198,6 +198,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '008_problem_formulation_core.sql',
       '009_safety_hold_control_foundation.sql',
       '010_problem_formulation_safety_vocabulary_reconcile.sql',
+      '011_compliance_feature_policy_foundation.sql',
     ]);
 
     // New Evidence schema exists.
@@ -251,7 +252,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(52); // + Slice 8 three + Slice 9 one
+    expect(policyRows[0].count).toBe(54); // + Slice 8 three + Slice 9 one + Slice 10 two
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
@@ -307,7 +308,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-expect(output).toMatch(/Migration complete: 0 new, 11 previously applied\./);
+expect(output).toMatch(/Migration complete: 0 new, 12 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
     expect(output).not.toContain('APPLY 005_case_participant_core.sql');

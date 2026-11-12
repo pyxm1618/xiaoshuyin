@@ -57,3 +57,6 @@ export * from './participants.js';
 // as `safetySchema` only; Safety command/persistence primitives are added by
 // their own reviewed tasks.
 export * from './safety/index.js';
+// Slice 10 — typed Drizzle projection of the compliance feature-policy truth.
+// The policy evaluator itself belongs to `@xiaoshuyin/compliance`.
+export * from './compliance/schema.js';
