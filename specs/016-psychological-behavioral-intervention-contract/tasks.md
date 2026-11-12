@@ -473,6 +473,9 @@ Focused integration/DB tests using existing shared test harness. Production chan
 **Required fault injection**
 Failure after definition/version write, review state, binding, audit boundary and before idempotency completion. Assert rollback leaves no partial truth and no completed idempotency success.
 
+**Verification**  
+Run the focused race/fault suite repeatedly against the real shared idempotency/transaction implementation; assert one authoritative winner, deterministic stale/conflict errors, exact replay, zero duplicate audits, and zero partial rows after each injected failure.
+
 **Mapping**  
 [REQ: FR-039,FR-040,FR-041,FR-042,FR-043] [AS: AS-41,AS-42,AS-43,AS-44,AS-45,AS-46]
 
@@ -533,6 +536,9 @@ wrong Family/Case/actor; cross-family/cross-case Evidence; current/stale Formula
 **Rollback**
 Injected failure during any composed write/audit path leaves no partial Slice 16 truth. Eligibility itself remains side-effect-free.
 
+**Verification**  
+Assert application denial + database RLS denial where applicable, exact reason-code/result stamps, no protected existence leakage, no family-sensitive narrative in generic logs, and transaction rollback under injected owner/infrastructure failures.
+
 **Mapping**  
 [REQ: FR-023,FR-029,FR-031,FR-032,FR-034,FR-036,FR-037,FR-038,FR-043,FR-044] [AS: AS-17,AS-18,AS-19,AS-21,AS-22,AS-23,AS-28,AS-34,AS-35,AS-36,AS-37,AS-38,AS-39,AS-40,AS-46]
 
@@ -588,6 +594,9 @@ T1602 exact owner paths frozen.
 **Self-test**  
 Each rule has at least one synthetic violating sample proving the guard is non-vacuous.
 
+**Verification**  
+Run `guard:static` and the guard self-test; each Slice 16 rule must both pass on the real tree and fail on its synthetic violating sample. Confirm existing Slice 9/10/11 guard rules remain green and were not weakened.
+
 **Mapping**  
 [REQ: FR-020,FR-024,FR-044,FR-045,FR-048,FR-049,FR-050] [AS: AS-16,AS-47,AS-48,AS-54,AS-55,AS-56,AS-57,AS-58] [NS: NS-01,NS-02,NS-03,NS-04,NS-05,NS-06,NS-07,NS-08,NS-09,NS-10,NS-11,NS-12,NS-13,NS-14,NS-15,NS-16,NS-17,NS-18,NS-19,NS-20,NS-21,NS-22,NS-24,NS-25]
 
@@ -612,6 +621,9 @@ Tests/scripts only as required by existing repository verification conventions; 
 
 **Failure rule**  
 Any mismatch is a Slice 16 defect unless proven pre-existing on exact base; do not weaken tests to pass.
+
+**Verification**  
+Capture exact command results for official migration fresh-install/upgrade, historical migration integrity, schema projection, RLS/grant introspection and OpenAPI generate/check when applicable; verify the working diff contains no generated drift after checks.
 
 **Mapping**  
 [REQ: FR-001,FR-018,FR-035,FR-036,FR-042,FR-043] [AS: AS-10,AS-17,AS-18,AS-20,AS-46]
@@ -639,6 +651,9 @@ No new feature work. Verification only; minimal defect fixes must return to the 
 - compare exact base/head; behind=0 at audit package time;
 - changed-file inventory proves Docs=0, Frozen Spec=0, Phase4/AI/RAG forbidden scope=0.
 
+**Verification**  
+All listed commands must PASS on the exact same implementation head. Re-read the exact head after the final command; any new commit invalidates the evidence and requires T1623 to run again.
+
 **Mapping**  
 [REQ: FR-001–FR-052] [AS: AS-01–AS-60] [NS: NS-01–NS-25]
 
@@ -657,6 +672,9 @@ base SHA, exact head SHA, merge base/ahead/behind, changed files, migration iden
 
 **Stop boundary**  
 Development AI does not approve its own work, does not merge main and does not perform Audit 2.
+
+**Verification**  
+Recompute package/file hashes and exact branch head, verify the evidence package binds only that head, and verify no merge/Audit2 action occurred. The handoff is complete only when an independent auditor can reproduce the cited evidence.
 
 **Mapping**  
 [REQ: FR-001–FR-052] [AS: AS-01–AS-60] [NS: NS-01–NS-25]
