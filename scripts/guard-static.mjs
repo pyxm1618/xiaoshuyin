@@ -365,7 +365,6 @@ function lineOf(text, index) {
 const FORBIDDEN_PATHS = [
   'apps/miniprogram',
   'apps/operations',
-  'packages/scenes',
   'packages/ai',
   'packages/rag',
   'packages/memory',
@@ -584,6 +583,109 @@ function runComplianceRules() {
 
 runComplianceRules();
 
+// ─── Rule 10: Slice 11 — Digital Use Scene foundation architecture ───
+const DIGITAL_USE_SCENE_ROOT = 'packages/scenes/digital-use/';
+const DIGITAL_USE_MANIFEST = `${DIGITAL_USE_SCENE_ROOT}node-manifest.ts`;
+const DIGITAL_USE_ROUTING = `${DIGITAL_USE_SCENE_ROOT}routing.ts`;
+
+function checkSceneFoundationFile(relPath, content, report) {
+  const isProduction = relPath.startsWith('apps/') || relPath.startsWith('packages/');
+
+  if (
+    isProduction &&
+    /tests[\\/]+fixtures[\\/]+digital-use|tests\/fixtures\/digital-use/.test(content)
+  ) {
+    report('R10-scenes-single-truth', relPath, 1,
+      'Production code must never import/reference the Digital Use canonical test snapshot');
+  }
+
+  if (!relPath.startsWith(DIGITAL_USE_SCENE_ROOT)) return;
+
+  if (/node[-_]registry\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath)) {
+    report('R10-scenes-single-truth', relPath, 1,
+      'node-registry is forbidden; node-manifest.ts is the only production node truth');
+  }
+
+  if (relPath !== DIGITAL_USE_MANIFEST) {
+    const literalRegistryShape =
+      /nodeCode\s*:\s*['"][A0-9]/.test(content) &&
+      /sourceNodeCode\s*:\s*['"][A0-9]/.test(content) &&
+      /allowedNext\s*:\s*\[/.test(content);
+    if (literalRegistryShape) {
+      report('R10-scenes-single-truth', relPath, 1,
+        'Second registry-shaped node table detected outside node-manifest.ts');
+    }
+  }
+
+  if (relPath === DIGITAL_USE_MANIFEST) {
+    content.split('\n').forEach((line, i) => {
+      if (isComment(line)) return;
+      if (/\bArray\.from\b|\bnew\s+Array\b|\.fill\s*\(|\bfor\s*\(|\bwhile\s*\(/.test(line)) {
+        report('R10-scenes-numeric-generation', relPath, i + 1,
+          'Manifest identities must be explicit; range/loop generation is forbidden');
+      }
+      if (/parseInt\s*\([^)]*node|Number\s*\([^)]*node|\+\s*1\b/.test(line)) {
+        report('R10-scenes-numeric-generation', relPath, i + 1,
+          'Numeric next-node inference is forbidden');
+      }
+    });
+  }
+
+  if (relPath === DIGITAL_USE_ROUTING) {
+    let importsManifest = false;
+    content.split('\n').forEach((line, i) => {
+      if (isComment(line)) return;
+      const importMatch = /from\s+['"]([^'"]+)['"]/.exec(line);
+      if (importMatch) {
+        const specifier = importMatch[1].toLowerCase();
+        if (specifier === './node-manifest.js' || specifier === './node-manifest') {
+          importsManifest = true;
+        }
+        if (
+          /(^|\/)(?:pg|fastify|xstate|axios|undici)(?:$|\/)|openai|anthropic|langchain|rag|provider|model|\/db(?:\/|$)|database/.test(specifier)
+        ) {
+          report('R10-scenes-routing-purity', relPath, i + 1,
+            `Forbidden deterministic-routing dependency: ${importMatch[1]}`);
+        }
+      }
+      if (/\bfetch\s*\(/.test(line)) {
+        report('R10-scenes-routing-purity', relPath, i + 1,
+          'Network fetch is forbidden in deterministic routing');
+      }
+    });
+    if (!importsManifest) {
+      report('R10-scenes-single-truth', relPath, 1,
+        'routing.ts must consume node-manifest.ts instead of a second route table');
+    }
+  }
+}
+
+function runSceneFoundationRules() {
+  const manifestPaths = [];
+  scanDir(join(ROOT, 'packages', 'scenes'), (file) => {
+    const relPath = getRelPath(file);
+    if (!CODE_EXTENSIONS.has(relPath.slice(relPath.lastIndexOf('.')))) return;
+    if (relPath.endsWith('/node-manifest.ts') || relPath === 'packages/scenes/node-manifest.ts') {
+      manifestPaths.push(relPath);
+    }
+  }, CODE_EXTENSIONS);
+
+  if (manifestPaths.length !== 1 || manifestPaths[0] !== DIGITAL_USE_MANIFEST) {
+    addViolation('R10-scenes-single-truth', 'packages/scenes', 0,
+      `Expected exactly one Digital Use production node-manifest.ts at ${DIGITAL_USE_MANIFEST}; found ${manifestPaths.join(', ') || 'none'}`);
+  }
+
+  scanDir(ROOT, (file) => {
+    const relPath = getRelPath(file);
+    if (!CODE_EXTENSIONS.has(relPath.slice(relPath.lastIndexOf('.')))) return;
+    checkSceneFoundationFile(relPath, readFileSync(file, 'utf-8'), (rule, f, line, message) =>
+      addViolation(rule, f, line, message)
+    );
+  }, CODE_EXTENSIONS);
+}
+
+runSceneFoundationRules();
+
 // ─── Self-test: synthetic forbidden bypass fixtures ───
 // `node scripts/guard-static.mjs --self-test` proves the Safety rules detect a
 // bypass even when the real tree is clean. Not part of `bun run guard:static`.
@@ -649,6 +751,36 @@ if (process.argv.includes('--self-test')) {
       content: 'CREATE TABLE usage_sessions (id uuid PRIMARY KEY);',
       rule: 'R9-compliance-scope',
     },
+    {
+      name: 'second digital-use node registry',
+      path: 'packages/scenes/digital-use/node-registry.ts',
+      content: "export const registry = [{ nodeCode: 'A1001', sourceNodeCode: 'A1001', allowedNext: [] }];",
+      rule: 'R10-scenes-single-truth',
+    },
+    {
+      name: 'production snapshot import',
+      path: 'packages/scenes/digital-use/evil-snapshot.ts',
+      content: "import snapshot from '../../../tests/fixtures/digital-use/v1-product-node-manifest.snapshot.json';",
+      rule: 'R10-scenes-single-truth',
+    },
+    {
+      name: 'routing database dependency',
+      path: 'packages/scenes/digital-use/routing.ts',
+      content: "import { pool } from '../../../apps/server/api/src/db/pool.js';\nimport { digitalUseNodeManifest } from './node-manifest.js';",
+      rule: 'R10-scenes-routing-purity',
+    },
+    {
+      name: 'numeric manifest generation',
+      path: 'packages/scenes/digital-use/node-manifest.ts',
+      content: "const nodes = Array.from({length: 10}, (_, i) => ({ nodeCode: 'A' + (3000 + i) }));",
+      rule: 'R10-scenes-numeric-generation',
+    },
+    {
+      name: 'duplicate route table shape',
+      path: 'packages/scenes/digital-use/evil-routes.ts',
+      content: "export const x = [{ nodeCode: 'A1001', sourceNodeCode: 'A1001', allowedNext: [] }];",
+      rule: 'R10-scenes-single-truth',
+    },
   ];
 
   let selfTestFailures = 0;
@@ -659,6 +791,8 @@ if (process.argv.includes('--self-test')) {
       checkSafetyScopeNegatives(sample.path, sample.content, report);
     } else if (sample.rule === 'R9-compliance-scope') {
       checkComplianceScopeNegatives(sample.path, sample.content, report);
+    } else if (sample.rule.startsWith('R10-scenes-')) {
+      checkSceneFoundationFile(sample.path, sample.content, report);
     } else {
       checkSafetyUniqueEntry(sample.path, sample.content, report);
     }
