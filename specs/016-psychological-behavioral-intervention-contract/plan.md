@@ -479,6 +479,8 @@ Forbidden:
 
 Professional definitions themselves contain no family-sensitive narrative.
 
+Professional source material may have internal access restrictions. Publication/runtime surfaces expose only approved professional content and the provenance necessary for product behavior; they do not automatically expose restricted source bodies or internal review material to family actors.
+
 ## 15. Consent / Compliance / Safety Independence
 
 Authorization, Consent, Compliance and Safety are four independent gates.
@@ -492,6 +494,17 @@ No implication is legal:
 - publication does not override any family-specific control plane.
 
 Any required gate BLOCK/UNKNOWN according to its authoritative owner yields `allowed=false`.
+
+Additional frozen distinctions:
+
+- participation requirement and Consent are separate facts;
+- parent action never implies the child's Consent;
+- a published professional definition never implies Consent;
+- AI/RAG never create Consent;
+- definition age/development scope does not replace the authoritative age/minor Compliance profile;
+- A4003-specific Compliance remains with its feature policy and is not absorbed by Slice 16;
+- under `SAFETY_HOLD` or another authoritative Safety block, the evaluator must not evade the block by selecting a different ordinary Intervention;
+- Slice 16 never releases Safety and never creates Referral; it only preserves stop/reassess/Safety/Referral conditions for future owners.
 
 Slice 16 does not persist a duplicate copy of any control-plane truth.
 
