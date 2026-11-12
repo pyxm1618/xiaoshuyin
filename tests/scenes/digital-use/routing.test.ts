@@ -33,6 +33,34 @@ describe('Slice 11 pure deterministic routing', () => {
     });
   });
 
+  it('fails closed when a higher-priority condition is unresolved, without blocking resolved false', () => {
+    for (const state of ['UNKNOWN', 'NOT_COLLECTED', 'CONFLICT'] as const) {
+      expect(route('01002', { EMOTION_SEVERE_F: state, EMOTION_ASSESSMENT_NON_SEVERE: true })).toMatchObject({
+        kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION',
+      });
+    }
+
+    expect(route('01003', {
+      FAMILY_CONFLICT_SEVERE_F: 'UNKNOWN',
+      TRIAGE_NO_INTERVENTION_INTEGRATED: true,
+    }, ['PURPOSE'])).toMatchObject({
+      kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION',
+    });
+    expect(route('01003', {
+      FAMILY_CONFLICT_SEVERE_F: 'DECLINED',
+      TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED: true,
+    }, ['FUNCTIONAL_IMPACT'])).toMatchObject({
+      kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION',
+    });
+
+    expect(route('01002', {
+      EMOTION_SEVERE_F: false,
+      EMOTION_ASSESSMENT_NON_SEVERE: true,
+    })).toMatchObject({
+      kind: 'NODE_ROUTE', nextNodeCode: '01003', reasonCode: 'EMOTION_ASSESSMENT_NON_SEVERE',
+    });
+  });
+
   it('requires integrated Evidence basis and refuses duration-only triage', () => {
     expect(route('01003', { TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED: true }, ['TOTAL_DURATION'])).toMatchObject({
       kind: 'BLOCKED', code: 'INSUFFICIENT_INTEGRATED_EVIDENCE',
