@@ -540,6 +540,8 @@ At minimum record or emit existing audit/event equivalents for:
 - eligibility evaluated;
 - eligibility blocked.
 
+**Audit/observability split**: successful professional-truth mutations use the authoritative business audit/event path in the same transaction as the state change. A denied/failed `publication attempted` or eligibility-blocked attempt may use the existing bounded request/observability channel after the final outcome is known, but it is non-authoritative telemetry and MUST NOT claim a lifecycle transition or successful business state. No separate professional truth ledger is created.
+
 Audit information must include, where applicable:
 
 - actor;
