@@ -1,8 +1,8 @@
 # Slice 10 Implementation Plan — 010-compliance-feature-policy-foundation
 
-Status: **PLAN FROZEN / AUDIT 1 PASS AFTER REMEDIATION / FINAL PRE-DEVELOPMENT RE-AUDIT PASS / IMPLEMENT GATE BLOCKED**
+Status: **PLAN RE-FROZEN / TARGETED AUDIT 1 PASS / FINAL PRE-DEVELOPMENT RE-AUDIT PASS / IMPLEMENT GATE OPEN**
 
-This file is planning only. It does not authorize implementation, does not modify the Frozen Spec, and does not open the Slice 10 Implement Gate.
+This file is planning only. It does not modify the Frozen Spec or perform implementation. It records the independently verified Slice 10 Implement Gate as OPEN.
 
 ## Upstream Traceability
 
@@ -12,10 +12,15 @@ This file is planning only. It does not authorize implementation, does not modif
 - `Docs/V1产品需求.md` — final V1 product semantics authority
 - `Docs/总体技术架构.md`
 - `Docs/V1技术设计.md` — final V1 implementation architecture authority
-- Frozen Slice 10 Spec:
-  - branch: `spec/010-compliance-feature-policy-foundation`
+- Authoritative Frozen Slice 10 Spec v2:
+  - branch: `feat/010-compliance-feature-policy-foundation`
+  - commit: `bc12a0d64a9bd2cf09bbc0dfe0d3ffa305da97e1`
+  - blob: `ba38ccdafe85bbb044d994292a6a7237337eb474`
+  - re-freeze reason: `NON-SEMANTIC GOVERNANCE FORMAT REMEDIATION`
+- Historical Frozen Spec v1 — non-authoritative:
   - commit: `20b6eaecf7a1ac24904409f805042759631f5cf0`
   - blob: `a911bcc0c168e00efa015d53d5c120bece28c5a7`
+- `S10R01_GOVERNANCE_STAGE1_HEADING_GAP`: **CLOSED** — Frozen Spec v2 contains `## Upstream Traceability`, `## Scope`, `## Acceptance Scenarios`, and `## Acceptance Evidence`.
 
 ### Canonical requirements
 
@@ -80,15 +85,18 @@ Slice 10 does **not** implement continuous-use sessions/timers, reminder dispatc
 
 ### Verified repository baseline at planning time
 
-Remote truth was re-read because this environment cannot execute local `git` commands.
+Remote repository truth was re-read for this targeted provenance/gate-state remediation.
 
-- current `main`: `8e393c990be53c888c2e68d881bd8b23f9c37638`
-- Frozen Spec commit is one commit ahead / zero behind current main.
-- Frozen Spec commit changes only `specs/010-compliance-feature-policy-foundation/spec.md`.
-- Input Drift: **NONE**.
-- Slice 8 implementation exists on `feat/008-problem-formulation-core` / PR #26 but is not in main.
-- Slice 9 remains on `plan/009-safety-hold-control-foundation`, ahead of main with planning artifacts only; no Slice 9 implementation is on main.
-- Therefore Slice 10 Implement Gate remains **BLOCKED** by the Slice 9 Drizzle dependency.
+- current `main`: `f3f45f3c002eeb9cf169c201d4fae0f74fe03602`
+- Frozen Spec v2 commit: `bc12a0d64a9bd2cf09bbc0dfe0d3ffa305da97e1`
+- Frozen Spec v2 re-freeze commit itself changes only `specs/010-compliance-feature-policy-foundation/spec.md`.
+- Frozen Spec v2 and current main diverge from merge-base `95ce77d67a0a489dcbf4f788c4ae04ff364ec0c0` only because Slice 8 merged on main while Slice 10 planning/spec work remains on its feature branch.
+- All four authoritative Docs have identical blobs on Frozen Spec v2 and current main.
+- Input Drift: **RECONCILED — NON-SEMANTIC DEPENDENCY EXECUTION DRIFT (Slice 8 merge)**.
+- Slice 8 PR #26: **MERGED** at `f3f45f3c002eeb9cf169c201d4fae0f74fe03602`; semantic dependency remains **NO** and Slice 8 Blocking is **NO**.
+- Slice 9 PR #28: **MERGED**; post-merge remediation PR #29: **MERGED**.
+- Slice 9 Drizzle foundation is present on current main and satisfies the frozen same-client / identity / RLS transaction invariants.
+- Therefore Slice 10 Implement Gate is **OPEN**.
 
 ### Current compliance truth already present
 
@@ -113,17 +121,21 @@ Important semantic note:
 - A guardian is an adult Person related to the target minor through the existing `guardian_person_id` fact.
 - Slice 10 must not invent a second `GUARDIAN` age state.
 
-### Current data-access gap
+### Current data-access foundation
 
-Current main has:
+Current main now has the Slice 9 narrow Drizzle §7.0 foundation:
 
-- `drizzle-orm` declared in the API workspace;
+- `db/schema/index.ts` as the typed Drizzle schema entry;
 - `db/drizzle.config.ts`;
-- no authoritative `db/schema` implementation yet;
-- no locked `drizzle-kit` implementation path;
-- raw node-postgres transaction helpers.
+- lockfile-resolved `drizzle-orm@0.45.4` and `drizzle-kit@0.31.11`;
+- `apps/server/api/src/db/drizzle-tx.ts` with `withDrizzleRlsTransaction(...)`;
+- exactly one checked-out `PoolClient`;
+- Drizzle-owned transaction boundaries;
+- `set_identity_context` followed by identity verification, then `set_family_context`;
+- authorization/raw helper work on the same client and same transaction;
+- existing RLS semantics preserved.
 
-Slice 9 planning owns the narrow Drizzle §7.0 foundation. Slice 10 may consume it only after it is actually merged or a separate Data Access Remediation closes that blocker.
+The former technical blocker is satisfied on current main. Slice 10 must consume this authoritative seam and must not create a second transaction/data-access truth.
 
 ## Constitution Check
 
@@ -143,11 +155,11 @@ Slice 9 planning owns the narrow Drizzle §7.0 foundation. Slice 10 may consume 
 | verification is mechanical | PASS | §15 |
 | no fake external capability | PASS | no fake reviewer, policy conclusion, notification, filing or legal workflow |
 | no second workflow/state engine | PASS | no new RBAC, Safety state, consent state, timer state |
-| Drizzle architecture is not bypassed | PASS / IMPLEMENT-BLOCKED | §10 consumes Slice 9 or stops |
+| Drizzle architecture is not bypassed | PASS | §10 consumes the verified Slice 9 seam; current main satisfies the technical gate |
 
 **Constitution Check: PASS for planning.**
 
-This does not change the Future Implement Gate.
+This preserves planning semantics; the targeted gate-state reconciliation records that the former technical dependency is now satisfied.
 
 ## Design
 
@@ -606,7 +618,9 @@ Internal structured reason codes may be logged/tested only within authorized ser
 
 Slice 10 has no semantic dependency on Slice 9, but it has a technical data-access dependency.
 
-**Implement Gate: BLOCKED at planning time.**
+**Implement Gate: OPEN at targeted re-audit time.**
+
+Evidence: current main contains the merged Slice 9 Drizzle foundation and the required same-client / identity-verification / Family-RLS transaction seam.
 
 ### 10.2 Required development-start behavior
 
@@ -1043,16 +1057,20 @@ No large Compliance Control Plane, admin UI, workflow engine, external policy en
 
 ## Development Dependency Gate
 
-Planning result:
+Targeted re-audit result:
 
+- Slice 8: **MERGED**
 - Slice 8 semantic dependency: **NO**
+- Slice 8 Blocking: **NO**
+- Slice 9: **MERGED**
 - Slice 9 semantic dependency: **NO**
-- authoritative Drizzle capability dependency: **YES**
-- Slice 9 Drizzle implementation currently on main: **NO**
-- separate Data Access Remediation currently observed on main: **NO**
-- Implement Gate: **BLOCKED**
+- authoritative Drizzle capability dependency: **YES — SATISFIED**
+- Slice 9 Drizzle implementation currently on main: **YES**
+- separate Data Access Remediation required: **NO**
+- Drizzle Foundation: **PASS**
+- Implement Gate: **OPEN**
 
-Future development may begin only after T1001 proves either the Slice 9 Drizzle foundation or a separately approved Data Access Remediation has become authoritative on main.
+Development may begin from current authority. T1001 remains the mandatory development-start revalidation gate before any production edit; it must stop if these facts drift.
 
 ## Planning Audit 1
 
@@ -1087,18 +1105,18 @@ Result: **PASS**
 
 Fresh full re-audit confirmed:
 
-- current `main` remains `8e393c990be53c888c2e68d881bd8b23f9c37638`; Input Drift remains NONE;
-- Frozen Spec blob remains exactly `a911bcc0c168e00efa015d53d5c120bece28c5a7`;
-- the planning branch differs from the Frozen Spec commit only by `plan.md`, `checklist.md`, and `tasks.md`;
+- current `main` is `f3f45f3c002eeb9cf169c201d4fae0f74fe03602`; Input Drift is RECONCILED — NON-SEMANTIC DEPENDENCY EXECUTION DRIFT (Slice 8 merge);
+- authoritative Frozen Spec v2 blob remains exactly `ba38ccdafe85bbb044d994292a6a7237337eb474`; Historical Frozen Spec v1 is non-authoritative;
+- the targeted remediation diff from Frozen Spec v2 is limited to `plan.md`, `checklist.md`, and `tasks.md`;
 - Frozen `spec.md` is unchanged;
 - Docs are unchanged;
 - Plan contains all governance-required headings;
 - Tasks contain 13 unique canonical task lines, each with explicit `[REQ:...]` and `[VERIFY:...]`, and every FR-001..FR-030 appears in at least one exact task REQ field;
 - Checklist contains no FAIL item;
 - no production source, migration, test, package dependency, CI, OpenAPI or runtime file was changed;
-- Slice 8 remains outside current main;
-- Slice 9 remains planning-only relative to current main; no Slice 9 Drizzle implementation is present on main;
-- no separately approved Data Access Remediation is observed on current main;
+- Slice 8 PR #26 is merged on current main; semantic dependency remains NO and Blocking is NO;
+- Slice 9 PR #28 and post-merge remediation PR #29 are merged on current main;
+- Slice 9 Drizzle foundation is present and independently verified; no separate Data Access Remediation is required;
 - Slice 9 Safety remains semantically independent from Slice 10;
 - runtime policy access is constrained to current-effective rows / evaluator columns under policy-table ENABLE/FORCE RLS;
 - UNKNOWN/missing/ambiguous policy states remain fail closed;
@@ -1107,12 +1125,12 @@ Fresh full re-audit confirmed:
 - Open Product Decisions remain 0;
 - unresolved planning findings = 0.
 
-Governance Format: **PASS by direct evaluation of the current validator/template rules.** This environment has no local git/runtime execution, so no local `node .specify/scripts/validate-governance.mjs` run is claimed.
+Governance Format: **PENDING TARGETED EXECUTION** — the exact validator and self-test commands must exit 0 after this provenance/gate-state commit before final readiness is reported.
 
-Future Implement Gate: **BLOCKED** until T1001 proves either:
-1. Slice 9 Drizzle foundation is actually merged and satisfies the frozen data-access invariants; or
-2. a separately approved Data Access Remediation is actually merged and satisfies the same invariants.
+Future Implement Gate: **OPEN** — former Slice 9 Drizzle dependency is now satisfied on main.
 
-**SLICE 10 — PLAN FROZEN**
+T1001 still revalidates current main, migration numbering, Drizzle versions/seam, RLS, compliance/consent facts and CI before any production edit.
 
-**READY FOR DEVELOPMENT WHEN IMPLEMENT GATE OPENS**
+**SLICE 10 — PLAN RE-FROZEN**
+
+**READY FOR DEVELOPMENT AFTER GOVERNANCE EXECUTION PASSES**
