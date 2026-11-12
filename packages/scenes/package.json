@@ -1,0 +1,19 @@
+{
+  "name": "@xiaoshuyin/scenes",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "digital-use/index.ts",
+  "exports": {
+    "./digital-use": "./digital-use/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@xiaoshuyin/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}
