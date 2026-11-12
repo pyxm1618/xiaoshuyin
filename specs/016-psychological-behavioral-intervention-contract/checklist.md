@@ -3,7 +3,7 @@
 **Repository**: `pyxm1618/xiaoshuyin`  
 **Planning branch**: `plan/016-psychological-behavioral-intervention-contract`  
 **Frozen Spec**: `05aa4594cbb99c433035f9fa313376a7fec99785` / `a6cd9fd723f9339b575757279703be554afaf0f6`  
-**Status**: COMPLETE FOR AUDIT 1  
+**Status**: COMPLETE — Audit 1 FINAL PASS / Implement Gate BLOCKED  
 **Interpretation**: PASS means the planning contract is explicit, authority-aligned and mechanically verifiable. It does **not** mean runtime dependencies exist. The current Implement Gate is intentionally BLOCKED.
 
 | ID | Gate | Status | Evidence |
@@ -447,3 +447,49 @@ NO
 ```
 
 Reason: Slice 12–15 are not all Audit-2-passed and merged on the current main, and a real professional reviewer authorization/provenance responsibility is not yet proven. The development AI must execute T1601 read-only and must not start production edits until every predicate passes.
+
+
+## Audit 1 — Pre-Development Planning Audit — FINAL
+
+Audit scope: Frozen Spec vs Plan vs Checklist vs Tasks. This audit proves planning quality only; it does not open the runtime gate.
+
+| Question | Result | Final evidence |
+|---|---|---|
+| Q1 — Frozen Spec Integrity | PASS | blob remains `a6cd9fd723f9339b575757279703be554afaf0f6`; planning diff does not modify `spec.md` |
+| Q2 — Requirement Coverage | PASS | FR-001–FR-052 = 52/52 with explicit Plan, Checklist, Task and Verification mapping |
+| Q3 — Acceptance Coverage | PASS | AS-01–AS-60 = 60/60 with explicit Plan, Task and assertion mapping |
+| Q4 — Negative Scope Coverage | PASS | NS-01–NS-25 = 25/25 with static/test/review-gate proof |
+| Q5 — Ownership | PASS | no second Case/Evidence/Formulation/Authorization/Consent/Compliance/Safety/Scene/Audit/Idempotency/professional truth owner |
+| Q6 — Phase Boundary | PASS | no InterventionInstance/Goal/Plan/Task/Checkin/Common Core Review/Outcome/Schedule/Notification runtime is authorized |
+| Q7 — AI Boundary | PASS | AI/RAG receive no professional hard-gate authority |
+| Q8 — Professional Review Truth | PASS | no fake reviewer/automatic approval; absent real reviewer authority keeps T1601 BLOCKED |
+| Q9 — Executability | PASS | T1601–T1624 are dependency-ordered, bounded, file/module-scoped, verified and mapped |
+| Q10 — Dependency Fidelity | PASS | Planning COMPLETE is explicitly separate from runtime availability |
+| Q11 — Implement Gate | PASS | runtime gate remains BLOCKED until Slice 12–15 Audit2+merge and all owner/reviewer prerequisites are real |
+
+### Audit 1 remediation history
+
+During Audit 1, planning-only defects were corrected without changing Frozen Spec, Docs or production code:
+
+1. AS/NS interval notation was expanded to exact per-ID traceability.
+2. Six tasks received explicit standalone Verification clauses.
+3. Frozen Spec §7.2 initial V1 Intervention-family inventory was made explicit in Plan/T1609.
+4. Professional-source privacy and Consent/Compliance/Safety boundary distinctions were made explicit.
+
+All four findings are closed. Final unresolved Audit 1 findings: **0**.
+
+```text
+Planning Quality Gate:
+PASS
+
+Runtime Dependency Gate:
+BLOCKED
+
+Implement Gate:
+BLOCKED
+
+READY FOR DEVELOPMENT:
+NO
+```
+
+Planning is frozen. The next permitted action is T1601 read-only development-start verification after the real runtime dependencies change. No development, Audit 2 or merge is authorized by this Audit 1.
