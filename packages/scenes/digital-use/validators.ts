@@ -257,3 +257,138 @@ export function validateDigitalUseParallelFidelity(
 
   return { valid: issues.length === 0, issues };
 }
+
+
+export interface DigitalUseSnapshotRouteProjection {
+  readonly kind: 'NODE' | 'TERMINAL';
+  readonly targetNodeCode?: string;
+  readonly terminalCode?: string;
+  readonly conditionRef: string;
+  readonly reasonCode: string;
+}
+
+export interface DigitalUseSnapshotNodeProjection {
+  readonly nodeCode: string;
+  readonly sourceNodeCode: string;
+  readonly phase: string;
+  readonly stream?: string;
+  readonly role: string;
+  readonly prerequisites: readonly string[];
+  readonly inputSchemaRefs: readonly string[];
+  readonly decisionSchemaRefs: readonly string[];
+  readonly interactionRefs: readonly string[];
+  readonly outputRefs: readonly string[];
+  readonly recordContract: { readonly refs: readonly string[]; readonly semantics: string };
+  readonly allowedNext: readonly DigitalUseSnapshotRouteProjection[];
+  readonly canRunInParallelWith: readonly string[];
+  readonly entryMode: readonly string[];
+  readonly helpOrReentryRefs: readonly string[];
+  readonly policyRefs: readonly string[];
+  readonly authorityRefs: readonly string[];
+}
+
+export interface DigitalUseCanonicalSnapshotProjection {
+  readonly nodes: readonly DigitalUseSnapshotNodeProjection[];
+  readonly nonNodeMarkers: readonly { readonly code: string }[];
+  readonly forbiddenGapFillNodeCodes: readonly string[];
+  readonly parallelRelations: readonly DigitalUseParallelExpectation[];
+}
+
+function sameStringSet(actual: readonly string[], expected: readonly string[]): boolean {
+  return JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort());
+}
+
+function containsAll(actual: readonly string[], expected: readonly string[]): boolean {
+  const actualSet = new Set(actual);
+  return expected.every((value) => actualSet.has(value));
+}
+
+function routeProjection(route: DigitalUseNodeManifestEntry['allowedNext'][number]): DigitalUseSnapshotRouteProjection {
+  return route.kind === 'NODE'
+    ? {
+        kind: 'NODE',
+        targetNodeCode: route.targetNodeCode,
+        conditionRef: route.conditionRef,
+        reasonCode: route.reasonCode,
+      }
+    : {
+        kind: 'TERMINAL',
+        terminalCode: route.terminalCode,
+        conditionRef: route.conditionRef,
+        reasonCode: route.reasonCode,
+      };
+}
+
+/**
+ * Snapshot comparison is test/review input only. This function accepts the
+ * independent snapshot as an argument and never imports tests/fixtures.
+ */
+export function validateDigitalUseSnapshotFidelity(
+  manifest: readonly DigitalUseNodeManifestEntry[],
+  snapshot: DigitalUseCanonicalSnapshotProjection
+): DigitalUseValidationResult {
+  const base = validateDigitalUseManifest(manifest, snapshot.nodes.map((node) => node.nodeCode));
+  const issues = [...base.issues];
+  const byCode = new Map(manifest.map((node) => [node.nodeCode, node] as const));
+
+  for (const expected of snapshot.nodes) {
+    const actual = byCode.get(expected.nodeCode);
+    if (actual === undefined) continue;
+
+    if (actual.sourceNodeCode !== expected.sourceNodeCode) {
+      issues.push(issue('SNAPSHOT_SOURCE_DRIFT', `sourceNodeCode drift for ${expected.nodeCode}`, expected.nodeCode));
+    }
+    if (actual.phase !== expected.phase || actual.stream !== expected.stream || actual.role !== expected.role) {
+      issues.push(issue('SNAPSHOT_CLASSIFICATION_DRIFT', `phase/stream/role drift for ${expected.nodeCode}`, expected.nodeCode));
+    }
+
+    for (const [field, actualRefs, expectedRefs] of [
+      ['prerequisites', actual.prerequisites, expected.prerequisites],
+      ['inputSchemaRefs', actual.inputSchemaRefs, expected.inputSchemaRefs],
+      ['decisionSchemaRefs', actual.decisionSchemaRefs, expected.decisionSchemaRefs],
+      ['interactionRefs', actual.interactionRefs, expected.interactionRefs],
+      ['outputRefs', actual.outputRefs, expected.outputRefs],
+      ['policyRefs', actual.policyRefs, expected.policyRefs],
+      ['authorityRefs', actual.authorityRefs, expected.authorityRefs],
+    ] as const) {
+      if (!containsAll(actualRefs, expectedRefs)) {
+        issues.push(issue('SNAPSHOT_FIELD_DRIFT', `${field} lost expected semantic references`, expected.nodeCode));
+      }
+    }
+
+    if (
+      !sameStringSet(actual.recordContract.refs, expected.recordContract.refs) ||
+      actual.recordContract.semantics !== expected.recordContract.semantics
+    ) {
+      issues.push(issue('SNAPSHOT_RECORD_DRIFT', 'record-contract semantics drifted', expected.nodeCode));
+    }
+
+    if (!sameStringSet(actual.canRunInParallelWith, expected.canRunInParallelWith)) {
+      issues.push(issue('SNAPSHOT_PARALLEL_DRIFT', 'parallel relation projection drifted', expected.nodeCode));
+    }
+    if (!sameStringSet(actual.entryMode, expected.entryMode)) {
+      issues.push(issue('SNAPSHOT_ENTRY_MODE_DRIFT', 'entry-mode projection drifted', expected.nodeCode));
+    }
+    if (!sameStringSet(actual.helpOrReentryRefs, expected.helpOrReentryRefs)) {
+      issues.push(issue('SNAPSHOT_REENTRY_DRIFT', 'help/re-entry projection drifted', expected.nodeCode));
+    }
+
+    const actualRoutes = actual.allowedNext.map(routeProjection);
+    if (JSON.stringify(actualRoutes) !== JSON.stringify(expected.allowedNext)) {
+      issues.push(issue('SNAPSHOT_ROUTE_DRIFT', 'allowedNext target/condition/reason projection drifted', expected.nodeCode));
+    }
+  }
+
+  const parallel = validateDigitalUseParallelFidelity(manifest, snapshot.parallelRelations);
+  issues.push(...parallel.issues);
+
+  const nodeSet = new Set(manifest.map((node) => node.nodeCode));
+  for (const marker of snapshot.nonNodeMarkers) {
+    if (nodeSet.has(marker.code)) issues.push(issue('SNAPSHOT_NON_NODE_PROMOTED', `${marker.code} is explicitly non-node`, marker.code));
+  }
+  for (const forbidden of snapshot.forbiddenGapFillNodeCodes) {
+    if (nodeSet.has(forbidden)) issues.push(issue('SNAPSHOT_FORBIDDEN_GAP_FILL', `${forbidden} is an invented gap-fill node`, forbidden));
+  }
+
+  return { valid: issues.length === 0, issues };
+}
