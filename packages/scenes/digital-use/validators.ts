@@ -292,10 +292,80 @@ export interface DigitalUseCanonicalSnapshotProjection {
   readonly nonNodeMarkers: readonly { readonly code: string }[];
   readonly forbiddenGapFillNodeCodes: readonly string[];
   readonly parallelRelations: readonly DigitalUseParallelExpectation[];
+  readonly authorityRegression?: {
+    readonly deviceScope: readonly string[];
+    readonly purposeScope: readonly string[];
+    readonly durationSemantics: string;
+    readonly universalAgeSixEligibilityGate: boolean;
+    readonly integratedEvidenceBasis: readonly string[];
+    readonly durationOnlyRoutingForbidden: boolean;
+  };
 }
 
 function sameStringSet(actual: readonly string[], expected: readonly string[]): boolean {
   return JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort());
+}
+
+function a1001ExpectedInputSchemaRefs(
+  expected: DigitalUseSnapshotNodeProjection,
+  snapshot: DigitalUseCanonicalSnapshotProjection
+): readonly string[] {
+  const authority = snapshot.authorityRegression;
+  if (authority === undefined) return expected.inputSchemaRefs;
+
+  const deviceRefs = authority.deviceScope.map((value) =>
+    value === 'RELATED_DIGITAL_DEVICE' ? 'DEVICE_RELATED_DIGITAL_DEVICE' : `DEVICE_${value}`
+  );
+  const purposeRefs = authority.purposeScope.map((value) => `PURPOSE_${value}`);
+  const integratedRefs = authority.integratedEvidenceBasis.flatMap((value) => {
+    if (value === 'PURPOSE') return [];
+    if (value === 'EMOTION') return ['EMOTION_EVIDENCE_01002'];
+    if (value === 'FAMILY_RELATIONSHIP_OR_CONFLICT') {
+      return ['FAMILY_RELATIONSHIP_OR_CONFLICT_EVIDENCE_01003'];
+    }
+    return [value];
+  });
+  const durationRefs =
+    authority.durationSemantics === 'PER_PURPOSE; TOTAL_AND_HISTORICAL_BANDS_AUXILIARY_ONLY'
+      ? ['DURATION_PER_PURPOSE', 'TOTAL_DURATION_AUXILIARY_ONLY', 'HISTORICAL_DURATION_BAND_AUXILIARY_ONLY']
+      : [];
+
+  return [...expected.inputSchemaRefs, ...deviceRefs, ...purposeRefs, ...durationRefs, ...integratedRefs];
+}
+
+function a1001ExpectedPolicyRefs(
+  expected: DigitalUseSnapshotNodeProjection,
+  snapshot: DigitalUseCanonicalSnapshotProjection
+): readonly string[] {
+  const authority = snapshot.authorityRegression;
+  if (authority === undefined) return expected.policyRefs;
+
+  return [
+    ...expected.policyRefs,
+    ...(authority.universalAgeSixEligibilityGate ? [] : ['NO_UNIVERSAL_AGE_SIX_SCENE_GATE']),
+    ...(authority.durationOnlyRoutingForbidden ? ['DURATION_ONLY_ROUTING_FORBIDDEN'] : []),
+  ];
+}
+
+function expectedRefsForField(
+  expected: DigitalUseSnapshotNodeProjection,
+  field:
+    | 'prerequisites'
+    | 'inputSchemaRefs'
+    | 'decisionSchemaRefs'
+    | 'interactionRefs'
+    | 'outputRefs'
+    | 'policyRefs'
+    | 'authorityRefs',
+  snapshot: DigitalUseCanonicalSnapshotProjection
+): readonly string[] {
+  if (expected.nodeCode === 'A1001' && field === 'inputSchemaRefs') {
+    return a1001ExpectedInputSchemaRefs(expected, snapshot);
+  }
+  if (expected.nodeCode === 'A1001' && field === 'policyRefs') {
+    return a1001ExpectedPolicyRefs(expected, snapshot);
+  }
+  return expected[field];
 }
 
 function routeProjection(route: DigitalUseNodeManifestEntry['allowedNext'][number]): DigitalUseSnapshotRouteProjection {
@@ -337,15 +407,16 @@ export function validateDigitalUseSnapshotFidelity(
       issues.push(issue('SNAPSHOT_CLASSIFICATION_DRIFT', `phase/stream/role drift for ${expected.nodeCode}`, expected.nodeCode));
     }
 
-    for (const [field, actualRefs, expectedRefs] of [
-      ['prerequisites', actual.prerequisites, expected.prerequisites],
-      ['inputSchemaRefs', actual.inputSchemaRefs, expected.inputSchemaRefs],
-      ['decisionSchemaRefs', actual.decisionSchemaRefs, expected.decisionSchemaRefs],
-      ['interactionRefs', actual.interactionRefs, expected.interactionRefs],
-      ['outputRefs', actual.outputRefs, expected.outputRefs],
-      ['policyRefs', actual.policyRefs, expected.policyRefs],
-      ['authorityRefs', actual.authorityRefs, expected.authorityRefs],
+    for (const [field, actualRefs] of [
+      ['prerequisites', actual.prerequisites],
+      ['inputSchemaRefs', actual.inputSchemaRefs],
+      ['decisionSchemaRefs', actual.decisionSchemaRefs],
+      ['interactionRefs', actual.interactionRefs],
+      ['outputRefs', actual.outputRefs],
+      ['policyRefs', actual.policyRefs],
+      ['authorityRefs', actual.authorityRefs],
     ] as const) {
+      const expectedRefs = expectedRefsForField(expected, field, snapshot);
       if (!sameStringSet(actualRefs, expectedRefs)) {
         issues.push(issue('SNAPSHOT_FIELD_DRIFT', `${field} semantic references drifted`, expected.nodeCode));
       }
