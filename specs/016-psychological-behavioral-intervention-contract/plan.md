@@ -225,6 +225,34 @@ A method/therapy name alone is never a valid definition.
 
 `supporting_evidence_requirements`, conditions and source refs are professional definition data. Family-specific Evidence, child-specific facts, case observations and case-specific Formulation truth never live inside `intervention_definitions`.
 
+## 5.1 Initial V1 Digital Use Formal Intervention Definition Set
+
+The implementation must inventory the **formal Intervention candidates** actually required by the current V1 Digital Use product baseline and materialize reviewed definition versions only where the full Contract can be supported by authoritative professional source material.
+
+At minimum, the inventory must cover the Frozen Spec §7.2 families:
+
+1. internal motivation;
+2. emotional regulation;
+3. sleep / routine;
+4. time management / procrastination;
+5. family relationship / interaction;
+6. parent consistency;
+7. rewards / incentives;
+8. supervision;
+9. parent self-regulation;
+10. family communication / parent-response methods **when used as a formal Intervention**.
+
+This is an inventory of professional Intervention families, not permission to promote every Phase 2 node/template/example/FAQ/support artifact into `intervention_definitions`.
+
+For each candidate family, implementation evidence must show one of:
+
+- **REVIEWED + PUBLISHED**: complete Contract, traceable source refs, real authorized professional review, exact package binding; or
+- **NOT READY / UNPUBLISHED**: missing/insufficient professional source material, incomplete Contract, or review not completed.
+
+No developer or model may invent intervention steps, thresholds, contraindications, age boundaries, review criteria or source claims merely to make all ten families publishable.
+
+The system implementation may still truthfully expose an unpublished definition/version where allowed by lifecycle semantics, but no such version is production-eligible for formal use.
+
 ## 6. UNKNOWN / Condition Semantics
 
 The implementation must reuse existing Evidence/Formulation semantics where equivalent. Where a typed evaluation value is needed, it must distinguish at least the semantic states:
