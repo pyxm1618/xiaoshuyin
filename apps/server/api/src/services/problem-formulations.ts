@@ -324,6 +324,20 @@ export interface CommandResult {
   etag: string | null;
 }
 
+/**
+ * Savepoint names must be unique per invocation so that a caller-owned
+ * transaction (Slice 12 same-transaction composition) cannot collide with, or
+ * accidentally roll back to, its own savepoints. A counter is sufficient and
+ * deterministic: savepoints are scoped to one transaction, and names are never
+ * persisted.
+ */
+let savepointSequence = 0;
+
+function nextBusinessSavepointName(): string {
+  savepointSequence += 1;
+  return `pf_business_${savepointSequence}`;
+}
+
 async function executeIdempotentBusiness(
   tx: pg.PoolClient,
   input: {
@@ -345,10 +359,11 @@ async function executeIdempotentBusiness(
           : null,
     };
   }
-  await tx.query('SAVEPOINT pf_business');
+  const savepoint = nextBusinessSavepointName();
+  await tx.query(`SAVEPOINT ${savepoint}`);
   try {
     const result = await business();
-    await tx.query('RELEASE SAVEPOINT pf_business');
+    await tx.query(`RELEASE SAVEPOINT ${savepoint}`);
     await completeIdempotency(tx, {
       actorAccountId: input.actor.accountId,
       commandType: input.commandType as never,
@@ -370,8 +385,8 @@ async function executeIdempotentBusiness(
       typed.statusCode < 500 &&
       typeof typed.code === 'string'
     ) {
-      await tx.query('ROLLBACK TO SAVEPOINT pf_business');
-      await tx.query('RELEASE SAVEPOINT pf_business');
+      await tx.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+      await tx.query(`RELEASE SAVEPOINT ${savepoint}`);
       const body = { code: typed.code, message: typed.message ?? typed.code };
       await completeIdempotency(tx, {
         actorAccountId: input.actor.accountId,
@@ -411,6 +426,23 @@ export interface MutationInput {
   idempotencyKey: string;
 }
 
+export interface PresentProblemFormulationInput extends MutationInput {
+  content: ProblemFormulationContent;
+}
+
+/** The RLS context every Slice 8 command runs under (public and in-tx alike). */
+function familyManagementRlsContext(input: {
+  actor: ServiceActor;
+  familyId: string;
+}): { familyId: string; accountId: string; personId: string; purpose: string } {
+  return {
+    familyId: input.familyId,
+    accountId: input.actor.accountId,
+    personId: input.actor.personId,
+    purpose: 'FAMILY_MANAGEMENT',
+  };
+}
+
 export async function getCurrentProblemFormulationView(
   pool: pg.Pool,
   input: { actor: ServiceActor; familyId: string; caseId: string }
@@ -438,247 +470,334 @@ export async function getCurrentProblemFormulationView(
   );
 }
 
+/**
+ * Slice 8 same-transaction composition seam (post-merge owner remediation).
+ *
+ * Slice 12 must be able to run an authoritative Slice 8 command inside a
+ * CALLER-OWNED transaction so that
+ *   `StartAssessment` + `A1001 initialization`
+ * and
+ *   `Assessment final Scene effects` + `PresentProblemFormulation`
+ * commit or roll back as one atomic unit.
+ *
+ * There is exactly ONE authoritative implementation per command:
+ *
+ *   startAssessment(pool)            --withRlsTransaction--> startAssessmentAuthoritativeCommand(tx)
+ *   startAssessmentInTransaction(tx) ----------------------> startAssessmentAuthoritativeCommand(tx)
+ *
+ * Caller-owned contract (this seam NEVER opens a second transaction):
+ * 1. the caller owns BEGIN / COMMIT / ROLLBACK; this seam issues none of them
+ *    and never rolls back the caller transaction itself;
+ * 2. the passed client is the ONLY connection used — no second pool checkout;
+ * 3. the caller has already established the identity + Family RLS context for
+ *    `input.actor` / `input.familyId` (`app.set_identity_context` +
+ *    `app.set_family_context`, purpose `FAMILY_MANAGEMENT`). This seam never
+ *    re-establishes or overwrites that context, so authorization and RLS stay
+ *    exactly as fail-closed as the public path;
+ * 4. the caller MUST NOT hold a row lock on the target Case before calling.
+ *    The canonical lock order Family -> Case -> Problem Formulation resources
+ *    is acquired INSIDE this seam; pre-locking the Case in the caller would
+ *    invert that order and reintroduce deadlock risk;
+ * 5. idempotency (`CASE_START_ASSESSMENT`) stays owned by this authoritative
+ *    core. Slot acquisition, the business SAVEPOINT and completion all belong
+ *    to the caller's outer transaction and therefore roll back with it.
+ *
+ * Return value, HTTP status and error vocabulary are identical to the public
+ * command; no second error mapping exists.
+ */
+async function startAssessmentAuthoritativeCommand(
+  tx: pg.PoolClient,
+  input: MutationInput
+): Promise<CommandResult> {
+  await authorize(tx, {
+    actor: input.actor,
+    familyId: input.familyId,
+    caseId: input.caseId,
+    action: 'CASE_START_ASSESSMENT',
+  });
+
+  const hash = requestHash({
+    familyId: input.familyId,
+    caseId: input.caseId,
+    expectedCaseVersion: input.expectedCaseVersion,
+  });
+  const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
+  const slot = await acquireSlot(
+    tx,
+    input.actor,
+    'CASE_START_ASSESSMENT',
+    keyBytes,
+    hash
+  );
+  return executeIdempotentBusiness(
+    tx,
+    {
+      actor: input.actor,
+      commandType: 'CASE_START_ASSESSMENT',
+      keyBytes,
+      slot,
+    },
+    async () => {
+      await lockFamily(tx, input.familyId);
+      const caseRow = await lockCase(tx, input.caseId);
+      assertCaseGuards(caseRow, input.expectedCaseVersion, 'INTAKE');
+
+      const carrier = await resolveTraceableStatement(tx, input.caseId);
+      if (!carrier) throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
+
+      const carrierResolution = await resolveEvidenceRefs(tx, input.caseId, [carrier]);
+      const carrierMember = carrierResolution.members.get(canonicalEvidenceKey(carrier));
+      if (
+        !carrierMember ||
+        !carrierMember.usable ||
+        carrierMember.caseId !== input.caseId ||
+        (carrier.type === 'ASSERTION' && carrierMember.assertionKind !== 'STATEMENT')
+      ) {
+        throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
+      }
+      const carrierMembers = [carrierMember];
+      const personIds = deriveProcessingPersonIds({
+        actorPersonId: input.actor.personId,
+        caseCreatorPersonId: caseRow.created_by_person_id,
+        activeParticipantPersonIds: await resolveActiveCaseParticipantPersonIds(tx, input.caseId),
+        authoritativeMembers: carrierMembers,
+      });
+      await runComplianceGate(tx, personIds);
+
+      const updated = await advanceCasePhaseAndVersion(tx, {
+        caseId: input.caseId,
+        expectedVersion: input.expectedCaseVersion,
+        fromPhase: 'INTAKE',
+        toPhase: 'ASSESSMENT',
+      });
+
+      await insertProblemFormulationCaseEvent(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actorAccountId: input.actor.accountId,
+        eventType: 'CASE_ASSESSMENT_STARTED',
+        metadata: {
+          fromPhase: 'INTAKE',
+          toPhase: 'ASSESSMENT',
+          version: updated.version,
+        },
+      });
+      await insertProblemFormulationAudit(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actorAccountId: input.actor.accountId,
+        eventType: 'CASE_ASSESSMENT_STARTED',
+        resourceType: 'CASE',
+        resourceId: input.caseId,
+        metadata: {
+          fromPhase: 'INTAKE',
+          toPhase: 'ASSESSMENT',
+          version: updated.version,
+        },
+      });
+
+      const body = envelope(updated.version, null);
+      return { status: 200, body, etag: caseVersionEtag(updated.version) };
+    }
+  );
+}
+
+/**
+ * Public entry point. External behavior is unchanged: this function owns its
+ * RLS transaction and delegates to the same authoritative core as the in-tx
+ * seam.
+ */
 export async function startAssessment(
   pool: pg.Pool,
   input: MutationInput
-): Promise<{ status: number; body: unknown; etag: string | null }> {
+): Promise<CommandResult> {
   try {
-    return await withRlsTransaction(
-      pool,
-      {
-        familyId: input.familyId,
-        accountId: input.actor.accountId,
-        personId: input.actor.personId,
-        purpose: 'FAMILY_MANAGEMENT',
-      },
-      async (tx) => {
-        await authorize(tx, {
-          actor: input.actor,
-          familyId: input.familyId,
-          caseId: input.caseId,
-          action: 'CASE_START_ASSESSMENT',
-        });
-
-        const hash = requestHash({
-          familyId: input.familyId,
-          caseId: input.caseId,
-          expectedCaseVersion: input.expectedCaseVersion,
-        });
-        const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
-        const slot = await acquireSlot(
-          tx,
-          input.actor,
-          'CASE_START_ASSESSMENT',
-          keyBytes,
-          hash
-        );
-        return executeIdempotentBusiness(
-          tx,
-          {
-            actor: input.actor,
-            commandType: 'CASE_START_ASSESSMENT',
-            keyBytes,
-            slot,
-          },
-          async () => {
-
-        await lockFamily(tx, input.familyId);
-        const caseRow = await lockCase(tx, input.caseId);
-        assertCaseGuards(caseRow, input.expectedCaseVersion, 'INTAKE');
-
-        const carrier = await resolveTraceableStatement(tx, input.caseId);
-        if (!carrier) throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
-
-        const carrierResolution = await resolveEvidenceRefs(tx, input.caseId, [carrier]);
-        const carrierMember = carrierResolution.members.get(canonicalEvidenceKey(carrier));
-        if (
-          !carrierMember ||
-          !carrierMember.usable ||
-          carrierMember.caseId !== input.caseId ||
-          (carrier.type === 'ASSERTION' && carrierMember.assertionKind !== 'STATEMENT')
-        ) {
-          throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
-        }
-        const carrierMembers = [carrierMember];
-        const personIds = deriveProcessingPersonIds({
-          actorPersonId: input.actor.personId,
-          caseCreatorPersonId: caseRow.created_by_person_id,
-          activeParticipantPersonIds: await resolveActiveCaseParticipantPersonIds(tx, input.caseId),
-          authoritativeMembers: carrierMembers,
-        });
-        await runComplianceGate(tx, personIds);
-
-        const updated = await advanceCasePhaseAndVersion(tx, {
-          caseId: input.caseId,
-          expectedVersion: input.expectedCaseVersion,
-          fromPhase: 'INTAKE',
-          toPhase: 'ASSESSMENT',
-        });
-
-        await insertProblemFormulationCaseEvent(tx, {
-          familyId: input.familyId,
-          caseId: input.caseId,
-          actorAccountId: input.actor.accountId,
-          eventType: 'CASE_ASSESSMENT_STARTED',
-          metadata: {
-            fromPhase: 'INTAKE',
-            toPhase: 'ASSESSMENT',
-            version: updated.version,
-          },
-        });
-        await insertProblemFormulationAudit(tx, {
-          familyId: input.familyId,
-          caseId: input.caseId,
-          actorAccountId: input.actor.accountId,
-          eventType: 'CASE_ASSESSMENT_STARTED',
-          resourceType: 'CASE',
-          resourceId: input.caseId,
-          metadata: {
-            fromPhase: 'INTAKE',
-            toPhase: 'ASSESSMENT',
-            version: updated.version,
-          },
-        });
-
-        const body = envelope(updated.version, null);
-        return { status: 200, body, etag: caseVersionEtag(updated.version) };
-          }
-        );
-      }
+    return await withRlsTransaction(pool, familyManagementRlsContext(input), (tx) =>
+      startAssessmentAuthoritativeCommand(tx, input)
     );
   } catch (error) {
     return mapServiceError(error);
   }
 }
 
-export async function presentProblemFormulation(
-  pool: pg.Pool,
-  input: MutationInput & { content: ProblemFormulationContent }
-): Promise<{ status: number; body: unknown; etag: string | null }> {
+/**
+ * Caller-owned transaction entry point. The caller owns BEGIN / COMMIT /
+ * ROLLBACK and has already established the RLS context; see the contract on
+ * `startAssessmentAuthoritativeCommand` for the full precondition list.
+ */
+export async function startAssessmentInTransaction(
+  tx: pg.PoolClient,
+  input: MutationInput
+): Promise<CommandResult> {
   try {
-    return await withRlsTransaction(
-      pool,
-      {
-        familyId: input.familyId,
-        accountId: input.actor.accountId,
-        personId: input.actor.personId,
-        purpose: 'FAMILY_MANAGEMENT',
-      },
-      async (tx) => {
-        await authorize(tx, {
-          actor: input.actor,
-          familyId: input.familyId,
-          caseId: input.caseId,
-          action: 'CASE_PRESENT_PROBLEM_FORMULATION',
-        });
+    return await startAssessmentAuthoritativeCommand(tx, input);
+  } catch (error) {
+    return mapServiceError(error);
+  }
+}
 
-        const hash = requestHash({
-          familyId: input.familyId,
-          caseId: input.caseId,
-          expectedCaseVersion: input.expectedCaseVersion,
-          candidate: input.content,
-        });
-        const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
-        const slot = await acquireSlot(
-          tx,
-          input.actor,
-          'PROBLEM_FORMULATION_PRESENT',
-          keyBytes,
-          hash
-        );
-        return executeIdempotentBusiness(
-          tx,
-          {
-            actor: input.actor,
-            commandType: 'PROBLEM_FORMULATION_PRESENT',
-            keyBytes,
-            slot,
-          },
-          async () => {
+/**
+ * Slice 8 same-transaction composition seam (post-merge owner remediation).
+ *
+ * Same contract as `startAssessmentAuthoritativeCommand`:
+ *   presentProblemFormulation(pool)            -> withRlsTransaction -> this core
+ *   presentProblemFormulationInTransaction(tx) ---------------------> this core
+ *
+ * The caller owns BEGIN / COMMIT / ROLLBACK, provides the single
+ * `pg.PoolClient` with its RLS context already established, and MUST NOT
+ * pre-lock the target Case: the canonical Family -> Case -> Problem
+ * Formulation lock order is acquired here. Idempotency
+ * (`PROBLEM_FORMULATION_PRESENT`), the formulation write, the Case
+ * phase/version change, the Case event and the business audit all stay inside
+ * the caller's outer transaction and roll back with it.
+ */
+async function presentProblemFormulationAuthoritativeCommand(
+  tx: pg.PoolClient,
+  input: PresentProblemFormulationInput
+): Promise<CommandResult> {
+  await authorize(tx, {
+    actor: input.actor,
+    familyId: input.familyId,
+    caseId: input.caseId,
+    action: 'CASE_PRESENT_PROBLEM_FORMULATION',
+  });
 
-        await lockFamily(tx, input.familyId);
-        const caseRow = await lockCase(tx, input.caseId);
-        assertCaseGuards(caseRow, input.expectedCaseVersion, 'ASSESSMENT');
+  const hash = requestHash({
+    familyId: input.familyId,
+    caseId: input.caseId,
+    expectedCaseVersion: input.expectedCaseVersion,
+    candidate: input.content,
+  });
+  const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
+  const slot = await acquireSlot(
+    tx,
+    input.actor,
+    'PROBLEM_FORMULATION_PRESENT',
+    keyBytes,
+    hash
+  );
+  return executeIdempotentBusiness(
+    tx,
+    {
+      actor: input.actor,
+      commandType: 'PROBLEM_FORMULATION_PRESENT',
+      keyBytes,
+      slot,
+    },
+    async () => {
+      await lockFamily(tx, input.familyId);
+      const caseRow = await lockCase(tx, input.caseId);
+      assertCaseGuards(caseRow, input.expectedCaseVersion, 'ASSESSMENT');
 
-        const authoritative = await validateFormulationContent(
-          tx,
-          input.caseId,
-          input.content
-        );
-        const persons = await processingPersonIds(tx, {
-          actor: input.actor,
-          caseRow,
-          authoritative,
-        });
-        const compliance = await runComplianceGate(tx, persons);
+      const authoritative = await validateFormulationContent(
+        tx,
+        input.caseId,
+        input.content
+      );
+      const persons = await processingPersonIds(tx, {
+        actor: input.actor,
+        caseRow,
+        authoritative,
+      });
+      const compliance = await runComplianceGate(tx, persons);
 
-        const mandatory = mandatoryDependencies(authoritative, compliance);
-        if (!isDependencySubset(mandatory, input.content.dependencyRefs)) {
-          throw pfError(
-            'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
-            'mandatory dependency refs are missing from the candidate'
-          );
-        }
-
-        const current = await lockCurrentProblemFormulation(tx, input.caseId);
-        const version = nextFormulationVersion(current);
-        if (current) {
-          await markCurrentFormulationSuperseded(tx, {
-            id: current.id,
-            caseId: input.caseId,
-            expectedStatus: current.status,
-          });
-        }
-
-        const inserted = await insertProblemFormulationVersion(tx, {
-          familyId: input.familyId,
-          caseId: input.caseId,
-          version,
-          content: input.content,
-          userResponse: null,
-          supersedesVersion: current ? current.version : null,
-        });
-
-        const updated = await advanceCasePhaseAndVersion(tx, {
-          caseId: input.caseId,
-          expectedVersion: input.expectedCaseVersion,
-          fromPhase: 'ASSESSMENT',
-          toPhase: 'PROBLEM_FORMULATION',
-        });
-
-        await insertProblemFormulationCaseEvent(tx, {
-          familyId: input.familyId,
-          caseId: input.caseId,
-          actorAccountId: input.actor.accountId,
-          eventType: 'CASE_PROBLEM_FORMULATION_PRESENTED',
-          metadata: {
-            formulationVersion: inserted.version,
-            fromPhase: 'ASSESSMENT',
-            toPhase: 'PROBLEM_FORMULATION',
-            version: updated.version,
-          },
-        });
-        await insertProblemFormulationAudit(tx, {
-          familyId: input.familyId,
-          caseId: input.caseId,
-          actorAccountId: input.actor.accountId,
-          eventType: 'CASE_PROBLEM_FORMULATION_PRESENTED',
-          resourceType: 'PROBLEM_FORMULATION',
-          resourceId: inserted.id,
-          metadata: {
-            formulationVersion: inserted.version,
-            fromPhase: 'ASSESSMENT',
-            toPhase: 'PROBLEM_FORMULATION',
-            version: updated.version,
-          },
-        });
-
-        const body = envelope(updated.version, inserted);
-        return { status: 200, body, etag: caseVersionEtag(updated.version) };
-          }
+      const mandatory = mandatoryDependencies(authoritative, compliance);
+      if (!isDependencySubset(mandatory, input.content.dependencyRefs)) {
+        throw pfError(
+          'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+          'mandatory dependency refs are missing from the candidate'
         );
       }
+
+      const current = await lockCurrentProblemFormulation(tx, input.caseId);
+      const version = nextFormulationVersion(current);
+      if (current) {
+        await markCurrentFormulationSuperseded(tx, {
+          id: current.id,
+          caseId: input.caseId,
+          expectedStatus: current.status,
+        });
+      }
+
+      const inserted = await insertProblemFormulationVersion(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        version,
+        content: input.content,
+        userResponse: null,
+        supersedesVersion: current ? current.version : null,
+      });
+
+      const updated = await advanceCasePhaseAndVersion(tx, {
+        caseId: input.caseId,
+        expectedVersion: input.expectedCaseVersion,
+        fromPhase: 'ASSESSMENT',
+        toPhase: 'PROBLEM_FORMULATION',
+      });
+
+      await insertProblemFormulationCaseEvent(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actorAccountId: input.actor.accountId,
+        eventType: 'CASE_PROBLEM_FORMULATION_PRESENTED',
+        metadata: {
+          formulationVersion: inserted.version,
+          fromPhase: 'ASSESSMENT',
+          toPhase: 'PROBLEM_FORMULATION',
+          version: updated.version,
+        },
+      });
+      await insertProblemFormulationAudit(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actorAccountId: input.actor.accountId,
+        eventType: 'CASE_PROBLEM_FORMULATION_PRESENTED',
+        resourceType: 'PROBLEM_FORMULATION',
+        resourceId: inserted.id,
+        metadata: {
+          formulationVersion: inserted.version,
+          fromPhase: 'ASSESSMENT',
+          toPhase: 'PROBLEM_FORMULATION',
+          version: updated.version,
+        },
+      });
+
+      const body = envelope(updated.version, inserted);
+      return { status: 200, body, etag: caseVersionEtag(updated.version) };
+    }
+  );
+}
+
+/**
+ * Public entry point. External behavior is unchanged: this function owns its
+ * RLS transaction and delegates to the same authoritative core as the in-tx
+ * seam.
+ */
+export async function presentProblemFormulation(
+  pool: pg.Pool,
+  input: PresentProblemFormulationInput
+): Promise<CommandResult> {
+  try {
+    return await withRlsTransaction(pool, familyManagementRlsContext(input), (tx) =>
+      presentProblemFormulationAuthoritativeCommand(tx, input)
     );
+  } catch (error) {
+    return mapServiceError(error);
+  }
+}
+
+/**
+ * Caller-owned transaction entry point. The caller owns BEGIN / COMMIT /
+ * ROLLBACK and has already established the RLS context; see the contract on
+ * `presentProblemFormulationAuthoritativeCommand` for the full precondition
+ * list.
+ */
+export async function presentProblemFormulationInTransaction(
+  tx: pg.PoolClient,
+  input: PresentProblemFormulationInput
+): Promise<CommandResult> {
+  try {
+    return await presentProblemFormulationAuthoritativeCommand(tx, input);
   } catch (error) {
     return mapServiceError(error);
   }
