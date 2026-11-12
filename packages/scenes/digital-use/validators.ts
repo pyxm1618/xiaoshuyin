@@ -374,7 +374,22 @@ export function validateDigitalUseSnapshotFidelity(
     }
 
     const actualRoutes = actual.allowedNext.map(routeProjection);
-    if (JSON.stringify(actualRoutes) !== JSON.stringify(expected.allowedNext)) {
+    const expectedRoutes = expected.allowedNext.map((route) =>
+      route.kind === 'NODE'
+        ? {
+            kind: 'NODE' as const,
+            targetNodeCode: route.targetNodeCode,
+            conditionRef: route.conditionRef,
+            reasonCode: route.reasonCode,
+          }
+        : {
+            kind: 'TERMINAL' as const,
+            terminalCode: route.terminalCode,
+            conditionRef: route.conditionRef,
+            reasonCode: route.reasonCode,
+          }
+    );
+    if (JSON.stringify(actualRoutes) !== JSON.stringify(expectedRoutes)) {
       issues.push(issue('SNAPSHOT_ROUTE_DRIFT', 'allowedNext target/condition/reason projection drifted', expected.nodeCode));
     }
   }
