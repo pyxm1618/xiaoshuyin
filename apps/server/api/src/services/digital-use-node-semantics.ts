@@ -249,33 +249,66 @@ async function handle01002(
 ): Promise<DigitalUseNodeSemanticResult> {
   const parsed = Response01002.safeParse(context.response);
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
-  const answer = parsed.data;
-  const ref = await recordAssessmentStatement(context, '01002.emotion', answer);
+  await recordAssessmentStatement(context, '01002.emotion', parsed.data);
 
-  if (answer.state !== 'KNOWN') {
+  // Re-read the authoritative current Evidence family after the write. The
+  // submitted payload alone is never allowed to erase another current source,
+  // an Evidence conflict group or a disputed current statement.
+  const evidence = await loadIntegratedTriageEvidence(context.tx, context.caseId);
+  const emotion = evidence.emotion01002;
+  const refs: StoredSceneRef[] = (
+    await listCurrentSceneEvidenceStatements(
+      context.tx,
+      context.caseId,
+      'DUA:v1:01002.emotion:'
+    )
+  ).map((row) => ({ type: 'ASSERTION' as const, id: row.id }));
+
+  if (emotion.kind === 'MISSING') {
+    const conditionState =
+      emotion.reason === 'DECLINED'
+        ? 'DECLINED'
+        : emotion.reason === 'NOT_COLLECTED'
+          ? 'NOT_COLLECTED'
+          : 'UNKNOWN';
     return {
       inputRefs: [],
-      outputRefs: [ref],
+      outputRefs: refs,
       conditions: {
-        EMOTION_SEVERE_F: answer.state,
-        EMOTION_ASSESSMENT_NON_SEVERE: answer.state,
+        EMOTION_SEVERE_F: conditionState,
+        EMOTION_ASSESSMENT_NON_SEVERE: conditionState,
       },
       evidenceBasis: ['EMOTION'],
       progression: 'HOLD',
       holdReasonCode: 'INTEGRATED_TRIAGE_INSUFFICIENT',
+      nextInputRefs: refs,
     };
   }
 
-  const hasF = answer.selections.includes('F');
+  if (emotion.kind === 'CONFLICT') {
+    return {
+      inputRefs: [],
+      outputRefs: refs,
+      conditions: {},
+      evidenceBasis: ['EMOTION'],
+      completionStatus: 'BLOCKED',
+      progression: 'BLOCKED',
+      blockReasonCode: '01002_CONFLICT_FAMILY',
+      nextInputRefs: refs,
+    };
+  }
+
+  const hasF = emotion.value.includes('F');
   return {
     inputRefs: [],
-    outputRefs: [ref],
+    outputRefs: refs,
     conditions: {
       EMOTION_SEVERE_F: hasF,
       EMOTION_ASSESSMENT_NON_SEVERE: !hasF,
     },
     evidenceBasis: ['EMOTION'],
     progression: 'ROUTE',
+    nextInputRefs: refs,
   };
 }
 
