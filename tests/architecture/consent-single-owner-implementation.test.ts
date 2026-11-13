@@ -234,6 +234,7 @@ describe('Consent owner — single implementation and scope guards', () => {
       'db/migrations/012_consent_01004_supplemental_enums.sql',
       'db/migrations/013_consent_01004_supplemental_assessment.sql',
       'packages/compliance/src/evidence.ts',
+      'packages/compliance/src/supplemental-assessment-disclosure.ts',
       'packages/compliance/src/supplemental-consent.ts',
       'packages/contracts/src/schemas.ts',
     ]);

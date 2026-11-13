@@ -16,9 +16,10 @@
  *     lock, the version chain, uniqueness constraints and the DB guards;
  *   - actor == subject: the server-verified actor is the Consent subject, and
  *     no client-supplied / derived target subject exists for this purpose;
- *   - disclosure identity must be server-resolved and approved. There is no
- *     approved 01004 disclosure artifact in this repository yet, so the default
- *     authority always fails closed.
+ *   - disclosure identity must be server-resolved and approved. The approved
+ *     01004 artifact is owned by supplemental-assessment-disclosure.ts, while
+ *     this owner seam still defaults to NO_APPROVED... so callers must
+ *     explicitly inject an approved authority.
  */
 
 import type { PoolClient } from 'pg';
@@ -86,10 +87,10 @@ export interface SupplementalAssessmentDisclosureAuthority {
 }
 
 /**
- * Default authority: the repository only contains the formal guardian notice
- * catalog, which MUST NOT be reused as the 01004 disclosure. With no approved
- * 01004 disclosure artifact, every supplemental decision fails closed. Slice 12
- * must supply its own approved authority before 01004 can execute.
+ * Explicit fail-closed default. A caller that does not inject a server-approved
+ * 01004 disclosure authority can never record a supplemental decision. The
+ * approved production catalog is intentionally NOT wired here as an implicit
+ * default: owner capability and caller integration remain separate.
  */
 export const NO_APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY: SupplementalAssessmentDisclosureAuthority =
   Object.freeze({

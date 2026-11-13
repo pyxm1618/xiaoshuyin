@@ -36,6 +36,10 @@ import {
   type RecordPurposeScopedConsentDecisionInput,
   type SupplementalAssessmentDisclosureAuthority,
 } from '../../packages/compliance/src/supplemental-consent.js';
+import {
+  APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY,
+  CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE,
+} from '../../packages/compliance/src/supplemental-assessment-disclosure.js';
 import { getConsentRecordForGate, getConsentsByFamily, getValidConsentForBinding } from '../../packages/compliance/src/repository.js';
 import { getCurrentNoticeHash, getCurrentNoticeVersion } from '../../packages/compliance/src/notices.js';
 
@@ -159,6 +163,22 @@ describe('Consent owner — 01004 supplemental assessment owner seam', () => {
         purpose: 'DIGITAL_USE_ASSESSMENT',
       },
       (tx) => recordPurposeScopedConsentDecision(tx, input, authority)
+    );
+  }
+
+  function recordWithDefaultAuthority(
+    scope: Scope,
+    input: RecordPurposeScopedConsentDecisionInput
+  ) {
+    return withRlsTransaction(
+      appPool,
+      {
+        familyId: scope.familyId,
+        accountId: scope.manager.accountId,
+        personId: scope.manager.personId,
+        purpose: 'DIGITAL_USE_ASSESSMENT',
+      },
+      (tx) => recordPurposeScopedConsentDecision(tx, input)
     );
   }
 
@@ -533,12 +553,119 @@ describe('Consent owner — 01004 supplemental assessment owner seam', () => {
     expect(await supplementalRows(scope)).toHaveLength(0);
   });
 
-  it('no approved 01004 disclosure → no Consent record (default authority)', async () => {
-    const scope = await newScope('no-disclosure');
-    await expectCode(
-      record(scope, inputFor(scope), {
-        resolveApprovedDisclosure: () => null,
+  it('production 01004 authority lets the owner record the exact approved disclosure', async () => {
+    const scope = await newScope('production-disclosure-grant');
+    const disclosure = CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE;
+    const result = await record(
+      scope,
+      inputFor(scope, {
+        disclosure: {
+          reference: disclosure.reference,
+          version: disclosure.version,
+          hash: disclosure.hash,
+        },
       }),
+      APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY
+    );
+
+    expect(result).toMatchObject({ decision: 'GRANTED', version: 1, replayed: false });
+    const rows = await supplementalRows(scope);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      disclosure_reference: disclosure.reference,
+      notice_version: disclosure.version,
+      notice_hash: disclosure.hash,
+    });
+  });
+
+  it('production 01004 authority rejects an unknown disclosure identity', async () => {
+    const scope = await newScope('production-disclosure-unknown');
+    const disclosure = CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE;
+    await expectCode(
+      record(
+        scope,
+        inputFor(scope, {
+          disclosure: {
+            reference: disclosure.reference,
+            version: 'v999',
+            hash: disclosure.hash,
+          },
+        }),
+        APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY
+      ),
+      'CONSENT_DISCLOSURE_NOT_APPROVED'
+    );
+    expect(await supplementalRows(scope)).toHaveLength(0);
+  });
+
+  it('DECLINED records the same exact approved disclosure identity shown to the user', async () => {
+    const scope = await newScope('production-disclosure-declined');
+    const disclosure = CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE;
+    const result = await record(
+      scope,
+      inputFor(scope, {
+        decision: 'DECLINED',
+        disclosure: {
+          reference: disclosure.reference,
+          version: disclosure.version,
+          hash: disclosure.hash,
+        },
+      }),
+      APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY
+    );
+
+    expect(result.decision).toBe('DECLINED');
+    const rows = await supplementalRows(scope);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      decision: 'DECLINED',
+      disclosure_reference: disclosure.reference,
+      notice_version: disclosure.version,
+      notice_hash: disclosure.hash,
+    });
+  });
+
+  it('caller-authored disclosureText / noticeBody are rejected even with approved identity', async () => {
+    const scope = await newScope('production-disclosure-caller-text');
+    const disclosure = CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE;
+    const base = inputFor(scope, {
+      disclosure: {
+        reference: disclosure.reference,
+        version: disclosure.version,
+        hash: disclosure.hash,
+      },
+    });
+
+    for (const injected of [
+      { disclosureText: disclosure.body },
+      { noticeBody: disclosure.body },
+    ]) {
+      await expectCode(
+        record(
+          scope,
+          { ...base, ...injected } as unknown as RecordPurposeScopedConsentDecisionInput,
+          APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY
+        ),
+        'CONSENT_INPUT_INVALID'
+      );
+    }
+    expect(await supplementalRows(scope)).toHaveLength(0);
+  });
+
+  it('no explicitly supplied authority → no Consent record (default fail closed)', async () => {
+    const scope = await newScope('no-disclosure');
+    const disclosure = CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE;
+    await expectCode(
+      recordWithDefaultAuthority(
+        scope,
+        inputFor(scope, {
+          disclosure: {
+            reference: disclosure.reference,
+            version: disclosure.version,
+            hash: disclosure.hash,
+          },
+        })
+      ),
       'CONSENT_DISCLOSURE_NOT_APPROVED'
     );
     expect(await supplementalRows(scope)).toHaveLength(0);
@@ -557,9 +684,7 @@ describe('Consent owner — 01004 supplemental assessment owner seam', () => {
             hash: getCurrentNoticeHash(),
           },
         }),
-        {
-          resolveApprovedDisclosure: () => null,
-        }
+        APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY
       ),
       'CONSENT_DISCLOSURE_NOT_APPROVED'
     );
