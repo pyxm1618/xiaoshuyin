@@ -264,6 +264,25 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(response.json().code).toBe('SCENE_NODE_UNREACHABLE');
   });
 
+  it('rejects a fabricated node without creating any Scene state', async () => {
+    const f = await fixture('fabricated');
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/FAKE_NODE`,
+      headers: auth(f.manager.token),
+    });
+    expect(response.statusCode, response.body).toBe(404);
+    expect(response.json().code).toBe('SCENE_NODE_NOT_FOUND');
+
+    const { rows } = await admin.query(
+      `SELECT count(*)::int AS n
+         FROM scene_node_states
+        WHERE case_id=$1 AND node_code='FAKE_NODE'`,
+      [f.caseId]
+    );
+    expect(rows[0].n).toBe(0);
+  });
+
   it('anti-enumerates cross-Family access and keeps A200401 non-addressable', async () => {
     const owner = await fixture('owner');
     const attacker = await loginWithLabel(app, 'du-hard-attacker');
