@@ -5,6 +5,7 @@ export * from './repository.js';
 // Slice 1 Consent Owner — 01004 narrow post-merge remediation. Internal-only
 // purpose-scoped supplemental-assessment decision seam (no public API).
 export * from './supplemental-consent.js';
+export * from './supplemental-assessment-disclosure.js';
 // Slice 10 — Compliance Feature Policy Foundation. Internal-only contract:
 // server-owned feature identity, versioned policy evaluation and the pure
 // obligation-support guard. No public policy surface is exported.
