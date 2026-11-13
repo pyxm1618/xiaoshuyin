@@ -12,6 +12,13 @@ import {
 } from '../setup/api.js';
 import { createCase } from '../setup/participation.js';
 import { validateSceneRefs } from '@xiaoshuyin/domain';
+import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import {
+  APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY,
+  CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE,
+  DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+  recordPurposeScopedConsentDecision,
+} from '@xiaoshuyin/compliance';
 
 interface Fixture {
   manager: LoginResult;
@@ -550,6 +557,152 @@ describe('T1218 Digital Use runtime hardening', () => {
       client.release();
       await runtimePool.end();
     }
+  });
+
+  it('rechecks current Consent owner truth after 01004 grant and blocks 01000 after revocation', async () => {
+    const f = await fixture('consent-revoke');
+
+    const a1 = await respondA1001(f, `du-consent-a1001-${crypto.randomUUID()}`);
+    expect(a1.statusCode, a1.body).toBe(200);
+    let scene = a1.json();
+    expect(scene.currentNode?.nodeCode).toBe('01002');
+
+    const r01002 = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/01002/responses`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-01002-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: scene.caseVersion,
+        expectedNodeRevision: scene.currentNode.revision,
+        response: { state: 'KNOWN', selections: ['A'] },
+      },
+    });
+    expect(r01002.statusCode, r01002.body).toBe(200);
+    scene = r01002.json();
+    expect(scene.currentNode?.nodeCode).toBe('01003');
+
+    const r01003 = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/01003/responses`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-01003-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: scene.caseVersion,
+        expectedNodeRevision: scene.currentNode.revision,
+        response: { state: 'KNOWN', selection: 'B' },
+      },
+    });
+    expect(r01003.statusCode, r01003.body).toBe(200);
+    scene = r01003.json();
+    expect(scene.currentNode?.nodeCode).toBe('A2002');
+
+    const a2002 = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A2002/responses`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-a2002-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: scene.caseVersion,
+        expectedNodeRevision: scene.currentNode.revision,
+        response: { choice: 'FURTHER_ASSESSMENT' },
+      },
+    });
+    expect(a2002.statusCode, a2002.body).toBe(200);
+    scene = a2002.json();
+    expect(scene.currentNode?.nodeCode).toBe('01004');
+
+    const granted = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/01004/responses`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-01004-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: scene.caseVersion,
+        expectedNodeRevision: scene.currentNode.revision,
+        response: {
+          decision: 'GRANTED',
+          confirmationStatementHash: 'a'.repeat(64),
+        },
+      },
+    });
+    expect(granted.statusCode, granted.body).toBe(200);
+    scene = granted.json();
+    expect(scene.currentNode?.nodeCode).toBe('01000');
+
+    const current = await admin.query(
+      `SELECT id, version
+         FROM consent_records
+        WHERE family_id=$1 AND case_id=$2
+          AND purpose='DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT'
+          AND decision='GRANTED'
+        ORDER BY version DESC LIMIT 1`,
+      [f.familyId, f.caseId]
+    );
+    expect(current.rows).toHaveLength(1);
+
+    const runtimePool = new pg.Pool({
+      connectionString: process.env['DATABASE_URL'],
+      max: 1,
+    });
+    try {
+      await withRlsTransaction(
+        runtimePool,
+        {
+          familyId: f.familyId,
+          accountId: f.manager.accountId,
+          personId: f.manager.personId,
+          purpose: 'DIGITAL_USE_ASSESSMENT',
+        },
+        (tx) =>
+          recordPurposeScopedConsentDecision(
+            tx,
+            {
+              familyId: f.familyId,
+              caseId: f.caseId,
+              actor: {
+                accountId: f.manager.accountId,
+                personId: f.manager.personId,
+              },
+              purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+              decision: 'REVOKED',
+              expectedVersion: current.rows[0].version,
+              disclosure: {
+                reference: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.reference,
+                version: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.version,
+                hash: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.hash,
+              },
+              confirmationStatementHash: 'b'.repeat(64),
+              sceneAuthorization: { nodeCode: '01004', verified: true },
+              evidence: {
+                clientIp: '203.0.113.42',
+                userAgent: 'slice12-hardening/1.0',
+                pepper: process.env['EVIDENCE_HASH_PEPPER'] ?? 'test-evidence-hash-pepper-fixture',
+              },
+            },
+            APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY
+          )
+      );
+    } finally {
+      await runtimePool.end();
+    }
+
+    const blocked = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/01000/responses`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-01000-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: scene.caseVersion,
+        expectedNodeRevision: scene.currentNode.revision,
+        response: { category: 'EMOTION' },
+      },
+    });
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json().code).toBe('SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED');
+
+    const artifacts = await admin.query(
+      `SELECT count(*)::int AS n
+         FROM scene_artifacts
+        WHERE case_id=$1 AND artifact_type='SUPPLEMENTAL_ASSESSMENT_BOUNDARY'`,
+      [f.caseId]
+    );
+    expect(artifacts.rows[0].n).toBe(0);
   });
 
   it('rejects client route/package authority fields before business execution', async () => {
