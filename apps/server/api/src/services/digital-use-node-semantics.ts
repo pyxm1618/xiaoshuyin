@@ -6,7 +6,6 @@
  * only. Slice 11 routeDigitalUseTopology() remains the sole topology owner.
  */
 import type pg from 'pg';
-import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   canonicalJson,
@@ -32,6 +31,7 @@ import {
   CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE,
   DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
   PurposeScopedConsentError,
+  getCurrentPurposeScopedConsentDecision,
   recordPurposeScopedConsentDecision,
 } from '@xiaoshuyin/compliance';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
@@ -60,7 +60,9 @@ export interface DigitalUseNodeSemanticResult {
   readonly nextInputRefs?: readonly StoredSceneRef[];
   /** Legal collected-but-insufficient response: retain Evidence, do not route. */
   readonly progression?: 'ROUTE' | 'HOLD' | 'BLOCKED';
-  readonly holdReasonCode?: 'INTEGRATED_TRIAGE_INSUFFICIENT';
+  readonly holdReasonCode?:
+    | 'INTEGRATED_TRIAGE_INSUFFICIENT'
+    | 'APPROVED_INSTRUMENT_UNAVAILABLE';
   readonly blockReasonCode?: string;
 }
 
@@ -147,6 +149,10 @@ const Response01003 = z.union([
 
 const Response01004 = z.strictObject({
   decision: z.enum(['GRANTED', 'DECLINED']),
+  // Existing Consent-owner contract: this is evidence of the exact
+  // confirmation/refusal statement the user accepted. Slice 12 must not
+  // manufacture a substitute statement catalog or server-invented hash.
+  confirmationStatementHash: z.string().regex(/^[0-9a-f]{64}$/),
 });
 
 const Response01000 = z.strictObject({
@@ -807,21 +813,6 @@ async function handleA2009(
   };
 }
 
-function confirmationReceiptHash(decision: 'GRANTED' | 'DECLINED'): string {
-  return createHash('sha256')
-    .update(
-      [
-        DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
-        CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.reference,
-        CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.version,
-        CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.hash,
-        decision,
-      ].join('\n'),
-      'utf8'
-    )
-    .digest('hex');
-}
-
 async function handle01004(
   context: DigitalUseNodeSemanticsContext
 ): Promise<DigitalUseNodeSemanticResult> {
@@ -845,7 +836,7 @@ async function handle01004(
           version: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.version,
           hash: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.hash,
         },
-        confirmationStatementHash: confirmationReceiptHash(parsed.data.decision),
+        confirmationStatementHash: parsed.data.confirmationStatementHash,
         sceneAuthorization: { nodeCode: '01004', verified: true },
         evidence: context.requestEvidence,
       },
@@ -889,8 +880,42 @@ async function handle01000(
   const parsed = Response01000.safeParse(context.response);
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
 
+  const consentRefs = context.currentInputRefs.filter(
+    (ref): ref is Extract<StoredSceneRef, { type: 'CONSENT' }> =>
+      ref.type === 'CONSENT'
+  );
+  if (consentRefs.length !== 1) {
+    semanticError('SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED');
+  }
+
+  // Re-check the current Consent OWNER truth under the same owner scope lock.
+  // The owner lock is held to outer transaction commit, serializing a
+  // concurrent revoke/decision behind this 01000 command.
+  const currentConsent = await getCurrentPurposeScopedConsentDecision(
+    context.tx,
+    {
+      familyId: context.familyId,
+      caseId: context.caseId,
+      actor: context.actor,
+      purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+    }
+  );
+  if (
+    currentConsent === null ||
+    currentConsent.decision !== 'GRANTED' ||
+    currentConsent.consentRecordId !== consentRefs[0]!.id
+  ) {
+    semanticError('SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED');
+  }
+
   // No concrete instrument/item-bank/scoring/cut-off is approved in the
-  // current Authority. Persist the truthful boundary instead of generating one.
+  // current Authority. Persist a versioned truthful boundary, but DO NOT
+  // falsely complete 01000 or route as if an assessment had run.
+  const previous = await getLatestSceneArtifact(
+    context.tx,
+    context.caseId,
+    'SUPPLEMENTAL_ASSESSMENT_BOUNDARY'
+  );
   const artifact = await insertSceneArtifact(context.tx, {
     familyId: context.familyId,
     caseId: context.caseId,
@@ -910,15 +935,17 @@ async function handle01000(
     },
     ownerPersonId: context.actor.personId,
     sourceRefs: context.currentInputRefs,
-    revision: 1,
+    revision: previous === null ? 1 : previous.revision + 1,
+    ...(previous === null ? {} : { supersedesId: previous.id }),
   });
 
   const artifactRef: StoredSceneRef = { type: 'SCENE_ARTIFACT', id: artifact.id };
   return {
     inputRefs: context.currentInputRefs,
     outputRefs: [artifactRef],
-    conditions: { SUPPLEMENTAL_ASSESSMENT_COMPLETE: true },
-    progression: 'ROUTE',
+    conditions: {},
+    progression: 'HOLD',
+    holdReasonCode: 'APPROVED_INSTRUMENT_UNAVAILABLE',
     nextInputRefs: [artifactRef],
   };
 }
