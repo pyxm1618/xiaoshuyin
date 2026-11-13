@@ -16,6 +16,7 @@ export default defineConfig({
       '@xiaoshuyin/compliance': workspacePath('compliance'),
       '@xiaoshuyin/contracts': workspacePath('contracts'),
       '@xiaoshuyin/domain': workspacePath('domain'),
+      '@xiaoshuyin/scenes/digital-use': fileURLToPath(new URL('./packages/scenes/digital-use/index.ts', import.meta.url)),
     },
   },
   test: {
