@@ -523,3 +523,32 @@ export async function listCurrentSceneEvidenceStatements(
 }
 
 
+
+
+export async function getSceneEvidenceText(
+  tx: Tx,
+  input: { caseId: string; ref: StoredEvidenceRef }
+): Promise<string | null> {
+  if (input.ref.type === 'DIALOGUE_MESSAGE') {
+    const { rows } = await tx.query<{ content: string }>(
+      `SELECT content FROM dialogue_messages WHERE id = $1 AND case_id = $2`,
+      [input.ref.id, input.caseId]
+    );
+    return rows[0]?.content ?? null;
+  }
+  if (input.ref.type === 'ASSERTION') {
+    const { rows } = await tx.query<{ content: string }>(
+      `SELECT content FROM assertions
+        WHERE id = $1 AND case_id = $2
+          AND kind = 'STATEMENT'
+          AND (valid_from IS NULL OR valid_from <= now())
+          AND (valid_until IS NULL OR valid_until > now())
+          AND NOT EXISTS (
+            SELECT 1 FROM assertions successor WHERE successor.supersedes_id = assertions.id
+          )`,
+      [input.ref.id, input.caseId]
+    );
+    return rows[0]?.content ?? null;
+  }
+  return null;
+}
