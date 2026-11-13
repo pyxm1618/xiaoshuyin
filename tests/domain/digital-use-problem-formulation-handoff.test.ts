@@ -9,6 +9,7 @@ const {
   resolveEvidenceRefs,
   resolveActiveCaseParticipantPersonIds,
   getComplianceProfileForGate,
+  prepareProblemFormulationInTransaction,
   presentProblemFormulationInTransaction,
 } = vi.hoisted(() => ({
   getSceneNodeState: vi.fn(),
@@ -18,6 +19,7 @@ const {
   resolveEvidenceRefs: vi.fn(),
   resolveActiveCaseParticipantPersonIds: vi.fn(),
   getComplianceProfileForGate: vi.fn(),
+  prepareProblemFormulationInTransaction: vi.fn(),
   presentProblemFormulationInTransaction: vi.fn(),
 }));
 
@@ -40,6 +42,7 @@ vi.mock('@xiaoshuyin/compliance', async (importOriginal) => {
 });
 
 vi.mock('../../apps/server/api/src/services/problem-formulations.js', () => ({
+  prepareProblemFormulationInTransaction,
   presentProblemFormulationInTransaction,
 }));
 
@@ -76,6 +79,9 @@ describe('T1216 Digital Use Problem Formulation handoff', () => {
     getCaseById.mockResolvedValue({ created_by_person_id: actorPersonId });
     resolveActiveCaseParticipantPersonIds.mockResolvedValue([]);
     getComplianceProfileForGate.mockResolvedValue(null);
+    prepareProblemFormulationInTransaction.mockResolvedValue({
+      mandatoryDependencyRefs: [],
+    });
     resolveEvidenceRefs.mockImplementation(async (_tx, _caseId, refs) => ({
       missing: [],
       members: new Map(refs.map((ref: { type: string; id: string }) => [
@@ -113,8 +119,12 @@ describe('T1216 Digital Use Problem Formulation handoff', () => {
     ]);
 
     const result = await buildDigitalUseProblemFormulationCandidate({} as never, {
+      actor: {
+        accountId: '00000000-0000-7000-8000-000000000001',
+        personId: actorPersonId,
+      },
+      familyId: '00000000-0000-7000-8000-000000000003',
       caseId,
-      actorPersonId,
     });
 
     expect(result.ok).toBe(true);
@@ -137,6 +147,14 @@ describe('T1216 Digital Use Problem Formulation handoff', () => {
       key: 'DIGITAL_USE',
       version: 'v1',
     });
+    expect(prepareProblemFormulationInTransaction).toHaveBeenCalledTimes(1);
+    expect(prepareProblemFormulationInTransaction.mock.calls[0]![1]).toMatchObject({
+      familyId: '00000000-0000-7000-8000-000000000003',
+      caseId,
+      content: {
+        dependencyRefs: [],
+      },
+    });
   });
 
   it('fails closed on contradictory current Evidence instead of choosing one side', async () => {
@@ -150,11 +168,54 @@ describe('T1216 Digital Use Problem Formulation handoff', () => {
     ]);
 
     await expect(buildDigitalUseProblemFormulationCandidate({} as never, {
+      actor: {
+        accountId: '00000000-0000-7000-8000-000000000001',
+        personId: actorPersonId,
+      },
+      familyId: '00000000-0000-7000-8000-000000000003',
       caseId,
-      actorPersonId,
     })).resolves.toEqual({
       ok: false,
       reasonCode: 'PROBLEM_FORMULATION_EVIDENCE_CONFLICT',
+    });
+  });
+
+  it('uses the Slice 8 owner-computed mandatory dependency set without recomputing it', async () => {
+    listCurrentSceneEvidenceStatements.mockResolvedValue([
+      row('00000000-0000-7000-8000-000000000025', 'a1001.impact.sleep', {
+        state: 'KNOWN', impacted: true,
+      }),
+    ]);
+    prepareProblemFormulationInTransaction.mockResolvedValueOnce({
+      mandatoryDependencyRefs: [
+        {
+          type: 'CONSENT',
+          id: '00000000-0000-7000-8000-000000000026',
+          version: 3,
+        },
+      ],
+    });
+
+    const result = await buildDigitalUseProblemFormulationCandidate({} as never, {
+      actor: {
+        accountId: '00000000-0000-7000-8000-000000000001',
+        personId: actorPersonId,
+      },
+      familyId: '00000000-0000-7000-8000-000000000003',
+      caseId,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.content.dependencyRefs).toContainEqual({
+      type: 'CONSENT',
+      id: '00000000-0000-7000-8000-000000000026',
+      version: 3,
+    });
+    expect(result.content.dependencyRefs).toContainEqual({
+      type: 'PACKAGE',
+      key: 'DIGITAL_USE',
+      version: 'v1',
     });
   });
 
