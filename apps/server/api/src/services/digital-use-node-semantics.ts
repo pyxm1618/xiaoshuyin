@@ -1002,3 +1002,36 @@ export async function applyDigitalUseNodeSemantics(
       semanticError('SCENE_RESPONSE_INVALID');
   }
 }
+
+
+/**
+ * Read-only lock-order preview for T1216.
+ *
+ * This does NOT decide topology and never writes. It only identifies the exact
+ * responses whose final authoritative route may require Slice 8 to acquire its
+ * own Family -> Case lock before the Scene shell does. The real semantic
+ * handler + Slice 11 router are still executed afterwards and must agree.
+ */
+export async function shouldPrepareProblemFormulationHandoff(
+  context: Omit<DigitalUseNodeSemanticsContext, 'currentInputRefs' | 'requestEvidence'>
+): Promise<boolean> {
+  if (context.nodeCode === 'A2001') {
+    const parsed = A2001ChoiceResponse.safeParse(context.response);
+    return parsed.success && parsed.data.choice === 'CONTINUE_DIGITAL_USE';
+  }
+  if (context.nodeCode === 'A2002') {
+    const parsed = A2002ChoiceResponse.safeParse(context.response);
+    return parsed.success && parsed.data.choice === 'CONTINUE_DIGITAL_USE';
+  }
+  if (context.nodeCode !== '01003') return false;
+
+  const parsed = Response01003.safeParse(context.response);
+  if (!parsed.success || parsed.data.state !== 'KNOWN') return false;
+
+  const evidence = await loadIntegratedTriageEvidence(context.tx, context.caseId);
+  const result = evaluateIntegratedTriage({
+    ...evidence,
+    family01003: { kind: 'VALUE', value: parsed.data.selection },
+  });
+  return result.outcome === 'A2003';
+}
