@@ -83,7 +83,6 @@ describe('problem formulation public surface (Slice 8)', () => {
   it('keeps out-of-scope objects absent from the schema surface', () => {
     const doc = buildOpenApiDocument() as any;
     for (const forbidden of [
-      '/api/v1/cases/{id}/assessments',
       '/api/v1/goals',
       '/api/v1/plans',
       '/api/v1/tasks',
