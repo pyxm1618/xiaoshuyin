@@ -831,7 +831,7 @@ export function buildOpenApiDocument() {
             },
             response: {
               type: 'object',
-              additionalProperties: true,
+              additionalProperties: {},
             },
           },
           required: ['expectedCaseVersion', 'expectedNodeRevision', 'response'],
