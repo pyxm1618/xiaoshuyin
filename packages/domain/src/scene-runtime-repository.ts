@@ -13,6 +13,7 @@ export type StoredEvidenceRef =
   | { type: 'DIALOGUE_MESSAGE' | 'ASSERTION' | 'OBSERVATION'; id: string };
 export type StoredSceneRef =
   | StoredEvidenceRef
+  | { type: 'CONSENT'; id: string }
   | { type: 'SCENE_ARTIFACT'; id: string }
   | { type: 'RECORD_MARKER'; markerCode: 'A200401'; evidenceRefs: StoredEvidenceRef[] };
 
@@ -389,6 +390,7 @@ async function resolveOneRef(
     ref.type === 'DIALOGUE_MESSAGE' ? 'dialogue_messages'
       : ref.type === 'ASSERTION' ? 'assertions'
       : ref.type === 'OBSERVATION' ? 'observations'
+      : ref.type === 'CONSENT' ? 'consent_records'
       : 'scene_artifacts';
 
   const { rows } = await tx.query<{ ok: boolean }>(
