@@ -509,11 +509,15 @@ async function assertUnionConstraints(
     'CASE_SWITCH_PRIMARY',
     'PROBLEM_FORMULATION_PRESENT',
     ...SLICE9_COMMANDS,
-    ...(includeSlice12
-      ? ['DIGITAL_USE_ASSESSMENT_RESUME', 'DIGITAL_USE_NODE_RESPONSE']
-      : []),
   ]) {
     expect(keyRepresentation, `key representation must keep ${literal}`).toContain(`'${literal}'`);
+  }
+  if (includeSlice12) {
+    // Slice 12 reuses the existing text-key runIdempotentCommandInTransaction
+    // owner path. Its commands belong to the command vocabulary but must not
+    // be misclassified into the bytea-only switch/Safety branch.
+    expect(keyRepresentation).not.toContain("'DIGITAL_USE_ASSESSMENT_RESUME'");
+    expect(keyRepresentation).not.toContain("'DIGITAL_USE_NODE_RESPONSE'");
   }
   expect(keyRepresentation).toContain('idempotency_key_bytes IS NOT NULL');
 }
