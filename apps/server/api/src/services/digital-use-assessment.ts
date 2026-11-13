@@ -16,6 +16,7 @@ import {
   assertOrdinaryProgressionAllowedRaw,
   caseIdempotencyKeyBytes,
   getCaseById,
+  getScenePackageBinding,
   getReservedIdempotency,
   hashPayload,
   isLegacyTextLookupSafe,
@@ -266,7 +267,7 @@ export async function startOrResumeDigitalUseAssessment(
         throw sceneError('CASE_PHASE_CONFLICT');
       }
 
-      const binding = await getReservedPackage(tx, input.caseId);
+      const binding = await getScenePackageBinding(tx, input.caseId);
       if (binding === null) {
         // A legal ASSESSMENT from another owner path may not fabricate Scene
         // history. It may initialize the approved A1001 projection only when no
@@ -303,14 +304,4 @@ export async function startOrResumeDigitalUseAssessment(
       return outcome.body as DigitalUseSceneResponseType;
     }
   );
-}
-
-async function getReservedPackage(tx: pg.PoolClient, caseId: string): Promise<string | null> {
-  const { rows } = await tx.query<{ scene_package_version: string }>(
-    `SELECT scene_package_version
-       FROM scene_node_states
-      WHERE case_id = $1 AND node_code = 'A1001'`,
-    [caseId]
-  );
-  return rows[0]?.scene_package_version ?? null;
 }
