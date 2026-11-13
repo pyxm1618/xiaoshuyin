@@ -28,11 +28,20 @@ function sectionTitles(text, level = 2) {
 function hasSection(text, acceptedTitles, level = 2) {
   const titles = sectionTitles(text, level);
   return acceptedTitles.some((title) =>
-    titles.some((actual) =>
-      actual === title ||
-      actual.startsWith(`${title} `) ||
-      actual.startsWith(`${title}:`)
-    )
+    titles.some((actual) => {
+      if (actual === title) return true;
+      if (!actual.startsWith(title)) return false;
+      // Reviewed legacy/numbered artifacts may annotate an otherwise exact
+      // section title with explanatory suffixes. Require a real boundary so
+      // lookalikes such as "ScopeGuard" never satisfy the contract.
+      const boundary = actual.slice(title.length, title.length + 1);
+      return boundary === ' ' ||
+        boundary === ':' ||
+        boundary === '(' ||
+        boundary === '（' ||
+        boundary === '—' ||
+        boundary === '-';
+    })
   );
 }
 
