@@ -65,6 +65,20 @@ const ERROR_MAP: Record<string, number> = {
   INVITATION_NOT_AVAILABLE: 404,
   PARTICIPATION_NOT_FOUND: 404,
   PARTICIPATION_STATE_CONFLICT: 409,
+  // Slice 12 Digital Use Assessment Runtime.
+  SCENE_NODE_NOT_FOUND: 404,
+  SCENE_NODE_UNREACHABLE: 409,
+  SCENE_PACKAGE_MISMATCH: 409,
+  STALE_SCENE_PACKAGE: 409,
+  STALE_NODE_REVISION: 409,
+  SCENE_RESPONSE_INVALID: 422,
+  INTEGRATED_TRIAGE_INSUFFICIENT: 409,
+  INTEGRATED_TRIAGE_BLOCKED: 409,
+  SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED: 409,
+  SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED: 409,
+  APPROVED_INSTRUMENT_UNAVAILABLE: 409,
+  DOWNSTREAM_RUNTIME_UNAVAILABLE: 409,
+  COMPLIANCE_BLOCKED: 409,
   // Slice 006 identity binding.
   WECHAT_AUTH_FAILED: 401,
   BINDING_CONTEXT_INVALID: 401,
@@ -133,6 +147,8 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
     '/api/v1/participation-invites/:token/accept',
     '/api/v1/participations/:id/decline',
     '/api/v1/participations/:id/withdraw',
+    '/api/v1/cases/:id/assessments',
+    '/api/v1/cases/:id/scene/nodes/:nodeCode/responses',
   ]);
   const isStrictCreateCommand =
     req.method === 'POST' && strictJsonCommands.has(routeUrl);

@@ -35,6 +35,11 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   // the modern bytea exact-key representation; no second idempotency system.
   'CASE_ENTER_SAFETY_HOLD',
   'CASE_RESOLVE_RISK',
+  // Slice 12 uses the existing idempotency store/orchestration. First legal
+  // Assessment entry remains CASE_START_ASSESSMENT-owned; only an already-
+  // ASSESSMENT resume and node response need new command identities.
+  'DIGITAL_USE_ASSESSMENT_RESUME',
+  'DIGITAL_USE_NODE_RESPONSE',
 ] as const;
 
 export type IdempotencyCommandType = (typeof IDEMPOTENCY_COMMAND_TYPES)[number];
