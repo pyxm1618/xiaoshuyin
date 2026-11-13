@@ -17,6 +17,7 @@ import {
 } from '@xiaoshuyin/domain';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
+  buildA200401RecordMarker,
   evaluateIntegratedTriage,
 } from '@xiaoshuyin/scenes/digital-use';
 import type {
@@ -147,6 +148,48 @@ const Response01004 = z.strictObject({
 
 const Response01000 = z.strictObject({
   category: z.enum(['EMOTION', 'PARENT_CHILD_INTERACTION']),
+});
+
+const TextAnswer = z.union([
+  z.strictObject({ state: z.literal('KNOWN'), text: z.string().min(1).max(2000) }),
+  z.strictObject({ state: UnresolvedState }),
+]);
+
+const A2003Response = z.strictObject({
+  expectedDuration: DurationAnswer,
+  reason: TextAnswer,
+  priorMethods: TextAnswer,
+  observedEffect: TextAnswer,
+  difficulties: TextAnswer,
+});
+
+const A2004Response = z.strictObject({
+  decision: z.enum([
+    'YES',
+    'NO',
+    'ASKED_WHY',
+    'TRIED_BEFORE_NOT_WORKED',
+    'UNKNOWN',
+    'DECLINED',
+  ]),
+});
+
+const A2005Response = z.strictObject({
+  decision: z.enum([
+    'WILLING',
+    'UNWILLING',
+    'TRIED_BEFORE_NOT_WORKED',
+    'UNKNOWN',
+    'DECLINED',
+  ]),
+});
+
+const WillingnessResponse = z.strictObject({
+  decision: z.enum(['WILLING', 'UNWILLING', 'UNKNOWN', 'DECLINED']),
+});
+
+const AgreementResponse = z.strictObject({
+  decision: z.enum(['AGREE', 'DISAGREE', 'UNKNOWN', 'DECLINED']),
 });
 
 function statementPrefix(code: string): string {
@@ -441,6 +484,158 @@ async function handle01003(
 }
 
 
+
+function propagatedRefs(
+  context: DigitalUseNodeSemanticsContext,
+  added: readonly StoredSceneRef[]
+): StoredSceneRef[] {
+  const seen = new Set<string>();
+  const result: StoredSceneRef[] = [];
+  for (const ref of [...context.currentInputRefs, ...added]) {
+    const key =
+      ref.type === 'RECORD_MARKER'
+        ? `RECORD_MARKER:${ref.markerCode}:${ref.evidenceRefs.map((item) => item.id).join(',')}`
+        : `${ref.type}:${ref.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(ref);
+  }
+  return result;
+}
+
+async function handleA2003(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = A2003Response.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+
+  const evidenceRefs: StoredSceneRef[] = [
+    await recordAssessmentStatement(context, 'a2003.expected_duration', parsed.data.expectedDuration),
+    await recordAssessmentStatement(context, 'a2003.reason', parsed.data.reason),
+    await recordAssessmentStatement(context, 'a2003.prior_methods', parsed.data.priorMethods),
+    await recordAssessmentStatement(context, 'a2003.observed_effect', parsed.data.observedEffect),
+    await recordAssessmentStatement(context, 'a2003.difficulties', parsed.data.difficulties),
+  ];
+  const onlyEvidence = evidenceRefs.map((ref) => {
+    if (ref.type !== 'ASSERTION') semanticError('INTERNAL_ERROR');
+    return { type: 'ASSERTION' as const, id: ref.id };
+  });
+  const marker = buildA200401RecordMarker(onlyEvidence);
+  if (marker.type !== 'RECORD_MARKER') semanticError('INTERNAL_ERROR');
+  const markerRef: StoredSceneRef = marker;
+
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [...evidenceRefs, markerRef],
+    conditions: { PARENT_EXPECTATION_CAPTURED: true },
+    progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, [markerRef, ...evidenceRefs]),
+  };
+}
+
+async function handleA2004(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = A2004Response.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  const ref = await recordAssessmentStatement(context, 'a2004.collaborative_duration', parsed.data);
+  const yes = parsed.data.decision === 'YES';
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: {
+      COLLABORATIVE_DURATION_YES: yes,
+      COLLABORATIVE_DURATION_NO: !yes,
+    },
+    progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, [ref]),
+  };
+}
+
+async function handleA2005(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = A2005Response.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  const ref = await recordAssessmentStatement(context, 'a2005.solution_willingness', parsed.data);
+  const willing = parsed.data.decision === 'WILLING';
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: {
+      SOLUTION_APPROACH_WILLING: willing,
+      SOLUTION_APPROACH_UNWILLING: !willing,
+    },
+    progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, [ref]),
+  };
+}
+
+async function handleA2006(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = WillingnessResponse.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  const marker = context.currentInputRefs.find(
+    (ref) => ref.type === 'RECORD_MARKER' && ref.markerCode === 'A200401'
+  );
+  if (!marker) semanticError('SCENE_RESPONSE_INVALID');
+  const ref = await recordAssessmentStatement(context, 'a2006.motivation_reconsider', parsed.data);
+  const willing = parsed.data.decision === 'WILLING';
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: {
+      MOTIVATION_RECONSIDER_WILLING: willing,
+      MOTIVATION_RECONSIDER_UNWILLING: !willing,
+    },
+    progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, [ref]),
+  };
+}
+
+async function handleA2008(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = AgreementResponse.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  const marker = context.currentInputRefs.find(
+    (ref) => ref.type === 'RECORD_MARKER' && ref.markerCode === 'A200401'
+  );
+  if (!marker) semanticError('SCENE_RESPONSE_INVALID');
+  const ref = await recordAssessmentStatement(context, 'a2008.family_alliance_agreement', parsed.data);
+  const agreed = parsed.data.decision === 'AGREE';
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: {
+      FAMILY_ALLIANCE_AGREED: agreed,
+      FAMILY_ALLIANCE_DECLINED: !agreed,
+    },
+    progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, [ref]),
+  };
+}
+
+async function handleA2009(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = AgreementResponse.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  const ref = await recordAssessmentStatement(context, 'a2009.relationship_assessment', parsed.data);
+  const agreed = parsed.data.decision === 'AGREE';
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: {
+      RELATIONSHIP_ASSESSMENT_AGREED: agreed,
+      RELATIONSHIP_ASSESSMENT_DECLINED: !agreed,
+    },
+    progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, [ref]),
+  };
+}
+
 function confirmationReceiptHash(decision: 'GRANTED' | 'DECLINED'): string {
   return createHash('sha256')
     .update(
@@ -575,6 +770,18 @@ export async function applyDigitalUseNodeSemantics(
       return handle01004(context);
     case '01000':
       return handle01000(context);
+    case 'A2003':
+      return handleA2003(context);
+    case 'A2004':
+      return handleA2004(context);
+    case 'A2005':
+      return handleA2005(context);
+    case 'A2006':
+      return handleA2006(context);
+    case 'A2008':
+      return handleA2008(context);
+    case 'A2009':
+      return handleA2009(context);
     default:
       semanticError('SCENE_RESPONSE_INVALID');
   }
