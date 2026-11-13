@@ -71,6 +71,11 @@ export interface CompleteDigitalUseNodeInput extends CompleteDigitalUseNodeReque
   readonly caseId: string;
   readonly nodeCode: string;
   readonly idempotencyKey: string;
+  readonly requestEvidence?: {
+    readonly clientIp: string | null;
+    readonly userAgent: string | null;
+    readonly pepper: string;
+  };
 }
 
 export function assertNodeCasePreconditions(
@@ -211,6 +216,10 @@ export async function completeDigitalUseNodeResponse(
               caseId: input.caseId,
               nodeCode: node.nodeCode,
               response: input.response,
+              currentInputRefs: current.input_refs,
+              ...(input.requestEvidence === undefined
+                ? {}
+                : { requestEvidence: input.requestEvidence }),
             });
           } catch (error) {
             rethrowKnownBusinessError(error);
