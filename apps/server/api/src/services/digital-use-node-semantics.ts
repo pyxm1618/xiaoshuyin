@@ -13,10 +13,10 @@ import {
   recordStatement,
   type StoredSceneRef,
 } from '@xiaoshuyin/domain';
+import { evaluateIntegratedTriage } from '@xiaoshuyin/scenes/digital-use';
 import type {
   DigitalUseConditionState,
   DigitalUseEvidenceBasisCategory,
-  evaluateIntegratedTriage,
 } from '@xiaoshuyin/scenes/digital-use';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 
