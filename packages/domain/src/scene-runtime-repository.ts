@@ -366,3 +366,76 @@ export async function validateSceneRefs(
   }
   return true;
 }
+
+
+export async function insertDigitalUseNodeCompletedEvent(
+  tx: Tx,
+  input: {
+    familyId: string;
+    caseId: string;
+    actorAccountId: string;
+    scenePackageVersion: string;
+    nodeCode: string;
+    nodeRevision: number;
+    routeReasonCode: string | null;
+    inputRefs: readonly StoredSceneRef[];
+    outputRefs: readonly StoredSceneRef[];
+    nextNodeCode: string | null;
+    terminalCode: string | null;
+  }
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO case_events
+       (family_id, case_id, actor_account_id, event_type, metadata)
+     VALUES ($1,$2,$3,'CASE_DIGITAL_USE_NODE_COMPLETED',$4::jsonb)`,
+    [
+      input.familyId,
+      input.caseId,
+      input.actorAccountId,
+      JSON.stringify({
+        scenePackageVersion: input.scenePackageVersion,
+        nodeCode: input.nodeCode,
+        nodeRevision: input.nodeRevision,
+        routeReasonCode: input.routeReasonCode,
+        inputRefs: input.inputRefs,
+        outputRefs: input.outputRefs,
+        nextNodeCode: input.nextNodeCode,
+        terminalCode: input.terminalCode,
+      }),
+    ]
+  );
+}
+
+export async function insertDigitalUseNodeCompletedAudit(
+  tx: Tx,
+  input: {
+    familyId: string;
+    caseId: string;
+    actorAccountId: string;
+    scenePackageVersion: string;
+    nodeCode: string;
+    nodeRevision: number;
+    routeReasonCode: string | null;
+    nextNodeCode: string | null;
+    terminalCode: string | null;
+  }
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO business_audit_events
+       (family_id, actor_account_id, event_type, resource_type, resource_id, metadata)
+     VALUES ($1,$2,'DIGITAL_USE_NODE_COMPLETED','CASE',$3,$4::jsonb)`,
+    [
+      input.familyId,
+      input.actorAccountId,
+      input.caseId,
+      JSON.stringify({
+        scenePackageVersion: input.scenePackageVersion,
+        nodeCode: input.nodeCode,
+        nodeRevision: input.nodeRevision,
+        routeReasonCode: input.routeReasonCode,
+        nextNodeCode: input.nextNodeCode,
+        terminalCode: input.terminalCode,
+      }),
+    ]
+  );
+}
