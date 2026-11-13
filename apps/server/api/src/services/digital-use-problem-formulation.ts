@@ -66,7 +66,7 @@ function containsUnresolved(value: unknown): boolean {
 }
 
 function currentEvidenceIsFormulatable(
-  rows: readonly Awaited<ReturnType<typeof listCurrentSceneEvidenceStatements>>
+  rows: Awaited<ReturnType<typeof listCurrentSceneEvidenceStatements>>
 ): Exclude<ProblemFormulationCandidateDecision, { ok: true }> | null {
   const byCode = new Map<string, Set<string>>();
 
