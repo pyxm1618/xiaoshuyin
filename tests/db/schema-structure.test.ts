@@ -45,7 +45,7 @@ describe('Schema Structure', () => {
       'consent_decision', 'consent_purpose', 'consent_request_status',
       'evidence_confirmation_status', 'evidence_time_state',
       'observation_value_state', 'observation_value_type', 'problem_formulation_status',
-      'profile_attribute', 'profile_value_status', 'provenance_source', 'scene_node_status', 'scene_node_status',
+      'profile_attribute', 'profile_value_status', 'provenance_source', 'scene_node_status',
     ]);
     expect(enumMap['case_status']).toEqual([
       'OPEN', 'WAITING', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
