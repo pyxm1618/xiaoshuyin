@@ -9,22 +9,20 @@ import type pg from 'pg';
 import {
   canonicalDependencies,
   canonicalEvidenceRefs,
-  deriveMandatoryDependencyRefs,
-  deriveProcessingPersonIds,
-  getCaseById,
   getSceneEvidenceText,
   getSceneNodeState,
   hashPayload,
   listCurrentSceneEvidenceStatements,
-  resolveActiveCaseParticipantPersonIds,
   resolveEvidenceRefs,
   type EvidenceRef,
   type ProblemFormulationContent,
   type StoredEvidenceRef,
 } from '@xiaoshuyin/domain';
-import { getComplianceProfileForGate } from '@xiaoshuyin/compliance';
 import { DIGITAL_USE_PACKAGE_VERSION } from '@xiaoshuyin/scenes/digital-use';
-import { presentProblemFormulationInTransaction } from './problem-formulations.js';
+import {
+  prepareProblemFormulationInTransaction,
+  presentProblemFormulationInTransaction,
+} from './problem-formulations.js';
 
 export type ProblemFormulationCandidateDecision =
   | { readonly ok: true; readonly content: ProblemFormulationContent }
@@ -126,53 +124,17 @@ function analyzeCurrentEvidence(
   return { ok: true, unknowns };
 }
 
-async function mandatoryUnder14Dependencies(
-  tx: pg.PoolClient,
-  input: {
-    actorPersonId: string;
-    caseId: string;
-    caseCreatorPersonId: string;
-    evidenceRefs: readonly EvidenceRef[];
-  }
-): Promise<{ id: string; version: number }[]> {
-  const resolution = await resolveEvidenceRefs(tx, input.caseId, input.evidenceRefs);
-  if (resolution.missing.length > 0) return [];
-
-  const authoritativeMembers = input.evidenceRefs
-    .map((ref) => resolution.members.get(`${ref.type}:${ref.id.toLowerCase()}`))
-    .filter((member): member is NonNullable<typeof member> => member !== undefined);
-
-  const personIds = deriveProcessingPersonIds({
-    actorPersonId: input.actorPersonId,
-    caseCreatorPersonId: input.caseCreatorPersonId,
-    activeParticipantPersonIds: await resolveActiveCaseParticipantPersonIds(tx, input.caseId),
-    authoritativeMembers,
-  });
-
-  const result: { id: string; version: number }[] = [];
-  for (const personId of personIds) {
-    const profile = await getComplianceProfileForGate(tx, personId);
-    if (
-      profile?.age_band === 'UNDER_14' &&
-      typeof profile.guardian_consent_record_id === 'string' &&
-      typeof profile.guardian_consent_version === 'number'
-    ) {
-      result.push({
-        id: profile.guardian_consent_record_id,
-        version: profile.guardian_consent_version,
-      });
-    }
-  }
-  return result;
-}
-
 /**
  * Build only when the current Assessment Evidence can be preserved without
  * inventing an owner-native Unknown/Conflict representation.
  */
 export async function buildDigitalUseProblemFormulationCandidate(
   tx: pg.PoolClient,
-  input: { caseId: string; actorPersonId: string }
+  input: {
+    actor: { accountId: string; personId: string };
+    familyId: string;
+    caseId: string;
+  }
 ): Promise<ProblemFormulationCandidateDecision> {
   const a1001 = await getSceneNodeState(tx, input.caseId, 'A1001');
   const carrier = a1001?.input_refs.find(
@@ -209,11 +171,6 @@ export async function buildDigitalUseProblemFormulationCandidate(
     })),
   ]);
 
-  const caseRow = await getCaseById(tx, input.caseId);
-  if (!caseRow) {
-    return { ok: false, reasonCode: 'PROBLEM_FORMULATION_EVIDENCE_INVALID' };
-  }
-
   const resolution = await resolveEvidenceRefs(tx, input.caseId, refs);
   if (
     resolution.missing.length > 0 ||
@@ -225,33 +182,38 @@ export async function buildDigitalUseProblemFormulationCandidate(
     return { ok: false, reasonCode: 'PROBLEM_FORMULATION_EVIDENCE_INVALID' };
   }
 
-  const under14Consents = await mandatoryUnder14Dependencies(tx, {
-    actorPersonId: input.actorPersonId,
-    caseId: input.caseId,
-    caseCreatorPersonId: caseRow.created_by_person_id,
+  // Build the content shell first. Mandatory dependencies are computed only
+  // by the Slice 8 owner preparation seam below; Slice 12 does not duplicate
+  // processing-person, minor-consent or Compliance dependency logic.
+  const content: ProblemFormulationContent = {
+    primaryProblem: {
+      text: carrierText,
+      evidenceRefs: [evidenceRef(carrier)],
+    },
+    keyFactors: [],
     evidenceRefs: refs,
+    unknowns: analysis.unknowns,
+    conflicts: [],
+    sceneFit: 'DIGITAL_USE',
+    alternativeExplanations: [],
+    reassessmentConditions: [],
+    exitConditions: [],
+    dependencyRefs: [],
+  };
+
+  const prepared = await prepareProblemFormulationInTransaction(tx, {
+    actor: input.actor,
+    familyId: input.familyId,
+    caseId: input.caseId,
+    content,
   });
 
   return {
     ok: true,
     content: {
-      primaryProblem: {
-        text: carrierText,
-        evidenceRefs: [evidenceRef(carrier)],
-      },
-      keyFactors: [],
-      evidenceRefs: refs,
-      unknowns: analysis.unknowns,
-      conflicts: [],
-      sceneFit: 'DIGITAL_USE',
-      alternativeExplanations: [],
-      reassessmentConditions: [],
-      exitConditions: [],
+      ...content,
       dependencyRefs: canonicalDependencies([
-        ...deriveMandatoryDependencyRefs({
-          authoritativeRefs: refs,
-          under14Consents,
-        }),
+        ...prepared.mandatoryDependencyRefs,
         {
           type: 'PACKAGE',
           key: 'DIGITAL_USE',
@@ -286,8 +248,9 @@ export async function presentDigitalUseProblemFormulationInTransaction(
   | { readonly kind: 'PRESENTED'; readonly caseVersion: number }
 > {
   const candidate = await buildDigitalUseProblemFormulationCandidate(tx, {
+    actor: input.actor,
+    familyId: input.familyId,
     caseId: input.caseId,
-    actorPersonId: input.actor.personId,
   });
   if (!candidate.ok) {
     return { kind: 'UNAVAILABLE', reasonCode: candidate.reasonCode };
