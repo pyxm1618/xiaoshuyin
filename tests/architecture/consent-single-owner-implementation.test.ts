@@ -236,7 +236,7 @@ describe('Consent owner — single implementation and scope guards', () => {
       'packages/compliance/src/supplemental-assessment-disclosure.ts',
       'packages/compliance/src/supplemental-consent.ts',
       'packages/contracts/src/schemas.ts',
-    ]);
+    ].sort());
   });
 
   it('keeps guardian-only public consent projections guardian-scoped', () => {
