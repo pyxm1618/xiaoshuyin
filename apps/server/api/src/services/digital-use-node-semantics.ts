@@ -18,6 +18,7 @@ import {
 import {
   DIGITAL_USE_PACKAGE_VERSION,
   buildA200401RecordMarker,
+  buildTimelineArtifactData,
   evaluateIntegratedTriage,
 } from '@xiaoshuyin/scenes/digital-use';
 import type {
@@ -206,6 +207,17 @@ const ExplicitExitResponse = z.strictObject({
 
 const ReturnMainResponse = z.strictObject({
   action: z.literal('RETURN_MAIN'),
+});
+
+const TimelineScalar = z.union([
+  z.string().min(1).max(500),
+  z.number().finite(),
+  z.boolean(),
+]);
+
+const A2007Response = z.strictObject({
+  timeline: z.record(z.string().min(1).max(64), TimelineScalar)
+    .refine((value) => Object.keys(value).length > 0),
 });
 
 function statementPrefix(code: string): string {
@@ -678,6 +690,36 @@ async function handleA2006(
   };
 }
 
+
+async function handleA2007(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = A2007Response.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+
+  const data = buildTimelineArtifactData(parsed.data.timeline);
+  const artifact = await insertSceneArtifact(context.tx, {
+    familyId: context.familyId,
+    caseId: context.caseId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    artifactType: 'TIMELINE',
+    schemaVersion: 'v1',
+    sourceNodeCode: 'A2007',
+    data: data as Record<string, unknown>,
+    ownerPersonId: context.actor.personId,
+    sourceRefs: context.currentInputRefs,
+    revision: 1,
+  });
+  const ref: StoredSceneRef = { type: 'SCENE_ARTIFACT', id: artifact.id };
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: { TIMELINE_SET: true },
+    progression: 'ROUTE',
+    nextInputRefs: [ref],
+  };
+}
+
 async function handleA2008(
   context: DigitalUseNodeSemanticsContext
 ): Promise<DigitalUseNodeSemanticResult> {
@@ -872,6 +914,8 @@ export async function applyDigitalUseNodeSemantics(
       return handleA2005(context);
     case 'A2006':
       return handleA2006(context);
+    case 'A2007':
+      return handleA2007(context);
     case 'A2008':
       return handleA2008(context);
     case 'A2009':
