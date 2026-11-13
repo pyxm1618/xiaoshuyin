@@ -11,6 +11,7 @@ import {
   casCompleteSceneNodeState,
   casRecordSceneNodeProgress,
   ensureSceneNodeAvailable,
+  getCaseById,
   getSceneNodeState,
   getScenePackageBinding,
   hashPayload,
@@ -20,6 +21,7 @@ import {
   lockSceneCase,
   validateSceneRefs,
   type SceneCaseRow,
+  type SceneNodeStateRow,
   type StoredSceneRef,
 } from '@xiaoshuyin/domain';
 import {
@@ -43,7 +45,11 @@ import {
   currentSceneEnvelope,
   type DigitalUseActor,
 } from './digital-use-assessment.js';
-import { applyDigitalUseNodeSemantics } from './digital-use-node-semantics.js';
+import {
+  applyDigitalUseNodeSemantics,
+  shouldPrepareProblemFormulationHandoff,
+} from './digital-use-node-semantics.js';
+import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -121,6 +127,280 @@ function nextInputRefs(
   return semantic.nextInputRefs ?? semantic.outputRefs;
 }
 
+
+async function readUnlockedHandoffPreconditions(
+  tx: pg.PoolClient,
+  input: CompleteDigitalUseNodeInput,
+  node: DigitalUseNodeManifestEntry
+): Promise<SceneNodeStateRow> {
+  const caseRow = await getCaseById(tx, input.caseId);
+  if (!caseRow) throw nodeError('CASE_NOT_FOUND', 'Case not found');
+  assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
+  await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+  await assertAssessmentCompliance(tx, input.actor.personId);
+
+  const binding = await getScenePackageBinding(tx, input.caseId);
+  if (binding === null) throw nodeError('SCENE_NODE_UNREACHABLE');
+  if (binding !== DIGITAL_USE_PACKAGE_VERSION) throw nodeError('STALE_SCENE_PACKAGE');
+
+  const current = await getSceneNodeState(tx, input.caseId, node.nodeCode);
+  if (!current) throw nodeError('SCENE_NODE_UNREACHABLE');
+  if (current.scene_package_version !== DIGITAL_USE_PACKAGE_VERSION) {
+    throw nodeError('STALE_SCENE_PACKAGE');
+  }
+  if (current.revision !== input.expectedNodeRevision) {
+    throw nodeError('STALE_NODE_REVISION');
+  }
+  if (current.status !== 'AVAILABLE' && current.status !== 'IN_PROGRESS') {
+    throw nodeError('SCENE_NODE_UNREACHABLE');
+  }
+  return current;
+}
+
+async function applySemanticForCurrentNode(
+  tx: pg.PoolClient,
+  input: CompleteDigitalUseNodeInput,
+  node: DigitalUseNodeManifestEntry,
+  current: SceneNodeStateRow
+) {
+  try {
+    return await applyDigitalUseNodeSemantics({
+      tx,
+      actor: input.actor,
+      familyId: input.familyId,
+      caseId: input.caseId,
+      nodeCode: node.nodeCode,
+      response: input.response,
+      currentInputRefs: current.input_refs,
+      ...(input.requestEvidence === undefined
+        ? {}
+        : { requestEvidence: input.requestEvidence }),
+    });
+  } catch (error) {
+    rethrowKnownBusinessError(error);
+  }
+}
+
+async function assertSemanticRefs(
+  tx: pg.PoolClient,
+  input: CompleteDigitalUseNodeInput,
+  semantic: Awaited<ReturnType<typeof applyDigitalUseNodeSemantics>>
+): Promise<void> {
+  if (
+    !(await validateSceneRefs(tx, {
+      familyId: input.familyId,
+      caseId: input.caseId,
+      refs: [...semantic.inputRefs, ...semantic.outputRefs],
+    }))
+  ) {
+    throw nodeError('SCENE_RESPONSE_INVALID', 'Scene refs are outside the authorized Case');
+  }
+}
+
+function routeSemantic(
+  node: DigitalUseNodeManifestEntry,
+  semantic: Awaited<ReturnType<typeof applyDigitalUseNodeSemantics>>
+): ResolvedRoute {
+  return requireResolvedRoute(
+    routeDigitalUseTopology({
+      sceneCode: DIGITAL_USE_SCENE_CODE,
+      packageVersion: DIGITAL_USE_PACKAGE_VERSION,
+      currentNodeCode: node.nodeCode,
+      conditions: semantic.conditions,
+      ...(semantic.evidenceBasis === undefined
+        ? {}
+        : { evidenceBasis: semantic.evidenceBasis }),
+    })
+  );
+}
+
+async function recordBlockedHandoffCandidate(
+  tx: pg.PoolClient,
+  input: CompleteDigitalUseNodeInput,
+  node: DigitalUseNodeManifestEntry,
+  semantic: Awaited<ReturnType<typeof applyDigitalUseNodeSemantics>>,
+  reasonCode: string
+): Promise<DigitalUseSceneResponseType> {
+  // No Slice 8 owner call occurred. Acquire the canonical Family -> Case ->
+  // Scene locks now, then revalidate every mutable precondition before
+  // materializing the fail-closed Scene result.
+  if (!(await lockFamilyForPrimaryDecision(tx, input.familyId))) {
+    throw nodeError('CASE_NOT_FOUND', 'Case not found');
+  }
+  const caseRow = await lockSceneCase(tx, input.caseId);
+  if (!caseRow) throw nodeError('CASE_NOT_FOUND', 'Case not found');
+  assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
+  await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+  await assertAssessmentCompliance(tx, input.actor.personId);
+
+  const current = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
+  if (
+    !current ||
+    current.scene_package_version !== DIGITAL_USE_PACKAGE_VERSION ||
+    current.revision !== input.expectedNodeRevision ||
+    (current.status !== 'AVAILABLE' && current.status !== 'IN_PROGRESS')
+  ) {
+    throw nodeError('STALE_NODE_REVISION');
+  }
+
+  const blocked = await casCompleteSceneNodeState(tx, {
+    caseId: input.caseId,
+    nodeCode: node.nodeCode,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    expectedRevision: input.expectedNodeRevision,
+    status: 'BLOCKED',
+    branchReasonCodes: [reasonCode],
+    inputRefs: semantic.inputRefs,
+    outputRefs: semantic.outputRefs,
+  });
+  if (!blocked) throw nodeError('STALE_NODE_REVISION');
+
+  await insertDigitalUseNodeCompletedEvent(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: node.nodeCode,
+    nodeRevision: blocked.revision,
+    routeReasonCode: reasonCode,
+    inputRefs: semantic.inputRefs,
+    outputRefs: semantic.outputRefs,
+    nextNodeCode: null,
+    terminalCode: null,
+  });
+  await insertDigitalUseNodeCompletedAudit(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: node.nodeCode,
+    nodeRevision: blocked.revision,
+    routeReasonCode: reasonCode,
+    nextNodeCode: null,
+    terminalCode: null,
+  });
+  return currentSceneEnvelope(tx, input.caseId);
+}
+
+async function executeProblemFormulationHandoffPath(
+  tx: pg.PoolClient,
+  input: CompleteDigitalUseNodeInput,
+  node: DigitalUseNodeManifestEntry
+): Promise<DigitalUseSceneResponseType> {
+  // IMPORTANT: no Family/Case row lock has been acquired by Slice 12 yet.
+  // This is the only path that may invoke the Slice 8 caller-owned seam.
+  const current = await readUnlockedHandoffPreconditions(tx, input, node);
+  const semantic = await applySemanticForCurrentNode(tx, input, node, current);
+  await assertSemanticRefs(tx, input, semantic);
+
+  if (semantic.progression !== undefined && semantic.progression !== 'ROUTE') {
+    // The read-only preview was invalidated by current Evidence before the
+    // actual semantics ran. Roll back this attempt instead of choosing a stale
+    // handoff outcome.
+    throw nodeError('STALE_NODE_REVISION');
+  }
+
+  const route = routeSemantic(node, semantic);
+  if (route.kind !== 'NODE' || route.nextNodeCode !== 'A2003') {
+    throw nodeError('SCENE_ROUTE_UNRESOLVED', 'Handoff preview no longer matches route');
+  }
+
+  const handoff = await presentDigitalUseProblemFormulationInTransaction(tx, {
+    actor: input.actor,
+    familyId: input.familyId,
+    caseId: input.caseId,
+    nodeCode: node.nodeCode,
+    expectedCaseVersion: input.expectedCaseVersion,
+    outerIdempotencyKey: input.idempotencyKey,
+  });
+
+  if (handoff.kind === 'UNAVAILABLE') {
+    return recordBlockedHandoffCandidate(
+      tx,
+      input,
+      node,
+      semantic,
+      handoff.reasonCode
+    );
+  }
+
+  // Slice 8 has now acquired Family -> Case itself and moved only to
+  // PROBLEM_FORMULATION. Re-read the Scene node under its lock; if a concurrent
+  // writer changed revision before the owner lock converged, the whole outer
+  // transaction (including formulation/event/idempotency) rolls back.
+  const postCase = await lockSceneCase(tx, input.caseId);
+  if (
+    !postCase ||
+    postCase.status !== 'OPEN' ||
+    !postCase.is_primary ||
+    postCase.phase !== 'PROBLEM_FORMULATION' ||
+    postCase.version !== handoff.caseVersion
+  ) {
+    throw nodeError('STALE_CASE_VERSION');
+  }
+
+  const binding = await getScenePackageBinding(tx, input.caseId);
+  if (binding !== DIGITAL_USE_PACKAGE_VERSION) throw nodeError('STALE_SCENE_PACKAGE');
+  const lockedNode = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
+  if (
+    !lockedNode ||
+    lockedNode.revision !== input.expectedNodeRevision ||
+    (lockedNode.status !== 'AVAILABLE' && lockedNode.status !== 'IN_PROGRESS')
+  ) {
+    throw nodeError('STALE_NODE_REVISION');
+  }
+
+  const completed = await casCompleteSceneNodeState(tx, {
+    caseId: input.caseId,
+    nodeCode: node.nodeCode,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    expectedRevision: input.expectedNodeRevision,
+    status: semantic.completionStatus ?? 'COMPLETED',
+    branchReasonCodes: [route.reasonCode],
+    inputRefs: semantic.inputRefs,
+    outputRefs: semantic.outputRefs,
+  });
+  if (!completed) throw nodeError('STALE_NODE_REVISION');
+
+  const next = resolveDigitalUseRuntimeNode('A2003');
+  await ensureSceneNodeAvailable(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: next.nodeCode,
+    sourceNodeCode: next.sourceNodeCode,
+    branchReasonCodes: [route.reasonCode],
+    inputRefs: nextInputRefs(semantic),
+  });
+
+  await insertDigitalUseNodeCompletedEvent(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: node.nodeCode,
+    nodeRevision: completed.revision,
+    routeReasonCode: route.reasonCode,
+    inputRefs: semantic.inputRefs,
+    outputRefs: semantic.outputRefs,
+    nextNodeCode: 'A2003',
+    terminalCode: null,
+  });
+  await insertDigitalUseNodeCompletedAudit(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: node.nodeCode,
+    nodeRevision: completed.revision,
+    routeReasonCode: route.reasonCode,
+    nextNodeCode: 'A2003',
+    terminalCode: null,
+  });
+
+  return currentSceneEnvelope(tx, input.caseId);
+}
+
 /**
  * Complete one currently reachable node.
  *
@@ -180,6 +460,21 @@ export async function completeDigitalUseNodeResponse(
           requestHash,
         },
         async () => {
+          const handoffCandidate = await shouldPrepareProblemFormulationHandoff({
+            tx,
+            actor: input.actor,
+            familyId: input.familyId,
+            caseId: input.caseId,
+            nodeCode: node.nodeCode,
+            response: input.response,
+          });
+          if (handoffCandidate) {
+            return {
+              status: 200,
+              body: await executeProblemFormulationHandoffPath(tx, input, node),
+            };
+          }
+
           // Canonical write lock order: Family -> Case -> Scene node.
           if (!(await lockFamilyForPrimaryDecision(tx, input.familyId))) {
             throw nodeError('CASE_NOT_FOUND', 'Case not found');
@@ -207,33 +502,8 @@ export async function completeDigitalUseNodeResponse(
             throw nodeError('SCENE_NODE_UNREACHABLE');
           }
 
-          let semantic: Awaited<ReturnType<typeof applyDigitalUseNodeSemantics>>;
-          try {
-            semantic = await applyDigitalUseNodeSemantics({
-              tx,
-              actor: input.actor,
-              familyId: input.familyId,
-              caseId: input.caseId,
-              nodeCode: node.nodeCode,
-              response: input.response,
-              currentInputRefs: current.input_refs,
-              ...(input.requestEvidence === undefined
-                ? {}
-                : { requestEvidence: input.requestEvidence }),
-            });
-          } catch (error) {
-            rethrowKnownBusinessError(error);
-          }
-
-          if (
-            !(await validateSceneRefs(tx, {
-              familyId: input.familyId,
-              caseId: input.caseId,
-              refs: [...semantic.inputRefs, ...semantic.outputRefs],
-            }))
-          ) {
-            throw nodeError('SCENE_RESPONSE_INVALID', 'Scene refs are outside the authorized Case');
-          }
+          const semantic = await applySemanticForCurrentNode(tx, input, node, current);
+          await assertSemanticRefs(tx, input, semantic);
 
           if (semantic.progression === 'HOLD') {
             const reasonCode = semantic.holdReasonCode ?? 'INTEGRATED_TRIAGE_INSUFFICIENT';
@@ -296,17 +566,7 @@ export async function completeDigitalUseNodeResponse(
             };
           }
 
-          const route = requireResolvedRoute(
-            routeDigitalUseTopology({
-              sceneCode: DIGITAL_USE_SCENE_CODE,
-              packageVersion: DIGITAL_USE_PACKAGE_VERSION,
-              currentNodeCode: node.nodeCode,
-              conditions: semantic.conditions,
-              ...(semantic.evidenceBasis === undefined
-                ? {}
-                : { evidenceBasis: semantic.evidenceBasis }),
-            })
-          );
+          const route = routeSemantic(node, semantic);
 
           const completed = await casCompleteSceneNodeState(tx, {
             caseId: input.caseId,
