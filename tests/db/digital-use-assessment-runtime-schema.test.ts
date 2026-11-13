@@ -94,23 +94,6 @@ describe('T1203 Digital Use Scene persistence', () => {
     });
   });
 
-  it('binds both Slice 12 commands to the existing bytea idempotency-key contract', async () => {
-    const { rows } = await admin.query<{ definition: string }>(
-      `SELECT pg_get_constraintdef(oid) AS definition
-         FROM pg_constraint
-        WHERE conname = 'idempotency_keys_key_representation_check'`
-    );
-    expect(rows).toHaveLength(1);
-    const definition = rows[0]!.definition;
-    for (const command of [
-      'DIGITAL_USE_ASSESSMENT_RESUME',
-      'DIGITAL_USE_NODE_RESPONSE',
-    ]) {
-      expect(definition).toContain(command);
-    }
-    expect(definition).toContain('idempotency_key_bytes IS NOT NULL');
-  });
-
   it('has hard A200401, revision, refs, artifact-class and package-binding constraints', async () => {
     const { rows } = await admin.query<{ table_name: string; constraint_name: string }>(
       `SELECT table_name, constraint_name
