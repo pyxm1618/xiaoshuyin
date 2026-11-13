@@ -49,13 +49,7 @@ paths:
       operationId: getDigitalUseSceneNode
       parameters:
         - $ref: '#/components/parameters/CaseId'
-        - name: nodeCode
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 64
+        - $ref: '#/components/parameters/NodeCode'
       responses:
         '200': { description: Authorized reachable node projection }
         '401': { description: Unauthenticated }
@@ -69,13 +63,7 @@ paths:
       operationId: completeDigitalUseSceneNode
       parameters:
         - $ref: '#/components/parameters/CaseId'
-        - name: nodeCode
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-            maxLength: 64
+        - $ref: '#/components/parameters/NodeCode'
         - $ref: '#/components/parameters/IdempotencyKeyHeader'
       requestBody:
         required: true
