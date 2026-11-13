@@ -339,12 +339,23 @@ describe('T1218 Digital Use runtime hardening', () => {
 
   it('fails closed on package drift and never silently rebinds Scene package truth', async () => {
     const f = await fixture('package');
-    await admin.query(
-      `UPDATE scene_node_states
-          SET scene_package_version='v999'
-        WHERE case_id=$1`,
-      [f.caseId]
-    );
+    const drift = await admin.connect();
+    try {
+      await drift.query('BEGIN');
+      await drift.query("SET LOCAL session_replication_role = 'replica'");
+      await drift.query(
+        `UPDATE scene_node_states
+            SET scene_package_version='v999'
+          WHERE case_id=$1`,
+        [f.caseId]
+      );
+      await drift.query('COMMIT');
+    } catch (error) {
+      await drift.query('ROLLBACK');
+      throw error;
+    } finally {
+      drift.release();
+    }
     const response = await respondA1001(
       f,
       `du-package-${crypto.randomUUID()}`
