@@ -63,6 +63,50 @@ const buildTasks = ({ req = "[REQ:U01]", verify = "[VERIFY:unit test]" } = {}) =
 - [ ] T001 do the thing ${req} ${verify}
 `;
 
+const STRUCTURED_SPEC_MD = `# Feature Specification: structured fixture
+
+## 1. Scope
+In scope: fixture.
+
+## 2. Upstream Traceability
+- U01
+
+## 3. Acceptance Scenarios
+1. Fixture passes.
+`;
+
+const STRUCTURED_PLAN_MD = `# Implementation Plan: structured fixture
+
+## 1. Authority Gate
+- PASS
+
+## 2. Frozen Requirement Traceability
+- U01
+
+## 3. Scope Contract
+- constrained
+
+## 4. Verification Strategy
+- unit test
+`;
+
+const STRUCTURED_TASKS_MD = `# Tasks: structured fixture
+
+## Frozen Spec Authority Map
+| Task | Authority |
+| --- | --- |
+| T1201 | U01 |
+
+## T1201 — Do the thing
+### Goal
+Implement fixture.
+### Verification
+- unit test
+
+## Acceptance Evidence Contract
+- scenario evidence
+`;
+
 function writeFile(root, rel, content) {
   const target = path.join(root, rel);
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -135,6 +179,16 @@ function cleanup(root) {
   writeFile(root, path.join("specs", "004-complete", "plan.md"), PLAN_MD);
   writeFile(root, path.join("specs", "004-complete", "tasks.md"), buildTasks());
   record("D spec+plan+tasks with REQ and VERIFY passes", 0, run(validator, root));
+  cleanup(root);
+}
+
+{
+  const root = makeProject();
+  featureDir(root, "004b-structured-complete");
+  writeFile(root, path.join("specs", "004b-structured-complete", "spec.md"), STRUCTURED_SPEC_MD);
+  writeFile(root, path.join("specs", "004b-structured-complete", "plan.md"), STRUCTURED_PLAN_MD);
+  writeFile(root, path.join("specs", "004b-structured-complete", "tasks.md"), STRUCTURED_TASKS_MD);
+  record("D2 numbered headings + structured tasks pass", 0, run(validator, root));
   cleanup(root);
 }
 
