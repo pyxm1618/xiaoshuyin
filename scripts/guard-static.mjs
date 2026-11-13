@@ -170,15 +170,16 @@ scanDir(ROOT, (file) => {
 });
 
 // ─── Rule 6: Scope guard ───
-// Forbidden tables that remain out of scope after Slice 4 Case Participant Core.
-// `case_participants` is now an explicitly owned Slice 4 table; the remaining
-// future-slice tables stay forbidden.
+// Forbidden tables that remain out of scope after Slice 12 Assessment Runtime.
+// `case_participants` (Slice 4) and `scene_node_states` / `scene_artifacts`
+// (Slice 12) are explicit reviewed owners. Parallel Assessment fact stores and
+// future-slice business tables remain forbidden.
 const FORBIDDEN_TABLE_PATTERNS = [
   'participation_invites',
   'evidence_items',
 
-  'scene_node_states',
-  'scene_artifacts',
+  'assessments',
+  'assessment_answers',
   'safety_states',
   'goals',
   'intervention_instances',
