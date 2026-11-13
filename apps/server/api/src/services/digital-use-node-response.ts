@@ -339,6 +339,12 @@ async function executeProblemFormulationHandoffPath(
     throw nodeError('STALE_CASE_VERSION');
   }
 
+  // Re-run independent mutable gates after the Slice 8 owner has converged its
+  // Family/Case lock. A Safety or Compliance change racing the unlocked preview
+  // must roll back formulation + Scene + Evidence as one transaction.
+  await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+  await assertAssessmentCompliance(tx, input.actor.personId);
+
   const binding = await getScenePackageBinding(tx, input.caseId);
   if (binding !== DIGITAL_USE_PACKAGE_VERSION) throw nodeError('STALE_SCENE_PACKAGE');
   const lockedNode = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
