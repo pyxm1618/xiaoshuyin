@@ -237,6 +237,7 @@ const SLICE10_NEW_OBJECTS = [
 
 /** Exact Slice 12 Scene persistence constraints created by migration 015. */
 const SLICE12_NEW_CONSTRAINTS = [
+  'scene_node_states_pkey',
   'scene_node_states_case_family_fk',
   'scene_node_states_case_node_key',
   'scene_node_states_id_case_family_key',
@@ -246,6 +247,7 @@ const SLICE12_NEW_CONSTRAINTS = [
   'scene_node_states_source_node_code_check',
   'scene_node_states_refs_shape_check',
   'scene_node_states_completion_shape_check',
+  'scene_artifacts_pkey',
   'scene_artifacts_case_family_fk',
   'scene_artifacts_owner_family_fk',
   'scene_artifacts_id_case_family_key',
