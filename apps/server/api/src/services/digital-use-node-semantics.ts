@@ -192,6 +192,22 @@ const AgreementResponse = z.strictObject({
   decision: z.enum(['AGREE', 'DISAGREE', 'UNKNOWN', 'DECLINED']),
 });
 
+const A2001ChoiceResponse = z.strictObject({
+  choice: z.enum(['GENERAL_ADVICE', 'CONTINUE_DIGITAL_USE', 'OTHER_CONTENT']),
+});
+
+const A2002ChoiceResponse = z.strictObject({
+  choice: z.enum(['FURTHER_ASSESSMENT', 'CONTINUE_DIGITAL_USE', 'OTHER_CONTENT']),
+});
+
+const ExplicitExitResponse = z.strictObject({
+  action: z.literal('EXIT'),
+});
+
+const ReturnMainResponse = z.strictObject({
+  action: z.literal('RETURN_MAIN'),
+});
+
 function statementPrefix(code: string): string {
   return `DUA:v1:${code}:`;
 }
@@ -503,6 +519,74 @@ function propagatedRefs(
   return result;
 }
 
+
+async function handleA2001(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = A2001ChoiceResponse.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  const ref = await recordAssessmentStatement(context, 'a2001.user_choice', parsed.data);
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: {
+      USER_WANTS_GENERAL_ADVICE: parsed.data.choice === 'GENERAL_ADVICE',
+      USER_CONTINUES_DIGITAL_USE: parsed.data.choice === 'CONTINUE_DIGITAL_USE',
+      USER_WANTS_OTHER_CONTENT: parsed.data.choice === 'OTHER_CONTENT',
+    },
+    progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, [ref]),
+  };
+}
+
+async function handleA1000(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = ReturnMainResponse.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [],
+    conditions: { RETURN_MAIN: true },
+    progression: 'ROUTE',
+    nextInputRefs: context.currentInputRefs,
+  };
+}
+
+async function handleA2002(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = A2002ChoiceResponse.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  const ref = await recordAssessmentStatement(context, 'a2002.user_choice', parsed.data);
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: {
+      USER_ACCEPTS_FURTHER_ASSESSMENT: parsed.data.choice === 'FURTHER_ASSESSMENT',
+      USER_CONTINUES_DIGITAL_USE: parsed.data.choice === 'CONTINUE_DIGITAL_USE',
+      USER_WANTS_OTHER_CONTENT: parsed.data.choice === 'OTHER_CONTENT',
+    },
+    progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, [ref]),
+  };
+}
+
+async function handlePriorityExit(
+  context: DigitalUseNodeSemanticsContext,
+  condition: 'PRIORITY_EMOTION_EXIT' | 'PRIORITY_CONFLICT_EXIT'
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = ExplicitExitResponse.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [],
+    conditions: { [condition]: true },
+    progression: 'ROUTE',
+    nextInputRefs: context.currentInputRefs,
+  };
+}
+
 async function handleA2003(
   context: DigitalUseNodeSemanticsContext
 ): Promise<DigitalUseNodeSemanticResult> {
@@ -770,6 +854,16 @@ export async function applyDigitalUseNodeSemantics(
       return handle01004(context);
     case '01000':
       return handle01000(context);
+    case 'A2001':
+      return handleA2001(context);
+    case 'A1000':
+      return handleA1000(context);
+    case 'A2002':
+      return handleA2002(context);
+    case '01005':
+      return handlePriorityExit(context, 'PRIORITY_EMOTION_EXIT');
+    case '01006':
+      return handlePriorityExit(context, 'PRIORITY_CONFLICT_EXIT');
     case 'A2003':
       return handleA2003(context);
     case 'A2004':
