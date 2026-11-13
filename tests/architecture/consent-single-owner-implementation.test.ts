@@ -139,8 +139,6 @@ describe('Consent owner — single implementation and scope guards', () => {
       'supplemental_consents',
       'digital_use_consents',
       'assessment_consents',
-      'scene_node_states',
-      'scene_artifacts',
     ]) {
       expect(createdTables).not.toContain(forbiddenTable);
     }
@@ -200,12 +198,7 @@ describe('Consent owner — single implementation and scope guards', () => {
     expect(openapi).not.toContain(PURPOSE);
   });
 
-  it('implements no Slice 12 Scene runtime', () => {
-    const appDir = join(ROOT, 'apps', 'server', 'api', 'src');
-    for (const file of codeFiles(appDir)) {
-      expect(readFileSync(file, 'utf8'), file).not.toContain('01004');
-    }
-
+  it('keeps Consent-owner migrations free of a parallel Scene runtime', () => {
     for (const filename of NEW_MIGRATIONS) {
       const sql = readFileSync(join(MIGRATIONS_DIR, filename), 'utf8');
       for (const forbidden of [
@@ -216,6 +209,11 @@ describe('Consent owner — single implementation and scope guards', () => {
         expect(sql, `${filename}:${forbidden}`).not.toContain(forbidden);
       }
     }
+
+    const owner = readFileSync(OWNER_SEAM, 'utf8');
+    expect(owner).not.toContain('scene_node_states');
+    expect(owner).not.toContain('scene_artifacts');
+    expect(owner).not.toContain('routeDigitalUseTopology');
   });
 
   it('keeps the purpose literal to the reviewed scope (no generic consent platform)', () => {
@@ -233,6 +231,7 @@ describe('Consent owner — single implementation and scope guards', () => {
     expect(filesWithPurpose.map(relative).sort()).toEqual([
       'db/migrations/012_consent_01004_supplemental_enums.sql',
       'db/migrations/013_consent_01004_supplemental_assessment.sql',
+      'apps/server/api/src/services/digital-use-node-semantics.ts',
       'packages/compliance/src/evidence.ts',
       'packages/compliance/src/supplemental-assessment-disclosure.ts',
       'packages/compliance/src/supplemental-consent.ts',
