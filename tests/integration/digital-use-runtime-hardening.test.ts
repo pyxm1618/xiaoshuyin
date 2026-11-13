@@ -207,13 +207,13 @@ describe('T1218 Digital Use runtime hardening', () => {
     const fn = `du_fault_${input.label}_${suffix}`;
     const trigger = `du_fault_trigger_${input.label}_${suffix}`;
     await admin.query(
-      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
        BEGIN
          IF ${input.condition} THEN
            RAISE EXCEPTION 'SLICE12_INJECTED_${input.label.toUpperCase()}_FAILURE';
          END IF;
          RETURN NEW;
-       END $`
+       END $$`
     );
     await admin.query(
       `CREATE TRIGGER ${trigger}
@@ -533,13 +533,13 @@ describe('T1218 Digital Use runtime hardening', () => {
     const fn = `du_fault_cas_${suffix}`;
     const trigger = `du_fault_cas_trigger_${suffix}`;
     await admin.query(
-      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
        BEGIN
          IF NEW.case_id = '${f.caseId}'::uuid AND NEW.node_code='A1001' THEN
            RAISE EXCEPTION 'SLICE12_AFTER_EVIDENCE_FAULT';
          END IF;
          RETURN NEW;
-       END $`
+       END $$`
     );
     await admin.query(
       `CREATE TRIGGER ${trigger}
@@ -580,13 +580,13 @@ describe('T1218 Digital Use runtime hardening', () => {
     const fn = `du_fault_next_${suffix}`;
     const trigger = `du_fault_next_trigger_${suffix}`;
     await admin.query(
-      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
        BEGIN
          IF NEW.case_id = '${f.caseId}'::uuid AND NEW.node_code='01002' THEN
            RAISE EXCEPTION 'SLICE12_AFTER_CAS_FAULT';
          END IF;
          RETURN NEW;
-       END $`
+       END $$`
     );
     await admin.query(
       `CREATE TRIGGER ${trigger}
@@ -627,14 +627,14 @@ describe('T1218 Digital Use runtime hardening', () => {
     const fn = `du_fault_audit_${suffix}`;
     const trigger = `du_fault_audit_trigger_${suffix}`;
     await admin.query(
-      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
        BEGIN
          IF NEW.resource_id = '${f.caseId}'::uuid
             AND NEW.event_type='DIGITAL_USE_NODE_COMPLETED' THEN
            RAISE EXCEPTION 'SLICE12_AFTER_AUDIT_FAULT';
          END IF;
          RETURN NEW;
-       END $`
+       END $$`
     );
     await admin.query(
       `CREATE TRIGGER ${trigger}
@@ -675,14 +675,14 @@ describe('T1218 Digital Use runtime hardening', () => {
     const fn = `du_fault_idem_${suffix}`;
     const trigger = `du_fault_idem_trigger_${suffix}`;
     await admin.query(
-      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
        BEGIN
          IF NEW.actor_account_id = '${f.manager.accountId}'::uuid
             AND NEW.command_type='DIGITAL_USE_NODE_RESPONSE' THEN
            RAISE EXCEPTION 'SLICE12_IDEMPOTENCY_COMPLETION_FAULT';
          END IF;
          RETURN NEW;
-       END $`
+       END $$`
     );
     await admin.query(
       `CREATE TRIGGER ${trigger}
@@ -762,13 +762,13 @@ describe('T1218 Digital Use runtime hardening', () => {
     const fn = `du_fault_pf_${suffix}`;
     const trigger = `du_fault_pf_trigger_${suffix}`;
     await admin.query(
-      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $$
        BEGIN
          IF NEW.case_id = '${f.caseId}'::uuid THEN
            RAISE EXCEPTION 'SLICE12_PROBLEM_FORMULATION_OWNER_FAULT';
          END IF;
          RETURN NEW;
-       END $`
+       END $$`
     );
     await admin.query(
       `CREATE TRIGGER ${trigger}
