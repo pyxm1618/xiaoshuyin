@@ -793,12 +793,7 @@ export function buildOpenApiDocument() {
         security: [{ bearerAuth: [] }],
         parameters: [
           paramRef('CaseId'),
-          {
-            name: 'nodeCode',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', minLength: 1, maxLength: 64 },
-          },
+          paramRef('NodeCode'),
         ],
         responses: {
           '200': jsonResponse('Authorized reachable Digital Use node', toJsonSchema(DigitalUseNodeResponse)),
@@ -817,12 +812,7 @@ export function buildOpenApiDocument() {
         security: [{ bearerAuth: [] }],
         parameters: [
           paramRef('CaseId'),
-          {
-            name: 'nodeCode',
-            in: 'path',
-            required: true,
-            schema: { type: 'string', minLength: 1, maxLength: 64 },
-          },
+          paramRef('NodeCode'),
           paramRef('IdempotencyKeyHeader'),
         ],
         requestBody: jsonBody({
@@ -1068,6 +1058,12 @@ export function buildOpenApiDocument() {
           in: 'path',
           required: true,
           schema: { type: 'string', format: 'uuid' },
+        },
+        NodeCode: {
+          name: 'nodeCode',
+          in: 'path',
+          required: true,
+          schema: { type: 'string', minLength: 1, maxLength: 64 },
         },
         FormulationVersion: {
           name: 'version',
