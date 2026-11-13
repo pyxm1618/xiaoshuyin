@@ -12,8 +12,7 @@ import {
   CompleteDigitalUseNodeRequest,
   DigitalUseNodeResponse,
   DigitalUseSceneResponse,
-  ErrorSchema,
-  SceneRuntimeError,
+  DigitalUseApiError,
   StartDigitalUseAssessmentRequest,
 } from '@xiaoshuyin/contracts';
 import { withIdentityTransaction } from '../db/tx.js';
@@ -75,19 +74,19 @@ function caseIdOf(raw: string): string {
 }
 
 const ReadErrors = {
-  401: ErrorSchema,
-  404: ErrorSchema,
-  409: SceneRuntimeError,
-  422: SceneRuntimeError,
-  500: ErrorSchema,
+  401: DigitalUseApiError,
+  404: DigitalUseApiError,
+  409: DigitalUseApiError,
+  422: DigitalUseApiError,
+  500: DigitalUseApiError,
 } as const;
 
 const MutationErrors = {
-  401: ErrorSchema,
-  404: ErrorSchema,
-  409: SceneRuntimeError,
-  422: SceneRuntimeError,
-  500: ErrorSchema,
+  401: DigitalUseApiError,
+  404: DigitalUseApiError,
+  409: DigitalUseApiError,
+  422: DigitalUseApiError,
+  500: DigitalUseApiError,
 } as const;
 
 export function registerDigitalUseAssessmentRoutes(
