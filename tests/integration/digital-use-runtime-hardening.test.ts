@@ -1582,6 +1582,9 @@ describe('T1218 Digital Use runtime hardening', () => {
         nextNode: 'A3000',
         familyId: '00000000-0000-7000-8000-000000000999',
         scenePackageVersion: 'client-v99',
+        subjectPersonId: '00000000-0000-7000-8000-000000000998',
+        visibility: 'PUBLIC',
+        purpose: 'GUARDIAN_CONSENT',
       }
     );
     expect(attacked.statusCode).toBe(422);
