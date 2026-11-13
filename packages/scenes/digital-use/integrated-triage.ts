@@ -183,7 +183,7 @@ export function evaluateIntegratedTriage(
     };
     const otherNeedsPositive =
       hasNonSevereEmotionNeed(emotionValues) ||
-      (familyValue !== 'A' && familyValue !== 'F') ||
+      familyValue !== 'A' ||
       (evidence.otherNeeds?.kind === 'VALUE' && evidence.otherNeeds.value === true);
     p = {
       ...p,
