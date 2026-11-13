@@ -207,6 +207,45 @@ export async function ensureSceneNodeAvailable(
   return existing;
 }
 
+export async function casRecordSceneNodeProgress(
+  tx: Tx,
+  input: {
+    caseId: string;
+    nodeCode: string;
+    scenePackageVersion: string;
+    expectedRevision: number;
+    branchReasonCodes: readonly string[];
+    inputRefs: readonly StoredSceneRef[];
+    outputRefs: readonly StoredSceneRef[];
+  }
+): Promise<SceneNodeStateRow | null> {
+  const { rows } = await tx.query<SceneNodeStateRow>(
+    `UPDATE scene_node_states
+        SET status = 'IN_PROGRESS',
+            branch_reason_codes = $5,
+            input_refs = $6::jsonb,
+            output_refs = $7::jsonb,
+            completed_at = NULL,
+            revision = revision + 1
+      WHERE case_id = $1
+        AND node_code = $2
+        AND scene_package_version = $3
+        AND revision = $4
+        AND status IN ('AVAILABLE','IN_PROGRESS')
+      RETURNING ${NODE_COLUMNS}`,
+    [
+      input.caseId,
+      input.nodeCode,
+      input.scenePackageVersion,
+      input.expectedRevision,
+      [...input.branchReasonCodes],
+      JSON.stringify(input.inputRefs),
+      JSON.stringify(input.outputRefs),
+    ]
+  );
+  return rows[0] ?? null;
+}
+
 export async function casCompleteSceneNodeState(
   tx: Tx,
   input: {
