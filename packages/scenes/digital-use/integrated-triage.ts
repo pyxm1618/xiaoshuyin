@@ -125,6 +125,17 @@ export function evaluateIntegratedTriage(
   ) {
     return result('BLOCKED', { ...p, MATERIAL_UNRESOLVED: true }, '01002_INVALID_CURRENT_VALUE');
   }
+  if (
+    emotionValues.includes('A') &&
+    emotionValues.some((value) => value !== 'A')
+  ) {
+    return result(
+      'BLOCKED',
+      { ...p, MATERIAL_UNRESOLVED: true },
+      '01002_INCOMPATIBLE_CURRENT_VALUE'
+    );
+  }
+
   const emotionF = emotionValues.includes('F');
   p = { ...p, EMOTION_F: emotionF };
   if (emotionF) {
