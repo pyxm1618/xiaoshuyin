@@ -51,24 +51,39 @@ function structuredPayload(content: string): { code: string; value: unknown } | 
   }
 }
 
-function containsUnresolved(value: unknown): boolean {
-  if (Array.isArray(value)) return value.some(containsUnresolved);
-  if (typeof value !== 'object' || value === null) return false;
+function collectUnresolvedStates(
+  value: unknown,
+  into: Set<'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED'>
+): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectUnresolvedStates(item, into);
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
   const row = value as Record<string, unknown>;
   if (
     row['state'] === 'UNKNOWN' ||
     row['state'] === 'NOT_COLLECTED' ||
     row['state'] === 'DECLINED'
   ) {
-    return true;
+    into.add(row['state']);
   }
-  return Object.values(row).some(containsUnresolved);
+  for (const nested of Object.values(row)) collectUnresolvedStates(nested, into);
 }
 
-function currentEvidenceIsFormulatable(
-  rows: Awaited<ReturnType<typeof listCurrentSceneEvidenceStatements>>
-): Exclude<ProblemFormulationCandidateDecision, { ok: true }> | null {
-  const byCode = new Map<string, Set<string>>();
+type CurrentEvidenceAnalysis =
+  | {
+      readonly ok: true;
+      readonly unknowns: ProblemFormulationContent['unknowns'];
+    }
+  | Exclude<ProblemFormulationCandidateDecision, { ok: true }>;
+
+function analyzeCurrentEvidence(
+  rows: readonly Awaited<ReturnType<typeof listCurrentSceneEvidenceStatements>>
+): CurrentEvidenceAnalysis {
+  const knownByCode = new Map<string, Set<string>>();
+  const unknownKeys = new Set<string>();
+  const unknowns: ProblemFormulationContent['unknowns'] = [];
 
   for (const row of rows) {
     if (row.conflict_group_id !== null || row.confirmation_status === 'DISPUTED') {
@@ -78,18 +93,37 @@ function currentEvidenceIsFormulatable(
     if (!structured) {
       return { ok: false, reasonCode: 'PROBLEM_FORMULATION_EVIDENCE_INVALID' };
     }
-    if (containsUnresolved(structured.value)) {
-      return { ok: false, reasonCode: 'PROBLEM_FORMULATION_EVIDENCE_UNRESOLVED' };
+
+    const unresolved = new Set<'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED'>();
+    collectUnresolvedStates(structured.value, unresolved);
+    if (unresolved.size > 0) {
+      // Slice 8 permits UnknownItem without a native Observation ref. The exact
+      // source assertion remains in top-level evidenceRefs; an empty nested ref
+      // list avoids falsely claiming that an Assertion is an Observation.
+      for (const state of unresolved) {
+        const key = `${structured.code}:${state}`;
+        if (unknownKeys.has(key)) continue;
+        unknownKeys.add(key);
+        unknowns.push({
+          topic: structured.code,
+          state,
+          evidenceRefs: [],
+        });
+      }
+      // Missing-like current reports never become Conflict merely because a
+      // different approved source also has a usable current value.
+      continue;
     }
-    const values = byCode.get(structured.code) ?? new Set<string>();
+
+    const values = knownByCode.get(structured.code) ?? new Set<string>();
     values.add(JSON.stringify(structured.value));
-    byCode.set(structured.code, values);
+    knownByCode.set(structured.code, values);
   }
 
-  if ([...byCode.values()].some((values) => values.size > 1)) {
+  if ([...knownByCode.values()].some((values) => values.size > 1)) {
     return { ok: false, reasonCode: 'PROBLEM_FORMULATION_EVIDENCE_CONFLICT' };
   }
-  return null;
+  return { ok: true, unknowns };
 }
 
 async function mandatoryUnder14Dependencies(
@@ -164,8 +198,8 @@ export async function buildDigitalUseProblemFormulationCandidate(
     input.caseId,
     'DUA:v1:'
   );
-  const invalid = currentEvidenceIsFormulatable(currentAssessment);
-  if (invalid) return invalid;
+  const analysis = analyzeCurrentEvidence(currentAssessment);
+  if (!analysis.ok) return analysis;
 
   const refs = canonicalEvidenceRefs([
     evidenceRef(carrier),
@@ -207,7 +241,7 @@ export async function buildDigitalUseProblemFormulationCandidate(
       },
       keyFactors: [],
       evidenceRefs: refs,
-      unknowns: [],
+      unknowns: analysis.unknowns,
       conflicts: [],
       sceneFit: 'DIGITAL_USE',
       alternativeExplanations: [],
