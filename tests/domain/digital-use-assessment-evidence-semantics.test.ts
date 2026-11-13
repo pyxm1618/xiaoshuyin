@@ -31,16 +31,40 @@ function context(nodeCode: string, response: Record<string, unknown>) {
 
 describe('T1210 A1001 / 01002 / 01003 Evidence semantics', () => {
   let seq = 0;
+  let currentRows: Array<Record<string, unknown>> = [];
 
   beforeEach(() => {
     seq = 0;
+    currentRows = [];
     recordStatement.mockReset();
     listCurrentSceneEvidenceStatements.mockReset();
-    listCurrentSceneEvidenceStatements.mockResolvedValue([]);
-    recordStatement.mockImplementation(async () => ({
-      id: `00000000-0000-7000-8000-${String(++seq).padStart(12, '0')}`,
-      recordedAt: new Date('2026-11-13T00:00:00.000Z'),
-    }));
+    listCurrentSceneEvidenceStatements.mockImplementation(
+      async (_tx: unknown, _caseId: string, prefix: string) =>
+        currentRows.filter((row) =>
+          typeof row.content === 'string' && row.content.startsWith(prefix)
+        )
+    );
+    recordStatement.mockImplementation(async (_tx, ctx, draft) => {
+      const id = `00000000-0000-7000-8000-${String(++seq).padStart(12, '0')}`;
+      if (draft.supersedesId) {
+        currentRows = currentRows.filter((row) => row.id !== draft.supersedesId);
+      }
+      currentRows.push({
+        id,
+        family_id: ctx.familyId,
+        case_id: ctx.caseId,
+        subject_person_id: draft.subjectPersonId,
+        source_person_id: draft.sourcePersonId,
+        content: draft.content,
+        confirmation_status: draft.confirmationStatus,
+        conflict_group_id: null,
+        recorded_at: new Date('2026-11-13T00:00:00.000Z'),
+      });
+      return {
+        id,
+        recordedAt: new Date('2026-11-13T00:00:00.000Z'),
+      };
+    });
   });
 
   it('records broad devices, purpose-separated durations and functional impact', async () => {
