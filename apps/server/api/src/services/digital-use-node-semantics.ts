@@ -69,7 +69,7 @@ const UnresolvedState = z.enum(['UNKNOWN', 'NOT_COLLECTED', 'DECLINED']);
 const DurationAnswer = z.union([
   z.strictObject({
     state: z.literal('KNOWN'),
-    minutesPerDay: z.number().finite().min(0),
+    minutesPerDay: z.number().finite().min(0).max(1440),
     certainty: z.enum(['EXACT', 'ESTIMATE']),
   }),
   z.strictObject({ state: UnresolvedState }),
@@ -104,6 +104,21 @@ const A1001Response = z.strictObject({
     studyOrNecessaryAffairs: ImpactAnswer,
     realWorldActivityDisplacement: ImpactAnswer,
   }),
+}).superRefine((value, ctx) => {
+  if (
+    value.historicalDurationBand !== undefined &&
+    (
+      value.reportedAgeYears === undefined ||
+      value.reportedAgeYears < 6 ||
+      value.reportedAgeYears > 18
+    )
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['historicalDurationBand'],
+      message: 'historical duration band is only approved for reported ages 6–18',
+    });
+  }
 });
 
 const Known01002 = z.strictObject({
