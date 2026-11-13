@@ -333,6 +333,127 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(rows[0].n).toBe(1);
   });
 
+  it('serializes mutually-exclusive A2004 branch responses to exactly one legal next node', async () => {
+    const f = await fixture('branch-race');
+    await forceSceneNode(f, 'A2004');
+
+    const [yes, no] = await Promise.all([
+      respondSceneNode(
+        f,
+        'A2004',
+        1,
+        { decision: 'YES' },
+        `du-branch-yes-${crypto.randomUUID()}`
+      ),
+      respondSceneNode(
+        f,
+        'A2004',
+        1,
+        { decision: 'NO' },
+        `du-branch-no-${crypto.randomUUID()}`
+      ),
+    ]);
+
+    expect([yes.statusCode, no.statusCode].sort()).toEqual([200, 409]);
+    const projected = await admin.query<{ node_code: string }>(
+      `SELECT node_code
+         FROM scene_node_states
+        WHERE case_id=$1 AND node_code IN ('A2005','A2006')
+        ORDER BY node_code`,
+      [f.caseId]
+    );
+    expect(projected.rows).toHaveLength(1);
+    expect(['A2005', 'A2006']).toContain(projected.rows[0]!.node_code);
+
+    const currentFacts = await admin.query<{ n: number }>(
+      `SELECT count(*)::int AS n
+         FROM assertions a
+        WHERE a.case_id=$1
+          AND a.content LIKE 'DUA:v1:a2004.collaborative_duration:%'
+          AND NOT EXISTS (
+            SELECT 1 FROM assertions newer WHERE newer.supersedes_id=a.id
+          )`,
+      [f.caseId]
+    );
+    expect(currentFacts.rows[0]!.n).toBe(1);
+  });
+
+  it('revalidates a Safety transition that commits while the node writer waits on the Case lock', async () => {
+    const f = await fixture('safety-race');
+    const blocker = await admin.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        `UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1`,
+        [f.caseId]
+      );
+
+      const pending = respondA1001(
+        f,
+        `du-safety-race-${crypto.randomUUID()}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await blocker.query('COMMIT');
+
+      const response = await pending;
+      expect(response.statusCode, response.body).toBe(409);
+      expect(response.json().code).toBe('SAFETY_HOLD_BLOCKED');
+
+      const evidence = await admin.query<{ n: number }>(
+        `SELECT count(*)::int AS n
+           FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%'`,
+        [f.caseId]
+      );
+      expect(evidence.rows[0]!.n).toBe(0);
+      await expectNodeUnchanged(f, 'A1001', f.nodeRevision);
+      await expectNoNodeResponseIdempotency(f);
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      blocker.release();
+    }
+  });
+
+  it('revalidates a concurrent Common Core phase/version transition before writing Scene truth', async () => {
+    const f = await fixture('phase-race');
+    const blocker = await admin.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        `UPDATE cases
+            SET phase='PROBLEM_FORMULATION', version=version+1
+          WHERE id=$1`,
+        [f.caseId]
+      );
+
+      const pending = respondA1001(
+        f,
+        `du-phase-race-${crypto.randomUUID()}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await blocker.query('COMMIT');
+
+      const response = await pending;
+      expect(response.statusCode, response.body).toBe(409);
+      expect(['STALE_CASE_VERSION', 'CASE_PHASE_CONFLICT']).toContain(
+        response.json().code
+      );
+
+      const evidence = await admin.query<{ n: number }>(
+        `SELECT count(*)::int AS n
+           FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%'`,
+        [f.caseId]
+      );
+      expect(evidence.rows[0]!.n).toBe(0);
+      await expectNodeUnchanged(f, 'A1001', f.nodeRevision);
+      await expectNoNodeResponseIdempotency(f);
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      blocker.release();
+    }
+  });
+
   it('fault point 1/8: rolls back after Evidence write before Scene CAS', async () => {
     const f = await fixture('fault-evidence');
     const cleanup = await installFaultTrigger({
