@@ -11,6 +11,7 @@ import {
   type LoginResult,
 } from '../setup/api.js';
 import { createCase } from '../setup/participation.js';
+import { validateSceneRefs } from '@xiaoshuyin/domain';
 
 interface Fixture {
   manager: LoginResult;
@@ -160,6 +161,30 @@ describe('T1218 Digital Use runtime hardening', () => {
       [f.caseId]
     );
     expect(rows[0].n).toBe(7);
+  });
+
+  it('concurrent same-key responses serialize to one execution and replay the same result', async () => {
+    const f = await fixture('same-key');
+    const idem = `du-same-key-${crypto.randomUUID()}`;
+    const [a, b] = await Promise.all([
+      respondA1001(f, idem),
+      respondA1001(f, idem),
+    ]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 200]);
+    expect(a.json()).toEqual(b.json());
+
+    const { rows } = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM assertions
+           WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%') AS evidence,
+         (SELECT count(*)::int FROM case_events
+           WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED'
+             AND metadata->>'nodeCode'='A1001') AS events,
+         (SELECT count(*)::int FROM idempotency_keys
+           WHERE actor_account_id=$2 AND command_type='DIGITAL_USE_NODE_RESPONSE') AS idempotency`,
+      [f.caseId, f.manager.accountId]
+    );
+    expect(rows[0]).toEqual({ evidence: 7, events: 1, idempotency: 1 });
   });
 
   it('allows only one winner for two concurrent responses at the same revision', async () => {
@@ -473,6 +498,57 @@ describe('T1218 Digital Use runtime hardening', () => {
       );
       await fault.query('COMMIT');
       fault.release();
+    }
+  });
+
+  it('rejects same-Family cross-Case Evidence refs at the authoritative repository boundary', async () => {
+    const f = await fixture('cross-case');
+    const second = await createCase(app, f.manager.token, 'du-hard-cross-case-second');
+    expect(second.statusCode).toBe(201);
+    const secondCaseId = second.json().id as string;
+
+    const inserted = await admin.query<{ id: string }>(
+      `INSERT INTO dialogue_messages
+         (family_id, case_id, actor_account_id, source_person_id, content)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id`,
+      [
+        f.familyId,
+        secondCaseId,
+        f.manager.accountId,
+        f.manager.personId,
+        'cross-case Evidence must never satisfy the first Case',
+      ]
+    );
+    const foreignEvidenceId = inserted.rows[0]!.id;
+
+    const runtimePool = new pg.Pool({
+      connectionString: process.env['DATABASE_URL'],
+      max: 1,
+    });
+    const client = await runtimePool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT app.set_identity_context($1,$2)', [
+        f.manager.accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await client.query('SELECT app.set_family_context($1,$2,$3)', [
+        f.familyId,
+        f.manager.personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await expect(
+        validateSceneRefs(client, {
+          familyId: f.familyId,
+          caseId: f.caseId,
+          refs: [{ type: 'DIALOGUE_MESSAGE', id: foreignEvidenceId }],
+        })
+      ).resolves.toBe(false);
+      await client.query('ROLLBACK');
+    } finally {
+      client.release();
+      await runtimePool.end();
     }
   });
 
