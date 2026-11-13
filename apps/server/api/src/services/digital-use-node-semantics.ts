@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   canonicalJson,
+  getLatestSceneArtifact,
   insertSceneArtifact,
   listCurrentSceneEvidenceStatements,
   recordStatement,
@@ -18,6 +19,7 @@ import {
 import {
   DIGITAL_USE_PACKAGE_VERSION,
   buildA200401RecordMarker,
+  buildSolutionSummaryArtifactData,
   buildTimelineArtifactData,
   evaluateIntegratedTriage,
 } from '@xiaoshuyin/scenes/digital-use';
@@ -218,6 +220,10 @@ const TimelineScalar = z.union([
 const A2007Response = z.strictObject({
   timeline: z.record(z.string().min(1).max(64), TimelineScalar)
     .refine((value) => Object.keys(value).length > 0),
+});
+
+const A2010Response = z.strictObject({
+  action: z.literal('GENERATE_SUMMARY'),
 });
 
 function statementPrefix(code: string): string {
@@ -720,6 +726,45 @@ async function handleA2007(
   };
 }
 
+
+async function handleA2010(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = A2010Response.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+
+  const timeline = await getLatestSceneArtifact(context.tx, context.caseId, 'TIMELINE');
+  if (!timeline) semanticError('SCENE_RESPONSE_INVALID');
+
+  const data = buildSolutionSummaryArtifactData({
+    timelineArtifactId: timeline.id,
+    timelineData: timeline.data,
+  });
+  const artifact = await insertSceneArtifact(context.tx, {
+    familyId: context.familyId,
+    caseId: context.caseId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    artifactType: 'SOLUTION_SUMMARY',
+    schemaVersion: 'v1',
+    sourceNodeCode: 'A2010',
+    data: data as Record<string, unknown>,
+    ownerPersonId: context.actor.personId,
+    sourceRefs: [
+      { type: 'SCENE_ARTIFACT', id: timeline.id },
+      ...context.currentInputRefs,
+    ],
+    revision: 1,
+  });
+  const ref: StoredSceneRef = { type: 'SCENE_ARTIFACT', id: artifact.id };
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: { SOLUTION_STAGE_READY: true },
+    progression: 'ROUTE',
+    nextInputRefs: [ref],
+  };
+}
+
 async function handleA2008(
   context: DigitalUseNodeSemanticsContext
 ): Promise<DigitalUseNodeSemanticResult> {
@@ -920,6 +965,8 @@ export async function applyDigitalUseNodeSemantics(
       return handleA2008(context);
     case 'A2009':
       return handleA2009(context);
+    case 'A2010':
+      return handleA2010(context);
     default:
       semanticError('SCENE_RESPONSE_INVALID');
   }
