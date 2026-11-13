@@ -49,6 +49,18 @@ export interface SceneArtifactRow {
   created_at: Date;
 }
 
+export interface SceneEvidenceStatementRow {
+  id: string;
+  family_id: string;
+  case_id: string;
+  subject_person_id: string | null;
+  source_person_id: string | null;
+  content: string;
+  confirmation_status: string;
+  conflict_group_id: string | null;
+  recorded_at: Date;
+}
+
 export interface SceneCaseRow {
   id: string;
   family_id: string;
@@ -477,4 +489,33 @@ export async function insertDigitalUseNodeCompletedAudit(
       }),
     ]
   );
+}
+
+
+/**
+ * Narrow read of current Evidence statements used by Digital Use assessment.
+ * It does not interpret content or own fact semantics; callers supply the
+ * server-owned prefix and perform deterministic parsing.
+ */
+export async function listCurrentSceneEvidenceStatements(
+  tx: Tx,
+  caseId: string,
+  contentPrefix: string
+): Promise<SceneEvidenceStatementRow[]> {
+  const { rows } = await tx.query<SceneEvidenceStatementRow>(
+    `SELECT a.id, a.family_id, a.case_id, a.subject_person_id, a.source_person_id,
+            a.content, a.confirmation_status, a.conflict_group_id, a.recorded_at
+       FROM assertions a
+      WHERE a.case_id = $1
+        AND a.kind = 'STATEMENT'
+        AND a.content LIKE $2
+        AND (a.valid_from IS NULL OR a.valid_from <= now())
+        AND (a.valid_until IS NULL OR a.valid_until > now())
+        AND NOT EXISTS (
+          SELECT 1 FROM assertions successor WHERE successor.supersedes_id = a.id
+        )
+      ORDER BY a.recorded_at ASC, a.id ASC`,
+    [caseId, `${contentPrefix}%`]
+  );
+  return rows;
 }
