@@ -706,6 +706,7 @@ async function handleA2007(
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
 
   const data = buildTimelineArtifactData(parsed.data.timeline);
+  const previous = await getLatestSceneArtifact(context.tx, context.caseId, 'TIMELINE');
   const artifact = await insertSceneArtifact(context.tx, {
     familyId: context.familyId,
     caseId: context.caseId,
@@ -716,7 +717,8 @@ async function handleA2007(
     data: data as Record<string, unknown>,
     ownerPersonId: context.actor.personId,
     sourceRefs: context.currentInputRefs,
-    revision: 1,
+    revision: previous === null ? 1 : previous.revision + 1,
+    ...(previous === null ? {} : { supersedesId: previous.id }),
   });
   const ref: StoredSceneRef = { type: 'SCENE_ARTIFACT', id: artifact.id };
   return {
@@ -742,6 +744,11 @@ async function handleA2010(
     timelineArtifactId: timeline.id,
     timelineData: timeline.data,
   });
+  const previousSummary = await getLatestSceneArtifact(
+    context.tx,
+    context.caseId,
+    'SOLUTION_SUMMARY'
+  );
   const artifact = await insertSceneArtifact(context.tx, {
     familyId: context.familyId,
     caseId: context.caseId,
@@ -755,7 +762,8 @@ async function handleA2010(
       { type: 'SCENE_ARTIFACT', id: timeline.id },
       ...context.currentInputRefs,
     ],
-    revision: 1,
+    revision: previousSummary === null ? 1 : previousSummary.revision + 1,
+    ...(previousSummary === null ? {} : { supersedesId: previousSummary.id }),
   });
   const ref: StoredSceneRef = { type: 'SCENE_ARTIFACT', id: artifact.id };
   return {
