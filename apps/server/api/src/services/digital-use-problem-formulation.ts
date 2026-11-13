@@ -79,7 +79,7 @@ type CurrentEvidenceAnalysis =
   | Exclude<ProblemFormulationCandidateDecision, { ok: true }>;
 
 function analyzeCurrentEvidence(
-  rows: readonly Awaited<ReturnType<typeof listCurrentSceneEvidenceStatements>>
+  rows: Awaited<ReturnType<typeof listCurrentSceneEvidenceStatements>>
 ): CurrentEvidenceAnalysis {
   const knownByCode = new Map<string, Set<string>>();
   const unknownKeys = new Set<string>();
