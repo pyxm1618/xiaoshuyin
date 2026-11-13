@@ -43,6 +43,7 @@ import { toHttpError } from '../plugins/error-handler.js';
 import {
   assertAssessmentCompliance,
   currentSceneEnvelope,
+  resolveRequestedDigitalUseNode,
   type DigitalUseActor,
 } from './digital-use-assessment.js';
 import {
@@ -456,7 +457,7 @@ export async function completeDigitalUseNodeResponse(
 
       // Manifest identity is resolved only after authorization, so fabricated
       // node codes do not become a cross-Family existence oracle.
-      const node = resolveDigitalUseRuntimeNode(input.nodeCode);
+      const node = resolveRequestedDigitalUseNode(input.nodeCode);
       const requestHash = hashPayload({
         familyId: input.familyId,
         caseId: input.caseId,
