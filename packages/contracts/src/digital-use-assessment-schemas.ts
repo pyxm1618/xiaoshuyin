@@ -10,6 +10,7 @@ export const SceneRef = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('DIALOGUE_MESSAGE'), id: z.string().uuid() }),
   z.strictObject({ type: z.literal('ASSERTION'), id: z.string().uuid() }),
   z.strictObject({ type: z.literal('OBSERVATION'), id: z.string().uuid() }),
+  z.strictObject({ type: z.literal('CONSENT'), id: z.string().uuid() }),
   z.strictObject({ type: z.literal('SCENE_ARTIFACT'), id: z.string().uuid() }),
   z.strictObject({
     type: z.literal('RECORD_MARKER'),
