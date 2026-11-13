@@ -6,18 +6,30 @@
  * only. Slice 11 routeDigitalUseTopology() remains the sole topology owner.
  */
 import type pg from 'pg';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   canonicalJson,
+  insertSceneArtifact,
   listCurrentSceneEvidenceStatements,
   recordStatement,
   type StoredSceneRef,
 } from '@xiaoshuyin/domain';
-import { evaluateIntegratedTriage } from '@xiaoshuyin/scenes/digital-use';
+import {
+  DIGITAL_USE_PACKAGE_VERSION,
+  evaluateIntegratedTriage,
+} from '@xiaoshuyin/scenes/digital-use';
 import type {
   DigitalUseConditionState,
   DigitalUseEvidenceBasisCategory,
 } from '@xiaoshuyin/scenes/digital-use';
+import {
+  APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY,
+  CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE,
+  DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+  PurposeScopedConsentError,
+  recordPurposeScopedConsentDecision,
+} from '@xiaoshuyin/compliance';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 
 export interface DigitalUseNodeSemanticsContext {
@@ -27,6 +39,12 @@ export interface DigitalUseNodeSemanticsContext {
   readonly caseId: string;
   readonly nodeCode: string;
   readonly response: Readonly<Record<string, unknown>>;
+  readonly currentInputRefs: readonly StoredSceneRef[];
+  readonly requestEvidence?: {
+    readonly clientIp: string | null;
+    readonly userAgent: string | null;
+    readonly pepper: string;
+  };
 }
 
 export interface DigitalUseNodeSemanticResult {
@@ -107,6 +125,14 @@ const Response01003 = z.union([
   }),
   z.strictObject({ state: UnresolvedState }),
 ]);
+
+const Response01004 = z.strictObject({
+  decision: z.enum(['GRANTED', 'DECLINED']),
+});
+
+const Response01000 = z.strictObject({
+  category: z.enum(['EMOTION', 'PARENT_CHILD_INTERACTION']),
+});
 
 function statementPrefix(code: string): string {
   return `DUA:v1:${code}:`;
@@ -399,6 +425,123 @@ async function handle01003(
   };
 }
 
+
+function confirmationReceiptHash(decision: 'GRANTED' | 'DECLINED'): string {
+  return createHash('sha256')
+    .update(
+      [
+        DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+        CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.reference,
+        CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.version,
+        CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.hash,
+        decision,
+      ].join('\n'),
+      'utf8'
+    )
+    .digest('hex');
+}
+
+async function handle01004(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = Response01004.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+  if (context.requestEvidence === undefined) semanticError('INTERNAL_ERROR');
+
+  let decisionRef: Awaited<ReturnType<typeof recordPurposeScopedConsentDecision>>;
+  try {
+    decisionRef = await recordPurposeScopedConsentDecision(
+      context.tx,
+      {
+        familyId: context.familyId,
+        caseId: context.caseId,
+        actor: context.actor,
+        purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+        decision: parsed.data.decision,
+        expectedVersion: null,
+        disclosure: {
+          reference: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.reference,
+          version: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.version,
+          hash: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.hash,
+        },
+        confirmationStatementHash: confirmationReceiptHash(parsed.data.decision),
+        sceneAuthorization: { nodeCode: '01004', verified: true },
+        evidence: context.requestEvidence,
+      },
+      APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY
+    );
+  } catch (error) {
+    if (error instanceof PurposeScopedConsentError) {
+      if (error.code === 'CONSENT_DISCLOSURE_NOT_APPROVED') {
+        semanticError('SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED');
+      }
+      if (
+        error.code === 'CONSENT_STALE_VERSION' ||
+        error.code === 'CONSENT_DECISION_CONFLICT'
+      ) {
+        semanticError('SCENE_RESPONSE_INVALID');
+      }
+    }
+    throw error;
+  }
+
+  const ref: StoredSceneRef = {
+    type: 'CONSENT',
+    id: decisionRef.consentRecordId,
+  };
+  const granted = parsed.data.decision === 'GRANTED';
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [ref],
+    conditions: {
+      CONSENT_ACCEPTED: granted,
+      CONSENT_DECLINED: !granted,
+    },
+    progression: 'ROUTE',
+    nextInputRefs: [ref],
+  };
+}
+
+async function handle01000(
+  context: DigitalUseNodeSemanticsContext
+): Promise<DigitalUseNodeSemanticResult> {
+  const parsed = Response01000.safeParse(context.response);
+  if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
+
+  // No concrete instrument/item-bank/scoring/cut-off is approved in the
+  // current Authority. Persist the truthful boundary instead of generating one.
+  const artifact = await insertSceneArtifact(context.tx, {
+    familyId: context.familyId,
+    caseId: context.caseId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    artifactType: 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY',
+    schemaVersion: 'v1',
+    sourceNodeCode: '01000',
+    data: {
+      category: parsed.data.category,
+      status: 'APPROVED_INSTRUMENT_UNAVAILABLE',
+      approvedInstrument: null,
+      questionnaire: null,
+      scoring: null,
+      cutoff: null,
+      diagnosis: null,
+      generated: false,
+    },
+    ownerPersonId: context.actor.personId,
+    sourceRefs: context.currentInputRefs,
+    revision: 1,
+  });
+
+  const artifactRef: StoredSceneRef = { type: 'SCENE_ARTIFACT', id: artifact.id };
+  return {
+    inputRefs: context.currentInputRefs,
+    outputRefs: [artifactRef],
+    conditions: { SUPPLEMENTAL_ASSESSMENT_COMPLETE: true },
+    progression: 'ROUTE',
+    nextInputRefs: [artifactRef],
+  };
+}
+
 /**
  * Single node-specific dispatch point. Later tasks extend this switch; no
  * per-node service/router/state machine is created.
@@ -413,6 +556,10 @@ export async function applyDigitalUseNodeSemantics(
       return handle01002(context);
     case '01003':
       return handle01003(context);
+    case '01004':
+      return handle01004(context);
+    case '01000':
+      return handle01000(context);
     default:
       semanticError('SCENE_RESPONSE_INVALID');
   }
