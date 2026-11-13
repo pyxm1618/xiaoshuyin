@@ -75,7 +75,12 @@ export const CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE =
  */
 export const APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY: SupplementalAssessmentDisclosureAuthority =
   Object.freeze({
-    resolveApprovedDisclosure(submitted) {
+    resolveApprovedDisclosure(submitted: {
+      readonly purpose: typeof DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT;
+      readonly reference: string;
+      readonly version: string;
+      readonly hash: string;
+    }) {
       const approved = APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURES.find(
         (candidate) =>
           submitted.purpose === candidate.purpose &&
