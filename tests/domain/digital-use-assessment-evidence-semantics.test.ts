@@ -155,6 +155,12 @@ describe('T1210 A1001 / 01002 / 01003 Evidence semantics', () => {
   );
 
   it('enforces 01003 exactly one selection and preserves unresolved states', async () => {
+    // 01003 is only reachable after a valid non-F 01002 current Evidence value.
+    await applyDigitalUseNodeSemantics(context('01002', {
+      state: 'KNOWN',
+      selections: ['A'],
+    }));
+
     const f = await applyDigitalUseNodeSemantics(context('01003', {
       state: 'KNOWN',
       selection: 'F',
