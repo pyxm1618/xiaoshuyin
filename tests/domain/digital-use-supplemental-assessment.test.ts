@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const recordPurposeScopedConsentDecision = vi.fn();
-const insertSceneArtifact = vi.fn();
+const {
+  recordPurposeScopedConsentDecision,
+  insertSceneArtifact,
+} = vi.hoisted(() => ({
+  recordPurposeScopedConsentDecision: vi.fn(),
+  insertSceneArtifact: vi.fn(),
+}));
 
 vi.mock('@xiaoshuyin/compliance', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xiaoshuyin/compliance')>();
