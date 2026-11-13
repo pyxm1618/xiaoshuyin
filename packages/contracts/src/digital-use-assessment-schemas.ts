@@ -90,19 +90,10 @@ export const StartDigitalUseAssessmentResponse = DigitalUseSceneResponse;
 export type StartDigitalUseAssessmentResponseType =
   z.infer<typeof StartDigitalUseAssessmentResponse>;
 
-const JsonScalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);
-export const SceneResponseValue: z.ZodType<unknown> = z.lazy(() =>
-  z.union([
-    JsonScalar,
-    z.array(SceneResponseValue),
-    z.record(z.string(), SceneResponseValue),
-  ])
-);
-
 export const CompleteDigitalUseNodeRequest = z.strictObject({
   expectedCaseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
   expectedNodeRevision: z.number().int().min(1).max(PG_INTEGER_MAX),
-  response: z.record(z.string(), SceneResponseValue),
+  response: z.record(z.string(), z.unknown()),
 });
 export type CompleteDigitalUseNodeRequestType =
   z.infer<typeof CompleteDigitalUseNodeRequest>;
