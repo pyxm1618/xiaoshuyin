@@ -16,7 +16,9 @@ import {
 import type {
   DigitalUseConditionState,
   DigitalUseEvidenceBasisCategory,
+  evaluateIntegratedTriage,
 } from '@xiaoshuyin/scenes/digital-use';
+import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 
 export interface DigitalUseNodeSemanticsContext {
   readonly tx: pg.PoolClient;
@@ -35,8 +37,9 @@ export interface DigitalUseNodeSemanticResult {
   readonly completionStatus?: 'COMPLETED' | 'SKIPPED' | 'BLOCKED';
   readonly nextInputRefs?: readonly StoredSceneRef[];
   /** Legal collected-but-insufficient response: retain Evidence, do not route. */
-  readonly progression?: 'ROUTE' | 'HOLD';
+  readonly progression?: 'ROUTE' | 'HOLD' | 'BLOCKED';
   readonly holdReasonCode?: 'INTEGRATED_TRIAGE_INSUFFICIENT';
+  readonly blockReasonCode?: string;
 }
 
 function semanticError(code: string): never {
@@ -295,14 +298,71 @@ async function handle01003(
     };
   }
 
-  // T1210 owns only collection / priority-family Evidence semantics. T1211
-  // adds the normal Integrated Triage conditions for non-F answers.
+  const evidence = await loadIntegratedTriageEvidence(context.tx, context.caseId);
+  const triage = evaluateIntegratedTriage(evidence);
+  const currentEvidenceRefs: StoredSceneRef[] = (
+    await listCurrentSceneEvidenceStatements(context.tx, context.caseId, 'DUA:v1:')
+  ).map((row) => ({ type: 'ASSERTION' as const, id: row.id }));
+
+  const integratedBasis: DigitalUseEvidenceBasisCategory[] = [
+    'FUNCTIONAL_IMPACT',
+    'SLEEP',
+    'REAL_WORLD_ACTIVITY_DISPLACEMENT',
+    'EMOTION',
+    'FAMILY_RELATIONSHIP_OR_CONFLICT',
+  ];
+
+  if (triage.outcome === 'INSUFFICIENT') {
+    return {
+      inputRefs: [],
+      outputRefs: currentEvidenceRefs,
+      conditions: {},
+      evidenceBasis: integratedBasis,
+      progression: 'HOLD',
+      holdReasonCode: 'INTEGRATED_TRIAGE_INSUFFICIENT',
+      nextInputRefs: currentEvidenceRefs,
+    };
+  }
+
+  if (triage.outcome === 'BLOCKED') {
+    return {
+      inputRefs: [],
+      outputRefs: currentEvidenceRefs,
+      conditions: {},
+      evidenceBasis: integratedBasis,
+      completionStatus: 'BLOCKED',
+      progression: 'BLOCKED',
+      blockReasonCode: triage.reasonCode,
+      nextInputRefs: currentEvidenceRefs,
+    };
+  }
+
+  if (triage.outcome === '01005') {
+    // A valid 01002F must have exited at 01002. Reaching 01003 with current
+    // Evidence now requiring 01005 indicates stale/re-entered progression.
+    // Slice 12 cannot invent a 01003->01005 edge outside the Slice 11 manifest.
+    return {
+      inputRefs: [],
+      outputRefs: currentEvidenceRefs,
+      conditions: {},
+      evidenceBasis: integratedBasis,
+      completionStatus: 'BLOCKED',
+      progression: 'BLOCKED',
+      blockReasonCode: '01002_PRIORITY_ROUTE_STALE_AT_01003',
+      nextInputRefs: currentEvidenceRefs,
+    };
+  }
+
   return {
     inputRefs: [],
-    outputRefs: [ref],
-    conditions: { FAMILY_CONFLICT_SEVERE_F: answer.selection === 'F' },
-    evidenceBasis: ['FAMILY_RELATIONSHIP_OR_CONFLICT'],
+    outputRefs: currentEvidenceRefs,
+    conditions: {
+      FAMILY_CONFLICT_SEVERE_F: triage.outcome === '01006',
+      ...triage.conditions,
+    },
+    evidenceBasis: integratedBasis,
     progression: 'ROUTE',
+    nextInputRefs: currentEvidenceRefs,
   };
 }
 
