@@ -687,6 +687,124 @@ function runSceneFoundationRules() {
 
 runSceneFoundationRules();
 
+
+// ─── Rule 11: Slice 12 — Assessment runtime owner boundaries ───
+const ASSESSMENT_SERVICE_ROOT = 'apps/server/api/src/services/';
+const ASSESSMENT_RUNTIME_FILES = new Set([
+  'apps/server/api/src/services/digital-use-assessment.ts',
+  'apps/server/api/src/services/digital-use-node-response.ts',
+  'apps/server/api/src/services/digital-use-node-semantics.ts',
+  'apps/server/api/src/services/digital-use-triage-evidence.ts',
+  'apps/server/api/src/services/digital-use-problem-formulation.ts',
+  'packages/scenes/digital-use/integrated-triage.ts',
+]);
+
+function checkAssessmentRuntimeBoundaries(relPath, content, report) {
+  const isProduction = relPath.startsWith('apps/') || relPath.startsWith('packages/');
+  if (!isProduction) return;
+
+  if (
+    /(?:assessment[-_]router|slice12[-_]node[-_]manifest|assessment[-_]node[-_]manifest)\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath)
+  ) {
+    report(
+      'R11-assessment-single-owner',
+      relPath,
+      1,
+      'Slice 12 must consume the Slice 11 manifest/router; parallel Assessment routing files are forbidden'
+    );
+  }
+
+  if (!ASSESSMENT_RUNTIME_FILES.has(relPath)) return;
+
+  content.split('\n').forEach((line, i) => {
+    if (isComment(line)) return;
+    const importMatch = /from\s+['"]([^'"]+)['"]/.exec(line);
+    if (importMatch) {
+      const specifier = importMatch[1].toLowerCase();
+      if (
+        /openai|anthropic|langchain|@xiaoshuyin\/(?:ai|rag|memory)|(^|\/)xstate(?:$|\/)/.test(specifier)
+      ) {
+        report(
+          'R11-assessment-no-model-truth',
+          relPath,
+          i + 1,
+          `Forbidden model/workflow dependency in Assessment runtime: ${importMatch[1]}`
+        );
+      }
+      if (/pg-boss|@xiaoshuyin\/notifications?/.test(specifier)) {
+        report(
+          'R11-assessment-no-scheduler',
+          relPath,
+          i + 1,
+          `Forbidden scheduler/notification dependency in Slice 12: ${importMatch[1]}`
+        );
+      }
+    }
+    if (/\bfetch\s*\(/.test(line) && relPath.endsWith('integrated-triage.ts')) {
+      report(
+        'R11-assessment-no-model-truth',
+        relPath,
+        i + 1,
+        'Network access is forbidden in Integrated Triage'
+      );
+    }
+  });
+
+  const normalized = normalizeSql(content);
+  if (/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+problem_formulations\b/i.test(normalized)) {
+    report(
+      'R11-assessment-problem-formulation-owner',
+      relPath,
+      lineOf(normalized, normalized.search(/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+problem_formulations\b/i)),
+      'Slice 12 must use the Slice 8 Problem Formulation owner seam, never direct SQL'
+    );
+  }
+  const schedulerSql = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:case_followup_schedules|notifications|notification_attempts)\b/i;
+  if (schedulerSql.test(normalized)) {
+    report(
+      'R11-assessment-no-scheduler',
+      relPath,
+      lineOf(normalized, normalized.search(schedulerSql)),
+      'Slice 12 may create follow-up basis metadata but no scheduler/notification business truth'
+    );
+  }
+
+  if (
+    /ensureSceneNodeAvailable\s*\([\s\S]{0,500}?nodeCode\s*:\s*['"]A3000['"]/.test(content)
+  ) {
+    report(
+      'R11-assessment-no-a3000-runtime',
+      relPath,
+      1,
+      'Slice 12 may expose A3000 route intent but must not materialize A3000 runtime state'
+    );
+  }
+  if (
+    /(?:getSceneNodeState|ensureSceneNodeAvailable|casCompleteSceneNodeState|casRecordSceneNodeProgress)\s*\([\s\S]{0,300}?['"]A200401['"]/.test(content)
+  ) {
+    report(
+      'R11-assessment-marker-only',
+      relPath,
+      1,
+      'A200401 is a record marker only and must never be a Scene node state'
+    );
+  }
+}
+
+function runAssessmentRuntimeRules() {
+  scanDir(ROOT, (file) => {
+    const relPath = getRelPath(file);
+    if (!CODE_EXTENSIONS.has(relPath.slice(relPath.lastIndexOf('.')))) return;
+    checkAssessmentRuntimeBoundaries(
+      relPath,
+      readFileSync(file, 'utf-8'),
+      (rule, f, line, message) => addViolation(rule, f, line, message)
+    );
+  }, CODE_EXTENSIONS);
+}
+
+runAssessmentRuntimeRules();
+
 // ─── Self-test: synthetic forbidden bypass fixtures ───
 // `node scripts/guard-static.mjs --self-test` proves the Safety rules detect a
 // bypass even when the real tree is clean. Not part of `bun run guard:static`.
@@ -801,6 +919,24 @@ if (process.argv.includes('--self-test')) {
       content: "export const x = [{ nodeCode: 'A1001', sourceNodeCode: 'A1001', allowedNext: [] }];",
       rule: 'R10-scenes-single-truth',
     },
+    {
+      name: 'direct Problem Formulation SQL in Slice 12',
+      path: 'apps/server/api/src/services/digital-use-evil.ts',
+      content: "await tx.query('INSERT INTO problem_formulations (id) VALUES ($1)', [id]);",
+      rule: 'R11-assessment-problem-formulation-owner',
+    },
+    {
+      name: 'Assessment model dependency',
+      path: 'apps/server/api/src/services/digital-use-node-semantics.ts',
+      content: "import OpenAI from 'openai';",
+      rule: 'R11-assessment-no-model-truth',
+    },
+    {
+      name: 'Assessment scheduler dependency',
+      path: 'apps/server/api/src/services/digital-use-assessment.ts',
+      content: "import PgBoss from 'pg-boss';",
+      rule: 'R11-assessment-no-scheduler',
+    },
   ];
 
   let selfTestFailures = 0;
@@ -813,6 +949,8 @@ if (process.argv.includes('--self-test')) {
       checkComplianceScopeNegatives(sample.path, sample.content, report);
     } else if (sample.rule.startsWith('R10-scenes-')) {
       checkSceneFoundationFile(sample.path, sample.content, report);
+    } else if (sample.rule.startsWith('R11-assessment-')) {
+      checkAssessmentRuntimeBoundaries(sample.path, sample.content, report);
     } else {
       checkSafetyUniqueEntry(sample.path, sample.content, report);
     }
