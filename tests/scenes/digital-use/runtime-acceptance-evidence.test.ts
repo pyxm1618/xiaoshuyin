@@ -32,7 +32,7 @@ const ACCEPTANCE_EVIDENCE: readonly AcceptanceEvidence[] = [
   { id: 12, scenario: '01004 decline', file: 'tests/domain/digital-use-supplemental-assessment.test.ts', needle: 'records explicit decline through Consent owner and routes only to decline terminal' },
   { id: 13, scenario: '01004 consent isolation', file: 'tests/domain/digital-use-supplemental-assessment.test.ts', needle: 'explicitly injects the PR #35 approved disclosure authority into the one Consent owner' },
   { id: 14, scenario: '01000 no invention', file: 'tests/domain/digital-use-supplemental-assessment.test.ts', needle: '01000 persists only the approved category boundary and truthful unavailable state' },
-  { id: 15, scenario: 'A200401 negative node', file: 'tests/domain/digital-use-scene-read.test.ts', needle: 'keeps A200401 and fabricated identities non-addressable' },
+  { id: 15, scenario: 'A200401 GET/POST negative + marker recording', file: 'tests/integration/digital-use-canonical-no-model.test.ts', needle: 'proves A200401 is marker-only across GET, POST, and A2003 recording' },
   { id: 16, scenario: 'A2004 route fidelity', file: 'tests/domain/digital-use-problem-formulation-branches.test.ts', needle: 'A2004 preserves %s Evidence while applying the approved branch' },
   { id: 17, scenario: 'Unknown provenance fidelity', file: 'tests/domain/digital-use-problem-formulation-branches.test.ts', needle: 'A2006 and A2008 require A200401 context and preserve uncertainty' },
   { id: 18, scenario: 'A2005/A2006/A2008/A2009 fidelity', file: 'tests/domain/digital-use-problem-formulation-branches.test.ts', needle: 'A2009 never converts uncertainty into agreement' },
@@ -52,7 +52,7 @@ const ACCEPTANCE_EVIDENCE: readonly AcceptanceEvidence[] = [
   { id: 32, scenario: 'Primary switch race', file: 'tests/integration/digital-use-runtime-hardening.test.ts', needle: 'a primary switch makes the old Assessment Case lose write authority' },
   { id: 33, scenario: 'Atomic injected failure', file: 'tests/integration/digital-use-runtime-hardening.test.ts', needle: 'fault point 5/8: rolls back after router decision before audit/event' },
   { id: 34, scenario: 'PresentProblemFormulation handoff', file: 'tests/domain/digital-use-problem-formulation-handoff.test.ts', needle: 'delegates presentation to the Slice 8 caller-owned seam and never writes formulation SQL' },
-  { id: 35, scenario: 'Full no-model canonical fixture', file: 'tests/scenes/digital-use/architecture-guard.test.ts', needle: 'accepts the canonical repository architecture' },
+  { id: 35, scenario: 'Full no-model canonical fixture', file: 'tests/integration/digital-use-canonical-no-model.test.ts', needle: 'runs the full canonical Slice 12 production orchestration without LLM, RAG, or network route truth' },
   { id: 36, scenario: 'Scope negative', file: 'tests/scenes/digital-use/architecture-guard.test.ts', needle: 'detects cross-tree second truth bypasses without flagging isolated node references' },
 
   { id: 37, scenario: '01002F only → 01005', file: 'tests/scenes/digital-use/integrated-triage.test.ts', needle: "['01002 F'" },
