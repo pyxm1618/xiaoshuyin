@@ -408,7 +408,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 8 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 9 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -561,7 +561,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 15 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 16 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -582,6 +582,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '012_consent_01004_supplemental_enums.sql',
       '013_consent_01004_supplemental_assessment.sql',
       '014_consent_01004_cross_purpose_supersede_guard.sql',
+      '015_digital_use_assessment_runtime.sql',
     ]);
   }, 180_000);
 });
