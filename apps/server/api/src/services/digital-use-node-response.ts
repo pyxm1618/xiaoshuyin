@@ -34,7 +34,7 @@ import type {
   DigitalUseSceneResponseType,
 } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
-import { requireFamilyAction } from '../authz.js';
+import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
@@ -136,15 +136,20 @@ export async function completeDigitalUseNodeResponse(
       purpose: 'FAMILY_MANAGEMENT',
     },
     async (tx) => {
-      await requireFamilyAction(tx, {
-        accountId: input.actor.accountId,
-        personId: input.actor.personId,
-        familyId: input.familyId,
-        caseId: input.caseId,
-        action: 'CASE_RESPOND_ASSESSMENT_SCENE',
-        purpose: 'FAMILY_MANAGEMENT',
-        resource: { type: 'CASE', familyId: input.familyId, caseId: input.caseId },
-      });
+      try {
+        await requireFamilyAction(tx, {
+          accountId: input.actor.accountId,
+          personId: input.actor.personId,
+          familyId: input.familyId,
+          caseId: input.caseId,
+          action: 'CASE_RESPOND_ASSESSMENT_SCENE',
+          purpose: 'FAMILY_MANAGEMENT',
+          resource: { type: 'CASE', familyId: input.familyId, caseId: input.caseId },
+        });
+      } catch (error) {
+        if (!isKnownAuthorizationDenial(error)) throw error;
+        throw nodeError('CASE_NOT_FOUND', 'Case not found');
+      }
 
       // Manifest identity is resolved only after authorization, so fabricated
       // node codes do not become a cross-Family existence oracle.
