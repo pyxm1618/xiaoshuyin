@@ -1505,8 +1505,8 @@ describe('T1218 Digital Use runtime hardening', () => {
     const cleanup = await installFaultTrigger({
       table: 'idempotency_keys',
       timing: 'BEFORE',
-      event: 'INSERT',
-      condition: `NEW.actor_account_id='${f.manager.accountId}'::uuid AND NEW.command_type='DIGITAL_USE_NODE_RESPONSE'`,
+      event: 'UPDATE',
+      condition: `NEW.actor_account_id='${f.manager.accountId}'::uuid AND NEW.command_type='DIGITAL_USE_NODE_RESPONSE' AND NEW.response_status IS NOT NULL`,
       label: 'idem_before',
     });
     try {
@@ -1544,8 +1544,8 @@ describe('T1218 Digital Use runtime hardening', () => {
     const cleanup = await installFaultTrigger({
       table: 'idempotency_keys',
       timing: 'AFTER',
-      event: 'INSERT',
-      condition: `NEW.actor_account_id='${f.manager.accountId}'::uuid AND NEW.command_type='DIGITAL_USE_NODE_RESPONSE'`,
+      event: 'UPDATE',
+      condition: `NEW.actor_account_id='${f.manager.accountId}'::uuid AND NEW.command_type='DIGITAL_USE_NODE_RESPONSE' AND NEW.response_status IS NOT NULL`,
       label: 'idem_after',
     });
     try {
