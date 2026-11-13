@@ -1,5 +1,12 @@
 import { z } from 'zod';
-import { PG_INTEGER_MAX } from './schemas.js';
+import {
+  PG_INTEGER_MAX,
+  CurrentFamilyAmbiguousError,
+  CurrentFamilyNotFoundError,
+  InternalError,
+  UnauthenticatedError,
+  ValidationError,
+} from './schemas.js';
 
 export const SceneNodeStatus = z.enum([
   'LOCKED', 'AVAILABLE', 'IN_PROGRESS', 'COMPLETED', 'SKIPPED', 'BLOCKED',
@@ -137,3 +144,14 @@ export const SceneRuntimeError = z.strictObject({
   ]),
   message: z.string(),
 });
+
+
+export const DigitalUseApiError = z.union([
+  UnauthenticatedError,
+  CurrentFamilyNotFoundError,
+  CurrentFamilyAmbiguousError,
+  ValidationError,
+  InternalError,
+  SceneRuntimeError,
+]);
+export type DigitalUseApiErrorType = z.infer<typeof DigitalUseApiError>;
