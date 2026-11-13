@@ -158,6 +158,27 @@ export interface PurposeScopedConsentDecisionReference {
   readonly replayed: boolean;
 }
 
+export interface PurposeScopedConsentScopeInput {
+  readonly familyId: string;
+  readonly caseId: string;
+  readonly actor: {
+    readonly accountId: string;
+    readonly personId: string;
+  };
+  readonly purpose: SupplementalAssessmentPurpose;
+}
+
+export interface CurrentPurposeScopedConsentDecisionReference {
+  readonly consentRecordId: string;
+  readonly purpose: SupplementalAssessmentPurpose;
+  readonly caseId: string;
+  readonly decisionActorPersonId: string;
+  readonly decision: SupplementalAssessmentDecision;
+  readonly version: number;
+  readonly decidedAt: string;
+  readonly supersedesId: string | null;
+}
+
 interface CurrentSupplementalConsentRow {
   id: string;
   decision: SupplementalAssessmentDecision;
@@ -299,7 +320,7 @@ function resolveApprovedDisclosure(
 
 async function assertVerifiedScope(
   tx: PurposeScopedConsentTx,
-  input: RecordPurposeScopedConsentDecisionInput
+  input: PurposeScopedConsentScopeInput
 ): Promise<void> {
   // Family must be visible in the caller-owned RLS context.
   const family = await tx.query('SELECT 1 FROM families WHERE id = $1', [input.familyId]);
@@ -342,7 +363,7 @@ async function assertVerifiedScope(
 
 async function lockScope(
   tx: PurposeScopedConsentTx,
-  input: RecordPurposeScopedConsentDecisionInput
+  input: PurposeScopedConsentScopeInput
 ): Promise<void> {
   // Transaction-scoped serialization of one logical scope:
   // Family + Case + purpose + actor person (actor == subject).
@@ -354,7 +375,7 @@ async function lockScope(
 
 async function readCurrentDecision(
   tx: PurposeScopedConsentTx,
-  input: RecordPurposeScopedConsentDecisionInput
+  input: PurposeScopedConsentScopeInput
 ): Promise<CurrentSupplementalConsentRow | null> {
   const { rows } = await tx.query(
     `SELECT c.id, c.decision, c.version, c.decided_at, c.supersedes_id,
@@ -436,6 +457,41 @@ function auditEventType(decision: SupplementalAssessmentDecision): string {
     case 'REVOKED':
       return 'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED';
   }
+}
+
+/**
+ * Read and transactionally pin the current supplemental-assessment Consent
+ * truth for one exact Family/Case/actor scope.
+ *
+ * This is a read seam of the existing Consent owner, not a second state store.
+ * It acquires the SAME transaction-scoped advisory lock used by the decision
+ * writer, so a Scene command can re-check current GRANTED truth and keep it
+ * stable until its outer transaction commits. A concurrent revoke/decision is
+ * serialized behind this lock.
+ */
+export async function getCurrentPurposeScopedConsentDecision(
+  tx: PurposeScopedConsentTx,
+  input: PurposeScopedConsentScopeInput
+): Promise<CurrentPurposeScopedConsentDecisionReference | null> {
+  if (input.purpose !== DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT) {
+    fail('CONSENT_PURPOSE_UNSUPPORTED', 'Consent owner only reads the approved 01004 purpose');
+  }
+
+  await assertVerifiedScope(tx, input);
+  await lockScope(tx, input);
+  const current = await readCurrentDecision(tx, input);
+  if (current === null) return null;
+
+  return {
+    consentRecordId: current.id,
+    purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+    caseId: input.caseId,
+    decisionActorPersonId: input.actor.personId,
+    decision: current.decision,
+    version: current.version,
+    decidedAt: new Date(current.decided_at).toISOString(),
+    supersedesId: current.supersedes_id,
+  };
 }
 
 // ── The one authoritative owner seam ────────────────────────────────────────
