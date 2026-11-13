@@ -86,6 +86,45 @@ describe('T1211 Integrated Triage authority matrix', () => {
     expect(evaluateIntegratedTriage(evidence).outcome).toBe(expected);
   });
 
+  it.each([
+    ['NO_RECORD', missing()],
+    ['UNKNOWN', missing('UNKNOWN')],
+    ['NOT_COLLECTED', missing('NOT_COLLECTED')],
+    ['DECLINED', missing('DECLINED')],
+  ] as const)(
+    'direct-impact %s without a usable current value stays INSUFFICIENT',
+    (_name, unresolved) => {
+      const result = evaluateIntegratedTriage(fixture({
+        directImpact: {
+          sleep: unresolved,
+          studyOrNecessaryAffairs: v(false),
+          realWorldActivityDisplacement: v(false),
+        },
+      }));
+      expect(result.outcome).toBe('INSUFFICIENT');
+      expect(result.conditions).toEqual({});
+    }
+  );
+
+  it('never defaults absence or unresolved evidence into a normal triage outcome', () => {
+    const result = evaluateIntegratedTriage(fixture({
+      emotion01002: missing('UNKNOWN'),
+      family01003: missing('NOT_COLLECTED'),
+      directImpact: {
+        sleep: missing('DECLINED'),
+        studyOrNecessaryAffairs: missing(),
+        realWorldActivityDisplacement: missing('UNKNOWN'),
+      },
+    }));
+    expect(result.outcome).toBe('INSUFFICIENT');
+    expect(result.conditions).toEqual({});
+    expect([
+      result.predicates.CLEAN_NON_DIGITAL_USE_STATE,
+      result.predicates.DIRECT_DIGITAL_USE_IMPACT_POSITIVE,
+      result.predicates.DIRECT_DIGITAL_USE_IMPACT_NEGATIVE,
+    ]).not.toContain(true);
+  });
+
   it('requires positive direct-impact proof for A2003 and never duration-only', () => {
     const positive = evaluateIntegratedTriage(fixture({
       directImpact: {
