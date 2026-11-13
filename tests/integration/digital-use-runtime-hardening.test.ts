@@ -160,7 +160,8 @@ describe('T1218 Digital Use runtime hardening', () => {
     await admin.query(
       `UPDATE scene_node_states
           SET status='COMPLETED',
-              completed_at=COALESCE(completed_at, now())
+              completed_at=COALESCE(completed_at, now()),
+              revision=revision+1
         WHERE case_id=$1
           AND status IN ('AVAILABLE','IN_PROGRESS')`,
       [f.caseId]
