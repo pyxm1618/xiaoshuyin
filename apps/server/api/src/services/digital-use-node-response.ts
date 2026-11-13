@@ -231,7 +231,9 @@ export async function completeDigitalUseNodeResponse(
               packageVersion: DIGITAL_USE_PACKAGE_VERSION,
               currentNodeCode: node.nodeCode,
               conditions: semantic.conditions,
-              evidenceBasis: semantic.evidenceBasis,
+              ...(semantic.evidenceBasis === undefined
+                ? {}
+                : { evidenceBasis: semantic.evidenceBasis }),
             })
           );
 
