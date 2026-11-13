@@ -154,7 +154,7 @@ describe('T1211 Integrated Triage authority matrix', () => {
     expect(evaluateIntegratedTriage(evidence)).toEqual(evaluateIntegratedTriage(evidence));
 
     const source = readFileSync(
-      new URL('../../packages/scenes/digital-use/integrated-triage.ts', import.meta.url),
+      new URL('../../../packages/scenes/digital-use/integrated-triage.ts', import.meta.url),
       'utf8'
     );
     expect(source).not.toMatch(/openai|anthropic|llm|embedding|classifier|fetch\s*\(|http[s]?:\/\//i);
