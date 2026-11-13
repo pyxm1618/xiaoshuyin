@@ -2,8 +2,9 @@
  * T029 / T059 — Slice 3 scope guard.
  *
  * Enumerates the real database, routes and production exports; requires the
- * approved three tables / one route / four writers and forbids every future
- * Slice object. RED before the Slice 3 objects exist.
+ * approved Slice 3 Evidence tables / writers and still forbids generic Evidence
+ * or FACT authority. Later reviewed owners (including Slice 12 Scene projection)
+ * are explicitly allowed instead of being misclassified as future Slice 3 scope.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -22,8 +23,6 @@ const FORBIDDEN_TABLES = [
   'evidence_items',
   'participation_invites',
   'assessments',
-  'scene_node_states',
-  'scene_artifacts',
   'safety_states',
   'goals',
   'intervention_instances',
@@ -45,8 +44,6 @@ const FORBIDDEN_FRAGMENTS = [
   '/evidence',
   '/facts',
   '/fact',
-  '/assessments',
-  '/scene',
   '/participants',
 ];
 
@@ -74,7 +71,7 @@ describe('Evidence scope guard (T029)', () => {
     await app.close();
   });
 
-  it('database contains exactly the three approved Slice 3 tables and no future object', async () => {
+  it('database preserves the three approved Evidence tables and no parallel Evidence/future fact object', async () => {
     const { rows } = await verifyPool.query(
       `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`
     );
@@ -89,7 +86,7 @@ describe('Evidence scope guard (T029)', () => {
     expect(evidenceLike.sort()).toEqual(APPROVED_TABLES);
   });
 
-  it('routes expose one new message POST and no generic Evidence / FACT endpoint', () => {
+  it('routes retain the message POST and expose no generic Evidence / FACT endpoint', () => {
     const routes = app.printRoutes({ commonPrefix: false });
     expect(routes).toContain('/messages (POST)');
     for (const fragment of FORBIDDEN_FRAGMENTS) {
