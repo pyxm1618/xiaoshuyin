@@ -519,3 +519,55 @@ export async function listCurrentSceneEvidenceStatements(
   );
   return rows;
 }
+
+export interface DigitalUseEvidenceAssertionRow {
+  id: string;
+  family_id: string;
+  case_id: string;
+  source_person_id: string | null;
+  conflict_group_id: string | null;
+  confirmation_status: 'UNCONFIRMED' | 'SOURCE_CONFIRMED' | 'DISPUTED';
+  content: string;
+  recorded_at: Date;
+}
+
+/**
+ * Read current Slice 12 facts from Evidence Core only.
+ *
+ * "Current" follows Evidence supersedes semantics: an assertion remains current
+ * until another assertion in the same Case explicitly supersedes it. The
+ * DUA1 prefix is only a typed encoding inside Evidence content; it is not a
+ * second answer table or truth store.
+ */
+export async function listCurrentDigitalUseEvidenceAssertions(
+  tx: Tx,
+  caseId: string,
+  code: string,
+  sourcePersonId?: string
+): Promise<DigitalUseEvidenceAssertionRow[]> {
+  const prefix = `DUA1:${code}:%`;
+  const params: unknown[] = [caseId, prefix];
+  const sourcePredicate =
+    sourcePersonId === undefined ? '' : 'AND a.source_person_id = $3';
+  if (sourcePersonId !== undefined) params.push(sourcePersonId);
+
+  const { rows } = await tx.query<DigitalUseEvidenceAssertionRow>(
+    `SELECT a.id, a.family_id, a.case_id, a.source_person_id,
+            a.conflict_group_id, a.confirmation_status, a.content, a.recorded_at
+       FROM assertions a
+      WHERE a.case_id = $1
+        AND a.kind = 'STATEMENT'
+        AND a.content LIKE $2
+        ${sourcePredicate}
+        AND NOT EXISTS (
+          SELECT 1
+            FROM assertions newer
+           WHERE newer.case_id = a.case_id
+             AND newer.supersedes_id = a.id
+        )
+      ORDER BY a.recorded_at ASC, a.id ASC`,
+    params
+  );
+  return rows;
+}
+
