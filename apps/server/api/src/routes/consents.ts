@@ -107,7 +107,12 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
             });
           }
 
-          // Create REVOKED version (v+1). Evidence keeps the frozen five-field shape.
+          // Guardian revoke path only: the repository read already restricts the
+          // purpose, and the guardian branch makes both identities non-null.
+          if (!consent.guardian_person_id || !consent.guardian_account_id) {
+            const err = toHttpError('VALIDATION_ERROR', 'Invalid guardian consent record');
+            throw Object.assign(new Error(err.message), err);
+          }
           const revocationTextHash = getRevocationTextHash(consent.notice_version);
           if (!revocationTextHash) {
             const err = toHttpError('VALIDATION_ERROR', 'Invalid notice version');

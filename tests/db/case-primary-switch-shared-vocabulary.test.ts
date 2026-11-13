@@ -35,6 +35,11 @@ const EXPECTED_AUDIT_EVENTS = [
   // value above must survive.
   'CASE_SAFETY_HOLD_ENTERED',
   'CASE_RISK_RESOLVED',
+  // Slice 1 Consent Owner 01004 remediation appends exactly three
+  // supplemental-assessment consent outcomes.
+  'CONSENT_SUPPLEMENTAL_ASSESSMENT_GRANTED',
+  'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
+  'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
 ];
 
 const EXPECTED_COMMANDS = [

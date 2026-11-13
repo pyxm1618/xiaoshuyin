@@ -20,8 +20,10 @@
 import { createHash, createHmac } from 'node:crypto';
 import {
   ConsentEvidence,
+  SupplementalAssessmentConsentEvidence,
   type ConsentChannelType,
   type ConsentEvidenceType,
+  type SupplementalAssessmentConsentEvidenceType,
 } from '@xiaoshuyin/contracts';
 
 export function sha256Hex(text: string): string {
@@ -64,4 +66,46 @@ export function buildConsentEvidence(input: ConsentEvidenceInput): ConsentEviden
 /** Server-decided consent channel (Owner ruling C1 / option d). */
 export function runtimeConsentChannel(env: NodeJS.ProcessEnv = process.env): ConsentChannelType {
   return env['NODE_ENV'] === 'test' ? 'TEST' : 'MINIPROGRAM';
+}
+export interface SupplementalAssessmentConsentEvidenceInput {
+  decision: 'GRANTED' | 'DECLINED' | 'REVOKED';
+  /** Server-verified decision actor; for this purpose it IS the Consent subject. */
+  decisionActorPersonId: string;
+  caseId: string;
+  disclosureReference: string;
+  disclosureVersion: string;
+  disclosureHash: string;
+  confirmationStatementHash: string;
+  /** Server-generated decision time; never taken from the client. */
+  decidedAt: Date;
+  /** Raw client IP; hashed with the evidence pepper, never persisted as-is. */
+  clientIp: string | null;
+  /** Raw User-Agent; hashed with the evidence pepper, never persisted as-is. */
+  userAgent: string | null;
+  /** Deployment secret (EVIDENCE_HASH_PEPPER); never persisted. */
+  pepper: string;
+}
+
+/**
+ * Build and validate the purpose-discriminated supplemental evidence object.
+ * Raw IP / User-Agent never leave this function: only HMAC-SHA256 digests are
+ * stored, matching the existing guardian privacy discipline.
+ */
+export function buildSupplementalAssessmentConsentEvidence(
+  input: SupplementalAssessmentConsentEvidenceInput
+): SupplementalAssessmentConsentEvidenceType {
+  return SupplementalAssessmentConsentEvidence.parse({
+    evidence_kind: 'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT',
+    purpose: 'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT',
+    disclosure_reference: input.disclosureReference,
+    disclosure_version: input.disclosureVersion,
+    disclosure_hash: input.disclosureHash,
+    confirmation_statement_hash: input.confirmationStatementHash,
+    decision: input.decision,
+    decision_actor_person_id: input.decisionActorPersonId,
+    case_id: input.caseId,
+    decided_at: input.decidedAt.toISOString(),
+    client_ip_hash: hmacSha256Hex(input.pepper, input.clientIp ?? ''),
+    user_agent_hash: hmacSha256Hex(input.pepper, input.userAgent ?? ''),
+  });
 }

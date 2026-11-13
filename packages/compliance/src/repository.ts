@@ -15,14 +15,19 @@ export type Tx = PoolClient;
 export interface ConsentRecordRow {
   id: string;
   family_id: string;
-  guardian_person_id: string;
-  guardian_account_id: string;
+  guardian_person_id: string | null;
+  guardian_account_id: string | null;
   purpose: string;
-  decision: 'GRANTED' | 'REVOKED';
+  decision: 'GRANTED' | 'DECLINED' | 'REVOKED';
   version: number;
   onboarding_request_id: string | null;
   bound_person_id: string | null;
   bound_at: Date | null;
+  case_id: string | null;
+  decision_actor_person_id: string | null;
+  decision_actor_account_id: string | null;
+  disclosure_reference: string | null;
+  confirmation_statement_hash: string | null;
   notice_version: string;
   notice_hash: string;
   policy_version: string;
@@ -87,11 +92,18 @@ export async function updateConsentRequestGranted(tx: Tx, id: string): Promise<v
 
 const CONSENT_COLUMNS = `id, family_id, guardian_person_id, guardian_account_id, purpose,
   decision, version, onboarding_request_id, bound_person_id, bound_at,
+  case_id, decision_actor_person_id, decision_actor_account_id,
+  disclosure_reference, confirmation_statement_hash,
   notice_version, notice_hash, policy_version, evidence, decided_at, supersedes_id`;
+
+// FR-004: every guardian gate / binding / revoke path must only ever consider
+// the guardian purpose. Supplemental truth can never satisfy a guardian gate.
+const GUARDIAN_PURPOSE = 'UNDER_14_GUARDIAN_CONSENT';
 
 export async function getConsentRecordForUpdate(tx: Tx, id: string): Promise<ConsentRecordRow | null> {
   const { rows } = await tx.query(
-    `SELECT ${CONSENT_COLUMNS} FROM consent_records WHERE id = $1 FOR UPDATE`,
+    `SELECT ${CONSENT_COLUMNS} FROM consent_records
+      WHERE id = $1 AND purpose = '${GUARDIAN_PURPOSE}' FOR UPDATE`,
     [id]
   );
   return rows[0] ?? null;
@@ -139,6 +151,7 @@ export async function getValidConsentForBinding(
              WHERE r.id = c.onboarding_request_id) AS request_valid
      FROM consent_records c
      WHERE c.id = $1
+       AND c.purpose = '${GUARDIAN_PURPOSE}'
      FOR UPDATE`,
     [id]
   );
@@ -189,7 +202,8 @@ export async function getComplianceProfileForUpdate(tx: Tx, personId: string) {
 export async function getConsentRecordForGate(tx: Tx, id: string) {
   const { rows } = await tx.query(
     `SELECT id, version, decision, bound_person_id, notice_hash, guardian_person_id, evidence
-     FROM consent_records WHERE id = $1`,
+     FROM consent_records
+      WHERE id = $1 AND purpose = '${GUARDIAN_PURPOSE}'`,
     [id]
   );
   const row = rows[0];
@@ -248,9 +262,12 @@ export async function bindConsentToPerson(
 }
 
 export async function getConsentsByFamily(tx: Tx, familyId: string) {
+  // FR-060: the existing public read contract stays guardian-only. Supplemental
+  // records are never exposed through this unapproved public projection.
   const { rows } = await tx.query(
-    `SELECT ${CONSENT_COLUMNS} FROM consent_records WHERE family_id = $1
-     ORDER BY decided_at DESC`,
+    `SELECT ${CONSENT_COLUMNS} FROM consent_records
+      WHERE family_id = $1 AND purpose = '${GUARDIAN_PURPOSE}'
+      ORDER BY decided_at DESC`,
     [familyId]
   );
   return rows;

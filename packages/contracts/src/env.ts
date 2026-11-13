@@ -1,10 +1,16 @@
 import { z } from 'zod';
+import { MIN_EVIDENCE_PEPPER_LENGTH } from './evidence-pepper-policy.js';
 
 export const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   MIGRATION_DATABASE_URL: z.string().min(1, 'MIGRATION_DATABASE_URL is required'),
   SESSION_SECRET: z.string().min(16, 'SESSION_SECRET must be at least 16 characters'),
-  EVIDENCE_HASH_PEPPER: z.string().min(16, 'EVIDENCE_HASH_PEPPER must be at least 16 characters'),
+  EVIDENCE_HASH_PEPPER: z
+    .string()
+    .min(
+      MIN_EVIDENCE_PEPPER_LENGTH,
+      `EVIDENCE_HASH_PEPPER must be at least ${MIN_EVIDENCE_PEPPER_LENGTH} characters`
+    ),
   WECHAT_APP_ID: z.string().min(1, 'WECHAT_APP_ID is required'),
   WECHAT_APP_SECRET: z.string().min(1, 'WECHAT_APP_SECRET is required'),
   // Slice 006 identity binding. Required, no defaults: a missing value must

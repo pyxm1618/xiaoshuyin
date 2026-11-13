@@ -315,7 +315,7 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     expect(output).toContain('APPLY 008_problem_formulation_core.sql');
     expect(output).toContain('APPLY 010_problem_formulation_safety_vocabulary_reconcile.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 3 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 6 new, 9 previously applied\./);
 
     const client = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await client.connect();
@@ -372,14 +372,17 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     await client.connect();
     try {
       expect(await readSafetyRows(client, pre.fixture.caseId)).toEqual(pre.safetyRows);
-      await assertUnionConstraints(client);
+      await assertUnionConstraints(client, false);
     } finally {
       await client.end();
     }
   }, 180_000);
 });
 
-async function assertUnionConstraints(client: Client): Promise<void> {
+async function assertUnionConstraints(
+  client: Client,
+  includeSupplementalConsentAudit = true
+): Promise<void> {
   const definitions = new Map<string, string>(
     (
       await client.query<{ conname: string; definition: string }>(
@@ -446,6 +449,13 @@ async function assertUnionConstraints(client: Client): Promise<void> {
     'CASE_PRIMARY_SWITCHED',
     ...SLICE8_AUDIT_EVENT_TYPES,
     ...SLICE9_AUDIT_EVENT_TYPES,
+    ...(includeSupplementalConsentAudit
+      ? [
+          'CONSENT_SUPPLEMENTAL_ASSESSMENT_GRANTED',
+          'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
+          'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
+        ]
+      : []),
   ]);
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
