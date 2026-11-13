@@ -158,6 +158,14 @@ describe('T1218 Digital Use runtime hardening', () => {
       [f.caseId]
     );
     await admin.query(
+      `UPDATE scene_node_states
+          SET status='COMPLETED',
+              completed_at=COALESCE(completed_at, now())
+        WHERE case_id=$1
+          AND status IN ('AVAILABLE','IN_PROGRESS')`,
+      [f.caseId]
+    );
+    await admin.query(
       `INSERT INTO scene_node_states
          (family_id, case_id, scene_package_version, node_code, source_node_code,
           status, branch_reason_codes, input_refs, output_refs, revision)
@@ -1521,7 +1529,7 @@ describe('T1218 Digital Use runtime hardening', () => {
            (SELECT count(*)::int FROM case_events
              WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED') AS events,
            (SELECT count(*)::int FROM business_audit_events
-             WHERE resource_type='CASE' AND resource_id::text=$1
+             WHERE resource_type='CASE' AND resource_id::text=$1::text
                AND event_type='DIGITAL_USE_NODE_COMPLETED') AS audits`,
         [f.caseId]
       );
@@ -1560,7 +1568,7 @@ describe('T1218 Digital Use runtime hardening', () => {
            (SELECT count(*)::int FROM case_events
              WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED') AS events,
            (SELECT count(*)::int FROM business_audit_events
-             WHERE resource_type='CASE' AND resource_id::text=$1
+             WHERE resource_type='CASE' AND resource_id::text=$1::text
                AND event_type='DIGITAL_USE_NODE_COMPLETED') AS audits`,
         [f.caseId]
       );
