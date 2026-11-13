@@ -58,6 +58,21 @@ const PLAN_MD = `# Implementation Plan: fixture
 - unit test
 `;
 
+const ANNOTATED_SPEC_MD = `# Feature Specification: annotated fixture
+
+## Upstream Traceability
+- U01
+
+## Scope（§2A）
+In scope: fixture.
+
+## Acceptance Scenarios（§18）
+1. Fixture passes.
+
+## Acceptance Evidence（§20）
+- unit test
+`;
+
 const buildTasks = ({ req = "[REQ:U01]", verify = "[VERIFY:unit test]" } = {}) => `# Tasks: fixture
 
 - [ ] T001 do the thing ${req} ${verify}
@@ -230,6 +245,34 @@ for (const fixture of [
   if (pass && fixture.error && !actual.out.includes(fixture.error)) {
     results[results.length - 1].pass = false;
     results[results.length - 1].note = `missing expected error: ${fixture.error}`;
+  }
+  cleanup(root);
+}
+
+
+{
+  const root = makeProject();
+  const dir = "009-annotated-section-suffixes";
+  featureDir(root, dir);
+  writeFile(root, path.join("specs", dir, "spec.md"), ANNOTATED_SPEC_MD);
+  record("annotated reviewed section suffixes pass", 0, run(validator, root));
+  cleanup(root);
+}
+
+{
+  const root = makeProject();
+  const dir = "010-lookalike-section-boundaries";
+  featureDir(root, dir);
+  writeFile(
+    root,
+    path.join("specs", dir, "spec.md"),
+    SPEC_MD.replace("## Scope", "## ScopeGuard")
+  );
+  const actual = run(validator, root);
+  const pass = record("lookalike section prefix does not pass", 1, actual);
+  if (pass && !actual.out.includes('missing required section "## Scope"')) {
+    results[results.length - 1].pass = false;
+    results[results.length - 1].note = "missing expected Scope error";
   }
   cleanup(root);
 }
