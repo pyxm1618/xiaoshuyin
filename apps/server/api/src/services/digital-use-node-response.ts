@@ -93,7 +93,12 @@ export function assertNodeCasePreconditions(
   if (caseRow.status !== 'OPEN') throw nodeError('CASE_NOT_OPEN');
   if (!caseRow.is_primary) throw nodeError('CASE_NOT_PRIMARY');
   if (caseRow.version !== expectedCaseVersion) throw nodeError('STALE_CASE_VERSION');
-  if (caseRow.phase !== node.phase) throw nodeError('CASE_PHASE_CONFLICT');
+  // Digital Use A/010xx phases are Scene metadata, not a second global Case
+  // phase machine. Slice 12 owns only the ASSESSMENT -> PROBLEM_FORMULATION
+  // Common Core bridge; Goal/Planning runtime is explicitly out of scope.
+  const requiredCasePhase =
+    node.phase === 'ASSESSMENT' ? 'ASSESSMENT' : 'PROBLEM_FORMULATION';
+  if (caseRow.phase !== requiredCasePhase) throw nodeError('CASE_PHASE_CONFLICT');
 }
 
 export type ResolvedRoute =
@@ -301,8 +306,14 @@ async function executeProblemFormulationHandoffPath(
   }
 
   const route = routeSemantic(node, semantic);
-  if (route.kind !== 'NODE' || route.nextNodeCode !== 'A2003') {
+  if (route.kind !== 'NODE') {
     throw nodeError('SCENE_ROUTE_UNRESOLVED', 'Handoff preview no longer matches route');
+  }
+  const routedNext = resolveDigitalUseRuntimeNode(route.nextNodeCode);
+  // The actual handoff decision is bound to Slice 11 manifest phase metadata,
+  // never numeric adjacency or a hard-coded A2003 target.
+  if (routedNext.phase !== 'PROBLEM_FORMULATION') {
+    throw nodeError('SCENE_ROUTE_UNRESOLVED', 'Handoff preview no longer matches manifest phase');
   }
 
   const handoff = await presentDigitalUseProblemFormulationInTransaction(tx, {
@@ -368,13 +379,12 @@ async function executeProblemFormulationHandoffPath(
   });
   if (!completed) throw nodeError('STALE_NODE_REVISION');
 
-  const next = resolveDigitalUseRuntimeNode('A2003');
   await ensureSceneNodeAvailable(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-    nodeCode: next.nodeCode,
-    sourceNodeCode: next.sourceNodeCode,
+    nodeCode: routedNext.nodeCode,
+    sourceNodeCode: routedNext.sourceNodeCode,
     branchReasonCodes: [route.reasonCode],
     inputRefs: nextInputRefs(semantic),
   });
@@ -389,7 +399,7 @@ async function executeProblemFormulationHandoffPath(
     routeReasonCode: route.reasonCode,
     inputRefs: semantic.inputRefs,
     outputRefs: semantic.outputRefs,
-    nextNodeCode: 'A2003',
+    nextNodeCode: routedNext.nodeCode,
     terminalCode: null,
   });
   await insertDigitalUseNodeCompletedAudit(tx, {
@@ -400,7 +410,7 @@ async function executeProblemFormulationHandoffPath(
     nodeCode: node.nodeCode,
     nodeRevision: completed.revision,
     routeReasonCode: route.reasonCode,
-    nextNodeCode: 'A2003',
+    nextNodeCode: routedNext.nodeCode,
     terminalCode: null,
   });
 
