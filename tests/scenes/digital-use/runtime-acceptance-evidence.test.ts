@@ -50,7 +50,7 @@ const ACCEPTANCE_EVIDENCE: readonly AcceptanceEvidence[] = [
   { id: 30, scenario: 'Idempotency mismatch', file: 'tests/integration/digital-use-runtime-hardening.test.ts', needle: "IDEMPOTENCY_PAYLOAD_MISMATCH" },
   { id: 31, scenario: 'Concurrent node response', file: 'tests/integration/digital-use-runtime-hardening.test.ts', needle: 'allows only one winner for two concurrent responses at the same revision' },
   { id: 32, scenario: 'Primary switch race', file: 'tests/integration/digital-use-runtime-hardening.test.ts', needle: 'a primary switch makes the old Assessment Case lose write authority' },
-  { id: 33, scenario: 'Atomic injected failure', file: 'tests/integration/digital-use-runtime-hardening.test.ts', needle: 'rolls back Evidence + Scene CAS when a later event write is fault-injected' },
+  { id: 33, scenario: 'Atomic injected failure', file: 'tests/integration/digital-use-runtime-hardening.test.ts', needle: 'fault point 5/8: rolls back after router decision before audit/event' },
   { id: 34, scenario: 'PresentProblemFormulation handoff', file: 'tests/domain/digital-use-problem-formulation-handoff.test.ts', needle: 'delegates presentation to the Slice 8 caller-owned seam and never writes formulation SQL' },
   { id: 35, scenario: 'Full no-model canonical fixture', file: 'tests/scenes/digital-use/architecture-guard.test.ts', needle: 'accepts the canonical repository architecture' },
   { id: 36, scenario: 'Scope negative', file: 'tests/scenes/digital-use/architecture-guard.test.ts', needle: 'detects cross-tree second truth bypasses without flagging isolated node references' },
