@@ -75,8 +75,6 @@ import {
   InvitationNotAvailableError,
   ParticipationNotFoundError,
   ParticipationValidationError,
-  StartDigitalUseAssessmentRequest,
-  CompleteDigitalUseNodeRequest,
   DigitalUseSceneResponse,
   DigitalUseNodeResponse,
   SceneRuntimeError,
@@ -750,7 +748,18 @@ export function buildOpenApiDocument() {
           paramRef('CaseId'),
           paramRef('IdempotencyKeyHeader'),
         ],
-        requestBody: jsonBody(toJsonSchema(StartDigitalUseAssessmentRequest)),
+        requestBody: jsonBody({
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            expectedCaseVersion: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 2147483647,
+            },
+          },
+          required: ['expectedCaseVersion'],
+        }),
         responses: {
           '200': jsonResponse('Digital Use Assessment started or resumed', toJsonSchema(DigitalUseSceneResponse)),
           '401': errorResponse('`UNAUTHENTICATED`'),
@@ -816,7 +825,27 @@ export function buildOpenApiDocument() {
           },
           paramRef('IdempotencyKeyHeader'),
         ],
-        requestBody: jsonBody(toJsonSchema(CompleteDigitalUseNodeRequest)),
+        requestBody: jsonBody({
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            expectedCaseVersion: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 2147483647,
+            },
+            expectedNodeRevision: {
+              type: 'integer',
+              minimum: 1,
+              maximum: 2147483647,
+            },
+            response: {
+              type: 'object',
+              additionalProperties: true,
+            },
+          },
+          required: ['expectedCaseVersion', 'expectedNodeRevision', 'response'],
+        }),
         responses: {
           '200': jsonResponse('Node response committed or idempotently replayed', toJsonSchema(DigitalUseSceneResponse)),
           '401': errorResponse('`UNAUTHENTICATED`'),
