@@ -18,6 +18,7 @@ import {
   getCaseById,
   getScenePackageBinding,
   getReservedIdempotency,
+  getSceneNodeState,
   hashPayload,
   isLegacyTextLookupSafe,
   listSceneArtifacts,
@@ -31,8 +32,9 @@ import {
   DIGITAL_USE_PACKAGE_VERSION,
   DIGITAL_USE_SCENE_CODE,
   initialA1001Projection,
+  resolveDigitalUseRuntimeNode,
 } from '@xiaoshuyin/scenes/digital-use';
-import type { DigitalUseSceneResponseType } from '@xiaoshuyin/contracts';
+import type { DigitalUseNodeResponseType, DigitalUseSceneResponseType } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
 import { requireFamilyAction } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
@@ -128,7 +130,7 @@ function artifactDto(row: SceneArtifactRow) {
   };
 }
 
-function buildSceneEnvelope(input: {
+export function buildSceneEnvelope(input: {
   caseRow: SceneCaseRow;
   nodes: SceneNodeStateRow[];
   artifacts: SceneArtifactRow[];
@@ -302,6 +304,103 @@ export async function startOrResumeDigitalUseAssessment(
         throw sceneError('IDEMPOTENCY_PAYLOAD_MISMATCH');
       }
       return outcome.body as DigitalUseSceneResponseType;
+    }
+  );
+}
+
+
+export interface ReadDigitalUseSceneInput {
+  readonly actor: DigitalUseActor;
+  readonly familyId: string;
+  readonly caseId: string;
+}
+
+async function authorizeSceneRead(
+  tx: pg.PoolClient,
+  input: ReadDigitalUseSceneInput
+): Promise<SceneCaseRow> {
+  await requireFamilyAction(tx, {
+    accountId: input.actor.accountId,
+    personId: input.actor.personId,
+    familyId: input.familyId,
+    caseId: input.caseId,
+    action: 'CASE_READ_ASSESSMENT_SCENE',
+    purpose: 'FAMILY_MANAGEMENT',
+    resource: { type: 'CASE', familyId: input.familyId, caseId: input.caseId },
+  });
+  const caseRow = await getCaseById(tx, input.caseId);
+  if (!caseRow) throw sceneError('CASE_NOT_FOUND', 'Case not found');
+  const binding = await getScenePackageBinding(tx, input.caseId);
+  if (binding === null) throw sceneError('SCENE_NODE_UNREACHABLE', 'Scene has not started');
+  if (binding !== DIGITAL_USE_PACKAGE_VERSION) throw sceneError('STALE_SCENE_PACKAGE');
+  return caseRow;
+}
+
+/** Authorized read-only Scene projection. Never creates or advances state. */
+export async function getDigitalUseScene(
+  pool: pg.Pool,
+  input: ReadDigitalUseSceneInput
+): Promise<DigitalUseSceneResponseType> {
+  return withRlsTransaction(
+    pool,
+    {
+      familyId: input.familyId,
+      accountId: input.actor.accountId,
+      personId: input.actor.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    },
+    async (tx) => {
+      await authorizeSceneRead(tx, input);
+      return currentSceneEnvelope(tx, input.caseId);
+    }
+  );
+}
+
+/**
+ * Authorized read-only node view. Manifest identity is necessary but not
+ * sufficient: a node without a current sparse projection is unreachable.
+ * A200401 is rejected by the canonical runtime-node resolver.
+ */
+export async function getDigitalUseNode(
+  pool: pg.Pool,
+  input: ReadDigitalUseSceneInput & { readonly nodeCode: string }
+): Promise<DigitalUseNodeResponseType> {
+  const manifestNode = resolveDigitalUseRuntimeNode(input.nodeCode);
+  return withRlsTransaction(
+    pool,
+    {
+      familyId: input.familyId,
+      accountId: input.actor.accountId,
+      personId: input.actor.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    },
+    async (tx) => {
+      const caseRow = await authorizeSceneRead(tx, input);
+      const stored = await getSceneNodeState(tx, input.caseId, manifestNode.nodeCode);
+      if (!stored) throw sceneError('SCENE_NODE_UNREACHABLE');
+      if (stored.scene_package_version !== DIGITAL_USE_PACKAGE_VERSION) {
+        throw sceneError('STALE_SCENE_PACKAGE');
+      }
+      const artifacts = await listSceneArtifacts(tx, input.caseId);
+      return {
+        caseId: caseRow.id,
+        caseVersion: caseRow.version,
+        sceneCode: DIGITAL_USE_SCENE_CODE,
+        scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+        node: nodeDto(stored),
+        artifacts: artifacts
+          .filter((artifact) => artifact.source_node_code === stored.node_code)
+          .map(artifactDto),
+        routeReasonCode: stored.branch_reason_codes.at(-1) ?? null,
+        downstream:
+          stored.node_code === 'A2010'
+            ? {
+                routeIntent: 'A3000',
+                available: false,
+                reasonCode: 'DOWNSTREAM_RUNTIME_UNAVAILABLE',
+              }
+            : { routeIntent: null, available: true, reasonCode: null },
+      };
     }
   );
 }

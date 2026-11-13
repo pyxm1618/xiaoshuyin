@@ -67,6 +67,18 @@ export const DigitalUseSceneResponse = z.strictObject({
 });
 export type DigitalUseSceneResponseType = z.infer<typeof DigitalUseSceneResponse>;
 
+export const DigitalUseNodeResponse = z.strictObject({
+  caseId: z.string().uuid(),
+  caseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
+  sceneCode: z.literal('DIGITAL_USE'),
+  scenePackageVersion: z.literal('v1'),
+  node: SceneNodeProjection,
+  artifacts: z.array(SceneArtifact),
+  routeReasonCode: z.string().nullable(),
+  downstream: DownstreamAvailability,
+});
+export type DigitalUseNodeResponseType = z.infer<typeof DigitalUseNodeResponse>;
+
 export const StartDigitalUseAssessmentRequest = z.strictObject({
   expectedCaseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
 });
