@@ -23,6 +23,7 @@ import {
   isLegacyTextLookupSafe,
   listSceneArtifacts,
   listSceneNodeStates,
+  resolveTraceableStatement,
   ensureSceneNodeAvailable,
   type SceneArtifactRow,
   type SceneCaseRow,
@@ -188,6 +189,8 @@ async function ensureA1001(
   input: Pick<StartDigitalUseAssessmentInput, 'familyId' | 'caseId'>
 ): Promise<SceneNodeStateRow> {
   const initial = initialA1001Projection();
+  const carrier = await resolveTraceableStatement(tx, input.caseId);
+  if (!carrier) throw sceneError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
   return ensureSceneNodeAvailable(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
@@ -195,6 +198,7 @@ async function ensureA1001(
     nodeCode: initial.nodeCode,
     sourceNodeCode: initial.sourceNodeCode,
     branchReasonCodes: ['LEGAL_DIGITAL_USE_SCENE_ENTRY'],
+    inputRefs: [{ type: carrier.type, id: carrier.id }],
   });
 }
 
@@ -218,7 +222,7 @@ function stableInitialSceneEnvelope(
     status: 'AVAILABLE',
     revision: 1,
     branch_reason_codes: ['LEGAL_DIGITAL_USE_SCENE_ENTRY'],
-    input_refs: [],
+    input_refs: a1001.input_refs,
     output_refs: [],
     completed_at: null,
   };
