@@ -548,9 +548,7 @@ ALTER TABLE idempotency_keys
         'PROBLEM_FORMULATION_CORRECT',
         'CASE_REASSESS_FROM_FORMULATION',
         'CASE_ENTER_SAFETY_HOLD',
-        'CASE_RESOLVE_RISK',
-        'DIGITAL_USE_ASSESSMENT_RESUME',
-        'DIGITAL_USE_NODE_RESPONSE'
+        'CASE_RESOLVE_RISK'
       )
       AND idempotency_key IS NOT NULL
       AND idempotency_key_bytes IS NULL
@@ -572,9 +570,7 @@ ALTER TABLE idempotency_keys
         'PROBLEM_FORMULATION_CORRECT',
         'CASE_REASSESS_FROM_FORMULATION',
         'CASE_ENTER_SAFETY_HOLD',
-        'CASE_RESOLVE_RISK',
-        'DIGITAL_USE_ASSESSMENT_RESUME',
-        'DIGITAL_USE_NODE_RESPONSE'
+        'CASE_RESOLVE_RISK'
       )
       AND idempotency_key IS NULL
       AND idempotency_key_bytes IS NOT NULL
