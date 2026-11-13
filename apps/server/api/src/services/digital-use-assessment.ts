@@ -81,6 +81,7 @@ export function decideAssessmentEntry(
 ): AssessmentEntryDecision {
   if (row.status === 'SAFETY_HOLD') throw sceneError('SAFETY_HOLD_BLOCKED');
   if (row.status === 'CLOSED') throw sceneError('CASE_CLOSED');
+  if (row.status !== 'OPEN') throw sceneError('CASE_NOT_OPEN');
   if (!row.is_primary) throw sceneError('CASE_NOT_PRIMARY');
   if (row.version !== expectedCaseVersion) throw sceneError('STALE_CASE_VERSION');
   if (row.phase === 'INTAKE') return 'START';
@@ -88,7 +89,7 @@ export function decideAssessmentEntry(
   throw sceneError('CASE_PHASE_CONFLICT');
 }
 
-async function assertAssessmentCompliance(
+export async function assertAssessmentCompliance(
   tx: pg.PoolClient,
   actorPersonId: string
 ): Promise<void> {
@@ -169,7 +170,7 @@ export function buildSceneEnvelope(input: {
   };
 }
 
-async function currentSceneEnvelope(
+export async function currentSceneEnvelope(
   tx: pg.PoolClient,
   caseId: string
 ): Promise<DigitalUseSceneResponseType> {
