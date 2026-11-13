@@ -253,6 +253,17 @@ describe('T1218 Digital Use runtime hardening', () => {
     }
   });
 
+  it('rejects a manifest-valid but not-yet-reachable node read', async () => {
+    const f = await fixture('unreachable');
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/01002`,
+      headers: auth(f.manager.token),
+    });
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json().code).toBe('SCENE_NODE_UNREACHABLE');
+  });
+
   it('anti-enumerates cross-Family access and keeps A200401 non-addressable', async () => {
     const owner = await fixture('owner');
     const attacker = await loginWithLabel(app, 'du-hard-attacker');
