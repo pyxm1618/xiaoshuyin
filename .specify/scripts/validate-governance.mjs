@@ -26,8 +26,14 @@ function sectionTitles(text, level = 2) {
 }
 
 function hasSection(text, acceptedTitles, level = 2) {
-  const titles = new Set(sectionTitles(text, level));
-  return acceptedTitles.some((title) => titles.has(title));
+  const titles = sectionTitles(text, level);
+  return acceptedTitles.some((title) =>
+    titles.some((actual) =>
+      actual === title ||
+      actual.startsWith(`${title} `) ||
+      actual.startsWith(`${title}:`)
+    )
+  );
 }
 
 const requiredFiles = [
