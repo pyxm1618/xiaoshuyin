@@ -90,6 +90,7 @@ export function assertNodeCasePreconditions(
   expectedCaseVersion: number
 ): void {
   if (caseRow.status === 'CLOSED') throw nodeError('CASE_CLOSED');
+  if (caseRow.status === 'SAFETY_HOLD') throw nodeError('SAFETY_HOLD_BLOCKED');
   if (caseRow.status !== 'OPEN') throw nodeError('CASE_NOT_OPEN');
   if (!caseRow.is_primary) throw nodeError('CASE_NOT_PRIMARY');
   if (caseRow.version !== expectedCaseVersion) throw nodeError('STALE_CASE_VERSION');
