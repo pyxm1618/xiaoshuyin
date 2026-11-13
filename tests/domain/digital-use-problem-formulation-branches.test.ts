@@ -19,7 +19,7 @@ vi.mock('@xiaoshuyin/domain', async (importOriginal) => {
 });
 
 import { applyDigitalUseNodeSemantics } from '../../apps/server/api/src/services/digital-use-node-semantics.js';
-import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
+import { resolveDigitalUseRuntimeNode, routeDigitalUseTopology } from '@xiaoshuyin/scenes/digital-use';
 
 const actor = {
   accountId: '00000000-0000-7000-8000-000000000001',
@@ -165,6 +165,38 @@ describe('T1213 A2003 / A200401 / A2004-A2009', () => {
     });
     expect(recordStatement.mock.calls.at(-1)?.[2].content)
       .toContain('"decision":"UNKNOWN"');
+  });
+
+  it('mechanically routes A2001 advice/continue and A2002 further-assessment through the sole Slice 11 router', async () => {
+    const advice = await applyDigitalUseNodeSemantics(
+      ctx('A2001', { choice: 'GENERAL_ADVICE' }, [marker])
+    );
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2001',
+      conditions: advice.conditions,
+    })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: 'A1000' });
+
+    const continueCurrent = await applyDigitalUseNodeSemantics(
+      ctx('A2001', { choice: 'CONTINUE_DIGITAL_USE' }, [marker])
+    );
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2001',
+      conditions: continueCurrent.conditions,
+    })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: 'A2003' });
+
+    const further = await applyDigitalUseNodeSemantics(
+      ctx('A2002', { choice: 'FURTHER_ASSESSMENT' }, [marker])
+    );
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2002',
+      conditions: further.conditions,
+    })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: '01004' });
   });
 
   it('keeps initial A2003 truth distinct from later explicit continue choice', async () => {
