@@ -24,6 +24,8 @@
 import type { PoolClient } from 'pg';
 import {
   SupplementalAssessmentConsentEvidence,
+  hasSufficientEvidencePepperStrength,
+  MIN_EVIDENCE_PEPPER_LENGTH,
   type SupplementalAssessmentConsentEvidenceType,
 } from '@xiaoshuyin/contracts';
 import { buildSupplementalAssessmentConsentEvidence } from './evidence.js';
@@ -44,6 +46,7 @@ export type PurposeScopedConsentErrorCode =
   | 'CONSENT_SCOPE_UNAVAILABLE'
   | 'CONSENT_ACTOR_SUBJECT_INVALID'
   | 'CONSENT_STALE_VERSION'
+  | 'CONSENT_EVIDENCE_PEPPER_INVALID'
   | 'CONSENT_DECISION_CONFLICT';
 
 /**
@@ -160,6 +163,7 @@ interface CurrentSupplementalConsentRow {
   version: number;
   decided_at: Date;
   supersedes_id: string | null;
+  disclosure_reference: string;
   notice_version: string;
   notice_hash: string;
   confirmation_statement_hash: string;
@@ -196,6 +200,19 @@ function assertNoForbiddenInput(input: RecordPurposeScopedConsentDecisionInput):
         `Consent owner does not accept caller-supplied ${key}; actor identity is server-verified and equals the subject`
       );
     }
+  }
+}
+
+function assertEvidencePepperStrength(input: RecordPurposeScopedConsentDecisionInput): void {
+  // Same authoritative minimum as the Guardian runtime boundary
+  // (`MIN_PEPPER_LENGTH`), shared through @xiaoshuyin/contracts. This runs
+  // before any DB read, advisory lock or write: an empty or short pepper can
+  // never produce a 64-character digest that looks like real evidence.
+  if (!hasSufficientEvidencePepperStrength(input.evidence?.pepper)) {
+    fail(
+      'CONSENT_EVIDENCE_PEPPER_INVALID',
+      `Evidence pepper must be at least ${MIN_EVIDENCE_PEPPER_LENGTH} characters`
+    );
   }
 }
 
@@ -340,13 +357,22 @@ async function readCurrentDecision(
 ): Promise<CurrentSupplementalConsentRow | null> {
   const { rows } = await tx.query(
     `SELECT c.id, c.decision, c.version, c.decided_at, c.supersedes_id,
-            c.notice_version, c.notice_hash, c.confirmation_statement_hash
+            c.disclosure_reference, c.notice_version, c.notice_hash,
+            c.confirmation_statement_hash
        FROM consent_records c
       WHERE c.family_id = $1
         AND c.case_id = $2
         AND c.purpose = $3
         AND c.decision_actor_person_id = $4
-        AND NOT EXISTS (SELECT 1 FROM consent_records s WHERE s.supersedes_id = c.id)
+        AND NOT EXISTS (
+          SELECT 1
+            FROM consent_records s
+           WHERE s.supersedes_id = c.id
+             AND s.purpose = c.purpose
+             AND s.family_id = c.family_id
+             AND s.case_id = c.case_id
+             AND s.decision_actor_person_id = c.decision_actor_person_id
+        )
       FOR UPDATE OF c`,
     [
       input.familyId,
@@ -369,6 +395,7 @@ function sameSemanticPayload(
 ): boolean {
   return (
     current.decision === input.decision &&
+    current.disclosure_reference === input.disclosure.reference &&
     current.notice_version === input.disclosure.version &&
     current.notice_hash === input.disclosure.hash &&
     current.confirmation_statement_hash === input.confirmationStatementHash
@@ -430,6 +457,9 @@ export async function recordPurposeScopedConsentDecision(
 ): Promise<PurposeScopedConsentDecisionReference> {
   assertNoForbiddenInput(input);
   assertInputShape(input);
+  // Pepper discipline is part of input validation: fail closed before any
+  // scope read, advisory lock or persisted side effect.
+  assertEvidencePepperStrength(input);
 
   // Disclosure owner capability gate: fail closed BEFORE any read/write.
   const approvedDisclosure = resolveApprovedDisclosure(disclosureAuthority, input.disclosure);

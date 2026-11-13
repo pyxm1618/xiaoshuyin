@@ -38,6 +38,7 @@ const HISTORICAL_MIGRATIONS = [
 const NEW_MIGRATIONS = [
   '012_consent_01004_supplemental_enums.sql',
   '013_consent_01004_supplemental_assessment.sql',
+  '014_consent_01004_cross_purpose_supersede_guard.sql',
 ] as const;
 
 function codeFiles(dir: string, extensions: string[] = ['.ts']): string[] {
@@ -166,11 +167,23 @@ describe('Consent owner — single implementation and scope guards', () => {
       expect(sql, filename).not.toContain('consent_supplemental');
     }
 
-    // Only the two reviewed forward migrations introduce the branch.
-    for (const filename of NEW_MIGRATIONS) {
+    // The two reviewed branch migrations introduce the purpose literal; 014 is a
+    // purpose-identity guard and must not add a second purpose vocabulary.
+    for (const filename of [
+      '012_consent_01004_supplemental_enums.sql',
+      '013_consent_01004_supplemental_assessment.sql',
+    ]) {
       const sql = readFileSync(join(MIGRATIONS_DIR, filename), 'utf8');
       expect(sql, filename).toContain(PURPOSE);
     }
+
+    const supersedeGuard = readFileSync(
+      join(MIGRATIONS_DIR, '014_consent_01004_cross_purpose_supersede_guard.sql'),
+      'utf8'
+    );
+    expect(supersedeGuard).toContain('consent_records_supersede_purpose_guard');
+    expect(supersedeGuard).toContain('CONSENT_SUPERSEDE_CROSS_PURPOSE');
+    expect(supersedeGuard).not.toContain('CREATE TABLE');
   });
 
   it('adds no public supplemental consent route', () => {

@@ -39,6 +39,7 @@ const PRE_REMEDIATION_MIGRATIONS = [
 const NEW_MIGRATIONS = [
   '012_consent_01004_supplemental_enums.sql',
   '013_consent_01004_supplemental_assessment.sql',
+  '014_consent_01004_cross_purpose_supersede_guard.sql',
 ] as const;
 
 function urlForDatabase(baseUrl: string, database: string): string {
@@ -186,7 +187,7 @@ describe('Consent 01004 supplemental migration upgrade', () => {
     await admin?.end().catch(() => {});
   }, 120_000);
 
-  it('applies the two new forward migrations over existing guardian data', async () => {
+  it('applies the three new forward migrations over existing guardian data', async () => {
     const output = runMigrator(upgradeUrl);
     for (const filename of PRE_REMEDIATION_MIGRATIONS) {
       expect(output).toContain(`SKIP ${filename}`);
@@ -194,7 +195,7 @@ describe('Consent 01004 supplemental migration upgrade', () => {
     for (const filename of NEW_MIGRATIONS) {
       expect(output).toContain(`APPLY ${filename}`);
     }
-    expect(output).toMatch(/Migration complete: 2 new, 12 previously applied\./);
+    expect(output).toMatch(/Migration complete: 3 new, 12 previously applied\./);
     expect(output).toContain('Verified: app role has no DDL permissions.');
   });
 
@@ -290,7 +291,7 @@ describe('Consent 01004 supplemental migration upgrade', () => {
   it('records both new migrations and a second apply is a zero-new no-op', async () => {
     const before = await schemaFingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 14 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 15 previously applied\./);
     const after = await schemaFingerprint(migrator);
     expect(after).toEqual(before);
 
@@ -307,7 +308,7 @@ it('bootstraps the full schema from an empty database', async () => {
     let fresh: Client | null = null;
     try {
       const output = runMigrator(freshUrl);
-      expect(output).toMatch(/Migration complete: 14 new, 0 previously applied\./);
+      expect(output).toMatch(/Migration complete: 15 new, 0 previously applied\./);
 
       fresh = new Client({ connectionString: urlForDatabase(ADMIN_URL, freshDatabase) });
       await fresh.connect();
@@ -332,11 +333,13 @@ it('bootstraps the full schema from an empty database', async () => {
           WHERE NOT tgisinternal
             AND tgname IN ('consent_records_guard',
                            'consent_records_supplemental_insert_guard',
-                           'consent_records_supplemental_update_guard')
+                           'consent_records_supplemental_update_guard',
+                           'consent_records_supersede_purpose_guard')
           ORDER BY tgname`
       );
       expect(triggerRows.rows.map((r: any) => r.tgname)).toEqual([
         'consent_records_guard',
+        'consent_records_supersede_purpose_guard',
         'consent_records_supplemental_insert_guard',
         'consent_records_supplemental_update_guard',
       ]);
@@ -424,6 +427,157 @@ it('bootstraps the full schema from an empty database', async () => {
       await admin.query(`DROP DATABASE IF EXISTS "${freshDatabase}"`).catch(() => {});
     }
   }, 120_000);
+});
+
+describe('Consent 01004 cross-purpose supersession preflight', () => {
+  it('fails closed and rolls back when a historical cross-purpose chain exists', async () => {
+    const admin = new Client({ connectionString: ADMIN_URL });
+    await admin.connect();
+    const database = `xiaoshuyin_consent_cross_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+    await admin.query(`CREATE DATABASE "${database}" OWNER xiaoshuyin_migrator`);
+    const upgradeUrl = urlForDatabase(MIGRATION_URL, database);
+    const migrator = new Client({ connectionString: upgradeUrl });
+    await migrator.connect();
+    const seedAdmin = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
+    await seedAdmin.connect();
+
+    try {
+      await migrator.query(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          filename   text PRIMARY KEY,
+          applied_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      for (const filename of [
+        ...PRE_REMEDIATION_MIGRATIONS,
+        '012_consent_01004_supplemental_enums.sql',
+        '013_consent_01004_supplemental_assessment.sql',
+      ]) {
+        const sql = readFileSync(join(ROOT, 'db', 'migrations', filename), 'utf-8');
+        await migrator.query('BEGIN');
+        await migrator.query(sql);
+        await migrator.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [filename]);
+        await migrator.query('COMMIT');
+      }
+
+      const account = await seedAdmin.query(
+        `INSERT INTO accounts (wechat_openid) VALUES ($1) RETURNING id`,
+        [`consent_cross_${crypto.randomUUID()}`]
+      );
+      const accountId = account.rows[0].id;
+      const person = await seedAdmin.query(
+        `INSERT INTO persons (account_id, created_by_account_id) VALUES ($1, $1) RETURNING id`,
+        [accountId]
+      );
+      const personId = person.rows[0].id;
+      const family = await seedAdmin.query(
+        `INSERT INTO families (created_by_person_id) VALUES ($1) RETURNING id`,
+        [personId]
+      );
+      const familyId = family.rows[0].id;
+      await seedAdmin.query(
+        `INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)`,
+        [familyId, personId]
+      );
+      const kase = await seedAdmin.query(
+        `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
+         VALUES ($1, $2, 'OPEN', 'INTAKE', false, 1) RETURNING id`,
+        [familyId, personId]
+      );
+      const caseId = kase.rows[0].id;
+
+
+      const request = await seedAdmin.query(
+        `INSERT INTO guardian_consent_requests
+           (family_id, guardian_person_id, declared_age_band, notice_version, notice_hash,
+            status, expires_at, completed_at)
+         VALUES ($1, $2, 'UNDER_14', 'v1', $3, 'GRANTED', now() + interval '24 hours', now())
+         RETURNING id`,
+        [familyId, personId, sha('a')]
+      );
+      const guardian = await seedAdmin.query(
+        `INSERT INTO consent_records (
+           family_id, guardian_person_id, guardian_account_id, purpose, decision, version,
+           onboarding_request_id, notice_version, notice_hash, policy_version, evidence
+         ) VALUES ($1, $2, $3, 'UNDER_14_GUARDIAN_CONSENT', 'GRANTED', 1, $4, 'v1', $5, 'v1', '{}')
+         RETURNING id`,
+        [familyId, personId, accountId, request.rows[0].id, sha('a')]
+      );
+
+      // Construct exactly the forbidden historical row the preflight exists to
+      // detect. The 013 guard is disabled only to build this fixture; 014 must
+      // still refuse to install itself over the resulting illegal chain.
+      const badEvidence = supplementalEvidence(
+        { personId, caseId, actorAccountId: accountId },
+        'REVOKED'
+      );
+      await seedAdmin.query(
+        'ALTER TABLE consent_records DISABLE TRIGGER consent_records_supplemental_insert_guard'
+      );
+      await seedAdmin.query(
+        `INSERT INTO consent_records (
+           family_id, guardian_person_id, guardian_account_id, purpose, decision, version,
+           onboarding_request_id, bound_person_id, bound_at,
+           case_id, decision_actor_person_id, decision_actor_account_id,
+           disclosure_reference, confirmation_statement_hash,
+           notice_version, notice_hash, policy_version, evidence, decided_at, supersedes_id
+         ) VALUES (
+           $1, NULL, NULL, 'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT', 'REVOKED', 2,
+           NULL, NULL, NULL,
+           $2, $3, $4,
+           $5, $6,
+           'v1', $7, 'v1', $8, now(), $9
+         )`,
+        [
+          familyId,
+          caseId,
+          personId,
+          accountId,
+          badEvidence.disclosure_reference,
+          badEvidence.confirmation_statement_hash,
+          badEvidence.disclosure_hash,
+          JSON.stringify(badEvidence),
+          guardian.rows[0].id,
+        ]
+      );
+      await seedAdmin.query(
+        'ALTER TABLE consent_records ENABLE TRIGGER consent_records_supplemental_insert_guard'
+      );
+
+      expect(() => runMigrator(upgradeUrl)).toThrow(
+        /CONSENT_EXISTING_CROSS_PURPOSE_SUPERSESSION/
+      );
+
+      const applied = await seedAdmin.query(
+        `SELECT filename FROM schema_migrations WHERE filename LIKE '014_%'`
+      );
+      expect(applied.rows).toEqual([]);
+      const trigger = await seedAdmin.query(
+        `SELECT 1 FROM pg_trigger WHERE tgname = 'consent_records_supersede_purpose_guard'`
+      );
+      expect(trigger.rows).toEqual([]);
+      const rls = await seedAdmin.query(
+        `SELECT relforcerowsecurity FROM pg_class WHERE oid = 'consent_records'::regclass`
+      );
+      expect(rls.rows[0].relforcerowsecurity).toBe(true);
+      const illegal = await seedAdmin.query(
+        `SELECT purpose, supersedes_id FROM consent_records WHERE supersedes_id = $1`,
+        [guardian.rows[0].id]
+      );
+      expect(illegal.rows[0].purpose).toBe('DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT');
+    } finally {
+      await seedAdmin.end().catch(() => {});
+      await migrator.end().catch(() => {});
+      await admin
+        .query(
+          'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()',
+          [database]
+        )
+        .catch(() => {});
+      await admin.query(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`).catch(() => {});
+      await admin.end().catch(() => {});
+    }
+  }, 180_000);
 });
 
 async function schemaFingerprint(client: Client): Promise<string> {

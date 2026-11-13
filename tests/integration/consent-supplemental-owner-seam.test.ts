@@ -52,22 +52,35 @@ const TEST_DISCLOSURE = {
   hash: sha('a'),
 } as const;
 
+/**
+ * A second approved identity with the SAME version and hash but a DIFFERENT
+ * reference. It exists only to prove that replay equality includes the exact
+ * disclosure reference, not just the version/hash pair.
+ */
+const TEST_DISCLOSURE_B = {
+  reference: 'test-only-01004-disclosure-fixture-b',
+  version: 'v1',
+  hash: sha('a'),
+} as const;
+
 const TEST_CONFIRMATION_HASH = sha('b');
 
 const TEST_DISCLOSURE_AUTHORITY: SupplementalAssessmentDisclosureAuthority = {
   resolveApprovedDisclosure(submitted) {
-    if (
-      submitted.purpose === DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT &&
-      submitted.reference === TEST_DISCLOSURE.reference &&
-      submitted.version === TEST_DISCLOSURE.version &&
-      submitted.hash === TEST_DISCLOSURE.hash
-    ) {
-      return {
-        purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
-        reference: TEST_DISCLOSURE.reference,
-        version: TEST_DISCLOSURE.version,
-        hash: TEST_DISCLOSURE.hash,
-      };
+    for (const approved of [TEST_DISCLOSURE, TEST_DISCLOSURE_B]) {
+      if (
+        submitted.purpose === DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT &&
+        submitted.reference === approved.reference &&
+        submitted.version === approved.version &&
+        submitted.hash === approved.hash
+      ) {
+        return {
+          purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+          reference: approved.reference,
+          version: approved.version,
+          hash: approved.hash,
+        };
+      }
     }
     return null;
   },
@@ -152,8 +165,8 @@ describe('Consent owner — 01004 supplemental assessment owner seam', () => {
   async function supplementalRows(scope: Scope) {
     const { rows } = await admin.query(
       `SELECT id, decision, version, case_id, decision_actor_person_id,
-              supersedes_id, notice_version, notice_hash, confirmation_statement_hash,
-              evidence
+              supersedes_id, disclosure_reference, notice_version, notice_hash,
+              confirmation_statement_hash, evidence
          FROM consent_records
         WHERE family_id = $1 AND purpose = 'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT'
         ORDER BY decided_at, version`,
@@ -292,7 +305,35 @@ describe('Consent owner — 01004 supplemental assessment owner seam', () => {
       version: v1.version,
       replayed: true,
     });
-    expect(await supplementalRows(scope)).toHaveLength(1);
+    const rows = await supplementalRows(scope);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].disclosure_reference).toBe(TEST_DISCLOSURE.reference);
+    expect(await supplementalAudit(scope)).toHaveLength(1);
+  });
+
+  it('same version/hash but a different approved disclosure reference is NOT a replay', async () => {
+    const scope = await newScope('replay-reference-mismatch');
+    const v1 = await record(scope, inputFor(scope));
+
+    await expectCode(
+      record(
+        scope,
+        inputFor(scope, {
+          expectedVersion: v1.version,
+          disclosure: { ...TEST_DISCLOSURE_B },
+        })
+      ),
+      'CONSENT_DECISION_CONFLICT'
+    );
+
+    const rows = await supplementalRows(scope);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: v1.consentRecordId,
+      decision: 'GRANTED',
+      version: v1.version,
+      disclosure_reference: TEST_DISCLOSURE.reference,
+    });
     expect(await supplementalAudit(scope)).toHaveLength(1);
   });
 
@@ -423,6 +464,63 @@ describe('Consent owner — 01004 supplemental assessment owner seam', () => {
       'CONSENT_AUTHORIZATION_CONTEXT_MISSING'
     );
     expect(await supplementalRows(scope)).toHaveLength(0);
+  });
+
+  it('empty pepper fails closed before any owner-seam database read/write', async () => {
+    const scope = await newScope('pepper-empty');
+    const base = inputFor(scope);
+    const bad = { ...base, evidence: { ...base.evidence, pepper: '' } };
+
+    // The authoritative client is deliberately absent: if pepper validation
+    // touched the database first, this would fail with a non-domain error.
+    await expectCode(
+      recordPurposeScopedConsentDecision(null as never, bad),
+      'CONSENT_EVIDENCE_PEPPER_INVALID'
+    );
+
+    await expectCode(record(scope, bad), 'CONSENT_EVIDENCE_PEPPER_INVALID');
+    expect(await supplementalRows(scope)).toHaveLength(0);
+    expect(await supplementalAudit(scope)).toHaveLength(0);
+  });
+
+  it('missing pepper fails closed with zero consent / audit residue', async () => {
+    const scope = await newScope('pepper-missing');
+    const base = inputFor(scope);
+    const bad = {
+      ...base,
+      evidence: { ...base.evidence, pepper: undefined as unknown as string },
+    };
+    await expectCode(record(scope, bad), 'CONSENT_EVIDENCE_PEPPER_INVALID');
+    expect(await supplementalRows(scope)).toHaveLength(0);
+    expect(await supplementalAudit(scope)).toHaveLength(0);
+  });
+
+  it('15-character pepper fails closed with zero consent / audit residue', async () => {
+    const scope = await newScope('pepper-short');
+    const base = inputFor(scope);
+    const bad = {
+      ...base,
+      evidence: { ...base.evidence, pepper: 'x'.repeat(15) },
+    };
+    await expectCode(record(scope, bad), 'CONSENT_EVIDENCE_PEPPER_INVALID');
+    expect(await supplementalRows(scope)).toHaveLength(0);
+    expect(await supplementalAudit(scope)).toHaveLength(0);
+  });
+
+  it('exactly 16-character pepper passes validation and records normally', async () => {
+    const scope = await newScope('pepper-minimum');
+    const base = inputFor(scope);
+    const minimumPepper = 'x'.repeat(16);
+    const result = await record(scope, {
+      ...base,
+      evidence: { ...base.evidence, pepper: minimumPepper },
+    });
+    expect(result).toMatchObject({ decision: 'GRANTED', version: 1, replayed: false });
+
+    const rows = await supplementalRows(scope);
+    expect(rows).toHaveLength(1);
+    expect(JSON.stringify(rows[0].evidence)).not.toContain(minimumPepper);
+    expect(await supplementalAudit(scope)).toHaveLength(1);
   });
 
   it('Case from another Family fails closed', async () => {

@@ -306,6 +306,7 @@ const CONSENT_OWNER_NEW_CONSTRAINTS = [
 const CONSENT_OWNER_NEW_OBJECTS = [
   'trigger:consent_records_supplemental_insert_guard',
   'trigger:consent_records_supplemental_update_guard',
+  'trigger:consent_records_supersede_purpose_guard',
 ];
 
 const CONSENT_OWNER_CHANGED_CONSTRAINTS = ['business_audit_events_event_type_check'];
@@ -407,7 +408,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 7 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 8 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -560,7 +561,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 14 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 15 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -580,6 +581,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '011_compliance_feature_policy_foundation.sql',
       '012_consent_01004_supplemental_enums.sql',
       '013_consent_01004_supplemental_assessment.sql',
+      '014_consent_01004_cross_purpose_supersede_guard.sql',
     ]);
   }, 180_000);
 });
