@@ -720,6 +720,109 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
   });
 
+  it('rolls back 01003 Evidence and Scene state when the Problem Formulation owner insert fails', async () => {
+    const f = await fixture('fault-pf');
+    const a1001Result = await respondA1001(
+      f,
+      `du-pf-a1001-${crypto.randomUUID()}`,
+      a1001(true)
+    );
+    expect(a1001Result.statusCode, a1001Result.body).toBe(200);
+    let scene = a1001Result.json();
+    expect(scene.currentNode?.nodeCode).toBe('01002');
+
+    const r01002 = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/01002/responses`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': `du-pf-01002-${crypto.randomUUID()}`,
+      },
+      payload: {
+        expectedCaseVersion: scene.caseVersion,
+        expectedNodeRevision: scene.currentNode.revision,
+        response: { state: 'KNOWN', selections: ['A'] },
+      },
+    });
+    expect(r01002.statusCode, r01002.body).toBe(200);
+    scene = r01002.json();
+    expect(scene.currentNode?.nodeCode).toBe('01003');
+
+    const beforeCase = await admin.query<{ phase: string; version: number }>(
+      `SELECT phase::text AS phase, version FROM cases WHERE id=$1`,
+      [f.caseId]
+    );
+    const beforeNode = await admin.query<{ revision: number; status: string }>(
+      `SELECT revision, status::text AS status
+         FROM scene_node_states WHERE case_id=$1 AND node_code='01003'`,
+      [f.caseId]
+    );
+
+    const suffix = crypto.randomUUID().replaceAll('-', '');
+    const fn = `du_fault_pf_${suffix}`;
+    const trigger = `du_fault_pf_trigger_${suffix}`;
+    await admin.query(
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+       BEGIN
+         IF NEW.case_id = '${f.caseId}'::uuid THEN
+           RAISE EXCEPTION 'SLICE12_PROBLEM_FORMULATION_OWNER_FAULT';
+         END IF;
+         RETURN NEW;
+       END $`
+    );
+    await admin.query(
+      `CREATE TRIGGER ${trigger}
+         BEFORE INSERT ON problem_formulations
+         FOR EACH ROW EXECUTE FUNCTION ${fn}()`
+    );
+
+    try {
+      const failed = await app.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/scene/nodes/01003/responses`,
+        headers: {
+          ...auth(f.manager.token),
+          'idempotency-key': `du-pf-01003-${crypto.randomUUID()}`,
+        },
+        payload: {
+          expectedCaseVersion: scene.caseVersion,
+          expectedNodeRevision: scene.currentNode.revision,
+          response: { state: 'KNOWN', selection: 'A' },
+        },
+      });
+      expect(failed.statusCode, failed.body).toBe(500);
+    } finally {
+      await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON problem_formulations`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+    }
+
+    const afterCase = await admin.query<{ phase: string; version: number }>(
+      `SELECT phase::text AS phase, version FROM cases WHERE id=$1`,
+      [f.caseId]
+    );
+    expect(afterCase.rows[0]).toEqual(beforeCase.rows[0]);
+
+    const afterNode = await admin.query<{ revision: number; status: string }>(
+      `SELECT revision, status::text AS status
+         FROM scene_node_states WHERE case_id=$1 AND node_code='01003'`,
+      [f.caseId]
+    );
+    expect(afterNode.rows[0]).toEqual(beforeNode.rows[0]);
+
+    const evidence = await admin.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUA:v1:01003.family_relationship:%'`,
+      [f.caseId]
+    );
+    expect(evidence.rows[0]!.n).toBe(0);
+
+    const formulations = await admin.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM problem_formulations WHERE case_id=$1`,
+      [f.caseId]
+    );
+    expect(formulations.rows[0]!.n).toBe(0);
+  });
+
   it('rejects a manifest-valid but not-yet-reachable node read', async () => {
     const f = await fixture('unreachable');
     const response = await app.inject({
