@@ -11,7 +11,7 @@ import {
   type LoginResult,
 } from '../setup/api.js';
 import { createCase } from '../setup/participation.js';
-import { validateSceneRefs } from '@xiaoshuyin/domain';
+import { insertSceneArtifact, validateSceneRefs } from '@xiaoshuyin/domain';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import {
   APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY,
@@ -507,6 +507,76 @@ describe('T1218 Digital Use runtime hardening', () => {
       fault.release();
     }
   });
+
+  it.each([
+    ['TIMELINE', 'A2007'],
+    ['SOLUTION_SUMMARY', 'A2010'],
+  ] as const)(
+    'serializes duplicate %s artifact revisions under concurrent inserts',
+    async (artifactType, sourceNodeCode) => {
+      const f = await fixture(`artifact-${artifactType.toLowerCase()}`);
+      const runtimePool = new pg.Pool({
+        connectionString: process.env['DATABASE_URL'],
+        max: 2,
+      });
+      const first = await runtimePool.connect();
+      const second = await runtimePool.connect();
+
+      const enter = async (client: pg.PoolClient) => {
+        await client.query('BEGIN');
+        await client.query('SELECT app.set_identity_context($1,$2)', [
+          f.manager.accountId,
+          'FAMILY_MANAGEMENT',
+        ]);
+        await client.query('SELECT app.set_family_context($1,$2,$3)', [
+          f.familyId,
+          f.manager.personId,
+          'FAMILY_MANAGEMENT',
+        ]);
+      };
+
+      try {
+        await enter(first);
+        await enter(second);
+        const input = {
+          familyId: f.familyId,
+          caseId: f.caseId,
+          scenePackageVersion: 'v1',
+          artifactType,
+          schemaVersion: 'v1',
+          sourceNodeCode,
+          data: { concurrencyProof: true },
+          ownerPersonId: f.manager.personId,
+          sourceRefs: [] as const,
+          revision: 1,
+        };
+
+        const inserted = await insertSceneArtifact(first, input);
+        expect(inserted.revision).toBe(1);
+
+        const secondAttempt = insertSceneArtifact(second, input);
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        await first.query('COMMIT');
+        await expect(secondAttempt).rejects.toMatchObject({ code: '23505' });
+        await second.query('ROLLBACK');
+
+        const rows = await admin.query<{ n: number }>(
+          `SELECT count(*)::int AS n
+             FROM scene_artifacts
+            WHERE case_id=$1 AND artifact_type=$2 AND source_node_code=$3
+              AND revision=1`,
+          [f.caseId, artifactType, sourceNodeCode]
+        );
+        expect(rows.rows[0]!.n).toBe(1);
+      } finally {
+        await first.query('ROLLBACK').catch(() => undefined);
+        await second.query('ROLLBACK').catch(() => undefined);
+        first.release();
+        second.release();
+        await runtimePool.end();
+      }
+    }
+  );
 
   it('rejects same-Family cross-Case Evidence refs at the authoritative repository boundary', async () => {
     const f = await fixture('cross-case');
