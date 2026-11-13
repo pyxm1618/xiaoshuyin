@@ -108,6 +108,68 @@ describe('T1210 A1001 / 01002 / 01003 Evidence semantics', () => {
     )).toBe(true);
   });
 
+  it('does not invent an under-six Scene eligibility gate', async () => {
+    const result = await applyDigitalUseNodeSemantics(context('A1001', {
+      reportedAgeYears: 5,
+      devices: ['COMPUTER', 'GAME_CONSOLE_OR_DEVICE'],
+      purposeDurations: {
+        learningResearchHomework: { state: 'KNOWN', minutesPerDay: 20, certainty: 'ESTIMATE' },
+        necessaryContact: { state: 'KNOWN', minutesPerDay: 5, certainty: 'ESTIMATE' },
+        entertainmentGamingVideoSocialNonLearning: { state: 'KNOWN', minutesPerDay: 25, certainty: 'ESTIMATE' },
+      },
+      functionalImpact: {
+        sleep: { state: 'KNOWN', impacted: false },
+        studyOrNecessaryAffairs: { state: 'KNOWN', impacted: false },
+        realWorldActivityDisplacement: { state: 'KNOWN', impacted: false },
+      },
+    }));
+    expect(result.conditions).toEqual({ A1001_ASSESSMENT_COMPLETE: true });
+    expect(recordStatement.mock.calls.some((call) =>
+      call[2].content.includes('DUA:v1:a1001.reported_age_years:') &&
+      call[2].content.includes('"value":5')
+    )).toBe(true);
+  });
+
+  it('keeps purpose distributions distinguishable even when total duration is identical', async () => {
+    const base = {
+      devices: ['PHONE'] as const,
+      totalDuration: { state: 'KNOWN' as const, minutesPerDay: 120, certainty: 'EXACT' as const },
+      functionalImpact: {
+        sleep: { state: 'KNOWN' as const, impacted: false },
+        studyOrNecessaryAffairs: { state: 'KNOWN' as const, impacted: false },
+        realWorldActivityDisplacement: { state: 'KNOWN' as const, impacted: false },
+      },
+    };
+    await applyDigitalUseNodeSemantics(context('A1001', {
+      ...base,
+      purposeDurations: {
+        learningResearchHomework: { state: 'KNOWN', minutesPerDay: 60, certainty: 'EXACT' },
+        necessaryContact: { state: 'KNOWN', minutesPerDay: 10, certainty: 'EXACT' },
+        entertainmentGamingVideoSocialNonLearning: { state: 'KNOWN', minutesPerDay: 50, certainty: 'EXACT' },
+      },
+    }));
+    const first = recordStatement.mock.calls
+      .map((call) => call[2].content as string)
+      .filter((value) => value.includes('a1001.duration.'));
+    recordStatement.mockClear();
+
+    await applyDigitalUseNodeSemantics(context('A1001', {
+      ...base,
+      purposeDurations: {
+        learningResearchHomework: { state: 'KNOWN', minutesPerDay: 20, certainty: 'EXACT' },
+        necessaryContact: { state: 'KNOWN', minutesPerDay: 10, certainty: 'EXACT' },
+        entertainmentGamingVideoSocialNonLearning: { state: 'KNOWN', minutesPerDay: 90, certainty: 'EXACT' },
+      },
+    }));
+    const second = recordStatement.mock.calls
+      .map((call) => call[2].content as string)
+      .filter((value) => value.includes('a1001.duration.'));
+
+    expect(first.some((value) => value.includes('"minutesPerDay":60'))).toBe(true);
+    expect(second.some((value) => value.includes('"minutesPerDay":20'))).toBe(true);
+    expect(first).not.toEqual(second);
+  });
+
   it('preserves an explicit estimate as collected Evidence', async () => {
     await applyDigitalUseNodeSemantics(context('A1001', {
       devices: ['TABLET'],
