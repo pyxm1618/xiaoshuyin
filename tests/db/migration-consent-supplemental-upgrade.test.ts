@@ -42,6 +42,10 @@ const NEW_MIGRATIONS = [
   '014_consent_01004_cross_purpose_supersede_guard.sql',
 ] as const;
 
+const POST_CONSENT_APPROVED_MIGRATIONS = [
+  '015_digital_use_assessment_runtime.sql',
+] as const;
+
 function urlForDatabase(baseUrl: string, database: string): string {
   const url = new URL(baseUrl);
   url.pathname = `/${database}`;
@@ -187,7 +191,7 @@ describe('Consent 01004 supplemental migration upgrade', () => {
     await admin?.end().catch(() => {});
   }, 120_000);
 
-  it('applies the three new forward migrations over existing guardian data', async () => {
+  it('applies the Consent migrations plus the approved Slice 12 forward migration', async () => {
     const output = runMigrator(upgradeUrl);
     for (const filename of PRE_REMEDIATION_MIGRATIONS) {
       expect(output).toContain(`SKIP ${filename}`);
@@ -195,7 +199,10 @@ describe('Consent 01004 supplemental migration upgrade', () => {
     for (const filename of NEW_MIGRATIONS) {
       expect(output).toContain(`APPLY ${filename}`);
     }
-    expect(output).toMatch(/Migration complete: 3 new, 12 previously applied\./);
+    for (const filename of POST_CONSENT_APPROVED_MIGRATIONS) {
+      expect(output).toContain(`APPLY ${filename}`);
+    }
+    expect(output).toMatch(/Migration complete: 4 new, 12 previously applied\./);
     expect(output).toContain('Verified: app role has no DDL permissions.');
   });
 
@@ -291,7 +298,7 @@ describe('Consent 01004 supplemental migration upgrade', () => {
   it('records both new migrations and a second apply is a zero-new no-op', async () => {
     const before = await schemaFingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 15 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 16 previously applied\./);
     const after = await schemaFingerprint(migrator);
     expect(after).toEqual(before);
 
@@ -299,6 +306,7 @@ describe('Consent 01004 supplemental migration upgrade', () => {
     expect(rows.map((r: any) => r.filename)).toEqual([
       ...PRE_REMEDIATION_MIGRATIONS,
       ...NEW_MIGRATIONS,
+      ...POST_CONSENT_APPROVED_MIGRATIONS,
     ]);
   });
 it('bootstraps the full schema from an empty database', async () => {
@@ -308,7 +316,7 @@ it('bootstraps the full schema from an empty database', async () => {
     let fresh: Client | null = null;
     try {
       const output = runMigrator(freshUrl);
-      expect(output).toMatch(/Migration complete: 15 new, 0 previously applied\./);
+      expect(output).toMatch(/Migration complete: 16 new, 0 previously applied\./);
 
       fresh = new Client({ connectionString: urlForDatabase(ADMIN_URL, freshDatabase) });
       await fresh.connect();
