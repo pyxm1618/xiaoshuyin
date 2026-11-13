@@ -130,7 +130,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     // Audit 2 remediation adds one forward supersession guard migration.
     expect(output).toContain('APPLY 014_consent_01004_cross_purpose_supersede_guard.sql');
-    expect(output).toMatch(/Migration complete: 12 new, 3 previously applied\./);
+    expect(output).toMatch(/Migration complete: 13 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -204,6 +204,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '012_consent_01004_supplemental_enums.sql',
       '013_consent_01004_supplemental_assessment.sql',
       '014_consent_01004_cross_purpose_supersede_guard.sql',
+      '015_digital_use_assessment_runtime.sql',
     ]);
 
     // New Evidence schema exists.
@@ -257,7 +258,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(54); // + Slice 8 three + Slice 9 one + Slice 10 two
+    expect(policyRows[0].count).toBe(56); // + Slice 8 three + Slice 9 one + Slice 10 two
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
@@ -313,7 +314,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-expect(output).toMatch(/Migration complete: 0 new, 15 previously applied\./);
+expect(output).toMatch(/Migration complete: 0 new, 16 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
     expect(output).not.toContain('APPLY 005_case_participant_core.sql');
