@@ -160,6 +160,11 @@ jobs:
   contract:
     name: Contract
     runs-on: ubuntu-latest
+    # Temporary T1217 byte-exact handoff: allow this job to commit only the
+    # generator-owned artifacts on the Slice 12 feature branch. Removed once
+    # the generated files are committed; permanent CI remains read-only.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -183,3 +188,15 @@ jobs:
             packages/generated/openapi.d.ts
           if-no-files-found: error
           retention-days: 7
+      - name: Commit exact generated OpenAPI artifacts for Slice 12
+        if: github.event_name == 'push' && github.ref == 'refs/heads/feat/012-digital-use-assessment-runtime'
+        run: |
+          git add packages/generated/openapi.json packages/generated/openapi.d.ts
+          if git diff --cached --quiet; then
+            echo "Generated OpenAPI artifacts already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(slice12): refresh generated OpenAPI client [skip ci]"
+          git push origin HEAD:feat/012-digital-use-assessment-runtime
