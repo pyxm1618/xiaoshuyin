@@ -441,20 +441,16 @@ async function handle01003(
 ): Promise<DigitalUseNodeSemanticResult> {
   const parsed = Response01003.safeParse(context.response);
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
-  const answer = parsed.data;
-  const ref = await recordAssessmentStatement(context, '01003.family_relationship', answer);
+  await recordAssessmentStatement(
+    context,
+    '01003.family_relationship',
+    parsed.data
+  );
 
-  if (answer.state !== 'KNOWN') {
-    return {
-      inputRefs: [],
-      outputRefs: [ref],
-      conditions: { FAMILY_CONFLICT_SEVERE_F: answer.state },
-      evidenceBasis: ['FAMILY_RELATIONSHIP_OR_CONFLICT'],
-      progression: 'HOLD',
-      holdReasonCode: 'INTEGRATED_TRIAGE_INSUFFICIENT',
-    };
-  }
-
+  // Always classify the write-after current Evidence snapshot. A submitted
+  // UNKNOWN/DECLINED value cannot hide another current conflict, and a usable
+  // approved current value is not downgraded merely because this actor is
+  // missing-like.
   const evidence = await loadIntegratedTriageEvidence(context.tx, context.caseId);
   const triage = evaluateIntegratedTriage(evidence);
   const currentEvidenceRefs: StoredSceneRef[] = (
