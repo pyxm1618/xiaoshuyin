@@ -244,6 +244,49 @@ export async function completeDigitalUseNodeResponse(
             };
           }
 
+          if (semantic.progression === 'BLOCKED') {
+            const reasonCode = semantic.blockReasonCode ?? 'INTEGRATED_TRIAGE_BLOCKED';
+            const blocked = await casCompleteSceneNodeState(tx, {
+              caseId: input.caseId,
+              nodeCode: node.nodeCode,
+              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+              expectedRevision: input.expectedNodeRevision,
+              status: 'BLOCKED',
+              branchReasonCodes: [reasonCode],
+              inputRefs: semantic.inputRefs,
+              outputRefs: semantic.outputRefs,
+            });
+            if (!blocked) throw nodeError('STALE_NODE_REVISION');
+            await insertDigitalUseNodeCompletedEvent(tx, {
+              familyId: input.familyId,
+              caseId: input.caseId,
+              actorAccountId: input.actor.accountId,
+              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+              nodeCode: node.nodeCode,
+              nodeRevision: blocked.revision,
+              routeReasonCode: reasonCode,
+              inputRefs: semantic.inputRefs,
+              outputRefs: semantic.outputRefs,
+              nextNodeCode: null,
+              terminalCode: null,
+            });
+            await insertDigitalUseNodeCompletedAudit(tx, {
+              familyId: input.familyId,
+              caseId: input.caseId,
+              actorAccountId: input.actor.accountId,
+              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+              nodeCode: node.nodeCode,
+              nodeRevision: blocked.revision,
+              routeReasonCode: reasonCode,
+              nextNodeCode: null,
+              terminalCode: null,
+            });
+            return {
+              status: 200,
+              body: await currentSceneEnvelope(tx, input.caseId),
+            };
+          }
+
           const route = requireResolvedRoute(
             routeDigitalUseTopology({
               sceneCode: DIGITAL_USE_SCENE_CODE,
