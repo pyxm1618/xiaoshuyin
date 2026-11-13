@@ -62,7 +62,7 @@ async function resolveFamily(
   );
 }
 
-function actorOf(req: { actor?: { accountId?: string; personId?: string } }) {
+function actorOf(req: { actor?: { accountId: string; personId: string | null } | null }) {
   const actor = req.actor;
   if (!actor?.accountId || !actor.personId) throw httpError('UNAUTHENTICATED');
   return { accountId: actor.accountId, personId: actor.personId };
