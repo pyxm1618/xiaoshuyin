@@ -74,6 +74,26 @@ function sceneError(code: string, message?: string): Error & { statusCode: numbe
   });
 }
 
+/**
+ * Map only a client-requested node identifier into the HTTP/application error
+ * contract. Internal router-produced node codes are still allowed to surface
+ * as invariants if the manifest/router ever drift.
+ */
+export function resolveRequestedDigitalUseNode(nodeCode: string) {
+  try {
+    return resolveDigitalUseRuntimeNode(nodeCode);
+  } catch (error) {
+    const code =
+      typeof error === 'object' && error !== null
+        ? (error as { code?: unknown }).code
+        : undefined;
+    if (code === 'SCENE_NODE_NOT_FOUND') {
+      throw sceneError('SCENE_NODE_NOT_FOUND');
+    }
+    throw error;
+  }
+}
+
 export type AssessmentEntryDecision = 'START' | 'RESUME';
 
 export function decideAssessmentEntry(
@@ -445,7 +465,7 @@ export async function getDigitalUseNode(
     },
     async (tx) => {
       const caseRow = await authorizeSceneRead(tx, input);
-      const manifestNode = resolveDigitalUseRuntimeNode(input.nodeCode);
+      const manifestNode = resolveRequestedDigitalUseNode(input.nodeCode);
       const stored = await getSceneNodeState(tx, input.caseId, manifestNode.nodeCode);
       if (!stored) throw sceneError('SCENE_NODE_UNREACHABLE');
       if (stored.scene_package_version !== DIGITAL_USE_PACKAGE_VERSION) {
