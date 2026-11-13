@@ -46,6 +46,14 @@ const SLICE8_ADDED_OPERATION_IDS = [
   'correctProblemFormulation',
 ] as const;
 
+/** The four reviewed Slice 12 Case business operations. */
+const SLICE12_ADDED_OPERATION_IDS = [
+  'startDigitalUseAssessment',
+  'getDigitalUseScene',
+  'getDigitalUseSceneNode',
+  'completeDigitalUseSceneNode',
+] as const;
+
 /** Real Case path operations that are not Case business operations. */
 const NON_BUSINESS_OPERATION_IDS = ['createParticipationInvite'] as const;
 
@@ -60,6 +68,10 @@ const KNOWN_CASE_PATHS = [
   '/api/v1/cases/{id}/problem-formulations/{version}/confirm',
   '/api/v1/cases/{id}/problem-formulations/{version}/dispute',
   '/api/v1/cases/{id}/problem-formulations/{version}/corrections',
+  '/api/v1/cases/{id}/assessments',
+  '/api/v1/cases/{id}/scene',
+  '/api/v1/cases/{id}/scene/nodes/{nodeCode}',
+  '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
 ] as const;
 
 interface OperationRef {
@@ -99,7 +111,7 @@ describe('case primary switch scope (T730)', () => {
     await admin.end();
   });
 
-  it('keeps Base = 4, Slice 7 delta = exactly 1, Final = 5 Case business operations', () => {
+  it('keeps Base=4, Slice7=1, Slice8=4 and Slice12=4 as an exact 13-operation set', () => {
     // Path layer: every real Case path is present, and nothing unexpected was added.
     const paths = casePathKeys();
     expect(paths.sort()).toEqual([...KNOWN_CASE_PATHS].sort());
@@ -121,6 +133,10 @@ describe('case primary switch scope (T730)', () => {
         'POST /api/v1/cases/{id}/problem-formulations/{version}/confirm',
         'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
         'POST /api/v1/cases/{id}/problem-formulations/{version}/corrections',
+        'POST /api/v1/cases/{id}/assessments',
+        'GET /api/v1/cases/{id}/scene',
+        'GET /api/v1/cases/{id}/scene/nodes/{nodeCode}',
+        'POST /api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
       ].sort()
     );
 
@@ -144,17 +160,23 @@ describe('case primary switch scope (T730)', () => {
     }
     expect(BASE_CASE_OPERATION_IDS).toHaveLength(4);
 
-    // Final = 9, exact equality (contains/>= would hide an extra operation).
+    // Final = 13, exact equality (contains/>= would hide an extra operation).
     expect(businessOperationIds).toEqual(
-      [...BASE_CASE_OPERATION_IDS, ...SLICE7_ADDED_OPERATION_IDS, ...SLICE8_ADDED_OPERATION_IDS].sort()
+      [
+        ...BASE_CASE_OPERATION_IDS,
+        ...SLICE7_ADDED_OPERATION_IDS,
+        ...SLICE8_ADDED_OPERATION_IDS,
+        ...SLICE12_ADDED_OPERATION_IDS,
+      ].sort()
     );
-    expect(businessOperationIds).toHaveLength(9);
+    expect(businessOperationIds).toHaveLength(13);
 
     // Slice 7 delta = exactly 1.
     const slice7Delta = businessOperationIds.filter(
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice7Delta).toEqual(['switchPrimaryCase']);
     expect(slice7Delta).toHaveLength(1);
@@ -162,12 +184,23 @@ describe('case primary switch scope (T730)', () => {
     const slice8Delta = businessOperationIds.filter(
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice8Delta.sort()).toEqual([...SLICE8_ADDED_OPERATION_IDS].sort());
     expect(slice8Delta).toHaveLength(4);
 
-    // Unexpected Slice 7-added Case business operations = 0.
+    const slice12Delta = businessOperationIds.filter(
+      (id) =>
+        !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+    );
+    expect(slice12Delta.sort()).toEqual([...SLICE12_ADDED_OPERATION_IDS].sort());
+    expect(slice12Delta).toHaveLength(4);
+
+    // Unexpected Case business operations = 0.
     const unexpected = businessOperationIds.filter(
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
@@ -186,9 +219,7 @@ describe('case primary switch scope (T730)', () => {
       '/cases/{id}/resume',
       '/cases/{id}/close',
       '/cases/{id}/recurrences',
-      '/cases/{id}/assessments',
       '/cases/{id}/participants',
-      '/cases/{id}/scene',
       '/cases/{id}/evidence',
       '/cases/{id}/statements',
       '/cases/{id}/observations',
@@ -206,8 +237,6 @@ describe('case primary switch scope (T730)', () => {
       // `case_participants` (Slice 4), `problem_formulations` (Slice 8) and
       // `risk_events` (Slice 9) are approved tables. Slice 7's zero-schema
       // expansion proof lives in migration-repro / db:evidence.
-      'scene_node_states',
-      'scene_artifacts',
       'referrals',
       'safety_states',
     ]) {
