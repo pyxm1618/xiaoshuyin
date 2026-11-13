@@ -13,6 +13,7 @@ import {
 import { createCase } from '../setup/participation.js';
 import { insertSceneArtifact, validateSceneRefs } from '@xiaoshuyin/domain';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import {
   APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY,
   CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE,
@@ -145,6 +146,115 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
   }
 
+
+  async function forceSceneNode(
+    f: Fixture,
+    nodeCode: string,
+    inputRefs: readonly unknown[] = []
+  ): Promise<void> {
+    const node = resolveDigitalUseRuntimeNode(nodeCode);
+    await admin.query(
+      `UPDATE cases SET phase='PROBLEM_FORMULATION' WHERE id=$1`,
+      [f.caseId]
+    );
+    await admin.query(
+      `INSERT INTO scene_node_states
+         (family_id, case_id, scene_package_version, node_code, source_node_code,
+          status, branch_reason_codes, input_refs, output_refs, revision)
+       VALUES ($1,$2,'v1',$3,$4,'AVAILABLE',ARRAY['T1218_FAULT_SETUP'],
+               $5::jsonb,'[]'::jsonb,1)`,
+      [
+        f.familyId,
+        f.caseId,
+        node.nodeCode,
+        node.sourceNodeCode,
+        JSON.stringify(inputRefs),
+      ]
+    );
+  }
+
+  function respondSceneNode(
+    f: Fixture,
+    nodeCode: string,
+    nodeRevision: number,
+    response: Record<string, unknown>,
+    key: string,
+    expectedCaseVersion = f.caseVersion
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/${nodeCode}/responses`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': key,
+      },
+      payload: {
+        expectedCaseVersion,
+        expectedNodeRevision: nodeRevision,
+        response,
+      },
+    });
+  }
+
+  async function installFaultTrigger(input: {
+    table: string;
+    timing: 'BEFORE' | 'AFTER';
+    event: 'INSERT' | 'UPDATE';
+    condition: string;
+    label: string;
+  }): Promise<() => Promise<void>> {
+    const suffix = crypto.randomUUID().replaceAll('-', '');
+    const fn = `du_fault_${input.label}_${suffix}`;
+    const trigger = `du_fault_trigger_${input.label}_${suffix}`;
+    await admin.query(
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+       BEGIN
+         IF ${input.condition} THEN
+           RAISE EXCEPTION 'SLICE12_INJECTED_${input.label.toUpperCase()}_FAILURE';
+         END IF;
+         RETURN NEW;
+       END $`
+    );
+    await admin.query(
+      `CREATE TRIGGER ${trigger}
+         ${input.timing} ${input.event} ON ${input.table}
+         FOR EACH ROW EXECUTE FUNCTION ${fn}()`
+    );
+    return async () => {
+      await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON ${input.table}`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+    };
+  }
+
+  async function expectNodeUnchanged(
+    f: Fixture,
+    nodeCode: string,
+    revision = 1
+  ): Promise<void> {
+    const node = await admin.query(
+      `SELECT status, revision, output_refs
+         FROM scene_node_states
+        WHERE case_id=$1 AND node_code=$2`,
+      [f.caseId, nodeCode]
+    );
+    expect(node.rows[0]).toMatchObject({
+      status: 'AVAILABLE',
+      revision,
+      output_refs: [],
+    });
+  }
+
+  async function expectNoNodeResponseIdempotency(f: Fixture): Promise<void> {
+    const idem = await admin.query(
+      `SELECT count(*)::int AS n
+         FROM idempotency_keys
+        WHERE command_type='DIGITAL_USE_NODE_RESPONSE'
+          AND actor_account_id=$1`,
+      [f.manager.accountId]
+    );
+    expect(idem.rows[0].n).toBe(0);
+  }
+
   it('replays same key/result and rejects same key with a different canonical payload', async () => {
     const f = await fixture('idem');
     const key = `du-idem-${crypto.randomUUID()}`;
@@ -223,7 +333,139 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(rows[0].n).toBe(1);
   });
 
-  it('rolls back Evidence + Scene CAS when a later event write is fault-injected', async () => {
+  it('fault point 1/8: rolls back after Evidence write before Scene CAS', async () => {
+    const f = await fixture('fault-evidence');
+    const cleanup = await installFaultTrigger({
+      table: 'scene_node_states',
+      timing: 'BEFORE',
+      event: 'UPDATE',
+      condition: `NEW.case_id='${f.caseId}'::uuid AND NEW.node_code='A1001'`,
+      label: 'evidence',
+    });
+    try {
+      const failed = await respondA1001(f, `du-fault-evidence-${crypto.randomUUID()}`);
+      expect(failed.statusCode).toBe(500);
+      const evidence = await admin.query(
+        `SELECT count(*)::int AS n FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%'`,
+        [f.caseId]
+      );
+      expect(evidence.rows[0].n).toBe(0);
+      await expectNodeUnchanged(f, 'A1001', f.nodeRevision);
+      await expectNoNodeResponseIdempotency(f);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fault point 2/8: rolls back after A200401 marker is written into the completed node projection', async () => {
+    const f = await fixture('fault-marker');
+    await forceSceneNode(f, 'A2003');
+    const cleanup = await installFaultTrigger({
+      table: 'scene_node_states',
+      timing: 'BEFORE',
+      event: 'INSERT',
+      condition: `NEW.case_id='${f.caseId}'::uuid AND NEW.node_code='A2004'`,
+      label: 'marker',
+    });
+    try {
+      const failed = await respondSceneNode(
+        f,
+        'A2003',
+        1,
+        {
+          expectedDuration: { state: 'KNOWN', minutesPerDay: 90, certainty: 'ESTIMATE' },
+          reason: { state: 'KNOWN', text: 'Reduce disruption around daily routines.' },
+          priorMethods: { state: 'UNKNOWN' },
+          observedEffect: { state: 'UNKNOWN' },
+          difficulties: { state: 'KNOWN', text: 'Transitions are difficult.' },
+        },
+        `du-fault-marker-${crypto.randomUUID()}`
+      );
+      expect(failed.statusCode).toBe(500);
+      const evidence = await admin.query(
+        `SELECT count(*)::int AS n FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUA:v1:a2003.%'`,
+        [f.caseId]
+      );
+      expect(evidence.rows[0].n).toBe(0);
+      await expectNodeUnchanged(f, 'A2003');
+      const next = await admin.query(
+        `SELECT count(*)::int AS n FROM scene_node_states
+          WHERE case_id=$1 AND node_code='A2004'`,
+        [f.caseId]
+      );
+      expect(next.rows[0].n).toBe(0);
+      await expectNoNodeResponseIdempotency(f);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fault point 3/8: rolls back a failing Scene artifact insertion', async () => {
+    const f = await fixture('fault-artifact');
+    await forceSceneNode(f, 'A2007');
+    const cleanup = await installFaultTrigger({
+      table: 'scene_artifacts',
+      timing: 'BEFORE',
+      event: 'INSERT',
+      condition: `NEW.case_id='${f.caseId}'::uuid AND NEW.artifact_type='TIMELINE'`,
+      label: 'artifact',
+    });
+    try {
+      const failed = await respondSceneNode(
+        f,
+        'A2007',
+        1,
+        { timeline: { reviewDate: '2026-12-01', cadence: 'weekly' } },
+        `du-fault-artifact-${crypto.randomUUID()}`
+      );
+      expect(failed.statusCode).toBe(500);
+      const artifacts = await admin.query(
+        `SELECT count(*)::int AS n FROM scene_artifacts
+          WHERE case_id=$1 AND artifact_type='TIMELINE'`,
+        [f.caseId]
+      );
+      expect(artifacts.rows[0].n).toBe(0);
+      await expectNodeUnchanged(f, 'A2007');
+      await expectNoNodeResponseIdempotency(f);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fault point 4/8: rolls back after Scene CAS when next-node projection fails', async () => {
+    const f = await fixture('fault-next');
+    const cleanup = await installFaultTrigger({
+      table: 'scene_node_states',
+      timing: 'BEFORE',
+      event: 'INSERT',
+      condition: `NEW.case_id='${f.caseId}'::uuid AND NEW.node_code='01002'`,
+      label: 'next_projection',
+    });
+    try {
+      const failed = await respondA1001(f, `du-fault-next-${crypto.randomUUID()}`);
+      expect(failed.statusCode).toBe(500);
+      const evidence = await admin.query(
+        `SELECT count(*)::int AS n FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%'`,
+        [f.caseId]
+      );
+      expect(evidence.rows[0].n).toBe(0);
+      await expectNodeUnchanged(f, 'A1001', f.nodeRevision);
+      const next = await admin.query(
+        `SELECT count(*)::int AS n FROM scene_node_states
+          WHERE case_id=$1 AND node_code='01002'`,
+        [f.caseId]
+      );
+      expect(next.rows[0].n).toBe(0);
+      await expectNoNodeResponseIdempotency(f);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fault point 5/8: rolls back after router decision before audit/event', async () => {
     const f = await fixture('fault');
     const suffix = crypto.randomUUID().replaceAll('-', '');
     const fn = `du_fault_${suffix}`;
@@ -773,6 +1015,144 @@ describe('T1218 Digital Use runtime hardening', () => {
       [f.caseId]
     );
     expect(artifacts.rows[0].n).toBe(0);
+  });
+
+  it('fault point 6/8: rolls back during authoritative Problem Formulation handoff', async () => {
+    const f = await fixture('fault-formulation');
+
+    const first = await respondA1001(
+      f,
+      `du-fault-pf-a1001-${crypto.randomUUID()}`,
+      a1001(true)
+    );
+    expect(first.statusCode, first.body).toBe(200);
+    let scene = first.json();
+    expect(scene.currentNode?.nodeCode).toBe('01002');
+
+    const second = await respondSceneNode(
+      f,
+      '01002',
+      scene.currentNode.revision,
+      { state: 'KNOWN', selections: ['A'] },
+      `du-fault-pf-01002-${crypto.randomUUID()}`,
+      scene.caseVersion
+    );
+    expect(second.statusCode, second.body).toBe(200);
+    scene = second.json();
+    expect(scene.currentNode?.nodeCode).toBe('01003');
+
+    const cleanup = await installFaultTrigger({
+      table: 'problem_formulations',
+      timing: 'BEFORE',
+      event: 'INSERT',
+      condition: `NEW.case_id='${f.caseId}'::uuid`,
+      label: 'formulation',
+    });
+    try {
+      const failed = await respondSceneNode(
+        f,
+        '01003',
+        scene.currentNode.revision,
+        { state: 'KNOWN', selection: 'A' },
+        `du-fault-pf-01003-${crypto.randomUUID()}`,
+        scene.caseVersion
+      );
+      expect(failed.statusCode).toBe(500);
+
+      const kase = await admin.query(
+        `SELECT phase FROM cases WHERE id=$1`,
+        [f.caseId]
+      );
+      expect(kase.rows[0].phase).toBe('ASSESSMENT');
+
+      const pf = await admin.query(
+        `SELECT count(*)::int AS n FROM problem_formulations WHERE case_id=$1`,
+        [f.caseId]
+      );
+      expect(pf.rows[0].n).toBe(0);
+
+      const evidence = await admin.query(
+        `SELECT count(*)::int AS n FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUA:v1:01003.%'`,
+        [f.caseId]
+      );
+      expect(evidence.rows[0].n).toBe(0);
+      await expectNodeUnchanged(f, '01003');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fault point 7/8: rolls back after audit/event and before idempotency completion', async () => {
+    const f = await fixture('fault-idem-before');
+    const cleanup = await installFaultTrigger({
+      table: 'idempotency_keys',
+      timing: 'BEFORE',
+      event: 'INSERT',
+      condition: `NEW.actor_account_id='${f.manager.accountId}'::uuid AND NEW.command_type='DIGITAL_USE_NODE_RESPONSE'`,
+      label: 'idem_before',
+    });
+    try {
+      const failed = await respondA1001(
+        f,
+        `du-fault-idem-before-${crypto.randomUUID()}`
+      );
+      expect(failed.statusCode).toBe(500);
+
+      const audit = await admin.query(
+        `SELECT
+           (SELECT count(*)::int FROM case_events
+             WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED') AS events,
+           (SELECT count(*)::int FROM business_audit_events
+             WHERE resource_type='CASE' AND resource_id::text=$1
+               AND event_type='DIGITAL_USE_NODE_COMPLETED') AS audits`,
+        [f.caseId]
+      );
+      expect(audit.rows[0]).toEqual({ events: 0, audits: 0 });
+      const evidence = await admin.query(
+        `SELECT count(*)::int AS n FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%'`,
+        [f.caseId]
+      );
+      expect(evidence.rows[0].n).toBe(0);
+      await expectNodeUnchanged(f, 'A1001', f.nodeRevision);
+      await expectNoNodeResponseIdempotency(f);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fault point 8/8: rolls back when idempotency completion fails after row insertion', async () => {
+    const f = await fixture('fault-idem-after');
+    const cleanup = await installFaultTrigger({
+      table: 'idempotency_keys',
+      timing: 'AFTER',
+      event: 'INSERT',
+      condition: `NEW.actor_account_id='${f.manager.accountId}'::uuid AND NEW.command_type='DIGITAL_USE_NODE_RESPONSE'`,
+      label: 'idem_after',
+    });
+    try {
+      const failed = await respondA1001(
+        f,
+        `du-fault-idem-after-${crypto.randomUUID()}`
+      );
+      expect(failed.statusCode).toBe(500);
+
+      const audit = await admin.query(
+        `SELECT
+           (SELECT count(*)::int FROM case_events
+             WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED') AS events,
+           (SELECT count(*)::int FROM business_audit_events
+             WHERE resource_type='CASE' AND resource_id::text=$1
+               AND event_type='DIGITAL_USE_NODE_COMPLETED') AS audits`,
+        [f.caseId]
+      );
+      expect(audit.rows[0]).toEqual({ events: 0, audits: 0 });
+      await expectNodeUnchanged(f, 'A1001', f.nodeRevision);
+      await expectNoNodeResponseIdempotency(f);
+    } finally {
+      await cleanup();
+    }
   });
 
   it('rejects client route/package authority fields before business execution', async () => {
