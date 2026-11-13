@@ -176,7 +176,8 @@ describe('T1210 A1001 / 01002 / 01003 Evidence semantics', () => {
       state: 'DECLINED',
     }));
     expect(unresolved.progression).toBe('HOLD');
-    expect(unresolved.conditions.FAMILY_CONFLICT_SEVERE_F).toBe('DECLINED');
+    expect(unresolved.conditions).toEqual({});
+    expect(unresolved.outputRefs.length).toBeGreaterThan(0);
   });
 
   it('supersedes one actor-owned current response but never guesses among multiple current rows', async () => {
