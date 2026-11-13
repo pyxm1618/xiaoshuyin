@@ -40,6 +40,7 @@ describe('T1218 Digital Use runtime hardening', () => {
   let app: FastifyInstance;
   let admin: pg.Pool;
   let migrator: pg.Client;
+  let migrator: pg.Client;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -397,6 +398,53 @@ describe('T1218 Digital Use runtime hardening', () => {
       [f.caseId]
     );
     expect(rows.map((row) => row.scene_package_version)).toEqual(['v999']);
+  });
+
+  it('fails closed when the current Slice 10 Compliance policy becomes unresolved', async () => {
+    const f = await fixture('compliance');
+
+    // Test-only policy fault injection. Production judgment immutability remains
+    // intact; triggers are bypassed on this admin connection only, then the
+    // reviewed value is restored in finally.
+    const fault = await admin.connect();
+    try {
+      await fault.query('BEGIN');
+      await fault.query("SET LOCAL session_replication_role = 'replica'");
+      await fault.query(
+        `UPDATE compliance_feature_policies
+            SET anthropomorphic_applicability='UNKNOWN'
+          WHERE feature_code='DIGITAL_USE_ASSESSMENT_RUNTIME'
+            AND feature_contract_revision='v1'
+            AND policy_version=1`
+      );
+      await fault.query('COMMIT');
+
+      const response = await respondA1001(
+        f,
+        `du-compliance-${crypto.randomUUID()}`
+      );
+      expect(response.statusCode, response.body).toBe(409);
+      expect(response.json().code).toBe('COMPLIANCE_BLOCKED');
+
+      const evidence = await admin.query(
+        `SELECT count(*)::int AS n FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%'`,
+        [f.caseId]
+      );
+      expect(evidence.rows[0].n).toBe(0);
+    } finally {
+      await fault.query('BEGIN');
+      await fault.query("SET LOCAL session_replication_role = 'replica'");
+      await fault.query(
+        `UPDATE compliance_feature_policies
+            SET anthropomorphic_applicability='NOT_APPLICABLE'
+          WHERE feature_code='DIGITAL_USE_ASSESSMENT_RUNTIME'
+            AND feature_contract_revision='v1'
+            AND policy_version=1`
+      );
+      await fault.query('COMMIT');
+      fault.release();
+    }
   });
 
   it('rejects client route/package authority fields before business execution', async () => {
