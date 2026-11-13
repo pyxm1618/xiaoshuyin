@@ -40,7 +40,6 @@ describe('T1218 Digital Use runtime hardening', () => {
   let app: FastifyInstance;
   let admin: pg.Pool;
   let migrator: pg.Client;
-  let migrator: pg.Client;
 
   beforeAll(async () => {
     app = await buildApp();
