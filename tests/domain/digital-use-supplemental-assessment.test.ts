@@ -31,6 +31,7 @@ import {
   CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE,
 } from '@xiaoshuyin/compliance';
 import { applyDigitalUseNodeSemantics } from '../../apps/server/api/src/services/digital-use-node-semantics.js';
+import { routeDigitalUseTopology } from '@xiaoshuyin/scenes/digital-use';
 
 function ctx(nodeCode: string, response: Record<string, unknown>) {
   return {
@@ -110,6 +111,32 @@ describe('T1212 01004 Consent / 01000 no-invention', () => {
     expect(input.purpose).toBe('DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT');
     expect(input.sceneAuthorization).toEqual({ nodeCode: '01004', verified: true });
     expect(input.confirmationStatementHash).toBe(CONFIRMATION_HASH);
+  });
+
+  it('router reaches 01000 only after explicit grant and MAIN after explicit decline', async () => {
+    const granted = await applyDigitalUseNodeSemantics(
+      ctx('01004', { decision: 'GRANTED', confirmationStatementHash: CONFIRMATION_HASH })
+    );
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: '01004',
+      conditions: granted.conditions,
+    })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: '01000' });
+
+    recordPurposeScopedConsentDecision.mockResolvedValueOnce({
+      consentRecordId: '00000000-0000-7000-8000-000000000051',
+      decision: 'DECLINED',
+    });
+    const declined = await applyDigitalUseNodeSemantics(
+      ctx('01004', { decision: 'DECLINED', confirmationStatementHash: CONFIRMATION_HASH })
+    );
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: '01004',
+      conditions: declined.conditions,
+    })).toMatchObject({ kind: 'TERMINAL_ROUTE', terminalCode: 'MAIN' });
   });
 
   it('records explicit decline through Consent owner and routes only to decline terminal', async () => {
