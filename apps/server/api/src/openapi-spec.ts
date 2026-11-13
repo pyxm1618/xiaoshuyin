@@ -827,6 +827,128 @@ export function buildOpenApiDocument() {
         },
       },
     },
+    '/api/v1/cases/{id}/assessments': {
+      post: {
+        tags: ['digital-use-assessment'],
+        operationId: 'startDigitalUseAssessment',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: jsonBody(toJsonSchema(StartDigitalUseAssessmentRequest)),
+        responses: {
+          '200': jsonResponse(
+            'Current Digital Use Assessment Scene projection',
+            toJsonSchema(DigitalUseSceneResponse)
+          ),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': errorResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`'),
+          '409': jsonResponse(
+            'Scene, Case, Safety, Compliance or idempotency conflict',
+            toJsonSchema(SceneRuntimeError)
+          ),
+          '422': jsonResponse(
+            'Strict request / traceable-evidence validation failure',
+            toJsonSchema(SceneRuntimeError)
+          ),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/scene': {
+      get: {
+        tags: ['digital-use-assessment'],
+        operationId: 'getDigitalUseScene',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseId')],
+        responses: {
+          '200': jsonResponse(
+            'Authorized current Digital Use Scene projection',
+            toJsonSchema(DigitalUseSceneResponse)
+          ),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': errorResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND`'),
+          '409': jsonResponse(
+            'Scene package or reachability conflict',
+            toJsonSchema(SceneRuntimeError)
+          ),
+          '422': jsonResponse(
+            'Scene validation failure',
+            toJsonSchema(SceneRuntimeError)
+          ),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/scene/nodes/{nodeCode}': {
+      get: {
+        tags: ['digital-use-assessment'],
+        operationId: 'getDigitalUseSceneNode',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          {
+            name: 'nodeCode',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', minLength: 1, maxLength: 64 },
+          },
+        ],
+        responses: {
+          '200': jsonResponse(
+            'Authorized current node projection',
+            toJsonSchema(DigitalUseNodeResponse)
+          ),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': errorResponse('`CASE_NOT_FOUND` / `SCENE_NODE_NOT_FOUND`'),
+          '409': jsonResponse(
+            'Scene package or reachability conflict',
+            toJsonSchema(SceneRuntimeError)
+          ),
+          '422': jsonResponse(
+            'Scene validation failure',
+            toJsonSchema(SceneRuntimeError)
+          ),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses': {
+      post: {
+        tags: ['digital-use-assessment'],
+        operationId: 'completeDigitalUseSceneNode',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          {
+            name: 'nodeCode',
+            in: 'path',
+            required: true,
+            schema: { type: 'string', minLength: 1, maxLength: 64 },
+          },
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: jsonBody(toJsonSchema(CompleteDigitalUseNodeRequest)),
+        responses: {
+          '200': jsonResponse(
+            'Committed Digital Use Scene business result',
+            toJsonSchema(DigitalUseSceneResponse)
+          ),
+          '401': errorResponse('`UNAUTHENTICATED`'),
+          '404': errorResponse('`CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` / `SCENE_NODE_NOT_FOUND`'),
+          '409': jsonResponse(
+            'Scene, Case, Safety, Compliance, Consent, revision or idempotency conflict',
+            toJsonSchema(SceneRuntimeError)
+          ),
+          '422': jsonResponse(
+            'Strict node-response validation failure',
+            toJsonSchema(SceneRuntimeError)
+          ),
+          '500': errorResponse('`INTERNAL_ERROR`'),
+        },
+      },
+    },
     '/api/v1/cases/{id}/problem-formulations/current': {
       get: {
         tags: ['case'],
