@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import type pg from 'pg';
+import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
 import {
@@ -39,14 +39,41 @@ function a1001(impact = false) {
 describe('T1218 Digital Use runtime hardening', () => {
   let app: FastifyInstance;
   let admin: pg.Pool;
+  let migrator: pg.Client;
 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
     admin = createAdminPool();
+    migrator = new pg.Client({ connectionString: process.env['MIGRATION_DATABASE_URL'] });
+    await migrator.connect();
+
+    // Exact server-owned Slice 12 feature policy. Production runtime correctly
+    // fails closed without reviewed policy truth; this integration fixture
+    // publishes one legal NOT_APPLICABLE policy through the Slice 10 owner.
+    await migrator.query(
+      `SELECT app.publish_compliance_feature_policy(
+         'DIGITAL_USE_ASSESSMENT_RUNTIME','v1',NULL,1,
+         'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+         'Slice 12 integration reviewed basis','evidence://slice12/integration',
+         now() - interval '1 minute','migration:slice12-integration'
+       )`
+    );
   });
 
   afterAll(async () => {
+    await admin.query(
+      `UPDATE compliance_feature_policies
+          SET superseded_by_policy_id = NULL
+        WHERE feature_code='DIGITAL_USE_ASSESSMENT_RUNTIME'
+          AND feature_contract_revision='v1'`
+    ).catch(() => undefined);
+    await admin.query(
+      `DELETE FROM compliance_feature_policies
+        WHERE feature_code='DIGITAL_USE_ASSESSMENT_RUNTIME'
+          AND feature_contract_revision='v1'`
+    ).catch(() => undefined);
+    await migrator.end().catch(() => undefined);
     await admin.end();
     await app.close();
   });
