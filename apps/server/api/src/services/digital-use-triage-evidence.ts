@@ -41,7 +41,13 @@ function classifyRows<T>(
 ): TriageEvidenceState<T> {
   const selected = rows.filter((row) => row.content.startsWith(prefix(code)));
   if (selected.length === 0) return { kind: 'MISSING', reason: 'NO_RECORD' };
-  if (selected.some((row) => row.conflict_group_id !== null)) {
+  if (
+    selected.some(
+      (row) =>
+        row.conflict_group_id !== null ||
+        row.confirmation_status === 'DISPUTED'
+    )
+  ) {
     return { kind: 'CONFLICT', reason: 'CONFLICTING' };
   }
 
@@ -56,11 +62,36 @@ function classifyRows<T>(
     return { kind: 'CONFLICT', reason: 'INVALID' };
   }
 
-  // Identical current statements from multiple admissible sources are not
-  // contradictory. Distinct current route-driving meanings are.
-  const distinct = new Map(parsed.map((item) => [canonicalJson(item), item]));
-  if (distinct.size !== 1) return { kind: 'CONFLICT', reason: 'CONTRADICTORY' };
-  return [...distinct.values()][0]!;
+  // Missing-like states never become Conflict merely because another source
+  // has a usable current value. A usable approved current value can resolve the
+  // family unless two current VALUE meanings contradict each other.
+  const values = parsed.filter(
+    (item): item is Extract<TriageEvidenceState<T>, { kind: 'VALUE' }> =>
+      item.kind === 'VALUE'
+  );
+  if (values.length > 0) {
+    const distinctValues = new Map(
+      values.map((item) => [canonicalJson(item.value), item])
+    );
+    if (distinctValues.size > 1) {
+      return { kind: 'CONFLICT', reason: 'CONTRADICTORY' };
+    }
+    return [...distinctValues.values()][0]!;
+  }
+
+  // With no usable value, every remaining state is Missing family. Different
+  // missing reasons stay Missing, never Conflict.
+  const missingStates = parsed.filter(
+    (item): item is Extract<TriageEvidenceState<T>, { kind: 'MISSING' }> =>
+      item.kind === 'MISSING'
+  );
+  if (missingStates.some((item) => item.reason === 'DECLINED')) {
+    return { kind: 'MISSING', reason: 'DECLINED' };
+  }
+  if (missingStates.some((item) => item.reason === 'NOT_COLLECTED')) {
+    return { kind: 'MISSING', reason: 'NOT_COLLECTED' };
+  }
+  return { kind: 'MISSING', reason: 'UNKNOWN' };
 }
 
 function parseEmotion(value: unknown): TriageEvidenceState<readonly EmotionOption[]> | null {
