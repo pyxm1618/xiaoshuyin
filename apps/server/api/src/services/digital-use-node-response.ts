@@ -9,6 +9,7 @@ import type pg from 'pg';
 import {
   assertOrdinaryProgressionAllowedRaw,
   casCompleteSceneNodeState,
+  casRecordSceneNodeProgress,
   ensureSceneNodeAvailable,
   getSceneNodeState,
   getScenePackageBinding,
@@ -223,6 +224,24 @@ export async function completeDigitalUseNodeResponse(
             }))
           ) {
             throw nodeError('SCENE_RESPONSE_INVALID', 'Scene refs are outside the authorized Case');
+          }
+
+          if (semantic.progression === 'HOLD') {
+            const reasonCode = semantic.holdReasonCode ?? 'INTEGRATED_TRIAGE_INSUFFICIENT';
+            const progressed = await casRecordSceneNodeProgress(tx, {
+              caseId: input.caseId,
+              nodeCode: node.nodeCode,
+              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+              expectedRevision: input.expectedNodeRevision,
+              branchReasonCodes: [reasonCode],
+              inputRefs: semantic.inputRefs,
+              outputRefs: semantic.outputRefs,
+            });
+            if (!progressed) throw nodeError('STALE_NODE_REVISION');
+            return {
+              status: 200,
+              body: await currentSceneEnvelope(tx, input.caseId),
+            };
           }
 
           const route = requireResolvedRoute(
