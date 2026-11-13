@@ -36,7 +36,7 @@ import {
 } from '@xiaoshuyin/scenes/digital-use';
 import type { DigitalUseNodeResponseType, DigitalUseSceneResponseType } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
-import { requireFamilyAction } from '../authz.js';
+import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { startAssessmentInTransaction } from './problem-formulations.js';
@@ -185,9 +185,9 @@ async function currentSceneEnvelope(
 async function ensureA1001(
   tx: pg.PoolClient,
   input: Pick<StartDigitalUseAssessmentInput, 'familyId' | 'caseId'>
-): Promise<void> {
+): Promise<SceneNodeStateRow> {
   const initial = initialA1001Projection();
-  await ensureSceneNodeAvailable(tx, {
+  return ensureSceneNodeAvailable(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
     scenePackageVersion: initial.scenePackageVersion,
@@ -195,6 +195,55 @@ async function ensureA1001(
     sourceNodeCode: initial.sourceNodeCode,
     branchReasonCodes: ['LEGAL_DIGITAL_USE_SCENE_ENTRY'],
   });
+}
+
+function ownerCaseVersion(result: { status: number; body: unknown }): number {
+  const value =
+    typeof result.body === 'object' && result.body !== null
+      ? (result.body as { caseVersion?: unknown }).caseVersion
+      : undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw sceneError('INTERNAL_ERROR', 'Invalid StartAssessment owner response');
+  }
+  return value;
+}
+
+function stableInitialSceneEnvelope(
+  a1001: SceneNodeStateRow,
+  caseVersion: number
+): DigitalUseSceneResponseType {
+  const initialRow: SceneNodeStateRow = {
+    ...a1001,
+    status: 'AVAILABLE',
+    revision: 1,
+    branch_reason_codes: ['LEGAL_DIGITAL_USE_SCENE_ENTRY'],
+    input_refs: [],
+    output_refs: [],
+    completed_at: null,
+  };
+  const projected = nodeDto(initialRow);
+  return {
+    caseId: a1001.case_id,
+    caseVersion,
+    sceneCode: DIGITAL_USE_SCENE_CODE,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    currentNode: projected,
+    nodes: [projected],
+    artifacts: [],
+    routeReasonCode: null,
+    downstream: { routeIntent: null, available: true, reasonCode: null },
+  };
+}
+
+async function requireExistingA1001(
+  tx: pg.PoolClient,
+  caseId: string
+): Promise<SceneNodeStateRow> {
+  const row = await getSceneNodeState(tx, caseId, 'A1001');
+  if (!row || row.scene_package_version !== DIGITAL_USE_PACKAGE_VERSION) {
+    throw sceneError('SCENE_PACKAGE_MISMATCH');
+  }
+  return row;
 }
 
 /**
@@ -230,14 +279,9 @@ export async function startOrResumeDigitalUseAssessment(
       const visibleCase = await getCaseById(tx, input.caseId);
       if (!visibleCase) throw sceneError('CASE_NOT_FOUND', 'Case not found');
 
-      // Safety precedes ordinary business progression and is re-read inside this
-      // exact transaction. Compliance uses the same checked-out client.
-      await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-      await assertAssessmentCompliance(tx, input.actor.personId);
-
-      // If this exact key already belongs to the Slice 8 start command, delegate
-      // back to that owner even though the Case is now ASSESSMENT. The owner
-      // decides replay vs mismatch before its phase precondition.
+      // Idempotent owner replay is a read-only business result. It is decided
+      // before current Safety/Compliance state so same key + same payload stays
+      // the original result; no ordinary progression is performed on replay.
       const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
       const ownerExisting = await getReservedIdempotency(tx, {
         actorAccountId: input.actor.accountId,
@@ -248,20 +292,38 @@ export async function startOrResumeDigitalUseAssessment(
           : null,
       });
 
-      if (visibleCase.phase === 'INTAKE' || ownerExisting !== null) {
-        await startAssessmentInTransaction(tx, {
+      if (ownerExisting !== null) {
+        const ownerResult = await startAssessmentInTransaction(tx, {
           actor: input.actor,
           familyId: input.familyId,
           caseId: input.caseId,
           expectedCaseVersion: input.expectedCaseVersion,
           idempotencyKey: input.idempotencyKey,
         });
+        if (ownerResult.status !== 200) return ownerResult as never;
+        const a1001 = await requireExistingA1001(tx, input.caseId);
+        return stableInitialSceneEnvelope(a1001, ownerCaseVersion(ownerResult));
+      }
 
-        // This write is deliberately AFTER the authoritative owner command but
-        // inside the same outer transaction. Failure here rolls back the phase,
-        // owner event/audit and owner idempotency completion together.
-        await ensureA1001(tx, input);
-        return currentSceneEnvelope(tx, input.caseId);
+      if (visibleCase.phase === 'INTAKE') {
+        await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+        await assertAssessmentCompliance(tx, input.actor.personId);
+
+        const ownerResult = await startAssessmentInTransaction(tx, {
+          actor: input.actor,
+          familyId: input.familyId,
+          caseId: input.caseId,
+          expectedCaseVersion: input.expectedCaseVersion,
+          idempotencyKey: input.idempotencyKey,
+        });
+        if (ownerResult.status !== 200) {
+          // Preserve the Slice 8 owner's original idempotent 4xx result and do
+          // not create A1001 for a failed StartAssessment.
+          return ownerResult as never;
+        }
+
+        const a1001 = await ensureA1001(tx, input);
+        return stableInitialSceneEnvelope(a1001, ownerCaseVersion(ownerResult));
       }
 
       const decision = decideAssessmentEntry(visibleCase, input.expectedCaseVersion);
@@ -271,11 +333,9 @@ export async function startOrResumeDigitalUseAssessment(
 
       const binding = await getScenePackageBinding(tx, input.caseId);
       if (binding === null) {
-        // A legal ASSESSMENT from another owner path may not fabricate Scene
-        // history. It may initialize the approved A1001 projection only when no
-        // conflicting package binding exists.
-        await ensureA1001(tx, input);
-      } else if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
+        throw sceneError('SCENE_PACKAGE_MISMATCH');
+      }
+      if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
         throw sceneError('STALE_SCENE_PACKAGE');
       }
 
@@ -319,15 +379,20 @@ async function authorizeSceneRead(
   tx: pg.PoolClient,
   input: ReadDigitalUseSceneInput
 ): Promise<SceneCaseRow> {
-  await requireFamilyAction(tx, {
-    accountId: input.actor.accountId,
-    personId: input.actor.personId,
-    familyId: input.familyId,
-    caseId: input.caseId,
-    action: 'CASE_READ_ASSESSMENT_SCENE',
-    purpose: 'FAMILY_MANAGEMENT',
-    resource: { type: 'CASE', familyId: input.familyId, caseId: input.caseId },
-  });
+  try {
+    await requireFamilyAction(tx, {
+      accountId: input.actor.accountId,
+      personId: input.actor.personId,
+      familyId: input.familyId,
+      caseId: input.caseId,
+      action: 'CASE_READ_ASSESSMENT_SCENE',
+      purpose: 'FAMILY_MANAGEMENT',
+      resource: { type: 'CASE', familyId: input.familyId, caseId: input.caseId },
+    });
+  } catch (error) {
+    if (!isKnownAuthorizationDenial(error)) throw error;
+    throw sceneError('CASE_NOT_FOUND', 'Case not found');
+  }
   const caseRow = await getCaseById(tx, input.caseId);
   if (!caseRow) throw sceneError('CASE_NOT_FOUND', 'Case not found');
   const binding = await getScenePackageBinding(tx, input.caseId);
@@ -365,7 +430,6 @@ export async function getDigitalUseNode(
   pool: pg.Pool,
   input: ReadDigitalUseSceneInput & { readonly nodeCode: string }
 ): Promise<DigitalUseNodeResponseType> {
-  const manifestNode = resolveDigitalUseRuntimeNode(input.nodeCode);
   return withRlsTransaction(
     pool,
     {
@@ -376,6 +440,7 @@ export async function getDigitalUseNode(
     },
     async (tx) => {
       const caseRow = await authorizeSceneRead(tx, input);
+      const manifestNode = resolveDigitalUseRuntimeNode(input.nodeCode);
       const stored = await getSceneNodeState(tx, input.caseId, manifestNode.nodeCode);
       if (!stored) throw sceneError('SCENE_NODE_UNREACHABLE');
       if (stored.scene_package_version !== DIGITAL_USE_PACKAGE_VERSION) {
