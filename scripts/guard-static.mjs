@@ -714,7 +714,13 @@ function checkAssessmentRuntimeBoundaries(relPath, content, report) {
     );
   }
 
-  if (!ASSESSMENT_RUNTIME_FILES.has(relPath)) return;
+  const isAssessmentRuntime =
+    ASSESSMENT_RUNTIME_FILES.has(relPath) ||
+    (
+      relPath.startsWith(ASSESSMENT_SERVICE_ROOT) &&
+      /digital-use[^/]*\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath)
+    );
+  if (!isAssessmentRuntime) return;
 
   content.split('\n').forEach((line, i) => {
     if (isComment(line)) return;
@@ -750,21 +756,25 @@ function checkAssessmentRuntimeBoundaries(relPath, content, report) {
     }
   });
 
-  const normalized = normalizeSql(content);
-  if (/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+problem_formulations\b/i.test(normalized)) {
+  const directPfSql =
+    /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+problem_formulations\b/i;
+  const pfMatch = directPfSql.exec(content);
+  if (pfMatch) {
     report(
       'R11-assessment-problem-formulation-owner',
       relPath,
-      lineOf(normalized, normalized.search(/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+problem_formulations\b/i)),
+      lineOf(content, pfMatch.index),
       'Slice 12 must use the Slice 8 Problem Formulation owner seam, never direct SQL'
     );
   }
-  const schedulerSql = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:case_followup_schedules|notifications|notification_attempts)\b/i;
-  if (schedulerSql.test(normalized)) {
+  const schedulerSql =
+    /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:case_followup_schedules|notifications|notification_attempts)\b/i;
+  const schedulerMatch = schedulerSql.exec(content);
+  if (schedulerMatch) {
     report(
       'R11-assessment-no-scheduler',
       relPath,
-      lineOf(normalized, normalized.search(schedulerSql)),
+      lineOf(content, schedulerMatch.index),
       'Slice 12 may create follow-up basis metadata but no scheduler/notification business truth'
     );
   }
