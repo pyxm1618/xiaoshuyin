@@ -240,7 +240,7 @@ export function evaluateIntegratedTriage(
   };
 
   const emotionOther = hasNonSevereEmotionNeed(emotionValues);
-  const familyOther = familyValue !== 'A' && familyValue !== 'F';
+  const familyOther = familyValue !== 'A';
   const explicitOther =
     evidence.otherNeeds?.kind === 'VALUE' && evidence.otherNeeds.value === true;
   const otherNeedsPositive = emotionOther || familyOther || explicitOther;
