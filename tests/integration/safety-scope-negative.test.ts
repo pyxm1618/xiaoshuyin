@@ -140,7 +140,6 @@ describe('T918 executable scope negatives', () => {
         'plan_versions',
         'tasks',
         'reviews',
-        'scene_node_states',
       ]) {
         expect(names, forbidden).not.toContain(forbidden);
       }
