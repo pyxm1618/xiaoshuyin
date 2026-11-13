@@ -527,6 +527,199 @@ describe('T1218 Digital Use runtime hardening', () => {
     }
   });
 
+  it('fails after Evidence writes when the Scene CAS is fault-injected and rolls everything back', async () => {
+    const f = await fixture('fault-cas');
+    const suffix = crypto.randomUUID().replaceAll('-', '');
+    const fn = `du_fault_cas_${suffix}`;
+    const trigger = `du_fault_cas_trigger_${suffix}`;
+    await admin.query(
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+       BEGIN
+         IF NEW.case_id = '${f.caseId}'::uuid AND NEW.node_code='A1001' THEN
+           RAISE EXCEPTION 'SLICE12_AFTER_EVIDENCE_FAULT';
+         END IF;
+         RETURN NEW;
+       END $`
+    );
+    await admin.query(
+      `CREATE TRIGGER ${trigger}
+         BEFORE UPDATE ON scene_node_states
+         FOR EACH ROW EXECUTE FUNCTION ${fn}()`
+    );
+    try {
+      const failed = await respondA1001(f, `du-fault-cas-${crypto.randomUUID()}`);
+      expect(failed.statusCode).toBe(500);
+    } finally {
+      await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON scene_node_states`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+    }
+
+    const facts = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM assertions
+           WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%') AS evidence,
+         (SELECT revision FROM scene_node_states
+           WHERE case_id=$1 AND node_code='A1001') AS revision,
+         (SELECT status::text FROM scene_node_states
+           WHERE case_id=$1 AND node_code='A1001') AS status,
+         (SELECT count(*)::int FROM idempotency_keys
+           WHERE actor_account_id=$2 AND command_type='DIGITAL_USE_NODE_RESPONSE') AS idempotency`,
+      [f.caseId, f.manager.accountId]
+    );
+    expect(facts.rows[0]).toEqual({
+      evidence: 0,
+      revision: f.nodeRevision,
+      status: 'AVAILABLE',
+      idempotency: 0,
+    });
+  });
+
+  it('rolls back a completed CAS when the routed next-node projection insert fails', async () => {
+    const f = await fixture('fault-next');
+    const suffix = crypto.randomUUID().replaceAll('-', '');
+    const fn = `du_fault_next_${suffix}`;
+    const trigger = `du_fault_next_trigger_${suffix}`;
+    await admin.query(
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+       BEGIN
+         IF NEW.case_id = '${f.caseId}'::uuid AND NEW.node_code='01002' THEN
+           RAISE EXCEPTION 'SLICE12_AFTER_CAS_FAULT';
+         END IF;
+         RETURN NEW;
+       END $`
+    );
+    await admin.query(
+      `CREATE TRIGGER ${trigger}
+         BEFORE INSERT ON scene_node_states
+         FOR EACH ROW EXECUTE FUNCTION ${fn}()`
+    );
+    try {
+      const failed = await respondA1001(f, `du-fault-next-${crypto.randomUUID()}`);
+      expect(failed.statusCode).toBe(500);
+    } finally {
+      await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON scene_node_states`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+    }
+
+    const facts = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM assertions
+           WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%') AS evidence,
+         (SELECT revision FROM scene_node_states
+           WHERE case_id=$1 AND node_code='A1001') AS revision,
+         (SELECT status::text FROM scene_node_states
+           WHERE case_id=$1 AND node_code='A1001') AS status,
+         (SELECT count(*)::int FROM scene_node_states
+           WHERE case_id=$1 AND node_code='01002') AS next_nodes`,
+      [f.caseId]
+    );
+    expect(facts.rows[0]).toEqual({
+      evidence: 0,
+      revision: f.nodeRevision,
+      status: 'AVAILABLE',
+      next_nodes: 0,
+    });
+  });
+
+  it('rolls back after audit/event work but before idempotency completion', async () => {
+    const f = await fixture('fault-after-audit');
+    const suffix = crypto.randomUUID().replaceAll('-', '');
+    const fn = `du_fault_audit_${suffix}`;
+    const trigger = `du_fault_audit_trigger_${suffix}`;
+    await admin.query(
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+       BEGIN
+         IF NEW.resource_id = '${f.caseId}'::uuid
+            AND NEW.event_type='DIGITAL_USE_NODE_COMPLETED' THEN
+           RAISE EXCEPTION 'SLICE12_AFTER_AUDIT_FAULT';
+         END IF;
+         RETURN NEW;
+       END $`
+    );
+    await admin.query(
+      `CREATE TRIGGER ${trigger}
+         AFTER INSERT ON business_audit_events
+         FOR EACH ROW EXECUTE FUNCTION ${fn}()`
+    );
+    try {
+      const failed = await respondA1001(f, `du-fault-audit-${crypto.randomUUID()}`);
+      expect(failed.statusCode).toBe(500);
+    } finally {
+      await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON business_audit_events`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+    }
+
+    const facts = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM assertions
+           WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%') AS evidence,
+         (SELECT count(*)::int FROM case_events
+           WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED') AS events,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE resource_id=$1 AND event_type='DIGITAL_USE_NODE_COMPLETED') AS audits,
+         (SELECT count(*)::int FROM idempotency_keys
+           WHERE actor_account_id=$2 AND command_type='DIGITAL_USE_NODE_RESPONSE') AS idempotency`,
+      [f.caseId, f.manager.accountId]
+    );
+    expect(facts.rows[0]).toEqual({
+      evidence: 0,
+      events: 0,
+      audits: 0,
+      idempotency: 0,
+    });
+  });
+
+  it('rolls back all business effects when idempotency completion itself fails', async () => {
+    const f = await fixture('fault-idempotency');
+    const suffix = crypto.randomUUID().replaceAll('-', '');
+    const fn = `du_fault_idem_${suffix}`;
+    const trigger = `du_fault_idem_trigger_${suffix}`;
+    await admin.query(
+      `CREATE FUNCTION ${fn}() RETURNS trigger LANGUAGE plpgsql AS $
+       BEGIN
+         IF NEW.actor_account_id = '${f.manager.accountId}'::uuid
+            AND NEW.command_type='DIGITAL_USE_NODE_RESPONSE' THEN
+           RAISE EXCEPTION 'SLICE12_IDEMPOTENCY_COMPLETION_FAULT';
+         END IF;
+         RETURN NEW;
+       END $`
+    );
+    await admin.query(
+      `CREATE TRIGGER ${trigger}
+         BEFORE INSERT ON idempotency_keys
+         FOR EACH ROW EXECUTE FUNCTION ${fn}()`
+    );
+    try {
+      const failed = await respondA1001(f, `du-fault-idem-${crypto.randomUUID()}`);
+      expect(failed.statusCode).toBe(500);
+    } finally {
+      await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON idempotency_keys`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+    }
+
+    const facts = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM assertions
+           WHERE case_id=$1 AND content LIKE 'DUA:v1:a1001.%') AS evidence,
+         (SELECT revision FROM scene_node_states
+           WHERE case_id=$1 AND node_code='A1001') AS revision,
+         (SELECT count(*)::int FROM case_events
+           WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED') AS events,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE resource_id=$1 AND event_type='DIGITAL_USE_NODE_COMPLETED') AS audits,
+         (SELECT count(*)::int FROM idempotency_keys
+           WHERE actor_account_id=$2 AND command_type='DIGITAL_USE_NODE_RESPONSE') AS idempotency`,
+      [f.caseId, f.manager.accountId]
+    );
+    expect(facts.rows[0]).toEqual({
+      evidence: 0,
+      revision: f.nodeRevision,
+      events: 0,
+      audits: 0,
+      idempotency: 0,
+    });
+  });
+
   it('rejects a manifest-valid but not-yet-reachable node read', async () => {
     const f = await fixture('unreachable');
     const response = await app.inject({
