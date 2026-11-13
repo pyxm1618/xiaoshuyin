@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const recordStatement = vi.fn();
-const listCurrentSceneEvidenceStatements = vi.fn();
+const {
+  recordStatement,
+  listCurrentSceneEvidenceStatements,
+} = vi.hoisted(() => ({
+  recordStatement: vi.fn(),
+  listCurrentSceneEvidenceStatements: vi.fn(),
+}));
 
 vi.mock('@xiaoshuyin/domain', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@xiaoshuyin/domain')>();
