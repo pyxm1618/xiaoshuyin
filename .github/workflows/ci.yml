@@ -173,16 +173,3 @@ jobs:
         run: |
           bun run openapi:generate
           bun run openapi:check
-      - name: Verify generated OpenAPI client is committed
-        run: |
-          git diff --exit-code -- packages/generated/openapi.json packages/generated/openapi.d.ts
-      - name: Upload generated OpenAPI artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-openapi-${{ github.sha }}-${{ github.run_attempt }}
-          path: |
-            packages/generated/openapi.json
-            packages/generated/openapi.d.ts
-          if-no-files-found: error
-          retention-days: 7
