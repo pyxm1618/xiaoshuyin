@@ -360,11 +360,12 @@ async function handleA1001(
   if (value.historicalDurationBand !== undefined) basis.push('HISTORICAL_DURATION_BAND');
 
   return {
-    inputRefs: [],
+    inputRefs: context.currentInputRefs,
     outputRefs: refs,
     conditions: { A1001_ASSESSMENT_COMPLETE: true },
     evidenceBasis: basis,
     progression: 'ROUTE',
+    nextInputRefs: propagatedRefs(context, refs),
   };
 }
 
@@ -396,7 +397,7 @@ async function handle01002(
           ? 'NOT_COLLECTED'
           : 'UNKNOWN';
     return {
-      inputRefs: [],
+      inputRefs: context.currentInputRefs,
       outputRefs: refs,
       conditions: {
         EMOTION_SEVERE_F: conditionState,
@@ -405,26 +406,26 @@ async function handle01002(
       evidenceBasis: ['EMOTION'],
       progression: 'HOLD',
       holdReasonCode: 'INTEGRATED_TRIAGE_INSUFFICIENT',
-      nextInputRefs: refs,
+      nextInputRefs: propagatedRefs(context, refs),
     };
   }
 
   if (emotion.kind === 'CONFLICT') {
     return {
-      inputRefs: [],
+      inputRefs: context.currentInputRefs,
       outputRefs: refs,
       conditions: {},
       evidenceBasis: ['EMOTION'],
       completionStatus: 'BLOCKED',
       progression: 'BLOCKED',
       blockReasonCode: '01002_CONFLICT_FAMILY',
-      nextInputRefs: refs,
+      nextInputRefs: propagatedRefs(context, refs),
     };
   }
 
   const hasF = emotion.value.includes('F');
   return {
-    inputRefs: [],
+    inputRefs: context.currentInputRefs,
     outputRefs: refs,
     conditions: {
       EMOTION_SEVERE_F: hasF,
@@ -432,7 +433,7 @@ async function handle01002(
     },
     evidenceBasis: ['EMOTION'],
     progression: 'ROUTE',
-    nextInputRefs: refs,
+    nextInputRefs: propagatedRefs(context, refs),
   };
 }
 
@@ -467,26 +468,26 @@ async function handle01003(
 
   if (triage.outcome === 'INSUFFICIENT') {
     return {
-      inputRefs: [],
+      inputRefs: context.currentInputRefs,
       outputRefs: currentEvidenceRefs,
       conditions: {},
       evidenceBasis: integratedBasis,
       progression: 'HOLD',
       holdReasonCode: 'INTEGRATED_TRIAGE_INSUFFICIENT',
-      nextInputRefs: currentEvidenceRefs,
+      nextInputRefs: propagatedRefs(context, currentEvidenceRefs),
     };
   }
 
   if (triage.outcome === 'BLOCKED') {
     return {
-      inputRefs: [],
+      inputRefs: context.currentInputRefs,
       outputRefs: currentEvidenceRefs,
       conditions: {},
       evidenceBasis: integratedBasis,
       completionStatus: 'BLOCKED',
       progression: 'BLOCKED',
       blockReasonCode: triage.reasonCode,
-      nextInputRefs: currentEvidenceRefs,
+      nextInputRefs: propagatedRefs(context, currentEvidenceRefs),
     };
   }
 
@@ -502,12 +503,12 @@ async function handle01003(
       completionStatus: 'BLOCKED',
       progression: 'BLOCKED',
       blockReasonCode: '01002_PRIORITY_ROUTE_STALE_AT_01003',
-      nextInputRefs: currentEvidenceRefs,
+      nextInputRefs: propagatedRefs(context, currentEvidenceRefs),
     };
   }
 
   return {
-    inputRefs: [],
+    inputRefs: context.currentInputRefs,
     outputRefs: currentEvidenceRefs,
     conditions: {
       FAMILY_CONFLICT_SEVERE_F: triage.outcome === '01006',
@@ -515,7 +516,7 @@ async function handle01003(
     },
     evidenceBasis: integratedBasis,
     progression: 'ROUTE',
-    nextInputRefs: currentEvidenceRefs,
+    nextInputRefs: propagatedRefs(context, currentEvidenceRefs),
   };
 }
 
