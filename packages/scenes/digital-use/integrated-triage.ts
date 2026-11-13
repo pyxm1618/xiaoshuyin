@@ -193,7 +193,10 @@ export function evaluateIntegratedTriage(
     evidence.directImpact.studyOrNecessaryAffairs,
     evidence.directImpact.realWorldActivityDisplacement,
   ];
-  if (requiredImpactStates.some((state) => state.kind === 'MISSING')) {
+  if (
+    requiredImpactStates.some((state) => state.kind === 'MISSING') ||
+    (evidence.directImpact.otherApproved ?? []).some((state) => state.kind === 'MISSING')
+  ) {
     return result(
       'INSUFFICIENT',
       { ...p, DIRECT_DIGITAL_USE_IMPACT_POSITIVE: false, MATERIAL_UNRESOLVED: true },
@@ -265,7 +268,10 @@ export function evaluateIntegratedTriage(
   const clean =
     isEmotionExactlyA(emotionValues) &&
     familyValue === 'A' &&
-    evidence.otherNeeds === undefined;
+    (
+      evidence.otherNeeds === undefined ||
+      (evidence.otherNeeds.kind === 'VALUE' && evidence.otherNeeds.value === false)
+    );
 
   p = {
     ...p,
