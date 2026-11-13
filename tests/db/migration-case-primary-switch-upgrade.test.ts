@@ -84,6 +84,7 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_REASSESSMENT_STARTED',
     'CASE_RISK_RESOLVED',
     'CASE_SAFETY_HOLD_ENTERED',
+    'CASE_DIGITAL_USE_NODE_COMPLETED',
   ],
   business_audit_events_event_type_check: [
     'CASE_PRIMARY_SWITCHED',
@@ -98,6 +99,7 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CONSENT_SUPPLEMENTAL_ASSESSMENT_GRANTED',
     'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
     'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
+    'DIGITAL_USE_NODE_COMPLETED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -109,6 +111,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_REASSESS_FROM_FORMULATION',
     'CASE_ENTER_SAFETY_HOLD',
     'CASE_RESOLVE_RISK',
+    'DIGITAL_USE_ASSESSMENT_RESUME',
+    'DIGITAL_USE_NODE_RESPONSE',
   ],
 };
 
@@ -230,6 +234,42 @@ const SLICE10_NEW_OBJECTS = [
   'trigger:compliance_feature_policies_overlap_insert',
   'trigger:compliance_feature_policies_overlap_update',
 ];
+
+/** Exact Slice 12 Scene persistence constraints created by migration 015. */
+const SLICE12_NEW_CONSTRAINTS = [
+  'scene_node_states_case_family_fk',
+  'scene_node_states_case_node_key',
+  'scene_node_states_id_case_family_key',
+  'scene_node_states_revision_check',
+  'scene_node_states_package_check',
+  'scene_node_states_node_code_check',
+  'scene_node_states_source_node_code_check',
+  'scene_node_states_refs_shape_check',
+  'scene_node_states_completion_shape_check',
+  'scene_artifacts_case_family_fk',
+  'scene_artifacts_owner_family_fk',
+  'scene_artifacts_id_case_family_key',
+  'scene_artifacts_supersedes_same_case_fk',
+  'scene_artifacts_revision_check',
+  'scene_artifacts_package_check',
+  'scene_artifacts_type_check',
+  'scene_artifacts_schema_version_check',
+  'scene_artifacts_source_node_check',
+  'scene_artifacts_type_source_check',
+  'scene_artifacts_data_shape_check',
+  'scene_artifacts_refs_shape_check',
+  'scene_artifacts_visibility_check',
+].sort();
+
+const SLICE12_NEW_OBJECTS = [
+  'enum:scene_node_status',
+  'table:scene_node_states',
+  'table:scene_artifacts',
+  'policy:scene_node_states_family_scope',
+  'policy:scene_artifacts_family_scope',
+  'trigger:scene_node_states_guard',
+  'trigger:scene_artifacts_insert_guard',
+].sort();
 
 /** Constraints whose definitions 007 is authorized to rewrite. */
 const SLICE7_CONSTRAINT_CHANGES = [
@@ -455,7 +495,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       expect(afterIdempotencyLiterals).toContain(literal);
     }
 
-    // Only the approved Slice 7 literals were added — exactly, not more.
+    // Only explicitly reviewed later-slice literals were added — exactly, not more.
     const added = (after: string[], before: string[]) => after.filter((v) => !before.includes(v));
     expect([...added(afterCaseEventLiterals, beforeCaseEventLiterals)].sort()).toEqual(
       [...SLICE7_AND_SLICE8_APPROVED_LITERALS.case_events_event_type_check].sort()
@@ -503,6 +543,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE9_RISK_EVENT_CONSTRAINTS,
         ...SLICE10_NEW_CONSTRAINTS,
         ...CONSENT_OWNER_NEW_CONSTRAINTS,
+        ...SLICE12_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -521,7 +562,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ].sort()
     );
 
-    // Exactly the reviewed Slice 8 + Slice 9 objects are added; legacy entries survive.
+    // Exactly the reviewed later-slice objects are added; legacy entries survive.
     const beforeSet = new Set(beforeObjects.split('|'));
     const afterFingerprint = await objectFingerprint(seed);
     const afterSet = new Set(afterFingerprint.split('|'));
@@ -534,6 +575,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       'policy:risk_events_family_scope',
       'table:risk_events',
       ...CONSENT_OWNER_NEW_OBJECTS,
+      ...SLICE12_NEW_OBJECTS,
     ].sort());
 
     // Column-level UPDATE grant, never table-level.
