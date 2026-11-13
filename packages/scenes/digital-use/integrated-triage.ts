@@ -1,8 +1,8 @@
 /**
  * Slice 12 — deterministic Digital Use Integrated Triage.
  *
- * Pure domain logic only. No database, clock, network, model, RAG, classifier,
- * prompt or client route truth is available in this module.
+ * Pure domain logic only. It has no I/O, clock access or external decision dependency;
+ * only the supplied authoritative Evidence snapshot can affect the result.
  */
 
 export type TriageEvidenceState<T> =
