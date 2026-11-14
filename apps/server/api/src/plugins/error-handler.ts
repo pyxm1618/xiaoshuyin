@@ -139,12 +139,19 @@ function logUnexpected(req: FastifyRequest, err: Error) {
   );
 }
 
-/** The only 5xx body shape the API ever returns. */
+/** The only body shape for unexpected/infrastructure 5xx failures. */
 function genericInternalError(reply: FastifyReply) {
   return reply.status(500).send({
     code: 'INTERNAL_ERROR',
     message: 'An internal error occurred',
   });
+}
+
+function isExplicitOperational5xx(httpErr: HttpError): boolean {
+  // Slice 13 Frozen Spec requires dependency unavailability to remain
+  // distinguishable from infrastructure failure. Keep this whitelist narrow:
+  // every other 5xx still uses the generic redacted INTERNAL_ERROR envelope.
+  return httpErr.statusCode === 503 && httpErr.code === 'DEPENDENCY_UNAVAILABLE';
 }
 
 export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyReply) {
@@ -185,10 +192,10 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
 
   if ('statusCode' in err && 'code' in err) {
     const httpErr = err as unknown as HttpError;
-    // 4xx keep their contract message. Any 5xx — including typed
-    // INTERNAL_ERROR raised by an invariant branch — is reported through the
-    // single generic 500 contract so no internal detail reaches the client.
-    if (httpErr.statusCode < 500) {
+    // 4xx and the one explicitly frozen operational 503 keep their stable
+    // contract code. Unknown/infrastructure 5xx — including typed
+    // INTERNAL_ERROR invariant branches — remain redacted to generic 500.
+    if (httpErr.statusCode < 500 || isExplicitOperational5xx(httpErr)) {
       return reply.status(httpErr.statusCode).send({
         code: httpErr.code,
         message: httpErr.message,
