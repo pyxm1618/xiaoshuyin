@@ -226,3 +226,12 @@ ALTER TABLE scene_artifacts
     OR (artifact_type = 'SOLUTION_SUMMARY' AND source_node_code = 'A2010')
     OR (artifact_type = 'FAMILY_ALLIANCE_SELF_ASSESSMENT' AND source_node_code = 'A3000')
   );
+
+-- Slice 12's append-only artifact guard validates supersession with
+-- SELECT ... FOR UPDATE. The runtime role intentionally has no direct UPDATE
+-- capability on scene_artifacts, so execute that existing guard with its
+-- NOBYPASSRLS owner privileges instead of widening runtime grants. FORCE RLS
+-- remains authoritative and the hardened search_path prevents name shadowing.
+ALTER FUNCTION scene_artifacts_insert_guard() SECURITY DEFINER;
+ALTER FUNCTION scene_artifacts_insert_guard() SET search_path = pg_catalog, public;
+ALTER FUNCTION scene_artifacts_insert_guard() SET row_security = on;

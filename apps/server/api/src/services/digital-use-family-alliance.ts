@@ -83,7 +83,9 @@ function rethrowFamilyBusinessError(error: unknown): never {
       : undefined;
   if (typeof code === 'string') {
     const mapped = toHttpError(code);
-    if (mapped.statusCode < 500) throw familyHttpError(code);
+    if (mapped.statusCode < 500 || code === 'DEPENDENCY_UNAVAILABLE') {
+      throw familyHttpError(code);
+    }
   }
   throw error;
 }
