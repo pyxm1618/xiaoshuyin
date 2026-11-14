@@ -110,32 +110,36 @@ async function validateBoundMigrations(client, byName) {
   return legacy;
 }
 
+async function bindLegacyRowsInCurrentTransaction(client, filenames, byName) {
+  for (const filename of filenames) {
+    const current = byName.get(filename);
+    if (!current) {
+      throw new Error(`MIGRATION_FILE_MISSING ${filename}`);
+    }
+    const result = await client.query(
+      `UPDATE schema_migrations
+          SET content_checksum = $2,
+              checksum_origin = 'LEGACY_BASELINE',
+              checksum_bound_at = now()
+        WHERE filename = $1
+          AND content_checksum IS NULL
+          AND checksum_origin IS NULL
+          AND checksum_bound_at IS NULL`,
+      [filename, current.checksum]
+    );
+    if (result.rowCount !== 1) {
+      throw new Error(`MIGRATION_LEGACY_BASELINE_RACE ${filename}`);
+    }
+    console.log(`BASELINE ${filename} sha256:${current.checksum}`);
+  }
+}
+
 async function bindLegacyRows(client, filenames, byName) {
   if (filenames.length === 0) return;
 
   await client.query('BEGIN');
   try {
-    for (const filename of filenames) {
-      const current = byName.get(filename);
-      if (!current) {
-        throw new Error(`MIGRATION_FILE_MISSING ${filename}`);
-      }
-      const result = await client.query(
-        `UPDATE schema_migrations
-            SET content_checksum = $2,
-                checksum_origin = 'LEGACY_BASELINE',
-                checksum_bound_at = now()
-          WHERE filename = $1
-            AND content_checksum IS NULL
-            AND checksum_origin IS NULL
-            AND checksum_bound_at IS NULL`,
-        [filename, current.checksum]
-      );
-      if (result.rowCount !== 1) {
-        throw new Error(`MIGRATION_LEGACY_BASELINE_RACE ${filename}`);
-      }
-      console.log(`BASELINE ${filename} sha256:${current.checksum}`);
-    }
+    await bindLegacyRowsInCurrentTransaction(client, filenames, byName);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK');
@@ -154,11 +158,11 @@ async function main() {
   await client.connect();
 
   try {
-    // Serialize migration runners for this database. The checksum transition
-    // spans multiple transactions (apply metadata migration, then baseline
-    // legacy rows), so a session-level advisory lock is the minimum primitive
-    // that prevents duplicate apply / baseline races without creating a second
-    // migration framework.
+    // Serialize migration runners for this database. One runner can execute
+    // multiple migration transactions, and recovery of pre-existing NULL
+    // checksum rows may use a separate transaction, so a session-level advisory
+    // lock is the minimum primitive that prevents duplicate apply / baseline
+    // races without creating a second migration framework.
     await client.query('SELECT pg_advisory_lock($1, $2)', [
       MIGRATION_LOCK_KEY_1,
       MIGRATION_LOCK_KEY_2,
@@ -213,6 +217,14 @@ async function main() {
              VALUES ($1, $2, 'APPLIED', now())`,
             [migration.filename, migration.checksum]
           );
+
+          // The migration that first establishes checksum metadata is the exact
+          // legacy transition point. Bind every older filename-only row inside
+          // THIS SAME transaction so metadata + LEGACY_BASELINE become visible
+          // atomically, or roll back together on any failure.
+          if (!hasChecksums) {
+            await bindLegacyRowsInCurrentTransaction(client, [...applied], byName);
+          }
         } else {
           await client.query(
             'INSERT INTO schema_migrations (filename) VALUES ($1)',
@@ -230,12 +242,8 @@ async function main() {
       applied.add(migration.filename);
       appliedCount++;
 
-      // The forward metadata migration is the exact legacy transition point.
-      // Bind all older filename-only records before any later migration runs.
       if (!hasChecksums && metadataAfterApply) {
         hasChecksums = true;
-        const legacy = await validateBoundMigrations(client, byName);
-        await bindLegacyRows(client, legacy, byName);
       }
     }
 
