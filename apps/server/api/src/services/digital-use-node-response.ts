@@ -32,9 +32,10 @@ import {
   type DigitalUseNodeManifestEntry,
   type DigitalUseRoutingResult,
 } from '@xiaoshuyin/scenes/digital-use';
-import type {
-  CompleteDigitalUseNodeRequestType,
-  DigitalUseSceneResponseType,
+import {
+  A5001FamilyAllianceReviewResponse,
+  type CompleteDigitalUseNodeRequestType,
+  type DigitalUseSceneResponseType,
 } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
 import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
@@ -468,6 +469,14 @@ export async function completeDigitalUseNodeResponse(
         node.stream === 'FAMILY_ALLIANCE_REVIEW'
           ? await resolveA5001SubjectSnapshot(tx, input.caseId)
           : null;
+      const validatedResponse =
+        node.stream === 'FAMILY_ALLIANCE_REVIEW'
+          ? (() => {
+              const parsed = A5001FamilyAllianceReviewResponse.safeParse(input.response);
+              if (!parsed.success) throw nodeError('SCENE_RESPONSE_INVALID');
+              return parsed.data;
+            })()
+          : input.response;
       const requestHash = hashPayload({
         familyId: input.familyId,
         caseId: input.caseId,
@@ -478,7 +487,7 @@ export async function completeDigitalUseNodeResponse(
         expectedSelectionRevision: input.expectedSelectionRevision ?? null,
         expectedTargetRevision: input.expectedTargetRevision ?? null,
         resolvedSubject: resolvedA5001Subject,
-        response: input.response,
+        response: validatedResponse,
       });
 
       const outcome = await runIdempotentCommandInTransaction(

@@ -83,7 +83,6 @@ export interface A5001SubjectSnapshot {
     readonly artifactId: string;
     readonly revision: number;
   };
-  readonly communicationPreparationNodeRevision: number;
   readonly targetSelectionNodeRevision: number;
   readonly selectionRevision: number;
   readonly selectedTargets: readonly {
@@ -107,9 +106,8 @@ export async function resolveA5001SubjectSnapshot(
   caseId: string
 ): Promise<A5001SubjectSnapshot> {
   const a3000 = await getSceneNodeState(tx, caseId, 'A3000');
-  const a3001 = await getSceneNodeState(tx, caseId, 'A3001');
   const a3002 = await getSceneNodeState(tx, caseId, 'A3002');
-  if (!completedNode(a3000) || !completedNode(a3001) || !completedNode(a3002)) {
+  if (!completedNode(a3000) || !completedNode(a3002)) {
     throw reviewError('FAMILY_ALLIANCE_ENTRY_BLOCKED');
   }
 
@@ -133,7 +131,6 @@ export async function resolveA5001SubjectSnapshot(
       artifactId: selfAssessment.id,
       revision: selfAssessment.revision,
     },
-    communicationPreparationNodeRevision: a3001.revision,
     targetSelectionNodeRevision: a3002.revision,
     selectionRevision,
     selectedTargets: targets
@@ -156,7 +153,7 @@ function sameSubject(
 
 function sourceRefsFor(
   subject: A5001SubjectSnapshot,
-  a3001: SceneNodeStateRow,
+  a3001: SceneNodeStateRow | null,
   a3002: SceneNodeStateRow,
   evidenceRefs: readonly StoredSceneRef[]
 ): StoredSceneRef[] {
@@ -165,7 +162,7 @@ function sourceRefsFor(
       type: 'SCENE_ARTIFACT',
       id: subject.familyAllianceSelfAssessment.artifactId,
     },
-    ...a3001.output_refs,
+    ...(a3001?.output_refs ?? []),
     ...a3002.output_refs,
     ...subject.selectedTargets.map((target) => ({
       type: 'TARGET_ITEM' as const,
@@ -370,9 +367,11 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
     }
     validateTargetExpectations(subject, parsed.data);
 
+    // A3001 is approved source material only "where present"; it is not an
+    // A5001 entry prerequisite. A3002 is part of the exact review subject.
     const a3001 = await getSceneNodeState(tx, input.caseId, 'A3001', true);
     const a3002 = await getSceneNodeState(tx, input.caseId, 'A3002', true);
-    if (!completedNode(a3001) || !completedNode(a3002)) {
+    if (!completedNode(a3002)) {
       throw reviewError('FAMILY_ALLIANCE_ENTRY_BLOCKED');
     }
 
@@ -473,9 +472,14 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
             kind: 'FAMILY_ALLIANCE_TARGET_LIST',
             familyAllianceSelfAssessment:
               subject.familyAllianceSelfAssessment,
-            communicationPreparationNodeRevision:
-              subject.communicationPreparationNodeRevision,
             targetSelectionNodeRevision: subject.targetSelectionNodeRevision,
+            communicationPreparation:
+              a3001 === null
+                ? null
+                : {
+                    nodeRevision: a3001.revision,
+                    status: a3001.status,
+                  },
             selectionRevision: subject.selectionRevision,
             targets: subject.selectedTargets.map((target) => ({
               targetCode: target.targetCode,
@@ -609,15 +613,3 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
   }
 }
 
-/**
- * Production has no Phase 4 Schedule owner. The public Scene submission path
- * therefore has only USER_INITIATED context. This pure test seam documents the
- * future SCHEDULED capability without creating a scheduler or trigger truth.
- */
-export function resolveA5001EntryCapability(
-  input: { readonly kind: 'PUBLIC_USER_REQUEST' | 'SYNTHETIC_TEST_SCHEDULED' }
-): 'USER_INITIATED' | 'SCHEDULED' {
-  if (input.kind === 'PUBLIC_USER_REQUEST') return 'USER_INITIATED';
-  if (process.env['NODE_ENV'] === 'test') return 'SCHEDULED';
-  throw reviewError('DEPENDENCY_UNAVAILABLE');
-}
