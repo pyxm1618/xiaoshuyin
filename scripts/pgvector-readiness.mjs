@@ -175,6 +175,7 @@ async function collectRealEvidence(client, evidence) {
   if (!evidence.pgvector.installed) return;
 
   await client.query('BEGIN');
+
   try {
     await client.query(`
       CREATE TEMP TABLE pgvector_readiness_probe (
@@ -183,7 +184,13 @@ async function collectRealEvidence(client, evidence) {
       ) ON COMMIT DROP
     `);
     evidence.probe.vector_type = true;
+  } catch (error) {
+    evidence.probe_error = `vector_type: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'}`;
+    await client.query('ROLLBACK').catch(() => {});
+    return;
+  }
 
+  try {
     await client.query(`
       INSERT INTO pgvector_readiness_probe (label, embedding)
       VALUES
@@ -192,7 +199,13 @@ async function collectRealEvidence(client, evidence) {
         ('far',    '[3,0,0]'::vector)
     `);
     evidence.probe.insert = true;
+  } catch (error) {
+    evidence.probe_error = `insert: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'}`;
+    await client.query('ROLLBACK').catch(() => {});
+    return;
+  }
 
+  try {
     const readback = await client.query(
       "SELECT label, embedding::text AS embedding FROM pgvector_readiness_probe ORDER BY label"
     );
@@ -201,7 +214,13 @@ async function collectRealEvidence(client, evidence) {
       vectorTextMatches(byLabel.origin, [0, 0, 0]) &&
       vectorTextMatches(byLabel.near, [1, 0, 0]) &&
       vectorTextMatches(byLabel.far, [3, 0, 0]);
+  } catch (error) {
+    evidence.probe_error = `readback: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'}`;
+    await client.query('ROLLBACK').catch(() => {});
+    return;
+  }
 
+  try {
     const distance = await client.query(`
       SELECT label, embedding <-> '[0,0,0]'::vector AS distance
         FROM pgvector_readiness_probe
@@ -216,15 +235,21 @@ async function collectRealEvidence(client, evidence) {
       distanceClose(distances[0], 0) &&
       distanceClose(distances[1], 1) &&
       distanceClose(distances[2], 3);
+  } catch (error) {
+    evidence.probe_error = `distance: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'}`;
+    await client.query('ROLLBACK').catch(() => {});
+    return;
+  }
 
+  try {
     await client.query('COMMIT');
     const cleanup = await client.query(
       "SELECT to_regclass('pg_temp.pgvector_readiness_probe') IS NULL AS cleaned"
     );
     evidence.probe.temporary_cleanup = cleanup.rows[0].cleaned === true;
   } catch (error) {
+    evidence.probe_error = `cleanup: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'}`;
     await client.query('ROLLBACK').catch(() => {});
-    throw error;
   }
 }
 
@@ -234,11 +259,13 @@ async function main() {
   const evidence = evidenceBase();
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
 
+  let connected = false;
   try {
     await client.connect();
+    connected = true;
     await collectRealEvidence(client, evidence);
   } catch (error) {
-    evidence.environment_reachable = false;
+    if (!connected) evidence.environment_reachable = false;
     evidence.probe_error = error instanceof Error ? error.message.slice(0, 240) : 'unknown database error';
   } finally {
     await client.end().catch(() => {});
