@@ -345,6 +345,12 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       body = progressResponse.json();
       target = body.targets.find((item: any) => item.targetCode === family.code);
       expect(target.progressEvidenceRefs).toHaveLength(1);
+      if (family.code === 'SLEEP') {
+        // AS-19: one target may have progress while the others remain
+        // independently reachable; no false stream-global completion exists.
+        expect(body.nodes.find((item: any) => item.nodeCode === 'A3022')?.status)
+          .toBe('AVAILABLE');
+      }
 
       const helpResponse = await respond(
         f,
@@ -1082,6 +1088,129 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       [f.caseId, f.manager.accountId, key]
     );
     expect(targetResidue.rows[0]).toEqual({ targets: 0, idempotency: 0 });
+  });
+
+
+  it('AS-20..AS-24 authorization, isolation and source fidelity fail closed', async () => {
+    const f = await fixture('auth-isolation');
+
+    const unauthenticated = await app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      headers: { 'idempotency-key': \`fa-unauth-\${crypto.randomUUID()}\` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        response: selfAssessment(),
+      },
+    });
+    expect(unauthenticated.statusCode).toBe(401);
+
+    const outsider = await loginWithLabel(app, 'fa-outsider-auth-isolation');
+    const outsiderFamily = await createFamily(
+      app,
+      outsider.token,
+      'fa-outsider-auth-isolation'
+    );
+    expect(outsiderFamily.statusCode, outsiderFamily.body).toBe(201);
+    const crossFamily = await app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      headers: {
+        ...auth(outsider.token),
+        'idempotency-key': \`fa-cross-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        response: selfAssessment(),
+      },
+    });
+    expect([403, 404]).toContain(crossFamily.statusCode);
+
+    const participant = await loginWithLabel(app, 'fa-participant-auth-isolation');
+    const participantOwnFamily = await createFamily(
+      app,
+      participant.token,
+      'fa-participant-own-auth-isolation'
+    );
+    expect(participantOwnFamily.statusCode, participantOwnFamily.body).toBe(201);
+    await admin.query(
+      \`INSERT INTO family_members (family_id,person_id)
+       VALUES ($1,$2) ON CONFLICT DO NOTHING\`,
+      [f.familyId, participant.personId]
+    );
+    const tokenHash =
+      crypto.randomUUID().replaceAll('-', '').padEnd(64, '0');
+    await admin.query(
+      \`INSERT INTO case_participants
+         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,
+          created_by_person_id,accepted_at)
+       VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())\`,
+      [f.familyId, f.caseId, participant.personId, tokenHash, f.manager.personId]
+    );
+    const participantAttempt = await app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      headers: {
+        ...auth(participant.token),
+        'idempotency-key': \`fa-participant-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        response: selfAssessment(),
+      },
+    });
+    expect(participantAttempt.statusCode).toBe(403);
+
+    // Wrong-Case/Evidence/target references and child-source attribution are
+    // not request capabilities at all: the strict node payload rejects them.
+    const forgedRefs = await app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-forged-ref-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        sourceRefs: [{ type: 'ASSERTION', id: crypto.randomUUID() }],
+        response: selfAssessment(),
+      },
+    });
+    expect(forgedRefs.statusCode).toBe(422);
+
+    const forgedSubject = await app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-forged-subject-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        response: {
+          ...selfAssessment(),
+          subjectPersonId: participant.personId,
+        },
+      },
+    });
+    expect(forgedSubject.statusCode).toBe(422);
+
+    const residue = await admin.query<{ n: number }>(
+      \`SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'\`,
+      [f.caseId]
+    );
+    expect(residue.rows[0]!.n).toBe(0);
   });
 
 });

@@ -150,6 +150,7 @@ describe('Slice 13 FAMILY_ALLIANCE frozen-scope governance', () => {
     const semantics = rootFile('apps/server/api/src/services/family-alliance-semantics.ts');
     const combined = [orchestrator, semantics].join('\n');
     expect(combined).not.toMatch(/A400[1-9]|A401[0-2]/);
+    expect(combined).not.toMatch(/A5001|A5002/);
     expect(combined).not.toMatch(/\b(LLM|RAG|embedding|prompt runtime|AI routing|OpenAI|Anthropic)\b/i);
   });
 
@@ -162,7 +163,15 @@ describe('Slice 13 FAMILY_ALLIANCE frozen-scope governance', () => {
     expect(migration).toMatch(/FORCE ROW LEVEL SECURITY/);
   });
 
-  it('FA-GOV-10 handler owns business semantics only; no local topology declarations exist', () => {
+  it('FA-GOV-10 substantive Evidence preserves actor source identity and cannot forge a child statement', () => {
+    const semantics = rootFile('apps/server/api/src/services/family-alliance-semantics.ts');
+    expect(semantics).toContain('subjectPersonId: context.actor.personId');
+    expect(semantics).toContain('sourcePersonId: context.actor.personId');
+    expect(semantics).not.toMatch(/subjectPersonId:\s*context\.response/);
+    expect(semantics).not.toMatch(/sourcePersonId:\s*context\.response/);
+  });
+
+  it('FA-GOV-11 handler owns business semantics only; no local topology declarations exist', () => {
     const orchestrator = rootFile('apps/server/api/src/services/digital-use-family-alliance.ts');
     const semantics = rootFile('apps/server/api/src/services/family-alliance-semantics.ts');
     expect(semantics).not.toMatch(/allowedNext\s*:/);
