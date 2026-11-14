@@ -19,6 +19,8 @@ import pg from 'pg';
 const ROOT = new URL('..', import.meta.url).pathname;
 const MIGRATIONS_DIR = join(ROOT, 'db', 'migrations');
 const CHECKSUM_RE = /^[0-9a-f]{64}$/;
+const MIGRATION_LOCK_KEY_1 = 20261114;
+const MIGRATION_LOCK_KEY_2 = 1;
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -64,6 +66,14 @@ async function readApplied(client, hasChecksums) {
      ORDER BY filename
   `);
   return rows;
+}
+
+function validateRecordedFilesPresent(rows, byName) {
+  for (const row of rows) {
+    if (!byName.has(row.filename)) {
+      throw new Error(`MIGRATION_FILE_MISSING ${row.filename}`);
+    }
+  }
 }
 
 async function validateBoundMigrations(client, byName) {
@@ -144,6 +154,16 @@ async function main() {
   await client.connect();
 
   try {
+    // Serialize migration runners for this database. The checksum transition
+    // spans multiple transactions (apply metadata migration, then baseline
+    // legacy rows), so a session-level advisory lock is the minimum primitive
+    // that prevents duplicate apply / baseline races without creating a second
+    // migration framework.
+    await client.query('SELECT pg_advisory_lock($1, $2)', [
+      MIGRATION_LOCK_KEY_1,
+      MIGRATION_LOCK_KEY_2,
+    ]);
+
     // Fresh databases start checksum-capable. Existing filename-only tables are
     // not rewritten here: migration 018 establishes the forward transition.
     await client.query(`
@@ -161,6 +181,9 @@ async function main() {
 
     let hasChecksums = await checksumMetadataAvailable(client);
     const initialRows = await readApplied(client, hasChecksums);
+    // Missing recorded files are integrity failures even on a legacy database
+    // that has not reached migration 018 yet. Fail before executing ANY new SQL.
+    validateRecordedFilesPresent(initialRows, byName);
     const applied = new Set(initialRows.map((row) => row.filename));
 
     if (hasChecksums) {
