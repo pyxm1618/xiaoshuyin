@@ -83,7 +83,7 @@ const acceptance: readonly AcceptanceEvidence[] = [
   {id:'AS-57',evidence:[e(GOV,'S14-GOV-06 keeps A5002 and scheduler/notification execution outside Slice 14'),e(HARD,'Slice 14 A4012 keeps old ACTIVE truth until the replacement is independently reconfirmed')]},
   {id:'AS-58',evidence:[e(AUTH,'denies parent / Family manager impersonation as the child'),e(AUTH,'denies unsupported resources instead of treating Case/Participation as Contract authority')]},
   {id:'AS-59',evidence:[e(HARD,'anti-enumerates cross-Family access and keeps A200401 non-addressable'),e(DB,'FORCEs RLS on every new business table')]},
-  {id:'AS-60',evidence:[e(HARD,'Slice 14 blocks UNDER_14 Contract processing when guardian Consent is missing')]},
+  {id:'AS-60',evidence:[e(HARD,'Slice 14 Consent revoked before Contract commit blocks confirmation with zero success write')]},
   {id:'AS-61',evidence:[e(HARD,'Slice 14 Consent revocation blocks future support but preserves historical ACTIVE Contract truth')]},
   {id:'AS-62',evidence:[e(HARD,'fails closed when the current Slice 10 Compliance policy becomes unresolved')]},
   {id:'AS-63',evidence:[e(HARD,'Safety Hold preempts an ordinary node response without leaving Evidence'),e(HARD,'Slice 14 formal Contract requires independent party confirmations and activates atomically')]},

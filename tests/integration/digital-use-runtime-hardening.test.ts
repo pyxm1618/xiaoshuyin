@@ -2531,6 +2531,70 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(rows.rows[0].n).toBe(0);
   });
 
+  it('Slice 14 Consent revoked before Contract commit blocks confirmation with zero success write', async () => {
+    const f=await fixture('s14-consent-revoked-before-commit');
+    const child=await loginWithLabel(app,`s14-consent-revoked-before-commit-child-${crypto.randomUUID()}`);
+    await admin.query(
+      `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+      [f.familyId,child.personId]
+    );
+    const consent=await makeUnder14Consent(f,child);
+    const p=await admin.query<{id:string}>(
+      `INSERT INTO case_participants
+        (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now()) RETURNING id`,
+      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+    );
+    await forceSceneNode(f,'A4004');
+    await admin.query(
+      `UPDATE scene_node_states
+          SET status='COMPLETED',completed_at=now(),revision=revision+1
+        WHERE case_id=$1 AND node_code='A4004'`,
+      [f.caseId]
+    );
+    const v=(value:string)=>({state:'VALUE',value});
+    const terms={
+      purpose:v('p'),phoneUseRules:v('r'),executionPeriod:v('e'),
+      parentSupportMeasures:v('s'),supervisionMeasures:v('m'),
+      incentives:v('i'),breachResponsibilities:v('b'),
+    };
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-consent-revoked-before-commit-draft'),
+      payload:{
+        expectedCaseVersion:f.caseVersion,adultPartyPersonId:f.manager.personId,
+        childPartyPersonId:child.personId,childParticipationId:p.rows[0]!.id,
+        sourceTemplateVersion:'phone-use-contract-v1',dependencyRefs:[],terms,
+      },
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+
+    await revokeUnder14Consent(f,child,consent.consentId,consent.noticeHash);
+
+    const blocked=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,'s14-consent-revoked-before-commit-confirm'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(blocked.statusCode,blocked.body).toBe(409);
+    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_CONSENT_BLOCKED');
+
+    const truth=await admin.query(
+      `SELECT status,parent_confirmation,child_confirmation
+         FROM digital_use_contract_versions WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(truth.rows).toEqual([{status:'DRAFT',parent_confirmation:null,child_confirmation:null}]);
+    const residue=await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM scene_artifacts WHERE case_id=$1 AND artifact_type='PHONE_USE_CONTRACT_DOCUMENT') AS documents,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE resource_id=$1 AND event_type IN ('PHONE_USE_CONTRACT_CONFIRMED','PHONE_USE_CONTRACT_ACTIVATED')) AS success_audits`,
+      [f.caseId]
+    );
+    expect(residue.rows[0]).toEqual({documents:0,success_audits:0});
+  });
+
   it('Slice 14 Consent revocation blocks future support but preserves historical ACTIVE Contract truth', async () => {
     const f=await fixture('s14-consent-revoked');
     const child=await loginWithLabel(app,`s14-consent-revoked-child-${crypto.randomUUID()}`);
