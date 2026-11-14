@@ -40,6 +40,27 @@ describe('Slice 4 participation expiry', () => {
     });
   });
 
+  it('REM2-004: expired PENDING is materialized and a fresh invite is allowed', async () => {
+    const {f,target,created}=await makeExpired('expiry-reinvite');
+    const reinvite=await invite(h.app,f.manager.token,f.caseId,target.personId,'expiry-reinvite-new');
+    expect(reinvite.statusCode).toBe(201);
+    expect(reinvite.json().participationId).not.toBe(created.json().participationId);
+    expect(reinvite.json().state).toBe('PENDING');
+
+    const old=(await h.admin.query(
+      `SELECT state,expired_at FROM case_participants WHERE id=$1`,
+      [created.json().participationId]
+    )).rows[0];
+    expect(old.state).toBe('EXPIRED');
+    expect(old.expired_at).not.toBeNull();
+    const audit=(await h.admin.query(
+      `SELECT count(*)::int AS n FROM business_audit_events
+       WHERE resource_id=$1 AND event_type='PARTICIPATION_EXPIRED'`,
+      [created.json().participationId]
+    )).rows[0].n;
+    expect(audit).toBe(1);
+  });
+
   it('accept at/after deadline materializes EXPIRED and returns authorized 409', async () => {
     const {target,created}=await makeExpired('expiry-accept');
     const res=await acceptInvite(h.app,target.token,created.json().inviteToken,'expiry-accept-command');
