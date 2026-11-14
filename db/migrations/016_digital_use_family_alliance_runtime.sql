@@ -187,8 +187,14 @@ ALTER TABLE digital_use_target_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE digital_use_target_items FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY digital_use_target_items_family_scope ON digital_use_target_items
-  USING (family_id = app_family_id())
-  WITH CHECK (family_id = app_family_id());
+  USING (
+    family_id = app_family_id()
+    AND app_current_purpose() = 'FAMILY_MANAGEMENT'
+  )
+  WITH CHECK (
+    family_id = app_family_id()
+    AND app_current_purpose() = 'FAMILY_MANAGEMENT'
+  );
 
 GRANT SELECT, INSERT ON digital_use_target_items TO xiaoshuyin_app;
 GRANT UPDATE (superseded_at) ON digital_use_target_items TO xiaoshuyin_app;

@@ -61,7 +61,9 @@ describe('T1303/T1305 Digital Use Family Alliance target persistence', () => {
     expect(policies.rows).toHaveLength(1);
     expect(policies.rows[0]!.policyname).toBe('digital_use_target_items_family_scope');
     expect(policies.rows[0]!.qual).toMatch(/family_id = app_family_id\(\)/);
+    expect(policies.rows[0]!.qual).toMatch(/app_current_purpose\(\) = 'FAMILY_MANAGEMENT'/);
     expect(policies.rows[0]!.with_check).toMatch(/family_id = app_family_id\(\)/);
+    expect(policies.rows[0]!.with_check).toMatch(/app_current_purpose\(\) = 'FAMILY_MANAGEMENT'/);
   });
 
   it('grants only SELECT/INSERT and superseded_at lifecycle UPDATE; never DELETE/TRUNCATE', async () => {
@@ -174,6 +176,43 @@ describe('T1303/T1305 Digital Use Family Alliance target persistence', () => {
            FROM case_row, anchor_row`
       );
       const valid = seed.rows[0]!;
+      await admin.query(
+        `INSERT INTO digital_use_target_items
+           (family_id,case_id,scene_package_version,target_code,
+            selection_revision,revision,selected,created_by_person_id)
+         VALUES ($1,$2,'v1','SLEEP',1,1,true,$3)`,
+        [valid.family_id, valid.case_id, valid.person_id]
+      );
+
+      await app.query('BEGIN');
+      try {
+        await app.query(
+          `SELECT app.set_family_context($1,$2,'SELF_IDENTITY')`,
+          [valid.family_id, valid.person_id]
+        );
+        const wrongPurpose = await app.query(
+          'SELECT count(*)::int AS n FROM digital_use_target_items WHERE case_id=$1',
+          [valid.case_id]
+        );
+        expect(wrongPurpose.rows[0]!.n).toBe(0);
+      } finally {
+        await app.query('ROLLBACK');
+      }
+
+      await app.query('BEGIN');
+      try {
+        await app.query(
+          `SELECT app.set_family_context($1,$2,'FAMILY_MANAGEMENT')`,
+          [valid.family_id, valid.person_id]
+        );
+        const correctPurpose = await app.query(
+          'SELECT count(*)::int AS n FROM digital_use_target_items WHERE case_id=$1',
+          [valid.case_id]
+        );
+        expect(correctPurpose.rows[0]!.n).toBe(1);
+      } finally {
+        await app.query('ROLLBACK');
+      }
 
       await expect(
         app.query(
