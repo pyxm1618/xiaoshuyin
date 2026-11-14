@@ -481,6 +481,7 @@ export async function completeDigitalUseNodeResponse(
         familyId: input.familyId,
         caseId: input.caseId,
         nodeCode: node.nodeCode,
+        stream: node.stream,
         expectedCaseVersion: input.expectedCaseVersion,
         expectedNodeRevision: input.expectedNodeRevision,
         expectedScenePackageVersion: input.expectedScenePackageVersion ?? null,
