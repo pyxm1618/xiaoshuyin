@@ -2531,19 +2531,19 @@ describe('T1218 Digital Use runtime hardening', () => {
     const draftKey=`s14-races-draft-${crypto.randomUUID()}`;
     const first=await app.inject({
       method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
-      headers:commandHeaders(f.manager.token,draftKey),payload:draftPayload,
+      headers:{...auth(f.manager.token),'idempotency-key':draftKey},payload:draftPayload,
     });
     expect(first.statusCode,first.body).toBe(201);
     const replay=await app.inject({
       method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
-      headers:commandHeaders(f.manager.token,draftKey),payload:draftPayload,
+      headers:{...auth(f.manager.token),'idempotency-key':draftKey},payload:draftPayload,
     });
     expect(replay.statusCode,replay.body).toBe(201);
     expect(replay.json().id).toBe(first.json().id);
 
     const mismatch=await app.inject({
       method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
-      headers:commandHeaders(f.manager.token,draftKey),
+      headers:{...auth(f.manager.token),'idempotency-key':draftKey},
       payload:{...draftPayload,terms:{...terms,phoneUseRules:v('different')}},
     });
     expect(mismatch.statusCode,mismatch.body).toBe(409);
@@ -2572,7 +2572,7 @@ describe('T1218 Digital Use runtime hardening', () => {
     const childKey=`s14-races-child-confirm-${crypto.randomUUID()}`;
     const childPending=await app.inject({
       method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
-      headers:commandHeaders(child.token,childKey),
+      headers:{...auth(child.token),'idempotency-key':childKey},
       payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:2},
     });
     expect(childPending.statusCode,childPending.body).toBe(200);
@@ -2595,7 +2595,7 @@ describe('T1218 Digital Use runtime hardening', () => {
 
     const childReplay=await app.inject({
       method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
-      headers:commandHeaders(child.token,childKey),
+      headers:{...auth(child.token),'idempotency-key':childKey},
       payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:2},
     });
     expect(childReplay.statusCode,childReplay.body).toBe(200);
@@ -2603,7 +2603,7 @@ describe('T1218 Digital Use runtime hardening', () => {
 
     const childMismatch=await app.inject({
       method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
-      headers:commandHeaders(child.token,childKey),
+      headers:{...auth(child.token),'idempotency-key':childKey},
       payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:3},
     });
     expect(childMismatch.statusCode,childMismatch.body).toBe(409);
