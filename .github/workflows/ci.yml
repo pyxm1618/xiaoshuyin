@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:c29f30688a9ad961691bdf0ec1650717cc132a5814619d80f80463d6e4c42e47
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -80,6 +80,14 @@ jobs:
           POSTGRES_DB: xiaoshuyin_test
           POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
           POSTGRES_APP_PASSWORD: ci_app_pw
+      - name: Bootstrap pgvector
+        run: bash db/init/02-pgvector.sh
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: xiaoshuyin_test
       - name: Run migrations
         run: bun run db:migrate
         env:
@@ -91,7 +99,7 @@ jobs:
     needs: [static, db-migrate]
     services:
       postgres:
-        image: postgres:18
+        image: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:c29f30688a9ad961691bdf0ec1650717cc132a5814619d80f80463d6e4c42e47
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -125,6 +133,14 @@ jobs:
           POSTGRES_DB: xiaoshuyin_test
           POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
           POSTGRES_APP_PASSWORD: ci_app_pw
+      - name: Bootstrap pgvector
+        run: bash db/init/02-pgvector.sh
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: xiaoshuyin_test
       - name: Run migrations
         run: bun run db:migrate
         env:
@@ -145,6 +161,13 @@ jobs:
           IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300'
           PARTICIPATION_INVITE_TTL_SECONDS: '86400'
           PARTICIPATION_INVITE_TOKEN_SECRET: ci-participation-invite-secret-32chars
+          PGVECTOR_STAGE: STAGE_A
+          PGVECTOR_ENVIRONMENT_KIND: CI_INTEGRATION
+          PGVECTOR_ENVIRONMENT_ID: 'github:${{ github.repository }}:${{ github.run_id }}:${{ github.run_attempt }}:integration'
+          PGVECTOR_REPOSITORY_COMMIT: ${{ github.sha }}
+          PGVECTOR_IMAGE_REF: pgvector/pgvector:0.8.7-pg18-bookworm@sha256:c29f30688a9ad961691bdf0ec1650717cc132a5814619d80f80463d6e4c42e47
+          PGVECTOR_EXPECTED_VERSION: '0.8.7'
+          PGVECTOR_READINESS_EVIDENCE: ${{ runner.temp }}/pgvector-readiness.json
           COVERAGE_EXECUTION_EVIDENCE: ${{ runner.temp }}/vitest-results.json
       - name: Upload verify-all provenance
         if: always()
@@ -154,6 +177,7 @@ jobs:
           path: |
             ${{ runner.temp }}/verify-all.log
             ${{ runner.temp }}/vitest-results.json
+            ${{ runner.temp }}/pgvector-readiness.json
           if-no-files-found: warn
           retention-days: 90
 
