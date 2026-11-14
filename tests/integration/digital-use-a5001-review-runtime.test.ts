@@ -439,6 +439,20 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     expect(artifact.data.subject.communicationPreparation).toMatchObject({
       status: 'AVAILABLE',
     });
+    const sleepSubject = artifact.data.subject.targets.find(
+      (target: any) => target.targetCode === 'SLEEP'
+    );
+    expect(sleepSubject).toMatchObject({
+      concreteTargetText: 'Try a consistent sleep target on selected evenings.',
+      targetRevision: expect.any(Number),
+      selectionRevision: scene.targetSelectionRevision,
+    });
+    expect(sleepSubject).toHaveProperty('feasibility');
+    expect(sleepSubject).toHaveProperty('progress');
+    expect(sleepSubject).toHaveProperty('progressEvidenceRefs');
+    expect(sleepSubject).toHaveProperty('helpHistoryRefs');
+    expect(sleepSubject).toHaveProperty('sourceRefs');
+    expect(artifact.data.subject.priorReviewArtifact).toBeNull();
     expect(artifact.data.evaluation.familyDimensions.childVoiceNegotiation)
       .toEqual({ state: 'UNKNOWN' });
     expect(artifact.data.evaluation.familyDimensions.trust)
@@ -937,6 +951,10 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     expect(history.rows[0]!.supersedes_id).toBeNull();
     expect(history.rows[1]!.revision).toBe(2);
     expect(history.rows[1]!.supersedes_id).toBe(history.rows[0]!.id);
+    expect(history.rows[1]!.data.subject.priorReviewArtifact).toEqual({
+      artifactId: history.rows[0]!.id,
+      revision: 1,
+    });
     expect(history.rows[0]!.data.evaluation.familyDimensions.emotionalSupport.note)
       .toContain('first');
     expect(history.rows[1]!.data.evaluation.familyDimensions.emotionalSupport.note)
