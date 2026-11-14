@@ -669,4 +669,419 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     );
     expect(evidence.rows[0]!.n).toBe(0);
   });
+
+  it('AS-34 concurrent target revisions cannot last-write-win', async () => {
+    const f = await fixture('target-race');
+    expect((await respond(f, 'A3000', selfAssessment())).statusCode).toBe(200);
+    const selection = await respond(
+      f,
+      'A3002',
+      { kind: 'TARGET_SELECTION', confirmed: true, selectedTargets: ['SLEEP'] },
+      { expectedSelectionRevision: 0 }
+    );
+    expect(selection.statusCode, selection.body).toBe(200);
+    const body = selection.json();
+    const target = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    const node = body.nodes.find((item: any) => item.nodeCode === 'A3011');
+
+    const make = (text: string) => app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3011/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-target-race-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: node.revision,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: target.selectionRevision,
+        expectedTargetRevision: target.revision,
+        response: {
+          kind: 'FEASIBILITY',
+          feasibility: {
+            concreteQuantified: { state: 'KNOWN', concreteTargetText: text },
+            need: { state: 'KNOWN', rating: 8 },
+            motivationBenefit: { state: 'KNOWN', rating: 7 },
+            abilityPossibility: { state: 'KNOWN', rating: 6 },
+            challengeResistance: { state: 'UNKNOWN' },
+          },
+        },
+      },
+    });
+    const [left, right] = await Promise.all([
+      make('first concurrent target'),
+      make('second concurrent target'),
+    ]);
+    expect([left.statusCode, right.statusCode].sort()).toEqual([200, 409]);
+
+    const current = await admin.query<{
+      n: number;
+      texts: string[];
+    }>(
+      \`SELECT count(*)::int AS n,
+              array_agg(concrete_target_text ORDER BY revision) FILTER
+                (WHERE superseded_at IS NULL) AS texts
+         FROM digital_use_target_items
+        WHERE case_id=$1 AND target_code='SLEEP'\`,
+      [f.caseId]
+    );
+    expect(current.rows[0]!.n).toBe(2);
+    expect(current.rows[0]!.texts).toHaveLength(1);
+  });
+
+  it('AS-26 Safety race wins before Family Alliance commit', async () => {
+    const f = await fixture('safety-race');
+    const blocker = new pg.Client({ connectionString: process.env['TEST_ADMIN_DATABASE_URL']! });
+    await blocker.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        \`UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1\`,
+        [f.caseId]
+      );
+      const request = app.inject({
+        method: 'POST',
+        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+        headers: {
+          ...auth(f.manager.token),
+          'idempotency-key': \`fa-safety-race-\${crypto.randomUUID()}\`,
+        },
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          response: selfAssessment(),
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await blocker.query('COMMIT');
+      const blocked = await request;
+      expect(blocked.statusCode, blocked.body).toBe(409);
+      expect(blocked.json().code).toBe('SAFETY_HOLD_BLOCKED');
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      await blocker.end();
+    }
+
+    const residue = await admin.query<{ evidence: number; artifacts: number }>(
+      \`SELECT
+        (SELECT count(*)::int FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUFA:v1:%') AS evidence,
+        (SELECT count(*)::int FROM scene_artifacts
+          WHERE case_id=$1 AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT') AS artifacts\`,
+      [f.caseId]
+    );
+    expect(residue.rows[0]).toEqual({ evidence: 0, artifacts: 0 });
+  });
+
+  it('AS-35 primary-case race fails stale Family Alliance progression', async () => {
+    const f = await fixture('primary-race');
+    const blocker = new pg.Client({ connectionString: process.env['TEST_ADMIN_DATABASE_URL']! });
+    await blocker.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        \`UPDATE cases SET is_primary=false, version=version+1 WHERE id=$1\`,
+        [f.caseId]
+      );
+      const request = app.inject({
+        method: 'POST',
+        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+        headers: {
+          ...auth(f.manager.token),
+          'idempotency-key': \`fa-primary-race-\${crypto.randomUUID()}\`,
+        },
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          response: selfAssessment(),
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await blocker.query('COMMIT');
+      const blocked = await request;
+      expect(blocked.statusCode, blocked.body).toBe(409);
+      expect(['CASE_NOT_PRIMARY','STALE_CASE_VERSION']).toContain(blocked.json().code);
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      await blocker.end();
+    }
+
+    const residue = await admin.query<{ n: number }>(
+      \`SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'\`,
+      [f.caseId]
+    );
+    expect(residue.rows[0]!.n).toBe(0);
+  });
+
+  it('AS-27/28 Compliance publication race and UNKNOWN policy fail closed', async () => {
+    const f = await fixture('compliance-race');
+    const publisher = new pg.Client({
+      connectionString: process.env['MIGRATION_DATABASE_URL']!,
+    });
+    await publisher.connect();
+    try {
+      await publisher.query('BEGIN');
+      await publisher.query(
+        \`SELECT app.publish_compliance_feature_policy(
+           'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','v1',1,2,
+           'UNKNOWN','BASELINE','BASELINE','BASELINE','BASELINE',
+           NULL,NULL,clock_timestamp() - interval '1 second',
+           'migration:slice13-compliance-race'
+         )\`
+      );
+
+      const request = app.inject({
+        method: 'POST',
+        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+        headers: {
+          ...auth(f.manager.token),
+          'idempotency-key': \`fa-compliance-race-\${crypto.randomUUID()}\`,
+        },
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          response: selfAssessment(),
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await publisher.query('COMMIT');
+      const blocked = await request;
+      expect(blocked.statusCode, blocked.body).toBe(409);
+      expect(blocked.json().code).toBe('COMPLIANCE_BLOCKED');
+
+      await publisher.query(
+        \`SELECT app.publish_compliance_feature_policy(
+           'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','v1',2,3,
+           'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+           'Slice 13 restored reviewed basis','evidence://slice13/restored',
+           clock_timestamp(),'migration:slice13-compliance-restore'
+         )\`
+      );
+    } finally {
+      await publisher.query('ROLLBACK').catch(() => undefined);
+      await publisher.end();
+    }
+
+    const residue = await admin.query<{ n: number }>(
+      \`SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'\`,
+      [f.caseId]
+    );
+    expect(residue.rows[0]!.n).toBe(0);
+  });
+
+  async function installFaultTrigger(
+    table: string,
+    operation: 'INSERT' | 'UPDATE',
+    predicate: string,
+    token: string,
+    deferred = false
+  ): Promise<() => Promise<void>> {
+    const safe = token.replace(/[^a-zA-Z0-9_]/g, '_');
+    const functionName = \`slice13_fault_fn_\${safe}\`;
+    const triggerName = \`slice13_fault_tr_\${safe}\`;
+    await admin.query(
+      \`CREATE FUNCTION \${functionName}() RETURNS trigger
+         LANGUAGE plpgsql AS $$
+       BEGIN
+         RAISE EXCEPTION 'SLICE13_FAULT_\${safe}';
+       END $$\`
+    );
+    const prefix = deferred
+      ? 'CREATE CONSTRAINT TRIGGER'
+      : 'CREATE TRIGGER';
+    const timing = deferred
+      ? \`AFTER \${operation} ON \${table}
+         DEFERRABLE INITIALLY DEFERRED\`
+      : \`BEFORE \${operation} ON \${table}\`;
+    await admin.query(
+      \`\${prefix} \${triggerName}
+         \${timing}
+         FOR EACH ROW
+         WHEN (\${predicate})
+         EXECUTE FUNCTION \${functionName}()\`
+    );
+    return async () => {
+      await admin.query(\`DROP TRIGGER IF EXISTS \${triggerName} ON \${table}\`);
+      await admin.query(\`DROP FUNCTION IF EXISTS \${functionName}()\`);
+    };
+  }
+
+  async function assertA3000NoResidue(f: Fixture, key: string): Promise<void> {
+    const { rows } = await admin.query<{
+      evidence: number;
+      artifacts: number;
+      scene: number;
+      events: number;
+      audits: number;
+      idempotency: number;
+    }>(
+      \`SELECT
+        (SELECT count(*)::int FROM assertions
+          WHERE case_id=$1 AND content LIKE 'DUFA:v1:%') AS evidence,
+        (SELECT count(*)::int FROM scene_artifacts
+          WHERE case_id=$1 AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT') AS artifacts,
+        (SELECT count(*)::int FROM scene_node_states
+          WHERE case_id=$1 AND node_code='A3000') AS scene,
+        (SELECT count(*)::int FROM case_events
+          WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED') AS events,
+        (SELECT count(*)::int FROM business_audit_events
+          WHERE family_id=$2 AND event_type='DIGITAL_USE_NODE_COMPLETED'
+            AND resource_id=$1) AS audits,
+        (SELECT count(*)::int FROM idempotency_keys
+          WHERE actor_account_id=$3
+            AND command_type='DIGITAL_USE_NODE_RESPONSE'
+            AND idempotency_key=$4) AS idempotency\`,
+      [f.caseId, f.familyId, f.manager.accountId, key]
+    );
+    expect(rows[0]).toEqual({
+      evidence: 0,
+      artifacts: 0,
+      scene: 0,
+      events: 0,
+      audits: 0,
+      idempotency: 0,
+    });
+  }
+
+  it('AS-37 fault injection proves atomic rollback at seven business boundaries', async () => {
+    const stages = [
+      {
+        name: 'after-evidence',
+        table: 'scene_artifacts',
+        operation: 'INSERT' as const,
+        predicate: \`NEW.artifact_type = 'FAMILY_ALLIANCE_SELF_ASSESSMENT'\`,
+        deferred: false,
+      },
+      {
+        name: 'after-artifact',
+        table: 'scene_node_states',
+        operation: 'UPDATE' as const,
+        predicate: \`NEW.node_code = 'A3000' AND NEW.status = 'COMPLETED'\`,
+        deferred: false,
+      },
+      {
+        name: 'after-scene-before-event',
+        table: 'case_events',
+        operation: 'INSERT' as const,
+        predicate: \`NEW.event_type = 'CASE_DIGITAL_USE_NODE_COMPLETED'\`,
+        deferred: false,
+      },
+      {
+        name: 'before-audit',
+        table: 'business_audit_events',
+        operation: 'INSERT' as const,
+        predicate: \`NEW.event_type = 'DIGITAL_USE_NODE_COMPLETED'\`,
+        deferred: false,
+      },
+      {
+        name: 'before-idempotency-success',
+        table: 'idempotency_keys',
+        operation: 'INSERT' as const,
+        predicate: \`NEW.command_type = 'DIGITAL_USE_NODE_RESPONSE'\`,
+        deferred: false,
+      },
+      {
+        name: 'before-commit-deferred',
+        table: 'idempotency_keys',
+        operation: 'INSERT' as const,
+        predicate: \`NEW.command_type = 'DIGITAL_USE_NODE_RESPONSE'\`,
+        deferred: true,
+      },
+    ];
+
+    for (const stage of stages) {
+      const f = await fixture(\`fault-\${stage.name}\`);
+      const key = \`fa-fault-\${stage.name}-\${crypto.randomUUID()}\`;
+      const scopePredicate =
+        stage.table === 'scene_artifacts' ||
+        stage.table === 'scene_node_states' ||
+        stage.table === 'case_events'
+          ? \`(\${stage.predicate}) AND NEW.case_id = '\${f.caseId}'::uuid\`
+          : stage.table === 'business_audit_events'
+            ? \`(\${stage.predicate}) AND NEW.family_id = '\${f.familyId}'::uuid
+               AND NEW.resource_id = '\${f.caseId}'::uuid\`
+            : \`(\${stage.predicate}) AND NEW.actor_account_id = '\${f.manager.accountId}'::uuid
+               AND NEW.idempotency_key = '\${key}'\`;
+      const drop = await installFaultTrigger(
+        stage.table,
+        stage.operation,
+        scopePredicate,
+        \`\${stage.name}_\${f.caseId.replaceAll('-', '_')}\`,
+        stage.deferred
+      );
+      try {
+        const failed = await app.inject({
+          method: 'POST',
+          url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+          headers: { ...auth(f.manager.token), 'idempotency-key': key },
+          payload: {
+            expectedCaseVersion: f.caseVersion,
+            expectedNodeRevision: 0,
+            expectedScenePackageVersion: 'v1',
+            response: selfAssessment(),
+          },
+        });
+        expect(failed.statusCode).toBe(500);
+      } finally {
+        await drop();
+      }
+      await assertA3000NoResidue(f, key);
+    }
+
+    // Dedicated "after target write" point: A3002 creates the selection rows
+    // before Scene CAS, so a scoped Scene-state trigger must roll the target set
+    // and idempotency row back together.
+    const f = await fixture('fault-after-target');
+    expect((await respond(f, 'A3000', selfAssessment())).statusCode).toBe(200);
+    const scene = await getScene(f);
+    const a3002 = scene.nodes.find((node: any) => node.nodeCode === 'A3002');
+    const key = \`fa-fault-after-target-\${crypto.randomUUID()}\`;
+    const safeCase = f.caseId.replaceAll('-', '_');
+    const drop = await installFaultTrigger(
+      'scene_node_states',
+      'UPDATE',
+      \`NEW.case_id = '\${f.caseId}'::uuid AND NEW.node_code = 'A3002'
+        AND NEW.status = 'COMPLETED'\`,
+      \`after_target_\${safeCase}\`,
+      false
+    );
+    try {
+      const failed = await app.inject({
+        method: 'POST',
+        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3002/responses\`,
+        headers: { ...auth(f.manager.token), 'idempotency-key': key },
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedNodeRevision: a3002.revision,
+          expectedScenePackageVersion: 'v1',
+          expectedSelectionRevision: 0,
+          response: {
+            kind: 'TARGET_SELECTION',
+            confirmed: true,
+            selectedTargets: ['SLEEP'],
+          },
+        },
+      });
+      expect(failed.statusCode).toBe(500);
+    } finally {
+      await drop();
+    }
+    const targetResidue = await admin.query<{ targets: number; idempotency: number }>(
+      \`SELECT
+        (SELECT count(*)::int FROM digital_use_target_items WHERE case_id=$1) AS targets,
+        (SELECT count(*)::int FROM idempotency_keys
+          WHERE actor_account_id=$2 AND command_type='DIGITAL_USE_NODE_RESPONSE'
+            AND idempotency_key=$3) AS idempotency\`,
+      [f.caseId, f.manager.accountId, key]
+    );
+    expect(targetResidue.rows[0]).toEqual({ targets: 0, idempotency: 0 });
+  });
+
 });
