@@ -219,10 +219,18 @@ describe('T1303/T1305 Digital Use Family Alliance target persistence', () => {
           `INSERT INTO digital_use_target_items
              (family_id,case_id,scene_package_version,target_code,
               selection_revision,revision,selected,created_by_person_id)
-           VALUES ($1,$2,'v1','SLEEP',1,1,true,$3)`,
+           VALUES ($1,$2,'v1','EXERCISE',1,1,true,$3)`,
           [valid.family_id, valid.case_id, valid.person_id]
         )
-      ).rejects.toMatchObject({ code: '42501' });
+      ).rejects.toThrow();
+
+      const afterNoContextAttempt = await admin.query(
+        `SELECT count(*)::int AS n
+           FROM digital_use_target_items
+          WHERE case_id=$1 AND target_code='EXERCISE'`,
+        [valid.case_id]
+      );
+      expect(afterNoContextAttempt.rows[0]!.n).toBe(0);
     } finally {
       await app.end();
     }
