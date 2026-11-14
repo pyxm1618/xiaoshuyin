@@ -21,7 +21,7 @@ describe('Schema Structure', () => {
     await client.end();
   });
 
-  it('22 enums exist with exact values (Slice 1 + Case Core + Slice 3 + Slice 4 + Slice 6 + Slice 8)', async () => {
+  it('23 enums exist with exact values through Slice 12', async () => {
     const { rows } = await client.query(`
       SELECT t.typname, e.enumlabel
       FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid
@@ -45,7 +45,7 @@ describe('Schema Structure', () => {
       'consent_decision', 'consent_purpose', 'consent_request_status',
       'evidence_confirmation_status', 'evidence_time_state',
       'observation_value_state', 'observation_value_type', 'problem_formulation_status',
-      'profile_attribute', 'profile_value_status', 'provenance_source',
+      'profile_attribute', 'profile_value_status', 'provenance_source', 'scene_node_status',
     ]);
     expect(enumMap['case_status']).toEqual([
       'OPEN', 'WAITING', 'LOST_CONTACT', 'SAFETY_HOLD', 'CLOSED',
@@ -53,6 +53,9 @@ describe('Schema Structure', () => {
     expect(enumMap['case_phase']).toEqual([
       'INTAKE', 'ASSESSMENT', 'PROBLEM_FORMULATION', 'GOALS',
       'PLANNING', 'EXECUTION', 'REVIEW', 'MAINTENANCE', 'CLOSED',
+    ]);
+    expect(enumMap['scene_node_status']).toEqual([
+      'LOCKED', 'AVAILABLE', 'IN_PROGRESS', 'COMPLETED', 'SKIPPED', 'BLOCKED',
     ]);
     expect(enumMap['age_band']).toEqual(['ADULT', 'MINOR_14_17', 'UNDER_14', 'UNKNOWN']);
     expect(enumMap['profile_attribute']).toEqual(['DISPLAY_NAME']);

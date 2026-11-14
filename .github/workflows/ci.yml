@@ -173,3 +173,6 @@ jobs:
         run: |
           bun run openapi:generate
           bun run openapi:check
+      - name: Verify generated OpenAPI client is committed
+        run: |
+          git diff --exit-code -- packages/generated/openapi.json packages/generated/openapi.d.ts

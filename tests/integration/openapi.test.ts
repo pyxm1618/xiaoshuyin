@@ -154,7 +154,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-it('contains exactly the 34 frozen business operations including Slice 4 six participation surfaces, Slice 7 switch and Slice 8 four formulation surfaces)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+it('contains exactly the 38 frozen business operations including Slice 12 four Scene surfaces)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
@@ -182,6 +182,10 @@ it('contains exactly the 34 frozen business operations including Slice 4 six par
       'POST /api/v1/cases/{id}/messages',
       'POST /api/v1/cases/{id}/participation-invites',
       'POST /api/v1/cases/{id}/switch-primary',
+      'GET /api/v1/cases/{id}/scene',
+      'GET /api/v1/cases/{id}/scene/nodes/{nodeCode}',
+      'POST /api/v1/cases/{id}/assessments',
+      'POST /api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
       'GET /api/v1/cases/{id}/problem-formulations/current',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/confirm',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
@@ -213,6 +217,8 @@ it('contains exactly the 34 frozen business operations including Slice 4 six par
       ['post', '/api/v1/cases'],
       ['post', '/api/v1/cases/{id}/messages'],
       ['post', '/api/v1/cases/{id}/switch-primary'],
+      ['post', '/api/v1/cases/{id}/assessments'],
+      ['post', '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses'],
     ] as const;
     for (const [method, path] of commands) {
       const params = spec.paths[path][method].parameters ?? [];
@@ -262,6 +268,11 @@ it('contains exactly the 34 frozen business operations including Slice 4 six par
       '/api/v1/participations/{id}',
       // Slice 7 (007-case-primary-switch) — the single approved switch POST.
       '/api/v1/cases/{id}/switch-primary',
+      // Slice 12 — exactly four Digital Use Assessment / Scene surfaces.
+      '/api/v1/cases/{id}/assessments',
+      '/api/v1/cases/{id}/scene',
+      '/api/v1/cases/{id}/scene/nodes/{nodeCode}',
+      '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
       // Slice 8 (008-problem-formulation-core) — exactly four formulation surfaces.
       '/api/v1/cases/{id}/problem-formulations/current',
       '/api/v1/cases/{id}/problem-formulations/{version}/confirm',

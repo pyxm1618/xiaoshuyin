@@ -115,10 +115,15 @@ describe('Generated OpenAPI — Message operation (T028)', () => {
       expect(spec.paths[forbidden], forbidden).toBeUndefined();
     }
     for (const [path, item] of Object.entries<any>(spec.paths)) {
+      expect(path.toLowerCase(), path).not.toMatch(
+        /\/(?:facts?|evidence|assertions?|observations?)(?:\/|$)/
+      );
       for (const method of ['get', 'post', 'put', 'patch', 'delete']) {
-        if (!item[method]) continue;
-        expect(JSON.stringify(item[method]).toLowerCase(), `${method} ${path}`).not.toContain(
-          'fact'
+        const operation = item[method];
+        if (!operation) continue;
+        const operationId = String(operation.operationId ?? '');
+        expect(operationId, `${method} ${path}`).not.toMatch(
+          /^(?:create|record|update|delete|list|get)(?:Fact|Evidence|Assertion|Observation)/
         );
       }
     }

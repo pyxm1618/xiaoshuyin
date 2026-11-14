@@ -88,6 +88,16 @@ const FROZEN_DOCS = [
       'problem-formulation-api.openapi.yaml'
     ),
   },
+  {
+    label: '012-digital-use-assessment-runtime',
+    path: join(
+      ROOT,
+      'specs',
+      '012-digital-use-assessment-runtime',
+      'contracts',
+      'digital-use-assessment-api.openapi.yaml'
+    ),
+  },
 ];
 
 // Normalization lives in `scripts/lib/openapi-normalize.mjs` so the semantic

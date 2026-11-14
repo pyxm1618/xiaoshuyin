@@ -20,9 +20,7 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
 
   '/close',
   '/recurrences',
-  '/assessments',
   '/participants',
-  '/scene',
   '/evidence',
   '/statements',
   '/observations',
@@ -30,8 +28,6 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
 
 const FORBIDDEN_TABLES = [
   'participation_invites',
-  'scene_node_states',
-  'scene_artifacts',
   'safety_states',
   'goals',
   'intervention_instances',
@@ -65,7 +61,7 @@ describe('Case scope guard (T031)', () => {
     await app.close();
   });
 
-  it('exposes exactly the approved Case operations (Slice 2 + Slice 3 + Slice 7)', () => {
+  it('preserves the approved Case core while later reviewed nested routes coexist', () => {
     const routes = app.printRoutes({ commonPrefix: false });
     // Collection: POST + GET (+ implicit HEAD). Detail: GET (+ HEAD).
     expect(routes).toContain('/api/v1/cases (POST, GET)');

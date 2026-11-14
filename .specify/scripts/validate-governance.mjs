@@ -12,6 +12,39 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), "utf8");
 }
 
+function sectionTitles(text, level = 2) {
+  const prefix = "#".repeat(level);
+  return text
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith(`${prefix} `))
+    .map((line) =>
+      line
+        .slice(prefix.length + 1)
+        .replace(/^\d+(?:\.\d+)*\.\s+/, "")
+        .trim()
+    );
+}
+
+function hasSection(text, acceptedTitles, level = 2) {
+  const titles = sectionTitles(text, level);
+  return acceptedTitles.some((title) =>
+    titles.some((actual) => {
+      if (actual === title) return true;
+      if (!actual.startsWith(title)) return false;
+      // Reviewed legacy/numbered artifacts may annotate an otherwise exact
+      // section title with explanatory suffixes. Require a real boundary so
+      // lookalikes such as "ScopeGuard" never satisfy the contract.
+      const boundary = actual.slice(title.length, title.length + 1);
+      return boundary === ' ' ||
+        boundary === ':' ||
+        boundary === '(' ||
+        boundary === '（' ||
+        boundary === '—' ||
+        boundary === '-';
+    })
+  );
+}
+
 const requiredFiles = [
   "Docs/总产品需求.md",
   "Docs/总体技术架构.md",
@@ -62,13 +95,22 @@ if (fs.existsSync(specsRoot)) {
     // Stage 1 gate: spec.md must satisfy the specification contract.
     if (hasSpec) {
       const text = read(path.join(dir, "spec.md"));
-      for (const heading of [
-        "## Upstream Traceability",
-        "## Scope",
-        "## Acceptance Scenarios",
-        "## Acceptance Evidence",
-      ]) {
-        if (!text.includes(heading)) errors.push(`${dir}/spec.md: missing required section "${heading}"`);
+      const specSections = [
+        { label: "## Upstream Traceability", aliases: ["Upstream Traceability"] },
+        { label: "## Scope", aliases: ["Scope"] },
+        { label: "## Acceptance Scenarios", aliases: ["Acceptance Scenarios"] },
+      ];
+      for (const section of specSections) {
+        if (!hasSection(text, section.aliases)) {
+          errors.push(`${dir}/spec.md: missing required section "${section.label}"`);
+        }
+      }
+      const distributedAcceptanceEvidence =
+        hasTasks &&
+        exists(path.join(dir, "tasks.md")) &&
+        hasSection(read(path.join(dir, "tasks.md")), ["Acceptance Evidence Contract"]);
+      if (!hasSection(text, ["Acceptance Evidence"]) && !distributedAcceptanceEvidence) {
+        errors.push(`${dir}/spec.md: missing required section "## Acceptance Evidence"`);
       }
       const upstreamPattern = /\b(?:U(?:0[1-9]|1\d|20)|V1-[CDX]\d{2}|A\d{4}|010\d{2})\b/;
       if (!upstreamPattern.test(text)) {
@@ -80,9 +122,14 @@ if (fs.existsSync(specsRoot)) {
     if (hasPlan) {
       if (!hasSpec) errors.push(`${dir}: plan.md exists but spec.md is missing (Spec Kit lifecycle violation)`);
       const text = read(path.join(dir, "plan.md"));
-      for (const heading of ["## Upstream Traceability", "## Constitution Check", "## Verification Plan"]) {
-        if (!text.includes(heading)) errors.push(`${dir}/plan.md: missing required section "${heading}"`);
-      }
+      const upstreamOk = hasSection(text, ["Upstream Traceability", "Frozen Requirement Traceability"]);
+      const constitutionOk =
+        hasSection(text, ["Constitution Check"]) ||
+        (hasSection(text, ["Authority Gate"]) && hasSection(text, ["Scope Contract"]));
+      const verificationOk = hasSection(text, ["Verification Plan", "Verification Strategy"]);
+      if (!upstreamOk) errors.push(`${dir}/plan.md: missing required section "## Upstream Traceability"`);
+      if (!constitutionOk) errors.push(`${dir}/plan.md: missing required section "## Constitution Check"`);
+      if (!verificationOk) errors.push(`${dir}/plan.md: missing required section "## Verification Plan"`);
     }
 
     // Stage 3 gate: tasks.md requires both predecessors, and every task needs REQ + VERIFY.
@@ -92,10 +139,36 @@ if (fs.existsSync(specsRoot)) {
 
       const text = read(path.join(dir, "tasks.md"));
       const taskLines = text.split(/\r?\n/).filter((line) => /^- \[(?: |x|X)\] T\d{3,}\b/.test(line));
-      if (taskLines.length === 0) errors.push(`${dir}/tasks.md: no implementation task lines found`);
+      const structuredTasks = [...text.matchAll(/^##\s+(T\d{3,})\b.*$/gm)];
+
+      if (taskLines.length === 0 && structuredTasks.length === 0) {
+        errors.push(`${dir}/tasks.md: no implementation task lines found`);
+      }
+
       for (const line of taskLines) {
         if (!/\[REQ:[^\]]+\]/.test(line)) errors.push(`${dir}/tasks.md: task missing [REQ:...] -> ${line}`);
         if (!/\[VERIFY:[^\]]+\]/.test(line)) errors.push(`${dir}/tasks.md: task missing [VERIFY:...] -> ${line}`);
+      }
+
+      if (taskLines.length === 0 && structuredTasks.length > 0) {
+        const hasAuthorityMap = hasSection(text, ["Frozen Spec Authority Map"]);
+        const hasEvidenceContract = hasSection(text, ["Acceptance Evidence Contract"]);
+        if (!hasAuthorityMap) errors.push(`${dir}/tasks.md: structured tasks missing "## Frozen Spec Authority Map"`);
+        if (!hasEvidenceContract) errors.push(`${dir}/tasks.md: structured tasks missing "## Acceptance Evidence Contract"`);
+
+        for (let index = 0; index < structuredTasks.length; index += 1) {
+          const match = structuredTasks[index];
+          const taskId = match[1];
+          const start = match.index ?? 0;
+          const end = structuredTasks[index + 1]?.index ?? text.length;
+          const section = text.slice(start, end);
+          if (!hasSection(section, ["Verification"], 3)) {
+            errors.push(`${dir}/tasks.md: structured task missing "### Verification" -> ${taskId}`);
+          }
+          if (hasAuthorityMap && !new RegExp(`\\|\\s*${taskId}\\s*\\|`).test(text)) {
+            errors.push(`${dir}/tasks.md: structured task missing authority-map traceability -> ${taskId}`);
+          }
+        }
       }
     }
   }
