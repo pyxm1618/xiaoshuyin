@@ -4,3 +4,5 @@ export * from './routing.js';
 export * from './validators.js';
 export * from './runtime-primitives.js';
 export * from './integrated-triage.js';
+
+export * from './phone-use-contract-content.js';

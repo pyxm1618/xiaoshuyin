@@ -38,9 +38,23 @@ export interface SceneArtifactRow {
   family_id: string;
   case_id: string;
   scene_package_version: string;
-  artifact_type: 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY';
+  artifact_type:
+    | 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY'
+    | 'PHONE_USE_CONTRACT_QUIZ_ATTEMPT'
+    | 'PHONE_USE_CONTRACT_TOOL_SELECTION'
+    | 'PHONE_USE_DURATION_COMPONENT'
+    | 'PHONE_USE_SUPERVISION_COMPONENT'
+    | 'PHONE_USE_SUPERVISION_LOG'
+    | 'PHONE_USE_INCENTIVE_COMPONENT'
+    | 'PHONE_USE_BREACH_COMPONENT'
+    | 'PARENT_SELF_REGULATION_CHECKLIST'
+    | 'PHONE_USE_CONTRACT_DOCUMENT'
+    | 'PHONE_USE_CONTRACT_SUPPORT_LOG';
   schema_version: string;
-  source_node_code: '01000' | 'A2007' | 'A2010';
+  source_node_code:
+    | '01000' | 'A2007' | 'A2010'
+    | 'A4001' | 'A4004' | 'A4005' | 'A4006' | 'A4007' | 'A4008'
+    | 'A4009' | 'A4010' | 'A4011' | 'A4012';
   data: Record<string, unknown>;
   owner_person_id: string;
   visibility: 'FAMILY_AUTHORIZED';

@@ -33,9 +33,19 @@ export type SceneRefType = z.infer<typeof SceneRef>;
 
 export const SceneArtifact = z.strictObject({
   id: z.string().uuid(),
-  type: z.enum(['SUPPLEMENTAL_ASSESSMENT_BOUNDARY', 'TIMELINE', 'SOLUTION_SUMMARY']),
+  type: z.enum([
+    'SUPPLEMENTAL_ASSESSMENT_BOUNDARY', 'TIMELINE', 'SOLUTION_SUMMARY',
+    'PHONE_USE_CONTRACT_QUIZ_ATTEMPT', 'PHONE_USE_CONTRACT_TOOL_SELECTION',
+    'PHONE_USE_DURATION_COMPONENT', 'PHONE_USE_SUPERVISION_COMPONENT', 'PHONE_USE_SUPERVISION_LOG',
+    'PHONE_USE_INCENTIVE_COMPONENT', 'PHONE_USE_BREACH_COMPONENT',
+    'PARENT_SELF_REGULATION_CHECKLIST', 'PHONE_USE_CONTRACT_DOCUMENT',
+    'PHONE_USE_CONTRACT_SUPPORT_LOG',
+  ]),
   schemaVersion: z.string().min(1).max(64),
-  sourceNodeCode: z.enum(['01000', 'A2007', 'A2010']),
+  sourceNodeCode: z.enum([
+    '01000', 'A2007', 'A2010',
+    'A4001', 'A4004', 'A4005', 'A4006', 'A4007', 'A4008', 'A4009', 'A4010', 'A4011', 'A4012',
+  ]),
   revision: z.number().int().min(1).max(PG_INTEGER_MAX),
   data: z.record(z.string(), z.unknown()),
   sourceRefs: z.array(SceneRef),
