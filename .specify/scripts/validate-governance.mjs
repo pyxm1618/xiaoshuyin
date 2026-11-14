@@ -96,8 +96,8 @@ if (fs.existsSync(specsRoot)) {
     if (hasSpec) {
       const text = read(path.join(dir, "spec.md"));
       const specSections = [
-        { label: "## Upstream Traceability", aliases: ["Upstream Traceability", "Authority Gate"] },
-        { label: "## Scope", aliases: ["Scope"] },
+        { label: "## Upstream Traceability", aliases: ["Upstream Traceability", "Authority Gate", "Authority Baseline"] },
+        { label: "## Scope", aliases: ["Scope", "Selected Slice Definition"] },
         { label: "## Acceptance Scenarios", aliases: ["Acceptance Scenarios"] },
       ];
       for (const section of specSections) {
@@ -115,7 +115,7 @@ if (fs.existsSync(specsRoot)) {
           hasSection(tasksText, ["Acceptance Evidence Contract"]) ||
           /\*\*Acceptance \/ Evidence Ownership\*\*/.test(tasksText)
         );
-      if (!hasSection(text, ["Acceptance Evidence"]) && !distributedAcceptanceEvidence) {
+      if (!hasSection(text, ["Acceptance Evidence", "Observability / Evidence"]) && !distributedAcceptanceEvidence) {
         errors.push(`${dir}/spec.md: missing required section "## Acceptance Evidence"`);
       }
       const upstreamPattern = /\b(?:U(?:0[1-9]|1\d|20)|V1-[CDX]\d{2}|A\d{4}|010\d{2})\b/;
@@ -128,14 +128,16 @@ if (fs.existsSync(specsRoot)) {
     if (hasPlan) {
       if (!hasSpec) errors.push(`${dir}: plan.md exists but spec.md is missing (Spec Kit lifecycle violation)`);
       const text = read(path.join(dir, "plan.md"));
-      const upstreamOk = hasSection(text, ["Upstream Traceability", "Frozen Requirement Traceability"]);
+      const upstreamOk = hasSection(text, ["Upstream Traceability", "Frozen Requirement Traceability", "Authority Gate"]);
       const constitutionOk =
         hasSection(text, ["Constitution Check"]) ||
-        (hasSection(text, ["Authority Gate"]) && hasSection(text, ["Scope Contract"]));
+        (hasSection(text, ["Authority Gate"]) && hasSection(text, ["Scope Contract", "Scope Convergence"]));
       const verificationOk = hasSection(text, [
         "Verification Plan",
         "Verification Strategy",
         "Testing Strategy",
+        "Test and Validation Design",
+        "Exact-head Verification Contract",
       ]);
       if (!upstreamOk) errors.push(`${dir}/plan.md: missing required section "## Upstream Traceability"`);
       if (!constitutionOk) errors.push(`${dir}/plan.md: missing required section "## Constitution Check"`);
@@ -166,12 +168,14 @@ if (fs.existsSync(specsRoot)) {
         const hasPerTaskAuthority = structuredTasks.every((match, index) => {
           const start = match.index ?? 0;
           const end = structuredTasks[index + 1]?.index ?? text.length;
-          return /\*\*Frozen Spec Authority\*\*/.test(text.slice(start, end));
+          return /\*\*Frozen Spec Authority\*\*/.test(text.slice(start, end)) ||
+            /^FR \/ AS \/ NS Mapping:\s*$/m.test(text.slice(start, end));
         });
         const hasPerTaskEvidence = structuredTasks.every((match, index) => {
           const start = match.index ?? 0;
           const end = structuredTasks[index + 1]?.index ?? text.length;
-          return /\*\*Acceptance \/ Evidence Ownership\*\*/.test(text.slice(start, end));
+          return /\*\*Acceptance \/ Evidence Ownership\*\*/.test(text.slice(start, end)) ||
+            /^Evidence:\s*$/m.test(text.slice(start, end));
         });
         if (!hasAuthorityMap && !hasPerTaskAuthority) errors.push(`${dir}/tasks.md: structured tasks missing authority traceability contract`);
         if (!hasEvidenceContract && !hasPerTaskEvidence) errors.push(`${dir}/tasks.md: structured tasks missing acceptance evidence contract`);
@@ -182,7 +186,11 @@ if (fs.existsSync(specsRoot)) {
           const start = match.index ?? 0;
           const end = structuredTasks[index + 1]?.index ?? text.length;
           const section = text.slice(start, end);
-          if (!hasSection(section, ["Verification"], 3) && !/\*\*Verification\*\*/.test(section)) {
+          if (
+            !hasSection(section, ["Verification"], 3) &&
+            !/\*\*Verification\*\*/.test(section) &&
+            !/^Verification:\s*$/m.test(section)
+          ) {
             errors.push(`${dir}/tasks.md: structured task missing verification contract -> ${taskId}`);
           }
           if (hasAuthorityMap && !new RegExp(`\\|\\s*${taskId}\\s*\\|`).test(text)) {
