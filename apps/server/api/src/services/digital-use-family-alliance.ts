@@ -543,7 +543,6 @@ export async function executeFamilyAllianceNodeInTransaction(
       scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
       nodeCode: node.nodeCode,
       nodeRevision: completed.revision,
-      priorNodeRevision: current.revision,
       routeReasonCode: reasonCode,
       inputRefs: semantic.inputRefs,
       outputRefs: semantic.outputRefs,
