@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from 'pg';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const ADMIN_URL = process.env['TEST_ADMIN_DATABASE_URL']!;
 const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL']!;
@@ -68,6 +68,27 @@ function runRunner(root: string, databaseUrl: string) {
   });
 }
 
+function runRunnerAsync(
+  root: string,
+  databaseUrl: string
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [join(root, 'scripts', 'db-migrate.mjs')], {
+      cwd: root,
+      env: { ...process.env, MIGRATION_DATABASE_URL: databaseUrl },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.once('error', reject);
+    child.once('close', (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
 afterEach(async () => {
   for (const name of tempDatabases.splice(0)) {
     const admin = new Client({ connectionString: ADMIN_URL });
@@ -81,6 +102,111 @@ afterEach(async () => {
   for (const root of tempRoots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
   }
+  it('fails closed on a missing legacy-recorded file before applying checksum metadata', async () => {
+    const root = fixtureRoot();
+    const dbUrl = await createDatabase('legacy_missing');
+    writeMigration(root, '002_checksum_metadata.sql', METADATA_MIGRATION);
+
+    const db = new Client({ connectionString: dbUrl });
+    await db.connect();
+    try {
+      await db.query(`
+        CREATE TABLE schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      await db.query(
+        'INSERT INTO schema_migrations (filename) VALUES ($1)',
+        ['001_missing.sql']
+      );
+    } finally {
+      await db.end();
+    }
+
+    const failed = runRunner(root, dbUrl);
+    expect(failed.status).not.toBe(0);
+    expect(`${failed.stdout}\n${failed.stderr}`).toMatch(
+      /MIGRATION_FILE_MISSING 001_missing\.sql/
+    );
+
+    const check = new Client({ connectionString: dbUrl });
+    await check.connect();
+    try {
+      const columns = await check.query(`
+        SELECT column_name
+          FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'schema_migrations'
+           AND column_name IN ('content_checksum', 'checksum_origin', 'checksum_bound_at')
+      `);
+      expect(columns.rows).toEqual([]);
+    } finally {
+      await check.end();
+    }
+  });
+
+  it('serializes concurrent legacy transition runners without duplicate apply or baseline races', async () => {
+    const root = fixtureRoot();
+    const dbUrl = await createDatabase('legacy_concurrent');
+    const original = 'CREATE TABLE legacy_concurrent_probe (id integer PRIMARY KEY);\n';
+    writeMigration(root, '001_legacy.sql', original);
+    writeMigration(root, '002_checksum_metadata.sql', METADATA_MIGRATION);
+
+    const db = new Client({ connectionString: dbUrl });
+    await db.connect();
+    try {
+      await db.query(`
+        CREATE TABLE schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      await db.query(original);
+      await db.query(
+        'INSERT INTO schema_migrations (filename) VALUES ($1)',
+        ['001_legacy.sql']
+      );
+    } finally {
+      await db.end();
+    }
+
+    const [first, second] = await Promise.all([
+      runRunnerAsync(root, dbUrl),
+      runRunnerAsync(root, dbUrl),
+    ]);
+    expect(first.status, `${first.stdout}\n${first.stderr}`).toBe(0);
+    expect(second.status, `${second.stdout}\n${second.stderr}`).toBe(0);
+    expect(`${first.stdout}\n${first.stderr}\n${second.stdout}\n${second.stderr}`).not.toMatch(
+      /MIGRATION_LEGACY_BASELINE_RACE|duplicate key/
+    );
+
+    const check = new Client({ connectionString: dbUrl });
+    await check.connect();
+    try {
+      const rows = await check.query(`
+        SELECT filename, content_checksum, checksum_origin, checksum_bound_at
+          FROM schema_migrations
+         ORDER BY filename
+      `);
+      expect(rows.rows).toHaveLength(2);
+      expect(rows.rows[0]).toMatchObject({
+        filename: '001_legacy.sql',
+        checksum_origin: 'LEGACY_BASELINE',
+      });
+      expect(rows.rows[1]).toMatchObject({
+        filename: '002_checksum_metadata.sql',
+        checksum_origin: 'APPLIED',
+      });
+      for (const row of rows.rows) {
+        expect(row.content_checksum).toMatch(/^[0-9a-f]{64}$/);
+        expect(row.checksum_bound_at).not.toBeNull();
+      }
+    } finally {
+      await check.end();
+    }
+  });
+
 });
 
 describe('migration checksum integrity', () => {
