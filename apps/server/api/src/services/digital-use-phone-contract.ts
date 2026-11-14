@@ -356,11 +356,13 @@ async function managerConfirm(
  pool:pg.Pool,input:{actor:DigitalUseActor;familyId:string;caseId:string;version:number;expectedCaseVersion:number;expectedDraftRevision:number;idempotencyKey:string}
 ){
  return withRlsTransaction(pool,{familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'},async tx=>{
-  const row0=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
-  if(!row0) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
-  await lockManagerContractCase(tx,input,row0.supersedes_id?'A4012':'A4010');
+  // Immutable identity preview only; authoritative lock follows Family -> Case.
+  const preview=await getPhoneUseContractVersion(tx,input.caseId,input.version,false);
+  if(!preview) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
+  await lockManagerContractCase(tx,input,preview.supersedes_id?'A4012':'A4010');
   const row=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
   if(!row||row.adult_party_person_id!==input.actor.personId) throw contractError('PHONE_USE_CONTRACT_UNAUTHORIZED');
+  if((row.supersedes_id!==null)!==(preview.supersedes_id!==null)) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
   const requestHash=hashPayload({caseId:input.caseId,version:input.version,expectedCaseVersion:input.expectedCaseVersion,expectedDraftRevision:input.expectedDraftRevision,party:'ADULT'});
   const outcome=await runIdempotentCommandInTransaction(tx,{
    accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',commandType:'PHONE_USE_CONTRACT_CONFIRM',idempotencyKey:input.idempotencyKey,requestHash,
@@ -402,10 +404,11 @@ async function childConfirm(
  pool:pg.Pool,input:{actor:DigitalUseActor;familyId:string;caseId:string;version:number;expectedCaseVersion:number;expectedDraftRevision:number;idempotencyKey:string}
 ){
  return withRlsTransaction(pool,{familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'PHONE_USE_CONTRACT'},async tx=>{
-  const row=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
-  if(!row) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
+  if(!(await lockFamilyForPrimaryDecision(tx,input.familyId))) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
   const caseRow=await lockSceneCase(tx,input.caseId);
   if(!caseRow||caseRow.version!==input.expectedCaseVersion) throw contractError(!caseRow?'PHONE_USE_CONTRACT_NOT_FOUND':'STALE_CASE_VERSION');
+  const row=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
+  if(!row) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
   await assertAssessmentCompliance(tx,input.actor.personId);
   const participation=await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id});
