@@ -808,6 +808,93 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     expect(counts.audits).toBe(1);
   });
 
+  it('A5001 primary-Case race fails stale progression with no business residue', async () => {
+    const { f, scene } = await prepareA5001('primary-race');
+    const blocker = new pg.Client({
+      connectionString: process.env['TEST_ADMIN_DATABASE_URL']!,
+    });
+    await blocker.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        `UPDATE cases SET is_primary=false, version=version+1 WHERE id=$1`,
+        [f.caseId]
+      );
+      const request = a5001Request(
+        f,
+        scene,
+        `a5001-primary-race-${crypto.randomUUID()}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await blocker.query('COMMIT');
+      const blocked = await request;
+      expect(blocked.statusCode, blocked.body).toBe(409);
+      expect(['CASE_NOT_PRIMARY', 'STALE_CASE_VERSION']).toContain(
+        blocked.json().code
+      );
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      await blocker.end();
+    }
+    expect(await a5001Counts(f)).toEqual({
+      evidence: 0,
+      artifacts: 0,
+      scene: 0,
+      events: 0,
+      audits: 0,
+      idempotency: 0,
+    });
+  });
+
+  it('A5001 Scene-package replacement race fails closed with no business residue', async () => {
+    const { f, scene } = await prepareA5001('package-race');
+    const blocker = new pg.Client({
+      connectionString: process.env['TEST_ADMIN_DATABASE_URL']!,
+    });
+    await blocker.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        `DELETE FROM scene_node_states
+          WHERE case_id=$1 AND node_code='A1001'`,
+        [f.caseId]
+      );
+      const a1001 = resolveDigitalUseRuntimeNode('A1001');
+      await blocker.query(
+        `INSERT INTO scene_node_states
+           (family_id,case_id,scene_package_version,node_code,source_node_code,
+            status,branch_reason_codes,input_refs,output_refs,revision,completed_at)
+         VALUES ($1,$2,'v2',$3,$4,'COMPLETED',ARRAY['A5001_PACKAGE_DRIFT'],
+                 '[]'::jsonb,'[]'::jsonb,1,now())`,
+        [f.familyId, f.caseId, a1001.nodeCode, a1001.sourceNodeCode]
+      );
+
+      const request = a5001Request(
+        f,
+        scene,
+        `a5001-package-race-${crypto.randomUUID()}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await blocker.query('COMMIT');
+      const blocked = await request;
+      expect(blocked.statusCode, blocked.body).toBe(409);
+      expect(['SCENE_PACKAGE_MISMATCH', 'STALE_SCENE_PACKAGE']).toContain(
+        blocked.json().code
+      );
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      await blocker.end();
+    }
+    expect(await a5001Counts(f)).toEqual({
+      evidence: 0,
+      artifacts: 0,
+      scene: 0,
+      events: 0,
+      audits: 0,
+      idempotency: 0,
+    });
+  });
+
   it('AS-32-36 rechecks Safety, Family Alliance Compliance and Consent independently', async () => {
     const safety = await prepareA5001('safety');
     await admin.query(`UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1`, [
