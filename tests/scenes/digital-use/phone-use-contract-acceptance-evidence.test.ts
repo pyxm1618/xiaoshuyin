@@ -95,7 +95,7 @@ const acceptance: readonly AcceptanceEvidence[] = [
   {id:'AS-69',evidence:[e(HARD,'a primary switch makes the old Assessment Case lose write authority')]},
   {id:'AS-70',evidence:[e(HARD,'fails closed on package drift and never silently rebinds Scene package truth')]},
   {id:'AS-71',evidence:[e(CONTENT,'binds the exact approved source blob and exposes one immutable V1 content identity')]},
-  {id:'AS-72',evidence:[e(HARD,'Slice 14 HIGH-001 blocks ASSERTION supersession at activation while preserving historical Evidence'),e(HARD,'Slice 14 HIGH-001 accepts current Scene Artifact then blocks its exact superseded ref at activation'),e(HARD,'Slice 14 HIGH-001 serializes Scene correction before activation and never commits false ACTIVE')]},
+  {id:'AS-72',evidence:[e(HARD,'Slice 14 HIGH-001 blocks ASSERTION supersession at activation while preserving historical Evidence'),e(HARD,'Slice 14 HIGH-001 accepts current Scene Artifact then blocks its exact superseded ref at activation'),e(HARD,'Slice 14 HIGH-001 serializes Scene correction before activation and never commits false ACTIVE'),e(HARD,'Slice 14 AS-72 preserves historical ACTIVE truth but blocks stale-source support and revision')]},
   {id:'AS-73',evidence:[e(HARD,'Slice 14 AS-73 rejects corrected child-related source and does not substitute parent truth'),e(AUTH_ARCH,'requires explicit Contract, party and ACTIVE participation facts')]},
   {id:'AS-74',evidence:[e(GOV,'S14-GOV-06 keeps A5002 and scheduler/notification execution outside Slice 14')]},
   {id:'AS-75',evidence:[e(GOV,'S14-GOV-02 keeps topology and reachability in the single Manifest/router owner'),e(ARCH,'accepts the canonical repository architecture')]},

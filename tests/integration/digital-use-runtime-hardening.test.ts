@@ -3104,6 +3104,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       validFrom?:string;
       validUntil?:string;
       conflictGroupId?:string;
+      confirmationStatus?:'UNCONFIRMED'|'CONFIRMED'|'DISPUTED';
       content?:string;
     }={}
   ):Promise<string>{
@@ -3112,13 +3113,14 @@ describe('T1218 Digital Use runtime hardening', () => {
         (family_id,case_id,subject_person_id,source_kind,source_person_id,
          occurred_time_state,valid_from,valid_until,confirmation_status,
          supersedes_id,conflict_group_id,kind,content)
-       VALUES($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN',$5,$6,'UNCONFIRMED',$7,$8,'STATEMENT',$9)
+       VALUES($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN',$5,$6,$7,$8,$9,'STATEMENT',$10)
        RETURNING id`,
       [
         f.familyId,f.caseId,input.subjectPersonId??f.manager.personId,
         input.sourcePersonId??f.manager.personId,
-        input.validFrom??null,input.validUntil??null,input.supersedesId??null,
-        input.conflictGroupId??null,input.content??'Slice 14 dependency assertion',
+        input.validFrom??null,input.validUntil??null,input.confirmationStatus??'UNCONFIRMED',
+        input.supersedesId??null,input.conflictGroupId??null,
+        input.content??'Slice 14 dependency assertion',
       ]
     );
     return row.rows[0]!.id;
@@ -3244,7 +3246,10 @@ describe('T1218 Digital Use runtime hardening', () => {
     const expiredDraft=await app.inject({
       method:'POST',url:`/api/v1/cases/${expiredCase.f.caseId}/digital-use/contract/drafts`,
       headers:commandHeaders(expiredCase.f.manager.token,'s14-high001-expired-draft'),
-      payload:expiredCase.draftPayload([{type:'ASSERTION',id:expired}]),
+      payload:expiredCase.draftPayload([{
+        type:'RECORD_MARKER',markerCode:'A200401',
+        evidenceRefs:[{type:'ASSERTION',id:expired}],
+      }]),
     });
     expect(expiredDraft.statusCode,expiredDraft.body).toBe(422);
     expect(expiredDraft.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
@@ -3433,6 +3438,90 @@ describe('T1218 Digital Use runtime hardening', () => {
       [f.caseId]
     );
     expect(truth.rows).toEqual([{status:'PENDING_CONFIRMATION',child_confirmation:null,activated_at:null}]);
+  });
+
+
+  it('Slice 14 HIGH-001 fails closed on Evidence conflict and disputed confirmation owner state', async()=>{
+    const conflictCase=await preparePhoneContractCase('s14-high001-conflict');
+    const conflictId=crypto.randomUUID();
+    const conflicted=await insertAssertionSource(conflictCase.f,{conflictGroupId:conflictId});
+    const conflictDraft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${conflictCase.f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(conflictCase.f.manager.token,'s14-high001-conflict-draft'),
+      payload:conflictCase.draftPayload([{type:'ASSERTION',id:conflicted}]),
+    });
+    expect(conflictDraft.statusCode,conflictDraft.body).toBe(422);
+    expect(conflictDraft.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+
+    const disputedCase=await preparePhoneContractCase('s14-high001-disputed');
+    const disputed=await insertAssertionSource(disputedCase.f,{confirmationStatus:'DISPUTED'});
+    const disputedDraft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${disputedCase.f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(disputedCase.f.manager.token,'s14-high001-disputed-draft'),
+      payload:disputedCase.draftPayload([{type:'ASSERTION',id:disputed}]),
+    });
+    expect(disputedDraft.statusCode,disputedDraft.body).toBe(422);
+    expect(disputedDraft.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+  });
+
+  it('Slice 14 AS-72 preserves historical ACTIVE truth but blocks stale-source support and revision', async()=>{
+    const {f,child,draftPayload}=await preparePhoneContractCase('s14-high001-active-history');
+    const a1=await insertTimelineArtifact(f,1);
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-high001-active-history-draft'),
+      payload:draftPayload([{type:'SCENE_ARTIFACT',id:a1.id}]),
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    const adult=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,'s14-high001-active-history-adult'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+    const childConfirm=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,'s14-high001-active-history-child'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(childConfirm.statusCode,childConfirm.body).toBe(200);
+    expect(childConfirm.json().status).toBe('ACTIVE');
+
+    await insertTimelineArtifact(f,2,a1.id);
+
+    const support=await app.inject({
+      method:'GET',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/faq`,
+      headers:auth(f.manager.token),
+    });
+    expect(support.statusCode,support.body).toBe(422);
+    expect(support.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+
+    const revise=await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/revise`,
+      headers:commandHeaders(f.manager.token,'s14-high001-active-history-revise'),
+      payload:{
+        expectedCaseVersion:f.caseVersion,
+        expectedActiveDraftRevision:1,
+        updateTrigger:'NEW_PROBLEM',
+        updateReason:'must not reuse corrected dependency truth',
+      },
+    });
+    expect(revise.statusCode,revise.body).toBe(422);
+    expect(revise.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+
+    const history=await admin.query(
+      `SELECT version,status,activated_at,superseded_at,dependency_refs
+         FROM digital_use_contract_versions WHERE case_id=$1 ORDER BY version`,
+      [f.caseId]
+    );
+    expect(history.rows).toHaveLength(1);
+    expect(history.rows[0].version).toBe(1);
+    expect(history.rows[0].status).toBe('ACTIVE');
+    expect(history.rows[0].activated_at).not.toBeNull();
+    expect(history.rows[0].superseded_at).toBeNull();
+    expect(history.rows[0].dependency_refs).toEqual([{type:'SCENE_ARTIFACT',id:a1.id}]);
   });
 
 });
