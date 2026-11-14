@@ -43,7 +43,6 @@ import {
 import { appendCandidate, hasKind } from './confirmation-repository.js';
 import {
   clearOpenidForFreshContext,
-  findByIdForUpdate as findPendingContextByIdForUpdate,
   clearPairingForAttemptExcept,
   clearPairingIssuance,
   setPairingIssuance,
@@ -298,61 +297,69 @@ async function generic(
   };
 }
 
+interface PairingWindow {
+  startsAt: Date;
+  expiresAt: Date;
+}
+
+/**
+ * Observable pairing rotation is anchored to immutable context time rather than
+ * "request now". Real and decoy responses therefore cross the same TTL window
+ * boundaries for a given context. An optional upper bound (the attempt expiry)
+ * can shorten a real issuance without extending the context lifetime.
+ */
+function pairingWindow(
+  context: PendingContextRow,
+  pairingTtlSeconds: number,
+  now: Date,
+  upperBoundMs = context.expiresAt.getTime()
+): PairingWindow | null {
+  const ttlMs = pairingTtlSeconds * 1000;
+  const anchorMs = context.createdAt.getTime();
+  const upperMs = Math.min(context.expiresAt.getTime(), upperBoundMs);
+  if (ttlMs <= 0 || upperMs <= anchorMs) return null;
+
+  // Once an optional business upper bound has passed, there is no valid real
+  // issuance window left. Generic decoys omit that business bound and remain
+  // derived solely from the still-live transport context.
+  if (upperBoundMs < context.expiresAt.getTime() && now.getTime() >= upperMs) {
+    return null;
+  }
+
+  const effectiveNowMs = Math.min(
+    Math.max(now.getTime(), anchorMs),
+    upperMs - 1
+  );
+  const windowIndex = Math.floor((effectiveNowMs - anchorMs) / ttlMs);
+  const startsAtMs = anchorMs + windowIndex * ttlMs;
+  const expiresAtMs = Math.min(startsAtMs + ttlMs, upperMs);
+  if (expiresAtMs <= startsAtMs) return null;
+  return {
+    startsAt: new Date(startsAtMs),
+    expiresAt: new Date(expiresAtMs),
+  };
+}
+
 async function issueOrReplayDecoyChallenge(
-  tx: pg.PoolClient,
+  _tx: pg.PoolClient,
   deps: CandidateDecisionDeps,
   context: PendingContextRow
 ): Promise<string> {
-  // Re-read under lock because terminal settlement may have cleared a real
-  // issuance after requireContext() loaded its earlier snapshot.
-  const current = (await findPendingContextByIdForUpdate(tx, context.id)) ?? context;
-  const now = new Date();
-  const desiredExpiry = Math.min(
-    now.getTime() + deps.pairingTtlSeconds * 1000,
-    current.expiresAt.getTime()
-  );
+  const window =
+    pairingWindow(context, deps.pairingTtlSeconds, new Date()) ?? {
+      startsAt: context.createdAt,
+      expiresAt: context.expiresAt,
+    };
 
-  let issuanceId = current.pairingIssuanceId;
-  let issuedAt = current.pairingIssuedAt;
-  let expiresAt = current.pairingExpiresAt;
-  const reusable =
-    issuanceId !== null &&
-    issuedAt !== null &&
-    expiresAt !== null &&
-    expiresAt.getTime() > now.getTime();
-
-  if (!reusable && desiredExpiry > now.getTime()) {
-    const row = await setPairingIssuance(tx, current.id, {
-      pairingIssuanceId: randomUUID(),
-      pairingIssuedAt: now,
-      pairingExpiresAt: new Date(desiredExpiry),
-    });
-    if (row) {
-      issuanceId = row.pairingIssuanceId;
-      issuedAt = row.pairingIssuedAt;
-      expiresAt = row.pairingExpiresAt;
-    }
-  }
-
-  // A context can cross its expiry while this transaction is already in
-  // progress. In that edge case there is no legal DB issuance window left;
-  // derive from immutable context lifetime facts so the same in-flight context
-  // still receives a deterministic non-resolving value rather than a random
-  // oracle. Subsequent requests are rejected by requireContext().
-  if (!issuanceId || !issuedAt || !expiresAt) {
-    return encodeDecoyPairingChallenge(deps.identityBindingSecret, {
-      contextId: current.id,
-      pairingIssuanceId: current.id,
-      pairingIssuedAt: current.createdAt,
-      pairingExpiresAt: current.expiresAt,
-    });
-  }
-
+  // A decoy is intentionally stateless: terminal settlement must leave ZERO
+  // valid pairing issuance in binding_pending_contexts. The keyed encoder uses
+  // immutable context id + deterministic TTL window facts, so repeated calls
+  // in one observable window are byte-stable without creating consumable state.
   return encodeDecoyPairingChallenge(deps.identityBindingSecret, {
-    contextId: current.id,
-    pairingIssuanceId: issuanceId,
-    pairingIssuedAt: issuedAt,
-    pairingExpiresAt: expiresAt,
+    contextId: context.id,
+    pairingIssuanceId: context.id,
+    pairingIssuedAt: window.startsAt,
+    pairingExpiresAt: window.expiresAt,
   });
 }
 
@@ -449,10 +456,10 @@ async function issueOrReplayChallenge(
   correlationId: string
 ): Promise<string | null> {
   const now = new Date();
-  const ttlMs = deps.pairingTtlSeconds * 1000;
   const upperBound = Math.min(context.expiresAt.getTime(), attempt.expiresAt.getTime());
-  const desiredExpiry = Math.min(now.getTime() + ttlMs, upperBound);
-  if (desiredExpiry <= now.getTime()) {
+  const window = pairingWindow(context, deps.pairingTtlSeconds, now, upperBound);
+  const desiredExpiry = window?.expiresAt.getTime() ?? upperBound;
+  if (!window || desiredExpiry <= now.getTime()) {
     // The context or attempt is already at/over its own lifetime. Settle the
     // attempt if it expired; the context expiry is handled by requireContext.
     if (attempt.expiresAt.getTime() <= now.getTime()) {
