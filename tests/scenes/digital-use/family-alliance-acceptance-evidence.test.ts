@@ -48,7 +48,7 @@ const acceptance: readonly AcceptanceEvidence[] = [
   { id: 'AS-26', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-26 Safety race wins before Family Alliance commit' }] },
   { id: 'AS-27', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-27/28 Compliance publication race' }] },
   { id: 'AS-28', evidence: [{ file: FAMILY_RUNTIME, anchor: 'UNKNOWN policy fail closed' }, { file: 'tests/domain/compliance-feature-policy-evaluator.test.ts', anchor: 'missing / future-only / expired-only all fail closed as POLICY_MISSING' }] },
-  { id: 'AS-29', evidence: [{ file: 'tests/integration/consent-revoke.test.ts', anchor: 'T058: gate BLOCK after revoke' }, { file: 'tests/domain/compliance-age-consent-composition.test.ts', anchor: 'revoked consent is invalid' }] },
+  { id: 'AS-29', evidence: [{ file: FAMILY_RUNTIME, anchor: 'HX-07 Consent revoke race serializes against Family Alliance processing' }, { file: 'tests/integration/consent-revoke.test.ts', anchor: 'T058: gate BLOCK after revoke' }, { file: 'tests/domain/compliance-age-consent-composition.test.ts', anchor: 'revoked consent is invalid' }] },
   { id: 'AS-30', evidence: [{ file: FAMILY_RUNTIME, anchor: 'Safety Hold blocks entry without Evidence/artifact/idempotency residue' }, { file: FAMILY_RUNTIME, anchor: 'Compliance publication race and UNKNOWN policy fail closed' }] },
   { id: 'AS-31', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-05/31/32/33 gives stable idempotent A3002 semantics' }] },
   { id: 'AS-32', evidence: [{ file: FAMILY_RUNTIME, anchor: 'IDEMPOTENCY_PAYLOAD_MISMATCH' }] },

@@ -10,6 +10,9 @@ import {
   auth,
   commandHeaders,
   createFamily,
+  createConsentRequest,
+  grantConsent,
+  revokeConsent,
   loginWithLabel,
   type LoginResult,
 } from '../setup/api.js';
@@ -1453,6 +1456,148 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       [f.caseId]
     );
     expect(residue.rows[0]!.n).toBe(0);
+  });
+
+
+  it('HX-07 Consent revoke race serializes against Family Alliance processing', async () => {
+    const f = await fixture('consent-race');
+    const child = await loginWithLabel(app, 'fa-consent-race-child');
+    await admin.query(
+      \`INSERT INTO family_members (family_id,person_id)
+       VALUES ($1,$2) ON CONFLICT DO NOTHING\`,
+      [f.familyId, child.personId]
+    );
+
+    const request = await createConsentRequest(
+      app,
+      f.manager.token,
+      'fa-consent-race',
+      { existingSubjectPersonId: child.personId }
+    );
+    expect(request.statusCode, request.body).toBe(201);
+    const grant = await grantConsent(
+      app,
+      f.manager.token,
+      'fa-consent-race',
+      request.json().requestId
+    );
+    expect(grant.statusCode, grant.body).toBe(201);
+    const granted = grant.json();
+
+    const bound = await admin.query<{
+      bound_person_id: string | null;
+      version: number;
+    }>(
+      \`SELECT bound_person_id,version FROM consent_records WHERE id=$1\`,
+      [granted.id]
+    );
+    expect(bound.rows[0]).toMatchObject({
+      bound_person_id: child.personId,
+      version: 1,
+    });
+
+    await admin.query(
+      \`INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,verified_source,guardian_person_id,
+          guardian_consent_record_id,guardian_consent_version)
+       VALUES ($1,'UNDER_14',true,'GUARDIAN_RELAY',$2,$3,1)
+       ON CONFLICT (person_id) DO UPDATE SET
+         age_band='UNDER_14',
+         minor_mode=true,
+         verified_source='GUARDIAN_RELAY',
+         guardian_person_id=EXCLUDED.guardian_person_id,
+         guardian_consent_record_id=EXCLUDED.guardian_consent_record_id,
+         guardian_consent_version=1,
+         effective_at=now(),
+         updated_at=now()\`,
+      [child.personId, f.manager.personId, granted.id]
+    );
+    // Test-only role transfer makes the consent-bound subject the authorized
+    // Family manager so the race reaches Consent/Compliance, not authz denial.
+    await admin.query(
+      \`UPDATE families SET created_by_person_id=$2 WHERE id=$1\`,
+      [f.familyId, child.personId]
+    );
+
+    const familyRequest = app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      headers: {
+        ...auth(child.token),
+        'idempotency-key': \`fa-consent-family-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        response: selfAssessment(),
+      },
+    });
+    const revokeRequest = revokeConsent(
+      app,
+      f.manager.token,
+      \`fa-consent-race-\${crypto.randomUUID()}\`,
+      granted.id,
+      { reason: 'concurrent family processing test' }
+    );
+    const [familyResult, revoked] = await Promise.all([
+      familyRequest,
+      revokeRequest,
+    ]);
+    expect(revoked.statusCode, revoked.body).toBe(200);
+    expect([200, 409]).toContain(familyResult.statusCode);
+    if (familyResult.statusCode === 409) {
+      expect(familyResult.json().code).toBe('CONSENT_BLOCKED');
+    }
+
+    const final = await admin.query<{
+      guardian_consent_version: number;
+      decision: string;
+    }>(
+      \`SELECT p.guardian_consent_version,c.decision
+         FROM person_compliance_profiles p
+         JOIN consent_records c ON c.id=p.guardian_consent_record_id
+        WHERE p.person_id=$1\`,
+      [child.personId]
+    );
+    expect(final.rows[0]).toEqual({
+      guardian_consent_version: 2,
+      decision: 'REVOKED',
+    });
+
+    const currentArtifacts = await admin.query<{ n: number }>(
+      \`SELECT count(*)::int AS n FROM scene_artifacts
+        WHERE case_id=$1
+          AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT'\`,
+      [f.caseId]
+    );
+    expect(currentArtifacts.rows[0]!.n)
+      .toBe(familyResult.statusCode === 200 ? 1 : 0);
+  });
+
+
+  it('HX-11 dependency unavailable is distinct from denial and infrastructure failure', async () => {
+    const f = await fixture('dependency-unavailable');
+    await admin.query(
+      \`DELETE FROM assertions
+        WHERE case_id=$1
+          AND (
+            content LIKE 'DUA:v1:01002.emotion:%'
+            OR content LIKE 'DUA:v1:01003.family_relationship:%'
+          )\`,
+      [f.caseId]
+    );
+    const entry = await respond(f, 'A3000', selfAssessment());
+    expect(entry.statusCode, entry.body).toBe(200);
+
+    const unavailable = await respond(
+      f,
+      'A3002',
+      { kind: 'TARGET_SELECTION', confirmed: true, selectedTargets: [] },
+      { expectedSelectionRevision: 0 }
+    );
+    expect(unavailable.statusCode, unavailable.body).toBe(503);
+    expect(unavailable.json().code).toBe('DEPENDENCY_UNAVAILABLE');
   });
 
 });
