@@ -810,6 +810,7 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
 
   it('A5001 primary-Case race fails stale progression with no business residue', async () => {
     const { f, scene } = await prepareA5001('primary-race');
+    const before = await a5001Counts(f);
     const blocker = new pg.Client({
       connectionString: process.env['TEST_ADMIN_DATABASE_URL']!,
     });
@@ -836,18 +837,18 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
       await blocker.query('ROLLBACK').catch(() => undefined);
       await blocker.end();
     }
-    expect(await a5001Counts(f)).toEqual({
-      evidence: 0,
-      artifacts: 0,
-      scene: 0,
-      events: 0,
-      audits: 0,
-      idempotency: 0,
-    });
+    const after = await a5001Counts(f);
+    expect(after.evidence).toBe(0);
+    expect(after.artifacts).toBe(0);
+    expect(after.scene).toBe(0);
+    expect(after.events).toBe(0);
+    expect(after.audits).toBe(0);
+    expect(after.idempotency).toBe(before.idempotency);
   });
 
   it('A5001 Scene-package replacement race fails closed with no business residue', async () => {
     const { f, scene } = await prepareA5001('package-race');
+    const before = await a5001Counts(f);
     const blocker = new pg.Client({
       connectionString: process.env['TEST_ADMIN_DATABASE_URL']!,
     });
@@ -885,14 +886,13 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
       await blocker.query('ROLLBACK').catch(() => undefined);
       await blocker.end();
     }
-    expect(await a5001Counts(f)).toEqual({
-      evidence: 0,
-      artifacts: 0,
-      scene: 0,
-      events: 0,
-      audits: 0,
-      idempotency: 0,
-    });
+    const after = await a5001Counts(f);
+    expect(after.evidence).toBe(0);
+    expect(after.artifacts).toBe(0);
+    expect(after.scene).toBe(0);
+    expect(after.events).toBe(0);
+    expect(after.audits).toBe(0);
+    expect(after.idempotency).toBe(before.idempotency);
   });
 
   it('AS-32-36 rechecks Safety, Family Alliance Compliance and Consent independently', async () => {
