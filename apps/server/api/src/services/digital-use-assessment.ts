@@ -185,18 +185,21 @@ function targetDto(row: DigitalUseTargetItemRow) {
   };
 }
 
-function familyNodeReachable(
+function sceneNodeReachable(
   row: SceneNodeStateRow,
   selectedTargets: ReadonlySet<string>
 ): boolean {
   const manifest = (digitalUseNodeManifest as readonly DigitalUseNodeManifestEntry[])
     .find((entry) => entry.nodeCode === row.node_code);
   if (!manifest) return false;
-  if (manifest.stream !== 'FAMILY_ALLIANCE') {
-    return row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS';
+
+  // Target-selection gating belongs only to FAMILY_ALLIANCE. Re-entry semantics
+  // themselves are Manifest-owned across every Digital Use stream.
+  if (manifest.stream === 'FAMILY_ALLIANCE') {
+    const target = familyAllianceTargetIdentity(manifest);
+    if (target !== null && !selectedTargets.has(target.targetCode)) return false;
   }
-  const target = familyAllianceTargetIdentity(manifest);
-  if (target !== null && !selectedTargets.has(target.targetCode)) return false;
+
   if (row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS') return true;
   if (row.status !== 'COMPLETED') return false;
   return (
@@ -219,7 +222,7 @@ export function buildSceneEnvelope(input: {
     targets.filter((target) => target.selected).map((target) => target.target_code)
   );
   const reachableRows = input.nodes.filter((row) =>
-    familyNodeReachable(row, selectedTargets)
+    sceneNodeReachable(row, selectedTargets)
   );
   const reachableCodes = new Set(reachableRows.map((row) => row.node_code));
   const active = projected.filter(

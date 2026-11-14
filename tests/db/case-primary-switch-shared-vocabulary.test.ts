@@ -41,6 +41,12 @@ const EXPECTED_AUDIT_EVENTS = [
   'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
   'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
   'DIGITAL_USE_NODE_COMPLETED',
+  // Slice 14 phone-use Contract / roleplay audit vocabulary.
+  'PHONE_USE_CONTRACT_DRAFT_SAVED',
+  'PHONE_USE_CONTRACT_CONFIRMED',
+  'PHONE_USE_CONTRACT_ACTIVATED',
+  'PHONE_USE_CONTRACT_SUPERSEDED',
+  'PHONE_USE_ROLEPLAY_RECORDED',
 ];
 
 const EXPECTED_COMMANDS = [
@@ -68,6 +74,14 @@ const EXPECTED_COMMANDS = [
   'CASE_RESOLVE_RISK',
   'DIGITAL_USE_ASSESSMENT_RESUME',
   'DIGITAL_USE_NODE_RESPONSE',
+  // Slice 14 reuses the shared text-key idempotency owner.
+  'PHONE_USE_CONTRACT_DRAFT_SAVE',
+  'PHONE_USE_CONTRACT_CONFIRM',
+  'PHONE_USE_CONTRACT_REVISE',
+  'PHONE_USE_ROLEPLAY_CREATE',
+  'PHONE_USE_ROLEPLAY_TURN',
+  'PHONE_USE_ROLEPLAY_RATE',
+  'PHONE_USE_ROLEPLAY_SELECT',
 ];
 
 const EXPECTED_RESOURCE_TYPES = [
@@ -108,7 +122,7 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
     return rows[0].definition as string;
   }
 
-  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Slice 12', async () => {
+  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Slice 14', async () => {
     const values = literalsOf(await definition('business_audit_events_event_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_AUDIT_EVENTS));
   });
@@ -118,7 +132,7 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
     expect(new Set(values)).toEqual(new Set(EXPECTED_RESOURCE_TYPES));
   });
 
-  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Slice 12', async () => {
+  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Slice 14', async () => {
     const values = literalsOf(await definition('idempotency_keys_command_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_COMMANDS));
   });

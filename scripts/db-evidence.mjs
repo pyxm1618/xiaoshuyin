@@ -427,7 +427,7 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015', true,
+check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015 + 016 + 017', true,
       /APPLY 004_evidence_core\.sql/.test(output) &&
       /APPLY 004_identity_binding_runtime\.sql/.test(output) &&
       /APPLY 005_case_participant_core\.sql/.test(output) &&
@@ -441,11 +441,12 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       /APPLY 013_consent_01004_supplemental_assessment\.sql/.test(output) &&
       /APPLY 014_consent_01004_cross_purpose_supersede_guard\.sql/.test(output) &&
       /APPLY 015_digital_use_assessment_runtime\.sql/.test(output) &&
-      /APPLY 016_digital_use_family_alliance_runtime\.sql/.test(output));
+      /APPLY 016_digital_use_family_alliance_runtime\.sql/.test(output) &&
+      /APPLY 017_digital_use_phone_use_contract_runtime\.sql/.test(output));
     check(
-      'upgrade 结果为 14 new / 3 previously applied',
+      'upgrade 结果为 15 new / 3 previously applied',
       true,
-      /Migration complete: 14 new, 3 previously applied\./.test(output)
+      /Migration complete: 15 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -476,6 +477,8 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       '015_digital_use_assessment_runtime.sql',
       // Slice 13 reviewed Digital Use Family Alliance runtime migration.
       '016_digital_use_family_alliance_runtime.sql',
+      // Slice 14 reviewed Digital Use Phone Use Contract runtime migration.
+      '017_digital_use_phone_use_contract_runtime.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',
