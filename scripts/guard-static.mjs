@@ -849,8 +849,8 @@ function checkPgvectorReadinessScope(relPath, content, report) {
   }
 
   const adapter =
-    /(?:^|\\/)(?:embedding|reranker)[-_]?adapter\\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath) ||
-    /\\b(?:EmbeddingAdapter|RerankerAdapter)\\b/.test(content);
+    /(?:^|\/)(?:embedding|reranker)[-_]?adapter\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath) ||
+    /\b(?:EmbeddingAdapter|RerankerAdapter)\b/.test(content);
   if (adapter) {
     report(
       'R12-pgvector-scope',
