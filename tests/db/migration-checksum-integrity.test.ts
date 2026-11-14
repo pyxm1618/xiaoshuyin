@@ -282,10 +282,10 @@ describe('migration checksum integrity', () => {
       );
       await db.query(`
         CREATE FUNCTION reject_legacy_baseline_for_test() RETURNS trigger
-        LANGUAGE plpgsql AS $
+        LANGUAGE plpgsql AS $test$
         BEGIN
           RAISE EXCEPTION 'TEST_BASELINE_REJECTED';
-        END $;
+        END $test$;
         CREATE TRIGGER reject_legacy_baseline_for_test
           BEFORE UPDATE ON schema_migrations
           FOR EACH ROW EXECUTE FUNCTION reject_legacy_baseline_for_test();
