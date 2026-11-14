@@ -7,6 +7,7 @@
  * It creates no Review entity/table/API and has no Slice 14 dependency.
  */
 import type pg from 'pg';
+import { createServerFeatureDescriptor } from '@xiaoshuyin/compliance';
 import {
   A5001FamilyAllianceReviewResponse,
   A5001_FAMILY_DIMENSION_KEYS,
@@ -52,6 +53,11 @@ import {
 
 const ARTIFACT_TYPE = 'DIGITAL_USE_A5001_EFFECT_EVALUATION' as const;
 const ARTIFACT_SCHEMA_VERSION = 'v1' as const;
+const A5001_REVIEW_FEATURE = createServerFeatureDescriptor({
+  featureCode: 'DIGITAL_USE_A5001_FAMILY_ALLIANCE_REVIEW_RUNTIME',
+  featureContractRevision: 'v1',
+  capabilityLabel: 'Digital Use A5001 Family Alliance Review Runtime',
+});
 
 function reviewError(
   code: string,
@@ -355,7 +361,8 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
     await pinAndAssertFamilyAllianceGates(
       tx,
       input.caseId,
-      input.actor.personId
+      input.actor.personId,
+      A5001_REVIEW_FEATURE
     );
 
     const subject = await resolveA5001SubjectSnapshot(tx, input.caseId);
@@ -604,7 +611,8 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
     await revalidateFamilyAllianceGates(
       tx,
       input.caseId,
-      input.actor.personId
+      input.actor.personId,
+      A5001_REVIEW_FEATURE
     );
 
     return await currentSceneEnvelope(tx, input.caseId);
