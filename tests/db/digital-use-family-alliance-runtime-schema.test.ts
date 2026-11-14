@@ -125,14 +125,65 @@ describe('T1303/T1305 Digital Use Family Alliance target persistence', () => {
       );
       expect(visible.rows[0]!.n).toBe(0);
 
+      const seed = await admin.query<{
+        family_id: string;
+        case_id: string;
+        person_id: string;
+      }>(
+        `WITH account_row AS (
+           INSERT INTO accounts (wechat_openid)
+           VALUES ('slice13-rls-' || uuidv7()::text)
+           RETURNING id
+         ),
+         person_row AS (
+           INSERT INTO persons (account_id, created_by_account_id)
+           SELECT id, id FROM account_row
+           RETURNING id
+         ),
+         family_row AS (
+           INSERT INTO families (created_by_person_id)
+           SELECT id FROM person_row
+           RETURNING id
+         ),
+         member_row AS (
+           INSERT INTO family_members (family_id, person_id)
+           SELECT family_row.id, person_row.id
+             FROM family_row, person_row
+           RETURNING family_id, person_id
+         ),
+         case_row AS (
+           INSERT INTO cases
+             (family_id, created_by_person_id, status, phase, is_primary, version)
+           SELECT family_id, person_id, 'OPEN', 'GOALS', true, 1
+             FROM member_row
+           RETURNING id, family_id, created_by_person_id
+         ),
+         anchor_row AS (
+           INSERT INTO scene_node_states
+             (family_id, case_id, scene_package_version, node_code,
+              source_node_code, status, branch_reason_codes, input_refs,
+              output_refs, revision, completed_at)
+           SELECT family_id, id, 'v1', 'A1001', 'A1001', 'COMPLETED',
+                  ARRAY['RLS_FIXTURE'], '[]'::jsonb, '[]'::jsonb, 1, now()
+             FROM case_row
+           RETURNING case_id
+         )
+         SELECT case_row.family_id,
+                case_row.id AS case_id,
+                case_row.created_by_person_id AS person_id
+           FROM case_row, anchor_row`
+      );
+      const valid = seed.rows[0]!;
+
       await expect(
         app.query(
           `INSERT INTO digital_use_target_items
              (family_id,case_id,scene_package_version,target_code,
               selection_revision,revision,selected,created_by_person_id)
-           VALUES (uuidv7(),uuidv7(),'v1','SLEEP',1,1,true,uuidv7())`
+           VALUES ($1,$2,'v1','SLEEP',1,1,true,$3)`,
+          [valid.family_id, valid.case_id, valid.person_id]
         )
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ code: '42501' });
     } finally {
       await app.end();
     }
