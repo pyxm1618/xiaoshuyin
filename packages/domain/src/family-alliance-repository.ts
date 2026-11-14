@@ -176,6 +176,7 @@ export async function replaceDigitalUseTargetSelection(
     caseId: string;
     scenePackageVersion: string;
     expectedSelectionRevision: number;
+    selectionRevision: number;
     selectedTargets: readonly FamilyAllianceTargetCode[];
     createdByPersonId: string;
     sourceRefs?: readonly StoredSceneRef[];
@@ -215,7 +216,10 @@ export async function replaceDigitalUseTargetSelection(
     if (result.rowCount !== 1) targetError('STALE_TARGET_REVISION');
   }
 
-  const nextSelectionRevision = currentSelectionRevision + 1;
+  const nextSelectionRevision = input.selectionRevision;
+  if (!Number.isInteger(nextSelectionRevision) || nextSelectionRevision < 1 || nextSelectionRevision <= currentSelectionRevision) {
+    targetError('STALE_SELECTION_REVISION');
+  }
   const inserted: DigitalUseTargetItemRow[] = [];
   for (const targetCode of FAMILY_ALLIANCE_TARGET_CODES) {
     const previous = byCode.get(targetCode);

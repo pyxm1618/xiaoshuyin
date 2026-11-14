@@ -17,6 +17,8 @@ import {
   caseIdempotencyKeyBytes,
   getCaseById,
   getScenePackageBinding,
+  coherentCurrentSelectionRevision,
+  listCurrentDigitalUseTargetItems,
   getReservedIdempotency,
   getSceneNodeState,
   hashPayload,
@@ -28,12 +30,14 @@ import {
   type SceneArtifactRow,
   type SceneCaseRow,
   type SceneNodeStateRow,
+  type DigitalUseTargetItemRow,
 } from '@xiaoshuyin/domain';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
   DIGITAL_USE_SCENE_CODE,
   initialA1001Projection,
   resolveDigitalUseRuntimeNode,
+  digitalUseNodeManifest,
 } from '@xiaoshuyin/scenes/digital-use';
 import type { DigitalUseNodeResponseType, DigitalUseSceneResponseType } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
@@ -41,6 +45,7 @@ import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { startAssessmentInTransaction } from './problem-formulations.js';
+import { familyAllianceTargetIdentity } from './family-alliance-semantics.js';
 
 export interface DigitalUseActor {
   readonly accountId: string;
@@ -152,21 +157,77 @@ function artifactDto(row: SceneArtifactRow) {
   };
 }
 
+function targetDto(row: DigitalUseTargetItemRow) {
+  return {
+    id: row.id,
+    targetCode: row.target_code,
+    selectionRevision: row.selection_revision,
+    revision: row.revision,
+    selected: row.selected,
+    concreteTargetText: row.concrete_target_text,
+    feasibility: row.feasibility_payload,
+    progress: row.progress_payload,
+    progressEvidenceRefs: row.progress_evidence_refs.filter(
+      (ref): ref is { type: string; id: string } => 'id' in ref
+    ),
+    helpHistoryRefs: row.help_history_refs.filter(
+      (ref): ref is { type: string; id: string } => 'id' in ref
+    ),
+    sourceRefs: row.source_refs,
+    createdAt: new Date(row.created_at).toISOString(),
+  };
+}
+
+function familyNodeReachable(
+  row: SceneNodeStateRow,
+  selectedTargets: ReadonlySet<string>
+): boolean {
+  const manifest = digitalUseNodeManifest.find((entry) => entry.nodeCode === row.node_code);
+  if (!manifest) return false;
+  if (manifest.stream !== 'FAMILY_ALLIANCE') {
+    return row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS';
+  }
+  const target = familyAllianceTargetIdentity(manifest);
+  if (target !== null && !selectedTargets.has(target.targetCode)) return false;
+  if (row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS') return true;
+  if (row.status !== 'COMPLETED') return false;
+  return (
+    row.node_code === 'A3000' ||
+    manifest.entryMode.includes('USER_INITIATED') ||
+    manifest.entryMode.includes('SCHEDULED') ||
+    manifest.helpOrReentryRefs.length > 0
+  );
+}
+
 export function buildSceneEnvelope(input: {
   caseRow: SceneCaseRow;
   nodes: SceneNodeStateRow[];
   artifacts: SceneArtifactRow[];
+  targets?: DigitalUseTargetItemRow[];
 }): DigitalUseSceneResponseType {
+  const targets = input.targets ?? [];
   const projected = input.nodes.map(nodeDto);
-  const active = projected.filter((node) =>
-    node.status === 'AVAILABLE' || node.status === 'IN_PROGRESS'
+  const selectedTargets = new Set(
+    targets.filter((target) => target.selected).map((target) => target.target_code)
   );
-  if (active.length > 1) throw sceneError('INTERNAL_ERROR', 'Multiple active Scene nodes');
+  const reachableRows = input.nodes.filter((row) =>
+    familyNodeReachable(row, selectedTargets)
+  );
+  const reachableCodes = new Set(reachableRows.map((row) => row.node_code));
+  const active = projected.filter(
+    (node) =>
+      (node.status === 'AVAILABLE' || node.status === 'IN_PROGRESS') &&
+      reachableCodes.has(node.nodeCode)
+  );
+  // Backward-compatible representative only. activeNodes/reachableNodes are
+  // authoritative for Slice 13 parallel Scene projection.
   const currentNode = active[0] ?? projected.at(-1) ?? null;
   const latestReason = currentNode?.branchReasonCodes.at(-1) ?? null;
   const a2010 = input.artifacts
     .filter((artifact) => artifact.artifact_type === 'SOLUTION_SUMMARY')
     .sort((a, b) => b.revision - a.revision)[0];
+  const a3000 = input.nodes.find((node) => node.node_code === 'A3000');
+  const targetSelectionRevision = coherentCurrentSelectionRevision(targets);
 
   return {
     caseId: input.caseRow.id,
@@ -174,20 +235,42 @@ export function buildSceneEnvelope(input: {
     sceneCode: DIGITAL_USE_SCENE_CODE,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     currentNode,
+    activeNodes: active,
+    reachableNodes: reachableRows.map((row) => {
+      const manifest = resolveDigitalUseRuntimeNode(row.node_code);
+      return {
+        nodeCode: row.node_code,
+        sourceNodeCode: row.source_node_code,
+        entryModes: [...manifest.entryMode],
+        reasonCode:
+          row.status === 'COMPLETED'
+            ? 'MANIFEST_REENTRY_AVAILABLE'
+            : row.branch_reason_codes.at(-1) ?? 'SCENE_NODE_AVAILABLE',
+      };
+    }),
     nodes: projected,
     artifacts: input.artifacts.map(artifactDto),
+    targetSelectionRevision,
+    targets: targets.map(targetDto),
     routeReasonCode: latestReason,
-    downstream: a2010
-      ? {
-          routeIntent: 'A3000',
-          available: false,
-          reasonCode: 'DOWNSTREAM_RUNTIME_UNAVAILABLE',
-        }
-      : {
-          routeIntent: null,
-          available: true,
-          reasonCode: null,
-        },
+    downstream:
+      a3000 !== undefined
+        ? {
+            routeIntent: 'A4001',
+            available: false,
+            reasonCode: 'DOWNSTREAM_RUNTIME_UNAVAILABLE',
+          }
+        : a2010
+          ? {
+              routeIntent: 'A3000',
+              available: false,
+              reasonCode: 'ENTRY_GATES_REVALIDATION_REQUIRED',
+            }
+          : {
+              routeIntent: null,
+              available: true,
+              reasonCode: null,
+            },
   };
 }
 
@@ -197,11 +280,12 @@ export async function currentSceneEnvelope(
 ): Promise<DigitalUseSceneResponseType> {
   const caseRow = await getCaseById(tx, caseId);
   if (!caseRow) throw sceneError('CASE_NOT_FOUND', 'Case not found');
-  const [nodes, artifacts] = await Promise.all([
+  const [nodes, artifacts, targets] = await Promise.all([
     listSceneNodeStates(tx, caseId),
     listSceneArtifacts(tx, caseId),
+    listCurrentDigitalUseTargetItems(tx, caseId),
   ]);
-  return buildSceneEnvelope({ caseRow, nodes, artifacts });
+  return buildSceneEnvelope({ caseRow, nodes, artifacts, targets });
 }
 
 async function ensureA1001(
@@ -253,8 +337,17 @@ function stableInitialSceneEnvelope(
     sceneCode: DIGITAL_USE_SCENE_CODE,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     currentNode: projected,
+    activeNodes: [projected],
+    reachableNodes: [{
+      nodeCode: projected.nodeCode,
+      sourceNodeCode: projected.sourceNodeCode,
+      entryModes: [...resolveDigitalUseRuntimeNode(projected.nodeCode).entryMode],
+      reasonCode: 'LEGAL_DIGITAL_USE_SCENE_ENTRY',
+    }],
     nodes: [projected],
     artifacts: [],
+    targetSelectionRevision: 0,
+    targets: [],
     routeReasonCode: null,
     downstream: { routeIntent: null, available: true, reasonCode: null },
   };
@@ -471,26 +564,24 @@ export async function getDigitalUseNode(
       if (stored.scene_package_version !== DIGITAL_USE_PACKAGE_VERSION) {
         throw sceneError('STALE_SCENE_PACKAGE');
       }
-      const artifacts = await listSceneArtifacts(tx, input.caseId);
+      const envelope = await currentSceneEnvelope(tx, input.caseId);
       return {
         caseId: caseRow.id,
         caseVersion: caseRow.version,
         sceneCode: DIGITAL_USE_SCENE_CODE,
         scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
         node: nodeDto(stored),
-        artifacts: artifacts
-          .filter((artifact) => artifact.source_node_code === stored.node_code)
-          .map(artifactDto),
+        activeNodes: envelope.activeNodes,
+        reachableNodes: envelope.reachableNodes,
+        artifacts: envelope.artifacts.filter(
+          (artifact) => artifact.sourceNodeCode === stored.node_code
+        ),
+        targetSelectionRevision: envelope.targetSelectionRevision,
+        targets: envelope.targets,
         routeReasonCode: stored.branch_reason_codes.at(-1) ?? null,
-        downstream:
-          stored.node_code === 'A2010'
-            ? {
-                routeIntent: 'A3000',
-                available: false,
-                reasonCode: 'DOWNSTREAM_RUNTIME_UNAVAILABLE',
-              }
-            : { routeIntent: null, available: true, reasonCode: null },
+        downstream: envelope.downstream,
       };
     }
   );
 }
+

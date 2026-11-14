@@ -51,6 +51,7 @@ import {
   shouldPrepareProblemFormulationHandoff,
 } from './digital-use-node-semantics.js';
 import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
+import { executeFamilyAllianceNodeInTransaction } from './digital-use-family-alliance.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -464,6 +465,9 @@ export async function completeDigitalUseNodeResponse(
         nodeCode: node.nodeCode,
         expectedCaseVersion: input.expectedCaseVersion,
         expectedNodeRevision: input.expectedNodeRevision,
+        expectedScenePackageVersion: input.expectedScenePackageVersion ?? null,
+        expectedSelectionRevision: input.expectedSelectionRevision ?? null,
+        expectedTargetRevision: input.expectedTargetRevision ?? null,
         response: input.response,
       });
 
@@ -478,6 +482,13 @@ export async function completeDigitalUseNodeResponse(
           requestHash,
         },
         async () => {
+          if (node.stream === 'FAMILY_ALLIANCE') {
+            return {
+              status: 200,
+              body: await executeFamilyAllianceNodeInTransaction(tx, input, node),
+            };
+          }
+
           const handoffCandidate = await shouldPrepareProblemFormulationHandoff({
             tx,
             actor: input.actor,
