@@ -247,7 +247,7 @@ describe('REM2-006 — Gate 2 production invitation concurrency barrier', () => 
       try {
         await mutator.query(
           `UPDATE case_participants
-              SET state='EXPIRED', expired_at=now(), updated_at=now()
+              SET state='DECLINED', declined_at=now(), updated_at=now()
             WHERE id=$1`,
           [c.participationId]
         );
