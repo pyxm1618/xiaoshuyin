@@ -307,6 +307,19 @@ async function applyTargetFamily(
   if (identity.role === 'FEASIBILITY') {
     const parsed = FamilyAllianceFeasibilityResponse.safeParse(context.response);
     if (!parsed.success) familyError('SCENE_RESPONSE_INVALID');
+
+    // Frozen Evidence boundary: need/motivation/ability/resistance ratings are
+    // user-provided substantive statements. Evidence owns that source truth;
+    // the target item below is the bounded structured Scene projection.
+    const feasibilityEvidenceRef = await recordFamilyStatement(
+      context,
+      `${context.node.nodeCode}.feasibility`,
+      {
+        targetCode: identity.targetCode,
+        feasibility: parsed.data.feasibility,
+      }
+    );
+
     const targetRow = await reviseDigitalUseTargetItem(context.tx, {
       ...common,
       patch: {
@@ -317,12 +330,15 @@ async function applyTargetFamily(
             }
           : {}),
         feasibilityPayload: parsed.data.feasibility,
-        sourceRefs: context.currentInputRefs,
+        sourceRefs: [...context.currentInputRefs, feasibilityEvidenceRef],
       },
     });
     return {
       inputRefs: context.currentInputRefs,
-      outputRefs: [{ type: 'TARGET_ITEM', id: targetRow.id }],
+      outputRefs: [
+        feasibilityEvidenceRef,
+        { type: 'TARGET_ITEM', id: targetRow.id },
+      ],
       conditions: {},
       targetRow,
     };

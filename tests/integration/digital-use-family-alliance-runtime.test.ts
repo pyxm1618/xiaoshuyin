@@ -326,6 +326,9 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       target = body.targets.find((item: any) => item.targetCode === family.code);
       expect(target.feasibility).not.toHaveProperty('score');
       expect(target.feasibility).not.toHaveProperty('cutoff');
+      expect(target.sourceRefs).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'ASSERTION' })])
+      );
 
       const progressResponse = await respond(
         f,
