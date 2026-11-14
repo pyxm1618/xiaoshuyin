@@ -182,7 +182,7 @@ describe('Slice 15 A5001 typed contract and negative space', () => {
     expect(IDEMPOTENCY_COMMAND_TYPES).not.toContain('DIGITAL_USE_A5001_REVIEW');
   });
 
-  it('contains no A5002 business dependency, generic Review API, scheduler, AI authority or migration', () => {
+  it('contains no blocked-stream dependency, generic Review API, scheduler or AI authority', () => {
     const root = process.cwd();
     const service = readFileSync(
       join(root, 'apps/server/api/src/services/digital-use-family-alliance-review.ts'),

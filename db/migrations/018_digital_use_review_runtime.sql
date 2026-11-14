@@ -1,9 +1,9 @@
 -- Slice 15 / A5001 only.
--- Extend the authoritative Slice 12 Scene Artifact vocabulary without creating
--- a second Review owner/table and without pre-admitting Slice 14/A5002 truth.
+-- Extend the authoritative Scene Artifact vocabulary without creating
+-- a second Review owner/table.
 --
--- Migration number 017 is owned by the parallel Slice 14 branch. 018 is used
--- here deliberately so later main convergence orders Slice 14 before Slice 15.
+-- Migration slot 017 is reserved by a parallel upstream branch. 018 avoids
+-- that collision while preserving the then-current authoritative constraints.
 BEGIN;
 
 DO $$
