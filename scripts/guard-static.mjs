@@ -848,6 +848,18 @@ function checkPgvectorReadinessScope(relPath, content, report) {
     }
   }
 
+  const adapter =
+    /(?:^|\\/)(?:embedding|reranker)[-_]?adapter\\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath) ||
+    /\\b(?:EmbeddingAdapter|RerankerAdapter)\\b/.test(content);
+  if (adapter) {
+    report(
+      'R12-pgvector-scope',
+      relPath,
+      1,
+      'Slice 19 forbids embedding/reranker adapter implementation'
+    );
+  }
+
   const rrf = /\bRRF\b|reciprocal\s+rank\s+fusion/i.exec(content);
   if (rrf) {
     report(
@@ -1057,6 +1069,12 @@ if (process.argv.includes('--self-test')) {
       name: 'Slice 19 sparsevec retrieval',
       path: 'packages/domain/src/evil-pgvector.ts',
       content: "const sql = 'embedding sparsevec(1000)';",
+      rule: 'R12-pgvector-scope',
+    },
+    {
+      name: 'Slice 19 embedding adapter',
+      path: 'packages/domain/src/embedding-adapter.ts',
+      content: 'export class EmbeddingAdapter {}',
       rule: 'R12-pgvector-scope',
     },
     {
