@@ -45,6 +45,7 @@ const NEW_MIGRATIONS = [
 const POST_CONSENT_APPROVED_MIGRATIONS = [
   '015_digital_use_assessment_runtime.sql',
   '016_digital_use_family_alliance_runtime.sql',
+  '018_digital_use_review_runtime.sql',
 ] as const;
 
 function urlForDatabase(baseUrl: string, database: string): string {
