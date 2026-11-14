@@ -15,6 +15,7 @@ export type StoredSceneRef =
   | StoredEvidenceRef
   | { type: 'CONSENT'; id: string }
   | { type: 'SCENE_ARTIFACT'; id: string }
+  | { type: 'TARGET_ITEM'; id: string }
   | { type: 'RECORD_MARKER'; markerCode: 'A200401'; evidenceRefs: StoredEvidenceRef[] };
 
 export interface SceneNodeStateRow {
@@ -38,9 +39,9 @@ export interface SceneArtifactRow {
   family_id: string;
   case_id: string;
   scene_package_version: string;
-  artifact_type: 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY';
+  artifact_type: 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY' | 'FAMILY_ALLIANCE_SELF_ASSESSMENT';
   schema_version: string;
-  source_node_code: '01000' | 'A2007' | 'A2010';
+  source_node_code: '01000' | 'A2007' | 'A2010' | 'A3000';
   data: Record<string, unknown>;
   owner_person_id: string;
   visibility: 'FAMILY_AUTHORIZED';
@@ -300,6 +301,49 @@ export async function casCompleteSceneNodeState(
   return rows[0] ?? null;
 }
 
+/**
+ * Slice 13 narrow re-entry CAS. Re-entry is caller-authorized by current
+ * Manifest/gates; this primitive owns no reachability rule and never rewinds.
+ */
+export async function casRecompleteSceneNodeState(
+  tx: Tx,
+  input: {
+    caseId: string;
+    nodeCode: string;
+    scenePackageVersion: string;
+    expectedRevision: number;
+    branchReasonCodes: readonly string[];
+    inputRefs: readonly StoredSceneRef[];
+    outputRefs: readonly StoredSceneRef[];
+  }
+): Promise<SceneNodeStateRow | null> {
+  const { rows } = await tx.query<SceneNodeStateRow>(
+    `UPDATE scene_node_states
+        SET status = 'COMPLETED',
+            branch_reason_codes = $5,
+            input_refs = $6::jsonb,
+            output_refs = $7::jsonb,
+            completed_at = now(),
+            revision = revision + 1
+      WHERE case_id = $1
+        AND node_code = $2
+        AND scene_package_version = $3
+        AND revision = $4
+        AND status = 'COMPLETED'
+      RETURNING ${NODE_COLUMNS}`,
+    [
+      input.caseId,
+      input.nodeCode,
+      input.scenePackageVersion,
+      input.expectedRevision,
+      [...input.branchReasonCodes],
+      JSON.stringify(input.inputRefs),
+      JSON.stringify(input.outputRefs),
+    ]
+  );
+  return rows[0] ?? null;
+}
+
 export async function listSceneArtifacts(
   tx: Tx,
   caseId: string
@@ -391,6 +435,7 @@ async function resolveOneRef(
       : ref.type === 'ASSERTION' ? 'assertions'
       : ref.type === 'OBSERVATION' ? 'observations'
       : ref.type === 'CONSENT' ? 'consent_records'
+      : ref.type === 'TARGET_ITEM' ? 'digital_use_target_items'
       : 'scene_artifacts';
 
   const { rows } = await tx.query<{ ok: boolean }>(
@@ -468,9 +513,18 @@ export async function insertDigitalUseNodeCompletedAudit(
     scenePackageVersion: string;
     nodeCode: string;
     nodeRevision: number;
+    priorNodeRevision?: number;
     routeReasonCode: string | null;
     nextNodeCode: string | null;
     terminalCode: string | null;
+    sourceNodeCode?: string;
+    entryMode?: string;
+    targetCode?: string;
+    selectionRevision?: number;
+    targetRevision?: number;
+    inputRefs?: readonly StoredSceneRef[];
+    outputRefs?: readonly StoredSceneRef[];
+    idempotencyOutcome?: 'EXECUTED';
   }
 ): Promise<void> {
   await tx.query(
@@ -485,9 +539,22 @@ export async function insertDigitalUseNodeCompletedAudit(
         scenePackageVersion: input.scenePackageVersion,
         nodeCode: input.nodeCode,
         nodeRevision: input.nodeRevision,
+        ...(input.priorNodeRevision === undefined
+          ? {}
+          : { priorNodeRevision: input.priorNodeRevision }),
         routeReasonCode: input.routeReasonCode,
         nextNodeCode: input.nextNodeCode,
         terminalCode: input.terminalCode,
+        ...(input.sourceNodeCode === undefined ? {} : { sourceNodeCode: input.sourceNodeCode }),
+        ...(input.entryMode === undefined ? {} : { entryMode: input.entryMode }),
+        ...(input.targetCode === undefined ? {} : { targetCode: input.targetCode }),
+        ...(input.selectionRevision === undefined ? {} : { selectionRevision: input.selectionRevision }),
+        ...(input.targetRevision === undefined ? {} : { targetRevision: input.targetRevision }),
+        ...(input.inputRefs === undefined ? {} : { inputRefs: input.inputRefs }),
+        ...(input.outputRefs === undefined ? {} : { outputRefs: input.outputRefs }),
+        ...(input.idempotencyOutcome === undefined
+          ? {}
+          : { idempotencyOutcome: input.idempotencyOutcome }),
       }),
     ]
   );
