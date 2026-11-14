@@ -876,20 +876,57 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
   }
 
   it('AS-44/45 fault injection rolls Evidence/artifact/state/audit/idempotency back atomically', async () => {
-    for (const stage of ['artifact', 'idempotency'] as const) {
+    for (const stage of [
+      'artifact',
+      'state',
+      'event',
+      'audit',
+      'idempotency',
+    ] as const) {
       const { f, scene } = await prepareA5001(`fault-${stage}`);
       const key = `a5001-fault-${stage}-${crypto.randomUUID()}`;
       const before = await a5001Counts(f);
-      const predicate =
+
+      const fault =
         stage === 'artifact'
-          ? `NEW.case_id = '${f.caseId}'::uuid
-             AND NEW.artifact_type = 'DIGITAL_USE_A5001_EFFECT_EVALUATION'`
-          : `NEW.actor_account_id = '${f.manager.accountId}'::uuid
-             AND NEW.command_type = 'DIGITAL_USE_NODE_RESPONSE'`;
+          ? {
+              table: 'scene_artifacts',
+              operation: 'INSERT' as const,
+              predicate: `NEW.case_id = '${f.caseId}'::uuid
+                AND NEW.artifact_type = 'DIGITAL_USE_A5001_EFFECT_EVALUATION'`,
+            }
+          : stage === 'state'
+            ? {
+                table: 'scene_node_states',
+                operation: 'UPDATE' as const,
+                predicate: `NEW.case_id = '${f.caseId}'::uuid
+                  AND NEW.node_code = 'A5001'`,
+              }
+            : stage === 'event'
+              ? {
+                  table: 'case_events',
+                  operation: 'INSERT' as const,
+                  predicate: `NEW.case_id = '${f.caseId}'::uuid
+                    AND NEW.event_type = 'CASE_DIGITAL_USE_NODE_COMPLETED'`,
+                }
+              : stage === 'audit'
+                ? {
+                    table: 'business_audit_events',
+                    operation: 'INSERT' as const,
+                    predicate: `NEW.family_id = '${f.familyId}'::uuid
+                      AND NEW.resource_id = '${f.caseId}'::uuid
+                      AND NEW.event_type = 'DIGITAL_USE_NODE_COMPLETED'`,
+                  }
+                : {
+                    table: 'idempotency_keys',
+                    operation: 'INSERT' as const,
+                    predicate: `NEW.actor_account_id = '${f.manager.accountId}'::uuid
+                      AND NEW.command_type = 'DIGITAL_USE_NODE_RESPONSE'`,
+                  };
       const drop = await installFaultTrigger(
-        stage === 'artifact' ? 'scene_artifacts' : 'idempotency_keys',
-        'INSERT',
-        predicate,
+        fault.table,
+        fault.operation,
+        fault.predicate,
         `${stage}_${f.caseId.replaceAll('-', '_')}`
       );
       try {

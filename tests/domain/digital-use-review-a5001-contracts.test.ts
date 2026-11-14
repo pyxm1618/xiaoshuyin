@@ -45,6 +45,18 @@ function validPayload() {
   };
 }
 
+function syntheticScheduledTriggerFixture() {
+  const node = resolveDigitalUseRuntimeNode('A5001');
+  if (!node.entryMode.includes('SCHEDULED')) {
+    throw new Error('A5001 manifest lost SCHEDULED eligibility');
+  }
+  return {
+    testOnly: true as const,
+    nodeCode: 'A5001' as const,
+    entryMode: 'SCHEDULED' as const,
+  };
+}
+
 describe('Slice 15 A5001 typed contract and negative space', () => {
   it('preserves the exact A5001 identity, dimensions and explicit unknown states', () => {
     const parsed = A5001FamilyAllianceReviewResponse.parse(validPayload());
@@ -130,6 +142,14 @@ describe('Slice 15 A5001 typed contract and negative space', () => {
         CompleteDigitalUseNodeRequest.safeParse({ ...base, ...extra }).success
       ).toBe(false);
     }
+  });
+
+  it('keeps SCHEDULED as test-only future eligibility, not production trigger truth', () => {
+    expect(syntheticScheduledTriggerFixture()).toEqual({
+      testOnly: true,
+      nodeCode: 'A5001',
+      entryMode: 'SCHEDULED',
+    });
   });
 
   it('uses the sole manifest/routing owner and exact REVIEW_COMPLETE semantics', () => {
