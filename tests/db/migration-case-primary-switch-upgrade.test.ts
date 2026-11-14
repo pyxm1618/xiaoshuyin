@@ -298,6 +298,44 @@ const SLICE12_NEW_OBJECTS = [
   'trigger:scene_artifacts_insert_guard',
 ].sort();
 
+/** Exact Slice 13 target persistence constraints created by migration 016. */
+const SLICE13_NEW_CONSTRAINTS = [
+  'digital_use_target_items_pkey',
+  'digital_use_target_items_id_not_null',
+  'digital_use_target_items_family_id_not_null',
+  'digital_use_target_items_case_id_not_null',
+  'digital_use_target_items_scene_package_version_not_null',
+  'digital_use_target_items_target_code_not_null',
+  'digital_use_target_items_selection_revision_not_null',
+  'digital_use_target_items_revision_not_null',
+  'digital_use_target_items_selected_not_null',
+  'digital_use_target_items_progress_evidence_refs_not_null',
+  'digital_use_target_items_help_history_refs_not_null',
+  'digital_use_target_items_source_refs_not_null',
+  'digital_use_target_items_created_by_person_id_not_null',
+  'digital_use_target_items_created_at_not_null',
+  'digital_use_target_items_case_family_fk',
+  'digital_use_target_items_creator_family_fk',
+  'digital_use_target_items_id_scope_key',
+  'digital_use_target_items_supersedes_scope_fk',
+  'digital_use_target_items_revision_key',
+  'digital_use_target_items_revision_check',
+  'digital_use_target_items_selection_revision_check',
+  'digital_use_target_items_package_check',
+  'digital_use_target_items_target_code_check',
+  'digital_use_target_items_target_text_check',
+  'digital_use_target_items_payload_shape_check',
+  'digital_use_target_items_supersession_shape_check',
+].sort();
+
+const SLICE13_NEW_OBJECTS = [
+  'table:digital_use_target_items',
+  'policy:digital_use_target_items_family_scope',
+  'trigger:digital_use_target_items_insert_guard',
+  'trigger:digital_use_target_items_update_guard',
+].sort();
+
+
 /** Constraints whose definitions 007 is authorized to rewrite. */
 const SLICE7_CONSTRAINT_CHANGES = [
   'case_events_event_type_check',
@@ -475,7 +513,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 9 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 10 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -571,6 +609,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE10_NEW_CONSTRAINTS,
         ...CONSENT_OWNER_NEW_CONSTRAINTS,
         ...SLICE12_NEW_CONSTRAINTS,
+        ...SLICE13_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -603,6 +642,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       'table:risk_events',
       ...CONSENT_OWNER_NEW_OBJECTS,
       ...SLICE12_NEW_OBJECTS,
+      ...SLICE13_NEW_OBJECTS,
     ].sort());
 
     // Column-level UPDATE grant, never table-level.
@@ -630,7 +670,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 16 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 17 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -652,6 +692,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '013_consent_01004_supplemental_assessment.sql',
       '014_consent_01004_cross_purpose_supersede_guard.sql',
       '015_digital_use_assessment_runtime.sql',
+      '016_digital_use_family_alliance_runtime.sql',
     ]);
   }, 180_000);
 });
