@@ -92,12 +92,11 @@ function rethrowFamilyBusinessError(error: unknown): never {
 
 async function evaluateFamilyAllianceCompliance(
   tx: pg.PoolClient,
-  actorPersonId: string,
-  feature: ReturnType<typeof createServerFeatureDescriptor> = FAMILY_ALLIANCE_FEATURE
+  actorPersonId: string
 ): Promise<{ policyId: string | null; policyVersion: number | null }> {
   const db = drizzle(tx);
   const result = await evaluateComplianceAtTransactionTime(db, tx, {
-    descriptor: feature,
+    descriptor: FAMILY_ALLIANCE_FEATURE,
     personId: actorPersonId,
     supportedObligations: SUPPORTED_FAMILY_ALLIANCE_OBLIGATIONS,
   });
@@ -147,15 +146,14 @@ async function assertFamilyAllianceConsentOwnerGate(
 export async function pinAndAssertFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
-  actorPersonId: string,
-  feature: ReturnType<typeof createServerFeatureDescriptor> = FAMILY_ALLIANCE_FEATURE
+  actorPersonId: string
 ): Promise<{ policyId: string | null; policyVersion: number | null }> {
   // Consent remains an independent owner: validate the authoritative guardian
   // purpose/version/revocation gate before evaluating feature policy.
   await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
   // Exact same advisory key as Slice 10 publisher/overlap guard.
-  await lockComplianceFeatureEvaluationBasis(tx, feature);
-  const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId, feature);
+  await lockComplianceFeatureEvaluationBasis(tx, FAMILY_ALLIANCE_FEATURE);
+  const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
   return compliance;
 }
@@ -163,13 +161,12 @@ export async function pinAndAssertFamilyAllianceGates(
 export async function revalidateFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
-  actorPersonId: string,
-  feature: ReturnType<typeof createServerFeatureDescriptor> = FAMILY_ALLIANCE_FEATURE
+  actorPersonId: string
 ): Promise<void> {
   // Profile/policy locks are still held. Revalidate Consent independently,
   // then Compliance, immediately before idempotency success/commit.
   await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
-  await evaluateFamilyAllianceCompliance(tx, actorPersonId, feature);
+  await evaluateFamilyAllianceCompliance(tx, actorPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
 }
 
