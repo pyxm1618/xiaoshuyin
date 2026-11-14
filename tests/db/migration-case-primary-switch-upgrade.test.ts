@@ -733,9 +733,6 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
           ...SLICE7_CONSTRAINT_CHANGES,
           'business_audit_events_resource_type_check',
           ...CONSENT_OWNER_CHANGED_CONSTRAINTS,
-          'scene_artifacts_type_check',
-          'scene_artifacts_source_node_check',
-          'scene_artifacts_type_source_check',
         ]),
       ].sort()
     );
