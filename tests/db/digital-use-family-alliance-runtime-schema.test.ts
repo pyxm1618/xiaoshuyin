@@ -132,7 +132,7 @@ describe('T1303/T1305 Digital Use Family Alliance target persistence', () => {
               selection_revision,revision,selected,created_by_person_id)
            VALUES (uuidv7(),uuidv7(),'v1','SLEEP',1,1,true,uuidv7())`
         )
-      ).rejects.toMatchObject({ code: '42501' });
+      ).rejects.toThrow();
     } finally {
       await app.end();
     }

@@ -259,7 +259,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(56); // + Slice 8 three + Slice 9 one + Slice 10 two
+    expect(policyRows[0].count).toBe(57); // + Slice 13 target-item family-scope policy
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(

@@ -695,10 +695,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
 
     const make = (text: string) => app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3011/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3011/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-target-race-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-target-race-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -728,11 +728,11 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       n: number;
       texts: string[];
     }>(
-      \`SELECT count(*)::int AS n,
+      `SELECT count(*)::int AS n,
               array_agg(concrete_target_text ORDER BY revision) FILTER
                 (WHERE superseded_at IS NULL) AS texts
          FROM digital_use_target_items
-        WHERE case_id=$1 AND target_code='SLEEP'\`,
+        WHERE case_id=$1 AND target_code='SLEEP'`,
       [f.caseId]
     );
     expect(current.rows[0]!.n).toBe(2);
@@ -746,15 +746,15 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     try {
       await blocker.query('BEGIN');
       await blocker.query(
-        \`UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1\`,
+        `UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1`,
         [f.caseId]
       );
       const request = app.inject({
         method: 'POST',
-        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+        url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
         headers: {
           ...auth(f.manager.token),
-          'idempotency-key': \`fa-safety-race-\${crypto.randomUUID()}\`,
+          'idempotency-key': `fa-safety-race-${crypto.randomUUID()}`,
         },
         payload: {
           expectedCaseVersion: f.caseVersion,
@@ -774,11 +774,11 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     }
 
     const residue = await admin.query<{ evidence: number; artifacts: number }>(
-      \`SELECT
+      `SELECT
         (SELECT count(*)::int FROM assertions
           WHERE case_id=$1 AND content LIKE 'DUFA:v1:%') AS evidence,
         (SELECT count(*)::int FROM scene_artifacts
-          WHERE case_id=$1 AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT') AS artifacts\`,
+          WHERE case_id=$1 AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT') AS artifacts`,
       [f.caseId]
     );
     expect(residue.rows[0]).toEqual({ evidence: 0, artifacts: 0 });
@@ -791,15 +791,15 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     try {
       await blocker.query('BEGIN');
       await blocker.query(
-        \`UPDATE cases SET is_primary=false, version=version+1 WHERE id=$1\`,
+        `UPDATE cases SET is_primary=false, version=version+1 WHERE id=$1`,
         [f.caseId]
       );
       const request = app.inject({
         method: 'POST',
-        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+        url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
         headers: {
           ...auth(f.manager.token),
-          'idempotency-key': \`fa-primary-race-\${crypto.randomUUID()}\`,
+          'idempotency-key': `fa-primary-race-${crypto.randomUUID()}`,
         },
         payload: {
           expectedCaseVersion: f.caseVersion,
@@ -819,8 +819,8 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     }
 
     const residue = await admin.query<{ n: number }>(
-      \`SELECT count(*)::int AS n FROM assertions
-        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'\`,
+      `SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'`,
       [f.caseId]
     );
     expect(residue.rows[0]!.n).toBe(0);
@@ -835,20 +835,20 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     try {
       await publisher.query('BEGIN');
       await publisher.query(
-        \`SELECT app.publish_compliance_feature_policy(
+        `SELECT app.publish_compliance_feature_policy(
            'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','v1',1,2,
            'UNKNOWN','BASELINE','BASELINE','BASELINE','BASELINE',
            NULL,NULL,clock_timestamp() - interval '1 second',
            'migration:slice13-compliance-race'
-         )\`
+         )`
       );
 
       const request = app.inject({
         method: 'POST',
-        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+        url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
         headers: {
           ...auth(f.manager.token),
-          'idempotency-key': \`fa-compliance-race-\${crypto.randomUUID()}\`,
+          'idempotency-key': `fa-compliance-race-${crypto.randomUUID()}`,
         },
         payload: {
           expectedCaseVersion: f.caseVersion,
@@ -865,12 +865,12 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       expect(blocked.json().code).toBe('COMPLIANCE_BLOCKED');
 
       await publisher.query(
-        \`SELECT app.publish_compliance_feature_policy(
+        `SELECT app.publish_compliance_feature_policy(
            'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','v1',2,3,
            'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
            'Slice 13 restored reviewed basis','evidence://slice13/restored',
            clock_timestamp(),'migration:slice13-compliance-restore'
-         )\`
+         )`
       );
     } finally {
       await publisher.query('ROLLBACK').catch(() => undefined);
@@ -878,8 +878,8 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     }
 
     const residue = await admin.query<{ n: number }>(
-      \`SELECT count(*)::int AS n FROM assertions
-        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'\`,
+      `SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'`,
       [f.caseId]
     );
     expect(residue.rows[0]!.n).toBe(0);
@@ -893,32 +893,32 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     deferred = false
   ): Promise<() => Promise<void>> {
     const safe = token.replace(/[^a-zA-Z0-9_]/g, '_');
-    const functionName = \`slice13_fault_fn_\${safe}\`;
-    const triggerName = \`slice13_fault_tr_\${safe}\`;
+    const functionName = `slice13_fault_fn_${safe}`;
+    const triggerName = `slice13_fault_tr_${safe}`;
     await admin.query(
-      \`CREATE FUNCTION \${functionName}() RETURNS trigger
+      `CREATE FUNCTION ${functionName}() RETURNS trigger
          LANGUAGE plpgsql AS $$
        BEGIN
-         RAISE EXCEPTION 'SLICE13_FAULT_\${safe}';
-       END $$\`
+         RAISE EXCEPTION 'SLICE13_FAULT_${safe}';
+       END $$`
     );
     const prefix = deferred
       ? 'CREATE CONSTRAINT TRIGGER'
       : 'CREATE TRIGGER';
     const timing = deferred
-      ? \`AFTER \${operation} ON \${table}
-         DEFERRABLE INITIALLY DEFERRED\`
-      : \`BEFORE \${operation} ON \${table}\`;
+      ? `AFTER ${operation} ON ${table}
+         DEFERRABLE INITIALLY DEFERRED`
+      : `BEFORE ${operation} ON ${table}`;
     await admin.query(
-      \`\${prefix} \${triggerName}
-         \${timing}
+      `${prefix} ${triggerName}
+         ${timing}
          FOR EACH ROW
-         WHEN (\${predicate})
-         EXECUTE FUNCTION \${functionName}()\`
+         WHEN (${predicate})
+         EXECUTE FUNCTION ${functionName}()`
     );
     return async () => {
-      await admin.query(\`DROP TRIGGER IF EXISTS \${triggerName} ON \${table}\`);
-      await admin.query(\`DROP FUNCTION IF EXISTS \${functionName}()\`);
+      await admin.query(`DROP TRIGGER IF EXISTS ${triggerName} ON ${table}`);
+      await admin.query(`DROP FUNCTION IF EXISTS ${functionName}()`);
     };
   }
 
@@ -931,7 +931,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       audits: number;
       idempotency: number;
     }>(
-      \`SELECT
+      `SELECT
         (SELECT count(*)::int FROM assertions
           WHERE case_id=$1 AND content LIKE 'DUFA:v1:%') AS evidence,
         (SELECT count(*)::int FROM scene_artifacts
@@ -946,7 +946,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         (SELECT count(*)::int FROM idempotency_keys
           WHERE actor_account_id=$3
             AND command_type='DIGITAL_USE_NODE_RESPONSE'
-            AND idempotency_key=$4) AS idempotency\`,
+            AND idempotency_key=$4) AS idempotency`,
       [f.caseId, f.familyId, f.manager.accountId, key]
     );
     expect(rows[0]).toEqual({
@@ -965,70 +965,70 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         name: 'after-evidence',
         table: 'scene_artifacts',
         operation: 'INSERT' as const,
-        predicate: \`NEW.artifact_type = 'FAMILY_ALLIANCE_SELF_ASSESSMENT'\`,
+        predicate: `NEW.artifact_type = 'FAMILY_ALLIANCE_SELF_ASSESSMENT'`,
         deferred: false,
       },
       {
         name: 'after-artifact',
         table: 'scene_node_states',
         operation: 'UPDATE' as const,
-        predicate: \`NEW.node_code = 'A3000' AND NEW.status = 'COMPLETED'\`,
+        predicate: `NEW.node_code = 'A3000' AND NEW.status = 'COMPLETED'`,
         deferred: false,
       },
       {
         name: 'after-scene-before-event',
         table: 'case_events',
         operation: 'INSERT' as const,
-        predicate: \`NEW.event_type = 'CASE_DIGITAL_USE_NODE_COMPLETED'\`,
+        predicate: `NEW.event_type = 'CASE_DIGITAL_USE_NODE_COMPLETED'`,
         deferred: false,
       },
       {
         name: 'before-audit',
         table: 'business_audit_events',
         operation: 'INSERT' as const,
-        predicate: \`NEW.event_type = 'DIGITAL_USE_NODE_COMPLETED'\`,
+        predicate: `NEW.event_type = 'DIGITAL_USE_NODE_COMPLETED'`,
         deferred: false,
       },
       {
         name: 'before-idempotency-success',
         table: 'idempotency_keys',
         operation: 'INSERT' as const,
-        predicate: \`NEW.command_type = 'DIGITAL_USE_NODE_RESPONSE'\`,
+        predicate: `NEW.command_type = 'DIGITAL_USE_NODE_RESPONSE'`,
         deferred: false,
       },
       {
         name: 'before-commit-deferred',
         table: 'idempotency_keys',
         operation: 'INSERT' as const,
-        predicate: \`NEW.command_type = 'DIGITAL_USE_NODE_RESPONSE'\`,
+        predicate: `NEW.command_type = 'DIGITAL_USE_NODE_RESPONSE'`,
         deferred: true,
       },
     ];
 
     for (const stage of stages) {
-      const f = await fixture(\`fault-\${stage.name}\`);
-      const key = \`fa-fault-\${stage.name}-\${crypto.randomUUID()}\`;
+      const f = await fixture(`fault-${stage.name}`);
+      const key = `fa-fault-${stage.name}-${crypto.randomUUID()}`;
       const scopePredicate =
         stage.table === 'scene_artifacts' ||
         stage.table === 'scene_node_states' ||
         stage.table === 'case_events'
-          ? \`(\${stage.predicate}) AND NEW.case_id = '\${f.caseId}'::uuid\`
+          ? `(${stage.predicate}) AND NEW.case_id = '${f.caseId}'::uuid`
           : stage.table === 'business_audit_events'
-            ? \`(\${stage.predicate}) AND NEW.family_id = '\${f.familyId}'::uuid
-               AND NEW.resource_id = '\${f.caseId}'::uuid\`
-            : \`(\${stage.predicate}) AND NEW.actor_account_id = '\${f.manager.accountId}'::uuid
-               AND NEW.idempotency_key = '\${key}'\`;
+            ? `(${stage.predicate}) AND NEW.family_id = '${f.familyId}'::uuid
+               AND NEW.resource_id = '${f.caseId}'::uuid`
+            : `(${stage.predicate}) AND NEW.actor_account_id = '${f.manager.accountId}'::uuid
+               AND NEW.idempotency_key = '${key}'`;
       const drop = await installFaultTrigger(
         stage.table,
         stage.operation,
         scopePredicate,
-        \`\${stage.name}_\${f.caseId.replaceAll('-', '_')}\`,
+        `${stage.name}_${f.caseId.replaceAll('-', '_')}`,
         stage.deferred
       );
       try {
         const failed = await app.inject({
           method: 'POST',
-          url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+          url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
           headers: { ...auth(f.manager.token), 'idempotency-key': key },
           payload: {
             expectedCaseVersion: f.caseVersion,
@@ -1051,20 +1051,20 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect((await respond(f, 'A3000', selfAssessment())).statusCode).toBe(200);
     const scene = await getScene(f);
     const a3002 = scene.nodes.find((node: any) => node.nodeCode === 'A3002');
-    const key = \`fa-fault-after-target-\${crypto.randomUUID()}\`;
+    const key = `fa-fault-after-target-${crypto.randomUUID()}`;
     const safeCase = f.caseId.replaceAll('-', '_');
     const drop = await installFaultTrigger(
       'scene_node_states',
       'UPDATE',
-      \`NEW.case_id = '\${f.caseId}'::uuid AND NEW.node_code = 'A3002'
-        AND NEW.status = 'COMPLETED'\`,
-      \`after_target_\${safeCase}\`,
+      `NEW.case_id = '${f.caseId}'::uuid AND NEW.node_code = 'A3002'
+        AND NEW.status = 'COMPLETED'`,
+      `after_target_${safeCase}`,
       false
     );
     try {
       const failed = await app.inject({
         method: 'POST',
-        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3002/responses\`,
+        url: `/api/v1/cases/${f.caseId}/scene/nodes/A3002/responses`,
         headers: { ...auth(f.manager.token), 'idempotency-key': key },
         payload: {
           expectedCaseVersion: f.caseVersion,
@@ -1083,11 +1083,11 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       await drop();
     }
     const targetResidue = await admin.query<{ targets: number; idempotency: number }>(
-      \`SELECT
+      `SELECT
         (SELECT count(*)::int FROM digital_use_target_items WHERE case_id=$1) AS targets,
         (SELECT count(*)::int FROM idempotency_keys
           WHERE actor_account_id=$2 AND command_type='DIGITAL_USE_NODE_RESPONSE'
-            AND idempotency_key=$3) AS idempotency\`,
+            AND idempotency_key=$3) AS idempotency`,
       [f.caseId, f.manager.accountId, key]
     );
     expect(targetResidue.rows[0]).toEqual({ targets: 0, idempotency: 0 });
@@ -1099,8 +1099,8 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
 
     const unauthenticated = await app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
-      headers: { 'idempotency-key': \`fa-unauth-\${crypto.randomUUID()}\` },
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
+      headers: { 'idempotency-key': `fa-unauth-${crypto.randomUUID()}` },
       payload: {
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 0,
@@ -1119,10 +1119,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect(outsiderFamily.statusCode, outsiderFamily.body).toBe(201);
     const crossFamily = await app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
       headers: {
         ...auth(outsider.token),
-        'idempotency-key': \`fa-cross-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-cross-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1141,25 +1141,25 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     );
     expect(participantOwnFamily.statusCode, participantOwnFamily.body).toBe(201);
     await admin.query(
-      \`INSERT INTO family_members (family_id,person_id)
-       VALUES ($1,$2) ON CONFLICT DO NOTHING\`,
+      `INSERT INTO family_members (family_id,person_id)
+       VALUES ($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId, participant.personId]
     );
     const tokenHash =
       crypto.randomUUID().replaceAll('-', '').padEnd(64, '0');
     await admin.query(
-      \`INSERT INTO case_participants
+      `INSERT INTO case_participants
          (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,
           created_by_person_id,accepted_at)
-       VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())\`,
+       VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())`,
       [f.familyId, f.caseId, participant.personId, tokenHash, f.manager.personId]
     );
     const participantAttempt = await app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
       headers: {
         ...auth(participant.token),
-        'idempotency-key': \`fa-participant-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-participant-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1174,10 +1174,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     // not request capabilities at all: the strict node payload rejects them.
     const forgedRefs = await app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-forged-ref-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-forged-ref-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1191,10 +1191,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
 
     const forgedSubject = await app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-forged-subject-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-forged-subject-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1209,8 +1209,8 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect(forgedSubject.statusCode).toBe(422);
 
     const residue = await admin.query<{ n: number }>(
-      \`SELECT count(*)::int AS n FROM assertions
-        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'\`,
+      `SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'`,
       [f.caseId]
     );
     expect(residue.rows[0]!.n).toBe(0);
@@ -1226,10 +1226,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
 
     const communication = app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3001/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3001/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-parallel-a3001-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-parallel-a3001-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1240,10 +1240,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     });
     const selection = app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3002/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3002/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-parallel-a3002-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-parallel-a3002-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1283,10 +1283,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
 
     const reselection = app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3002/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3002/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-reselect-race-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-reselect-race-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1302,10 +1302,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     });
     const progress = app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3012/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3012/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-progress-race-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-progress-race-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1329,12 +1329,12 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       selection_revisions: number;
       selected_sleep: number;
     }>(
-      \`SELECT
+      `SELECT
         count(*)::int AS n,
         count(DISTINCT selection_revision)::int AS selection_revisions,
         count(*) FILTER (WHERE target_code='SLEEP' AND selected)::int AS selected_sleep
        FROM digital_use_target_items
-       WHERE case_id=$1 AND superseded_at IS NULL\`,
+       WHERE case_id=$1 AND superseded_at IS NULL`,
       [f.caseId]
     );
     expect(current.rows[0]).toEqual({
@@ -1344,10 +1344,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     });
     if (progressed.statusCode === 200) {
       const historical = await admin.query<{ n: number }>(
-        \`SELECT count(*)::int AS n
+        `SELECT count(*)::int AS n
            FROM digital_use_target_items
           WHERE case_id=$1 AND target_code='SLEEP'
-            AND progress_payload IS NOT NULL\`,
+            AND progress_payload IS NOT NULL`,
         [f.caseId]
       );
       expect(historical.rows[0]!.n).toBeGreaterThan(0);
@@ -1364,10 +1364,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
 
     const reassess = app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-reassess-race-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-reassess-race-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1378,10 +1378,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     });
     const downstream = app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3001/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3001/responses`,
       headers: {
         ...auth(f.manager.token),
-        'idempotency-key': \`fa-downstream-race-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-downstream-race-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1394,9 +1394,9 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect([left.statusCode, right.statusCode]).toEqual([200, 200]);
 
     const artifacts = await admin.query<{ n: number }>(
-      \`SELECT count(*)::int AS n FROM scene_artifacts
+      `SELECT count(*)::int AS n FROM scene_artifacts
         WHERE case_id=$1
-          AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT'\`,
+          AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT'`,
       [f.caseId]
     );
     expect(artifacts.rows[0]!.n).toBe(2);
@@ -1411,26 +1411,26 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     try {
       await blocker.query('BEGIN');
       await blocker.query(
-        \`DELETE FROM scene_node_states
-          WHERE case_id=$1 AND node_code='A1001'\`,
+        `DELETE FROM scene_node_states
+          WHERE case_id=$1 AND node_code='A1001'`,
         [f.caseId]
       );
       const a1001 = resolveDigitalUseRuntimeNode('A1001');
       await blocker.query(
-        \`INSERT INTO scene_node_states
+        `INSERT INTO scene_node_states
            (family_id,case_id,scene_package_version,node_code,source_node_code,
             status,branch_reason_codes,input_refs,output_refs,revision,completed_at)
          VALUES ($1,$2,'v2',$3,$4,'COMPLETED',ARRAY['PACKAGE_DRIFT_FIXTURE'],
-                 '[]'::jsonb,'[]'::jsonb,1,now())\`,
+                 '[]'::jsonb,'[]'::jsonb,1,now())`,
         [f.familyId, f.caseId, a1001.nodeCode, a1001.sourceNodeCode]
       );
 
       const request = app.inject({
         method: 'POST',
-        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+        url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
         headers: {
           ...auth(f.manager.token),
-          'idempotency-key': \`fa-package-race-\${crypto.randomUUID()}\`,
+          'idempotency-key': `fa-package-race-${crypto.randomUUID()}`,
         },
         payload: {
           expectedCaseVersion: f.caseVersion,
@@ -1451,8 +1451,8 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     }
 
     const residue = await admin.query<{ n: number }>(
-      \`SELECT count(*)::int AS n FROM assertions
-        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'\`,
+      `SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'`,
       [f.caseId]
     );
     expect(residue.rows[0]!.n).toBe(0);
@@ -1463,8 +1463,8 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     const f = await fixture('consent-race');
     const child = await loginWithLabel(app, 'fa-consent-race-child');
     await admin.query(
-      \`INSERT INTO family_members (family_id,person_id)
-       VALUES ($1,$2) ON CONFLICT DO NOTHING\`,
+      `INSERT INTO family_members (family_id,person_id)
+       VALUES ($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId, child.personId]
     );
 
@@ -1488,7 +1488,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       bound_person_id: string | null;
       version: number;
     }>(
-      \`SELECT bound_person_id,version FROM consent_records WHERE id=$1\`,
+      `SELECT bound_person_id,version FROM consent_records WHERE id=$1`,
       [granted.id]
     );
     expect(bound.rows[0]).toMatchObject({
@@ -1497,7 +1497,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     });
 
     await admin.query(
-      \`INSERT INTO person_compliance_profiles
+      `INSERT INTO person_compliance_profiles
          (person_id,age_band,minor_mode,verified_source,guardian_person_id,
           guardian_consent_record_id,guardian_consent_version)
        VALUES ($1,'UNDER_14',true,'GUARDIAN_RELAY',$2,$3,1)
@@ -1509,22 +1509,22 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
          guardian_consent_record_id=EXCLUDED.guardian_consent_record_id,
          guardian_consent_version=1,
          effective_at=now(),
-         updated_at=now()\`,
+         updated_at=now()`,
       [child.personId, f.manager.personId, granted.id]
     );
     // Test-only role transfer makes the consent-bound subject the authorized
     // Family manager so the race reaches Consent/Compliance, not authz denial.
     await admin.query(
-      \`UPDATE families SET created_by_person_id=$2 WHERE id=$1\`,
+      `UPDATE families SET created_by_person_id=$2 WHERE id=$1`,
       [f.familyId, child.personId]
     );
 
     const familyRequest = app.inject({
       method: 'POST',
-      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
       headers: {
         ...auth(child.token),
-        'idempotency-key': \`fa-consent-family-\${crypto.randomUUID()}\`,
+        'idempotency-key': `fa-consent-family-${crypto.randomUUID()}`,
       },
       payload: {
         expectedCaseVersion: f.caseVersion,
@@ -1536,7 +1536,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     const revokeRequest = revokeConsent(
       app,
       f.manager.token,
-      \`fa-consent-race-\${crypto.randomUUID()}\`,
+      `fa-consent-race-${crypto.randomUUID()}`,
       granted.id,
       { reason: 'concurrent family processing test' }
     );
@@ -1554,10 +1554,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       guardian_consent_version: number;
       decision: string;
     }>(
-      \`SELECT p.guardian_consent_version,c.decision
+      `SELECT p.guardian_consent_version,c.decision
          FROM person_compliance_profiles p
          JOIN consent_records c ON c.id=p.guardian_consent_record_id
-        WHERE p.person_id=$1\`,
+        WHERE p.person_id=$1`,
       [child.personId]
     );
     expect(final.rows[0]).toEqual({
@@ -1566,9 +1566,9 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     });
 
     const currentArtifacts = await admin.query<{ n: number }>(
-      \`SELECT count(*)::int AS n FROM scene_artifacts
+      `SELECT count(*)::int AS n FROM scene_artifacts
         WHERE case_id=$1
-          AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT'\`,
+          AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT'`,
       [f.caseId]
     );
     expect(currentArtifacts.rows[0]!.n)
@@ -1579,12 +1579,12 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
   it('HX-11 dependency unavailable is distinct from denial and infrastructure failure', async () => {
     const f = await fixture('dependency-unavailable');
     await admin.query(
-      \`DELETE FROM assertions
+      `DELETE FROM assertions
         WHERE case_id=$1
           AND (
             content LIKE 'DUA:v1:01002.emotion:%'
             OR content LIKE 'DUA:v1:01003.family_relationship:%'
-          )\`,
+          )`,
       [f.caseId]
     );
     const entry = await respond(f, 'A3000', selfAssessment());
