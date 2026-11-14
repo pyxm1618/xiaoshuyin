@@ -1840,10 +1840,10 @@ describe('T1218 Digital Use runtime hardening', () => {
       );
       expect(afterAssertions.rows[0].n).toBe(beforeAssertions.rows[0].n);
       const childTruth = await admin.query(
-        `SELECT
-          (SELECT count(*)::int FROM digital_use_contract_versions WHERE case_id=$1) AS contracts,
-          (SELECT count(*)::int FROM consent_records WHERE subject_person_id=$2) AS consents`,
-        [f.caseId, f.manager.personId]
+        `SELECT count(*)::int AS contracts
+           FROM digital_use_contract_versions
+          WHERE case_id=$1`,
+        [f.caseId]
       );
       expect(childTruth.rows[0].contracts).toBe(0);
     } finally {

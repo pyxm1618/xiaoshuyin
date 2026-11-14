@@ -57,7 +57,9 @@ describe('Slice 14 phone-use Contract professional content boundary', () => {
       'INCENTIVES',
       'BREACH_RESPONSIBILITIES',
     ]);
-    expect(PHONE_USE_CONTRACT_TEMPLATE.sourceText.length).toBeGreaterThan(500);
+    expect(PHONE_USE_CONTRACT_TEMPLATE.sourceText).toContain('手机使用合约');
+    expect(PHONE_USE_CONTRACT_TEMPLATE.sourceText).toContain('使用手机的主要目的');
+    expect(PHONE_USE_CONTRACT_TEMPLATE.sourceText).toContain('违反合约时的责任');
     expect(PHONE_USE_CONTRACT_EXAMPLES).toHaveLength(4);
     expect(PHONE_USE_CONTRACT_EXAMPLES.map((x) => x.id)).toEqual([
       'EXAMPLE_1','EXAMPLE_2','EXAMPLE_3','EXAMPLE_4',
