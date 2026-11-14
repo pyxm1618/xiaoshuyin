@@ -197,6 +197,13 @@ describe('Slice 15 A5001 typed contract and negative space', () => {
     expect(routes).not.toContain('digital-use-reviews.ts');
 
     const migrations = readdirSync(join(root, 'db/migrations'));
-    expect(migrations.some((name) => /015.*review|a5001|review_runtime/i.test(name))).toBe(false);
+    expect(migrations).toContain('018_digital_use_review_runtime.sql');
+    const migration = readFileSync(
+      join(root, 'db/migrations/018_digital_use_review_runtime.sql'),
+      'utf8'
+    );
+    expect(migration).not.toMatch(/CREATE\s+TABLE|CREATE\s+POLICY|PHONE_USE_CONTRACT|A5002/i);
+    expect(migration).toContain('DIGITAL_USE_A5001_EFFECT_EVALUATION');
+    expect(migration).toContain('A5001');
   });
 });

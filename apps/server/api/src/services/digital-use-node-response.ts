@@ -465,6 +465,13 @@ export async function completeDigitalUseNodeResponse(
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
+      if (node.stream === 'FAMILY_ALLIANCE_REVIEW') {
+        // Subject resolution must never run before the Case has been proven
+        // visible inside the actor's RLS family context. Otherwise a foreign
+        // Case could surface a semantic 409 instead of anti-enumeration 404.
+        const visibleCase = await lockSceneCase(tx, input.caseId);
+        if (visibleCase === null) throw nodeError('CASE_NOT_FOUND', 'Case not found');
+      }
       const resolvedA5001Subject =
         node.stream === 'FAMILY_ALLIANCE_REVIEW'
           ? await resolveA5001SubjectSnapshot(tx, input.caseId)

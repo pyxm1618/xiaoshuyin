@@ -554,7 +554,8 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
       {},
       outsider.token
     );
-    expect([403, 404]).toContain(outsiderAttempt.statusCode);
+    expect(outsiderAttempt.statusCode).toBe(404);
+    expect(outsiderAttempt.json().code).toBe('CASE_NOT_FOUND');
 
     const participant = await loginWithLabel(app, 'a5001-participant');
     const participantOwnFamily = await createFamily(
