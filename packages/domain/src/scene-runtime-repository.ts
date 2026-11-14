@@ -475,6 +475,7 @@ export async function insertDigitalUseNodeCompletedEvent(
     scenePackageVersion: string;
     nodeCode: string;
     nodeRevision: number;
+    priorNodeRevision?: number;
     routeReasonCode: string | null;
     inputRefs: readonly StoredSceneRef[];
     outputRefs: readonly StoredSceneRef[];
@@ -494,6 +495,9 @@ export async function insertDigitalUseNodeCompletedEvent(
         scenePackageVersion: input.scenePackageVersion,
         nodeCode: input.nodeCode,
         nodeRevision: input.nodeRevision,
+        ...(input.priorNodeRevision === undefined
+          ? {}
+          : { priorNodeRevision: input.priorNodeRevision }),
         routeReasonCode: input.routeReasonCode,
         inputRefs: input.inputRefs,
         outputRefs: input.outputRefs,
@@ -521,6 +525,9 @@ export async function insertDigitalUseNodeCompletedAudit(
     targetCode?: string;
     selectionRevision?: number;
     targetRevision?: number;
+    inputRefs?: readonly StoredSceneRef[];
+    outputRefs?: readonly StoredSceneRef[];
+    idempotencyOutcome?: 'EXECUTED';
   }
 ): Promise<void> {
   await tx.query(
@@ -543,6 +550,11 @@ export async function insertDigitalUseNodeCompletedAudit(
         ...(input.targetCode === undefined ? {} : { targetCode: input.targetCode }),
         ...(input.selectionRevision === undefined ? {} : { selectionRevision: input.selectionRevision }),
         ...(input.targetRevision === undefined ? {} : { targetRevision: input.targetRevision }),
+        ...(input.inputRefs === undefined ? {} : { inputRefs: input.inputRefs }),
+        ...(input.outputRefs === undefined ? {} : { outputRefs: input.outputRefs }),
+        ...(input.idempotencyOutcome === undefined
+          ? {}
+          : { idempotencyOutcome: input.idempotencyOutcome }),
       }),
     ]
   );

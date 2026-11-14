@@ -543,6 +543,7 @@ export async function executeFamilyAllianceNodeInTransaction(
       scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
       nodeCode: node.nodeCode,
       nodeRevision: completed.revision,
+      priorNodeRevision: current.revision,
       routeReasonCode: reasonCode,
       inputRefs: semantic.inputRefs,
       outputRefs: semantic.outputRefs,
@@ -566,6 +567,9 @@ export async function executeFamilyAllianceNodeInTransaction(
       ...(semantic.targetRow === undefined
         ? {}
         : { targetRevision: semantic.targetRow.revision }),
+      inputRefs: semantic.inputRefs,
+      outputRefs: semantic.outputRefs,
+      idempotencyOutcome: 'EXECUTED',
     });
 
     // Final race gate. Case, formulation, Consent profile and feature policy
