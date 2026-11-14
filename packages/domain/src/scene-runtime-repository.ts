@@ -41,6 +41,7 @@ export interface SceneArtifactRow {
   artifact_type:
     | 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY'
     | 'PHONE_USE_CONTRACT_QUIZ_ATTEMPT'
+    | 'PHONE_USE_ROLEPLAY_SELECTION'
     | 'PHONE_USE_CONTRACT_TOOL_SELECTION'
     | 'PHONE_USE_DURATION_COMPONENT'
     | 'PHONE_USE_SUPERVISION_COMPONENT'
@@ -53,7 +54,7 @@ export interface SceneArtifactRow {
   schema_version: string;
   source_node_code:
     | '01000' | 'A2007' | 'A2010'
-    | 'A4001' | 'A4004' | 'A4005' | 'A4006' | 'A4007' | 'A4008'
+    | 'A4001' | 'A4003' | 'A4004' | 'A4005' | 'A4006' | 'A4007' | 'A4008'
     | 'A4009' | 'A4010' | 'A4011' | 'A4012';
   data: Record<string, unknown>;
   owner_person_id: string;

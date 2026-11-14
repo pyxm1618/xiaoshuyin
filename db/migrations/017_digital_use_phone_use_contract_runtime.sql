@@ -314,7 +314,7 @@ ALTER TABLE scene_artifacts DROP CONSTRAINT scene_artifacts_type_check;
 ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_check CHECK (
   artifact_type IN (
     'SUPPLEMENTAL_ASSESSMENT_BOUNDARY','TIMELINE','SOLUTION_SUMMARY',
-    'PHONE_USE_CONTRACT_QUIZ_ATTEMPT','PHONE_USE_CONTRACT_TOOL_SELECTION',
+    'PHONE_USE_CONTRACT_QUIZ_ATTEMPT','PHONE_USE_ROLEPLAY_SELECTION','PHONE_USE_CONTRACT_TOOL_SELECTION',
     'PHONE_USE_DURATION_COMPONENT','PHONE_USE_SUPERVISION_COMPONENT','PHONE_USE_SUPERVISION_LOG',
     'PHONE_USE_INCENTIVE_COMPONENT','PHONE_USE_BREACH_COMPONENT',
     'PARENT_SELF_REGULATION_CHECKLIST','PHONE_USE_CONTRACT_DOCUMENT','PHONE_USE_CONTRACT_SUPPORT_LOG'
@@ -322,7 +322,7 @@ ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_check CHECK (
 );
 ALTER TABLE scene_artifacts DROP CONSTRAINT scene_artifacts_source_node_check;
 ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_source_node_check CHECK (
-  source_node_code IN ('01000','A2007','A2010','A4001','A4004','A4005','A4006','A4007','A4008','A4009','A4010','A4011','A4012')
+  source_node_code IN ('01000','A2007','A2010','A4001','A4003','A4004','A4005','A4006','A4007','A4008','A4009','A4010','A4011','A4012')
 );
 ALTER TABLE scene_artifacts DROP CONSTRAINT scene_artifacts_type_source_check;
 ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_source_check CHECK (
@@ -330,6 +330,7 @@ ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_source_check CHE
   OR (artifact_type='TIMELINE' AND source_node_code='A2007')
   OR (artifact_type='SOLUTION_SUMMARY' AND source_node_code='A2010')
   OR (artifact_type='PHONE_USE_CONTRACT_QUIZ_ATTEMPT' AND source_node_code='A4001')
+  OR (artifact_type='PHONE_USE_ROLEPLAY_SELECTION' AND source_node_code='A4003')
   OR (artifact_type='PHONE_USE_CONTRACT_TOOL_SELECTION' AND source_node_code='A4004')
   OR (artifact_type='PHONE_USE_DURATION_COMPONENT' AND source_node_code='A4005')
   OR (artifact_type IN ('PHONE_USE_SUPERVISION_COMPONENT','PHONE_USE_SUPERVISION_LOG') AND source_node_code='A4006')
