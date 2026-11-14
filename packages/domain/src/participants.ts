@@ -312,8 +312,7 @@ export async function getLiveParticipationByTokenHash(
      FROM case_participants
      WHERE invite_token_hash=$1
        AND state='PENDING'
-       AND invite_expires_at > now()
-     FOR UPDATE`,
+       AND invite_expires_at > now()`,
     [tokenHash]
   );
   return rows[0] ?? null;
