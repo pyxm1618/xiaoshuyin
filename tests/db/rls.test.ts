@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('25 tables have ENABLE + FORCE RLS, accounts does not', async () => {    const { rows } = await client.query(`
+  it('28 tables have ENABLE + FORCE RLS, accounts does not', async () => {    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -33,7 +33,7 @@ describe('RLS', () => {
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
     // Prior reviewed owners plus Slice 12 scene_node_states + scene_artifacts.
-    expect(rlsTables.length).toBe(25);
+    expect(rlsTables.length).toBe(28);
     expect(noRlsTables.map((r: any) => r.relname)).toContain('accounts');
 
     for (const t of rlsTables) {
@@ -41,11 +41,11 @@ describe('RLS', () => {
     }
   });
 
-  it('56 policies exist after Slice 12 adds two family-scope Scene policies', async () => {
+  it('59 policies exist after Slice 14 adds three bounded runtime policies', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(56);
+    expect(rows.length).toBe(59);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {

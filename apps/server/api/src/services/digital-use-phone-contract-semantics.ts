@@ -101,10 +101,6 @@ async function insertArtifact(
   data: Record<string, unknown>
 ): Promise<StoredSceneRef> {
   const previous=await getLatestSceneArtifact(context.tx,context.caseId,artifactType);
-  const appendOnly =
-    artifactType === 'PHONE_USE_CONTRACT_QUIZ_ATTEMPT'
-    || artifactType === 'PHONE_USE_SUPERVISION_LOG'
-    || artifactType === 'PHONE_USE_CONTRACT_SUPPORT_LOG';
   const artifact=await insertSceneArtifact(context.tx,{
     familyId:context.familyId,
     caseId:context.caseId,
@@ -120,7 +116,7 @@ async function insertArtifact(
     ownerPersonId:context.actor.personId,
     sourceRefs:context.currentInputRefs,
     revision:previous===null?1:previous.revision+1,
-    ...(!appendOnly && previous ? { supersedesId: previous.id } : {}),
+    ...(previous ? { supersedesId: previous.id } : {}),
   });
   return {type:'SCENE_ARTIFACT',id:artifact.id};
 }

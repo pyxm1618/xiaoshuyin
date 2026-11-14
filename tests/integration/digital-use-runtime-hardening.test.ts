@@ -1876,7 +1876,7 @@ describe('T1218 Digital Use runtime hardening', () => {
 
     await forceSceneNode(f, 'A4004');
     await admin.query(
-      `UPDATE scene_node_states SET status='COMPLETED',completed_at=now()
+      `UPDATE scene_node_states SET status='COMPLETED',completed_at=now(),revision=revision+1
         WHERE case_id=$1 AND node_code='A4004'`,
       [f.caseId]
     );
@@ -1997,7 +1997,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
     );
     await forceSceneNode(f,'A4004');
-    await admin.query(`UPDATE scene_node_states SET status='COMPLETED',completed_at=now() WHERE case_id=$1 AND node_code='A4004'`,[f.caseId]);
+    await admin.query(`UPDATE scene_node_states SET status='COMPLETED',completed_at=now(),revision=revision+1 WHERE case_id=$1 AND node_code='A4004'`,[f.caseId]);
     const v=(value:string)=>({state:'VALUE',value});
     const terms={purpose:v('p'),phoneUseRules:v('r'),executionPeriod:v('e'),parentSupportMeasures:v('s'),supervisionMeasures:v('m'),incentives:v('i'),breachResponsibilities:v('b')};
     const draft=await app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,headers:commandHeaders(f.manager.token,'s14-fault-draft'),payload:{expectedCaseVersion:f.caseVersion,adultPartyPersonId:f.manager.personId,childPartyPersonId:child.personId,childParticipationId:p.rows[0]!.id,sourceTemplateVersion:'phone-use-contract-v1',dependencyRefs:[],terms}});
@@ -2052,7 +2052,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
     );
     await forceSceneNode(f,'A4004');
-    await admin.query(`UPDATE scene_node_states SET status='COMPLETED',completed_at=now() WHERE case_id=$1 AND node_code='A4004'`,[f.caseId]);
+    await admin.query(`UPDATE scene_node_states SET status='COMPLETED',completed_at=now(),revision=revision+1 WHERE case_id=$1 AND node_code='A4004'`,[f.caseId]);
     const v=(value:string)=>({state:'VALUE',value});
     const terms={purpose:v('p'),phoneUseRules:v('r'),executionPeriod:v('e'),parentSupportMeasures:v('s'),supervisionMeasures:v('m'),incentives:v('i'),breachResponsibilities:v('b')};
     const draft=await app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,headers:commandHeaders(f.manager.token,'s14-rev-draft'),payload:{expectedCaseVersion:f.caseVersion,adultPartyPersonId:f.manager.personId,childPartyPersonId:child.personId,childParticipationId:p.rows[0]!.id,sourceTemplateVersion:'phone-use-contract-v1',dependencyRefs:[],terms}});
