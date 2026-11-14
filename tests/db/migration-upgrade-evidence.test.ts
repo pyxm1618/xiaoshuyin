@@ -261,7 +261,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(60); // + Slice 13 target-item + Slice 14 three bounded runtime policies
+    expect(policyRows[0].count).toBe(65); // + Foundation accounts least-privilege policies
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
