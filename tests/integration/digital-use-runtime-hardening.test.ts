@@ -28,6 +28,7 @@ interface Fixture {
   caseId: string;
   caseVersion: number;
   nodeRevision: number;
+  messageId: string;
 }
 
 function a1001(impact = false) {
@@ -130,6 +131,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       caseId,
       caseVersion: body.caseVersion,
       nodeRevision: body.currentNode.revision,
+      messageId: message.json().id as string,
     };
   }
 
@@ -1849,6 +1851,167 @@ describe('T1218 Digital Use runtime hardening', () => {
     } finally {
       await roleplayApp.close();
     }
+  });
+
+  it('Slice 14 A4004–A4009 stay independently re-enterable, typed, sourced and correction-safe', async () => {
+    const f = await fixture('s14-tools');
+    await forceSceneNode(f, 'A4004');
+
+    const catalog = await respondSceneNode(
+      f, 'A4004', 1, { tool: 'DURATION' },
+      `s14-tools-catalog-${crypto.randomUUID()}`
+    );
+    expect(catalog.statusCode, catalog.body).toBe(200);
+
+    const duration = await respondSceneNode(
+      f, 'A4005', 1,
+      {
+        duration: { state: 'VALUE', value: 'Weekdays 30 minutes after homework' },
+        sourceRefs: [{ type: 'DIALOGUE_MESSAGE', id: f.messageId }],
+        reportedPerspective: 'PARENT_REPORT_OF_CHILD_VIEW',
+      },
+      `s14-tools-duration-${crypto.randomUUID()}`
+    );
+    expect(duration.statusCode, duration.body).toBe(200);
+
+    const noForcedA4006 = await admin.query(
+      `SELECT count(*)::int AS n FROM scene_node_states
+        WHERE case_id=$1 AND node_code='A4006'`,
+      [f.caseId]
+    );
+    expect(noForcedA4006.rows[0].n).toBe(0);
+
+    const firstDuration = await admin.query(
+      `SELECT id,revision,supersedes_id,source_refs,data
+         FROM scene_artifacts
+        WHERE case_id=$1 AND artifact_type='PHONE_USE_DURATION_COMPONENT'
+        ORDER BY revision`,
+      [f.caseId]
+    );
+    expect(firstDuration.rows).toHaveLength(1);
+    expect(firstDuration.rows[0]).toMatchObject({revision:1,supersedes_id:null});
+    expect(firstDuration.rows[0].source_refs).toEqual(
+      expect.arrayContaining([{ type:'DIALOGUE_MESSAGE', id:f.messageId }])
+    );
+    expect(firstDuration.rows[0].data).toMatchObject({
+      reportedPerspective:'PARENT_REPORT_OF_CHILD_VIEW',
+      sourceAttribution:'AUTHENTICATED_PARENT_ACTOR',
+      actorPersonId:f.manager.personId,
+      provenance:'AUTHENTICATED_ACTOR_INPUT',
+      contentVersion:'phone-use-contract-v1',
+    });
+
+    const durationState = await admin.query(
+      `SELECT revision FROM scene_node_states WHERE case_id=$1 AND node_code='A4005'`,
+      [f.caseId]
+    );
+    const corrected = await respondSceneNode(
+      f, 'A4005', durationState.rows[0].revision,
+      {
+        duration: { state: 'VALUE', value: 'Weekdays 20 minutes after homework' },
+        sourceRefs: [{ type: 'DIALOGUE_MESSAGE', id: f.messageId }],
+        reportedPerspective: 'JOINT_DISCUSSION_REPORTED_BY_PARENT',
+      },
+      `s14-tools-duration-correct-${crypto.randomUUID()}`
+    );
+    expect(corrected.statusCode, corrected.body).toBe(200);
+
+    const durationHistory = await admin.query(
+      `SELECT id,revision,supersedes_id,data
+         FROM scene_artifacts
+        WHERE case_id=$1 AND artifact_type='PHONE_USE_DURATION_COMPONENT'
+        ORDER BY revision`,
+      [f.caseId]
+    );
+    expect(durationHistory.rows).toHaveLength(2);
+    expect(durationHistory.rows[1]).toMatchObject({
+      revision:2,
+      supersedes_id:durationHistory.rows[0].id,
+    });
+    expect(durationHistory.rows[1].data.duration.value)
+      .toBe('Weekdays 20 minutes after homework');
+
+    const stale = await respondSceneNode(
+      f, 'A4005', durationState.rows[0].revision,
+      {
+        duration: { state: 'VALUE', value: 'stale overwrite' },
+        sourceRefs: [{ type: 'DIALOGUE_MESSAGE', id: f.messageId }],
+        reportedPerspective: 'PARENT_INPUT',
+      },
+      `s14-tools-duration-stale-${crypto.randomUUID()}`
+    );
+    expect(stale.statusCode, stale.body).toBe(409);
+    expect(stale.json().code).toBe('STALE_NODE_REVISION');
+
+    const independent = [
+      ['A4006', {
+        action:'CONFIGURE',
+        measures:['Review screen-time together once per evening'],
+        sourceRefs:[{type:'DIALOGUE_MESSAGE',id:f.messageId}],
+      }, 'PHONE_USE_SUPERVISION_COMPONENT'],
+      ['A4007', {
+        incentive:{state:'VALUE',value:'Choose a weekend family activity'},
+        sourceRefs:[{type:'DIALOGUE_MESSAGE',id:f.messageId}],
+      }, 'PHONE_USE_INCENTIVE_COMPONENT'],
+      ['A4008', {
+        responsibility:{state:'VALUE',value:'Discuss the reason and adjust the plan'},
+        sourceRefs:[{type:'DIALOGUE_MESSAGE',id:f.messageId}],
+      }, 'PHONE_USE_BREACH_COMPONENT'],
+      ['A4009', {
+        commitments:['Parent puts own phone away during dinner'],
+        methods:['Use a visible charging place outside the dining area'],
+        sourceRefs:[{type:'DIALOGUE_MESSAGE',id:f.messageId}],
+      }, 'PARENT_SELF_REGULATION_CHECKLIST'],
+    ] as const;
+
+    for (const [nodeCode,response,artifactType] of independent) {
+      const saved = await respondSceneNode(
+        f,nodeCode,1,response as unknown as Record<string,unknown>,
+        `s14-tools-${nodeCode.toLowerCase()}-${crypto.randomUUID()}`
+      );
+      expect(saved.statusCode, `${nodeCode}: ${saved.body}`).toBe(200);
+      const artifact = await admin.query(
+        `SELECT data,source_refs FROM scene_artifacts
+          WHERE case_id=$1 AND artifact_type=$2 ORDER BY revision DESC LIMIT 1`,
+        [f.caseId,artifactType]
+      );
+      expect(artifact.rows).toHaveLength(1);
+      expect(artifact.rows[0].data).toMatchObject({
+        actorPersonId:f.manager.personId,
+        provenance:'AUTHENTICATED_ACTOR_INPUT',
+        contentVersion:'phone-use-contract-v1',
+      });
+      expect(artifact.rows[0].source_refs).toEqual(
+        expect.arrayContaining([{type:'DIALOGUE_MESSAGE',id:f.messageId}])
+      );
+    }
+
+    const supervisionLogState = await admin.query(
+      `SELECT revision FROM scene_node_states WHERE case_id=$1 AND node_code='A4006'`,
+      [f.caseId]
+    );
+    const logged = await respondSceneNode(
+      f,'A4006',supervisionLogState.rows[0].revision,
+      {
+        action:'LOG',
+        note:'Reviewed together; no Common Core Checkin was created.',
+        sourceRefs:[{type:'DIALOGUE_MESSAGE',id:f.messageId}],
+      },
+      `s14-tools-supervision-log-${crypto.randomUUID()}`
+    );
+    expect(logged.statusCode, logged.body).toBe(200);
+    const logArtifact = await admin.query(
+      `SELECT data FROM scene_artifacts
+        WHERE case_id=$1 AND artifact_type='PHONE_USE_SUPERVISION_LOG'`
+      ,[f.caseId]
+    );
+    expect(logArtifact.rows).toHaveLength(1);
+
+    const contractRows = await admin.query(
+      `SELECT count(*)::int AS n FROM digital_use_contract_versions WHERE case_id=$1`,
+      [f.caseId]
+    );
+    expect(contractRows.rows[0].n).toBe(0);
   });
 
   it('Slice 14 formal Contract requires independent party confirmations and activates atomically', async () => {

@@ -242,6 +242,7 @@ export async function selectPhoneUseRoleplay(
          professionalContentVersion:selected.professional_content_version,
        },
        ownerPersonId:input.actor.personId,sourceRefs:scene.input_refs,revision:previous===null?1:previous.revision+1,
+       ...(previous?{supersedesId:previous.id}:{}),
      });
      const outputRefs=[{type:'SCENE_ARTIFACT' as const,id:artifact.id}];
      const completed=await casCompleteSceneNodeState(tx,{
