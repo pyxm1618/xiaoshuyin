@@ -487,10 +487,11 @@ export async function completeDigitalUseNodeResponse(
           accountId: input.actor.accountId,
           personId: input.actor.personId,
           purpose: 'FAMILY_MANAGEMENT',
-          commandType:
-            node.stream === 'FAMILY_ALLIANCE_REVIEW'
-              ? 'DIGITAL_USE_A5001_REVIEW'
-              : 'DIGITAL_USE_NODE_RESPONSE',
+          // Slice 15 keeps the existing Scene command slot. A5001 command
+          // identity is independent through the server-resolved node + exact
+          // Family Alliance subject/revisions included in requestHash above;
+          // no second idempotency owner or schema vocabulary is introduced.
+          commandType: 'DIGITAL_USE_NODE_RESPONSE',
           idempotencyKey: input.idempotencyKey,
           requestHash,
         },
