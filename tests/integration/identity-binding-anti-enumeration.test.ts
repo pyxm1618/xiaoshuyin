@@ -287,6 +287,67 @@ describe('candidate-facing anti-enumeration', () => {
     }
   });
 
+  it('REM2-005: repeated real and decoy AFFIRM calls have the same stability policy', async () => {
+    const eligible = await createTarget(h, 'enum_stability_real', { ageBand: 'UNDER_14' });
+    const eligibleBoot = await bootstrap(
+      h,
+      eligible.invitationToken,
+      `enum_stability_real_${randomUUID()}`
+    );
+    const eligibleToken = eligibleBoot.json().pendingContextToken as string;
+    const realFirst = await candidateDecision(
+      h,
+      eligibleToken,
+      'AFFIRM',
+      `enum-stability-real-1-${randomUUID()}`,
+      'candidate-binding-v1'
+    );
+    const realReplay = await candidateDecision(
+      h,
+      eligibleToken,
+      'AFFIRM',
+      `enum-stability-real-2-${randomUUID()}`,
+      'candidate-binding-v1'
+    );
+
+    const hidden = await createTarget(h, 'enum_stability_decoy', { ageBand: 'UNDER_14' });
+    const hiddenBoot = await bootstrap(
+      h,
+      hidden.invitationToken,
+      `enum_stability_decoy_${randomUUID()}`
+    );
+    const hiddenToken = hiddenBoot.json().pendingContextToken as string;
+    const revoked = await revokeConsent(
+      h.app,
+      hidden.guardian.token,
+      'enum_stability_decoy',
+      hidden.consentId!
+    );
+    expect([200, 201]).toContain(revoked.statusCode);
+    const decoyFirst = await candidateDecision(
+      h,
+      hiddenToken,
+      'AFFIRM',
+      `enum-stability-decoy-1-${randomUUID()}`,
+      'candidate-binding-v1'
+    );
+    const decoyReplay = await candidateDecision(
+      h,
+      hiddenToken,
+      'AFFIRM',
+      `enum-stability-decoy-2-${randomUUID()}`,
+      'candidate-binding-v1'
+    );
+
+    for (const res of [realFirst, realReplay, decoyFirst, decoyReplay]) {
+      expect(res.statusCode).toBe(200);
+      expect(Object.keys(res.json()).sort()).toEqual(['binding', 'pairingChallenge']);
+      expect(res.json().pairingChallenge).toMatch(/^[A-Za-z0-9_-]{192}$/);
+    }
+    expect(realReplay.json().pairingChallenge).toBe(realFirst.json().pairingChallenge);
+    expect(decoyReplay.json().pairingChallenge).toBe(decoyFirst.json().pairingChallenge);
+  });
+
   it('true Case B mismatch (P1 bound to A, candidate authenticates as B) is generically indistinguishable', async () => {
     const target = await createTarget(h, 'enum_true_caseb', { ageBand: 'UNDER_14' });
     const codeA = `enum_true_caseb_a_${randomUUID()}`;
