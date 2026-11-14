@@ -355,6 +355,10 @@ async function managerConfirm(
   const row=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
   if(!row||row.adult_party_person_id!==input.actor.personId) throw contractError('PHONE_USE_CONTRACT_UNAUTHORIZED');
   if((row.supersedes_id!==null)!==(preview.supersedes_id!==null)) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
+  await assertChildParticipation(tx,{
+   familyId:input.familyId,caseId:input.caseId,
+   childPersonId:row.child_party_person_id,participationId:row.child_participation_id,
+  });
   const requestHash=hashPayload({caseId:input.caseId,version:input.version,expectedCaseVersion:input.expectedCaseVersion,expectedDraftRevision:input.expectedDraftRevision,party:'ADULT'});
   const outcome=await runIdempotentCommandInTransaction(tx,{
    accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',commandType:'PHONE_USE_CONTRACT_CONFIRM',idempotencyKey:input.idempotencyKey,requestHash,
