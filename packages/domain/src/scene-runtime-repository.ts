@@ -39,9 +39,9 @@ export interface SceneArtifactRow {
   family_id: string;
   case_id: string;
   scene_package_version: string;
-  artifact_type: 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY' | 'FAMILY_ALLIANCE_SELF_ASSESSMENT';
+  artifact_type: 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY' | 'FAMILY_ALLIANCE_SELF_ASSESSMENT' | 'DIGITAL_USE_A5001_EFFECT_EVALUATION';
   schema_version: string;
-  source_node_code: '01000' | 'A2007' | 'A2010' | 'A3000';
+  source_node_code: '01000' | 'A2007' | 'A2010' | 'A3000' | 'A5001';
   data: Record<string, unknown>;
   owner_person_id: string;
   visibility: 'FAMILY_AUTHORIZED';

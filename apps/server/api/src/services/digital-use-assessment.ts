@@ -192,6 +192,14 @@ function familyNodeReachable(
   const manifest = (digitalUseNodeManifest as readonly DigitalUseNodeManifestEntry[])
     .find((entry) => entry.nodeCode === row.node_code);
   if (!manifest) return false;
+  if (manifest.stream === 'FAMILY_ALLIANCE_REVIEW' && row.node_code === 'A5001') {
+    if (row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS') return true;
+    return (
+      row.status === 'COMPLETED' &&
+      manifest.entryMode.includes('USER_INITIATED') &&
+      manifest.helpOrReentryRefs.includes('USER_TIMELINE_REVIEW')
+    );
+  }
   if (manifest.stream !== 'FAMILY_ALLIANCE') {
     return row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS';
   }

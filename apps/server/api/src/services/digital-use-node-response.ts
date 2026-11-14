@@ -52,6 +52,10 @@ import {
 } from './digital-use-node-semantics.js';
 import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
 import { executeFamilyAllianceNodeInTransaction } from './digital-use-family-alliance.js';
+import {
+  executeFamilyAllianceReviewNodeInTransaction,
+  resolveA5001SubjectSnapshot,
+} from './digital-use-family-alliance-review.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -460,6 +464,10 @@ export async function completeDigitalUseNodeResponse(
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
+      const resolvedA5001Subject =
+        node.stream === 'FAMILY_ALLIANCE_REVIEW'
+          ? await resolveA5001SubjectSnapshot(tx, input.caseId)
+          : null;
       const requestHash = hashPayload({
         familyId: input.familyId,
         caseId: input.caseId,
@@ -469,6 +477,7 @@ export async function completeDigitalUseNodeResponse(
         expectedScenePackageVersion: input.expectedScenePackageVersion ?? null,
         expectedSelectionRevision: input.expectedSelectionRevision ?? null,
         expectedTargetRevision: input.expectedTargetRevision ?? null,
+        resolvedSubject: resolvedA5001Subject,
         response: input.response,
       });
 
@@ -478,11 +487,25 @@ export async function completeDigitalUseNodeResponse(
           accountId: input.actor.accountId,
           personId: input.actor.personId,
           purpose: 'FAMILY_MANAGEMENT',
-          commandType: 'DIGITAL_USE_NODE_RESPONSE',
+          commandType:
+            node.stream === 'FAMILY_ALLIANCE_REVIEW'
+              ? 'DIGITAL_USE_A5001_REVIEW'
+              : 'DIGITAL_USE_NODE_RESPONSE',
           idempotencyKey: input.idempotencyKey,
           requestHash,
         },
         async () => {
+          if (node.stream === 'FAMILY_ALLIANCE_REVIEW') {
+            return {
+              status: 200,
+              body: await executeFamilyAllianceReviewNodeInTransaction(
+                tx,
+                input,
+                node
+              ),
+            };
+          }
+
           if (node.stream === 'FAMILY_ALLIANCE') {
             return {
               status: 200,

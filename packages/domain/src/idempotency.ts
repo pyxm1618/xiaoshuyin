@@ -40,6 +40,8 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   // ASSESSMENT resume and node response need new command identities.
   'DIGITAL_USE_ASSESSMENT_RESUME',
   'DIGITAL_USE_NODE_RESPONSE',
+  // Slice 15 A5001 uses the same store but an independent command identity.
+  'DIGITAL_USE_A5001_REVIEW',
 ] as const;
 
 export type IdempotencyCommandType = (typeof IDEMPOTENCY_COMMAND_TYPES)[number];
