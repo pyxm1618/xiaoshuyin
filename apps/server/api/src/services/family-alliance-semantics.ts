@@ -373,28 +373,6 @@ async function applyTargetFamily(
     );
   }
 
-  if (currentNoteRefs.length === 0) {
-    const current = await getCurrentDigitalUseTargetItem(
-      context.tx,
-      context.caseId,
-      identity.targetCode,
-      true
-    );
-    if (!current || !current.selected) familyError('TARGET_NOT_SELECTED');
-    if (
-      current.selection_revision !== common.expectedSelectionRevision ||
-      current.revision !== common.expectedTargetRevision
-    ) {
-      familyError('STALE_TARGET_REVISION');
-    }
-    return {
-      inputRefs: context.currentInputRefs,
-      outputRefs: [{ type: 'TARGET_ITEM', id: current.id }],
-      conditions: {},
-      targetRow: current,
-    };
-  }
-
   const current = await getCurrentDigitalUseTargetItem(
     context.tx,
     context.caseId,
@@ -402,10 +380,24 @@ async function applyTargetFamily(
     true
   );
   if (!current || !current.selected) familyError('TARGET_NOT_SELECTED');
+  if (current.selection_revision !== common.expectedSelectionRevision) {
+    familyError('STALE_SELECTION_REVISION');
+  }
+  if (current.revision !== common.expectedTargetRevision) {
+    familyError('STALE_TARGET_REVISION');
+  }
+
+  const helpEntry = {
+    nodeCode: context.node.nodeCode,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    interactionRefs: [...context.node.interactionRefs],
+    helpOrReentryRefs: [...context.node.helpOrReentryRefs],
+    evidenceRefs: currentNoteRefs,
+  };
   const targetRow = await reviseDigitalUseTargetItem(context.tx, {
     ...common,
     patch: {
-      helpHistoryRefs: [...current.help_history_refs, ...currentNoteRefs],
+      helpHistoryRefs: [...current.help_history_refs, helpEntry],
       sourceRefs: [...context.currentInputRefs, ...currentNoteRefs],
     },
   });

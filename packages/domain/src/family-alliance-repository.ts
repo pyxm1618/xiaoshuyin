@@ -49,6 +49,14 @@ export interface FamilyAllianceFeasibilityPayload {
     | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
 }
 
+export interface FamilyAllianceHelpHistoryEntry {
+  readonly nodeCode: string;
+  readonly scenePackageVersion: string;
+  readonly interactionRefs: readonly string[];
+  readonly helpOrReentryRefs: readonly string[];
+  readonly evidenceRefs: readonly StoredSceneRef[];
+}
+
 export interface FamilyAllianceProgressPayload {
   readonly stage:
     | 'COMMUNICATION'
@@ -72,7 +80,7 @@ export interface DigitalUseTargetItemRow {
   feasibility_payload: FamilyAllianceFeasibilityPayload | null;
   progress_payload: FamilyAllianceProgressPayload | null;
   progress_evidence_refs: StoredSceneRef[];
-  help_history_refs: StoredSceneRef[];
+  help_history_refs: FamilyAllianceHelpHistoryEntry[];
   source_refs: StoredSceneRef[];
   created_by_person_id: string;
   supersedes_id: string | null;
@@ -268,7 +276,7 @@ export async function reviseDigitalUseTargetItem(
       feasibilityPayload?: FamilyAllianceFeasibilityPayload | null;
       progressPayload?: FamilyAllianceProgressPayload | null;
       progressEvidenceRefs?: readonly StoredSceneRef[];
-      helpHistoryRefs?: readonly StoredSceneRef[];
+      helpHistoryRefs?: readonly FamilyAllianceHelpHistoryEntry[];
       sourceRefs?: readonly StoredSceneRef[];
     };
   }

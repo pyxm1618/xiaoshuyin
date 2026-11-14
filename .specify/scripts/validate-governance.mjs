@@ -105,10 +105,16 @@ if (fs.existsSync(specsRoot)) {
           errors.push(`${dir}/spec.md: missing required section "${section.label}"`);
         }
       }
+      const tasksText =
+        hasTasks && exists(path.join(dir, "tasks.md"))
+          ? read(path.join(dir, "tasks.md"))
+          : "";
       const distributedAcceptanceEvidence =
         hasTasks &&
-        exists(path.join(dir, "tasks.md")) &&
-        hasSection(read(path.join(dir, "tasks.md")), ["Acceptance Evidence Contract"]);
+        (
+          hasSection(tasksText, ["Acceptance Evidence Contract"]) ||
+          /\*\*Acceptance \/ Evidence Ownership\*\*/.test(tasksText)
+        );
       if (!hasSection(text, ["Acceptance Evidence"]) && !distributedAcceptanceEvidence) {
         errors.push(`${dir}/spec.md: missing required section "## Acceptance Evidence"`);
       }
@@ -126,7 +132,11 @@ if (fs.existsSync(specsRoot)) {
       const constitutionOk =
         hasSection(text, ["Constitution Check"]) ||
         (hasSection(text, ["Authority Gate"]) && hasSection(text, ["Scope Contract"]));
-      const verificationOk = hasSection(text, ["Verification Plan", "Verification Strategy"]);
+      const verificationOk = hasSection(text, [
+        "Verification Plan",
+        "Verification Strategy",
+        "Testing Strategy",
+      ]);
       if (!upstreamOk) errors.push(`${dir}/plan.md: missing required section "## Upstream Traceability"`);
       if (!constitutionOk) errors.push(`${dir}/plan.md: missing required section "## Constitution Check"`);
       if (!verificationOk) errors.push(`${dir}/plan.md: missing required section "## Verification Plan"`);
@@ -153,8 +163,18 @@ if (fs.existsSync(specsRoot)) {
       if (taskLines.length === 0 && structuredTasks.length > 0) {
         const hasAuthorityMap = hasSection(text, ["Frozen Spec Authority Map"]);
         const hasEvidenceContract = hasSection(text, ["Acceptance Evidence Contract"]);
-        if (!hasAuthorityMap) errors.push(`${dir}/tasks.md: structured tasks missing "## Frozen Spec Authority Map"`);
-        if (!hasEvidenceContract) errors.push(`${dir}/tasks.md: structured tasks missing "## Acceptance Evidence Contract"`);
+        const hasPerTaskAuthority = structuredTasks.every((match, index) => {
+          const start = match.index ?? 0;
+          const end = structuredTasks[index + 1]?.index ?? text.length;
+          return /\*\*Frozen Spec Authority\*\*/.test(text.slice(start, end));
+        });
+        const hasPerTaskEvidence = structuredTasks.every((match, index) => {
+          const start = match.index ?? 0;
+          const end = structuredTasks[index + 1]?.index ?? text.length;
+          return /\*\*Acceptance \/ Evidence Ownership\*\*/.test(text.slice(start, end));
+        });
+        if (!hasAuthorityMap && !hasPerTaskAuthority) errors.push(`${dir}/tasks.md: structured tasks missing authority traceability contract`);
+        if (!hasEvidenceContract && !hasPerTaskEvidence) errors.push(`${dir}/tasks.md: structured tasks missing acceptance evidence contract`);
 
         for (let index = 0; index < structuredTasks.length; index += 1) {
           const match = structuredTasks[index];
@@ -162,8 +182,8 @@ if (fs.existsSync(specsRoot)) {
           const start = match.index ?? 0;
           const end = structuredTasks[index + 1]?.index ?? text.length;
           const section = text.slice(start, end);
-          if (!hasSection(section, ["Verification"], 3)) {
-            errors.push(`${dir}/tasks.md: structured task missing "### Verification" -> ${taskId}`);
+          if (!hasSection(section, ["Verification"], 3) && !/\*\*Verification\*\*/.test(section)) {
+            errors.push(`${dir}/tasks.md: structured task missing verification contract -> ${taskId}`);
           }
           if (hasAuthorityMap && !new RegExp(`\\|\\s*${taskId}\\s*\\|`).test(text)) {
             errors.push(`${dir}/tasks.md: structured task missing authority-map traceability -> ${taskId}`);

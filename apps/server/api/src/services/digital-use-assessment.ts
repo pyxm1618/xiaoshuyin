@@ -171,9 +171,15 @@ function targetDto(row: DigitalUseTargetItemRow) {
     progressEvidenceRefs: row.progress_evidence_refs
       .filter((ref) => 'id' in ref)
       .map((ref) => ({ type: ref.type, id: ref.id })),
-    helpHistoryRefs: row.help_history_refs
-      .filter((ref) => 'id' in ref)
-      .map((ref) => ({ type: ref.type, id: ref.id })),
+    helpHistoryRefs: row.help_history_refs.map((entry) => ({
+      nodeCode: entry.nodeCode,
+      scenePackageVersion: entry.scenePackageVersion as 'v1',
+      interactionRefs: [...entry.interactionRefs],
+      helpOrReentryRefs: [...entry.helpOrReentryRefs],
+      evidenceRefs: entry.evidenceRefs
+        .filter((ref) => 'id' in ref)
+        .map((ref) => ({ type: ref.type, id: ref.id })),
+    })),
     sourceRefs: row.source_refs,
     createdAt: new Date(row.created_at).toISOString(),
   };
@@ -245,6 +251,9 @@ export function buildSceneEnvelope(input: {
         nodeCode: row.node_code,
         sourceNodeCode: row.source_node_code,
         entryModes: [...manifest.entryMode],
+        interactionRefs: [...manifest.interactionRefs],
+        outputRefs: [...manifest.outputRefs],
+        helpOrReentryRefs: [...manifest.helpOrReentryRefs],
         reasonCode:
           row.status === 'COMPLETED'
             ? 'MANIFEST_REENTRY_AVAILABLE'
@@ -345,6 +354,9 @@ function stableInitialSceneEnvelope(
       nodeCode: projected.nodeCode,
       sourceNodeCode: projected.sourceNodeCode,
       entryModes: [...resolveDigitalUseRuntimeNode(projected.nodeCode).entryMode],
+      interactionRefs: [...resolveDigitalUseRuntimeNode(projected.nodeCode).interactionRefs],
+      outputRefs: [...resolveDigitalUseRuntimeNode(projected.nodeCode).outputRefs],
+      helpOrReentryRefs: [...resolveDigitalUseRuntimeNode(projected.nodeCode).helpOrReentryRefs],
       reasonCode: 'LEGAL_DIGITAL_USE_SCENE_ENTRY',
     }],
     nodes: [projected],

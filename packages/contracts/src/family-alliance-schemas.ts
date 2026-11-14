@@ -133,6 +133,16 @@ export const FamilyAllianceNodeResponsePayload = z.discriminatedUnion('kind', [
 export type FamilyAllianceNodeResponsePayloadType =
   z.infer<typeof FamilyAllianceNodeResponsePayload>;
 
+export const FamilyAllianceHelpHistoryEntry = z.strictObject({
+  nodeCode: z.string().min(1).max(64),
+  scenePackageVersion: z.literal('v1'),
+  interactionRefs: z.array(z.string().min(1).max(160)),
+  helpOrReentryRefs: z.array(z.string().min(1).max(160)),
+  evidenceRefs: z.array(
+    z.object({ type: z.string(), id: z.string().uuid() }).passthrough()
+  ),
+});
+
 export const FamilyAllianceTargetItemProjection = z.strictObject({
   id: z.string().uuid(),
   targetCode: FamilyAllianceTargetCode,
@@ -143,7 +153,7 @@ export const FamilyAllianceTargetItemProjection = z.strictObject({
   feasibility: FamilyAllianceFeasibilityPayload.nullable(),
   progress: FamilyAllianceProgressPayload.nullable(),
   progressEvidenceRefs: z.array(z.object({ type: z.string(), id: z.string().uuid() }).passthrough()),
-  helpHistoryRefs: z.array(z.object({ type: z.string(), id: z.string().uuid() }).passthrough()),
+  helpHistoryRefs: z.array(FamilyAllianceHelpHistoryEntry),
   sourceRefs: z.array(z.object({ type: z.string() }).passthrough()),
   createdAt: z.string().datetime(),
 });
@@ -154,6 +164,9 @@ export const FamilyAllianceReachableNode = z.strictObject({
   nodeCode: z.string().min(1).max(64),
   sourceNodeCode: z.string().min(1).max(64),
   entryModes: z.array(z.enum(['ROUTED', 'USER_INITIATED', 'SCHEDULED'])),
+  interactionRefs: z.array(z.string().min(1).max(160)),
+  outputRefs: z.array(z.string().min(1).max(160)),
+  helpOrReentryRefs: z.array(z.string().min(1).max(160)),
   reasonCode: z.string().min(1).max(160),
 });
 export type FamilyAllianceReachableNodeType =
