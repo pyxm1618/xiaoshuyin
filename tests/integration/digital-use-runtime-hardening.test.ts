@@ -1065,6 +1065,31 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(response.json().code).toBe('SCENE_NODE_UNREACHABLE');
   });
 
+  it('Slice 14 rejects illegal direct A4002/A4010 entry without creating stream truth', async () => {
+    const f = await fixture('s14-illegal-direct-entry');
+    for (const [nodeCode,response] of [
+      ['A4002',{contentVersion:'phone-use-contract-v1',action:'ACKNOWLEDGE_TEMPLATE'}],
+      ['A4010',{}],
+    ] as const) {
+      const attempted=await app.inject({
+        method:'POST',
+        url:`/api/v1/cases/${f.caseId}/scene/nodes/${nodeCode}/responses`,
+        headers:commandHeaders(f.manager.token,`s14-illegal-${nodeCode.toLowerCase()}`),
+        payload:{expectedCaseVersion:f.caseVersion,expectedNodeRevision:1,response},
+      });
+      expect(attempted.statusCode,attempted.body).toBe(409);
+      expect(attempted.json().code).toBe('SCENE_NODE_UNREACHABLE');
+    }
+    const residue=await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM scene_node_states WHERE case_id=$1 AND node_code IN ('A4002','A4010')) AS nodes,
+         (SELECT count(*)::int FROM digital_use_contract_versions WHERE case_id=$1) AS contracts,
+         (SELECT count(*)::int FROM scene_artifacts WHERE case_id=$1 AND artifact_type LIKE 'PHONE_USE_%') AS artifacts`,
+      [f.caseId]
+    );
+    expect(residue.rows[0]).toEqual({nodes:0,contracts:0,artifacts:0});
+  });
+
   it('rejects a fabricated node without creating any Scene state', async () => {
     const f = await fixture('fabricated');
     const response = await app.inject({
@@ -2669,8 +2694,8 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(active1.rows[0].status).toBe('ACTIVE');
 
     const [r1,r2]=await Promise.all([
-      app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/revise`,headers:commandHeaders(f.manager.token,'s14-rev-a'),payload:{expectedCaseVersion:f.caseVersion,expectedActiveDraftRevision:1,updateTrigger:'NEW_PROBLEM',updateReason:'New family situation'}}),
-      app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/revise`,headers:commandHeaders(f.manager.token,'s14-rev-b'),payload:{expectedCaseVersion:f.caseVersion,expectedActiveDraftRevision:1,updateTrigger:'NEW_PROBLEM',updateReason:'New family situation'}}),
+      app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/revise`,headers:commandHeaders(f.manager.token,'s14-rev-a'),payload:{expectedCaseVersion:f.caseVersion,expectedActiveDraftRevision:1,updateTrigger:'PERIOD_COMPLETE',updateReason:'Execution period completed'}}),
+      app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/revise`,headers:commandHeaders(f.manager.token,'s14-rev-b'),payload:{expectedCaseVersion:f.caseVersion,expectedActiveDraftRevision:1,updateTrigger:'PERIOD_COMPLETE',updateReason:'Execution period completed'}}),
     ]);
     expect([r1.statusCode,r2.statusCode].sort()).toEqual([201,409]);
 
@@ -2706,7 +2731,34 @@ describe('T1218 Digital Use runtime hardening', () => {
     const stillOld=await admin.query(`SELECT version,status FROM digital_use_contract_versions WHERE case_id=$1 AND status='ACTIVE'`,[f.caseId]);
     expect(stillOld.rows).toEqual([{version:1,status:'ACTIVE'}]);
 
-    const confirmChild=await app.inject({method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/2/confirm`,headers:commandHeaders(child.token,'s14-rev-confirm-child'),payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:2}});
+    const childV2Key='s14-rev-confirm-child';
+    const cleanupSupersedeFault=await installFaultTrigger({
+      table:'scene_artifacts',timing:'BEFORE',event:'INSERT',
+      condition:`NEW.case_id='${f.caseId}'::uuid AND NEW.artifact_type='PHONE_USE_CONTRACT_DOCUMENT' AND NEW.revision=2`,
+      label:'s14_contract_supersede_document',
+    });
+    try{
+      const failedChild=await app.inject({
+        method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/2/confirm`,
+        headers:commandHeaders(child.token,childV2Key),
+        payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:2},
+      });
+      expect(failedChild.statusCode).toBe(500);
+    }finally{await cleanupSupersedeFault();}
+    const rolledSupersede=await admin.query(
+      `SELECT version,status,child_confirmation IS NOT NULL AS child_ok
+         FROM digital_use_contract_versions WHERE case_id=$1 ORDER BY version`,
+      [f.caseId]
+    );
+    expect(rolledSupersede.rows).toEqual([
+      {version:1,status:'ACTIVE',child_ok:true},
+      {version:2,status:'PENDING_CONFIRMATION',child_ok:false},
+    ]);
+    const confirmChild=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/2/confirm`,
+      headers:commandHeaders(child.token,childV2Key),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:2},
+    });
     expect(confirmChild.statusCode,confirmChild.body).toBe(200);
     expect(confirmChild.json().status).toBe('ACTIVE');
 
@@ -2736,6 +2788,27 @@ describe('T1218 Digital Use runtime hardening', () => {
       owner_person_id:f.manager.personId,
       projection_node_code:'A4012',contract_version_id:confirmChild.json().id,
     });
+
+    const newProblem=await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/2/revise`,
+      headers:commandHeaders(f.manager.token,'s14-rev-new-problem-v3'),
+      payload:{
+        expectedCaseVersion:f.caseVersion,
+        expectedActiveDraftRevision:2,
+        updateTrigger:'NEW_PROBLEM',
+        updateReason:'A new family phone-use issue emerged',
+      },
+    });
+    expect(newProblem.statusCode,newProblem.body).toBe(201);
+    expect(newProblem.json()).toMatchObject({
+      version:3,status:'DRAFT',supersedesId:confirmChild.json().id,updateTrigger:'NEW_PROBLEM',
+    });
+    const activeAfterNewProblem=await admin.query(
+      `SELECT version,status FROM digital_use_contract_versions WHERE case_id=$1 AND status='ACTIVE'`,
+      [f.caseId]
+    );
+    expect(activeAfterNewProblem.rows).toEqual([{version:2,status:'ACTIVE'}]);
   });
 
 });

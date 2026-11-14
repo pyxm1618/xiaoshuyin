@@ -299,6 +299,9 @@ describe('Slice 12 canonical no-model production orchestration', () => {
       reasonCode: 'ENTRY_GATES_REVALIDATION_REQUIRED',
     });
     expect(scene.nodes.some((node: any) => node.nodeCode === 'A3000')).toBe(false);
+    expect(scene.activeNodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeCode: 'A4001', status: 'AVAILABLE' }),
+    ]));
     expect(scene.artifacts.some((artifact: any) => artifact.type === 'SOLUTION_SUMMARY')).toBe(true);
 
     // Alternative branch: A2004 no -> A2006 willing -> A2005 unwilling
