@@ -79,6 +79,35 @@ describe('Members Integration (T047 + T049)', () => {
     expect(rows[0].account_id).toBeNull();
   });
 
+  it('REM2-001: explicit UNKNOWN cannot complete formal member onboarding', async () => {
+    const { token, familyId } = await setupManagerAndFamily('rem2-unknown');
+    const before = await queryDb(
+      'SELECT count(*)::int AS n FROM family_members WHERE family_id = $1',
+      [familyId]
+    );
+
+    const res = await createMember(app, token, familyId, 'rem2-unknown', {
+      ageBand: 'UNKNOWN',
+      ageBandSource: 'GUARDIAN_RELAY',
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('AGE_BAND_UNKNOWN');
+
+    const after = await queryDb(
+      'SELECT count(*)::int AS n FROM family_members WHERE family_id = $1',
+      [familyId]
+    );
+    expect(after.rows[0].n).toBe(before.rows[0].n);
+    const unknownProfiles = await queryDb(
+      `SELECT count(*)::int AS n
+         FROM person_compliance_profiles pcp
+         JOIN family_members fm ON fm.person_id = pcp.person_id
+        WHERE fm.family_id = $1 AND pcp.age_band = 'UNKNOWN'`,
+      [familyId]
+    );
+    expect(unknownProfiles.rows[0].n).toBe(0);
+  });
+
   it('T047: non-writable source rejected by schema → 422', async () => {
     const { token, familyId } = await setupManagerAndFamily('t047b');
 

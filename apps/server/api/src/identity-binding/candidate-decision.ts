@@ -28,7 +28,7 @@ import {
   withBindingContextTransaction,
 } from '../db/tx.js';
 import {
-  createDecoyPairingChallenge,
+  encodeDecoyPairingChallenge,
   decodePairingChallenge,
   decryptOpenid,
   encodePairingChallenge,
@@ -108,7 +108,7 @@ export async function submitCandidateDecision(
         action: 'IDENTITY_BINDING_CANDIDATE_DECIDE',
         purpose: 'IDENTITY_BINDING',
       });
-      if (authDecision.decision !== 'ALLOW') return generic(input.decision);
+      if (authDecision.decision !== 'ALLOW') return generic(tx, deps, context, input.decision);
 
       const scope: BindingOperationScope = computeOperationScope({
         commandType: 'CANDIDATE_DECISION',
@@ -158,7 +158,7 @@ export async function submitCandidateDecision(
       }
 
       if (!context.attemptId || !context.invitationParticipationId) {
-        return generic(input.decision);
+        return generic(tx, deps, context, input.decision);
       }
 
       await setBindingAttemptContext(tx, {
@@ -167,7 +167,7 @@ export async function submitCandidateDecision(
         invitationId: context.invitationParticipationId,
       });
       const initial = await findById(tx, context.attemptId);
-      if (!initial) return generic(input.decision);
+      if (!initial) return generic(tx, deps, context, input.decision);
 
       // Narrow to the exact target and switch to the Gate purpose. This makes
       // the current facts readable under the binding read policies and is
@@ -182,7 +182,7 @@ export async function submitCandidateDecision(
       });
 
       if (initial.candidateIdentityDigest !== context.candidateIdentityDigest) {
-        return generic(input.decision);
+        return generic(tx, deps, context, input.decision);
       }
 
       const correlationId = randomUUID();
@@ -191,10 +191,10 @@ export async function submitCandidateDecision(
       // the state here and terminalize again later.
       if (initial.state === 'PENDING' && initial.expiresAt.getTime() <= Date.now()) {
         await settleExpiredAttempt(tx, { attemptId: initial.id, correlationId });
-        return generic(input.decision);
+        return generic(tx, deps, context, input.decision);
       }
       if (initial.state !== 'PENDING') {
-        return generic(input.decision);
+        return generic(tx, deps, context, input.decision);
       }
 
       if (input.decision !== 'AFFIRM') {
@@ -214,7 +214,7 @@ export async function submitCandidateDecision(
 
       // ── M-01 current dynamic eligibility ───────────────────
       const attempt = await findByIdForUpdate(tx, initial.id);
-      if (!attempt || attempt.state !== 'PENDING') return generic('AFFIRM');
+      if (!attempt || attempt.state !== 'PENDING') return generic(tx, deps, context, 'AFFIRM');
 
       const invitation = await deps.invitationPort.resolveByParticipationId(
         tx,
@@ -226,7 +226,7 @@ export async function submitCandidateDecision(
           reason: 'INVITATION_TERMINAL',
           correlationId,
         });
-        return generic('AFFIRM');
+        return generic(tx, deps, context, 'AFFIRM');
       }
 
       await setBindingGateContext(tx, {
@@ -260,7 +260,7 @@ export async function submitCandidateDecision(
           reason: gate.result.reason,
           correlationId,
         });
-        return generic('AFFIRM');
+        return generic(tx, deps, context, 'AFFIRM');
       }
 
       const confirmation = await appendCandidate(tx, attempt.id, context.id);
@@ -278,15 +278,89 @@ export async function submitCandidateDecision(
       }
 
       const challenge = await issueOrReplayChallenge(tx, deps, context, attempt, correlationId);
-      if (!challenge) return generic('AFFIRM');
+      if (!challenge) return generic(tx, deps, context, 'AFFIRM');
       return { binding: 'NOT_COMPLETED', pairingChallenge: challenge };
     }
   );
 }
 
-function generic(decision: 'AFFIRM' | 'REJECT' | 'CANCEL'): CandidateDecisionResult {
+async function generic(
+  tx: pg.PoolClient,
+  deps: CandidateDecisionDeps,
+  context: PendingContextRow,
+  decision: 'AFFIRM' | 'REJECT' | 'CANCEL'
+): Promise<CandidateDecisionResult> {
   if (decision !== 'AFFIRM') return { binding: 'NOT_COMPLETED' };
-  return { binding: 'NOT_COMPLETED', pairingChallenge: createDecoyPairingChallenge() };
+  return {
+    binding: 'NOT_COMPLETED',
+    pairingChallenge: await issueOrReplayDecoyChallenge(tx, deps, context),
+  };
+}
+
+interface PairingWindow {
+  startsAt: Date;
+  expiresAt: Date;
+}
+
+/**
+ * Observable pairing rotation is anchored to immutable context time rather than
+ * "request now". Real and decoy responses therefore cross the same TTL window
+ * boundaries for a given context. An optional upper bound (the attempt expiry)
+ * can shorten a real issuance without extending the context lifetime.
+ */
+function pairingWindow(
+  context: PendingContextRow,
+  pairingTtlSeconds: number,
+  now: Date,
+  upperBoundMs = context.expiresAt.getTime()
+): PairingWindow | null {
+  const ttlMs = pairingTtlSeconds * 1000;
+  const anchorMs = context.createdAt.getTime();
+  const upperMs = Math.min(context.expiresAt.getTime(), upperBoundMs);
+  if (ttlMs <= 0 || upperMs <= anchorMs) return null;
+
+  // Once an optional business upper bound has passed, there is no valid real
+  // issuance window left. Generic decoys omit that business bound and remain
+  // derived solely from the still-live transport context.
+  if (upperBoundMs < context.expiresAt.getTime() && now.getTime() >= upperMs) {
+    return null;
+  }
+
+  const effectiveNowMs = Math.min(
+    Math.max(now.getTime(), anchorMs),
+    upperMs - 1
+  );
+  const windowIndex = Math.floor((effectiveNowMs - anchorMs) / ttlMs);
+  const startsAtMs = anchorMs + windowIndex * ttlMs;
+  const expiresAtMs = Math.min(startsAtMs + ttlMs, upperMs);
+  if (expiresAtMs <= startsAtMs) return null;
+  return {
+    startsAt: new Date(startsAtMs),
+    expiresAt: new Date(expiresAtMs),
+  };
+}
+
+async function issueOrReplayDecoyChallenge(
+  _tx: pg.PoolClient,
+  deps: CandidateDecisionDeps,
+  context: PendingContextRow
+): Promise<string> {
+  const window =
+    pairingWindow(context, deps.pairingTtlSeconds, new Date()) ?? {
+      startsAt: context.createdAt,
+      expiresAt: context.expiresAt,
+    };
+
+  // A decoy is intentionally stateless: terminal settlement must leave ZERO
+  // valid pairing issuance in binding_pending_contexts. The keyed encoder uses
+  // immutable context id + deterministic TTL window facts, so repeated calls
+  // in one observable window are byte-stable without creating consumable state.
+  return encodeDecoyPairingChallenge(deps.identityBindingSecret, {
+    contextId: context.id,
+    pairingIssuanceId: context.id,
+    pairingIssuedAt: window.startsAt,
+    pairingExpiresAt: window.expiresAt,
+  });
 }
 
 async function replayCandidateOperation(
@@ -297,7 +371,7 @@ async function replayCandidateOperation(
   input: CandidateDecisionInput
 ): Promise<CandidateDecisionResult> {
   if (input.decision !== 'AFFIRM' || !attemptId || context.attemptId !== attemptId) {
-    return generic(input.decision);
+    return generic(tx, deps, context, input.decision);
   }
   if (
     !context.pairingIssuedAt ||
@@ -305,9 +379,9 @@ async function replayCandidateOperation(
     !context.pairingIssuanceId ||
     !context.invitationParticipationId
   ) {
-    return generic('AFFIRM');
+    return generic(tx, deps, context, 'AFFIRM');
   }
-  if (context.pairingExpiresAt.getTime() <= Date.now()) return generic('AFFIRM');
+  if (context.pairingExpiresAt.getTime() <= Date.now()) return generic(tx, deps, context, 'AFFIRM');
 
   await setBindingAttemptContext(tx, {
     attemptId,
@@ -315,8 +389,8 @@ async function replayCandidateOperation(
     invitationId: context.invitationParticipationId,
   });
   const attempt = await findById(tx, attemptId);
-  if (!attempt || attempt.state !== 'PENDING') return generic('AFFIRM');
-  if (await hasKind(tx, attemptId, 'SECOND_PARTY')) return generic('AFFIRM');
+  if (!attempt || attempt.state !== 'PENDING') return generic(tx, deps, context, 'AFFIRM');
+  if (await hasKind(tx, attemptId, 'SECOND_PARTY')) return generic(tx, deps, context, 'AFFIRM');
 
   return {
     binding: 'NOT_COMPLETED',
@@ -382,10 +456,10 @@ async function issueOrReplayChallenge(
   correlationId: string
 ): Promise<string | null> {
   const now = new Date();
-  const ttlMs = deps.pairingTtlSeconds * 1000;
   const upperBound = Math.min(context.expiresAt.getTime(), attempt.expiresAt.getTime());
-  const desiredExpiry = Math.min(now.getTime() + ttlMs, upperBound);
-  if (desiredExpiry <= now.getTime()) {
+  const window = pairingWindow(context, deps.pairingTtlSeconds, now, upperBound);
+  const desiredExpiry = window?.expiresAt.getTime() ?? upperBound;
+  if (!window || desiredExpiry <= now.getTime()) {
     // The context or attempt is already at/over its own lifetime. Settle the
     // attempt if it expired; the context expiry is handled by requireContext.
     if (attempt.expiresAt.getTime() <= now.getTime()) {

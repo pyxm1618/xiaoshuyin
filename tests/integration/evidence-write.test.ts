@@ -245,6 +245,27 @@ describe('Internal Evidence writers (T027)', () => {
     await admin.end();
   });
 
+  it('REM2-007A: SOURCE_CONFIRMED requires the authenticated source Person', async () => {
+    const trusted = await runWrite((tx) =>
+      recordStatement(
+        tx,
+        ctx(),
+        statementDraft({ confirmationStatus: 'SOURCE_CONFIRMED' })
+      )
+    );
+    expect(trusted.id).toBeDefined();
+
+    await expect(
+      runWrite((tx) =>
+        recordObservation(
+          tx,
+          ctx(),
+          observationDraft({ confirmationStatus: 'SOURCE_CONFIRMED' })
+        )
+      )
+    ).rejects.toMatchObject({ code: 'EVIDENCE_CONFIRMATION_AUTHORITY_INVALID' });
+  });
+
   it('records a SELF_STATEMENT with audit metadata {} and no case_event', async () => {
     const before = await counts(fx.familyId);
     const written = await runWrite((tx) => recordStatement(tx, ctx(), statementDraft()));

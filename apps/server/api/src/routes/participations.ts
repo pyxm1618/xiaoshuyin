@@ -42,6 +42,7 @@ import {
   isFamilyMember,
   isParticipationProcessingAllowed,
   lockParticipationById,
+  lockExpiredPendingParticipationByCasePerson,
   materializeParticipationExpiry,
   PARTICIPATION_NOTICE,
   planParticipationCommand,
@@ -209,7 +210,8 @@ async function rehydrateVerifiedInviteReplay(
 async function recordExpiry(
   tx: pg.PoolClient,
   locked: ParticipationRow,
-  accountId: string
+  accountId: string,
+  materializedOnAccess = true
 ): Promise<ParticipationRow | null> {
   const expired = await materializeParticipationExpiry(tx, locked.id);
   if (!expired) return null;
@@ -224,7 +226,7 @@ async function recordExpiry(
       fromState: 'PENDING',
       toState: 'EXPIRED',
       expiresAt: new Date(expired.invite_expires_at).toISOString(),
-      materializedOnAccess: true,
+      materializedOnAccess,
     },
   });
   return expired;
@@ -482,6 +484,18 @@ export function registerParticipationRoutes(
               if (!targetMember) throw targetIneligible();
               if (!(await isParticipationProcessingAllowed(tx, parsed.data.personId))) {
                 throw targetIneligible();
+              }
+
+              // Normalize the one stale PENDING row under a real row lock before
+              // evaluating the live-participation uniqueness rule. The existing
+              // expiry transition + audit remain the sole state-change seam.
+              const stalePending = await lockExpiredPendingParticipationByCasePerson(
+                tx,
+                caseId,
+                parsed.data.personId
+              );
+              if (stalePending) {
+                await recordExpiry(tx, stalePending, actor.accountId, false);
               }
 
               if (await hasLiveParticipation(tx, caseId, parsed.data.personId)) {
