@@ -65,7 +65,7 @@ Planning Freeze PASS; repository access.
 3. Slice 16 exact implementation/Audit 2/merge state;
 4. current Case, Evidence, Problem Formulation, Authorization, RLS, Consent, Compliance, Safety owners;
 5. exact Scene Package identity/version owner and package knowledge-set contribution/freeze seam;
-6. current professional reviewer and publisher authorization responsibility;
+6. current professional create/edit/read-unpublished/review/publish/retire/read-published authorization responsibility;
 7. sanctioned professional-asset audit owner;
 8. shared idempotency owner;
 9. caller-owned same-transaction seam;
@@ -74,8 +74,7 @@ Planning Freeze PASS; repository access.
 
 **PASS predicates**
 - Slice 16 required professional owner/provenance/package interfaces are independently audited and merged/usable;
-- a real accountable reviewer authority exists;
-- a real publisher authority exists where the actual authority model requires it;
+- real accountable professional create/edit/read-unpublished/review/publish/retire/read-published capabilities exist as required by the authoritative seam;
 - a single Scene Package owner can accept/freeze exact knowledge-version contribution without a second registry;
 - a sanctioned professional-asset audit/event path exists without fake family scope;
 - Authorization/RLS/Consent/Compliance/Safety/idempotency/transaction seams are composable;
@@ -250,14 +249,16 @@ T1701 must have proven the authoritative human professional-content capability. 
 
 **Required behavior**
 - resolve authenticated actor and professional content capability server-side;
-- derive reviewer/publisher responsibility from the authoritative seam;
+- derive create/edit/read-unpublished/review/publish/retire/read-published authority from the authoritative seam without inventing role names;
+- DRAFT/REVIEWED content is readable only with explicit read-unpublished authority;
+- PUBLISHED runtime/internal reads and RETIRED historical reads use the authoritative read-published/history policy; lifecycle status itself grants no access;
 - bind review to exact version/revision/hash/source refs/time;
-- family manager, developer flag, AI/model identity and caller role string cannot approve;
+- family manager, developer flag, AI/model identity and caller role string cannot approve or gain unpublished read access;
 - do not invent separation-of-duties policy or generic RBAC;
-- absence of real reviewer/source keeps item NOT READY.
+- absence of any required real professional authority keeps the gate blocked / item NOT READY.
 
 **Verification**  
-Real authorized fixture/capability passes; family actor, fake role, AI/system, unauthenticated and unavailable-authority cases make zero business writes.
+Real authorized capability fixtures pass; ordinary family actor, fake role, AI/system, unauthenticated actor and unavailable-authority cases cannot read unpublished assets or make business writes. Published/history read behavior follows only the authoritative policy.
 
 **Mapping**  
 [REQ: FR-008,FR-021,FR-027,FR-035,FR-040] [AS: AS-003,AS-004,AS-005,AS-027,AS-032,AS-035] [NS: NS-04,NS-15]
@@ -470,6 +471,8 @@ Ensure error differences do not become a professional-asset or family-data exist
 
 **Rules**
 - authenticate/authorize before protected item detail disclosure;
+- DRAFT/REVIEWED detail requires the explicit read-unpublished capability proven by T1707;
+- PUBLISHED/RETIRED detail uses the authoritative published/history read policy and is never granted merely by status;
 - internal reasons remain precise;
 - unauthorized/unknown/unpublished/retired/wrong-package results collapse to the existing bounded unavailable/not-found envelope when caller lacks disclosure right;
 - no public search/retrieval endpoint is added;
