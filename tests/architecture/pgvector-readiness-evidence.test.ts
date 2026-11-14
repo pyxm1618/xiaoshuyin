@@ -137,12 +137,14 @@ describe('Slice 19 pgvector readiness failure semantics', () => {
     );
   });
 
-  it('unevaluated stages remain NOT_EVALUATED rather than inheriting Stage A READY', () => {
-    const result = classifyPgvectorReadiness(
-      { probe_mode: 'NOT_EVALUATED', stage: 'STAGE_B' },
-      { stage: 'STAGE_B' },
-    );
-    expect(result).toEqual({ status: 'NOT_EVALUATED', reasons: [] });
+  it('unevaluated downstream stages remain NOT_EVALUATED rather than inheriting Stage A READY', () => {
+    for (const stage of ['STAGE_B', 'STAGE_C']) {
+      const result = classifyPgvectorReadiness(
+        { probe_mode: 'NOT_EVALUATED', stage },
+        { stage },
+      );
+      expect(result).toEqual({ status: 'NOT_EVALUATED', reasons: [] });
+    }
   });
 });
 
