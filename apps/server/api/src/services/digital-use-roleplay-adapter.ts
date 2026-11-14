@@ -27,11 +27,13 @@ export interface RoleplayTurnOutput {
 }
 
 export interface RoleplayAdapter {
+  readonly adapterRef: string;
   isAvailable(context: RoleplayCapabilityContext): Promise<boolean>;
   createTurn(input: RoleplayTurnInput): Promise<RoleplayTurnOutput>;
 }
 
 export const unavailableProductionRoleplayAdapter: RoleplayAdapter = Object.freeze({
+  adapterRef: 'phase3:unavailable',
   async isAvailable() { return false; },
   async createTurn(): Promise<RoleplayTurnOutput> {
     throw Object.assign(new Error('DOWNSTREAM_AI_UNAVAILABLE'), {

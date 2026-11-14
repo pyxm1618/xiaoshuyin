@@ -134,7 +134,7 @@ export async function createPhoneUseRoleplay(
        scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
        professionalContentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,
        compliancePolicyRef:`${compliance.featureCode}@${compliance.featureContractRevision}:policy-${compliance.policyVersion ?? 'none'}`,
-       adapterRef:'roleplay-adapter:v1',
+       adapterRef:adapter.adapterRef,
      });
      return {status:201,body:roleplaySessionDto(row)};
    });
@@ -167,6 +167,9 @@ export async function addPhoneUseRoleplayTurn(
        sessionId:session.id,roundNumber,simulatedChildInput:input.simulatedChildInput,actorPersonId:input.actor.personId,
        scenePackageVersion:session.scene_package_version,professionalContentVersion:session.professional_content_version,
      });
+     if(generated.adapterRef!==session.adapter_ref){
+       throw roleplayError('PHONE_USE_CONTRACT_PACKAGE_DRIFT','Roleplay adapter provenance drift');
+     }
      const turn=await insertRoleplayTurn(tx,{
        familyId:input.familyId,caseId:input.caseId,sessionId:session.id,roundNumber,
        simulatedChildInput:input.simulatedChildInput,simulatedParentOutput:generated.simulatedParentOutput,

@@ -467,6 +467,10 @@ export async function revisePhoneUseContract(
   const active=await getCurrentActivePhoneUseContract(tx,input.caseId,true);
   if(!active||active.adult_party_person_id!==input.actor.personId) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
   if(active.draft_revision!==input.expectedActiveDraftRevision) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
+  const current=await getCurrentPhoneUseContract(tx,input.caseId);
+  if(current && (current.status==='DRAFT'||current.status==='PENDING_CONFIRMATION')){
+    throw contractError('PHONE_USE_CONTRACT_STALE_REVISION','An open Contract revision already exists');
+  }
   resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
   await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:active.child_party_person_id,participationId:active.child_participation_id});
   await ensureContractNode(tx,{familyId:input.familyId,caseId:input.caseId,nodeCode:'A4012',inputRefs:toStoredRefs(active.dependency_refs)});
