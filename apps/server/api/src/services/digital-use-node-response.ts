@@ -32,9 +32,10 @@ import {
   type DigitalUseNodeManifestEntry,
   type DigitalUseRoutingResult,
 } from '@xiaoshuyin/scenes/digital-use';
-import type {
-  CompleteDigitalUseNodeRequestType,
-  DigitalUseSceneResponseType,
+import {
+  A5001FamilyAllianceReviewResponse,
+  type CompleteDigitalUseNodeRequestType,
+  type DigitalUseSceneResponseType,
 } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
 import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
@@ -52,6 +53,10 @@ import {
 } from './digital-use-node-semantics.js';
 import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
 import { executeFamilyAllianceNodeInTransaction } from './digital-use-family-alliance.js';
+import {
+  executeFamilyAllianceReviewNodeInTransaction,
+  resolveA5001SubjectSnapshot,
+} from './digital-use-family-alliance-review.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -460,16 +465,39 @@ export async function completeDigitalUseNodeResponse(
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
+      if (node.stream === 'FAMILY_ALLIANCE_REVIEW') {
+        // Subject resolution must never run before the Case has been proven
+        // visible inside the actor's RLS family context. Keep this check
+        // read-only: the canonical business path acquires Family -> Case locks
+        // only after the idempotency advisory lock, preserving the existing
+        // transaction lock order and avoiding a Case -> idempotency inversion.
+        const visibleCase = await getCaseById(tx, input.caseId);
+        if (visibleCase === null) throw nodeError('CASE_NOT_FOUND', 'Case not found');
+      }
+      const resolvedA5001Subject =
+        node.stream === 'FAMILY_ALLIANCE_REVIEW'
+          ? await resolveA5001SubjectSnapshot(tx, input.caseId)
+          : null;
+      const validatedResponse =
+        node.stream === 'FAMILY_ALLIANCE_REVIEW'
+          ? (() => {
+              const parsed = A5001FamilyAllianceReviewResponse.safeParse(input.response);
+              if (!parsed.success) throw nodeError('SCENE_RESPONSE_INVALID');
+              return parsed.data;
+            })()
+          : input.response;
       const requestHash = hashPayload({
         familyId: input.familyId,
         caseId: input.caseId,
         nodeCode: node.nodeCode,
+        stream: node.stream,
         expectedCaseVersion: input.expectedCaseVersion,
         expectedNodeRevision: input.expectedNodeRevision,
         expectedScenePackageVersion: input.expectedScenePackageVersion ?? null,
         expectedSelectionRevision: input.expectedSelectionRevision ?? null,
         expectedTargetRevision: input.expectedTargetRevision ?? null,
-        response: input.response,
+        resolvedSubject: resolvedA5001Subject,
+        response: validatedResponse,
       });
 
       const outcome = await runIdempotentCommandInTransaction(
@@ -478,11 +506,26 @@ export async function completeDigitalUseNodeResponse(
           accountId: input.actor.accountId,
           personId: input.actor.personId,
           purpose: 'FAMILY_MANAGEMENT',
+          // Slice 15 keeps the existing Scene command slot. A5001 command
+          // identity is independent through the server-resolved node + exact
+          // Family Alliance subject/revisions included in requestHash above;
+          // no second idempotency owner or schema vocabulary is introduced.
           commandType: 'DIGITAL_USE_NODE_RESPONSE',
           idempotencyKey: input.idempotencyKey,
           requestHash,
         },
         async () => {
+          if (node.stream === 'FAMILY_ALLIANCE_REVIEW') {
+            return {
+              status: 200,
+              body: await executeFamilyAllianceReviewNodeInTransaction(
+                tx,
+                input,
+                node
+              ),
+            };
+          }
+
           if (node.stream === 'FAMILY_ALLIANCE') {
             return {
               status: 200,

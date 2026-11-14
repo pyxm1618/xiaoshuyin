@@ -89,6 +89,27 @@ const MutationErrors = {
   500: DigitalUseApiError,
 } as const;
 
+function hasUntrustedScheduledClaim(body: unknown): boolean {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    (body as Record<string, unknown>)['entryMode'] === 'SCHEDULED'
+  );
+}
+
+function scheduledCapabilityUnavailable(): Error & {
+  statusCode: 409;
+  code: 'DEPENDENCY_UNAVAILABLE';
+} {
+  return Object.assign(new Error('Scheduled entry capability is unavailable'), {
+    // Slice 12 froze this endpoint's public status set. Slice 15 keeps the
+    // exact unavailable capability code while using the existing 409
+    // business-gate conflict status instead of mutating the upstream API.
+    statusCode: 409 as const,
+    code: 'DEPENDENCY_UNAVAILABLE' as const,
+  });
+}
+
 export function registerDigitalUseAssessmentRoutes(
   app: FastifyInstance,
   pool: pg.Pool,
@@ -190,6 +211,19 @@ export function registerDigitalUseAssessmentRoutes(
     '/api/v1/cases/:id/scene/nodes/:nodeCode/responses',
     {
       onRequest: app.authenticate,
+      preValidation: async (req) => {
+        const params = req.params as { nodeCode?: unknown };
+        if (
+          params.nodeCode === 'A5001' &&
+          hasUntrustedScheduledClaim(req.body)
+        ) {
+          // SCHEDULED is Manifest eligibility only. Until the future Phase-4
+          // Schedule owner can provide authentic trigger context, production
+          // scheduled execution is truthfully unavailable. Keep entryMode out
+          // of the legal body contract so the client never gains authority.
+          throw scheduledCapabilityUnavailable();
+        }
+      },
       schema: {
         operationId: 'completeDigitalUseSceneNode',
         summary: 'Record one structured response for the current Digital Use node',

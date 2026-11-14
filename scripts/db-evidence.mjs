@@ -441,11 +441,12 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       /APPLY 013_consent_01004_supplemental_assessment\.sql/.test(output) &&
       /APPLY 014_consent_01004_cross_purpose_supersede_guard\.sql/.test(output) &&
       /APPLY 015_digital_use_assessment_runtime\.sql/.test(output) &&
-      /APPLY 016_digital_use_family_alliance_runtime\.sql/.test(output));
+      /APPLY 016_digital_use_family_alliance_runtime\.sql/.test(output) &&
+      /APPLY 018_digital_use_review_runtime\.sql/.test(output));
     check(
-      'upgrade 结果为 14 new / 3 previously applied',
+      'upgrade 结果为 15 new / 3 previously applied',
       true,
-      /Migration complete: 14 new, 3 previously applied\./.test(output)
+      /Migration complete: 15 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -476,6 +477,8 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       '015_digital_use_assessment_runtime.sql',
       // Slice 13 reviewed Digital Use Family Alliance runtime migration.
       '016_digital_use_family_alliance_runtime.sql',
+      // Slice 15 A5001 additive Scene Artifact vocabulary migration.
+      '018_digital_use_review_runtime.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',
