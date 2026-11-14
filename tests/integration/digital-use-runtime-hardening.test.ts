@@ -1078,7 +1078,7 @@ describe('T1218 Digital Use runtime hardening', () => {
         payload:{expectedCaseVersion:f.caseVersion,expectedNodeRevision:1,response},
       });
       expect(attempted.statusCode,attempted.body).toBe(409);
-      expect(attempted.json().code).toBe('SCENE_NODE_UNREACHABLE');
+      expect(attempted.json().code).toBe('CASE_PHASE_CONFLICT');
     }
     const residue=await admin.query(
       `SELECT
