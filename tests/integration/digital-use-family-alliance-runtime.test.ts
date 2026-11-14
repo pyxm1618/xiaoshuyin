@@ -1213,4 +1213,246 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect(residue.rows[0]!.n).toBe(0);
   });
 
+
+  it('HX parallel A3001/A3002 writes are both legal and neither becomes a prerequisite', async () => {
+    const f = await fixture('parallel-race');
+    expect((await respond(f, 'A3000', selfAssessment())).statusCode).toBe(200);
+    const scene = await getScene(f);
+    const a3001 = scene.nodes.find((node: any) => node.nodeCode === 'A3001');
+    const a3002 = scene.nodes.find((node: any) => node.nodeCode === 'A3002');
+
+    const communication = app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3001/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-parallel-a3001-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: a3001.revision,
+        expectedScenePackageVersion: 'v1',
+        response: { kind: 'COMMUNICATION_PREP', action: 'ACKNOWLEDGED' },
+      },
+    });
+    const selection = app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3002/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-parallel-a3002-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: a3002.revision,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: 0,
+        response: {
+          kind: 'TARGET_SELECTION',
+          confirmed: true,
+          selectedTargets: ['SLEEP'],
+        },
+      },
+    });
+    const [left, right] = await Promise.all([communication, selection]);
+    expect([left.statusCode, right.statusCode]).toEqual([200, 200]);
+    const final = await getScene(f);
+    expect(final.nodes.find((node: any) => node.nodeCode === 'A3001')?.status)
+      .toBe('COMPLETED');
+    expect(final.nodes.find((node: any) => node.nodeCode === 'A3002')?.status)
+      .toBe('COMPLETED');
+  });
+
+  it('HX target reselection versus progress preserves one selection truth and immutable history', async () => {
+    const f = await fixture('reselect-progress-race');
+    expect((await respond(f, 'A3000', selfAssessment())).statusCode).toBe(200);
+    const selected = await respond(
+      f,
+      'A3002',
+      { kind: 'TARGET_SELECTION', confirmed: true, selectedTargets: ['SLEEP'] },
+      { expectedSelectionRevision: 0 }
+    );
+    expect(selected.statusCode, selected.body).toBe(200);
+    const body = selected.json();
+    const a3002 = body.nodes.find((node: any) => node.nodeCode === 'A3002');
+    const a3012 = body.nodes.find((node: any) => node.nodeCode === 'A3012');
+    const sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+
+    const reselection = app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3002/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-reselect-race-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: a3002.revision,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: sleep.selectionRevision,
+        response: {
+          kind: 'TARGET_SELECTION',
+          confirmed: true,
+          selectedTargets: ['EXERCISE'],
+        },
+      },
+    });
+    const progress = app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3012/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-progress-race-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: a3012.revision,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+        response: {
+          kind: 'PROGRESS',
+          progress: { stage: 'EXECUTION', state: 'KNOWN', modifyTarget: 'NO' },
+          note: 'concurrent progress observation',
+        },
+      },
+    });
+    const [reselected, progressed] = await Promise.all([reselection, progress]);
+    expect(reselected.statusCode, reselected.body).toBe(200);
+    expect([200, 409]).toContain(progressed.statusCode);
+
+    const current = await admin.query<{
+      n: number;
+      selection_revisions: number;
+      selected_sleep: number;
+    }>(
+      \`SELECT
+        count(*)::int AS n,
+        count(DISTINCT selection_revision)::int AS selection_revisions,
+        count(*) FILTER (WHERE target_code='SLEEP' AND selected)::int AS selected_sleep
+       FROM digital_use_target_items
+       WHERE case_id=$1 AND superseded_at IS NULL\`,
+      [f.caseId]
+    );
+    expect(current.rows[0]).toEqual({
+      n: 10,
+      selection_revisions: 1,
+      selected_sleep: 0,
+    });
+    if (progressed.statusCode === 200) {
+      const historical = await admin.query<{ n: number }>(
+        \`SELECT count(*)::int AS n
+           FROM digital_use_target_items
+          WHERE case_id=$1 AND target_code='SLEEP'
+            AND progress_payload IS NOT NULL\`,
+        [f.caseId]
+      );
+      expect(historical.rows[0]!.n).toBeGreaterThan(0);
+    }
+  });
+
+  it('HX A3000 reassessment and independent A3001 write may coexist without stale cross-branch failure', async () => {
+    const f = await fixture('reassess-downstream-race');
+    const first = await respond(f, 'A3000', selfAssessment('YES'));
+    expect(first.statusCode, first.body).toBe(200);
+    const body = first.json();
+    const a3000 = body.nodes.find((node: any) => node.nodeCode === 'A3000');
+    const a3001 = body.nodes.find((node: any) => node.nodeCode === 'A3001');
+
+    const reassess = app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-reassess-race-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: a3000.revision,
+        expectedScenePackageVersion: 'v1',
+        response: selfAssessment('NO'),
+      },
+    });
+    const downstream = app.inject({
+      method: 'POST',
+      url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3001/responses\`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': \`fa-downstream-race-\${crypto.randomUUID()}\`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: a3001.revision,
+        expectedScenePackageVersion: 'v1',
+        response: { kind: 'COMMUNICATION_PREP', action: 'ACKNOWLEDGED' },
+      },
+    });
+    const [left, right] = await Promise.all([reassess, downstream]);
+    expect([left.statusCode, right.statusCode]).toEqual([200, 200]);
+
+    const artifacts = await admin.query<{ n: number }>(
+      \`SELECT count(*)::int AS n FROM scene_artifacts
+        WHERE case_id=$1
+          AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT'\`,
+      [f.caseId]
+    );
+    expect(artifacts.rows[0]!.n).toBe(2);
+  });
+
+  it('HX Scene package replacement race is pinned by the A1001 owner row lock', async () => {
+    const f = await fixture('package-race');
+    const blocker = new pg.Client({
+      connectionString: process.env['TEST_ADMIN_DATABASE_URL']!,
+    });
+    await blocker.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        \`DELETE FROM scene_node_states
+          WHERE case_id=$1 AND node_code='A1001'\`,
+        [f.caseId]
+      );
+      const a1001 = resolveDigitalUseRuntimeNode('A1001');
+      await blocker.query(
+        \`INSERT INTO scene_node_states
+           (family_id,case_id,scene_package_version,node_code,source_node_code,
+            status,branch_reason_codes,input_refs,output_refs,revision,completed_at)
+         VALUES ($1,$2,'v2',$3,$4,'COMPLETED',ARRAY['PACKAGE_DRIFT_FIXTURE'],
+                 '[]'::jsonb,'[]'::jsonb,1,now())\`,
+        [f.familyId, f.caseId, a1001.nodeCode, a1001.sourceNodeCode]
+      );
+
+      const request = app.inject({
+        method: 'POST',
+        url: \`/api/v1/cases/\${f.caseId}/scene/nodes/A3000/responses\`,
+        headers: {
+          ...auth(f.manager.token),
+          'idempotency-key': \`fa-package-race-\${crypto.randomUUID()}\`,
+        },
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          response: selfAssessment(),
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await blocker.query('COMMIT');
+      const blocked = await request;
+      expect(blocked.statusCode).toBe(409);
+      expect(['SCENE_PACKAGE_MISMATCH','STALE_SCENE_PACKAGE'])
+        .toContain(blocked.json().code);
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      await blocker.end();
+    }
+
+    const residue = await admin.query<{ n: number }>(
+      \`SELECT count(*)::int AS n FROM assertions
+        WHERE case_id=$1 AND content LIKE 'DUFA:v1:%'\`,
+      [f.caseId]
+    );
+    expect(residue.rows[0]!.n).toBe(0);
+  });
+
 });

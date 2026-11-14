@@ -23,7 +23,6 @@ import {
   getCurrentDigitalUseTargetItem,
   getCurrentTargetSelectionRevision,
   getSceneNodeState,
-  getScenePackageBinding,
   insertDigitalUseNodeCompletedAudit,
   insertDigitalUseNodeCompletedEvent,
   listCurrentDigitalUseTargetItems,
@@ -390,7 +389,11 @@ export async function executeFamilyAllianceNodeInTransaction(
     }
     if (caseRow.phase !== 'GOALS') throw familyHttpError('CASE_PHASE_CONFLICT');
 
-    const binding = await getScenePackageBinding(tx, input.caseId);
+    // Pin the single Slice 12 package anchor in the caller-owned transaction.
+    // This prevents an owner-side package replacement from racing after the
+    // basis check but before Family Alliance business effects commit.
+    const packageAnchor = await getSceneNodeState(tx, input.caseId, 'A1001', true);
+    const binding = packageAnchor?.scene_package_version ?? null;
     if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
       throw familyHttpError(
         binding === null ? 'SCENE_PACKAGE_MISMATCH' : 'STALE_SCENE_PACKAGE'
