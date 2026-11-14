@@ -259,6 +259,66 @@ describe('migration checksum integrity', () => {
     }
   });
 
+  it('rolls checksum metadata back if legacy baseline binding fails inside the transition', async () => {
+    const root = fixtureRoot();
+    const dbUrl = await createDatabase('legacy_atomic');
+    const original = 'CREATE TABLE legacy_atomic_probe (id integer PRIMARY KEY);\n';
+    writeMigration(root, '001_legacy.sql', original);
+    writeMigration(root, '002_checksum_metadata.sql', METADATA_MIGRATION);
+
+    const db = new Client({ connectionString: dbUrl });
+    await db.connect();
+    try {
+      await db.query(`
+        CREATE TABLE schema_migrations (
+          filename text PRIMARY KEY,
+          applied_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      await db.query(original);
+      await db.query(
+        'INSERT INTO schema_migrations (filename) VALUES ($1)',
+        ['001_legacy.sql']
+      );
+      await db.query(`
+        CREATE FUNCTION reject_legacy_baseline_for_test() RETURNS trigger
+        LANGUAGE plpgsql AS $
+        BEGIN
+          RAISE EXCEPTION 'TEST_BASELINE_REJECTED';
+        END $;
+        CREATE TRIGGER reject_legacy_baseline_for_test
+          BEFORE UPDATE ON schema_migrations
+          FOR EACH ROW EXECUTE FUNCTION reject_legacy_baseline_for_test();
+      `);
+    } finally {
+      await db.end();
+    }
+
+    const failed = runRunner(root, dbUrl);
+    expect(failed.status).not.toBe(0);
+    expect(`${failed.stdout}\n${failed.stderr}`).toMatch(/TEST_BASELINE_REJECTED/);
+
+    const check = new Client({ connectionString: dbUrl });
+    await check.connect();
+    try {
+      const columns = await check.query(`
+        SELECT column_name
+          FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND table_name = 'schema_migrations'
+         ORDER BY ordinal_position
+      `);
+      expect(columns.rows.map((row) => row.column_name)).toEqual(['filename', 'applied_at']);
+
+      const rows = await check.query(
+        'SELECT filename FROM schema_migrations ORDER BY filename'
+      );
+      expect(rows.rows).toEqual([{ filename: '001_legacy.sql' }]);
+    } finally {
+      await check.end();
+    }
+  });
+
   it('serializes concurrent legacy transition runners without duplicate apply or baseline races', async () => {
     const root = fixtureRoot();
     const dbUrl = await createDatabase('legacy_concurrent');
