@@ -89,6 +89,19 @@ const MutationErrors = {
   500: DigitalUseApiError,
 } as const;
 
+const NodeMutationErrors = {
+  ...MutationErrors,
+  503: DigitalUseApiError,
+} as const;
+
+function hasUntrustedScheduledClaim(body: unknown): boolean {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    (body as Record<string, unknown>)['entryMode'] === 'SCHEDULED'
+  );
+}
+
 export function registerDigitalUseAssessmentRoutes(
   app: FastifyInstance,
   pool: pg.Pool,
@@ -190,6 +203,22 @@ export function registerDigitalUseAssessmentRoutes(
     '/api/v1/cases/:id/scene/nodes/:nodeCode/responses',
     {
       onRequest: app.authenticate,
+      preValidation: async (req) => {
+        const params = req.params as { nodeCode?: unknown };
+        if (
+          params.nodeCode === 'A5001' &&
+          hasUntrustedScheduledClaim(req.body)
+        ) {
+          // SCHEDULED is Manifest eligibility only. Until the future Phase-4
+          // Schedule owner can provide authentic trigger context, production
+          // scheduled execution is truthfully unavailable. Keep entryMode out
+          // of the legal body contract so the client never gains authority.
+          throw httpError(
+            'DEPENDENCY_UNAVAILABLE',
+            'Scheduled entry capability is unavailable'
+          );
+        }
+      },
       schema: {
         operationId: 'completeDigitalUseSceneNode',
         summary: 'Record one structured response for the current Digital Use node',
@@ -199,7 +228,7 @@ export function registerDigitalUseAssessmentRoutes(
         body: CompleteDigitalUseNodeRequest,
         response: {
           200: DigitalUseSceneResponse,
-          ...MutationErrors,
+          ...NodeMutationErrors,
         },
       },
     },
