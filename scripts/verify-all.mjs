@@ -281,6 +281,26 @@ const gates = [
     args: ['run', 'coverage:audit'],
     env: { COVERAGE_EXECUTION_EVIDENCE: EXECUTION_EVIDENCE },
   },
+  {
+    label: 'G9 Slice 19 pgvector targeted tests',
+    exec: 'bunx',
+    args: [
+      'vitest',
+      'run',
+      'tests/architecture/pgvector-readiness-evidence.test.ts',
+      'tests/db/pgvector-readiness.test.ts',
+    ],
+  },
+  {
+    label: 'G10 static guard self-test',
+    exec: 'node',
+    args: ['scripts/guard-static.mjs', '--self-test'],
+  },
+  {
+    label: 'G11 real pgvector readiness probe',
+    exec: 'node',
+    args: ['scripts/pgvector-readiness.mjs'],
+  },
 ];
 
 const governance = [
@@ -341,6 +361,11 @@ async function main() {
     provenanceOk = false;
     notVerified++;
   }
+  const pgvectorRepositoryCommit = process.env['PGVECTOR_REPOSITORY_COMMIT'] ?? '';
+  if (pgvectorRepositoryCommit && head !== pgvectorRepositoryCommit) {
+    provenanceOk = false;
+    notVerified++;
+  }
   if (!startClean && !ARCHIVE) {
     provenanceOk = false;
     notVerified++;
@@ -355,6 +380,16 @@ async function main() {
     'IDENTITY_BINDING_PAIRING_TTL_SECONDS',
     'PARTICIPATION_INVITE_TTL_SECONDS',
     'PARTICIPATION_INVITE_TOKEN_SECRET',
+    'PGVECTOR_STAGE',
+    'PGVECTOR_ENVIRONMENT_KIND',
+    'PGVECTOR_ENVIRONMENT_ID',
+    'PGVECTOR_REPOSITORY_COMMIT',
+    'PGVECTOR_IMAGE_REF',
+    'PGVECTOR_EXPECTED_VERSION',
+    'PGVECTOR_READINESS_EVIDENCE',
+    'GITHUB_SHA',
+    'GITHUB_RUN_ID',
+    'GITHUB_RUN_ATTEMPT',
   ];
   const fixtureProvided = new Set([
     'IDENTITY_BINDING_SECRET',
