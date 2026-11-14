@@ -121,7 +121,7 @@ async function ensureContractNode(
  input:{familyId:string;caseId:string;nodeCode:'A4010'|'A4012';inputRefs:readonly StoredSceneRef[]}
 ){
  const manifest=resolveDigitalUseRuntimeNode(input.nodeCode);
- if(!manifest.entryMode.includes('USER_INITIATED')) throw contractError('SCENE_NODE_UNREACHABLE');
+ if(!(manifest.entryMode as readonly string[]).includes('USER_INITIATED')) throw contractError('SCENE_NODE_UNREACHABLE');
  let existing=await getSceneNodeState(tx,input.caseId,input.nodeCode,true);
  if(existing?.status==='COMPLETED'){
    const reentered=await casReenterCompletedSceneNode(tx,{

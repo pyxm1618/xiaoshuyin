@@ -512,7 +512,7 @@ export async function completeDigitalUseNodeResponse(
           let current = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
           if (
             current?.status === 'COMPLETED' &&
-            node.entryMode.includes('USER_INITIATED') &&
+            (node.entryMode as readonly string[]).includes('USER_INITIATED') &&
             node.helpOrReentryRefs.length > 0
           ) {
             if (current.revision !== input.expectedNodeRevision) {
@@ -536,7 +536,7 @@ export async function completeDigitalUseNodeResponse(
           if (
             !current &&
             ['A4005','A4006','A4007','A4008','A4009'].includes(node.nodeCode) &&
-            node.entryMode.includes('USER_INITIATED')
+            (node.entryMode as readonly string[]).includes('USER_INITIATED')
           ) {
             const catalog = await getSceneNodeState(tx, input.caseId, 'A4004', true);
             if (!catalog || catalog.status !== 'COMPLETED') {
@@ -700,7 +700,7 @@ export async function completeDigitalUseNodeResponse(
               });
             } else {
               const familyEntry = resolveDigitalUseRuntimeNode('A3000');
-              if (familyEntry.canRunInParallelWith.includes('A4001')) {
+              if ((familyEntry.canRunInParallelWith as readonly string[]).includes('A4001')) {
                 const contractEntry = resolveDigitalUseRuntimeNode('A4001');
                 await ensureSceneNodeAvailable(tx, {
                   familyId: input.familyId,

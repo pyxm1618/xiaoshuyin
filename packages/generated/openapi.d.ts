@@ -3415,10 +3415,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -3903,10 +3903,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -4287,10 +4287,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -4789,10 +4789,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
                             revision: number;
                             data: {
                                 [key: string]: unknown;

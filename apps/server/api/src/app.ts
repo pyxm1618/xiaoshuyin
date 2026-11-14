@@ -156,7 +156,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);
   registerDigitalUseAssessmentRoutes(app, pool, { evidencePepper: runtime.evidencePepper });
-  registerDigitalUsePhoneContractRoutes(app, pool, { roleplayAdapter: options.phoneUseContract?.roleplayAdapter });
+  registerDigitalUsePhoneContractRoutes(
+    app,
+    pool,
+    options.phoneUseContract?.roleplayAdapter
+      ? { roleplayAdapter: options.phoneUseContract.roleplayAdapter }
+      : {}
+  );
   registerParticipationRoutes(app, pool, {
     inviteTtlSeconds: runtime.participationInviteTtlSeconds,
     inviteTokenSecret: runtime.participationInviteTokenSecret,
