@@ -502,6 +502,57 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     });
   });
 
+  it('RLS keeps the A5001 artifact invisible outside its Family context', async () => {
+    const { f, scene } = await prepareA5001('rls-artifact');
+    const result = await a5001Request(
+      f,
+      scene,
+      `a5001-rls-${crypto.randomUUID()}`
+    );
+    expect(result.statusCode, result.body).toBe(200);
+    const artifact = result.json().artifacts.find(
+      (item: any) => item.type === 'DIGITAL_USE_A5001_EFFECT_EVALUATION'
+    );
+    expect(artifact?.id).toEqual(expect.any(String));
+
+    const visible = await withRlsTransaction(
+      appDb,
+      {
+        familyId: f.familyId,
+        accountId: f.manager.accountId,
+        personId: f.manager.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) => tx.query(
+        'SELECT count(*)::int AS n FROM scene_artifacts WHERE id=$1',
+        [artifact.id]
+      )
+    );
+    expect(visible.rows[0]!.n).toBe(1);
+
+    const outsider = await loginWithLabel(app, 'a5001-rls-outsider');
+    const outsiderFamily = await createFamily(
+      app,
+      outsider.token,
+      'a5001-rls-outsider'
+    );
+    expect(outsiderFamily.statusCode, outsiderFamily.body).toBe(201);
+    const hidden = await withRlsTransaction(
+      appDb,
+      {
+        familyId: outsiderFamily.json().id as string,
+        accountId: outsider.accountId,
+        personId: outsider.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) => tx.query(
+        'SELECT count(*)::int AS n FROM scene_artifacts WHERE id=$1',
+        [artifact.id]
+      )
+    );
+    expect(hidden.rows[0]!.n).toBe(0);
+  });
+
   it('AS-07/53-56 rejects Contract-review and fake scheduled authority with no review artifact', async () => {
     const { f, scene } = await prepareA5001('strict-boundary');
 
