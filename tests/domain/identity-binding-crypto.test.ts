@@ -10,6 +10,7 @@ import {
   deriveIdentityDigest,
   deriveIdentityPepper,
   derivePairingIssuanceNonce,
+  encodeDecoyPairingChallenge,
   encodePairingChallenge,
   encryptOpenid,
   hashToken,
@@ -156,6 +157,30 @@ describe('identity binding crypto', () => {
       pairingExpiresAt: new Date(Date.now() - 300_000),
     });
     expect(decodePairingChallenge(SECRET, encodePairingChallenge(SECRET, expired))).toBeNull();
+  });
+
+  it('REM2-005: one decoy issuance is stable and rotation changes it', () => {
+    const base = fixedFacts();
+    const decoyFacts = {
+      contextId: base.contextId,
+      pairingIssuanceId: base.pairingIssuanceId,
+      pairingIssuedAt: base.pairingIssuedAt,
+      pairingExpiresAt: base.pairingExpiresAt,
+    };
+    const first = encodeDecoyPairingChallenge(SECRET, decoyFacts);
+    const replay = encodeDecoyPairingChallenge(SECRET, decoyFacts);
+    const rotated = encodeDecoyPairingChallenge(SECRET, {
+      ...decoyFacts,
+      pairingIssuanceId: randomUUID(),
+    });
+
+    expect(replay).toBe(first);
+    expect(rotated).not.toBe(first);
+    for (const challenge of [first, rotated]) {
+      expect(challenge).toMatch(/^[A-Za-z0-9_-]{192}$/);
+      expect(Buffer.from(challenge, 'base64url')).toHaveLength(PAIRING_ENVELOPE_BYTES);
+      expect(decodePairingChallenge(SECRET, challenge)).toBeNull();
+    }
   });
 
   it('decoy has the same external representation but never resolves', () => {
