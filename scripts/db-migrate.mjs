@@ -199,11 +199,11 @@ async function main() {
 
     for (const migration of migrations) {
       if (applied.has(migration.filename)) {
-        console.log(`SKIP ${migration.filename}`);
+        console.log(`  SKIP ${migration.filename} (already applied)`);
         continue;
       }
 
-      console.log(`APPLY ${migration.filename}`);
+      console.log(`  APPLY ${migration.filename}`);
       await client.query('BEGIN');
       let metadataAfterApply = hasChecksums;
       try {
@@ -235,7 +235,7 @@ async function main() {
         await client.query('COMMIT');
       } catch (err) {
         await client.query('ROLLBACK');
-        console.error(`FAILED ${migration.filename}:`, err.message);
+        console.error(`  FAIL ${migration.filename}: ${err.message}`);
         throw err;
       }
 
@@ -263,6 +263,7 @@ async function main() {
           'xiaoshuyin_app has CREATE on public schema; run db/init/01-roles.sh to revoke it'
         );
       }
+      console.log('Verified: app role has no DDL permissions.');
     } catch (err) {
       if (err.code === '42704') {
         console.warn('WARN xiaoshuyin_app role not found; run db/init/01-roles.sh first');
@@ -272,7 +273,7 @@ async function main() {
     }
 
     console.log(
-      `Migration complete: ${appliedCount} new, ${migrations.length - appliedCount} previously applied.`
+      `\nMigration complete: ${appliedCount} new, ${migrations.length - appliedCount} previously applied.`
     );
   } finally {
     await client.end();
@@ -280,6 +281,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err);
+  console.error('Migration failed:', err.message);
   process.exit(1);
 });
