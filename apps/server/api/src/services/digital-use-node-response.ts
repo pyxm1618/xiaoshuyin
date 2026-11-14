@@ -10,6 +10,7 @@ import {
   assertOrdinaryProgressionAllowedRaw,
   casCompleteSceneNodeState,
   casRecordSceneNodeProgress,
+  casReenterCompletedSceneNode,
   ensureSceneNodeAvailable,
   getCaseById,
   getSceneNodeState,
@@ -509,6 +510,29 @@ export async function completeDigitalUseNodeResponse(
           if (binding !== DIGITAL_USE_PACKAGE_VERSION) throw nodeError('STALE_SCENE_PACKAGE');
 
           let current = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
+          if (
+            current?.status === 'COMPLETED' &&
+            node.entryMode.includes('USER_INITIATED') &&
+            node.helpOrReentryRefs.length > 0
+          ) {
+            if (current.revision !== input.expectedNodeRevision) {
+              throw nodeError('STALE_NODE_REVISION');
+            }
+            const reentered = await casReenterCompletedSceneNode(tx, {
+              caseId: input.caseId,
+              nodeCode: node.nodeCode,
+              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+              expectedRevision: current.revision,
+              branchReasonCodes: ['USER_INITIATED_REENTRY'],
+              inputRefs: current.output_refs.length > 0 ? current.output_refs : current.input_refs,
+            });
+            if (!reentered) throw nodeError('STALE_NODE_REVISION');
+            current = reentered;
+            // The client supplied the revision of the completed projection.
+            // The generic re-entry transition consumes it, so subsequent
+            // completion must use the server-owned incremented revision.
+            input = { ...input, expectedNodeRevision: reentered.revision };
+          }
           if (
             !current &&
             ['A4005','A4006','A4007','A4008','A4009'].includes(node.nodeCode) &&

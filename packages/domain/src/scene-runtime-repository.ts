@@ -315,6 +315,44 @@ export async function casCompleteSceneNodeState(
   return rows[0] ?? null;
 }
 
+/**
+ * Slice 14 consumes the existing Manifest USER_INITIATED re-entry metadata.
+ * This is a generic Scene-State CAS transition, not phone-contract topology:
+ * callers must prove the Manifest permits re-entry before invoking it.
+ */
+export async function casReenterCompletedSceneNode(
+  tx: Tx,
+  input: {
+    caseId: string;
+    nodeCode: string;
+    scenePackageVersion: string;
+    expectedRevision: number;
+    branchReasonCodes: readonly string[];
+    inputRefs: readonly StoredSceneRef[];
+  }
+): Promise<SceneNodeStateRow | null> {
+  const { rows } = await tx.query<SceneNodeStateRow>(
+    `UPDATE scene_node_states
+        SET status = 'IN_PROGRESS',
+            branch_reason_codes = $5,
+            input_refs = $6::jsonb,
+            output_refs = '[]'::jsonb,
+            completed_at = NULL,
+            revision = revision + 1
+      WHERE case_id = $1
+        AND node_code = $2
+        AND scene_package_version = $3
+        AND revision = $4
+        AND status = 'COMPLETED'
+      RETURNING ${NODE_COLUMNS}`,
+    [
+      input.caseId, input.nodeCode, input.scenePackageVersion, input.expectedRevision,
+      [...input.branchReasonCodes], JSON.stringify(input.inputRefs),
+    ]
+  );
+  return rows[0] ?? null;
+}
+
 export async function listSceneArtifacts(
   tx: Tx,
   caseId: string
