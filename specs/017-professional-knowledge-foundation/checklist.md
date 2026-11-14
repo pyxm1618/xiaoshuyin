@@ -64,6 +64,7 @@
 | D12 | source/filter/package scope changes substantive | PASS | Plan §5/§8 |
 | D13 | history/citations preserved | PASS | Plan §5/§8 |
 | D14 | AI draft provenance grants no authority | PASS | Plan §8 |
+| D15 | no SUBMITTED lifecycle state or review queue is invented; review target semantics are explicit | PASS | Plan §8 / Tasks T1708 |
 
 ## Persistence / Source / Filters
 
@@ -147,6 +148,7 @@
 | R12 | commit-success/response-loss test | PASS | Plan §16 / T1717 |
 | R13 | no-commit timeout test | PASS | Plan §16 / T1717 |
 | R14 | outcome unknown needs readback | PASS | Plan §16 |
+| R15 | any pre-existing distinct review-request command is non-authoritative and uses shared idempotency | PASS | Plan §8/§14 / Tasks T1708 |
 | AU01 | family audit not abused | PASS | Plan §17 |
 | AU02 | professional audit stays under existing audit authority | PASS | Plan §17 |
 | AU03 | physical projection only if sanctioned | PASS | Plan §17 |
@@ -297,6 +299,11 @@ This is a correct planning result, not checklist failure.
 
 ## Audit 1
 
-Initial artifact status: **PENDING remote read-back and independent Frozen Spec vs Plan/Checklist/Tasks audit**.
+Initial Audit 1: **FINDING — MEDIUM 1**.
 
-Audit 1 must answer Q1–Q10 from the planning instructions. Any remediation is planning-only and requires re-audit.
+- S17-AUDIT1-REVIEW-SUBMISSION-01: Plan/Tasks did not explicitly state whether review submission creates a separate state/command, leaving Developer to guess and risking a generic workflow/queue.
+- Remediation: Plan §8/§14 and T1708 now state there is no Slice-17-owned SUBMITTED state/queue; an existing external review-request seam, if proven by T1702, is non-authoritative and idempotent only.
+- Files changed by remediation: plan.md, checklist.md, tasks.md only.
+- Frozen Spec / Docs / production / tests / migration changes: 0.
+
+Final re-Audit 1: **PENDING remote read-back**.

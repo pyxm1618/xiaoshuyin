@@ -262,6 +262,12 @@ Forbidden:
 
 Draft origin is typed HUMAN / AI_ASSISTED / SYSTEM_IMPORT unless a merged authoritative vocabulary supersedes labels. It is provenance only and gives no review/publish authority. No AI runtime is needed.
 
+### Review submission semantics
+
+Frozen Spec defines no SUBMITTED lifecycle state and this Slice must not invent a review queue/workflow truth. The authoritative lifecycle mutation is the real reviewer decision on one exact DRAFT revision/hash.
+
+If a then-current merged professional-workflow owner already exposes a distinct review-request/submit command, Slice 17 may call that seam only as non-authoritative coordination: it must carry exact knowledge/version/revision/hash, use shared idempotency, create no professional approval, and never make content production-selectable. If no such owner exists, T1708 proceeds directly from an exact DRAFT target to the authorized review decision; Developer must not create a new SUBMITTED state, queue table or generic workflow engine.
+
 ## 9. Scene Package / Knowledge Set Ownership
 
 Current merged authority:
@@ -361,6 +367,7 @@ Covered mutations:
 - create successor/correction;
 - source verify/update/withdraw;
 - separate package inclusion only if package owner requires it.
+- a distinct review-request/submit command only if an already-authoritative professional workflow owner exposes it; such coordination is non-authoritative and cannot add a lifecycle state.
 
 Rules:
 

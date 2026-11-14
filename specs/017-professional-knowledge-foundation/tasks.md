@@ -129,7 +129,9 @@ APPROVE -> append decision + REVIEWED. REJECT -> append decision + DRAFT/nonprod
 
 Use expected revision and shared idempotency.
 
-Verification: approve/reject/stale/replay/unauthorized/reviewed-only negative.
+**Submission semantics**: Frozen Spec has no SUBMITTED state. T1708's authoritative mutation is the reviewer decision on an exact DRAFT revision. If T1702 proves an existing professional-workflow owner has a separate review-request command, integrate it only as non-authoritative idempotent coordination carrying the exact revision/hash. Do not create a queue table, SUBMITTED status or generic workflow owner.
+
+Verification: approve/reject/stale/replay/unauthorized/reviewed-only negative; if an existing review-request seam is used, verify replay/mismatch and prove it cannot approve or publish.
 
 [REQ: FR-008,FR-009,FR-010,FR-011] [AS: AS-002,AS-003,AS-006,AS-018]
 
