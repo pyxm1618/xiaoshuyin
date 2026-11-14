@@ -452,3 +452,55 @@ export async function revisePhoneUseContract(
   return outcome.body;
  });
 }
+
+
+async function readProfessionalAssetGate(
+  pool: pg.Pool,
+  input: { actor: DigitalUseActor; familyId: string; caseId: string; nodeCode: 'A4002' | 'A4011' }
+): Promise<void> {
+  return withRlsTransaction(pool, {
+    familyId: input.familyId,
+    accountId: input.actor.accountId,
+    personId: input.actor.personId,
+    purpose: 'FAMILY_MANAGEMENT',
+  }, async (tx) => {
+    await authorizeManager(tx, input, 'CASE_READ_ASSESSMENT_SCENE');
+    await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+    await assertAssessmentCompliance(tx, input.actor.personId);
+    const binding = await getScenePackageBinding(tx, input.caseId);
+    if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
+      throw contractError(binding === null ? 'SCENE_NODE_UNREACHABLE' : 'STALE_SCENE_PACKAGE');
+    }
+    const node = await getSceneNodeState(tx, input.caseId, input.nodeCode);
+    if (!node || (node.status !== 'AVAILABLE' && node.status !== 'IN_PROGRESS' && node.status !== 'COMPLETED')) {
+      throw contractError('SCENE_NODE_UNREACHABLE');
+    }
+  });
+}
+
+export async function getPhoneUseContractTemplate(
+  pool: pg.Pool,
+  input: { actor: DigitalUseActor; familyId: string; caseId: string }
+) {
+  await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4002' });
+  const content = resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
+  return { meta: content.meta, ...content.template };
+}
+
+export async function getPhoneUseContractExamples(
+  pool: pg.Pool,
+  input: { actor: DigitalUseActor; familyId: string; caseId: string }
+) {
+  await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4002' });
+  const content = resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
+  return { meta: content.meta, examples: content.examples };
+}
+
+export async function getPhoneUseContractFaq(
+  pool: pg.Pool,
+  input: { actor: DigitalUseActor; familyId: string; caseId: string }
+) {
+  await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4011' });
+  const content = resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
+  return { meta: content.meta, ...content.faq };
+}

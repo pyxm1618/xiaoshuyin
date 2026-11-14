@@ -55,11 +55,18 @@ export const CreatePhoneUseRoleplayRequest=z.strictObject({
  expectedCaseVersion:z.number().int().min(1).max(PG_INTEGER_MAX),professionalContentVersion:z.string().min(1).max(128),
 });
 export const CreatePhoneUseRoleplayTurnRequest=z.strictObject({
- expectedSessionRevision:z.number().int().min(1).max(PG_INTEGER_MAX),simulatedChildInput:z.string().trim().min(1).max(8000),
+ expectedCaseVersion:z.number().int().min(1).max(PG_INTEGER_MAX),
+ expectedSessionRevision:z.number().int().min(1).max(PG_INTEGER_MAX),
+ simulatedChildInput:z.string().trim().min(1).max(8000),
 });
-export const RatePhoneUseRoleplayRequest=z.strictObject({turnId:z.string().uuid(),rating:z.number().int().min(1).max(5)});
+export const RatePhoneUseRoleplayRequest=z.strictObject({
+ expectedCaseVersion:z.number().int().min(1).max(PG_INTEGER_MAX),
+ turnId:z.string().uuid(),rating:z.number().int().min(1).max(5),
+});
 export const SelectPhoneUseRoleplayRequest=z.strictObject({
- expectedSessionRevision:z.number().int().min(1).max(PG_INTEGER_MAX),turnId:z.string().uuid(),expectedNodeRevision:z.number().int().min(1).max(PG_INTEGER_MAX),
+ expectedCaseVersion:z.number().int().min(1).max(PG_INTEGER_MAX),
+ expectedSessionRevision:z.number().int().min(1).max(PG_INTEGER_MAX),
+ turnId:z.string().uuid(),expectedNodeRevision:z.number().int().min(1).max(PG_INTEGER_MAX),
 });
 export const PhoneUseRoleplaySessionDto=z.strictObject({
  id:z.string().uuid(),familyId:z.string().uuid(),caseId:z.string().uuid(),actorPersonId:z.string().uuid(),
@@ -78,3 +85,8 @@ export const PhoneUseContractRuntimeError=z.strictObject({code:z.enum([
  'PHONE_USE_CONTRACT_COMPLIANCE_BLOCKED','PHONE_USE_CONTRACT_SAFETY_BLOCKED','PHONE_USE_CONTRACT_PACKAGE_DRIFT',
  'PHONE_USE_ROLEPLAY_DOWNSTREAM_UNAVAILABLE','PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE','IDEMPOTENCY_PAYLOAD_MISMATCH','INTERNAL_ERROR'
 ]),message:z.string()});
+
+export const PhoneUseRoleplaySelectionResponse=z.strictObject({
+ session:PhoneUseRoleplaySessionDto,
+ selectedTurn:PhoneUseRoleplayTurnDto,
+});
