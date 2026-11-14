@@ -271,7 +271,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     expect(scene.routeReasonCode).toBe('PRIORITY_CONFLICT_EXIT');
 
     // Positive direct impact -> A2003 -> marker -> A2004 yes -> A2005 willing
-    // -> A2007 timeline -> A2010 summary. A3000 remains route intent only.
+    // -> A2007 timeline -> A2010 summary. A3000 remains a gated route intent here.
     f = await fixture('happy');
     scene = await enterA2004(f);
     const a2003 = scene.nodes.find((node: any) => node.nodeCode === 'A2003');
@@ -296,7 +296,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     expect(scene.downstream).toEqual({
       routeIntent: 'A3000',
       available: false,
-      reasonCode: 'DOWNSTREAM_RUNTIME_UNAVAILABLE',
+      reasonCode: 'ENTRY_GATES_REVALIDATION_REQUIRED',
     });
     expect(scene.nodes.some((node: any) => node.nodeCode === 'A3000')).toBe(false);
     expect(scene.artifacts.some((artifact: any) => artifact.type === 'SOLUTION_SUMMARY')).toBe(true);
