@@ -13,6 +13,7 @@ import { WechatLoginRequest } from '@xiaoshuyin/contracts';
 import type { WechatAuthProvider } from '../auth/wechat-provider.js';
 import { signToken } from '../auth/session-token.js';
 import { toHttpError } from '../plugins/error-handler.js';
+import { withAccountTransaction } from '../db/tx.js';
 import type pg from 'pg';
 
 export function registerAuthRoutes(
@@ -34,6 +35,8 @@ export function registerAuthRoutes(
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query(`SELECT set_config('app.purpose', 'SELF_IDENTITY', true)`);
+      await client.query('SELECT app.set_account_openid_context($1)', [openid]);
 
       // Check if account exists
       const { rows: existing } = await client.query(
@@ -48,6 +51,7 @@ export function registerAuthRoutes(
 
       if (existing.length > 0) {
         accountId = existing[0].id;
+        await client.query('SELECT app.set_account_context($1, $2)', [accountId, 'SELF_IDENTITY']);
         // Bump epoch for new session
         await client.query(
           'UPDATE accounts SET last_login_at = now(), session_epoch = session_epoch + 1 WHERE id = $1',
@@ -58,10 +62,6 @@ export function registerAuthRoutes(
           [accountId]
         );
         epoch = updated[0].session_epoch;
-
-        // Set account context for RLS before querying persons
-        await client.query(`SELECT set_config('app.account_id', $1, true)`, [accountId]);
-        await client.query(`SELECT set_config('app.purpose', 'SELF_IDENTITY', true)`);
 
         // Find existing person
         const { rows: persons } = await client.query(
@@ -85,9 +85,8 @@ export function registerAuthRoutes(
         accountId = newAccount[0].id;
         epoch = 0;
 
-        // Set account context for person creation (use set_config directly since this is the bootstrap path)
-        await client.query(`SELECT set_config('app.account_id', $1, true)`, [accountId]);
-        await client.query(`SELECT set_config('app.purpose', 'SELF_IDENTITY', true)`);
+        // Bind the newly created Account as the transaction subject before Person creation.
+        await client.query('SELECT app.set_account_context($1, $2)', [accountId, 'SELF_IDENTITY']);
 
         // Create person (DB default uuidv7())
         const { rows: newPerson } = await client.query(
@@ -136,10 +135,16 @@ export function registerAuthRoutes(
       return reply.status(err.statusCode).send(err);
     }
 
-    // Bump epoch to invalidate all tokens
-    await pool.query(
-      'UPDATE accounts SET session_epoch = session_epoch + 1 WHERE id = $1',
-      [actor.accountId]
+    // Bump epoch to invalidate all tokens under the authenticated Account RLS subject.
+    await withAccountTransaction(
+      pool,
+      { accountId: actor.accountId, purpose: 'SELF_IDENTITY' },
+      async (tx) => {
+        await tx.query(
+          'UPDATE accounts SET session_epoch = session_epoch + 1 WHERE id = $1',
+          [actor.accountId]
+        );
+      }
     );
 
     return reply.status(204).send();

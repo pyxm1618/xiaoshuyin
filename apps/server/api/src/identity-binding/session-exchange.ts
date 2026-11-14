@@ -13,6 +13,7 @@ import { signToken } from '../auth/session-token.js';
 import { getAccountById } from '../auth/binding-account.js';
 import {
   setBindingAttemptContext,
+  setBindingCommitAccountId,
   setBindingGateContext,
   withBindingContextTransaction,
 } from '../db/tx.js';
@@ -98,6 +99,7 @@ export async function exchangeSession(
       });
 
       const person = await getPersonById(tx, attempt.targetPersonId);
+      await setBindingCommitAccountId(tx, attempt.committedAccountId);
       const account = await getAccountById(tx, attempt.committedAccountId);
       if (!person || !account || person.account_id !== account.id) {
         return { binding: 'NOT_COMPLETED' };

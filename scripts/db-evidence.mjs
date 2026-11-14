@@ -71,7 +71,7 @@ function quoteIdent(name) {
 }
 
 const RLS_TABLES = [
-  'assertions', 'business_audit_events', 'case_events', 'cases', 'consent_records',
+  'accounts', 'assertions', 'business_audit_events', 'case_events', 'cases', 'consent_records',
   'compliance_feature_policies',
   'dialogue_messages', 'families', 'family_members', 'guardian_consent_requests',
   'idempotency_keys', 'observations', 'person_compliance_profiles',
@@ -234,7 +234,7 @@ function verifyStructure(label, d) {
   check('5 张 006 binding 表 relrowsecurity/relforcerowsecurity', 'true/true × 5',
     slice5RlsFlags,
     (a) => a.length === 5 && a.every((s) => s.endsWith('=true/true')));
-  check('accounts 无 RLS', 'false/false',
+  check('accounts ENABLE + FORCE RLS', 'true/true',
     `${rlsMap['accounts']?.relrowsecurity}/${rlsMap['accounts']?.relforcerowsecurity}`);
 
   const owners = [...new Set(EXPECTED_TABLES.map((t) => rlsMap[t]?.owner))];
@@ -427,7 +427,7 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015 + 016 + 017', true,
+check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015 + 016 + 017 + 018', true,
       /APPLY 004_evidence_core\.sql/.test(output) &&
       /APPLY 004_identity_binding_runtime\.sql/.test(output) &&
       /APPLY 005_case_participant_core\.sql/.test(output) &&
@@ -442,11 +442,12 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       /APPLY 014_consent_01004_cross_purpose_supersede_guard\.sql/.test(output) &&
       /APPLY 015_digital_use_assessment_runtime\.sql/.test(output) &&
       /APPLY 016_digital_use_family_alliance_runtime\.sql/.test(output) &&
-      /APPLY 017_digital_use_phone_use_contract_runtime\.sql/.test(output));
+      /APPLY 017_digital_use_phone_use_contract_runtime\.sql/.test(output) &&
+      /APPLY 018_foundation_database_integrity_1\.sql/.test(output));
     check(
-      'upgrade 结果为 15 new / 3 previously applied',
+      'upgrade 结果为 16 new / 3 previously applied',
       true,
-      /Migration complete: 15 new, 3 previously applied\./.test(output)
+      /Migration complete: 16 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -454,7 +455,7 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
     const afterRecords = await client.query(
       'SELECT filename, applied_at FROM schema_migrations ORDER BY filename'
     );
-    check('schema_migrations records added for 004 and 005', [
+    check('schema_migrations records added for forward migrations', [
       '001_initial_schema.sql',
       '002_case_core.sql',
       '003_case_idempotency_key_bytes.sql',
@@ -479,6 +480,8 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       '016_digital_use_family_alliance_runtime.sql',
       // Slice 14 reviewed Digital Use Phone Use Contract runtime migration.
       '017_digital_use_phone_use_contract_runtime.sql',
+      // Foundation Remediation 1 database / migration integrity hardening.
+      '018_foundation_database_integrity_1.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',

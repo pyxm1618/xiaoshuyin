@@ -1,6 +1,6 @@
 /**
  * RLS tests: verify RLS policies, context functions, and default deny.
- * T063: RLS evidence — no GUC, identity context, family isolation, accounts no RLS, pool no leak.
+ * T063: RLS evidence — no GUC, identity context, family isolation, accounts RLS, pool no leak.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('29 tables have ENABLE + FORCE RLS, accounts does not', async () => {    const { rows } = await client.query(`
+  it('all 30 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -33,19 +33,19 @@ describe('RLS', () => {
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
     // Prior reviewed owners plus Slice 12 Scene, Slice 13 target items, and Slice 14 Contract/roleplay tables.
-    expect(rlsTables.length).toBe(29);
-    expect(noRlsTables.map((r: any) => r.relname)).toContain('accounts');
+    expect(rlsTables.length).toBe(30);
+    expect(noRlsTables).toEqual([]);
 
     for (const t of rlsTables) {
       expect(t.relforcerowsecurity, `${t.relname} FORCE`).toBe(true);
     }
   });
 
-  it('60 policies exist after Slice 13 target items and Slice 14 bounded runtime policies', async () => {
+  it('65 policies exist after Foundation account hardening', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(60);
+    expect(rows.length).toBe(65);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
@@ -155,7 +155,7 @@ describe('RLS', () => {
 
       await setupClient.query('BEGIN');
 
-      // Insert accounts (accounts has no RLS)
+      // Insert accounts through the migrator authority.
       await setupClient.query(`INSERT INTO accounts (id, wechat_openid) VALUES ($1, $2), ($3, $4)`, [accAId, `rls_fama_${ts}`, accBId, `rls_famb_${ts}`]);
 
       // Insert person A (set context to match)
