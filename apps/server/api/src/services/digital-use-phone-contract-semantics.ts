@@ -7,8 +7,11 @@
 import type pg from 'pg';
 import { z } from 'zod';
 import {
+  getCurrentActivePhoneUseContract,
   getLatestSceneArtifact,
   insertSceneArtifact,
+  isParticipationProcessingAllowed,
+  lockParticipationById,
   type StoredSceneRef,
 } from '@xiaoshuyin/domain';
 import {
@@ -65,10 +68,22 @@ const A4006Response = z.discriminatedUnion('action', [
   z.strictObject({ action: z.literal('CONFIGURE'), term: Term }),
   z.strictObject({ action: z.literal('LOG'), note: z.string().trim().min(1).max(4000) }),
 ]);
+const ActiveContractRef = z.strictObject({
+  contractVersionId: z.string().uuid(),
+  contractVersion: z.number().int().min(1).max(2147483647),
+});
 const A4011Response = z.discriminatedUnion('action', [
-  z.strictObject({ action: z.literal('FAQ_VIEWED'), topic: z.string().trim().min(1).max(120) }),
-  z.strictObject({ action: z.literal('PERIOD_COMPLETE') }),
-  z.strictObject({ action: z.literal('NEW_PROBLEM') }),
+  ActiveContractRef.extend({
+    action: z.literal('FAQ_VIEWED'),
+    topic: z.string().trim().min(1).max(120),
+  }),
+  ActiveContractRef.extend({ action: z.literal('PERIOD_COMPLETE') }),
+  ActiveContractRef.extend({ action: z.literal('NEW_PROBLEM') }),
+  ActiveContractRef.extend({
+    action: z.literal('PERSONALIZED_AI_SUPPORT'),
+    prompt: z.string().trim().min(1).max(4000),
+  }),
+  ActiveContractRef.extend({ action: z.literal('FOLLOWUP_REMINDER') }),
 ]);
 
 async function insertArtifact(
@@ -86,6 +101,10 @@ async function insertArtifact(
   data: Record<string, unknown>
 ): Promise<StoredSceneRef> {
   const previous=await getLatestSceneArtifact(context.tx,context.caseId,artifactType);
+  const appendOnly =
+    artifactType === 'PHONE_USE_CONTRACT_QUIZ_ATTEMPT'
+    || artifactType === 'PHONE_USE_SUPERVISION_LOG'
+    || artifactType === 'PHONE_USE_CONTRACT_SUPPORT_LOG';
   const artifact=await insertSceneArtifact(context.tx,{
     familyId:context.familyId,
     caseId:context.caseId,
@@ -94,10 +113,14 @@ async function insertArtifact(
     schemaVersion:'v1',
     sourceNodeCode:context.nodeCode as
       | 'A4001'|'A4004'|'A4005'|'A4006'|'A4007'|'A4008'|'A4009'|'A4011',
-    data,
+    data: {
+      contentVersion: PHONE_USE_CONTRACT_CONTENT_VERSION,
+      ...data,
+    },
     ownerPersonId:context.actor.personId,
     sourceRefs:context.currentInputRefs,
     revision:previous===null?1:previous.revision+1,
+    ...(!appendOnly && previous ? { supersedesId: previous.id } : {}),
   });
   return {type:'SCENE_ARTIFACT',id:artifact.id};
 }
@@ -204,10 +227,40 @@ async function handleA4006(context:PhoneUseSceneSemanticContext):Promise<PhoneUs
 async function handleA4011(context:PhoneUseSceneSemanticContext):Promise<PhoneUseSceneSemanticResult>{
  const parsed=A4011Response.safeParse(context.response);
  if(!parsed.success) semanticError();
+
+ const active=await getCurrentActivePhoneUseContract(context.tx,context.caseId,true);
+ if(!active) semanticError('PHONE_USE_CONTRACT_NOT_FOUND');
+ if(
+   active.id!==parsed.data.contractVersionId
+   || active.version!==parsed.data.contractVersion
+   || active.status!=='ACTIVE'
+ ) semanticError('PHONE_USE_CONTRACT_STALE_REVISION');
+ resolvePhoneUseContractContent(active.source_template_version);
+
+ const participation=await lockParticipationById(context.tx,active.child_participation_id);
+ if(
+   !participation
+   || participation.family_id!==context.familyId
+   || participation.case_id!==context.caseId
+   || participation.person_id!==active.child_party_person_id
+   || participation.state!=='ACTIVE'
+   || !(await isParticipationProcessingAllowed(context.tx,participation.person_id))
+ ) semanticError('PHONE_USE_CONTRACT_CONSENT_BLOCKED');
+
+ if(parsed.data.action==='PERSONALIZED_AI_SUPPORT'){
+   semanticError('DOWNSTREAM_AI_UNAVAILABLE');
+ }
+ if(parsed.data.action==='FOLLOWUP_REMINDER'){
+   semanticError('PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE');
+ }
  if(parsed.data.action==='FAQ_VIEWED'){
    const ref=await insertArtifact(context,'PHONE_USE_CONTRACT_SUPPORT_LOG',{
-     action:parsed.data.action,topic:parsed.data.topic,contentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,
-     actorPersonId:context.actor.personId,provenance:'AUTHENTICATED_ACTOR_INPUT',
+     action:parsed.data.action,
+     topic:parsed.data.topic,
+     contractVersionId:active.id,
+     contractVersion:active.version,
+     actorPersonId:context.actor.personId,
+     provenance:'AUTHENTICATED_ACTOR_INPUT',
    });
    return {
      inputRefs:context.currentInputRefs,outputRefs:[ref],conditions:{},progression:'HOLD',

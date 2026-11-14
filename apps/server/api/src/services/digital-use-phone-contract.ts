@@ -500,7 +500,7 @@ export async function revisePhoneUseContract(
 async function readProfessionalAssetGate(
   pool: pg.Pool,
   input: { actor: DigitalUseActor; familyId: string; caseId: string; nodeCode: 'A4002' | 'A4011' }
-): Promise<void> {
+): Promise<PhoneUseContractVersionRow | null> {
   return withRlsTransaction(pool, {
     familyId: input.familyId,
     accountId: input.actor.accountId,
@@ -518,6 +518,19 @@ async function readProfessionalAssetGate(
     if (!node || (node.status !== 'AVAILABLE' && node.status !== 'IN_PROGRESS' && node.status !== 'COMPLETED')) {
       throw contractError('SCENE_NODE_UNREACHABLE');
     }
+    if (input.nodeCode === 'A4011') {
+      const active = await getCurrentActivePhoneUseContract(tx, input.caseId, true);
+      if (!active) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
+      resolvePhoneUseContractContent(active.source_template_version);
+      await assertChildParticipation(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        childPersonId: active.child_party_person_id,
+        participationId: active.child_participation_id,
+      });
+      return active;
+    }
+    return null;
   });
 }
 
@@ -543,7 +556,12 @@ export async function getPhoneUseContractFaq(
   pool: pg.Pool,
   input: { actor: DigitalUseActor; familyId: string; caseId: string }
 ) {
-  await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4011' });
-  const content = resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
-  return { meta: content.meta, ...content.faq };
+  const active = await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4011' });
+  if (!active) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
+  const content = resolvePhoneUseContractContent(active.source_template_version);
+  return {
+    meta: content.meta,
+    contract: { id: active.id, version: active.version, status: 'ACTIVE' as const },
+    ...content.faq,
+  };
 }

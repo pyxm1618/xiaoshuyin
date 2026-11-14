@@ -50,7 +50,16 @@ export const PhoneUseContractVersionPathParams=z.strictObject({id:z.string().uui
 export const PhoneUseContractContentMeta=z.strictObject({contentVersion:z.string().min(1),sourceBlob:z.string().regex(/^[0-9a-f]{40}$/),approved:z.literal(true)});
 export const PhoneUseContractTemplateResponse=z.strictObject({meta:PhoneUseContractContentMeta,sections:z.array(z.string()),sourceText:z.string()});
 export const PhoneUseContractExamplesResponse=z.strictObject({meta:PhoneUseContractContentMeta,examples:z.array(z.strictObject({id:z.string(),title:z.string(),sourceText:z.string()})).length(4)});
-export const PhoneUseContractFaqResponse=z.strictObject({meta:PhoneUseContractContentMeta,topics:z.array(z.string()).min(1),sourceText:z.string()});
+export const PhoneUseContractFaqResponse=z.strictObject({
+ meta:PhoneUseContractContentMeta,
+ contract:z.strictObject({
+   id:z.string().uuid(),
+   version:z.number().int().min(1).max(PG_INTEGER_MAX),
+   status:z.literal('ACTIVE'),
+ }),
+ topics:z.array(z.string()).min(1),
+ sourceText:z.string(),
+});
 export const CreatePhoneUseRoleplayRequest=z.strictObject({
  expectedCaseVersion:z.number().int().min(1).max(PG_INTEGER_MAX),professionalContentVersion:z.string().min(1).max(128),
 });
