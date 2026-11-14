@@ -815,6 +815,106 @@ function runAssessmentRuntimeRules() {
 
 runAssessmentRuntimeRules();
 
+// ─── Rule 12: Slice 19 — pgvector readiness scope/security boundary ───
+// This rule protects the narrow readiness foundation. It deliberately does not
+// ban pgvector itself; it bans route-specific retrieval/RAG work, permanent
+// readiness stores and privilege escalation. The one sanctioned CREATE
+// EXTENSION owner is db/init/02-pgvector.sh.
+const PGVECTOR_BOOTSTRAP_FILE = 'db/init/02-pgvector.sh';
+
+function checkPgvectorReadinessScope(relPath, content, report) {
+  if (relPath.startsWith('tests/') || relPath.startsWith('specs/') || relPath.startsWith('Docs/')) {
+    return;
+  }
+
+  const lower = content.toLowerCase();
+  const forbiddenTokens = [
+    ['knowledge_embeddings', 'production Knowledge embedding persistence'],
+    ['sparsevec', 'sparse-vector retrieval'],
+    ['pg_jieba', 'pg_jieba lexical retrieval'],
+    ['pg_textsearch', 'pg_textsearch lexical retrieval'],
+    ['hnsw', 'HNSW index/tuning'],
+    ['ivfflat', 'IVFFlat index/tuning'],
+  ];
+  for (const [token, label] of forbiddenTokens) {
+    const index = lower.indexOf(token);
+    if (index >= 0) {
+      report(
+        'R12-pgvector-scope',
+        relPath,
+        lineOf(content, index),
+        `Slice 19 forbids ${label}: ${token}`
+      );
+    }
+  }
+
+  const rrf = /\bRRF\b|reciprocal\s+rank\s+fusion/i.exec(content);
+  if (rrf) {
+    report(
+      'R12-pgvector-scope',
+      relPath,
+      lineOf(content, rrf.index),
+      'Slice 19 forbids RRF/fusion retrieval implementation'
+    );
+  }
+
+  if (relPath !== PGVECTOR_BOOTSTRAP_FILE) {
+    const createExtension = /\bCREATE\s+EXTENSION\b[\s\S]{0,120}\bvector\b/i.exec(content);
+    if (createExtension) {
+      report(
+        'R12-pgvector-security',
+        relPath,
+        lineOf(content, createExtension.index),
+        'CREATE EXTENSION vector is allowed only in the privileged pgvector bootstrap'
+      );
+    }
+  }
+
+  const permanentReadiness = /\bCREATE\s+(?:UNLOGGED\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[A-Za-z_][A-Za-z0-9_]*\.)?(?:pgvector_readiness|readiness_registry|capability_registry)\b/i.exec(content);
+  if (permanentReadiness) {
+    report(
+      'R12-pgvector-scope',
+      relPath,
+      lineOf(content, permanentReadiness.index),
+      'Permanent readiness/capability registry is forbidden; evidence is run-scoped'
+    );
+  }
+
+  const escalation = /\b(?:ALTER|CREATE)\s+ROLE\s+xiaoshuyin_app\b[\s\S]{0,160}\b(?:SUPERUSER|BYPASSRLS)\b/i.exec(content);
+  if (escalation) {
+    report(
+      'R12-pgvector-security',
+      relPath,
+      lineOf(content, escalation.index),
+      'Runtime role must remain NOSUPERUSER and NOBYPASSRLS'
+    );
+  }
+
+  const schemaCreate = /\bGRANT\s+CREATE\s+ON\s+SCHEMA\s+public\s+TO\s+xiaoshuyin_app\b/i.exec(content);
+  if (schemaCreate) {
+    report(
+      'R12-pgvector-security',
+      relPath,
+      lineOf(content, schemaCreate.index),
+      'Runtime role must not receive public schema CREATE'
+    );
+  }
+}
+
+function runPgvectorReadinessRules() {
+  const pgvectorScanExtensions = new Set([...ALL_SCAN_EXTENSIONS, '.sh']);
+  scanDir(ROOT, (file) => {
+    const relPath = getRelPath(file);
+    checkPgvectorReadinessScope(
+      relPath,
+      readFileSync(file, 'utf-8'),
+      (guardRule, f, line, message) => addViolation(guardRule, f, line, message)
+    );
+  }, pgvectorScanExtensions);
+}
+
+runPgvectorReadinessRules();
+
 // ─── Self-test: synthetic forbidden bypass fixtures ───
 // `node scripts/guard-static.mjs --self-test` proves the Safety rules detect a
 // bypass even when the real tree is clean. Not part of `bun run guard:static`.
@@ -947,6 +1047,42 @@ if (process.argv.includes('--self-test')) {
       content: "import PgBoss from 'pg-boss';",
       rule: 'R11-assessment-no-scheduler',
     },
+    {
+      name: 'Slice 19 Knowledge embeddings persistence',
+      path: 'db/migrations/evil-pgvector.sql',
+      content: 'CREATE TABLE knowledge_embeddings (id uuid PRIMARY KEY);',
+      rule: 'R12-pgvector-scope',
+    },
+    {
+      name: 'Slice 19 sparsevec retrieval',
+      path: 'packages/domain/src/evil-pgvector.ts',
+      content: "const sql = 'embedding sparsevec(1000)';",
+      rule: 'R12-pgvector-scope',
+    },
+    {
+      name: 'runtime CREATE EXTENSION vector',
+      path: 'scripts/evil-runtime-vector.mjs',
+      content: "await client.query('CREATE EXTENSION vector');",
+      rule: 'R12-pgvector-security',
+    },
+    {
+      name: 'runtime BYPASSRLS escalation',
+      path: 'db/init/evil-role.sql',
+      content: 'ALTER ROLE xiaoshuyin_app BYPASSRLS;',
+      rule: 'R12-pgvector-security',
+    },
+    {
+      name: 'runtime public schema CREATE escalation',
+      path: 'db/init/evil-grant.sql',
+      content: 'GRANT CREATE ON SCHEMA public TO xiaoshuyin_app;',
+      rule: 'R12-pgvector-security',
+    },
+    {
+      name: 'permanent readiness registry',
+      path: 'db/init/evil-registry.sql',
+      content: 'CREATE TABLE pgvector_readiness (environment text PRIMARY KEY);',
+      rule: 'R12-pgvector-scope',
+    },
   ];
 
   let selfTestFailures = 0;
@@ -961,6 +1097,8 @@ if (process.argv.includes('--self-test')) {
       checkSceneFoundationFile(sample.path, sample.content, report);
     } else if (sample.rule.startsWith('R11-assessment-')) {
       checkAssessmentRuntimeBoundaries(sample.path, sample.content, report);
+    } else if (sample.rule.startsWith('R12-pgvector-')) {
+      checkPgvectorReadinessScope(sample.path, sample.content, report);
     } else {
       checkSafetyUniqueEntry(sample.path, sample.content, report);
     }
