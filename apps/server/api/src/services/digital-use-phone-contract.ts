@@ -12,6 +12,7 @@ import {
   casCompleteSceneNodeState,
   casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
+  canonicalEvidenceKey,
   getCurrentActivePhoneUseContract,
   getCurrentPhoneUseContract,
   getLatestSceneArtifact,
@@ -25,17 +26,21 @@ import {
   insertPhoneUseContractDraft,
   insertSceneArtifact,
   isParticipationProcessingAllowed,
+  listCurrentDigitalUseTargetItems,
   lockFamilyForPrimaryDecision,
   lockParticipationById,
   lockSceneCase,
   nextPhoneUseContractVersion,
   recordAdultContractConfirmationCas,
   recordChildContractConfirmationCas,
+  revalidateStoredEvidenceDependencies,
+  resolveEvidenceRefs,
+  resolveSceneArtifactRefCurrentness,
   supersedePhoneUseContractCas,
   activatePhoneUseContractCas,
   updatePhoneUseContractDraftCas,
-  validateSceneRefs,
   type ContractTermPayload,
+  type EvidenceRef,
   type PhoneUseContractConfirmation,
   type PhoneUseContractVersionRow,
   type StoredSceneRef,
@@ -57,6 +62,10 @@ import {
 } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
+import {
+  DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+  getCurrentPurposeScopedConsentDecision,
+} from '@xiaoshuyin/compliance';
 import {
   assertAssessmentCompliance,
   type DigitalUseActor,
@@ -138,12 +147,125 @@ async function ensureContractNode(
  });
 }
 async function assertDependencies(
- tx:pg.PoolClient,input:{familyId:string;caseId:string;dependencyRefs:readonly unknown[]}
+ tx:pg.PoolClient,
+ input:{
+  actor:DigitalUseActor;
+  familyId:string;
+  caseId:string;
+  dependencyRefs:readonly unknown[];
+ }
 ){
  const refs=toStoredRefs(input.dependencyRefs);
- if(!(await validateSceneRefs(tx,{familyId:input.familyId,caseId:input.caseId,refs}))){
-   throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Dependency refs are outside the authorized Case');
+ const evidenceRefs:EvidenceRef[]=[];
+ const sceneArtifactIds:string[]=[];
+ const consentIds:string[]=[];
+ const targetItemIds:string[]=[];
+
+ for(const ref of refs){
+  if(ref.type==='RECORD_MARKER'){
+   if(ref.markerCode!=='A200401'||ref.evidenceRefs.length===0){
+    throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Record marker dependency is invalid');
+   }
+   evidenceRefs.push(...ref.evidenceRefs);
+   continue;
+  }
+  if(ref.type==='DIALOGUE_MESSAGE'||ref.type==='ASSERTION'||ref.type==='OBSERVATION'){
+   evidenceRefs.push(ref);
+   continue;
+  }
+  if(ref.type==='SCENE_ARTIFACT'){
+   sceneArtifactIds.push(ref.id);
+   continue;
+  }
+  if(ref.type==='CONSENT'){
+   consentIds.push(ref.id);
+   continue;
+  }
+  if(ref.type==='TARGET_ITEM'){
+   targetItemIds.push(ref.id);
+   continue;
+  }
+  throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Unsupported Contract dependency ref');
  }
+
+ if(evidenceRefs.length>0){
+  const evidenceDependencies=evidenceRefs.map((evidence)=>({type:'EVIDENCE' as const,evidence}));
+  try{
+   await revalidateStoredEvidenceDependencies(tx,input.caseId,evidenceDependencies);
+  }catch(error){
+   const code=typeof error==='object'&&error!==null
+    ? (error as {code?:unknown}).code
+    : undefined;
+   if(code==='PROBLEM_FORMULATION_DEPENDENCY_INVALID'){
+    throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Evidence dependency is no longer current-valid');
+   }
+   throw error;
+  }
+
+  const resolution=await resolveEvidenceRefs(tx,input.caseId,evidenceRefs);
+  if(resolution.missing.length>0){
+   throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Evidence dependency is outside the authorized Case');
+  }
+  for(const ref of evidenceRefs){
+   const member=resolution.members.get(canonicalEvidenceKey(ref));
+   if(
+    !member||
+    member.familyId.toLowerCase()!==input.familyId.toLowerCase()||
+    member.caseId.toLowerCase()!==input.caseId.toLowerCase()
+   ){
+    throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Evidence dependency is outside the authorized Case');
+   }
+   if(
+    member.kind!=='DIALOGUE_MESSAGE'&&
+    (member.conflictGroupId!==null||member.confirmationStatus==='DISPUTED')
+   ){
+    throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Evidence dependency requires conflict review');
+   }
+  }
+ }
+
+ for(const artifactId of sceneArtifactIds){
+  const currentness=await resolveSceneArtifactRefCurrentness(tx,{
+   artifactId,familyId:input.familyId,caseId:input.caseId,
+  });
+  if(currentness.status!=='CURRENT'){
+   throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Scene Artifact dependency is no longer current');
+  }
+ }
+
+ if(targetItemIds.length>0){
+  const currentTargets=await listCurrentDigitalUseTargetItems(tx,input.caseId);
+  const currentIds=new Set(
+   currentTargets
+    .filter((row)=>
+      row.family_id.toLowerCase()===input.familyId.toLowerCase()&&
+      row.case_id.toLowerCase()===input.caseId.toLowerCase()
+    )
+    .map((row)=>row.id.toLowerCase())
+  );
+  for(const targetItemId of targetItemIds){
+   if(!currentIds.has(targetItemId.toLowerCase())){
+    throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Target Item dependency is no longer current');
+   }
+  }
+ }
+
+ for(const consentId of consentIds){
+  const currentConsent=await getCurrentPurposeScopedConsentDecision(tx,{
+   familyId:input.familyId,
+   caseId:input.caseId,
+   actor:input.actor,
+   purpose:DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+  });
+  if(
+   currentConsent===null||
+   currentConsent.decision!=='GRANTED'||
+   currentConsent.consentRecordId.toLowerCase()!==consentId.toLowerCase()
+  ){
+   throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Consent dependency is no longer current');
+  }
+ }
+
  return refs;
 }
 async function assertChildParticipation(
@@ -293,7 +415,10 @@ async function activateConfirmedContract(
    throw contractError('PHONE_USE_CONTRACT_MISSING_CONFIRMATION');
  }
  resolvePhoneUseContractContent(row.source_template_version);
- const refs=await assertDependencies(tx,{familyId:input.familyId,caseId:input.caseId,dependencyRefs:row.dependency_refs});
+ const refs=await assertDependencies(tx,{
+  actor:{accountId:row.parent_confirmation.accountId,personId:row.parent_confirmation.personId},
+  familyId:input.familyId,caseId:input.caseId,dependencyRefs:row.dependency_refs,
+ });
  await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id});
  const nodeCode:'A4010'|'A4012'=row.supersedes_id?'A4012':'A4010';
  const scene=await ensureContractNode(tx,{familyId:input.familyId,caseId:input.caseId,nodeCode,inputRefs:refs});
@@ -471,8 +596,14 @@ export async function revisePhoneUseContract(
     throw contractError('PHONE_USE_CONTRACT_STALE_REVISION','An open Contract revision already exists');
   }
   resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
+  const activeDependencyRefs=await assertDependencies(tx,{
+   actor:active.parent_confirmation
+    ? {accountId:active.parent_confirmation.accountId,personId:active.parent_confirmation.personId}
+    : input.actor,
+   familyId:input.familyId,caseId:input.caseId,dependencyRefs:active.dependency_refs,
+  });
   await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:active.child_party_person_id,participationId:active.child_participation_id});
-  await ensureContractNode(tx,{familyId:input.familyId,caseId:input.caseId,nodeCode:'A4012',inputRefs:toStoredRefs(active.dependency_refs)});
+  await ensureContractNode(tx,{familyId:input.familyId,caseId:input.caseId,nodeCode:'A4012',inputRefs:activeDependencyRefs});
   const requestHash=hashPayload({caseId:input.caseId,expectedCaseVersion:input.expectedCaseVersion,expectedActiveDraftRevision:input.expectedActiveDraftRevision,activeId:active.id,updateTrigger:input.updateTrigger,updateReason:input.updateReason});
   const outcome=await runIdempotentCommandInTransaction(tx,{
    accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',commandType:'PHONE_USE_CONTRACT_REVISE',idempotencyKey:input.idempotencyKey,requestHash,
@@ -521,6 +652,12 @@ async function readProfessionalAssetGate(
       const active = await getCurrentActivePhoneUseContract(tx, input.caseId, true);
       if (!active) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
       resolvePhoneUseContractContent(active.source_template_version);
+      await assertDependencies(tx,{
+        actor:active.parent_confirmation
+          ? {accountId:active.parent_confirmation.accountId,personId:active.parent_confirmation.personId}
+          : input.actor,
+        familyId:input.familyId,caseId:input.caseId,dependencyRefs:active.dependency_refs,
+      });
       await assertChildParticipation(tx, {
         familyId: input.familyId,
         caseId: input.caseId,
