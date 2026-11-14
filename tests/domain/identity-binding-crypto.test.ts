@@ -284,8 +284,17 @@ describe('identity binding crypto', () => {
     // uniformly random in the same positions.
     expect(legacyStructuredPlaintextDistinguisher(validBytes)).toBe(false);
 
+    const decoyBase = fixedFacts();
     const decoys = Array.from({ length: 8 }, () =>
-      Buffer.from(createDecoyPairingChallenge(), 'base64url')
+      Buffer.from(
+        encodeDecoyPairingChallenge(SECRET, {
+          contextId: decoyBase.contextId,
+          pairingIssuanceId: randomUUID(),
+          pairingIssuedAt: decoyBase.pairingIssuedAt,
+          pairingExpiresAt: decoyBase.pairingExpiresAt,
+        }),
+        'base64url'
+      )
     );
     for (const decoyBytes of decoys) {
       expect(legacyStructuredPlaintextDistinguisher(decoyBytes)).toBe(false);
