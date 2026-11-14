@@ -2703,6 +2703,27 @@ describe('T1218 Digital Use runtime hardening', () => {
       {version:1,status:'SUPERSEDED',supersedes_id:null},
       {version:2,status:'ACTIVE',supersedes_id:active1.rows[0].id},
     ]);
+
+    const documentHistory=await admin.query(
+      `SELECT id,revision,supersedes_id,source_node_code,owner_person_id,
+              data->>'projectionNodeCode' AS projection_node_code,
+              data->>'contractVersionId' AS contract_version_id
+         FROM scene_artifacts
+        WHERE case_id=$1 AND artifact_type='PHONE_USE_CONTRACT_DOCUMENT'
+        ORDER BY revision`,
+      [f.caseId]
+    );
+    expect(documentHistory.rows).toHaveLength(2);
+    expect(documentHistory.rows[0]).toMatchObject({
+      revision:1,supersedes_id:null,source_node_code:'A4010',
+      owner_person_id:f.manager.personId,
+      projection_node_code:'A4010',contract_version_id:active1.rows[0].id,
+    });
+    expect(documentHistory.rows[1]).toMatchObject({
+      revision:2,supersedes_id:documentHistory.rows[0].id,source_node_code:'A4010',
+      owner_person_id:f.manager.personId,
+      projection_node_code:'A4012',contract_version_id:confirmChild.json().id,
+    });
   });
 
 });

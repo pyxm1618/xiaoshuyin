@@ -405,7 +405,7 @@ ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_check CHECK (
 );
 ALTER TABLE scene_artifacts DROP CONSTRAINT scene_artifacts_source_node_check;
 ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_source_node_check CHECK (
-  source_node_code IN ('01000','A2007','A2010','A3000','A4001','A4003','A4004','A4005','A4006','A4007','A4008','A4009','A4010','A4011','A4012')
+  source_node_code IN ('01000','A2007','A2010','A3000','A4001','A4003','A4004','A4005','A4006','A4007','A4008','A4009','A4010','A4011')
 );
 ALTER TABLE scene_artifacts DROP CONSTRAINT scene_artifacts_type_source_check;
 ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_source_check CHECK (
@@ -421,7 +421,7 @@ ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_source_check CHE
   OR (artifact_type='PHONE_USE_INCENTIVE_COMPONENT' AND source_node_code='A4007')
   OR (artifact_type='PHONE_USE_BREACH_COMPONENT' AND source_node_code='A4008')
   OR (artifact_type='PARENT_SELF_REGULATION_CHECKLIST' AND source_node_code='A4009')
-  OR (artifact_type='PHONE_USE_CONTRACT_DOCUMENT' AND source_node_code IN ('A4010','A4012'))
+  OR (artifact_type='PHONE_USE_CONTRACT_DOCUMENT' AND source_node_code='A4010')
   OR (artifact_type='PHONE_USE_CONTRACT_SUPPORT_LOG' AND source_node_code='A4011')
 );
 

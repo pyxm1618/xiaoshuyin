@@ -99,6 +99,15 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
     );
     expect(columns.rows.some((r:any)=>r.table_name==='digital_use_contract_versions'&&r.column_name==='child_confirmation'&&r.privilege_type==='UPDATE')).toBe(true);
     expect(columns.rows.some((r:any)=>r.table_name==='roleplay_turns'&&r.column_name==='user_rating'&&r.privilege_type==='UPDATE')).toBe(true);
+
+    const sceneGrants=await db.query(
+      `SELECT privilege_type FROM information_schema.role_table_grants
+        WHERE grantee='xiaoshuyin_app' AND table_name='scene_artifacts'
+        ORDER BY privilege_type`
+    );
+    expect(sceneGrants.rows.map((r:any)=>r.privilege_type)).toEqual(['INSERT','SELECT']);
+    expect(sceneGrants.rows.some((r:any)=>r.privilege_type==='UPDATE')).toBe(false);
+    expect(sceneGrants.rows.some((r:any)=>r.privilege_type==='DELETE')).toBe(false);
   });
 
   it('extends the existing Scene Artifact owner rather than creating a private Scene store', async () => {
@@ -111,5 +120,6 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
     expect(rows[0].def).toContain('PHONE_USE_CONTRACT_QUIZ_ATTEMPT');
     expect(rows[0].def).toContain('PHONE_USE_ROLEPLAY_SELECTION');
     expect(rows[0].def).toContain('PHONE_USE_CONTRACT_DOCUMENT');
+    expect(rows[0].def).toContain("source_node_code = 'A4010'");
   });
 });
