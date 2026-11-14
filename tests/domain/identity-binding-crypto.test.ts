@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import {
   PAIRING_ENVELOPE_BYTES,
   createContextToken,
-  createDecoyPairingChallenge,
   decodePairingChallenge,
   decryptOpenid,
   deriveAesKey,
@@ -184,7 +183,13 @@ describe('identity binding crypto', () => {
   });
 
   it('decoy has the same external representation but never resolves', () => {
-    const decoy = createDecoyPairingChallenge();
+    const base = fixedFacts();
+    const decoy = encodeDecoyPairingChallenge(SECRET, {
+      contextId: base.contextId,
+      pairingIssuanceId: base.pairingIssuanceId,
+      pairingIssuedAt: base.pairingIssuedAt,
+      pairingExpiresAt: base.pairingExpiresAt,
+    });
     expect(decoy).toMatch(/^[A-Za-z0-9_-]{192}$/);
     expect(decodePairingChallenge(SECRET, decoy)).toBeNull();
   });
@@ -249,8 +254,14 @@ describe('identity binding crypto', () => {
   });
 
   it('decoy and valid envelopes share length, alphabet and decoded byte shape', () => {
-    const valid = encodePairingChallenge(SECRET, fixedFacts());
-    const decoy = createDecoyPairingChallenge();
+    const base = fixedFacts();
+    const valid = encodePairingChallenge(SECRET, base);
+    const decoy = encodeDecoyPairingChallenge(SECRET, {
+      contextId: base.contextId,
+      pairingIssuanceId: base.pairingIssuanceId,
+      pairingIssuedAt: base.pairingIssuedAt,
+      pairingExpiresAt: base.pairingExpiresAt,
+    });
 
     for (const value of [valid, decoy]) {
       expect(value).toHaveLength(192);
