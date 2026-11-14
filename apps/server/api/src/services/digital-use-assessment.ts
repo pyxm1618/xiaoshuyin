@@ -244,6 +244,44 @@ export function buildSceneEnvelope(input: {
     .sort((a, b) => b.revision - a.revision)[0];
   const a3000 = input.nodes.find((node) => node.node_code === 'A3000');
   const targetSelectionRevision = coherentCurrentSelectionRevision(targets);
+  const a3002 = input.nodes.find((node) => node.node_code === 'A3002');
+  const hasA5001State = input.nodes.some((node) => node.node_code === 'A5001');
+  const a5001FirstEntryEligible =
+    !hasA5001State &&
+    input.caseRow.status === 'OPEN' &&
+    input.caseRow.is_primary &&
+    input.caseRow.phase === 'GOALS' &&
+    a3000?.status === 'COMPLETED' &&
+    a3002?.status === 'COMPLETED' &&
+    targetSelectionRevision > 0;
+  const reachableNodes = reachableRows.map((row) => {
+    const manifest: DigitalUseNodeManifestEntry =
+      resolveDigitalUseRuntimeNode(row.node_code);
+    return {
+      nodeCode: row.node_code,
+      sourceNodeCode: row.source_node_code,
+      entryModes: [...manifest.entryMode],
+      interactionRefs: [...manifest.interactionRefs],
+      outputRefs: [...manifest.outputRefs],
+      helpOrReentryRefs: [...manifest.helpOrReentryRefs],
+      reasonCode:
+        row.status === 'COMPLETED'
+          ? 'MANIFEST_REENTRY_AVAILABLE'
+          : row.branch_reason_codes.at(-1) ?? 'SCENE_NODE_AVAILABLE',
+    };
+  });
+  if (a5001FirstEntryEligible) {
+    const manifest = resolveDigitalUseRuntimeNode('A5001');
+    reachableNodes.push({
+      nodeCode: manifest.nodeCode,
+      sourceNodeCode: manifest.sourceNodeCode,
+      entryModes: [...manifest.entryMode],
+      interactionRefs: [...manifest.interactionRefs],
+      outputRefs: [...manifest.outputRefs],
+      helpOrReentryRefs: [...manifest.helpOrReentryRefs],
+      reasonCode: 'USER_INITIATED_AVAILABLE',
+    });
+  }
 
   return {
     caseId: input.caseRow.id,
@@ -252,22 +290,7 @@ export function buildSceneEnvelope(input: {
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     currentNode,
     activeNodes: active,
-    reachableNodes: reachableRows.map((row) => {
-      const manifest: DigitalUseNodeManifestEntry =
-        resolveDigitalUseRuntimeNode(row.node_code);
-      return {
-        nodeCode: row.node_code,
-        sourceNodeCode: row.source_node_code,
-        entryModes: [...manifest.entryMode],
-        interactionRefs: [...manifest.interactionRefs],
-        outputRefs: [...manifest.outputRefs],
-        helpOrReentryRefs: [...manifest.helpOrReentryRefs],
-        reasonCode:
-          row.status === 'COMPLETED'
-            ? 'MANIFEST_REENTRY_AVAILABLE'
-            : row.branch_reason_codes.at(-1) ?? 'SCENE_NODE_AVAILABLE',
-      };
-    }),
+    reachableNodes,
     nodes: projected,
     artifacts: input.artifacts.map(artifactDto),
     targetSelectionRevision,
