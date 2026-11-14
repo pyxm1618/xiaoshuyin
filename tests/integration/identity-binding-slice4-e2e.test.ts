@@ -19,6 +19,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
+import { Slice4InvitationPort } from '../../apps/server/api/src/identity-binding/invitation-slice4-adapter.js';
+import type { InvitationResolutionPort } from '../../apps/server/api/src/identity-binding/invitation-port.js';
 import {
   bootstrap,
   candidateSession,
@@ -194,6 +196,81 @@ describe('T122 — full Case C E2E: invitation -> binding -> explicit accept', (
     expect(accepted.json().state).toBe('ACTIVE');
     expect((await participationRow(c.participationId))?.state).toBe('ACTIVE');
     expect(await activeParticipationCount(c.target.targetPersonId)).toBe(1);
+  });
+});
+
+describe('REM2-006 — Gate 2 production invitation concurrency barrier', () => {
+  it('holds the Slice 4 invitation row lock through the final binding commit', async () => {
+    const c = await createCaseCInvitation('rem2-gate2-lock');
+    const { attemptId } = await startBinding(
+      runtime,
+      c.target,
+      `rem2_gate2_lock_${randomUUID()}`
+    );
+
+    let signalLocked!: () => void;
+    const locked = new Promise<void>((resolve) => { signalLocked = resolve; });
+    let releaseLock!: () => void;
+    const release = new Promise<void>((resolve) => { releaseLock = resolve; });
+    const production = new Slice4InvitationPort();
+    const barrierPort: InvitationResolutionPort = {
+      resolveByToken: (tx, token) => production.resolveByToken(tx, token),
+      async resolveByParticipationId(tx, participationId) {
+        // Production resolver performs SELECT ... FOR UPDATE. Pause only after
+        // it returns so Transaction B races inside the actual Gate 2 commit
+        // window while Transaction A still owns that row lock.
+        const result = await production.resolveByParticipationId(tx, participationId);
+        signalLocked();
+        await release;
+        return result;
+      },
+    };
+    const barrierHarness = await buildParticipationApp(barrierPort);
+    const barrierRuntime: BindingRuntime = {
+      app: barrierHarness.app as FastifyInstance,
+      admin: barrierHarness.admin,
+    };
+    const mutator = await h.admin.connect();
+
+    try {
+      const commitResponse = confirmerDecision(
+        barrierRuntime,
+        c.fixture.manager.token,
+        attemptId,
+        { personId: c.target.targetPersonId, decision: 'AFFIRM' }
+      );
+      await locked;
+
+      await mutator.query('BEGIN');
+      await mutator.query("SET LOCAL lock_timeout = '500ms'");
+      let lockError: unknown = null;
+      try {
+        await mutator.query(
+          `UPDATE case_participants
+              SET state='EXPIRED', expired_at=now(), updated_at=now()
+            WHERE id=$1`,
+          [c.participationId]
+        );
+      } catch (error) {
+        lockError = error;
+      }
+      expect((lockError as { code?: string } | null)?.code).toBe('55P03');
+      await mutator.query('ROLLBACK');
+
+      releaseLock();
+      const committed = await commitResponse;
+      expect(committed.statusCode).toBe(200);
+      expect(committed.json().state).toBe('COMMITTED');
+      expect((await participationRow(c.participationId))?.state).toBe('PENDING');
+      expect(await personAccountId(runtime, c.target.targetPersonId)).not.toBeNull();
+    } finally {
+      // Always release Transaction A if an assertion above fails, otherwise
+      // teardown would wait forever on the intentionally paused commit.
+      releaseLock();
+      await mutator.query('ROLLBACK').catch(() => undefined);
+      mutator.release();
+      await barrierHarness.close();
+    }
   });
 });
 
