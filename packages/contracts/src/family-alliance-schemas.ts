@@ -40,8 +40,16 @@ export const FamilyAllianceRatingDimension = z.union([
   z.strictObject({ state: UnresolvedFamilyAllianceValueState }),
 ]);
 
+export const FamilyAllianceConcreteDimension = z.union([
+  z.strictObject({
+    state: z.literal('KNOWN'),
+    concreteTargetText: z.string().trim().min(1).max(2000),
+  }),
+  z.strictObject({ state: UnresolvedFamilyAllianceValueState }),
+]);
+
 export const FamilyAllianceFeasibilityPayload = z.strictObject({
-  concreteQuantified: z.strictObject({ state: FamilyAllianceValueState }),
+  concreteQuantified: FamilyAllianceConcreteDimension,
   need: FamilyAllianceRatingDimension,
   motivationBenefit: FamilyAllianceRatingDimension,
   abilityPossibility: FamilyAllianceRatingDimension,
@@ -58,15 +66,23 @@ export const FamilyAllianceProgressPayload = z.strictObject({
 export type FamilyAllianceProgressPayloadType =
   z.infer<typeof FamilyAllianceProgressPayload>;
 
+export const FamilyAllianceBinaryAnswer = z.enum([
+  'YES',
+  'NO',
+  'UNKNOWN',
+  'NOT_COLLECTED',
+  'DECLINED',
+]);
+
 export const FamilyAllianceSelfAssessmentResponse = z.strictObject({
   kind: z.literal('SELF_ASSESSMENT'),
   answers: z.strictObject({
-    emotionAttention: FamilyAllianceValueState,
-    negotiatedAgreement: FamilyAllianceValueState,
-    trustsAgreement: FamilyAllianceValueState,
-    familyCoordination: FamilyAllianceValueState,
-    parentEmotionFluctuation: FamilyAllianceValueState,
-    keepsPromises: FamilyAllianceValueState,
+    emotionAttention: FamilyAllianceBinaryAnswer,
+    negotiatedAgreement: FamilyAllianceBinaryAnswer,
+    trustsAgreement: FamilyAllianceBinaryAnswer,
+    familyCoordination: FamilyAllianceBinaryAnswer,
+    parentEmotionFluctuation: FamilyAllianceBinaryAnswer,
+    keepsPromises: FamilyAllianceBinaryAnswer,
   }),
 });
 
@@ -79,7 +95,6 @@ export const FamilyAllianceTargetSelectionResponse = z.strictObject({
   kind: z.literal('TARGET_SELECTION'),
   confirmed: z.literal(true),
   selectedTargets: z.array(FamilyAllianceTargetCode)
-    .min(1)
     .max(10)
     .refine((values) => new Set(values).size === values.length),
 });

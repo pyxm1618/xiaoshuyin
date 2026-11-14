@@ -38,6 +38,7 @@ import {
   initialA1001Projection,
   resolveDigitalUseRuntimeNode,
   digitalUseNodeManifest,
+  type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
 import type { DigitalUseNodeResponseType, DigitalUseSceneResponseType } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
@@ -167,12 +168,12 @@ function targetDto(row: DigitalUseTargetItemRow) {
     concreteTargetText: row.concrete_target_text,
     feasibility: row.feasibility_payload,
     progress: row.progress_payload,
-    progressEvidenceRefs: row.progress_evidence_refs.filter(
-      (ref): ref is { type: string; id: string } => 'id' in ref
-    ),
-    helpHistoryRefs: row.help_history_refs.filter(
-      (ref): ref is { type: string; id: string } => 'id' in ref
-    ),
+    progressEvidenceRefs: row.progress_evidence_refs
+      .filter((ref) => 'id' in ref)
+      .map((ref) => ({ type: ref.type, id: ref.id })),
+    helpHistoryRefs: row.help_history_refs
+      .filter((ref) => 'id' in ref)
+      .map((ref) => ({ type: ref.type, id: ref.id })),
     sourceRefs: row.source_refs,
     createdAt: new Date(row.created_at).toISOString(),
   };
@@ -182,7 +183,8 @@ function familyNodeReachable(
   row: SceneNodeStateRow,
   selectedTargets: ReadonlySet<string>
 ): boolean {
-  const manifest = digitalUseNodeManifest.find((entry) => entry.nodeCode === row.node_code);
+  const manifest = (digitalUseNodeManifest as readonly DigitalUseNodeManifestEntry[])
+    .find((entry) => entry.nodeCode === row.node_code);
   if (!manifest) return false;
   if (manifest.stream !== 'FAMILY_ALLIANCE') {
     return row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS';
@@ -237,7 +239,8 @@ export function buildSceneEnvelope(input: {
     currentNode,
     activeNodes: active,
     reachableNodes: reachableRows.map((row) => {
-      const manifest = resolveDigitalUseRuntimeNode(row.node_code);
+      const manifest: DigitalUseNodeManifestEntry =
+        resolveDigitalUseRuntimeNode(row.node_code);
       return {
         nodeCode: row.node_code,
         sourceNodeCode: row.source_node_code,

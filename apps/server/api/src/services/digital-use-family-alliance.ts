@@ -142,9 +142,9 @@ export interface FamilyAllianceExecutionInput {
   readonly nodeCode: string;
   readonly expectedCaseVersion: number;
   readonly expectedNodeRevision: number;
-  readonly expectedScenePackageVersion?: 'v1';
-  readonly expectedSelectionRevision?: number;
-  readonly expectedTargetRevision?: number;
+  readonly expectedScenePackageVersion?: 'v1' | undefined;
+  readonly expectedSelectionRevision?: number | undefined;
+  readonly expectedTargetRevision?: number | undefined;
   readonly response: Readonly<Record<string, unknown>>;
 }
 
@@ -290,7 +290,11 @@ function routeFamilyNode(
   if (route.kind !== 'NODE_ROUTE') {
     const code =
       route.kind === 'BLOCKED' ? 'SCENE_ROUTE_BLOCKED' : 'SCENE_ROUTE_UNRESOLVED';
-    throw familyHttpError(code, route.code);
+    const detail =
+      route.kind === 'BLOCKED' || route.kind === 'UNKNOWN'
+        ? route.code
+        : route.terminalCode;
+    throw familyHttpError(code, detail);
   }
   return { reasonCode: route.reasonCode, nextNodeCode: route.nextNodeCode };
 }
@@ -313,7 +317,8 @@ async function materializeParallelNodes(
   });
 
   for (const parallelCode of routedNode.canRunInParallelWith) {
-    const parallel = resolveDigitalUseRuntimeNode(parallelCode);
+    const parallel: DigitalUseNodeManifestEntry =
+      resolveDigitalUseRuntimeNode(parallelCode);
     if (parallel.stream !== 'FAMILY_ALLIANCE') continue;
     await ensureSceneNodeAvailable(tx, {
       familyId: input.familyId,
@@ -340,7 +345,7 @@ async function materializeSelectedTargetNodes(
       .map((row) => [row.target_code, row])
   );
 
-  for (const candidate of digitalUseNodeManifest) {
+  for (const candidate of digitalUseNodeManifest as readonly DigitalUseNodeManifestEntry[]) {
     if (candidate.stream !== 'FAMILY_ALLIANCE') continue;
     const identity = familyAllianceTargetIdentity(candidate);
     if (identity === null || !selected.has(identity.targetCode)) continue;
@@ -469,7 +474,8 @@ export async function executeFamilyAllianceNodeInTransaction(
     if (!completed) throw familyHttpError('STALE_NODE_REVISION');
 
     if (route.nextNodeCode !== null) {
-      const next = resolveDigitalUseRuntimeNode(route.nextNodeCode);
+      const next: DigitalUseNodeManifestEntry =
+        resolveDigitalUseRuntimeNode(route.nextNodeCode);
       if (next.stream !== 'FAMILY_ALLIANCE') {
         throw familyHttpError('SCENE_ROUTE_UNRESOLVED');
       }

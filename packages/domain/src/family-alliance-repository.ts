@@ -32,7 +32,9 @@ export type FamilyAllianceValueState =
   | 'NOT_APPLICABLE';
 
 export interface FamilyAllianceFeasibilityPayload {
-  readonly concreteQuantified: { readonly state: FamilyAllianceValueState };
+  readonly concreteQuantified:
+    | { readonly state: 'KNOWN'; readonly concreteTargetText: string }
+    | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
   readonly need:
     | { readonly state: 'KNOWN'; readonly rating: number }
     | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
@@ -54,7 +56,7 @@ export interface FamilyAllianceProgressPayload {
     | 'OBSERVATION'
     | 'ADJUSTMENT';
   readonly state: FamilyAllianceValueState;
-  readonly modifyTarget?: 'YES' | 'NO' | 'NOT_DECIDED';
+  readonly modifyTarget?: 'YES' | 'NO' | 'NOT_DECIDED' | undefined;
 }
 
 export interface DigitalUseTargetItemRow {

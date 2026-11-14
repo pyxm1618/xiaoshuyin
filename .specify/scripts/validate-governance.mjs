@@ -96,7 +96,7 @@ if (fs.existsSync(specsRoot)) {
     if (hasSpec) {
       const text = read(path.join(dir, "spec.md"));
       const specSections = [
-        { label: "## Upstream Traceability", aliases: ["Upstream Traceability"] },
+        { label: "## Upstream Traceability", aliases: ["Upstream Traceability", "Authority Gate"] },
         { label: "## Scope", aliases: ["Scope"] },
         { label: "## Acceptance Scenarios", aliases: ["Acceptance Scenarios"] },
       ];

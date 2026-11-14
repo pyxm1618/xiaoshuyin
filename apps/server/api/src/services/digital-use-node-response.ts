@@ -458,7 +458,8 @@ export async function completeDigitalUseNodeResponse(
 
       // Manifest identity is resolved only after authorization, so fabricated
       // node codes do not become a cross-Family existence oracle.
-      const node = resolveRequestedDigitalUseNode(input.nodeCode);
+      const node: DigitalUseNodeManifestEntry =
+        resolveRequestedDigitalUseNode(input.nodeCode);
       const requestHash = hashPayload({
         familyId: input.familyId,
         caseId: input.caseId,

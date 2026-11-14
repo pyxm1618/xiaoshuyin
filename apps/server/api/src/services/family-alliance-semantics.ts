@@ -310,6 +310,12 @@ async function applyTargetFamily(
     const targetRow = await reviseDigitalUseTargetItem(context.tx, {
       ...common,
       patch: {
+        ...(parsed.data.feasibility.concreteQuantified.state === 'KNOWN'
+          ? {
+              concreteTargetText:
+                parsed.data.feasibility.concreteQuantified.concreteTargetText,
+            }
+          : {}),
         feasibilityPayload: parsed.data.feasibility,
         sourceRefs: context.currentInputRefs,
       },
