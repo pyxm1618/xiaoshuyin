@@ -630,6 +630,57 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     expect(crossFamily.statusCode).toBe(422);
     expect(crossFamily.json().code).toBe('SCENE_RESPONSE_INVALID');
 
+    const otherCase = await createCase(
+      app,
+      f.manager.token,
+      `a5001-cross-case-${crypto.randomUUID()}`
+    );
+    expect(otherCase.statusCode, otherCase.body).toBe(201);
+    const otherCaseId = otherCase.json().id as string;
+    let crossCaseAssertionId = '';
+    await withRlsTransaction(
+      appDb,
+      {
+        familyId: f.familyId,
+        accountId: f.manager.accountId,
+        personId: f.manager.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) => {
+        const recorded = await recordStatement(
+          tx,
+          {
+            familyId: f.familyId,
+            caseId: otherCaseId,
+            actorAccountId: f.manager.accountId,
+            actorPersonId: f.manager.personId,
+            purpose: 'FAMILY_MANAGEMENT',
+          },
+          {
+            subjectPersonId: f.manager.personId,
+            sourceKind: 'SELF_STATEMENT',
+            sourcePersonId: f.manager.personId,
+            occurredTimeState: 'UNKNOWN',
+            confirmationStatus: 'UNCONFIRMED',
+            content: 'cross-case A5001 source must not bind',
+          }
+        );
+        crossCaseAssertionId = recorded.id;
+      }
+    );
+    const forgedCrossCase = reviewPayload(scene);
+    forgedCrossCase.evidenceRefs = [
+      { type: 'ASSERTION', id: crossCaseAssertionId },
+    ] as any;
+    const crossCase = await a5001Request(
+      f,
+      scene,
+      `a5001-cross-case-${crypto.randomUUID()}`,
+      forgedCrossCase
+    );
+    expect(crossCase.statusCode).toBe(422);
+    expect(crossCase.json().code).toBe('SCENE_RESPONSE_INVALID');
+
     const counts = await a5001Counts(f);
     expect(counts.artifacts).toBe(0);
     expect(counts.evidence).toBe(0);
