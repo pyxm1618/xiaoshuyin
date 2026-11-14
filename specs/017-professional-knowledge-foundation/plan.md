@@ -5,7 +5,7 @@
 **Planning branch**: plan/017-professional-knowledge-foundation  
 **Frozen Spec**: commit a345937868ca1b8d2cef65003d4197de4207eb52 / blob 866c3f77dd269c94d420d9c0ae6b918f114286ce  
 **Execution context**: REMOTE-ONLY. Remote repository truth is authoritative; no local checkout is claimed.  
-**Planning status**: COMPLETE subject to Audit 1  
+**Planning status**: COMPLETE — Audit 1 FINAL PASS / Planning Freeze PASS  
 **Runtime status**: BLOCKED — only T1701 read-only gate may run until all implementation prerequisites are real.
 
 ## 1. Authority Gate
@@ -965,7 +965,22 @@ Open Planning Decisions: 0
 Scope Drift: 0
 ~~~
 
-## 31. Stop Boundary
+## 31. Audit 1 Closure
+
+Audit 1 found one planning-only authorization gap: the initial draft did not make unpublished/published professional-asset read authority mechanically explicit. The gap was remediated only in Plan/Checklist/Tasks by requiring authoritative read-unpublished/read-published/history capabilities and preserving the no-shadow-RBAC rule.
+
+Final unresolved findings after re-audit:
+
+~~~text
+CRITICAL 0
+HIGH     0
+MEDIUM   0
+LOW      0
+~~~
+
+Planning Quality Gate: PASS. Runtime Implement Gate remains BLOCKED. Development Authorization remains NOT GRANTED.
+
+## 32. Stop Boundary
 
 After Plan/Checklist/Tasks/Audit 1/Planning Freeze, Plan AI 2 stops.
 
