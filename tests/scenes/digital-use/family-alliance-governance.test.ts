@@ -53,6 +53,12 @@ describe('Slice 13 FAMILY_ALLIANCE frozen-scope governance', () => {
       .toBe('FEASIBILITY_EMOTION_REGULATION_2');
   });
 
+  it('FA-GOV-03A keeps A3002 Target List distinct from target-family identities', () => {
+    const a3002 = familyManifest.find((node) => node.nodeCode === 'A3002')!;
+    expect(a3002.role).toBe('TARGET_LIST_MANAGEMENT');
+    expect(a3002.role).not.toMatch(/^TARGET_(SLEEP|EXERCISE|HOBBY|HOUSEWORK|FAMILY_GATHERING|OUTDOOR_ACTIVITY|EMOTION_REGULATION_1|TIME_MANAGEMENT|FAMILY_RELATIONSHIP|EMOTION_REGULATION_2)$/);
+  });
+
   it('FA-GOV-03 preserves reciprocal A3001/A3002 parallel topology in the single Manifest', () => {
     const a3001 = familyManifest.find((node) => node.nodeCode === 'A3001')!;
     const a3002 = familyManifest.find((node) => node.nodeCode === 'A3002')!;

@@ -597,7 +597,7 @@ export async function executeFamilyAllianceNodeInTransaction(
     await revalidateFamilyAllianceGates(tx, input.caseId, input.actor.personId);
 
     void compliance;
-    return currentSceneEnvelope(tx, input.caseId);
+    return await currentSceneEnvelope(tx, input.caseId);
   } catch (error) {
     rethrowFamilyBusinessError(error);
   }

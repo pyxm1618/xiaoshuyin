@@ -138,6 +138,10 @@ export function familyAllianceTargetIdentity(
   node: Pick<DigitalUseNodeManifestEntry, 'stream' | 'role'>
 ): { role: FamilyAllianceTargetRole; targetCode: FamilyAllianceTargetCode } | null {
   if (node.stream !== 'FAMILY_ALLIANCE') return null;
+  // A3002 is the Target List aggregate, not one of the ten target families.
+  // Its role intentionally begins with TARGET_ but must never be interpreted
+  // as a target_code-bearing target item.
+  if (node.role === 'TARGET_LIST_MANAGEMENT') return null;
   for (const role of ['TARGET', 'FEASIBILITY', 'PROGRESS', 'HELP'] as const) {
     const prefix = `${role}_`;
     if (!node.role.startsWith(prefix)) continue;
