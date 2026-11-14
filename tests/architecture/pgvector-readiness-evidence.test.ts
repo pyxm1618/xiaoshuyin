@@ -6,7 +6,7 @@ import {
 } from '../../scripts/lib/pgvector-readiness.mjs';
 
 const IMAGE =
-  'pgvector/pgvector:0.8.7-pg18-bookworm@sha256:c29f30688a9ad961691bdf0ec1650717cc132a5814619d80f80463d6e4c42e47';
+  'pgvector/pgvector:0.8.7-pg18-trixie@sha256:5895949dfcdf308eb0cd31c950c93c14895c77f33fbedfecf1fa511ab1d4bcd2';
 
 const expected = {
   stage: 'STAGE_A',
@@ -46,6 +46,7 @@ function evidence(overrides: Record<string, any> = {}) {
       readback: true,
       distance_query: true,
       distance_order: true,
+      temporary_cleanup: true,
     },
   };
   return {
@@ -73,7 +74,7 @@ describe('Slice 19 pgvector readiness failure semantics', () => {
   it('accepts only an explicit semantic pgvector PG18 tag plus immutable digest', () => {
     expect(isPinnedPgvectorImageRef(IMAGE)).toBe(true);
     expect(isPinnedPgvectorImageRef('pgvector/pgvector:latest')).toBe(false);
-    expect(isPinnedPgvectorImageRef('pgvector/pgvector:0.8.7-pg18-bookworm')).toBe(false);
+    expect(isPinnedPgvectorImageRef('pgvector/pgvector:0.8.7-pg18-trixie')).toBe(false);
     expect(isPinnedPgvectorImageRef('postgres:18@sha256:' + 'a'.repeat(64))).toBe(false);
   });
 
