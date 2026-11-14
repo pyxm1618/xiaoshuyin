@@ -282,15 +282,18 @@ describe('T1218 Digital Use runtime hardening', () => {
       ]
     );
     await admin.query(
-      `UPDATE person_compliance_profiles
-          SET age_band='UNDER_14',
-              minor_mode=true,
-              guardian_person_id=$2,
-              guardian_consent_record_id=$3,
-              guardian_consent_version=1,
-              verified_source='GUARDIAN_RELAY',
-              updated_at=now()
-        WHERE person_id=$1`,
+      `INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,guardian_person_id,
+          guardian_consent_record_id,guardian_consent_version,verified_source)
+       VALUES ($1,'UNDER_14',true,$2,$3,1,'GUARDIAN_RELAY')
+       ON CONFLICT (person_id) DO UPDATE
+         SET age_band='UNDER_14',
+             minor_mode=true,
+             guardian_person_id=EXCLUDED.guardian_person_id,
+             guardian_consent_record_id=EXCLUDED.guardian_consent_record_id,
+             guardian_consent_version=EXCLUDED.guardian_consent_version,
+             verified_source='GUARDIAN_RELAY',
+             updated_at=now()`,
       [child.personId,f.manager.personId,consent.rows[0]!.id]
     );
     return {consentId:consent.rows[0]!.id,noticeHash};
@@ -1828,8 +1831,8 @@ describe('T1218 Digital Use runtime hardening', () => {
       await forceSceneNode(f,'A4003');
       await admin.query(
         `UPDATE person_compliance_profiles
-            SET age_band=$2,
-                minor_mode=CASE WHEN $2='MINOR_14_17' THEN true ELSE false END,
+            SET age_band=$2::age_band,
+                minor_mode=CASE WHEN $2::text='MINOR_14_17' THEN true ELSE false END,
                 guardian_person_id=NULL,
                 guardian_consent_record_id=NULL,
                 guardian_consent_version=NULL,

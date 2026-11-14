@@ -306,12 +306,13 @@ async function activateConfirmedContract(
  }
  const active=await activatePhoneUseContractCas(tx,{caseId:input.caseId,version:row.version,expectedDraftRevision:row.draft_revision});
  if(!active) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
- const previous=await getLatestSceneArtifact(tx,input.caseId,'PHONE_USE_CONTRACT_DOCUMENT');
+ const latestDocument=await getLatestSceneArtifact(tx,input.caseId,'PHONE_USE_CONTRACT_DOCUMENT');
+ const previous=latestDocument?.source_node_code===nodeCode ? latestDocument : null;
  const document=await insertSceneArtifact(tx,{
    familyId:input.familyId,caseId:input.caseId,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
    artifactType:'PHONE_USE_CONTRACT_DOCUMENT',schemaVersion:'v1',sourceNodeCode:nodeCode,
    data:{contractVersionId:active.id,version:active.version,draftRevision:active.draft_revision,status:'ACTIVE',projection:dto(active)},
-   ownerPersonId:input.actor.personId,sourceRefs:refs,revision:previous===null?1:previous.revision+1,
+   ownerPersonId:active.adult_party_person_id,sourceRefs:refs,revision:previous===null?1:previous.revision+1,
    ...(previous?{supersedesId:previous.id}:{}),
  });
  const outputRefs=[{type:'SCENE_ARTIFACT' as const,id:document.id}];

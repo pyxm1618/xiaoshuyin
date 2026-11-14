@@ -80,8 +80,6 @@ const EXPECTED_TABLE_NAMES = [
   'persons',
   'problem_formulations',
   'risk_events',
-  'roleplay_sessions',
-  'roleplay_turns',
   'scene_artifacts',
   'scene_node_states',
 ].sort();

@@ -100,11 +100,6 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
     'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
     'DIGITAL_USE_NODE_COMPLETED',
-    'PHONE_USE_CONTRACT_DRAFT_SAVED',
-    'PHONE_USE_CONTRACT_CONFIRMED',
-    'PHONE_USE_CONTRACT_ACTIVATED',
-    'PHONE_USE_CONTRACT_SUPERSEDED',
-    'PHONE_USE_ROLEPLAY_RECORDED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -118,13 +113,6 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_RESOLVE_RISK',
     'DIGITAL_USE_ASSESSMENT_RESUME',
     'DIGITAL_USE_NODE_RESPONSE',
-    'PHONE_USE_CONTRACT_DRAFT_SAVE',
-    'PHONE_USE_CONTRACT_CONFIRM',
-    'PHONE_USE_CONTRACT_REVISE',
-    'PHONE_USE_ROLEPLAY_CREATE',
-    'PHONE_USE_ROLEPLAY_TURN',
-    'PHONE_USE_ROLEPLAY_RATE',
-    'PHONE_USE_ROLEPLAY_SELECT',
   ],
 };
 
@@ -525,7 +513,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 11 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 10 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -682,7 +670,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 18 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 17 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -705,7 +693,6 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '014_consent_01004_cross_purpose_supersede_guard.sql',
       '015_digital_use_assessment_runtime.sql',
       '016_digital_use_family_alliance_runtime.sql',
-      '017_digital_use_phone_use_contract_runtime.sql',
     ]);
   }, 180_000);
 });
