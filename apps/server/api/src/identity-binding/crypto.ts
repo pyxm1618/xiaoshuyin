@@ -334,16 +334,6 @@ export function decodePairingChallenge(
 }
 
 /**
- * Same fixed-width, same-alphabet material for hidden business failures. It is
- * a uniformly random 144-byte string: identical length, alphabet and observable
- * structure to a real AEAD envelope, so a valid issuance cannot be told apart
- * from a decoy without the secret.
- */
-export function createDecoyPairingChallenge(): string {
-  return randomBytes(PAIRING_ENVELOPE_BYTES).toString('base64url');
-}
-
-/**
  * Deterministic opaque decoy for one persisted issuance. Real and decoy
  * challenges therefore share the same replay/rotation policy: repeated reads
  * of one live issuance are byte-stable, while a rotated issuance changes the
