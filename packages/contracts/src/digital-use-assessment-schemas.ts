@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FamilyAllianceReachableNode, FamilyAllianceTargetItemProjection } from './family-alliance-schemas.js';
 import {
   PG_INTEGER_MAX,
   CurrentFamilyAmbiguousError,
@@ -19,6 +20,7 @@ export const SceneRef = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('OBSERVATION'), id: z.string().uuid() }),
   z.strictObject({ type: z.literal('CONSENT'), id: z.string().uuid() }),
   z.strictObject({ type: z.literal('SCENE_ARTIFACT'), id: z.string().uuid() }),
+  z.strictObject({ type: z.literal('TARGET_ITEM'), id: z.string().uuid() }),
   z.strictObject({
     type: z.literal('RECORD_MARKER'),
     markerCode: z.literal('A200401'),
@@ -34,7 +36,7 @@ export type SceneRefType = z.infer<typeof SceneRef>;
 export const SceneArtifact = z.strictObject({
   id: z.string().uuid(),
   type: z.enum([
-    'SUPPLEMENTAL_ASSESSMENT_BOUNDARY', 'TIMELINE', 'SOLUTION_SUMMARY',
+    'SUPPLEMENTAL_ASSESSMENT_BOUNDARY', 'TIMELINE', 'SOLUTION_SUMMARY', 'FAMILY_ALLIANCE_SELF_ASSESSMENT',
     'PHONE_USE_CONTRACT_QUIZ_ATTEMPT', 'PHONE_USE_ROLEPLAY_SELECTION', 'PHONE_USE_CONTRACT_TOOL_SELECTION',
     'PHONE_USE_DURATION_COMPONENT', 'PHONE_USE_SUPERVISION_COMPONENT', 'PHONE_USE_SUPERVISION_LOG',
     'PHONE_USE_INCENTIVE_COMPONENT', 'PHONE_USE_BREACH_COMPONENT',
@@ -43,7 +45,7 @@ export const SceneArtifact = z.strictObject({
   ]),
   schemaVersion: z.string().min(1).max(64),
   sourceNodeCode: z.enum([
-    '01000', 'A2007', 'A2010',
+    '01000', 'A2007', 'A2010', 'A3000',
     'A4001', 'A4003', 'A4004', 'A4005', 'A4006', 'A4007', 'A4008', 'A4009', 'A4010', 'A4011', 'A4012',
   ]),
   revision: z.number().int().min(1).max(PG_INTEGER_MAX),
@@ -78,8 +80,12 @@ export const DigitalUseSceneResponse = z.strictObject({
   sceneCode: z.literal('DIGITAL_USE'),
   scenePackageVersion: z.literal('v1'),
   currentNode: SceneNodeProjection.nullable(),
+  activeNodes: z.array(SceneNodeProjection),
+  reachableNodes: z.array(FamilyAllianceReachableNode),
   nodes: z.array(SceneNodeProjection),
   artifacts: z.array(SceneArtifact),
+  targetSelectionRevision: z.number().int().min(0).max(PG_INTEGER_MAX),
+  targets: z.array(FamilyAllianceTargetItemProjection),
   routeReasonCode: z.string().nullable(),
   downstream: DownstreamAvailability,
 });
@@ -91,7 +97,11 @@ export const DigitalUseNodeResponse = z.strictObject({
   sceneCode: z.literal('DIGITAL_USE'),
   scenePackageVersion: z.literal('v1'),
   node: SceneNodeProjection,
+  activeNodes: z.array(SceneNodeProjection),
+  reachableNodes: z.array(FamilyAllianceReachableNode),
   artifacts: z.array(SceneArtifact),
+  targetSelectionRevision: z.number().int().min(0).max(PG_INTEGER_MAX),
+  targets: z.array(FamilyAllianceTargetItemProjection),
   routeReasonCode: z.string().nullable(),
   downstream: DownstreamAvailability,
 });
@@ -109,7 +119,10 @@ export type StartDigitalUseAssessmentResponseType =
 
 export const CompleteDigitalUseNodeRequest = z.strictObject({
   expectedCaseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
-  expectedNodeRevision: z.number().int().min(1).max(PG_INTEGER_MAX),
+  expectedNodeRevision: z.number().int().min(0).max(PG_INTEGER_MAX),
+  expectedScenePackageVersion: z.literal('v1').optional(),
+  expectedSelectionRevision: z.number().int().min(0).max(PG_INTEGER_MAX).optional(),
+  expectedTargetRevision: z.number().int().min(1).max(PG_INTEGER_MAX).optional(),
   response: z.record(z.string(), z.unknown()),
 });
 export type CompleteDigitalUseNodeRequestType =
@@ -138,6 +151,17 @@ export const SceneRuntimeError = z.strictObject({
     'SCENE_PACKAGE_MISMATCH',
     'STALE_SCENE_PACKAGE',
     'STALE_NODE_REVISION',
+    'STALE_SELECTION_REVISION',
+    'STALE_TARGET_REVISION',
+    'TARGET_SELECTION_INVALID',
+    'TARGET_CODE_INVALID',
+    'TARGET_NOT_SELECTED',
+    'TARGET_SCOPE_INVALID',
+    'TARGET_SELECTION_STATE_INVALID',
+    'FAMILY_ALLIANCE_ENTRY_BLOCKED',
+    'PROBLEM_FORMULATION_REQUIRED',
+    'CONSENT_BLOCKED',
+    'DEPENDENCY_UNAVAILABLE',
     'SCENE_RESPONSE_INVALID',
     'SCENE_ROUTE_BLOCKED',
     'SCENE_ROUTE_UNRESOLVED',

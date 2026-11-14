@@ -14,7 +14,7 @@ import {
 import {
   assertOrdinaryProgressionAllowedRaw,
   casCompleteSceneNodeState,
-  casReenterCompletedSceneNode,
+  casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
   getLatestSceneArtifact,
   getRoleplaySession,
@@ -271,16 +271,9 @@ export async function selectPhoneUseRoleplay(
      let routeReasonCode:string;
      let nextNodeCode:string|null=null;
      if(correction){
-       const reopened=await casReenterCompletedSceneNode(tx,{
+       completed=await casRecompleteSceneNodeState(tx,{
          caseId:input.caseId,nodeCode:'A4003',scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
          expectedRevision:input.expectedNodeRevision,
-         branchReasonCodes:['SIMULATION_SELECTION_CORRECTION'],
-         inputRefs:scene.input_refs,
-       });
-       if(!reopened) throw roleplayError('STALE_NODE_REVISION');
-       completed=await casCompleteSceneNodeState(tx,{
-         caseId:input.caseId,nodeCode:'A4003',scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
-         expectedRevision:reopened.revision,status:'COMPLETED',
          branchReasonCodes:['SIMULATION_SELECTION_CORRECTED'],inputRefs:scene.input_refs,outputRefs,
        });
        if(!completed) throw roleplayError('STALE_NODE_REVISION');

@@ -3235,6 +3235,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3282,6 +3287,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3306,6 +3316,130 @@ export interface operations {
                             enteredAt: string;
                             completedAt: string | null;
                         } | null;
+                        activeNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        reachableNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            entryModes: ("ROUTED" | "USER_INITIATED" | "SCHEDULED")[];
+                            interactionRefs: string[];
+                            outputRefs: string[];
+                            helpOrReentryRefs: string[];
+                            reasonCode: string;
+                        }[];
                         nodes: {
                             nodeCode: string;
                             sourceNodeCode: string;
@@ -3340,6 +3474,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3387,6 +3526,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3415,10 +3559,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -3450,6 +3594,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3469,6 +3618,95 @@ export interface operations {
                                     /** Format: uuid */
                                     id: string;
                                 })[];
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        targetSelectionRevision: number;
+                        targets: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            targetCode: "SLEEP" | "EXERCISE" | "HOBBIES" | "CHORES" | "FAMILY_GATHERING" | "OUTDOOR_ACTIVITY" | "EMOTION_REGULATION_1" | "TIME_MANAGEMENT" | "FAMILY_RELATIONSHIP" | "EMOTION_REGULATION_2";
+                            selectionRevision: number;
+                            revision: number;
+                            selected: boolean;
+                            concreteTargetText: string | null;
+                            feasibility: {
+                                concreteQuantified: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    concreteTargetText: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                need: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                motivationBenefit: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                abilityPossibility: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                challengeResistance: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                            } | null;
+                            progress: {
+                                /** @enum {string} */
+                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                /** @enum {string} */
+                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                /** @enum {string} */
+                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
+                            } | null;
+                            progressEvidenceRefs: ({
+                                type: string;
+                                /** Format: uuid */
+                                id: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            helpHistoryRefs: {
+                                nodeCode: string;
+                                /** @constant */
+                                scenePackageVersion: "v1";
+                                interactionRefs: string[];
+                                helpOrReentryRefs: string[];
+                                evidenceRefs: ({
+                                    type: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            }[];
+                            sourceRefs: ({
+                                type: string;
+                            } & {
+                                [key: string]: unknown;
                             })[];
                             /** Format: date-time */
                             createdAt: string;
@@ -3513,7 +3751,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -3549,7 +3787,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -3585,7 +3823,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -3621,7 +3859,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -3657,7 +3895,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -3723,6 +3961,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3770,6 +4013,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3794,6 +4042,130 @@ export interface operations {
                             enteredAt: string;
                             completedAt: string | null;
                         } | null;
+                        activeNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        reachableNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            entryModes: ("ROUTED" | "USER_INITIATED" | "SCHEDULED")[];
+                            interactionRefs: string[];
+                            outputRefs: string[];
+                            helpOrReentryRefs: string[];
+                            reasonCode: string;
+                        }[];
                         nodes: {
                             nodeCode: string;
                             sourceNodeCode: string;
@@ -3828,6 +4200,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3875,6 +4252,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3903,10 +4285,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -3938,6 +4320,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -3957,6 +4344,95 @@ export interface operations {
                                     /** Format: uuid */
                                     id: string;
                                 })[];
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        targetSelectionRevision: number;
+                        targets: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            targetCode: "SLEEP" | "EXERCISE" | "HOBBIES" | "CHORES" | "FAMILY_GATHERING" | "OUTDOOR_ACTIVITY" | "EMOTION_REGULATION_1" | "TIME_MANAGEMENT" | "FAMILY_RELATIONSHIP" | "EMOTION_REGULATION_2";
+                            selectionRevision: number;
+                            revision: number;
+                            selected: boolean;
+                            concreteTargetText: string | null;
+                            feasibility: {
+                                concreteQuantified: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    concreteTargetText: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                need: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                motivationBenefit: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                abilityPossibility: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                challengeResistance: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                            } | null;
+                            progress: {
+                                /** @enum {string} */
+                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                /** @enum {string} */
+                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                /** @enum {string} */
+                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
+                            } | null;
+                            progressEvidenceRefs: ({
+                                type: string;
+                                /** Format: uuid */
+                                id: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            helpHistoryRefs: {
+                                nodeCode: string;
+                                /** @constant */
+                                scenePackageVersion: "v1";
+                                interactionRefs: string[];
+                                helpOrReentryRefs: string[];
+                                evidenceRefs: ({
+                                    type: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            }[];
+                            sourceRefs: ({
+                                type: string;
+                            } & {
+                                [key: string]: unknown;
                             })[];
                             /** Format: date-time */
                             createdAt: string;
@@ -4001,7 +4477,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4037,7 +4513,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4073,7 +4549,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4109,7 +4585,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4145,7 +4621,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4212,6 +4688,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -4259,6 +4740,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -4283,14 +4769,138 @@ export interface operations {
                             enteredAt: string;
                             completedAt: string | null;
                         };
+                        activeNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        reachableNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            entryModes: ("ROUTED" | "USER_INITIATED" | "SCHEDULED")[];
+                            interactionRefs: string[];
+                            outputRefs: string[];
+                            helpOrReentryRefs: string[];
+                            reasonCode: string;
+                        }[];
                         artifacts: {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -4322,6 +4932,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -4341,6 +4956,95 @@ export interface operations {
                                     /** Format: uuid */
                                     id: string;
                                 })[];
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        targetSelectionRevision: number;
+                        targets: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            targetCode: "SLEEP" | "EXERCISE" | "HOBBIES" | "CHORES" | "FAMILY_GATHERING" | "OUTDOOR_ACTIVITY" | "EMOTION_REGULATION_1" | "TIME_MANAGEMENT" | "FAMILY_RELATIONSHIP" | "EMOTION_REGULATION_2";
+                            selectionRevision: number;
+                            revision: number;
+                            selected: boolean;
+                            concreteTargetText: string | null;
+                            feasibility: {
+                                concreteQuantified: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    concreteTargetText: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                need: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                motivationBenefit: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                abilityPossibility: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                challengeResistance: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                            } | null;
+                            progress: {
+                                /** @enum {string} */
+                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                /** @enum {string} */
+                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                /** @enum {string} */
+                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
+                            } | null;
+                            progressEvidenceRefs: ({
+                                type: string;
+                                /** Format: uuid */
+                                id: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            helpHistoryRefs: {
+                                nodeCode: string;
+                                /** @constant */
+                                scenePackageVersion: "v1";
+                                interactionRefs: string[];
+                                helpOrReentryRefs: string[];
+                                evidenceRefs: ({
+                                    type: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            }[];
+                            sourceRefs: ({
+                                type: string;
+                            } & {
+                                [key: string]: unknown;
                             })[];
                             /** Format: date-time */
                             createdAt: string;
@@ -4385,7 +5089,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4421,7 +5125,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4457,7 +5161,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4493,7 +5197,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4529,7 +5233,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4609,6 +5313,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -4656,6 +5365,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -4680,6 +5394,130 @@ export interface operations {
                             enteredAt: string;
                             completedAt: string | null;
                         } | null;
+                        activeNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        reachableNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            entryModes: ("ROUTED" | "USER_INITIATED" | "SCHEDULED")[];
+                            interactionRefs: string[];
+                            outputRefs: string[];
+                            helpOrReentryRefs: string[];
+                            reasonCode: string;
+                        }[];
                         nodes: {
                             nodeCode: string;
                             sourceNodeCode: string;
@@ -4714,6 +5552,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -4761,6 +5604,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -4789,10 +5637,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT" | "PHONE_USE_CONTRACT_QUIZ_ATTEMPT" | "PHONE_USE_ROLEPLAY_SELECTION" | "PHONE_USE_CONTRACT_TOOL_SELECTION" | "PHONE_USE_DURATION_COMPONENT" | "PHONE_USE_SUPERVISION_COMPONENT" | "PHONE_USE_SUPERVISION_LOG" | "PHONE_USE_INCENTIVE_COMPONENT" | "PHONE_USE_BREACH_COMPONENT" | "PARENT_SELF_REGULATION_CHECKLIST" | "PHONE_USE_CONTRACT_DOCUMENT" | "PHONE_USE_CONTRACT_SUPPORT_LOG";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000" | "A4001" | "A4003" | "A4004" | "A4005" | "A4006" | "A4007" | "A4008" | "A4009" | "A4010" | "A4011" | "A4012";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -4824,6 +5672,11 @@ export interface operations {
                                 id: string;
                             } | {
                                 /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
                                 type: "RECORD_MARKER";
                                 /** @constant */
                                 markerCode: "A200401";
@@ -4843,6 +5696,95 @@ export interface operations {
                                     /** Format: uuid */
                                     id: string;
                                 })[];
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        targetSelectionRevision: number;
+                        targets: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            targetCode: "SLEEP" | "EXERCISE" | "HOBBIES" | "CHORES" | "FAMILY_GATHERING" | "OUTDOOR_ACTIVITY" | "EMOTION_REGULATION_1" | "TIME_MANAGEMENT" | "FAMILY_RELATIONSHIP" | "EMOTION_REGULATION_2";
+                            selectionRevision: number;
+                            revision: number;
+                            selected: boolean;
+                            concreteTargetText: string | null;
+                            feasibility: {
+                                concreteQuantified: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    concreteTargetText: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                need: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                motivationBenefit: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                abilityPossibility: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                challengeResistance: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                            } | null;
+                            progress: {
+                                /** @enum {string} */
+                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                /** @enum {string} */
+                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                /** @enum {string} */
+                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
+                            } | null;
+                            progressEvidenceRefs: ({
+                                type: string;
+                                /** Format: uuid */
+                                id: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            helpHistoryRefs: {
+                                nodeCode: string;
+                                /** @constant */
+                                scenePackageVersion: "v1";
+                                interactionRefs: string[];
+                                helpOrReentryRefs: string[];
+                                evidenceRefs: ({
+                                    type: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            }[];
+                            sourceRefs: ({
+                                type: string;
+                            } & {
+                                [key: string]: unknown;
                             })[];
                             /** Format: date-time */
                             createdAt: string;
@@ -4887,7 +5829,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4923,7 +5865,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4959,7 +5901,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -4995,7 +5937,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };
@@ -5031,7 +5973,7 @@ export interface operations {
                         message: string;
                     } | {
                         /** @enum {string} */
-                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
                 };

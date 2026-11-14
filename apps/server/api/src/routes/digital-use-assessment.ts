@@ -224,6 +224,9 @@ export function registerDigitalUseAssessmentRoutes(
         nodeCode: params.nodeCode,
         expectedCaseVersion: body.expectedCaseVersion,
         expectedNodeRevision: body.expectedNodeRevision,
+        expectedScenePackageVersion: body.expectedScenePackageVersion,
+        expectedSelectionRevision: body.expectedSelectionRevision,
+        expectedTargetRevision: body.expectedTargetRevision,
         response: body.response as Readonly<Record<string, unknown>>,
         idempotencyKey,
         requestEvidence: {

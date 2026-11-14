@@ -205,3 +205,20 @@ export async function loadCompliancePersonSnapshot(
     verifiedSource: asString(row['verified_source']),
   };
 }
+
+/**
+ * Narrow consumer-side serialization seam for mutable feature-policy
+ * publication. Uses the exact advisory-lock key owned by migration 011's
+ * publication/overlap guards and the caller's existing transaction.
+ */
+export async function lockComplianceFeatureEvaluationBasis(
+  executor: CompliancePersonQueryExecutor,
+  feature: ComplianceFeatureDescriptor
+): Promise<void> {
+  await executor.query(
+    `SELECT pg_advisory_xact_lock(
+       hashtextextended($1 || chr(31) || $2, 0)
+     )`,
+    [feature.featureCode, feature.featureContractRevision]
+  );
+}

@@ -15,6 +15,7 @@ export type StoredSceneRef =
   | StoredEvidenceRef
   | { type: 'CONSENT'; id: string }
   | { type: 'SCENE_ARTIFACT'; id: string }
+  | { type: 'TARGET_ITEM'; id: string }
   | { type: 'RECORD_MARKER'; markerCode: 'A200401'; evidenceRefs: StoredEvidenceRef[] };
 
 export interface SceneNodeStateRow {
@@ -40,6 +41,7 @@ export interface SceneArtifactRow {
   scene_package_version: string;
   artifact_type:
     | 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY'
+    | 'FAMILY_ALLIANCE_SELF_ASSESSMENT'
     | 'PHONE_USE_CONTRACT_QUIZ_ATTEMPT'
     | 'PHONE_USE_ROLEPLAY_SELECTION'
     | 'PHONE_USE_CONTRACT_TOOL_SELECTION'
@@ -53,7 +55,7 @@ export interface SceneArtifactRow {
     | 'PHONE_USE_CONTRACT_SUPPORT_LOG';
   schema_version: string;
   source_node_code:
-    | '01000' | 'A2007' | 'A2010'
+    | '01000' | 'A2007' | 'A2010' | 'A3000'
     | 'A4001' | 'A4003' | 'A4004' | 'A4005' | 'A4006' | 'A4007' | 'A4008'
     | 'A4009' | 'A4010' | 'A4011' | 'A4012';
   data: Record<string, unknown>;
@@ -316,11 +318,10 @@ export async function casCompleteSceneNodeState(
 }
 
 /**
- * Slice 14 consumes the existing Manifest USER_INITIATED re-entry metadata.
- * This is a generic Scene-State CAS transition, not phone-contract topology:
- * callers must prove the Manifest permits re-entry before invoking it.
+ * Slice 13 narrow re-entry CAS. Re-entry is caller-authorized by current
+ * Manifest/gates; this primitive owns no reachability rule and never rewinds.
  */
-export async function casReenterCompletedSceneNode(
+export async function casRecompleteSceneNodeState(
   tx: Tx,
   input: {
     caseId: string;
@@ -329,15 +330,16 @@ export async function casReenterCompletedSceneNode(
     expectedRevision: number;
     branchReasonCodes: readonly string[];
     inputRefs: readonly StoredSceneRef[];
+    outputRefs: readonly StoredSceneRef[];
   }
 ): Promise<SceneNodeStateRow | null> {
   const { rows } = await tx.query<SceneNodeStateRow>(
     `UPDATE scene_node_states
-        SET status = 'IN_PROGRESS',
+        SET status = 'COMPLETED',
             branch_reason_codes = $5,
             input_refs = $6::jsonb,
-            output_refs = '[]'::jsonb,
-            completed_at = NULL,
+            output_refs = $7::jsonb,
+            completed_at = now(),
             revision = revision + 1
       WHERE case_id = $1
         AND node_code = $2
@@ -346,8 +348,13 @@ export async function casReenterCompletedSceneNode(
         AND status = 'COMPLETED'
       RETURNING ${NODE_COLUMNS}`,
     [
-      input.caseId, input.nodeCode, input.scenePackageVersion, input.expectedRevision,
-      [...input.branchReasonCodes], JSON.stringify(input.inputRefs),
+      input.caseId,
+      input.nodeCode,
+      input.scenePackageVersion,
+      input.expectedRevision,
+      [...input.branchReasonCodes],
+      JSON.stringify(input.inputRefs),
+      JSON.stringify(input.outputRefs),
     ]
   );
   return rows[0] ?? null;
@@ -444,6 +451,7 @@ async function resolveOneRef(
       : ref.type === 'ASSERTION' ? 'assertions'
       : ref.type === 'OBSERVATION' ? 'observations'
       : ref.type === 'CONSENT' ? 'consent_records'
+      : ref.type === 'TARGET_ITEM' ? 'digital_use_target_items'
       : 'scene_artifacts';
 
   const { rows } = await tx.query<{ ok: boolean }>(
@@ -521,9 +529,18 @@ export async function insertDigitalUseNodeCompletedAudit(
     scenePackageVersion: string;
     nodeCode: string;
     nodeRevision: number;
+    priorNodeRevision?: number;
     routeReasonCode: string | null;
     nextNodeCode: string | null;
     terminalCode: string | null;
+    sourceNodeCode?: string;
+    entryMode?: string;
+    targetCode?: string;
+    selectionRevision?: number;
+    targetRevision?: number;
+    inputRefs?: readonly StoredSceneRef[];
+    outputRefs?: readonly StoredSceneRef[];
+    idempotencyOutcome?: 'EXECUTED';
   }
 ): Promise<void> {
   await tx.query(
@@ -538,9 +555,22 @@ export async function insertDigitalUseNodeCompletedAudit(
         scenePackageVersion: input.scenePackageVersion,
         nodeCode: input.nodeCode,
         nodeRevision: input.nodeRevision,
+        ...(input.priorNodeRevision === undefined
+          ? {}
+          : { priorNodeRevision: input.priorNodeRevision }),
         routeReasonCode: input.routeReasonCode,
         nextNodeCode: input.nextNodeCode,
         terminalCode: input.terminalCode,
+        ...(input.sourceNodeCode === undefined ? {} : { sourceNodeCode: input.sourceNodeCode }),
+        ...(input.entryMode === undefined ? {} : { entryMode: input.entryMode }),
+        ...(input.targetCode === undefined ? {} : { targetCode: input.targetCode }),
+        ...(input.selectionRevision === undefined ? {} : { selectionRevision: input.selectionRevision }),
+        ...(input.targetRevision === undefined ? {} : { targetRevision: input.targetRevision }),
+        ...(input.inputRefs === undefined ? {} : { inputRefs: input.inputRefs }),
+        ...(input.outputRefs === undefined ? {} : { outputRefs: input.outputRefs }),
+        ...(input.idempotencyOutcome === undefined
+          ? {}
+          : { idempotencyOutcome: input.idempotencyOutcome }),
       }),
     ]
   );

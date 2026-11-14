@@ -10,7 +10,7 @@ import {
   assertOrdinaryProgressionAllowedRaw,
   casCompleteSceneNodeState,
   casRecordSceneNodeProgress,
-  casReenterCompletedSceneNode,
+  casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
   getCaseById,
   getSceneNodeState,
@@ -52,6 +52,7 @@ import {
   shouldPrepareProblemFormulationHandoff,
 } from './digital-use-node-semantics.js';
 import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
+import { executeFamilyAllianceNodeInTransaction } from './digital-use-family-alliance.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -458,13 +459,17 @@ export async function completeDigitalUseNodeResponse(
 
       // Manifest identity is resolved only after authorization, so fabricated
       // node codes do not become a cross-Family existence oracle.
-      const node = resolveRequestedDigitalUseNode(input.nodeCode);
+      const node: DigitalUseNodeManifestEntry =
+        resolveRequestedDigitalUseNode(input.nodeCode);
       const requestHash = hashPayload({
         familyId: input.familyId,
         caseId: input.caseId,
         nodeCode: node.nodeCode,
         expectedCaseVersion: input.expectedCaseVersion,
         expectedNodeRevision: input.expectedNodeRevision,
+        expectedScenePackageVersion: input.expectedScenePackageVersion ?? null,
+        expectedSelectionRevision: input.expectedSelectionRevision ?? null,
+        expectedTargetRevision: input.expectedTargetRevision ?? null,
         response: input.response,
       });
 
@@ -479,6 +484,13 @@ export async function completeDigitalUseNodeResponse(
           requestHash,
         },
         async () => {
+          if (node.stream === 'FAMILY_ALLIANCE') {
+            return {
+              status: 200,
+              body: await executeFamilyAllianceNodeInTransaction(tx, input, node),
+            };
+          }
+
           const handoffCandidate = await shouldPrepareProblemFormulationHandoff({
             tx,
             actor: input.actor,
@@ -510,6 +522,7 @@ export async function completeDigitalUseNodeResponse(
           if (binding !== DIGITAL_USE_PACKAGE_VERSION) throw nodeError('STALE_SCENE_PACKAGE');
 
           let current = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
+          let recompleting = false;
           if (
             current?.status === 'COMPLETED' &&
             (node.entryMode as readonly string[]).includes('USER_INITIATED') &&
@@ -518,20 +531,7 @@ export async function completeDigitalUseNodeResponse(
             if (current.revision !== input.expectedNodeRevision) {
               throw nodeError('STALE_NODE_REVISION');
             }
-            const reentered = await casReenterCompletedSceneNode(tx, {
-              caseId: input.caseId,
-              nodeCode: node.nodeCode,
-              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-              expectedRevision: current.revision,
-              branchReasonCodes: ['USER_INITIATED_REENTRY'],
-              inputRefs: current.output_refs.length > 0 ? current.output_refs : current.input_refs,
-            });
-            if (!reentered) throw nodeError('STALE_NODE_REVISION');
-            current = reentered;
-            // The client supplied the revision of the completed projection.
-            // The generic re-entry transition consumes it, so subsequent
-            // completion must use the server-owned incremented revision.
-            input = { ...input, expectedNodeRevision: reentered.revision };
+            recompleting = true;
           }
           if (
             !current &&
@@ -559,7 +559,11 @@ export async function completeDigitalUseNodeResponse(
           if (current.revision !== input.expectedNodeRevision) {
             throw nodeError('STALE_NODE_REVISION');
           }
-          if (current.status !== 'AVAILABLE' && current.status !== 'IN_PROGRESS') {
+          if (
+            current.status !== 'AVAILABLE' &&
+            current.status !== 'IN_PROGRESS' &&
+            !(recompleting && current.status === 'COMPLETED')
+          ) {
             throw nodeError('SCENE_NODE_UNREACHABLE');
           }
 
@@ -629,16 +633,26 @@ export async function completeDigitalUseNodeResponse(
 
           if (semantic.progression === 'COMPLETE_NO_ROUTE') {
             const reasonCode = semantic.completeReasonCode ?? 'SCENE_NODE_COMPLETED';
-            const completed = await casCompleteSceneNodeState(tx, {
-              caseId: input.caseId,
-              nodeCode: node.nodeCode,
-              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-              expectedRevision: current.revision,
-              status: semantic.completionStatus ?? 'COMPLETED',
-              branchReasonCodes: [reasonCode],
-              inputRefs: semantic.inputRefs,
-              outputRefs: semantic.outputRefs,
-            });
+            const completed = recompleting
+              ? await casRecompleteSceneNodeState(tx, {
+                  caseId: input.caseId,
+                  nodeCode: node.nodeCode,
+                  scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                  expectedRevision: current.revision,
+                  branchReasonCodes: [reasonCode],
+                  inputRefs: semantic.inputRefs,
+                  outputRefs: semantic.outputRefs,
+                })
+              : await casCompleteSceneNodeState(tx, {
+                  caseId: input.caseId,
+                  nodeCode: node.nodeCode,
+                  scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                  expectedRevision: current.revision,
+                  status: semantic.completionStatus ?? 'COMPLETED',
+                  branchReasonCodes: [reasonCode],
+                  inputRefs: semantic.inputRefs,
+                  outputRefs: semantic.outputRefs,
+                });
             if (!completed) throw nodeError('STALE_NODE_REVISION');
             await insertDigitalUseNodeCompletedEvent(tx, {
               familyId: input.familyId,
@@ -669,16 +683,26 @@ export async function completeDigitalUseNodeResponse(
 
           const route = routeSemantic(node, semantic);
 
-          const completed = await casCompleteSceneNodeState(tx, {
-            caseId: input.caseId,
-            nodeCode: node.nodeCode,
-            scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-            expectedRevision: input.expectedNodeRevision,
-            status: semantic.completionStatus ?? 'COMPLETED',
-            branchReasonCodes: [route.reasonCode],
-            inputRefs: semantic.inputRefs,
-            outputRefs: semantic.outputRefs,
-          });
+          const completed = recompleting
+            ? await casRecompleteSceneNodeState(tx, {
+                caseId: input.caseId,
+                nodeCode: node.nodeCode,
+                scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                expectedRevision: current.revision,
+                branchReasonCodes: [route.reasonCode],
+                inputRefs: semantic.inputRefs,
+                outputRefs: semantic.outputRefs,
+              })
+            : await casCompleteSceneNodeState(tx, {
+                caseId: input.caseId,
+                nodeCode: node.nodeCode,
+                scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                expectedRevision: current.revision,
+                status: semantic.completionStatus ?? 'COMPLETED',
+                branchReasonCodes: [route.reasonCode],
+                inputRefs: semantic.inputRefs,
+                outputRefs: semantic.outputRefs,
+              });
           if (!completed) throw nodeError('STALE_NODE_REVISION');
 
           let nextNodeCode: string | null = null;

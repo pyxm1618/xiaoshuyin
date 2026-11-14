@@ -63,6 +63,7 @@ export * from './compliance/schema.js';
 // Slice 12 — typed projection only; topology/routing remains @xiaoshuyin/scenes.
 export * from './scene-runtime-schema.js';
 export * from './scene-runtime-repository.js';
+export * from './family-alliance-repository.js';
 
 // Slice 14 — bounded phone-use Contract/roleplay persistence.
 export * from './phone-use-contract-schema.js';

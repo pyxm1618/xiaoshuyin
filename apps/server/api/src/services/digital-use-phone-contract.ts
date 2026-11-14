@@ -10,7 +10,7 @@ import type pg from 'pg';
 import {
   assertOrdinaryProgressionAllowedRaw,
   casCompleteSceneNodeState,
-  casReenterCompletedSceneNode,
+  casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
   getCurrentActivePhoneUseContract,
   getCurrentPhoneUseContract,
@@ -123,16 +123,8 @@ async function ensureContractNode(
  const manifest=resolveDigitalUseRuntimeNode(input.nodeCode);
  if(!(manifest.entryMode as readonly string[]).includes('USER_INITIATED')) throw contractError('SCENE_NODE_UNREACHABLE');
  let existing=await getSceneNodeState(tx,input.caseId,input.nodeCode,true);
- if(existing?.status==='COMPLETED'){
-   const reentered=await casReenterCompletedSceneNode(tx,{
-     caseId:input.caseId,nodeCode:input.nodeCode,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
-     expectedRevision:existing.revision,branchReasonCodes:['USER_INITIATED_REENTRY'],inputRefs:input.inputRefs,
-   });
-   if(!reentered) throw contractError('STALE_NODE_REVISION');
-   existing=reentered;
- }
  if(existing){
-   if(existing.status!=='AVAILABLE'&&existing.status!=='IN_PROGRESS') throw contractError('SCENE_NODE_UNREACHABLE');
+   if(existing.status!=='AVAILABLE'&&existing.status!=='IN_PROGRESS'&&existing.status!=='COMPLETED') throw contractError('SCENE_NODE_UNREACHABLE');
    return existing;
  }
  if(input.nodeCode==='A4010'){
@@ -323,11 +315,17 @@ async function activateConfirmedContract(
    ...(previous?{supersedesId:previous.id}:{}),
  });
  const outputRefs=[{type:'SCENE_ARTIFACT' as const,id:document.id}];
- const completed=await casCompleteSceneNodeState(tx,{
-   caseId:input.caseId,nodeCode,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,expectedRevision:scene.revision,status:'COMPLETED',
-   branchReasonCodes:[nodeCode==='A4010'?'FORMAL_CONTRACT_CONFIRMED':'CONTRACT_VERSION_ACTIVATED'],
-   inputRefs:refs,outputRefs,
- });
+ const completed=scene.status==='COMPLETED'
+   ? await casRecompleteSceneNodeState(tx,{
+       caseId:input.caseId,nodeCode,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,expectedRevision:scene.revision,
+       branchReasonCodes:[nodeCode==='A4010'?'FORMAL_CONTRACT_CONFIRMED':'CONTRACT_VERSION_ACTIVATED'],
+       inputRefs:refs,outputRefs,
+     })
+   : await casCompleteSceneNodeState(tx,{
+       caseId:input.caseId,nodeCode,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,expectedRevision:scene.revision,status:'COMPLETED',
+       branchReasonCodes:[nodeCode==='A4010'?'FORMAL_CONTRACT_CONFIRMED':'CONTRACT_VERSION_ACTIVATED'],
+       inputRefs:refs,outputRefs,
+     });
  if(!completed) throw contractError('STALE_NODE_REVISION');
  let nextNodeCode:string|null=null; let reasonCode='CONTRACT_VERSION_ACTIVATED';
  if(nodeCode==='A4010'){
@@ -339,12 +337,6 @@ async function activateConfirmedContract(
    reasonCode=routed.reasonCode; nextNodeCode='A4011';
    const next=resolveDigitalUseRuntimeNode('A4011');
    await ensureSceneNodeAvailable(tx,{familyId:input.familyId,caseId:input.caseId,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,nodeCode:next.nodeCode,sourceNodeCode:next.sourceNodeCode,branchReasonCodes:[routed.reasonCode],inputRefs:outputRefs});
- }else{
-   const support=await getSceneNodeState(tx,input.caseId,'A4011',true);
-   if(support?.status==='COMPLETED'){
-    const reopened=await casReenterCompletedSceneNode(tx,{caseId:input.caseId,nodeCode:'A4011',scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,expectedRevision:support.revision,branchReasonCodes:['CONTRACT_VERSION_ACTIVATED'],inputRefs:outputRefs});
-    if(!reopened) throw contractError('STALE_NODE_REVISION');
-   }
  }
  await insertDigitalUseNodeCompletedEvent(tx,{familyId:input.familyId,caseId:input.caseId,actorAccountId:input.actor.accountId,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,nodeCode,nodeRevision:completed.revision,routeReasonCode:reasonCode,inputRefs:refs,outputRefs,nextNodeCode,terminalCode:null});
  await insertDigitalUseNodeCompletedAudit(tx,{familyId:input.familyId,caseId:input.caseId,actorAccountId:input.actor.accountId,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,nodeCode,nodeRevision:completed.revision,routeReasonCode:reasonCode,nextNodeCode,terminalCode:null});
