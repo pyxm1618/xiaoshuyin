@@ -206,6 +206,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '014_consent_01004_cross_purpose_supersede_guard.sql',
       '015_digital_use_assessment_runtime.sql',
       '016_digital_use_family_alliance_runtime.sql',
+      '018_digital_use_review_runtime.sql',
     ]);
 
     // New Evidence schema exists.
