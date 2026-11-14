@@ -693,6 +693,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '014_consent_01004_cross_purpose_supersede_guard.sql',
       '015_digital_use_assessment_runtime.sql',
       '016_digital_use_family_alliance_runtime.sql',
+      '018_digital_use_review_runtime.sql',
     ]);
   }, 180_000);
 });
