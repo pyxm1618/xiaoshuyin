@@ -10,6 +10,7 @@ const contract = root('apps/server/api/src/services/digital-use-phone-contract.t
 const roleplay = root('apps/server/api/src/services/digital-use-roleplay.ts');
 const roleplayAdapter = root('apps/server/api/src/services/digital-use-roleplay-adapter.ts');
 const nodeResponse = root('apps/server/api/src/services/digital-use-node-response.ts');
+const contractSemantics = root('apps/server/api/src/services/digital-use-phone-contract-semantics.ts');
 const sceneRepo = root('packages/domain/src/scene-runtime-repository.ts');
 const migration = root('db/migrations/017_digital_use_phone_use_contract_runtime.sql');
 const manifest = root('packages/scenes/digital-use/node-manifest.ts');
@@ -59,7 +60,7 @@ describe('Slice 14 PHONE_USE_CONTRACT frozen-scope governance', () => {
     const slice14 = [contract, roleplay, nodeResponse, migration].join('\n');
     expect(slice14).not.toMatch(/A5002/);
     expect(slice14).not.toMatch(/CREATE TABLE\s+(review|reviews|followup|followups|notification|notifications|jobs)\b/i);
-    expect(contract).toContain('PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE');
+    expect(contractSemantics).toContain('PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE');
   });
 
   it('S14-GOV-07 keeps Contract document projection in one append-only Scene Artifact chain', () => {
