@@ -161,7 +161,9 @@ export function buildSceneEnvelope(input: {
   const active = projected.filter((node) =>
     node.status === 'AVAILABLE' || node.status === 'IN_PROGRESS'
   );
-  if (active.length > 1) throw sceneError('INTERNAL_ERROR', 'Multiple active Scene nodes');
+  // Slice 14 can legitimately expose parallel Contract/tool nodes. Until the
+  // Slice 13 activeNodes/reachableNodes projection converges into main,
+  // currentNode is only a backward-compatible representative.
   const currentNode = active[0] ?? projected.at(-1) ?? null;
   const latestReason = currentNode?.branchReasonCodes.at(-1) ?? null;
   const a2010 = input.artifacts

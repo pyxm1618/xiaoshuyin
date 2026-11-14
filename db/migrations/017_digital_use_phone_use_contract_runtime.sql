@@ -94,6 +94,26 @@ CREATE TABLE digital_use_contract_versions (
       AND (child_confirmation ->> 'draftRevision')::integer = draft_revision
     ))
   ),
+  CONSTRAINT digital_use_contract_versions_confirmation_provenance_check CHECK (
+    (
+      parent_confirmation IS NULL
+      OR (
+        parent_confirmation ->> 'kind' = 'ADULT'
+        AND parent_confirmation ->> 'personId' = adult_party_person_id::text
+        AND parent_confirmation ->> 'authorizationAction' = 'CASE_RESPOND_ASSESSMENT_SCENE'
+      )
+    )
+    AND
+    (
+      child_confirmation IS NULL
+      OR (
+        child_confirmation ->> 'kind' = 'CHILD'
+        AND child_confirmation ->> 'personId' = child_party_person_id::text
+        AND child_confirmation ->> 'participationId' = child_participation_id::text
+        AND child_confirmation ->> 'authorizationAction' = 'PHONE_USE_CONTRACT_CONFIRM_SELF'
+      )
+    )
+  ),
   CONSTRAINT digital_use_contract_versions_supersedes_self_check CHECK (supersedes_id IS NULL OR supersedes_id <> id),
   CONSTRAINT digital_use_contract_versions_initial_or_revision_check CHECK (
     (supersedes_id IS NULL AND version = 1 AND update_trigger IS NULL)
@@ -142,6 +162,23 @@ BEGIN
     OR NEW.incentives IS DISTINCT FROM OLD.incentives
     OR NEW.breach_responsibilities IS DISTINCT FROM OLD.breach_responsibilities
     OR NEW.dependency_refs IS DISTINCT FROM OLD.dependency_refs;
+
+  IF app_current_purpose() = 'PHONE_USE_CONTRACT' THEN
+    IF material_changed
+       OR NEW.parent_confirmation IS DISTINCT FROM OLD.parent_confirmation
+       OR NEW.supersedes_id IS DISTINCT FROM OLD.supersedes_id
+       OR NEW.update_reason IS DISTINCT FROM OLD.update_reason
+       OR NEW.update_trigger IS DISTINCT FROM OLD.update_trigger
+    THEN
+      RAISE EXCEPTION 'PHONE_USE_CONTRACT_CHILD_WRITE_SCOPE_INVALID' USING ERRCODE = '42501';
+    END IF;
+  ELSIF app_current_purpose() = 'FAMILY_MANAGEMENT' THEN
+    IF NEW.child_confirmation IS DISTINCT FROM OLD.child_confirmation THEN
+      RAISE EXCEPTION 'PHONE_USE_CONTRACT_CHILD_CONFIRMATION_PROVENANCE_INVALID' USING ERRCODE = '42501';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'PHONE_USE_CONTRACT_PURPOSE_INVALID' USING ERRCODE = '42501';
+  END IF;
 
   IF OLD.status IN ('ACTIVE','SUPERSEDED','PAUSED') AND material_changed THEN
     RAISE EXCEPTION 'PHONE_USE_CONTRACT_ACTIVE_TERMS_IMMUTABLE' USING ERRCODE = '23514';

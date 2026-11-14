@@ -93,7 +93,10 @@ export async function updatePhoneUseContractDraftCas(tx:Tx,input:{
 async function recordConfirmation(tx:Tx,input:{caseId:string;version:number;expectedDraftRevision:number;confirmation:PhoneUseContractConfirmation},column:'parent_confirmation'|'child_confirmation'){
  const {rows}=await tx.query<PhoneUseContractVersionRow>(
  `UPDATE digital_use_contract_versions SET ${column}=$4::jsonb,status='PENDING_CONFIRMATION'
- WHERE case_id=$1 AND version=$2 AND draft_revision=$3 AND status IN('DRAFT','PENDING_CONFIRMATION') RETURNING ${CONTRACT_COLUMNS}`,
+ WHERE case_id=$1 AND version=$2 AND draft_revision=$3
+   AND status IN('DRAFT','PENDING_CONFIRMATION')
+   AND ${column} IS NULL
+ RETURNING ${CONTRACT_COLUMNS}`,
  [input.caseId,input.version,input.expectedDraftRevision,JSON.stringify(input.confirmation)]);
  return rows[0]??null;
 }
