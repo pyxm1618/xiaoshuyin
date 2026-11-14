@@ -444,6 +444,20 @@ const SLICE14_NEW_OBJECTS = [
 ].sort();
 
 
+/** Foundation Remediation 1 schema delta created by migration 018. */
+const FOUNDATION_REM1_NEW_CONSTRAINTS = [
+  'schema_migrations_checksum_state_check',
+].sort();
+
+const FOUNDATION_REM1_NEW_OBJECTS = [
+  'policy:accounts_migrator_all',
+  'policy:accounts_runtime_read',
+  'policy:accounts_runtime_insert',
+  'policy:accounts_runtime_self_update',
+  'policy:accounts_binding_lock',
+].sort();
+
+
 /** Constraints whose definitions 007 is authorized to rewrite. */
 const SLICE7_CONSTRAINT_CHANGES = [
   'case_events_event_type_check',
@@ -719,6 +733,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE12_NEW_CONSTRAINTS,
         ...SLICE13_NEW_CONSTRAINTS,
         ...SLICE14_NEW_CONSTRAINTS,
+        ...FOUNDATION_REM1_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -753,6 +768,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...SLICE12_NEW_OBJECTS,
       ...SLICE13_NEW_OBJECTS,
       ...SLICE14_NEW_OBJECTS,
+      ...FOUNDATION_REM1_NEW_OBJECTS,
     ].sort());
 
     // Column-level UPDATE grant, never table-level.
