@@ -5,13 +5,17 @@ import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { recordStatement } from '@xiaoshuyin/domain';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
+import {
+  buildConsentEvidence,
+  getAcceptanceTextHash,
+  getCurrentNoticeHash,
+  runtimeConsentChannel,
+} from '@xiaoshuyin/compliance';
 import { createAdminPool } from '../setup/db.js';
 import {
   auth,
   commandHeaders,
   createFamily,
-  createConsentRequest,
-  grantConsent,
   revokeConsent,
   loginWithLabel,
   type LoginResult,
@@ -1471,21 +1475,45 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       [f.familyId, child.personId]
     );
 
-    const request = await createConsentRequest(
-      app,
-      f.manager.token,
-      'fa-consent-race',
-      { existingSubjectPersonId: child.personId }
+    const noticeHash = getCurrentNoticeHash();
+    const acceptedTextHash = getAcceptanceTextHash('v1');
+    if (!acceptedTextHash) throw new Error('missing v1 acceptance text');
+
+    const requestSeed = await admin.query<{ id: string }>(
+      `INSERT INTO guardian_consent_requests
+         (family_id,guardian_person_id,subject_person_id,declared_age_band,
+          notice_version,notice_hash,status,expires_at,completed_at)
+       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',
+               now() + interval '24 hours',now())
+       RETURNING id`,
+      [f.familyId, f.manager.personId, child.personId, noticeHash]
     );
-    expect(request.statusCode, request.body).toBe(201);
-    const grant = await grantConsent(
-      app,
-      f.manager.token,
-      'fa-consent-race',
-      request.json().requestId
+    const evidence = buildConsentEvidence({
+      channel: runtimeConsentChannel(),
+      acceptedTextHash,
+      clientIp: null,
+      userAgent: null,
+      pepper: 'slice13-consent-race-fixture',
+    });
+    const consentSeed = await admin.query<{ id: string }>(
+      `INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,
+          version,onboarding_request_id,bound_person_id,bound_at,
+          notice_version,notice_hash,policy_version,evidence)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',
+               1,$4,$5,now(),'v1',$6,'v1',$7::jsonb)
+       RETURNING id`,
+      [
+        f.familyId,
+        f.manager.personId,
+        f.manager.accountId,
+        requestSeed.rows[0]!.id,
+        child.personId,
+        noticeHash,
+        JSON.stringify(evidence),
+      ]
     );
-    expect(grant.statusCode, grant.body).toBe(201);
-    const granted = grant.json();
+    const granted = { id: consentSeed.rows[0]!.id };
 
     const bound = await admin.query<{
       bound_person_id: string | null;
