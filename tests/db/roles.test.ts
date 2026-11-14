@@ -4,7 +4,7 @@
  * Defines the final expected state for database roles:
  * - App role has NOBYPASSRLS
  * - Business tables are owned by xiaoshuyin_migrator (not app)
- * - App has minimal DML on 10 tables, no CREATE/TRUNCATE
+ * - App privileges are least-privilege per table, no CREATE/TRUNCATE
  * - 8 enum USAGE is correct
  *
  * This test is EXPECTED TO FAIL (RED) until T028 (GRANT) completes.
@@ -29,6 +29,10 @@ const TABLES = [
   'person_profile_values',
   'persons',
 ];
+
+const FULL_DML_TABLES = TABLES.filter(
+  (table) => !['accounts', 'business_audit_events', 'consent_records'].includes(table)
+);
 
 const ENUMS = [
   'account_status',
@@ -80,8 +84,8 @@ describe('Database Roles (T012 RED)', () => {
     }
   });
 
-  it('app role should have DML privileges on all 10 tables', async () => {
-    for (const table of TABLES) {
+  it('app role retains reviewed DML privileges on non-remediated legacy tables', async () => {
+    for (const table of FULL_DML_TABLES) {
       for (const priv of ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) {
         const { rows } = await client.query(
           `SELECT has_table_privilege('xiaoshuyin_app', $1, $2) as has`,
@@ -89,6 +93,87 @@ describe('Database Roles (T012 RED)', () => {
         );
         expect(rows[0].has, `app should have ${priv} on ${table}`).toBe(true);
       }
+    }
+  });
+
+  it('Foundation remediation: accounts privileges are least-privilege', async () => {
+    for (const priv of ['SELECT', 'INSERT']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'accounts', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `accounts ${priv}`).toBe(true);
+    }
+    for (const priv of ['UPDATE', 'DELETE', 'TRUNCATE']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'accounts', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `accounts ${priv}`).toBe(false);
+    }
+
+    for (const column of ['session_epoch', 'last_login_at']) {
+      const { rows } = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'accounts', $1, 'UPDATE') AS has`,
+        [column]
+      );
+      expect(rows[0].has, `accounts.${column} UPDATE`).toBe(true);
+    }
+    for (const column of ['id', 'wechat_openid', 'status', 'created_at']) {
+      const { rows } = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'accounts', $1, 'UPDATE') AS has`,
+        [column]
+      );
+      expect(rows[0].has, `accounts.${column} UPDATE`).toBe(false);
+    }
+  });
+
+  it('Foundation remediation: consent history only permits one-time binding columns', async () => {
+    for (const priv of ['SELECT', 'INSERT']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'consent_records', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `consent_records ${priv}`).toBe(true);
+    }
+    for (const priv of ['UPDATE', 'DELETE', 'TRUNCATE']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'consent_records', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `consent_records ${priv}`).toBe(false);
+    }
+
+    for (const column of ['bound_person_id', 'bound_at']) {
+      const { rows } = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'consent_records', $1, 'UPDATE') AS has`,
+        [column]
+      );
+      expect(rows[0].has, `consent_records.${column} UPDATE`).toBe(true);
+    }
+    for (const column of ['decision', 'version', 'evidence', 'supersedes_id']) {
+      const { rows } = await client.query(
+        `SELECT has_column_privilege('xiaoshuyin_app', 'consent_records', $1, 'UPDATE') AS has`,
+        [column]
+      );
+      expect(rows[0].has, `consent_records.${column} UPDATE`).toBe(false);
+    }
+  });
+
+  it('Foundation remediation: business audit events are runtime append-only', async () => {
+    for (const priv of ['SELECT', 'INSERT']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'business_audit_events', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `business_audit_events ${priv}`).toBe(true);
+    }
+    for (const priv of ['UPDATE', 'DELETE', 'TRUNCATE']) {
+      const { rows } = await client.query(
+        `SELECT has_table_privilege('xiaoshuyin_app', 'business_audit_events', $1) AS has`,
+        [priv]
+      );
+      expect(rows[0].has, `business_audit_events ${priv}`).toBe(false);
     }
   });
 
