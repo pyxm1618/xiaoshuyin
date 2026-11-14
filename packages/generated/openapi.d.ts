@@ -3559,10 +3559,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT" | "DIGITAL_USE_A5001_EFFECT_EVALUATION";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000" | "A5001";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -4285,10 +4285,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT" | "DIGITAL_USE_A5001_EFFECT_EVALUATION";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000" | "A5001";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -4897,10 +4897,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT" | "DIGITAL_USE_A5001_EFFECT_EVALUATION";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000" | "A5001";
                             revision: number;
                             data: {
                                 [key: string]: unknown;
@@ -5637,10 +5637,10 @@ export interface operations {
                             /** Format: uuid */
                             id: string;
                             /** @enum {string} */
-                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT";
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT" | "DIGITAL_USE_A5001_EFFECT_EVALUATION";
                             schemaVersion: string;
                             /** @enum {string} */
-                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000";
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000" | "A5001";
                             revision: number;
                             data: {
                                 [key: string]: unknown;

@@ -23,6 +23,7 @@ import {
   getSceneNodeState,
   insertDigitalUseNodeCompletedAudit,
   insertDigitalUseNodeCompletedEvent,
+  insertSceneArtifact,
   listCurrentDigitalUseTargetItems,
   listCurrentSceneEvidenceStatements,
   lockFamilyForPrimaryDecision,
@@ -457,8 +458,7 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
       input.caseId,
       ARTIFACT_TYPE
     );
-    const artifact = await import('@xiaoshuyin/domain').then(({ insertSceneArtifact }) =>
-      insertSceneArtifact(tx, {
+    const artifact = await insertSceneArtifact(tx, {
         familyId: input.familyId,
         caseId: input.caseId,
         scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
@@ -505,8 +505,7 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
         sourceRefs,
         revision: previous === null ? 1 : previous.revision + 1,
         ...(previous === null ? {} : { supersedesId: previous.id }),
-      })
-    );
+      });
     const artifactRef: StoredSceneRef = {
       type: 'SCENE_ARTIFACT',
       id: artifact.id,
