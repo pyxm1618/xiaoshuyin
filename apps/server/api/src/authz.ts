@@ -21,7 +21,7 @@ import {
   type Purpose,
   type Resource,
 } from '@xiaoshuyin/authorization';
-import { getFamilyById, isFamilyMember } from '@xiaoshuyin/domain';
+import { getFamilyById, isFamilyMember, type ParticipationRow, type PhoneUseContractVersionRow } from '@xiaoshuyin/domain';
 import { getComplianceProfile } from '@xiaoshuyin/compliance';
 import { toHttpError } from './plugins/error-handler.js';
 
@@ -184,4 +184,81 @@ export function denyToError(reason: DenyReason): Error & { statusCode: number; c
   }
 
   return error;
+}
+
+/**
+ * Slice 14 narrow adapter into the Authorization owner's
+ * PHONE_USE_CONTRACT_CONFIRM_SELF action.
+ *
+ * Every fact comes from authoritative rows already read/locked by the caller
+ * in this transaction. This function intentionally contains no local ALLOW
+ * rule and cannot authorize adult/guardian proxy confirmation.
+ */
+export async function requirePhoneUseContractChildConfirmation(
+  tx: pg.PoolClient,
+  input: {
+    accountId: string;
+    personId: string;
+    familyId: string;
+    caseId: string;
+    contract: Pick<
+      PhoneUseContractVersionRow,
+      'id' | 'family_id' | 'case_id' | 'child_party_person_id' | 'child_participation_id'
+    >;
+    participation: Pick<
+      ParticipationRow,
+      'id' | 'family_id' | 'case_id' | 'person_id' | 'state'
+    >;
+  }
+): Promise<Extract<Decision, { decision: 'ALLOW' }>> {
+  const [family, membership] = await Promise.all([
+    getFamilyById(tx, input.familyId),
+    isFamilyMember(tx, input.familyId, input.personId),
+  ]);
+
+  const decision = authorize({
+    actor: { kind: 'ACCOUNT', accountId: input.accountId, personId: input.personId },
+    product: 'V1',
+    family: { familyId: input.familyId },
+    case: { caseId: input.caseId },
+    participation: {
+      participationId: input.participation.id,
+      familyId: input.participation.family_id,
+      caseId: input.participation.case_id,
+      personId: input.participation.person_id,
+      state: input.participation.state,
+    },
+    resource: {
+      type: 'PHONE_USE_CONTRACT_VERSION',
+      familyId: input.familyId,
+      caseId: input.caseId,
+      contractVersionId: input.contract.id,
+      partyPersonId: input.contract.child_party_person_id,
+      partyRole: 'CHILD',
+    },
+    action: 'PHONE_USE_CONTRACT_CONFIRM_SELF',
+    purpose: 'PHONE_USE_CONTRACT',
+    facts: {
+      membership,
+      familyCreatedByPersonId: family?.created_by_person_id ?? null,
+      actorAgeBand: null,
+      guardianPersonId: null,
+      targetIsFamilyMember: false,
+      familyId: family ? input.familyId : null,
+      phoneUseContractConfirmation: {
+        contractVersionId: input.contract.id,
+        contractFamilyId: input.contract.family_id,
+        contractCaseId: input.contract.case_id,
+        contractPartyPersonId: input.contract.child_party_person_id,
+        contractPartyRole: 'CHILD',
+        participationId: input.contract.child_participation_id,
+        participationFamilyId: input.participation.family_id,
+        participationCaseId: input.participation.case_id,
+        participationPersonId: input.participation.person_id,
+        participationState: input.participation.state,
+      },
+    },
+  });
+  if (decision.decision === 'DENY') throw denyToError(decision.reason);
+  return decision;
 }

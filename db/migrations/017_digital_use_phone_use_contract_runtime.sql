@@ -266,35 +266,81 @@ CREATE POLICY digital_use_contract_versions_scope ON digital_use_contract_versio
   USING (
     family_id = app_family_id()
     AND (
-      app_current_purpose() = 'FAMILY_MANAGEMENT'
-      OR (app_current_purpose() = 'PHONE_USE_CONTRACT' AND child_party_person_id = app_person_id())
+      (
+        app_current_purpose() = 'FAMILY_MANAGEMENT'
+        AND EXISTS (
+          SELECT 1 FROM families f
+           WHERE f.id = digital_use_contract_versions.family_id
+             AND f.created_by_person_id = app_person_id()
+        )
+      )
+      OR (
+        app_current_purpose() = 'PHONE_USE_CONTRACT'
+        AND child_party_person_id = app_person_id()
+      )
     )
   )
   WITH CHECK (
     family_id = app_family_id()
     AND (
-      app_current_purpose() = 'FAMILY_MANAGEMENT'
-      OR (app_current_purpose() = 'PHONE_USE_CONTRACT' AND child_party_person_id = app_person_id())
+      (
+        app_current_purpose() = 'FAMILY_MANAGEMENT'
+        AND EXISTS (
+          SELECT 1 FROM families f
+           WHERE f.id = digital_use_contract_versions.family_id
+             AND f.created_by_person_id = app_person_id()
+        )
+      )
+      OR (
+        app_current_purpose() = 'PHONE_USE_CONTRACT'
+        AND child_party_person_id = app_person_id()
+      )
     )
   );
 
 CREATE POLICY roleplay_sessions_scope ON roleplay_sessions
-  USING (family_id = app_family_id() AND app_current_purpose() = 'FAMILY_MANAGEMENT' AND actor_person_id = app_person_id())
-  WITH CHECK (family_id = app_family_id() AND app_current_purpose() = 'FAMILY_MANAGEMENT' AND actor_person_id = app_person_id());
+  USING (
+    family_id = app_family_id()
+    AND app_current_purpose() = 'FAMILY_MANAGEMENT'
+    AND actor_person_id = app_person_id()
+    AND EXISTS (
+      SELECT 1 FROM families f
+       WHERE f.id = roleplay_sessions.family_id
+         AND f.created_by_person_id = app_person_id()
+    )
+  )
+  WITH CHECK (
+    family_id = app_family_id()
+    AND app_current_purpose() = 'FAMILY_MANAGEMENT'
+    AND actor_person_id = app_person_id()
+    AND EXISTS (
+      SELECT 1 FROM families f
+       WHERE f.id = roleplay_sessions.family_id
+         AND f.created_by_person_id = app_person_id()
+    )
+  );
 
 CREATE POLICY roleplay_turns_scope ON roleplay_turns
   USING (
     family_id = app_family_id() AND app_current_purpose() = 'FAMILY_MANAGEMENT'
     AND EXISTS (
-      SELECT 1 FROM roleplay_sessions s
-      WHERE s.id = roleplay_turns.session_id AND s.actor_person_id = app_person_id()
+      SELECT 1
+        FROM roleplay_sessions s
+        JOIN families f ON f.id = s.family_id
+       WHERE s.id = roleplay_turns.session_id
+         AND s.actor_person_id = app_person_id()
+         AND f.created_by_person_id = app_person_id()
     )
   )
   WITH CHECK (
     family_id = app_family_id() AND app_current_purpose() = 'FAMILY_MANAGEMENT'
     AND EXISTS (
-      SELECT 1 FROM roleplay_sessions s
-      WHERE s.id = roleplay_turns.session_id AND s.actor_person_id = app_person_id()
+      SELECT 1
+        FROM roleplay_sessions s
+        JOIN families f ON f.id = s.family_id
+       WHERE s.id = roleplay_turns.session_id
+         AND s.actor_person_id = app_person_id()
+         AND f.created_by_person_id = app_person_id()
     )
   );
 
