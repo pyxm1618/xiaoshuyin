@@ -1911,6 +1911,19 @@ describe('T1218 Digital Use runtime hardening', () => {
         promptVersionRef: 'test-prompt-v1',
       });
 
+      const turn2 = await roleplayApp.inject({
+        method:'POST',
+        url:`/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+        headers:commandHeaders(f.manager.token,'s14-roleplay-turn-2'),
+        payload:{
+          expectedCaseVersion:f.caseVersion,
+          expectedSessionRevision:created.json().revision,
+          simulatedChildInput:'What if I disagree with the first option?',
+        },
+      });
+      expect(turn2.statusCode,turn2.body).toBe(201);
+      expect(turn2.json().roundNumber).toBe(2);
+
       const rated = await roleplayApp.inject({
         method: 'POST',
         url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/rate`,
@@ -1975,6 +1988,43 @@ describe('T1218 Digital Use runtime hardening', () => {
         [f.caseId]
       );
       expect(childTruth.rows[0].contracts).toBe(0);
+
+      const completedScene=await admin.query(
+        `SELECT revision FROM scene_node_states WHERE case_id=$1 AND node_code='A4003'`,
+        [f.caseId]
+      );
+      const correctedSelection=await roleplayApp.inject({
+        method:'POST',
+        url:`/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/select`,
+        headers:commandHeaders(f.manager.token,'s14-roleplay-select-correction'),
+        payload:{
+          expectedCaseVersion:f.caseVersion,
+          expectedSessionRevision:selected.json().session.revision,
+          turnId:turn2.json().id,
+          expectedNodeRevision:completedScene.rows[0].revision,
+        },
+      });
+      expect(correctedSelection.statusCode,correctedSelection.body).toBe(200);
+      expect(correctedSelection.json().selectedTurn.id).toBe(turn2.json().id);
+
+      const selectionHistory=await admin.query(
+        `SELECT id,revision,supersedes_id,data FROM scene_artifacts
+          WHERE case_id=$1 AND artifact_type='PHONE_USE_ROLEPLAY_SELECTION'
+          ORDER BY revision`,
+        [f.caseId]
+      );
+      expect(selectionHistory.rows).toHaveLength(2);
+      expect(selectionHistory.rows[1]).toMatchObject({
+        revision:2,
+        supersedes_id:selectionHistory.rows[0].id,
+      });
+      expect(selectionHistory.rows[1].data.selectedTurnId).toBe(turn2.json().id);
+      const downstream=await admin.query(
+        `SELECT count(*)::int AS n FROM scene_node_states
+          WHERE case_id=$1 AND node_code='A4004'`,
+        [f.caseId]
+      );
+      expect(downstream.rows[0].n).toBe(1);
     } finally {
       await roleplayApp.close();
     }

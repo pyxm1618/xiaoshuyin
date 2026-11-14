@@ -14,6 +14,7 @@ import {
 import {
   assertOrdinaryProgressionAllowedRaw,
   casCompleteSceneNodeState,
+  casReenterCompletedSceneNode,
   ensureSceneNodeAvailable,
   getLatestSceneArtifact,
   getRoleplaySession,
@@ -68,7 +69,8 @@ function roleplayError(code:string,message?:string):Error & {statusCode:number;c
 }
 async function authorizeAdultRoleplay(
   tx:pg.PoolClient,
-  input:{actor:DigitalUseActor;familyId:string;caseId:string;expectedCaseVersion:number}
+  input:{actor:DigitalUseActor;familyId:string;caseId:string;expectedCaseVersion:number},
+  allowCompleted=false
 ){
   await requireFamilyAction(tx,{
     accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,
@@ -86,7 +88,11 @@ async function authorizeAdultRoleplay(
   if(profile.age_band!=='ADULT') throw roleplayError('FORBIDDEN','A4003_ADULT_ONLY');
   const scene=await getSceneNodeState(tx,input.caseId,'A4003',true);
   if(!scene || scene.scene_package_version!==DIGITAL_USE_PACKAGE_VERSION) throw roleplayError('SCENE_NODE_UNREACHABLE');
-  if(scene.status!=='AVAILABLE'&&scene.status!=='IN_PROGRESS') throw roleplayError('SCENE_NODE_UNREACHABLE');
+  if(
+    scene.status!=='AVAILABLE'
+    && scene.status!=='IN_PROGRESS'
+    && !(allowCompleted&&scene.status==='COMPLETED')
+  ) throw roleplayError('SCENE_NODE_UNREACHABLE');
   return {caseRow,node,scene};
 }
 async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
@@ -95,6 +101,15 @@ async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
   });
   if(result.gate!=='ALLOW') throw roleplayError('COMPLIANCE_BLOCKED',result.reasonCode??'COMPLIANCE_BLOCKED');
   return result;
+}
+function assertRoleplaySessionCurrent(session:{
+  scene_package_version:string;
+  professional_content_version:string;
+}):void{
+  if(
+    session.scene_package_version!==DIGITAL_USE_PACKAGE_VERSION
+    || session.professional_content_version!==PHONE_USE_CONTRACT_CONTENT_VERSION
+  ) throw roleplayError('PHONE_USE_CONTRACT_PACKAGE_DRIFT');
 }
 async function requireAdapterAvailable(adapter:RoleplayAdapter){
   const available=await adapter.isAvailable({
@@ -161,6 +176,7 @@ export async function addPhoneUseRoleplayTurn(
    },async()=>{
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
+     assertRoleplaySessionCurrent(session);
      if(session.status!=='OPEN'||session.revision!==input.expectedSessionRevision) throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
      const roundNumber=await nextRoleplayRound(tx,session.id);
      const generated=await adapter.createTurn({
@@ -190,6 +206,7 @@ export async function ratePhoneUseRoleplay(
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
    await authorizeAdultRoleplay(tx,input);
+   await assertRoleplayCompliance(tx,input.actor.personId);
    const requestHash=hashPayload({sessionId:input.sessionId,turnId:input.turnId,rating:input.rating});
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
@@ -197,6 +214,7 @@ export async function ratePhoneUseRoleplay(
    },async()=>{
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
+     assertRoleplaySessionCurrent(session);
      const turn=await rateRoleplayTurnCas(tx,{sessionId:session.id,turnId:input.turnId,rating:input.rating});
      if(!turn) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
      return {status:200,body:roleplayTurnDto(turn)};
@@ -213,8 +231,9 @@ export async function selectPhoneUseRoleplay(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   const {scene}=await authorizeAdultRoleplay(tx,input);
+   const {scene}=await authorizeAdultRoleplay(tx,input,true);
    if(scene.revision!==input.expectedNodeRevision) throw roleplayError('STALE_NODE_REVISION');
+   const correction=scene.status==='COMPLETED';
    await assertRoleplayCompliance(tx,input.actor.personId);
    const requestHash=hashPayload({
      sessionId:input.sessionId,turnId:input.turnId,expectedSessionRevision:input.expectedSessionRevision,expectedNodeRevision:input.expectedNodeRevision
@@ -225,6 +244,9 @@ export async function selectPhoneUseRoleplay(
    },async()=>{
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
+     assertRoleplaySessionCurrent(session);
+     if(correction&&session.status!=='COMPLETED') throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
+     if(!correction&&session.status!=='OPEN') throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
      const turn=await getRoleplayTurn(tx,session.id,input.turnId);
      if(!turn) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
      const selected=await selectRoleplayTurnCas(tx,{
@@ -245,31 +267,53 @@ export async function selectPhoneUseRoleplay(
        ...(previous?{supersedesId:previous.id}:{}),
      });
      const outputRefs=[{type:'SCENE_ARTIFACT' as const,id:artifact.id}];
-     const completed=await casCompleteSceneNodeState(tx,{
-       caseId:input.caseId,nodeCode:'A4003',scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
-       expectedRevision:input.expectedNodeRevision,status:'COMPLETED',
-       branchReasonCodes:['SIMULATION_COMPLETE'],inputRefs:scene.input_refs,outputRefs,
-     });
-     if(!completed) throw roleplayError('STALE_NODE_REVISION');
-     const routed=requireResolvedRoute(routeDigitalUseTopology({
-       sceneCode:DIGITAL_USE_SCENE_CODE,packageVersion:DIGITAL_USE_PACKAGE_VERSION,currentNodeCode:'A4003',
-       conditions:{SIMULATION_COMPLETE:true},
-     }));
-     if(routed.kind!=='NODE'||routed.nextNodeCode!=='A4004') throw roleplayError('SCENE_ROUTE_UNRESOLVED');
-     const next=resolveDigitalUseRuntimeNode(routed.nextNodeCode);
-     await ensureSceneNodeAvailable(tx,{
-       familyId:input.familyId,caseId:input.caseId,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
-       nodeCode:next.nodeCode,sourceNodeCode:next.sourceNodeCode,branchReasonCodes:[routed.reasonCode],inputRefs:outputRefs,
-     });
+     let completed;
+     let routeReasonCode:string;
+     let nextNodeCode:string|null=null;
+     if(correction){
+       const reopened=await casReenterCompletedSceneNode(tx,{
+         caseId:input.caseId,nodeCode:'A4003',scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
+         expectedRevision:input.expectedNodeRevision,
+         branchReasonCodes:['SIMULATION_SELECTION_CORRECTION'],
+         inputRefs:scene.input_refs,
+       });
+       if(!reopened) throw roleplayError('STALE_NODE_REVISION');
+       completed=await casCompleteSceneNodeState(tx,{
+         caseId:input.caseId,nodeCode:'A4003',scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
+         expectedRevision:reopened.revision,status:'COMPLETED',
+         branchReasonCodes:['SIMULATION_SELECTION_CORRECTED'],inputRefs:scene.input_refs,outputRefs,
+       });
+       if(!completed) throw roleplayError('STALE_NODE_REVISION');
+       routeReasonCode='SIMULATION_SELECTION_CORRECTED';
+     }else{
+       completed=await casCompleteSceneNodeState(tx,{
+         caseId:input.caseId,nodeCode:'A4003',scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
+         expectedRevision:input.expectedNodeRevision,status:'COMPLETED',
+         branchReasonCodes:['SIMULATION_COMPLETE'],inputRefs:scene.input_refs,outputRefs,
+       });
+       if(!completed) throw roleplayError('STALE_NODE_REVISION');
+       const routed=requireResolvedRoute(routeDigitalUseTopology({
+         sceneCode:DIGITAL_USE_SCENE_CODE,packageVersion:DIGITAL_USE_PACKAGE_VERSION,currentNodeCode:'A4003',
+         conditions:{SIMULATION_COMPLETE:true},
+       }));
+       if(routed.kind!=='NODE'||routed.nextNodeCode!=='A4004') throw roleplayError('SCENE_ROUTE_UNRESOLVED');
+       routeReasonCode=routed.reasonCode;
+       nextNodeCode='A4004';
+       const next=resolveDigitalUseRuntimeNode(routed.nextNodeCode);
+       await ensureSceneNodeAvailable(tx,{
+         familyId:input.familyId,caseId:input.caseId,scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
+         nodeCode:next.nodeCode,sourceNodeCode:next.sourceNodeCode,branchReasonCodes:[routed.reasonCode],inputRefs:outputRefs,
+       });
+     }
      await insertDigitalUseNodeCompletedEvent(tx,{
        familyId:input.familyId,caseId:input.caseId,actorAccountId:input.actor.accountId,
        scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,nodeCode:'A4003',nodeRevision:completed.revision,
-       routeReasonCode:routed.reasonCode,inputRefs:scene.input_refs,outputRefs,nextNodeCode:'A4004',terminalCode:null,
+       routeReasonCode,inputRefs:scene.input_refs,outputRefs,nextNodeCode,terminalCode:null,
      });
      await insertDigitalUseNodeCompletedAudit(tx,{
        familyId:input.familyId,caseId:input.caseId,actorAccountId:input.actor.accountId,
        scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,nodeCode:'A4003',nodeRevision:completed.revision,
-       routeReasonCode:routed.reasonCode,nextNodeCode:'A4004',terminalCode:null,
+       routeReasonCode,nextNodeCode,terminalCode:null,
      });
      return {status:200,body:{session:roleplaySessionDto(selected),selectedTurn:roleplayTurnDto(turn)}};
    });

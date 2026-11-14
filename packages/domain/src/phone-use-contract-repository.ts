@@ -160,8 +160,8 @@ export async function rateRoleplayTurnCas(tx:Tx,input:{sessionId:string;turnId:s
 }
 export async function selectRoleplayTurnCas(tx:Tx,input:{sessionId:string;expectedRevision:number;turnId:string}):Promise<RoleplaySessionRow|null>{
  const {rows}=await tx.query<RoleplaySessionRow>(
- `UPDATE roleplay_sessions SET selected_turn_id=$3,status='COMPLETED',completed_at=now(),revision=revision+1
- WHERE id=$1 AND revision=$2 AND status='OPEN' AND EXISTS(SELECT 1 FROM roleplay_turns WHERE id=$3 AND session_id=roleplay_sessions.id)
+ `UPDATE roleplay_sessions SET selected_turn_id=$3,status='COMPLETED',completed_at=COALESCE(completed_at,now()),revision=revision+1
+ WHERE id=$1 AND revision=$2 AND status IN ('OPEN','COMPLETED') AND EXISTS(SELECT 1 FROM roleplay_turns WHERE id=$3 AND session_id=roleplay_sessions.id)
  RETURNING ${SESSION_COLUMNS}`,[input.sessionId,input.expectedRevision,input.turnId]);
  return rows[0]??null;
 }
