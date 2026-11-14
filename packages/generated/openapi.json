@@ -3684,6 +3684,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -3839,6 +3844,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -3994,6 +4004,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -4149,6 +4164,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -4304,6 +4324,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -5709,6 +5734,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -5864,6 +5894,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -6019,6 +6054,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -6174,6 +6214,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -6329,6 +6374,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -7288,6 +7338,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -7443,6 +7498,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -7598,6 +7658,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -7753,6 +7818,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -7908,6 +7978,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -9351,6 +9426,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -9506,6 +9586,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -9661,6 +9746,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -9816,6 +9906,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
@@ -9971,6 +10066,11 @@
                             "APPROVED_INSTRUMENT_UNAVAILABLE",
                             "DOWNSTREAM_RUNTIME_UNAVAILABLE",
                             "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
                             "VALIDATION_ERROR",
                             "INTERNAL_ERROR"
                           ]
