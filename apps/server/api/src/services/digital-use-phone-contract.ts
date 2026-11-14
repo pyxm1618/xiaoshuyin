@@ -365,12 +365,31 @@ async function managerConfirm(
   const outcome=await runIdempotentCommandInTransaction(tx,{
    accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',commandType:'PHONE_USE_CONTRACT_CONFIRM',idempotencyKey:input.idempotencyKey,requestHash,
   },async()=>{
-   const confirmed=await recordAdultContractConfirmationCas(tx,{
+   let confirmed=await recordAdultContractConfirmationCas(tx,{
     caseId:input.caseId,version:input.version,expectedDraftRevision:input.expectedDraftRevision,
     confirmation:confirmation({kind:'ADULT',actor:input.actor,draftRevision:input.expectedDraftRevision,authorizationAction:'CASE_RESPOND_ASSESSMENT_SCENE'}),
    });
-   if(!confirmed) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
-   await insertPhoneUseBusinessAudit(tx,{familyId:input.familyId,actorAccountId:input.actor.accountId,caseId:input.caseId,eventType:'PHONE_USE_CONTRACT_CONFIRMED',metadata:{contractVersionId:confirmed.id,version:confirmed.version,draftRevision:confirmed.draft_revision,party:'ADULT'}});
+   let newlyRecorded=true;
+   if(!confirmed){
+    const existing=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
+    const prior=existing?.parent_confirmation;
+    if(
+      !existing ||
+      existing.draft_revision!==input.expectedDraftRevision ||
+      !prior ||
+      prior.kind!=='ADULT' ||
+      prior.personId!==input.actor.personId ||
+      prior.accountId!==input.actor.accountId ||
+      prior.draftRevision!==input.expectedDraftRevision
+    ) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
+    confirmed=existing;
+    newlyRecorded=false;
+   }
+   if(newlyRecorded){
+    await insertPhoneUseBusinessAudit(tx,{familyId:input.familyId,actorAccountId:input.actor.accountId,caseId:input.caseId,eventType:'PHONE_USE_CONTRACT_CONFIRMED',metadata:{contractVersionId:confirmed.id,version:confirmed.version,draftRevision:confirmed.draft_revision,party:'ADULT'}});
+   }
+   if(confirmed.status==='ACTIVE') return {status:200,body:dto(confirmed)};
+   if(confirmed.status==='SUPERSEDED'||confirmed.status==='PAUSED') throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
    const finalRow=await activateConfirmedContract(tx,{actor:input.actor,familyId:input.familyId,caseId:input.caseId,row:confirmed});
    return {status:200,body:dto(finalRow)};
   });
@@ -395,12 +414,32 @@ async function childConfirm(
   const outcome=await runIdempotentCommandInTransaction(tx,{
    accountId:input.actor.accountId,personId:input.actor.personId,purpose:'PHONE_USE_CONTRACT',commandType:'PHONE_USE_CONTRACT_CONFIRM',idempotencyKey:input.idempotencyKey,requestHash,
   },async()=>{
-   const confirmed=await recordChildContractConfirmationCas(tx,{
+   let confirmed=await recordChildContractConfirmationCas(tx,{
     caseId:input.caseId,version:input.version,expectedDraftRevision:input.expectedDraftRevision,
     confirmation:confirmation({kind:'CHILD',actor:input.actor,draftRevision:input.expectedDraftRevision,authorizationAction:'PHONE_USE_CONTRACT_CONFIRM_SELF',participationId:participation.id}),
    });
-   if(!confirmed) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
-   await insertPhoneUseBusinessAudit(tx,{familyId:input.familyId,actorAccountId:input.actor.accountId,caseId:input.caseId,eventType:'PHONE_USE_CONTRACT_CONFIRMED',metadata:{contractVersionId:confirmed.id,version:confirmed.version,draftRevision:confirmed.draft_revision,party:'CHILD',participationId:participation.id}});
+   let newlyRecorded=true;
+   if(!confirmed){
+    const existing=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
+    const prior=existing?.child_confirmation;
+    if(
+      !existing ||
+      existing.draft_revision!==input.expectedDraftRevision ||
+      !prior ||
+      prior.kind!=='CHILD' ||
+      prior.personId!==input.actor.personId ||
+      prior.accountId!==input.actor.accountId ||
+      prior.participationId!==participation.id ||
+      prior.draftRevision!==input.expectedDraftRevision
+    ) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
+    confirmed=existing;
+    newlyRecorded=false;
+   }
+   if(newlyRecorded){
+    await insertPhoneUseBusinessAudit(tx,{familyId:input.familyId,actorAccountId:input.actor.accountId,caseId:input.caseId,eventType:'PHONE_USE_CONTRACT_CONFIRMED',metadata:{contractVersionId:confirmed.id,version:confirmed.version,draftRevision:confirmed.draft_revision,party:'CHILD',participationId:participation.id}});
+   }
+   if(confirmed.status==='ACTIVE') return {status:200,body:dto(confirmed)};
+   if(confirmed.status==='SUPERSEDED'||confirmed.status==='PAUSED') throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
    const finalRow=await activateConfirmedContract(tx,{actor:input.actor,familyId:input.familyId,caseId:input.caseId,row:confirmed});
    return {status:200,body:dto(finalRow)};
   });
