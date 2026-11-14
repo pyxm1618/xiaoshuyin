@@ -89,17 +89,25 @@ const MutationErrors = {
   500: DigitalUseApiError,
 } as const;
 
-const NodeMutationErrors = {
-  ...MutationErrors,
-  503: DigitalUseApiError,
-} as const;
-
 function hasUntrustedScheduledClaim(body: unknown): boolean {
   return (
     typeof body === 'object' &&
     body !== null &&
     (body as Record<string, unknown>)['entryMode'] === 'SCHEDULED'
   );
+}
+
+function scheduledCapabilityUnavailable(): Error & {
+  statusCode: 409;
+  code: 'DEPENDENCY_UNAVAILABLE';
+} {
+  return Object.assign(new Error('Scheduled entry capability is unavailable'), {
+    // Slice 12 froze this endpoint's public status set. Slice 15 keeps the
+    // exact unavailable capability code while using the existing 409
+    // business-gate conflict status instead of mutating the upstream API.
+    statusCode: 409 as const,
+    code: 'DEPENDENCY_UNAVAILABLE' as const,
+  });
 }
 
 export function registerDigitalUseAssessmentRoutes(
@@ -213,10 +221,7 @@ export function registerDigitalUseAssessmentRoutes(
           // Schedule owner can provide authentic trigger context, production
           // scheduled execution is truthfully unavailable. Keep entryMode out
           // of the legal body contract so the client never gains authority.
-          throw httpError(
-            'DEPENDENCY_UNAVAILABLE',
-            'Scheduled entry capability is unavailable'
-          );
+          throw scheduledCapabilityUnavailable();
         }
       },
       schema: {
@@ -228,7 +233,7 @@ export function registerDigitalUseAssessmentRoutes(
         body: CompleteDigitalUseNodeRequest,
         response: {
           200: DigitalUseSceneResponse,
-          ...NodeMutationErrors,
+          ...MutationErrors,
         },
       },
     },
