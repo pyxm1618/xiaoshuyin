@@ -504,7 +504,8 @@ export async function getBindingInvitationByTrustedTarget(
        AND family_id=$2
        AND person_id=$3
        AND state='PENDING'
-       AND invite_expires_at > now()`,
+       AND invite_expires_at > now()
+     FOR UPDATE`,
     [participationId, targetFamilyId, targetPersonId]
   );
   const row=rows[0];
