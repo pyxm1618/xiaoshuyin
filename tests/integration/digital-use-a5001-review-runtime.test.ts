@@ -572,7 +572,8 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
       reviewPayload(scene),
       { entryMode: 'SCHEDULED' }
     );
-    expect(scheduled.statusCode).toBe(422);
+    expect(scheduled.statusCode).toBe(503);
+    expect(scheduled.json().code).toBe('DEPENDENCY_UNAVAILABLE');
 
     const counts = await a5001Counts(f);
     expect(counts.artifacts).toBe(0);
