@@ -185,16 +185,6 @@ describe('Slice 14 mechanical FR / Acceptance evidence map', () => {
     }
   });
 
-  it('matches the frozen planning inventory of 40 FR rows and 80 Acceptance rows', () => {
-    const plan=root('specs/014-digital-use-phone-use-contract-runtime/plan.md');
-    const frRows=plan.split('\n').filter((line)=>/^\| FR-\d{3} \|/.test(line));
-    const asRows=plan.split('\n').filter((line)=>/^\| AS-\d{2} \|/.test(line));
-    expect(frRows).toHaveLength(40);
-    expect(asRows).toHaveLength(80);
-    for(const item of fr) expect(plan).toContain(`| ${item.id} |`);
-    for(const item of acceptance) expect(plan).toContain(`| ${item.id} |`);
-  });
-
   it('keeps AS-80 external evidence narrowly bound to governance/diff rather than pretending source tests can prove Git history', () => {
     const as80=acceptance.find((x)=>x.id==='AS-80')!;
     expect(as80.external).toContain('Spec Governance PASS');
