@@ -517,6 +517,7 @@ export async function insertDigitalUseNodeCompletedAudit(
     scenePackageVersion: string;
     nodeCode: string;
     nodeRevision: number;
+    priorNodeRevision?: number;
     routeReasonCode: string | null;
     nextNodeCode: string | null;
     terminalCode: string | null;
@@ -542,6 +543,9 @@ export async function insertDigitalUseNodeCompletedAudit(
         scenePackageVersion: input.scenePackageVersion,
         nodeCode: input.nodeCode,
         nodeRevision: input.nodeRevision,
+        ...(input.priorNodeRevision === undefined
+          ? {}
+          : { priorNodeRevision: input.priorNodeRevision }),
         routeReasonCode: input.routeReasonCode,
         nextNodeCode: input.nextNodeCode,
         terminalCode: input.terminalCode,
