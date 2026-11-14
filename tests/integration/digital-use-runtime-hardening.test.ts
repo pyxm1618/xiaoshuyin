@@ -12,7 +12,13 @@ import {
   type LoginResult,
 } from '../setup/api.js';
 import { createCase } from '../setup/participation.js';
-import { insertSceneArtifact, validateSceneRefs } from '@xiaoshuyin/domain';
+import {
+  insertSceneArtifact,
+  lockFamilyForPrimaryDecision,
+  lockSceneCase,
+  resolveSceneArtifactRefCurrentness,
+  validateSceneRefs,
+} from '@xiaoshuyin/domain';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import {
@@ -51,12 +57,14 @@ function a1001(impact = false) {
 describe('T1218 Digital Use runtime hardening', () => {
   let app: FastifyInstance;
   let admin: pg.Pool;
+  let appPool: pg.Pool;
   let migrator: pg.Client;
 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
     admin = createAdminPool();
+    appPool = new pg.Pool({ connectionString: process.env['DATABASE_URL'] });
     migrator = new pg.Client({ connectionString: process.env['MIGRATION_DATABASE_URL'] });
     await migrator.connect();
 
@@ -94,6 +102,7 @@ describe('T1218 Digital Use runtime hardening', () => {
           AND feature_contract_revision='v1'`
     ).catch(() => undefined);
     await migrator.end().catch(() => undefined);
+    await appPool.end().catch(() => undefined);
     await admin.end();
     await app.close();
   });
@@ -3037,6 +3046,393 @@ describe('T1218 Digital Use runtime hardening', () => {
       [f.caseId]
     );
     expect(activeAfterNewProblem.rows).toEqual([{version:2,status:'ACTIVE'}]);
+  });
+
+
+  async function preparePhoneContractCase(label:string) {
+    const f=await fixture(label);
+    const child=await loginWithLabel(app,`${label}-child-${crypto.randomUUID()}`);
+    await admin.query(
+      `INSERT INTO person_compliance_profiles(person_id,age_band,minor_mode,verified_source)
+       VALUES($1,'ADULT',false,'SELF_STATEMENT')
+       ON CONFLICT(person_id) DO UPDATE
+         SET age_band='ADULT',minor_mode=false,verified_source='SELF_STATEMENT'`,
+      [child.personId]
+    );
+    await admin.query(
+      `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+      [f.familyId,child.personId]
+    );
+    const participation=await admin.query<{id:string}>(
+      `INSERT INTO case_participants
+        (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())
+       RETURNING id`,
+      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+    );
+    await forceSceneNode(f,'A4004');
+    await admin.query(
+      `UPDATE scene_node_states
+          SET status='COMPLETED',completed_at=now(),revision=revision+1
+        WHERE case_id=$1 AND node_code='A4004'`,
+      [f.caseId]
+    );
+    const v=(value:string)=>({state:'VALUE' as const,value});
+    const terms={
+      purpose:v('p'),phoneUseRules:v('r'),executionPeriod:v('e'),
+      parentSupportMeasures:v('s'),supervisionMeasures:v('m'),
+      incentives:v('i'),breachResponsibilities:v('b'),
+    };
+    const draftPayload=(dependencyRefs:readonly unknown[])=>({
+      expectedCaseVersion:f.caseVersion,
+      adultPartyPersonId:f.manager.personId,
+      childPartyPersonId:child.personId,
+      childParticipationId:participation.rows[0]!.id,
+      sourceTemplateVersion:'phone-use-contract-v1',
+      dependencyRefs,
+      terms,
+    });
+    return {f,child,terms,draftPayload};
+  }
+
+  async function insertAssertionSource(
+    f:Fixture,
+    input:{
+      sourcePersonId?:string;
+      subjectPersonId?:string;
+      supersedesId?:string;
+      validFrom?:string;
+      validUntil?:string;
+      conflictGroupId?:string;
+      content?:string;
+    }={}
+  ):Promise<string>{
+    const row=await admin.query<{id:string}>(
+      `INSERT INTO assertions
+        (family_id,case_id,subject_person_id,source_kind,source_person_id,
+         occurred_time_state,valid_from,valid_until,confirmation_status,
+         supersedes_id,conflict_group_id,kind,content)
+       VALUES($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN',$5,$6,'UNCONFIRMED',$7,$8,'STATEMENT',$9)
+       RETURNING id`,
+      [
+        f.familyId,f.caseId,input.subjectPersonId??f.manager.personId,
+        input.sourcePersonId??f.manager.personId,
+        input.validFrom??null,input.validUntil??null,input.supersedesId??null,
+        input.conflictGroupId??null,input.content??'Slice 14 dependency assertion',
+      ]
+    );
+    return row.rows[0]!.id;
+  }
+
+  async function insertObservationSource(
+    f:Fixture,
+    input:{supersedesId?:string;validFrom?:string;validUntil?:string}={}
+  ):Promise<string>{
+    const row=await admin.query<{id:string}>(
+      `INSERT INTO observations
+        (family_id,case_id,subject_person_id,source_kind,source_person_id,
+         occurred_time_state,valid_from,valid_until,confirmation_status,
+         supersedes_id,observation_code,value_state,value_type,value_text)
+       VALUES($1,$2,$3,'SELF_STATEMENT',$3,'UNKNOWN',$4,$5,'UNCONFIRMED',$6,
+              'slice14.contract.source','KNOWN','TEXT','observed')
+       RETURNING id`,
+      [f.familyId,f.caseId,f.manager.personId,input.validFrom??null,input.validUntil??null,input.supersedesId??null]
+    );
+    return row.rows[0]!.id;
+  }
+
+  async function insertTimelineArtifact(f:Fixture,revision:number,supersedesId?:string){
+    return withRlsTransaction(
+      appPool,
+      {
+        familyId:f.familyId,
+        accountId:f.manager.accountId,
+        personId:f.manager.personId,
+        purpose:'FAMILY_MANAGEMENT',
+      },
+      (tx)=>insertSceneArtifact(tx,{
+        familyId:f.familyId,
+        caseId:f.caseId,
+        scenePackageVersion:'v1',
+        artifactType:'TIMELINE',
+        schemaVersion:'v1',
+        sourceNodeCode:'A2007',
+        data:{slice14Dependency:true,revision},
+        ownerPersonId:f.manager.personId,
+        sourceRefs:[],
+        revision,
+        ...(supersedesId===undefined?{}:{supersedesId}),
+      })
+    );
+  }
+
+  it('Slice 14 HIGH-001 blocks ASSERTION supersession at activation while preserving historical Evidence', async()=>{
+    const {f,child,draftPayload}=await preparePhoneContractCase('s14-high001-assertion');
+    const a1=await insertAssertionSource(f);
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-high001-assertion-draft'),
+      payload:draftPayload([{type:'ASSERTION',id:a1}]),
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    const adult=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,'s14-high001-assertion-adult'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+    expect(adult.json().status).toBe('PENDING_CONFIRMATION');
+
+    const a2=await insertAssertionSource(f,{supersedesId:a1,content:'corrected Slice 14 dependency assertion'});
+    expect(a2).not.toBe(a1);
+    const childResponse=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,'s14-high001-assertion-child'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(childResponse.statusCode,childResponse.body).toBe(422);
+    expect(childResponse.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+    const truth=await admin.query(
+      `SELECT status,child_confirmation FROM digital_use_contract_versions WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(truth.rows).toEqual([{status:'PENDING_CONFIRMATION',child_confirmation:null}]);
+    const history=await admin.query(
+      `SELECT id,supersedes_id FROM assertions WHERE id=ANY($1::uuid[]) ORDER BY recorded_at,id`,
+      [[a1,a2]]
+    );
+    expect(history.rows).toHaveLength(2);
+  });
+
+  it('Slice 14 HIGH-001 blocks OBSERVATION supersession at activation', async()=>{
+    const {f,child,draftPayload}=await preparePhoneContractCase('s14-high001-observation');
+    const o1=await insertObservationSource(f);
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-high001-observation-draft'),
+      payload:draftPayload([{type:'OBSERVATION',id:o1}]),
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    const adult=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,'s14-high001-observation-adult'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+    const o2=await insertObservationSource(f,{supersedesId:o1});
+    expect(o2).not.toBe(o1);
+    const blocked=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,'s14-high001-observation-child'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(blocked.statusCode,blocked.body).toBe(422);
+    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+    const active=await admin.query(
+      `SELECT count(*)::int AS n FROM digital_use_contract_versions WHERE case_id=$1 AND status='ACTIVE'`,
+      [f.caseId]
+    );
+    expect(active.rows[0].n).toBe(0);
+  });
+
+  it('Slice 14 HIGH-001 rejects expired and not-yet-valid Evidence at draft creation', async()=>{
+    const expiredCase=await preparePhoneContractCase('s14-high001-expired');
+    const expired=await insertAssertionSource(expiredCase.f,{
+      validFrom:new Date(Date.now()-120_000).toISOString(),
+      validUntil:new Date(Date.now()-60_000).toISOString(),
+    });
+    const expiredDraft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${expiredCase.f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(expiredCase.f.manager.token,'s14-high001-expired-draft'),
+      payload:expiredCase.draftPayload([{type:'ASSERTION',id:expired}]),
+    });
+    expect(expiredDraft.statusCode,expiredDraft.body).toBe(422);
+    expect(expiredDraft.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+
+    const futureCase=await preparePhoneContractCase('s14-high001-future');
+    const future=await insertAssertionSource(futureCase.f,{
+      validFrom:new Date(Date.now()+60_000).toISOString(),
+      validUntil:new Date(Date.now()+120_000).toISOString(),
+    });
+    const futureDraft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${futureCase.f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(futureCase.f.manager.token,'s14-high001-future-draft'),
+      payload:futureCase.draftPayload([{type:'ASSERTION',id:future}]),
+    });
+    expect(futureDraft.statusCode,futureDraft.body).toBe(422);
+    expect(futureDraft.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+  });
+
+  it('Slice 14 HIGH-001 revalidates stale Evidence on draft update', async()=>{
+    const {f,draftPayload,terms}=await preparePhoneContractCase('s14-high001-update');
+    const a1=await insertAssertionSource(f);
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-high001-update-draft'),
+      payload:draftPayload([{type:'ASSERTION',id:a1}]),
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    await insertAssertionSource(f,{supersedesId:a1,content:'corrected before draft update'});
+    const patch=await app.inject({
+      method:'PATCH',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts/1`,
+      headers:commandHeaders(f.manager.token,'s14-high001-update-patch'),
+      payload:{
+        expectedCaseVersion:f.caseVersion,
+        expectedDraftRevision:1,
+        dependencyRefs:[{type:'ASSERTION',id:a1}],
+        terms:{...terms,phoneUseRules:{state:'VALUE',value:'updated'}},
+      },
+    });
+    expect(patch.statusCode,patch.body).toBe(422);
+    expect(patch.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+  });
+
+  it('Slice 14 HIGH-001 accepts current Scene Artifact then blocks its exact superseded ref at activation', async()=>{
+    const {f,child,draftPayload}=await preparePhoneContractCase('s14-high001-scene');
+    const a1=await insertTimelineArtifact(f,1);
+    const current=await withRlsTransaction(
+      appPool,
+      {familyId:f.familyId,accountId:f.manager.accountId,personId:f.manager.personId,purpose:'FAMILY_MANAGEMENT'},
+      (tx)=>resolveSceneArtifactRefCurrentness(tx,{artifactId:a1.id,familyId:f.familyId,caseId:f.caseId})
+    );
+    expect(current.status).toBe('CURRENT');
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-high001-scene-draft'),
+      payload:draftPayload([{type:'SCENE_ARTIFACT',id:a1.id}]),
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    const adult=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,'s14-high001-scene-adult'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+    const a2=await insertTimelineArtifact(f,2,a1.id);
+    expect(a2.supersedes_id).toBe(a1.id);
+    const blocked=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,'s14-high001-scene-child'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(blocked.statusCode,blocked.body).toBe(422);
+    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+    const history=await admin.query(
+      `SELECT id,revision,supersedes_id FROM scene_artifacts WHERE id=ANY($1::uuid[]) ORDER BY revision`,
+      [[a1.id,a2.id]]
+    );
+    expect(history.rows).toHaveLength(2);
+    const active=await admin.query(
+      `SELECT count(*)::int AS n FROM digital_use_contract_versions WHERE case_id=$1 AND status='ACTIVE'`,
+      [f.caseId]
+    );
+    expect(active.rows[0].n).toBe(0);
+  });
+
+  it('Slice 14 AS-73 rejects corrected child-related source and does not substitute parent truth', async()=>{
+    const {f,child,draftPayload}=await preparePhoneContractCase('s14-high001-child-source');
+    const childSource=await insertAssertionSource(f,{
+      sourcePersonId:child.personId,
+      subjectPersonId:child.personId,
+      content:'child source v1',
+    });
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-high001-child-source-draft'),
+      payload:draftPayload([{type:'ASSERTION',id:childSource}]),
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    const adult=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,'s14-high001-child-source-adult'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+    const correctedChild=await insertAssertionSource(f,{
+      sourcePersonId:child.personId,
+      subjectPersonId:child.personId,
+      supersedesId:childSource,
+      content:'child source corrected',
+    });
+    const parentSubstitute=await insertAssertionSource(f,{
+      sourcePersonId:f.manager.personId,
+      subjectPersonId:child.personId,
+      content:'parent substitute must not replace exact child dependency',
+    });
+    expect(correctedChild).not.toBe(childSource);
+    expect(parentSubstitute).not.toBe(childSource);
+    const blocked=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,'s14-high001-child-source-child-confirm'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(blocked.statusCode,blocked.body).toBe(422);
+    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+    const truth=await admin.query(
+      `SELECT status,parent_confirmation IS NOT NULL AS parent_ok,child_confirmation
+       FROM digital_use_contract_versions WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(truth.rows).toEqual([{status:'PENDING_CONFIRMATION',parent_ok:true,child_confirmation:null}]);
+  });
+
+  it('Slice 14 HIGH-001 serializes Scene correction before activation and never commits false ACTIVE', async()=>{
+    const {f,child,draftPayload}=await preparePhoneContractCase('s14-high001-race');
+    const a1=await insertTimelineArtifact(f,1);
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-high001-race-draft'),
+      payload:draftPayload([{type:'SCENE_ARTIFACT',id:a1.id}]),
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    const adult=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,'s14-high001-race-adult'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+
+    let markCorrectionReady!:()=>void;
+    const correctionReady=new Promise<void>((resolve)=>{markCorrectionReady=resolve;});
+    let releaseCorrection!:()=>void;
+    const correctionHold=new Promise<void>((resolve)=>{releaseCorrection=resolve;});
+    const correction=withRlsTransaction(
+      appPool,
+      {familyId:f.familyId,accountId:f.manager.accountId,personId:f.manager.personId,purpose:'FAMILY_MANAGEMENT'},
+      async(tx)=>{
+        expect(await lockFamilyForPrimaryDecision(tx,f.familyId)).toBe(true);
+        expect(await lockSceneCase(tx,f.caseId)).not.toBeNull();
+        await insertSceneArtifact(tx,{
+          familyId:f.familyId,caseId:f.caseId,scenePackageVersion:'v1',
+          artifactType:'TIMELINE',schemaVersion:'v1',sourceNodeCode:'A2007',
+          data:{slice14Dependency:true,revision:2},ownerPersonId:f.manager.personId,
+          sourceRefs:[],revision:2,supersedesId:a1.id,
+        });
+        markCorrectionReady();
+        await correctionHold;
+      }
+    );
+    await correctionReady;
+
+    let activationSettled=false;
+    const activationPromise=app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,'s14-high001-race-child'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    }).then((response)=>{activationSettled=true;return response;});
+    await new Promise((resolve)=>setTimeout(resolve,75));
+    expect(activationSettled).toBe(false);
+    releaseCorrection();
+    await correction;
+    const activation=await activationPromise;
+    expect(activation.statusCode,activation.body).toBe(422);
+    expect(activation.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+    const truth=await admin.query(
+      `SELECT status,child_confirmation,activated_at
+       FROM digital_use_contract_versions WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(truth.rows).toEqual([{status:'PENDING_CONFIRMATION',child_confirmation:null,activated_at:null}]);
   });
 
 });
