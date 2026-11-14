@@ -216,9 +216,9 @@ describe('REM2-006 — Gate 2 production invitation concurrency barrier', () => 
     const barrierPort: InvitationResolutionPort = {
       resolveByToken: (tx, token) => production.resolveByToken(tx, token),
       async resolveByParticipationId(tx, participationId) {
-        // Production resolver performs SELECT ... FOR UPDATE. Pause only after
+        // Production resolver performs SELECT ... FOR SHARE. Pause only after
         // it returns so Transaction B races inside the actual Gate 2 commit
-        // window while Transaction A still owns that row lock.
+        // window while Transaction A still owns a row lock that blocks UPDATE.
         const result = await production.resolveByParticipationId(tx, participationId);
         signalLocked();
         await release;
