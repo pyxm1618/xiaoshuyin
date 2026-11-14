@@ -2111,6 +2111,18 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(durationHistory.rows[1].data.duration.value)
       .toBe('Weekdays 20 minutes after homework');
 
+    // Scene reads must consume the same Manifest re-entry truth as the write
+    // path: A4005 is completed but USER_INITIATED/help re-entry remains legal.
+    const reentryProjection=await app.inject({
+      method:'GET',
+      url:`/api/v1/cases/${f.caseId}/scene`,
+      headers:auth(f.manager.token),
+    });
+    expect(reentryProjection.statusCode,reentryProjection.body).toBe(200);
+    expect(
+      reentryProjection.json().reachableNodes.map((node:{nodeCode:string})=>node.nodeCode)
+    ).toContain('A4005');
+
     const stale = await respondSceneNode(
       f, 'A4005', durationState.rows[0].revision,
       {
