@@ -35,6 +35,12 @@ const EXPECTED_AUDIT_EVENTS = [
   // value above must survive.
   'CASE_SAFETY_HOLD_ENTERED',
   'CASE_RISK_RESOLVED',
+  // Slice 1 Consent Owner 01004 remediation appends exactly three
+  // supplemental-assessment consent outcomes.
+  'CONSENT_SUPPLEMENTAL_ASSESSMENT_GRANTED',
+  'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
+  'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
+  'DIGITAL_USE_NODE_COMPLETED',
 ];
 
 const EXPECTED_COMMANDS = [
@@ -60,6 +66,8 @@ const EXPECTED_COMMANDS = [
   // Slice 9 Safety commands use the same idempotency store/vocabulary.
   'CASE_ENTER_SAFETY_HOLD',
   'CASE_RESOLVE_RISK',
+  'DIGITAL_USE_ASSESSMENT_RESUME',
+  'DIGITAL_USE_NODE_RESPONSE',
 ];
 
 const EXPECTED_RESOURCE_TYPES = [
@@ -100,7 +108,7 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
     return rows[0].definition as string;
   }
 
-  it('business_audit_events.event_type preserves all main values and adds CASE_PRIMARY_SWITCHED', async () => {
+  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Slice 12', async () => {
     const values = literalsOf(await definition('business_audit_events_event_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_AUDIT_EVENTS));
   });
@@ -110,12 +118,12 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
     expect(new Set(values)).toEqual(new Set(EXPECTED_RESOURCE_TYPES));
   });
 
-  it('idempotency_keys.command_type preserves all main values and adds CASE_SWITCH_PRIMARY', async () => {
+  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Slice 12', async () => {
     const values = literalsOf(await definition('idempotency_keys_command_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_COMMANDS));
   });
 
-  it('case_events.event_type is exactly CASE_CREATED + the two Slice 7 events + the two Slice 9 events', async () => {
+  it('case_events.event_type is the exact reviewed vocabulary through Slice 12', async () => {
     const values = literalsOf(await definition('case_events_event_type_check'));
     expect(new Set(values)).toEqual(
       new Set([
@@ -130,6 +138,7 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
         'CASE_REASSESSMENT_STARTED',
         'CASE_SAFETY_HOLD_ENTERED',
         'CASE_RISK_RESOLVED',
+        'CASE_DIGITAL_USE_NODE_COMPLETED',
       ])
     );
   });

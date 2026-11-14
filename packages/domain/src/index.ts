@@ -60,3 +60,7 @@ export * from './safety/index.js';
 // Slice 10 — typed Drizzle projection of the compliance feature-policy truth.
 // The policy evaluator itself belongs to `@xiaoshuyin/compliance`.
 export * from './compliance/schema.js';
+// Slice 12 — typed projection only; topology/routing remains @xiaoshuyin/scenes.
+export * from './scene-runtime-schema.js';
+export * from './scene-runtime-repository.js';
+export * from './family-alliance-repository.js';

@@ -7,7 +7,9 @@
  * pepper is a hard startup/runtime failure, never a silent continuation.
  */
 
-export const MIN_PEPPER_LENGTH = 16;
+import { MIN_EVIDENCE_PEPPER_LENGTH } from '@xiaoshuyin/contracts';
+
+export const MIN_PEPPER_LENGTH = MIN_EVIDENCE_PEPPER_LENGTH;
 
 export function requireEvidencePepper(env: NodeJS.ProcessEnv = process.env): string {
   const pepper = env['EVIDENCE_HASH_PEPPER'];

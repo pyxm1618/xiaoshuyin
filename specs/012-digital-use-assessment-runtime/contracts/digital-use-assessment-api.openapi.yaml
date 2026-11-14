@@ -1,0 +1,124 @@
+openapi: 3.1.0
+info:
+  title: Xiaoshuyin V1 — Digital Use Assessment Runtime API
+  version: 1.0.0
+paths:
+  /api/v1/cases/{id}/assessments:
+    post:
+      operationId: startDigitalUseAssessment
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedCaseVersion:
+                  type: integer
+                  minimum: 1
+                  maximum: 2147483647
+              required:
+                - expectedCaseVersion
+              additionalProperties: false
+      responses:
+        '200': { description: Current Digital Use Assessment Scene projection }
+        '401': { description: Unauthenticated }
+        '404': { description: Case or current Family unavailable }
+        '409': { description: Scene or business gate conflict }
+        '422': { description: Validation failure }
+        '500': { description: Internal error }
+
+  /api/v1/cases/{id}/scene:
+    get:
+      operationId: getDigitalUseScene
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+      responses:
+        '200': { description: Authorized current Scene projection }
+        '401': { description: Unauthenticated }
+        '404': { description: Case or current Family unavailable }
+        '409': { description: Scene state conflict }
+        '422': { description: Validation failure }
+        '500': { description: Internal error }
+
+  /api/v1/cases/{id}/scene/nodes/{nodeCode}:
+    get:
+      operationId: getDigitalUseSceneNode
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+        - $ref: '#/components/parameters/NodeCode'
+      responses:
+        '200': { description: Authorized reachable node projection }
+        '401': { description: Unauthenticated }
+        '404': { description: Case or node unavailable }
+        '409': { description: Scene state conflict }
+        '422': { description: Validation failure }
+        '500': { description: Internal error }
+
+  /api/v1/cases/{id}/scene/nodes/{nodeCode}/responses:
+    post:
+      operationId: completeDigitalUseSceneNode
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+        - $ref: '#/components/parameters/NodeCode'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedCaseVersion:
+                  type: integer
+                  minimum: 1
+                  maximum: 2147483647
+                expectedNodeRevision:
+                  type: integer
+                  minimum: 1
+                  maximum: 2147483647
+                response:
+                  type: object
+                  additionalProperties: {}
+              required:
+                - expectedCaseVersion
+                - expectedNodeRevision
+                - response
+              additionalProperties: false
+      responses:
+        '200': { description: Committed Scene business result }
+        '401': { description: Unauthenticated }
+        '404': { description: Case or node unavailable }
+        '409': { description: Scene or business gate conflict }
+        '422': { description: Validation failure }
+        '500': { description: Internal error }
+
+components:
+  parameters:
+    CaseId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    NodeCode:
+      name: nodeCode
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 关键命令幂等键（§8.5）。同 key 不同 payload → 409。
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128

@@ -5,7 +5,9 @@
  * Base (current main) = 4 Case business operations:
  *   createCase / listCases / getCase / createCaseMessage
  * Slice 7 delta = exactly 1: switchPrimaryCase
- * Final = 5 Case business operations.
+ * Slice 8 delta = exactly 4 Problem Formulation operations.
+ * Slice 12 delta = exactly 4 Digital Use Assessment / Scene operations.
+ * Current total = 13 Case-scoped business operations.
  * `createParticipationInvite` stays a real Case path operation and is excluded
  * from the business-operation count by operationId (approved Slice 4 Scope).
  */
@@ -59,7 +61,7 @@ function literalCodes(schema: any): string[] {
 }
 
 describe('Generated OpenAPI — Case operations (T078)', () => {
-  it('contains the real Case paths and exactly nine Case business operations (Base 4 + Slice 7 delta 1 + Slice 8 delta 4)', () => {
+  it('contains the real Case paths and exactly thirteen Case business operations through Slice 12', () => {
     const casePaths = Object.keys(spec.paths).filter(
       (p) => p === CASE_PATH_PREFIX || p.startsWith(`${CASE_PATH_PREFIX}/`)
     );
@@ -67,6 +69,10 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       '/api/v1/cases',
       '/api/v1/cases/{id}',
       '/api/v1/cases/{id}/messages',
+      '/api/v1/cases/{id}/assessments',
+      '/api/v1/cases/{id}/scene',
+      '/api/v1/cases/{id}/scene/nodes/{nodeCode}',
+      '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
       '/api/v1/cases/{id}/participation-invites',
       '/api/v1/cases/{id}/switch-primary',
       '/api/v1/cases/{id}/problem-formulations/current',
@@ -93,33 +99,41 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'GET /api/v1/cases/{id}',
       'POST /api/v1/cases',
       'POST /api/v1/cases/{id}/messages',
+      'POST /api/v1/cases/{id}/assessments',
+      'GET /api/v1/cases/{id}/scene',
+      'GET /api/v1/cases/{id}/scene/nodes/{nodeCode}',
+      'POST /api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
       'POST /api/v1/cases/{id}/switch-primary',
       'GET /api/v1/cases/{id}/problem-formulations/current',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/confirm',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/corrections',
     ].sort());
-    expect(operations).toHaveLength(9);
+    expect(operations).toHaveLength(13);
   });
 
   it('每个 operation 声明 frozen operationId 与 bearerAuth', () => {
-    const expected: Record<string, { op: string }> = {
+    const expected: Record<string, { op: string; tag?: string }> = {
       'post /api/v1/cases': { op: 'createCase' },
       'get /api/v1/cases': { op: 'listCases' },
       'get /api/v1/cases/{id}': { op: 'getCase' },
       'post /api/v1/cases/{id}/messages': { op: 'createCaseMessage' },
+      'post /api/v1/cases/{id}/assessments': { op: 'startDigitalUseAssessment', tag: 'digital-use-assessment' },
+      'get /api/v1/cases/{id}/scene': { op: 'getDigitalUseScene', tag: 'digital-use-assessment' },
+      'get /api/v1/cases/{id}/scene/nodes/{nodeCode}': { op: 'getDigitalUseSceneNode', tag: 'digital-use-assessment' },
+      'post /api/v1/cases/{id}/scene/nodes/{nodeCode}/responses': { op: 'completeDigitalUseSceneNode', tag: 'digital-use-assessment' },
       'post /api/v1/cases/{id}/switch-primary': { op: 'switchPrimaryCase' },
       'get /api/v1/cases/{id}/problem-formulations/current': { op: 'getCurrentProblemFormulation' },
       'post /api/v1/cases/{id}/problem-formulations/{version}/confirm': { op: 'confirmProblemFormulation' },
       'post /api/v1/cases/{id}/problem-formulations/{version}/dispute': { op: 'disputeProblemFormulation' },
       'post /api/v1/cases/{id}/problem-formulations/{version}/corrections': { op: 'correctProblemFormulation' },
     };
-    for (const [key, { op }] of Object.entries(expected)) {
+    for (const [key, { op, tag }] of Object.entries(expected)) {
       const [method, path] = key.split(' ');
       const operation = spec.paths[path][method];
       expect(operation.operationId, `${method} ${path} operationId`).toBe(op);
       expect(operation.security, `${method} ${path} security`).toEqual([{ bearerAuth: [] }]);
-      expect(operation.tags).toEqual(['case']);
+      expect(operation.tags).toEqual([tag ?? 'case']);
     }
     expect(spec.components.securitySchemes.bearerAuth).toMatchObject({
       type: 'http',

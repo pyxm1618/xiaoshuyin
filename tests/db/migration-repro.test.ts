@@ -5,7 +5,7 @@
  * - Full migration can establish schema from empty PostgreSQL 18
  * - Second apply is a no-op
  * - Object set is consistent before and after
- * - Final set includes: 15 enums, 15 tables, RLS functions, 19 policies, consent trigger
+ * - Final set includes the reviewed enums/tables, RLS functions/policies, and runtime guards
  *
  * This test is EXPECTED TO FAIL (RED) until Phase 3 (T013-T028) completes.
  * It turns GREEN when the full reviewed migration is in place.
@@ -18,12 +18,12 @@ import { Client } from 'pg';
 const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATABASE_URL']!;
 
 // Expected final object counts (Slice 1/2 + Case Core + Slice 3 Evidence + Slice 6 binding)
-const EXPECTED_ENUMS = 22; // + problem_formulation_status (Slice 8)
-const EXPECTED_TABLES = 24; // + compliance_feature_policies (Slice 10)
+const EXPECTED_ENUMS = 23; // + problem_formulation_status (Slice 8)
+const EXPECTED_TABLES = 27; // + compliance_feature_policies (Slice 10)
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 4; // set_account_context, set_identity_context, set_family_context, create_family
-const EXPECTED_POLICIES = 54; // + 2 compliance_feature_policies RLS policies (Slice 10)
-const EXPECTED_TRIGGERS = 3; // consent_records_guard + 2 binding append-only triggers
+const EXPECTED_POLICIES = 57; // + 2 compliance_feature_policies RLS policies (Slice 10)
+const EXPECTED_TRIGGERS = 5; // consent_records_guard + 2 binding append-only triggers
 
 const EXPECTED_ENUM_NAMES = [
   'account_status',
@@ -48,6 +48,7 @@ const EXPECTED_ENUM_NAMES = [
   'profile_value_status',
   'provenance_source',
   'problem_formulation_status',
+  'scene_node_status',
 ].sort();
 
 const EXPECTED_TABLE_NAMES = [
@@ -64,6 +65,7 @@ const EXPECTED_TABLE_NAMES = [
   'compliance_feature_policies',
   'consent_records',
   'dialogue_messages',
+  'digital_use_target_items',
   'families',
   'family_members',
   'guardian_consent_requests',
@@ -75,6 +77,8 @@ const EXPECTED_TABLE_NAMES = [
   'persons',
   'problem_formulations',
   'risk_events',
+  'scene_artifacts',
+  'scene_node_states',
 ].sort();
 
 describe('Migration Reproducibility (T011 RED)', () => {
@@ -89,7 +93,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     await client.end();
   });
 
-  it('should have all 21 enums with correct values', async () => {
+  it('should have all 23 enums with correct values', async () => {
     const { rows } = await client.query(`
       SELECT t.typname, array_agg(e.enumlabel ORDER BY e.enumsortorder) as values
       FROM pg_type t
@@ -105,7 +109,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(enumNames.length).toBe(EXPECTED_ENUMS);
   });
 
-  it('should have all 21 tables', async () => {
+  it('should have all 27 tables', async () => {
     const { rows } = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -141,7 +145,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 48 RLS policies', async () => {
+  it('should have 57 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'

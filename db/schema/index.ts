@@ -9,3 +9,4 @@
  */
 
 export * from '../../packages/domain/src/safety/schema.js';export * from '../../packages/domain/src/compliance/schema.js';
+export * from '../../packages/domain/src/scene-runtime-schema.js';

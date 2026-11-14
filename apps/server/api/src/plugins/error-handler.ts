@@ -43,6 +43,7 @@ const ERROR_MAP: Record<string, number> = {
   // Slice 8 Problem Formulation Core.
   CASE_NOT_PRIMARY: 409,
   CASE_PHASE_CONFLICT: 409,
+  CASE_NOT_OPEN: 409,
   STALE_CASE_VERSION: 409,
   PROBLEM_FORMULATION_VERSION_CONFLICT: 409,
   PROBLEM_FORMULATION_STATE_CONFLICT: 409,
@@ -65,6 +66,33 @@ const ERROR_MAP: Record<string, number> = {
   INVITATION_NOT_AVAILABLE: 404,
   PARTICIPATION_NOT_FOUND: 404,
   PARTICIPATION_STATE_CONFLICT: 409,
+  // Slice 12 Digital Use Assessment Runtime.
+  SCENE_NODE_NOT_FOUND: 404,
+  SCENE_NODE_UNREACHABLE: 409,
+  SCENE_PACKAGE_MISMATCH: 409,
+  STALE_SCENE_PACKAGE: 409,
+  STALE_NODE_REVISION: 409,
+  STALE_SELECTION_REVISION: 409,
+  STALE_TARGET_REVISION: 409,
+  TARGET_SELECTION_INVALID: 422,
+  TARGET_CODE_INVALID: 422,
+  TARGET_NOT_SELECTED: 409,
+  TARGET_SCOPE_INVALID: 403,
+  TARGET_SELECTION_STATE_INVALID: 409,
+  FAMILY_ALLIANCE_ENTRY_BLOCKED: 409,
+  PROBLEM_FORMULATION_REQUIRED: 409,
+  CONSENT_BLOCKED: 409,
+  DEPENDENCY_UNAVAILABLE: 503,
+  SCENE_RESPONSE_INVALID: 422,
+  SCENE_ROUTE_BLOCKED: 409,
+  SCENE_ROUTE_UNRESOLVED: 409,
+  INTEGRATED_TRIAGE_INSUFFICIENT: 409,
+  INTEGRATED_TRIAGE_BLOCKED: 409,
+  SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED: 409,
+  SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED: 409,
+  APPROVED_INSTRUMENT_UNAVAILABLE: 409,
+  DOWNSTREAM_RUNTIME_UNAVAILABLE: 409,
+  COMPLIANCE_BLOCKED: 409,
   // Slice 006 identity binding.
   WECHAT_AUTH_FAILED: 401,
   BINDING_CONTEXT_INVALID: 401,
@@ -111,12 +139,19 @@ function logUnexpected(req: FastifyRequest, err: Error) {
   );
 }
 
-/** The only 5xx body shape the API ever returns. */
+/** The only body shape for unexpected/infrastructure 5xx failures. */
 function genericInternalError(reply: FastifyReply) {
   return reply.status(500).send({
     code: 'INTERNAL_ERROR',
     message: 'An internal error occurred',
   });
+}
+
+function isExplicitOperational5xx(httpErr: HttpError): boolean {
+  // Slice 13 Frozen Spec requires dependency unavailability to remain
+  // distinguishable from infrastructure failure. Keep this whitelist narrow:
+  // every other 5xx still uses the generic redacted INTERNAL_ERROR envelope.
+  return httpErr.statusCode === 503 && httpErr.code === 'DEPENDENCY_UNAVAILABLE';
 }
 
 export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyReply) {
@@ -133,6 +168,8 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
     '/api/v1/participation-invites/:token/accept',
     '/api/v1/participations/:id/decline',
     '/api/v1/participations/:id/withdraw',
+    '/api/v1/cases/:id/assessments',
+    '/api/v1/cases/:id/scene/nodes/:nodeCode/responses',
   ]);
   const isStrictCreateCommand =
     req.method === 'POST' && strictJsonCommands.has(routeUrl);
@@ -155,10 +192,10 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
 
   if ('statusCode' in err && 'code' in err) {
     const httpErr = err as unknown as HttpError;
-    // 4xx keep their contract message. Any 5xx — including typed
-    // INTERNAL_ERROR raised by an invariant branch — is reported through the
-    // single generic 500 contract so no internal detail reaches the client.
-    if (httpErr.statusCode < 500) {
+    // 4xx and the one explicitly frozen operational 503 keep their stable
+    // contract code. Unknown/infrastructure 5xx — including typed
+    // INTERNAL_ERROR invariant branches — remain redacted to generic 500.
+    if (httpErr.statusCode < 500 || isExplicitOperational5xx(httpErr)) {
       return reply.status(httpErr.statusCode).send({
         code: httpErr.code,
         message: httpErr.message,

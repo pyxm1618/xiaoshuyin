@@ -126,6 +126,17 @@ describe('server-owned compliance feature identity', () => {
     const branchPattern = /===\s*['"](?:A4003|DIGITAL_USE_[A-Z0-9_]*)['"]/;
     const sceneLiteralPattern = /\bA4003\b|\bDIGITAL_USE_[A-Z0-9_]+\b/;
 
+    // Narrow, reviewed exception: the Slice 1 Consent owner capability and the
+    // approved 01004 disclosure authority necessarily name the ONE approved
+    // supplemental consent purpose. None is a Scene feature branch; the
+    // branchPattern assertion below still applies, and every other literal is
+    // still forbidden.
+    const OWNER_CAPABILITY_FILES = new Set([
+      'evidence.ts',
+      'supplemental-assessment-disclosure.ts',
+      'supplemental-consent.ts',
+    ]);
+
     for (const file of files) {
       const content = readFileSync(join(sourceDir, file), 'utf-8');
       const codeLines = content
@@ -138,6 +149,15 @@ describe('server-owned compliance feature identity', () => {
       expect(branchPattern.test(code), `${file} must not branch on a Scene feature literal`).toBe(
         false
       );
+      if (OWNER_CAPABILITY_FILES.has(file)) {
+        const literalMatches = code.match(sceneLiteralPattern) ?? [];
+        for (const literal of literalMatches) {
+          expect(literal, `${file} may only name the approved consent purpose`).toBe(
+            'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT'
+          );
+        }
+        continue;
+      }
       // Comments may explain the prohibition; executable code may not contain
       // a Scene/Digital-Use literal at all.
       const executableLiterals = code.match(sceneLiteralPattern);

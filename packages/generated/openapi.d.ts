@@ -468,6 +468,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{id}/assessments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["startDigitalUseAssessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/scene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDigitalUseScene"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/scene/nodes/{nodeCode}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getDigitalUseSceneNode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeDigitalUseSceneNode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{id}/problem-formulations/current": {
         parameters: {
             query?: never;
@@ -1395,6 +1459,7 @@ export interface components {
         BindingPersonIdQuery: string;
         FormulationVersionPath: number;
         CaseId: string;
+        NodeCode: string;
         FormulationVersion: number;
         /** @description Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version. Runtime must parse the decimal payload and reject values outside 1..2147483647 before repository/SQL access; the regex is only a lexical gate. */
         IfMatchCaseVersionHeader: string;
@@ -3098,6 +3163,2819 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startDigitalUseAssessment: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedCaseVersion: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Digital Use Assessment started or resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        caseId: string;
+                        caseVersion: number;
+                        /** @constant */
+                        sceneCode: "DIGITAL_USE";
+                        /** @constant */
+                        scenePackageVersion: "v1";
+                        currentNode: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        } | null;
+                        activeNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        reachableNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            entryModes: ("ROUTED" | "USER_INITIATED" | "SCHEDULED")[];
+                            interactionRefs: string[];
+                            outputRefs: string[];
+                            helpOrReentryRefs: string[];
+                            reasonCode: string;
+                        }[];
+                        nodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        artifacts: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT";
+                            schemaVersion: string;
+                            /** @enum {string} */
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000";
+                            revision: number;
+                            data: {
+                                [key: string]: unknown;
+                            };
+                            sourceRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        targetSelectionRevision: number;
+                        targets: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            targetCode: "SLEEP" | "EXERCISE" | "HOBBIES" | "CHORES" | "FAMILY_GATHERING" | "OUTDOOR_ACTIVITY" | "EMOTION_REGULATION_1" | "TIME_MANAGEMENT" | "FAMILY_RELATIONSHIP" | "EMOTION_REGULATION_2";
+                            selectionRevision: number;
+                            revision: number;
+                            selected: boolean;
+                            concreteTargetText: string | null;
+                            feasibility: {
+                                concreteQuantified: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    concreteTargetText: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                need: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                motivationBenefit: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                abilityPossibility: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                challengeResistance: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                            } | null;
+                            progress: {
+                                /** @enum {string} */
+                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                /** @enum {string} */
+                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                /** @enum {string} */
+                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
+                            } | null;
+                            progressEvidenceRefs: ({
+                                type: string;
+                                /** Format: uuid */
+                                id: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            helpHistoryRefs: {
+                                nodeCode: string;
+                                /** @constant */
+                                scenePackageVersion: "v1";
+                                interactionRefs: string[];
+                                helpOrReentryRefs: string[];
+                                evidenceRefs: ({
+                                    type: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            }[];
+                            sourceRefs: ({
+                                type: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        routeReasonCode: string | null;
+                        downstream: {
+                            routeIntent: string | null;
+                            available: boolean;
+                            reasonCode: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description Assessment state, Safety, Compliance or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description Strict request or Scene validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    getDigitalUseScene: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized current Digital Use Scene projection */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        caseId: string;
+                        caseVersion: number;
+                        /** @constant */
+                        sceneCode: "DIGITAL_USE";
+                        /** @constant */
+                        scenePackageVersion: "v1";
+                        currentNode: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        } | null;
+                        activeNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        reachableNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            entryModes: ("ROUTED" | "USER_INITIATED" | "SCHEDULED")[];
+                            interactionRefs: string[];
+                            outputRefs: string[];
+                            helpOrReentryRefs: string[];
+                            reasonCode: string;
+                        }[];
+                        nodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        artifacts: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT";
+                            schemaVersion: string;
+                            /** @enum {string} */
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000";
+                            revision: number;
+                            data: {
+                                [key: string]: unknown;
+                            };
+                            sourceRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        targetSelectionRevision: number;
+                        targets: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            targetCode: "SLEEP" | "EXERCISE" | "HOBBIES" | "CHORES" | "FAMILY_GATHERING" | "OUTDOOR_ACTIVITY" | "EMOTION_REGULATION_1" | "TIME_MANAGEMENT" | "FAMILY_RELATIONSHIP" | "EMOTION_REGULATION_2";
+                            selectionRevision: number;
+                            revision: number;
+                            selected: boolean;
+                            concreteTargetText: string | null;
+                            feasibility: {
+                                concreteQuantified: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    concreteTargetText: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                need: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                motivationBenefit: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                abilityPossibility: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                challengeResistance: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                            } | null;
+                            progress: {
+                                /** @enum {string} */
+                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                /** @enum {string} */
+                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                /** @enum {string} */
+                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
+                            } | null;
+                            progressEvidenceRefs: ({
+                                type: string;
+                                /** Format: uuid */
+                                id: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            helpHistoryRefs: {
+                                nodeCode: string;
+                                /** @constant */
+                                scenePackageVersion: "v1";
+                                interactionRefs: string[];
+                                helpOrReentryRefs: string[];
+                                evidenceRefs: ({
+                                    type: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            }[];
+                            sourceRefs: ({
+                                type: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        routeReasonCode: string | null;
+                        downstream: {
+                            routeIntent: string | null;
+                            available: boolean;
+                            reasonCode: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description Scene state/package conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description Scene validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    getDigitalUseSceneNode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CaseId"];
+                nodeCode: components["parameters"]["NodeCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized reachable Digital Use node */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        caseId: string;
+                        caseVersion: number;
+                        /** @constant */
+                        sceneCode: "DIGITAL_USE";
+                        /** @constant */
+                        scenePackageVersion: "v1";
+                        node: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        };
+                        activeNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        reachableNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            entryModes: ("ROUTED" | "USER_INITIATED" | "SCHEDULED")[];
+                            interactionRefs: string[];
+                            outputRefs: string[];
+                            helpOrReentryRefs: string[];
+                            reasonCode: string;
+                        }[];
+                        artifacts: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT";
+                            schemaVersion: string;
+                            /** @enum {string} */
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000";
+                            revision: number;
+                            data: {
+                                [key: string]: unknown;
+                            };
+                            sourceRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        targetSelectionRevision: number;
+                        targets: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            targetCode: "SLEEP" | "EXERCISE" | "HOBBIES" | "CHORES" | "FAMILY_GATHERING" | "OUTDOOR_ACTIVITY" | "EMOTION_REGULATION_1" | "TIME_MANAGEMENT" | "FAMILY_RELATIONSHIP" | "EMOTION_REGULATION_2";
+                            selectionRevision: number;
+                            revision: number;
+                            selected: boolean;
+                            concreteTargetText: string | null;
+                            feasibility: {
+                                concreteQuantified: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    concreteTargetText: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                need: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                motivationBenefit: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                abilityPossibility: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                challengeResistance: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                            } | null;
+                            progress: {
+                                /** @enum {string} */
+                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                /** @enum {string} */
+                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                /** @enum {string} */
+                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
+                            } | null;
+                            progressEvidenceRefs: ({
+                                type: string;
+                                /** Format: uuid */
+                                id: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            helpHistoryRefs: {
+                                nodeCode: string;
+                                /** @constant */
+                                scenePackageVersion: "v1";
+                                interactionRefs: string[];
+                                helpOrReentryRefs: string[];
+                                evidenceRefs: ({
+                                    type: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            }[];
+                            sourceRefs: ({
+                                type: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        routeReasonCode: string | null;
+                        downstream: {
+                            routeIntent: string | null;
+                            available: boolean;
+                            reasonCode: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description Scene state/package conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description Fabricated/unreachable node or validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+        };
+    };
+    completeDigitalUseSceneNode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                nodeCode: components["parameters"]["NodeCode"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedCaseVersion: number;
+                    expectedNodeRevision: number;
+                    response: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Node response committed or idempotently replayed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        caseId: string;
+                        caseVersion: number;
+                        /** @constant */
+                        sceneCode: "DIGITAL_USE";
+                        /** @constant */
+                        scenePackageVersion: "v1";
+                        currentNode: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        } | null;
+                        activeNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        reachableNodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            entryModes: ("ROUTED" | "USER_INITIATED" | "SCHEDULED")[];
+                            interactionRefs: string[];
+                            outputRefs: string[];
+                            helpOrReentryRefs: string[];
+                            reasonCode: string;
+                        }[];
+                        nodes: {
+                            nodeCode: string;
+                            sourceNodeCode: string;
+                            /** @enum {string} */
+                            status: "LOCKED" | "AVAILABLE" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "BLOCKED";
+                            revision: number;
+                            branchReasonCodes: string[];
+                            inputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            outputRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            enteredAt: string;
+                            completedAt: string | null;
+                        }[];
+                        artifacts: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            type: "SUPPLEMENTAL_ASSESSMENT_BOUNDARY" | "TIMELINE" | "SOLUTION_SUMMARY" | "FAMILY_ALLIANCE_SELF_ASSESSMENT";
+                            schemaVersion: string;
+                            /** @enum {string} */
+                            sourceNodeCode: "01000" | "A2007" | "A2010" | "A3000";
+                            revision: number;
+                            data: {
+                                [key: string]: unknown;
+                            };
+                            sourceRefs: ({
+                                /** @constant */
+                                type: "DIALOGUE_MESSAGE";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "ASSERTION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "OBSERVATION";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "CONSENT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "SCENE_ARTIFACT";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "TARGET_ITEM";
+                                /** Format: uuid */
+                                id: string;
+                            } | {
+                                /** @constant */
+                                type: "RECORD_MARKER";
+                                /** @constant */
+                                markerCode: "A200401";
+                                evidenceRefs: ({
+                                    /** @constant */
+                                    type: "DIALOGUE_MESSAGE";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "ASSERTION";
+                                    /** Format: uuid */
+                                    id: string;
+                                } | {
+                                    /** @constant */
+                                    type: "OBSERVATION";
+                                    /** Format: uuid */
+                                    id: string;
+                                })[];
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        targetSelectionRevision: number;
+                        targets: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            targetCode: "SLEEP" | "EXERCISE" | "HOBBIES" | "CHORES" | "FAMILY_GATHERING" | "OUTDOOR_ACTIVITY" | "EMOTION_REGULATION_1" | "TIME_MANAGEMENT" | "FAMILY_RELATIONSHIP" | "EMOTION_REGULATION_2";
+                            selectionRevision: number;
+                            revision: number;
+                            selected: boolean;
+                            concreteTargetText: string | null;
+                            feasibility: {
+                                concreteQuantified: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    concreteTargetText: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                need: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                motivationBenefit: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                abilityPossibility: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                challengeResistance: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    rating: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                            } | null;
+                            progress: {
+                                /** @enum {string} */
+                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                /** @enum {string} */
+                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                /** @enum {string} */
+                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
+                            } | null;
+                            progressEvidenceRefs: ({
+                                type: string;
+                                /** Format: uuid */
+                                id: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            helpHistoryRefs: {
+                                nodeCode: string;
+                                /** @constant */
+                                scenePackageVersion: "v1";
+                                interactionRefs: string[];
+                                helpOrReentryRefs: string[];
+                                evidenceRefs: ({
+                                    type: string;
+                                    /** Format: uuid */
+                                    id: string;
+                                } & {
+                                    [key: string]: unknown;
+                                })[];
+                            }[];
+                            sourceRefs: ({
+                                type: string;
+                            } & {
+                                [key: string]: unknown;
+                            })[];
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                        routeReasonCode: string | null;
+                        downstream: {
+                            routeIntent: string | null;
+                            available: boolean;
+                            reasonCode: string | null;
+                        };
+                    };
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `CURRENT_FAMILY_NOT_FOUND` / `CASE_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description Concurrency, routing, Safety, Compliance or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description Strict node response validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
                 };
             };
         };

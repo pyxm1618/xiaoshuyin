@@ -315,7 +315,7 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     expect(output).toContain('APPLY 008_problem_formulation_core.sql');
     expect(output).toContain('APPLY 010_problem_formulation_safety_vocabulary_reconcile.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 3 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 8 new, 9 previously applied\./);
 
     const client = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await client.connect();
@@ -372,14 +372,18 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     await client.connect();
     try {
       expect(await readSafetyRows(client, pre.fixture.caseId)).toEqual(pre.safetyRows);
-      await assertUnionConstraints(client);
+      await assertUnionConstraints(client, false);
     } finally {
       await client.end();
     }
   }, 180_000);
 });
 
-async function assertUnionConstraints(client: Client): Promise<void> {
+async function assertUnionConstraints(
+  client: Client,
+  includeSupplementalConsentAudit = true,
+  includeSlice12 = includeSupplementalConsentAudit
+): Promise<void> {
   const definitions = new Map<string, string>(
     (
       await client.query<{ conname: string; definition: string }>(
@@ -414,6 +418,7 @@ async function assertUnionConstraints(client: Client): Promise<void> {
     'CASE_PRIMARY_REVOKED',
     ...SLICE8_CASE_EVENT_TYPES,
     ...SLICE9_CASE_EVENT_TYPES,
+    ...(includeSlice12 ? ['CASE_DIGITAL_USE_NODE_COMPLETED'] : []),
   ]);
   const caseEventLiterals = literalsOf(definitions.get('case_events_event_type_check')!);
   expect(new Set(caseEventLiterals)).toEqual(caseEventSet);
@@ -421,6 +426,7 @@ async function assertUnionConstraints(client: Client): Promise<void> {
   expectAll('case_events_metadata_shape_check', [
     ...SLICE8_CASE_EVENT_TYPES,
     ...SLICE9_CASE_EVENT_TYPES,
+    ...(includeSlice12 ? ['CASE_DIGITAL_USE_NODE_COMPLETED'] : []),
   ]);
   const metadataShape = definitions.get('case_events_metadata_shape_check')!;
   for (const marker of ['riskEventId', 'fromVersion', 'toVersion', 'fromStatus', 'toStatus']) {
@@ -446,6 +452,14 @@ async function assertUnionConstraints(client: Client): Promise<void> {
     'CASE_PRIMARY_SWITCHED',
     ...SLICE8_AUDIT_EVENT_TYPES,
     ...SLICE9_AUDIT_EVENT_TYPES,
+    ...(includeSupplementalConsentAudit
+      ? [
+          'CONSENT_SUPPLEMENTAL_ASSESSMENT_GRANTED',
+          'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
+          'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
+        ]
+      : []),
+    ...(includeSlice12 ? ['DIGITAL_USE_NODE_COMPLETED'] : []),
   ]);
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
@@ -482,6 +496,9 @@ async function assertUnionConstraints(client: Client): Promise<void> {
     'CASE_SWITCH_PRIMARY',
     ...SLICE8_COMMANDS,
     ...SLICE9_COMMANDS,
+    ...(includeSlice12
+      ? ['DIGITAL_USE_ASSESSMENT_RESUME', 'DIGITAL_USE_NODE_RESPONSE']
+      : []),
   ]);
   const commandLiterals = literalsOf(definitions.get('idempotency_keys_command_type_check')!);
   expect(new Set(commandLiterals)).toEqual(commandSet);
@@ -494,6 +511,13 @@ async function assertUnionConstraints(client: Client): Promise<void> {
     ...SLICE9_COMMANDS,
   ]) {
     expect(keyRepresentation, `key representation must keep ${literal}`).toContain(`'${literal}'`);
+  }
+  if (includeSlice12) {
+    // Slice 12 reuses the existing text-key runIdempotentCommandInTransaction
+    // owner path. Its commands belong to the command vocabulary but must not
+    // be misclassified into the bytea-only switch/Safety branch.
+    expect(keyRepresentation).not.toContain("'DIGITAL_USE_ASSESSMENT_RESUME'");
+    expect(keyRepresentation).not.toContain("'DIGITAL_USE_NODE_RESPONSE'");
   }
   expect(keyRepresentation).toContain('idempotency_key_bytes IS NOT NULL');
 }

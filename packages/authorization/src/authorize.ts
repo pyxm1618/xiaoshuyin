@@ -35,6 +35,13 @@ export type Action =
   // Slice 9 Safety control foundation. Internal domain commands only: neither
   // action has a public route.
   | 'CASE_ENTER_SAFETY_HOLD' | 'CASE_RESOLVE_RISK'
+  // Slice 12 Digital Use Assessment Scene. These reuse FAMILY_MANAGEMENT and
+  // never promote participant presence into Assessment authority.
+  | 'CASE_READ_ASSESSMENT_SCENE' | 'CASE_RESPOND_ASSESSMENT_SCENE'
+  // Narrow Authorization-owner seam for Slice 14. This action authorizes only
+  // the authenticated child Contract party to attempt confirmation of one
+  // exact phone-use Contract version; Contract lifecycle remains domain-owned.
+  | 'PHONE_USE_CONTRACT_CONFIRM_SELF'
   // Slice 4 Case Participant Core.
   | 'PARTICIPATION_INVITE_CREATE'
   | 'PARTICIPATION_READ_SELF' | 'PARTICIPATION_ACCEPT_SELF'
@@ -51,7 +58,10 @@ export type Action =
 
 export type Purpose =
   | 'SELF_IDENTITY' | 'FAMILY_MANAGEMENT' | 'GUARDIAN_CONSENT'
-  | 'PARTICIPATION' | 'IDENTITY_BINDING';
+  | 'PARTICIPATION' | 'IDENTITY_BINDING'
+  // Existing Digital Use stream identity; deliberately distinct from
+  // PARTICIPATION, FAMILY_MANAGEMENT and GUARDIAN_CONSENT.
+  | 'PHONE_USE_CONTRACT';
 
 /**
  * Structured resource contract (authorization-and-rls.md §2.1).
@@ -65,6 +75,14 @@ export type Resource =
   | { type: 'CONSENT'; familyId: string; consentId?: string }
   | { type: 'CASE'; familyId: string; caseId: string }
   | { type: 'PARTICIPATION'; participationId: string }
+  | {
+      type: 'PHONE_USE_CONTRACT_VERSION';
+      familyId: string;
+      caseId: string;
+      contractVersionId: string;
+      partyPersonId: string;
+      partyRole: 'CHILD';
+    }
   | { type: 'BINDING'; attemptId: string | null; personId: string | null };
 
 export type AgeBandValue = 'ADULT' | 'MINOR_14_17' | 'UNDER_14' | 'UNKNOWN';
@@ -74,6 +92,9 @@ export type DenyReason =
   | 'FAMILY_CONTEXT_REQUIRED' | 'NOT_FAMILY_MEMBER' | 'NOT_FAMILY_MANAGER'
   | 'NOT_GUARDIAN' | 'AGE_BAND_UNKNOWN' | 'CASE_CONTEXT_REQUIRED'
   | 'PARTICIPATION_CONTEXT_REQUIRED' | 'NOT_PARTICIPANT' | 'AUTHORIZATION_ERROR'
+  // Narrow phone-use Contract confirmation denials.
+  | 'CONTRACT_CONFIRMATION_CONTEXT_INVALID' | 'NOT_CONTRACT_PARTY'
+  | 'PARTICIPATION_NOT_ACTIVE'
   // Slice 9: no separately verified Safety-resolution capability.
   | 'NOT_SAFETY_RESOLVER'
   // Slice 006 binding-specific denials.
@@ -124,6 +145,27 @@ export interface AuthorizeFacts {
    */
   safetyResolution?: { verified: boolean; authorityRef: string } | null;
   /**
+   * Narrow Slice 14 owner-remediation facts. Every value is read by the future
+   * caller from authoritative rows inside its transaction. This object is not
+   * Contract lifecycle state and authorize() never queries the database.
+   *
+   * The duplicate scope fields are intentional: request/resource dimensions
+   * are untrusted and must match independently-read Contract/participation
+   * facts before self-confirmation can be attempted.
+   */
+  phoneUseContractConfirmation?: {
+    contractVersionId: string;
+    contractFamilyId: string;
+    contractCaseId: string;
+    contractPartyPersonId: string;
+    contractPartyRole: 'CHILD';
+    participationId: string;
+    participationFamilyId: string;
+    participationCaseId: string;
+    participationPersonId: string;
+    participationState: 'PENDING' | 'ACTIVE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN';
+  } | null;
+  /**
    * Real `families.id` the facts were read from. Internal (not a frozen
    * contract) and used to prove that `FAMILY_CREATE` is deciding on the row
    * that was actually persisted in this transaction.
@@ -150,8 +192,19 @@ export interface AuthInput {
   product: 'V1';
   family: { familyId: string } | null;
   case: { caseId: string } | null;
-  /** Slice 4 target context. Absent is treated exactly like null (fail closed). */
-  participation?: { personId: string; state: 'PENDING' | 'ACTIVE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN' } | null;
+  /**
+   * Slice 4 target context. Existing callers may provide only person/state.
+   * The Contract-confirmation seam additionally requires the exact
+   * participation id + Family + Case so it cannot promote ordinary participant
+   * presence into Contract mutation authority.
+   */
+  participation?: {
+    participationId?: string;
+    familyId?: string;
+    caseId?: string;
+    personId: string;
+    state: 'PENDING' | 'ACTIVE' | 'DECLINED' | 'EXPIRED' | 'WITHDRAWN';
+  } | null;
   resource: Resource;
   action: Action;
   purpose: Purpose;
@@ -169,6 +222,8 @@ const REGISTERED_ACTIONS: Action[] = [
   'CASE_CONFIRM_PROBLEM_FORMULATION', 'CASE_DISPUTE_PROBLEM_FORMULATION',
   'CASE_CORRECT_PROBLEM_FORMULATION', 'CASE_REASSESS_FROM_FORMULATION',
   'CASE_ENTER_SAFETY_HOLD', 'CASE_RESOLVE_RISK',
+  'CASE_READ_ASSESSMENT_SCENE', 'CASE_RESPOND_ASSESSMENT_SCENE',
+  'PHONE_USE_CONTRACT_CONFIRM_SELF',
   'PARTICIPATION_INVITE_CREATE', 'PARTICIPATION_READ_SELF',
   'PARTICIPATION_ACCEPT_SELF', 'PARTICIPATION_DECLINE_SELF',
   'PARTICIPATION_WITHDRAW_SELF', 'PARTICIPATION_READ_MANAGER',
@@ -179,6 +234,7 @@ const REGISTERED_ACTIONS: Action[] = [
 
 const REGISTERED_PURPOSES: Purpose[] = [
   'SELF_IDENTITY', 'FAMILY_MANAGEMENT', 'GUARDIAN_CONSENT', 'PARTICIPATION', 'IDENTITY_BINDING',
+  'PHONE_USE_CONTRACT',
 ];
 
 const BINDING_ACTIONS: Action[] = [
@@ -205,6 +261,11 @@ const CASE_ACTIONS: Action[] = [
   'CASE_CONFIRM_PROBLEM_FORMULATION', 'CASE_DISPUTE_PROBLEM_FORMULATION',
   'CASE_CORRECT_PROBLEM_FORMULATION', 'CASE_REASSESS_FROM_FORMULATION',
   'CASE_ENTER_SAFETY_HOLD', 'CASE_RESOLVE_RISK',
+  'CASE_READ_ASSESSMENT_SCENE', 'CASE_RESPOND_ASSESSMENT_SCENE',
+];
+
+const PHONE_USE_CONTRACT_ACTIONS: Action[] = [
+  'PHONE_USE_CONTRACT_CONFIRM_SELF',
 ];
 
 const PARTICIPATION_ACTIONS: Action[] = [
@@ -412,6 +473,85 @@ function decideCaseAction(
 }
 
 /**
+ * Narrow phone-use Contract child-confirmation authorization.
+ *
+ * This function decides only WHO may attempt confirmation. It deliberately
+ * does not inspect Contract status/currentness/draft revision/transition
+ * eligibility; those remain the future Slice 14 Contract aggregate's domain
+ * invariants. All facts arrive from the caller's same transaction.
+ */
+function decidePhoneUseContractAction(
+  input: AuthInput,
+  facts: AuthorizeFacts,
+  actorPersonId: string
+): Decision {
+  if (input.action !== 'PHONE_USE_CONTRACT_CONFIRM_SELF') {
+    return deny('UNSUPPORTED_ACTION');
+  }
+  if (input.purpose !== 'PHONE_USE_CONTRACT') {
+    return deny('UNSUPPORTED_PURPOSE');
+  }
+  if ((input.actor.kind ?? 'ACCOUNT') !== 'ACCOUNT') {
+    return deny('NO_ACTOR');
+  }
+  if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
+  if (input.case === null) return deny('CASE_CONTEXT_REQUIRED');
+  if (input.resource.type !== 'PHONE_USE_CONTRACT_VERSION') {
+    return deny('CONTRACT_CONFIRMATION_CONTEXT_INVALID');
+  }
+  if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
+
+  const participation = input.participation ?? null;
+  if (participation === null) return deny('PARTICIPATION_CONTEXT_REQUIRED');
+  if (participation.personId !== actorPersonId) return deny('NOT_PARTICIPANT');
+  if (participation.state !== 'ACTIVE') return deny('PARTICIPATION_NOT_ACTIVE');
+  if (
+    !participation.participationId ||
+    !participation.familyId ||
+    !participation.caseId
+  ) {
+    return deny('CONTRACT_CONFIRMATION_CONTEXT_INVALID');
+  }
+
+  const confirmation = facts.phoneUseContractConfirmation ?? null;
+  if (confirmation === null) {
+    return deny('CONTRACT_CONFIRMATION_CONTEXT_INVALID');
+  }
+
+  // Only the exact CHILD party may confirm through this self action.
+  if (
+    input.resource.partyRole !== 'CHILD' ||
+    confirmation.contractPartyRole !== 'CHILD' ||
+    input.resource.partyPersonId !== actorPersonId ||
+    confirmation.contractPartyPersonId !== actorPersonId
+  ) {
+    return deny('NOT_CONTRACT_PARTY');
+  }
+
+  // Request scope, Contract facts and participation facts must all name the
+  // same Family + Case + Contract version + participation. Any mismatch fails
+  // closed; no identifier supplied by the request establishes authority.
+  if (
+    input.resource.familyId !== input.family.familyId ||
+    input.resource.caseId !== input.case.caseId ||
+    confirmation.contractFamilyId !== input.family.familyId ||
+    confirmation.contractCaseId !== input.case.caseId ||
+    confirmation.contractVersionId !== input.resource.contractVersionId ||
+    confirmation.participationId !== participation.participationId ||
+    confirmation.participationFamilyId !== input.family.familyId ||
+    confirmation.participationCaseId !== input.case.caseId ||
+    confirmation.participationPersonId !== actorPersonId ||
+    confirmation.participationState !== 'ACTIVE' ||
+    participation.familyId !== input.family.familyId ||
+    participation.caseId !== input.case.caseId
+  ) {
+    return deny('CONTRACT_CONFIRMATION_CONTEXT_INVALID');
+  }
+
+  return allow(false, input.purpose, true);
+}
+
+/**
  * Slice 4 participation authorization. This decides who may attempt an
  * operation; lifecycle state transitions stay in the participation domain.
  */
@@ -476,20 +616,27 @@ export function authorize(input: AuthInput): Decision {
 
     const actorPersonId = input.actor.personId;
 
-    // 4. Participation actions use the single authorization entry point.
+    // 4. Narrow phone-use Contract child confirmation stays inside the single
+    //    authoritative authorize() entry and is evaluated before generic
+    //    participation/Case branches.
+    if (PHONE_USE_CONTRACT_ACTIONS.includes(input.action)) {
+      return decidePhoneUseContractAction(input, facts, actorPersonId);
+    }
+
+    // 5. Participation actions use the single authorization entry point.
     if (PARTICIPATION_ACTIONS.includes(input.action)) {
       return decideParticipationAction(input, facts, actorPersonId);
     }
 
-    // 5. Case actions: dedicated branch (D-6.2); Case increment only.
+    // 6. Case actions: dedicated branch (D-6.2); Case increment only.
     if (CASE_ACTIONS.includes(input.action)) {
       return decideCaseAction(input, facts, actorPersonId);
     }
 
-    // 6. Non-Case actions keep Slice 1 fail-closed behavior on the case dimension.
+    // 7. Non-Case actions keep Slice 1 fail-closed behavior on the case dimension.
     if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
 
-    // 6. Family-scoped actions require an explicit family context.
+    // 8. Family-scoped actions require an explicit family context.
     if (FAMILY_ACTIONS.includes(input.action) && input.family === null) {
       return deny('FAMILY_CONTEXT_REQUIRED');
     }

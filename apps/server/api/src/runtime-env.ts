@@ -8,6 +8,7 @@
  * `NODE_ENV` is treated as production when unset (fail-closed default).
  */
 
+import { MIN_EVIDENCE_PEPPER_LENGTH } from '@xiaoshuyin/contracts';
 import {
   FakeWechatProvider,
   type WechatAuthProvider,
@@ -71,7 +72,7 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
 
   // Required in every mode: there is deliberately no fallback value.
   const sessionSecret = required(env, 'SESSION_SECRET', MIN_SECRET_LENGTH);
-  const evidencePepper = required(env, 'EVIDENCE_HASH_PEPPER', MIN_SECRET_LENGTH);
+  const evidencePepper = required(env, 'EVIDENCE_HASH_PEPPER', MIN_EVIDENCE_PEPPER_LENGTH);
   const wechatAppId = required(env, 'WECHAT_APP_ID');
   const wechatAppSecret = required(env, 'WECHAT_APP_SECRET');
   const identityBindingSecret = required(env, 'IDENTITY_BINDING_SECRET', 32);

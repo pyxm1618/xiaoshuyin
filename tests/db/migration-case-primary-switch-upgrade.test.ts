@@ -84,6 +84,7 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_REASSESSMENT_STARTED',
     'CASE_RISK_RESOLVED',
     'CASE_SAFETY_HOLD_ENTERED',
+    'CASE_DIGITAL_USE_NODE_COMPLETED',
   ],
   business_audit_events_event_type_check: [
     'CASE_PRIMARY_SWITCHED',
@@ -95,6 +96,10 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_REASSESSMENT_STARTED',
     'CASE_RISK_RESOLVED',
     'CASE_SAFETY_HOLD_ENTERED',
+    'CONSENT_SUPPLEMENTAL_ASSESSMENT_GRANTED',
+    'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
+    'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
+    'DIGITAL_USE_NODE_COMPLETED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -106,6 +111,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_REASSESS_FROM_FORMULATION',
     'CASE_ENTER_SAFETY_HOLD',
     'CASE_RESOLVE_RISK',
+    'DIGITAL_USE_ASSESSMENT_RESUME',
+    'DIGITAL_USE_NODE_RESPONSE',
   ],
 };
 
@@ -228,6 +235,107 @@ const SLICE10_NEW_OBJECTS = [
   'trigger:compliance_feature_policies_overlap_update',
 ];
 
+/** Exact Slice 12 Scene persistence constraints created by migration 015. */
+const SLICE12_NEW_CONSTRAINTS = [
+  'scene_node_states_pkey',
+  'scene_node_states_id_not_null',
+  'scene_node_states_family_id_not_null',
+  'scene_node_states_case_id_not_null',
+  'scene_node_states_scene_package_version_not_null',
+  'scene_node_states_node_code_not_null',
+  'scene_node_states_source_node_code_not_null',
+  'scene_node_states_status_not_null',
+  'scene_node_states_branch_reason_codes_not_null',
+  'scene_node_states_input_refs_not_null',
+  'scene_node_states_output_refs_not_null',
+  'scene_node_states_entered_at_not_null',
+  'scene_node_states_revision_not_null',
+  'scene_node_states_case_family_fk',
+  'scene_node_states_case_node_key',
+  'scene_node_states_id_case_family_key',
+  'scene_node_states_revision_check',
+  'scene_node_states_package_check',
+  'scene_node_states_node_code_check',
+  'scene_node_states_source_node_code_check',
+  'scene_node_states_refs_shape_check',
+  'scene_node_states_completion_shape_check',
+  'scene_artifacts_pkey',
+  'scene_artifacts_id_not_null',
+  'scene_artifacts_family_id_not_null',
+  'scene_artifacts_case_id_not_null',
+  'scene_artifacts_scene_package_version_not_null',
+  'scene_artifacts_artifact_type_not_null',
+  'scene_artifacts_schema_version_not_null',
+  'scene_artifacts_source_node_code_not_null',
+  'scene_artifacts_data_not_null',
+  'scene_artifacts_owner_person_id_not_null',
+  'scene_artifacts_visibility_not_null',
+  'scene_artifacts_source_refs_not_null',
+  'scene_artifacts_revision_not_null',
+  'scene_artifacts_created_at_not_null',
+  'scene_artifacts_case_family_fk',
+  'scene_artifacts_owner_family_fk',
+  'scene_artifacts_id_case_family_key',
+  'scene_artifacts_supersedes_same_case_fk',
+  'scene_artifacts_revision_check',
+  'scene_artifacts_package_check',
+  'scene_artifacts_type_check',
+  'scene_artifacts_schema_version_check',
+  'scene_artifacts_source_node_check',
+  'scene_artifacts_type_source_check',
+  'scene_artifacts_data_shape_check',
+  'scene_artifacts_refs_shape_check',
+  'scene_artifacts_visibility_check',
+].sort();
+
+const SLICE12_NEW_OBJECTS = [
+  'enum:scene_node_status',
+  'table:scene_node_states',
+  'table:scene_artifacts',
+  'policy:scene_node_states_family_scope',
+  'policy:scene_artifacts_family_scope',
+  'trigger:scene_node_states_guard',
+  'trigger:scene_artifacts_insert_guard',
+].sort();
+
+/** Exact Slice 13 target persistence constraints created by migration 016. */
+const SLICE13_NEW_CONSTRAINTS = [
+  'digital_use_target_items_pkey',
+  'digital_use_target_items_id_not_null',
+  'digital_use_target_items_family_id_not_null',
+  'digital_use_target_items_case_id_not_null',
+  'digital_use_target_items_scene_package_version_not_null',
+  'digital_use_target_items_target_code_not_null',
+  'digital_use_target_items_selection_revision_not_null',
+  'digital_use_target_items_revision_not_null',
+  'digital_use_target_items_selected_not_null',
+  'digital_use_target_items_progress_evidence_refs_not_null',
+  'digital_use_target_items_help_history_refs_not_null',
+  'digital_use_target_items_source_refs_not_null',
+  'digital_use_target_items_created_by_person_id_not_null',
+  'digital_use_target_items_created_at_not_null',
+  'digital_use_target_items_case_family_fk',
+  'digital_use_target_items_creator_family_fk',
+  'digital_use_target_items_id_scope_key',
+  'digital_use_target_items_supersedes_scope_fk',
+  'digital_use_target_items_revision_key',
+  'digital_use_target_items_revision_check',
+  'digital_use_target_items_selection_revision_check',
+  'digital_use_target_items_package_check',
+  'digital_use_target_items_target_code_check',
+  'digital_use_target_items_target_text_check',
+  'digital_use_target_items_payload_shape_check',
+  'digital_use_target_items_supersession_shape_check',
+].sort();
+
+const SLICE13_NEW_OBJECTS = [
+  'table:digital_use_target_items',
+  'policy:digital_use_target_items_family_scope',
+  'trigger:digital_use_target_items_insert_guard',
+  'trigger:digital_use_target_items_update_guard',
+].sort();
+
+
 /** Constraints whose definitions 007 is authorized to rewrite. */
 const SLICE7_CONSTRAINT_CHANGES = [
   'case_events_event_type_check',
@@ -275,6 +383,38 @@ interface SeedIds {
   messageId: string;
   participationId: string;
 }
+
+/**
+ * Slice 1 Consent Owner — 01004 narrow post-merge remediation.
+ *
+ * Three guardian-oriented constraints are intentionally replaced by the
+ * purpose-discriminated branch (Frozen Spec FR-056 / FR-071). Every guardian
+ * clause is re-imposed by `consent_purpose_field_binding`, so no guardian
+ * invariant is dropped or widened.
+ */
+const CONSENT_OWNER_REPLACED_CONSTRAINTS = [
+  'consent_records_guardian_person_id_not_null',
+  'consent_records_guardian_account_id_not_null',
+  'consent_request_binding',
+];
+
+const CONSENT_OWNER_NEW_CONSTRAINTS = [
+  'consent_supplemental_case_fk',
+  'consent_supplemental_case_family_fk',
+  'consent_supplemental_actor_person_fk',
+  'consent_supplemental_actor_account_fk',
+  'consent_purpose_field_binding',
+  'consent_guardian_decision_set',
+  'consent_supplemental_evidence_shape',
+];
+
+const CONSENT_OWNER_NEW_OBJECTS = [
+  'trigger:consent_records_supplemental_insert_guard',
+  'trigger:consent_records_supplemental_update_guard',
+  'trigger:consent_records_supersede_purpose_guard',
+];
+
+const CONSENT_OWNER_CHANGED_CONSTRAINTS = ['business_audit_events_event_type_check'];
 
 describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)', () => {
   let admin: Client;
@@ -373,7 +513,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 5 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 10 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -420,7 +560,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       expect(afterIdempotencyLiterals).toContain(literal);
     }
 
-    // Only the approved Slice 7 literals were added — exactly, not more.
+    // Only explicitly reviewed later-slice literals were added — exactly, not more.
     const added = (after: string[], before: string[]) => after.filter((v) => !before.includes(v));
     expect([...added(afterCaseEventLiterals, beforeCaseEventLiterals)].sort()).toEqual(
       [...SLICE7_AND_SLICE8_APPROVED_LITERALS.case_events_event_type_check].sort()
@@ -445,8 +585,20 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeConstraintNames = Object.keys(beforeConstraints).sort();
     const afterConstraintNames = Object.keys(afterConstraints).sort();
     for (const name of beforeConstraintNames) {
+      if (CONSENT_OWNER_REPLACED_CONSTRAINTS.includes(name)) continue;
       expect(afterConstraintNames).toContain(name);
     }
+    // The replaced guardian invariants are re-imposed by the purpose branch.
+    for (const name of CONSENT_OWNER_REPLACED_CONSTRAINTS.slice(0, 2)) {
+      expect(afterConstraintNames).not.toContain(name);
+    }
+    expect(afterConstraintNames).toContain('consent_purpose_field_binding');
+    expect(afterConstraints['consent_purpose_field_binding']).toContain(
+      "guardian_person_id IS NOT NULL"
+    );
+    expect(afterConstraints['consent_purpose_field_binding']).toContain(
+      "guardian_account_id IS NOT NULL"
+    );
     const newConstraints = afterConstraintNames.filter(
       (name) => !beforeConstraintNames.includes(name)
     );
@@ -455,16 +607,28 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE8_NEW_CONSTRAINTS,
         ...SLICE9_RISK_EVENT_CONSTRAINTS,
         ...SLICE10_NEW_CONSTRAINTS,
+        ...CONSENT_OWNER_NEW_CONSTRAINTS,
+        ...SLICE12_NEW_CONSTRAINTS,
+        ...SLICE13_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
-      (name) => afterConstraints[name] !== beforeConstraints[name]
+      (name) => afterConstraintNames.includes(name) && afterConstraints[name] !== beforeConstraints[name]
     );
+    // `business_audit_events_event_type_check` is already part of the Slice 7
+    // set; the Consent remediation extends that same constraint, so this is a
+    // union of changed constraint names, never a duplicated literal.
     expect(changedConstraints.sort()).toEqual(
-      [...SLICE7_CONSTRAINT_CHANGES, 'business_audit_events_resource_type_check'].sort()
+      [
+        ...new Set([
+          ...SLICE7_CONSTRAINT_CHANGES,
+          'business_audit_events_resource_type_check',
+          ...CONSENT_OWNER_CHANGED_CONSTRAINTS,
+        ]),
+      ].sort()
     );
 
-    // Exactly the reviewed Slice 8 + Slice 9 objects are added; legacy entries survive.
+    // Exactly the reviewed later-slice objects are added; legacy entries survive.
     const beforeSet = new Set(beforeObjects.split('|'));
     const afterFingerprint = await objectFingerprint(seed);
     const afterSet = new Set(afterFingerprint.split('|'));
@@ -476,6 +640,9 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...SLICE10_NEW_OBJECTS,
       'policy:risk_events_family_scope',
       'table:risk_events',
+      ...CONSENT_OWNER_NEW_OBJECTS,
+      ...SLICE12_NEW_OBJECTS,
+      ...SLICE13_NEW_OBJECTS,
     ].sort());
 
     // Column-level UPDATE grant, never table-level.
@@ -503,7 +670,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 12 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 17 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -521,6 +688,11 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '009_safety_hold_control_foundation.sql',
       '010_problem_formulation_safety_vocabulary_reconcile.sql',
       '011_compliance_feature_policy_foundation.sql',
+      '012_consent_01004_supplemental_enums.sql',
+      '013_consent_01004_supplemental_assessment.sql',
+      '014_consent_01004_cross_purpose_supersede_guard.sql',
+      '015_digital_use_assessment_runtime.sql',
+      '016_digital_use_family_alliance_runtime.sql',
     ]);
   }, 180_000);
 });

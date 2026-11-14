@@ -430,6 +430,66 @@ export interface PresentProblemFormulationInput extends MutationInput {
   content: ProblemFormulationContent;
 }
 
+export interface PrepareProblemFormulationInput {
+  actor: ServiceActor;
+  familyId: string;
+  caseId: string;
+  content: ProblemFormulationContent;
+}
+
+export interface PreparedProblemFormulationOwnerResult {
+  /**
+   * Exact mandatory dependency set computed by the Slice 8 owner from the
+   * authoritative Evidence + current Compliance facts. Callers may add
+   * non-owner provenance dependencies, but must never recompute this set.
+   */
+  mandatoryDependencyRefs: DependencyRef[];
+}
+
+/**
+ * Caller-owned preparation seam for downstream composers such as Slice 12.
+ *
+ * This is not a second Problem Formulation implementation. It exposes the
+ * existing owner pipeline:
+ *   authorize -> validateFormulationContent -> processingPersonIds
+ *   -> runComplianceGate -> mandatoryDependencies
+ *
+ * Crucially it acquires NO Family/Case row lock. The caller can therefore use
+ * it to build an owner-valid candidate before invoking
+ * presentProblemFormulationInTransaction(), whose authoritative implementation
+ * still owns Family -> Case -> Problem Formulation lock ordering.
+ */
+export async function prepareProblemFormulationInTransaction(
+  tx: pg.PoolClient,
+  input: PrepareProblemFormulationInput
+): Promise<PreparedProblemFormulationOwnerResult> {
+  await authorize(tx, {
+    actor: input.actor,
+    familyId: input.familyId,
+    caseId: input.caseId,
+    action: 'CASE_PRESENT_PROBLEM_FORMULATION',
+  });
+
+  const caseRow = await getCaseById(tx, input.caseId);
+  if (!caseRow) throw httpError('CASE_NOT_FOUND', 'Case not found');
+
+  const authoritative = await validateFormulationContent(
+    tx,
+    input.caseId,
+    input.content
+  );
+  const persons = await processingPersonIds(tx, {
+    actor: input.actor,
+    caseRow,
+    authoritative,
+  });
+  const compliance = await runComplianceGate(tx, persons);
+
+  return {
+    mandatoryDependencyRefs: mandatoryDependencies(authoritative, compliance),
+  };
+}
+
 /** The RLS context every Slice 8 command runs under (public and in-tx alike). */
 function familyManagementRlsContext(input: {
   actor: ServiceActor;
