@@ -346,6 +346,35 @@ describe('candidate-facing anti-enumeration', () => {
     }
     expect(realReplay.json().pairingChallenge).toBe(realFirst.json().pairingChallenge);
     expect(decoyReplay.json().pairingChallenge).toBe(decoyFirst.json().pairingChallenge);
+
+    // Real issuance stays consumable while the attempt is PENDING; the decoy
+    // path is stateless after terminal settlement and must not recreate any
+    // pairing_issuance_* row state that could violate one-time/cleanup semantics.
+    const realIssuance = await h.admin.query(
+      `SELECT count(*)::int AS n
+         FROM binding_pending_contexts c
+         JOIN binding_attempts a ON a.id = c.attempt_id
+        WHERE a.target_person_id = $1
+          AND c.pairing_issuance_id IS NOT NULL
+          AND c.pairing_issued_at IS NOT NULL
+          AND c.pairing_expires_at IS NOT NULL`,
+      [eligible.targetPersonId]
+    );
+    expect(realIssuance.rows[0].n).toBe(1);
+
+    const decoyIssuance = await h.admin.query(
+      `SELECT count(*)::int AS n
+         FROM binding_pending_contexts c
+         JOIN binding_attempts a ON a.id = c.attempt_id
+        WHERE a.target_person_id = $1
+          AND (
+            c.pairing_issuance_id IS NOT NULL
+            OR c.pairing_issued_at IS NOT NULL
+            OR c.pairing_expires_at IS NOT NULL
+          )`,
+      [hidden.targetPersonId]
+    );
+    expect(decoyIssuance.rows[0].n).toBe(0);
   });
 
   it('true Case B mismatch (P1 bound to A, candidate authenticates as B) is generically indistinguishable', async () => {
