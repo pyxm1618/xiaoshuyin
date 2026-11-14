@@ -29,7 +29,6 @@ interface Fixture {
   caseVersion: number;
 }
 
-const REVIEW_FEATURE = 'DIGITAL_USE_A5001_FAMILY_ALLIANCE_REVIEW_RUNTIME';
 const FAMILY_FEATURE = 'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME';
 
 describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
@@ -74,21 +73,9 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     });
     await migrator.connect();
     await ensureBaselinePolicy(FAMILY_FEATURE);
-    await ensureBaselinePolicy(REVIEW_FEATURE);
   });
 
   afterAll(async () => {
-    await admin.query(
-      `UPDATE compliance_feature_policies
-          SET superseded_by_policy_id = NULL
-        WHERE feature_code=$1 AND feature_contract_revision='v1'`,
-      [REVIEW_FEATURE]
-    ).catch(() => undefined);
-    await admin.query(
-      `DELETE FROM compliance_feature_policies
-        WHERE feature_code=$1 AND feature_contract_revision='v1'`,
-      [REVIEW_FEATURE]
-    ).catch(() => undefined);
     await appDb.end().catch(() => undefined);
     await migrator.end().catch(() => undefined);
     await admin.end().catch(() => undefined);
@@ -399,6 +386,15 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
       partialTarget: true,
     });
     const before = await a5001Counts(f);
+    expect(before.scene).toBe(0);
+    expect(scene.nodes.find((item: any) => item.nodeCode === 'A5001')).toBeUndefined();
+    expect(
+      scene.reachableNodes.find((item: any) => item.nodeCode === 'A5001')
+    ).toMatchObject({
+      nodeCode: 'A5001',
+      entryModes: expect.arrayContaining(['USER_INITIATED', 'SCHEDULED']),
+      reasonCode: 'USER_INITIATED_AVAILABLE',
+    });
 
     const result = await a5001Request(
       f,
@@ -710,7 +706,7 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     expect(counts.audits).toBe(1);
   });
 
-  it('AS-32-36 rechecks Safety, A5001 Compliance identity and Consent independently', async () => {
+  it('AS-32-36 rechecks Safety, Family Alliance Compliance and Consent independently', async () => {
     const safety = await prepareA5001('safety');
     await admin.query(`UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1`, [
       safety.f.caseId,
@@ -728,7 +724,7 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     await admin.query(
       `DELETE FROM compliance_feature_policies
         WHERE feature_code=$1 AND feature_contract_revision='v1'`,
-      [REVIEW_FEATURE]
+      [FAMILY_FEATURE]
     );
     try {
       const complianceBlocked = await a5001Request(
@@ -740,7 +736,7 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
       expect(complianceBlocked.json().code).toBe('COMPLIANCE_BLOCKED');
       expect((await a5001Counts(compliance.f)).artifacts).toBe(0);
     } finally {
-      await ensureBaselinePolicy(REVIEW_FEATURE);
+      await ensureBaselinePolicy(FAMILY_FEATURE);
     }
 
     const consent = await prepareA5001('consent');
