@@ -1175,7 +1175,11 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         response: selfAssessment(),
       },
     });
-    expect(participantAttempt.statusCode).toBe(403);
+    // Preserve the repository anti-enumeration contract: an authorized
+    // participant without Family Alliance mutation authority cannot learn
+    // whether the protected Case exists through this mutation surface.
+    expect(participantAttempt.statusCode).toBe(404);
+    expect(participantAttempt.json().code).toBe('CASE_NOT_FOUND');
 
     // Wrong-Case/Evidence/target references and child-source attribution are
     // not request capabilities at all: the strict node payload rejects them.
