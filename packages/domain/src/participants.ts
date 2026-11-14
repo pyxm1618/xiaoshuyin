@@ -221,6 +221,24 @@ export async function hasLiveParticipation(
   return rows[0]?.exists === true;
 }
 
+/** Lock the unique stale PENDING row before duplicate-invite evaluation. */
+export async function lockExpiredPendingParticipationByCasePerson(
+  tx: PoolClient,
+  caseId: string,
+  personId: string
+): Promise<ParticipationRow | null> {
+  const { rows } = await tx.query<ParticipationRow>(
+    `SELECT ${PARTICIPATION_COLUMNS}
+       FROM case_participants
+      WHERE case_id=$1 AND person_id=$2
+        AND state='PENDING' AND invite_expires_at <= now()
+      FOR UPDATE`,
+    [caseId, personId]
+  );
+  if (rows.length > 1) throw new Error('MULTIPLE_STALE_PENDING_PARTICIPATIONS');
+  return rows[0] ?? null;
+}
+
 export async function getParticipationById(
   tx: PoolClient,
   participationId: string
