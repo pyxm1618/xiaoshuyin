@@ -382,7 +382,8 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
 async function assertUnionConstraints(
   client: Client,
   includeSupplementalConsentAudit = true,
-  includeSlice12 = includeSupplementalConsentAudit
+  includeSlice12 = includeSupplementalConsentAudit,
+  includeSlice14 = includeSlice12
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -460,6 +461,15 @@ async function assertUnionConstraints(
         ]
       : []),
     ...(includeSlice12 ? ['DIGITAL_USE_NODE_COMPLETED'] : []),
+    ...(includeSlice14
+      ? [
+          'PHONE_USE_CONTRACT_DRAFT_SAVED',
+          'PHONE_USE_CONTRACT_CONFIRMED',
+          'PHONE_USE_CONTRACT_ACTIVATED',
+          'PHONE_USE_CONTRACT_SUPERSEDED',
+          'PHONE_USE_ROLEPLAY_RECORDED',
+        ]
+      : []),
   ]);
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
@@ -498,6 +508,17 @@ async function assertUnionConstraints(
     ...SLICE9_COMMANDS,
     ...(includeSlice12
       ? ['DIGITAL_USE_ASSESSMENT_RESUME', 'DIGITAL_USE_NODE_RESPONSE']
+      : []),
+    ...(includeSlice14
+      ? [
+          'PHONE_USE_CONTRACT_DRAFT_SAVE',
+          'PHONE_USE_CONTRACT_CONFIRM',
+          'PHONE_USE_CONTRACT_REVISE',
+          'PHONE_USE_ROLEPLAY_CREATE',
+          'PHONE_USE_ROLEPLAY_TURN',
+          'PHONE_USE_ROLEPLAY_RATE',
+          'PHONE_USE_ROLEPLAY_SELECT',
+        ]
       : []),
   ]);
   const commandLiterals = literalsOf(definitions.get('idempotency_keys_command_type_check')!);
