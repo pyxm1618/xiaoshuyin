@@ -1732,6 +1732,46 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(rows.rows[0].n).toBe(0);
   });
 
+  it('Slice 14 A4003 denies MINOR and UNKNOWN actors before adapter/session creation', async () => {
+    for (const [label,ageBand,expectedCode] of [
+      ['minor','MINOR_14_17','FORBIDDEN'],
+      ['unknown','UNKNOWN','AGE_BAND_UNKNOWN'],
+    ] as const) {
+      const f = await fixture(`s14-roleplay-${label}`);
+      await forceSceneNode(f,'A4003');
+      await admin.query(
+        `UPDATE person_compliance_profiles
+            SET age_band=$2,
+                minor_mode=CASE WHEN $2='MINOR_14_17' THEN true ELSE false END,
+                guardian_person_id=NULL,
+                guardian_consent_record_id=NULL,
+                guardian_consent_version=NULL,
+                verified_source='SELF_STATEMENT',
+                updated_at=now()
+          WHERE person_id=$1`,
+        [f.manager.personId,ageBand]
+      );
+
+      const response = await app.inject({
+        method:'POST',
+        url:`/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+        headers:commandHeaders(f.manager.token,`s14-roleplay-${label}-deny`),
+        payload:{
+          expectedCaseVersion:f.caseVersion,
+          professionalContentVersion:'phone-use-contract-v1',
+        },
+      });
+      expect(response.statusCode,response.body).toBe(403);
+      expect(response.json().code).toBe(expectedCode);
+
+      const sessions=await admin.query(
+        `SELECT count(*)::int AS n FROM roleplay_sessions WHERE case_id=$1`,
+        [f.caseId]
+      );
+      expect(sessions.rows[0].n).toBe(0);
+    }
+  });
+
   it('Slice 14 test-only deterministic A4003 remains SIMULATION and routes through the official Manifest', async () => {
     const adapter: RoleplayAdapter = {
       adapterRef: 'test:deterministic-roleplay-v1',
@@ -2142,6 +2182,115 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
     expect(childRead.statusCode,childRead.body).toBe(200);
     expect(childRead.json().id).toBe(childConfirm.json().id);
+
+    const faq=await app.inject({
+      method:'GET',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/faq`,
+      headers:auth(f.manager.token),
+    });
+    expect(faq.statusCode,faq.body).toBe(200);
+    expect(faq.json().contract).toEqual({
+      id:childConfirm.json().id,
+      version:1,
+      status:'ACTIVE',
+    });
+    expect(faq.json().topics.length).toBeGreaterThanOrEqual(15);
+
+    const supportFaq=await respondSceneNode(
+      f,'A4011',1,
+      {
+        action:'FAQ_VIEWED',
+        topic:'CONTRACT_DURATION',
+        contractVersionId:childConfirm.json().id,
+        contractVersion:1,
+      },
+      `s14-support-faq-${crypto.randomUUID()}`
+    );
+    expect(supportFaq.statusCode,supportFaq.body).toBe(200);
+    const supportState=await admin.query(
+      `SELECT revision,status FROM scene_node_states
+        WHERE case_id=$1 AND node_code='A4011'`,
+      [f.caseId]
+    );
+    expect(supportState.rows[0]).toMatchObject({revision:2,status:'IN_PROGRESS'});
+
+    const aiUnavailable=await respondSceneNode(
+      f,'A4011',2,
+      {
+        action:'PERSONALIZED_AI_SUPPORT',
+        prompt:'How should I discuss tonight?',
+        contractVersionId:childConfirm.json().id,
+        contractVersion:1,
+      },
+      `s14-support-ai-${crypto.randomUUID()}`
+    );
+    expect(aiUnavailable.statusCode,aiUnavailable.body).toBe(409);
+    expect(aiUnavailable.json().code).toBe('DOWNSTREAM_AI_UNAVAILABLE');
+
+    const reminderUnavailable=await respondSceneNode(
+      f,'A4011',2,
+      {
+        action:'FOLLOWUP_REMINDER',
+        contractVersionId:childConfirm.json().id,
+        contractVersion:1,
+      },
+      `s14-support-reminder-${crypto.randomUUID()}`
+    );
+    expect(reminderUnavailable.statusCode,reminderUnavailable.body).toBe(409);
+    expect(reminderUnavailable.json().code).toBe('PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE');
+
+    const beforeToolReentry=await admin.query(
+      `SELECT status,draft_revision,phone_use_rules,parent_confirmation,child_confirmation
+         FROM digital_use_contract_versions
+        WHERE id=$1`,
+      [childConfirm.json().id]
+    );
+    const catalogState=await admin.query(
+      `SELECT revision,status FROM scene_node_states WHERE case_id=$1 AND node_code='A4004'`,
+      [f.caseId]
+    );
+    expect(catalogState.rows[0].status).toBe('COMPLETED');
+
+    const reenteredCatalog=await respondSceneNode(
+      f,'A4004',catalogState.rows[0].revision,
+      {tool:'INCENTIVE'},
+      `s14-support-tool-reentry-${crypto.randomUUID()}`
+    );
+    expect(reenteredCatalog.statusCode,reenteredCatalog.body).toBe(200);
+    const incentiveNode=await admin.query(
+      `SELECT status FROM scene_node_states WHERE case_id=$1 AND node_code='A4007'`,
+      [f.caseId]
+    );
+    expect(incentiveNode.rows[0].status).toBe('AVAILABLE');
+
+    const afterToolReentry=await admin.query(
+      `SELECT status,draft_revision,phone_use_rules,parent_confirmation,child_confirmation
+         FROM digital_use_contract_versions
+        WHERE id=$1`,
+      [childConfirm.json().id]
+    );
+    expect(afterToolReentry.rows[0]).toEqual(beforeToolReentry.rows[0]);
+
+    await admin.query(`UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1`,[f.caseId]);
+    const safetyBlocked=await respondSceneNode(
+      f,'A4011',2,
+      {
+        action:'FAQ_VIEWED',
+        topic:'CONTRACT_DURATION',
+        contractVersionId:childConfirm.json().id,
+        contractVersion:1,
+      },
+      `s14-support-safety-${crypto.randomUUID()}`
+    );
+    expect(safetyBlocked.statusCode,safetyBlocked.body).toBe(409);
+    expect(safetyBlocked.json().code).toBe('SAFETY_HOLD_BLOCKED');
+
+    const historical=await admin.query(
+      `SELECT status,draft_revision,phone_use_rules,parent_confirmation,child_confirmation
+         FROM digital_use_contract_versions WHERE id=$1`,
+      [childConfirm.json().id]
+    );
+    expect(historical.rows[0]).toEqual(beforeToolReentry.rows[0]);
   });
 
   it('Slice 14 activation fault rolls child confirmation back with Scene/Contract truth', async () => {
