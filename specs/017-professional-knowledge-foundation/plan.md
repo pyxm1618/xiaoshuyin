@@ -436,9 +436,11 @@ Review and publication require real accountable authenticated actors.
 
 T1701 must locate the approved professional-content authority seam. It may expose one or multiple capabilities such as:
 - create/edit professional draft;
+- read unpublished professional content;
 - review professional content;
 - publish professional content;
-- retire professional content.
+- retire professional content;
+- read published professional content.
 
 This Plan does not invent role names or separation-of-duties rules. The same human may hold multiple approved capabilities only if the authoritative seam says so.
 
@@ -468,9 +470,17 @@ Mutation must:
 
 If the merged upstream system has no sanctioned professional-asset DB authorization/RLS/grant seam, implementation remains blocked. Slice 17 must not create a second auth system.
 
-### 14.2 Published professional reads
+### 14.2 Professional asset read authorization
 
-Published Knowledge contains no family private data. Read access may use the professional asset read policy established by the same authority.
+Read visibility is explicit and never inferred from lifecycle status alone:
+
+- DRAFT / REVIEWED versions are nonproduction assets. They are readable only by authenticated actors/services holding an explicit `professional-content read-unpublished` capability (or the exact equivalent exposed by the authoritative professional-content seam). Reviewer access is therefore a real authorized read, not a side effect of knowing an item ID.
+- PUBLISHED versions remain professional assets. Internal/runtime reads require the authoritative `read-published` capability or equivalent service authority. Family-facing use is not a direct professional-asset browse permission; it must enter through the case-scoped consumption contract in §14.3 and §15.
+- RETIRED versions are historical professional assets. Historical read requires the same explicit privileged professional/history read authority; retirement does not make the content public.
+- Ordinary Family membership, Case ownership, paid status, Knowledge ID possession, package membership, reviewer identity strings or client flags grant none of these read capabilities.
+- Slice 17 adds no public professional Knowledge catalog/browse/search endpoint. If a future product wants direct public reading, that requires separate authority/product review.
+
+If the merged authoritative professional-content seam cannot express the needed unpublished/published read boundary, T1701 remains BLOCKED. Slice 17 must not invent a shadow ACL/RBAC table to compensate.
 
 ### 14.3 Case-scoped consumption
 
