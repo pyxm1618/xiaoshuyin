@@ -214,7 +214,8 @@ export async function hasLiveParticipation(
   const { rows } = await tx.query<{ exists: boolean }>(
     `SELECT EXISTS (
        SELECT 1 FROM case_participants
-       WHERE case_id=$1 AND person_id=$2 AND state IN ('PENDING','ACTIVE')
+       WHERE case_id=$1 AND person_id=$2
+         AND (state='ACTIVE' OR (state='PENDING' AND invite_expires_at > now()))
      ) AS exists`,
     [caseId, personId]
   );
