@@ -19,6 +19,7 @@ import {
   APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY,
   CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE,
   DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+  getCurrentNoticeHash,
   recordPurposeScopedConsentDecision,
 } from '@xiaoshuyin/compliance';
 
@@ -244,6 +245,92 @@ describe('T1218 Digital Use runtime hardening', () => {
       await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON ${input.table}`);
       await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
     };
+  }
+
+  async function makeUnder14Consent(
+    f: Fixture,
+    child: LoginResult
+  ): Promise<{ consentId: string; noticeHash: string }> {
+    const noticeHash=getCurrentNoticeHash();
+    const request=await admin.query<{id:string}>(
+      `INSERT INTO guardian_consent_requests
+        (family_id,guardian_person_id,subject_person_id,declared_age_band,
+         notice_version,notice_hash,status,expires_at,completed_at)
+       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',
+               now()+interval '24 hours',now())
+       RETURNING id`,
+      [f.familyId,f.manager.personId,child.personId,noticeHash]
+    );
+    const evidence={
+      channel:'TEST',
+      accepted_text_hash:'a'.repeat(64),
+      declared_age_band:'UNDER_14',
+      client_ip_hash:'b'.repeat(64),
+      user_agent_hash:'c'.repeat(64),
+    };
+    const consent=await admin.query<{id:string}>(
+      `INSERT INTO consent_records
+        (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,
+         onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,
+         policy_version,evidence)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,
+               $4,$5,now(),'v1',$6,'v1',$7::jsonb)
+       RETURNING id`,
+      [
+        f.familyId,f.manager.personId,f.manager.accountId,request.rows[0]!.id,
+        child.personId,noticeHash,JSON.stringify(evidence),
+      ]
+    );
+    await admin.query(
+      `UPDATE person_compliance_profiles
+          SET age_band='UNDER_14',
+              minor_mode=true,
+              guardian_person_id=$2,
+              guardian_consent_record_id=$3,
+              guardian_consent_version=1,
+              verified_source='GUARDIAN_RELAY',
+              updated_at=now()
+        WHERE person_id=$1`,
+      [child.personId,f.manager.personId,consent.rows[0]!.id]
+    );
+    return {consentId:consent.rows[0]!.id,noticeHash};
+  }
+
+  async function revokeUnder14Consent(
+    f: Fixture,
+    child: LoginResult,
+    priorConsentId: string,
+    noticeHash: string
+  ): Promise<string> {
+    const evidence={
+      channel:'TEST',
+      accepted_text_hash:'d'.repeat(64),
+      declared_age_band:'UNDER_14',
+      client_ip_hash:'e'.repeat(64),
+      user_agent_hash:'f'.repeat(64),
+    };
+    const revoked=await admin.query<{id:string}>(
+      `INSERT INTO consent_records
+        (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,
+         onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,
+         policy_version,evidence,supersedes_id)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','REVOKED',2,
+               NULL,$4,now(),'v1',$5,'v1',$6::jsonb,$7)
+       RETURNING id`,
+      [
+        f.familyId,f.manager.personId,f.manager.accountId,child.personId,
+        noticeHash,JSON.stringify(evidence),priorConsentId,
+      ]
+    );
+    await admin.query(
+      `UPDATE person_compliance_profiles
+          SET guardian_consent_record_id=$2,
+              guardian_consent_version=2,
+              updated_at=now()
+        WHERE person_id=$1`,
+      [child.personId,revoked.rows[0]!.id]
+    );
+    return revoked.rows[0]!.id;
   }
 
   async function expectNodeUnchanged(
@@ -2291,6 +2378,145 @@ describe('T1218 Digital Use runtime hardening', () => {
       [childConfirm.json().id]
     );
     expect(historical.rows[0]).toEqual(beforeToolReentry.rows[0]);
+  });
+
+  it('Slice 14 blocks UNDER_14 Contract processing when guardian Consent is missing', async () => {
+    const f=await fixture('s14-consent-missing');
+    const child=await loginWithLabel(app,`s14-consent-missing-child-${crypto.randomUUID()}`);
+    await admin.query(
+      `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+      [f.familyId,child.personId]
+    );
+    await admin.query(
+      `UPDATE person_compliance_profiles
+          SET age_band='UNDER_14',
+              minor_mode=true,
+              guardian_person_id=$2,
+              guardian_consent_record_id=NULL,
+              guardian_consent_version=NULL,
+              verified_source='GUARDIAN_RELAY',
+              updated_at=now()
+        WHERE person_id=$1`,
+      [child.personId,f.manager.personId]
+    );
+    const p=await admin.query<{id:string}>(
+      `INSERT INTO case_participants
+        (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now()) RETURNING id`,
+      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+    );
+    await forceSceneNode(f,'A4004');
+    await admin.query(
+      `UPDATE scene_node_states
+          SET status='COMPLETED',completed_at=now(),revision=revision+1
+        WHERE case_id=$1 AND node_code='A4004'`,
+      [f.caseId]
+    );
+    const v=(value:string)=>({state:'VALUE',value});
+    const terms={
+      purpose:v('p'),phoneUseRules:v('r'),executionPeriod:v('e'),
+      parentSupportMeasures:v('s'),supervisionMeasures:v('m'),
+      incentives:v('i'),breachResponsibilities:v('b'),
+    };
+    const blocked=await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-consent-missing-draft'),
+      payload:{
+        expectedCaseVersion:f.caseVersion,
+        adultPartyPersonId:f.manager.personId,
+        childPartyPersonId:child.personId,
+        childParticipationId:p.rows[0]!.id,
+        sourceTemplateVersion:'phone-use-contract-v1',
+        dependencyRefs:[],
+        terms,
+      },
+    });
+    expect(blocked.statusCode,blocked.body).toBe(409);
+    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_CONSENT_BLOCKED');
+    const rows=await admin.query(
+      `SELECT count(*)::int AS n FROM digital_use_contract_versions WHERE case_id=$1`,
+      [f.caseId]
+    );
+    expect(rows.rows[0].n).toBe(0);
+  });
+
+  it('Slice 14 Consent revocation blocks future support but preserves historical ACTIVE Contract truth', async () => {
+    const f=await fixture('s14-consent-revoked');
+    const child=await loginWithLabel(app,`s14-consent-revoked-child-${crypto.randomUUID()}`);
+    await admin.query(
+      `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
+      [f.familyId,child.personId]
+    );
+    const consent=await makeUnder14Consent(f,child);
+    const p=await admin.query<{id:string}>(
+      `INSERT INTO case_participants
+        (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now()) RETURNING id`,
+      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+    );
+    await forceSceneNode(f,'A4004');
+    await admin.query(
+      `UPDATE scene_node_states
+          SET status='COMPLETED',completed_at=now(),revision=revision+1
+        WHERE case_id=$1 AND node_code='A4004'`,
+      [f.caseId]
+    );
+    const v=(value:string)=>({state:'VALUE',value});
+    const terms={
+      purpose:v('p'),phoneUseRules:v('r'),executionPeriod:v('e'),
+      parentSupportMeasures:v('s'),supervisionMeasures:v('m'),
+      incentives:v('i'),breachResponsibilities:v('b'),
+    };
+    const draft=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,'s14-consent-revoked-draft'),
+      payload:{
+        expectedCaseVersion:f.caseVersion,adultPartyPersonId:f.manager.personId,
+        childPartyPersonId:child.personId,childParticipationId:p.rows[0]!.id,
+        sourceTemplateVersion:'phone-use-contract-v1',dependencyRefs:[],terms,
+      },
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    const adult=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,'s14-consent-revoked-adult'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+    const childConfirm=await app.inject({
+      method:'POST',url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,'s14-consent-revoked-child-confirm'),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(childConfirm.statusCode,childConfirm.body).toBe(200);
+    expect(childConfirm.json().status).toBe('ACTIVE');
+
+    await revokeUnder14Consent(f,child,consent.consentId,consent.noticeHash);
+
+    const blocked=await app.inject({
+      method:'GET',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/faq`,
+      headers:auth(f.manager.token),
+    });
+    expect(blocked.statusCode,blocked.body).toBe(409);
+    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_CONSENT_BLOCKED');
+
+    const history=await admin.query(
+      `SELECT status,activated_at,superseded_at
+         FROM digital_use_contract_versions
+        WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(history.rows[0].status).toBe('ACTIVE');
+    expect(history.rows[0].activated_at).not.toBeNull();
+    expect(history.rows[0].superseded_at).toBeNull();
+    const docs=await admin.query(
+      `SELECT count(*)::int AS n FROM scene_artifacts
+        WHERE case_id=$1 AND artifact_type='PHONE_USE_CONTRACT_DOCUMENT'`,
+      [f.caseId]
+    );
+    expect(docs.rows[0].n).toBe(1);
   });
 
   it('Slice 14 activation fault rolls child confirmation back with Scene/Contract truth', async () => {
