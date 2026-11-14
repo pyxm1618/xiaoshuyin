@@ -96,6 +96,12 @@ export interface A5001SubjectSnapshot {
     readonly targetCode: DigitalUseTargetItemRow['target_code'];
     readonly revision: number;
     readonly selectionRevision: number;
+    readonly concreteTargetText: string | null;
+    readonly feasibility: DigitalUseTargetItemRow['feasibility_payload'];
+    readonly progress: DigitalUseTargetItemRow['progress_payload'];
+    readonly progressEvidenceRefs: readonly StoredSceneRef[];
+    readonly helpHistoryRefs: DigitalUseTargetItemRow['help_history_refs'];
+    readonly sourceRefs: readonly StoredSceneRef[];
   }[];
 }
 
@@ -146,6 +152,12 @@ export async function resolveA5001SubjectSnapshot(
         targetCode: target.target_code,
         revision: target.revision,
         selectionRevision: target.selection_revision,
+        concreteTargetText: target.concrete_target_text,
+        feasibility: target.feasibility_payload,
+        progress: target.progress_payload,
+        progressEvidenceRefs: target.progress_evidence_refs,
+        helpHistoryRefs: target.help_history_refs,
+        sourceRefs: target.source_refs,
       })),
   };
 }
@@ -161,7 +173,8 @@ function sourceRefsFor(
   subject: A5001SubjectSnapshot,
   a3001: SceneNodeStateRow | null,
   a3002: SceneNodeStateRow,
-  evidenceRefs: readonly StoredSceneRef[]
+  evidenceRefs: readonly StoredSceneRef[],
+  previousArtifactId?: string
 ): StoredSceneRef[] {
   const refs: StoredSceneRef[] = [
     {
@@ -170,10 +183,15 @@ function sourceRefsFor(
     },
     ...(a3001?.output_refs ?? []),
     ...a3002.output_refs,
-    ...subject.selectedTargets.map((target) => ({
-      type: 'TARGET_ITEM' as const,
-      id: target.id,
-    })),
+    ...subject.selectedTargets.flatMap((target) => [
+      { type: 'TARGET_ITEM' as const, id: target.id },
+      ...target.sourceRefs,
+      ...target.progressEvidenceRefs,
+      ...target.helpHistoryRefs.flatMap((entry) => entry.evidenceRefs),
+    ]),
+    ...(previousArtifactId === undefined
+      ? []
+      : [{ type: 'SCENE_ARTIFACT' as const, id: previousArtifactId }]),
     ...evidenceRefs,
   ];
   const seen = new Set<string>();
@@ -382,12 +400,18 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
       throw reviewError('FAMILY_ALLIANCE_ENTRY_BLOCKED');
     }
 
+    const previous = await getLatestSceneArtifact(
+      tx,
+      input.caseId,
+      ARTIFACT_TYPE
+    );
     const clientEvidenceRefs = parsed.data.evidenceRefs as StoredSceneRef[];
     const initialSourceRefs = sourceRefsFor(
       subject,
       a3001,
       a3002,
-      clientEvidenceRefs
+      clientEvidenceRefs,
+      previous?.id
     );
     if (
       !(await validateSceneRefs(tx, {
@@ -447,7 +471,13 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
       ...clientEvidenceRefs,
       ...recordedEvidenceRefs,
     ] as StoredSceneRef[];
-    const sourceRefs = sourceRefsFor(subject, a3001, a3002, evidenceRefs);
+    const sourceRefs = sourceRefsFor(
+      subject,
+      a3001,
+      a3002,
+      evidenceRefs,
+      previous?.id
+    );
 
     if (
       !(await validateSceneRefs(tx, {
@@ -459,11 +489,6 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
       throw reviewError('SCENE_RESPONSE_INVALID');
     }
 
-    const previous = await getLatestSceneArtifact(
-      tx,
-      input.caseId,
-      ARTIFACT_TYPE
-    );
     const artifact = await insertSceneArtifact(tx, {
         familyId: input.familyId,
         caseId: input.caseId,
@@ -493,7 +518,20 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
               targetItemId: target.id,
               selectionRevision: target.selectionRevision,
               targetRevision: target.revision,
+              concreteTargetText: target.concreteTargetText,
+              feasibility: target.feasibility,
+              progress: target.progress,
+              progressEvidenceRefs: target.progressEvidenceRefs,
+              helpHistoryRefs: target.helpHistoryRefs,
+              sourceRefs: target.sourceRefs,
             })),
+            priorReviewArtifact:
+              previous === null
+                ? null
+                : {
+                    artifactId: previous.id,
+                    revision: previous.revision,
+                  },
           },
           sourceRefs,
           evidenceRefs,
