@@ -3,7 +3,7 @@
 **Repository**: `pyxm1618/xiaoshuyin`  
 **Planning branch**: `plan/017-professional-knowledge-foundation`  
 **Frozen Spec authority**: `a345937868ca1b8d2cef65003d4197de4207eb52` / `866c3f77dd269c94d420d9c0ae6b918f114286ce`  
-**Planning status**: FROZEN only after Audit 1 FINAL PASS  
+**Planning status**: FROZEN — Audit 1 FINAL PASS / Planning Freeze PASS  
 **Implementation status at planning time**: NOT STARTED / IMPLEMENT GATE BLOCKED
 
 Only **T1701** may run while the Implement Gate is BLOCKED. T1701 is read-only. No schema, production code, migration, implementation test or implementation PR work may begin until T1701 proves every hard prerequisite and records `READY FOR DEVELOPMENT = YES`.
