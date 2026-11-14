@@ -12,6 +12,8 @@ import {
   createServerFeatureDescriptor,
   evaluateComplianceAtTransactionTime,
   getComplianceProfileForUpdate,
+  getConsentRecordForGate,
+  getCurrentNoticeHash,
   lockComplianceFeatureEvaluationBasis,
   type ComplianceObligation,
 } from '@xiaoshuyin/compliance';
@@ -108,14 +110,45 @@ async function evaluateFamilyAllianceCompliance(
   return { policyId: result.policyId, policyVersion: result.policyVersion };
 }
 
+async function assertFamilyAllianceConsentOwnerGate(
+  tx: pg.PoolClient,
+  actorPersonId: string
+): Promise<void> {
+  const profile = await getComplianceProfileForUpdate(tx, actorPersonId);
+  if (!profile || profile.age_band !== 'UNDER_14') return;
+
+  if (
+    !profile.guardian_person_id ||
+    !profile.guardian_consent_record_id ||
+    !profile.guardian_consent_version
+  ) {
+    throw familyHttpError('CONSENT_BLOCKED', 'GUARDIAN_CONSENT_REQUIRED');
+  }
+
+  const consent = await getConsentRecordForGate(
+    tx,
+    profile.guardian_consent_record_id
+  );
+  if (
+    !consent ||
+    consent.decision !== 'GRANTED' ||
+    consent.version !== profile.guardian_consent_version ||
+    consent.bound_person_id !== actorPersonId ||
+    consent.guardian_person_id !== profile.guardian_person_id ||
+    consent.notice_hash !== getCurrentNoticeHash()
+  ) {
+    throw familyHttpError('CONSENT_BLOCKED', 'GUARDIAN_CONSENT_INVALID');
+  }
+}
+
 async function pinAndAssertFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
   actorPersonId: string
 ): Promise<{ policyId: string | null; policyVersion: number | null }> {
-  // Consent owner seam: profile pointer + bound guardian consent are frozen by
-  // the profile row lock for the duration of the caller-owned transaction.
-  await getComplianceProfileForUpdate(tx, actorPersonId);
+  // Consent remains an independent owner: validate the authoritative guardian
+  // purpose/version/revocation gate before evaluating feature policy.
+  await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
   // Exact same advisory key as Slice 10 publisher/overlap guard.
   await lockComplianceFeatureEvaluationBasis(tx, FAMILY_ALLIANCE_FEATURE);
   const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId);
@@ -128,8 +161,9 @@ async function revalidateFamilyAllianceGates(
   caseId: string,
   actorPersonId: string
 ): Promise<void> {
-  // Profile/policy locks are still held. Re-evaluate immediately before the
-  // idempotency shell records success and the transaction commits.
+  // Profile/policy locks are still held. Revalidate Consent independently,
+  // then Compliance, immediately before idempotency success/commit.
+  await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
   await evaluateFamilyAllianceCompliance(tx, actorPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
 }
