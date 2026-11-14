@@ -230,6 +230,10 @@
 | AR09 | unauthorized existence disclosure is bounded | PASS | Plan §16 |
 | AR10 | reviewer identity/internal review notes are not leaked to family callers | PASS | Plan §16 |
 | AR11 | exact internal reason codes may remain internal/auditable | PASS | Plan §16 |
+| AR12 | DRAFT/REVIEWED read requires explicit authoritative read-unpublished capability | PASS | Plan §14.2 |
+| AR13 | PUBLISHED/RETIRED internal/history reads use explicit authoritative read policy; lifecycle status alone grants nothing | PASS | Plan §14.2 |
+| AR14 | no public Knowledge browse/catalog/search endpoint is authorized by this Slice | PASS | Plan §14.2/§16 |
+| AR15 | absent professional read capability keeps T1701 BLOCKED rather than creating shadow ACL/RBAC | PASS | Plan §14.2 |
 
 ## L. Idempotency / Concurrency / Atomicity / Timeout
 
