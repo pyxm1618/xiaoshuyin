@@ -3,7 +3,7 @@
 **Repository**: `pyxm1618/xiaoshuyin`  
 **Planning branch**: `plan/017-professional-knowledge-foundation`  
 **Frozen Spec**: `a345937868ca1b8d2cef65003d4197de4207eb52` / `866c3f77dd269c94d420d9c0ae6b918f114286ce`  
-**Status**: COMPLETE — Audit 1 PENDING  
+**Status**: COMPLETE — Audit 1 FINAL PASS / Planning Freeze PASS  
 **Interpretation**: PASS proves that the planning contract is explicit and verifiable. It never means the runtime Implement Gate is open. Current runtime dependency result is **BLOCKED**.
 
 ## A. Authority / Repository Truth
@@ -454,7 +454,7 @@
 
 ~~~text
 Planning Quality Gate:
-PENDING AUDIT 1
+PASS
 
 Runtime Dependency Gate:
 BLOCKED
@@ -468,6 +468,60 @@ NOT GRANTED
 
 Reason: current main does not contain merged Slice 16 professional owner/provenance integration, a real professional reviewer/publisher authority, a sanctioned global professional-asset audit path, or a proven Scene Package knowledge-set contribution owner. The correct behavior is to stop at T1701 rather than fabricate any of them.
 
-## Audit 1
+## Audit 1 — Pre-Development Planning Audit — FINAL
 
-Audit 1 is intentionally not pre-declared PASS in this initial checklist. Plan AI 2 must audit Frozen Spec vs Plan/Checklist/Tasks after all three planning artifacts exist. Any real finding is remediated only in those three planning files and Audit 1 is re-run.
+Audit scope: Frozen Spec vs Plan vs Checklist vs Tasks only. Production code is not an Audit 1 subject.
+
+| Question | Final result | Evidence |
+|---|---|---|
+| Q1 — Frozen Spec Integrity | PASS | commit/blob remain exact; `spec.md` unchanged |
+| Q2 — Requirement Coverage | PASS | FR 40/40, AS 41/41, NS 18/18 present in Plan/Checklist/Tasks with explicit mappings |
+| Q3 — Scope | PASS | no embedding/chunk/RAG/AI runtime/Phase 4/generic CMS/RBAC/workflow implementation is authorized |
+| Q4 — Owner Duplication | PASS | no second Case/Evidence/Formulation/Authorization/Consent/Compliance/Safety/Scene/Intervention/package owner |
+| Q5 — Lifecycle | PASS | DRAFT→REVIEWED→PUBLISHED→RETIRED, review invalidation, immutable publication, successor/retirement semantics closed |
+| Q6 — Professional Authority | PASS | fake reviewer/admin/developer/AI paths rejected; explicit create/edit/read-unpublished/review/publish/retire/read-published authority required |
+| Q7 — Package Binding | PASS | exact package contribution only through true owner/delegation; no latest/floating/second registry |
+| Q8 — Reliability | PASS | shared idempotency, CAS concurrency, one transaction, rollback, timeout outcome-unknown/readback all explicit |
+| Q9 — Security / Privacy | PASS | no family-private Knowledge, no raw copyrighted source archive, bounded anti-enumeration/read visibility |
+| Q10 — Implement Gate | PASS | current gate remains BLOCKED and Development Authorization remains NOT GRANTED |
+
+### Audit 1 Finding / Remediation History
+
+One real planning-only Finding was found on the first Audit 1 pass:
+
+~~~text
+S17-AUDIT1-AUTH-READ-01
+Severity: MEDIUM
+Type: AUTHORIZATION CONTRACT GAP
+Finding: Initial Plan did not mechanically specify who may read DRAFT/REVIEWED unpublished professional assets versus PUBLISHED/RETIRED assets.
+Risk: Developer could invent read permissions or expose unpublished content merely from lifecycle status.
+~~~
+
+Remediation changed only:
+- `plan.md`;
+- `checklist.md`;
+- `tasks.md`.
+
+Remediation:
+- added explicit authoritative `read-unpublished` requirement for DRAFT/REVIEWED;
+- added authoritative published/history read policy;
+- prohibited status-derived read access and public browse/search;
+- made missing read-authority seam a T1701 STOP condition;
+- preserved the ban on shadow ACL/RBAC.
+
+Re-Audit 1 result:
+
+~~~text
+CRITICAL 0
+HIGH     0
+MEDIUM   0
+LOW      0
+
+Planning Quality Gate: PASS
+Planning Freeze: PASS
+Runtime Dependency Gate: BLOCKED
+Implement Gate: BLOCKED
+Development Authorization: NOT GRANTED
+~~~
+
+No Frozen Spec, Docs, production code, test, migration, upstream artifact or main mutation occurred.
