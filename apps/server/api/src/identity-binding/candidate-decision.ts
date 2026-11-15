@@ -31,6 +31,7 @@ import {
   encodeDecoyPairingChallenge,
   decodePairingChallenge,
   decryptOpenid,
+  derivePairingIssuanceId,
   encodePairingChallenge,
   hashToken,
 } from './crypto.js';
@@ -341,25 +342,95 @@ function pairingWindow(
 }
 
 async function issueOrReplayDecoyChallenge(
-  _tx: pg.PoolClient,
+  tx: pg.PoolClient,
   deps: CandidateDecisionDeps,
   context: PendingContextRow
 ): Promise<string> {
+  const now = new Date();
+
+  // One candidate-facing observable policy: if this transport context already
+  // emitted a real envelope in the current PUBLIC context window, preserve
+  // those exact bytes through hidden settlement/consumption. Authoritative
+  // consumability is separate: settlement clears pairing_issuance_id and the
+  // verifier also requires a live PENDING attempt. The historical timestamps
+  // below therefore cannot revive or consume a retired challenge.
+  const continuity = await replayObservablePairingChallenge(tx, deps, context, now);
+  if (continuity) return continuity;
+
   const window =
-    pairingWindow(context, deps.pairingTtlSeconds, new Date()) ?? {
+    pairingWindow(context, deps.pairingTtlSeconds, now) ?? {
       startsAt: context.createdAt,
       expiresAt: context.expiresAt,
     };
 
-  // A decoy is intentionally stateless: terminal settlement must leave ZERO
-  // valid pairing issuance in binding_pending_contexts. The keyed encoder uses
-  // immutable context id + deterministic TTL window facts, so repeated calls
-  // in one observable window are byte-stable without creating consumable state.
+  // A true decoy is stateless: it creates no pairing issuance. The keyed PRF
+  // uses only immutable context/window facts, so repeated calls in one public
+  // window are byte-stable without creating consumable state.
   return encodeDecoyPairingChallenge(deps.identityBindingSecret, {
     contextId: context.id,
     pairingIssuanceId: context.id,
     pairingIssuedAt: window.startsAt,
     pairingExpiresAt: window.expiresAt,
+  });
+}
+
+async function replayObservablePairingChallenge(
+  tx: pg.PoolClient,
+  deps: CandidateDecisionDeps,
+  context: PendingContextRow,
+  now: Date
+): Promise<string | null> {
+  if (
+    !context.attemptId ||
+    !context.invitationParticipationId ||
+    !context.pairingIssuedAt ||
+    !context.pairingExpiresAt
+  ) {
+    return null;
+  }
+
+  // The hidden attempt upper bound is deliberately excluded here. Candidate
+  // bytes may remain stable only until the same context-only window boundary a
+  // from-scratch decoy would use; attempt expiry is never its own transition.
+  const publicWindow = pairingWindow(
+    context,
+    deps.pairingTtlSeconds,
+    context.pairingIssuedAt
+  );
+  if (!publicWindow || now.getTime() >= publicWindow.expiresAt.getTime()) {
+    return null;
+  }
+
+  await setBindingAttemptContext(tx, {
+    attemptId: context.attemptId,
+    identityDigest: context.candidateIdentityDigest,
+    invitationId: context.invitationParticipationId,
+  });
+  const attempt = await findById(tx, context.attemptId);
+  if (
+    !attempt ||
+    attempt.candidateIdentityDigest !== context.candidateIdentityDigest ||
+    attempt.invitationParticipationId !== context.invitationParticipationId
+  ) {
+    return null;
+  }
+
+  const identityFacts = {
+    contextId: context.id,
+    candidateIdentityDigest: context.candidateIdentityDigest,
+    attemptId: attempt.id,
+    targetPersonId: attempt.targetPersonId,
+    invitationParticipationId: attempt.invitationParticipationId,
+    pairingIssuedAt: context.pairingIssuedAt,
+    pairingExpiresAt: context.pairingExpiresAt,
+  };
+  const pairingIssuanceId =
+    context.pairingIssuanceId ??
+    derivePairingIssuanceId(deps.identityBindingSecret, identityFacts);
+
+  return encodePairingChallenge(deps.identityBindingSecret, {
+    ...identityFacts,
+    pairingIssuanceId,
   });
 }
 
@@ -479,10 +550,24 @@ async function issueOrReplayChallenge(
     (await hasKind(tx, attempt.id, 'CANDIDATE'));
 
   if (!reusable) {
+    const pairingIssuedAt = now;
+    const pairingExpiresAt = new Date(desiredExpiry);
+    const pairingIssuanceId = derivePairingIssuanceId(
+      deps.identityBindingSecret,
+      {
+        contextId: context.id,
+        candidateIdentityDigest: context.candidateIdentityDigest,
+        attemptId: attempt.id,
+        targetPersonId: attempt.targetPersonId,
+        invitationParticipationId: attempt.invitationParticipationId,
+        pairingIssuedAt,
+        pairingExpiresAt,
+      }
+    );
     const row = await setPairingIssuance(tx, context.id, {
-      pairingIssuanceId: randomUUID(),
-      pairingIssuedAt: now,
-      pairingExpiresAt: new Date(desiredExpiry),
+      pairingIssuanceId,
+      pairingIssuedAt,
+      pairingExpiresAt,
     });
     if (!row) return null;
     // H-01 rotation: a new valid issuance supersedes every older issuance of
