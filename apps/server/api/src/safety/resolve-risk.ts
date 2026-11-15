@@ -73,6 +73,17 @@ function httpError(code: string, message?: string) {
   return Object.assign(new Error(error.message), error);
 }
 
+function isStaffAuthorityDatabaseDenial(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '42501' &&
+    'message' in error &&
+    (error as { message?: unknown }).message === 'STAFF_ASSIGNMENT_REQUIRED'
+  );
+}
+
 function asSafetyWriteTx(tx: SafetyDrizzleTx): SafetyWriteTx {
   return tx as unknown as SafetyWriteTx;
 }
@@ -432,6 +443,9 @@ export async function resolveRisk(
       }
     );
   } catch (error) {
+    if (isStaffAuthorityDatabaseDenial(error)) {
+      throw httpError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
+    }
     if (isSafetyError(error)) throw httpError(error.code);
     throw error;
   }
