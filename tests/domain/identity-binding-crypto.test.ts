@@ -8,6 +8,7 @@ import {
   deriveAesKey,
   deriveIdentityDigest,
   deriveIdentityPepper,
+  derivePairingIssuanceId,
   derivePairingIssuanceNonce,
   encodeDecoyPairingChallenge,
   encodePairingChallenge,
@@ -117,6 +118,27 @@ describe('identity binding crypto', () => {
     expect(isPairingChallengeShape(challenge)).toBe(true);
     expect(challenge).not.toContain('openid');
     expect(challenge).not.toContain('AFFIRM');
+  });
+
+  it('REM2-005-M01: issuance identity is keyed, deterministic and fact-bound', () => {
+    const base = fixedFacts();
+    const {
+      pairingIssuanceId: _ignored,
+      ...identityFacts
+    } = base;
+    const first = derivePairingIssuanceId(SECRET, identityFacts);
+    const replay = derivePairingIssuanceId(SECRET, identityFacts);
+    const rotated = derivePairingIssuanceId(SECRET, {
+      ...identityFacts,
+      pairingIssuedAt: new Date(identityFacts.pairingIssuedAt.getTime() + 1),
+    });
+
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(replay).toBe(first);
+    expect(rotated).not.toBe(first);
+    expect(
+      derivePairingIssuanceId('different-secret-value-32-characters-long', identityFacts)
+    ).not.toBe(first);
   });
 
   it('same issuance deterministically reconstructs the exact same bytes', () => {
