@@ -438,6 +438,37 @@ $function$;
 REVOKE ALL ON FUNCTION app.set_staff_case_context(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.set_staff_case_context(uuid, uuid) TO xiaoshuyin_app;
 
+-- Final transition-time wall-clock guard. RLS predicates are evaluated while
+-- locating rows for UPDATE; the row may then wait before the physical write.
+-- Re-check the SAME database authority helper at the last transition point so
+-- authority that expires during that wait fails closed.
+CREATE FUNCTION app.guard_staff_resolve_transition()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  IF app_current_purpose() = 'SAFETY_RESOLUTION'
+     AND OLD.status = 'SAFETY_HOLD'
+     AND NEW.status = 'WAITING'
+     AND app.staff_case_authorized(OLD.id) IS NOT TRUE THEN
+    RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+REVOKE ALL ON FUNCTION app.guard_staff_resolve_transition() FROM PUBLIC;
+
+-- PostgreSQL fires same-kind triggers in name order. The zz_ prefix ensures
+-- deterministic execution after the regression barrier trigger, while still
+-- remaining a BEFORE UPDATE check at the physical transition boundary.
+CREATE TRIGGER zz_cases_staff_resolve_authority_guard
+  BEFORE UPDATE OF status ON cases
+  FOR EACH ROW
+  EXECUTE FUNCTION app.guard_staff_resolve_transition();
+
 -- Staff exact-Case policies are additive. Existing household Family policies
 -- are left byte-for-byte unchanged.
 CREATE POLICY cases_staff_safety_select ON cases
