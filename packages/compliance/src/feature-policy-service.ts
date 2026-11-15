@@ -26,8 +26,10 @@ import {
 export interface ComplianceEvaluationRequest {
   /** Must already be a server-resolved descriptor, never a request string. */
   readonly descriptor: ComplianceFeatureDescriptor;
+  /** Authenticated actor whose feature eligibility is evaluated. */
+  readonly actorPersonId: string;
   /** Target Person when the consuming command performs person processing. */
-  readonly personId: string | null;
+  readonly targetPersonId: string | null;
   /** Server-owned capability declaration; never request/client input. */
   readonly supportedObligations: readonly ComplianceObligation[];
 }
@@ -47,16 +49,23 @@ export async function loadComplianceEvaluationSnapshot(
     request.descriptor
   );
 
+  const actor = await loadCompliancePersonSnapshot(
+    personExecutor,
+    request.actorPersonId
+  );
   const person =
-    request.personId === null
+    request.targetPersonId === null
       ? null
-      : await loadCompliancePersonSnapshot(personExecutor, request.personId);
+      : request.targetPersonId === request.actorPersonId
+        ? actor
+        : await loadCompliancePersonSnapshot(personExecutor, request.targetPersonId);
 
   return {
     feature: request.descriptor,
     evaluatedAt: policySnapshot.evaluatedAt,
     candidatePolicies: policySnapshot.policies,
-    personProcessingRequired: request.personId !== null,
+    actor,
+    personProcessingRequired: request.targetPersonId !== null,
     person,
     currentNoticeHash: getCurrentNoticeHash(),
   };
