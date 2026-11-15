@@ -476,6 +476,22 @@ describe('AUTH-007/AUTH-008 production Safety resolver staff authority', () => {
     await expectDenied(staff, held);
   });
 
+  it('denies when the exact CASE assignment was revoked first', async () => {
+    const held = await createHeldCase();
+    const authority = await seedAuthority(staff, held.caseId);
+    expect(authority.assignmentId).not.toBeNull();
+
+    await admin.query(
+      `UPDATE staff_assignments
+          SET revoked_by_account_id = $2,
+              revoked_at = clock_timestamp()
+        WHERE id = $1`,
+      [authority.assignmentId, owner.accountId]
+    );
+
+    await expectDenied(staff, held);
+  });
+
   it('denies when the reviewer Account was DISABLED first', async () => {
     const held = await createHeldCase();
     await seedAuthority(staff, held.caseId);
