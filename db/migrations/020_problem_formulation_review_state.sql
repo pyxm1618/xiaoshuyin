@@ -19,7 +19,7 @@ DECLARE
 BEGIN
   SELECT count(*) INTO ambiguous_count
     FROM problem_formulations
-   WHERE status = 'NEEDS_REVIEW';
+   WHERE status::text = 'NEEDS_REVIEW';
 
   IF ambiguous_count <> 0 THEN
     RAISE EXCEPTION
