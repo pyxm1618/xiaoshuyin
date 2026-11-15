@@ -45,14 +45,19 @@ function policy(
   };
 }
 
+type ActorAwareComplianceEvaluationSnapshot = ComplianceEvaluationSnapshot & {
+  readonly actor: CompliancePersonSnapshot | null;
+};
+
 function snapshot(
   candidatePolicies: readonly ComplianceFeaturePolicyRecord[],
-  overrides: Partial<ComplianceEvaluationSnapshot> = {}
-): ComplianceEvaluationSnapshot {
+  overrides: Partial<ActorAwareComplianceEvaluationSnapshot> = {}
+): ActorAwareComplianceEvaluationSnapshot {
   return {
     feature: FEATURE,
     evaluatedAt: NOW,
     candidatePolicies,
+    actor: null,
     personProcessingRequired: false,
     person: null,
     currentNoticeHash: 'f'.repeat(64),
@@ -131,6 +136,56 @@ describe('pure compliance feature-policy evaluator', () => {
       'REQUIRE_GENERATED_CONTENT_LABEL',
       'REQUIRE_USAGE_REMINDER',
     ]);
+  });
+
+  it('REM3-002: MINORS_BLOCKED is actor eligibility, not target protection', () => {
+    const minor: CompliancePersonSnapshot = {
+      ...ADULT,
+      personId: '00000000-0000-7000-8000-0000000000b1',
+      ageBand: 'MINOR_14_17',
+      minorMode: true,
+    };
+    const restricted = policy({ minorAccessRule: 'MINORS_BLOCKED' });
+
+    const minorActorAdultTarget = evaluateCompliance(
+      snapshot([restricted], {
+        actor: minor,
+        personProcessingRequired: true,
+        person: ADULT,
+      })
+    );
+    expect(minorActorAdultTarget.gate).toBe('BLOCK');
+    expect(minorActorAdultTarget.reasonCode).toBe('COMPLIANCE_FEATURE_BLOCKED');
+
+    const adultActorMinorTarget = evaluateCompliance(
+      snapshot([restricted], {
+        actor: ADULT,
+        personProcessingRequired: true,
+        person: minor,
+      })
+    );
+    expect(adultActorMinorTarget.gate).toBe('ALLOW');
+    expect(adultActorMinorTarget.reasonCode).toBeNull();
+    expect(adultActorMinorTarget.obligations).toContain('REQUIRE_MINOR_MODE');
+
+    expect(
+      evaluateCompliance(
+        snapshot([restricted], {
+          actor: minor,
+          personProcessingRequired: true,
+          person: minor,
+        })
+      ).gate
+    ).toBe('BLOCK');
+    expect(
+      evaluateCompliance(
+        snapshot([restricted], {
+          actor: ADULT,
+          personProcessingRequired: true,
+          person: ADULT,
+        })
+      ).gate
+    ).toBe('ALLOW');
   });
 
   it('SC-03: UNKNOWN fails closed and is never NOT_APPLICABLE/ALLOW', () => {
