@@ -20,6 +20,7 @@ import {
   type DenyReason,
   type Purpose,
   type Resource,
+  type SafetyResolutionFact,
 } from '@xiaoshuyin/authorization';
 import { getFamilyById, isFamilyMember, type ParticipationRow, type PhoneUseContractVersionRow } from '@xiaoshuyin/domain';
 import { getComplianceProfile } from '@xiaoshuyin/compliance';
@@ -45,7 +46,7 @@ export interface FamilyActionRequest {
    * the composition's SafetyResolutionAuthoritySource. Absent means NO
    * capability — family roles never imply it.
    */
-  safetyResolution?: { verified: boolean; authorityRef: string } | null;
+  safetyResolution?: SafetyResolutionFact | null;
 }
 
 async function readFacts(
