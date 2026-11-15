@@ -171,7 +171,8 @@ describe('compliance consistent snapshot (Audit 2 HIGH-01)', () => {
       const person = await loadCompliancePersonSnapshot(client, owner.personId);
       const evaluated = await evaluateComplianceAtTransactionTime(tx, client, {
         descriptor: descriptor(code),
-        personId: owner.personId,
+        actorPersonId: owner.personId,
+        targetPersonId: owner.personId,
         supportedObligations: SUPPORTED,
       });
       const secondSnapshot = await loadCompliancePolicySnapshot(tx, descriptor(code));
@@ -325,7 +326,8 @@ describe('compliance consistent snapshot (Audit 2 HIGH-01)', () => {
         const snapshot = await loadCompliancePersonSnapshot(client, personId);
         const evaluated = await evaluateComplianceAtTransactionTime(tx, client, {
           descriptor: descriptor(code),
-          personId,
+          actorPersonId: owner.personId,
+          targetPersonId: personId,
           supportedObligations: SUPPORTED,
         });
         return { snapshot, evaluated };

@@ -8,7 +8,6 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import {
   createServerFeatureDescriptor,
   evaluateComplianceAtTransactionTime,
-  getComplianceProfile,
   type ComplianceObligation,
 } from '@xiaoshuyin/compliance';
 import {
@@ -67,7 +66,7 @@ function roleplayError(code:string,message?:string):Error & {statusCode:number;c
   const mapped=toHttpError(code,message);
   return Object.assign(new Error(mapped.message),{statusCode:mapped.statusCode,code:mapped.code});
 }
-async function authorizeAdultRoleplay(
+async function authorizeRoleplay(
   tx:pg.PoolClient,
   input:{actor:DigitalUseActor;familyId:string;caseId:string;expectedCaseVersion:number},
   allowCompleted=false
@@ -83,9 +82,6 @@ async function authorizeAdultRoleplay(
   const node=resolveDigitalUseRuntimeNode('A4003');
   assertNodeCasePreconditions(caseRow,node,input.expectedCaseVersion);
   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
-  const profile=await getComplianceProfile(tx,input.actor.personId);
-  if(!profile || profile.age_band==='UNKNOWN') throw roleplayError('AGE_BAND_UNKNOWN');
-  if(profile.age_band!=='ADULT') throw roleplayError('FORBIDDEN','A4003_ADULT_ONLY');
   const scene=await getSceneNodeState(tx,input.caseId,'A4003',true);
   if(!scene || scene.scene_package_version!==DIGITAL_USE_PACKAGE_VERSION) throw roleplayError('SCENE_NODE_UNREACHABLE');
   if(
@@ -97,9 +93,17 @@ async function authorizeAdultRoleplay(
 }
 async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
   const result=await evaluateComplianceAtTransactionTime(drizzle(tx),tx,{
-    descriptor:ROLEPLAY_FEATURE,personId,supportedObligations:SUPPORTED_ROLEPLAY_OBLIGATIONS,
+    descriptor:ROLEPLAY_FEATURE,actorPersonId:personId,targetPersonId:personId,supportedObligations:SUPPORTED_ROLEPLAY_OBLIGATIONS,
   });
-  if(result.gate!=='ALLOW') throw roleplayError('COMPLIANCE_BLOCKED',result.reasonCode??'COMPLIANCE_BLOCKED');
+  if(result.gate!=='ALLOW') {
+    if(result.reasonCode==='COMPLIANCE_FEATURE_BLOCKED') {
+      throw roleplayError('FORBIDDEN','A4003_ADULT_ONLY');
+    }
+    if(result.reasonCode==='COMPLIANCE_AGE_UNKNOWN'||result.reasonCode==='COMPLIANCE_PROFILE_MISSING') {
+      throw roleplayError('AGE_BAND_UNKNOWN');
+    }
+    throw roleplayError('COMPLIANCE_BLOCKED',result.reasonCode??'COMPLIANCE_BLOCKED');
+  }
   return result;
 }
 function assertRoleplaySessionCurrent(session:{
@@ -132,10 +136,10 @@ export async function createPhoneUseRoleplay(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   await authorizeAdultRoleplay(tx,input);
+   await authorizeRoleplay(tx,input);
    if(input.professionalContentVersion!==PHONE_USE_CONTRACT_CONTENT_VERSION) throw roleplayError('PHONE_USE_CONTRACT_CONTENT_STALE');
-   await requireAdapterAvailable(adapter);
    const compliance=await assertRoleplayCompliance(tx,input.actor.personId);
+   await requireAdapterAvailable(adapter);
    const requestHash=hashPayload({
      familyId:input.familyId,caseId:input.caseId,expectedCaseVersion:input.expectedCaseVersion,
      professionalContentVersion:input.professionalContentVersion,
@@ -166,9 +170,9 @@ export async function addPhoneUseRoleplayTurn(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   await authorizeAdultRoleplay(tx,input);
-   await requireAdapterAvailable(adapter);
+   await authorizeRoleplay(tx,input);
    await assertRoleplayCompliance(tx,input.actor.personId);
+   await requireAdapterAvailable(adapter);
    const requestHash=hashPayload({sessionId:input.sessionId,expectedSessionRevision:input.expectedSessionRevision,simulatedChildInput:input.simulatedChildInput});
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
@@ -205,7 +209,7 @@ export async function ratePhoneUseRoleplay(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   await authorizeAdultRoleplay(tx,input);
+   await authorizeRoleplay(tx,input);
    await assertRoleplayCompliance(tx,input.actor.personId);
    const requestHash=hashPayload({sessionId:input.sessionId,turnId:input.turnId,rating:input.rating});
    const outcome=await runIdempotentCommandInTransaction(tx,{
@@ -231,7 +235,7 @@ export async function selectPhoneUseRoleplay(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   const {scene}=await authorizeAdultRoleplay(tx,input,true);
+   const {scene}=await authorizeRoleplay(tx,input,true);
    if(scene.revision!==input.expectedNodeRevision) throw roleplayError('STALE_NODE_REVISION');
    const correction=scene.status==='COMPLETED';
    await assertRoleplayCompliance(tx,input.actor.personId);

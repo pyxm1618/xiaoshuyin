@@ -123,7 +123,8 @@ export async function assertAssessmentCompliance(
   const db = drizzle(tx);
   const result = await evaluateComplianceAtTransactionTime(db, tx, {
     descriptor: DIGITAL_USE_ASSESSMENT_FEATURE,
-    personId: actorPersonId,
+    actorPersonId,
+    targetPersonId: actorPersonId,
     supportedObligations: SUPPORTED_ASSESSMENT_OBLIGATIONS,
   });
   if (result.gate !== 'ALLOW') {

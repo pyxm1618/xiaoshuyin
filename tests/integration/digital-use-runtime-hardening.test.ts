@@ -82,7 +82,7 @@ describe('T1218 Digital Use runtime hardening', () => {
     await migrator.query(
       `SELECT app.publish_compliance_feature_policy(
          'DIGITAL_USE_ROLEPLAY_A4003','v1',NULL,1,
-         'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+         'NOT_APPLICABLE','MINORS_BLOCKED','BASELINE','BASELINE','BASELINE',
          'Slice 14 roleplay integration reviewed basis','evidence://slice14/roleplay-integration',
          now() - interval '1 minute','migration:slice14-roleplay-integration'
        )`
