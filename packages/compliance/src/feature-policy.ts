@@ -99,6 +99,8 @@ export interface CompliancePersonSnapshot {
 export interface ComplianceEvaluationSnapshot {
   readonly feature: ComplianceFeatureDescriptor;
   readonly evaluatedAt: string;
+  /** Authenticated actor whose feature eligibility is being evaluated. */
+  readonly actor: CompliancePersonSnapshot | null;
   /**
    * Candidate policy rows for the exact feature identity. The pure evaluator
    * still applies the half-open effective-period rule defensively so corrupted
@@ -361,6 +363,28 @@ export function evaluateCompliance(
 
   const obligations: ComplianceObligation[] = [...policyObligations(policy)];
 
+  // Feature access is an actor-eligibility rule. It must never be inferred
+  // from the target Person being processed. Target-minor protections remain
+  // independently enforced below through the existing person-processing gate.
+  if (policy.minorAccessRule === 'MINORS_BLOCKED') {
+    const actor = snapshot.actor;
+    if (actor === null) {
+      return baseResult(
+        snapshot,
+        'BLOCK',
+        'COMPLIANCE_PROFILE_MISSING',
+        obligations,
+        policy
+      );
+    }
+    if (actor.ageBand === 'UNKNOWN') {
+      return baseResult(snapshot, 'BLOCK', 'COMPLIANCE_AGE_UNKNOWN', obligations, policy);
+    }
+    if (actor.ageBand === 'MINOR_14_17' || actor.ageBand === 'UNDER_14') {
+      return baseResult(snapshot, 'BLOCK', 'COMPLIANCE_FEATURE_BLOCKED', obligations, policy);
+    }
+  }
+
   if (snapshot.personProcessingRequired) {
     if (snapshot.person === null) {
       return baseResult(
@@ -398,9 +422,6 @@ export function evaluateCompliance(
       obligations.push('REQUIRE_GUARDIAN_CONSENT');
     }
 
-    if (ageGate.minorMode && policy.minorAccessRule === 'MINORS_BLOCKED') {
-      return baseResult(snapshot, 'BLOCK', 'COMPLIANCE_FEATURE_BLOCKED', obligations, policy);
-    }
   }
 
   return baseResult(snapshot, 'ALLOW', null, obligations, policy);
