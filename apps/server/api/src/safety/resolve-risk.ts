@@ -26,6 +26,7 @@ import {
   isSafetyError,
   lockFamilyForPrimaryDecision,
 
+  type ApprovedPolicyIdentity,
   type OpaqueEvidenceReference,
   type SafetyWriteTx,
 } from '@xiaoshuyin/domain';
@@ -54,6 +55,8 @@ export interface ResolveRiskInput {
   idempotencyKey: string;
   expectedCaseVersion: number;
   reviewEvidenceRefs: OpaqueEvidenceReference[];
+  /** Current approved/versioned Safety Policy + Rule identity from the trusted seam. */
+  trustedPolicyIdentity: ApprovedPolicyIdentity;
 }
 
 export interface ResolveRiskResponse {
@@ -87,6 +90,7 @@ function buildRequestHash(input: {
   expectedCaseVersion: number;
   reviewEvidenceRefs: OpaqueEvidenceReference[];
   authorityRef: string;
+  trustedPolicyIdentity: ApprovedPolicyIdentity;
 }): string {
   return hashPayload({
     familyId: input.familyId,
@@ -94,7 +98,26 @@ function buildRequestHash(input: {
     expectedCaseVersion: input.expectedCaseVersion,
     reviewEvidenceRefs: sortedRefs(input.reviewEvidenceRefs),
     authorityRef: input.authorityRef,
+    trustedPolicyIdentity: input.trustedPolicyIdentity,
   });
+}
+
+
+function samePolicyIdentity(
+  context: {
+    policyRef: string;
+    policyVersion: string;
+    ruleRef: string;
+    ruleVersion: string;
+  },
+  trusted: ApprovedPolicyIdentity
+): boolean {
+  return (
+    context.policyRef === trusted.policyRef &&
+    context.policyVersion === trusted.policyVersion &&
+    context.ruleRef === trusted.ruleRef &&
+    context.ruleVersion === trusted.ruleVersion
+  );
 }
 
 function assertEvidenceShape(refs: OpaqueEvidenceReference[]): void {
@@ -293,6 +316,7 @@ export async function resolveRisk(
           expectedCaseVersion: input.expectedCaseVersion,
           reviewEvidenceRefs: input.reviewEvidenceRefs,
           authorityRef: authority.authorityRef,
+          trustedPolicyIdentity: input.trustedPolicyIdentity,
         });
         const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
 
@@ -333,6 +357,9 @@ export async function resolveRisk(
 
         // The trace is linkage evidence, never a second status source.
         const holdPolicyContext = await findActiveHoldPolicyContext(client, { familyId, caseId });
+        if (!samePolicyIdentity(holdPolicyContext, input.trustedPolicyIdentity)) {
+          throw httpError('SAFETY_PRECHECK_STALE');
+        }
 
         const transitioned = await transitionCaseStatus(asSafetyWriteTx(tx), {
           caseId,
