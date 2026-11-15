@@ -586,6 +586,7 @@ export const ProblemFormulationStatus = z.enum([
 ]);
 export const ProblemFormulationReviewState = z.enum(['CURRENT', 'NEEDS_REVIEW']);
 export type ProblemFormulationStatusType = z.infer<typeof ProblemFormulationStatus>;
+export type ProblemFormulationReviewStateType = z.infer<typeof ProblemFormulationReviewState>;
 
 export const EvidenceRef = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('DIALOGUE_MESSAGE'), id: z.string().uuid() }),
