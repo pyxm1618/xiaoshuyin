@@ -68,6 +68,7 @@ const FROZEN_SCHEMAS = [
   'Error',
   'ErrorResponse',
   'ProblemFormulationStatus',
+  'ProblemFormulationReviewState',
   'DialogueMessageRef',
   'AssertionRef',
   'ObservationRef',
