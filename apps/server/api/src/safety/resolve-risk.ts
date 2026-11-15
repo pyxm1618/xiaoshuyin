@@ -253,11 +253,10 @@ export async function resolveRisk(
         accountId: input.accountId,
         personId: input.personId,
         purpose: 'SAFETY_RESOLUTION',
-        isolationLevel: 'REPEATABLE READ',
       },
       async (tx, client) => {
-        // Resolve Staff authority from the SAME transaction snapshot used by
-        // the command. No test/provider injection exists in production.
+        // Resolve and lock Staff authority facts in the SAME transaction used
+        // by the command. No test/provider injection exists in production.
         const authoritySource = createProductionSafetyResolutionAuthoritySource({
           async query(text, values) {
             const result = await client.query(text, values);
@@ -279,7 +278,8 @@ export async function resolveRisk(
         // Staff is deliberately not inserted into family_members. The DB gate
         // establishes only this exact Case's Family RLS context after
         // SAFETY_RESOLVE + linked GLOBAL grant + current CASE assignment were
-        // proven. It revalidates the same facts under this transaction snapshot.
+        // proven. It revalidates the same facts while the authority rows stay
+        // locked against concurrent revoke/disable through transaction end.
         const context = await client.query<{ family_id: string }>(
           'SELECT app.set_staff_case_context($1, $2)::text AS family_id',
           [authority.assignmentId, caseId]
