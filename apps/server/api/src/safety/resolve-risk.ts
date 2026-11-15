@@ -74,14 +74,30 @@ function httpError(code: string, message?: string) {
 }
 
 function isStaffAuthorityDatabaseDenial(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { code?: unknown }).code === '42501' &&
-    'message' in error &&
-    (error as { message?: unknown }).message === 'STAFF_ASSIGNMENT_REQUIRED'
-  );
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    if (typeof current !== 'object' || current === null || seen.has(current)) {
+      return false;
+    }
+    seen.add(current);
+
+    const candidate = current as {
+      code?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (
+      candidate.code === '42501' &&
+      candidate.message === 'STAFF_ASSIGNMENT_REQUIRED'
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+
+  return false;
 }
 
 function asSafetyWriteTx(tx: SafetyDrizzleTx): SafetyWriteTx {
