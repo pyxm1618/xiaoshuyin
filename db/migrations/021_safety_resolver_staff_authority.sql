@@ -384,6 +384,42 @@ BEGIN
      )
      AND reviewer_account.status = 'ACTIVE';
 
+  -- Candidate discovery happens before the Account serialization lock. If a
+  -- concurrent INSERT won that lock first, re-check ambiguity after the lock:
+  -- exactly one current SAFETY_RESOLVE assignment may authorize this Case.
+  IF v_family_id IS NOT NULL AND (
+    SELECT count(*)
+      FROM public.staff_assignments current_assignment
+      JOIN public.staff_assignments current_grant
+        ON current_grant.id = current_assignment.capability_grant_id
+      JOIN public.accounts current_account
+        ON current_account.id = current_assignment.account_id
+     WHERE current_assignment.account_id = v_account_id
+       AND current_assignment.person_id = v_person_id
+       AND current_assignment.case_id = p_case_id
+       AND current_assignment.scope_type = 'CASE'
+       AND current_assignment.capability = 'SAFETY_RESOLVE'
+       AND current_assignment.revoked_at IS NULL
+       AND current_assignment.valid_from <= v_now
+       AND (
+         current_assignment.valid_until IS NULL
+         OR current_assignment.valid_until > v_now
+       )
+       AND current_grant.scope_type = 'GLOBAL'
+       AND current_grant.capability = 'SAFETY_RESOLVE'
+       AND current_grant.account_id = current_assignment.account_id
+       AND current_grant.person_id = current_assignment.person_id
+       AND current_grant.revoked_at IS NULL
+       AND current_grant.valid_from <= v_now
+       AND (
+         current_grant.valid_until IS NULL
+         OR current_grant.valid_until > v_now
+       )
+       AND current_account.status = 'ACTIVE'
+  ) <> 1 THEN
+    v_family_id := NULL;
+  END IF;
+
   IF v_family_id IS NULL THEN
     RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
   END IF;
@@ -409,6 +445,39 @@ $function$;
 
 REVOKE ALL ON FUNCTION app.set_staff_case_context(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.set_staff_case_context(uuid, uuid) TO xiaoshuyin_app;
+
+-- Transition-time authority guard. RLS predicates are evaluated while locating
+-- rows for UPDATE; a row can then wait on another BEFORE trigger/lock before the
+-- physical write. Re-check with clock_timestamp() in a BEFORE UPDATE trigger so
+-- expiry during that wait cannot produce SAFETY_HOLD -> WAITING on stale
+-- authority. Test/admin fixture roles are not production runtime and remain
+-- unaffected.
+CREATE FUNCTION app.guard_staff_resolve_transition()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  IF current_user = 'xiaoshuyin_app'
+     AND OLD.status = 'SAFETY_HOLD'
+     AND NEW.status = 'WAITING'
+     AND (
+       app_current_purpose() <> 'SAFETY_RESOLUTION'
+       OR NOT app.staff_case_authorized(OLD.id)
+     ) THEN
+    RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+REVOKE ALL ON FUNCTION app.guard_staff_resolve_transition() FROM PUBLIC;
+
+CREATE TRIGGER cases_staff_resolve_authority_guard
+  BEFORE UPDATE OF status ON cases
+  FOR EACH ROW
+  EXECUTE FUNCTION app.guard_staff_resolve_transition();
 
 -- Staff exact-Case policies are additive. Existing household Family policies
 -- are left byte-for-byte unchanged.
