@@ -28,6 +28,7 @@ import {
   insertDigitalUseNodeCompletedAudit,
   insertDigitalUseNodeCompletedEvent,
   listCurrentDigitalUseTargetItems,
+  isProblemFormulationAuthoritativeExecutionBasis,
   lockCurrentProblemFormulation,
   lockFamilyForPrimaryDecision,
   lockSceneCase,
@@ -199,7 +200,7 @@ async function materializeLegalA3000Entry(
   }
 
   const formulation = await lockCurrentProblemFormulation(tx, input.caseId);
-  if (!formulation || formulation.status !== 'CONFIRMED') {
+  if (!formulation || !isProblemFormulationAuthoritativeExecutionBasis(formulation)) {
     throw familyHttpError('PROBLEM_FORMULATION_REQUIRED');
   }
 
@@ -438,7 +439,7 @@ export async function executeFamilyAllianceNodeInTransaction(
     }
 
     const formulation = await lockCurrentProblemFormulation(tx, input.caseId);
-    if (!formulation || formulation.status !== 'CONFIRMED') {
+    if (!formulation || !isProblemFormulationAuthoritativeExecutionBasis(formulation)) {
       throw familyHttpError('PROBLEM_FORMULATION_REQUIRED');
     }
 
@@ -592,7 +593,7 @@ export async function executeFamilyAllianceNodeInTransaction(
       !finalFormulation ||
       finalFormulation.id !== formulation.id ||
       finalFormulation.version !== formulation.version ||
-      finalFormulation.status !== 'CONFIRMED'
+      !isProblemFormulationAuthoritativeExecutionBasis(finalFormulation)
     ) {
       throw familyHttpError('PROBLEM_FORMULATION_REQUIRED');
     }

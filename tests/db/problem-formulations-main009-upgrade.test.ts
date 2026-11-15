@@ -315,7 +315,7 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     expect(output).toContain('APPLY 008_problem_formulation_core.sql');
     expect(output).toContain('APPLY 010_problem_formulation_safety_vocabulary_reconcile.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 11 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 12 new, 9 previously applied\./);
 
     const client = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await client.connect();
@@ -383,7 +383,8 @@ async function assertUnionConstraints(
   client: Client,
   includeSupplementalConsentAudit = true,
   includeSlice12 = includeSupplementalConsentAudit,
-  includeSlice14 = includeSlice12
+  includeSlice14 = includeSlice12,
+  includeAuth006 = includeSlice14
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -470,6 +471,12 @@ async function assertUnionConstraints(
           'PHONE_USE_ROLEPLAY_RECORDED',
         ]
       : []),
+    ...(includeAuth006
+      ? [
+          'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED',
+          'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
+        ]
+      : []),
   ]);
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
@@ -520,6 +527,7 @@ async function assertUnionConstraints(
           'PHONE_USE_ROLEPLAY_SELECT',
         ]
       : []),
+    ...(includeAuth006 ? ['PROBLEM_FORMULATION_REVIEW_RESOLVE'] : []),
   ]);
   const commandLiterals = literalsOf(definitions.get('idempotency_keys_command_type_check')!);
   expect(new Set(commandLiterals)).toEqual(commandSet);

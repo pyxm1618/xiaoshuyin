@@ -15,6 +15,8 @@ import {
   parseIfMatchCaseVersion,
   caseVersionEtag,
   ProblemFormulationError,
+  assertProblemFormulationReviewCurrent,
+  isProblemFormulationAuthoritativeExecutionBasis,
   type ProblemFormulationContent,
   type ProblemFormulationRow,
 } from '@xiaoshuyin/domain';
@@ -44,6 +46,7 @@ function row(overrides: Partial<ProblemFormulationRow> = {}): ProblemFormulation
     case_id: '44444444-4444-4444-8444-444444444444',
     version: 1,
     status: 'PRESENTED',
+    review_state: 'CURRENT',
     primary_problem: value.primaryProblem,
     key_factors: value.keyFactors,
     evidence_refs: value.evidenceRefs,
@@ -68,9 +71,12 @@ describe('problem formulation state policy', () => {
   it('accepts exactly the frozen legal transitions', () => {
     expect(() => assertStatusAllows('CONFIRM', 'PRESENTED')).not.toThrow();
     expect(() => assertStatusAllows('DISPUTE', 'PRESENTED')).not.toThrow();
-    for (const status of ['PRESENTED', 'DISPUTED', 'NEEDS_REVIEW'] as const) {
+    for (const status of ['PRESENTED', 'DISPUTED'] as const) {
       expect(() => assertStatusAllows('CORRECTION', status)).not.toThrow();
     }
+    expect(() => assertStatusAllows('CORRECTION', 'NEEDS_REVIEW' as never)).toThrow(
+      ProblemFormulationError
+    );
   });
 
   it('fails closed on illegal transitions', () => {
@@ -79,6 +85,23 @@ describe('problem formulation state policy', () => {
       expect(() => assertStatusAllows('DISPUTE', status)).toThrow(ProblemFormulationError);
       expect(() => assertStatusAllows('CORRECTION', status)).toThrow(ProblemFormulationError);
     }
+  });
+
+  it('separates authoritative execution from lifecycle status', () => {
+    expect(() => assertProblemFormulationReviewCurrent('CURRENT')).not.toThrow();
+    expect(() => assertProblemFormulationReviewCurrent('NEEDS_REVIEW')).toThrow(
+      ProblemFormulationError
+    );
+    expect(
+      isProblemFormulationAuthoritativeExecutionBasis(
+        row({ status: 'CONFIRMED', review_state: 'CURRENT' })
+      )
+    ).toBe(true);
+    expect(
+      isProblemFormulationAuthoritativeExecutionBasis(
+        row({ status: 'CONFIRMED', review_state: 'NEEDS_REVIEW' })
+      )
+    ).toBe(false);
   });
 
   it('allocates versions from 1 and rejects overflow', () => {

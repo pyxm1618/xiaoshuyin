@@ -121,7 +121,7 @@ const EXPECTED_ENUMS = [
   'consent_decision', 'consent_purpose', 'consent_request_status',
   'evidence_confirmation_status', 'evidence_time_state', 'observation_value_state',
   'observation_value_type', 'profile_attribute', 'profile_value_status',
-  'provenance_source', 'problem_formulation_status',
+  'provenance_source', 'problem_formulation_status', 'problem_formulation_review_state',
 ].sort();
 
 const EXPECTED_UUIDV7_TABLES = [
@@ -444,11 +444,12 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       /APPLY 016_digital_use_family_alliance_runtime\.sql/.test(output) &&
       /APPLY 017_digital_use_phone_use_contract_runtime\.sql/.test(output) &&
       /APPLY 018_foundation_database_integrity_1\.sql/.test(output) &&
-      /APPLY 019_auth_disabled_hard_disable\.sql/.test(output));
+      /APPLY 019_auth_disabled_hard_disable\.sql/.test(output) &&
+      /APPLY 020_problem_formulation_review_state\.sql/.test(output));
     check(
-      'upgrade 结果为 17 new / 3 previously applied',
+      'upgrade 结果为 18 new / 3 previously applied',
       true,
-      /Migration complete: 17 new, 3 previously applied\./.test(output)
+      /Migration complete: 18 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -485,6 +486,8 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       '018_foundation_database_integrity_1.sql',
       // AUTH-001 Account Hard Disable session invalidation.
       '019_auth_disabled_hard_disable.sql',
+      // AUTH-006 Problem Formulation lifecycle / review-state reconciliation.
+      '020_problem_formulation_review_state.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',

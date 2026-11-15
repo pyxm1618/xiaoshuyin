@@ -18,7 +18,11 @@ import {
   getRevocationTextHash,
   runtimeConsentChannel,
 } from '@xiaoshuyin/compliance';
-import { insertAuditEvent, hashPayload } from '@xiaoshuyin/domain';
+import {
+  hashPayload,
+  insertAuditEvent,
+  markProblemFormulationsForConsentReview,
+} from '@xiaoshuyin/domain';
 import { resolveCurrentFamily, requireCurrentFamily } from '../family-context.js';
 import { requireFamilyAction, requireSelfAction } from '../authz.js';
 import { requireEvidencePepper } from '../evidence-pepper.js';
@@ -141,6 +145,14 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
 
           // Audit
           await insertAuditEvent(tx, familyId, accountId, 'CONSENT_REVOKED', 'CONSENT', newConsent.id);
+
+          // AUTH-006: only formulations pinned to the exact superseded Consent
+          // version enter review. Other Cases/objects remain untouched.
+          await markProblemFormulationsForConsentReview(tx, {
+            familyId,
+            consentId: consent.id,
+            version: consent.version,
+          });
 
           return {
             status: 200,

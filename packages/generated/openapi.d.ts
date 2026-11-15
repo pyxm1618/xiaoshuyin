@@ -1292,7 +1292,9 @@ export interface components {
             message: string;
         };
         /** @enum {string} */
-        ProblemFormulationStatus: "DRAFT" | "PRESENTED" | "CONFIRMED" | "DISPUTED" | "NEEDS_REVIEW" | "SUPERSEDED";
+        ProblemFormulationStatus: "DRAFT" | "PRESENTED" | "CONFIRMED" | "DISPUTED" | "SUPERSEDED";
+        /** @enum {string} */
+        ProblemFormulationReviewState: "CURRENT" | "NEEDS_REVIEW";
         DialogueMessageRef: {
             /** @enum {string} */
             type: "DIALOGUE_MESSAGE";
@@ -1384,6 +1386,7 @@ export interface components {
             caseId: string;
             version: number;
             status: components["schemas"]["ProblemFormulationStatus"];
+            reviewState: components["schemas"]["ProblemFormulationReviewState"];
             primaryProblem: components["schemas"]["PrimaryProblem"];
             keyFactors: components["schemas"]["KeyFactor"][];
             evidenceRefs: components["schemas"]["EvidenceRef"][];

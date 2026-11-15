@@ -95,15 +95,33 @@ describe('problem formulation schema (Slice 8)', () => {
     );
   }
 
-  it('enum has the exact frozen six labels in order', async () => {
+  it('separates lifecycle and review-state enums exactly', async () => {
     const { rows } = await admin.query(
-      `SELECT string_agg(enumlabel, ',' ORDER BY enumsortorder) AS labels
-       FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
-       WHERE t.typname = 'problem_formulation_status'`
+      `SELECT t.typname, string_agg(e.enumlabel, ',' ORDER BY e.enumsortorder) AS labels
+         FROM pg_enum e
+         JOIN pg_type t ON t.oid = e.enumtypid
+        WHERE t.typname IN ('problem_formulation_status','problem_formulation_review_state')
+        GROUP BY t.typname
+        ORDER BY t.typname`
     );
-    expect(rows[0].labels).toBe(
-      'DRAFT,PRESENTED,CONFIRMED,DISPUTED,NEEDS_REVIEW,SUPERSEDED'
+    const enums = Object.fromEntries(rows.map((row: any) => [row.typname, row.labels]));
+    expect(enums['problem_formulation_status']).toBe(
+      'DRAFT,PRESENTED,CONFIRMED,DISPUTED,SUPERSEDED'
     );
+    expect(enums['problem_formulation_review_state']).toBe('CURRENT,NEEDS_REVIEW');
+
+    const reviewColumn = await admin.query(
+      `SELECT is_nullable, column_default, udt_name
+         FROM information_schema.columns
+        WHERE table_schema='public'
+          AND table_name='problem_formulations'
+          AND column_name='review_state'`
+    );
+    expect(reviewColumn.rows[0]).toMatchObject({
+      is_nullable: 'NO',
+      udt_name: 'problem_formulation_review_state',
+    });
+    expect(reviewColumn.rows[0].column_default).toContain('CURRENT');
   });
 
   it('RLS is enabled and forced with Family policies and no DELETE policy', async () => {
@@ -135,6 +153,7 @@ describe('problem formulation schema (Slice 8)', () => {
          has_table_privilege('xiaoshuyin_app','problem_formulations','INSERT') AS ins,
          has_table_privilege('xiaoshuyin_app','problem_formulations','DELETE') AS del,
          has_column_privilege('xiaoshuyin_app','problem_formulations','status','UPDATE') AS st,
+         has_column_privilege('xiaoshuyin_app','problem_formulations','review_state','UPDATE') AS review,
          has_column_privilege('xiaoshuyin_app','problem_formulations','primary_problem','UPDATE') AS content,
          has_table_privilege('xiaoshuyin_app','cases','UPDATE') AS case_table_update,
          has_column_privilege('xiaoshuyin_app','cases','phase','UPDATE') AS case_phase_update`
@@ -144,15 +163,19 @@ describe('problem formulation schema (Slice 8)', () => {
       ins: true,
       del: false,
       st: true,
+      review: true,
       content: false,
       case_table_update: false,
       case_phase_update: true,
     });
   });
 
-  it('rejects at-rest DRAFT', async () => {
+  it('rejects at-rest DRAFT and lifecycle NEEDS_REVIEW', async () => {
     await admin.query('DELETE FROM problem_formulations WHERE family_id = $1', [familyId]);
     await expect(insert({ status: 'DRAFT' })).rejects.toThrow();
+    await expect(insert({ status: 'NEEDS_REVIEW' })).rejects.toThrow(
+      /invalid input value for enum problem_formulation_status/
+    );
   });
 
   it('rejects a non-contiguous version chain', async () => {

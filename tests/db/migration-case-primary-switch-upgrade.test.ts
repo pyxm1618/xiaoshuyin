@@ -105,6 +105,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'PHONE_USE_CONTRACT_ACTIVATED',
     'PHONE_USE_CONTRACT_SUPERSEDED',
     'PHONE_USE_ROLEPLAY_RECORDED',
+    'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED',
+    'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -125,9 +127,14 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'PHONE_USE_ROLEPLAY_TURN',
     'PHONE_USE_ROLEPLAY_RATE',
     'PHONE_USE_ROLEPLAY_SELECT',
+    'PROBLEM_FORMULATION_REVIEW_RESOLVE',
   ],
 };
 
+
+const AUTH006_NEW_CONSTRAINTS = [
+  'problem_formulations_review_state_not_null',
+] as const;
 
 /** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
 const SLICE8_NEW_CONSTRAINTS = [
@@ -173,6 +180,7 @@ const SLICE8_NEW_CONSTRAINTS = [
 
 /** Exact Slice 8 object-fingerprint delta. */
 const SLICE8_NEW_OBJECTS = [
+  'enum:problem_formulation_review_state',
   'enum:problem_formulation_status',
   'policy:problem_formulations_insert',
   'policy:problem_formulations_select',
@@ -635,7 +643,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 13 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 14 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -734,6 +742,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE13_NEW_CONSTRAINTS,
         ...SLICE14_NEW_CONSTRAINTS,
         ...FOUNDATION_REM1_NEW_CONSTRAINTS,
+        ...AUTH006_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -797,7 +806,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 20 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 21 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -823,6 +832,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '017_digital_use_phone_use_contract_runtime.sql',
       '018_foundation_database_integrity_1.sql',
       '019_auth_disabled_hard_disable.sql',
+      '020_problem_formulation_review_state.sql',
     ]);
   }, 180_000);
 });
