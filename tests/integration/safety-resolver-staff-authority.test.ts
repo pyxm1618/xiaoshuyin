@@ -301,6 +301,60 @@ describe('AUTH-007/AUTH-008 production Safety resolver staff authority', () => {
     return false;
   }
 
+  async function expectResolveWinsAuthorityMutationRace(
+    held: HeldCase,
+    label: string,
+    mutate: (client: pg.PoolClient) => Promise<unknown>
+  ): Promise<void> {
+    const barrier = await installCaseTransitionBarrier(held.caseId);
+    const mutator = await admin.connect();
+    let resolvePromise: ReturnType<typeof resolveAs> | null = null;
+    let mutationPromise: Promise<unknown> | null = null;
+
+    try {
+      resolvePromise = resolveAs(staff, held, nextKey(label));
+      await waitForBarrier(barrier.advisoryKey1, barrier.advisoryKey2);
+
+      const pid = await mutator.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
+      let mutationSettled = false;
+      mutationPromise = mutate(mutator).finally(() => {
+        mutationSettled = true;
+      });
+
+      expect(
+        await waitForBlockedBackend(pid.rows[0]!.pid, () => mutationSettled)
+      ).toBe(true);
+
+      await barrier.release();
+
+      const resolved = await resolvePromise;
+      expect(resolved.status).toBe(200);
+      await mutationPromise;
+
+      const after = await fixture.getCase(held.caseId);
+      expect(after.status).toBe('WAITING');
+      expect(after.version).toBe(held.heldVersion + 1);
+    } finally {
+      await barrier.release().catch(() => undefined);
+      await resolvePromise?.catch(() => undefined);
+      await mutationPromise?.catch(() => undefined);
+      mutator.release();
+      await barrier.cleanup();
+    }
+  }
+
+  async function waitUntilExpired(validUntil: Date): Promise<void> {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+      const now = await admin.query<{ expired: boolean }>(
+        'SELECT clock_timestamp() >= $1::timestamptz AS expired',
+        [validUntil]
+      );
+      if (now.rows[0]?.expired) return;
+      await admin.query('SELECT pg_sleep(0.01)');
+    }
+    throw new Error('Authority did not reach deterministic expiry boundary');
+  }
+
   it('serializes a concurrent GLOBAL SAFETY_RESOLVE revoke after final authority validation', async () => {
     const held = await createHeldCase();
     const authority = await seedAuthority(staff, held.caseId);
@@ -360,6 +414,122 @@ describe('AUTH-007/AUTH-008 production Safety resolver staff authority', () => {
       await resolvePromise?.catch(() => undefined);
       await revokePromise?.catch(() => undefined);
       mutator.release();
+      await barrier.cleanup();
+    }
+  });
+
+  it('serializes a concurrent exact CASE assignment revoke after final authority validation', async () => {
+    const held = await createHeldCase();
+    const authority = await seedAuthority(staff, held.caseId);
+    expect(authority.assignmentId).not.toBeNull();
+
+    await expectResolveWinsAuthorityMutationRace(
+      held,
+      'resolve-case-revoke-race',
+      (client) =>
+        client.query(
+          `UPDATE staff_assignments
+              SET revoked_by_account_id = $2,
+                  revoked_at = clock_timestamp()
+            WHERE id = $1`,
+          [authority.assignmentId, owner.accountId]
+        )
+    );
+  });
+
+  it('serializes a concurrent reviewer Account disable after final authority validation', async () => {
+    const held = await createHeldCase();
+    await seedAuthority(staff, held.caseId);
+
+    try {
+      await expectResolveWinsAuthorityMutationRace(
+        held,
+        'resolve-account-disable-race',
+        (client) =>
+          client.query(
+            `UPDATE accounts
+                SET status = 'DISABLED'
+              WHERE id = $1`,
+            [staff.accountId]
+          )
+      );
+    } finally {
+      await admin.query(
+        `UPDATE accounts SET status = 'ACTIVE' WHERE id = $1`,
+        [staff.accountId]
+      );
+    }
+  });
+
+  it('denies when a GLOBAL SAFETY_RESOLVE grant was revoked first', async () => {
+    const held = await createHeldCase();
+    const authority = await seedAuthority(staff, held.caseId);
+
+    await admin.query(
+      `UPDATE staff_assignments
+          SET revoked_by_account_id = $2,
+              revoked_at = clock_timestamp()
+        WHERE id = $1`,
+      [authority.grantId, owner.accountId]
+    );
+
+    await expectDenied(staff, held);
+  });
+
+  it('denies when the reviewer Account was DISABLED first', async () => {
+    const held = await createHeldCase();
+    await seedAuthority(staff, held.caseId);
+
+    await admin.query(
+      `UPDATE accounts SET status = 'DISABLED' WHERE id = $1`,
+      [staff.accountId]
+    );
+    try {
+      await expectDenied(staff, held);
+    } finally {
+      await admin.query(
+        `UPDATE accounts SET status = 'ACTIVE' WHERE id = $1`,
+        [staff.accountId]
+      );
+    }
+  });
+
+  it('uses wall-clock authority validity at the actual ResolveRisk transition', async () => {
+    const held = await createHeldCase();
+    const authority = await seedAuthority(staff, held.caseId);
+    expect(authority.assignmentId).not.toBeNull();
+
+    const expiry = await admin.query<{ valid_until: Date }>(
+      `UPDATE staff_assignments
+          SET valid_until = clock_timestamp() + interval '3 seconds'
+        WHERE id IN ($1, $2)
+        RETURNING valid_until`,
+      [authority.grantId, authority.assignmentId]
+    );
+    const validUntil = new Date(
+      Math.max(...expiry.rows.map((row) => row.valid_until.getTime()))
+    );
+
+    const barrier = await installCaseTransitionBarrier(held.caseId);
+    let resolvePromise: ReturnType<typeof resolveAs> | null = null;
+
+    try {
+      resolvePromise = resolveAs(staff, held, nextKey('resolve-expiry-race'));
+      await waitForBarrier(barrier.advisoryKey1, barrier.advisoryKey2);
+      await waitUntilExpired(validUntil);
+      await barrier.release();
+
+      await expect(resolvePromise).rejects.toMatchObject({
+        code: 'SAFETY_RESOLUTION_AUTHORITY_DENIED',
+        statusCode: 403,
+      });
+
+      const after = await fixture.getCase(held.caseId);
+      expect(after.status).toBe('SAFETY_HOLD');
+      expect(after.version).toBe(held.heldVersion);
+    } finally {
+      await barrier.release().catch(() => undefined);
+      await resolvePromise?.catch(() => undefined);
       await barrier.cleanup();
     }
   });
