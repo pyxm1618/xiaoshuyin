@@ -250,7 +250,8 @@ describe('compliance feature policy integration', () => {
         async (_tx, client) =>
           evaluateComplianceAtTransactionTime(failingExecutor, client, {
             descriptor: descriptor(featureCode('FAILURE')),
-            personId: owner.personId,
+            actorPersonId: owner.personId,
+            targetPersonId: owner.personId,
             supportedObligations: SUPPORTED,
           })
       )
