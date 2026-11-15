@@ -661,7 +661,10 @@ describe('candidate-facing anti-enumeration', () => {
           // attempt fact can create a different candidate-facing transition.
           await matrixHarness.admin.query(
             `UPDATE binding_pending_contexts
-                SET expires_at = now() - interval '1 second'
+                SET pairing_issuance_id = NULL,
+                    pairing_issued_at = NULL,
+                    pairing_expires_at = NULL,
+                    expires_at = now() - interval '1 second'
               WHERE attempt_id = ANY($1::uuid[])`,
             [[realAttemptId, hiddenAttemptId]]
           );
