@@ -54,6 +54,10 @@ function snapshot(
     feature: FEATURE,
     evaluatedAt: NOW,
     candidatePolicies: [policyRow],
+    // These composition fixtures model self-use unless a test explicitly
+    // separates actor and target. Actor eligibility and target protections are
+    // distinct fields even when they refer to the same Person.
+    actor: person,
     personProcessingRequired: true,
     person,
     currentNoticeHash: CURRENT_NOTICE_HASH,
@@ -185,7 +189,7 @@ describe('compliance composition with existing person/guardian/consent truth', (
     expect(result.reasonCode).toBe('COMPLIANCE_PROFILE_MISSING');
   });
 
-  it('SC-10: generic MINORS_BLOCKED blocks both minor bands and spares adults', () => {
+  it('SC-10: generic MINORS_BLOCKED blocks minor actors and spares adult actors', () => {
     const blockingPolicy = policy({ minorAccessRule: 'MINORS_BLOCKED' });
 
     for (const person of [minor14(), under14()]) {
