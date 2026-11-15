@@ -255,6 +255,36 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     };
   }
 
+  it('AUTH-006: confirmed NEEDS_REVIEW formulation blocks FAMILY_ALLIANCE without global Case pause', async () => {
+    const f = await fixture('auth006-review');
+
+    await admin.query(
+      `UPDATE problem_formulations
+          SET review_state='NEEDS_REVIEW'
+        WHERE case_id=$1 AND status='CONFIRMED'`,
+      [f.caseId]
+    );
+
+    const blocked = await respond(f, 'A3000', selfAssessment('YES'));
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json()).toMatchObject({ code: 'PROBLEM_FORMULATION_REQUIRED' });
+
+    const formulation = await admin.query(
+      'SELECT status::text AS status, review_state::text AS review_state FROM problem_formulations WHERE case_id=$1',
+      [f.caseId]
+    );
+    expect(formulation.rows[0]).toEqual({
+      status: 'CONFIRMED',
+      review_state: 'NEEDS_REVIEW',
+    });
+
+    const kase = await admin.query(
+      'SELECT status::text AS status, phase::text AS phase FROM cases WHERE id=$1',
+      [f.caseId]
+    );
+    expect(kase.rows[0]).toEqual({ status: 'OPEN', phase: 'GOALS' });
+  });
+
   it('AS-01..AS-13 executes legal entry, parallel target management and all ten exact target families', async () => {
     const f = await fixture('canonical');
 
