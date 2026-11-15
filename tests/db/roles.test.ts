@@ -302,7 +302,7 @@ describe('Database Roles (T012 RED)', () => {
   });
 
   it('Slice 8: problem_formulations column UPDATE is lifecycle-only', async () => {
-    const allowed = ['status', 'user_response', 'confirmed_by_person_id', 'confirmed_at', 'updated_at'];
+    const allowed = ['status', 'review_state', 'user_response', 'confirmed_by_person_id', 'confirmed_at', 'updated_at'];
     const denied = [
       'id', 'family_id', 'case_id', 'version', 'primary_problem', 'key_factors',
       'evidence_refs', 'unknowns', 'conflicts', 'scene_fit',
