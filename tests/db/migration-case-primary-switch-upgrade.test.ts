@@ -769,6 +769,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...SLICE13_NEW_OBJECTS,
       ...SLICE14_NEW_OBJECTS,
       ...FOUNDATION_REM1_NEW_OBJECTS,
+      'trigger:accounts_status_invalidates_sessions',
     ].sort());
 
     // Column-level UPDATE grant, never table-level.
