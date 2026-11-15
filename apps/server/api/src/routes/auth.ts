@@ -12,6 +12,7 @@ import type { FastifyInstance } from 'fastify';
 import { WechatLoginRequest } from '@xiaoshuyin/contracts';
 import type { WechatAuthProvider } from '../auth/wechat-provider.js';
 import { signToken } from '../auth/session-token.js';
+import { isAccountAuthorityEligible } from '../auth/account-authority.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { withAccountTransaction } from '../db/tx.js';
 import type pg from 'pg';
@@ -40,7 +41,7 @@ export function registerAuthRoutes(
 
       // Check if account exists
       const { rows: existing } = await client.query(
-        'SELECT id FROM accounts WHERE wechat_openid = $1',
+        'SELECT id, status FROM accounts WHERE wechat_openid = $1',
         [openid]
       );
 
@@ -51,16 +52,26 @@ export function registerAuthRoutes(
 
       if (existing.length > 0) {
         accountId = existing[0].id;
+        if (!isAccountAuthorityEligible({ status: existing[0].status })) {
+          const err = toHttpError('UNAUTHENTICATED');
+          throw Object.assign(new Error(err.message), err);
+        }
         await client.query('SELECT app.set_account_context($1, $2)', [accountId, 'SELF_IDENTITY']);
-        // Bump epoch for new session
-        await client.query(
-          'UPDATE accounts SET last_login_at = now(), session_epoch = session_epoch + 1 WHERE id = $1',
-          [accountId]
-        );
+        // Issuance linearization point: re-check ACTIVE atomically under the
+        // Account row lock acquired by UPDATE. A concurrent disable that wins
+        // before this statement makes the update affect zero rows, so no
+        // Session is issued from a stale pre-disable read.
         const { rows: updated } = await client.query(
-          'SELECT session_epoch FROM accounts WHERE id = $1',
+          `UPDATE accounts
+              SET last_login_at = now(), session_epoch = session_epoch + 1
+            WHERE id = $1 AND status = 'ACTIVE'
+            RETURNING session_epoch`,
           [accountId]
         );
+        if (!updated[0]) {
+          const err = toHttpError('UNAUTHENTICATED');
+          throw Object.assign(new Error(err.message), err);
+        }
         epoch = updated[0].session_epoch;
 
         // Find existing person
