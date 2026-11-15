@@ -3,12 +3,13 @@
  *
  * The ONLY legal exit from SAFETY_HOLD. Internal only: NO HTTP route exists.
  *
- * Production posture (Frozen Spec §8.3 / C4 / FR-014):
- *   - the default authority source returns `UNAVAILABLE`, so a production
- *     caller can never resolve a hold;
- *   - Family manager / guardian / participant / ordinary Account / admin-like
- *     strings are never promoted to resolver authority;
- *   - a controlled test composition may inject a verified fact.
+ * AUTH-007/AUTH-008 production posture:
+ *   - one database-backed Staff authority source establishes SAFETY_RESOLVE;
+ *   - exact current Case assignment is mandatory in addition to capability;
+ *   - Family Manager / Guardian / participant / ordinary Account / AI never
+ *     produce the resolver fact;
+ *   - existing Review Evidence + approved/versioned hold policy context remain
+ *     mandatory before SAFETY_HOLD may transition to WAITING.
  */
 
 import pg from 'pg';
@@ -26,15 +27,12 @@ import {
   lockFamilyForPrimaryDecision,
 
   type OpaqueEvidenceReference,
-  type SafetyResolutionAuthoritySource,
   type SafetyWriteTx,
 } from '@xiaoshuyin/domain';
 // S9-H01: package-internal primitive, deliberately not part of the
 // `@xiaoshuyin/domain` production root export surface.
 import { transitionCaseStatus } from '../../../../../packages/domain/src/safety/case-transition.js';
-import { withDrizzleRlsTransaction, type SafetyDrizzleTx } from '../db/drizzle-tx.js';
-import { withIdentityTransaction } from '../db/tx.js';
-import { requireCurrentFamily } from '../family-context.js';
+import { withDrizzleIdentityTransaction, type SafetyDrizzleTx } from '../db/drizzle-tx.js';
 import { requireFamilyAction } from '../authz.js';
 import { toHttpError } from '../plugins/error-handler.js';
 
@@ -56,11 +54,6 @@ export interface ResolveRiskInput {
   idempotencyKey: string;
   expectedCaseVersion: number;
   reviewEvidenceRefs: OpaqueEvidenceReference[];
-  /**
-   * Composition seam. Production omits it and therefore fails closed; tests
-   * inject a verified capability from `tests/setup/safety-resolver.ts`.
-   */
-  authoritySource?: SafetyResolutionAuthoritySource;
 }
 
 export interface ResolveRiskResponse {
@@ -151,13 +144,32 @@ async function assertEvidenceBelongsToCase(
   }
 }
 
-/** Exactly one unresolved HOLD_ENTERED trace must exist for the held period. */
-async function findActiveHoldTrace(
+/**
+ * Exactly one unresolved HOLD_ENTERED trace must exist for the held period.
+ *
+ * That trace is the existing approved/versioned Safety Policy context: it could
+ * only have been persisted by EnterSafetyHold after trusted policy-identity
+ * validation. ResolveRisk re-reads the complete opaque identity here instead
+ * of inventing a second Safety-policy model.
+ */
+async function findActiveHoldPolicyContext(
   client: pg.PoolClient,
   input: { familyId: string; caseId: string }
-): Promise<string> {
-  const { rows } = await client.query<{ id: string }>(
-    `SELECT r.id
+): Promise<{
+  id: string;
+  policyRef: string;
+  policyVersion: string;
+  ruleRef: string;
+  ruleVersion: string;
+}> {
+  const { rows } = await client.query<{
+    id: string;
+    policy_ref: string | null;
+    policy_version: string | null;
+    rule_ref: string | null;
+    rule_version: string | null;
+  }>(
+    `SELECT r.id, r.policy_ref, r.policy_version, r.rule_ref, r.rule_version
        FROM risk_events r
       WHERE r.family_id = $1
         AND r.case_id = $2
@@ -168,10 +180,30 @@ async function findActiveHoldTrace(
         )`,
     [input.familyId, input.caseId]
   );
-  // Trace inconsistency is an internal invariant failure, never a second
-  // source of status truth.
-  if (rows.length !== 1) throw httpError('INTERNAL_ERROR', 'Safety trace inconsistent');
-  return rows[0]!.id;
+
+  const row = rows[0];
+  if (
+    rows.length !== 1 ||
+    !row ||
+    typeof row.policy_ref !== 'string' ||
+    row.policy_ref.trim() === '' ||
+    typeof row.policy_version !== 'string' ||
+    row.policy_version.trim() === '' ||
+    typeof row.rule_ref !== 'string' ||
+    row.rule_ref.trim() === '' ||
+    typeof row.rule_version !== 'string' ||
+    row.rule_version.trim() === ''
+  ) {
+    throw httpError('INTERNAL_ERROR', 'Safety policy context inconsistent');
+  }
+
+  return {
+    id: row.id,
+    policyRef: row.policy_ref,
+    policyVersion: row.policy_version,
+    ruleRef: row.rule_ref,
+    ruleVersion: row.rule_version,
+  };
 }
 
 export async function resolveRisk(
@@ -191,28 +223,25 @@ export async function resolveRisk(
     throw httpError('SAFETY_REVIEW_EVIDENCE_INVALID');
   }
 
-  const familyId = await withIdentityTransaction(
-    pool,
-    { accountId: input.accountId, purpose: 'FAMILY_MANAGEMENT' },
-    (tx) => requireCurrentFamily(tx, input.personId)
-  );
-
-  const authoritySource =
-    input.authoritySource ?? createProductionSafetyResolutionAuthoritySource();
-
   try {
-    return await withDrizzleRlsTransaction(
+    return await withDrizzleIdentityTransaction(
       pool,
       {
-        familyId,
         accountId: input.accountId,
         personId: input.personId,
-        purpose: 'FAMILY_MANAGEMENT',
+        purpose: 'SAFETY_RESOLUTION',
+        isolationLevel: 'REPEATABLE READ',
       },
       async (tx, client) => {
-        // Resolve the separate capability BEFORE any disclosure or mutation.
+        // Resolve Staff authority from the SAME transaction snapshot used by
+        // the command. No test/provider injection exists in production.
+        const authoritySource = createProductionSafetyResolutionAuthoritySource({
+          async query(text, values) {
+            const result = await client.query(text, values);
+            return { rows: result.rows };
+          },
+        });
         const authority = await authoritySource.resolve({
-          familyId,
           caseId,
           accountId: input.accountId,
           personId: input.personId,
@@ -224,15 +253,38 @@ export async function resolveRisk(
           throw httpError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
         }
 
+        // Staff is deliberately not inserted into family_members. The DB gate
+        // establishes only this exact Case's Family RLS context after
+        // SAFETY_RESOLVE + linked GLOBAL grant + current CASE assignment were
+        // proven. It revalidates the same facts under this transaction snapshot.
+        const context = await client.query<{ family_id: string }>(
+          'SELECT app.set_staff_case_context($1, $2)::text AS family_id',
+          [authority.assignmentId, caseId]
+        );
+        const familyId = context.rows[0]?.family_id;
+        if (!familyId || familyId !== authority.familyId) {
+          throw httpError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
+        }
+
         await requireFamilyAction(client, {
           accountId: input.accountId,
           personId: input.personId,
           familyId,
           action: 'CASE_RESOLVE_RISK',
-          purpose: 'FAMILY_MANAGEMENT',
+          purpose: 'SAFETY_RESOLUTION',
           resource: { type: 'CASE', familyId, caseId },
           caseId,
-          safetyResolution: { verified: true, authorityRef: authority.authorityRef },
+          safetyResolution: {
+            verified: true,
+            authorityRef: authority.authorityRef,
+            capability: authority.capability,
+            capabilityGrantId: authority.capabilityGrantId,
+            assignmentId: authority.assignmentId,
+            familyId: authority.familyId,
+            caseId: authority.caseId,
+            accountId: authority.accountId,
+            personId: authority.personId,
+          },
         });
 
         const requestHash = buildRequestHash({
@@ -280,7 +332,7 @@ export async function resolveRisk(
         });
 
         // The trace is linkage evidence, never a second status source.
-        const holdTraceId = await findActiveHoldTrace(client, { familyId, caseId });
+        const holdPolicyContext = await findActiveHoldPolicyContext(client, { familyId, caseId });
 
         const transitioned = await transitionCaseStatus(asSafetyWriteTx(tx), {
           caseId,
@@ -294,7 +346,7 @@ export async function resolveRisk(
           caseId,
           actorAccountId: input.accountId,
           decisionCaseVersion: locked.version,
-          resolutionOfRiskEventId: holdTraceId,
+          resolutionOfRiskEventId: holdPolicyContext.id,
           evidenceRefs: input.reviewEvidenceRefs,
           resolutionAuthorityRef: authority.authorityRef,
         });
