@@ -95,7 +95,15 @@ async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
   const result=await evaluateComplianceAtTransactionTime(drizzle(tx),tx,{
     descriptor:ROLEPLAY_FEATURE,actorPersonId:personId,targetPersonId:personId,supportedObligations:SUPPORTED_ROLEPLAY_OBLIGATIONS,
   });
-  if(result.gate!=='ALLOW') throw roleplayError('COMPLIANCE_BLOCKED',result.reasonCode??'COMPLIANCE_BLOCKED');
+  if(result.gate!=='ALLOW') {
+    if(result.reasonCode==='COMPLIANCE_FEATURE_BLOCKED') {
+      throw roleplayError('FORBIDDEN','A4003_ADULT_ONLY');
+    }
+    if(result.reasonCode==='COMPLIANCE_AGE_UNKNOWN'||result.reasonCode==='COMPLIANCE_PROFILE_MISSING') {
+      throw roleplayError('AGE_BAND_UNKNOWN');
+    }
+    throw roleplayError('COMPLIANCE_BLOCKED',result.reasonCode??'COMPLIANCE_BLOCKED');
+  }
   return result;
 }
 function assertRoleplaySessionCurrent(session:{
@@ -130,8 +138,8 @@ export async function createPhoneUseRoleplay(
  },async tx=>{
    await authorizeRoleplay(tx,input);
    if(input.professionalContentVersion!==PHONE_USE_CONTRACT_CONTENT_VERSION) throw roleplayError('PHONE_USE_CONTRACT_CONTENT_STALE');
-   await requireAdapterAvailable(adapter);
    const compliance=await assertRoleplayCompliance(tx,input.actor.personId);
+   await requireAdapterAvailable(adapter);
    const requestHash=hashPayload({
      familyId:input.familyId,caseId:input.caseId,expectedCaseVersion:input.expectedCaseVersion,
      professionalContentVersion:input.professionalContentVersion,
@@ -163,8 +171,8 @@ export async function addPhoneUseRoleplayTurn(
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
    await authorizeRoleplay(tx,input);
-   await requireAdapterAvailable(adapter);
    await assertRoleplayCompliance(tx,input.actor.personId);
+   await requireAdapterAvailable(adapter);
    const requestHash=hashPayload({sessionId:input.sessionId,expectedSessionRevision:input.expectedSessionRevision,simulatedChildInput:input.simulatedChildInput});
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
