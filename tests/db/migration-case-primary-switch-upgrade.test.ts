@@ -177,6 +177,7 @@ const SLICE8_NEW_CONSTRAINTS = [
 
 /** Exact Slice 8 object-fingerprint delta. */
 const SLICE8_NEW_OBJECTS = [
+  'enum:problem_formulation_review_state',
   'enum:problem_formulation_status',
   'policy:problem_formulations_insert',
   'policy:problem_formulations_select',
