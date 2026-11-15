@@ -31,7 +31,6 @@ import {
   encodeDecoyPairingChallenge,
   decodePairingChallenge,
   decryptOpenid,
-  derivePairingIssuanceId,
   encodePairingChallenge,
   hashToken,
 } from './crypto.js';
@@ -350,10 +349,10 @@ async function issueOrReplayDecoyChallenge(
 
   // One candidate-facing observable policy: if this transport context already
   // emitted a real envelope in the current PUBLIC context window, preserve
-  // those exact bytes through hidden settlement/consumption. Authoritative
-  // consumability is separate: settlement clears pairing_issuance_id and the
-  // verifier also requires a live PENDING attempt. The historical timestamps
-  // below therefore cannot revive or consume a retired challenge.
+  // those exact bytes across ATTEMPT_EXPIRED settlement. The retained issuance
+  // facts are already expired in the real protocol because pairing expiry is
+  // bounded by attempt expiry, and the confirmer independently requires a live
+  // PENDING attempt. They are historical replay material, not authority.
   const continuity = await replayObservablePairingChallenge(tx, deps, context, now);
   if (continuity) return continuity;
 
@@ -384,7 +383,8 @@ async function replayObservablePairingChallenge(
     !context.attemptId ||
     !context.invitationParticipationId ||
     !context.pairingIssuedAt ||
-    !context.pairingExpiresAt
+    !context.pairingExpiresAt ||
+    !context.pairingIssuanceId
   ) {
     return null;
   }
@@ -420,11 +420,11 @@ async function replayObservablePairingChallenge(
   // a still-live public context window. Other terminal/consumed reasons must
   // fall through to the ordinary non-decodable decoy path.
   //
-  // The historical envelope may still be cryptographically decodable for the
-  // remainder of its original pairing window, but it is no longer consumable:
-  // settlement has retired pairing_issuance_id and the confirmer independently
-  // requires a live PENDING attempt. That separation is what closes the oracle
-  // without extending business validity.
+  // In the real protocol the historical envelope is already expired here:
+  // pairing_expires_at <= attempt.expires_at. Tests may move the attempt
+  // boundary deterministically instead of sleeping; even in that synthetic
+  // state the confirmer still requires a live PENDING attempt, so replaying
+  // these bytes cannot extend business validity.
   if (
     attempt.state !== 'TERMINAL' ||
     attempt.terminalReason !== 'ATTEMPT_EXPIRED' ||
@@ -433,22 +433,15 @@ async function replayObservablePairingChallenge(
     return null;
   }
 
-  const identityFacts = {
+  return encodePairingChallenge(deps.identityBindingSecret, {
     contextId: context.id,
     candidateIdentityDigest: context.candidateIdentityDigest,
     attemptId: attempt.id,
     targetPersonId: attempt.targetPersonId,
     invitationParticipationId: attempt.invitationParticipationId,
+    pairingIssuanceId: context.pairingIssuanceId,
     pairingIssuedAt: context.pairingIssuedAt,
     pairingExpiresAt: context.pairingExpiresAt,
-  };
-  const pairingIssuanceId =
-    context.pairingIssuanceId ??
-    derivePairingIssuanceId(deps.identityBindingSecret, identityFacts);
-
-  return encodePairingChallenge(deps.identityBindingSecret, {
-    ...identityFacts,
-    pairingIssuanceId,
   });
 }
 
@@ -570,18 +563,7 @@ async function issueOrReplayChallenge(
   if (!reusable) {
     const pairingIssuedAt = now;
     const pairingExpiresAt = new Date(desiredExpiry);
-    const pairingIssuanceId = derivePairingIssuanceId(
-      deps.identityBindingSecret,
-      {
-        contextId: context.id,
-        candidateIdentityDigest: context.candidateIdentityDigest,
-        attemptId: attempt.id,
-        targetPersonId: attempt.targetPersonId,
-        invitationParticipationId: attempt.invitationParticipationId,
-        pairingIssuedAt,
-        pairingExpiresAt,
-      }
-    );
+    const pairingIssuanceId = randomUUID();
     const row = await setPairingIssuance(tx, context.id, {
       pairingIssuanceId,
       pairingIssuedAt,
