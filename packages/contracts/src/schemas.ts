@@ -582,8 +582,9 @@ export const ParticipationStateConflictError = z.strictObject({
 export const PG_INTEGER_MAX = 2147483647;
 
 export const ProblemFormulationStatus = z.enum([
-  'DRAFT', 'PRESENTED', 'CONFIRMED', 'DISPUTED', 'NEEDS_REVIEW', 'SUPERSEDED',
+  'DRAFT', 'PRESENTED', 'CONFIRMED', 'DISPUTED', 'SUPERSEDED',
 ]);
+export const ProblemFormulationReviewState = z.enum(['CURRENT', 'NEEDS_REVIEW']);
 export type ProblemFormulationStatusType = z.infer<typeof ProblemFormulationStatus>;
 
 export const EvidenceRef = z.discriminatedUnion('type', [
@@ -689,6 +690,7 @@ export const ProblemFormulation = z.strictObject({
   caseId: z.string().uuid(),
   version: z.number().int().min(1).max(PG_INTEGER_MAX),
   status: ProblemFormulationStatus,
+  reviewState: ProblemFormulationReviewState,
   primaryProblem: PrimaryProblem,
   keyFactors: z.array(KeyFactor),
   evidenceRefs: z.array(EvidenceRef).min(1),
