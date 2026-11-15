@@ -2,26 +2,17 @@
 -- AUTH-007 + AUTH-008 — Safety Resolver Staff Authority Foundation
 -- Migration: 021_safety_resolver_staff_authority.sql
 --
--- Forward-only targeted foundation. Historical migrations remain immutable.
+-- PR-local forward-only targeted foundation. Historical migrations 001–020
+-- remain immutable.
 --
 -- Scope:
---   1. one Staff authority table, `staff_assignments`
---   2. GLOBAL rows = explicit capability grants
---   3. CASE rows = exact Case assignments referencing one GLOBAL grant
---   4. self-only runtime read RLS; runtime cannot grant/revoke/mutate
---   5. narrow Staff Case RLS context function for SAFETY_RESOLVE only
---   6. narrow self Account read under SAFETY_RESOLUTION so Hard Disable remains
---      an authority fact at the production resolver source
---
--- NOT created here:
---   Staff UI / Admin Console / Staff SSO / IAM platform / CRM / employee
---   directory / generic ADMIN role / any Staff workflow / professional Safety
---   rule content.  Only SAFETY_RESOLVE is consumed by production in AUTH-007.
+--   1. one Staff authority table, staff_assignments
+--   2. DB-enforced CASE -> matching GLOBAL authority graph
+--   3. runtime-read-only Staff facts + exact-Case Safety RLS
+--   4. DB-enforced serialization for revoke/disable vs ResolveRisk
+--   5. wall-clock-safe authority validation with clock_timestamp()
 -- ============================================================================
 
--- The existing Account↔Person 1:1 model already has persons.id PK and
--- persons.account_id UNIQUE.  This additive composite key lets Staff authority
--- rows bind both identifiers mechanically, not by application convention.
 ALTER TABLE persons
   ADD CONSTRAINT persons_id_account_key UNIQUE (id, account_id);
 
@@ -35,6 +26,9 @@ CREATE TABLE staff_assignments (
   family_id                uuid,
   case_id                  uuid,
   capability_grant_id      uuid,
+  capability_grant_scope_type text GENERATED ALWAYS AS (
+    CASE WHEN scope_type = 'CASE' THEN 'GLOBAL'::text ELSE NULL::text END
+  ) STORED,
   granted_by_account_id    uuid NOT NULL
                              REFERENCES accounts(id) ON DELETE RESTRICT,
   granted_at               timestamptz NOT NULL DEFAULT now(),
@@ -55,13 +49,29 @@ CREATE TABLE staff_assignments (
     REFERENCES cases(id, family_id)
     ON DELETE RESTRICT,
 
-  CONSTRAINT staff_assignments_capability_grant_fk
-    FOREIGN KEY (capability_grant_id)
-    REFERENCES staff_assignments(id)
+  -- Composite target for the CASE -> GLOBAL authority edge.  id remains the
+  -- primary identity; the extra key lets the FK mechanically bind the parent
+  -- scope + Account + Person + capability as one graph invariant.
+  CONSTRAINT staff_assignments_authority_identity_key
+    UNIQUE (id, scope_type, account_id, person_id, capability),
+
+  CONSTRAINT staff_assignments_capability_grant_identity_fk
+    FOREIGN KEY (
+      capability_grant_id,
+      capability_grant_scope_type,
+      account_id,
+      person_id,
+      capability
+    )
+    REFERENCES staff_assignments(
+      id,
+      scope_type,
+      account_id,
+      person_id,
+      capability
+    )
     ON DELETE RESTRICT,
 
-  -- AUTH-008 freezes the vocabulary but this migration creates no workflow for
-  -- capabilities other than SAFETY_RESOLVE.
   CONSTRAINT staff_assignments_capability_check CHECK (
     capability IN (
       'PROFESSIONAL_REVIEW',
@@ -78,9 +88,6 @@ CREATE TABLE staff_assignments (
     scope_type IN ('GLOBAL', 'CASE')
   ),
 
-  -- One table, two explicit facts:
-  --   GLOBAL = capability grant
-  --   CASE   = Case assignment tied to a GLOBAL grant
   CONSTRAINT staff_assignments_scope_shape_check CHECK (
     (
       scope_type = 'GLOBAL'
@@ -119,10 +126,91 @@ CREATE INDEX staff_assignments_case_capability_idx
   ON staff_assignments (case_id, capability, account_id)
   WHERE scope_type = 'CASE';
 
--- Staff authority is not household authority.  Before a Case context is
--- established, the authenticated Account/Person can see only its own authority
--- rows.  Runtime receives no mutation privilege, so this is not a grant/revoke
--- workflow or Staff administration surface.
+-- --------------------------------------------------------------------------
+-- Serialization boundary
+--
+-- ResolveRisk and every Staff authority mutation for the same Account contend
+-- on the same transaction advisory lock. Staff-row mutations additionally
+-- contend on the exact row lock key. This keeps runtime SELECT-only while
+-- making every INSERT/UPDATE/DELETE mutation path mechanically participate in
+-- the serialization protocol.
+-- --------------------------------------------------------------------------
+
+CREATE FUNCTION app.serialize_staff_authority_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE
+  v_old_account_key bigint;
+  v_new_account_key bigint;
+  v_row_id uuid;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    v_new_account_key := hashtextextended('AUTH_ACCOUNT:' || NEW.account_id::text, 0);
+    PERFORM pg_advisory_xact_lock(v_new_account_key);
+    v_row_id := NEW.id;
+  ELSIF TG_OP = 'DELETE' THEN
+    v_old_account_key := hashtextextended('AUTH_ACCOUNT:' || OLD.account_id::text, 0);
+    PERFORM pg_advisory_xact_lock(v_old_account_key);
+    v_row_id := OLD.id;
+  ELSE
+    v_old_account_key := hashtextextended('AUTH_ACCOUNT:' || OLD.account_id::text, 0);
+    v_new_account_key := hashtextextended('AUTH_ACCOUNT:' || NEW.account_id::text, 0);
+
+    IF v_old_account_key = v_new_account_key THEN
+      PERFORM pg_advisory_xact_lock(v_new_account_key);
+    ELSE
+      PERFORM pg_advisory_xact_lock(LEAST(v_old_account_key, v_new_account_key));
+      PERFORM pg_advisory_xact_lock(GREATEST(v_old_account_key, v_new_account_key));
+    END IF;
+    v_row_id := NEW.id;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('AUTH_ROW:' || v_row_id::text, 0)
+  );
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+REVOKE ALL ON FUNCTION app.serialize_staff_authority_mutation() FROM PUBLIC;
+
+CREATE TRIGGER staff_assignments_authority_serialization
+  BEFORE INSERT OR UPDATE OR DELETE ON staff_assignments
+  FOR EACH ROW
+  EXECUTE FUNCTION app.serialize_staff_authority_mutation();
+
+CREATE FUNCTION app.serialize_account_authority_status_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('AUTH_ACCOUNT:' || OLD.id::text, 0)
+  );
+  RETURN NEW;
+END
+$function$;
+
+REVOKE ALL ON FUNCTION app.serialize_account_authority_status_mutation() FROM PUBLIC;
+
+CREATE TRIGGER accounts_authority_status_serialization
+  BEFORE UPDATE OF status ON accounts
+  FOR EACH ROW
+  EXECUTE FUNCTION app.serialize_account_authority_status_mutation();
+
+-- --------------------------------------------------------------------------
+-- RLS + exact Staff Case context
+-- --------------------------------------------------------------------------
+
 ALTER TABLE staff_assignments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_assignments FORCE ROW LEVEL SECURITY;
 
@@ -137,9 +225,6 @@ CREATE POLICY staff_assignments_runtime_self_read ON staff_assignments
 REVOKE ALL ON staff_assignments FROM xiaoshuyin_app;
 GRANT SELECT ON staff_assignments TO xiaoshuyin_app;
 
--- AUTH-001 composition: the production resolver must also be able to verify
--- that its exact authenticated Account is still ACTIVE.  This policy exposes
--- only that Account and only under the dedicated Safety-resolution purpose.
 CREATE POLICY accounts_runtime_safety_resolution_read ON accounts
   FOR SELECT
   TO xiaoshuyin_app
@@ -148,58 +233,146 @@ CREATE POLICY accounts_runtime_safety_resolution_read ON accounts
     AND id = app_account_id()
   );
 
--- Establish the Family RLS context for a Staff resolver without manufacturing
--- family_members membership.  This is a database defence-in-depth gate, not a
--- second authorization system: the application still calls the single
--- authorize() seam with the verified fact returned by the production resolver
--- source.  Both GLOBAL capability grant and exact CASE assignment must be
--- current in the same transaction snapshot.
+-- A Staff Case GUC is never authority by itself. Every policy calls this
+-- verifier, which binds the GUC to the exact current assignment + matching
+-- GLOBAL grant + ACTIVE Account using wall-clock time.
+CREATE FUNCTION app.staff_case_authorized(p_case_id uuid)
+RETURNS boolean
+LANGUAGE sql
+VOLATILE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+  SELECT
+    p_case_id IS NOT NULL
+    AND app_current_purpose() = 'SAFETY_RESOLUTION'
+    AND p_case_id = NULLIF(current_setting('app.staff_case_id', true), '')::uuid
+    AND EXISTS (
+      SELECT 1
+        FROM public.staff_assignments assignment
+        JOIN public.staff_assignments capability_grant
+          ON capability_grant.id = assignment.capability_grant_id
+        JOIN public.accounts reviewer_account
+          ON reviewer_account.id = assignment.account_id
+       WHERE assignment.id =
+             NULLIF(current_setting('app.staff_assignment_id', true), '')::uuid
+         AND assignment.scope_type = 'CASE'
+         AND assignment.capability = 'SAFETY_RESOLVE'
+         AND assignment.case_id = p_case_id
+         AND assignment.account_id = app_account_id()
+         AND assignment.person_id = app_person_id()
+         AND assignment.revoked_at IS NULL
+         AND assignment.valid_from <= clock_timestamp()
+         AND (
+           assignment.valid_until IS NULL
+           OR assignment.valid_until > clock_timestamp()
+         )
+         AND capability_grant.scope_type = 'GLOBAL'
+         AND capability_grant.capability = 'SAFETY_RESOLVE'
+         AND capability_grant.account_id = assignment.account_id
+         AND capability_grant.person_id = assignment.person_id
+         AND capability_grant.revoked_at IS NULL
+         AND capability_grant.valid_from <= clock_timestamp()
+         AND (
+           capability_grant.valid_until IS NULL
+           OR capability_grant.valid_until > clock_timestamp()
+         )
+         AND reviewer_account.status = 'ACTIVE'
+    )
+$function$;
+
+REVOKE ALL ON FUNCTION app.staff_case_authorized(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.staff_case_authorized(uuid) TO xiaoshuyin_app;
+
+-- The one DB entry point for Staff ResolveRisk context. Lock order:
+--   Account serialization -> GLOBAL grant key -> CASE assignment key -> Case row.
+-- No app.family_id is set, so this context can never become household-Family
+-- authority. The Case row lock is held until the surrounding transaction ends.
 CREATE FUNCTION app.set_staff_case_context(
   p_assignment_id uuid,
   p_case_id uuid
 ) RETURNS uuid
 LANGUAGE plpgsql
 SECURITY INVOKER
-AS $$
+SET search_path = pg_catalog, public
+AS $function$
 DECLARE
+  v_account_id uuid;
+  v_person_id uuid;
+  v_grant_id uuid;
   v_family_id uuid;
+  v_case_family_id uuid;
+  v_now timestamptz;
 BEGIN
+  v_account_id := app_account_id();
+  v_person_id := app_person_id();
+
   IF p_assignment_id IS NULL
      OR p_case_id IS NULL
-     OR app_account_id() IS NULL
-     OR app_person_id() IS NULL
+     OR v_account_id IS NULL
+     OR v_person_id IS NULL
      OR app_current_purpose() <> 'SAFETY_RESOLUTION' THEN
     RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
   END IF;
 
+  -- First lock is the Account serialization key. Every grant/assignment
+  -- mutation and Account status mutation for this actor must take it too.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('AUTH_ACCOUNT:' || v_account_id::text, 0)
+  );
+
+  -- Structural lookup only; a concurrent mutation that won the Account lock
+  -- has already committed before this statement can run.
+  SELECT assignment.capability_grant_id
+    INTO v_grant_id
+    FROM public.staff_assignments assignment
+   WHERE assignment.id = p_assignment_id
+     AND assignment.account_id = v_account_id
+     AND assignment.person_id = v_person_id
+     AND assignment.scope_type = 'CASE'
+     AND assignment.capability = 'SAFETY_RESOLVE'
+     AND assignment.case_id = p_case_id;
+
+  IF v_grant_id IS NULL THEN
+    RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+
+  -- Deterministic authority-row order after the Account lock.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('AUTH_ROW:' || v_grant_id::text, 0)
+  );
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('AUTH_ROW:' || p_assignment_id::text, 0)
+  );
+
+  v_now := clock_timestamp();
+
   SELECT assignment.family_id
     INTO v_family_id
-    FROM staff_assignments assignment
-    JOIN staff_assignments capability_grant
+    FROM public.staff_assignments assignment
+    JOIN public.staff_assignments capability_grant
       ON capability_grant.id = assignment.capability_grant_id
-    JOIN accounts reviewer_account
+    JOIN public.accounts reviewer_account
       ON reviewer_account.id = assignment.account_id
    WHERE assignment.id = p_assignment_id
      AND assignment.scope_type = 'CASE'
      AND assignment.capability = 'SAFETY_RESOLVE'
      AND assignment.case_id = p_case_id
-     AND assignment.account_id = app_account_id()
-     AND assignment.person_id = app_person_id()
+     AND assignment.account_id = v_account_id
+     AND assignment.person_id = v_person_id
      AND assignment.revoked_at IS NULL
-     AND assignment.valid_from <= CURRENT_TIMESTAMP
-     AND (
-       assignment.valid_until IS NULL
-       OR assignment.valid_until > CURRENT_TIMESTAMP
-     )
+     AND assignment.valid_from <= v_now
+     AND (assignment.valid_until IS NULL OR assignment.valid_until > v_now)
+     AND capability_grant.id = v_grant_id
      AND capability_grant.scope_type = 'GLOBAL'
      AND capability_grant.capability = 'SAFETY_RESOLVE'
      AND capability_grant.account_id = assignment.account_id
      AND capability_grant.person_id = assignment.person_id
      AND capability_grant.revoked_at IS NULL
-     AND capability_grant.valid_from <= CURRENT_TIMESTAMP
+     AND capability_grant.valid_from <= v_now
      AND (
        capability_grant.valid_until IS NULL
-       OR capability_grant.valid_until > CURRENT_TIMESTAMP
+       OR capability_grant.valid_until > v_now
      )
      AND reviewer_account.status = 'ACTIVE';
 
@@ -207,9 +380,72 @@ BEGIN
     RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
   END IF;
 
-  PERFORM set_config('app.family_id', v_family_id::text, true);
+  PERFORM set_config('app.staff_assignment_id', p_assignment_id::text, true);
+  PERFORM set_config('app.staff_case_id', p_case_id::text, true);
+
+  -- Exact Case row lock. The Staff RLS policy below revalidates the same
+  -- authority using clock_timestamp(), so an expired fact cannot create scope.
+  SELECT target_case.family_id
+    INTO v_case_family_id
+    FROM public.cases target_case
+   WHERE target_case.id = p_case_id
+   FOR UPDATE;
+
+  IF v_case_family_id IS NULL OR v_case_family_id <> v_family_id THEN
+    RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
+  END IF;
+
   RETURN v_family_id;
-END $$;
+END
+$function$;
 
 REVOKE ALL ON FUNCTION app.set_staff_case_context(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.set_staff_case_context(uuid, uuid) TO xiaoshuyin_app;
+
+-- Staff exact-Case policies are additive. Existing household Family policies
+-- are left byte-for-byte unchanged.
+CREATE POLICY cases_staff_safety_select ON cases
+  FOR SELECT TO xiaoshuyin_app
+  USING (app.staff_case_authorized(id));
+
+CREATE POLICY cases_staff_safety_update ON cases
+  FOR UPDATE TO xiaoshuyin_app
+  USING (app.staff_case_authorized(id))
+  WITH CHECK (app.staff_case_authorized(id));
+
+CREATE POLICY case_events_staff_safety_insert ON case_events
+  FOR INSERT TO xiaoshuyin_app
+  WITH CHECK (app.staff_case_authorized(case_id));
+
+CREATE POLICY risk_events_staff_safety_select ON risk_events
+  FOR SELECT TO xiaoshuyin_app
+  USING (app.staff_case_authorized(case_id));
+
+CREATE POLICY risk_events_staff_safety_insert ON risk_events
+  FOR INSERT TO xiaoshuyin_app
+  WITH CHECK (app.staff_case_authorized(case_id));
+
+CREATE POLICY dialogue_messages_staff_safety_select ON dialogue_messages
+  FOR SELECT TO xiaoshuyin_app
+  USING (app.staff_case_authorized(case_id));
+
+CREATE POLICY assertions_staff_safety_select ON assertions
+  FOR SELECT TO xiaoshuyin_app
+  USING (app.staff_case_authorized(case_id));
+
+CREATE POLICY observations_staff_safety_select ON observations
+  FOR SELECT TO xiaoshuyin_app
+  USING (app.staff_case_authorized(case_id));
+
+CREATE POLICY audit_staff_safety_insert ON business_audit_events
+  FOR INSERT TO xiaoshuyin_app
+  WITH CHECK (
+    resource_type = 'CASE'
+    AND EXISTS (
+      SELECT 1
+        FROM public.cases target_case
+       WHERE target_case.id = resource_id
+         AND target_case.family_id = family_id
+         AND app.staff_case_authorized(target_case.id)
+    )
+  );

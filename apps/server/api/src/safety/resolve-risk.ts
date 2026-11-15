@@ -24,7 +24,6 @@ import {
   insertSafetyAuditEvent,
   insertSafetyCaseEvent,
   isSafetyError,
-  lockFamilyForPrimaryDecision,
 
   type ApprovedPolicyIdentity,
   type OpaqueEvidenceReference,
@@ -275,18 +274,10 @@ export async function resolveRisk(
           throw httpError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
         }
 
-        // Staff is deliberately not inserted into family_members. The DB gate
-        // establishes only this exact Case's Family RLS context after
-        // SAFETY_RESOLVE + linked GLOBAL grant + current CASE assignment were
-        // proven. Runtime is deliberately SELECT-only on authority data.
-        const context = await client.query<{ family_id: string }>(
-          'SELECT app.set_staff_case_context($1, $2)::text AS family_id',
-          [authority.assignmentId, caseId]
-        );
-        const familyId = context.rows[0]?.family_id;
-        if (!familyId || familyId !== authority.familyId) {
-          throw httpError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
-        }
+        // The production authority source has already passed the one DB gate:
+        // revoke/disable serialization is held, exact Case context is set, and
+        // the Case row is locked. No household app.family_id is established.
+        const familyId = authority.familyId;
 
         await requireFamilyAction(client, {
           accountId: input.accountId,
@@ -333,9 +324,6 @@ export async function resolveRisk(
           throw httpError('INTERNAL_ERROR', 'Idempotency slot unavailable');
         }
 
-        const familyVisible = await lockFamilyForPrimaryDecision(client, familyId);
-        if (!familyVisible) throw httpError('CASE_NOT_FOUND', 'Case not found');
-
         const locked = await getCaseForUpdate(client, caseId);
         if (!locked) throw httpError('CASE_NOT_FOUND', 'Case not found');
 
@@ -360,14 +348,23 @@ export async function resolveRisk(
           throw httpError('SAFETY_PRECHECK_STALE');
         }
 
-        // Linearization point for "can this actor exercise SAFETY_RESOLVE for
-        // this exact Case right now?". Re-read capability grant, Case
-        // assignment and ACTIVE Account immediately before the state change.
-        const revalidated = await client.query<{ family_id: string }>(
-          'SELECT app.set_staff_case_context($1, $2)::text AS family_id',
-          [authority.assignmentId, caseId]
-        );
-        if (revalidated.rows[0]?.family_id !== familyId) {
+        // Wall-clock revalidation immediately before the state change. The
+        // first DB gate still holds the Account/grant/assignment serialization
+        // and exact Case row lock; this second pass catches expiry. The Case
+        // UPDATE RLS policy repeats the same clock_timestamp() predicate inside
+        // the transition statement, so the mutation itself is authority-bound.
+        const revalidated = await authoritySource.resolve({
+          caseId,
+          accountId: input.accountId,
+          personId: input.personId,
+        });
+        if (
+          revalidated.status !== 'VERIFIED' ||
+          revalidated.authorityRef !== authority.authorityRef ||
+          revalidated.capabilityGrantId !== authority.capabilityGrantId ||
+          revalidated.assignmentId !== authority.assignmentId ||
+          revalidated.familyId !== familyId
+        ) {
           throw httpError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
         }
 

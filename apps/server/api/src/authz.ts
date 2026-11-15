@@ -53,6 +53,20 @@ async function readFacts(
   tx: pg.PoolClient,
   req: FamilyActionRequest
 ): Promise<AuthorizeFacts> {
+  // AUTH-007: Staff ResolveRisk is exact-Case authority, not Family authority.
+  // Do not read household Family/member facts and do not require app.family_id.
+  if (req.action === 'CASE_RESOLVE_RISK') {
+    return {
+      membership: false,
+      familyCreatedByPersonId: null,
+      actorAgeBand: null,
+      guardianPersonId: null,
+      targetIsFamilyMember: false,
+      familyId: null,
+      safetyResolution: req.safetyResolution ?? null,
+    };
+  }
+
   const needsAgeBand =
     req.action === 'GUARDIAN_CONSENT_REQUEST' || req.action === 'GUARDIAN_CONSENT_GRANT';
 

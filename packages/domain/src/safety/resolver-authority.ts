@@ -55,7 +55,7 @@ export interface SafetyResolutionAuthorityQuery {
   query(
     text: string,
     values: unknown[]
-  ): Promise<{ rows: SafetyResolutionAuthorityRow[] }>;
+  ): Promise<{ rows: Array<Record<string, unknown>> }>;
 }
 
 function nonEmpty(value: unknown): value is string {
@@ -66,13 +66,12 @@ function nonEmpty(value: unknown): value is string {
  * Construct the database-backed production authority source.
  *
  * The caller supplies the query handle from the SAME transaction used by
- * ResolveRisk. Runtime has SELECT-only authority-table access; it must never
- * receive UPDATE merely to obtain row locks. ResolveRisk therefore performs
- * this mechanical verification and then revalidates the same assignment/grant/
- * Account immediately before the state transition through
- * app.set_staff_case_context(). PostgreSQL CURRENT_TIMESTAMP is transaction-
- * stable. Database/infrastructure errors are intentionally not converted to
- * DENIED/UNAVAILABLE: they propagate as infrastructure failures.
+ * ResolveRisk. Candidate discovery is followed by the one DB authority/context
+ * gate, app.set_staff_case_context(), which serializes revoke/disable, locks the
+ * exact Case and validates with clock_timestamp(). Runtime remains SELECT-only
+ * on staff_assignments. A second resolve() immediately before transition gives
+ * a wall-clock revalidation; the Case RLS UPDATE policy is the atomic final
+ * authority predicate.
  */
 export function createProductionSafetyResolutionAuthoritySource(
   reader: SafetyResolutionAuthorityQuery
@@ -100,20 +99,20 @@ export function createProductionSafetyResolutionAuthoritySource(
           AND assignment.scope_type = 'CASE'
           AND assignment.capability = 'SAFETY_RESOLVE'
           AND assignment.revoked_at IS NULL
-          AND assignment.valid_from <= CURRENT_TIMESTAMP
+          AND assignment.valid_from <= clock_timestamp()
           AND (
             assignment.valid_until IS NULL
-            OR assignment.valid_until > CURRENT_TIMESTAMP
+            OR assignment.valid_until > clock_timestamp()
           )
           AND capability_grant.scope_type = 'GLOBAL'
           AND capability_grant.capability = 'SAFETY_RESOLVE'
           AND capability_grant.account_id = assignment.account_id
           AND capability_grant.person_id = assignment.person_id
           AND capability_grant.revoked_at IS NULL
-          AND capability_grant.valid_from <= CURRENT_TIMESTAMP
+          AND capability_grant.valid_from <= clock_timestamp()
           AND (
             capability_grant.valid_until IS NULL
-            OR capability_grant.valid_until > CURRENT_TIMESTAMP
+            OR capability_grant.valid_until > clock_timestamp()
           )
           AND reviewer_account.status = 'ACTIVE'
         ORDER BY assignment.id
@@ -125,7 +124,7 @@ export function createProductionSafetyResolutionAuthoritySource(
       // an arbitrary authority fact.
       if (result.rows.length !== 1) return { status: 'DENIED' };
 
-      const row = result.rows[0]!;
+      const row = result.rows[0]! as unknown as SafetyResolutionAuthorityRow;
       if (
         !nonEmpty(row.assignment_id) ||
         !nonEmpty(row.capability_grant_id) ||
@@ -138,6 +137,27 @@ export function createProductionSafetyResolutionAuthoritySource(
         row.person_id !== input.personId
       ) {
         return { status: 'DENIED' };
+      }
+
+      try {
+        const context = await reader.query(
+          'SELECT app.set_staff_case_context($1, $2)::text AS family_id',
+          [row.assignment_id, input.caseId]
+        );
+        const familyId = context.rows[0]?.['family_id'];
+        if (typeof familyId !== 'string' || familyId !== row.family_id) {
+          return { status: 'DENIED' };
+        }
+      } catch (error) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          (error as { code?: unknown }).code === '42501'
+        ) {
+          return { status: 'DENIED' };
+        }
+        throw error;
       }
 
       return {
