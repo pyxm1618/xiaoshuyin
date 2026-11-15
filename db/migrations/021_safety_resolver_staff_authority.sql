@@ -449,10 +449,13 @@ SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $function$
 BEGIN
-  IF app_current_purpose() = 'SAFETY_RESOLUTION'
+  IF current_user = 'xiaoshuyin_app'
      AND OLD.status = 'SAFETY_HOLD'
      AND NEW.status = 'WAITING'
-     AND app.staff_case_authorized(OLD.id) IS NOT TRUE THEN
+     AND (
+       app_current_purpose() IS DISTINCT FROM 'SAFETY_RESOLUTION'
+       OR app.staff_case_authorized(OLD.id) IS NOT TRUE
+     ) THEN
     RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
   END IF;
   RETURN NEW;
