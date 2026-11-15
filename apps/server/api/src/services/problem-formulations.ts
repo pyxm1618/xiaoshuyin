@@ -8,6 +8,7 @@
 import type pg from 'pg';
 import {
   assertCaseGuards,
+  assertProblemFormulationReviewCurrent,
   assertStatusAllows,
   assertTransferableStatus,
   assertVersionBound,
@@ -942,6 +943,7 @@ export async function confirmProblemFormulation(
         });
         assertStatusAllows('CONFIRM', current.status);
         assertTransferableStatus(current.status);
+        assertProblemFormulationReviewCurrent(current.review_state);
 
         const authoritative = await revalidateCurrent(tx, input.caseId, current);
         const persons = await processingPersonIds(tx, {
@@ -1355,6 +1357,7 @@ export async function reassessFromFormulation(
         if (current.version !== input.formulationVersion) {
           throw pfError('PROBLEM_FORMULATION_VERSION_CONFLICT');
         }
+        assertProblemFormulationReviewCurrent(current.review_state);
         await validateReassessmentBasis(tx, current, input.basis);
 
         const authoritative = await revalidateCurrent(tx, input.caseId, current);
