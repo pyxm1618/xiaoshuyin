@@ -15,6 +15,7 @@ import {
   bumpCaseVersionWithoutPhaseChange,
   canonicalDependencies,
   canonicalEvidenceKey,
+  canonicalEvidenceRefs,
   caseVersionEtag,
   contentOf,
   getCaseById,
@@ -43,6 +44,7 @@ import {
   reassessmentBasisFingerprint,
   validateReassessmentBasis,
   advanceCasePhaseAndVersion,
+  resolveProblemFormulationReview as resolveProblemFormulationReviewState,
   pfError,
   type AuthoritativeEvidenceSet,
   type DependencyRef,
@@ -1292,6 +1294,291 @@ export async function correctProblemFormulation(
 
         const body = envelope(updated.version, inserted);
         return { status: 201, body, etag: caseVersionEtag(updated.version) };
+          }
+        );
+      }
+    );
+  } catch (error) {
+    return mapServiceError(error);
+  }
+}
+
+export interface ReviewResolutionInput extends MutationInput {
+  formulationId: string;
+  formulationVersion: number;
+  decision: 'NO_MATERIAL_IMPACT' | 'MATERIAL_CHANGE';
+  reviewBasis: string;
+  reviewEvidenceRefs?: EvidenceRef[];
+  successorChanges?: Partial<ProblemFormulationContent>;
+  note?: string;
+}
+
+/**
+ * AUTH-006 single authoritative Problem Formulation review-resolution command.
+ *
+ * This is the only application operation allowed to turn
+ * review_state=NEEDS_REVIEW back into CURRENT. It binds an authorized Family
+ * V1 formulation actor, the exact Family/Case/formulation id/version, an
+ * explicit review decision and review basis, current dependency validity and
+ * an authoritative review-resolution audit event in one transaction.
+ *
+ * It is internal: the product authority does not define a public review API.
+ */
+export async function resolveProblemFormulationReview(
+  pool: pg.Pool,
+  input: ReviewResolutionInput
+): Promise<{ status: number; body: unknown; etag: string | null }> {
+  try {
+    const reviewBasis = input.reviewBasis.trim();
+    if (reviewBasis.length === 0 || reviewBasis.length > 500) {
+      return {
+        status: 422,
+        body: {
+          code: 'VALIDATION_ERROR',
+          message: 'reviewBasis must be 1..500 characters',
+        },
+        etag: null,
+      };
+    }
+
+    return await withRlsTransaction(
+      pool,
+      {
+        familyId: input.familyId,
+        accountId: input.actor.accountId,
+        personId: input.actor.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) => {
+        await authorize(tx, {
+          actor: input.actor,
+          familyId: input.familyId,
+          caseId: input.caseId,
+          action:
+            input.decision === 'NO_MATERIAL_IMPACT'
+              ? 'CASE_CONFIRM_PROBLEM_FORMULATION'
+              : 'CASE_CORRECT_PROBLEM_FORMULATION',
+        });
+
+        const hash = requestHash({
+          familyId: input.familyId,
+          caseId: input.caseId,
+          formulationId: input.formulationId,
+          formulationVersion: input.formulationVersion,
+          expectedCaseVersion: input.expectedCaseVersion,
+          decision: input.decision,
+          reviewBasis,
+          successorChanges: input.successorChanges ?? null,
+          note: input.note ?? null,
+        });
+        const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
+        const slot = await acquireSlot(
+          tx,
+          input.actor,
+          'PROBLEM_FORMULATION_REVIEW_RESOLVE',
+          keyBytes,
+          hash
+        );
+        return executeIdempotentBusiness(
+          tx,
+          {
+            actor: input.actor,
+            commandType: 'PROBLEM_FORMULATION_REVIEW_RESOLVE',
+            keyBytes,
+            slot,
+          },
+          async () => {
+            await lockFamily(tx, input.familyId);
+            const caseRow = await lockCase(tx, input.caseId);
+            assertCaseGuards(caseRow, input.expectedCaseVersion, 'GOALS');
+
+            const current = await lockCurrentForResponse(tx, {
+              caseId: input.caseId,
+              formulationVersion: input.formulationVersion,
+            });
+            if (current.id !== input.formulationId) {
+              throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
+            }
+            if (
+              current.status !== 'CONFIRMED' ||
+              current.review_state !== 'NEEDS_REVIEW'
+            ) {
+              throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
+            }
+
+            if (input.decision === 'NO_MATERIAL_IMPACT') {
+              const reviewEvidenceRefs = canonicalEvidenceRefs(
+                input.reviewEvidenceRefs ?? []
+              );
+              if (reviewEvidenceRefs.length === 0) {
+                throw httpError(
+                  'VALIDATION_ERROR',
+                  'no-material-impact review requires reviewEvidenceRefs'
+                );
+              }
+              const reviewResolution = await resolveEvidenceRefs(
+                tx,
+                input.caseId,
+                reviewEvidenceRefs
+              );
+              if (reviewResolution.missing.length > 0) {
+                throw pfError(
+                  'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+                  'reviewed Evidence does not exist in this Case'
+                );
+              }
+              for (const ref of reviewEvidenceRefs) {
+                const member = reviewResolution.members.get(
+                  canonicalEvidenceKey(ref)
+                );
+                if (
+                  !member ||
+                  !member.usable ||
+                  member.caseId.toLowerCase() !== input.caseId.toLowerCase()
+                ) {
+                  throw pfError(
+                    'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+                    'reviewed Evidence is not current-valid in this Case'
+                  );
+                }
+              }
+              const authoritative: AuthoritativeEvidenceSet = {
+                refs: reviewEvidenceRefs,
+                members: [...reviewResolution.members.values()],
+              };
+              const persons = await processingPersonIds(tx, {
+                actor: input.actor,
+                caseRow,
+                authoritative,
+              });
+              await runComplianceGate(tx, persons, 'PUBLIC');
+
+              const resolution = await resolveProblemFormulationReviewState(tx, {
+                id: current.id,
+                caseId: input.caseId,
+                version: current.version,
+                decision: 'NO_MATERIAL_IMPACT',
+                successorContent: null,
+                successorUserResponse: null,
+                expectedCaseVersion: input.expectedCaseVersion,
+              });
+
+              await insertProblemFormulationAudit(tx, {
+                familyId: input.familyId,
+                caseId: input.caseId,
+                actorAccountId: input.actor.accountId,
+                eventType: 'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED',
+                resourceType: 'PROBLEM_FORMULATION',
+                resourceId: resolution.resolved.id,
+                metadata: {
+                  formulationId: resolution.resolved.id,
+                  formulationVersion: resolution.resolved.version,
+                  reviewDecision: 'NO_MATERIAL_IMPACT',
+                  reviewBasis,
+                  reviewEvidenceRefs,
+                  fromReviewState: 'NEEDS_REVIEW',
+                  toReviewState: 'CURRENT',
+                  version: caseRow.version,
+                },
+              });
+
+              return {
+                status: 200,
+                body: envelope(caseRow.version, resolution.resolved),
+                etag: caseVersionEtag(caseRow.version),
+              };
+            }
+
+            const changes = input.successorChanges ?? {};
+            if (Object.keys(changes).length === 0) {
+              throw httpError(
+                'VALIDATION_ERROR',
+                'material change requires successor content'
+              );
+            }
+            const merged = mergeCorrection(contentOf(current), changes);
+            const authoritative = await validateFormulationContent(
+              tx,
+              input.caseId,
+              merged
+            );
+            const persons = await processingPersonIds(tx, {
+              actor: input.actor,
+              caseRow,
+              authoritative,
+            });
+            const compliance = await runComplianceGate(tx, persons, 'PUBLIC');
+            const mandatory = mandatoryDependencies(authoritative, compliance);
+            if (!isDependencySubset(mandatory, merged.dependencyRefs)) {
+              throw pfError(
+                'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+                'mandatory dependency refs are missing from the successor formulation'
+              );
+            }
+
+            const response: UserResponse = {
+              kind: 'CORRECTION',
+              actorPersonId: input.actor.personId,
+              respondedAt: new Date().toISOString(),
+              ...(input.note !== undefined ? { note: input.note } : {}),
+            };
+
+            const resolution = await resolveProblemFormulationReviewState(tx, {
+              id: current.id,
+              caseId: input.caseId,
+              version: current.version,
+              decision: 'MATERIAL_CHANGE',
+              successorContent: merged,
+              successorUserResponse: response,
+              expectedCaseVersion: input.expectedCaseVersion,
+            });
+            const successor = resolution.successor;
+            const updatedCase = resolution.caseRow;
+            if (successor === null || updatedCase === null) {
+              throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
+            }
+
+            await insertProblemFormulationCaseEvent(tx, {
+              familyId: input.familyId,
+              caseId: input.caseId,
+              actorAccountId: input.actor.accountId,
+              eventType: 'CASE_PROBLEM_FORMULATION_CORRECTED',
+              metadata: {
+                fromFormulationVersion: current.version,
+                toFormulationVersion: successor.version,
+                fromStatus: 'CONFIRMED',
+                toStatus: 'PRESENTED',
+                version: updatedCase.version,
+              },
+            });
+            await insertProblemFormulationAudit(tx, {
+              familyId: input.familyId,
+              caseId: input.caseId,
+              actorAccountId: input.actor.accountId,
+              eventType:
+                'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
+              resourceType: 'PROBLEM_FORMULATION',
+              resourceId: successor.id,
+              metadata: {
+                formulationId: current.id,
+                formulationVersion: current.version,
+                reviewDecision: 'MATERIAL_CHANGE',
+                reviewBasis,
+                successorId: successor.id,
+                successorVersion: successor.version,
+                fromReviewState: 'NEEDS_REVIEW',
+                toReviewState: 'CURRENT',
+                fromPhase: 'GOALS',
+                toPhase: 'PROBLEM_FORMULATION',
+                version: updatedCase.version,
+              },
+            });
+
+            return {
+              status: 201,
+              body: envelope(updatedCase.version, successor),
+              etag: caseVersionEtag(updatedCase.version),
+            };
           }
         );
       }

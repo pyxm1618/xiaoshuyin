@@ -383,7 +383,8 @@ async function assertUnionConstraints(
   client: Client,
   includeSupplementalConsentAudit = true,
   includeSlice12 = includeSupplementalConsentAudit,
-  includeSlice14 = includeSlice12
+  includeSlice14 = includeSlice12,
+  includeAuth006 = includeSlice14
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -470,6 +471,12 @@ async function assertUnionConstraints(
           'PHONE_USE_ROLEPLAY_RECORDED',
         ]
       : []),
+    ...(includeAuth006
+      ? [
+          'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED',
+          'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
+        ]
+      : []),
   ]);
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
@@ -520,6 +527,7 @@ async function assertUnionConstraints(
           'PHONE_USE_ROLEPLAY_SELECT',
         ]
       : []),
+    ...(includeAuth006 ? ['PROBLEM_FORMULATION_REVIEW_RESOLVE'] : []),
   ]);
   const commandLiterals = literalsOf(definitions.get('idempotency_keys_command_type_check')!);
   expect(new Set(commandLiterals)).toEqual(commandSet);

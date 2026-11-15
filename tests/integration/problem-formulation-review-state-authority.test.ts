@@ -13,14 +13,15 @@ import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import {
   confirmProblemFormulation,
-  correctProblemFormulation,
+
   getCurrentProblemFormulationView,
   presentProblemFormulation,
   reassessFromFormulation,
+  resolveProblemFormulationReview,
   startAssessment,
 } from '../../apps/server/api/src/services/problem-formulations.js';
 import { recordStatement } from '../../packages/domain/src/evidence.js';
-import { clearProblemFormulationReviewState } from '../../packages/domain/src/problem-formulations.js';
+import { isProblemFormulationAuthoritativeExecutionBasis } from '../../packages/domain/src/problem-formulations.js';
 
 const PREFIX = 'auth006_';
 
@@ -312,15 +313,48 @@ describe('AUTH-006 — Problem Formulation lifecycle / review-state separation',
     expect(caseRow.rows[0]).toEqual({ status: 'OPEN', phase: 'GOALS' });
   });
 
-  it('Case C — NEEDS_REVIEW cannot drive reassessment execution even with otherwise-valid evidence', async () => {
-    const fx = await prepare('execution-suppression');
-
-    await admin.query(
-      `UPDATE problem_formulations
-          SET review_state = 'NEEDS_REVIEW'
-        WHERE case_id = $1 AND version = 1`,
+  async function confirmedWithReview(label: string) {
+    const fx = await prepare(label);
+    const confirmed = await confirmProblemFormulation(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.presented.body.caseVersion,
+      idempotencyKey: key(`confirm-${label}`),
+      formulationVersion: 1,
+      body: {},
+    });
+    expect(confirmed.status).toBe(200);
+    const successorStatement = await supersedeSource(fx);
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+      }),
+    ]);
+    const caseRow = await admin.query(
+      'SELECT phase FROM cases WHERE id = $1',
       [fx.created.id]
     );
+    expect(caseRow.rows[0]).toEqual({ phase: 'GOALS' });
+    return { ...fx, confirmed, successorStatement };
+  }
+
+  function evidenceRef(id: string) {
+    return { type: 'ASSERTION' as const, id };
+  }
+
+  it('Case C — CONFIRMED + NEEDS_REVIEW cannot drive reassessment execution', async () => {
+    const fx = await confirmedWithReview('execution-suppression');
+
+    const facts = await formulationFacts(fx.created.id);
+    expect(
+      isProblemFormulationAuthoritativeExecutionBasis({
+        status: facts[0]!.status as never,
+        review_state: facts[0]!.review_state as never,
+      })
+    ).toBe(false);
 
     const before = await admin.query(
       'SELECT phase, version FROM cases WHERE id = $1',
@@ -331,16 +365,13 @@ describe('AUTH-006 — Problem Formulation lifecycle / review-state separation',
       actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
       familyId: fx.familyId,
       caseId: fx.created.id,
-      expectedCaseVersion: fx.presented.body.caseVersion,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
       idempotencyKey: key('reassess-blocked'),
       formulationVersion: 1,
       basis: { kind: 'REASSESSMENT_CONDITION', text: '新证据要求重新评估' },
     });
 
-    expect(blocked.status).toBe(409);
-    expect(blocked.body).toMatchObject({
-      code: 'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
-    });
+expect(blocked.status).toBe(409);
 
     const after = await admin.query(
       'SELECT phase, version FROM cases WHERE id = $1',
@@ -349,78 +380,112 @@ describe('AUTH-006 — Problem Formulation lifecycle / review-state separation',
     expect(after.rows[0]).toEqual(before.rows[0]);
   });
 
-  it('Case D — no material impact clears review state without changing lifecycle', async () => {
-    const fx = await prepare('no-material-impact');
-
-    await admin.query(
-      `UPDATE problem_formulations
-          SET review_state = 'NEEDS_REVIEW'
-        WHERE case_id = $1 AND version = 1`,
-      [fx.created.id]
-    );
-
-    const before = await formulationFacts(fx.created.id);
-    expect(before[0]).toMatchObject({
-      status: 'PRESENTED',
-      review_state: 'NEEDS_REVIEW',
-    });
-
-    await withRlsTransaction(
-      pool,
-      {
-        familyId: fx.familyId,
-        accountId: fx.owner.accountId,
-        personId: fx.owner.personId,
-        purpose: 'FAMILY_MANAGEMENT',
-      },
-      async (tx) => {
-        const restored = await clearProblemFormulationReviewState(tx, {
-          id: fx.presented.body.current.id,
-          caseId: fx.created.id,
-          version: 1,
-        });
-        expect(restored.status).toBe('PRESENTED');
-        expect(restored.review_state).toBe('CURRENT');
-      }
-    );
-
-    expect(await formulationFacts(fx.created.id)).toEqual([
-      expect.objectContaining({
-        version: 1,
-        status: 'PRESENTED',
-        review_state: 'CURRENT',
-      }),
+  it('Case C2 — phase-legal Case still blocks reassessment on NEEDS_REVIEW', async () => {
+    const fx = await confirmedWithReview('review-gate');
+    await admin.query(`UPDATE cases SET phase = 'PROBLEM_FORMULATION' WHERE id = $1`, [
+      fx.created.id,
     ]);
-  });
 
-  it('Case E — material correction supersedes reviewed version and creates CURRENT successor', async () => {
-    const fx = await prepare('material-change');
-
-    await admin.query(
-      `UPDATE problem_formulations
-          SET review_state = 'NEEDS_REVIEW'
-        WHERE case_id = $1 AND version = 1`,
-      [fx.created.id]
-    );
-
-    const corrected = await correctProblemFormulation(pool, {
+    const blocked = await reassessFromFormulation(pool, {
       actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
       familyId: fx.familyId,
       caseId: fx.created.id,
-      expectedCaseVersion: fx.presented.body.caseVersion,
-      idempotencyKey: key('material-correction'),
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('reassess-review-gate'),
       formulationVersion: 1,
-      changes: {
+      basis: { kind: 'REASSESSMENT_CONDITION', text: '新证据要求重新评估' },
+    });
+
+    expect(blocked.status).toBe(409);
+    expect(blocked.body).toMatchObject({
+      code: 'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+    });
+  });
+
+  it('Case D — authorized NO_MATERIAL_IMPACT review restores CURRENT on the same version', async () => {
+    const fx = await confirmedWithReview('no-material-impact');
+
+    const resolved = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('review-no-material'),
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '更正后的陈述与原问题陈述一致，无实质影响',
+      reviewEvidenceRefs: [evidenceRef(fx.successorStatement.id)],
+    });
+
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.current).toMatchObject({
+      version: 1,
+      status: 'CONFIRMED',
+      reviewState: 'CURRENT',
+    });
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
+        review_state: 'CURRENT',
+      }),
+    ]);
+
+    const caseRow = await admin.query(
+      'SELECT phase, version FROM cases WHERE id = $1',
+      [fx.created.id]
+    );
+    expect(caseRow.rows[0]).toEqual({
+      phase: 'GOALS',
+      version: fx.confirmed.body.caseVersion,
+    });
+
+    const audit = await admin.query(
+      `SELECT metadata
+         FROM business_audit_events
+        WHERE resource_id = $1
+          AND event_type = 'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED'`,
+      [fx.presented.body.current.id]
+    );
+    expect(audit.rows).toHaveLength(1);
+    expect(audit.rows[0].metadata).toMatchObject({
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      reviewDecision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '更正后的陈述与原问题陈述一致，无实质影响',
+      fromReviewState: 'NEEDS_REVIEW',
+      toReviewState: 'CURRENT',
+    });
+  });
+
+  it('Case E — authorized MATERIAL_CHANGE supersedes v1, creates v2 and rewinds phase', async () => {
+    const fx = await confirmedWithReview('material-change');
+    const ref = evidenceRef(fx.successorStatement.id);
+
+    const resolved = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('review-material'),
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'MATERIAL_CHANGE',
+      reviewBasis: '更正后的陈述推翻原问题定义',
+      successorChanges: {
         primaryProblem: {
           text: '复核后确认存在实质变化',
-          evidenceRefs: [{ type: 'ASSERTION', id: fx.statement.id }],
+          evidenceRefs: [ref],
         },
+        evidenceRefs: [ref],
+        dependencyRefs: [{ type: 'EVIDENCE', evidence: ref }],
       },
       note: 'AUTH-006 material-change counterfactual',
     });
 
-    expect(corrected.status).toBe(201);
-    expect(corrected.body.current).toMatchObject({
+    expect(resolved.status).toBe(201);
+    expect(resolved.body.current).toMatchObject({
       version: 2,
       status: 'PRESENTED',
       reviewState: 'CURRENT',
@@ -436,6 +501,180 @@ describe('AUTH-006 — Problem Formulation lifecycle / review-state separation',
       expect.objectContaining({
         version: 2,
         status: 'PRESENTED',
+        review_state: 'CURRENT',
+      }),
+    ]);
+
+    const caseRow = await admin.query(
+      'SELECT phase, version FROM cases WHERE id = $1',
+      [fx.created.id]
+    );
+    expect(caseRow.rows[0]).toEqual({
+      phase: 'PROBLEM_FORMULATION',
+      version: fx.confirmed.body.caseVersion + 1,
+    });
+
+    const audit = await admin.query(
+      `SELECT metadata
+         FROM business_audit_events
+        WHERE resource_id = $1
+          AND event_type = 'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED'`,
+      [resolved.body.current.id]
+    );
+    expect(audit.rows).toHaveLength(1);
+    expect(audit.rows[0].metadata).toMatchObject({
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      reviewDecision: 'MATERIAL_CHANGE',
+      reviewBasis: '更正后的陈述推翻原问题定义',
+      successorVersion: 2,
+      fromPhase: 'GOALS',
+      toPhase: 'PROBLEM_FORMULATION',
+    });
+
+    const correctionEvent = await admin.query(
+      `SELECT metadata
+         FROM case_events
+        WHERE case_id = $1
+          AND event_type = 'CASE_PROBLEM_FORMULATION_CORRECTED'`,
+      [fx.created.id]
+    );
+    expect(correctionEvent.rows).toHaveLength(1);
+    expect(correctionEvent.rows[0].metadata).toMatchObject({
+      fromFormulationVersion: 1,
+      toFormulationVersion: 2,
+      fromStatus: 'CONFIRMED',
+      toStatus: 'PRESENTED',
+    });
+
+    const reconfirmed = await confirmProblemFormulation(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: resolved.body.caseVersion,
+      idempotencyKey: key('reconfirm-material'),
+      formulationVersion: 2,
+      body: { note: '重新确认 successor' },
+    });
+
+    expect(reconfirmed.status).toBe(200);
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'SUPERSEDED',
+        review_state: 'NEEDS_REVIEW',
+      }),
+      expect.objectContaining({
+        version: 2,
+        status: 'CONFIRMED',
+        review_state: 'CURRENT',
+      }),
+    ]);
+
+    const finalCase = await admin.query(
+      'SELECT phase, version FROM cases WHERE id = $1',
+      [fx.created.id]
+    );
+    expect(finalCase.rows[0]).toEqual({
+      phase: 'GOALS',
+      version: resolved.body.caseVersion + 1,
+    });
+  });
+
+  it('Case F — unauthorized actor cannot resolve NEEDS_REVIEW', async () => {
+    const fx = await confirmedWithReview('unauthorized-review');
+    const outsider = await login('unauthorized-outsider');
+    await admin.query(
+      'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
+      [fx.familyId, outsider.personId]
+    );
+
+    let deniedError: unknown;
+    try {
+      await resolveProblemFormulationReview(pool, {
+        actor: {
+          accountId: outsider.accountId,
+          personId: outsider.personId,
+        },
+        familyId: fx.familyId,
+        caseId: fx.created.id,
+        expectedCaseVersion: fx.confirmed.body.caseVersion,
+        idempotencyKey: key('review-unauthorized'),
+        formulationId: fx.presented.body.current.id,
+        formulationVersion: 1,
+        decision: 'NO_MATERIAL_IMPACT',
+        reviewBasis: 'unauthorized attempt',
+        reviewEvidenceRefs: [evidenceRef(fx.successorStatement.id)],
+      });
+    } catch (error) {
+      deniedError = error;
+    }
+
+    expect(deniedError).toBeDefined();
+    expect((deniedError as { statusCode?: number }).statusCode).toBe(404);
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+      }),
+    ]);
+  });
+
+  it('Case G — unrelated formulation remains CURRENT when only one dependency changes', async () => {
+    const fx = await prepare('unrelated-formulations');
+    const confirmed1 = await confirmProblemFormulation(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.presented.body.caseVersion,
+      idempotencyKey: key('confirm-unrelated-1'),
+      formulationVersion: 1,
+      body: {},
+    });
+    expect(confirmed1.status).toBe(200);
+
+    const secondCase = await createCase(fx.owner.token, 'unrelated-second');
+    await admin.query(
+      `INSERT INTO problem_formulations
+         (family_id, case_id, version, status, review_state, primary_problem,
+          key_factors, evidence_refs, unknowns, conflicts, scene_fit,
+          alternative_explanations, reassessment_conditions, exit_conditions,
+          user_response, confirmed_by_person_id, confirmed_at,
+          dependency_refs, supersedes_version)
+       VALUES ($1, $2, 1, 'CONFIRMED', 'CURRENT', $3::jsonb, '[]'::jsonb,
+               $4::jsonb, '[]'::jsonb, '[]'::jsonb, 'AUTH006_UNRELATED',
+               '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $5::jsonb, $6, now(),
+               '[]'::jsonb, NULL)`,
+      [
+        fx.familyId,
+        secondCase.id,
+        JSON.stringify({ text: 'unrelated formulation probe' }),
+        JSON.stringify([
+          { type: 'ASSERTION', id: '11111111-1111-4111-8111-111111111111' },
+        ]),
+        JSON.stringify({
+          kind: 'CONFIRM',
+          actorPersonId: fx.owner.personId,
+          respondedAt: new Date().toISOString(),
+        }),
+        fx.owner.personId,
+      ]
+    );
+
+    await supersedeSource(fx);
+
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+      }),
+    ]);
+    expect(await formulationFacts(secondCase.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
         review_state: 'CURRENT',
       }),
     ]);

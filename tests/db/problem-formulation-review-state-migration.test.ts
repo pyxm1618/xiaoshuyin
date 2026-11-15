@@ -2,10 +2,11 @@
  * AUTH-006 forward-migration regression for Problem Formulation review state.
  *
  * Historical 008 remains immutable. This test applies the historical
- * Problem Formulation schema first, then exercises 020 directly so the two
- * governance cases are mechanical:
- *   - ambiguous legacy lifecycle=NEEDS_REVIEW rows fail closed atomically;
- *   - legal lifecycle rows retain their lifecycle and receive review=CURRENT.
+ * Problem Formulation schema first, then exercises 020 directly so the
+ * reconstruction cases are mechanical:
+ *   - legacy lifecycle=NEEDS_REVIEW rows recover PRESENTED / DISPUTED /
+ *     CONFIRMED from persisted authoritative facts and keep review=NEEDS_REVIEW;
+ *   - contradictory history aborts atomically before any row or schema change.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -30,6 +31,7 @@ const PRE_AUTH006_MIGRATIONS = [
 ] as const;
 
 const AUTH006_MIGRATION = '020_problem_formulation_review_state.sql';
+const CONFIRMED_AT = '2026-01-02T03:04:05.000Z';
 
 function urlForDatabase(baseUrl: string, database: string): string {
   const url = new URL(baseUrl);
@@ -62,10 +64,24 @@ async function enumLabels(client: Client, typeName: string): Promise<string[]> {
   return rows.map((row: any) => row.enumlabel);
 }
 
+interface SeedOptions {
+  status: 'PRESENTED' | 'NEEDS_REVIEW';
+  userResponse?: Record<string, unknown> | null;
+  confirmationAudit?: boolean;
+}
+
+interface SeededFormulation {
+  id: string;
+  caseId: string;
+  familyId: string;
+  accountId: string;
+  personId: string;
+}
+
 async function seedProblemFormulation(
   client: Client,
-  status: 'PRESENTED' | 'NEEDS_REVIEW'
-): Promise<{ id: string; caseId: string }> {
+  options: SeedOptions
+): Promise<SeededFormulation> {
   const suffix = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   const { rows: account } = await client.query(
     'INSERT INTO accounts (wechat_openid) VALUES ($1) RETURNING id',
@@ -105,17 +121,22 @@ async function seedProblemFormulation(
        ($1, $2, 1, $3,
         $4::jsonb, '[]'::jsonb, $5::jsonb, '[]'::jsonb, '[]'::jsonb,
         'AUTH006_MIGRATION', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb,
-        NULL, NULL, NULL, $6::jsonb, NULL)
+        $6::jsonb, NULL, NULL, $7::jsonb, NULL)
      RETURNING id`,
     [
       familyId,
       caseId,
-      status,
+      options.status,
       JSON.stringify({
         text: 'legacy formulation',
         evidenceRefs: [{ type: 'ASSERTION', id: evidenceId }],
       }),
       JSON.stringify([{ type: 'ASSERTION', id: evidenceId }]),
+      options.userResponse === undefined
+        ? null
+        : options.userResponse === null
+          ? null
+          : JSON.stringify(options.userResponse),
       JSON.stringify([
         {
           type: 'EVIDENCE',
@@ -124,7 +145,49 @@ async function seedProblemFormulation(
       ]),
     ]
   );
-  return { id: formulation[0].id, caseId };
+  const formulationId = formulation[0].id;
+
+  if (options.confirmationAudit) {
+    await client.query(
+      `INSERT INTO business_audit_events
+         (family_id, actor_account_id, event_type, resource_type, resource_id,
+          metadata, occurred_at)
+       VALUES ($1, $2, 'CASE_PROBLEM_FORMULATION_CONFIRMED',
+               'PROBLEM_FORMULATION', $3, $4::jsonb, $5)`,
+      [
+        familyId,
+        accountId,
+        formulationId,
+        JSON.stringify({
+          formulationVersion: 1,
+          fromStatus: 'PRESENTED',
+          toStatus: 'CONFIRMED',
+          fromPhase: 'PROBLEM_FORMULATION',
+          toPhase: 'GOALS',
+          version: 2,
+        }),
+        CONFIRMED_AT,
+      ]
+    );
+  }
+
+  return { id: formulationId, caseId, familyId, accountId, personId };
+}
+
+async function formulationFacts(
+  client: Client,
+  id: string
+): Promise<Record<string, unknown>> {
+  const { rows } = await client.query(
+    `SELECT status::text AS status,
+            review_state::text AS review_state,
+            confirmed_by_person_id,
+            confirmed_at
+       FROM problem_formulations
+      WHERE id = $1`,
+    [id]
+  );
+  return rows[0];
 }
 
 describe('AUTH-006 Problem Formulation review-state migration', () => {
@@ -162,10 +225,81 @@ describe('AUTH-006 Problem Formulation review-state migration', () => {
     return { database, migrator, seed };
   }
 
-  it('fails closed before schema mutation when a legacy NEEDS_REVIEW row cannot be reconstructed', async () => {
+  it('recovers an unambiguous PRESENTED legacy row and keeps NEEDS_REVIEW', async () => {
+    const { migrator, seed } = await prepare('presented');
+    try {
+      const legacy = await seedProblemFormulation(seed, {
+        status: 'NEEDS_REVIEW',
+        userResponse: null,
+      });
+      await applySqlFile(migrator, AUTH006_MIGRATION);
+
+      expect(await formulationFacts(seed, legacy.id)).toMatchObject({
+        status: 'PRESENTED',
+        review_state: 'NEEDS_REVIEW',
+        confirmed_by_person_id: null,
+        confirmed_at: null,
+      });
+    } finally {
+      await migrator.end();
+      await seed.end();
+    }
+  }, 180_000);
+
+  it('recovers an unambiguous DISPUTED legacy row and keeps NEEDS_REVIEW', async () => {
+    const { migrator, seed } = await prepare('disputed');
+    try {
+      const legacy = await seedProblemFormulation(seed, {
+        status: 'NEEDS_REVIEW',
+        userResponse: { kind: 'DISPUTE', respondedAt: CONFIRMED_AT },
+      });
+      await applySqlFile(migrator, AUTH006_MIGRATION);
+
+      expect(await formulationFacts(seed, legacy.id)).toMatchObject({
+        status: 'DISPUTED',
+        review_state: 'NEEDS_REVIEW',
+        confirmed_by_person_id: null,
+        confirmed_at: null,
+      });
+    } finally {
+      await migrator.end();
+      await seed.end();
+    }
+  }, 180_000);
+
+  it('recovers CONFIRMED from an authoritative confirmation audit and preserves confirmer facts', async () => {
+    const { migrator, seed } = await prepare('confirmed');
+    try {
+      const legacy = await seedProblemFormulation(seed, {
+        status: 'NEEDS_REVIEW',
+        userResponse: { kind: 'CONFIRM', respondedAt: CONFIRMED_AT },
+        confirmationAudit: true,
+      });
+      await applySqlFile(migrator, AUTH006_MIGRATION);
+
+      const facts = await formulationFacts(seed, legacy.id);
+      expect(facts).toMatchObject({
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+        confirmed_by_person_id: legacy.personId,
+      });
+      expect(new Date(facts['confirmed_at'] as string).toISOString()).toBe(
+        CONFIRMED_AT
+      );
+    } finally {
+      await migrator.end();
+      await seed.end();
+    }
+  }, 180_000);
+
+  it('fails closed atomically when legacy history is contradictory', async () => {
     const { migrator, seed } = await prepare('ambiguous');
     try {
-      const legacy = await seedProblemFormulation(seed, 'NEEDS_REVIEW');
+      const legacy = await seedProblemFormulation(seed, {
+        status: 'NEEDS_REVIEW',
+        userResponse: { kind: 'DISPUTE', respondedAt: CONFIRMED_AT },
+        confirmationAudit: true,
+      });
       const before = await seed.query(
         'SELECT status::text AS status FROM problem_formulations WHERE id = $1',
         [legacy.id]
@@ -210,7 +344,10 @@ describe('AUTH-006 Problem Formulation review-state migration', () => {
   it('preserves legal lifecycle and installs independent CURRENT / NEEDS_REVIEW storage', async () => {
     const { migrator, seed } = await prepare('upgrade');
     try {
-      const current = await seedProblemFormulation(seed, 'PRESENTED');
+      const current = await seedProblemFormulation(seed, {
+        status: 'PRESENTED',
+        userResponse: null,
+      });
       await applySqlFile(migrator, AUTH006_MIGRATION);
 
       expect(await enumLabels(seed, 'problem_formulation_status')).toEqual([
@@ -220,12 +357,7 @@ describe('AUTH-006 Problem Formulation review-state migration', () => {
         'CURRENT', 'NEEDS_REVIEW',
       ]);
 
-      const { rows } = await seed.query(
-        `SELECT status::text AS status, review_state::text AS review_state
-           FROM problem_formulations WHERE id = $1`,
-        [current.id]
-      );
-      expect(rows[0]).toEqual({
+      expect(await formulationFacts(seed, current.id)).toMatchObject({
         status: 'PRESENTED',
         review_state: 'CURRENT',
       });
