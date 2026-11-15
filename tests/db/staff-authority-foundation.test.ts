@@ -262,6 +262,10 @@ describe('AUTH-008 staff authority foundation', () => {
         staff.accountId,
       ]);
       await forged.query(
+        `SELECT set_config('app.staff_assignment_id', $1, true)`,
+        [assignmentId]
+      );
+      await forged.query(
         `SELECT set_config('app.staff_case_id', $1, true)`,
         [sibling.id]
       );
