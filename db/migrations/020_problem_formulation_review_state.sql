@@ -20,7 +20,7 @@
 -- the failure and FORCE remains in effect.
 ALTER TABLE problem_formulations NO FORCE ROW LEVEL SECURITY;
 
-DO $
+DO $$
 DECLARE
   ambiguous_count bigint;
 BEGIN
@@ -36,7 +36,7 @@ BEGIN
             HINT = 'Reconcile each legacy NEEDS_REVIEW row from authoritative lifecycle evidence before applying AUTH-006.';
   END IF;
 END
-$;
+$$;
 
 ALTER TABLE problem_formulations FORCE ROW LEVEL SECURITY;
 
