@@ -286,8 +286,8 @@ describe('pure compliance feature-policy evaluator', () => {
       minorAccessRule: 'MINORS_BLOCKED',
     });
 
-    const first = evaluateCompliance(snapshot([value], { personProcessingRequired: true, person: ADULT }));
-    const second = evaluateCompliance(snapshot([value], { personProcessingRequired: true, person: ADULT }));
+    const first = evaluateCompliance(snapshot([value], { actor: ADULT, personProcessingRequired: true, person: ADULT }));
+    const second = evaluateCompliance(snapshot([value], { actor: ADULT, personProcessingRequired: true, person: ADULT }));
 
     expect(first).toEqual(second);
   });
