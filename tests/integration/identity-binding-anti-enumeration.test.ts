@@ -10,6 +10,7 @@ import {
   buildBindingApp,
   candidateDecision,
   candidateSession,
+  confirmerDecision,
   candidateStatus,
   createTarget,
   personAccountId,
@@ -513,8 +514,188 @@ describe('candidate-facing anti-enumeration', () => {
         state: 'TERMINAL',
         terminal_reason: 'ATTEMPT_EXPIRED',
       });
+
+      // Settlement retires currentness but retains only non-secret historical
+      // timing facts needed to reproduce the candidate-facing bytes.
+      const retired = await boundaryHarness.admin.query(
+        `SELECT pairing_issuance_id, pairing_issued_at, pairing_expires_at
+           FROM binding_pending_contexts
+          WHERE attempt_id = $1`,
+        [realAttemptId]
+      );
+      expect(retired.rows[0].pairing_issuance_id).toBeNull();
+      expect(retired.rows[0].pairing_issued_at).not.toBeNull();
+      expect(retired.rows[0].pairing_expires_at).not.toBeNull();
+
+      // The stable bytes are observable continuity only. They cannot revive an
+      // expired attempt or be consumed by a confirmer under a new operation.
+      const expiredConsume = await confirmerDecision(
+        boundaryHarness,
+        real.guardian.token,
+        realBefore.json().pairingChallenge as string,
+        {
+          personId: real.targetPersonId,
+          decision: 'AFFIRM',
+          idempotencyKey: `m01-expired-consume-${randomUUID()}`,
+        }
+      );
+      expect(expiredConsume.statusCode).toBe(404);
+      expect(expiredConsume.json().code).toBe('BINDING_NOT_FOUND');
     } finally {
       if (boundaryHarness) await boundaryHarness.close();
+      for (const key of ttlKeys) {
+        const value = previous[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('REM2-005-M01: context-shorter and equal TTL relations keep the public boundary aligned', async () => {
+    const ttlKeys = [
+      'IDENTITY_BINDING_CONTEXT_TTL_SECONDS',
+      'IDENTITY_BINDING_ATTEMPT_TTL_SECONDS',
+      'IDENTITY_BINDING_PAIRING_TTL_SECONDS',
+    ] as const;
+    const previous = Object.fromEntries(ttlKeys.map((key) => [key, process.env[key]]));
+
+    try {
+      for (const relation of [
+        { label: 'context-shorter', contextTtl: 100, attemptTtl: 600 },
+        { label: 'equal', contextTtl: 100, attemptTtl: 100 },
+      ] as const) {
+        process.env['IDENTITY_BINDING_CONTEXT_TTL_SECONDS'] = String(relation.contextTtl);
+        process.env['IDENTITY_BINDING_ATTEMPT_TTL_SECONDS'] = String(relation.attemptTtl);
+        process.env['IDENTITY_BINDING_PAIRING_TTL_SECONDS'] = '60';
+
+        const matrixHarness = await buildBindingApp();
+        try {
+          const real = await createTarget(matrixHarness, `m01_${relation.label}_real`, {
+            ageBand: 'UNDER_14',
+          });
+          const hidden = await createTarget(matrixHarness, `m01_${relation.label}_decoy`, {
+            ageBand: 'UNDER_14',
+          });
+          const realBoot = await bootstrap(
+            matrixHarness,
+            real.invitationToken,
+            `m01_${relation.label}_real_${randomUUID()}`
+          );
+          const hiddenBoot = await bootstrap(
+            matrixHarness,
+            hidden.invitationToken,
+            `m01_${relation.label}_decoy_${randomUUID()}`
+          );
+          const realToken = realBoot.json().pendingContextToken as string;
+          const hiddenToken = hiddenBoot.json().pendingContextToken as string;
+
+          const ids = await matrixHarness.admin.query(
+            `SELECT id, target_person_id
+               FROM binding_attempts
+              WHERE target_person_id = ANY($1::uuid[])`,
+            [[real.targetPersonId, hidden.targetPersonId]]
+          );
+          const realAttemptId = ids.rows.find(
+            (row: any) => row.target_person_id === real.targetPersonId
+          ).id as string;
+          const hiddenAttemptId = ids.rows.find(
+            (row: any) => row.target_person_id === hidden.targetPersonId
+          ).id as string;
+
+          await matrixHarness.admin.query(
+            `UPDATE binding_pending_contexts
+                SET created_at = created_at - interval '90 seconds',
+                    expires_at = expires_at - interval '90 seconds'
+              WHERE attempt_id = ANY($1::uuid[])`,
+            [[realAttemptId, hiddenAttemptId]]
+          );
+          await matrixHarness.admin.query(
+            `UPDATE binding_attempts
+                SET created_at = created_at - interval '90 seconds',
+                    expires_at = expires_at - interval '90 seconds'
+              WHERE id = ANY($1::uuid[])`,
+            [[realAttemptId, hiddenAttemptId]]
+          );
+
+          const revoked = await revokeConsent(
+            matrixHarness.app,
+            hidden.guardian.token,
+            `m01_${relation.label}_decoy`,
+            hidden.consentId!
+          );
+          expect([200, 201]).toContain(revoked.statusCode);
+
+          const before = await Promise.all([
+            candidateDecision(
+              matrixHarness,
+              realToken,
+              'AFFIRM',
+              `m01-${relation.label}-real-before-${randomUUID()}`,
+              'candidate-binding-v1'
+            ),
+            candidateDecision(
+              matrixHarness,
+              hiddenToken,
+              'AFFIRM',
+              `m01-${relation.label}-decoy-before-${randomUUID()}`,
+              'candidate-binding-v1'
+            ),
+          ]);
+          for (const res of before) {
+            expect(res.statusCode, relation.label).toBe(200);
+            expect(Object.keys(res.json()).sort(), relation.label).toEqual([
+              'binding',
+              'pairingChallenge',
+            ]);
+            expect(res.json().pairingChallenge, relation.label).toMatch(
+              /^[A-Za-z0-9_-]{192}$/
+            );
+          }
+
+          // Cross the public context boundary for both branches. When context
+          // is the shorter lifetime, and when context==attempt, the transport
+          // credential itself becomes invalid identically before any hidden
+          // attempt fact can create a different candidate-facing transition.
+          await matrixHarness.admin.query(
+            `UPDATE binding_pending_contexts
+                SET expires_at = now() - interval '1 second'
+              WHERE attempt_id = ANY($1::uuid[])`,
+            [[realAttemptId, hiddenAttemptId]]
+          );
+          if (relation.label === 'equal') {
+            await matrixHarness.admin.query(
+              `UPDATE binding_attempts
+                  SET expires_at = now() - interval '1 second'
+                WHERE id = ANY($1::uuid[])`,
+              [[realAttemptId, hiddenAttemptId]]
+            );
+          }
+
+          const after = await Promise.all([
+            candidateDecision(
+              matrixHarness,
+              realToken,
+              'AFFIRM',
+              `m01-${relation.label}-real-after-${randomUUID()}`,
+              'candidate-binding-v1'
+            ),
+            candidateDecision(
+              matrixHarness,
+              hiddenToken,
+              'AFFIRM',
+              `m01-${relation.label}-decoy-after-${randomUUID()}`,
+              'candidate-binding-v1'
+            ),
+          ]);
+          expect(after[0].statusCode, relation.label).toBe(401);
+          expect(after[1].statusCode, relation.label).toBe(401);
+          expect(after[0].json(), relation.label).toEqual(after[1].json());
+          expect(after[0].json().code, relation.label).toBe('BINDING_CONTEXT_INVALID');
+        } finally {
+          await matrixHarness.close();
+        }
+      }
+    } finally {
       for (const key of ttlKeys) {
         const value = previous[key];
         if (value === undefined) delete process.env[key];
