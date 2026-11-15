@@ -13,7 +13,14 @@
 --   authoritative evidence before re-running the migration.
 -- ============================================================
 
-DO $$
+-- problem_formulations is FORCE RLS. The migrator owns the table, but FORCE
+-- would still hide legacy rows from this existing-data preflight. Temporarily
+-- remove FORCE (not RLS itself) so the owner sees every row. Each migration is
+-- transactional; if the preflight raises, this catalog change rolls back with
+-- the failure and FORCE remains in effect.
+ALTER TABLE problem_formulations NO FORCE ROW LEVEL SECURITY;
+
+DO $
 DECLARE
   ambiguous_count bigint;
 BEGIN
@@ -29,7 +36,9 @@ BEGIN
             HINT = 'Reconcile each legacy NEEDS_REVIEW row from authoritative lifecycle evidence before applying AUTH-006.';
   END IF;
 END
-$$;
+$;
+
+ALTER TABLE problem_formulations FORCE ROW LEVEL SECURITY;
 
 CREATE TYPE problem_formulation_review_state AS ENUM (
   'CURRENT',
