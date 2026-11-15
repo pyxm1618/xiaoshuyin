@@ -12,7 +12,10 @@
 import type pg from 'pg';
 import type { BindingAttemptRow, BindingTerminalReason } from '@xiaoshuyin/domain';
 import { appendAudit, type BindingAuditEventType } from './audit-repository.js';
-import { clearOpenidForAttempt } from './pending-context-repository.js';
+import {
+  clearOpenidForAttempt,
+  clearPairingForAttempt,
+} from './pending-context-repository.js';
 
 const COLUMNS = `id, target_person_id, target_family_id, invitation_participation_id,
   candidate_identity_digest, state, terminal_reason, committed_account_id,
@@ -174,15 +177,12 @@ async function writeSettlement(
     result: 'TERMINAL',
     terminalReason: input.reason,
   });
-  // Decryptable OpenID cleanup is part of settlement. A failure aborts the
-  // transaction, so no state-only TERMINAL with a retained secret can commit.
-  //
-  // Pairing issuance facts are deliberately NOT erased here. They are
-  // non-secret replay material and cannot authorize a settled attempt: the
-  // confirmer requires a live PENDING attempt/current issuance, and the
-  // challenge's original expiry is unchanged. Retaining these facts lets the
-  // candidate surface replay the exact already-invalid opaque bytes until the
-  // shared context pairing window rotates, preventing attempt-expiry from
-  // becoming a REAL-only anti-enumeration boundary (REM2-005-M01).
+  // Cleanup is part of settlement. A failure aborts the transaction, so no
+  // state-only TERMINAL with a retained secret/current issuance can commit.
+  // clearPairingForAttempt retires only pairing_issuance_id; the non-secret
+  // issued/expires timestamps remain historical envelope facts so the
+  // candidate surface can reconstruct the exact already-invalid bytes until
+  // the shared context pairing window rotates (REM2-005-M01).
   await clearOpenidForAttempt(tx, settled.id);
+  await clearPairingForAttempt(tx, settled.id);
 }
