@@ -392,6 +392,50 @@ describe('AUTH-006 — Problem Formulation lifecycle / review-state separation',
     ]);
   });
 
+  it('Case D — no material impact clears review state without changing lifecycle', async () => {
+    const fx = await prepare('no-material-impact');
+
+    await admin.query(
+      `UPDATE problem_formulations
+          SET review_state = 'NEEDS_REVIEW'
+        WHERE case_id = $1 AND version = 1`,
+      [fx.created.id]
+    );
+
+    const before = await formulationFacts(fx.created.id);
+    expect(before[0]).toMatchObject({
+      status: 'PRESENTED',
+      review_state: 'NEEDS_REVIEW',
+    });
+
+    await withRlsTransaction(
+      pool,
+      {
+        familyId: fx.familyId,
+        accountId: fx.owner.accountId,
+        personId: fx.owner.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) => {
+        const restored = await clearProblemFormulationReviewState(tx, {
+          id: fx.presented.body.current.id,
+          caseId: fx.created.id,
+          version: 1,
+        });
+        expect(restored.status).toBe('PRESENTED');
+        expect(restored.review_state).toBe('CURRENT');
+      }
+    );
+
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'PRESENTED',
+        review_state: 'CURRENT',
+      }),
+    ]);
+  });
+
   it('Case E — material correction supersedes reviewed version and creates CURRENT successor', async () => {
     const fx = await prepare('material-change');
 
