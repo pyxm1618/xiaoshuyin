@@ -18231,8 +18231,14 @@
           "PRESENTED",
           "CONFIRMED",
           "DISPUTED",
-          "NEEDS_REVIEW",
           "SUPERSEDED"
+        ]
+      },
+      "ProblemFormulationReviewState": {
+        "type": "string",
+        "enum": [
+          "CURRENT",
+          "NEEDS_REVIEW"
         ]
       },
       "DialogueMessageRef": {
@@ -18642,6 +18648,9 @@
           "status": {
             "$ref": "#/components/schemas/ProblemFormulationStatus"
           },
+          "reviewState": {
+            "$ref": "#/components/schemas/ProblemFormulationReviewState"
+          },
           "primaryProblem": {
             "$ref": "#/components/schemas/PrimaryProblem"
           },
@@ -18736,6 +18745,7 @@
           "caseId",
           "version",
           "status",
+          "reviewState",
           "primaryProblem",
           "keyFactors",
           "evidenceRefs",
