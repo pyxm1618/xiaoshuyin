@@ -19,10 +19,10 @@ const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATA
 
 // Expected final object counts (Slice 1/2 + Case Core + Slice 3 Evidence + Slice 6 binding)
 const EXPECTED_ENUMS = 24; // + independent problem_formulation_review_state (AUTH-006)
-const EXPECTED_TABLES = 30; // + Slice 13 target items + Slice 14 Contract/roleplay tables
+const EXPECTED_TABLES = 31; // + minimal staff authority source // + Slice 13 target items + Slice 14 Contract/roleplay tables
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
-const EXPECTED_CONTEXT_FUNCTIONS = 4; // set_account_context, set_identity_context, set_family_context, create_family
-const EXPECTED_POLICIES = 65; // + Foundation accounts least-privilege policies
+const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
+const EXPECTED_POLICIES = 66; // + staff_assignments self-read policy
 const EXPECTED_TRIGGERS = 6; // prior triggers + Slice 13 target-item guards + Slice 14 Contract guard
 
 const EXPECTED_ENUM_NAMES = [
@@ -83,6 +83,7 @@ const EXPECTED_TABLE_NAMES = [
   'risk_events',
   'scene_artifacts',
   'scene_node_states',
+  'staff_assignments',
 ].sort();
 
 describe('Migration Reproducibility (T011 RED)', () => {
@@ -113,7 +114,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(enumNames.length).toBe(EXPECTED_ENUMS);
   });
 
-  it('should have all 30 tables', async () => {
+  it('should have all 31 tables', async () => {
     const { rows } = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -142,14 +143,20 @@ describe('Migration Reproducibility (T011 RED)', () => {
       SELECT proname FROM pg_proc p
       JOIN pg_namespace n ON p.pronamespace = n.oid
       WHERE n.nspname = 'app'
-        AND proname IN ('set_account_context', 'set_identity_context', 'set_family_context', 'create_family')
+        AND proname IN (
+          'set_account_context',
+          'set_identity_context',
+          'set_family_context',
+          'create_family',
+          'set_staff_case_context'
+        )
       ORDER BY proname
     `);
 
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 65 RLS policies', async () => {
+  it('should have 66 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'
