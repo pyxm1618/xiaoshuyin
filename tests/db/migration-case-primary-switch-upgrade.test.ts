@@ -136,6 +136,38 @@ const AUTH006_NEW_CONSTRAINTS = [
   'problem_formulations_review_state_not_null',
 ] as const;
 
+const AUTH008_NEW_CONSTRAINTS = [
+  'persons_id_account_key',
+  'staff_assignments_account_id_fkey',
+  'staff_assignments_account_id_not_null',
+  'staff_assignments_capability_check',
+  'staff_assignments_capability_grant_fk',
+  'staff_assignments_capability_not_null',
+  'staff_assignments_case_family_fk',
+  'staff_assignments_created_at_not_null',
+  'staff_assignments_granted_at_not_null',
+  'staff_assignments_granted_by_account_id_fkey',
+  'staff_assignments_granted_by_account_id_not_null',
+  'staff_assignments_id_not_null',
+  'staff_assignments_identity_fk',
+  'staff_assignments_person_id_not_null',
+  'staff_assignments_pkey',
+  'staff_assignments_revoke_pair_check',
+  'staff_assignments_revoke_time_check',
+  'staff_assignments_revoked_by_account_id_fkey',
+  'staff_assignments_scope_shape_check',
+  'staff_assignments_scope_type_check',
+  'staff_assignments_scope_type_not_null',
+  'staff_assignments_valid_from_not_null',
+  'staff_assignments_validity_window_check',
+].sort();
+
+const AUTH008_NEW_OBJECTS = [
+  'policy:accounts_runtime_safety_resolution_read',
+  'policy:staff_assignments_runtime_self_read',
+  'table:staff_assignments',
+].sort();
+
 /** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
 const SLICE8_NEW_CONSTRAINTS = [
   'problem_formulations_alternative_explanations_not_null',
@@ -743,6 +775,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE14_NEW_CONSTRAINTS,
         ...FOUNDATION_REM1_NEW_CONSTRAINTS,
         ...AUTH006_NEW_CONSTRAINTS,
+        ...AUTH008_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -778,6 +811,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...SLICE13_NEW_OBJECTS,
       ...SLICE14_NEW_OBJECTS,
       ...FOUNDATION_REM1_NEW_OBJECTS,
+      ...AUTH008_NEW_OBJECTS,
       'trigger:accounts_status_invalidates_sessions',
     ].sort());
 
@@ -833,6 +867,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '018_foundation_database_integrity_1.sql',
       '019_auth_disabled_hard_disable.sql',
       '020_problem_formulation_review_state.sql',
+      '021_safety_resolver_staff_authority.sql',
     ]);
   }, 180_000);
 });
