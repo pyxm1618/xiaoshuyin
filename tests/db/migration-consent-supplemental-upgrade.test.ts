@@ -49,6 +49,7 @@ const POST_CONSENT_APPROVED_MIGRATIONS = [
   '018_foundation_database_integrity_1.sql',
   '019_auth_disabled_hard_disable.sql',
   '020_problem_formulation_review_state.sql',
+  '021_safety_resolver_staff_authority.sql',
 ] as const;
 
 function urlForDatabase(baseUrl: string, database: string): string {
@@ -207,7 +208,7 @@ describe('Consent 01004 supplemental migration upgrade', () => {
     for (const filename of POST_CONSENT_APPROVED_MIGRATIONS) {
       expect(output).toContain(`APPLY ${filename}`);
     }
-    expect(output).toMatch(/Migration complete: 9 new, 12 previously applied\./);
+    expect(output).toMatch(/Migration complete: 10 new, 12 previously applied\./);
     expect(output).toContain('Verified: app role has no DDL permissions.');
   });
 
@@ -303,7 +304,7 @@ describe('Consent 01004 supplemental migration upgrade', () => {
   it('records both new migrations and a second apply is a zero-new no-op', async () => {
     const before = await schemaFingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 21 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 22 previously applied\./);
     const after = await schemaFingerprint(migrator);
     expect(after).toEqual(before);
 
@@ -321,7 +322,7 @@ it('bootstraps the full schema from an empty database', async () => {
     let fresh: Client | null = null;
     try {
       const output = runMigrator(freshUrl);
-      expect(output).toMatch(/Migration complete: 21 new, 0 previously applied\./);
+      expect(output).toMatch(/Migration complete: 22 new, 0 previously applied\./);
 
       fresh = new Client({ connectionString: urlForDatabase(ADMIN_URL, freshDatabase) });
       await fresh.connect();

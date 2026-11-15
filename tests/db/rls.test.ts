@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('all 30 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
+  it('all 31 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -33,7 +33,7 @@ describe('RLS', () => {
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
     // Prior reviewed owners plus Slice 12 Scene, Slice 13 target items, and Slice 14 Contract/roleplay tables.
-    expect(rlsTables.length).toBe(30);
+    expect(rlsTables.length).toBe(31);
     expect(noRlsTables).toEqual([]);
 
     for (const t of rlsTables) {
@@ -41,18 +41,20 @@ describe('RLS', () => {
     }
   });
 
-  it('65 policies exist after Foundation account hardening', async () => {
+  it('76 policies exist after exact-Case Staff authority remediation', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(65);
+    expect(rows.length).toBe(76);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
     const { rows } = await client.query(
       `SELECT tablename, policyname, qual, with_check
        FROM pg_policies
-       WHERE schemaname = 'public' AND tablename IN ('cases', 'case_events')
+       WHERE schemaname = 'public'
+         AND tablename IN ('cases', 'case_events')
+         AND policyname IN ('cases_family_scope', 'case_events_family_scope')
        ORDER BY tablename`
     );
     expect(rows.map((r: any) => r.policyname)).toEqual([

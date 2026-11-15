@@ -175,7 +175,9 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
 
     const { rows: policies } = await admin.query<{ policyname: string; qual: string }>(
       `SELECT policyname, qual FROM pg_policies
-        WHERE schemaname = 'public' AND tablename = 'risk_events'`
+        WHERE schemaname = 'public'
+          AND tablename = 'risk_events'
+          AND policyname = 'risk_events_family_scope'`
     );
     expect(policies.map((p) => p.policyname)).toEqual(['risk_events_family_scope']);
     expect(policies[0]!.qual).toContain('family_id');

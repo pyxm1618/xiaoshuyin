@@ -58,7 +58,7 @@ export type Action =
 
 export type Purpose =
   | 'SELF_IDENTITY' | 'FAMILY_MANAGEMENT' | 'GUARDIAN_CONSENT'
-  | 'PARTICIPATION' | 'IDENTITY_BINDING'
+  | 'PARTICIPATION' | 'IDENTITY_BINDING' | 'SAFETY_RESOLUTION'
   // Existing Digital Use stream identity; deliberately distinct from
   // PARTICIPATION, FAMILY_MANAGEMENT and GUARDIAN_CONSENT.
   | 'PHONE_USE_CONTRACT';
@@ -117,6 +117,18 @@ export type Decision =
  * Facts that MUST be read from the database by the caller before deciding.
  * They are the verified inputs of the pure function — never caller opinions.
  */
+export interface SafetyResolutionFact {
+  verified: boolean;
+  authorityRef: string;
+  capability: 'SAFETY_RESOLVE';
+  capabilityGrantId: string;
+  assignmentId: string;
+  familyId: string;
+  caseId: string;
+  accountId: string;
+  personId: string;
+}
+
 export interface AuthorizeFacts {
   /** `family_members(familyId, actor.personId)` exists. */
   membership: boolean;
@@ -143,7 +155,7 @@ export interface AuthorizeFacts {
    * guardian, participant and ordinary Account privileges NEVER produce this
    * fact; a dedicated fact source must supply it.
    */
-  safetyResolution?: { verified: boolean; authorityRef: string } | null;
+  safetyResolution?: SafetyResolutionFact | null;
   /**
    * Narrow Slice 14 owner-remediation facts. Every value is read by the future
    * caller from authoritative rows inside its transaction. This object is not
@@ -234,7 +246,7 @@ const REGISTERED_ACTIONS: Action[] = [
 
 const REGISTERED_PURPOSES: Purpose[] = [
   'SELF_IDENTITY', 'FAMILY_MANAGEMENT', 'GUARDIAN_CONSENT', 'PARTICIPATION', 'IDENTITY_BINDING',
-  'PHONE_USE_CONTRACT',
+  'PHONE_USE_CONTRACT', 'SAFETY_RESOLUTION',
 ];
 
 const BINDING_ACTIONS: Action[] = [
@@ -425,7 +437,43 @@ function decideCaseAction(
   // a. Family context is mandatory for every Case action.
   if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
 
-  // b. Case management reuses FAMILY_MANAGEMENT; no new Purpose enum.
+  // AUTH-007: ResolveRisk is a Staff authority decision, not a household
+  // management decision. It stays inside the one authorize() seam but never
+  // derives authority from Family membership, manager or guardian roles.
+  if (input.action === 'CASE_RESOLVE_RISK') {
+    if (input.case === null) return deny('CASE_CONTEXT_REQUIRED');
+    if (input.resource.type !== 'CASE') return deny('NOT_SAFETY_RESOLVER');
+
+    const capability = facts.safetyResolution ?? null;
+    const actorKind = input.actor.kind ?? 'ACCOUNT';
+    if (actorKind !== 'ACCOUNT') return deny('NO_ACTOR');
+
+    if (
+      input.purpose !== 'SAFETY_RESOLUTION' ||
+      capability === null ||
+      capability.verified !== true ||
+      capability.capability !== 'SAFETY_RESOLVE' ||
+      typeof capability.authorityRef !== 'string' ||
+      capability.authorityRef.trim() === '' ||
+      typeof capability.capabilityGrantId !== 'string' ||
+      capability.capabilityGrantId.trim() === '' ||
+      typeof capability.assignmentId !== 'string' ||
+      capability.assignmentId.trim() === '' ||
+      capability.familyId !== input.family.familyId ||
+      capability.caseId !== input.case.caseId ||
+      capability.accountId !== input.actor.accountId ||
+      capability.personId !== actorPersonId ||
+      input.resource.familyId !== input.family.familyId ||
+      input.resource.caseId !== input.case.caseId
+    ) {
+      return deny('NOT_SAFETY_RESOLVER');
+    }
+
+    return allow(false, input.purpose, false, 'SAFETY_RESOLVER');
+  }
+
+  // b. Ordinary Case management reuses FAMILY_MANAGEMENT; no Staff fact can
+  // promote an actor into these household actions.
   if (input.purpose !== 'FAMILY_MANAGEMENT') return deny('UNSUPPORTED_PURPOSE');
 
   // c. Membership is a verified fact; RLS visibility is not authorization.
@@ -452,22 +500,6 @@ function decideCaseAction(
     return deny('NOT_FAMILY_MEMBER');
   }
   if (input.resource.caseId !== input.case.caseId) return deny('NOT_FAMILY_MEMBER');
-
-  // g. Slice 9: resolution additionally requires a separately verified Safety
-  //    capability fact. Family manager / guardian / membership privileges never
-  //    imply it; missing facts deny (fail closed).
-  if (input.action === 'CASE_RESOLVE_RISK') {
-    const capability = facts.safetyResolution ?? null;
-    if (
-      capability === null ||
-      capability.verified !== true ||
-      typeof capability.authorityRef !== 'string' ||
-      capability.authorityRef.trim() === ''
-    ) {
-      return deny('NOT_SAFETY_RESOLVER');
-    }
-    return allow(true, input.purpose, true, 'SAFETY_RESOLVER');
-  }
 
   return allow(true, input.purpose);
 }

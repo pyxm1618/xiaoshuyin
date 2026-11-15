@@ -137,14 +137,17 @@ describe('Evidence RLS / grants (T015)', () => {
     expect(byTable.get('dialogue_messages')?.map((r) => r.cmd)).toEqual([
       'INSERT',
       'SELECT',
+      'SELECT',
     ]);
     expect(byTable.get('assertions')?.map((r) => r.cmd)).toEqual([
       'INSERT',
+      'SELECT',
       'SELECT',
       'UPDATE',
     ]);
     expect(byTable.get('observations')?.map((r) => r.cmd)).toEqual([
       'INSERT',
+      'SELECT',
       'SELECT',
       'UPDATE',
     ]);

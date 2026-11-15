@@ -137,3 +137,49 @@ export const riskEvents = pgTable('risk_events', {
     .notNull()
     .defaultNow(),
 });
+
+/** AUTH-008 canonical Staff capability vocabulary. */
+export type StaffCapability =
+  | 'PROFESSIONAL_REVIEW'
+  | 'SAFETY_REVIEW'
+  | 'SAFETY_RESOLVE'
+  | 'DATA_RIGHTS'
+  | 'QUALITY_REVIEW'
+  | 'EXCEPTION_SUPPORT'
+  | 'SERVICE_CONTROL';
+
+export type StaffAssignmentScope = 'GLOBAL' | 'CASE';
+
+/**
+ * AUTH-008 `staff_assignments` authority facts.
+ *
+ * GLOBAL rows grant one explicit capability. CASE rows bind that same
+ * capability to one exact Case and reference the GLOBAL grant. Production
+ * AUTH-007 consumes SAFETY_RESOLVE only.
+ */
+export const staffAssignments = pgTable('staff_assignments', {
+  id: uuid('id')
+    .primaryKey()
+    .default(sql`uuidv7()`),
+  accountId: uuid('account_id').notNull(),
+  personId: uuid('person_id').notNull(),
+  capability: text('capability').notNull(),
+  scopeType: text('scope_type').notNull(),
+  familyId: uuid('family_id'),
+  caseId: uuid('case_id'),
+  capabilityGrantId: uuid('capability_grant_id'),
+  grantedByAccountId: uuid('granted_by_account_id').notNull(),
+  grantedAt: timestamp('granted_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  validFrom: timestamp('valid_from', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  validUntil: timestamp('valid_until', { withTimezone: true }),
+  revokedByAccountId: uuid('revoked_by_account_id'),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+

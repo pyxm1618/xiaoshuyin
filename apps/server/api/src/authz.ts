@@ -20,6 +20,7 @@ import {
   type DenyReason,
   type Purpose,
   type Resource,
+  type SafetyResolutionFact,
 } from '@xiaoshuyin/authorization';
 import { getFamilyById, isFamilyMember, type ParticipationRow, type PhoneUseContractVersionRow } from '@xiaoshuyin/domain';
 import { getComplianceProfile } from '@xiaoshuyin/compliance';
@@ -45,13 +46,27 @@ export interface FamilyActionRequest {
    * the composition's SafetyResolutionAuthoritySource. Absent means NO
    * capability — family roles never imply it.
    */
-  safetyResolution?: { verified: boolean; authorityRef: string } | null;
+  safetyResolution?: SafetyResolutionFact | null;
 }
 
 async function readFacts(
   tx: pg.PoolClient,
   req: FamilyActionRequest
 ): Promise<AuthorizeFacts> {
+  // AUTH-007: Staff ResolveRisk is exact-Case authority, not Family authority.
+  // Do not read household Family/member facts and do not require app.family_id.
+  if (req.action === 'CASE_RESOLVE_RISK') {
+    return {
+      membership: false,
+      familyCreatedByPersonId: null,
+      actorAgeBand: null,
+      guardianPersonId: null,
+      targetIsFamilyMember: false,
+      familyId: null,
+      safetyResolution: req.safetyResolution ?? null,
+    };
+  }
+
   const needsAgeBand =
     req.action === 'GUARDIAN_CONSENT_REQUEST' || req.action === 'GUARDIAN_CONSENT_GRANT';
 

@@ -12,10 +12,6 @@ import {
   type AuthInput,
   type AuthorizeFacts,
 } from '../../packages/authorization/src/authorize.js';
-import {
-  createProductionSafetyResolutionAuthoritySource,
-} from '../../packages/domain/src/safety/index.js';
-
 const FAMILY_ID = '11111111-1111-1111-1111-111111111111';
 const CASE_ID = '22222222-2222-2222-2222-222222222222';
 const MANAGER_PERSON = '33333333-3333-3333-3333-333333333333';
@@ -28,6 +24,21 @@ function facts(over: Partial<AuthorizeFacts> = {}): AuthorizeFacts {
     guardianPersonId: null,
     targetIsFamilyMember: true,
     familyId: FAMILY_ID,
+    ...over,
+  };
+}
+
+function resolverFact(over: Record<string, unknown> = {}) {
+  return {
+    verified: true,
+    authorityRef: 'staff_assignment:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    capability: 'SAFETY_RESOLVE',
+    capabilityGrantId: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    assignmentId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    familyId: FAMILY_ID,
+    caseId: CASE_ID,
+    accountId: 'staff-account',
+    personId: 'staff-person',
     ...over,
   };
 }
@@ -49,13 +60,27 @@ function input(action: AuthInput['action'], over: Partial<AuthInput> = {}): Auth
 describe('Safety authorization vocabulary (T906)', () => {
   it('registers both Safety actions through the single authorization entry', () => {
     expect(authorize(input('CASE_ENTER_SAFETY_HOLD')).decision).toBe('ALLOW');
-    expect(
-      authorize(
-        input('CASE_RESOLVE_RISK', {
-          facts: facts({ safetyResolution: { verified: true, authorityRef: 'authority.ref' } }),
-        })
-      ).decision
-    ).toBe('ALLOW');
+
+    const decision = authorize(
+      input('CASE_RESOLVE_RISK', {
+        actor: { accountId: 'staff-account', personId: 'staff-person' },
+        purpose: 'SAFETY_RESOLUTION',
+        facts: facts({
+          membership: false,
+          familyCreatedByPersonId: 'someone-else',
+          safetyResolution: resolverFact(),
+        }),
+      })
+    );
+    expect(decision).toEqual({
+      decision: 'ALLOW',
+      basis: {
+        membership: false,
+        manager: false,
+        purpose: 'SAFETY_RESOLUTION',
+        authority: 'SAFETY_RESOLVER',
+      },
+    });
   });
 
   it('allows Enter for a family manager without any resolver capability', () => {
@@ -65,13 +90,11 @@ describe('Safety authorization vocabulary (T906)', () => {
     expect(decision.decision).toBe('ALLOW');
   });
 
-  it('denies Resolve for manager / guardian / member alone', () => {
-    // manager
+  it('denies Resolve for Family Manager / guardian / ordinary member / ordinary Account alone', () => {
     expect(
       authorize(input('CASE_RESOLVE_RISK', { facts: facts({ safetyResolution: null }) }))
     ).toEqual({ decision: 'DENY', reason: 'NOT_SAFETY_RESOLVER' });
 
-    // guardian-only (not manager), still a member
     expect(
       authorize(
         input('CASE_RESOLVE_RISK', {
@@ -81,55 +104,101 @@ describe('Safety authorization vocabulary (T906)', () => {
             safetyResolution: null,
           }),
         })
-      ).decision
-    ).toBe('DENY');
+      )
+    ).toEqual({ decision: 'DENY', reason: 'NOT_SAFETY_RESOLVER' });
 
-    // plain member
     expect(
       authorize(
         input('CASE_RESOLVE_RISK', {
-          facts: facts({ familyCreatedByPersonId: 'someone-else', safetyResolution: null }),
+          facts: facts({
+            familyCreatedByPersonId: 'someone-else',
+            safetyResolution: null,
+          }),
         })
-      ).decision
-    ).toBe('DENY');
-  });
+      )
+    ).toEqual({ decision: 'DENY', reason: 'NOT_SAFETY_RESOLVER' });
 
-  it('denies Resolve for a capability fact that is not verified or has no authority ref', () => {
-    for (const safetyResolution of [
-      { verified: false, authorityRef: 'authority.ref' },
-      { verified: true, authorityRef: '' },
-      { verified: true, authorityRef: '   ' },
-    ]) {
-      expect(
-        authorize(input('CASE_RESOLVE_RISK', { facts: facts({ safetyResolution }) })).decision
-      ).toBe('DENY');
-    }
-  });
-
-  it('never infers resolver authority from a role-like string', () => {
-    for (const pseudo of ['FAMILY_MANAGER', 'GUARDIAN', 'ADMIN', 'STAFF', 'SYSTEM', 'AI']) {
-      expect(
-        authorize(
-          input('CASE_RESOLVE_RISK', {
-            facts: facts({ safetyResolution: { verified: true, authorityRef: pseudo } }),
-            actor: { accountId: 'acct', personId: MANAGER_PERSON },
-          })
-        ).decision
-      ).toBe('ALLOW');
-    }
-    // The above proves the authority is the *fact*, not a role name: with no
-    // fact the same actor is denied.
     expect(
-      authorize(input('CASE_RESOLVE_RISK', { facts: facts({ safetyResolution: null }) })).decision
-    ).toBe('DENY');
+      authorize(
+        input('CASE_RESOLVE_RISK', {
+          actor: { accountId: 'ordinary-account', personId: 'ordinary-person' },
+          facts: facts({
+            membership: false,
+            familyCreatedByPersonId: 'someone-else',
+            safetyResolution: null,
+          }),
+        })
+      )
+    ).toEqual({ decision: 'DENY', reason: 'NOT_SAFETY_RESOLVER' });
   });
 
-  it('has no actor path for a model/system principal', () => {
+  it('requires the exact SAFETY_RESOLVE capability, reviewer identity and Case scope', () => {
+    const staffInput = (safetyResolution: ReturnType<typeof resolverFact>) =>
+      input('CASE_RESOLVE_RISK', {
+        actor: { accountId: 'staff-account', personId: 'staff-person' },
+        purpose: 'SAFETY_RESOLUTION',
+        facts: facts({
+          membership: false,
+          familyCreatedByPersonId: 'someone-else',
+          safetyResolution,
+        }),
+      });
+
+    for (const invalid of [
+      resolverFact({ verified: false }),
+      resolverFact({ authorityRef: '' }),
+      resolverFact({ capability: 'SAFETY_REVIEW' }),
+      resolverFact({ familyId: 'other-family' }),
+      resolverFact({ caseId: 'other-case' }),
+      resolverFact({ accountId: 'other-account' }),
+      resolverFact({ personId: 'other-person' }),
+      resolverFact({ assignmentId: '' }),
+      resolverFact({ capabilityGrantId: '' }),
+    ]) {
+      expect(authorize(staffInput(invalid))).toEqual({
+        decision: 'DENY',
+        reason: 'NOT_SAFETY_RESOLVER',
+      });
+    }
+  });
+
+  it('never promotes role-like strings or AI/candidate principals into resolver authority', () => {
+    const roleLike = {
+      verified: true,
+      authorityRef: 'ADMIN',
+    };
+    expect(
+      authorize(
+        input('CASE_RESOLVE_RISK', {
+          facts: facts({ safetyResolution: roleLike }),
+        })
+      )
+    ).toEqual({ decision: 'DENY', reason: 'NOT_SAFETY_RESOLVER' });
+
+    expect(
+      authorize(
+        input('CASE_RESOLVE_RISK', {
+          actor: {
+            kind: 'WECHAT_CANDIDATE',
+            accountId: 'staff-account',
+            personId: 'staff-person',
+            candidateIdentityDigest: 'a'.repeat(64),
+          },
+          purpose: 'SAFETY_RESOLUTION',
+          facts: facts({
+            membership: false,
+            familyCreatedByPersonId: 'someone-else',
+            safetyResolution: resolverFact(),
+          }),
+        })
+      )
+    ).toEqual({ decision: 'DENY', reason: 'NO_ACTOR' });
+
     expect(
       authorize(
         input('CASE_RESOLVE_RISK', {
           actor: {},
-          facts: facts({ safetyResolution: { verified: true, authorityRef: 'authority.ref' } }),
+          facts: facts({ safetyResolution: resolverFact() }),
         })
       )
     ).toEqual({ decision: 'DENY', reason: 'NO_ACTOR' });
@@ -169,12 +238,4 @@ describe('Safety authorization vocabulary (T906)', () => {
     }
   });
 
-  it('production resolver source never yields a capability', async () => {
-    const source = createProductionSafetyResolutionAuthoritySource();
-    for (const name of ['manager', 'guardian', 'member', 'admin', 'staff', 'ai']) {
-      await expect(
-        source.resolve({ familyId: FAMILY_ID, caseId: CASE_ID, accountId: name, personId: name })
-      ).resolves.toEqual({ status: 'UNAVAILABLE' });
-    }
-  });
 });

@@ -12,7 +12,6 @@ import {
   type ApprovedPolicyIdentity,
   type SafetyPrecheckDecision,
 } from '../../packages/domain/src/safety/index.js';
-import { createVerifiedTestSafetyResolutionAuthoritySource } from '../setup/safety-resolver.js';
 import { createAdminPool } from '../setup/db.js';
 import { createSafetyFixture, type SafetyFixture } from '../setup/safety.js';
 
@@ -32,6 +31,7 @@ describe('T916 Safety concurrency', () => {
   let fixture: SafetyFixture;
   let admin: pg.Pool;
   let owner: { token: string; accountId: string; personId: string };
+  let familyId: string;
 
   beforeAll(async () => {
     const app = await buildApp();
@@ -39,15 +39,33 @@ describe('T916 Safety concurrency', () => {
     admin = createAdminPool();
     fixture = createSafetyFixture({ app, admin, prefix: PREFIX });
     owner = await fixture.login('owner');
-    await fixture.createFamily(owner, 'main');
+    familyId = await fixture.createFamily(owner, 'main');
   });
 
   afterAll(async () => {
+    await admin.query('DELETE FROM staff_assignments WHERE account_id = $1', [owner.accountId]);
     await fixture.cleanup();
     await fixture.close();
     await admin.end();
     await fixture.app.close();
   });
+
+  async function seedResolver(caseId: string): Promise<void> {
+    const grant = await admin.query<{ id: string }>(
+      `INSERT INTO staff_assignments
+         (account_id, person_id, capability, scope_type, granted_by_account_id)
+       VALUES ($1, $2, 'SAFETY_RESOLVE', 'GLOBAL', $1)
+       RETURNING id`,
+      [owner.accountId, owner.personId]
+    );
+    await admin.query(
+      `INSERT INTO staff_assignments
+         (account_id, person_id, capability, scope_type,
+          family_id, case_id, capability_grant_id, granted_by_account_id)
+       VALUES ($1, $2, 'SAFETY_RESOLVE', 'CASE', $3, $4, $5, $1)`,
+      [owner.accountId, owner.personId, familyId, caseId, grant.rows[0]!.id]
+    );
+  }
 
   function decision(caseId: string, version: number): SafetyPrecheckDecision {
     return runSafetyPrecheck({
@@ -138,6 +156,7 @@ describe('T916 Safety concurrency', () => {
     });
     expect(message.statusCode).toBe(201);
     const refs = [{ kind: 'MESSAGE', ref: message.json().id }];
+    await seedResolver(created.id);
 
     const resolve = (key: string) =>
       resolveRisk(fixture.pool, {
@@ -147,7 +166,7 @@ describe('T916 Safety concurrency', () => {
         idempotencyKey: key,
         expectedCaseVersion: held.version,
         reviewEvidenceRefs: refs,
-        authoritySource: createVerifiedTestSafetyResolutionAuthoritySource(),
+        trustedPolicyIdentity: IDENTITY,
       });
 
     const results = await Promise.allSettled([
@@ -180,6 +199,7 @@ describe('T916 Safety concurrency', () => {
       payload: { content: 'same key evidence' },
     });
     const refs = [{ kind: 'MESSAGE', ref: message.json().id }];
+    await seedResolver(created.id);
     const key = nextKey('res-same');
 
     const resolve = () =>
@@ -190,7 +210,7 @@ describe('T916 Safety concurrency', () => {
         idempotencyKey: key,
         expectedCaseVersion: held.version,
         reviewEvidenceRefs: refs,
-        authoritySource: createVerifiedTestSafetyResolutionAuthoritySource(),
+        trustedPolicyIdentity: IDENTITY,
       });
 
     const results = await Promise.allSettled([resolve(), resolve()]);
