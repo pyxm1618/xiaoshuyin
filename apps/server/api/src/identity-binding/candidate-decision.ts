@@ -192,10 +192,10 @@ export async function submitCandidateDecision(
       // the state here and terminalize again later.
       if (initial.state === 'PENDING' && initial.expiresAt.getTime() <= Date.now()) {
         await settleExpiredAttempt(tx, { attemptId: initial.id, correlationId });
-        return generic(tx, deps, context, input.decision);
+        return generic(tx, deps, context, input.decision, initial);
       }
       if (initial.state !== 'PENDING') {
-        return generic(tx, deps, context, input.decision);
+        return generic(tx, deps, context, input.decision, initial);
       }
 
       if (input.decision !== 'AFFIRM') {
@@ -261,7 +261,7 @@ export async function submitCandidateDecision(
           reason: gate.result.reason,
           correlationId,
         });
-        return generic(tx, deps, context, 'AFFIRM');
+        return generic(tx, deps, context, 'AFFIRM', attempt);
       }
 
       const confirmation = await appendCandidate(tx, attempt.id, context.id);
@@ -279,22 +279,47 @@ export async function submitCandidateDecision(
       }
 
       const challenge = await issueOrReplayChallenge(tx, deps, context, attempt, correlationId);
-      if (!challenge) return generic(tx, deps, context, 'AFFIRM');
+      if (!challenge) return generic(tx, deps, context, 'AFFIRM', attempt);
       return { binding: 'NOT_COMPLETED', pairingChallenge: challenge };
     }
   );
+}
+
+interface ObservableAttemptFacts {
+  id: string;
+  targetPersonId: string;
+  invitationParticipationId: string;
+  candidateIdentityDigest: string;
+  state: 'PENDING' | 'COMMITTED' | 'TERMINAL';
+  terminalReason: string | null;
+  expiresAt: Date;
 }
 
 async function generic(
   tx: pg.PoolClient,
   deps: CandidateDecisionDeps,
   context: PendingContextRow,
-  decision: 'AFFIRM' | 'REJECT' | 'CANCEL'
+  decision: 'AFFIRM' | 'REJECT' | 'CANCEL',
+  attempt?: ObservableAttemptFacts | null
 ): Promise<CandidateDecisionResult> {
   if (decision !== 'AFFIRM') return { binding: 'NOT_COMPLETED' };
+
+  // REM2-005-M01: an attempt may expire inside a still-live context pairing
+  // window. Its last real challenge is already non-consumable at that point,
+  // but changing the candidate-visible bytes exactly at the hidden attempt
+  // boundary creates an enumeration oracle. Re-encode the expired historical
+  // issuance only for the remainder of the same public context window.
+  //
+  // This is NOT a valid issuance revival: the confirmer path independently
+  // requires a PENDING, unexpired attempt and a current persisted issuance.
+  const historical = attempt
+    ? historicalExpiredChallengeInCurrentWindow(deps, context, attempt)
+    : null;
+
   return {
     binding: 'NOT_COMPLETED',
-    pairingChallenge: await issueOrReplayDecoyChallenge(tx, deps, context),
+    pairingChallenge:
+      historical ?? (await issueOrReplayDecoyChallenge(tx, deps, context)),
   };
 }
 
@@ -339,6 +364,70 @@ function pairingWindow(
     startsAt: new Date(startsAtMs),
     expiresAt: new Date(expiresAtMs),
   };
+}
+
+/**
+ * Reconstruct an already-expired real challenge only while its original
+ * context-anchored public pairing window is still the current public window.
+ *
+ * The helper is deliberately fail-closed:
+ * - only a genuinely expired attempt is eligible;
+ * - a terminal attempt settled for any other reason is excluded;
+ * - the persisted issuance must still bind the same context/attempt/invitation
+ *   and candidate digest;
+ * - the historical challenge itself must already be expired, so the AEAD
+ *   decoder rejects it even before business-state verification.
+ *
+ * The returned bytes are therefore continuity material, not a valid challenge.
+ */
+function historicalExpiredChallengeInCurrentWindow(
+  deps: CandidateDecisionDeps,
+  context: PendingContextRow,
+  attempt: ObservableAttemptFacts,
+  now: Date = new Date()
+): string | null {
+  if (attempt.state === 'COMMITTED') return null;
+  if (attempt.state === 'TERMINAL' && attempt.terminalReason !== 'ATTEMPT_EXPIRED') {
+    return null;
+  }
+  if (attempt.expiresAt.getTime() > now.getTime()) return null;
+
+  if (
+    context.attemptId !== attempt.id ||
+    context.invitationParticipationId !== attempt.invitationParticipationId ||
+    context.candidateIdentityDigest !== attempt.candidateIdentityDigest ||
+    !context.pairingIssuedAt ||
+    !context.pairingExpiresAt ||
+    !context.pairingIssuanceId ||
+    context.pairingExpiresAt.getTime() > now.getTime()
+  ) {
+    return null;
+  }
+
+  const currentWindow = pairingWindow(context, deps.pairingTtlSeconds, now);
+  const issuanceWindow = pairingWindow(
+    context,
+    deps.pairingTtlSeconds,
+    context.pairingIssuedAt
+  );
+  if (
+    !currentWindow ||
+    !issuanceWindow ||
+    currentWindow.startsAt.getTime() !== issuanceWindow.startsAt.getTime()
+  ) {
+    return null;
+  }
+
+  return encodePairingChallenge(deps.identityBindingSecret, {
+    contextId: context.id,
+    candidateIdentityDigest: context.candidateIdentityDigest,
+    attemptId: attempt.id,
+    targetPersonId: attempt.targetPersonId,
+    invitationParticipationId: attempt.invitationParticipationId,
+    pairingIssuanceId: context.pairingIssuanceId,
+    pairingIssuedAt: context.pairingIssuedAt,
+    pairingExpiresAt: context.pairingExpiresAt,
+  });
 }
 
 async function issueOrReplayDecoyChallenge(
@@ -452,16 +541,22 @@ async function replayCandidateOperation(
   ) {
     return generic(tx, deps, context, 'AFFIRM');
   }
-  if (context.pairingExpiresAt.getTime() <= Date.now()) return generic(tx, deps, context, 'AFFIRM');
-
   await setBindingAttemptContext(tx, {
     attemptId,
     identityDigest: context.candidateIdentityDigest,
     invitationId: context.invitationParticipationId,
   });
   const attempt = await findById(tx, attemptId);
-  if (!attempt || attempt.state !== 'PENDING') return generic(tx, deps, context, 'AFFIRM');
-  if (await hasKind(tx, attemptId, 'SECOND_PARTY')) return generic(tx, deps, context, 'AFFIRM');
+  if (!attempt) return generic(tx, deps, context, 'AFFIRM');
+  if (
+    context.pairingExpiresAt.getTime() <= Date.now() ||
+    attempt.state !== 'PENDING'
+  ) {
+    return generic(tx, deps, context, 'AFFIRM', attempt);
+  }
+  if (await hasKind(tx, attemptId, 'SECOND_PARTY')) {
+    return generic(tx, deps, context, 'AFFIRM', attempt);
+  }
 
   return {
     binding: 'NOT_COMPLETED',
