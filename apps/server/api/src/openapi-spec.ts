@@ -1090,7 +1090,11 @@ export function buildOpenApiDocument() {
         ...schemas,
         ProblemFormulationStatus: {
           type: 'string',
-          enum: ['DRAFT', 'PRESENTED', 'CONFIRMED', 'DISPUTED', 'NEEDS_REVIEW', 'SUPERSEDED'],
+          enum: ['DRAFT', 'PRESENTED', 'CONFIRMED', 'DISPUTED', 'SUPERSEDED'],
+        },
+        ProblemFormulationReviewState: {
+          type: 'string',
+          enum: ['CURRENT', 'NEEDS_REVIEW'],
         },
         DialogueMessageRef: {
           type: 'object',
@@ -1257,6 +1261,7 @@ export function buildOpenApiDocument() {
             caseId: { type: 'string', format: 'uuid' },
             version: { type: 'integer', minimum: 1, maximum: 2147483647 },
             status: ref('ProblemFormulationStatus'),
+            reviewState: ref('ProblemFormulationReviewState'),
             primaryProblem: ref('PrimaryProblem'),
             keyFactors: { type: 'array', items: ref('KeyFactor') },
             evidenceRefs: { type: 'array', minItems: 1, items: ref('EvidenceRef') },
@@ -1284,6 +1289,7 @@ export function buildOpenApiDocument() {
             'caseId',
             'version',
             'status',
+            'reviewState',
             'primaryProblem',
             'keyFactors',
             'evidenceRefs',
