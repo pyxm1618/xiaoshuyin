@@ -233,6 +233,20 @@ CREATE POLICY accounts_runtime_safety_resolution_read ON accounts
     AND id = app_account_id()
   );
 
+-- Staff Safety resolution is a distinct RLS mode. Household Family context is
+-- preserved for every existing household purpose, but ignored while the
+-- transaction purpose is SAFETY_RESOLUTION. This makes a forged app.family_id
+-- ineffective and prevents Family-wide visibility from composing with an
+-- exact-Case Staff assignment.
+CREATE OR REPLACE FUNCTION app_family_id() RETURNS uuid
+LANGUAGE sql STABLE AS $function$
+  SELECT CASE
+    WHEN NULLIF(current_setting('app.purpose', true), '') = 'SAFETY_RESOLUTION'
+      THEN NULL::uuid
+    ELSE NULLIF(current_setting('app.family_id', true), '')::uuid
+  END
+$function$;
+
 -- A Staff Case GUC is never authority by itself. Every policy calls this
 -- verifier, which binds the GUC to the exact current assignment + matching
 -- GLOBAL grant + ACTIVE Account using wall-clock time.
