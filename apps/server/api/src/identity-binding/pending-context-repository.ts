@@ -262,14 +262,7 @@ export async function setPairingIssuance(
   return rows[0] ? mapRow(rows[0]) : null;
 }
 
-/**
- * Retire the authoritative current issuance. The UUID is the DB currentness /
- * consumability marker and is cleared immediately. Issued/expires timestamps
- * are non-secret historical envelope facts retained only so candidate-facing
- * anti-enumeration can reconstruct the exact pre-retirement bytes until the
- * same public context window boundary. Confirmer verification still requires a
- * non-null current issuance id, so retained timestamps cannot be consumed.
- */
+/** Consume / invalidate the current issuance without touching secrets. */
 export async function clearPairingIssuance(
   tx: pg.PoolClient,
   contextId: string
