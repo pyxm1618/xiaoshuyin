@@ -283,7 +283,10 @@ export async function bootstrap(
       });
 
       const targetPerson = await getPersonById(tx, invitation.targetPersonId);
-      const candidateAccount = await findAccountByOpenid(tx, openid);
+      // Gate context is already established, so the existing Account can be
+      // locked through the binding-account seam. This makes Case B reuse /
+      // Case C eligibility and a concurrent disable serializable.
+      const candidateAccount = await findAccountByOpenid(tx, openid, true);
       if (candidateAccount) {
         await setBindingCandidateAccountId(tx, candidateAccount.id);
       }

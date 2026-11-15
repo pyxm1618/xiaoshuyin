@@ -101,7 +101,10 @@ export async function exchangeSession(
 
       const person = await getPersonById(tx, attempt.targetPersonId);
       await setBindingCommitAccountId(tx, attempt.committedAccountId);
-      const account = await getAccountById(tx, attempt.committedAccountId);
+      // Hold the Account row through token construction so a concurrent
+      // disable is ordered either before this eligibility check (no session)
+      // or after this exchange (the status transition then invalidates epoch).
+      const account = await getAccountById(tx, attempt.committedAccountId, true);
       if (
         !person ||
         !account ||
