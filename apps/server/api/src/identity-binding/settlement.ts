@@ -177,8 +177,14 @@ async function writeSettlement(
     result: 'TERMINAL',
     terminalReason: input.reason,
   });
-  // Cleanup is part of settlement. A failure aborts the transaction, so no
-  // state-only TERMINAL with a retained secret can commit.
+  // Secret cleanup is always part of settlement. Pairing issuance facts are
+  // normally retired as well. ATTEMPT_EXPIRED is the one narrow exception:
+  // its original issuance is already expired by construction
+  // (pairing_expires_at <= attempt.expires_at) and is retained only as
+  // non-secret candidate-facing replay material until the public context
+  // pairing window rotates (REM2-005-M01).
   await clearOpenidForAttempt(tx, settled.id);
-  await clearPairingForAttempt(tx, settled.id);
+  if (input.reason !== 'ATTEMPT_EXPIRED') {
+    await clearPairingForAttempt(tx, settled.id);
+  }
 }

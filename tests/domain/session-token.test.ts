@@ -21,6 +21,26 @@ describe('Session Token (T039)', () => {
     expect(verifyToken(tampered, secret, 0)).toBeNull();
   });
 
+  it('malformed signature variants are stable authentication failures', () => {
+    const payload = { accountId: 'a1', epoch: 0, exp: Math.floor(Date.now() / 1000) + 3600 };
+    const token = signToken(payload, secret);
+    const [body, sig] = token.split('.') as [string, string];
+    const invalid = [
+      `${body}.${sig.slice(0, -8)}`,
+      `${body}.${sig}abcdefgh`,
+      `${body}.!!!!`,
+      `${body}..${sig}`,
+      token.replace('.', ''),
+      'garbage-token',
+      '.',
+    ];
+
+    for (const candidate of invalid) {
+      expect(() => verifyToken(candidate, secret, 0)).not.toThrow();
+      expect(verifyToken(candidate, secret, 0)).toBeNull();
+    }
+  });
+
   it('expired token is rejected', () => {
     const payload = { accountId: 'a1', epoch: 0, exp: Math.floor(Date.now() / 1000) - 100 };
     const token = signToken(payload, secret);

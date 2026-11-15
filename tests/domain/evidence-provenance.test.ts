@@ -35,6 +35,20 @@ describe('Provenance admissibility (T019)', () => {
     ).toBe(false);
   });
 
+  it('REM2-007 regression: a manager/source cannot fabricate a child SELF_STATEMENT', () => {
+    const result = validateProvenance(
+      facts({
+        sourceKind: 'SELF_STATEMENT',
+        subjectPersonId: SUBJECT,
+        sourcePersonId: SOURCE,
+        sourceIsFamilyMember: true,
+        sourceIsGuardianOfSubject: true,
+      })
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('EVIDENCE_PROVENANCE_INVALID');
+  });
+
   it('GUARDIAN_OBSERVATION is allowed only for recordObservation with a real guardian', () => {
     const base = facts({
       writer: 'RECORD_OBSERVATION',

@@ -67,6 +67,7 @@ export type EvidenceErrorCode =
   | 'EVIDENCE_CONTENT_INVALID'
   | 'EVIDENCE_PROVENANCE_INVALID'
   | 'EVIDENCE_PERSON_REFERENCE_INVALID'
+  | 'EVIDENCE_CONFIRMATION_AUTHORITY_INVALID'
   | 'EVIDENCE_SUPERSEDES_INVALID'
   | 'EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE'
   | 'EVIDENCE_CONFLICT_INVALID'
@@ -80,6 +81,7 @@ const ERROR_MESSAGES: Record<EvidenceErrorCode, string> = {
   EVIDENCE_CONTENT_INVALID: 'Evidence content is invalid',
   EVIDENCE_PROVENANCE_INVALID: 'Evidence provenance is not admissible',
   EVIDENCE_PERSON_REFERENCE_INVALID: 'Evidence person reference is invalid',
+  EVIDENCE_CONFIRMATION_AUTHORITY_INVALID: 'Evidence source confirmation is not authorized',
   EVIDENCE_SUPERSEDES_INVALID: 'Evidence supersedes reference is invalid',
   EVIDENCE_HYPOTHESIS_SOURCE_UNAVAILABLE: 'No admissible production hypothesis source',
   EVIDENCE_CONFLICT_INVALID: 'Conflict group assignment is invalid',
@@ -409,13 +411,21 @@ export function validateConflictAssignment(
 
 export interface SupersedesInput {
   kind: 'ASSERTION' | 'OBSERVATION';
+  evidenceKind: string;
+  subjectPersonId: string | null;
+  sourceKind: ProvenanceSource;
+  sourcePersonId: string | null;
   newId?: string | null;
   supersedesId: string | null;
   target: {
     id: string;
     kind: 'ASSERTION' | 'OBSERVATION';
+    evidenceKind: string;
     familyId: string;
     caseId: string;
+    subjectPersonId: string | null;
+    sourceKind: ProvenanceSource;
+    sourcePersonId: string | null;
   } | null;
   familyId: string;
   caseId: string;
@@ -435,6 +445,17 @@ export function validateSupersedes(
   if (target.kind !== input.kind) return fail('EVIDENCE_SUPERSEDES_INVALID');
   if (target.id !== input.supersedesId) return fail('EVIDENCE_SUPERSEDES_INVALID');
   if (target.familyId !== input.familyId || target.caseId !== input.caseId) {
+    return fail('EVIDENCE_SUPERSEDES_INVALID');
+  }
+  // Supersession is a same-source correction chain, never a winner-selection
+  // mechanism across independent sources. Confirmation status is deliberately
+  // not part of source identity: a source may later confirm its own assertion.
+  if (
+    target.evidenceKind !== input.evidenceKind ||
+    target.subjectPersonId !== input.subjectPersonId ||
+    target.sourceKind !== input.sourceKind ||
+    target.sourcePersonId !== input.sourcePersonId
+  ) {
     return fail('EVIDENCE_SUPERSEDES_INVALID');
   }
   return { ok: true };
@@ -609,14 +630,22 @@ async function writeAssertion(
     const target = await getAssertionSupersedeTarget(tx, supersedesId);
     const supersedes = validateSupersedes({
       kind: 'ASSERTION',
+      evidenceKind: kind,
+      subjectPersonId,
+      sourceKind: draft.sourceKind,
+      sourcePersonId,
       newId: null,
       supersedesId,
       target: target
         ? {
             id: target.id,
             kind: 'ASSERTION',
+            evidenceKind: target.kind,
             familyId: target.family_id,
             caseId: target.case_id,
+            subjectPersonId: target.subject_person_id,
+            sourceKind: target.source_kind as ProvenanceSource,
+            sourcePersonId: target.source_person_id,
           }
         : null,
       familyId: ctx.familyId,
@@ -706,14 +735,22 @@ export async function recordObservation(
     const target = await getObservationSupersedeTarget(tx, supersedesId);
     const supersedes = validateSupersedes({
       kind: 'OBSERVATION',
+      evidenceKind: draft.observationCode,
+      subjectPersonId,
+      sourceKind: draft.sourceKind,
+      sourcePersonId,
       newId: null,
       supersedesId,
       target: target
         ? {
             id: target.id,
             kind: 'OBSERVATION',
+            evidenceKind: target.observation_code,
             familyId: target.family_id,
             caseId: target.case_id,
+            subjectPersonId: target.subject_person_id,
+            sourceKind: target.source_kind as ProvenanceSource,
+            sourcePersonId: target.source_person_id,
           }
         : null,
       familyId: ctx.familyId,

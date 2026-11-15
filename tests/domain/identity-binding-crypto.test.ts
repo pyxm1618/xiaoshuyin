@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto';
 import {
   PAIRING_ENVELOPE_BYTES,
   createContextToken,
-  createDecoyPairingChallenge,
   decodePairingChallenge,
   decryptOpenid,
   deriveAesKey,
   deriveIdentityDigest,
   deriveIdentityPepper,
   derivePairingIssuanceNonce,
+  encodeDecoyPairingChallenge,
   encodePairingChallenge,
   encryptOpenid,
   hashToken,
@@ -158,8 +158,38 @@ describe('identity binding crypto', () => {
     expect(decodePairingChallenge(SECRET, encodePairingChallenge(SECRET, expired))).toBeNull();
   });
 
+  it('REM2-005: one decoy issuance is stable and rotation changes it', () => {
+    const base = fixedFacts();
+    const decoyFacts = {
+      contextId: base.contextId,
+      pairingIssuanceId: base.pairingIssuanceId,
+      pairingIssuedAt: base.pairingIssuedAt,
+      pairingExpiresAt: base.pairingExpiresAt,
+    };
+    const first = encodeDecoyPairingChallenge(SECRET, decoyFacts);
+    const replay = encodeDecoyPairingChallenge(SECRET, decoyFacts);
+    const rotated = encodeDecoyPairingChallenge(SECRET, {
+      ...decoyFacts,
+      pairingIssuanceId: randomUUID(),
+    });
+
+    expect(replay).toBe(first);
+    expect(rotated).not.toBe(first);
+    for (const challenge of [first, rotated]) {
+      expect(challenge).toMatch(/^[A-Za-z0-9_-]{192}$/);
+      expect(Buffer.from(challenge, 'base64url')).toHaveLength(PAIRING_ENVELOPE_BYTES);
+      expect(decodePairingChallenge(SECRET, challenge)).toBeNull();
+    }
+  });
+
   it('decoy has the same external representation but never resolves', () => {
-    const decoy = createDecoyPairingChallenge();
+    const base = fixedFacts();
+    const decoy = encodeDecoyPairingChallenge(SECRET, {
+      contextId: base.contextId,
+      pairingIssuanceId: base.pairingIssuanceId,
+      pairingIssuedAt: base.pairingIssuedAt,
+      pairingExpiresAt: base.pairingExpiresAt,
+    });
     expect(decoy).toMatch(/^[A-Za-z0-9_-]{192}$/);
     expect(decodePairingChallenge(SECRET, decoy)).toBeNull();
   });
@@ -224,8 +254,14 @@ describe('identity binding crypto', () => {
   });
 
   it('decoy and valid envelopes share length, alphabet and decoded byte shape', () => {
-    const valid = encodePairingChallenge(SECRET, fixedFacts());
-    const decoy = createDecoyPairingChallenge();
+    const base = fixedFacts();
+    const valid = encodePairingChallenge(SECRET, base);
+    const decoy = encodeDecoyPairingChallenge(SECRET, {
+      contextId: base.contextId,
+      pairingIssuanceId: base.pairingIssuanceId,
+      pairingIssuedAt: base.pairingIssuedAt,
+      pairingExpiresAt: base.pairingExpiresAt,
+    });
 
     for (const value of [valid, decoy]) {
       expect(value).toHaveLength(192);
@@ -248,8 +284,17 @@ describe('identity binding crypto', () => {
     // uniformly random in the same positions.
     expect(legacyStructuredPlaintextDistinguisher(validBytes)).toBe(false);
 
+    const decoyBase = fixedFacts();
     const decoys = Array.from({ length: 8 }, () =>
-      Buffer.from(createDecoyPairingChallenge(), 'base64url')
+      Buffer.from(
+        encodeDecoyPairingChallenge(SECRET, {
+          contextId: decoyBase.contextId,
+          pairingIssuanceId: randomUUID(),
+          pairingIssuedAt: decoyBase.pairingIssuedAt,
+          pairingExpiresAt: decoyBase.pairingExpiresAt,
+        }),
+        'base64url'
+      )
     );
     for (const decoyBytes of decoys) {
       expect(legacyStructuredPlaintextDistinguisher(decoyBytes)).toBe(false);

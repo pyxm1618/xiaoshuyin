@@ -29,7 +29,14 @@ export function verifyToken(
   const [body, sig] = parts as [string, string];
   const expectedSig = createHmac('sha256', secret).update(body).digest('base64url');
 
-  if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
+  // timingSafeEqual throws when buffer lengths differ. Malformed, truncated,
+  // or extended signatures are ordinary authentication failures, never 500s.
+  const suppliedSig = Buffer.from(sig);
+  const expectedSigBytes = Buffer.from(expectedSig);
+  if (
+    suppliedSig.length !== expectedSigBytes.length ||
+    !timingSafeEqual(suppliedSig, expectedSigBytes)
+  ) {
     return null;
   }
 

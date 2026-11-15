@@ -577,6 +577,24 @@ async function validateRawEvidenceProvenance(
   if (!validation.ok) refuseEvidenceWrite(validation.code);
 }
 
+function refuseEvidenceConfirmationAuthority(): never {
+  throw Object.assign(new Error('Evidence source confirmation is not authorized'), {
+    name: 'EvidenceDomainError',
+    code: 'EVIDENCE_CONFIRMATION_AUTHORITY_INVALID',
+  });
+}
+
+async function validateEvidenceConfirmationAuthority(
+  tx: Tx,
+  row: { sourcePersonId: string | null; confirmationStatus: string }
+): Promise<void> {
+  if (row.confirmationStatus !== 'SOURCE_CONFIRMED') return;
+  const identity = await getCurrentTransactionIdentityContext(tx);
+  if (!row.sourcePersonId || identity.personId !== row.sourcePersonId) {
+    refuseEvidenceConfirmationAuthority();
+  }
+}
+
 function refuseEvidencePersonReference(): never {
   throw Object.assign(new Error('Evidence person reference is invalid'), {
     name: 'EvidenceDomainError',
@@ -727,9 +745,18 @@ export async function getObservationRef(tx: Tx, id: string): Promise<EvidenceRef
 export async function getAssertionSupersedeTarget(
   tx: Tx,
   id: string
-): Promise<{ id: string; family_id: string; case_id: string } | null> {
+): Promise<{
+  id: string;
+  family_id: string;
+  case_id: string;
+  kind: string;
+  subject_person_id: string | null;
+  source_kind: string;
+  source_person_id: string | null;
+} | null> {
   const { rows } = await tx.query(
-    `SELECT id, family_id, case_id FROM assertions WHERE id = $1`,
+    `SELECT id, family_id, case_id, kind, subject_person_id, source_kind, source_person_id
+       FROM assertions WHERE id = $1`,
     [id]
   );
   return rows[0] ?? null;
@@ -738,9 +765,18 @@ export async function getAssertionSupersedeTarget(
 export async function getObservationSupersedeTarget(
   tx: Tx,
   id: string
-): Promise<{ id: string; family_id: string; case_id: string } | null> {
+): Promise<{
+  id: string;
+  family_id: string;
+  case_id: string;
+  observation_code: string;
+  subject_person_id: string | null;
+  source_kind: string;
+  source_person_id: string | null;
+} | null> {
   const { rows } = await tx.query(
-    `SELECT id, family_id, case_id FROM observations WHERE id = $1`,
+    `SELECT id, family_id, case_id, observation_code, subject_person_id, source_kind, source_person_id
+       FROM observations WHERE id = $1`,
     [id]
   );
   return rows[0] ?? null;
@@ -775,6 +811,7 @@ export async function insertEvidenceAssertion(
     row,
     row.kind === 'HYPOTHESIS' ? 'RECORD_HYPOTHESIS' : 'RECORD_STATEMENT'
   );
+  await validateEvidenceConfirmationAuthority(tx, row);
   await verifyEvidenceSourceMessage(tx, row);
   await assertEvidencePersonProcessingAllowed(tx, row.subjectPersonId, row.sourcePersonId);
 
@@ -833,6 +870,7 @@ export async function insertEvidenceObservation(
 ): Promise<EvidenceInsertResult> {
   // Execute the same frozen provenance matrix as recordObservation().
   await validateRawEvidenceProvenance(tx, row, 'RECORD_OBSERVATION');
+  await validateEvidenceConfirmationAuthority(tx, row);
   await verifyEvidenceSourceMessage(tx, row);
   await assertEvidencePersonProcessingAllowed(tx, row.subjectPersonId, row.sourcePersonId);
 

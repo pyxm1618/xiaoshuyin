@@ -121,9 +121,14 @@ export async function createTarget(
       guardianConsentId: consentId,
     });
   } else {
+    // Formal member onboarding now correctly refuses UNKNOWN. Binding tests
+    // still need an already-existing UNKNOWN profile to prove the independent
+    // identity-binding fail-closed matrix, so create a legal fixture first and
+    // mutate only the test database into that pre-existing state.
+    const onboardingAgeBand = opts.ageBand === 'UNKNOWN' ? 'MINOR_14_17' : opts.ageBand;
     targetRes = await createMember(h.app, guardian.token, familyId, label, {
-      ageBand: opts.ageBand,
-      ageBandSource: opts.ageBand === 'ADULT' ? 'SELF_STATEMENT' : 'GUARDIAN_RELAY',
+      ageBand: onboardingAgeBand,
+      ageBandSource: onboardingAgeBand === 'ADULT' ? 'SELF_STATEMENT' : 'GUARDIAN_RELAY',
     });
   }
 
@@ -131,6 +136,16 @@ export async function createTarget(
     throw new Error(`member create failed: ${targetRes.statusCode} ${targetRes.body}`);
   }
   const targetPersonId = targetRes.json().personId as string;
+  if (opts.ageBand === 'UNKNOWN') {
+    await h.admin.query(
+      `UPDATE person_compliance_profiles
+          SET age_band='UNKNOWN', minor_mode=false, guardian_person_id=NULL,
+              guardian_consent_version=NULL, guardian_consent_record_id=NULL,
+              updated_at=now()
+        WHERE person_id=$1`,
+      [targetPersonId]
+    );
+  }
 
   for (const extraFamilyId of opts.extraFamilyIds ?? []) {
     await h.admin.query(
