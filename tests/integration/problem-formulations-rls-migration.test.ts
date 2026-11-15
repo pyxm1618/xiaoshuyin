@@ -138,7 +138,7 @@ describe('S8 direct RLS and migration rollback', () => {
         ).rejects.toMatchObject({ code: '42501' });
         await wrong.query('ROLLBACK TO SAVEPOINT w1');
         const wrongUpdate = await wrong.query(
-          `UPDATE problem_formulations SET status='NEEDS_REVIEW' WHERE family_id=$1`,
+          `UPDATE problem_formulations SET review_state='NEEDS_REVIEW' WHERE family_id=$1`,
           [a.familyId]
         );
         expect(wrongUpdate.rowCount).toBe(0);
