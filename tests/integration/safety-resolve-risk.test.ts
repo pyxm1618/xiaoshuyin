@@ -159,6 +159,7 @@ describe('T910 ResolveRisk', () => {
       idempotencyKey: key,
       expectedCaseVersion,
       reviewEvidenceRefs,
+      trustedPolicyIdentity: IDENTITY,
     });
   }
 
@@ -311,6 +312,25 @@ describe('T910 ResolveRisk', () => {
         { kind: 'MESSAGE', ref: otherMessage.json().id },
       ])
     ).rejects.toMatchObject({ code: 'SAFETY_REVIEW_EVIDENCE_INVALID' });
+
+    expect((await fixture.getCase(held.caseId)).status).toBe('SAFETY_HOLD');
+  });
+
+  it('rejects a resolver request whose trusted current Safety Policy identity no longer matches the hold', async () => {
+    const held = await createHeldCase();
+    await seedResolver(held.caseId);
+
+    await expect(
+      resolveRisk(fixture.pool, {
+        accountId: staff.accountId,
+        personId: staff.personId,
+        caseId: held.caseId,
+        idempotencyKey: nextKey('stale-policy'),
+        expectedCaseVersion: held.heldVersion,
+        reviewEvidenceRefs: [{ kind: 'MESSAGE', ref: held.messageId }],
+        trustedPolicyIdentity: { ...IDENTITY, ruleVersion: '2' },
+      })
+    ).rejects.toMatchObject({ code: 'SAFETY_PRECHECK_STALE' });
 
     expect((await fixture.getCase(held.caseId)).status).toBe('SAFETY_HOLD');
   });
