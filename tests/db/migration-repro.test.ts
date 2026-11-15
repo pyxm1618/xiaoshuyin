@@ -22,7 +22,7 @@ const EXPECTED_ENUMS = 24; // + independent problem_formulation_review_state (AU
 const EXPECTED_TABLES = 31; // + minimal staff authority source // + Slice 13 target items + Slice 14 Contract/roleplay tables
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
-const EXPECTED_POLICIES = 66; // + staff_assignments self-read policy
+const EXPECTED_POLICIES = 67; // + staff self-read + Safety-resolution Account self-read
 const EXPECTED_TRIGGERS = 6; // prior triggers + Slice 13 target-item guards + Slice 14 Contract guard
 
 const EXPECTED_ENUM_NAMES = [
@@ -156,7 +156,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 66 RLS policies', async () => {
+  it('should have 67 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'
