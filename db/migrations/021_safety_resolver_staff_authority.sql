@@ -233,14 +233,6 @@ CREATE POLICY accounts_runtime_safety_resolution_read ON accounts
     AND id = app_account_id()
   );
 
--- Expose only the transaction-local exact Staff Case identity for evidence
--- and tests. This getter is not authority; all Staff RLS still calls the
--- database-backed verifier below.
-CREATE FUNCTION app_staff_case_id() RETURNS uuid
-LANGUAGE sql STABLE AS $function$
-  SELECT NULLIF(current_setting('app.staff_case_id', true), '')::uuid
-$function$;
-
 -- A Staff Case GUC is never authority by itself. Every policy calls this
 -- verifier, which binds the GUC to the exact current assignment + matching
 -- GLOBAL grant + ACTIVE Account using wall-clock time.
@@ -481,37 +473,6 @@ CREATE TRIGGER cases_staff_resolve_authority_guard
 
 -- Staff exact-Case policies are additive. Existing household Family policies
 -- are left byte-for-byte unchanged.
--- Final transition-time wall-clock guard. PostgreSQL RLS quals are evaluated
--- during row selection, before BEFORE UPDATE triggers. This trigger therefore
--- repeats the SAME authority helper at the last database transition point so
--- authority that expires while the UPDATE is in flight still fails closed.
-CREATE FUNCTION app.guard_staff_safety_transition_authority()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = pg_catalog, public
-AS $function$
-BEGIN
-  IF app_current_purpose() = 'SAFETY_RESOLUTION'
-     AND OLD.status = 'SAFETY_HOLD'
-     AND NEW.status = 'WAITING'
-     AND app.staff_case_authorized(OLD.id) IS NOT TRUE THEN
-    RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
-  END IF;
-  RETURN NEW;
-END
-$function$;
-
-REVOKE ALL ON FUNCTION app.guard_staff_safety_transition_authority() FROM PUBLIC;
-
--- PostgreSQL fires same-kind triggers in name order. The zz_ prefix keeps this
--- final guard after ordinary/test pre-update barriers while remaining before
--- the row is physically changed.
-CREATE TRIGGER zz_cases_staff_safety_transition_authority
-  BEFORE UPDATE OF status ON cases
-  FOR EACH ROW
-  EXECUTE FUNCTION app.guard_staff_safety_transition_authority();
-
 CREATE POLICY cases_staff_safety_select ON cases
   FOR SELECT TO xiaoshuyin_app
   USING (app.staff_case_authorized(id));

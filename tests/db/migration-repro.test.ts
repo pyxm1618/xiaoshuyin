@@ -20,7 +20,7 @@ const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATA
 // Expected final object counts (Slice 1/2 + Case Core + Slice 3 Evidence + Slice 6 binding)
 const EXPECTED_ENUMS = 24; // + independent problem_formulation_review_state (AUTH-006)
 const EXPECTED_TABLES = 31; // + minimal staff authority source // + Slice 13 target items + Slice 14 Contract/roleplay tables
-const EXPECTED_RLS_FUNCTIONS = 5; // + exact Staff Case getter
+const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
 const EXPECTED_POLICIES = 76; // + 9 exact-Case Staff Safety policies
 const EXPECTED_TRIGGERS = 9; // + Staff mutation serialization + Account serialization + final transition guard
@@ -131,13 +131,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
       SELECT proname FROM pg_proc p
       JOIN pg_namespace n ON p.pronamespace = n.oid
       WHERE n.nspname = 'public'
-        AND proname IN (
-          'app_family_id',
-          'app_person_id',
-          'app_account_id',
-          'app_current_purpose',
-          'app_staff_case_id'
-        )
+        AND proname IN ('app_family_id', 'app_person_id', 'app_account_id', 'app_current_purpose')
       ORDER BY proname
     `);
 
