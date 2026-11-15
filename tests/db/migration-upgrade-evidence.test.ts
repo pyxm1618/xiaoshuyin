@@ -130,7 +130,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     // Audit 2 remediation adds one forward supersession guard migration.
     expect(output).toContain('APPLY 014_consent_01004_cross_purpose_supersede_guard.sql');
-    expect(output).toMatch(/Migration complete: 18 new, 3 previously applied\./);
+    expect(output).toMatch(/Migration complete: 19 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -210,6 +210,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '018_foundation_database_integrity_1.sql',
       '019_auth_disabled_hard_disable.sql',
       '020_problem_formulation_review_state.sql',
+      '021_safety_resolver_staff_authority.sql',
     ]);
 
     // New Evidence schema exists.
@@ -263,7 +264,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(65); // + Foundation accounts least-privilege policies
+    expect(policyRows[0].count).toBe(66); // + staff_assignments self-read policy
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
