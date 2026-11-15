@@ -864,6 +864,10 @@ export async function assignConflictGroup(
       // group (or the row vanished). Never migrate an existing group.
       throw new EvidenceDomainError('EVIDENCE_CONFLICT_GROUP_IMMUTABLE');
     }
+    await markProblemFormulationsForEvidenceReview(tx, {
+      caseId: ctx.caseId,
+      evidence: { type: ref.kind, id: ref.id },
+    });
   }
 
   return { conflictGroupId: groupId };
