@@ -415,6 +415,23 @@ async function replayObservablePairingChallenge(
     return null;
   }
 
+  // Continuity is narrowly authorized only for the audited REM2-005-M01
+  // boundary: a real issuance whose attempt has authoritatively expired inside
+  // a still-live public context window. Other terminal/consumed reasons must
+  // fall through to the ordinary non-decodable decoy path.
+  //
+  // Requiring the original challenge itself to be expired is important: the
+  // candidate surface must never replay a still-decodable real AEAD envelope
+  // after currentness has been retired.
+  if (
+    attempt.state !== 'TERMINAL' ||
+    attempt.terminalReason !== 'ATTEMPT_EXPIRED' ||
+    attempt.expiresAt.getTime() > now.getTime() ||
+    context.pairingExpiresAt.getTime() > now.getTime()
+  ) {
+    return null;
+  }
+
   const identityFacts = {
     contextId: context.id,
     candidateIdentityDigest: context.candidateIdentityDigest,
