@@ -1038,6 +1038,35 @@ export async function getProblemFormulationByVersion(
 }
 
 
+async function markProblemFormulationsForDependencyReview(
+  tx: Tx,
+  input: {
+    familyId: string | null;
+    caseId: string | null;
+    dependency: DependencyRef;
+  }
+): Promise<number> {
+  if (input.familyId === null && input.caseId === null) {
+    throw new Error('PROBLEM_FORMULATION_REVIEW_SCOPE_REQUIRED');
+  }
+  const result = await tx.query(
+    `UPDATE problem_formulations
+        SET review_state = 'NEEDS_REVIEW',
+            updated_at = now()
+      WHERE ($1::uuid IS NULL OR family_id = $1)
+        AND ($2::uuid IS NULL OR case_id = $2)
+        AND status <> 'SUPERSEDED'
+        AND review_state = 'CURRENT'
+        AND dependency_refs @> $3::jsonb`,
+    [
+      input.familyId,
+      input.caseId,
+      JSON.stringify([input.dependency]),
+    ]
+  );
+  return result.rowCount ?? 0;
+}
+
 /**
  * AUTH-006 foundation primitive: an authoritative Evidence correction marks
  * only currently reachable Problem Formulations that actually depend on the
@@ -1047,26 +1076,36 @@ export async function markProblemFormulationsForEvidenceReview(
   tx: Tx,
   input: { caseId: string; evidence: EvidenceRef }
 ): Promise<number> {
-  const dependency = JSON.stringify([
-    {
+  return markProblemFormulationsForDependencyReview(tx, {
+    familyId: null,
+    caseId: input.caseId,
+    dependency: {
       type: 'EVIDENCE',
       evidence: {
         type: input.evidence.type,
         id: input.evidence.id.toLowerCase(),
       },
     },
-  ]);
-  const result = await tx.query(
-    `UPDATE problem_formulations
-        SET review_state = 'NEEDS_REVIEW',
-            updated_at = now()
-      WHERE case_id = $1
-        AND status <> 'SUPERSEDED'
-        AND review_state = 'CURRENT'
-        AND dependency_refs @> $2::jsonb`,
-    [input.caseId, dependency]
-  );
-  return result.rowCount ?? 0;
+  });
+}
+
+/**
+ * AUTH-006 current-runtime Consent propagation seam. Revocation marks only
+ * formulations that are pinned to the exact superseded Consent id + version.
+ */
+export async function markProblemFormulationsForConsentReview(
+  tx: Tx,
+  input: { familyId: string; consentId: string; version: number }
+): Promise<number> {
+  return markProblemFormulationsForDependencyReview(tx, {
+    familyId: input.familyId,
+    caseId: null,
+    dependency: {
+      type: 'CONSENT',
+      id: input.consentId.toLowerCase(),
+      version: input.version,
+    },
+  });
 }
 
 /**
