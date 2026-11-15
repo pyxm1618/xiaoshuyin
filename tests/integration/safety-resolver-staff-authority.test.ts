@@ -228,14 +228,14 @@ describe('AUTH-007/AUTH-008 production Safety resolver staff authority', () => {
     await admin.query(`
       CREATE FUNCTION public.${functionName}() RETURNS trigger
       LANGUAGE plpgsql
-      AS $
+      AS $function$
       BEGIN
         IF NEW.id = '${targetCaseId}'::uuid THEN
           PERFORM pg_advisory_xact_lock(${advisoryKey1}, ${advisoryKey2});
         END IF;
         RETURN NEW;
       END
-      $
+      $function$
     `);
     await admin.query(`
       CREATE TRIGGER ${triggerName}
