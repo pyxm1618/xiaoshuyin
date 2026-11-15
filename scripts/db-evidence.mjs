@@ -445,11 +445,12 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       /APPLY 017_digital_use_phone_use_contract_runtime\.sql/.test(output) &&
       /APPLY 018_foundation_database_integrity_1\.sql/.test(output) &&
       /APPLY 019_auth_disabled_hard_disable\.sql/.test(output) &&
-      /APPLY 020_problem_formulation_review_state\.sql/.test(output));
+      /APPLY 020_problem_formulation_review_state\.sql/.test(output) &&
+      /APPLY 021_safety_resolver_staff_authority\.sql/.test(output));
     check(
-      'upgrade 结果为 18 new / 3 previously applied',
+      'upgrade 结果为 19 new / 3 previously applied',
       true,
-      /Migration complete: 18 new, 3 previously applied\./.test(output)
+      /Migration complete: 19 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -488,6 +489,8 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       '019_auth_disabled_hard_disable.sql',
       // AUTH-006 Problem Formulation lifecycle / review-state reconciliation.
       '020_problem_formulation_review_state.sql',
+      // AUTH-007/AUTH-008 minimum Safety resolver Staff authority foundation.
+      '021_safety_resolver_staff_authority.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',
