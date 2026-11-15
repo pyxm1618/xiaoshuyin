@@ -420,14 +420,15 @@ async function replayObservablePairingChallenge(
   // a still-live public context window. Other terminal/consumed reasons must
   // fall through to the ordinary non-decodable decoy path.
   //
-  // Requiring the original challenge itself to be expired is important: the
-  // candidate surface must never replay a still-decodable real AEAD envelope
-  // after currentness has been retired.
+  // The historical envelope may still be cryptographically decodable for the
+  // remainder of its original pairing window, but it is no longer consumable:
+  // settlement has retired pairing_issuance_id and the confirmer independently
+  // requires a live PENDING attempt. That separation is what closes the oracle
+  // without extending business validity.
   if (
     attempt.state !== 'TERMINAL' ||
     attempt.terminalReason !== 'ATTEMPT_EXPIRED' ||
-    attempt.expiresAt.getTime() > now.getTime() ||
-    context.pairingExpiresAt.getTime() > now.getTime()
+    attempt.expiresAt.getTime() > now.getTime()
   ) {
     return null;
   }
