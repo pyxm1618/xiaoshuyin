@@ -216,6 +216,154 @@ describe('AUTH-007/AUTH-008 production Safety resolver staff authority', () => {
     expect(after.version).toBe(held.heldVersion);
   }
 
+  async function installCaseTransitionBarrier(targetCaseId: string) {
+    const suffix = seq++;
+    const functionName = `auth007_case_update_barrier_${suffix}`;
+    const triggerName = `auth007_case_update_barrier_trigger_${suffix}`;
+    const advisoryKey1 = 7007;
+    const advisoryKey2 = 100_000 + suffix;
+    const locker = await admin.connect();
+
+    await locker.query('SELECT pg_advisory_lock($1, $2)', [advisoryKey1, advisoryKey2]);
+    await admin.query(`
+      CREATE FUNCTION public.${functionName}() RETURNS trigger
+      LANGUAGE plpgsql
+      AS $
+      BEGIN
+        IF NEW.id = '${targetCaseId}'::uuid THEN
+          PERFORM pg_advisory_xact_lock(${advisoryKey1}, ${advisoryKey2});
+        END IF;
+        RETURN NEW;
+      END
+      $
+    `);
+    await admin.query(`
+      CREATE TRIGGER ${triggerName}
+      BEFORE UPDATE OF status ON cases
+      FOR EACH ROW EXECUTE FUNCTION public.${functionName}()
+    `);
+
+    let released = false;
+    return {
+      advisoryKey1,
+      advisoryKey2,
+      async release() {
+        if (released) return;
+        released = true;
+        await locker.query('SELECT pg_advisory_unlock($1, $2)', [
+          advisoryKey1,
+          advisoryKey2,
+        ]);
+      },
+      async cleanup() {
+        await admin.query(`DROP TRIGGER IF EXISTS ${triggerName} ON cases`).catch(() => undefined);
+        await admin
+          .query(`DROP FUNCTION IF EXISTS public.${functionName}()`)
+          .catch(() => undefined);
+        locker.release();
+      },
+    };
+  }
+
+  async function waitForBarrier(advisoryKey1: number, advisoryKey2: number): Promise<void> {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      const waiting = await admin.query<{ waiting: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1
+             FROM pg_locks
+            WHERE locktype = 'advisory'
+              AND classid::bigint = $1
+              AND objid::bigint = $2
+              AND objsubid = 2
+              AND granted = false
+         ) AS waiting`,
+        [advisoryKey1, advisoryKey2]
+      );
+      if (waiting.rows[0]?.waiting) return;
+      await admin.query('SELECT pg_sleep(0.01)');
+    }
+    throw new Error('ResolveRisk did not reach the transition barrier');
+  }
+
+  async function waitForBlockedBackend(
+    backendPid: number,
+    settled: () => boolean
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
+      if (settled()) return false;
+      const blocked = await admin.query<{ blocked: boolean }>(
+        'SELECT cardinality(pg_blocking_pids($1)) > 0 AS blocked',
+        [backendPid]
+      );
+      if (blocked.rows[0]?.blocked) return true;
+      await admin.query('SELECT pg_sleep(0.01)');
+    }
+    return false;
+  }
+
+  it('serializes a concurrent GLOBAL SAFETY_RESOLVE revoke after final authority validation', async () => {
+    const held = await createHeldCase();
+    const authority = await seedAuthority(staff, held.caseId);
+    expect(authority.assignmentId).not.toBeNull();
+
+    const barrier = await installCaseTransitionBarrier(held.caseId);
+    const mutator = await admin.connect();
+    let resolvePromise: ReturnType<typeof resolveAs> | null = null;
+    let revokePromise: Promise<unknown> | null = null;
+
+    try {
+      resolvePromise = resolveAs(staff, held, nextKey('resolve-global-revoke-race'));
+      await waitForBarrier(barrier.advisoryKey1, barrier.advisoryKey2);
+
+      const pid = await mutator.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
+      let revokeSettled = false;
+      revokePromise = mutator
+        .query(
+          `UPDATE staff_assignments
+              SET revoked_by_account_id = $2,
+                  revoked_at = clock_timestamp()
+            WHERE id = $1`,
+          [authority.grantId, owner.accountId]
+        )
+        .finally(() => {
+          revokeSettled = true;
+        });
+
+      const serialized = await waitForBlockedBackend(
+        pid.rows[0]!.pid,
+        () => revokeSettled
+      );
+
+      // Regression-first invariant: once ResolveRisk has passed its final
+      // authority validation, revoke must not commit ahead of the Case
+      // transition. The audited Head fails here because no authority row is
+      // locked through transitionCaseStatus().
+      expect(serialized).toBe(true);
+
+      await barrier.release();
+
+      const resolved = await resolvePromise;
+      expect(resolved.status).toBe(200);
+      await revokePromise;
+
+      const after = await fixture.getCase(held.caseId);
+      expect(after.status).toBe('WAITING');
+      expect(after.version).toBe(held.heldVersion + 1);
+
+      const grant = await admin.query<{ revoked_at: Date | null }>(
+        'SELECT revoked_at FROM staff_assignments WHERE id = $1',
+        [authority.grantId]
+      );
+      expect(grant.rows[0]?.revoked_at).not.toBeNull();
+    } finally {
+      await barrier.release().catch(() => undefined);
+      await resolvePromise?.catch(() => undefined);
+      await revokePromise?.catch(() => undefined);
+      mutator.release();
+      await barrier.cleanup();
+    }
+  });
+
   it('denies when SAFETY_RESOLVE is absent even if another Staff capability is assigned', async () => {
     const held = await createHeldCase();
     await seedAuthority(staff, held.caseId, { capability: 'SAFETY_REVIEW' });
