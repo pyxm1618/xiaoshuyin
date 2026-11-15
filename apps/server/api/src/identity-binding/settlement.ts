@@ -178,11 +178,7 @@ async function writeSettlement(
     terminalReason: input.reason,
   });
   // Cleanup is part of settlement. A failure aborts the transaction, so no
-  // state-only TERMINAL with a retained secret/current issuance can commit.
-  // clearPairingForAttempt retires only pairing_issuance_id; the non-secret
-  // issued/expires timestamps remain historical envelope facts so the
-  // candidate surface can reconstruct the exact already-invalid bytes until
-  // the shared context pairing window rotates (REM2-005-M01).
+  // state-only TERMINAL with a retained secret can commit.
   await clearOpenidForAttempt(tx, settled.id);
   await clearPairingForAttempt(tx, settled.id);
 }
