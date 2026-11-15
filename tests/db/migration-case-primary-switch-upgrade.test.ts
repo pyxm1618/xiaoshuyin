@@ -165,8 +165,20 @@ const AUTH008_NEW_CONSTRAINTS = [
 
 const AUTH008_NEW_OBJECTS = [
   'policy:accounts_runtime_safety_resolution_read',
+  'policy:assertions_staff_safety_select',
+  'policy:audit_staff_safety_insert',
+  'policy:case_events_staff_safety_insert',
+  'policy:cases_staff_safety_select',
+  'policy:cases_staff_safety_update',
+  'policy:dialogue_messages_staff_safety_select',
+  'policy:observations_staff_safety_select',
+  'policy:risk_events_staff_safety_insert',
+  'policy:risk_events_staff_safety_select',
   'policy:staff_assignments_runtime_self_read',
   'table:staff_assignments',
+  'trigger:accounts_authority_status_serialization',
+  'trigger:staff_assignments_authority_serialization',
+  'trigger:zz_cases_staff_resolve_authority_guard',
 ].sort();
 
 /** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
