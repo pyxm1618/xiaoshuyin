@@ -192,10 +192,10 @@ export async function submitCandidateDecision(
       // the state here and terminalize again later.
       if (initial.state === 'PENDING' && initial.expiresAt.getTime() <= Date.now()) {
         await settleExpiredAttempt(tx, { attemptId: initial.id, correlationId });
-        return generic(tx, deps, context, input.decision);
+        return generic(tx, deps, context, input.decision, initial);
       }
       if (initial.state !== 'PENDING') {
-        return generic(tx, deps, context, input.decision);
+        return generic(tx, deps, context, input.decision, initial);
       }
 
       if (input.decision !== 'AFFIRM') {
@@ -215,7 +215,9 @@ export async function submitCandidateDecision(
 
       // ── M-01 current dynamic eligibility ───────────────────
       const attempt = await findByIdForUpdate(tx, initial.id);
-      if (!attempt || attempt.state !== 'PENDING') return generic(tx, deps, context, 'AFFIRM');
+      if (!attempt || attempt.state !== 'PENDING') {
+        return generic(tx, deps, context, 'AFFIRM', initial);
+      }
 
       const invitation = await deps.invitationPort.resolveByParticipationId(
         tx,
@@ -227,7 +229,7 @@ export async function submitCandidateDecision(
           reason: 'INVITATION_TERMINAL',
           correlationId,
         });
-        return generic(tx, deps, context, 'AFFIRM');
+        return generic(tx, deps, context, 'AFFIRM', attempt);
       }
 
       await setBindingGateContext(tx, {
@@ -261,7 +263,7 @@ export async function submitCandidateDecision(
           reason: gate.result.reason,
           correlationId,
         });
-        return generic(tx, deps, context, 'AFFIRM');
+        return generic(tx, deps, context, 'AFFIRM', attempt);
       }
 
       const confirmation = await appendCandidate(tx, attempt.id, context.id);
@@ -279,22 +281,32 @@ export async function submitCandidateDecision(
       }
 
       const challenge = await issueOrReplayChallenge(tx, deps, context, attempt, correlationId);
-      if (!challenge) return generic(tx, deps, context, 'AFFIRM');
+      if (!challenge) return generic(tx, deps, context, 'AFFIRM', attempt);
       return { binding: 'NOT_COMPLETED', pairingChallenge: challenge };
     }
   );
+}
+
+interface ObservableAttemptFacts {
+  id: string;
+  targetPersonId: string;
+  targetFamilyId: string;
+  invitationParticipationId: string;
+  candidateIdentityDigest: string;
+  expiresAt: Date;
 }
 
 async function generic(
   tx: pg.PoolClient,
   deps: CandidateDecisionDeps,
   context: PendingContextRow,
-  decision: 'AFFIRM' | 'REJECT' | 'CANCEL'
+  decision: 'AFFIRM' | 'REJECT' | 'CANCEL',
+  attempt?: ObservableAttemptFacts
 ): Promise<CandidateDecisionResult> {
   if (decision !== 'AFFIRM') return { binding: 'NOT_COMPLETED' };
   return {
     binding: 'NOT_COMPLETED',
-    pairingChallenge: await issueOrReplayDecoyChallenge(tx, deps, context),
+    pairingChallenge: await issueOrReplayGenericChallenge(tx, deps, context, attempt),
   };
 }
 
@@ -444,24 +456,32 @@ async function replayCandidateOperation(
   if (input.decision !== 'AFFIRM' || !attemptId || context.attemptId !== attemptId) {
     return generic(tx, deps, context, input.decision);
   }
-  if (
-    !context.pairingIssuedAt ||
-    !context.pairingExpiresAt ||
-    !context.pairingIssuanceId ||
-    !context.invitationParticipationId
-  ) {
+
+  if (!context.invitationParticipationId) {
     return generic(tx, deps, context, 'AFFIRM');
   }
-  if (context.pairingExpiresAt.getTime() <= Date.now()) return generic(tx, deps, context, 'AFFIRM');
-
   await setBindingAttemptContext(tx, {
     attemptId,
     identityDigest: context.candidateIdentityDigest,
     invitationId: context.invitationParticipationId,
   });
   const attempt = await findById(tx, attemptId);
-  if (!attempt || attempt.state !== 'PENDING') return generic(tx, deps, context, 'AFFIRM');
-  if (await hasKind(tx, attemptId, 'SECOND_PARTY')) return generic(tx, deps, context, 'AFFIRM');
+  if (!attempt) return generic(tx, deps, context, 'AFFIRM');
+
+  if (
+    !context.pairingIssuedAt ||
+    !context.pairingExpiresAt ||
+    !context.pairingIssuanceId
+  ) {
+    return generic(tx, deps, context, 'AFFIRM', attempt);
+  }
+  if (context.pairingExpiresAt.getTime() <= Date.now()) {
+    return generic(tx, deps, context, 'AFFIRM', attempt);
+  }
+  if (attempt.state !== 'PENDING') return generic(tx, deps, context, 'AFFIRM', attempt);
+  if (await hasKind(tx, attemptId, 'SECOND_PARTY')) {
+    return generic(tx, deps, context, 'AFFIRM', attempt);
+  }
 
   return {
     binding: 'NOT_COMPLETED',
