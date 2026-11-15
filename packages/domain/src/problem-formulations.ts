@@ -21,12 +21,19 @@ export const PROBLEM_FORMULATION_STATUSES = [
   'PRESENTED',
   'CONFIRMED',
   'DISPUTED',
-  'NEEDS_REVIEW',
   'SUPERSEDED',
 ] as const;
 
 export type ProblemFormulationStatus =
   (typeof PROBLEM_FORMULATION_STATUSES)[number];
+
+export const PROBLEM_FORMULATION_REVIEW_STATES = [
+  'CURRENT',
+  'NEEDS_REVIEW',
+] as const;
+
+export type ProblemFormulationReviewState =
+  (typeof PROBLEM_FORMULATION_REVIEW_STATES)[number];
 
 export const PG_INTEGER_MAX = 2147483647;
 
@@ -98,6 +105,7 @@ export interface ProblemFormulationRow {
   case_id: string;
   version: number;
   status: ProblemFormulationStatus;
+  review_state: ProblemFormulationReviewState;
   primary_problem: PrimaryProblem;
   key_factors: KeyFactor[];
   evidence_refs: EvidenceRef[];
@@ -121,6 +129,7 @@ export interface ProblemFormulationDto {
   caseId: string;
   version: number;
   status: ProblemFormulationStatus;
+  reviewState: ProblemFormulationReviewState;
   primaryProblem: PrimaryProblem;
   keyFactors: KeyFactor[];
   evidenceRefs: EvidenceRef[];
@@ -176,6 +185,7 @@ export function toProblemFormulationDto(row: ProblemFormulationRow): ProblemForm
     caseId: row.case_id,
     version: row.version,
     status: row.status,
+    reviewState: row.review_state,
     primaryProblem: row.primary_problem,
     keyFactors: row.key_factors,
     evidenceRefs: row.evidence_refs,
@@ -263,8 +273,7 @@ export function assertStatusAllows(
   if (command === 'CORRECTION') {
     if (
       currentStatus !== 'PRESENTED' &&
-      currentStatus !== 'DISPUTED' &&
-      currentStatus !== 'NEEDS_REVIEW'
+      currentStatus !== 'DISPUTED'
     ) {
       throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
     }
@@ -282,6 +291,23 @@ export function assertTransferableStatus(
   if (status === 'SUPERSEDED' || status === 'CONFIRMED' || status === 'DRAFT') {
     throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
   }
+}
+
+export function assertProblemFormulationReviewCurrent(
+  reviewState: ProblemFormulationReviewState
+): void {
+  if (reviewState !== 'CURRENT') {
+    throw pfError(
+      'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+      'problem formulation requires review before authoritative use'
+    );
+  }
+}
+
+export function isProblemFormulationAuthoritativeExecutionBasis(
+  row: Pick<ProblemFormulationRow, 'status' | 'review_state'>
+): boolean {
+  return row.status === 'CONFIRMED' && row.review_state === 'CURRENT';
 }
 
 export function nextFormulationVersion(current: ProblemFormulationRow | null): number {
@@ -963,7 +989,7 @@ export async function resolveTraceableStatement(
   return null;
 }
 
-const ROW_COLUMNS = `id, family_id, case_id, version, status,
+const ROW_COLUMNS = `id, family_id, case_id, version, status, review_state,
   primary_problem, key_factors, evidence_refs, unknowns, conflicts, scene_fit,
   alternative_explanations, reassessment_conditions, exit_conditions,
   user_response, confirmed_by_person_id, confirmed_at, dependency_refs,
@@ -1009,6 +1035,67 @@ export async function getProblemFormulationByVersion(
     [caseId, version]
   );
   return rows[0] ?? null;
+}
+
+
+/**
+ * AUTH-006 foundation primitive: an authoritative Evidence correction marks
+ * only currently reachable Problem Formulations that actually depend on the
+ * superseded Evidence. Lifecycle is intentionally untouched.
+ */
+export async function markProblemFormulationsForEvidenceReview(
+  tx: Tx,
+  input: { caseId: string; evidence: EvidenceRef }
+): Promise<number> {
+  const dependency = JSON.stringify([
+    {
+      type: 'EVIDENCE',
+      evidence: {
+        type: input.evidence.type,
+        id: input.evidence.id.toLowerCase(),
+      },
+    },
+  ]);
+  const result = await tx.query(
+    `UPDATE problem_formulations
+        SET review_state = 'NEEDS_REVIEW',
+            updated_at = now()
+      WHERE case_id = $1
+        AND status <> 'SUPERSEDED'
+        AND review_state = 'CURRENT'
+        AND dependency_refs @> $2::jsonb`,
+    [input.caseId, dependency]
+  );
+  return result.rowCount ?? 0;
+}
+
+/**
+ * AUTH-006 foundation-only no-material-impact primitive.
+ *
+ * This is deliberately not a public review workflow: a future authoritative
+ * owner must supply authorization, review evidence and audit in the same
+ * transaction. The repository primitive only enforces exact current-version
+ * state reconciliation without changing lifecycle.
+ */
+export async function clearProblemFormulationReviewState(
+  tx: Tx,
+  input: { id: string; caseId: string; version: number }
+): Promise<ProblemFormulationRow> {
+  const { rows } = await tx.query<ProblemFormulationRow>(
+    `UPDATE problem_formulations
+        SET review_state = 'CURRENT',
+            updated_at = now()
+      WHERE id = $1
+        AND case_id = $2
+        AND version = $3
+        AND status <> 'SUPERSEDED'
+        AND review_state = 'NEEDS_REVIEW'
+      RETURNING ${ROW_COLUMNS}`,
+    [input.id, input.caseId, input.version]
+  );
+  const row = rows[0];
+  if (!row) throw pfError('PROBLEM_FORMULATION_DEPENDENCY_INVALID');
+  return row;
 }
 
 export interface InsertProblemFormulationInput {
