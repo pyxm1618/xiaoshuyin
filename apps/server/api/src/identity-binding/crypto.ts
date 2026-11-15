@@ -26,6 +26,7 @@ const IDENTITY_LABEL = 'identity-binding:openid-digest:v1';
 const AES_LABEL = 'identity-binding:pending-openid:v1';
 const PAIRING_AEAD_LABEL = 'xiaoshuyin:identity-binding:pairing-aead:v1';
 const PAIRING_NONCE_LABEL = 'xiaoshuyin:identity-binding:pairing-nonce:v1';
+const PAIRING_ISSUANCE_ID_LABEL = 'xiaoshuyin:identity-binding:pairing-issuance-id:v1';
 const PAIRING_DECOY_LABEL = 'xiaoshuyin:identity-binding:pairing-decoy:v1';
 const PAIRING_AAD = Buffer.from('xiaoshuyin:identity-binding:pairing-aead:v1', 'utf8');
 
@@ -189,8 +190,10 @@ function pairingNonceKey(secret: string): Buffer {
   return deriveKey(secret, PAIRING_NONCE_LABEL);
 }
 
-/** 112-byte plaintext: every bound field except the raw issuance id. */
-function pairingPlaintext(facts: PairingChallengeFacts): Buffer {
+export type PairingIssuanceIdentityFacts = Omit<PairingChallengeFacts, 'pairingIssuanceId'>;
+
+/** 112-byte canonical material: every bound field except the issuance id. */
+function pairingIdentityMaterial(facts: PairingIssuanceIdentityFacts): Buffer {
   const payload = Buffer.alloc(PAIRING_PAYLOAD_BYTES);
   let offset = 0;
   uuidToBytes(facts.contextId).copy(payload, offset);
@@ -207,6 +210,34 @@ function pairingPlaintext(facts: PairingChallengeFacts): Buffer {
   offset += 8;
   writeTimestamp(payload, offset, facts.pairingExpiresAt);
   return payload;
+}
+
+/** 112-byte plaintext: every bound field except the raw issuance id. */
+function pairingPlaintext(facts: PairingChallengeFacts): Buffer {
+  return pairingIdentityMaterial(facts);
+}
+
+/**
+ * Stable server-owned issuance identity. The id is reconstructible after the
+ * current issuance marker is retired, but cannot be predicted without the
+ * binding secret. This lets candidate-facing anti-enumeration replay the exact
+ * historical envelope while the authoritative DB currentness marker stays
+ * cleared and therefore non-consumable.
+ */
+export function derivePairingIssuanceId(
+  secret: string,
+  facts: PairingIssuanceIdentityFacts
+): string {
+  const key = deriveKey(secret, PAIRING_ISSUANCE_ID_LABEL);
+  const bytes = createHmac('sha256', key)
+    .update(PAIRING_ISSUANCE_ID_LABEL)
+    .update(pairingIdentityMaterial(facts))
+    .digest()
+    .subarray(0, 16);
+  // UUID-shaped server id; version 8 denotes an application-defined payload.
+  bytes[6] = (bytes[6]! & 0x0f) | 0x80;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  return bytesToUuid(bytes);
 }
 
 /**
