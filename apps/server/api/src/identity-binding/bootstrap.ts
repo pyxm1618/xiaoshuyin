@@ -19,6 +19,7 @@ import {
   type BindingOperationScope,
 } from '@xiaoshuyin/domain';
 import { signToken } from '../auth/session-token.js';
+import { isAccountAuthorityEligible } from '../auth/account-authority.js';
 import { findAccountByOpenid } from '../auth/binding-account.js';
 import type { WechatAuthProvider } from '../auth/wechat-provider.js';
 import {
@@ -285,6 +286,17 @@ export async function bootstrap(
       const candidateAccount = await findAccountByOpenid(tx, openid);
       if (candidateAccount) {
         await setBindingCandidateAccountId(tx, candidateAccount.id);
+      }
+      if (candidateAccount && !isAccountAuthorityEligible(candidateAccount)) {
+        await appendAudit(tx, {
+          correlationId,
+          eventType: 'BINDING_GATE1_BLOCKED',
+          result: 'TERMINAL',
+          candidateIdentityDigest: identityDigest,
+          metadata: { authorityReason: 'ACCOUNT_DISABLED' },
+        });
+        await clearOpenidForNoAttemptIdentity(tx, identityDigest);
+        return { kind: 'GENERIC', pendingContextToken: token };
       }
       const candidateBoundPerson = candidateAccount
         ? await getPersonByAccountId(tx, candidateAccount.id)

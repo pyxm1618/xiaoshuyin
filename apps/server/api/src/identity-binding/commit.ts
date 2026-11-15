@@ -16,6 +16,7 @@ import {
   type BindingTerminalReason,
 } from '@xiaoshuyin/domain';
 import { createOrReuseAccount, findAccountByOpenid } from '../auth/binding-account.js';
+import { isAccountAuthorityEligible } from '../auth/account-authority.js';
 import {
   setBindingCandidateAccountId,
   setBindingCommitAccountId,
@@ -210,7 +211,16 @@ async function commitInTransaction(
   // minimal (F-01). A concurrent ordinary-login bind of the same Account parks
   // here instead of racing the Gate evaluation.
   if (candidateAccount) {
-    await tx.query('SELECT id FROM accounts WHERE id = $1 FOR UPDATE', [candidateAccount.id]);
+    const lockedAccount = await tx.query(
+      'SELECT id, status FROM accounts WHERE id = $1 FOR UPDATE',
+      [candidateAccount.id]
+    );
+    if (
+      !lockedAccount.rows[0] ||
+      !isAccountAuthorityEligible({ status: lockedAccount.rows[0].status })
+    ) {
+      return terminalize(tx, attempt, 'IDENTITY_CONFLICT', correlationId);
+    }
     const boundBeforeLock = await getPersonByAccountId(tx, candidateAccount.id);
     if (boundBeforeLock) {
       // Lock the Person row reachable through the candidate-account read
@@ -268,6 +278,11 @@ async function commitInTransaction(
   // so a loser can never leave an orphan Account.
   await tx.query('SAVEPOINT binding_phase_c');
   const { account } = await createOrReuseAccount(tx, openid);
+  if (!isAccountAuthorityEligible(account)) {
+    await tx.query('ROLLBACK TO SAVEPOINT binding_phase_c');
+    await tx.query('RELEASE SAVEPOINT binding_phase_c');
+    return terminalize(tx, attempt, 'IDENTITY_CONFLICT', correlationId);
+  }
   await setBindingCandidateAccountId(tx, account.id);
   const boundPerson = await getPersonByAccountId(tx, account.id);
   if (boundPerson && boundPerson.id !== attempt.targetPersonId) {

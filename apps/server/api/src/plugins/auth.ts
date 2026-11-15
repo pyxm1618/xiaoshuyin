@@ -11,6 +11,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { verifyToken } from '../auth/session-token.js';
+import { hasAuthenticatedSessionAuthority } from '../auth/account-authority.js';
 import type pg from 'pg';
 
 declare module 'fastify' {
@@ -87,10 +88,17 @@ export function createAuthenticate(pool: pg.Pool, sessionSecret: string) {
 
       // Get account and verify epoch
       const { rows: accounts } = await client.query(
-        'SELECT id, session_epoch FROM accounts WHERE id = $1',
+        'SELECT id, session_epoch, status FROM accounts WHERE id = $1',
         [payload.accountId]
       );
-      if (accounts.length === 0 || accounts[0].session_epoch !== payload.epoch) {
+      const account = accounts[0];
+      if (
+        !account ||
+        !hasAuthenticatedSessionAuthority(
+          { status: account.status, sessionEpoch: account.session_epoch },
+          payload.epoch
+        )
+      ) {
         await client.query('ROLLBACK');
         throw Object.assign(new Error('Invalid session'), {
           statusCode: 401,
