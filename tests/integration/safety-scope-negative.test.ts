@@ -198,8 +198,9 @@ describe('T918 executable scope negatives', () => {
       expect(content).not.toContain('safety-resolver');
     }
 
-    // The test-only resolver file exists only under tests/.
-    expect(existsSync(join(ROOT, 'tests/setup/safety-resolver.ts'))).toBe(true);
+    // AUTH-007 removes the old injectable resolver entirely. There is one
+    // production authority source and no test-provider parallel path.
+    expect(existsSync(join(ROOT, 'tests/setup/safety-resolver.ts'))).toBe(false);
     expect(existsSync(join(ROOT, 'packages/domain/src/safety/resolver-test.ts'))).toBe(false);
   });
 
