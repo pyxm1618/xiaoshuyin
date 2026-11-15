@@ -51,26 +51,54 @@ describe('T906 Safety authorization fail-closed composition', () => {
     await fixture.app.close();
   });
 
-  const rls = (actor: { accountId: string; personId: string }) => ({
+  const rls = (
+    actor: { accountId: string; personId: string },
+    purpose: 'FAMILY_MANAGEMENT' | 'SAFETY_RESOLUTION' = 'FAMILY_MANAGEMENT'
+  ) => ({
     familyId,
     accountId: actor.accountId,
     personId: actor.personId,
-    purpose: 'FAMILY_MANAGEMENT',
+    purpose,
   });
 
   const request = (
     actor: { accountId: string; personId: string },
     action: 'CASE_ENTER_SAFETY_HOLD' | 'CASE_RESOLVE_RISK',
-    safetyResolution?: { verified: boolean; authorityRef: string } | null
+    safetyResolution?: {
+      verified: boolean;
+      authorityRef: string;
+      capability: 'SAFETY_RESOLVE';
+      capabilityGrantId: string;
+      assignmentId: string;
+      familyId: string;
+      caseId: string;
+      accountId: string;
+      personId: string;
+    } | null
   ) => ({
     accountId: actor.accountId,
     personId: actor.personId,
     familyId,
     action,
-    purpose: 'FAMILY_MANAGEMENT' as const,
+    purpose:
+      action === 'CASE_RESOLVE_RISK'
+        ? ('SAFETY_RESOLUTION' as const)
+        : ('FAMILY_MANAGEMENT' as const),
     resource: { type: 'CASE' as const, familyId, caseId },
     caseId,
     ...(safetyResolution === undefined ? {} : { safetyResolution }),
+  });
+
+  const verifiedResolverFact = (actor: { accountId: string; personId: string }) => ({
+    verified: true,
+    authorityRef: 'staff_assignment:11111111-1111-1111-1111-111111111111',
+    capability: 'SAFETY_RESOLVE' as const,
+    capabilityGrantId: '22222222-2222-2222-2222-222222222222',
+    assignmentId: '11111111-1111-1111-1111-111111111111',
+    familyId,
+    caseId,
+    accountId: actor.accountId,
+    personId: actor.personId,
   });
 
   it('allows Enter for the manager without any resolver capability', async () => {
@@ -82,7 +110,7 @@ describe('T906 Safety authorization fail-closed composition', () => {
 
   it('denies Resolve without a verified capability fact', async () => {
     await expect(
-      withRlsTransaction(fixture.pool, rls(owner), (tx) =>
+      withRlsTransaction(fixture.pool, rls(owner, 'SAFETY_RESOLUTION'), (tx) =>
         requireFamilyAction(tx, request(owner, 'CASE_RESOLVE_RISK', null))
       )
     ).rejects.toMatchObject({ code: 'SAFETY_RESOLUTION_AUTHORITY_DENIED', statusCode: 403 });
@@ -92,21 +120,21 @@ describe('T906 Safety authorization fail-closed composition', () => {
     // `member` is an authenticated account of a DIFFERENT Family. Establishing
     // the owner's Family context cannot succeed, and no capability fact exists.
     await expect(
-      withRlsTransaction(fixture.pool, rls(member), (tx) =>
+      withRlsTransaction(fixture.pool, rls(member, 'SAFETY_RESOLUTION'), (tx) =>
         requireFamilyAction(tx, request(member, 'CASE_RESOLVE_RISK', null))
       )
     ).rejects.toBeTruthy();
   });
 
   it('allows Resolve only when the verified capability fact is present', async () => {
-    const decision = await withRlsTransaction(fixture.pool, rls(owner), (tx) =>
-      requireFamilyAction(
-        tx,
-        request(owner, 'CASE_RESOLVE_RISK', {
-          verified: true,
-          authorityRef: 'test-verified-authority',
-        })
-      )
+    const decision = await withRlsTransaction(
+      fixture.pool,
+      rls(owner, 'SAFETY_RESOLUTION'),
+      (tx) =>
+        requireFamilyAction(
+          tx,
+          request(owner, 'CASE_RESOLVE_RISK', verifiedResolverFact(owner))
+        )
     );
     expect(decision.decision).toBe('ALLOW');
     if (decision.decision === 'ALLOW') {
