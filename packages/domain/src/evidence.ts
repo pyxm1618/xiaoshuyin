@@ -21,6 +21,7 @@ import {
 } from './provenance.js';
 import type { Purpose } from '@xiaoshuyin/authorization';
 import { assertEvidenceCaseAuthorized } from './internal/evidence-authorization.js';
+import { markProblemFormulationsForEvidenceReview } from './problem-formulations.js';
 import type { Tx } from './repository.js';
 import {
   getAssertionRef,
@@ -680,6 +681,13 @@ async function writeAssertion(
     inserted.id
   );
 
+  if (supersedesId !== null) {
+    await markProblemFormulationsForEvidenceReview(tx, {
+      caseId: ctx.caseId,
+      evidence: { type: 'ASSERTION', id: supersedesId },
+    });
+  }
+
   return { id: inserted.id, recordedAt: inserted.recorded_at };
 }
 
@@ -790,6 +798,13 @@ export async function recordObservation(
     'OBSERVATION',
     inserted.id
   );
+
+  if (supersedesId !== null) {
+    await markProblemFormulationsForEvidenceReview(tx, {
+      caseId: ctx.caseId,
+      evidence: { type: 'OBSERVATION', id: supersedesId },
+    });
+  }
 
   return { id: inserted.id, recordedAt: inserted.recorded_at };
 }
