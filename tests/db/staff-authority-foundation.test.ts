@@ -131,7 +131,12 @@ describe('AUTH-008 staff authority foundation', () => {
     actor: ActorSession,
     assignmentId: string,
     targetCaseId: string
-  ): Promise<{ familyId: string; visibleCases: number }> {
+  ): Promise<{
+    familyId: string;
+    familyContext: string | null;
+    staffCaseId: string | null;
+    visibleCaseIds: string[];
+  }> {
     const client = await fixture.pool.connect();
     try {
       await client.query('BEGIN');
@@ -142,14 +147,22 @@ describe('AUTH-008 staff authority foundation', () => {
         'SELECT app.set_staff_case_context($1, $2)::text AS family_id',
         [assignmentId, targetCaseId]
       );
-      const visible = await client.query<{ count: string }>(
-        'SELECT count(*)::text AS count FROM cases WHERE id = $1',
-        [targetCaseId]
+      const gucs = await client.query<{
+        family_id: string | null;
+        staff_case_id: string | null;
+      }>(
+        `SELECT app_family_id()::text AS family_id,
+                app_staff_case_id()::text AS staff_case_id`
+      );
+      const visible = await client.query<{ id: string }>(
+        'SELECT id::text AS id FROM cases ORDER BY id'
       );
       await client.query('ROLLBACK');
       return {
         familyId: context.rows[0]!.family_id,
-        visibleCases: Number(visible.rows[0]!.count),
+        familyContext: gucs.rows[0]!.family_id,
+        staffCaseId: gucs.rows[0]!.staff_case_id,
+        visibleCaseIds: visible.rows.map((row) => row.id),
       };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
@@ -224,17 +237,84 @@ describe('AUTH-008 staff authority foundation', () => {
     ).rejects.toMatchObject({ code: '23503' });
   });
 
-  it('does not require or manufacture household membership for Staff', async () => {
+  it('does not require or manufacture household membership and remains exact-Case scoped', async () => {
     const membership = await admin.query(
       'SELECT 1 FROM family_members WHERE family_id = $1 AND person_id = $2',
       [familyId, staff.personId]
     );
     expect(membership.rowCount).toBe(0);
 
+    const sibling = await fixture.createCase(owner);
     const grantId = await insertGrant(staff);
     const assignmentId = await insertAssignment(staff, grantId, caseId);
     const context = await setStaffContext(staff, assignmentId, caseId);
-    expect(context).toEqual({ familyId, visibleCases: 1 });
+
+    expect(context.familyId).toBe(familyId);
+    expect(context.familyContext).toBeNull();
+    expect(context.staffCaseId).toBe(caseId);
+    expect(context.visibleCaseIds).toEqual([caseId]);
+    expect(context.visibleCaseIds).not.toContain(sibling.id);
+
+    const forged = await fixture.pool.connect();
+    try {
+      await forged.query('BEGIN');
+      await forged.query(`SELECT app.set_identity_context($1, 'SAFETY_RESOLUTION')`, [
+        staff.accountId,
+      ]);
+      await forged.query(
+        `SELECT set_config('app.staff_case_id', $1, true)`,
+        [sibling.id]
+      );
+      const visible = await forged.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM cases WHERE id = $1',
+        [sibling.id]
+      );
+      expect(visible.rows[0]!.count).toBe('0');
+      await forged.query('ROLLBACK');
+    } finally {
+      forged.release();
+    }
+  });
+
+  it('mechanically rejects invalid CASE-to-GLOBAL authority graphs and accepts the valid graph', async () => {
+    const validGrant = await insertGrant(staff);
+    const validAssignment = await insertAssignment(staff, validGrant, caseId);
+    expect(validAssignment).toBeTruthy();
+
+    const reviewGrant = await insertGrant(staff, 'SAFETY_REVIEW');
+    await expect(
+      insertAssignment(staff, reviewGrant, caseId, { capability: 'SAFETY_RESOLVE' })
+    ).rejects.toMatchObject({ code: '23503' });
+
+    const ownerGrant = await insertGrant(owner);
+    await expect(
+      insertAssignment(staff, ownerGrant, caseId)
+    ).rejects.toMatchObject({ code: '23503' });
+
+    await expect(
+      admin.query(
+        `INSERT INTO staff_assignments
+           (account_id, person_id, capability, scope_type,
+            family_id, case_id, capability_grant_id,
+            granted_by_account_id, valid_from, valid_until)
+         VALUES ($1, $2, 'SAFETY_RESOLVE', 'CASE',
+                 $3, $4, $5, $6, clock_timestamp() - interval '1 minute',
+                 clock_timestamp() + interval '1 hour')`,
+        [
+          staff.accountId,
+          owner.personId,
+          familyId,
+          caseId,
+          validGrant,
+          owner.accountId,
+        ]
+      )
+    ).rejects.toMatchObject({ code: '23503' });
+
+    const sibling = await fixture.createCase(owner);
+    await expect(
+      insertAssignment(staff, validAssignment, sibling.id)
+    ).rejects.toMatchObject({ code: '23503' });
   });
 
   it('the Staff RLS context refuses another Case and revoked/expired/inactive authority', async () => {
