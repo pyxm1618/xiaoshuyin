@@ -202,6 +202,7 @@ describe('AUTH-007/AUTH-008 production Safety resolver staff authority', () => {
       idempotencyKey: key,
       expectedCaseVersion: held.heldVersion,
       reviewEvidenceRefs: [{ kind: 'MESSAGE', ref: held.messageId }],
+      trustedPolicyIdentity: POLICY,
     });
   }
 
