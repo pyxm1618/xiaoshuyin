@@ -515,15 +515,18 @@ describe('candidate-facing anti-enumeration', () => {
         terminal_reason: 'ATTEMPT_EXPIRED',
       });
 
-      // Settlement retires currentness but retains only non-secret historical
-      // timing facts needed to reproduce the candidate-facing bytes.
+      // ATTEMPT_EXPIRED retains the complete non-secret historical issuance
+      // tuple so the exact old bytes can be replayed without violating the
+      // existing all-null/all-non-null DB constraint. It is not authority:
+      // the attempt is TERMINAL and the original pairing expiry is bounded by
+      // the attempt expiry in the real protocol.
       const retired = await boundaryHarness.admin.query(
         `SELECT pairing_issuance_id, pairing_issued_at, pairing_expires_at
            FROM binding_pending_contexts
           WHERE attempt_id = $1`,
         [realAttemptId]
       );
-      expect(retired.rows[0].pairing_issuance_id).toBeNull();
+      expect(retired.rows[0].pairing_issuance_id).not.toBeNull();
       expect(retired.rows[0].pairing_issued_at).not.toBeNull();
       expect(retired.rows[0].pairing_expires_at).not.toBeNull();
 
