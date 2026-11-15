@@ -427,7 +427,7 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015 + 016 + 017 + 018', true,
+check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015 + 016 + 017 + 018 + 019', true,
       /APPLY 004_evidence_core\.sql/.test(output) &&
       /APPLY 004_identity_binding_runtime\.sql/.test(output) &&
       /APPLY 005_case_participant_core\.sql/.test(output) &&
@@ -443,11 +443,12 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       /APPLY 015_digital_use_assessment_runtime\.sql/.test(output) &&
       /APPLY 016_digital_use_family_alliance_runtime\.sql/.test(output) &&
       /APPLY 017_digital_use_phone_use_contract_runtime\.sql/.test(output) &&
-      /APPLY 018_foundation_database_integrity_1\.sql/.test(output));
+      /APPLY 018_foundation_database_integrity_1\.sql/.test(output) &&
+      /APPLY 019_auth_disabled_hard_disable\.sql/.test(output));
     check(
-      'upgrade 结果为 16 new / 3 previously applied',
+      'upgrade 结果为 17 new / 3 previously applied',
       true,
-      /Migration complete: 16 new, 3 previously applied\./.test(output)
+      /Migration complete: 17 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -482,6 +483,8 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       '017_digital_use_phone_use_contract_runtime.sql',
       // Foundation Remediation 1 database / migration integrity hardening.
       '018_foundation_database_integrity_1.sql',
+      // AUTH-001 Account Hard Disable session invalidation.
+      '019_auth_disabled_hard_disable.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',
