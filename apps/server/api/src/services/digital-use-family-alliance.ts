@@ -97,7 +97,8 @@ async function evaluateFamilyAllianceCompliance(
   const db = drizzle(tx);
   const result = await evaluateComplianceAtTransactionTime(db, tx, {
     descriptor: FAMILY_ALLIANCE_FEATURE,
-    personId: actorPersonId,
+    actorPersonId,
+    targetPersonId: actorPersonId,
     supportedObligations: SUPPORTED_FAMILY_ALLIANCE_OBLIGATIONS,
   });
   if (result.gate !== 'ALLOW') {
