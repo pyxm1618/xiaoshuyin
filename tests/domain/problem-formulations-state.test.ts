@@ -15,6 +15,8 @@ import {
   parseIfMatchCaseVersion,
   caseVersionEtag,
   ProblemFormulationError,
+  assertProblemFormulationReviewCurrent,
+  isProblemFormulationAuthoritativeExecutionBasis,
   type ProblemFormulationContent,
   type ProblemFormulationRow,
 } from '@xiaoshuyin/domain';
@@ -83,6 +85,23 @@ describe('problem formulation state policy', () => {
       expect(() => assertStatusAllows('DISPUTE', status)).toThrow(ProblemFormulationError);
       expect(() => assertStatusAllows('CORRECTION', status)).toThrow(ProblemFormulationError);
     }
+  });
+
+  it('separates authoritative execution from lifecycle status', () => {
+    expect(() => assertProblemFormulationReviewCurrent('CURRENT')).not.toThrow();
+    expect(() => assertProblemFormulationReviewCurrent('NEEDS_REVIEW')).toThrow(
+      ProblemFormulationError
+    );
+    expect(
+      isProblemFormulationAuthoritativeExecutionBasis(
+        row({ status: 'CONFIRMED', review_state: 'CURRENT' })
+      )
+    ).toBe(true);
+    expect(
+      isProblemFormulationAuthoritativeExecutionBasis(
+        row({ status: 'CONFIRMED', review_state: 'NEEDS_REVIEW' })
+      )
+    ).toBe(false);
   });
 
   it('allocates versions from 1 and rejects overflow', () => {
