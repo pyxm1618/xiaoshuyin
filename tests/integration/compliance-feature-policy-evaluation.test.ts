@@ -143,7 +143,8 @@ describe('compliance feature policy integration', () => {
       async (tx, client) =>
         evaluateComplianceAtTransactionTime(tx, client, {
           descriptor: descriptor(code),
-          personId: owner.personId,
+          actorPersonId: owner.personId,
+          targetPersonId: owner.personId,
           supportedObligations: SUPPORTED,
         })
     );
@@ -182,7 +183,8 @@ describe('compliance feature policy integration', () => {
 
         return evaluateComplianceAtTransactionTime(tx, client, {
           descriptor: descriptor(code),
-          personId: null,
+          actorPersonId: owner.personId,
+          targetPersonId: null,
           supportedObligations: SUPPORTED,
         });
       }
@@ -215,7 +217,8 @@ describe('compliance feature policy integration', () => {
 
         return evaluateComplianceAtTransactionTime(tx, client, {
           descriptor: descriptor(code),
-          personId: other.personId,
+          actorPersonId: owner.personId,
+          targetPersonId: other.personId,
           supportedObligations: SUPPORTED,
         });
       }
@@ -273,7 +276,8 @@ describe('compliance feature policy integration', () => {
       async (tx, client) => {
         const evaluated = await evaluateComplianceAtTransactionTime(tx, client, {
           descriptor: descriptor(code),
-          personId: owner.personId,
+          actorPersonId: owner.personId,
+          targetPersonId: owner.personId,
           supportedObligations: SUPPORTED,
         });
         // A concurrent reviewed publication happens after the result was read.
@@ -299,7 +303,8 @@ describe('compliance feature policy integration', () => {
       async (tx, client) =>
         evaluateComplianceAtTransactionTime(tx, client, {
           descriptor: descriptor(code),
-          personId: owner.personId,
+          actorPersonId: owner.personId,
+          targetPersonId: owner.personId,
           supportedObligations: SUPPORTED,
         })
     );
@@ -328,7 +333,8 @@ describe('compliance feature policy integration', () => {
       async (tx, client) => {
         const evaluated = await evaluateComplianceAtTransactionTime(tx, client, {
           descriptor: descriptor(code),
-          personId: owner.personId,
+          actorPersonId: owner.personId,
+          targetPersonId: owner.personId,
           supportedObligations: SUPPORTED,
         });
         expect(evaluated.gate).toBe('ALLOW');
