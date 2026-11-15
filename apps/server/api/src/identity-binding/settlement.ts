@@ -12,7 +12,10 @@
 import type pg from 'pg';
 import type { BindingAttemptRow, BindingTerminalReason } from '@xiaoshuyin/domain';
 import { appendAudit, type BindingAuditEventType } from './audit-repository.js';
-import { clearOpenidForAttempt } from './pending-context-repository.js';
+import {
+  clearOpenidForAttempt,
+  clearPairingForAttempt,
+} from './pending-context-repository.js';
 
 const COLUMNS = `id, target_person_id, target_family_id, invitation_participation_id,
   candidate_identity_digest, state, terminal_reason, committed_account_id,
@@ -174,15 +177,8 @@ async function writeSettlement(
     result: 'TERMINAL',
     terminalReason: input.reason,
   });
-  // Secret cleanup is part of settlement. A failure aborts the transaction,
-  // so no state-only TERMINAL with retained decryptable OpenID can commit.
-  //
-  // Pairing issuance facts are intentionally retained as NON-SECRET historical
-  // replay material. They are not a valid issuance after settlement:
-  // confirmer verification independently requires a PENDING, unexpired attempt,
-  // and an expired challenge also fails the crypto expiry check. Candidate
-  // anti-enumeration may therefore re-encode the already-expired bytes through
-  // the remainder of the same public context pairing window without reviving
-  // any business capability (REM2-005-M01).
+  // Cleanup is part of settlement. A failure aborts the transaction, so no
+  // state-only TERMINAL with a retained secret can commit.
   await clearOpenidForAttempt(tx, settled.id);
+  await clearPairingForAttempt(tx, settled.id);
 }
