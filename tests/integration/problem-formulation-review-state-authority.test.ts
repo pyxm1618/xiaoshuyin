@@ -349,49 +349,6 @@ describe('AUTH-006 — Problem Formulation lifecycle / review-state separation',
     expect(after.rows[0]).toEqual(before.rows[0]);
   });
 
-  it('Case D — no-material-impact reconciliation clears review state without changing lifecycle', async () => {
-    const fx = await prepare('no-material-impact');
-
-    const row = await admin.query(
-      'SELECT id, status FROM problem_formulations WHERE case_id = $1 AND version = 1',
-      [fx.created.id]
-    );
-    expect(row.rows[0]?.status).toBe('PRESENTED');
-
-    await admin.query(
-      `UPDATE problem_formulations
-          SET review_state = 'NEEDS_REVIEW'
-        WHERE case_id = $1 AND version = 1`,
-      [fx.created.id]
-    );
-
-    const reconciled = await withRlsTransaction(
-      pool,
-      {
-        familyId: fx.familyId,
-        accountId: fx.owner.accountId,
-        personId: fx.owner.personId,
-        purpose: 'FAMILY_MANAGEMENT',
-      },
-      (tx) =>
-        clearProblemFormulationReviewState(tx, {
-          id: row.rows[0].id,
-          caseId: fx.created.id,
-          version: 1,
-        })
-    );
-
-    expect(reconciled.status).toBe('PRESENTED');
-    expect(reconciled.review_state).toBe('CURRENT');
-    expect(await formulationFacts(fx.created.id)).toEqual([
-      expect.objectContaining({
-        version: 1,
-        status: 'PRESENTED',
-        review_state: 'CURRENT',
-      }),
-    ]);
-  });
-
   it('Case D — no material impact clears review state without changing lifecycle', async () => {
     const fx = await prepare('no-material-impact');
 
