@@ -255,8 +255,8 @@ export async function resolveRisk(
         purpose: 'SAFETY_RESOLUTION',
       },
       async (tx, client) => {
-        // Resolve and lock Staff authority facts in the SAME transaction used
-        // by the command. No test/provider injection exists in production.
+        // Resolve Staff authority facts in the SAME transaction used by the
+        // command. No test/provider injection exists in production.
         const authoritySource = createProductionSafetyResolutionAuthoritySource({
           async query(text, values) {
             const result = await client.query(text, values);
@@ -278,8 +278,7 @@ export async function resolveRisk(
         // Staff is deliberately not inserted into family_members. The DB gate
         // establishes only this exact Case's Family RLS context after
         // SAFETY_RESOLVE + linked GLOBAL grant + current CASE assignment were
-        // proven. It revalidates the same facts while the authority rows stay
-        // locked against concurrent revoke/disable through transaction end.
+        // proven. Runtime is deliberately SELECT-only on authority data.
         const context = await client.query<{ family_id: string }>(
           'SELECT app.set_staff_case_context($1, $2)::text AS family_id',
           [authority.assignmentId, caseId]
@@ -359,6 +358,17 @@ export async function resolveRisk(
         const holdPolicyContext = await findActiveHoldPolicyContext(client, { familyId, caseId });
         if (!samePolicyIdentity(holdPolicyContext, input.trustedPolicyIdentity)) {
           throw httpError('SAFETY_PRECHECK_STALE');
+        }
+
+        // Linearization point for "can this actor exercise SAFETY_RESOLVE for
+        // this exact Case right now?". Re-read capability grant, Case
+        // assignment and ACTIVE Account immediately before the state change.
+        const revalidated = await client.query<{ family_id: string }>(
+          'SELECT app.set_staff_case_context($1, $2)::text AS family_id',
+          [authority.assignmentId, caseId]
+        );
+        if (revalidated.rows[0]?.family_id !== familyId) {
+          throw httpError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
         }
 
         const transitioned = await transitionCaseStatus(asSafetyWriteTx(tx), {
