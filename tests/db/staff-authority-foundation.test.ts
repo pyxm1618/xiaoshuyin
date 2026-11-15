@@ -78,6 +78,7 @@ describe('AUTH-008 staff authority foundation', () => {
         capability,
         owner.accountId,
         overrides.validFrom ?? new Date(Date.now() - 60_000),
+        overrides.validFrom ?? new Date(Date.now() - 60_000),
         overrides.validUntil ?? new Date(Date.now() + 60 * 60_000),
         overrides.revokedAt ? owner.accountId : null,
         overrides.revokedAt ?? null,
@@ -102,11 +103,11 @@ describe('AUTH-008 staff authority foundation', () => {
       `INSERT INTO staff_assignments
          (account_id, person_id, capability, scope_type,
           family_id, case_id, capability_grant_id,
-          granted_by_account_id, valid_from, valid_until,
+          granted_by_account_id, granted_at, valid_from, valid_until,
           revoked_by_account_id, revoked_at)
        VALUES ($1, $2, $3, 'CASE',
                $4, $5, $6,
-               $7, $8, $9, $10, $11)
+               $7, $8, $9, $10, $11, $12)
        RETURNING id`,
       [
         actor.accountId,
