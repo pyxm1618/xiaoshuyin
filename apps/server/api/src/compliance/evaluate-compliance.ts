@@ -115,7 +115,8 @@ export async function evaluateAuthorizedCompliance(
 
       const compliance = await evaluateComplianceAtTransactionTime(tx, client, {
         descriptor: input.descriptor,
-        personId: input.targetPersonId,
+        actorPersonId: input.actor.personId,
+        targetPersonId: input.targetPersonId,
         supportedObligations: input.supportedObligations,
       });
 
