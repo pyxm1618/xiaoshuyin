@@ -129,6 +129,10 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
 };
 
 
+const AUTH006_NEW_CONSTRAINTS = [
+  'problem_formulations_review_state_not_null',
+] as const;
+
 /** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
 const SLICE8_NEW_CONSTRAINTS = [
   'problem_formulations_alternative_explanations_not_null',
@@ -734,6 +738,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE13_NEW_CONSTRAINTS,
         ...SLICE14_NEW_CONSTRAINTS,
         ...FOUNDATION_REM1_NEW_CONSTRAINTS,
+        ...AUTH006_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
