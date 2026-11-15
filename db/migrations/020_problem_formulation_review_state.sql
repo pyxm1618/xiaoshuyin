@@ -47,10 +47,11 @@ DECLARE
   user_kind text;
   confirm_event_count bigint;
   dispute_event_count bigint;
-  correction_event_count bigint;
-  presented_event_count bigint;
+  creation_event_count bigint;
+  latest_confirmation_at timestamptz;
+  latest_dispute_at timestamptz;
+  latest_creation_at timestamptz;
   confirmer_ids uuid[];
-  confirmer_times timestamptz[];
   resolved_confirmer uuid;
   resolved_confirmed_at timestamptz;
   resolved_status text;
@@ -67,9 +68,15 @@ BEGIN
     resolved_status := NULL;
     resolved_confirmer := NULL;
     resolved_confirmed_at := NULL;
+    latest_confirmation_at := NULL;
+    latest_dispute_at := NULL;
+    latest_creation_at := NULL;
 
-    -- Authoritative confirmation facts for this exact formulation version.
-    SELECT count(*) INTO confirm_event_count
+    -- Terminal lifecycle facts for this exact formulation version. Case events
+    -- and audit events intentionally overlap: duplicates of the same legal
+    -- transition are evidence of one lifecycle state, not ambiguity.
+    SELECT count(*), max(confirm_events.occurred_at)
+      INTO confirm_event_count, latest_confirmation_at
       FROM (
         SELECT ce.actor_account_id, ce.occurred_at
           FROM case_events ce
@@ -84,16 +91,16 @@ BEGIN
            AND bae.event_type = 'CASE_PROBLEM_FORMULATION_CONFIRMED'
       ) confirm_events;
 
-    SELECT array_agg(DISTINCT p.id), array_agg(confirm_events.occurred_at)
-      INTO confirmer_ids, confirmer_times
+    SELECT array_agg(DISTINCT p.id)
+      INTO confirmer_ids
       FROM (
-        SELECT ce.actor_account_id, ce.occurred_at AS occurred_at
+        SELECT ce.actor_account_id
           FROM case_events ce
          WHERE ce.case_id = legacy.case_id
            AND ce.event_type = 'CASE_PROBLEM_FORMULATION_CONFIRMED'
            AND ce.metadata ->> 'formulationVersion' = legacy.version::text
         UNION ALL
-        SELECT bae.actor_account_id, bae.occurred_at
+        SELECT bae.actor_account_id
           FROM business_audit_events bae
          WHERE bae.resource_type = 'PROBLEM_FORMULATION'
            AND bae.resource_id = legacy.id
@@ -101,70 +108,78 @@ BEGIN
       ) confirm_events
       JOIN persons p ON p.account_id = confirm_events.actor_account_id;
 
-    SELECT count(*) INTO dispute_event_count
+    SELECT count(*), max(dispute_events.occurred_at)
+      INTO dispute_event_count, latest_dispute_at
       FROM (
-        SELECT 1
+        SELECT ce.occurred_at
           FROM case_events ce
          WHERE ce.case_id = legacy.case_id
            AND ce.event_type = 'CASE_PROBLEM_FORMULATION_DISPUTED'
            AND ce.metadata ->> 'formulationVersion' = legacy.version::text
         UNION ALL
-        SELECT 1
+        SELECT bae.occurred_at
           FROM business_audit_events bae
          WHERE bae.resource_type = 'PROBLEM_FORMULATION'
            AND bae.resource_id = legacy.id
            AND bae.event_type = 'CASE_PROBLEM_FORMULATION_DISPUTED'
       ) dispute_events;
 
-    SELECT count(*) INTO correction_event_count
+    -- PRESENTED can be proven either by the initial presentation event or by
+    -- a correction event whose toFormulationVersion is this exact version.
+    -- These are creation facts, not terminal lifecycle facts.
+    SELECT count(*), max(creation_events.occurred_at)
+      INTO creation_event_count, latest_creation_at
       FROM (
-        SELECT 1
-          FROM case_events ce
-         WHERE ce.case_id = legacy.case_id
-           AND ce.event_type = 'CASE_PROBLEM_FORMULATION_CORRECTED'
-           AND ce.metadata ->> 'toFormulationVersion' = legacy.version::text
-        UNION ALL
-        SELECT 1
-          FROM business_audit_events bae
-         WHERE bae.resource_type = 'PROBLEM_FORMULATION'
-           AND bae.resource_id = legacy.id
-           AND bae.event_type = 'CASE_PROBLEM_FORMULATION_CORRECTED'
-      ) correction_events;
-
-    SELECT count(*) INTO presented_event_count
-      FROM (
-        SELECT 1
+        SELECT ce.occurred_at
           FROM case_events ce
          WHERE ce.case_id = legacy.case_id
            AND ce.event_type = 'CASE_PROBLEM_FORMULATION_PRESENTED'
            AND ce.metadata ->> 'formulationVersion' = legacy.version::text
         UNION ALL
-        SELECT 1
+        SELECT bae.occurred_at
           FROM business_audit_events bae
          WHERE bae.resource_type = 'PROBLEM_FORMULATION'
            AND bae.resource_id = legacy.id
            AND bae.event_type = 'CASE_PROBLEM_FORMULATION_PRESENTED'
-      ) presented_events;
+        UNION ALL
+        SELECT ce.occurred_at
+          FROM case_events ce
+         WHERE ce.case_id = legacy.case_id
+           AND ce.event_type = 'CASE_PROBLEM_FORMULATION_CORRECTED'
+           AND ce.metadata ->> 'toFormulationVersion' = legacy.version::text
+        UNION ALL
+        SELECT bae.occurred_at
+          FROM business_audit_events bae
+         WHERE bae.resource_type = 'PROBLEM_FORMULATION'
+           AND bae.resource_id = legacy.id
+           AND bae.event_type = 'CASE_PROBLEM_FORMULATION_CORRECTED'
+      ) creation_events;
 
-    IF confirm_event_count > 0
-       AND (
-         dispute_event_count > 0
-         OR correction_event_count > 0
-         OR user_kind = 'DISPUTE'
-         OR user_kind = 'CORRECTION'
-       ) THEN
+    -- CONFIRMED and DISPUTED are mutually exclusive terminal states for one
+    -- formulation version. A correction-created PRESENTED fact may precede
+    -- either one and is therefore not contradictory when chronology proves
+    -- the terminal transition happened later.
+    IF confirm_event_count > 0 AND dispute_event_count > 0 THEN
       ambiguous_ids := ambiguous_ids || legacy.id;
       ambiguous_reasons := ambiguous_reasons
-        || format('row %s: confirmation and dispute/correction history conflict', legacy.id);
+        || format('row %s: both CONFIRMED and DISPUTED terminal history exists', legacy.id);
     ELSIF confirm_event_count > 0 THEN
-      IF coalesce(array_length(confirmer_ids, 1), 0) <> 1 THEN
+      IF latest_creation_at IS NOT NULL
+         AND latest_confirmation_at <= latest_creation_at THEN
+        ambiguous_ids := ambiguous_ids || legacy.id;
+        ambiguous_reasons := ambiguous_reasons
+          || format('row %s: CONFIRMED does not occur after the proven PRESENTED creation fact', legacy.id);
+      ELSIF user_kind IS NOT NULL AND user_kind <> 'CONFIRM' THEN
+        ambiguous_ids := ambiguous_ids || legacy.id;
+        ambiguous_reasons := ambiguous_reasons
+          || format('row %s: confirmation event conflicts with persisted user response %s', legacy.id, user_kind);
+      ELSIF coalesce(array_length(confirmer_ids, 1), 0) <> 1 THEN
         ambiguous_ids := ambiguous_ids || legacy.id;
         ambiguous_reasons := ambiguous_reasons
           || format('row %s: confirmation events do not resolve to exactly one Person', legacy.id);
       ELSE
         resolved_confirmer := confirmer_ids[1];
-        SELECT min(event_time) INTO resolved_confirmed_at
-          FROM unnest(confirmer_times) AS event_time;
+        resolved_confirmed_at := latest_confirmation_at;
         IF NOT EXISTS (
           SELECT 1
             FROM family_members fm
@@ -178,11 +193,16 @@ BEGIN
           resolved_status := 'CONFIRMED';
         END IF;
       END IF;
-    ELSIF dispute_event_count > 0 OR user_kind = 'DISPUTE' THEN
-      IF correction_event_count > 0 OR user_kind = 'CORRECTION' THEN
+    ELSIF dispute_event_count > 0 THEN
+      IF latest_creation_at IS NOT NULL
+         AND latest_dispute_at <= latest_creation_at THEN
         ambiguous_ids := ambiguous_ids || legacy.id;
         ambiguous_reasons := ambiguous_reasons
-          || format('row %s: dispute and correction history conflict', legacy.id);
+          || format('row %s: DISPUTED does not occur after the proven PRESENTED creation fact', legacy.id);
+      ELSIF user_kind IS NOT NULL AND user_kind <> 'DISPUTE' THEN
+        ambiguous_ids := ambiguous_ids || legacy.id;
+        ambiguous_reasons := ambiguous_reasons
+          || format('row %s: dispute event conflicts with persisted user response %s', legacy.id, user_kind);
       ELSE
         resolved_status := 'DISPUTED';
       END IF;
@@ -190,9 +210,10 @@ BEGIN
       ambiguous_ids := ambiguous_ids || legacy.id;
       ambiguous_reasons := ambiguous_reasons
         || format('row %s: CONFIRM response has no authoritative confirmation event', legacy.id);
-    ELSIF correction_event_count > 0
+    ELSIF user_kind = 'DISPUTE' THEN
+      resolved_status := 'DISPUTED';
+    ELSIF creation_event_count > 0
        OR user_kind = 'CORRECTION'
-       OR presented_event_count > 0
        OR legacy.version = 1 THEN
       resolved_status := 'PRESENTED';
     ELSE

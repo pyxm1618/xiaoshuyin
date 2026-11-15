@@ -31,6 +31,7 @@ const PRE_AUTH006_MIGRATIONS = [
 ] as const;
 
 const AUTH006_MIGRATION = '020_problem_formulation_review_state.sql';
+const CORRECTION_AT = '2026-01-01T03:04:05.000Z';
 const CONFIRMED_AT = '2026-01-02T03:04:05.000Z';
 
 function urlForDatabase(baseUrl: string, database: string): string {
@@ -174,15 +175,177 @@ async function seedProblemFormulation(
   return { id: formulationId, caseId, familyId, accountId, personId };
 }
 
+type CorrectionTerminal = 'PRESENTED' | 'DISPUTED' | 'CONFIRMED';
+
+async function insertLifecycleEvent(
+  client: Client,
+  input: SeededFormulation,
+  formulationId: string,
+  eventType:
+    | 'CASE_PROBLEM_FORMULATION_CORRECTED'
+    | 'CASE_PROBLEM_FORMULATION_DISPUTED'
+    | 'CASE_PROBLEM_FORMULATION_CONFIRMED',
+  metadata: Record<string, unknown>,
+  occurredAt: string
+): Promise<void> {
+  await client.query(
+    `INSERT INTO case_events
+       (family_id, case_id, actor_account_id, event_type, metadata, occurred_at)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6)`,
+    [input.familyId, input.caseId, input.accountId, eventType, JSON.stringify(metadata), occurredAt]
+  );
+  await client.query(
+    `INSERT INTO business_audit_events
+       (family_id, actor_account_id, event_type, resource_type, resource_id,
+        metadata, occurred_at)
+     VALUES ($1, $2, $3, 'PROBLEM_FORMULATION', $4, $5::jsonb, $6)`,
+    [input.familyId, input.accountId, eventType, formulationId, JSON.stringify(metadata), occurredAt]
+  );
+}
+
+async function seedCorrectionCreatedLegacy(
+  client: Client,
+  terminal: CorrectionTerminal
+): Promise<SeededFormulation & { v1Id: string; version: 2; dependencyRefs: unknown }> {
+  const base = await seedProblemFormulation(client, {
+    status: 'PRESENTED',
+    userResponse: null,
+  });
+  await client.query(
+    `UPDATE problem_formulations
+        SET status = 'SUPERSEDED', updated_at = now()
+      WHERE id = $1`,
+    [base.id]
+  );
+
+  const userResponse =
+    terminal === 'PRESENTED'
+      ? { kind: 'CORRECTION', respondedAt: CORRECTION_AT }
+      : terminal === 'DISPUTED'
+        ? { kind: 'DISPUTE', respondedAt: CONFIRMED_AT }
+        : { kind: 'CONFIRM', respondedAt: CONFIRMED_AT };
+
+  const { rows } = await client.query(
+    `INSERT INTO problem_formulations
+       (family_id, case_id, version, status, primary_problem, key_factors,
+        evidence_refs, unknowns, conflicts, scene_fit, alternative_explanations,
+        reassessment_conditions, exit_conditions, user_response,
+        confirmed_by_person_id, confirmed_at, dependency_refs, supersedes_version)
+     SELECT family_id, case_id, 2, 'NEEDS_REVIEW', primary_problem, key_factors,
+            evidence_refs, unknowns, conflicts, scene_fit, alternative_explanations,
+            reassessment_conditions, exit_conditions, $2::jsonb,
+            NULL, NULL, dependency_refs, 1
+       FROM problem_formulations
+      WHERE id = $1
+     RETURNING id, dependency_refs`,
+    [base.id, JSON.stringify(userResponse)]
+  );
+  const v2Id = rows[0].id as string;
+
+  await insertLifecycleEvent(
+    client,
+    base,
+    v2Id,
+    'CASE_PROBLEM_FORMULATION_CORRECTED',
+    {
+      fromFormulationVersion: 1,
+      toFormulationVersion: 2,
+      fromStatus: 'PRESENTED',
+      toStatus: 'PRESENTED',
+      version: 2,
+    },
+    CORRECTION_AT
+  );
+
+  if (terminal === 'DISPUTED') {
+    await insertLifecycleEvent(
+      client,
+      base,
+      v2Id,
+      'CASE_PROBLEM_FORMULATION_DISPUTED',
+      {
+        formulationVersion: 2,
+        fromStatus: 'PRESENTED',
+        toStatus: 'DISPUTED',
+        version: 3,
+      },
+      CONFIRMED_AT
+    );
+  } else if (terminal === 'CONFIRMED') {
+    await insertLifecycleEvent(
+      client,
+      base,
+      v2Id,
+      'CASE_PROBLEM_FORMULATION_CONFIRMED',
+      {
+        formulationVersion: 2,
+        fromStatus: 'PRESENTED',
+        toStatus: 'CONFIRMED',
+        fromPhase: 'PROBLEM_FORMULATION',
+        toPhase: 'GOALS',
+        version: 3,
+      },
+      CONFIRMED_AT
+    );
+  }
+
+  return {
+    ...base,
+    id: v2Id,
+    v1Id: base.id,
+    version: 2,
+    dependencyRefs: rows[0].dependency_refs,
+  };
+}
+
+async function lifecycleHistoryCounts(
+  client: Client,
+  caseId: string
+): Promise<{ caseEvents: number; auditEvents: number }> {
+  const caseEvents = await client.query(
+    `SELECT count(*)::int AS count
+       FROM case_events
+      WHERE case_id = $1
+        AND event_type IN (
+          'CASE_PROBLEM_FORMULATION_CORRECTED',
+          'CASE_PROBLEM_FORMULATION_DISPUTED',
+          'CASE_PROBLEM_FORMULATION_CONFIRMED'
+        )`,
+    [caseId]
+  );
+  const auditEvents = await client.query(
+    `SELECT count(*)::int AS count
+       FROM business_audit_events
+      WHERE resource_type = 'PROBLEM_FORMULATION'
+        AND event_type IN (
+          'CASE_PROBLEM_FORMULATION_CORRECTED',
+          'CASE_PROBLEM_FORMULATION_DISPUTED',
+          'CASE_PROBLEM_FORMULATION_CONFIRMED'
+        )
+        AND resource_id IN (
+          SELECT id FROM problem_formulations WHERE case_id = $1
+        )`,
+    [caseId]
+  );
+  return {
+    caseEvents: caseEvents.rows[0].count,
+    auditEvents: auditEvents.rows[0].count,
+  };
+}
+
 async function formulationFacts(
   client: Client,
   id: string
 ): Promise<Record<string, unknown>> {
   const { rows } = await client.query(
-    `SELECT status::text AS status,
+    `SELECT id,
+            version,
+            status::text AS status,
             review_state::text AS review_state,
             confirmed_by_person_id,
-            confirmed_at
+            confirmed_at,
+            supersedes_version,
+            dependency_refs
        FROM problem_formulations
       WHERE id = $1`,
     [id]
@@ -224,6 +387,84 @@ describe('AUTH-006 Problem Formulation review-state migration', () => {
     }
     return { database, migrator, seed };
   }
+
+  it('reconstructs correction-created v2 PRESENTED and preserves version/history/dependencies', async () => {
+    const { migrator, seed } = await prepare('correction-presented');
+    try {
+      const legacy = await seedCorrectionCreatedLegacy(seed, 'PRESENTED');
+      const beforeHistory = await lifecycleHistoryCounts(seed, legacy.caseId);
+      await applySqlFile(migrator, AUTH006_MIGRATION);
+
+      expect(await formulationFacts(seed, legacy.id)).toMatchObject({
+        id: legacy.id,
+        version: 2,
+        status: 'PRESENTED',
+        review_state: 'NEEDS_REVIEW',
+        confirmed_by_person_id: null,
+        confirmed_at: null,
+        supersedes_version: 1,
+        dependency_refs: legacy.dependencyRefs,
+      });
+      expect(await lifecycleHistoryCounts(seed, legacy.caseId)).toEqual(beforeHistory);
+      const v1 = await seed.query(
+        'SELECT status::text AS status FROM problem_formulations WHERE id = $1',
+        [legacy.v1Id]
+      );
+      expect(v1.rows[0]).toEqual({ status: 'SUPERSEDED' });
+    } finally {
+      await migrator.end();
+      await seed.end();
+    }
+  }, 180_000);
+
+  it('reconstructs correction-created v2 DISPUTED from later lifecycle history', async () => {
+    const { migrator, seed } = await prepare('correction-disputed');
+    try {
+      const legacy = await seedCorrectionCreatedLegacy(seed, 'DISPUTED');
+      const beforeHistory = await lifecycleHistoryCounts(seed, legacy.caseId);
+      await applySqlFile(migrator, AUTH006_MIGRATION);
+
+      expect(await formulationFacts(seed, legacy.id)).toMatchObject({
+        id: legacy.id,
+        version: 2,
+        status: 'DISPUTED',
+        review_state: 'NEEDS_REVIEW',
+        confirmed_by_person_id: null,
+        confirmed_at: null,
+        supersedes_version: 1,
+        dependency_refs: legacy.dependencyRefs,
+      });
+      expect(await lifecycleHistoryCounts(seed, legacy.caseId)).toEqual(beforeHistory);
+    } finally {
+      await migrator.end();
+      await seed.end();
+    }
+  }, 180_000);
+
+  it('reconstructs correction-created v2 CONFIRMED from later lifecycle history and preserves confirmation metadata', async () => {
+    const { migrator, seed } = await prepare('correction-confirmed');
+    try {
+      const legacy = await seedCorrectionCreatedLegacy(seed, 'CONFIRMED');
+      const beforeHistory = await lifecycleHistoryCounts(seed, legacy.caseId);
+      await applySqlFile(migrator, AUTH006_MIGRATION);
+
+      const facts = await formulationFacts(seed, legacy.id);
+      expect(facts).toMatchObject({
+        id: legacy.id,
+        version: 2,
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+        confirmed_by_person_id: legacy.personId,
+        supersedes_version: 1,
+        dependency_refs: legacy.dependencyRefs,
+      });
+      expect(new Date(facts['confirmed_at'] as string).toISOString()).toBe(CONFIRMED_AT);
+      expect(await lifecycleHistoryCounts(seed, legacy.caseId)).toEqual(beforeHistory);
+    } finally {
+      await migrator.end();
+      await seed.end();
+    }
+  }, 180_000);
 
   it('recovers an unambiguous PRESENTED legacy row and keeps NEEDS_REVIEW', async () => {
     const { migrator, seed } = await prepare('presented');

@@ -20,12 +20,22 @@ import {
   resolveProblemFormulationReview,
   startAssessment,
 } from '../../apps/server/api/src/services/problem-formulations.js';
+import * as domainPublicApi from '@xiaoshuyin/domain';
 import { recordStatement } from '../../packages/domain/src/evidence.js';
 import { isProblemFormulationAuthoritativeExecutionBasis } from '../../packages/domain/src/problem-formulations.js';
 
 const PREFIX = 'auth006_';
 
 describe('AUTH-006 — Problem Formulation lifecycle / review-state separation', () => {
+  it('does not expose a naked review-state resolution primitive from @xiaoshuyin/domain', () => {
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        domainPublicApi,
+        'resolveProblemFormulationReview'
+      )
+    ).toBe(false);
+  });
+
   let app: Awaited<ReturnType<typeof buildApp>>;
   let admin: pg.Pool;
   let pool: pg.Pool;
@@ -457,6 +467,61 @@ expect(blocked.status).toBe(409);
       fromReviewState: 'NEEDS_REVIEW',
       toReviewState: 'CURRENT',
     });
+  });
+
+  it('binds reviewEvidenceRefs into idempotency and exact replay has no duplicate side effects', async () => {
+    const fx = await confirmedWithReview('review-idempotency');
+    const idempotencyKey = key('review-evidence-idempotency');
+    const request = {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey,
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT' as const,
+      reviewBasis: '幂等复核证据绑定',
+      reviewEvidenceRefs: [evidenceRef(fx.successorStatement.id)],
+    };
+
+    const first = await resolveProblemFormulationReview(pool, request);
+    expect(first.status).toBe(200);
+
+    const replay = await resolveProblemFormulationReview(pool, request);
+    expect(replay).toEqual(first);
+
+    const afterReplayAudit = await admin.query(
+      `SELECT count(*)::int AS count
+         FROM business_audit_events
+        WHERE resource_id = $1
+          AND event_type = 'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED'`,
+      [fx.presented.body.current.id]
+    );
+    expect(afterReplayAudit.rows[0].count).toBe(1);
+
+    let mismatchError: unknown;
+    try {
+      await resolveProblemFormulationReview(pool, {
+        ...request,
+        reviewEvidenceRefs: [evidenceRef(fx.statement.id)],
+      });
+    } catch (error) {
+      mismatchError = error;
+    }
+    expect(mismatchError).toMatchObject({
+      statusCode: 409,
+      code: 'IDEMPOTENCY_PAYLOAD_MISMATCH',
+    });
+
+    const finalAudit = await admin.query(
+      `SELECT count(*)::int AS count
+         FROM business_audit_events
+        WHERE resource_id = $1
+          AND event_type = 'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED'`,
+      [fx.presented.body.current.id]
+    );
+    expect(finalAudit.rows[0].count).toBe(1);
   });
 
   it('Case E — authorized MATERIAL_CHANGE supersedes v1, creates v2 and rewinds phase', async () => {

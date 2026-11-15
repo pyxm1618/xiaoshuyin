@@ -1,8 +1,9 @@
 /**
  * Problem Formulation application service (Slice 8).
  *
- * One canonical transaction/lock/idempotency ordering for the four public
- * commands and the three internal domain commands. No SQL lives here.
+ * One canonical transaction/lock/idempotency ordering for the public and
+ * internal commands. AUTH-006 review-state mutation stays module-private here
+ * so it cannot be invoked independently of authorization, evidence and audit.
  */
 
 import type pg from 'pg';
@@ -44,7 +45,6 @@ import {
   reassessmentBasisFingerprint,
   validateReassessmentBasis,
   advanceCasePhaseAndVersion,
-  resolveProblemFormulationReview as resolveProblemFormulationReviewState,
   pfError,
   type AuthoritativeEvidenceSet,
   type DependencyRef,
@@ -54,6 +54,7 @@ import {
   type ProblemFormulationRow,
   type ReassessmentBasis,
   type UserResponse,
+  type Tx,
 } from '@xiaoshuyin/domain';
 import {
   assertMinorProcessingAllowed,
@@ -1303,6 +1304,94 @@ export async function correctProblemFormulation(
   }
 }
 
+async function resolveProblemFormulationReviewState(
+  tx: Tx,
+  input: {
+    id: string;
+    caseId: string;
+    version: number;
+    decision: 'NO_MATERIAL_IMPACT' | 'MATERIAL_CHANGE';
+    successorContent: ProblemFormulationContent | null;
+    successorUserResponse: UserResponse | null;
+    expectedCaseVersion: number;
+  }
+) {
+  if (input.decision === 'NO_MATERIAL_IMPACT') {
+    const updated = await tx.query(
+      `UPDATE problem_formulations
+          SET review_state = 'CURRENT',
+              updated_at = now()
+        WHERE id = $1
+          AND case_id = $2
+          AND version = $3
+          AND status = 'CONFIRMED'
+          AND review_state = 'NEEDS_REVIEW'`,
+      [input.id, input.caseId, input.version]
+    );
+    if (updated.rowCount !== 1) {
+      throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
+    }
+    const resolved = await getProblemFormulationByVersion(
+      tx,
+      input.caseId,
+      input.version
+    );
+    if (!resolved) {
+      throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
+    }
+    return { resolved, successor: null, caseRow: null };
+  }
+
+  if (input.successorContent === null || input.successorUserResponse === null) {
+    throw pfError(
+      'PROBLEM_FORMULATION_STATE_CONFLICT',
+      'material change requires successor content'
+    );
+  }
+
+  const superseded = await tx.query(
+    `UPDATE problem_formulations
+        SET status = 'SUPERSEDED',
+            updated_at = now()
+      WHERE id = $1
+        AND case_id = $2
+        AND version = $3
+        AND status = 'CONFIRMED'
+        AND review_state = 'NEEDS_REVIEW'`,
+    [input.id, input.caseId, input.version]
+  );
+  if (superseded.rowCount !== 1) {
+    throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
+  }
+
+  const reviewed = await getProblemFormulationByVersion(
+    tx,
+    input.caseId,
+    input.version
+  );
+  if (!reviewed) {
+    throw pfError('PROBLEM_FORMULATION_STATE_CONFLICT');
+  }
+
+  const successor = await insertProblemFormulationVersion(tx, {
+    familyId: reviewed.family_id,
+    caseId: input.caseId,
+    version: nextFormulationVersion(reviewed),
+    content: input.successorContent,
+    userResponse: input.successorUserResponse,
+    supersedesVersion: reviewed.version,
+  });
+
+  const caseRow = await advanceCasePhaseAndVersion(tx, {
+    caseId: input.caseId,
+    expectedVersion: input.expectedCaseVersion,
+    fromPhase: 'GOALS',
+    toPhase: 'PROBLEM_FORMULATION',
+  });
+
+  return { resolved: reviewed, successor, caseRow };
+}
+
 export interface ReviewResolutionInput extends MutationInput {
   formulationId: string;
   formulationVersion: number;
@@ -1341,6 +1430,10 @@ export async function resolveProblemFormulationReview(
       };
     }
 
+    const reviewEvidenceRefs = canonicalEvidenceRefs(
+      input.reviewEvidenceRefs ?? []
+    );
+
     return await withRlsTransaction(
       pool,
       {
@@ -1368,6 +1461,7 @@ export async function resolveProblemFormulationReview(
           expectedCaseVersion: input.expectedCaseVersion,
           decision: input.decision,
           reviewBasis,
+          reviewEvidenceRefs,
           successorChanges: input.successorChanges ?? null,
           note: input.note ?? null,
         });
@@ -1407,9 +1501,6 @@ export async function resolveProblemFormulationReview(
             }
 
             if (input.decision === 'NO_MATERIAL_IMPACT') {
-              const reviewEvidenceRefs = canonicalEvidenceRefs(
-                input.reviewEvidenceRefs ?? []
-              );
               if (reviewEvidenceRefs.length === 0) {
                 throw httpError(
                   'VALIDATION_ERROR',
