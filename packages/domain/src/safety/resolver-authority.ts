@@ -66,11 +66,12 @@ function nonEmpty(value: unknown): value is string {
  * Construct the database-backed production authority source.
  *
  * The caller supplies the query handle from the SAME transaction used by
- * ResolveRisk. The verified assignment, linked capability grant and reviewer
- * Account are held with row-share locks until that transaction ends, so a
- * concurrent revoke/disable cannot invalidate the authority fact halfway
- * through ResolveRisk. PostgreSQL CURRENT_TIMESTAMP is transaction-stable.
- * Database/infrastructure errors are intentionally not converted to
+ * ResolveRisk. Runtime has SELECT-only authority-table access; it must never
+ * receive UPDATE merely to obtain row locks. ResolveRisk therefore performs
+ * this mechanical verification and then revalidates the same assignment/grant/
+ * Account immediately before the state transition through
+ * app.set_staff_case_context(). PostgreSQL CURRENT_TIMESTAMP is transaction-
+ * stable. Database/infrastructure errors are intentionally not converted to
  * DENIED/UNAVAILABLE: they propagate as infrastructure failures.
  */
 export function createProductionSafetyResolutionAuthoritySource(
@@ -116,8 +117,7 @@ export function createProductionSafetyResolutionAuthoritySource(
           )
           AND reviewer_account.status = 'ACTIVE'
         ORDER BY assignment.id
-        LIMIT 2
-        FOR SHARE OF assignment, capability_grant, reviewer_account`,
+        LIMIT 2`,
         [input.accountId, input.personId, input.caseId]
       );
 
