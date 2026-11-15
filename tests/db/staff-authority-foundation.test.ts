@@ -152,7 +152,7 @@ describe('AUTH-008 staff authority foundation', () => {
         staff_case_id: string | null;
       }>(
         `SELECT app_family_id()::text AS family_id,
-                app_staff_case_id()::text AS staff_case_id`
+                NULLIF(current_setting('app.staff_case_id', true), '') AS staff_case_id`
       );
       const visible = await client.query<{ id: string }>(
         'SELECT id::text AS id FROM cases ORDER BY id'
