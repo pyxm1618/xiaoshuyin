@@ -113,7 +113,7 @@ scanDir(ROOT, (file) => {
 const FAMILY_TABLES = [
   'families', 'family_members', 'guardian_consent_requests', 'consent_records',
   'person_compliance_profiles', 'person_profile_values', 'business_audit_events',
-  'cases', 'case_events',
+  'cases', 'case_events', 'staff_assignments',
 ];
 
 scanDir(ROOT, (file) => {
