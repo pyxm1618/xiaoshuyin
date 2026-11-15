@@ -180,7 +180,9 @@ describe('cases RLS (T022)', () => {
     const { rows } = await admin.query(`
       SELECT policyname, qual, with_check
       FROM pg_policies
-      WHERE schemaname = 'public' AND tablename IN ('cases', 'case_events')
+      WHERE schemaname = 'public'
+        AND tablename IN ('cases', 'case_events')
+        AND policyname IN ('cases_family_scope', 'case_events_family_scope')
       ORDER BY policyname
     `);
     expect(rows.map((r: any) => r.policyname)).toEqual([

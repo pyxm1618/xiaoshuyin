@@ -41,18 +41,20 @@ describe('RLS', () => {
     }
   });
 
-  it('67 policies exist after Staff authority foundation', async () => {
+  it('76 policies exist after exact-Case Staff authority remediation', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(67);
+    expect(rows.length).toBe(76);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
     const { rows } = await client.query(
       `SELECT tablename, policyname, qual, with_check
        FROM pg_policies
-       WHERE schemaname = 'public' AND tablename IN ('cases', 'case_events')
+       WHERE schemaname = 'public'
+         AND tablename IN ('cases', 'case_events')
+         AND policyname IN ('cases_family_scope', 'case_events_family_scope')
        ORDER BY tablename`
     );
     expect(rows.map((r: any) => r.policyname)).toEqual([

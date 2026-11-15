@@ -264,7 +264,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(67); // + staff self-read + Safety-resolution Account self-read
+    expect(policyRows[0].count).toBe(76); // + exact-Case Staff Safety policies
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
