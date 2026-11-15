@@ -64,6 +64,7 @@ describe('Safety authorization vocabulary (T906)', () => {
     const decision = authorize(
       input('CASE_RESOLVE_RISK', {
         actor: { accountId: 'staff-account', personId: 'staff-person' },
+        purpose: 'SAFETY_RESOLUTION',
         facts: facts({
           membership: false,
           familyCreatedByPersonId: 'someone-else',
@@ -135,6 +136,7 @@ describe('Safety authorization vocabulary (T906)', () => {
     const staffInput = (safetyResolution: ReturnType<typeof resolverFact>) =>
       input('CASE_RESOLVE_RISK', {
         actor: { accountId: 'staff-account', personId: 'staff-person' },
+        purpose: 'SAFETY_RESOLUTION',
         facts: facts({
           membership: false,
           familyCreatedByPersonId: 'someone-else',
@@ -182,6 +184,7 @@ describe('Safety authorization vocabulary (T906)', () => {
             personId: 'staff-person',
             candidateIdentityDigest: 'a'.repeat(64),
           },
+          purpose: 'SAFETY_RESOLUTION',
           facts: facts({
             membership: false,
             familyCreatedByPersonId: 'someone-else',
