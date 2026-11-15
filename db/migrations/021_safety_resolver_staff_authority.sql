@@ -438,39 +438,6 @@ $function$;
 REVOKE ALL ON FUNCTION app.set_staff_case_context(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.set_staff_case_context(uuid, uuid) TO xiaoshuyin_app;
 
--- Transition-time authority guard. RLS predicates are evaluated while locating
--- rows for UPDATE; a row can then wait on another BEFORE trigger/lock before the
--- physical write. Re-check with clock_timestamp() in a BEFORE UPDATE trigger so
--- expiry during that wait cannot produce SAFETY_HOLD -> WAITING on stale
--- authority. Test/admin fixture roles are not production runtime and remain
--- unaffected.
-CREATE FUNCTION app.guard_staff_resolve_transition()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = pg_catalog, public
-AS $function$
-BEGIN
-  IF current_user = 'xiaoshuyin_app'
-     AND OLD.status = 'SAFETY_HOLD'
-     AND NEW.status = 'WAITING'
-     AND (
-       app_current_purpose() <> 'SAFETY_RESOLUTION'
-       OR NOT app.staff_case_authorized(OLD.id)
-     ) THEN
-    RAISE EXCEPTION 'STAFF_ASSIGNMENT_REQUIRED' USING ERRCODE = '42501';
-  END IF;
-  RETURN NEW;
-END
-$function$;
-
-REVOKE ALL ON FUNCTION app.guard_staff_resolve_transition() FROM PUBLIC;
-
-CREATE TRIGGER cases_staff_resolve_authority_guard
-  BEFORE UPDATE OF status ON cases
-  FOR EACH ROW
-  EXECUTE FUNCTION app.guard_staff_resolve_transition();
-
 -- Staff exact-Case policies are additive. Existing household Family policies
 -- are left byte-for-byte unchanged.
 CREATE POLICY cases_staff_safety_select ON cases
