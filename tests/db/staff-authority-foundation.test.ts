@@ -67,10 +67,10 @@ describe('AUTH-008 staff authority foundation', () => {
     const result = await admin.query<{ id: string }>(
       `INSERT INTO staff_assignments
          (account_id, person_id, capability, scope_type,
-          granted_by_account_id, valid_from, valid_until,
+          granted_by_account_id, granted_at, valid_from, valid_until,
           revoked_by_account_id, revoked_at)
        VALUES ($1, $2, $3, 'GLOBAL',
-               $4, $5, $6, $7, $8)
+               $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
         actor.accountId,
@@ -117,6 +117,7 @@ describe('AUTH-008 staff authority foundation', () => {
         targetCaseId,
         grantId,
         owner.accountId,
+        overrides.validFrom ?? new Date(Date.now() - 60_000),
         overrides.validFrom ?? new Date(Date.now() - 60_000),
         overrides.validUntil ?? new Date(Date.now() + 60 * 60_000),
         overrides.revokedAt ? owner.accountId : null,
