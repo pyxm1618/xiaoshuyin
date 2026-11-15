@@ -276,24 +276,24 @@ export async function clearPairingIssuance(
 ): Promise<void> {
   await tx.query(
     `UPDATE binding_pending_contexts
-        SET pairing_issuance_id = NULL
+        SET pairing_issuance_id = NULL,
+            pairing_issued_at = NULL,
+            pairing_expires_at = NULL
       WHERE id = $1`,
     [contextId]
   );
 }
 
-/**
- * Retire every current issuance belonging to one settled attempt. Settlement
- * keeps only non-secret historical timing facts; no context retains a valid
- * pairing_issuance_id after this update.
- */
+/** Consume every issuance belonging to one settled attempt. */
 export async function clearPairingForAttempt(
   tx: pg.PoolClient,
   attemptId: string
 ): Promise<void> {
   await tx.query(
     `UPDATE binding_pending_contexts
-        SET pairing_issuance_id = NULL
+        SET pairing_issuance_id = NULL,
+            pairing_issued_at = NULL,
+            pairing_expires_at = NULL
       WHERE attempt_id = $1`,
     [attemptId]
   );
