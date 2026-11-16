@@ -5,6 +5,7 @@ import { buildApp } from '../../apps/server/api/src/app.js';
 import type { RoleplayAdapter } from '../../apps/server/api/src/services/digital-use-roleplay-adapter.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { recordStatement } from '@xiaoshuyin/domain';
+import { resolveFamilyAllianceContent } from '@xiaoshuyin/scenes/digital-use';
 import { createAdminPool } from '../setup/db.js';
 import {
   auth,
@@ -87,6 +88,7 @@ function familySelfAssessment() {
 
 describe('Digital Use vertical convergence', () => {
   let app: FastifyInstance;
+  let productionBoundaryApp: FastifyInstance;
   let admin: pg.Pool;
   let appPool: pg.Pool;
   let migrator: pg.Client;
@@ -131,6 +133,8 @@ describe('Digital Use vertical convergence', () => {
       },
     });
     await app.ready();
+    productionBoundaryApp = await buildApp();
+    await productionBoundaryApp.ready();
     admin = createAdminPool();
     appPool = new pg.Pool({ connectionString: process.env['DATABASE_URL'] });
     migrator = new pg.Client({
@@ -180,20 +184,24 @@ describe('Digital Use vertical convergence', () => {
     await migrator.end().catch(() => undefined);
     await appPool.end().catch(() => undefined);
     await admin.end().catch(() => undefined);
+    await productionBoundaryApp.close();
     await app.close();
   });
 
-  async function fixture(label: string): Promise<Fixture> {
-    const manager = await loginWithLabel(app, `du-vertical-${label}`);
-    const family = await createFamily(app, manager.token, `du-vertical-${label}`);
+  async function fixture(
+    label: string,
+    targetApp: FastifyInstance = app
+  ): Promise<Fixture> {
+    const manager = await loginWithLabel(targetApp, `du-vertical-${label}`);
+    const family = await createFamily(targetApp, manager.token, `du-vertical-${label}`);
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
 
-    const kase = await createCase(app, manager.token, `du-vertical-${label}`);
+    const kase = await createCase(targetApp, manager.token, `du-vertical-${label}`);
     expect(kase.statusCode, kase.body).toBe(201);
     const caseId = kase.json().id as string;
 
-    const message = await app.inject({
+    const message = await targetApp.inject({
       method: 'POST',
       url: `/api/v1/cases/${caseId}/messages`,
       headers: commandHeaders(manager.token, `du-vertical-msg-${label}`),
@@ -203,7 +211,7 @@ describe('Digital Use vertical convergence', () => {
     });
     expect(message.statusCode, message.body).toBe(201);
 
-    const start = await app.inject({
+    const start = await targetApp.inject({
       method: 'POST',
       url: `/api/v1/cases/${caseId}/assessments`,
       headers: commandHeaders(manager.token, `du-vertical-start-${label}`),
@@ -220,8 +228,11 @@ describe('Digital Use vertical convergence', () => {
     };
   }
 
-  async function getScene(f: Fixture): Promise<any> {
-    const response = await app.inject({
+  async function getScene(
+    f: Fixture,
+    targetApp: FastifyInstance = app
+  ): Promise<any> {
+    const response = await targetApp.inject({
       method: 'GET',
       url: `/api/v1/cases/${f.caseId}/scene`,
       headers: auth(f.manager.token),
@@ -234,13 +245,14 @@ describe('Digital Use vertical convergence', () => {
     f: Fixture,
     nodeCode: string,
     response: Record<string, unknown>,
-    extra: Record<string, unknown> = {}
+    extra: Record<string, unknown> = {},
+    targetApp: FastifyInstance = app
   ): Promise<any> {
-    const scene = await getScene(f);
+    const scene = await getScene(f, targetApp);
     const node = scene.nodes.find((item: any) => item.nodeCode === nodeCode);
     expect(node, `${nodeCode} must be materialized before response`).toBeTruthy();
 
-    const result = await app.inject({
+    const result = await targetApp.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/scene/nodes/${nodeCode}/responses`,
       headers: commandHeaders(
@@ -259,8 +271,11 @@ describe('Digital Use vertical convergence', () => {
     return result.json();
   }
 
-  async function confirmCurrentFormulation(f: Fixture): Promise<any> {
-    const current = await app.inject({
+  async function confirmCurrentFormulation(
+    f: Fixture,
+    targetApp: FastifyInstance = app
+  ): Promise<any> {
+    const current = await targetApp.inject({
       method: 'GET',
       url: `/api/v1/cases/${f.caseId}/problem-formulations/current`,
       headers: auth(f.manager.token),
@@ -268,9 +283,9 @@ describe('Digital Use vertical convergence', () => {
     expect(current.statusCode, current.body).toBe(200);
     expect(current.json().current?.status).toBe('PRESENTED');
 
-    const scene = await getScene(f);
+    const scene = await getScene(f, targetApp);
     const formulation = current.json().current;
-    const confirmed = await app.inject({
+    const confirmed = await targetApp.inject({
       method: 'POST',
       url:
         `/api/v1/cases/${f.caseId}/problem-formulations/` +
@@ -284,7 +299,7 @@ describe('Digital Use vertical convergence', () => {
     expect(confirmed.statusCode, confirmed.body).toBe(200);
     expect(confirmed.json().current?.status).toBe('CONFIRMED');
 
-    const refreshed = await getScene(f);
+    const refreshed = await getScene(f, targetApp);
     const caseRow = await admin.query(
       `SELECT phase::text AS phase FROM cases WHERE id=$1`,
       [f.caseId]
@@ -293,35 +308,38 @@ describe('Digital Use vertical convergence', () => {
     return refreshed;
   }
 
-  async function advanceToParallelLanes(f: Fixture): Promise<any> {
-    await respondNode(f, 'A1001', a1001(true));
+  async function advanceToParallelLanes(
+    f: Fixture,
+    targetApp: FastifyInstance = app
+  ): Promise<any> {
+    await respondNode(f, 'A1001', a1001(true), {}, targetApp);
     await respondNode(f, '01002', {
       state: 'KNOWN',
       selections: ['A'],
-    });
+    }, {}, targetApp);
     let scene = await respondNode(f, '01003', {
       state: 'KNOWN',
       selection: 'A',
-    });
+    }, {}, targetApp);
     expect(scene.nodes.find((node: any) => node.nodeCode === 'A2003')?.status)
       .toBe('AVAILABLE');
 
-    scene = await confirmCurrentFormulation(f);
+    scene = await confirmCurrentFormulation(f, targetApp);
     expect(scene.nodes.find((node: any) => node.nodeCode === 'A2003')?.status)
       .toBe('AVAILABLE');
 
-    await respondNode(f, 'A2003', a2003Response());
-    await respondNode(f, 'A2004', { decision: 'YES' });
-    await respondNode(f, 'A2005', { decision: 'WILLING' });
+    await respondNode(f, 'A2003', a2003Response(), {}, targetApp);
+    await respondNode(f, 'A2004', { decision: 'YES' }, {}, targetApp);
+    await respondNode(f, 'A2005', { decision: 'WILLING' }, {}, targetApp);
     await respondNode(f, 'A2007', {
       timeline: {
         reviewDate: '2026-12-01',
         cadence: 'weekly',
       },
-    });
+    }, {}, targetApp);
     scene = await respondNode(f, 'A2010', {
       action: 'GENERATE_SUMMARY',
-    });
+    }, {}, targetApp);
 
     expect(scene.activeNodes).toEqual(expect.arrayContaining([
       expect.objectContaining({ nodeCode: 'A3000', status: 'AVAILABLE' }),
