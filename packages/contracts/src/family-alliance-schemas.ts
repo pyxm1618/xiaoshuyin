@@ -237,7 +237,7 @@ export const FamilyAllianceContentRef = z.strictObject({
 export const FamilyAllianceHelpHistoryEntry = z.strictObject({
   nodeCode: z.string().min(1).max(64),
   scenePackageVersion: z.literal('v1'),
-  contentRef: FamilyAllianceContentRef,
+  contentRef: FamilyAllianceContentRef.optional(),
   interactionRefs: z.array(z.string().min(1).max(160)),
   helpOrReentryRefs: z.array(z.string().min(1).max(160)),
   authorityRefs: z.array(z.string().min(1).max(160)),
