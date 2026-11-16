@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import helmet from '@fastify/helmet';
 import pg from 'pg';
 import { configPlugin } from './plugins/config.js';
 import { registerAuthPlugin } from './plugins/auth.js';
@@ -112,6 +113,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   // Config (re-validates the same runtime contract and exposes the channel)
   await app.register(configPlugin, { env });
+
+  // Baseline HTTP response hardening. This is independent of proxy/client-IP
+  // trust semantics, so it is safe across the current deployment shapes.
+  // Global request-rate limiting remains intentionally deferred until the
+  // authoritative proxy/client-IP boundary is frozen.
+  await app.register(helmet);
 
   // Database pool
   const pool = new pg.Pool({

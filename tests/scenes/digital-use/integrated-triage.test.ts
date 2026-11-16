@@ -2,12 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   evaluateIntegratedTriage,
+  type EmotionOption,
   type IntegratedTriageEvidence,
   type TriageEvidenceState,
 } from '@xiaoshuyin/scenes/digital-use';
 
 const v = <T>(value: T): TriageEvidenceState<T> => ({ kind: 'VALUE', value });
-const missing = (reason: 'NO_RECORD' | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' = 'NO_RECORD') =>
+const missing = (reason: 'NO_RECORD' | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'NOT_APPLICABLE' = 'NO_RECORD') =>
   ({ kind: 'MISSING', reason } as const);
 const conflict = (reason: 'CONFLICTING' | 'CONTRADICTORY' | 'INCOMPATIBLE' | 'INVALID' = 'CONFLICTING') =>
   ({ kind: 'CONFLICT', reason } as const);
@@ -31,12 +32,14 @@ describe('T1211 Integrated Triage authority matrix', () => {
     ['01002 NOT_COLLECTED', fixture({ emotion01002: missing('NOT_COLLECTED') }), 'INSUFFICIENT'],
     ['01002 DECLINED', fixture({ emotion01002: missing('DECLINED') }), 'INSUFFICIENT'],
     ['01002 UNKNOWN', fixture({ emotion01002: missing('UNKNOWN') }), 'INSUFFICIENT'],
+    ['01002 NOT_APPLICABLE', fixture({ emotion01002: missing('NOT_APPLICABLE') }), 'INSUFFICIENT'],
     ['01002 conflict', fixture({ emotion01002: conflict('CONTRADICTORY') }), 'BLOCKED'],
     ['01002 F', fixture({ emotion01002: v(['F']) }), '01005'],
     ['01003 missing', fixture({ family01003: missing() }), 'INSUFFICIENT'],
     ['01003 NOT_COLLECTED', fixture({ family01003: missing('NOT_COLLECTED') }), 'INSUFFICIENT'],
     ['01003 DECLINED', fixture({ family01003: missing('DECLINED') }), 'INSUFFICIENT'],
     ['01003 UNKNOWN', fixture({ family01003: missing('UNKNOWN') }), 'INSUFFICIENT'],
+    ['01003 NOT_APPLICABLE', fixture({ family01003: missing('NOT_APPLICABLE') }), 'INSUFFICIENT'],
     ['01003 conflict', fixture({ family01003: conflict('INCOMPATIBLE') }), 'BLOCKED'],
     ['01003 F', fixture({ family01003: v('F') }), '01006'],
     ['both F', fixture({ emotion01002: v(['F']), family01003: v('F') }), '01005'],
@@ -87,10 +90,37 @@ describe('T1211 Integrated Triage authority matrix', () => {
   });
 
   it.each([
+    ['A+B', ['A', 'B'] as const, 'A2002'],
+    ['A+C', ['A', 'C'] as const, 'A2002'],
+    ['A+D', ['A', 'D'] as const, 'A2002'],
+    ['A+E', ['A', 'E'] as const, 'A2002'],
+    ['A+F', ['A', 'F'] as const, '01005'],
+  ] as const)('01002 %s is a valid Authority selection', (_label, emotionValues, expected) => {
+    const evaluated = evaluateIntegratedTriage(
+      fixture({ emotion01002: v(emotionValues) })
+    );
+    expect(evaluated.outcome).toBe(expected);
+    expect(evaluated.reasonCode).not.toBe('01002_INCOMPATIBLE_CURRENT_VALUE');
+  });
+
+  it.each([
+    ['more than two selections', ['A', 'B', 'C'] as readonly EmotionOption[]],
+    ['duplicate selections', ['A', 'A'] as readonly EmotionOption[]],
+    ['malformed option', ['Z'] as unknown as readonly EmotionOption[]],
+  ])('01002 %s remains fail-closed', (_label, emotionValues) => {
+    const evaluated = evaluateIntegratedTriage(
+      fixture({ emotion01002: v(emotionValues) })
+    );
+    expect(evaluated.outcome).toBe('BLOCKED');
+    expect(evaluated.reasonCode).toBe('01002_INVALID_CURRENT_VALUE');
+  });
+
+  it.each([
     ['NO_RECORD', missing()],
     ['UNKNOWN', missing('UNKNOWN')],
     ['NOT_COLLECTED', missing('NOT_COLLECTED')],
     ['DECLINED', missing('DECLINED')],
+    ['NOT_APPLICABLE', missing('NOT_APPLICABLE')],
   ] as const)(
     'direct-impact %s without a usable current value stays INSUFFICIENT',
     (_name, unresolved) => {
@@ -157,6 +187,24 @@ describe('T1211 Integrated Triage authority matrix', () => {
     expect(other.outcome).toBe('A2002');
     expect(other.predicates.DIRECT_DIGITAL_USE_IMPACT_NEGATIVE).toBe(true);
     expect(other.predicates.OTHER_NEEDS_POSITIVE).toBe(true);
+  });
+
+  it('exports explicit non-severe 01003 priority truth for every ordinary route', () => {
+    for (const evidence of [
+      fixture(),
+      fixture({ emotion01002: v(['B']) }),
+      fixture({
+        directImpact: {
+          sleep: v(true),
+          studyOrNecessaryAffairs: v(false),
+          realWorldActivityDisplacement: v(false),
+        },
+      }),
+    ]) {
+      const result = evaluateIntegratedTriage(evidence);
+      expect(['A2001', 'A2002', 'A2003']).toContain(result.outcome);
+      expect(result.conditions.FAMILY_CONFLICT_SEVERE_F).toBe(false);
+    }
   });
 
   it('emits at most one normal routing condition', () => {

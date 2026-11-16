@@ -355,6 +355,29 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
             await updateComplianceProfileConsent(tx, boundPersonId, record.id, newVersion);
           }
 
+          // FND-REM-002: authoritative Consent mutation and its audit evidence
+          // are one transaction. A failed audit insert therefore rolls the
+          // request state, consent row and pointer change back together.
+          await insertAuditEvent(
+            tx,
+            familyId,
+            accountId,
+            'CONSENT_GRANTED',
+            'CONSENT',
+            record.id,
+            {
+              actorPersonId: personId,
+              subjectPersonId: boundPersonId,
+              purpose: 'UNDER_14_GUARDIAN_CONSENT',
+              decision: 'GRANTED',
+              version: newVersion,
+              supersedesId,
+              onboardingRequestId,
+              operation: 'GUARDIAN_CONSENT_GRANT',
+              provenanceChannel: evidence.channel,
+            }
+          );
+
           return {
             status: 201,
             body: consentRecordDto(record),

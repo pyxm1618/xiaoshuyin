@@ -1149,7 +1149,10 @@ export function buildOpenApiDocument() {
           additionalProperties: false,
           properties: {
             topic: { type: 'string', minLength: 1 },
-            state: { type: 'string', enum: ['UNKNOWN', 'NOT_COLLECTED', 'DECLINED'] },
+            state: {
+              type: 'string',
+              enum: ['UNKNOWN', 'NOT_COLLECTED', 'DECLINED', 'NOT_APPLICABLE'],
+            },
             evidenceRefs: { type: 'array', items: ref('EvidenceRef') },
           },
           required: ['topic', 'state', 'evidenceRefs'],

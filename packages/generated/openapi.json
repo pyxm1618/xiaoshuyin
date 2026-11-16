@@ -18369,7 +18369,8 @@
             "enum": [
               "UNKNOWN",
               "NOT_COLLECTED",
-              "DECLINED"
+              "DECLINED",
+              "NOT_APPLICABLE"
             ]
           },
           "evidenceRefs": {

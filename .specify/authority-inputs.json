@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "git-blob-sha1",
+  "authorityInputs": [
+    {
+      "path": "Docs/总产品需求.md",
+      "blobSha": "97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29"
+    },
+    {
+      "path": "Docs/V1产品需求.md",
+      "blobSha": "8eb660cd905d8fba4b52fe0f74bbc214b3113117"
+    },
+    {
+      "path": "Docs/总体技术架构.md",
+      "blobSha": "6b4630803f371faf6d93f27361070223d0f661a0"
+    },
+    {
+      "path": "Docs/V1技术设计.md",
+      "blobSha": "a0f09b8afda5532870150f03b713fed107359849"
+    }
+  ]
+}

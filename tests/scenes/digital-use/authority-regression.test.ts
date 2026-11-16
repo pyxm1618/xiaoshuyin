@@ -69,7 +69,7 @@ describe('Slice 11 current Digital Use authority regression', () => {
           sceneCode: 'DIGITAL_USE',
           packageVersion: 'v1',
           currentNodeCode: '01003',
-          conditions: { [condition]: true },
+          conditions: { FAMILY_CONFLICT_SEVERE_F: false, [condition]: true },
           evidenceBasis: basis,
         })).toMatchObject({ kind: 'BLOCKED', code: 'INSUFFICIENT_INTEGRATED_EVIDENCE' });
       }

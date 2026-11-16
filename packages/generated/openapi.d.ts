@@ -1325,7 +1325,7 @@ export interface components {
         UnknownItem: {
             topic: string;
             /** @enum {string} */
-            state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED";
+            state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "NOT_APPLICABLE";
             evidenceRefs: components["schemas"]["EvidenceRef"][];
         };
         ConflictItem: {

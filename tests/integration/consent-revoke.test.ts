@@ -113,6 +113,196 @@ describe('Consent Revoke Integration (T058)', () => {
     expect(auditRows.length).toBeGreaterThan(0);
   });
 
+  it('FND-REM-001: only the locked current chain head may be revoked', async () => {
+    const actor = await setupManagerAndFamily('fnd-current-head');
+    const v1 = await createAndGrantConsent(actor, 'fnd-current-head');
+    const member = await createMember(app, actor.token, actor.familyId, 'fnd-current-head', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: v1.id,
+    });
+    expect(member.statusCode).toBe(201);
+    const subjectId = member.json().personId as string;
+
+    const revokeV1 = await revokeConsent(app, actor.token, 'fnd-current-v1', v1.id);
+    expect(revokeV1.statusCode).toBe(200);
+    const v2 = revokeV1.json();
+
+    const v3 = await createAndGrantConsent(actor, 'fnd-current-v3', subjectId);
+    expect(v3.version).toBe(3);
+
+    for (const staleId of [v1.id, v2.id]) {
+      const stale = await revokeConsent(app, actor.token, `fnd-stale-${staleId}`, staleId);
+      expect(stale.statusCode).toBe(409);
+      expect(stale.json().code).toBe('GUARDIAN_CONSENT_STALE');
+    }
+
+    const current = await revokeConsent(app, actor.token, 'fnd-current-v3-revoke', v3.id);
+    expect(current.statusCode).toBe(200);
+    expect(current.json()).toMatchObject({
+      decision: 'REVOKED',
+      version: 4,
+      supersedesId: v3.id,
+    });
+  });
+
+  it('FND-REM-001: concurrent revoke race creates exactly one successor head', async () => {
+    const actor = await setupManagerAndFamily('fnd-revoke-race');
+    // Keep v1 unbound: old code had no bound-person version uniqueness here,
+    // so two serialized revoke requests could create two v2 successors.
+    const v1 = await createAndGrantConsent(actor, 'fnd-revoke-race');
+
+    const [a, b] = await Promise.all([
+      revokeConsent(app, actor.token, 'fnd-revoke-race-a', v1.id),
+      revokeConsent(app, actor.token, 'fnd-revoke-race-b', v1.id),
+    ]);
+
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+    const loser = a.statusCode === 409 ? a : b;
+    expect(loser.json().code).toBe('GUARDIAN_CONSENT_STALE');
+
+    const successors = await queryDb(
+      `SELECT id, decision, version
+         FROM consent_records
+        WHERE supersedes_id = $1
+          AND purpose = 'UNDER_14_GUARDIAN_CONSENT'`,
+      [v1.id]
+    );
+    expect(successors.rows).toHaveLength(1);
+    expect(successors.rows[0]).toMatchObject({ decision: 'REVOKED', version: 2 });
+  });
+
+  it('FND-REM-001: concurrent supersede/revoke race preserves one authoritative head', async () => {
+    const actor = await setupManagerAndFamily('fnd-supersede-revoke-race');
+    const v1 = await createAndGrantConsent(actor, 'fnd-supersede-revoke-race');
+    const member = await createMember(
+      app,
+      actor.token,
+      actor.familyId,
+      'fnd-supersede-revoke-race',
+      {
+        ageBand: 'UNDER_14',
+        ageBandSource: 'GUARDIAN_RELAY',
+        guardianConsentId: v1.id,
+      }
+    );
+    expect(member.statusCode).toBe(201);
+    const subjectId = member.json().personId as string;
+
+    const revokeV1 = await revokeConsent(
+      app,
+      actor.token,
+      'fnd-supersede-revoke-race-v2',
+      v1.id
+    );
+    expect(revokeV1.statusCode).toBe(200);
+    const v2 = revokeV1.json();
+
+    const request = await createConsentRequest(
+      app,
+      actor.token,
+      'fnd-supersede-revoke-race-v3',
+      { existingSubjectPersonId: subjectId }
+    );
+    expect(request.statusCode).toBe(201);
+
+    const [grantV3, revokeV2] = await Promise.all([
+      grantConsent(
+        app,
+        actor.token,
+        'fnd-supersede-revoke-race-v3',
+        request.json().requestId
+      ),
+      revokeConsent(
+        app,
+        actor.token,
+        'fnd-supersede-revoke-race-v2-again',
+        v2.id
+      ),
+    ]);
+
+    expect(grantV3.statusCode).toBe(201);
+    expect(revokeV2.statusCode).toBe(409);
+
+    const successors = await queryDb(
+      `SELECT id, decision, version
+         FROM consent_records
+        WHERE supersedes_id = $1
+          AND purpose = 'UNDER_14_GUARDIAN_CONSENT'`,
+      [v2.id]
+    );
+    expect(successors.rows).toHaveLength(1);
+    expect(successors.rows[0]).toMatchObject({
+      decision: 'GRANTED',
+      version: 3,
+    });
+
+    const profile = await queryDb(
+      `SELECT guardian_consent_record_id, guardian_consent_version
+         FROM person_compliance_profiles
+        WHERE person_id = $1`,
+      [subjectId]
+    );
+    expect(profile.rows[0]).toEqual({
+      guardian_consent_record_id: successors.rows[0].id,
+      guardian_consent_version: 3,
+    });
+  });
+
+  it('FND-REM-001: revoke audit failure rolls back the successor and pointer', async () => {
+    const actor = await setupManagerAndFamily('fnd-revoke-rollback');
+    const v1 = await createAndGrantConsent(actor, 'fnd-revoke-rollback');
+    const member = await createMember(app, actor.token, actor.familyId, 'fnd-revoke-rollback', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: v1.id,
+    });
+    expect(member.statusCode).toBe(201);
+    const subjectId = member.json().personId as string;
+
+    await queryDb(`
+      CREATE OR REPLACE FUNCTION fnd_rem_fail_revoke_audit() RETURNS trigger
+      LANGUAGE plpgsql AS $fnd$
+      BEGIN
+        IF NEW.event_type = 'CONSENT_REVOKED'
+           AND NEW.family_id = '${actor.familyId}'::uuid THEN
+          RAISE EXCEPTION 'FND_REM_REVOKE_AUDIT_FAILURE';
+        END IF;
+        RETURN NEW;
+      END $fnd$;
+      DROP TRIGGER IF EXISTS fnd_rem_fail_revoke_audit_trigger ON business_audit_events;
+      CREATE TRIGGER fnd_rem_fail_revoke_audit_trigger
+        BEFORE INSERT ON business_audit_events
+        FOR EACH ROW EXECUTE FUNCTION fnd_rem_fail_revoke_audit();
+    `);
+
+    try {
+      const failed = await revokeConsent(app, actor.token, 'fnd-revoke-rollback', v1.id);
+      expect(failed.statusCode).toBe(500);
+
+      const successors = await queryDb(
+        'SELECT count(*)::int AS count FROM consent_records WHERE supersedes_id = $1',
+        [v1.id]
+      );
+      expect(successors.rows[0].count).toBe(0);
+
+      const profile = await queryDb(
+        `SELECT guardian_consent_record_id, guardian_consent_version
+           FROM person_compliance_profiles WHERE person_id = $1`,
+        [subjectId]
+      );
+      expect(profile.rows[0]).toEqual({
+        guardian_consent_record_id: v1.id,
+        guardian_consent_version: 1,
+      });
+    } finally {
+      await queryDb(
+        `DROP TRIGGER IF EXISTS fnd_rem_fail_revoke_audit_trigger ON business_audit_events;
+         DROP FUNCTION IF EXISTS fnd_rem_fail_revoke_audit()`
+      );
+    }
+  });
+
   it('T058: gate BLOCK after revoke', async () => {
     const actor = await setupManagerAndFamily('t058b');
     const consent = await createAndGrantConsent(actor, 't058b');

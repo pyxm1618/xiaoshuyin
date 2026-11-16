@@ -207,7 +207,7 @@ describe('T1210 A1001 / 01002 / 01003 Evidence semantics', () => {
     });
   });
 
-  it.each(['UNKNOWN', 'NOT_COLLECTED', 'DECLINED'] as const)(
+  it.each(['UNKNOWN', 'NOT_COLLECTED', 'DECLINED', 'NOT_APPLICABLE'] as const)(
     'keeps 01002 %s as insufficient, never Conflict',
     async (state) => {
       const result = await applyDigitalUseNodeSemantics(context('01002', { state }));

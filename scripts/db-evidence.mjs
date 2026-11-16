@@ -427,7 +427,7 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015 + 016 + 017 + 018 + 019', true,
+check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015 + 016 + 017 + 018 + 019 + 020 + 021 + 022', true,
       /APPLY 004_evidence_core\.sql/.test(output) &&
       /APPLY 004_identity_binding_runtime\.sql/.test(output) &&
       /APPLY 005_case_participant_core\.sql/.test(output) &&
@@ -446,11 +446,12 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       /APPLY 018_foundation_database_integrity_1\.sql/.test(output) &&
       /APPLY 019_auth_disabled_hard_disable\.sql/.test(output) &&
       /APPLY 020_problem_formulation_review_state\.sql/.test(output) &&
-      /APPLY 021_safety_resolver_staff_authority\.sql/.test(output));
+      /APPLY 021_safety_resolver_staff_authority\.sql/.test(output) &&
+      /APPLY 022_foundation_remaining_consent_chain_integrity\.sql/.test(output));
     check(
-      'upgrade 结果为 19 new / 3 previously applied',
+      'upgrade 结果为 20 new / 3 previously applied',
       true,
-      /Migration complete: 19 new, 3 previously applied\./.test(output)
+      /Migration complete: 20 new, 3 previously applied\./.test(output)
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -491,6 +492,7 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
       '020_problem_formulation_review_state.sql',
       // AUTH-007/AUTH-008 minimum Safety resolver Staff authority foundation.
       '021_safety_resolver_staff_authority.sql',
+      '022_foundation_remaining_consent_chain_integrity.sql',
     ], afterRecords.rows.map((r) => r.filename));
     check(
       '001–003 历史记录时间戳未被改写',

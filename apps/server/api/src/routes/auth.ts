@@ -13,6 +13,7 @@ import { WechatLoginRequest } from '@xiaoshuyin/contracts';
 import type { WechatAuthProvider } from '../auth/wechat-provider.js';
 import { signToken } from '../auth/session-token.js';
 import { isAccountAuthorityEligible } from '../auth/account-authority.js';
+import { createOrReuseAccount } from '../auth/binding-account.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { withAccountTransaction } from '../db/tx.js';
 import type pg from 'pg';
@@ -39,28 +40,40 @@ export function registerAuthRoutes(
       await client.query(`SELECT set_config('app.purpose', 'SELF_IDENTITY', true)`);
       await client.query('SELECT app.set_account_openid_context($1)', [openid]);
 
-      // Check if account exists
-      const { rows: existing } = await client.query(
-        'SELECT id, status FROM accounts WHERE wechat_openid = $1',
-        [openid]
-      );
+      // Reuse the identity-binding Account owner instead of a second
+      // SELECT-none -> INSERT implementation. ON CONFLICT serializes concurrent
+      // first-login creation and then re-reads the one authoritative Account.
+      const { account, inserted } = await createOrReuseAccount(client, openid, false);
+      const accountId = account.id;
+      if (!isAccountAuthorityEligible({ status: account.status })) {
+        const err = toHttpError('UNAUTHENTICATED');
+        throw Object.assign(new Error(err.message), err);
+      }
 
-      let accountId: string;
+      await client.query('SELECT app.set_account_context($1, $2)', [
+        accountId,
+        'SELF_IDENTITY',
+      ]);
+
       let epoch: number;
       let personId: string;
       let personCreatedAt: Date;
 
-      if (existing.length > 0) {
-        accountId = existing[0].id;
-        if (!isAccountAuthorityEligible({ status: existing[0].status })) {
-          const err = toHttpError('UNAUTHENTICATED');
-          throw Object.assign(new Error(err.message), err);
-        }
-        await client.query('SELECT app.set_account_context($1, $2)', [accountId, 'SELF_IDENTITY']);
-        // Issuance linearization point: re-check ACTIVE atomically under the
-        // Account row lock acquired by UPDATE. A concurrent disable that wins
-        // before this statement makes the update affect zero rows, so no
-        // Session is issued from a stale pre-disable read.
+      if (inserted) {
+        epoch = account.sessionEpoch;
+        const { rows: newPerson } = await client.query(
+          `INSERT INTO persons (account_id, created_by_account_id)
+           VALUES ($1, $1)
+           RETURNING id, created_at`,
+          [accountId]
+        );
+        personId = newPerson[0].id;
+        personCreatedAt = newPerson[0].created_at;
+      } else {
+        // Issuance linearization point: after the authoritative conflict re-read,
+        // establish exact Account context and acquire the row lock through this
+        // conditional UPDATE. This preserves hard-disable without requiring the
+        // pre-context OpenID lookup itself to hold UPDATE authority.
         const { rows: updated } = await client.query(
           `UPDATE accounts
               SET last_login_at = now(), session_epoch = session_epoch + 1
@@ -74,12 +87,13 @@ export function registerAuthRoutes(
         }
         epoch = updated[0].session_epoch;
 
-        // Find existing person
         const { rows: persons } = await client.query(
           'SELECT id, created_at FROM persons WHERE account_id = $1',
           [accountId]
         );
         if (!persons[0]) {
+          // A reused Account without its one Person is genuine integrity
+          // corruption. Do not "repair" it by silently creating new identity.
           throw Object.assign(new Error('Person missing for existing account'), {
             statusCode: 500,
             code: 'INTERNAL_ERROR',
@@ -87,25 +101,6 @@ export function registerAuthRoutes(
         }
         personId = persons[0].id;
         personCreatedAt = persons[0].created_at;
-      } else {
-        // Create new account
-        const { rows: newAccount } = await client.query(
-          `INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0) RETURNING id`,
-          [openid]
-        );
-        accountId = newAccount[0].id;
-        epoch = 0;
-
-        // Bind the newly created Account as the transaction subject before Person creation.
-        await client.query('SELECT app.set_account_context($1, $2)', [accountId, 'SELF_IDENTITY']);
-
-        // Create person (DB default uuidv7())
-        const { rows: newPerson } = await client.query(
-          `INSERT INTO persons (account_id, created_by_account_id) VALUES ($1, $1) RETURNING id, created_at`,
-          [accountId]
-        );
-        personId = newPerson[0].id;
-        personCreatedAt = newPerson[0].created_at;
       }
 
       await client.query('COMMIT');

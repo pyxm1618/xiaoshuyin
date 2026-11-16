@@ -185,20 +185,28 @@ describe('AUTH-006 — Problem Formulation lifecycle / review-state separation',
     );
   }
 
-  function formulationContent(statementId: string) {
-    const ref = { type: 'ASSERTION' as const, id: statementId };
+  function formulationContentForStatements(statementIds: readonly string[]) {
+    const refs = statementIds.map((id) => ({ type: 'ASSERTION' as const, id }));
+    if (refs.length === 0) throw new Error('AUTH006_TEST_REQUIRES_EVIDENCE');
     return {
-      primaryProblem: { text: '当前主要问题', evidenceRefs: [ref] },
+      primaryProblem: { text: '当前主要问题', evidenceRefs: [refs[0]!] },
       keyFactors: [],
-      evidenceRefs: [ref],
+      evidenceRefs: refs,
       unknowns: [],
       conflicts: [],
       sceneFit: 'AUTH006_TEST',
       alternativeExplanations: [],
       reassessmentConditions: [{ text: '新证据要求重新评估' }],
       exitConditions: [],
-      dependencyRefs: [{ type: 'EVIDENCE' as const, evidence: ref }],
+      dependencyRefs: refs.map((evidence) => ({
+        type: 'EVIDENCE' as const,
+        evidence,
+      })),
     };
+  }
+
+  function formulationContent(statementId: string) {
+    return formulationContentForStatements([statementId]);
   }
 
   async function prepare(label: string) {
@@ -409,6 +417,243 @@ expect(blocked.status).toBe(409);
     expect(blocked.status).toBe(409);
     expect(blocked.body).toMatchObject({
       code: 'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
+    });
+  });
+
+  it('FND-REM-007: stale superseded Evidence cannot clear NEEDS_REVIEW', async () => {
+    const fx = await confirmedWithReview('stale-review-evidence');
+
+    const stale = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('review-stale-evidence'),
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '旧证据不得解除复核状态',
+      reviewEvidenceRefs: [evidenceRef(fx.statement.id)],
+    });
+
+    expect(stale.status).toBe(422);
+    expect(stale.body).toMatchObject({
+      code: 'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+    });
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+      }),
+    ]);
+
+    const current = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('review-current-evidence'),
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '当前 successor Evidence 复核后无实质影响',
+      reviewEvidenceRefs: [evidenceRef(fx.successorStatement.id)],
+    });
+
+    expect(current.status).toBe(200);
+    expect(current.body.current).toMatchObject({
+      version: 1,
+      status: 'CONFIRMED',
+      reviewState: 'CURRENT',
+    });
+  });
+
+  it('HIGH-002 — unrelated current Evidence cannot clear NEEDS_REVIEW', async () => {
+    const fx = await confirmedWithReview('unrelated-review-evidence');
+    const unrelated = await writeStatement({
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      accountId: fx.owner.accountId,
+      personId: fx.owner.personId,
+      content: '与原依赖无关的当前事实陈述',
+    });
+
+    const rejected = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('review-unrelated-current-evidence'),
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '无关当前证据不得解除依赖复核',
+      reviewEvidenceRefs: [evidenceRef(unrelated.id)],
+    });
+
+    expect(rejected.status).toBe(422);
+    expect(rejected.body).toMatchObject({
+      code: 'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+    });
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+      }),
+    ]);
+  });
+
+  it('HIGH-002 — legitimate successor may coexist with extra unrelated review Evidence', async () => {
+    const fx = await confirmedWithReview('mixed-review-evidence');
+    const unrelated = await writeStatement({
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      accountId: fx.owner.accountId,
+      personId: fx.owner.personId,
+      content: '额外但无关的当前事实陈述',
+    });
+
+    const resolved = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('review-mixed-evidence'),
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '合法 successor 已覆盖真实失效依赖',
+      reviewEvidenceRefs: [
+        evidenceRef(fx.successorStatement.id),
+        evidenceRef(unrelated.id),
+      ],
+    });
+
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.current).toMatchObject({
+      version: 1,
+      status: 'CONFIRMED',
+      reviewState: 'CURRENT',
+    });
+  });
+
+  it('HIGH-002 — every invalidated stored Evidence dependency requires lineage coverage', async () => {
+    const label = 'multiple-review-dependencies';
+    const owner = await login(label);
+    const familyId = await createFamily(owner.token, label);
+    const created = await createCase(owner.token, label);
+    const source1 = await writeStatement({
+      familyId,
+      caseId: created.id,
+      accountId: owner.accountId,
+      personId: owner.personId,
+      content: '第一条原始依赖事实',
+    });
+    const source3 = await writeStatement({
+      familyId,
+      caseId: created.id,
+      accountId: owner.accountId,
+      personId: owner.personId,
+      content: '第二条原始依赖事实',
+    });
+
+    const started = await startAssessment(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId: created.id,
+      expectedCaseVersion: created.version,
+      idempotencyKey: key('start-multiple-review-dependencies'),
+    });
+    expect(started.status).toBe(200);
+
+    const presented = await presentProblemFormulation(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId: created.id,
+      expectedCaseVersion: started.body.caseVersion,
+      idempotencyKey: key('present-multiple-review-dependencies'),
+      content: formulationContentForStatements([source1.id, source3.id]),
+    });
+    expect(presented.status).toBe(200);
+
+    const confirmed = await confirmProblemFormulation(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId: created.id,
+      expectedCaseVersion: presented.body.caseVersion,
+      idempotencyKey: key('confirm-multiple-review-dependencies'),
+      formulationVersion: 1,
+      body: {},
+    });
+    expect(confirmed.status).toBe(200);
+
+    const successor2 = await writeStatement({
+      familyId,
+      caseId: created.id,
+      accountId: owner.accountId,
+      personId: owner.personId,
+      content: '第一条依赖的合法 successor',
+      supersedesId: source1.id,
+    });
+    const successor4 = await writeStatement({
+      familyId,
+      caseId: created.id,
+      accountId: owner.accountId,
+      personId: owner.personId,
+      content: '第二条依赖的合法 successor',
+      supersedesId: source3.id,
+    });
+
+    expect(await formulationFacts(created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+      }),
+    ]);
+
+    const partial = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId: created.id,
+      expectedCaseVersion: confirmed.body.caseVersion,
+      idempotencyKey: key('review-partial-multiple-dependencies'),
+      formulationId: presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '只覆盖一个失效依赖不足以解除复核',
+      reviewEvidenceRefs: [evidenceRef(successor2.id)],
+    });
+    expect(partial.status).toBe(422);
+    expect(partial.body).toMatchObject({
+      code: 'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+    });
+    expect(await formulationFacts(created.id)).toEqual([
+      expect.objectContaining({ review_state: 'NEEDS_REVIEW' }),
+    ]);
+
+    const complete = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: owner.accountId, personId: owner.personId },
+      familyId,
+      caseId: created.id,
+      expectedCaseVersion: confirmed.body.caseVersion,
+      idempotencyKey: key('review-complete-multiple-dependencies'),
+      formulationId: presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '全部失效依赖均由合法 current successor 覆盖',
+      reviewEvidenceRefs: [
+        evidenceRef(successor2.id),
+        evidenceRef(successor4.id),
+      ],
+    });
+    expect(complete.status).toBe(200);
+    expect(complete.body.current).toMatchObject({
+      version: 1,
+      status: 'CONFIRMED',
+      reviewState: 'CURRENT',
     });
   });
 

@@ -1,5 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  AUTHORITY_SNAPSHOT_PATH,
+  validateAuthoritySnapshot,
+} from "./authority-inputs.mjs";
 
 const root = process.cwd();
 const errors = [];
@@ -56,10 +60,22 @@ const requiredFiles = [
   ".specify/templates/plan-template.md",
   ".specify/templates/tasks-template.md",
   ".specify/templates/checklist-template.md",
+  AUTHORITY_SNAPSHOT_PATH,
 ];
 
 for (const rel of requiredFiles) {
   if (!exists(rel)) errors.push(`Missing required governance/source file: ${rel}`);
+}
+
+if (exists(AUTHORITY_SNAPSHOT_PATH)) {
+  try {
+    const authoritySnapshot = JSON.parse(read(AUTHORITY_SNAPSHOT_PATH));
+    errors.push(...validateAuthoritySnapshot(root, authoritySnapshot));
+  } catch (error) {
+    errors.push(
+      `Authority input snapshot invalid JSON: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 // Spec Kit delivers a feature artifact set in stages:

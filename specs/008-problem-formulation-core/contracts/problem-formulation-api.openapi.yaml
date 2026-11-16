@@ -381,7 +381,7 @@ components:
           minLength: 1
         state:
           type: string
-          enum: [UNKNOWN, NOT_COLLECTED, DECLINED]
+          enum: [UNKNOWN, NOT_COLLECTED, DECLINED, NOT_APPLICABLE]
         evidenceRefs:
           type: array
           items:

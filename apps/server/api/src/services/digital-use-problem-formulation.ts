@@ -51,7 +51,7 @@ function structuredPayload(content: string): { code: string; value: unknown } | 
 
 function collectUnresolvedStates(
   value: unknown,
-  into: Set<'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED'>
+  into: Set<'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'NOT_APPLICABLE'>
 ): void {
   if (Array.isArray(value)) {
     for (const item of value) collectUnresolvedStates(item, into);
@@ -62,7 +62,8 @@ function collectUnresolvedStates(
   if (
     row['state'] === 'UNKNOWN' ||
     row['state'] === 'NOT_COLLECTED' ||
-    row['state'] === 'DECLINED'
+    row['state'] === 'DECLINED' ||
+    row['state'] === 'NOT_APPLICABLE'
   ) {
     into.add(row['state']);
   }
@@ -92,7 +93,9 @@ function analyzeCurrentEvidence(
       return { ok: false, reasonCode: 'PROBLEM_FORMULATION_EVIDENCE_INVALID' };
     }
 
-    const unresolved = new Set<'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED'>();
+    const unresolved = new Set<
+      'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'NOT_APPLICABLE'
+    >();
     collectUnresolvedStates(structured.value, unresolved);
     if (unresolved.size > 0) {
       // Slice 8 permits UnknownItem without a native Observation ref. The exact

@@ -134,7 +134,7 @@ describe('Slice 11 required negative mutation fixtures', () => {
     for (const condition of ['TRIAGE_NO_INTERVENTION_INTEGRATED','TRIAGE_FURTHER_ASSESSMENT_INTEGRATED','TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED']) {
       expect(routeDigitalUseTopology({
         sceneCode: 'DIGITAL_USE', packageVersion: 'v1', currentNodeCode: '01003',
-        conditions: { [condition]: true }, evidenceBasis: ['TOTAL_DURATION'],
+        conditions: { FAMILY_CONFLICT_SEVERE_F: false, [condition]: true }, evidenceBasis: ['TOTAL_DURATION'],
       })).toMatchObject({ kind: 'BLOCKED', code: 'INSUFFICIENT_INTEGRATED_EVIDENCE' });
     }
   });
@@ -144,7 +144,7 @@ describe('Slice 11 required negative mutation fixtures', () => {
       sceneCode: 'DIGITAL_USE', packageVersion: 'v1', currentNodeCode: 'A2004',
       conditions: {}, modelProposedNextNodeCode: 'A5002',
     } as any);
-    expect(result).toMatchObject({ kind: 'BLOCKED', code: 'NO_APPROVED_ROUTE' });
+    expect(result).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
     expect(result).not.toHaveProperty('nextNodeCode', 'A5002');
   });
 });

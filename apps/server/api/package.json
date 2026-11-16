@@ -18,7 +18,8 @@
     "drizzle-orm": "^0.45.0",
     "pg": "^8.16.0",
     "@fastify/swagger": "^9.0.0",
-    "@xiaoshuyin/scenes": "workspace:*"
+    "@xiaoshuyin/scenes": "workspace:*",
+    "@fastify/helmet": "13.2.0"
   },
   "devDependencies": {
     "@types/pg": "^8.15.0",

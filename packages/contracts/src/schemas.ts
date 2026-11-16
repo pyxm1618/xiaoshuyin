@@ -609,7 +609,7 @@ export type KeyFactorType = z.infer<typeof KeyFactor>;
 
 export const UnknownItem = z.strictObject({
   topic: z.string().min(1),
-  state: z.enum(['UNKNOWN', 'NOT_COLLECTED', 'DECLINED']),
+  state: z.enum(['UNKNOWN', 'NOT_COLLECTED', 'DECLINED', 'NOT_APPLICABLE']),
   evidenceRefs: z.array(EvidenceRef),
 });
 export type UnknownItemType = z.infer<typeof UnknownItem>;

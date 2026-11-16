@@ -10,9 +10,16 @@ const snapshot = JSON.parse(
 const byCode = new Map(digitalUseNodeManifest.map((node) => [node.nodeCode, node] as const));
 
 function routed(from: string, condition: string, basis?: string[]) {
+  const conditions: Record<string, boolean> = { [condition]: true };
+  if (from === '01002' && condition !== 'EMOTION_SEVERE_F') {
+    conditions.EMOTION_SEVERE_F = false;
+  }
+  if (from === '01003' && condition !== 'FAMILY_CONFLICT_SEVERE_F') {
+    conditions.FAMILY_CONFLICT_SEVERE_F = false;
+  }
   return routeDigitalUseTopology({
     sceneCode: 'DIGITAL_USE', packageVersion: 'v1', currentNodeCode: from,
-    conditions: { [condition]: true },
+    conditions,
     ...(basis ? { evidenceBasis: basis as any } : {}),
   });
 }
@@ -63,7 +70,7 @@ describe('Slice 11 frozen acceptance scenario matrix', () => {
     expect(a).toEqual(b);
     expect(a.authority).toBe('TOPOLOGY_ONLY');
     expect(digitalUseNodeManifest.map((node)=>node.nodeCode)).toEqual(expect.arrayContaining(['A3000','A3001','A3002','A4001','A4002','A4003','A5001','A5002']));
-    expect(routeDigitalUseTopology({...input,conditions:{}})).toMatchObject({kind:'BLOCKED',code:'NO_APPROVED_ROUTE'});
-    expect(routeDigitalUseTopology({...input,conditions:{COLLABORATIVE_DURATION_YES:'CONFLICT'}})).toMatchObject({kind:'UNKNOWN'});
+    expect(routeDigitalUseTopology({...input,conditions:{}})).toMatchObject({kind:'UNKNOWN',code:'UNKNOWN_OR_UNSUPPORTED_CONDITION'});
+    expect(routeDigitalUseTopology({...input,conditions:{COLLABORATIVE_DURATION_YES:'CONFLICT'}})).toMatchObject({kind:'BLOCKED',code:'CONFLICTING_CONDITION'});
   });
 });

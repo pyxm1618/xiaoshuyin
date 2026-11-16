@@ -26,6 +26,15 @@ import type { IncomingHttpHeaders } from 'node:http';
 // verbatim. There is no "assume the remaining headers are equal" shortcut.
 const INFRASTRUCTURE_HEADERS = new Set(['date', 'content-length', 'connection', 'keep-alive']);
 
+const HELMET_X_HEADERS = [
+  'x-content-type-options',
+  'x-dns-prefetch-control',
+  'x-download-options',
+  'x-frame-options',
+  'x-permitted-cross-domain-policies',
+  'x-xss-protection',
+].sort();
+
 function observableHeaders(headers: IncomingHttpHeaders): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
   for (const [rawName, value] of Object.entries(headers)) {
@@ -161,7 +170,9 @@ describe('candidate-facing anti-enumeration', () => {
     expect(baseline.headers['set-cookie']).toBeUndefined();
     expect(baseline.headers['location']).toBeUndefined();
     expect(baseline.headers['content-type']).toContain('application/json');
-    expect(Object.keys(baseline.headers).filter((name) => name.startsWith('x-'))).toEqual([]);
+    expect(Object.keys(baseline.headers).filter((name) => name.startsWith('x-')).sort()).toEqual(
+      HELMET_X_HEADERS
+    );
     expect(baseline.tokenShape).toEqual({ type: 'string', length: 43, format: 'base64url32' });
 
     runs.forEach((run, i) => {
@@ -222,7 +233,9 @@ describe('candidate-facing anti-enumeration', () => {
       expect(obs.headers['set-cookie']).toBeUndefined();
       expect(obs.headers['location']).toBeUndefined();
       expect(obs.headers['content-type']).toContain('application/json');
-      expect(Object.keys(obs.headers).filter((name) => name.startsWith('x-'))).toEqual([]);
+      expect(Object.keys(obs.headers).filter((name) => name.startsWith('x-')).sort()).toEqual(
+        HELMET_X_HEADERS
+      );
     }
     expect(observations[1]).toEqual(observations[0]);
     expect(observations[2]).toEqual(observations[0]);

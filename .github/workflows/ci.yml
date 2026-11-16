@@ -8,6 +8,7 @@ on:
 
 env:
   NODE_VERSION: '26.13.0'
+  BUN_VERSION: '1.4.4'
 
 jobs:
   static:
@@ -20,8 +21,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      - run: bun install
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
       - name: Typecheck
         run: bun run typecheck
       - name: Static guard
@@ -37,8 +38,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      - run: bun install
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
       - name: Run unit tests
         run: bunx vitest run tests/domain
       - name: Run Digital Use Scene foundation tests
@@ -68,8 +69,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      - run: bun install
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
       - name: Bootstrap roles
         run: bash db/init/01-roles.sh
         env:
@@ -113,8 +114,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      - run: bun install
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
       - name: Bootstrap roles
         run: bash db/init/01-roles.sh
         env:
@@ -167,8 +168,8 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
-      - run: bun install
+          bun-version: ${{ env.BUN_VERSION }}
+      - run: bun install --frozen-lockfile
       - name: OpenAPI generate + check
         run: |
           bun run openapi:generate

@@ -109,6 +109,56 @@ export async function getConsentRecordForUpdate(tx: Tx, id: string): Promise<Con
   return rows[0] ?? null;
 }
 
+/**
+ * Lock the exact guardian-consent chain from the requested record through its
+ * authoritative current head.
+ *
+ * Every legitimate guardian successor writer locks its predecessor before
+ * inserting. Walking predecessor -> successor while holding those row locks
+ * therefore makes the final "no successor" observation stable until this
+ * transaction ends. The database unique predecessor index added by migration
+ * 022 guarantees that a historical record cannot have two current successors.
+ *
+ * Returning both target and head lets a caller distinguish "not found" from a
+ * stale historical target without creating a second current-truth source.
+ */
+export async function lockGuardianConsentChainHead(
+  tx: Tx,
+  targetId: string
+): Promise<{ target: ConsentRecordRow; head: ConsentRecordRow } | null> {
+  const target = await getConsentRecordForUpdate(tx, targetId);
+  if (!target) return null;
+
+  const seen = new Set<string>([target.id]);
+  let head = target;
+
+  while (true) {
+    const { rows: successors } = await tx.query<{ id: string }>(
+      `SELECT id
+         FROM consent_records
+        WHERE supersedes_id = $1
+          AND purpose = '${GUARDIAN_PURPOSE}'
+        ORDER BY version ASC, id ASC
+        LIMIT 2`,
+      [head.id]
+    );
+
+    if (successors.length === 0) return { target, head };
+    if (successors.length > 1) {
+      // This is genuine persisted-chain corruption, not an expected race.
+      throw new Error('GUARDIAN_CONSENT_CHAIN_BRANCHED');
+    }
+
+    const nextId = successors[0]!.id;
+    if (seen.has(nextId)) throw new Error('GUARDIAN_CONSENT_CHAIN_CYCLE');
+    seen.add(nextId);
+
+    const next = await getConsentRecordForUpdate(tx, nextId);
+    if (!next) throw new Error('GUARDIAN_CONSENT_CHAIN_SUCCESSOR_MISSING');
+    head = next;
+  }
+}
+
 export async function getConsentRecordById(tx: Tx, id: string): Promise<ConsentRecordRow | null> {
   const { rows } = await tx.query(
     `SELECT ${CONSENT_COLUMNS} FROM consent_records WHERE id = $1 FOR UPDATE`,

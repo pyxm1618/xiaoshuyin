@@ -61,6 +61,7 @@ export type DigitalUseConditionState =
   | 'UNKNOWN'
   | 'NOT_COLLECTED'
   | 'DECLINED'
+  | 'NOT_APPLICABLE'
   | 'CONFLICT';
 
 export type DigitalUseEvidenceBasisCategory =
@@ -103,7 +104,12 @@ export type DigitalUseRoutingResult =
       readonly kind: 'BLOCKED';
       readonly authority: 'TOPOLOGY_ONLY';
       readonly fromNodeCode?: string;
-      readonly code: 'NO_APPROVED_ROUTE' | 'AMBIGUOUS_ROUTE' | 'INVALID_ROUTING_INPUT' | 'INSUFFICIENT_INTEGRATED_EVIDENCE';
+      readonly code:
+        | 'NO_APPROVED_ROUTE'
+        | 'AMBIGUOUS_ROUTE'
+        | 'INVALID_ROUTING_INPUT'
+        | 'INSUFFICIENT_INTEGRATED_EVIDENCE'
+        | 'CONFLICTING_CONDITION';
       readonly packageVersion: typeof DIGITAL_USE_PACKAGE_VERSION;
     }
   | {

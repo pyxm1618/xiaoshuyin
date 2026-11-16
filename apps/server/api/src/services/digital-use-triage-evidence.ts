@@ -29,8 +29,15 @@ function payloadOf(row: SceneEvidenceStatementRow, code: string): unknown {
   return JSON.parse(row.content.slice(expected.length));
 }
 
-function missingReason(state: string): 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | null {
-  if (state === 'UNKNOWN' || state === 'NOT_COLLECTED' || state === 'DECLINED') return state;
+function missingReason(
+  state: string
+): 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'NOT_APPLICABLE' | null {
+  if (
+    state === 'UNKNOWN' ||
+    state === 'NOT_COLLECTED' ||
+    state === 'DECLINED' ||
+    state === 'NOT_APPLICABLE'
+  ) return state;
   return null;
 }
 
@@ -90,6 +97,9 @@ function classifyRows<T>(
   }
   if (missingStates.some((item) => item.reason === 'NOT_COLLECTED')) {
     return { kind: 'MISSING', reason: 'NOT_COLLECTED' };
+  }
+  if (missingStates.some((item) => item.reason === 'NOT_APPLICABLE')) {
+    return { kind: 'MISSING', reason: 'NOT_APPLICABLE' };
   }
   return { kind: 'MISSING', reason: 'UNKNOWN' };
 }

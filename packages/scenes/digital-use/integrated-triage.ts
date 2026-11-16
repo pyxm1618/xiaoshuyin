@@ -7,7 +7,15 @@
 
 export type TriageEvidenceState<T> =
   | { readonly kind: 'VALUE'; readonly value: T }
-  | { readonly kind: 'MISSING'; readonly reason: 'NO_RECORD' | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' }
+  | {
+      readonly kind: 'MISSING';
+      readonly reason:
+        | 'NO_RECORD'
+        | 'UNKNOWN'
+        | 'NOT_COLLECTED'
+        | 'DECLINED'
+        | 'NOT_APPLICABLE';
+    }
   | { readonly kind: 'CONFLICT'; readonly reason: 'CONFLICTING' | 'CONTRADICTORY' | 'INCOMPATIBLE' | 'INVALID' };
 
 export type EmotionOption = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
@@ -86,6 +94,18 @@ function stateClass<T>(state: TriageEvidenceState<T>): 'VALUE' | 'MISSING' | 'CO
   return state.kind;
 }
 
+function hasOnlyValidEmotionOptions(values: readonly EmotionOption[]): boolean {
+  return values.every(
+    (value) =>
+      value === 'A' ||
+      value === 'B' ||
+      value === 'C' ||
+      value === 'D' ||
+      value === 'E' ||
+      value === 'F'
+  );
+}
+
 function hasNonSevereEmotionNeed(values: readonly EmotionOption[]): boolean {
   return values.some((value) => value === 'B' || value === 'C' || value === 'D' || value === 'E');
 }
@@ -121,19 +141,10 @@ export function evaluateIntegratedTriage(
   if (
     emotionValues.length < 1 ||
     emotionValues.length > 2 ||
-    new Set(emotionValues).size !== emotionValues.length
+    new Set(emotionValues).size !== emotionValues.length ||
+    !hasOnlyValidEmotionOptions(emotionValues)
   ) {
     return result('BLOCKED', { ...p, MATERIAL_UNRESOLVED: true }, '01002_INVALID_CURRENT_VALUE');
-  }
-  if (
-    emotionValues.includes('A') &&
-    emotionValues.some((value) => value !== 'A')
-  ) {
-    return result(
-      'BLOCKED',
-      { ...p, MATERIAL_UNRESOLVED: true },
-      '01002_INCOMPATIBLE_CURRENT_VALUE'
-    );
   }
 
   const emotionF = emotionValues.includes('F');
@@ -193,6 +204,7 @@ export function evaluateIntegratedTriage(
       OTHER_NEEDS_MATERIAL_UNRESOLVED: false,
     };
     return result('A2003', p, 'TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED', {
+      FAMILY_CONFLICT_SEVERE_F: false,
       TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED: true,
     });
   }
@@ -254,6 +266,7 @@ export function evaluateIntegratedTriage(
       OTHER_NEEDS_MATERIAL_UNRESOLVED: false,
     };
     return result('A2002', p, 'TRIAGE_FURTHER_ASSESSMENT_INTEGRATED', {
+      FAMILY_CONFLICT_SEVERE_F: false,
       TRIAGE_FURTHER_ASSESSMENT_INTEGRATED: true,
     });
   }
@@ -272,6 +285,7 @@ export function evaluateIntegratedTriage(
       OTHER_NEEDS_MATERIAL_UNRESOLVED: true,
     };
     return result('A2002', p, 'TRIAGE_FURTHER_ASSESSMENT_INTEGRATED', {
+      FAMILY_CONFLICT_SEVERE_F: false,
       TRIAGE_FURTHER_ASSESSMENT_INTEGRATED: true,
     });
   }
@@ -294,6 +308,7 @@ export function evaluateIntegratedTriage(
 
   if (clean) {
     return result('A2001', p, 'TRIAGE_NO_INTERVENTION_INTEGRATED', {
+      FAMILY_CONFLICT_SEVERE_F: false,
       TRIAGE_NO_INTERVENTION_INTEGRATED: true,
     });
   }

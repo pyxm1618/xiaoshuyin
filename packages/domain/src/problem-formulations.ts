@@ -13,6 +13,7 @@
 import type { PoolClient } from 'pg';
 import { getCaseForUpdate, type CaseRow, type CasePhaseValue } from './cases.js';
 import { canonicalJson, hashPayload } from './idempotency.js';
+import { decideOrdinaryProgression } from './safety/guard.js';
 
 type Tx = PoolClient;
 
@@ -58,7 +59,11 @@ export interface KeyFactor {
   evidenceRefs: EvidenceRef[];
 }
 
-export type UnknownState = 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED';
+export type UnknownState =
+  | 'UNKNOWN'
+  | 'NOT_COLLECTED'
+  | 'DECLINED'
+  | 'NOT_APPLICABLE';
 
 export interface UnknownItem {
   topic: string;
@@ -157,6 +162,7 @@ export type ProblemFormulationErrorCode =
   | 'CASE_PHASE_CONFLICT'
   | 'STALE_CASE_VERSION'
   | 'CASE_NOT_PRIMARY'
+  | 'CASE_NOT_OPEN'
   | 'CASE_CLOSED'
   | 'SAFETY_HOLD_BLOCKED'
   | 'CORRECTION_NOOP'
@@ -359,11 +365,12 @@ export function assertCaseGuards(
   expectedCaseVersion: number,
   requiredPhase: CasePhaseValue
 ): void {
-  if (caseRow.status === 'SAFETY_HOLD') {
-    throw pfError('SAFETY_HOLD_BLOCKED');
-  }
-  if (caseRow.status === 'CLOSED') {
-    throw pfError('CASE_CLOSED');
+  // Common Core ordinary-progression status authority lives in safety/guard.
+  // Problem Formulation consumes that decision instead of maintaining a
+  // parallel OPEN/WAITING/SAFETY_HOLD/CLOSED truth table.
+  const progression = decideOrdinaryProgression(caseRow.status);
+  if (!progression.allowed) {
+    throw pfError(progression.code);
   }
   if (!caseRow.is_primary) {
     throw pfError('CASE_NOT_PRIMARY');
@@ -523,7 +530,8 @@ export async function resolveEvidenceRefs(
       const unknownState: UnknownState | null =
         row.value_state === 'UNKNOWN' ||
         row.value_state === 'NOT_COLLECTED' ||
-        row.value_state === 'DECLINED'
+        row.value_state === 'DECLINED' ||
+        row.value_state === 'NOT_APPLICABLE'
           ? row.value_state
           : null;
       members.set(canonicalEvidenceKey(ref), {
@@ -936,6 +944,92 @@ export async function revalidateStoredEvidenceDependencies(
       throw pfError(
         'PROBLEM_FORMULATION_DEPENDENCY_INVALID',
         'stored Evidence dependency is no longer current-valid'
+      );
+    }
+  }
+}
+
+async function resolveEvidenceSuccessorRefs(
+  tx: Tx,
+  caseId: string,
+  ref: EvidenceRef
+): Promise<EvidenceRef[]> {
+  if (ref.type === 'DIALOGUE_MESSAGE') return [];
+
+  const table = ref.type === 'ASSERTION' ? 'assertions' : 'observations';
+  const { rows } = await tx.query<{ id: string }>(
+    `WITH RECURSIVE successors AS (
+       SELECT id
+         FROM ${table}
+        WHERE case_id = $1
+          AND supersedes_id = $2::uuid
+       UNION ALL
+       SELECT child.id
+         FROM ${table} child
+         JOIN successors parent ON child.supersedes_id = parent.id
+        WHERE child.case_id = $1
+     )
+     SELECT id FROM successors`,
+    [caseId, lowerId(ref.id)]
+  );
+
+  return canonicalEvidenceRefs(
+    rows.map((row) => ({ type: ref.type, id: row.id }))
+  );
+}
+
+/**
+ * Review coverage stays inside the existing Evidence/currentness owner.
+ * Only stored EVIDENCE dependencies that are no longer current-valid require
+ * replacement coverage. Coverage is proven exclusively by the persisted
+ * supersedes lineage; same-Case/currentness alone is insufficient.
+ */
+export async function assertReviewEvidenceCoversAffectedDependencies(
+  tx: Tx,
+  caseId: string,
+  dependencyRefs: readonly DependencyRef[],
+  reviewEvidenceRefs: readonly EvidenceRef[]
+): Promise<void> {
+  const storedEvidenceRefs = canonicalEvidenceRefs(
+    dependencyRefs
+      .filter((dep): dep is Extract<DependencyRef, { type: 'EVIDENCE' }> => dep.type === 'EVIDENCE')
+      .map((dep) => dep.evidence)
+  );
+  if (storedEvidenceRefs.length === 0) return;
+
+  const storedResolution = await resolveEvidenceRefs(tx, caseId, storedEvidenceRefs);
+  if (storedResolution.missing.length > 0) {
+    throw pfError(
+      'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+      'stored Evidence dependency can no longer be resolved for review'
+    );
+  }
+
+  const reviewKeys = new Set(
+    canonicalEvidenceRefs(reviewEvidenceRefs).map(canonicalEvidenceKey)
+  );
+
+  for (const storedRef of storedEvidenceRefs) {
+    const storedMember = storedResolution.members.get(canonicalEvidenceKey(storedRef));
+    if (
+      !storedMember ||
+      lowerId(storedMember.caseId) !== lowerId(caseId)
+    ) {
+      throw pfError(
+        'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+        'stored Evidence dependency does not belong to this Case'
+      );
+    }
+    if (storedMember.usable) continue;
+
+    const successors = await resolveEvidenceSuccessorRefs(tx, caseId, storedRef);
+    const covered = successors.some((successor) =>
+      reviewKeys.has(canonicalEvidenceKey(successor))
+    );
+    if (!covered) {
+      throw pfError(
+        'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+        'review Evidence does not cover an affected stored Evidence dependency'
       );
     }
   }
