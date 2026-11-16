@@ -131,6 +131,10 @@ export class TestProfessionalReviewContentProvider
 {
   private unavailable = new Set<ProfessionalReviewStream>();
   private failRevalidation = new Set<ProfessionalReviewStream>();
+  private resolveBarriers = new Map<
+    ProfessionalReviewStream,
+    TestRevalidationBarrier
+  >();
   private revalidationBarriers = new Map<
     ProfessionalReviewStream,
     TestRevalidationBarrier
@@ -148,10 +152,12 @@ export class TestProfessionalReviewContentProvider
     this.unavailable.delete(stream);
     this.failRevalidation.delete(stream);
     this.revalidationDrift.delete(stream);
-    const barrier = this.revalidationBarriers.get(stream);
-    if (barrier !== undefined) {
-      barrier.releaseResolve();
-      this.revalidationBarriers.delete(stream);
+    for (const barriers of [this.resolveBarriers, this.revalidationBarriers]) {
+      const barrier = barriers.get(stream);
+      if (barrier !== undefined) {
+        barrier.releaseResolve();
+        barriers.delete(stream);
+      }
     }
   }
 
@@ -159,13 +165,13 @@ export class TestProfessionalReviewContentProvider
     this.failRevalidation.add(stream);
   }
 
-  pauseNextRevalidation(stream: ProfessionalReviewStream): {
-    readonly reached: Promise<void>;
-    release(): void;
-  } {
-    const existing = this.revalidationBarriers.get(stream);
-    if (existing !== undefined) {
-      throw new Error(`TEST_REVALIDATION_BARRIER_ALREADY_ARMED:${stream}`);
+  private armBarrier(
+    barriers: Map<ProfessionalReviewStream, TestRevalidationBarrier>,
+    stream: ProfessionalReviewStream,
+    duplicateCode: string
+  ): { readonly reached: Promise<void>; release(): void } {
+    if (barriers.has(stream)) {
+      throw new Error(`${duplicateCode}:${stream}`);
     }
     let reachedResolve!: () => void;
     let releaseResolve!: () => void;
@@ -179,11 +185,33 @@ export class TestProfessionalReviewContentProvider
       }),
       releaseResolve: () => releaseResolve(),
     };
-    this.revalidationBarriers.set(stream, barrier);
+    barriers.set(stream, barrier);
     return {
       reached: barrier.reached,
       release: () => barrier.releaseResolve(),
     };
+  }
+
+  pauseNextResolve(stream: ProfessionalReviewStream): {
+    readonly reached: Promise<void>;
+    release(): void;
+  } {
+    return this.armBarrier(
+      this.resolveBarriers,
+      stream,
+      'TEST_RESOLVE_BARRIER_ALREADY_ARMED'
+    );
+  }
+
+  pauseNextRevalidation(stream: ProfessionalReviewStream): {
+    readonly reached: Promise<void>;
+    release(): void;
+  } {
+    return this.armBarrier(
+      this.revalidationBarriers,
+      stream,
+      'TEST_REVALIDATION_BARRIER_ALREADY_ARMED'
+    );
   }
 
   setNextRevalidationDrift(
@@ -200,6 +228,12 @@ export class TestProfessionalReviewContentProvider
     readonly packageVersion: string;
     readonly contentHash: string;
   }): Promise<ProfessionalReviewResolvedPackage | null> {
+    const barrier = this.resolveBarriers.get(input.stream);
+    if (barrier !== undefined) {
+      this.resolveBarriers.delete(input.stream);
+      barrier.reachedResolve();
+      await barrier.released;
+    }
     if (this.unavailable.has(input.stream)) return null;
     if (input.scenePackageVersion !== 'v1') return null;
     const identity = identitiesFor(input.stream).find(
