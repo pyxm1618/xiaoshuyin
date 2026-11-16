@@ -175,8 +175,34 @@ describe('T1218 Digital Use runtime hardening', () => {
   ): Promise<void> {
     const node = resolveDigitalUseRuntimeNode(nodeCode);
     await admin.query(
-      `UPDATE cases SET phase='PROBLEM_FORMULATION' WHERE id=$1`,
+      `UPDATE cases SET phase='GOALS' WHERE id=$1`,
       [f.caseId]
+    );
+    await admin.query(
+      `INSERT INTO problem_formulations
+         (family_id,case_id,version,status,primary_problem,key_factors,
+          evidence_refs,unknowns,conflicts,scene_fit,alternative_explanations,
+          reassessment_conditions,exit_conditions,user_response,
+          confirmed_by_person_id,confirmed_at,dependency_refs,supersedes_version)
+       SELECT
+         $1,$2,1,'CONFIRMED',$3::jsonb,'[]'::jsonb,$4::jsonb,
+         '[]'::jsonb,'[]'::jsonb,'DIGITAL_USE','[]'::jsonb,'[]'::jsonb,
+         '[]'::jsonb,$5::jsonb,$6,now(),'[]'::jsonb,NULL
+       WHERE NOT EXISTS (
+         SELECT 1 FROM problem_formulations WHERE case_id=$2
+       )`,
+      [
+        f.familyId,
+        f.caseId,
+        JSON.stringify({ text: 'Test-only confirmed Digital Use formulation' }),
+        JSON.stringify([{ type: 'DIALOGUE_MESSAGE', id: f.messageId }]),
+        JSON.stringify({
+          kind: 'CONFIRM',
+          actorPersonId: f.manager.personId,
+          respondedAt: new Date().toISOString(),
+        }),
+        f.manager.personId,
+      ]
     );
     await admin.query(
       `UPDATE scene_node_states
