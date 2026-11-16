@@ -876,10 +876,24 @@ export async function completeDigitalUseNodeResponse(
           let terminalCode: string | null = null;
           if (route.kind === 'NODE') {
             nextNodeCode = route.nextNodeCode;
-            // A3000 is canonical intent only in Slice 12. T1215 materializes no
-            // A3000 state and keeps the downstream runtime unavailable.
-            if (route.nextNodeCode !== 'A3000') {
-              const next = resolveDigitalUseRuntimeNode(route.nextNodeCode);
+          } else {
+            terminalCode = route.terminalCode;
+          }
+
+          if (reevaluatingTriage) {
+            await convergeSupersededTriageRoute(tx, {
+              caseId: input.caseId,
+              sourceNodeCode: node.nodeCode,
+              newNextNodeCode: nextNodeCode,
+              branchReasonCode: route.reasonCode,
+              nextInputRefs: nextInputRefs(semantic),
+            });
+          }
+
+          if (route.kind === 'NODE') {
+            const next = resolveDigitalUseRuntimeNode(route.nextNodeCode);
+            const existingNext = await getSceneNodeState(tx, input.caseId, next.nodeCode, true);
+            if (!existingNext) {
               await ensureSceneNodeAvailable(tx, {
                 familyId: input.familyId,
                 caseId: input.caseId,
@@ -889,10 +903,26 @@ export async function completeDigitalUseNodeResponse(
                 branchReasonCodes: [route.reasonCode],
                 inputRefs: nextInputRefs(semantic),
               });
-            } else {
-              const familyEntry = resolveDigitalUseRuntimeNode('A3000');
-              if ((familyEntry.canRunInParallelWith as readonly string[]).includes('A4001')) {
-                const contractEntry = resolveDigitalUseRuntimeNode('A4001');
+            }
+
+            if (route.nextNodeCode === 'A3000') {
+              const familyEntry = next;
+              const parallelCodes = familyEntry.canRunInParallelWith as readonly string[];
+              if (!parallelCodes.includes('A4001')) {
+                throw nodeError('SCENE_ROUTE_UNRESOLVED', 'A3000/A4001 parallel authority missing');
+              }
+              const contractEntry = resolveDigitalUseRuntimeNode('A4001');
+              const reciprocal = contractEntry.canRunInParallelWith as readonly string[];
+              if (!reciprocal.includes('A3000')) {
+                throw nodeError('SCENE_ROUTE_UNRESOLVED', 'A4001/A3000 parallel authority missing');
+              }
+              const existingContract = await getSceneNodeState(
+                tx,
+                input.caseId,
+                contractEntry.nodeCode,
+                true
+              );
+              if (!existingContract) {
                 await ensureSceneNodeAvailable(tx, {
                   familyId: input.familyId,
                   caseId: input.caseId,
@@ -902,10 +932,21 @@ export async function completeDigitalUseNodeResponse(
                   branchReasonCodes: [route.reasonCode],
                   inputRefs: nextInputRefs(semantic),
                 });
+              } else if (
+                existingContract.status === 'SKIPPED' ||
+                existingContract.status === 'BLOCKED'
+              ) {
+                const reopened = await casReopenSceneNodeForRouteConvergence(tx, {
+                  caseId: input.caseId,
+                  nodeCode: contractEntry.nodeCode,
+                  scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                  expectedRevision: existingContract.revision,
+                  branchReasonCodes: [route.reasonCode],
+                  inputRefs: nextInputRefs(semantic),
+                });
+                if (!reopened) throw nodeError('STALE_NODE_REVISION');
               }
             }
-          } else {
-            terminalCode = route.terminalCode;
           }
 
           await insertDigitalUseNodeCompletedEvent(tx, {
