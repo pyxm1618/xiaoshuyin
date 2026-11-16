@@ -381,6 +381,29 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
     return rows[0]!;
   }
 
+  it('AUTH-006 fails closed when CONFIRMED Problem Formulation is NEEDS_REVIEW', async () => {
+    const { f, scene } = await prepareA5001('pf-needs-review');
+    await admin.query(
+      `UPDATE problem_formulations
+          SET review_state='NEEDS_REVIEW'
+        WHERE case_id=$1 AND status='CONFIRMED'`,
+      [f.caseId]
+    );
+
+    const result = await a5001Request(
+      f,
+      scene,
+      `a5001-pf-needs-review-${crypto.randomUUID()}`
+    );
+    expect(result.statusCode).toBe(409);
+    expect(result.json().code).toBe('PROBLEM_FORMULATION_DEPENDENCY_INVALID');
+
+    const counts = await a5001Counts(f);
+    expect(counts.artifacts).toBe(0);
+    expect(counts.events).toBe(0);
+    expect(counts.audits).toBe(0);
+  });
+
   it('AS-01/03/05/09/16-23/51 completes legal USER_INITIATED A5001 on a partially executed target list', async () => {
     const { f, scene } = await prepareA5001('legal-partial', {
       partialTarget: true,
