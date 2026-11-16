@@ -32,14 +32,26 @@ function priorityConditionFor(currentNodeCode: string): string | null {
 function conditionState(
   input: DigitalUseRoutingInput,
   route: DigitalUseAllowedNext
-): boolean | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'CONFLICT' | undefined {
+): boolean | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'NOT_APPLICABLE' | 'CONFLICT' | undefined {
   return input.conditions[route.conditionRef];
 }
 
-function conditionStateIsUnresolved(
+function conditionStateIsMissing(
   state: ReturnType<typeof conditionState>
-): state is 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'CONFLICT' {
-  return state === 'UNKNOWN' || state === 'NOT_COLLECTED' || state === 'DECLINED' || state === 'CONFLICT';
+): state is 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'NOT_APPLICABLE' | undefined {
+  return (
+    state === undefined ||
+    state === 'UNKNOWN' ||
+    state === 'NOT_COLLECTED' ||
+    state === 'DECLINED' ||
+    state === 'NOT_APPLICABLE'
+  );
+}
+
+function conditionStateIsConflict(
+  state: ReturnType<typeof conditionState>
+): state is 'CONFLICT' {
+  return state === 'CONFLICT';
 }
 
 /**
@@ -84,12 +96,21 @@ export function routeDigitalUseTopology(
   const priorityState =
     priorityRoute === undefined ? undefined : conditionState(input, priorityRoute);
 
-  if (conditionStateIsUnresolved(priorityState)) {
+  if (priorityRef !== null && conditionStateIsMissing(priorityState)) {
     return {
       kind: 'UNKNOWN',
       authority: 'TOPOLOGY_ONLY',
       fromNodeCode: node.nodeCode,
       code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION',
+      packageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    };
+  }
+  if (priorityRef !== null && conditionStateIsConflict(priorityState)) {
+    return {
+      kind: 'BLOCKED',
+      authority: 'TOPOLOGY_ONLY',
+      fromNodeCode: node.nodeCode,
+      code: 'CONFLICTING_CONDITION',
       packageVersion: DIGITAL_USE_PACKAGE_VERSION,
     };
   }
@@ -143,10 +164,22 @@ export function routeDigitalUseTopology(
     };
   }
 
-  const unresolved = candidateRoutes.some((route) => {
-    const state = conditionState(input, route);
-    return state === 'UNKNOWN' || state === 'NOT_COLLECTED' || state === 'DECLINED' || state === 'CONFLICT';
-  });
+  const conflicting = candidateRoutes.some((route) =>
+    conditionStateIsConflict(conditionState(input, route))
+  );
+  if (conflicting) {
+    return {
+      kind: 'BLOCKED',
+      authority: 'TOPOLOGY_ONLY',
+      fromNodeCode: node.nodeCode,
+      code: 'CONFLICTING_CONDITION',
+      packageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    };
+  }
+
+  const unresolved = candidateRoutes.some((route) =>
+    conditionStateIsMissing(conditionState(input, route))
+  );
   if (unresolved) {
     return {
       kind: 'UNKNOWN',

@@ -7,7 +7,15 @@
 
 export type TriageEvidenceState<T> =
   | { readonly kind: 'VALUE'; readonly value: T }
-  | { readonly kind: 'MISSING'; readonly reason: 'NO_RECORD' | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' }
+  | {
+      readonly kind: 'MISSING';
+      readonly reason:
+        | 'NO_RECORD'
+        | 'UNKNOWN'
+        | 'NOT_COLLECTED'
+        | 'DECLINED'
+        | 'NOT_APPLICABLE';
+    }
   | { readonly kind: 'CONFLICT'; readonly reason: 'CONFLICTING' | 'CONTRADICTORY' | 'INCOMPATIBLE' | 'INVALID' };
 
 export type EmotionOption = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';

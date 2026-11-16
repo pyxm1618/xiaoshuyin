@@ -74,7 +74,12 @@ function semanticError(code: string): never {
   throw Object.assign(new Error(code), { code });
 }
 
-const UnresolvedState = z.enum(['UNKNOWN', 'NOT_COLLECTED', 'DECLINED']);
+const UnresolvedState = z.enum([
+  'UNKNOWN',
+  'NOT_COLLECTED',
+  'DECLINED',
+  'NOT_APPLICABLE',
+]);
 
 const DurationAnswer = z.union([
   z.strictObject({
@@ -399,7 +404,9 @@ async function handle01002(
         ? 'DECLINED'
         : emotion.reason === 'NOT_COLLECTED'
           ? 'NOT_COLLECTED'
-          : 'UNKNOWN';
+          : emotion.reason === 'NOT_APPLICABLE'
+            ? 'NOT_APPLICABLE'
+            : 'UNKNOWN';
     return {
       inputRefs: context.currentInputRefs,
       outputRefs: refs,
