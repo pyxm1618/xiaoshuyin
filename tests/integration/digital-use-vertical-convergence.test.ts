@@ -116,6 +116,18 @@ describe('Digital Use vertical convergence', () => {
           version: 'test-professional-roleplay-v1',
           authorityRef: 'test-authority:vertical-roleplay-v1',
         },
+        roleplayModelPromptAuthority: async () => ({
+          model: {
+            status: 'CURRENT_APPROVED',
+            modelRef: 'test-model:vertical-v1',
+            authorityRef: 'test-authority:model:vertical-v1',
+          },
+          prompt: {
+            status: 'CURRENT_APPROVED',
+            promptVersionRef: 'test-prompt:vertical-v1',
+            authorityRef: 'test-authority:prompt:vertical-v1',
+          },
+        }),
       },
     });
     await app.ready();

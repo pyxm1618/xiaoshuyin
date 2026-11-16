@@ -1904,6 +1904,18 @@ describe('T1218 Digital Use runtime hardening', () => {
           version: 'test-professional-roleplay-v1',
           authorityRef: 'test-authority:roleplay-v1',
         },
+        roleplayModelPromptAuthority: async () => ({
+          model: {
+            status: 'CURRENT_APPROVED',
+            modelRef: 'test-model:authority-current',
+            authorityRef: 'test-authority:model-current',
+          },
+          prompt: {
+            status: 'CURRENT_APPROVED',
+            promptVersionRef: 'test-prompt:authority-current',
+            authorityRef: 'test-authority:prompt-current',
+          },
+        }),
       },
     });
     await unavailableApp.ready();
@@ -1984,6 +1996,328 @@ describe('T1218 Digital Use runtime hardening', () => {
     }
   });
 
+  it.each([
+    ['model', null, 'test-prompt:current'],
+    ['prompt', 'test-model:current', null],
+  ] as const)(
+    'A4003 keeps HOLD when current %s authority is unavailable',
+    async (missingAuthority, modelRef, promptVersionRef) => {
+      const adapter: RoleplayAdapter = {
+        adapterRef: 'test:model-prompt-hold',
+        async isAvailable() { return true; },
+        async createTurn() {
+          throw new Error('createTurn must not run without current Model / Prompt authority');
+        },
+      };
+      const authorityApp = await buildApp({
+        phoneUseContract: {
+          roleplayAdapter: adapter,
+          roleplayProfessionalContent: {
+            status: 'APPROVED_PUBLISHED',
+            version: 'test-professional-roleplay-v1',
+            authorityRef: 'test-authority:roleplay-v1',
+          },
+          roleplayModelPromptAuthority: async () => ({
+            model: modelRef === null ? null : {
+              status: 'CURRENT_APPROVED',
+              modelRef,
+              authorityRef: 'test-authority:model-current',
+            },
+            prompt: promptVersionRef === null ? null : {
+              status: 'CURRENT_APPROVED',
+              promptVersionRef,
+              authorityRef: 'test-authority:prompt-current',
+            },
+          }),
+        },
+      });
+      await authorityApp.ready();
+      try {
+        const f = await fixture(`s14-roleplay-${missingAuthority}-authority-missing`, authorityApp);
+        await forceSceneNode(f, 'A4003');
+
+        const response = await authorityApp.inject({
+          method: 'POST',
+          url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+          headers: commandHeaders(
+            f.manager.token,
+            `s14-roleplay-${missingAuthority}-authority-missing`
+          ),
+          payload: {
+            expectedCaseVersion: f.caseVersion,
+            professionalContentVersion: 'test-professional-roleplay-v1',
+          },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json()).toMatchObject({
+          kind: 'HOLD',
+          nodeCode: 'A4003',
+          status: 'IN_PROGRESS',
+          reasonCode: 'DOWNSTREAM_AI_UNAVAILABLE',
+        });
+
+        const rows = await admin.query(
+          `SELECT
+             (SELECT count(*)::int FROM roleplay_sessions WHERE case_id=$1) AS sessions,
+             (SELECT count(*)::int FROM roleplay_turns WHERE case_id=$1) AS turns,
+             (SELECT count(*)::int FROM scene_node_states
+               WHERE case_id=$1 AND node_code='A4004') AS a4004`,
+          [f.caseId]
+        );
+        expect(rows.rows[0]).toEqual({ sessions: 0, turns: 0, a4004: 0 });
+      } finally {
+        await authorityApp.close();
+      }
+    }
+  );
+
+  it.each([
+    ['model', 'test-model:wrong', 'test-prompt:current'],
+    ['prompt', 'test-model:current', 'test-prompt:wrong'],
+  ] as const)(
+    'A4003 rejects adapter output with non-current %s provenance before persistence',
+    async (wrongDimension, generatedModelRef, generatedPromptVersionRef) => {
+      const adapter: RoleplayAdapter = {
+        adapterRef: 'test:model-prompt-output-drift',
+        async isAvailable() { return true; },
+        async createTurn(input) {
+          return {
+            simulatedParentOutput: `simulated-parent:${input.simulatedChildInput}`,
+            adapterRef: 'test:model-prompt-output-drift',
+            modelRef: generatedModelRef,
+            promptVersionRef: generatedPromptVersionRef,
+          };
+        },
+      };
+      const authorityApp = await buildApp({
+        phoneUseContract: {
+          roleplayAdapter: adapter,
+          roleplayProfessionalContent: {
+            status: 'APPROVED_PUBLISHED',
+            version: 'test-professional-roleplay-v1',
+            authorityRef: 'test-authority:roleplay-v1',
+          },
+          roleplayModelPromptAuthority: async () => ({
+            model: {
+              status: 'CURRENT_APPROVED',
+              modelRef: 'test-model:current',
+              authorityRef: 'test-authority:model-current',
+            },
+            prompt: {
+              status: 'CURRENT_APPROVED',
+              promptVersionRef: 'test-prompt:current',
+              authorityRef: 'test-authority:prompt-current',
+            },
+          }),
+        },
+      });
+      await authorityApp.ready();
+      try {
+        const f = await fixture(`s14-roleplay-${wrongDimension}-output-drift`, authorityApp);
+        await forceSceneNode(f, 'A4003');
+
+        const created = await authorityApp.inject({
+          method: 'POST',
+          url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+          headers: commandHeaders(f.manager.token, `s14-roleplay-${wrongDimension}-create`),
+          payload: {
+            expectedCaseVersion: f.caseVersion,
+            professionalContentVersion: 'test-professional-roleplay-v1',
+          },
+        });
+        expect(created.statusCode, created.body).toBe(201);
+
+        const turn = await authorityApp.inject({
+          method: 'POST',
+          url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+          headers: commandHeaders(f.manager.token, `s14-roleplay-${wrongDimension}-turn`),
+          payload: {
+            expectedCaseVersion: f.caseVersion,
+            expectedSessionRevision: created.json().revision,
+            simulatedChildInput: 'Test current provenance enforcement.',
+          },
+        });
+        expect(turn.statusCode, turn.body).toBe(409);
+        expect(turn.json().code).toBe('PHONE_USE_CONTRACT_PACKAGE_DRIFT');
+
+        const turns = await admin.query(
+          `SELECT count(*)::int AS n FROM roleplay_turns WHERE case_id=$1`,
+          [f.caseId]
+        );
+        expect(turns.rows[0].n).toBe(0);
+      } finally {
+        await authorityApp.close();
+      }
+    }
+  );
+
+  it('A4003 revalidates current Model / Prompt authority between turn and select', async () => {
+    let currentModelRef = 'test-model:v1';
+    let currentPromptVersionRef = 'test-prompt:v1';
+    const adapter: RoleplayAdapter = {
+      adapterRef: 'test:model-prompt-rotation',
+      async isAvailable(context) {
+        expect(context.expectedModelRef).toBe(currentModelRef);
+        expect(context.expectedPromptVersionRef).toBe(currentPromptVersionRef);
+        return true;
+      },
+      async createTurn(input) {
+        expect(input.expectedModelRef).toBe(currentModelRef);
+        expect(input.expectedPromptVersionRef).toBe(currentPromptVersionRef);
+        return {
+          simulatedParentOutput: `simulated-parent:${input.simulatedChildInput}`,
+          adapterRef: 'test:model-prompt-rotation',
+          modelRef: input.expectedModelRef,
+          promptVersionRef: input.expectedPromptVersionRef,
+        };
+      },
+    };
+    const authorityApp = await buildApp({
+      phoneUseContract: {
+        roleplayAdapter: adapter,
+        roleplayProfessionalContent: {
+          status: 'APPROVED_PUBLISHED',
+          version: 'test-professional-roleplay-v1',
+          authorityRef: 'test-authority:roleplay-v1',
+        },
+        roleplayModelPromptAuthority: async () => ({
+          model: {
+            status: 'CURRENT_APPROVED',
+            modelRef: currentModelRef,
+            authorityRef: `test-authority:model:${currentModelRef}`,
+          },
+          prompt: {
+            status: 'CURRENT_APPROVED',
+            promptVersionRef: currentPromptVersionRef,
+            authorityRef: `test-authority:prompt:${currentPromptVersionRef}`,
+          },
+        }),
+      },
+    });
+    await authorityApp.ready();
+    try {
+      const f = await fixture('s14-roleplay-authority-rotation', authorityApp);
+      await forceSceneNode(f, 'A4003');
+
+      const created = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-rotation-create'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          professionalContentVersion: 'test-professional-roleplay-v1',
+        },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+
+      const turnV1 = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-rotation-turn-v1'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          simulatedChildInput: 'Generate under v1.',
+        },
+      });
+      expect(turnV1.statusCode, turnV1.body).toBe(201);
+      expect(turnV1.json()).toMatchObject({
+        modelRef: 'test-model:v1',
+        promptVersionRef: 'test-prompt:v1',
+      });
+
+      currentModelRef = 'test-model:v2';
+      currentPromptVersionRef = 'test-prompt:v2';
+
+      const staleSelect = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/select`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-rotation-select-stale'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          turnId: turnV1.json().id,
+          expectedNodeRevision: 1,
+        },
+      });
+      expect(staleSelect.statusCode, staleSelect.body).toBe(409);
+      expect(staleSelect.json().code).toBe('PHONE_USE_CONTRACT_PACKAGE_DRIFT');
+
+      const afterStale = await admin.query(
+        `SELECT
+           (SELECT status::text FROM scene_node_states
+             WHERE case_id=$1 AND node_code='A4003') AS a4003,
+           (SELECT count(*)::int FROM scene_node_states
+             WHERE case_id=$1 AND node_code='A4004') AS a4004,
+           (SELECT selected_turn_id FROM roleplay_sessions
+             WHERE id=$2) AS selected_turn_id,
+           (SELECT count(*)::int FROM roleplay_turns
+             WHERE session_id=$2) AS turns`,
+        [f.caseId, created.json().id]
+      );
+      expect(afterStale.rows[0]).toEqual({
+        a4003: 'AVAILABLE',
+        a4004: 0,
+        selected_turn_id: null,
+        turns: 1,
+      });
+
+      const turnV2 = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-rotation-turn-v2'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          simulatedChildInput: 'Generate under v2.',
+        },
+      });
+      expect(turnV2.statusCode, turnV2.body).toBe(201);
+      expect(turnV2.json()).toMatchObject({
+        modelRef: 'test-model:v2',
+        promptVersionRef: 'test-prompt:v2',
+      });
+
+      const currentSelect = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/select`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-rotation-select-current'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          turnId: turnV2.json().id,
+          expectedNodeRevision: 1,
+        },
+      });
+      expect(currentSelect.statusCode, currentSelect.body).toBe(200);
+      expect(currentSelect.json().selectedTurn.id).toBe(turnV2.json().id);
+
+      const final = await admin.query(
+        `SELECT
+           (SELECT status::text FROM scene_node_states
+             WHERE case_id=$1 AND node_code='A4003') AS a4003,
+           (SELECT status::text FROM scene_node_states
+             WHERE case_id=$1 AND node_code='A4004') AS a4004,
+           (SELECT count(*)::int FROM roleplay_turns
+             WHERE session_id=$2) AS turns,
+           (SELECT count(*)::int FROM roleplay_turns
+             WHERE session_id=$2
+               AND id=$3
+               AND model_ref='test-model:v1'
+               AND prompt_version_ref='test-prompt:v1') AS historical_v1`,
+        [f.caseId, created.json().id, turnV1.json().id]
+      );
+      expect(final.rows[0]).toEqual({
+        a4003: 'COMPLETED',
+        a4004: 'AVAILABLE',
+        turns: 2,
+        historical_v1: 1,
+      });
+    } finally {
+      await authorityApp.close();
+    }
+  });
+
   it('Slice 14 test-only deterministic A4003 remains SIMULATION and routes through the official Manifest', async () => {
     const adapter: RoleplayAdapter = {
       adapterRef: 'test:deterministic-roleplay-v1',
@@ -2005,6 +2339,18 @@ describe('T1218 Digital Use runtime hardening', () => {
           version: 'test-professional-roleplay-v1',
           authorityRef: 'test-authority:roleplay-v1',
         },
+        roleplayModelPromptAuthority: async () => ({
+          model: {
+            status: 'CURRENT_APPROVED',
+            modelRef: 'test-model',
+            authorityRef: 'test-authority:model-v1',
+          },
+          prompt: {
+            status: 'CURRENT_APPROVED',
+            promptVersionRef: 'test-prompt-v1',
+            authorityRef: 'test-authority:prompt-v1',
+          },
+        }),
       },
     });
     await roleplayApp.ready();

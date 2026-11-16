@@ -139,7 +139,12 @@ async function resolveCurrentRoleplayModelPromptAuthority(
  provider:RoleplayModelPromptAuthorityProvider|undefined
 ):Promise<CurrentRoleplayModelPromptBinding|null>{
  if(provider===undefined) return null;
- const authority=await provider();
+ let authority;
+ try {
+  authority=await provider();
+ } catch {
+  return null;
+ }
  if(
   authority===null
   || authority.model===null
