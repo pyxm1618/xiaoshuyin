@@ -10,9 +10,11 @@ import type pg from 'pg';
 import { getPersonById } from '@xiaoshuyin/domain';
 import { authorize } from '@xiaoshuyin/authorization';
 import { signToken } from '../auth/session-token.js';
+import { isAccountAuthorityEligible } from '../auth/account-authority.js';
 import { getAccountById } from '../auth/binding-account.js';
 import {
   setBindingAttemptContext,
+  setBindingCommitAccountId,
   setBindingGateContext,
   withBindingContextTransaction,
 } from '../db/tx.js';
@@ -98,8 +100,17 @@ export async function exchangeSession(
       });
 
       const person = await getPersonById(tx, attempt.targetPersonId);
-      const account = await getAccountById(tx, attempt.committedAccountId);
-      if (!person || !account || person.account_id !== account.id) {
+      await setBindingCommitAccountId(tx, attempt.committedAccountId);
+      // Hold the Account row through token construction so a concurrent
+      // disable is ordered either before this eligibility check (no session)
+      // or after this exchange (the status transition then invalidates epoch).
+      const account = await getAccountById(tx, attempt.committedAccountId, true);
+      if (
+        !person ||
+        !account ||
+        !isAccountAuthorityEligible(account) ||
+        person.account_id !== account.id
+      ) {
         return { binding: 'NOT_COMPLETED' };
       }
 

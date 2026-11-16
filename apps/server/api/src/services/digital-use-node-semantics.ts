@@ -35,6 +35,7 @@ import {
   recordPurposeScopedConsentDecision,
 } from '@xiaoshuyin/compliance';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
+import { applyPhoneUseContractNodeSemantics } from './digital-use-phone-contract-semantics.js';
 
 export interface DigitalUseNodeSemanticsContext {
   readonly tx: pg.PoolClient;
@@ -59,11 +60,14 @@ export interface DigitalUseNodeSemanticResult {
   readonly completionStatus?: 'COMPLETED' | 'SKIPPED' | 'BLOCKED';
   readonly nextInputRefs?: readonly StoredSceneRef[];
   /** Legal collected-but-insufficient response: retain Evidence, do not route. */
-  readonly progression?: 'ROUTE' | 'HOLD' | 'BLOCKED';
+  readonly progression?: 'ROUTE' | 'HOLD' | 'BLOCKED' | 'COMPLETE_NO_ROUTE';
   readonly holdReasonCode?:
     | 'INTEGRATED_TRIAGE_INSUFFICIENT'
-    | 'APPROVED_INSTRUMENT_UNAVAILABLE';
+    | 'APPROVED_INSTRUMENT_UNAVAILABLE'
+    | 'PHONE_USE_CONTRACT_QUIZ_NOT_PASSED'
+    | 'PHONE_USE_CONTRACT_SUPPORT_RECORDED';
   readonly blockReasonCode?: string;
+  readonly completeReasonCode?: string;
 }
 
 function semanticError(code: string): never {
@@ -962,6 +966,8 @@ async function handle01000(
 export async function applyDigitalUseNodeSemantics(
   context: DigitalUseNodeSemanticsContext
 ): Promise<DigitalUseNodeSemanticResult> {
+  const phoneUse = await applyPhoneUseContractNodeSemantics(context);
+  if (phoneUse !== null) return phoneUse;
   switch (context.nodeCode) {
     case 'A1001':
       return handleA1001(context);

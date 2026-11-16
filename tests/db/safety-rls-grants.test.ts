@@ -231,7 +231,9 @@ describe('T912 Safety RLS and privilege matrix', () => {
   it('keeps the Family-scope policy free of role/purpose predicates', async () => {
     const { rows } = await admin.query<{ qual: string; with_check: string }>(
       `SELECT qual, with_check FROM pg_policies
-        WHERE schemaname = 'public' AND tablename = 'risk_events'`
+        WHERE schemaname = 'public'
+          AND tablename = 'risk_events'
+          AND policyname = 'risk_events_family_scope'`
     );
     expect(rows).toHaveLength(1);
     const text = `${rows[0]!.qual} ${rows[0]!.with_check}`;

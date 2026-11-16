@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
+import { createCase } from '../setup/participation.js';
 import {
   createConsentRequest,
   createFamily,
@@ -139,6 +140,82 @@ describe('Consent Revoke Integration (T058)', () => {
     );
     expect(v2Rows[0].decision).toBe('REVOKED');
     expect(v2Rows[0].supersedes_id).toBe(consent.id);
+  });
+
+  it('AUTH-006: revoke marks only exact Consent-dependent formulations NEEDS_REVIEW', async () => {
+    const actor = await setupManagerAndFamily('auth006-review');
+    const consent = await createAndGrantConsent(actor, 'auth006-review');
+
+    const member = await createMember(app, actor.token, actor.familyId, 'auth006-review', {
+      ageBand: 'UNDER_14',
+      ageBandSource: 'GUARDIAN_RELAY',
+      guardianConsentId: consent.id,
+    });
+    expect(member.statusCode).toBe(201);
+
+    const affectedCase = await createCase(app, actor.token, 'auth006-consent-affected');
+    const unaffectedCase = await createCase(app, actor.token, 'auth006-consent-unaffected');
+    expect(affectedCase.statusCode).toBe(201);
+    expect(unaffectedCase.statusCode).toBe(201);
+
+    for (const [caseId, dependencies] of [
+      [
+        affectedCase.json().id,
+        [{ type: 'CONSENT', id: consent.id, version: consent.version }],
+      ],
+      [unaffectedCase.json().id, []],
+    ] as const) {
+      await queryDb(
+        `INSERT INTO problem_formulations
+           (family_id,case_id,version,status,review_state,primary_problem,key_factors,
+            evidence_refs,unknowns,conflicts,scene_fit,alternative_explanations,
+            reassessment_conditions,exit_conditions,user_response,
+            confirmed_by_person_id,confirmed_at,dependency_refs,supersedes_version)
+         VALUES
+           ($1,$2,1,'CONFIRMED','CURRENT',$3::jsonb,'[]'::jsonb,$4::jsonb,
+            '[]'::jsonb,'[]'::jsonb,'AUTH006','[]'::jsonb,'[]'::jsonb,'[]'::jsonb,
+            $5::jsonb,$6,now(),$7::jsonb,NULL)`,
+        [
+          actor.familyId,
+          caseId,
+          JSON.stringify({ text: 'AUTH-006 consent dependency probe' }),
+          JSON.stringify([{ type: 'ASSERTION', id: '11111111-1111-4111-8111-111111111111' }]),
+          JSON.stringify({
+            kind: 'CONFIRM',
+            actorPersonId: actor.personId,
+            respondedAt: new Date().toISOString(),
+          }),
+          actor.personId,
+          JSON.stringify(dependencies),
+        ]
+      );
+    }
+
+    const revokeRes = await revokeConsent(
+      app,
+      actor.token,
+      'auth006-review',
+      consent.id,
+      { reason: 'AUTH-006 dependency propagation' }
+    );
+    expect(revokeRes.statusCode, revokeRes.body).toBe(200);
+
+    const rows = await queryDb(
+      `SELECT case_id, status::text AS status, review_state::text AS review_state
+         FROM problem_formulations
+        WHERE case_id = ANY($1::uuid[])
+        ORDER BY case_id`,
+      [[affectedCase.json().id, unaffectedCase.json().id]]
+    );
+    const byCase = Object.fromEntries(rows.rows.map((row: any) => [row.case_id, row]));
+    expect(byCase[affectedCase.json().id]).toMatchObject({
+      status: 'CONFIRMED',
+      review_state: 'NEEDS_REVIEW',
+    });
+    expect(byCase[unaffectedCase.json().id]).toMatchObject({
+      status: 'CONFIRMED',
+      review_state: 'CURRENT',
+    });
   });
 
   it('T058: re-consent continues the chain at v3 (not a new v1)', async () => {

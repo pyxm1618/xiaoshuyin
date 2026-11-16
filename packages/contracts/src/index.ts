@@ -5,4 +5,6 @@ export * from './env.js';
 export * from './digital-use-assessment-schemas.js';
 export * from './family-alliance-schemas.js';
 
+export * from './digital-use-phone-use-contract-schemas.js';
+
 export * from './digital-use-review-schemas.js';

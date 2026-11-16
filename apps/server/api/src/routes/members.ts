@@ -219,6 +219,15 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
           // §4.4: establish family context before any family-scoped read/write.
           await setFamilyContext(tx, familyId, personId, 'FAMILY_MANAGEMENT');
 
+          // UNKNOWN is an explicit unresolved age state, not an adult/non-minor
+          // fallback. This formal onboarding endpoint must fail closed without
+          // creating Person / Compliance Profile state until Authority defines
+          // a dedicated UNKNOWN onboarding flow.
+          if (ageBand === 'UNKNOWN') {
+            const ageError = toHttpError('AGE_BAND_UNKNOWN');
+            throw Object.assign(new Error(ageError.message), ageError);
+          }
+
           // Source acceptability check
           const path = ageBand === 'UNDER_14' ? 'MEMBER_CREATE_UNDER_14' : 'MEMBER_CREATE_OTHER';
           const sourceError = checkSourceAcceptability(path, ageBand, ageBandSource);

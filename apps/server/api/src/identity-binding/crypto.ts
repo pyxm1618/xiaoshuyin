@@ -26,6 +26,7 @@ const IDENTITY_LABEL = 'identity-binding:openid-digest:v1';
 const AES_LABEL = 'identity-binding:pending-openid:v1';
 const PAIRING_AEAD_LABEL = 'xiaoshuyin:identity-binding:pairing-aead:v1';
 const PAIRING_NONCE_LABEL = 'xiaoshuyin:identity-binding:pairing-nonce:v1';
+const PAIRING_DECOY_LABEL = 'xiaoshuyin:identity-binding:pairing-decoy:v1';
 const PAIRING_AAD = Buffer.from('xiaoshuyin:identity-binding:pairing-aead:v1', 'utf8');
 
 /**
@@ -124,6 +125,14 @@ export interface PairingChallengeFacts {
   attemptId: string;
   targetPersonId: string;
   invitationParticipationId: string;
+  pairingIssuanceId: string;
+  pairingIssuedAt: Date;
+  pairingExpiresAt: Date;
+}
+
+/** Server-owned issuance facts for an opaque non-resolving decoy. */
+export interface DecoyPairingChallengeFacts {
+  contextId: string;
   pairingIssuanceId: string;
   pairingIssuedAt: Date;
   pairingExpiresAt: Date;
@@ -325,11 +334,34 @@ export function decodePairingChallenge(
 }
 
 /**
- * Same fixed-width, same-alphabet material for hidden business failures. It is
- * a uniformly random 144-byte string: identical length, alphabet and observable
- * structure to a real AEAD envelope, so a valid issuance cannot be told apart
- * from a decoy without the secret.
+ * Deterministic opaque decoy for one persisted issuance. Real and decoy
+ * challenges therefore share the same replay/rotation policy: repeated reads
+ * of one live issuance are byte-stable, while a rotated issuance changes the
+ * observable challenge. The bytes are a keyed PRF output and intentionally do
+ * not form a valid AEAD envelope, so they can never resolve to binding facts.
  */
-export function createDecoyPairingChallenge(): string {
-  return randomBytes(PAIRING_ENVELOPE_BYTES).toString('base64url');
+export function encodeDecoyPairingChallenge(
+  secret: string,
+  facts: DecoyPairingChallengeFacts
+): string {
+  const material = Buffer.alloc(48);
+  uuidToBytes(facts.contextId).copy(material, 0);
+  uuidToBytes(facts.pairingIssuanceId).copy(material, 16);
+  writeTimestamp(material, 32, facts.pairingIssuedAt);
+  writeTimestamp(material, 40, facts.pairingExpiresAt);
+
+  const key = deriveKey(secret, PAIRING_DECOY_LABEL);
+  const chunks: Buffer[] = [];
+  for (let counter = 0; counter < 5; counter += 1) {
+    chunks.push(
+      createHmac('sha256', key)
+        .update(PAIRING_DECOY_LABEL)
+        .update(Buffer.from([counter]))
+        .update(material)
+        .digest()
+    );
+  }
+  return Buffer.concat(chunks)
+    .subarray(0, PAIRING_ENVELOPE_BYTES)
+    .toString('base64url');
 }

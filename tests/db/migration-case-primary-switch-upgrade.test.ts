@@ -100,6 +100,13 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
     'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
     'DIGITAL_USE_NODE_COMPLETED',
+    'PHONE_USE_CONTRACT_DRAFT_SAVED',
+    'PHONE_USE_CONTRACT_CONFIRMED',
+    'PHONE_USE_CONTRACT_ACTIVATED',
+    'PHONE_USE_CONTRACT_SUPERSEDED',
+    'PHONE_USE_ROLEPLAY_RECORDED',
+    'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED',
+    'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -113,9 +120,66 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_RESOLVE_RISK',
     'DIGITAL_USE_ASSESSMENT_RESUME',
     'DIGITAL_USE_NODE_RESPONSE',
+    'PHONE_USE_CONTRACT_DRAFT_SAVE',
+    'PHONE_USE_CONTRACT_CONFIRM',
+    'PHONE_USE_CONTRACT_REVISE',
+    'PHONE_USE_ROLEPLAY_CREATE',
+    'PHONE_USE_ROLEPLAY_TURN',
+    'PHONE_USE_ROLEPLAY_RATE',
+    'PHONE_USE_ROLEPLAY_SELECT',
+    'PROBLEM_FORMULATION_REVIEW_RESOLVE',
   ],
 };
 
+
+const AUTH006_NEW_CONSTRAINTS = [
+  'problem_formulations_review_state_not_null',
+] as const;
+
+const AUTH008_NEW_CONSTRAINTS = [
+  'persons_id_account_key',
+  'staff_assignments_account_id_fkey',
+  'staff_assignments_account_id_not_null',
+  'staff_assignments_authority_identity_key',
+  'staff_assignments_capability_check',
+  'staff_assignments_capability_grant_identity_fk',
+  'staff_assignments_capability_not_null',
+  'staff_assignments_case_family_fk',
+  'staff_assignments_created_at_not_null',
+  'staff_assignments_granted_at_not_null',
+  'staff_assignments_granted_by_account_id_fkey',
+  'staff_assignments_granted_by_account_id_not_null',
+  'staff_assignments_id_not_null',
+  'staff_assignments_identity_fk',
+  'staff_assignments_person_id_not_null',
+  'staff_assignments_pkey',
+  'staff_assignments_revoke_pair_check',
+  'staff_assignments_revoke_time_check',
+  'staff_assignments_revoked_by_account_id_fkey',
+  'staff_assignments_scope_shape_check',
+  'staff_assignments_scope_type_check',
+  'staff_assignments_scope_type_not_null',
+  'staff_assignments_valid_from_not_null',
+  'staff_assignments_validity_window_check',
+].sort();
+
+const AUTH008_NEW_OBJECTS = [
+  'policy:accounts_runtime_safety_resolution_read',
+  'policy:assertions_staff_safety_select',
+  'policy:audit_staff_safety_insert',
+  'policy:case_events_staff_safety_insert',
+  'policy:cases_staff_safety_select',
+  'policy:cases_staff_safety_update',
+  'policy:dialogue_messages_staff_safety_select',
+  'policy:observations_staff_safety_select',
+  'policy:risk_events_staff_safety_insert',
+  'policy:risk_events_staff_safety_select',
+  'policy:staff_assignments_runtime_self_read',
+  'table:staff_assignments',
+  'trigger:accounts_authority_status_serialization',
+  'trigger:staff_assignments_authority_serialization',
+  'trigger:zz_cases_staff_resolve_authority_guard',
+].sort();
 
 /** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
 const SLICE8_NEW_CONSTRAINTS = [
@@ -161,6 +225,7 @@ const SLICE8_NEW_CONSTRAINTS = [
 
 /** Exact Slice 8 object-fingerprint delta. */
 const SLICE8_NEW_OBJECTS = [
+  'enum:problem_formulation_review_state',
   'enum:problem_formulation_status',
   'policy:problem_formulations_insert',
   'policy:problem_formulations_select',
@@ -333,6 +398,116 @@ const SLICE13_NEW_OBJECTS = [
   'policy:digital_use_target_items_family_scope',
   'trigger:digital_use_target_items_insert_guard',
   'trigger:digital_use_target_items_update_guard',
+].sort();
+
+/** Exact Slice 14 Contract/roleplay constraints created by migration 017. */
+const SLICE14_NEW_CONSTRAINTS = [
+  'digital_use_contract_versions_id_not_null',
+  'digital_use_contract_versions_family_id_not_null',
+  'digital_use_contract_versions_case_id_not_null',
+  'digital_use_contract_versions_version_not_null',
+  'digital_use_contract_versions_draft_revision_not_null',
+  'digital_use_contract_versions_status_not_null',
+  'digital_use_contract_versions_adult_party_person_id_not_null',
+  'digital_use_contract_versions_child_party_person_id_not_null',
+  'digital_use_contract_versions_child_participation_id_not_null',
+  'digital_use_contract_versions_contract_purpose_not_null',
+  'digital_use_contract_versions_phone_use_rules_not_null',
+  'digital_use_contract_versions_execution_period_not_null',
+  'digital_use_contract_versions_parent_support_measures_not_null',
+  'digital_use_contract_versions_supervision_measures_not_null',
+  'digital_use_contract_versions_incentives_not_null',
+  'digital_use_contract_versions_breach_responsibilities_not_null',
+  'digital_use_contract_versions_source_template_version_not_null',
+  'digital_use_contract_versions_dependency_refs_not_null',
+  'digital_use_contract_versions_created_by_person_id_not_null',
+  'digital_use_contract_versions_created_at_not_null',
+  'digital_use_contract_versions_updated_at_not_null',
+  'digital_use_contract_versions_pkey',
+  'digital_use_contract_versions_child_participation_id_fkey',
+  'digital_use_contract_versions_case_family_fk',
+  'digital_use_contract_versions_adult_family_fk',
+  'digital_use_contract_versions_child_family_fk',
+  'digital_use_contract_versions_creator_family_fk',
+  'digital_use_contract_versions_id_scope_key',
+  'digital_use_contract_versions_case_version_key',
+  'digital_use_contract_versions_revision_check',
+  'digital_use_contract_versions_status_check',
+  'digital_use_contract_versions_party_check',
+  'digital_use_contract_versions_template_check',
+  'digital_use_contract_versions_terms_shape_check',
+  'digital_use_contract_versions_update_trigger_check',
+  'digital_use_contract_versions_update_reason_check',
+  'digital_use_contract_versions_status_timestamps_check',
+  'digital_use_contract_versions_confirmation_revision_check',
+  'digital_use_contract_versions_confirmation_provenance_check',
+  'digital_use_contract_versions_supersedes_self_check',
+  'digital_use_contract_versions_initial_or_revision_check',
+  'digital_use_contract_versions_supersedes_scope_fk',
+  'roleplay_sessions_id_not_null',
+  'roleplay_sessions_family_id_not_null',
+  'roleplay_sessions_case_id_not_null',
+  'roleplay_sessions_actor_person_id_not_null',
+  'roleplay_sessions_simulation_role_not_null',
+  'roleplay_sessions_status_not_null',
+  'roleplay_sessions_scene_package_version_not_null',
+  'roleplay_sessions_professional_content_version_not_null',
+  'roleplay_sessions_compliance_policy_ref_not_null',
+  'roleplay_sessions_adapter_ref_not_null',
+  'roleplay_sessions_revision_not_null',
+  'roleplay_sessions_created_at_not_null',
+  'roleplay_sessions_pkey',
+  'roleplay_sessions_case_family_fk',
+  'roleplay_sessions_actor_family_fk',
+  'roleplay_sessions_id_scope_key',
+  'roleplay_sessions_status_check',
+  'roleplay_sessions_role_check',
+  'roleplay_sessions_revision_check',
+  'roleplay_sessions_version_refs_check',
+  'roleplay_sessions_completion_shape_check',
+  'roleplay_sessions_selected_turn_fk',
+  'roleplay_turns_id_not_null',
+  'roleplay_turns_family_id_not_null',
+  'roleplay_turns_case_id_not_null',
+  'roleplay_turns_session_id_not_null',
+  'roleplay_turns_round_number_not_null',
+  'roleplay_turns_simulated_child_input_not_null',
+  'roleplay_turns_simulated_parent_output_not_null',
+  'roleplay_turns_provenance_not_null',
+  'roleplay_turns_created_at_not_null',
+  'roleplay_turns_pkey',
+  'roleplay_turns_session_scope_fk',
+  'roleplay_turns_id_session_key',
+  'roleplay_turns_round_key',
+  'roleplay_turns_round_check',
+  'roleplay_turns_provenance_check',
+  'roleplay_turns_input_check',
+  'roleplay_turns_output_check',
+  'roleplay_turns_rating_check',
+].sort();
+
+const SLICE14_NEW_OBJECTS = [
+  'table:digital_use_contract_versions',
+  'table:roleplay_sessions',
+  'table:roleplay_turns',
+  'policy:digital_use_contract_versions_scope',
+  'policy:roleplay_sessions_scope',
+  'policy:roleplay_turns_scope',
+  'trigger:digital_use_contract_versions_guard',
+].sort();
+
+
+/** Foundation Remediation 1 schema delta created by migration 018. */
+const FOUNDATION_REM1_NEW_CONSTRAINTS = [
+  'schema_migrations_checksum_state_check',
+].sort();
+
+const FOUNDATION_REM1_NEW_OBJECTS = [
+  'policy:accounts_migrator_all',
+  'policy:accounts_runtime_read',
+  'policy:accounts_runtime_insert',
+  'policy:accounts_runtime_self_update',
+  'policy:accounts_binding_lock',
 ].sort();
 
 
@@ -513,7 +688,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 11 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 16 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -610,6 +785,10 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...CONSENT_OWNER_NEW_CONSTRAINTS,
         ...SLICE12_NEW_CONSTRAINTS,
         ...SLICE13_NEW_CONSTRAINTS,
+        ...SLICE14_NEW_CONSTRAINTS,
+        ...FOUNDATION_REM1_NEW_CONSTRAINTS,
+        ...AUTH006_NEW_CONSTRAINTS,
+        ...AUTH008_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -643,6 +822,10 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...CONSENT_OWNER_NEW_OBJECTS,
       ...SLICE12_NEW_OBJECTS,
       ...SLICE13_NEW_OBJECTS,
+      ...SLICE14_NEW_OBJECTS,
+      ...FOUNDATION_REM1_NEW_OBJECTS,
+      ...AUTH008_NEW_OBJECTS,
+      'trigger:accounts_status_invalidates_sessions',
     ].sort());
 
     // Column-level UPDATE grant, never table-level.
@@ -670,7 +853,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 18 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 23 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -693,7 +876,12 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '014_consent_01004_cross_purpose_supersede_guard.sql',
       '015_digital_use_assessment_runtime.sql',
       '016_digital_use_family_alliance_runtime.sql',
-      '018_digital_use_review_runtime.sql',
+      '017_digital_use_phone_use_contract_runtime.sql',
+      '018_foundation_database_integrity_1.sql',
+      '019_auth_disabled_hard_disable.sql',
+      '020_problem_formulation_review_state.sql',
+      '021_safety_resolver_staff_authority.sql',
+      '022_digital_use_review_runtime.sql',
     ]);
   }, 180_000);
 });

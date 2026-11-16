@@ -93,6 +93,23 @@ const ERROR_MAP: Record<string, number> = {
   APPROVED_INSTRUMENT_UNAVAILABLE: 409,
   DOWNSTREAM_RUNTIME_UNAVAILABLE: 409,
   COMPLIANCE_BLOCKED: 409,
+  // Slice 14 — bounded phone-use Contract / Roleplay runtime.
+  PHONE_USE_CONTRACT_NOT_FOUND: 404,
+  PHONE_USE_CONTRACT_UNAUTHORIZED: 403,
+  PHONE_USE_CONTRACT_INVALID_PAYLOAD: 422,
+  PHONE_USE_CONTRACT_QUIZ_NOT_PASSED: 409,
+  PHONE_USE_CONTRACT_MISSING_CONFIRMATION: 409,
+  PHONE_USE_CONTRACT_INVALID_CONFIRMATION_SOURCE: 403,
+  PHONE_USE_CONTRACT_STALE_REVISION: 409,
+  PHONE_USE_CONTRACT_CONTENT_STALE: 409,
+  PHONE_USE_CONTRACT_ILLEGAL_ENTRY: 409,
+  PHONE_USE_CONTRACT_CONSENT_BLOCKED: 409,
+  PHONE_USE_CONTRACT_COMPLIANCE_BLOCKED: 409,
+  PHONE_USE_CONTRACT_SAFETY_BLOCKED: 409,
+  PHONE_USE_CONTRACT_PACKAGE_DRIFT: 409,
+  DOWNSTREAM_AI_UNAVAILABLE: 409,
+  PHONE_USE_ROLEPLAY_DOWNSTREAM_UNAVAILABLE: 409,
+  PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE: 409,
   // Slice 006 identity binding.
   WECHAT_AUTH_FAILED: 401,
   BINDING_CONTEXT_INVALID: 401,
@@ -170,6 +187,14 @@ export function errorHandler(err: Error, req: FastifyRequest, reply: FastifyRepl
     '/api/v1/participations/:id/withdraw',
     '/api/v1/cases/:id/assessments',
     '/api/v1/cases/:id/scene/nodes/:nodeCode/responses',
+    '/api/v1/cases/:id/digital-use/contract/drafts',
+    '/api/v1/cases/:id/digital-use/contract/drafts/:version',
+    '/api/v1/cases/:id/digital-use/contract/:version/confirm',
+    '/api/v1/cases/:id/digital-use/contract/:version/revise',
+    '/api/v1/cases/:id/digital-use/roleplays',
+    '/api/v1/cases/:id/digital-use/roleplays/:sessionId/turns',
+    '/api/v1/cases/:id/digital-use/roleplays/:sessionId/rate',
+    '/api/v1/cases/:id/digital-use/roleplays/:sessionId/select',
   ]);
   const isStrictCreateCommand =
     req.method === 'POST' && strictJsonCommands.has(routeUrl);

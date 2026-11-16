@@ -39,9 +39,26 @@ export interface SceneArtifactRow {
   family_id: string;
   case_id: string;
   scene_package_version: string;
-  artifact_type: 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY' | 'FAMILY_ALLIANCE_SELF_ASSESSMENT' | 'DIGITAL_USE_A5001_EFFECT_EVALUATION';
+  artifact_type:
+    | 'SUPPLEMENTAL_ASSESSMENT_BOUNDARY' | 'TIMELINE' | 'SOLUTION_SUMMARY'
+    | 'FAMILY_ALLIANCE_SELF_ASSESSMENT'
+    | 'PHONE_USE_CONTRACT_QUIZ_ATTEMPT'
+    | 'PHONE_USE_ROLEPLAY_SELECTION'
+    | 'PHONE_USE_CONTRACT_TOOL_SELECTION'
+    | 'PHONE_USE_DURATION_COMPONENT'
+    | 'PHONE_USE_SUPERVISION_COMPONENT'
+    | 'PHONE_USE_SUPERVISION_LOG'
+    | 'PHONE_USE_INCENTIVE_COMPONENT'
+    | 'PHONE_USE_BREACH_COMPONENT'
+    | 'PARENT_SELF_REGULATION_CHECKLIST'
+    | 'PHONE_USE_CONTRACT_DOCUMENT'
+    | 'PHONE_USE_CONTRACT_SUPPORT_LOG'
+    | 'DIGITAL_USE_A5001_EFFECT_EVALUATION';
   schema_version: string;
-  source_node_code: '01000' | 'A2007' | 'A2010' | 'A3000' | 'A5001';
+  source_node_code:
+    | '01000' | 'A2007' | 'A2010' | 'A3000'
+    | 'A4001' | 'A4003' | 'A4004' | 'A4005' | 'A4006' | 'A4007' | 'A4008'
+    | 'A4009' | 'A4010' | 'A4011' | 'A4012' | 'A5001';
   data: Record<string, unknown>;
   owner_person_id: string;
   visibility: 'FAMILY_AUTHORIZED';
@@ -414,6 +431,83 @@ export async function insertSceneArtifact(
   const row = rows[0];
   if (!row) throw new Error('SCENE_ARTIFACT_INSERT_RETURNED_NO_ROW');
   return row;
+}
+
+export type SceneArtifactRefCurrentness =
+  | { status: 'MISSING_OR_OUT_OF_SCOPE' }
+  | {
+      status: 'CURRENT';
+      artifactId: string;
+      revision: number;
+    }
+  | {
+      status: 'SUPERSEDED';
+      artifactId: string;
+      revision: number;
+      successorId: string;
+    };
+
+/**
+ * Resolve whether one exact Scene Artifact id is still the authoritative
+ * current revision for the supplied Family + Case scope.
+ *
+ * Currentness is owned by the append-only supersession graph: an artifact is
+ * CURRENT iff the exact scoped row is visible and no successor references its
+ * id through `supersedes_id`. The query intentionally does not use
+ * `created_at`, "latest" ordering, or artifact_type as authority.
+ *
+ * RLS remains active. A missing row, a cross-Family row hidden by RLS, and an
+ * exact id presented under the wrong Family/Case scope are all reported as
+ * MISSING_OR_OUT_OF_SCOPE rather than weakening isolation to classify them.
+ *
+ * Concurrency contract: this is a read-only point-in-time observation inside
+ * the caller-owned transaction and takes no lock. Under READ COMMITTED, a
+ * successor that commits after this statement can make a CURRENT result stale.
+ * Consumers that require currentness to remain true across a later write must
+ * compose this read with their own existing authoritative serialization
+ * boundary and revalidation discipline. Merely calling this function in the
+ * same transaction does not, by itself, close that TOCTOU window.
+ */
+export async function resolveSceneArtifactRefCurrentness(
+  tx: Tx,
+  input: {
+    artifactId: string;
+    familyId: string;
+    caseId: string;
+  }
+): Promise<SceneArtifactRefCurrentness> {
+  const { rows } = await tx.query<{
+    id: string;
+    revision: number;
+    successor_id: string | null;
+  }>(
+    `SELECT artifact.id, artifact.revision, successor.id AS successor_id
+       FROM scene_artifacts artifact
+       LEFT JOIN scene_artifacts successor
+         ON successor.supersedes_id = artifact.id
+        AND successor.family_id = artifact.family_id
+        AND successor.case_id = artifact.case_id
+      WHERE artifact.id = $1
+        AND artifact.family_id = $2
+        AND artifact.case_id = $3`,
+    [input.artifactId, input.familyId, input.caseId]
+  );
+
+  const row = rows[0];
+  if (!row) return { status: 'MISSING_OR_OUT_OF_SCOPE' };
+  if (row.successor_id !== null) {
+    return {
+      status: 'SUPERSEDED',
+      artifactId: row.id,
+      revision: row.revision,
+      successorId: row.successor_id,
+    };
+  }
+  return {
+    status: 'CURRENT',
+    artifactId: row.id,
+    revision: row.revision,
+  };
 }
 
 async function resolveOneRef(

@@ -26,6 +26,7 @@ export async function findAccountByOpenid(
   openid: string,
   forUpdate = false
 ): Promise<AccountRow | null> {
+  await tx.query('SELECT app.set_account_openid_context($1)', [openid]);
   const { rows } = await tx.query(
     `SELECT id, session_epoch, status FROM accounts WHERE wechat_openid = $1${
       forUpdate ? ' FOR UPDATE' : ''
@@ -37,10 +38,13 @@ export async function findAccountByOpenid(
 
 export async function getAccountById(
   tx: pg.PoolClient,
-  accountId: string
+  accountId: string,
+  forUpdate = false
 ): Promise<AccountRow | null> {
   const { rows } = await tx.query(
-    'SELECT id, session_epoch, status FROM accounts WHERE id = $1',
+    `SELECT id, session_epoch, status FROM accounts WHERE id = $1${
+      forUpdate ? ' FOR UPDATE' : ''
+    }`,
     [accountId]
   );
   return rows[0] ? mapRow(rows[0]) : null;
@@ -54,6 +58,7 @@ export async function createOrReuseAccount(
   tx: pg.PoolClient,
   openid: string
 ): Promise<{ account: AccountRow; inserted: boolean }> {
+  await tx.query('SELECT app.set_account_openid_context($1)', [openid]);
   const inserted = await tx.query(
     `INSERT INTO accounts (wechat_openid, session_epoch)
      VALUES ($1, 0)

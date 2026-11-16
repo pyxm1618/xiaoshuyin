@@ -31,6 +31,8 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   'PROBLEM_FORMULATION_DISPUTE',
   'PROBLEM_FORMULATION_CORRECT',
   'CASE_REASSESS_FROM_FORMULATION',
+  // AUTH-006 — the single authoritative Problem Formulation review resolution.
+  'PROBLEM_FORMULATION_REVIEW_RESOLVE',
   // Slice 9 — Safety control foundation. Same store, same canonical hashing and
   // the modern bytea exact-key representation; no second idempotency system.
   'CASE_ENTER_SAFETY_HOLD',
@@ -40,6 +42,14 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   // ASSESSMENT resume and node response need new command identities.
   'DIGITAL_USE_ASSESSMENT_RESUME',
   'DIGITAL_USE_NODE_RESPONSE',
+  // Slice 14 — same shared store; bounded Contract/roleplay commands only.
+  'PHONE_USE_CONTRACT_DRAFT_SAVE',
+  'PHONE_USE_CONTRACT_CONFIRM',
+  'PHONE_USE_CONTRACT_REVISE',
+  'PHONE_USE_ROLEPLAY_CREATE',
+  'PHONE_USE_ROLEPLAY_TURN',
+  'PHONE_USE_ROLEPLAY_RATE',
+  'PHONE_USE_ROLEPLAY_SELECT',
 ] as const;
 
 export type IdempotencyCommandType = (typeof IDEMPOTENCY_COMMAND_TYPES)[number];

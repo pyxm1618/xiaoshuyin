@@ -1,9 +1,9 @@
--- Slice 15 / A5001 only.
+-- Slice 15 / bounded Digital Use review runtime.
 -- Extend the authoritative Scene Artifact vocabulary without creating
 -- a second Review owner/table.
 --
--- Migration slot 017 is reserved by a parallel upstream branch. 018 avoids
--- that collision while preserving the then-current authoritative constraints.
+-- Migration slot 022 follows the authoritative main migration head (021)
+-- and preserves all previously merged constraints additively.
 BEGIN;
 
 DO $$

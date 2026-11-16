@@ -1,6 +1,6 @@
 /**
  * RLS tests: verify RLS policies, context functions, and default deny.
- * T063: RLS evidence — no GUC, identity context, family isolation, accounts no RLS, pool no leak.
+ * T063: RLS evidence — no GUC, identity context, family isolation, accounts RLS, pool no leak.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('26 tables have ENABLE + FORCE RLS, accounts does not', async () => {    const { rows } = await client.query(`
+  it('all 31 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -32,27 +32,29 @@ describe('RLS', () => {
     const rlsTables = rows.filter((r: any) => r.relrowsecurity);
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
-    // Prior reviewed owners plus Slice 12 Scene tables and Slice 13 target items.
-    expect(rlsTables.length).toBe(26);
-    expect(noRlsTables.map((r: any) => r.relname)).toContain('accounts');
+    // Prior reviewed owners plus Slice 12 Scene, Slice 13 target items, and Slice 14 Contract/roleplay tables.
+    expect(rlsTables.length).toBe(31);
+    expect(noRlsTables).toEqual([]);
 
     for (const t of rlsTables) {
       expect(t.relforcerowsecurity, `${t.relname} FORCE`).toBe(true);
     }
   });
 
-  it('57 policies exist after Slice 13 adds the target-item family-scope policy', async () => {
+  it('76 policies exist after exact-Case Staff authority remediation', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(57);
+    expect(rows.length).toBe(76);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
     const { rows } = await client.query(
       `SELECT tablename, policyname, qual, with_check
        FROM pg_policies
-       WHERE schemaname = 'public' AND tablename IN ('cases', 'case_events')
+       WHERE schemaname = 'public'
+         AND tablename IN ('cases', 'case_events')
+         AND policyname IN ('cases_family_scope', 'case_events_family_scope')
        ORDER BY tablename`
     );
     expect(rows.map((r: any) => r.policyname)).toEqual([
@@ -155,7 +157,7 @@ describe('RLS', () => {
 
       await setupClient.query('BEGIN');
 
-      // Insert accounts (accounts has no RLS)
+      // Insert accounts through the migrator authority.
       await setupClient.query(`INSERT INTO accounts (id, wechat_openid) VALUES ($1, $2), ($3, $4)`, [accAId, `rls_fama_${ts}`, accBId, `rls_famb_${ts}`]);
 
       // Insert person A (set context to match)

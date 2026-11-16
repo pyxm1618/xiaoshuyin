@@ -11,7 +11,6 @@ import {
   runSafetyPrecheck,
   type ApprovedPolicyIdentity,
 } from '../../packages/domain/src/safety/index.js';
-import { createVerifiedTestSafetyResolutionAuthoritySource } from '../setup/safety-resolver.js';
 import { createAdminPool } from '../setup/db.js';
 import { createSafetyFixture, type SafetyFixture } from '../setup/safety.js';
 
@@ -32,6 +31,7 @@ describe('T915 Safety atomicity', () => {
   let fixture: SafetyFixture;
   let admin: pg.Pool;
   let owner: { token: string; accountId: string; personId: string };
+  let familyId: string;
   const injected: Array<{ table: string; name: string }> = [];
 
   beforeAll(async () => {
@@ -40,7 +40,7 @@ describe('T915 Safety atomicity', () => {
     admin = createAdminPool();
     fixture = createSafetyFixture({ app, admin, prefix: PREFIX });
     owner = await fixture.login('owner');
-    await fixture.createFamily(owner, 'main');
+    familyId = await fixture.createFamily(owner, 'main');
   });
 
   afterEach(async () => {
@@ -52,6 +52,7 @@ describe('T915 Safety atomicity', () => {
   });
 
   afterAll(async () => {
+    await admin.query('DELETE FROM staff_assignments WHERE account_id = $1', [owner.accountId]);
     await fixture.cleanup();
     await fixture.close();
     await admin.end();
@@ -67,6 +68,23 @@ describe('T915 Safety atomicity', () => {
       `CREATE TRIGGER ${name} BEFORE ${event} ON ${table} FOR EACH ROW EXECUTE FUNCTION ${name}()`
     );
     injected.push({ table, name });
+  }
+
+  async function seedResolver(caseId: string): Promise<void> {
+    const grant = await admin.query<{ id: string }>(
+      `INSERT INTO staff_assignments
+         (account_id, person_id, capability, scope_type, granted_by_account_id)
+       VALUES ($1, $2, 'SAFETY_RESOLVE', 'GLOBAL', $1)
+       RETURNING id`,
+      [owner.accountId, owner.personId]
+    );
+    await admin.query(
+      `INSERT INTO staff_assignments
+         (account_id, person_id, capability, scope_type,
+          family_id, case_id, capability_grant_id, granted_by_account_id)
+       VALUES ($1, $2, 'SAFETY_RESOLVE', 'CASE', $3, $4, $5, $1)`,
+      [owner.accountId, owner.personId, familyId, caseId, grant.rows[0]!.id]
+    );
   }
 
   async function snapshot(caseId: string) {
@@ -154,6 +172,7 @@ describe('T915 Safety atomicity', () => {
     });
     expect(message.statusCode).toBe(201);
     const before = await snapshot(created.id);
+    await seedResolver(created.id);
 
     await injectOn('risk_events', 'INSERT', 'e');
     await expect(
@@ -164,7 +183,7 @@ describe('T915 Safety atomicity', () => {
         idempotencyKey: nextKey('resolve-fail'),
         expectedCaseVersion: held.version,
         reviewEvidenceRefs: [{ kind: 'MESSAGE', ref: message.json().id }],
-        authoritySource: createVerifiedTestSafetyResolutionAuthoritySource(),
+        trustedPolicyIdentity: IDENTITY,
       })
     ).rejects.toBeTruthy();
 

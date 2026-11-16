@@ -124,9 +124,18 @@ describe('supersedes invariants (T021)', () => {
     for (const kind of ['ASSERTION', 'OBSERVATION'] as const) {
       const result = evidence.validateSupersedes({
         kind,
+        evidenceKind: kind === 'ASSERTION' ? 'STATEMENT' : 'screen_time',
+        subjectPersonId: 'person-1',
+        sourceKind: 'SELF_STATEMENT',
+        sourcePersonId: 'person-1',
         newId: 'new-1',
         supersedesId: 'old-1',
-        target: { id: 'old-1', kind, familyId: FAMILY, caseId: CASE },
+        target: {
+          id: 'old-1', kind,
+          evidenceKind: kind === 'ASSERTION' ? 'STATEMENT' : 'screen_time',
+          familyId: FAMILY, caseId: CASE,
+          subjectPersonId: 'person-1', sourceKind: 'SELF_STATEMENT', sourcePersonId: 'person-1',
+        },
         familyId: FAMILY,
         caseId: CASE,
       });
@@ -138,6 +147,10 @@ describe('supersedes invariants (T021)', () => {
     expect(
       evidence.validateSupersedes({
         kind: 'ASSERTION',
+        evidenceKind: 'STATEMENT',
+        subjectPersonId: 'person-1',
+        sourceKind: 'SELF_STATEMENT',
+        sourcePersonId: 'person-1',
         newId: 'new-1',
         supersedesId: null,
         target: null,
@@ -150,9 +163,22 @@ describe('supersedes invariants (T021)', () => {
   it('rejects self-reference, missing target, wrong kind and cross-scope', () => {
     const base = {
       kind: 'ASSERTION' as const,
+      evidenceKind: 'STATEMENT',
+      subjectPersonId: 'person-1',
+      sourceKind: 'SELF_STATEMENT' as const,
+      sourcePersonId: 'person-1',
       newId: 'new-1',
       supersedesId: 'old-1',
-      target: { id: 'old-1', kind: 'ASSERTION' as const, familyId: FAMILY, caseId: CASE },
+      target: {
+        id: 'old-1',
+        kind: 'ASSERTION' as const,
+        evidenceKind: 'STATEMENT',
+        familyId: FAMILY,
+        caseId: CASE,
+        subjectPersonId: 'person-1',
+        sourceKind: 'SELF_STATEMENT' as const,
+        sourcePersonId: 'person-1',
+      },
       familyId: FAMILY,
       caseId: CASE,
     };
@@ -174,6 +200,30 @@ describe('supersedes invariants (T021)', () => {
       evidence.validateSupersedes({
         ...base,
         target: { ...base.target, caseId: 'case-2' },
+      }).ok
+    ).toBe(false);
+    expect(
+      evidence.validateSupersedes({
+        ...base,
+        target: { ...base.target, sourcePersonId: 'person-2' },
+      }).ok
+    ).toBe(false);
+    expect(
+      evidence.validateSupersedes({
+        ...base,
+        target: { ...base.target, sourceKind: 'OTHER_MEMBER_RELAY' },
+      }).ok
+    ).toBe(false);
+    expect(
+      evidence.validateSupersedes({
+        ...base,
+        target: { ...base.target, subjectPersonId: 'person-2' },
+      }).ok
+    ).toBe(false);
+    expect(
+      evidence.validateSupersedes({
+        ...base,
+        target: { ...base.target, evidenceKind: 'HYPOTHESIS' },
       }).ok
     ).toBe(false);
   });

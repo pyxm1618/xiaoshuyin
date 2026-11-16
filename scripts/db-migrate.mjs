@@ -1,110 +1,282 @@
 #!/usr/bin/env node
 /**
- * db-migrate.mjs — Reviewed migration executor for Xiaoshuyin.
+ * Apply db/migrations/*.sql in lexical order.
  *
- * Connects as the migrator role (MIGRATION_DATABASE_URL),
- * applies db/migrations/*.sql in filename order,
- * records applied migrations in schema_migrations,
- * and verifies the app role has no DDL permissions.
- *
- * NEVER uses drizzle-kit push.
+ * Migration integrity:
+ * - Fresh databases record SHA-256 for every migration at first application.
+ * - Legacy filename-only databases transition when the forward migration adds
+ *   checksum metadata; pre-existing rows are bound once to the repository bytes
+ *   visible at that transition and marked LEGACY_BASELINE.
+ * - Once checksum-bound, same-filename content drift fails closed before any
+ *   later migration is applied.
  */
 
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import pg from 'pg';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const MIGRATIONS_DIR = join(ROOT, 'db', 'migrations');
+const CHECKSUM_RE = /^[0-9a-f]{64}$/;
+const MIGRATION_LOCK_KEY_1 = 20261114;
+const MIGRATION_LOCK_KEY_2 = 1;
+
+function sha256(bytes) {
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
+async function checksumMetadataAvailable(client) {
+  const { rows } = await client.query(`
+    SELECT count(*)::int AS n
+      FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'schema_migrations'
+       AND column_name IN ('content_checksum', 'checksum_origin', 'checksum_bound_at')
+  `);
+  return rows[0]?.n === 3;
+}
+
+function migrationFiles() {
+  return readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith('.sql'))
+    .sort()
+    .map((filename) => {
+      const bytes = readFileSync(join(MIGRATIONS_DIR, filename));
+      return { filename, sql: bytes.toString('utf8'), checksum: sha256(bytes) };
+    });
+}
+
+async function readApplied(client, hasChecksums) {
+  if (!hasChecksums) {
+    const { rows } = await client.query(
+      'SELECT filename FROM schema_migrations ORDER BY filename'
+    );
+    return rows.map((row) => ({
+      filename: row.filename,
+      content_checksum: null,
+      checksum_origin: null,
+      checksum_bound_at: null,
+    }));
+  }
+
+  const { rows } = await client.query(`
+    SELECT filename, content_checksum, checksum_origin, checksum_bound_at
+      FROM schema_migrations
+     ORDER BY filename
+  `);
+  return rows;
+}
+
+function validateRecordedFilesPresent(rows, byName) {
+  for (const row of rows) {
+    if (!byName.has(row.filename)) {
+      throw new Error(`MIGRATION_FILE_MISSING ${row.filename}`);
+    }
+  }
+}
+
+async function validateBoundMigrations(client, byName) {
+  const rows = await readApplied(client, true);
+  const legacy = [];
+
+  for (const row of rows) {
+    const current = byName.get(row.filename);
+    if (!current) {
+      throw new Error(`MIGRATION_FILE_MISSING ${row.filename}`);
+    }
+
+    if (row.content_checksum === null) {
+      if (row.checksum_origin !== null || row.checksum_bound_at !== null) {
+        throw new Error(`MIGRATION_CHECKSUM_METADATA_INVALID ${row.filename}`);
+      }
+      legacy.push(row.filename);
+      continue;
+    }
+
+    if (
+      !CHECKSUM_RE.test(row.content_checksum) ||
+      !['APPLIED', 'LEGACY_BASELINE'].includes(row.checksum_origin) ||
+      row.checksum_bound_at === null
+    ) {
+      throw new Error(`MIGRATION_CHECKSUM_METADATA_INVALID ${row.filename}`);
+    }
+
+    if (row.content_checksum !== current.checksum) {
+      throw new Error(`MIGRATION_CHECKSUM_MISMATCH ${row.filename}`);
+    }
+  }
+
+  return legacy;
+}
+
+async function bindLegacyRowsInCurrentTransaction(client, filenames, byName) {
+  for (const filename of filenames) {
+    const current = byName.get(filename);
+    if (!current) {
+      throw new Error(`MIGRATION_FILE_MISSING ${filename}`);
+    }
+    const result = await client.query(
+      `UPDATE schema_migrations
+          SET content_checksum = $2,
+              checksum_origin = 'LEGACY_BASELINE',
+              checksum_bound_at = now()
+        WHERE filename = $1
+          AND content_checksum IS NULL
+          AND checksum_origin IS NULL
+          AND checksum_bound_at IS NULL`,
+      [filename, current.checksum]
+    );
+    if (result.rowCount !== 1) {
+      throw new Error(`MIGRATION_LEGACY_BASELINE_RACE ${filename}`);
+    }
+    console.log(`BASELINE ${filename} sha256:${current.checksum}`);
+  }
+}
+
+async function bindLegacyRows(client, filenames, byName) {
+  if (filenames.length === 0) return;
+
+  await client.query('BEGIN');
+  try {
+    await bindLegacyRowsInCurrentTransaction(client, filenames, byName);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  }
+}
 
 async function main() {
-  const connectionString = process.env['MIGRATION_DATABASE_URL'];
-  if (!connectionString) {
+  const url = process.env.MIGRATION_DATABASE_URL;
+  if (!url) {
     console.error('MIGRATION_DATABASE_URL is required');
     process.exit(1);
   }
 
-  const client = new pg.Client({ connectionString });
+  const client = new pg.Client({ connectionString: url });
   await client.connect();
 
   try {
-    // Ensure schema_migrations table exists
+    // Serialize migration runners for this database. One runner can execute
+    // multiple migration transactions, and recovery of pre-existing NULL
+    // checksum rows may use a separate transaction, so a session-level advisory
+    // lock is the minimum primitive that prevents duplicate apply / baseline
+    // races without creating a second migration framework.
+    await client.query('SELECT pg_advisory_lock($1, $2)', [
+      MIGRATION_LOCK_KEY_1,
+      MIGRATION_LOCK_KEY_2,
+    ]);
+
+    // Fresh databases start checksum-capable. Existing filename-only tables are
+    // not rewritten here: migration 018 establishes the forward transition.
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
-        filename   text PRIMARY KEY,
-        applied_at timestamptz NOT NULL DEFAULT now()
+        filename           text PRIMARY KEY,
+        applied_at         timestamptz NOT NULL DEFAULT now(),
+        content_checksum   text,
+        checksum_origin    text,
+        checksum_bound_at  timestamptz
       )
     `);
 
-    // Get list of migration files
-    let files;
-    try {
-      files = readdirSync(MIGRATIONS_DIR)
-        .filter((f) => f.endsWith('.sql'))
-        .sort();
-    } catch {
-      console.log('No migrations directory found, nothing to apply.');
-      return;
+    const migrations = migrationFiles();
+    const byName = new Map(migrations.map((m) => [m.filename, m]));
+
+    let hasChecksums = await checksumMetadataAvailable(client);
+    const initialRows = await readApplied(client, hasChecksums);
+    // Missing recorded files are integrity failures even on a legacy database
+    // that has not reached migration 018 yet. Fail before executing ANY new SQL.
+    validateRecordedFilesPresent(initialRows, byName);
+    const applied = new Set(initialRows.map((row) => row.filename));
+
+    if (hasChecksums) {
+      const legacy = await validateBoundMigrations(client, byName);
+      await bindLegacyRows(client, legacy, byName);
     }
 
-    if (files.length === 0) {
-      console.log('No migration files found, nothing to apply.');
-      return;
-    }
+    let appliedCount = 0;
 
-    // Get already-applied migrations
-    const { rows: applied } = await client.query(
-      'SELECT filename FROM schema_migrations'
-    );
-    const appliedSet = new Set(applied.map((r) => r.filename));
-
-    let newCount = 0;
-    for (const file of files) {
-      if (appliedSet.has(file)) {
-        console.log(`  SKIP ${file} (already applied)`);
+    for (const migration of migrations) {
+      if (applied.has(migration.filename)) {
+        console.log(`  SKIP ${migration.filename} (already applied)`);
         continue;
       }
 
-      const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
-      console.log(`  APPLY ${file}`);
-
+      console.log(`  APPLY ${migration.filename}`);
       await client.query('BEGIN');
+      let metadataAfterApply = hasChecksums;
       try {
-        await client.query(sql);
-        await client.query(
-          'INSERT INTO schema_migrations (filename) VALUES ($1)',
-          [file]
-        );
+        await client.query(migration.sql);
+        metadataAfterApply = await checksumMetadataAvailable(client);
+
+        if (metadataAfterApply) {
+          await client.query(
+            `INSERT INTO schema_migrations
+               (filename, content_checksum, checksum_origin, checksum_bound_at)
+             VALUES ($1, $2, 'APPLIED', now())`,
+            [migration.filename, migration.checksum]
+          );
+
+          // The migration that first establishes checksum metadata is the exact
+          // legacy transition point. Bind every older filename-only row inside
+          // THIS SAME transaction so metadata + LEGACY_BASELINE become visible
+          // atomically, or roll back together on any failure.
+          if (!hasChecksums) {
+            await bindLegacyRowsInCurrentTransaction(client, [...applied], byName);
+          }
+        } else {
+          await client.query(
+            'INSERT INTO schema_migrations (filename) VALUES ($1)',
+            [migration.filename]
+          );
+        }
+
         await client.query('COMMIT');
-        newCount++;
       } catch (err) {
         await client.query('ROLLBACK');
-        console.error(`  FAIL ${file}: ${err.message}`);
+        console.error(`  FAIL ${migration.filename}: ${err.message}`);
+        throw err;
+      }
+
+      applied.add(migration.filename);
+      appliedCount++;
+
+      if (!hasChecksums && metadataAfterApply) {
+        hasChecksums = true;
+      }
+    }
+
+    if (!hasChecksums) {
+      throw new Error('MIGRATION_CHECKSUM_METADATA_NOT_ESTABLISHED');
+    }
+
+    const trailingLegacy = await validateBoundMigrations(client, byName);
+    await bindLegacyRows(client, trailingLegacy, byName);
+
+    try {
+      const { rows } = await client.query(
+        `SELECT has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') AS can_create`
+      );
+      if (rows[0]?.can_create) {
+        throw new Error(
+          'xiaoshuyin_app has CREATE on public schema; run db/init/01-roles.sh to revoke it'
+        );
+      }
+      console.log('Verified: app role has no DDL permissions.');
+    } catch (err) {
+      if (err.code === '42704') {
+        console.warn('WARN xiaoshuyin_app role not found; run db/init/01-roles.sh first');
+      } else {
         throw err;
       }
     }
 
-    console.log(`\nMigration complete: ${newCount} new, ${appliedSet.size} previously applied.`);
-
-    // Verify app role has no DDL permissions
-    await verifyAppRoleNoDdl(client);
+    console.log(
+      `\nMigration complete: ${appliedCount} new, ${migrations.length - appliedCount} previously applied.`
+    );
   } finally {
     await client.end();
-  }
-}
-
-async function verifyAppRoleNoDdl(client) {
-  const { rows } = await client.query(`
-    SELECT
-      has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') as can_create_in_schema
-  `);
-
-  const r = rows[0];
-  if (r.can_create_in_schema) {
-    console.error('WARNING: app role has schema CREATE permission it should not have');
-    process.exit(1);
-  } else {
-    console.log('Verified: app role has no DDL permissions.');
   }
 }
 

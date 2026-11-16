@@ -15,6 +15,7 @@ import { registerMessageRoutes } from './routes/messages.js';
 import { registerParticipationRoutes } from './routes/participations.js';
 import { registerProblemFormulationRoutes } from './routes/problem-formulations.js';
 import { registerDigitalUseAssessmentRoutes } from './routes/digital-use-assessment.js';
+import { registerDigitalUsePhoneContractRoutes } from './routes/digital-use-phone-contract.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
 import {
   createWechatProvider,
@@ -24,6 +25,7 @@ import {
 import type { WechatAuthProvider } from './auth/wechat-provider.js';
 import { Slice4InvitationPort } from './identity-binding/invitation-slice4-adapter.js';
 import type { InvitationResolutionPort } from './identity-binding/invitation-port.js';
+import type { RoleplayAdapter } from './services/digital-use-roleplay-adapter.js';
 
 export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
@@ -39,6 +41,10 @@ export interface BuildAppOptions {
   identityBinding?: {
     invitationPort?: InvitationResolutionPort;
     wechatProvider?: WechatAuthProvider;
+  };
+  /** Slice 14 test-only Phase-2 adapter injection. Production defaults unavailable. */
+  phoneUseContract?: {
+    roleplayAdapter?: RoleplayAdapter;
   };
 }
 
@@ -150,6 +156,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);
   registerDigitalUseAssessmentRoutes(app, pool, { evidencePepper: runtime.evidencePepper });
+  registerDigitalUsePhoneContractRoutes(
+    app,
+    pool,
+    options.phoneUseContract?.roleplayAdapter
+      ? { roleplayAdapter: options.phoneUseContract.roleplayAdapter }
+      : {}
+  );
   registerParticipationRoutes(app, pool, {
     inviteTtlSeconds: runtime.participationInviteTtlSeconds,
     inviteTokenSecret: runtime.participationInviteTokenSecret,

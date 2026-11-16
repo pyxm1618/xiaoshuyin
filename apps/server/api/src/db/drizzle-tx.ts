@@ -80,7 +80,7 @@ function readIdentityContext(
  */
 async function assertIdentityContextMatches(
   tx: SafetyDrizzleTx,
-  opts: DrizzleRlsTransactionOptions
+  opts: { accountId: string; personId: string; purpose: string }
 ): Promise<void> {
   const rows = await readIdentityContext(tx);
   const row = rows[0] ?? ({} as { account_id?: string; person_id?: string; purpose?: string });
@@ -90,6 +90,62 @@ async function assertIdentityContextMatches(
     row.purpose !== opts.purpose
   ) {
     identityContextMismatch();
+  }
+}
+
+export interface DrizzleIdentityTransactionOptions {
+  accountId: string;
+  personId: string;
+  purpose: string;
+  isolationLevel?: 'REPEATABLE READ';
+}
+
+/**
+ * AUTH-007 Staff authority transaction seam.
+ *
+ * This is deliberately identity-scoped: it proves Account→Person first but
+ * does NOT call app.set_family_context(), which would incorrectly require
+ * household membership. ResolveRisk establishes its exact Staff Case context
+ * only after the production resolver source verifies SAFETY_RESOLVE + the
+ * Case assignment.
+ */
+export async function withDrizzleIdentityTransaction<T>(
+  pool: pg.Pool,
+  opts: DrizzleIdentityTransactionOptions,
+  fn: (tx: SafetyDrizzleTx, client: pg.PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await pool.connect();
+  let broken = false;
+
+  const onClientError = (_err: Error) => {
+    broken = true;
+  };
+  client.on('error', onClientError);
+
+  const db = drizzle(client, { schema: safetySchema });
+
+  try {
+    const transactionConfig =
+      opts.isolationLevel === 'REPEATABLE READ'
+        ? ({ isolationLevel: 'repeatable read' } as const)
+        : undefined;
+
+    return await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT app.set_identity_context(${opts.accountId}, ${opts.purpose})`
+      );
+      await assertIdentityContextMatches(tx, opts);
+      return fn(tx, client);
+    }, transactionConfig);
+  } catch (error) {
+    broken = broken || isBrokenClientError(error);
+    throw error;
+  } finally {
+    try {
+      client.release(broken);
+    } finally {
+      client.removeListener('error', onClientError);
+    }
   }
 }
 

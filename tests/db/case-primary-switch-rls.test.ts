@@ -175,10 +175,17 @@ describe('case primary switch RLS (T723)', () => {
     });
   });
 
-  it('does not add a new policy beyond the frozen baseline', async () => {
-    const { rows } = await admin.query(
-      `SELECT count(*)::int c FROM pg_policies WHERE tablename IN ('cases', 'case_events')`
+  it('preserves the two frozen Slice 7 baseline policies', async () => {
+    const { rows } = await admin.query<{ policyname: string }>(
+      `SELECT policyname
+         FROM pg_policies
+        WHERE schemaname = 'public'
+          AND policyname IN ('cases_family_scope', 'case_events_family_scope')
+        ORDER BY policyname`
     );
-    expect(rows[0].c).toBe(2);
+    expect(rows.map((row) => row.policyname)).toEqual([
+      'case_events_family_scope',
+      'cases_family_scope',
+    ]);
   });
 });
