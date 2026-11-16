@@ -36,6 +36,7 @@ import {
   type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
 import { toHttpError } from '../plugins/error-handler.js';
+import { assertCurrentAccountAuthority } from '../auth/account-authority.js';
 import { currentSceneEnvelope, type DigitalUseActor } from './digital-use-assessment.js';
 import {
   assertDigitalUseCaseLifecycle,
@@ -337,6 +338,8 @@ export async function executeA5001ReviewInTransaction(
     const parsed = A5001FamilyAllianceReviewSubmission.safeParse(input.response);
     if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
 
+    await assertCurrentAccountAuthority(tx, input.actor.accountId);
+
     if (!(await lockFamilyForPrimaryDecision(tx, input.familyId))) {
       throw reviewError('CASE_NOT_FOUND', 'Case not found');
     }
@@ -547,6 +550,7 @@ export async function executeA5001ReviewInTransaction(
     assertDigitalUseCaseLifecycle(finalCase, node, input.expectedCaseVersion);
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
     await revalidateFamilyAllianceGates(tx, input.caseId, input.actor.personId);
+    await assertCurrentAccountAuthority(tx, input.actor.accountId);
 
     const finalSubject = await resolveA5001SubjectSnapshot(tx, {
       familyId: input.familyId,
