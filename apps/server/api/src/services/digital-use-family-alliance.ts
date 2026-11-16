@@ -54,6 +54,7 @@ import {
   applyFamilyAllianceNodeSemantics,
   familyAllianceTargetIdentity,
 } from './family-alliance-semantics.js';
+import { isCasePhaseAtLeast } from './digital-use-case-lifecycle.js';
 
 const FAMILY_ALLIANCE_FEATURE = createServerFeatureDescriptor({
   featureCode: 'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME',
@@ -425,7 +426,9 @@ export async function executeFamilyAllianceNodeInTransaction(
     if (caseRow.version !== input.expectedCaseVersion) {
       throw familyHttpError('STALE_CASE_VERSION');
     }
-    if (caseRow.phase !== 'GOALS') throw familyHttpError('CASE_PHASE_CONFLICT');
+    if (!isCasePhaseAtLeast(caseRow.phase, 'GOALS')) {
+      throw familyHttpError('CASE_PHASE_CONFLICT');
+    }
 
     // Pin the single Slice 12 package anchor in the caller-owned transaction.
     // This prevents an owner-side package replacement from racing after the
@@ -584,7 +587,7 @@ export async function executeFamilyAllianceNodeInTransaction(
       finalCase.status !== 'OPEN' ||
       !finalCase.is_primary ||
       finalCase.version !== input.expectedCaseVersion ||
-      finalCase.phase !== 'GOALS'
+      !isCasePhaseAtLeast(finalCase.phase, 'GOALS')
     ) {
       throw familyHttpError('STALE_CASE_VERSION');
     }
