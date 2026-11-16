@@ -200,9 +200,10 @@ export async function runPreparedIdempotentCommandInTransaction(
   fn: (tx: pg.PoolClient) => Promise<CommandResponse>
 ): Promise<CommandOutcome> {
   // request_hash remains the package-normalized canonical authority identity.
-  // The auxiliary replay discriminator lives only in the existing response
-  // snapshot so an exact historical request can replay its committed result
-  // after package retirement without turning the raw wire form into authority.
+  // Every review attempt, including same-key replay, must first pass current
+  // account/Case/formulation/subject/control-plane/package authority and package
+  // normalization. An old committed result can never bypass a newly-invalid
+  // Professional package or stale authoritative subject.
   await lockIdempotentCommandInTransaction(tx, cfg);
   const existing = await getIdempotencyKey(
     tx,
@@ -210,21 +211,9 @@ export async function runPreparedIdempotentCommandInTransaction(
     cfg.commandType,
     cfg.idempotencyKey
   );
-  if (
-    existing !== null &&
-    isPreparedReplayEnvelope(existing.response_body) &&
-    existing.response_body.replayDiscriminator === cfg.replayDiscriminator
-  ) {
-    return {
-      action: 'REPLAY',
-      status: existing.response_status,
-      body: existing.response_body.body,
-    };
-  }
 
-  // A wire-different request must still pass current authority normalization.
-  // If its normalized canonical hash matches the committed hash it replays;
-  // otherwise the existing idempotency owner returns mismatch.
+  // If the current authority-normalized canonical hash matches the committed
+  // hash, replay the stored business response; otherwise return mismatch.
   const requestHash = await prepareRequestHash(tx);
   if (existing !== null) {
     const decision = decide(existing, requestHash);
