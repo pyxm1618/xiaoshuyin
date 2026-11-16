@@ -27,12 +27,14 @@ const reviewSchemas = read(
 );
 const migration = read('db/migrations/022_digital_use_review_runtime.sql');
 
-const acceptanceFiles = [
+const runtimeAcceptanceFiles = [
   'tests/integration/digital-use-a5001-review-runtime.test.ts',
   'tests/integration/digital-use-a5002-review-runtime.test.ts',
   'tests/domain/digital-use-review-a5001-contracts.test.ts',
-  'tests/domain/digital-use-review-slice15-closeout.test.ts',
 ] as const;
+
+const closeoutEvidenceFile =
+  'tests/domain/digital-use-review-slice15-closeout.test.ts';
 
 function expandAcceptanceMarkers(text: string): Set<number> {
   const out = new Set<number>();
@@ -49,6 +51,26 @@ function expandAcceptanceMarkers(text: string): Set<number> {
     }
   }
   return out;
+}
+
+function acceptanceEvidenceMarkers(): Set<number> {
+  const covered = new Set<number>();
+
+  // Runtime/domain evidence may advertise AS coverage in test titles/ranges.
+  // The closeout file itself is intentionally excluded from whole-file scans:
+  // FR_TO_AS contains every scenario number and must never self-certify 70/70.
+  for (const path of runtimeAcceptanceFiles) {
+    for (const n of expandAcceptanceMarkers(read(path))) covered.add(n);
+  }
+
+  // AS-57..69 are proven by the executable negative-space closeout test in
+  // this file. Read only test titles here, never FR_TO_AS or assertion data.
+  const closeout = read(closeoutEvidenceFile);
+  for (const match of closeout.matchAll(/\bit\(\s*(['"`])([^'"`]*?)\1\s*,/g)) {
+    for (const n of expandAcceptanceMarkers(match[2]!)) covered.add(n);
+  }
+
+  return covered;
 }
 
 const FR_TO_AS: Record<number, readonly number[]> = {
@@ -78,10 +100,7 @@ describe('Slice 15 T1517 deterministic closeout coverage', () => {
     const keys = Object.keys(FR_TO_AS).map(Number).sort((a, b) => a - b);
     expect(keys).toEqual(Array.from({ length: 50 }, (_, i) => i + 1));
 
-    const covered = new Set<number>();
-    for (const path of acceptanceFiles) {
-      for (const n of expandAcceptanceMarkers(read(path))) covered.add(n);
-    }
+    const covered = acceptanceEvidenceMarkers();
     for (const [fr, scenarios] of Object.entries(FR_TO_AS)) {
       expect(scenarios.length, `FR-${fr} has no acceptance evidence`).toBeGreaterThan(0);
       for (const scenario of scenarios) {
@@ -94,10 +113,7 @@ describe('Slice 15 T1517 deterministic closeout coverage', () => {
   });
 
   it('Acceptance Coverage: 70/70 has no missing or out-of-range scenario marker', () => {
-    const covered = new Set<number>();
-    for (const path of acceptanceFiles) {
-      for (const n of expandAcceptanceMarkers(read(path))) covered.add(n);
-    }
+    const covered = acceptanceEvidenceMarkers();
     expect([...covered].filter((n) => n < 1 || n > 70)).toEqual([]);
     expect([...covered].sort((a, b) => a - b)).toEqual(
       Array.from({ length: 70 }, (_, i) => i + 1)
