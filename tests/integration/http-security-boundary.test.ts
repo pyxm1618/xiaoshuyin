@@ -20,25 +20,20 @@ describe('Foundation HTTP security boundary', () => {
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
     expect(response.headers['content-security-policy']).toBeDefined();
-    expect(response.headers['x-ratelimit-limit']).toBeUndefined();
   });
 
-  it('rate-limits application routes while health remains exempt', async () => {
-    let limited = false;
-    for (let i = 0; i < 1001; i += 1) {
-      const response = await app.inject({ method: 'GET', url: '/api/v1/me' });
-      if (response.statusCode === 429) {
-        expect(response.headers['retry-after']).toBeDefined();
-        limited = true;
-        break;
-      }
-    }
-    expect(limited).toBe(true);
+  it('does not infer a proxy/client-IP trust contract for application traffic', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/me',
+      headers: { 'x-forwarded-for': '203.0.113.10' },
+    });
 
-    for (let i = 0; i < 3; i += 1) {
-      const health = await app.inject({ method: 'GET', url: '/healthz' });
-      expect(health.statusCode).toBe(200);
-      expect(health.headers['x-ratelimit-limit']).toBeUndefined();
-    }
+    // No global limiter is installed until the deployment authority freezes
+    // trusted proxy/client-IP semantics. The application response therefore
+    // remains the route's ordinary authentication outcome rather than 429.
+    expect(response.statusCode).not.toBe(429);
+    expect(response.headers['x-ratelimit-limit']).toBeUndefined();
+    expect(response.headers['retry-after']).toBeUndefined();
   });
 });
