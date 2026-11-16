@@ -6,3 +6,4 @@ export * from './runtime-primitives.js';
 export * from './integrated-triage.js';
 
 export * from './phone-use-contract-content.js';
+export * from './family-alliance-content.js';
