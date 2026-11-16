@@ -3636,55 +3636,353 @@ export interface operations {
                             selected: boolean;
                             concreteTargetText: string | null;
                             feasibility: {
-                                concreteQuantified: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    concreteTargetText: string;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                problemBehavior: {
+                                    concreteBehavior: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    need: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationBenefit: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityConditions: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
                                 };
-                                need: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                motivationBenefit: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                abilityPossibility: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                challengeResistance: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                replacementBehavior: {
+                                    concreteQuantified: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        concreteTargetText: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    need: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationBenefit: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityPossibility: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
                                 };
                             } | null;
-                            progress: {
+                            progress: ({
+                                /** @constant */
+                                kind: "GENERAL_MATRIX";
+                                taskPlan: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    text: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                communication: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                childFeedback: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                userObservation: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                otherFamilyFeedback: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
                                 /** @enum {string} */
-                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            } | {
+                                /** @constant */
+                                kind: "EMOTION_REGULATION_1";
+                                listening: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    count: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                affirmation: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    observations: string[];
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                reducedEvaluation: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    count: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                selfRegulationJournal: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    text: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                selfCare: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    durationMinutes: number;
+                                    activities: string[];
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                effectEvaluation: {
+                                    intrinsicMotivation: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    selfEsteemConfidence: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityPotential: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
                                 /** @enum {string} */
-                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            } | {
+                                /** @constant */
+                                kind: "EMOTION_REGULATION_2_LOG";
+                                entries: {
+                                    time: string;
+                                    childEmotion: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    emotionFeedback: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    childStress: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    selfGrowth: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                }[];
                                 /** @enum {string} */
-                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
-                            } | null;
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            }) | null;
                             progressEvidenceRefs: ({
                                 type: string;
                                 /** Format: uuid */
@@ -3698,6 +3996,7 @@ export interface operations {
                                 scenePackageVersion: "v1";
                                 interactionRefs: string[];
                                 helpOrReentryRefs: string[];
+                                authorityRefs: string[];
                                 evidenceRefs: ({
                                     type: string;
                                     /** Format: uuid */
@@ -4362,55 +4661,353 @@ export interface operations {
                             selected: boolean;
                             concreteTargetText: string | null;
                             feasibility: {
-                                concreteQuantified: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    concreteTargetText: string;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                problemBehavior: {
+                                    concreteBehavior: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    need: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationBenefit: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityConditions: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
                                 };
-                                need: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                motivationBenefit: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                abilityPossibility: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                challengeResistance: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                replacementBehavior: {
+                                    concreteQuantified: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        concreteTargetText: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    need: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationBenefit: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityPossibility: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
                                 };
                             } | null;
-                            progress: {
+                            progress: ({
+                                /** @constant */
+                                kind: "GENERAL_MATRIX";
+                                taskPlan: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    text: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                communication: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                childFeedback: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                userObservation: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                otherFamilyFeedback: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
                                 /** @enum {string} */
-                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            } | {
+                                /** @constant */
+                                kind: "EMOTION_REGULATION_1";
+                                listening: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    count: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                affirmation: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    observations: string[];
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                reducedEvaluation: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    count: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                selfRegulationJournal: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    text: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                selfCare: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    durationMinutes: number;
+                                    activities: string[];
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                effectEvaluation: {
+                                    intrinsicMotivation: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    selfEsteemConfidence: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityPotential: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
                                 /** @enum {string} */
-                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            } | {
+                                /** @constant */
+                                kind: "EMOTION_REGULATION_2_LOG";
+                                entries: {
+                                    time: string;
+                                    childEmotion: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    emotionFeedback: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    childStress: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    selfGrowth: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                }[];
                                 /** @enum {string} */
-                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
-                            } | null;
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            }) | null;
                             progressEvidenceRefs: ({
                                 type: string;
                                 /** Format: uuid */
@@ -4424,6 +5021,7 @@ export interface operations {
                                 scenePackageVersion: "v1";
                                 interactionRefs: string[];
                                 helpOrReentryRefs: string[];
+                                authorityRefs: string[];
                                 evidenceRefs: ({
                                     type: string;
                                     /** Format: uuid */
@@ -4974,55 +5572,353 @@ export interface operations {
                             selected: boolean;
                             concreteTargetText: string | null;
                             feasibility: {
-                                concreteQuantified: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    concreteTargetText: string;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                problemBehavior: {
+                                    concreteBehavior: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    need: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationBenefit: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityConditions: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
                                 };
-                                need: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                motivationBenefit: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                abilityPossibility: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                challengeResistance: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                replacementBehavior: {
+                                    concreteQuantified: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        concreteTargetText: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    need: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationBenefit: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityPossibility: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
                                 };
                             } | null;
-                            progress: {
+                            progress: ({
+                                /** @constant */
+                                kind: "GENERAL_MATRIX";
+                                taskPlan: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    text: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                communication: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                childFeedback: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                userObservation: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                otherFamilyFeedback: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
                                 /** @enum {string} */
-                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            } | {
+                                /** @constant */
+                                kind: "EMOTION_REGULATION_1";
+                                listening: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    count: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                affirmation: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    observations: string[];
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                reducedEvaluation: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    count: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                selfRegulationJournal: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    text: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                selfCare: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    durationMinutes: number;
+                                    activities: string[];
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                effectEvaluation: {
+                                    intrinsicMotivation: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    selfEsteemConfidence: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityPotential: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
                                 /** @enum {string} */
-                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            } | {
+                                /** @constant */
+                                kind: "EMOTION_REGULATION_2_LOG";
+                                entries: {
+                                    time: string;
+                                    childEmotion: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    emotionFeedback: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    childStress: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    selfGrowth: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                }[];
                                 /** @enum {string} */
-                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
-                            } | null;
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            }) | null;
                             progressEvidenceRefs: ({
                                 type: string;
                                 /** Format: uuid */
@@ -5036,6 +5932,7 @@ export interface operations {
                                 scenePackageVersion: "v1";
                                 interactionRefs: string[];
                                 helpOrReentryRefs: string[];
+                                authorityRefs: string[];
                                 evidenceRefs: ({
                                     type: string;
                                     /** Format: uuid */
@@ -5714,55 +6611,353 @@ export interface operations {
                             selected: boolean;
                             concreteTargetText: string | null;
                             feasibility: {
-                                concreteQuantified: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    concreteTargetText: string;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                problemBehavior: {
+                                    concreteBehavior: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    need: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationBenefit: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityConditions: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
                                 };
-                                need: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                motivationBenefit: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                abilityPossibility: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
-                                };
-                                challengeResistance: {
-                                    /** @constant */
-                                    state: "KNOWN";
-                                    rating: number;
-                                } | {
-                                    /** @enum {string} */
-                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                replacementBehavior: {
+                                    concreteQuantified: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        concreteTargetText: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    need: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationBenefit: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityPossibility: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        rating: number;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
                                 };
                             } | null;
-                            progress: {
+                            progress: ({
+                                /** @constant */
+                                kind: "GENERAL_MATRIX";
+                                taskPlan: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    text: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                communication: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                childFeedback: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                userObservation: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
+                                otherFamilyFeedback: {
+                                    needMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    motivationMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityMatch: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    challengeResistance: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
                                 /** @enum {string} */
-                                stage: "COMMUNICATION" | "EXECUTION" | "OBSERVATION" | "ADJUSTMENT";
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            } | {
+                                /** @constant */
+                                kind: "EMOTION_REGULATION_1";
+                                listening: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    count: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                affirmation: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    observations: string[];
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                reducedEvaluation: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    count: number;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                selfRegulationJournal: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    text: string;
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                selfCare: {
+                                    /** @constant */
+                                    state: "KNOWN";
+                                    durationMinutes: number;
+                                    activities: string[];
+                                } | {
+                                    /** @enum {string} */
+                                    state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                };
+                                effectEvaluation: {
+                                    intrinsicMotivation: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    selfEsteemConfidence: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    abilityPotential: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                };
                                 /** @enum {string} */
-                                state: "KNOWN" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            } | {
+                                /** @constant */
+                                kind: "EMOTION_REGULATION_2_LOG";
+                                entries: {
+                                    time: string;
+                                    childEmotion: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    emotionFeedback: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    childStress: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                    selfGrowth: {
+                                        /** @constant */
+                                        state: "KNOWN";
+                                        text: string;
+                                    } | {
+                                        /** @enum {string} */
+                                        state: "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "CONFLICT" | "NOT_APPLICABLE";
+                                    };
+                                }[];
                                 /** @enum {string} */
-                                modifyTarget?: "YES" | "NO" | "NOT_DECIDED";
-                            } | null;
+                                modifyTarget: "YES" | "NO" | "NOT_DECIDED";
+                            }) | null;
                             progressEvidenceRefs: ({
                                 type: string;
                                 /** Format: uuid */
@@ -5776,6 +6971,7 @@ export interface operations {
                                 scenePackageVersion: "v1";
                                 interactionRefs: string[];
                                 helpOrReentryRefs: string[];
+                                authorityRefs: string[];
                                 evidenceRefs: ({
                                     type: string;
                                     /** Format: uuid */
