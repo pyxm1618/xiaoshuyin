@@ -50,6 +50,12 @@ const EXPECTED_AUDIT_EVENTS = [
   // AUTH-006 Problem Formulation review-resolution audit vocabulary.
   'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED',
   'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
+  'INTERVENTION_DEFINITION_CANDIDATE_CREATED',
+  'INTERVENTION_DEFINITION_SUCCESSOR_CREATED',
+  'INTERVENTION_DEFINITION_SUPERSEDED',
+  'INTERVENTION_DEFINITION_RETIRED',
+  'INTERVENTION_ELIGIBILITY_EVALUATED',
+  'INTERVENTION_ELIGIBILITY_BLOCKED',
 ];
 
 const EXPECTED_COMMANDS = [
@@ -87,6 +93,10 @@ const EXPECTED_COMMANDS = [
   'PHONE_USE_ROLEPLAY_SELECT',
   // AUTH-006 single authoritative review-resolution command.
   'PROBLEM_FORMULATION_REVIEW_RESOLVE',
+  'INTERVENTION_DEFINITION_CREATE',
+  'INTERVENTION_DEFINITION_SUCCESSOR_CREATE',
+  'INTERVENTION_DEFINITION_RETIRE',
+  'INTERVENTION_DEFINITION_SUPERSEDE',
 ];
 
 const EXPECTED_RESOURCE_TYPES = [
@@ -99,6 +109,7 @@ const EXPECTED_RESOURCE_TYPES = [
   'OBSERVATION',
   'CASE_PARTICIPANT',
   'PROBLEM_FORMULATION',
+  'INTERVENTION_DEFINITION',
 ];
 
 function literalsOf(definition: string): string[] {
@@ -127,17 +138,17 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
     return rows[0].definition as string;
   }
 
-  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Slice 14', async () => {
+  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Slice 16', async () => {
     const values = literalsOf(await definition('business_audit_events_event_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_AUDIT_EVENTS));
   });
 
-  it('business_audit_events.resource_type remains the main eight values', async () => {
+  it('business_audit_events.resource_type includes the reviewed Slice 16 global InterventionDefinition resource', async () => {
     const values = literalsOf(await definition('business_audit_events_resource_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_RESOURCE_TYPES));
   });
 
-  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Slice 14', async () => {
+  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Slice 16', async () => {
     const values = literalsOf(await definition('idempotency_keys_command_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_COMMANDS));
   });

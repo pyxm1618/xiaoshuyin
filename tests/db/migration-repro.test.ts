@@ -114,7 +114,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(enumNames.length).toBe(EXPECTED_ENUMS);
   });
 
-  it('should have all 31 tables', async () => {
+  it('should have all 32 tables', async () => {
     const { rows } = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -156,7 +156,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 76 RLS policies', async () => {
+  it('should have 80 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'
