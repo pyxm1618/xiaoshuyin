@@ -19,8 +19,7 @@
     "pg": "^8.16.0",
     "@fastify/swagger": "^9.0.0",
     "@xiaoshuyin/scenes": "workspace:*",
-    "@fastify/helmet": "13.2.0",
-    "@fastify/rate-limit": "11.2.2"
+    "@fastify/helmet": "13.2.0"
   },
   "devDependencies": {
     "@types/pg": "^8.15.0",
