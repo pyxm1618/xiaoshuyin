@@ -23,8 +23,6 @@ jobs:
         with:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
-      - name: Capture generated lockfile delta
-        run: git diff -- bun.lock
       - name: Typecheck
         run: bun run typecheck
       - name: Static guard
