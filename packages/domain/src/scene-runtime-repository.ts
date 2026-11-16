@@ -52,12 +52,14 @@ export interface SceneArtifactRow {
     | 'PHONE_USE_BREACH_COMPONENT'
     | 'PARENT_SELF_REGULATION_CHECKLIST'
     | 'PHONE_USE_CONTRACT_DOCUMENT'
-    | 'PHONE_USE_CONTRACT_SUPPORT_LOG';
+    | 'PHONE_USE_CONTRACT_SUPPORT_LOG'
+    | 'DIGITAL_USE_A5001_EFFECT_EVALUATION'
+    | 'DIGITAL_USE_A5002_EFFECT_EVALUATION';
   schema_version: string;
   source_node_code:
     | '01000' | 'A2007' | 'A2010' | 'A3000'
     | 'A4001' | 'A4003' | 'A4004' | 'A4005' | 'A4006' | 'A4007' | 'A4008'
-    | 'A4009' | 'A4010' | 'A4011' | 'A4012';
+    | 'A4009' | 'A4010' | 'A4011' | 'A4012' | 'A5001' | 'A5002';
   data: Record<string, unknown>;
   owner_person_id: string;
   visibility: 'FAMILY_AUTHORIZED';
