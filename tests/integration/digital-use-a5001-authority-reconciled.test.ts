@@ -4,6 +4,7 @@ import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { recordObservation, recordStatement, reviseDigitalUseTargetItem } from '@xiaoshuyin/domain';
+import { recordDialogueMessage } from '../../packages/domain/src/internal/message-writer.js';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import { createAdminPool } from '../setup/db.js';
 import {
@@ -715,17 +716,28 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       [child.personId, f.manager.personId]
     );
 
-    const message = await app.inject({
-      method: 'POST',
-      url: `/api/v1/cases/${f.caseId}/messages`,
-      headers: commandHeaders(
-        child.token,
-        `slice15-a5001-child-message-${crypto.randomUUID()}`
-      ),
-      payload: { content: 'I followed the agreed sleep target this week.' },
-    });
-    expect(message.statusCode, message.body).toBe(201);
-    const messageId = message.json().id as string;
+    const message = await withRlsTransaction(
+      appDb,
+      {
+        familyId: f.familyId,
+        accountId: child.accountId,
+        personId: child.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) =>
+        recordDialogueMessage(
+          tx,
+          {
+            familyId: f.familyId,
+            caseId: f.caseId,
+            actorAccountId: child.accountId,
+            actorPersonId: child.personId,
+            purpose: 'FAMILY_MANAGEMENT',
+          },
+          'I followed the agreed sleep target this week.'
+        )
+    );
+    const messageId = message.id;
 
     const body = {
       ...payload(f),
@@ -811,7 +823,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
             occurredTimeState: 'UNKNOWN',
             confirmationStatus: 'UNCONFIRMED',
             content: 'Parent transcribed that the child was unsure whether the target helped.',
-            observationCode: 'SLICE15_CHILD_TRANSCRIBED_EFFECT',
+            observationCode: 'slice15.child_transcribed_effect',
             value: { state: 'UNKNOWN' },
           }
         )
