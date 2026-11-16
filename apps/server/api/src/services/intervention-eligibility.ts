@@ -108,8 +108,13 @@ export const productionInterventionOwnerAdapters:
       return {};
     },
     async resolveParticipation(
-      tx,
-      input
+      tx: pg.PoolClient,
+      input: {
+        familyId: string;
+        caseId: string;
+        actor: { accountId: string; personId: string };
+        requiredRefs: readonly string[];
+      }
     ): Promise<Readonly<Record<string, InterventionGateState>>> {
       const result: Record<string, InterventionGateState> = {};
       for (const ref of input.requiredRefs) {
@@ -140,8 +145,13 @@ export const productionInterventionOwnerAdapters:
       return result;
     },
     async resolveConsent(
-      tx,
-      input
+      tx: pg.PoolClient,
+      input: {
+        familyId: string;
+        caseId: string;
+        actor: { accountId: string; personId: string };
+        requiredPurposes: readonly string[];
+      }
     ): Promise<Readonly<Record<string, InterventionGateState>>> {
       const result: Record<string, InterventionGateState> = {};
       for (const purpose of input.requiredPurposes) {

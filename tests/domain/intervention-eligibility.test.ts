@@ -52,7 +52,7 @@ function allowedInput(): InterventionEligibilityInput {
     },
     participation: { CHILD: 'PASS' },
     consent: { TEST_CONSENT: 'PASS' },
-    consideredInterventionCodes: [],
+    consideredDefinitions: [],
     compliance: 'PASS',
     safety: 'PASS',
     dependencyRevisionRefs: ['CASE:case-1:v4', 'FORMULATION:formulation-1:v2', EVIDENCE, 'PACKAGE:v1'],
@@ -86,7 +86,16 @@ describe('Slice 16 deterministic intervention eligibility', () => {
     { label: 'exclusion', mutate: (x) => ({ ...x, facts: { ...x.facts, 'safety.worsening': true } }), reason: 'EXCLUSION_OR_CONTRAINDICATION' },
     { label: 'participation', mutate: (x) => ({ ...x, participation: { CHILD: 'BLOCK' } }), reason: 'PARTICIPATION_BLOCK' },
     { label: 'consent', mutate: (x) => ({ ...x, consent: { TEST_CONSENT: 'BLOCK' } }), reason: 'CONSENT_BLOCK' },
-    { label: 'combination conflict', mutate: (x) => ({ ...x, consideredInterventionCodes: ['TEST_CONFLICT'] }), reason: 'COMBINATION_CONFLICT' },
+    { label: 'combination conflict', mutate: (x) => ({
+      ...x,
+      consideredDefinitions: [{
+        id: '00000000-0000-7000-8000-000000000017',
+        sceneId: 'DIGITAL_USE',
+        interventionCode: 'TEST_CONFLICT',
+        version: 1,
+        contentHash: 'b'.repeat(64),
+      }],
+    }), reason: 'COMBINATION_CONFLICT' },
     { label: 'compliance', mutate: (x) => ({ ...x, compliance: 'BLOCK' }), reason: 'COMPLIANCE_BLOCK' },
     { label: 'safety', mutate: (x) => ({ ...x, safety: 'BLOCK' }), reason: 'SAFETY_BLOCK' },
   ];

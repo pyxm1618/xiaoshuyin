@@ -139,10 +139,11 @@ function conditionResult(
   if (condition.operator === 'EQUALS') return current === condition.value;
   if (condition.operator === 'NOT_EQUALS') return current !== condition.value;
   if (!Array.isArray(condition.value)) return false;
+  const expected = condition.value;
   if (Array.isArray(current)) {
-    return current.some((entry) => condition.value!.includes(entry));
+    return current.some((entry) => expected.includes(entry));
   }
-  return condition.value.some((value) => value === current);
+  return expected.some((value) => value === current);
 }
 
 function gateResult(state: InterventionGateState): 'ALLOW' | 'BLOCK' | 'UNKNOWN' {
