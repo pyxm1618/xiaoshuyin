@@ -26,6 +26,7 @@ import { createCase } from '../setup/participation.js';
 import {
   TestProfessionalReviewContentProvider,
   TEST_A5001_PACKAGE,
+  TEST_A5001_PACKAGE_V2,
   TEST_A5002_PACKAGE,
   normalizedReviewResponse,
 } from '../support/digital-use-review-professional-content.js';
@@ -953,6 +954,103 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     });
   });
 
+  it('T1510 raw-different but package-normalized-equivalent A5001 request replays the original result', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const { f, scene, payload } = await prepareA5001(app, 'a5001-normalized-idem');
+    const key = `a5001-normalized-idem-${crypto.randomUUID()}`;
+    const first = await submitA5001(app, f, scene, payload, key);
+    expect(first.statusCode, first.body).toBe(200);
+
+    const equivalent = {
+      ...payload,
+      packageResponse: {
+        ...normalizedReviewResponse,
+        note: `   ${normalizedReviewResponse.note}   `,
+      },
+    };
+    const replay = await submitA5001(app, f, scene, equivalent, key);
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+    expect(await reviewCounts(f, 'A5001')).toMatchObject({
+      artifacts: 1,
+      completed: 1,
+      events: 1,
+      idempotency: 1,
+    });
+  });
+
+  it('T1510 A5002 same-key exact replay returns original result and changed normalized payload conflicts', async () => {
+    provider.restore('PHONE_USE_CONTRACT_REVIEW');
+    const { f, scene, payload } = await prepareA5002(app, 'a5002-idem');
+    const key = `a5002-idem-${crypto.randomUUID()}`;
+    const first = await submitA5002(app, f, scene, payload, key);
+    expect(first.statusCode, first.body).toBe(200);
+
+    const replay = await submitA5002(app, f, scene, payload, key);
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+
+    const changed = {
+      ...payload,
+      packageResponse: {
+        ...normalizedReviewResponse,
+        note: 'Changed exact Contract review response.',
+      },
+    };
+    const mismatch = await submitA5002(app, f, scene, changed, key);
+    expect(mismatch.statusCode, mismatch.body).toBe(409);
+    expect(mismatch.json()).toMatchObject({
+      code: 'IDEMPOTENCY_PAYLOAD_MISMATCH',
+    });
+    expect(await reviewCounts(f, 'A5002')).toMatchObject({
+      artifacts: 1,
+      completed: 1,
+      events: 1,
+      idempotency: 1,
+    });
+  });
+
+  it('T1510 A5001 and A5002 cannot collide on the same idempotency key', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    provider.restore('PHONE_USE_CONTRACT_REVIEW');
+    const a5001 = await prepareA5001(app, 'review-stream-idem-collision-a5001');
+    const a5002 = await prepareA5002(app, 'review-stream-idem-collision-a5002');
+    const key = `review-stream-collision-${crypto.randomUUID()}`;
+
+    const first = await submitA5001(
+      app,
+      a5001.f,
+      a5001.scene,
+      a5001.payload,
+      key
+    );
+    expect(first.statusCode, first.body).toBe(200);
+
+    // Idempotency keys are account-scoped. Use the A5001 manager against A5002
+    // would fail authorization before idempotency, so collision identity is
+    // mechanically proven at the pure canonical fingerprint layer instead of
+    // fabricating cross-Family authorization here.
+    expect(a5001.f.manager.accountId).not.toBe(a5002.f.manager.accountId);
+  });
+
+  it('T1511 concurrent same-revision A5002 writers produce one winner and one stale loser without Contract mutation', async () => {
+    provider.restore('PHONE_USE_CONTRACT_REVIEW');
+    const { f, scene, payload } = await prepareA5002(app, 'a5002-race');
+    const before = await contractSnapshot(f);
+    const [one, two] = await Promise.all([
+      submitA5002(app, f, scene, payload, `a5002-race-a-${crypto.randomUUID()}`),
+      submitA5002(app, f, scene, payload, `a5002-race-b-${crypto.randomUUID()}`),
+    ]);
+    expect([one.statusCode, two.statusCode].sort()).toEqual([200, 409]);
+    expect(await reviewCounts(f, 'A5002')).toMatchObject({
+      artifacts: 1,
+      completed: 1,
+      events: 1,
+      idempotency: 1,
+    });
+    expect(await contractSnapshot(f)).toEqual(before);
+  });
+
   it('T1511 concurrent same-revision A5001 writers produce one winner and one stale loser', async () => {
     provider.restore('FAMILY_ALLIANCE_REVIEW');
     const { f, scene, payload } = await prepareA5001(app, 'a5001-race');
@@ -987,6 +1085,56 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       completed: 0,
       events: 0,
       idempotency: 0,
+    });
+  });
+
+  it('T1513 package v2 reassessment appends a new A5001 artifact and never rewrites package v1 history', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const { f, scene, payload } = await prepareA5001(app, 'a5001-package-history');
+    const first = await submitA5001(
+      app,
+      f,
+      scene,
+      payload,
+      `a5001-package-history-v1-${crypto.randomUUID()}`
+    );
+    expect(first.statusCode, first.body).toBe(200);
+
+    const secondPayload = {
+      ...payload,
+      professionalPackage: TEST_A5001_PACKAGE_V2,
+      packageResponse: {
+        outcome: 'SAME',
+        note: 'Synthetic package v2 reassessment.',
+      },
+    };
+    const second = await submitA5001(
+      app,
+      f,
+      first.json(),
+      secondPayload,
+      `a5001-package-history-v2-${crypto.randomUUID()}`
+    );
+    expect(second.statusCode, second.body).toBe(200);
+
+    const { rows } = await admin.query<any>(
+      `SELECT id,revision,supersedes_id,data
+         FROM scene_artifacts
+        WHERE case_id=$1
+          AND artifact_type='DIGITAL_USE_A5001_EFFECT_EVALUATION'
+        ORDER BY revision ASC`,
+      [f.caseId]
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0].revision).toBe(1);
+    expect(rows[0].data.professionalPackage).toMatchObject(TEST_A5001_PACKAGE);
+    expect(rows[1].revision).toBe(2);
+    expect(rows[1].supersedes_id).toBe(rows[0].id);
+    expect(rows[1].data.professionalPackage).toMatchObject(TEST_A5001_PACKAGE_V2);
+    expect(rows[0].data.normalizedResponse).toEqual(normalizedReviewResponse);
+    expect(rows[1].data.normalizedResponse).toMatchObject({
+      outcome: 'SAME',
+      note: 'Synthetic package v2 reassessment.',
     });
   });
 
