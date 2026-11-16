@@ -14,22 +14,67 @@ export interface ProfessionalReviewPackageScope {
   readonly scenePackageVersion: string;
 }
 
+export type ProfessionalReviewStatus =
+  | 'APPROVED'
+  | 'DRAFT'
+  | 'REJECTED'
+  | 'REVOKED';
+
+export type ProfessionalReviewPublicationStatus =
+  | 'PUBLISHED'
+  | 'UNPUBLISHED';
+
+export type ProfessionalReviewPackageLifecycleStatus =
+  | 'CURRENT'
+  | 'RETIRED'
+  | 'SUPERSEDED'
+  | 'CANDIDATE';
+
+export type ProfessionalReviewerProofStatus =
+  | 'VALID'
+  | 'REVOKED'
+  | 'MISMATCHED'
+  | 'UNVERIFIABLE';
+
 export interface ProfessionalReviewPackageProof {
   readonly packageId: string;
   readonly packageVersion: string;
   readonly contentHash: string;
   readonly scope: readonly ProfessionalReviewPackageScope[];
   readonly sourceRefs: readonly string[];
+
+  /** Immutable approval proof identity owned by the external authority. */
+  readonly approvalProofRef: string;
+  readonly approvalBinding: {
+    readonly packageId: string;
+    readonly packageVersion: string;
+    readonly contentHash: string;
+  };
+
   readonly reviewerIdentity: string;
   readonly reviewerQualificationRef: string;
-  readonly approvalStatus: 'APPROVED';
-  readonly publicationStatus: 'PUBLISHED';
+  readonly reviewerProofStatus: ProfessionalReviewerProofStatus;
+
+  readonly reviewStatus: ProfessionalReviewStatus;
+  readonly publicationStatus: ProfessionalReviewPublicationStatus;
+  readonly lifecycleStatus: ProfessionalReviewPackageLifecycleStatus;
+
   readonly reviewedAt: string;
-  readonly effectiveAt: string;
+  readonly effectiveFrom: string;
+  readonly effectiveTo: string | null;
+  readonly publishedAt: string;
 }
 
 export interface ProfessionalReviewResolvedPackage {
   readonly proof: ProfessionalReviewPackageProof;
+
+  /**
+   * Immutable identity of the content actually loaded by the provider.
+   * It must equal proof.contentHash so the consumer never authorizes one
+   * package while validating responses against different loaded content.
+   */
+  readonly loadedContentHash: string;
+
   /**
    * Package-owned validation only. The request carries the exact normalized
    * package response so idempotency can be computed without consulting mutable
@@ -79,6 +124,12 @@ function unavailable(): never {
   });
 }
 
+function validTimestamp(value: string): number | null {
+  if (value.trim().length === 0) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function packageMatches(
   value: ProfessionalReviewResolvedPackage | null,
   input: {
@@ -91,17 +142,43 @@ function packageMatches(
 ): value is ProfessionalReviewResolvedPackage {
   if (value === null) return false;
   const proof = value.proof;
+
+  const reviewedAt = validTimestamp(proof.reviewedAt);
+  const effectiveFrom = validTimestamp(proof.effectiveFrom);
+  const effectiveTo =
+    proof.effectiveTo === null ? null : validTimestamp(proof.effectiveTo);
+  const publishedAt = validTimestamp(proof.publishedAt);
+  const now = Date.now();
+
   return (
     proof.packageId === input.packageId &&
     proof.packageVersion === input.packageVersion &&
     proof.contentHash === input.contentHash &&
-    proof.approvalStatus === 'APPROVED' &&
+    value.loadedContentHash === proof.contentHash &&
+
+    proof.approvalBinding.packageId === proof.packageId &&
+    proof.approvalBinding.packageVersion === proof.packageVersion &&
+    proof.approvalBinding.contentHash === proof.contentHash &&
+    proof.approvalProofRef.trim().length > 0 &&
+
+    proof.reviewStatus === 'APPROVED' &&
     proof.publicationStatus === 'PUBLISHED' &&
+    proof.lifecycleStatus === 'CURRENT' &&
+
     proof.reviewerIdentity.trim().length > 0 &&
     proof.reviewerQualificationRef.trim().length > 0 &&
+    proof.reviewerProofStatus === 'VALID' &&
+
     proof.sourceRefs.length > 0 &&
-    proof.reviewedAt.trim().length > 0 &&
-    proof.effectiveAt.trim().length > 0 &&
+    reviewedAt !== null &&
+    effectiveFrom !== null &&
+    publishedAt !== null &&
+    reviewedAt <= now &&
+    effectiveFrom <= now &&
+    publishedAt <= now &&
+    (proof.effectiveTo === null ||
+      (effectiveTo !== null && effectiveTo >= now)) &&
+
     proof.scope.some(
       (scope) =>
         scope.stream === input.stream &&
@@ -141,11 +218,17 @@ export function professionalReviewPackageProofIdentity(
       scenePackageVersion: scope.scenePackageVersion,
     })),
     sourceRefs: [...proof.sourceRefs],
+    approvalProofRef: proof.approvalProofRef,
+    approvalBinding: { ...proof.approvalBinding },
     reviewerIdentity: proof.reviewerIdentity,
     reviewerQualificationRef: proof.reviewerQualificationRef,
-    approvalStatus: proof.approvalStatus,
+    reviewerProofStatus: proof.reviewerProofStatus,
+    reviewStatus: proof.reviewStatus,
     publicationStatus: proof.publicationStatus,
+    lifecycleStatus: proof.lifecycleStatus,
     reviewedAt: proof.reviewedAt,
-    effectiveAt: proof.effectiveAt,
+    effectiveFrom: proof.effectiveFrom,
+    effectiveTo: proof.effectiveTo,
+    publishedAt: proof.publishedAt,
   };
 }
