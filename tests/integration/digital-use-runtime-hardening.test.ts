@@ -2203,10 +2203,14 @@ describe('T1218 Digital Use runtime hardening', () => {
       expect(created.statusCode,created.body).toBe(201);
 
       const turnKey='s14-roleplay-idempotency-turn';
+      const turnHeaders={
+        ...auth(f.manager.token),
+        'idempotency-key':turnKey,
+      };
       const turnRequest=()=>authorityApp.inject({
         method:'POST',
         url:`/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
-        headers:commandHeaders(f.manager.token,turnKey),
+        headers:turnHeaders,
         payload:{
           expectedCaseVersion:f.caseVersion,
           expectedSessionRevision:created.json().revision,
