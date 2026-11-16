@@ -177,6 +177,7 @@ function targetDto(row: DigitalUseTargetItemRow) {
       scenePackageVersion: entry.scenePackageVersion as 'v1',
       interactionRefs: [...entry.interactionRefs],
       helpOrReentryRefs: [...entry.helpOrReentryRefs],
+      authorityRefs: [...(entry.authorityRefs ?? [])],
       evidenceRefs: entry.evidenceRefs
         .filter((ref) => 'id' in ref)
         .map((ref) => ({ type: ref.type, id: ref.id })),
@@ -202,6 +203,18 @@ function sceneNodeReachable(
   }
 
   if (row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS') return true;
+
+  // 01002/01003 are Evidence-derived decisions. A historical BLOCKED or
+  // COMPLETED projection remains addressable so corrected/superseding current
+  // Evidence can deterministically re-evaluate the route without deleting
+  // history.
+  if (
+    (row.node_code === '01002' || row.node_code === '01003') &&
+    (row.status === 'BLOCKED' || row.status === 'COMPLETED')
+  ) {
+    return true;
+  }
+
   if (row.status !== 'COMPLETED') return false;
   return (
     row.node_code === 'A3000' ||
