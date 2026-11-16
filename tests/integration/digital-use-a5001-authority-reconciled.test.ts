@@ -416,31 +416,35 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     expect(after.audits).toBe(1);
   });
 
-  it('same key replays original result even if package later becomes unavailable; changed package conflicts', async () => {
+  it('same exact authority replays; retired authority fails closed; changed canonical request conflicts', async () => {
     const f = await fixture('idempotency');
     const key = `slice15-a5001-idem-${crypto.randomUUID()}`;
     const request = payload(f);
     const first = await submit(f, key, request);
     expect(first.statusCode, first.body).toBe(200);
 
+    const replay = await submit(f, key, request);
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+
     professional.retire('FAMILY_ALLIANCE_REVIEW');
     try {
-      const replay = await submit(f, key, request);
-      expect(replay.statusCode, replay.body).toBe(200);
-      expect(replay.json()).toEqual(first.json());
-
-      const mismatch = await submit(f, key, {
-        ...request,
-        professionalPackage: {
-          ...TEST_A5001_PACKAGE,
-          contentHash: 'sha256:different-test-authority-package',
-        },
-      });
-      expect(mismatch.statusCode, mismatch.body).toBe(409);
-      expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+      const retired = await submit(f, key, request);
+      expect(retired.statusCode, retired.body).toBe(503);
+      expect(retired.json().code).toBe('DEPENDENCY_UNAVAILABLE');
     } finally {
       professional.restore('FAMILY_ALLIANCE_REVIEW');
     }
+
+    const mismatch = await submit(f, key, {
+      ...request,
+      packageResponse: {
+        outcome: 'SAME',
+        note: 'Different package-owned response.',
+      },
+    });
+    expect(mismatch.statusCode, mismatch.body).toBe(409);
+    expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
   });
 
   it('same Scene revision permits exactly one writer', async () => {
