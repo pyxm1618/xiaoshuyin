@@ -1853,7 +1853,7 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(template.json().meta).toMatchObject({
       contentVersion: 'phone-use-contract-v1',
       sourceBlob: '97a8db200013746faff64230ab7cbf5f15b41615',
-      authorityScope: 'PRODUCT_BASELINE',
+      approved: true,
     });
 
     const examples = await app.inject({
@@ -1863,7 +1863,7 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
     expect(examples.statusCode, examples.body).toBe(409);
     expect(examples.json()).toMatchObject({
-      code: 'PROFESSIONAL_CONTENT_UNAVAILABLE',
+      code: 'PHONE_USE_CONTRACT_CONTENT_STALE',
     });
   });
 
