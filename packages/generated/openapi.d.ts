@@ -7176,7 +7176,8 @@ export interface operations {
                         message: string;
                     };
                 };
-            };            /** @description `DEPENDENCY_UNAVAILABLE` */
+            };
+            /** @description `DEPENDENCY_UNAVAILABLE` */
             503: {
                 headers: {
                     [name: string]: unknown;
