@@ -194,26 +194,37 @@ export async function createPhoneUseRoleplay(
    const {scene}=await authorizeRoleplay(tx,input);
    const compliance=await assertRoleplayCompliance(tx,input.actor.personId);
 
-   const professionalContent=requireProfessionalContentAuthority(
-     input.professionalContentVersion,
-     professionalContentAuthority
-   );
-   if(professionalContent===null){
-     return recordRoleplayHold(tx,scene,'PROFESSIONAL_CONTENT_UNAVAILABLE');
-   }
-   if(!(await adapterAvailable(adapter,professionalContent.version))){
-     return recordRoleplayHold(tx,scene,'DOWNSTREAM_AI_UNAVAILABLE');
-   }
-
    const requestHash=hashPayload({
-     familyId:input.familyId,caseId:input.caseId,expectedCaseVersion:input.expectedCaseVersion,
-     professionalContentVersion:professionalContent.version,
-     professionalContentAuthorityRef:professionalContent.authorityRef,
+     familyId:input.familyId,
+     caseId:input.caseId,
+     expectedCaseVersion:input.expectedCaseVersion,
+     professionalContentVersion:input.professionalContentVersion,
    });
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_CREATE',idempotencyKey:input.idempotencyKey,requestHash,
    },async()=>{
+     const professionalContent=requireProfessionalContentAuthority(
+       input.professionalContentVersion,
+       professionalContentAuthority
+     );
+     if(professionalContent===null){
+       return {
+         status:200,
+         body:await recordRoleplayHold(
+           tx,
+           scene,
+           'PROFESSIONAL_CONTENT_UNAVAILABLE'
+         ),
+       };
+     }
+     if(!(await adapterAvailable(adapter,professionalContent.version))){
+       return {
+         status:200,
+         body:await recordRoleplayHold(tx,scene,'DOWNSTREAM_AI_UNAVAILABLE'),
+       };
+     }
+
      const row=await insertRoleplaySession(tx,{
        familyId:input.familyId,caseId:input.caseId,actorPersonId:input.actor.personId,
        scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
