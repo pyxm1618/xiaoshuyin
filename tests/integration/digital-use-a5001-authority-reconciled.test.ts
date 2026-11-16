@@ -798,7 +798,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       [child.personId, f.manager.personId]
     );
 
-    const observation = await withRlsTransaction(
+    const relay = await withRlsTransaction(
       appDb,
       {
         familyId: f.familyId,
@@ -807,7 +807,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
         purpose: 'FAMILY_MANAGEMENT',
       },
       async (tx) =>
-        recordObservation(
+        recordStatement(
           tx,
           {
             familyId: f.familyId,
@@ -818,20 +818,22 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
           },
           {
             subjectPersonId: child.personId,
-            sourceKind: 'GUARDIAN_OBSERVATION',
+            sourceKind: 'GUARDIAN_RELAY',
             sourcePersonId: f.manager.personId,
             occurredTimeState: 'UNKNOWN',
             confirmationStatus: 'UNCONFIRMED',
             content: 'Parent transcribed that the child was unsure whether the target helped.',
-            observationCode: 'slice15.child_transcribed_effect',
-            value: { state: 'UNKNOWN' },
           }
         )
     );
 
-    const evidenceRef = { type: 'OBSERVATION' as const, id: observation.id };
+    const evidenceRef = { type: 'ASSERTION' as const, id: relay.id };
     const body = {
       ...payload(f),
+      packageResponse: {
+        outcome: 'UNCERTAIN',
+        note: 'Child-reported effect remains uncertain.',
+      },
       evidenceRefs: [evidenceRef],
       provenance: [{
         kind: 'PARENT_TRANSCRIBED_CHILD_CLAIM',
@@ -851,12 +853,9 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       (item: any) => item.type === 'DIGITAL_USE_A5001_EFFECT_EVALUATION'
     );
     expect(artifact.data.provenance).toEqual(body.provenance);
-
-    const { rows } = await admin.query<{ value_state: string }>(
-      'SELECT value_state FROM observations WHERE id=$1',
-      [observation.id]
-    );
-    expect(rows[0]?.value_state).toBe('UNKNOWN');
+    expect(artifact.data.normalizedResponse).toMatchObject({
+      outcome: 'UNCERTAIN',
+    });
   });
 
   it('T1509 FORCE RLS keeps completed A5001 artifact invisible outside its Family context', async () => {
