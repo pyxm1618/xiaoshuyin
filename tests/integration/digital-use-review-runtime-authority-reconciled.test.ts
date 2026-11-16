@@ -574,6 +574,94 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     return rows;
   }
 
+  async function supersedeA5002WithVersion2(
+    f: A5002Fixture
+  ): Promise<A5002Fixture> {
+    const client = await admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT app.set_identity_context($1,$2)', [
+        f.manager.accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await client.query('SELECT app.set_family_context($1,$2,$3)', [
+        f.familyId,
+        f.manager.personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      const currentDoc = await client.query<{ id: string }>(
+        `SELECT id
+           FROM scene_artifacts
+          WHERE case_id=$1
+            AND artifact_type='PHONE_USE_CONTRACT_DOCUMENT'
+          ORDER BY revision DESC LIMIT 1`,
+        [f.caseId]
+      );
+      await client.query(
+        `UPDATE digital_use_contract_versions
+            SET status='SUPERSEDED',superseded_at=now()
+          WHERE id=$1 AND status='ACTIVE'`,
+        [f.contractId]
+      );
+      const next = await client.query<{ id: string }>(
+        `INSERT INTO digital_use_contract_versions
+           (family_id,case_id,version,draft_revision,status,
+            adult_party_person_id,child_party_person_id,child_participation_id,
+            contract_purpose,phone_use_rules,execution_period,parent_support_measures,
+            supervision_measures,incentives,breach_responsibilities,
+            source_template_version,dependency_refs,parent_confirmation,
+            child_confirmation,supersedes_id,update_reason,update_trigger,
+            created_by_person_id,activated_at)
+         SELECT
+            family_id,case_id,2,1,'ACTIVE',
+            adult_party_person_id,child_party_person_id,child_participation_id,
+            contract_purpose,phone_use_rules,execution_period,parent_support_measures,
+            supervision_measures,incentives,breach_responsibilities,
+            source_template_version,dependency_refs,parent_confirmation,
+            child_confirmation,id,'period completed','PERIOD_COMPLETE',
+            created_by_person_id,now()
+           FROM digital_use_contract_versions
+          WHERE id=$1
+         RETURNING id`,
+        [f.contractId]
+      );
+      const contractId = next.rows[0]!.id;
+      await client.query(
+        `INSERT INTO scene_artifacts
+           (family_id,case_id,scene_package_version,artifact_type,schema_version,
+            source_node_code,data,owner_person_id,visibility,source_refs,revision,
+            supersedes_id)
+         VALUES ($1,$2,'v1','PHONE_USE_CONTRACT_DOCUMENT','v1','A4010',
+                 $3::jsonb,$4,'FAMILY_AUTHORIZED','[]'::jsonb,2,$5)`,
+        [
+          f.familyId,
+          f.caseId,
+          JSON.stringify({
+            contractVersionId: contractId,
+            version: 2,
+            draftRevision: 1,
+            status: 'ACTIVE',
+            projectionNodeCode: 'A4012',
+          }),
+          f.manager.personId,
+          currentDoc.rows[0]!.id,
+        ]
+      );
+      await client.query('COMMIT');
+      return {
+        ...f,
+        contractId,
+        contractVersion: 2,
+        contractRevision: 1,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   it('T1503/T1506 production A5001 fails closed while the test-only exact package completes only A5001', async () => {
     provider.restore('FAMILY_ALLIANCE_REVIEW');
     const production = await prepareA5001(productionApp, 'a5001-prod-closed');
@@ -666,6 +754,78 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     });
     expect(artifact.data.professionalPackage).toMatchObject(TEST_A5002_PACKAGE);
     expect(artifact.data.a4012Boundary).toBe('OBSERVE_ONLY');
+  });
+
+  it('T1507/T1513 keeps historical A5002 bound to v1 and rejects silent substitution after independent A4012 creates v2', async () => {
+    provider.restore('PHONE_USE_CONTRACT_REVIEW');
+    const first = await prepareA5002(app, 'a5002-version-binding');
+    const v1 = await submitA5002(
+      app,
+      first.f,
+      first.scene,
+      first.payload,
+      `a5002-v1-${crypto.randomUUID()}`
+    );
+    expect(v1.statusCode, v1.body).toBe(200);
+
+    const v2Fixture = await supersedeA5002WithVersion2(first.f);
+    const afterA4012 = await getScene(app, v2Fixture);
+
+    const silentSwitch = await submitA5002(
+      app,
+      first.f,
+      afterA4012,
+      first.payload,
+      `a5002-old-subject-${crypto.randomUUID()}`
+    );
+    expect(silentSwitch.statusCode).toBe(409);
+    expect(silentSwitch.json()).toMatchObject({
+      code: 'PHONE_USE_CONTRACT_STALE_REVISION',
+    });
+
+    const v2Payload = {
+      ...first.payload,
+      subject: {
+        contractId: v2Fixture.contractId,
+        contractVersion: 2,
+        contractRevision: 1,
+        contractStatus: 'ACTIVE',
+      },
+      normalizedResponse: {
+        outcome: 'SAME',
+        note: 'Explicit review of the independently-created Contract v2.',
+      },
+    };
+    const v2 = await submitA5002(
+      app,
+      v2Fixture,
+      afterA4012,
+      v2Payload,
+      `a5002-v2-${crypto.randomUUID()}`
+    );
+    expect(v2.statusCode, v2.body).toBe(200);
+
+    const { rows } = await admin.query(
+      `SELECT id,revision,supersedes_id,data
+         FROM scene_artifacts
+        WHERE case_id=$1
+          AND artifact_type='DIGITAL_USE_A5002_EFFECT_EVALUATION'
+        ORDER BY revision`,
+      [first.f.caseId]
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0].data.subject).toMatchObject({
+      contractId: first.f.contractId,
+      contractVersion: 1,
+      contractRevision: 1,
+    });
+    expect(rows[1].data.subject).toMatchObject({
+      contractId: v2Fixture.contractId,
+      contractVersion: 2,
+      contractRevision: 1,
+      supersedesId: first.f.contractId,
+    });
+    expect(rows[1].supersedes_id).toBe(rows[0].id);
   });
 
   it('T1510 same idempotency key replays the original A5001 result and rejects changed package-owned payload', async () => {
