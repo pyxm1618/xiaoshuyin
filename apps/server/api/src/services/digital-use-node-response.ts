@@ -35,6 +35,7 @@ import {
 } from '@xiaoshuyin/scenes/digital-use';
 import {
   A5001FamilyAllianceReviewResponse,
+  A5002PhoneUseContractReviewResponse,
   type CompleteDigitalUseNodeRequestType,
   type DigitalUseSceneResponseType,
 } from '@xiaoshuyin/contracts';
@@ -58,6 +59,10 @@ import {
   executeFamilyAllianceReviewNodeInTransaction,
   resolveA5001SubjectSnapshot,
 } from './digital-use-family-alliance-review.js';
+import {
+  executePhoneUseContractReviewNodeInTransaction,
+  resolveA5002SubjectFingerprint,
+} from './digital-use-phone-contract-review.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -466,27 +471,37 @@ export async function completeDigitalUseNodeResponse(
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
-      if (node.stream === 'FAMILY_ALLIANCE_REVIEW') {
-        // Subject resolution must never run before the Case has been proven
-        // visible inside the actor's RLS family context. Keep this check
-        // read-only: the canonical business path acquires Family -> Case locks
-        // only after the idempotency advisory lock, preserving the existing
-        // transaction lock order and avoiding a Case -> idempotency inversion.
+      if (
+        node.stream === 'FAMILY_ALLIANCE_REVIEW' ||
+        node.stream === 'PHONE_USE_CONTRACT_REVIEW'
+      ) {
+        // Review subject resolution must never run before the Case has been
+        // proven visible inside the actor's RLS Family context. Keep this
+        // preview read-only; authoritative locks are acquired only inside the
+        // idempotent business execution.
         const visibleCase = await getCaseById(tx, input.caseId);
         if (visibleCase === null) throw nodeError('CASE_NOT_FOUND', 'Case not found');
       }
-      const resolvedA5001Subject =
-        node.stream === 'FAMILY_ALLIANCE_REVIEW'
-          ? await resolveA5001SubjectSnapshot(tx, input.caseId)
-          : null;
-      const validatedResponse =
-        node.stream === 'FAMILY_ALLIANCE_REVIEW'
-          ? (() => {
-              const parsed = A5001FamilyAllianceReviewResponse.safeParse(input.response);
-              if (!parsed.success) throw nodeError('SCENE_RESPONSE_INVALID');
-              return parsed.data;
-            })()
-          : input.response;
+
+      let validatedResponse: unknown = input.response;
+      let resolvedReviewSubject: unknown = null;
+      if (node.stream === 'FAMILY_ALLIANCE_REVIEW') {
+        const parsed = A5001FamilyAllianceReviewResponse.safeParse(input.response);
+        if (!parsed.success) throw nodeError('SCENE_RESPONSE_INVALID');
+        validatedResponse = parsed.data;
+        resolvedReviewSubject = await resolveA5001SubjectSnapshot(tx, input.caseId);
+      } else if (node.stream === 'PHONE_USE_CONTRACT_REVIEW') {
+        const parsed = A5002PhoneUseContractReviewResponse.safeParse(input.response);
+        if (!parsed.success) throw nodeError('SCENE_RESPONSE_INVALID');
+        validatedResponse = parsed.data;
+        resolvedReviewSubject = await resolveA5002SubjectFingerprint(tx, {
+          familyId: input.familyId,
+          caseId: input.caseId,
+          contractVersionId: parsed.data.contractVersionId,
+          contractVersion: parsed.data.contractVersion,
+          expectedContractDraftRevision: parsed.data.expectedContractDraftRevision,
+        });
+      }
       const requestHash = hashPayload({
         familyId: input.familyId,
         caseId: input.caseId,
@@ -497,7 +512,7 @@ export async function completeDigitalUseNodeResponse(
         expectedScenePackageVersion: input.expectedScenePackageVersion ?? null,
         expectedSelectionRevision: input.expectedSelectionRevision ?? null,
         expectedTargetRevision: input.expectedTargetRevision ?? null,
-        resolvedSubject: resolvedA5001Subject,
+        resolvedSubject: resolvedReviewSubject,
         response: validatedResponse,
       });
 
@@ -507,10 +522,10 @@ export async function completeDigitalUseNodeResponse(
           accountId: input.actor.accountId,
           personId: input.actor.personId,
           purpose: 'FAMILY_MANAGEMENT',
-          // Slice 15 keeps the existing Scene command slot. A5001 command
-          // identity is independent through the server-resolved node + exact
-          // Family Alliance subject/revisions included in requestHash above;
-          // no second idempotency owner or schema vocabulary is introduced.
+          // Slice 15 keeps the existing Scene command slot. A5001 and A5002
+          // identities remain independent through node/stream plus the exact
+          // server-resolved subject fingerprint included in requestHash; no
+          // second idempotency owner or command ledger is introduced.
           commandType: 'DIGITAL_USE_NODE_RESPONSE',
           idempotencyKey: input.idempotencyKey,
           requestHash,
@@ -520,6 +535,17 @@ export async function completeDigitalUseNodeResponse(
             return {
               status: 200,
               body: await executeFamilyAllianceReviewNodeInTransaction(
+                tx,
+                input,
+                node
+              ),
+            };
+          }
+
+          if (node.stream === 'PHONE_USE_CONTRACT_REVIEW') {
+            return {
+              status: 200,
+              body: await executePhoneUseContractReviewNodeInTransaction(
                 tx,
                 input,
                 node
