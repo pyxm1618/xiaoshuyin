@@ -65,8 +65,8 @@ describe('T908 AssertOrdinaryProgressionAllowed', () => {
     ).rejects.toMatchObject({ code: 'SAFETY_HOLD_BLOCKED', name: 'SafetyError' });
   });
 
-  it('allows every non-held status from the Safety perspective', async () => {
-    for (const status of ['OPEN', 'WAITING', 'LOST_CONTACT', 'CLOSED']) {
+  it('FND-REM-006: WAITING and CLOSED block ordinary progression while OPEN/LOST_CONTACT remain unchanged', async () => {
+    for (const status of ['OPEN', 'LOST_CONTACT']) {
       const caseId = await guardedCase(status);
       await expect(
         withDrizzleRlsTransaction(fixture.pool, rls(), (tx) =>
@@ -74,6 +74,20 @@ describe('T908 AssertOrdinaryProgressionAllowed', () => {
         )
       ).resolves.toBeUndefined();
     }
+
+    const waiting = await guardedCase('WAITING');
+    await expect(
+      withDrizzleRlsTransaction(fixture.pool, rls(), (tx) =>
+        assertOrdinaryProgressionAllowed(tx as unknown as SafetyWriteTx, { caseId: waiting })
+      )
+    ).rejects.toMatchObject({ code: 'CASE_NOT_OPEN' });
+
+    const closed = await guardedCase('CLOSED');
+    await expect(
+      withDrizzleRlsTransaction(fixture.pool, rls(), (tx) =>
+        assertOrdinaryProgressionAllowed(tx as unknown as SafetyWriteTx, { caseId: closed })
+      )
+    ).rejects.toMatchObject({ code: 'CASE_CLOSED' });
   });
 
   it('ignores a caller-supplied stale status snapshot', async () => {
@@ -106,9 +120,11 @@ describe('T908 AssertOrdinaryProgressionAllowed', () => {
   it('performs no write and advances no version', async () => {
     const caseId = await guardedCase('WAITING');
     const before = await fixture.getCase(caseId);
-    await withDrizzleRlsTransaction(fixture.pool, rls(), (tx) =>
-      assertOrdinaryProgressionAllowed(tx as unknown as SafetyWriteTx, { caseId })
-    );
+    await expect(
+      withDrizzleRlsTransaction(fixture.pool, rls(), (tx) =>
+        assertOrdinaryProgressionAllowed(tx as unknown as SafetyWriteTx, { caseId })
+      )
+    ).rejects.toMatchObject({ code: 'CASE_NOT_OPEN' });
     const after = await fixture.getCase(caseId);
     expect(after.version).toBe(before.version);
     expect(after.status).toBe('WAITING');
@@ -128,6 +144,8 @@ describe('T908 AssertOrdinaryProgressionAllowed', () => {
       // Both accessors must agree with the pure policy.
       expect(decideOrdinaryProgression('SAFETY_HOLD').allowed).toBe(false);
       expect(decideOrdinaryProgression('OPEN').allowed).toBe(true);
+      expect(decideOrdinaryProgression('WAITING')).toEqual({ allowed: false, code: 'CASE_NOT_OPEN' });
+      expect(decideOrdinaryProgression('CLOSED')).toEqual({ allowed: false, code: 'CASE_CLOSED' });
       expect(decideOrdinaryProgression(null).allowed).toBe(false);
       expect(isSafetyHoldStatus('SAFETY_HOLD')).toBe(true);
       expect(isSafetyHoldStatus('CLOSED')).toBe(false);

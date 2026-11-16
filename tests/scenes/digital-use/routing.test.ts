@@ -3,7 +3,7 @@ import { routeDigitalUseTopology } from '../../../packages/scenes/digital-use/ro
 
 function route(
   currentNodeCode: string,
-  conditions: Record<string, boolean | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'CONFLICT'>,
+  conditions: Record<string, boolean | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'NOT_APPLICABLE' | 'CONFLICT'>,
   evidenceBasis?: readonly ('PURPOSE' | 'FUNCTIONAL_IMPACT' | 'SLEEP' | 'REAL_WORLD_ACTIVITY_DISPLACEMENT' | 'EMOTION' | 'FAMILY_RELATIONSHIP_OR_CONFLICT' | 'OTHER_APPROVED_EVIDENCE' | 'TOTAL_DURATION' | 'HISTORICAL_DURATION_BAND')[]
 ) {
   return routeDigitalUseTopology({
@@ -34,11 +34,18 @@ describe('Slice 11 pure deterministic routing', () => {
   });
 
   it('fails closed when a higher-priority condition is unresolved, without blocking resolved false', () => {
-    for (const state of ['UNKNOWN', 'NOT_COLLECTED', 'CONFLICT'] as const) {
+    for (const state of ['UNKNOWN', 'NOT_COLLECTED', 'DECLINED', 'NOT_APPLICABLE'] as const) {
       expect(route('01002', { EMOTION_SEVERE_F: state, EMOTION_ASSESSMENT_NON_SEVERE: true })).toMatchObject({
         kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION',
       });
     }
+    expect(route('01002', { EMOTION_SEVERE_F: 'CONFLICT', EMOTION_ASSESSMENT_NON_SEVERE: true })).toMatchObject({
+      kind: 'BLOCKED', code: 'CONFLICTING_CONDITION',
+    });
+    // The key being absent is MISSING truth, not an implicit false.
+    expect(route('01002', { EMOTION_ASSESSMENT_NON_SEVERE: true })).toMatchObject({
+      kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION',
+    });
 
     expect(route('01003', {
       FAMILY_CONFLICT_SEVERE_F: 'UNKNOWN',
@@ -74,8 +81,9 @@ describe('Slice 11 pure deterministic routing', () => {
   });
 
   it('fails closed on no match, unresolved state, multiple match and unknown node', () => {
-    expect(route('A2004', {})).toMatchObject({ kind: 'BLOCKED', code: 'NO_APPROVED_ROUTE' });
-    expect(route('A2004', { COLLABORATIVE_DURATION_YES: 'UNKNOWN' })).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
+    expect(route('A2004', {})).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
+    expect(route('A2004', { COLLABORATIVE_DURATION_YES: 'UNKNOWN', COLLABORATIVE_DURATION_NO: false })).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
+    expect(route('A2004', { COLLABORATIVE_DURATION_YES: 'CONFLICT', COLLABORATIVE_DURATION_NO: false })).toMatchObject({ kind: 'BLOCKED', code: 'CONFLICTING_CONDITION' });
     expect(route('A2004', { COLLABORATIVE_DURATION_YES: true, COLLABORATIVE_DURATION_NO: true })).toMatchObject({ kind: 'BLOCKED', code: 'AMBIGUOUS_ROUTE' });
     expect(route('A9999', {})).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_NODE' });
   });

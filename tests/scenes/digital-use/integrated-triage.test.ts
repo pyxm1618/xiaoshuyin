@@ -7,7 +7,7 @@ import {
 } from '@xiaoshuyin/scenes/digital-use';
 
 const v = <T>(value: T): TriageEvidenceState<T> => ({ kind: 'VALUE', value });
-const missing = (reason: 'NO_RECORD' | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' = 'NO_RECORD') =>
+const missing = (reason: 'NO_RECORD' | 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED' | 'NOT_APPLICABLE' = 'NO_RECORD') =>
   ({ kind: 'MISSING', reason } as const);
 const conflict = (reason: 'CONFLICTING' | 'CONTRADICTORY' | 'INCOMPATIBLE' | 'INVALID' = 'CONFLICTING') =>
   ({ kind: 'CONFLICT', reason } as const);
@@ -31,12 +31,14 @@ describe('T1211 Integrated Triage authority matrix', () => {
     ['01002 NOT_COLLECTED', fixture({ emotion01002: missing('NOT_COLLECTED') }), 'INSUFFICIENT'],
     ['01002 DECLINED', fixture({ emotion01002: missing('DECLINED') }), 'INSUFFICIENT'],
     ['01002 UNKNOWN', fixture({ emotion01002: missing('UNKNOWN') }), 'INSUFFICIENT'],
+    ['01002 NOT_APPLICABLE', fixture({ emotion01002: missing('NOT_APPLICABLE') }), 'INSUFFICIENT'],
     ['01002 conflict', fixture({ emotion01002: conflict('CONTRADICTORY') }), 'BLOCKED'],
     ['01002 F', fixture({ emotion01002: v(['F']) }), '01005'],
     ['01003 missing', fixture({ family01003: missing() }), 'INSUFFICIENT'],
     ['01003 NOT_COLLECTED', fixture({ family01003: missing('NOT_COLLECTED') }), 'INSUFFICIENT'],
     ['01003 DECLINED', fixture({ family01003: missing('DECLINED') }), 'INSUFFICIENT'],
     ['01003 UNKNOWN', fixture({ family01003: missing('UNKNOWN') }), 'INSUFFICIENT'],
+    ['01003 NOT_APPLICABLE', fixture({ family01003: missing('NOT_APPLICABLE') }), 'INSUFFICIENT'],
     ['01003 conflict', fixture({ family01003: conflict('INCOMPATIBLE') }), 'BLOCKED'],
     ['01003 F', fixture({ family01003: v('F') }), '01006'],
     ['both F', fixture({ emotion01002: v(['F']), family01003: v('F') }), '01005'],
@@ -91,6 +93,7 @@ describe('T1211 Integrated Triage authority matrix', () => {
     ['UNKNOWN', missing('UNKNOWN')],
     ['NOT_COLLECTED', missing('NOT_COLLECTED')],
     ['DECLINED', missing('DECLINED')],
+    ['NOT_APPLICABLE', missing('NOT_APPLICABLE')],
   ] as const)(
     'direct-impact %s without a usable current value stays INSUFFICIENT',
     (_name, unresolved) => {

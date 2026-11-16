@@ -157,6 +157,34 @@ describe('T1216 Digital Use Problem Formulation handoff', () => {
     });
   });
 
+  it('FND-REM-005: preserves NOT_APPLICABLE as an unknown-like formulation item', async () => {
+    listCurrentSceneEvidenceStatements.mockResolvedValue([
+      row('00000000-0000-7000-8000-000000000015', 'a1001.impact.sleep', {
+        state: 'NOT_APPLICABLE',
+      }),
+      row('00000000-0000-7000-8000-000000000016', '01002.emotion', {
+        state: 'KNOWN', selections: ['A'],
+      }),
+    ]);
+
+    const result = await buildDigitalUseProblemFormulationCandidate({} as never, {
+      actor: {
+        accountId: '00000000-0000-7000-8000-000000000001',
+        personId: actorPersonId,
+      },
+      familyId: '00000000-0000-7000-8000-000000000003',
+      caseId,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.content.unknowns).toContainEqual({
+      topic: 'a1001.impact.sleep',
+      state: 'NOT_APPLICABLE',
+      evidenceRefs: [],
+    });
+  });
+
   it('fails closed on contradictory current Evidence instead of choosing one side', async () => {
     listCurrentSceneEvidenceStatements.mockResolvedValue([
       row('00000000-0000-7000-8000-000000000021', '01002.emotion', {
