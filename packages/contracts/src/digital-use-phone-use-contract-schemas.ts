@@ -47,25 +47,11 @@ export const RevisePhoneUseContractRequest=z.strictObject({
  updateTrigger:z.enum(['PERIOD_COMPLETE','NEW_PROBLEM']),updateReason:z.string().trim().min(1).max(2000),
 });
 export const PhoneUseContractVersionPathParams=z.strictObject({id:z.string().uuid(),version:z.coerce.number().int().min(1).max(PG_INTEGER_MAX)});
-export const PhoneUseContractContentMeta=z.strictObject({
- contentVersion:z.string().min(1),
- sourceBlob:z.string().regex(/^[0-9a-f]{40}$/),
- authorityScope:z.literal('PRODUCT_BASELINE'),
-});
-export const PhoneUseProfessionalAuthorityMeta=z.strictObject({
- status:z.literal('APPROVED_PUBLISHED'),
- version:z.string().min(1).max(128),
- authorityRef:z.string().min(1).max(240),
-});
+export const PhoneUseContractContentMeta=z.strictObject({contentVersion:z.string().min(1),sourceBlob:z.string().regex(/^[0-9a-f]{40}$/),approved:z.literal(true)});
 export const PhoneUseContractTemplateResponse=z.strictObject({meta:PhoneUseContractContentMeta,sections:z.array(z.string()),sourceText:z.string()});
-export const PhoneUseContractExamplesResponse=z.strictObject({
- meta:PhoneUseContractContentMeta,
- professionalAuthority:PhoneUseProfessionalAuthorityMeta,
- examples:z.array(z.strictObject({id:z.string(),title:z.string(),sourceText:z.string()})).length(4),
-});
+export const PhoneUseContractExamplesResponse=z.strictObject({meta:PhoneUseContractContentMeta,examples:z.array(z.strictObject({id:z.string(),title:z.string(),sourceText:z.string()})).length(4)});
 export const PhoneUseContractFaqResponse=z.strictObject({
  meta:PhoneUseContractContentMeta,
- professionalAuthority:PhoneUseProfessionalAuthorityMeta,
  contract:z.strictObject({
    id:z.string().uuid(),
    version:z.number().int().min(1).max(PG_INTEGER_MAX),
@@ -119,7 +105,7 @@ export const PhoneUseContractRuntimeError=z.strictObject({code:z.enum([
  'PHONE_USE_CONTRACT_MISSING_CONFIRMATION','PHONE_USE_CONTRACT_INVALID_CONFIRMATION_SOURCE','PHONE_USE_CONTRACT_STALE_REVISION',
  'PHONE_USE_CONTRACT_CONTENT_STALE','PHONE_USE_CONTRACT_ILLEGAL_ENTRY','PHONE_USE_CONTRACT_CONSENT_BLOCKED',
  'PHONE_USE_CONTRACT_COMPLIANCE_BLOCKED','PHONE_USE_CONTRACT_SAFETY_BLOCKED','PHONE_USE_CONTRACT_PACKAGE_DRIFT',
- 'PROFESSIONAL_CONTENT_UNAVAILABLE','DOWNSTREAM_AI_UNAVAILABLE','PHONE_USE_ROLEPLAY_DOWNSTREAM_UNAVAILABLE','PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE','INTERNAL_ERROR'
+ 'DOWNSTREAM_AI_UNAVAILABLE','PHONE_USE_ROLEPLAY_DOWNSTREAM_UNAVAILABLE','PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE','INTERNAL_ERROR'
 ]),message:z.string()});
 
 export const PhoneUseRoleplaySelectionResponse=z.strictObject({
