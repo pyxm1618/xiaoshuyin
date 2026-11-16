@@ -173,27 +173,92 @@ export async function runLockedIdempotentCommandInTransaction(
   return { action: 'EXECUTED', status: response.status, body: response.body };
 }
 
+interface PreparedIdempotencyReplayEnvelope {
+  readonly __preparedIdempotencyV1: true;
+  readonly replayDiscriminator: string;
+  readonly body: unknown;
+}
+
+function isPreparedReplayEnvelope(
+  value: unknown
+): value is PreparedIdempotencyReplayEnvelope {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record['__preparedIdempotencyV1'] === true &&
+    typeof record['replayDiscriminator'] === 'string' &&
+    Object.prototype.hasOwnProperty.call(record, 'body')
+  );
+}
+
 export async function runPreparedIdempotentCommandInTransaction(
   tx: pg.PoolClient,
-  cfg: Omit<IdempotentCommandConfig, 'requestHash'>,
+  cfg: Omit<IdempotentCommandConfig, 'requestHash'> & {
+    readonly replayDiscriminator: string;
+  },
   prepareRequestHash: (tx: pg.PoolClient) => Promise<string>,
   fn: (tx: pg.PoolClient) => Promise<CommandResponse>
 ): Promise<CommandOutcome> {
-  // T1510 binds replay to the exact *current* authority state. Acquire the
-  // existing idempotency lock first, then resolve/normalize the authority-bound
-  // canonical request hash, then reuse the one existing idempotency ledger.
-  //
-  // If the exact Professional package/subject is no longer current, hash
-  // preparation fails closed before replay. If it is current, same canonical
-  // authority replays and any changed package/subject/normalized response
-  // becomes the existing IDEMPOTENCY_PAYLOAD_MISMATCH.
+  // request_hash remains the package-normalized canonical authority identity.
+  // The auxiliary replay discriminator lives only in the existing response
+  // snapshot so an exact historical request can replay its committed result
+  // after package retirement without turning the raw wire form into authority.
   await lockIdempotentCommandInTransaction(tx, cfg);
-  const requestHash = await prepareRequestHash(tx);
-  return runLockedIdempotentCommandInTransaction(
+  const existing = await getIdempotencyKey(
     tx,
-    { ...cfg, requestHash },
-    fn
+    cfg.accountId,
+    cfg.commandType,
+    cfg.idempotencyKey
   );
+  if (
+    existing !== null &&
+    isPreparedReplayEnvelope(existing.response_body) &&
+    existing.response_body.replayDiscriminator === cfg.replayDiscriminator
+  ) {
+    return {
+      action: 'REPLAY',
+      status: existing.response_status,
+      body: existing.response_body.body,
+    };
+  }
+
+  // A wire-different request must still pass current authority normalization.
+  // If its normalized canonical hash matches the committed hash it replays;
+  // otherwise the existing idempotency owner returns mismatch.
+  const requestHash = await prepareRequestHash(tx);
+  if (existing !== null) {
+    const decision = decide(existing, requestHash);
+    if (decision) {
+      if (
+        decision.action === 'REPLAY' &&
+        isPreparedReplayEnvelope(existing.response_body)
+      ) {
+        return {
+          action: 'REPLAY',
+          status: decision.status,
+          body: existing.response_body.body,
+        };
+      }
+      return decision;
+    }
+  }
+
+  const response = await fn(tx);
+  const persisted: PreparedIdempotencyReplayEnvelope = {
+    __preparedIdempotencyV1: true,
+    replayDiscriminator: cfg.replayDiscriminator,
+    body: response.body,
+  };
+  await insertIdempotencyKey(
+    tx,
+    cfg.accountId,
+    cfg.commandType,
+    cfg.idempotencyKey,
+    requestHash,
+    response.status,
+    JSON.stringify(persisted)
+  );
+  return { action: 'EXECUTED', status: response.status, body: response.body };
 }
 
 export async function runIdempotentCommandInTransaction(
