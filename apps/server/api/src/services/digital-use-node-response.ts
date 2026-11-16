@@ -619,9 +619,30 @@ export async function completeDigitalUseNodeResponse(
         node.stream === 'FAMILY_ALLIANCE_REVIEW' ||
         node.stream === 'PHONE_USE_CONTRACT_REVIEW'
       ) {
+        const reviewReplayDiscriminator = hashPayload({
+          actor: {
+            accountId: input.actor.accountId,
+            personId: input.actor.personId,
+          },
+          familyId: input.familyId,
+          caseId: input.caseId,
+          node: node.nodeCode,
+          stream: node.stream,
+          expectedCaseVersion: input.expectedCaseVersion,
+          expectedNodeRevision: input.expectedNodeRevision,
+          expectedScenePackageVersion:
+            input.expectedScenePackageVersion ?? null,
+          expectedSelectionRevision:
+            input.expectedSelectionRevision ?? null,
+          expectedTargetRevision: input.expectedTargetRevision ?? null,
+          response: input.response,
+        });
         const reviewOutcome = await runPreparedIdempotentCommandInTransaction(
           tx,
-          idempotencyBase,
+          {
+            ...idempotencyBase,
+            replayDiscriminator: reviewReplayDiscriminator,
+          },
           async () => {
             const fingerprint =
               node.stream === 'FAMILY_ALLIANCE_REVIEW'
