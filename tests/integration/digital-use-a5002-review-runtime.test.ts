@@ -317,6 +317,92 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     }
   }
 
+  async function seedA5001Subject(f: Fixture): Promise<void> {
+    const a3000 = resolveDigitalUseRuntimeNode('A3000');
+    const a3002 = resolveDigitalUseRuntimeNode('A3002');
+    const client = await admin.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`UPDATE cases SET phase='GOALS' WHERE id=$1`, [f.caseId]);
+      for (const node of [a3000, a3002]) {
+        await client.query(
+          `INSERT INTO scene_node_states
+             (family_id,case_id,scene_package_version,node_code,source_node_code,
+              status,branch_reason_codes,input_refs,output_refs,completed_at,revision)
+           VALUES ($1,$2,'v1',$3,$4,'COMPLETED',
+                   ARRAY['SLICE15_DUAL_STREAM_FIXTURE'],'[]'::jsonb,'[]'::jsonb,now(),1)`,
+          [f.familyId, f.caseId, node.nodeCode, node.sourceNodeCode]
+        );
+      }
+      await client.query(
+        `INSERT INTO scene_artifacts
+           (family_id,case_id,scene_package_version,artifact_type,schema_version,
+            source_node_code,data,owner_person_id,visibility,source_refs,revision)
+         VALUES ($1,$2,'v1','FAMILY_ALLIANCE_SELF_ASSESSMENT','v1','A3000',
+                 $3::jsonb,$4,'FAMILY_AUTHORIZED','[]'::jsonb,1)`,
+        [
+          f.familyId,
+          f.caseId,
+          JSON.stringify({ fixture: 'slice15-dual-stream' }),
+          f.manager.personId,
+        ]
+      );
+      await client.query(
+        `INSERT INTO digital_use_target_items
+           (family_id,case_id,scene_package_version,target_code,selection_revision,
+            revision,selected,concrete_target_text,feasibility_payload,
+            progress_payload,progress_evidence_refs,help_history_refs,source_refs,
+            created_by_person_id)
+         VALUES
+           ($1,$2,'v1','SLEEP',1,1,true,'Keep the agreed bedtime',
+            $3::jsonb,$4::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,$5)`,
+        [
+          f.familyId,
+          f.caseId,
+          JSON.stringify({ state: 'KNOWN', note: 'Feasible with parent support.' }),
+          JSON.stringify({ state: 'PARTIAL', note: 'Tried on several evenings.' }),
+          f.manager.personId,
+        ]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  function a5001Payload() {
+    return {
+      kind: 'FAMILY_ALLIANCE_REVIEW',
+      familyDimensions: {
+        emotionalSupport: { state: 'KNOWN', note: 'Parent stayed calm.' },
+        childVoiceNegotiation: { state: 'UNKNOWN' },
+        trust: { state: 'KNOWN', note: 'Agreement was taken seriously.' },
+        coordination: { state: 'NOT_COLLECTED' },
+        parentStability: { state: 'KNOWN', note: 'Parent response was stable.' },
+        parentPromiseConsistency: { state: 'UNKNOWN' },
+      },
+      targetEvaluations: [
+        {
+          targetCode: 'SLEEP',
+          expectedTargetRevision: 1,
+          dimensions: {
+            attempted: { state: 'KNOWN', note: 'The bedtime target was attempted.' },
+            partialOrNotAttempted: { state: 'KNOWN', note: 'Execution was partial.' },
+            barriers: { state: 'UNKNOWN' },
+            help: { state: 'NOT_COLLECTED' },
+            change: { state: 'KNOWN', note: 'Conflict shortened.' },
+            adverseChange: { state: 'UNKNOWN' },
+            uncertainty: { state: 'UNKNOWN' },
+          },
+        },
+      ],
+      evidenceRefs: [],
+    };
+  }
+
   async function getScene(f: Fixture) {
     const response = await app.inject({
       method: 'GET',
@@ -789,6 +875,74 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     expect(result.statusCode).toBe(409);
     expect(result.json().code).toBe('DEPENDENCY_UNAVAILABLE');
     expect((await counts(f)).artifacts).toBe(0);
+  });
+
+  it('AS-46/70 deterministic same-Case fixture completes both streams without AI or Phase 4 truth', async () => {
+    const f = await fixture('dual-closeout');
+    await seedA5001Subject(f);
+
+    const before = await getScene(f);
+    expect(before.targetSelectionRevision).toBe(1);
+    expect(
+      before.reachableNodes.some((item: any) => item.nodeCode === 'A5001')
+    ).toBe(true);
+    expect(
+      before.reachableNodes.some((item: any) => item.nodeCode === 'A5002')
+    ).toBe(true);
+
+    const a5001 = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A5001/responses`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': `slice15-dual-a5001-${crypto.randomUUID()}`,
+      },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: 1,
+        response: a5001Payload(),
+      },
+    });
+    expect(a5001.statusCode, a5001.body).toBe(200);
+
+    const afterA5001 = await getScene(f);
+    const a5002 = await submit(
+      f,
+      afterA5001,
+      `slice15-dual-a5002-${crypto.randomUUID()}`,
+      payload(f, 'dual')
+    );
+    expect(a5002.statusCode, a5002.body).toBe(200);
+
+    const finalScene = a5002.json();
+    expect(finalScene.nodes.find((n: any) => n.nodeCode === 'A5001')).toMatchObject({
+      status: 'COMPLETED',
+    });
+    expect(finalScene.nodes.find((n: any) => n.nodeCode === 'A5002')).toMatchObject({
+      status: 'COMPLETED',
+    });
+    const types = finalScene.artifacts.map((item: any) => item.type);
+    expect(types).toContain('DIGITAL_USE_A5001_EFFECT_EVALUATION');
+    expect(types).toContain('DIGITAL_USE_A5002_EFFECT_EVALUATION');
+
+    const phase4 = await admin.query<{
+      reviews: string | null;
+      outcomes: string | null;
+      followup_schedules: string | null;
+    }>(
+      `SELECT
+         to_regclass('public.reviews')::text AS reviews,
+         to_regclass('public.outcomes')::text AS outcomes,
+         to_regclass('public.followup_schedules')::text AS followup_schedules`
+    );
+    expect(phase4.rows[0]).toEqual({
+      reviews: null,
+      outcomes: null,
+      followup_schedules: null,
+    });
+    expect((await counts(f)).a4012).toBe(0);
   });
 
   it('AS-44/45 rolls Evidence/node/artifact/idempotency back when artifact persistence fails', async () => {
