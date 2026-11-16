@@ -133,6 +133,9 @@ function manifestDescendants(nodeCode: string): ReadonlySet<string> {
         pending.push(edge.targetNodeCode);
       }
     }
+    for (const parallelNodeCode of node.canRunInParallelWith as readonly string[]) {
+      if (!visited.has(parallelNodeCode)) pending.push(parallelNodeCode);
+    }
   }
   return visited;
 }
@@ -646,7 +649,10 @@ export async function completeDigitalUseNodeResponse(
           assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
           await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
           await assertAssessmentCompliance(tx, input.actor.personId);
-          if (node.stream === 'PHONE_USE_CONTRACT') {
+          if (
+            node.nodeCode === 'A2010' ||
+            node.stream === 'PHONE_USE_CONTRACT'
+          ) {
             await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
           }
 
@@ -737,6 +743,15 @@ export async function completeDigitalUseNodeResponse(
                   outputRefs: semantic.outputRefs,
                 });
             if (!progressed) throw nodeError('STALE_NODE_REVISION');
+            if (reevaluatingTriage) {
+              await convergeSupersededTriageRoute(tx, {
+                caseId: input.caseId,
+                sourceNodeCode: node.nodeCode,
+                newNextNodeCode: null,
+                branchReasonCode: reasonCode,
+                nextInputRefs: nextInputRefs(semantic),
+              });
+            }
             return {
               status: 200,
               body: await currentSceneEnvelope(tx, input.caseId),
@@ -780,6 +795,15 @@ export async function completeDigitalUseNodeResponse(
               nextNodeCode: null,
               terminalCode: null,
             });
+            if (reevaluatingTriage) {
+              await convergeSupersededTriageRoute(tx, {
+                caseId: input.caseId,
+                sourceNodeCode: node.nodeCode,
+                newNextNodeCode: null,
+                branchReasonCode: reasonCode,
+                nextInputRefs: nextInputRefs(semantic),
+              });
+            }
             await insertDigitalUseNodeCompletedAudit(tx, {
               familyId: input.familyId,
               caseId: input.caseId,
