@@ -51,6 +51,7 @@ import {
   type ProfessionalReviewContentProvider,
   type ProfessionalReviewPackageProof,
 } from './digital-use-review-professional-content.js';
+import { assertProfessionalReviewProvenance } from './digital-use-review-provenance.js';
 
 const ARTIFACT_TYPE = 'DIGITAL_USE_A5001_EFFECT_EVALUATION' as const;
 const ARTIFACT_SCHEMA_VERSION = 'v1' as const;
@@ -248,25 +249,6 @@ function assertSubjectExpectation(
   }
 }
 
-function assertProvenance(
-  actor: DigitalUseActor,
-  submission: A5001FamilyAllianceReviewSubmissionType
-): void {
-  for (const provenance of submission.provenance) {
-    if (
-      provenance.kind === 'PARENT_AUTHORED_OBSERVATION' &&
-      provenance.sourcePersonId !== actor.personId
-    ) {
-      throw reviewError('SCENE_RESPONSE_INVALID');
-    }
-    if (
-      provenance.kind === 'PARENT_TRANSCRIBED_CHILD_CLAIM' &&
-      provenance.transcriberPersonId !== actor.personId
-    ) {
-      throw reviewError('SCENE_RESPONSE_INVALID');
-    }
-  }
-}
 
 function sourceRefsFor(
   subject: A5001SubjectSnapshot,
@@ -354,7 +336,6 @@ export async function executeA5001ReviewInTransaction(
 
     const parsed = A5001FamilyAllianceReviewSubmission.safeParse(input.response);
     if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
-    assertProvenance(input.actor, parsed.data);
 
     if (!(await lockFamilyForPrimaryDecision(tx, input.familyId))) {
       throw reviewError('CASE_NOT_FOUND', 'Case not found');
@@ -370,6 +351,13 @@ export async function executeA5001ReviewInTransaction(
     }
 
     await pinAndAssertFamilyAllianceGates(tx, input.caseId, input.actor.personId);
+    await assertProfessionalReviewProvenance(tx, {
+      familyId: input.familyId,
+      caseId: input.caseId,
+      actorPersonId: input.actor.personId,
+      evidenceRefs: parsed.data.evidenceRefs,
+      provenance: parsed.data.provenance,
+    });
     const subject = await resolveA5001SubjectSnapshot(tx, {
       familyId: input.familyId,
       caseId: input.caseId,
