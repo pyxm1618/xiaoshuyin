@@ -33,6 +33,10 @@ No production file change. This is a mandatory read-back gate.
 
 Frozen reconciliation spec + frozen Plan/Checklist/Tasks.
 
+### Implementation boundary
+
+Read-only development-start gate. It may update only the development report/inventory after non-semantic drift; it cannot change Spec, Docs, Plan authority, production code, tests or migration before the gate passes.
+
 ### Mechanical execution
 
 Read and record:
@@ -998,6 +1002,10 @@ File grouping may be consolidated, but no scenario coverage may disappear.
 
 T1602–T1611.
 
+### Implementation boundary
+
+Testing and test-support only, except minimal production fixes required to satisfy an already-frozen T1602–T1611 contract. This task cannot introduce new product semantics, approval authority, package authority or Phase 4 functionality.
+
 ### Mechanical execution
 
 Create a traceability matrix in tests/comments or a test evidence report that proves:
@@ -1069,6 +1077,10 @@ tests/architecture/intervention-negative-scope.test.ts
 ### Dependencies
 
 T1602–T1612.
+
+### Implementation boundary
+
+Architecture/static guards only. Production changes made solely to evade a guard are forbidden; a guard failure must either expose a real scope violation or be narrowed to avoid false positives on historical docs/specs.
 
 ### Mechanical execution
 
@@ -1152,6 +1164,10 @@ No new product functionality. Test/evidence metadata only if repository conventi
 ### Dependencies
 
 T1601–T1613.
+
+### Implementation boundary
+
+Verification/reporting only. No new feature, schema, migration, authority, Audit 2 action or merge may be added during final read-back; any failure returns to the responsible development task.
 
 ### Mechanical execution
 
