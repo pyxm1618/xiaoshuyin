@@ -843,6 +843,7 @@ export function buildOpenApiDocument() {
           '409': jsonResponse('Concurrency, routing, Safety, Compliance or idempotency conflict', toJsonSchema(DigitalUseApiError)),
           '422': jsonResponse('Strict node response validation failure', toJsonSchema(DigitalUseApiError)),
           '500': jsonResponse('`INTERNAL_ERROR`', toJsonSchema(DigitalUseApiError)),
+          '503': jsonResponse('`DEPENDENCY_UNAVAILABLE`', toJsonSchema(DigitalUseApiError)),
         },
       },
     },
