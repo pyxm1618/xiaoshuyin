@@ -75,8 +75,9 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
       expectedScenePackageVersion: 'v1' as const,
       response: a5001Response(),
     };
-    const fingerprint = (value: typeof base) =>
-      hashPayload(a5001CanonicalRequestFingerprint(value).fingerprint);
+    const fingerprint = (
+      value: Parameters<typeof a5001CanonicalRequestFingerprint>[0]
+    ) => hashPayload(a5001CanonicalRequestFingerprint(value).fingerprint);
     const original = fingerprint(base);
     expect(fingerprint(base)).toBe(original);
 
@@ -125,8 +126,9 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
       expectedScenePackageVersion: 'v1' as const,
       response: a5002Response(),
     };
-    const fingerprint = (value: typeof base) =>
-      hashPayload(a5002CanonicalRequestFingerprint(value).fingerprint);
+    const fingerprint = (
+      value: Parameters<typeof a5002CanonicalRequestFingerprint>[0]
+    ) => hashPayload(a5002CanonicalRequestFingerprint(value).fingerprint);
     const original = fingerprint(base);
     expect(fingerprint({
       ...base,
