@@ -177,6 +177,7 @@ function targetDto(row: DigitalUseTargetItemRow) {
       scenePackageVersion: entry.scenePackageVersion as 'v1',
       interactionRefs: [...entry.interactionRefs],
       helpOrReentryRefs: [...entry.helpOrReentryRefs],
+      authorityRefs: [...(entry.authorityRefs ?? [])],
       evidenceRefs: entry.evidenceRefs
         .filter((ref) => 'id' in ref)
         .map((ref) => ({ type: ref.type, id: ref.id })),
@@ -202,6 +203,18 @@ function sceneNodeReachable(
   }
 
   if (row.status === 'AVAILABLE' || row.status === 'IN_PROGRESS') return true;
+
+  // 01002/01003 are Evidence-derived decisions. A historical BLOCKED or
+  // COMPLETED projection remains addressable so corrected/superseding current
+  // Evidence can deterministically re-evaluate the route without deleting
+  // history.
+  if (
+    (row.node_code === '01002' || row.node_code === '01003') &&
+    (row.status === 'BLOCKED' || row.status === 'COMPLETED')
+  ) {
+    return true;
+  }
+
   if (row.status !== 'COMPLETED') return false;
   return (
     row.node_code === 'A3000' ||
@@ -239,6 +252,7 @@ export function buildSceneEnvelope(input: {
     .filter((artifact) => artifact.artifact_type === 'SOLUTION_SUMMARY')
     .sort((a, b) => b.revision - a.revision)[0];
   const a3000 = input.nodes.find((node) => node.node_code === 'A3000');
+  const a4001 = input.nodes.find((node) => node.node_code === 'A4001');
   const targetSelectionRevision = coherentCurrentSelectionRevision(targets);
 
   return {
@@ -270,23 +284,29 @@ export function buildSceneEnvelope(input: {
     targets: targets.map(targetDto),
     routeReasonCode: latestReason,
     downstream:
-      a3000 !== undefined
+      a3000 !== undefined && a4001 !== undefined
         ? {
-            routeIntent: 'A4001',
-            available: false,
-            reasonCode: 'DOWNSTREAM_RUNTIME_UNAVAILABLE',
+            routeIntent: null,
+            available: true,
+            reasonCode: null,
           }
-        : a2010
+        : a3000 !== undefined
           ? {
-              routeIntent: 'A3000',
+              routeIntent: 'A4001',
               available: false,
-              reasonCode: 'ENTRY_GATES_REVALIDATION_REQUIRED',
+              reasonCode: 'PARALLEL_LANE_CONVERGENCE_REQUIRED',
             }
-          : {
-              routeIntent: null,
-              available: true,
-              reasonCode: null,
-            },
+          : a2010
+            ? {
+                routeIntent: 'A3000',
+                available: false,
+                reasonCode: 'ENTRY_GATES_REVALIDATION_REQUIRED',
+              }
+            : {
+                routeIntent: null,
+                available: true,
+                reasonCode: null,
+              },
   };
 }
 

@@ -26,7 +26,11 @@ import {
 import type { WechatAuthProvider } from './auth/wechat-provider.js';
 import { Slice4InvitationPort } from './identity-binding/invitation-slice4-adapter.js';
 import type { InvitationResolutionPort } from './identity-binding/invitation-port.js';
-import type { RoleplayAdapter } from './services/digital-use-roleplay-adapter.js';
+import type {
+  RoleplayAdapter,
+  RoleplayModelPromptAuthorityProvider,
+  RoleplayProfessionalContentAuthority,
+} from './services/digital-use-roleplay-adapter.js';
 
 export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
@@ -43,9 +47,15 @@ export interface BuildAppOptions {
     invitationPort?: InvitationResolutionPort;
     wechatProvider?: WechatAuthProvider;
   };
-  /** Slice 14 test-only Phase-2 adapter injection. Production defaults unavailable. */
+  /**
+   * Bounded A4003 test seams. Production has neither a roleplay adapter, an
+   * assigned approved/published Professional Content package, nor implicit
+   * current Model / Prompt authority.
+   */
   phoneUseContract?: {
     roleplayAdapter?: RoleplayAdapter;
+    roleplayProfessionalContent?: RoleplayProfessionalContentAuthority;
+    roleplayModelPromptAuthority?: RoleplayModelPromptAuthorityProvider;
   };
 }
 
@@ -163,13 +173,23 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);
   registerDigitalUseAssessmentRoutes(app, pool, { evidencePepper: runtime.evidencePepper });
-  registerDigitalUsePhoneContractRoutes(
-    app,
-    pool,
-    options.phoneUseContract?.roleplayAdapter
+  registerDigitalUsePhoneContractRoutes(app, pool, {
+    ...(options.phoneUseContract?.roleplayAdapter
       ? { roleplayAdapter: options.phoneUseContract.roleplayAdapter }
-      : {}
-  );
+      : {}),
+    ...(options.phoneUseContract?.roleplayProfessionalContent
+      ? {
+          roleplayProfessionalContent:
+            options.phoneUseContract.roleplayProfessionalContent,
+        }
+      : {}),
+    ...(options.phoneUseContract?.roleplayModelPromptAuthority
+      ? {
+          roleplayModelPromptAuthority:
+            options.phoneUseContract.roleplayModelPromptAuthority,
+        }
+      : {}),
+  });
   registerParticipationRoutes(app, pool, {
     inviteTtlSeconds: runtime.participationInviteTtlSeconds,
     inviteTokenSecret: runtime.participationInviteTokenSecret,

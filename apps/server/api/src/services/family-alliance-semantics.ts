@@ -208,7 +208,9 @@ async function applyA3000(
     schemaVersion: 'v1',
     sourceNodeCode: 'A3000',
     data: {
-      contentVersion: 'family-alliance-principles-v1',
+      contentVersion: DIGITAL_USE_PACKAGE_VERSION,
+      interactionRefs: [...context.node.interactionRefs],
+      authorityRefs: [...context.node.authorityRefs],
       displayProjection: entries.map(([key], index) => ({
         key,
         evidenceRef: refs[index],
@@ -327,10 +329,10 @@ async function applyTargetFamily(
     const targetRow = await reviseDigitalUseTargetItem(context.tx, {
       ...common,
       patch: {
-        ...(parsed.data.feasibility.concreteQuantified.state === 'KNOWN'
+        ...(parsed.data.feasibility.replacementBehavior.concreteQuantified.state === 'KNOWN'
           ? {
               concreteTargetText:
-                parsed.data.feasibility.concreteQuantified.concreteTargetText,
+                parsed.data.feasibility.replacementBehavior.concreteQuantified.concreteTargetText,
             }
           : {}),
         feasibilityPayload: parsed.data.feasibility,
@@ -351,7 +353,27 @@ async function applyTargetFamily(
   if (identity.role === 'PROGRESS') {
     const parsed = FamilyAllianceProgressResponse.safeParse(context.response);
     if (!parsed.success) familyError('SCENE_RESPONSE_INVALID');
-    const evidenceRefs: StoredSceneRef[] = [];
+
+    const expectedKind =
+      identity.targetCode === 'EMOTION_REGULATION_1'
+        ? 'EMOTION_REGULATION_1'
+        : identity.targetCode === 'EMOTION_REGULATION_2'
+          ? 'EMOTION_REGULATION_2_LOG'
+          : 'GENERAL_MATRIX';
+    if (parsed.data.progress.kind !== expectedKind) {
+      familyError('SCENE_RESPONSE_INVALID');
+    }
+
+    const evidenceRefs: StoredSceneRef[] = [
+      await recordFamilyStatement(
+        context,
+        `${context.node.nodeCode}.progress`,
+        {
+          targetCode: identity.targetCode,
+          progress: parsed.data.progress,
+        }
+      ),
+    ];
     if (parsed.data.note !== undefined) {
       evidenceRefs.push(
         await recordFamilyStatement(
@@ -412,6 +434,7 @@ async function applyTargetFamily(
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     interactionRefs: [...context.node.interactionRefs],
     helpOrReentryRefs: [...context.node.helpOrReentryRefs],
+    authorityRefs: [...context.node.authorityRefs],
     evidenceRefs: currentNoteRefs,
   };
   const targetRow = await reviseDigitalUseTargetItem(context.tx, {

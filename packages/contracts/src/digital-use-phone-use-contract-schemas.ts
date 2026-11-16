@@ -77,6 +77,14 @@ export const SelectPhoneUseRoleplayRequest=z.strictObject({
  expectedSessionRevision:z.number().int().min(1).max(PG_INTEGER_MAX),
  turnId:z.string().uuid(),expectedNodeRevision:z.number().int().min(1).max(PG_INTEGER_MAX),
 });
+export const PhoneUseRoleplayHoldResponse=z.strictObject({
+ kind:z.literal('HOLD'),
+ nodeCode:z.literal('A4003'),
+ status:z.literal('IN_PROGRESS'),
+ nodeRevision:z.number().int().min(1).max(PG_INTEGER_MAX),
+ reasonCode:z.enum(['PROFESSIONAL_CONTENT_UNAVAILABLE','DOWNSTREAM_AI_UNAVAILABLE']),
+});
+
 export const PhoneUseRoleplaySessionDto=z.strictObject({
  id:z.string().uuid(),familyId:z.string().uuid(),caseId:z.string().uuid(),actorPersonId:z.string().uuid(),
  simulationRole:z.literal('ADULT_PLAYS_CHILD_AI_SIMULATES_PARENT'),status:z.enum(['OPEN','COMPLETED']),

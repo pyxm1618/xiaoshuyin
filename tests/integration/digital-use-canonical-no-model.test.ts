@@ -193,8 +193,44 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     );
   }
 
+  async function confirmCurrentFormulation(f: Fixture, scene: any) {
+    const current = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/problem-formulations/current`,
+      headers: auth(f.manager.token),
+    });
+    expect(current.statusCode, current.body).toBe(200);
+    const formulation = current.json().current;
+    expect(formulation?.status).toBe('PRESENTED');
+
+    const confirmed = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/problem-formulations/${formulation.version}/confirm`,
+      headers: {
+        ...commandHeaders(
+          f.manager.token,
+          `du-canonical-confirm-${crypto.randomUUID()}`
+        ),
+        'if-match': `"case-v${scene.caseVersion}"`,
+      },
+      payload: {},
+    });
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json().current?.status).toBe('CONFIRMED');
+
+    const refreshed = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/scene`,
+      headers: auth(f.manager.token),
+    });
+    expect(refreshed.statusCode, refreshed.body).toBe(200);
+    return track(refreshed.json());
+  }
+
   async function enterA2004(f: Fixture) {
     let scene = await triage(f, true, 'A', 'A');
+    expectCurrent(scene, 'A2003');
+    scene = await confirmCurrentFormulation(f, scene);
     expectCurrent(scene, 'A2003');
     scene = await respond(f, scene, 'A2003', a2003Response(), 'a2003');
     expectCurrent(scene, 'A2004');
@@ -270,8 +306,9 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     scene = await respond(f, scene, '01006', { action: 'EXIT' }, '01006-exit');
     expect(scene.routeReasonCode).toBe('PRIORITY_CONFLICT_EXIT');
 
-    // Positive direct impact -> A2003 -> marker -> A2004 yes -> A2005 willing
-    // -> A2007 timeline -> A2010 summary. A3000 remains a gated route intent here.
+    // Positive direct impact -> Problem Formulation PRESENT -> CONFIRM -> GOALS,
+    // while the still-incomplete A2003-A2010 flow remains valid. A2010 then
+    // materializes the two authoritative parallel main-lane entries.
     f = await fixture('happy');
     scene = await enterA2004(f);
     const a2003 = scene.nodes.find((node: any) => node.nodeCode === 'A2003');
@@ -294,14 +331,18 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     expectCurrent(scene, 'A2010');
     scene = await respond(f, scene, 'A2010', { action: 'GENERATE_SUMMARY' }, 'a2010');
     expect(scene.downstream).toEqual({
-      routeIntent: 'A3000',
-      available: false,
-      reasonCode: 'ENTRY_GATES_REVALIDATION_REQUIRED',
+      routeIntent: null,
+      available: true,
+      reasonCode: null,
     });
-    expect(scene.nodes.some((node: any) => node.nodeCode === 'A3000')).toBe(false);
     expect(scene.activeNodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeCode: 'A3000', status: 'AVAILABLE' }),
       expect.objectContaining({ nodeCode: 'A4001', status: 'AVAILABLE' }),
     ]));
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A3000')?.status)
+      .toBe('AVAILABLE');
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A4001')?.status)
+      .toBe('AVAILABLE');
     expect(scene.artifacts.some((artifact: any) => artifact.type === 'SOLUTION_SUMMARY')).toBe(true);
 
     // Alternative branch: A2004 no -> A2006 willing -> A2005 unwilling
@@ -357,7 +398,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     for (const nodeCode of intendedSlice12Subgraph) {
       expect(visitedNodes, `canonical fixture did not visit ${nodeCode}`).toContain(nodeCode);
     }
-    expect(visitedNodes).not.toContain('A3000');
+    expect(visitedNodes).toContain('A3000');
     expect(networkRouteTruthCalls).toBe(0);
   });
 

@@ -54,6 +54,7 @@ import {
   applyFamilyAllianceNodeSemantics,
   familyAllianceTargetIdentity,
 } from './family-alliance-semantics.js';
+import { assertDigitalUseCaseLifecycle } from './digital-use-case-lifecycle.js';
 
 const FAMILY_ALLIANCE_FEATURE = createServerFeatureDescriptor({
   featureCode: 'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME',
@@ -418,14 +419,11 @@ export async function executeFamilyAllianceNodeInTransaction(
     }
     const caseRow = await lockSceneCase(tx, input.caseId);
     if (!caseRow) throw familyHttpError('CASE_NOT_FOUND', 'Case not found');
-    if (caseRow.status === 'SAFETY_HOLD') throw familyHttpError('SAFETY_HOLD_BLOCKED');
-    if (caseRow.status === 'CLOSED') throw familyHttpError('CASE_NOT_OPEN');
-    if (caseRow.status !== 'OPEN') throw familyHttpError('CASE_NOT_OPEN');
-    if (!caseRow.is_primary) throw familyHttpError('CASE_NOT_PRIMARY');
-    if (caseRow.version !== input.expectedCaseVersion) {
-      throw familyHttpError('STALE_CASE_VERSION');
-    }
-    if (caseRow.phase !== 'GOALS') throw familyHttpError('CASE_PHASE_CONFLICT');
+    assertDigitalUseCaseLifecycle(
+      caseRow,
+      node,
+      input.expectedCaseVersion
+    );
 
     // Pin the single Slice 12 package anchor in the caller-owned transaction.
     // This prevents an owner-side package replacement from racing after the
@@ -579,15 +577,14 @@ export async function executeFamilyAllianceNodeInTransaction(
     // Final race gate. Case, formulation, Consent profile and feature policy
     // bases remain locked by owner seams; Safety/Compliance are re-read here.
     const finalCase = await lockSceneCase(tx, input.caseId);
-    if (
-      !finalCase ||
-      finalCase.status !== 'OPEN' ||
-      !finalCase.is_primary ||
-      finalCase.version !== input.expectedCaseVersion ||
-      finalCase.phase !== 'GOALS'
-    ) {
-      throw familyHttpError('STALE_CASE_VERSION');
+    if (!finalCase) {
+      throw familyHttpError('CASE_NOT_FOUND', 'Case not found');
     }
+    assertDigitalUseCaseLifecycle(
+      finalCase,
+      node,
+      input.expectedCaseVersion
+    );
     const finalFormulation = await lockCurrentProblemFormulation(tx, input.caseId);
     if (
       !finalFormulation ||

@@ -9,6 +9,7 @@ import type pg from 'pg';
 import {
   canonicalDependencies,
   canonicalEvidenceRefs,
+  canonicalJson,
   getSceneEvidenceText,
   getSceneNodeState,
   hashPayload,
@@ -117,7 +118,7 @@ function analyzeCurrentEvidence(
     }
 
     const values = knownByCode.get(structured.code) ?? new Set<string>();
-    values.add(JSON.stringify(structured.value));
+    values.add(canonicalJson(structured.value));
     knownByCode.set(structured.code, values);
   }
 

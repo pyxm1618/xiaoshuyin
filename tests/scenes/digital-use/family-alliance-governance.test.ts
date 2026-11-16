@@ -95,16 +95,25 @@ describe('Slice 13 FAMILY_ALLIANCE frozen-scope governance', () => {
     }).success).toBe(false);
   });
 
-  it('FA-GOV-05 feasibility keeps five approved dimensions but has no score/cutoff engine', () => {
+  it('FA-GOV-05 preserves both feasibility rows and five approved dimensions without a score/cutoff engine', () => {
     const payload = {
-      concreteQuantified: {
-        state: 'KNOWN',
-        concreteTargetText: 'Weekdays: devices outside the bedroom by 21:30.',
+      problemBehavior: {
+        concreteBehavior: { state: 'KNOWN', text: 'Phone remains in the bedroom after lights out.' },
+        need: { state: 'KNOWN', text: 'Immediate entertainment and connection.' },
+        motivationBenefit: { state: 'KNOWN', text: 'Fast relief from boredom.' },
+        abilityConditions: { state: 'KNOWN', text: 'Phone is physically available.' },
+        challengeResistance: { state: 'CONFLICT' },
       },
-      need: { state: 'KNOWN', rating: 8 },
-      motivationBenefit: { state: 'KNOWN', rating: 7 },
-      abilityPossibility: { state: 'KNOWN', rating: 6 },
-      challengeResistance: { state: 'CONFLICT' },
+      replacementBehavior: {
+        concreteQuantified: {
+          state: 'KNOWN',
+          concreteTargetText: 'Weekdays: devices outside the bedroom by 21:30.',
+        },
+        need: { state: 'KNOWN', rating: 8 },
+        motivationBenefit: { state: 'KNOWN', rating: 7 },
+        abilityPossibility: { state: 'KNOWN', rating: 6 },
+        challengeResistance: { state: 'CONFLICT' },
+      },
     } as const;
     const parsed = FamilyAllianceFeasibilityPayload.safeParse(payload);
     expect(parsed.success).toBe(true);

@@ -340,14 +340,23 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         {
           kind: 'FEASIBILITY',
           feasibility: {
-            concreteQuantified: {
-              state: 'KNOWN',
-              concreteTargetText: `${family.code} measurable target`,
+            problemBehavior: {
+              concreteBehavior: { state: 'KNOWN', text: `${family.code} current problem behaviour` },
+              need: { state: 'KNOWN', text: 'Current behaviour serves an immediate need.' },
+              motivationBenefit: { state: 'KNOWN', text: 'Current behaviour has short-term benefit.' },
+              abilityConditions: { state: 'KNOWN', text: 'Current conditions make it easy to repeat.' },
+              challengeResistance: { state: 'UNKNOWN' },
             },
-            need: { state: 'KNOWN', rating: 8 },
-            motivationBenefit: { state: 'KNOWN', rating: 7 },
-            abilityPossibility: { state: 'KNOWN', rating: 6 },
-            challengeResistance: { state: 'UNKNOWN' },
+            replacementBehavior: {
+              concreteQuantified: {
+                state: 'KNOWN',
+                concreteTargetText: `${family.code} measurable target`,
+              },
+              need: { state: 'KNOWN', rating: 8 },
+              motivationBenefit: { state: 'KNOWN', rating: 7 },
+              abilityPossibility: { state: 'KNOWN', rating: 6 },
+              challengeResistance: { state: 'UNKNOWN' },
+            },
           },
         },
         {
@@ -358,6 +367,13 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       expect(feasibilityResponse.statusCode, `${family.nodes[1]} ${feasibilityResponse.body}`).toBe(200);
       body = feasibilityResponse.json();
       target = body.targets.find((item: any) => item.targetCode === family.code);
+      expect(target.feasibility.problemBehavior.concreteBehavior).toMatchObject({
+        state: 'KNOWN',
+      });
+      expect(target.feasibility.replacementBehavior.need).toMatchObject({
+        state: 'KNOWN',
+        rating: 8,
+      });
       expect(target.feasibility).not.toHaveProperty('score');
       expect(target.feasibility).not.toHaveProperty('cutoff');
       expect(target.sourceRefs).toEqual(
@@ -369,11 +385,69 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         family.nodes[2],
         {
           kind: 'PROGRESS',
-          progress: {
-            stage: 'EXECUTION',
-            state: 'KNOWN',
-            modifyTarget: 'NO',
-          },
+          progress: family.code === 'EMOTION_REGULATION_1'
+            ? {
+                kind: 'EMOTION_REGULATION_1',
+                listening: { state: 'KNOWN', count: 3 },
+                affirmation: {
+                  state: 'KNOWN',
+                  observations: ['affirmed effort', 'affirmed feeling', 'affirmed choice'],
+                },
+                reducedEvaluation: { state: 'KNOWN', count: 2 },
+                selfRegulationJournal: { state: 'KNOWN', text: 'Stayed calm before responding.' },
+                selfCare: {
+                  state: 'KNOWN',
+                  durationMinutes: 30,
+                  activities: ['walk'],
+                },
+                effectEvaluation: {
+                  intrinsicMotivation: { state: 'KNOWN', text: 'More self-started behaviour.' },
+                  selfEsteemConfidence: { state: 'KNOWN', text: 'More confidence reported.' },
+                  abilityPotential: { state: 'KNOWN', text: 'Can complete the replacement behaviour.' },
+                },
+                modifyTarget: 'NO',
+              }
+            : family.code === 'EMOTION_REGULATION_2'
+              ? {
+                  kind: 'EMOTION_REGULATION_2_LOG',
+                  entries: [{
+                    time: '2026-11-16 evening',
+                    childEmotion: { state: 'KNOWN', text: 'Frustrated' },
+                    emotionFeedback: { state: 'KNOWN', text: 'Parent reflected the emotion.' },
+                    childStress: { state: 'KNOWN', text: 'Stress reduced after discussion.' },
+                    selfGrowth: { state: 'KNOWN', text: 'Parent paused before reacting.' },
+                  }],
+                  modifyTarget: 'NO',
+                }
+              : {
+                  kind: 'GENERAL_MATRIX',
+                  taskPlan: { state: 'KNOWN', text: `${family.code} weekly task plan` },
+                  communication: {
+                    needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+                    motivationMatch: { state: 'KNOWN', text: 'Motivation discussed.' },
+                    abilityMatch: { state: 'KNOWN', text: 'Ability discussed.' },
+                    challengeResistance: { state: 'KNOWN', text: 'Resistance discussed.' },
+                  },
+                  childFeedback: {
+                    needMatch: { state: 'KNOWN', text: 'Child says need is addressed.' },
+                    motivationMatch: { state: 'KNOWN', text: 'Child sees benefit.' },
+                    abilityMatch: { state: 'KNOWN', text: 'Child can attempt it.' },
+                    challengeResistance: { state: 'KNOWN', text: 'Child named one barrier.' },
+                  },
+                  userObservation: {
+                    needMatch: { state: 'KNOWN', text: 'Observed need fit.' },
+                    motivationMatch: { state: 'KNOWN', text: 'Observed motivation fit.' },
+                    abilityMatch: { state: 'KNOWN', text: 'Observed ability fit.' },
+                    challengeResistance: { state: 'KNOWN', text: 'Observed barrier.' },
+                  },
+                  otherFamilyFeedback: {
+                    needMatch: { state: 'NOT_COLLECTED' },
+                    motivationMatch: { state: 'NOT_COLLECTED' },
+                    abilityMatch: { state: 'NOT_COLLECTED' },
+                    challengeResistance: { state: 'NOT_COLLECTED' },
+                  },
+                  modifyTarget: 'NO',
+                },
           note: `${family.code} current execution observation`,
         },
         {
@@ -384,7 +458,36 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       expect(progressResponse.statusCode, `${family.nodes[2]} ${progressResponse.body}`).toBe(200);
       body = progressResponse.json();
       target = body.targets.find((item: any) => item.targetCode === family.code);
-      expect(target.progressEvidenceRefs).toHaveLength(1);
+      expect(target.progressEvidenceRefs.length).toBeGreaterThanOrEqual(1);
+      if (family.code === 'EMOTION_REGULATION_1') {
+        expect(target.progress).toMatchObject({
+          kind: 'EMOTION_REGULATION_1',
+          affirmation: {
+            state: 'KNOWN',
+            observations: ['affirmed effort', 'affirmed feeling', 'affirmed choice'],
+          },
+        });
+      } else if (family.code === 'EMOTION_REGULATION_2') {
+        expect(target.progress).toMatchObject({
+          kind: 'EMOTION_REGULATION_2_LOG',
+          entries: [
+            expect.objectContaining({
+              childEmotion: { state: 'KNOWN', text: 'Frustrated' },
+              selfGrowth: { state: 'KNOWN', text: 'Parent paused before reacting.' },
+            }),
+          ],
+        });
+      } else {
+        expect(target.progress).toMatchObject({
+          kind: 'GENERAL_MATRIX',
+          communication: {
+            needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+          },
+          otherFamilyFeedback: {
+            needMatch: { state: 'NOT_COLLECTED' },
+          },
+        });
+      }
       if (family.code === 'SLEEP') {
         // AS-19: one target may have progress while the others remain
         // independently reachable; no false stream-global completion exists.
@@ -414,7 +517,42 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         scenePackageVersion: 'v1',
       });
       expect(target.helpHistoryRefs[0].interactionRefs.length).toBeGreaterThan(0);
+      expect(target.helpHistoryRefs[0].authorityRefs.length).toBeGreaterThan(0);
     }
+
+    const semanticReadback = await admin.query<{
+      target_code: string;
+      feasibility_payload: any;
+      progress_payload: any;
+      help_history_refs: any[];
+    }>(
+      `SELECT target_code, feasibility_payload, progress_payload, help_history_refs
+         FROM digital_use_target_items
+        WHERE case_id=$1
+          AND superseded_at IS NULL
+          AND selected=true
+        ORDER BY target_code`,
+      [f.caseId]
+    );
+    expect(semanticReadback.rows).toHaveLength(10);
+    const sleepReadback = semanticReadback.rows.find((row) => row.target_code === 'SLEEP')!;
+    expect(sleepReadback.feasibility_payload.problemBehavior.concreteBehavior.state)
+      .toBe('KNOWN');
+    expect(sleepReadback.feasibility_payload.replacementBehavior.need.rating).toBe(8);
+    expect(sleepReadback.progress_payload.kind).toBe('GENERAL_MATRIX');
+    expect(sleepReadback.help_history_refs[0].authorityRefs.length).toBeGreaterThan(0);
+
+    const er1Readback = semanticReadback.rows.find(
+      (row) => row.target_code === 'EMOTION_REGULATION_1'
+    )!;
+    expect(er1Readback.progress_payload.kind).toBe('EMOTION_REGULATION_1');
+    expect(er1Readback.progress_payload.affirmation.observations).toHaveLength(3);
+
+    const er2Readback = semanticReadback.rows.find(
+      (row) => row.target_code === 'EMOTION_REGULATION_2'
+    )!;
+    expect(er2Readback.progress_payload.kind).toBe('EMOTION_REGULATION_2_LOG');
+    expect(er2Readback.progress_payload.entries[0].childStress.state).toBe('KNOWN');
 
     // A3001 can still complete after A3002 and all target-family activity.
     const a3001 = await respond(f, 'A3001', {
@@ -465,7 +603,35 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       'A3012',
       {
         kind: 'PROGRESS',
-        progress: { stage: 'EXECUTION', state: 'KNOWN', modifyTarget: 'NO' },
+        progress: {
+          kind: 'GENERAL_MATRIX',
+          taskPlan: { state: 'KNOWN', text: 'Sleep execution plan' },
+          communication: {
+            needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+            motivationMatch: { state: 'KNOWN', text: 'Motivation discussed.' },
+            abilityMatch: { state: 'KNOWN', text: 'Ability discussed.' },
+            challengeResistance: { state: 'KNOWN', text: 'Barrier discussed.' },
+          },
+          childFeedback: {
+            needMatch: { state: 'KNOWN', text: 'Need feedback.' },
+            motivationMatch: { state: 'KNOWN', text: 'Motivation feedback.' },
+            abilityMatch: { state: 'KNOWN', text: 'Ability feedback.' },
+            challengeResistance: { state: 'KNOWN', text: 'Barrier feedback.' },
+          },
+          userObservation: {
+            needMatch: { state: 'KNOWN', text: 'Observed need.' },
+            motivationMatch: { state: 'KNOWN', text: 'Observed motivation.' },
+            abilityMatch: { state: 'KNOWN', text: 'Observed ability.' },
+            challengeResistance: { state: 'KNOWN', text: 'Observed barrier.' },
+          },
+          otherFamilyFeedback: {
+            needMatch: { state: 'NOT_COLLECTED' },
+            motivationMatch: { state: 'NOT_COLLECTED' },
+            abilityMatch: { state: 'NOT_COLLECTED' },
+            challengeResistance: { state: 'NOT_COLLECTED' },
+          },
+          modifyTarget: 'NO',
+        },
         note: 'first sleep progress',
       },
       {
@@ -746,11 +912,20 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         response: {
           kind: 'FEASIBILITY',
           feasibility: {
-            concreteQuantified: { state: 'KNOWN', concreteTargetText: text },
-            need: { state: 'KNOWN', rating: 8 },
-            motivationBenefit: { state: 'KNOWN', rating: 7 },
-            abilityPossibility: { state: 'KNOWN', rating: 6 },
-            challengeResistance: { state: 'UNKNOWN' },
+            problemBehavior: {
+              concreteBehavior: { state: 'KNOWN', text: 'Current sleep-related phone behaviour' },
+              need: { state: 'KNOWN', text: 'Immediate entertainment need' },
+              motivationBenefit: { state: 'KNOWN', text: 'Immediate enjoyment' },
+              abilityConditions: { state: 'KNOWN', text: 'Phone remains available' },
+              challengeResistance: { state: 'UNKNOWN' },
+            },
+            replacementBehavior: {
+              concreteQuantified: { state: 'KNOWN', concreteTargetText: text },
+              need: { state: 'KNOWN', rating: 8 },
+              motivationBenefit: { state: 'KNOWN', rating: 7 },
+              abilityPossibility: { state: 'KNOWN', rating: 6 },
+              challengeResistance: { state: 'UNKNOWN' },
+            },
           },
         },
       },
@@ -1356,7 +1531,35 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         expectedTargetRevision: sleep.revision,
         response: {
           kind: 'PROGRESS',
-          progress: { stage: 'EXECUTION', state: 'KNOWN', modifyTarget: 'NO' },
+          progress: {
+            kind: 'GENERAL_MATRIX',
+            taskPlan: { state: 'KNOWN', text: 'Concurrent sleep execution plan.' },
+            communication: {
+              needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+              motivationMatch: { state: 'KNOWN', text: 'Motivation discussed.' },
+              abilityMatch: { state: 'KNOWN', text: 'Ability discussed.' },
+              challengeResistance: { state: 'KNOWN', text: 'Barrier discussed.' },
+            },
+            childFeedback: {
+              needMatch: { state: 'KNOWN', text: 'Need feedback.' },
+              motivationMatch: { state: 'KNOWN', text: 'Motivation feedback.' },
+              abilityMatch: { state: 'KNOWN', text: 'Ability feedback.' },
+              challengeResistance: { state: 'KNOWN', text: 'Barrier feedback.' },
+            },
+            userObservation: {
+              needMatch: { state: 'KNOWN', text: 'Observed need.' },
+              motivationMatch: { state: 'KNOWN', text: 'Observed motivation.' },
+              abilityMatch: { state: 'KNOWN', text: 'Observed ability.' },
+              challengeResistance: { state: 'KNOWN', text: 'Observed barrier.' },
+            },
+            otherFamilyFeedback: {
+              needMatch: { state: 'NOT_COLLECTED' },
+              motivationMatch: { state: 'NOT_COLLECTED' },
+              abilityMatch: { state: 'NOT_COLLECTED' },
+              challengeResistance: { state: 'NOT_COLLECTED' },
+            },
+            modifyTarget: 'NO',
+          },
           note: 'concurrent progress observation',
         },
       },
