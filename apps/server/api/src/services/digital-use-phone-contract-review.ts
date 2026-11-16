@@ -374,13 +374,6 @@ export async function executeA5002ReviewInTransaction(
     await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
     await assertAssessmentCompliance(tx, input.actor.personId);
-    await assertProfessionalReviewProvenance(tx, {
-      familyId: input.familyId,
-      caseId: input.caseId,
-      actorPersonId: input.actor.personId,
-      evidenceRefs: parsed.data.evidenceRefs,
-      provenance: parsed.data.provenance,
-    });
 
     const binding = await getScenePackageBinding(tx, input.caseId);
     if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
@@ -409,6 +402,17 @@ export async function executeA5002ReviewInTransaction(
       caseId: input.caseId,
       childPersonId: contract.child_party_person_id,
       participationId: contract.child_participation_id,
+    });
+    await assertProfessionalReviewProvenance(tx, {
+      familyId: input.familyId,
+      caseId: input.caseId,
+      actorPersonId: input.actor.personId,
+      evidenceRefs: parsed.data.evidenceRefs,
+      provenance: parsed.data.provenance,
+      exactChildSubject: {
+        personId: contract.child_party_person_id,
+        participationId: contract.child_participation_id,
+      },
     });
 
     const packageInput = {
