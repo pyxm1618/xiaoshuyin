@@ -2151,6 +2151,160 @@ describe('T1218 Digital Use runtime hardening', () => {
     }
   );
 
+  it('A4003 keeps turn and select recoverable when current Model / Prompt authority disappears', async () => {
+    let authorityAvailable = true;
+    const currentAuthority = {
+      model: {
+        status: 'CURRENT_APPROVED' as const,
+        modelRef: 'test-model:recoverable',
+        authorityRef: 'test-authority:model-recoverable',
+      },
+      prompt: {
+        status: 'CURRENT_APPROVED' as const,
+        promptVersionRef: 'test-prompt:recoverable',
+        authorityRef: 'test-authority:prompt-recoverable',
+      },
+    };
+    const adapter: RoleplayAdapter = {
+      adapterRef: 'test:model-prompt-recoverable',
+      async isAvailable() { return true; },
+      async createTurn(input) {
+        return {
+          simulatedParentOutput: `simulated-parent:${input.simulatedChildInput}`,
+          adapterRef: 'test:model-prompt-recoverable',
+          modelRef: input.expectedModelRef,
+          promptVersionRef: input.expectedPromptVersionRef,
+        };
+      },
+    };
+    const authorityApp = await buildApp({
+      phoneUseContract: {
+        roleplayAdapter: adapter,
+        roleplayProfessionalContent: {
+          status: 'APPROVED_PUBLISHED',
+          version: 'test-professional-roleplay-v1',
+          authorityRef: 'test-authority:roleplay-v1',
+        },
+        roleplayModelPromptAuthority: async () =>
+          authorityAvailable ? currentAuthority : null,
+      },
+    });
+    await authorityApp.ready();
+    try {
+      const f = await fixture('s14-roleplay-authority-recovery', authorityApp);
+      await forceSceneNode(f, 'A4003');
+
+      const created = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-recovery-create'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          professionalContentVersion: 'test-professional-roleplay-v1',
+        },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+
+      authorityAvailable = false;
+      const heldTurn = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-recovery-turn-hold'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          simulatedChildInput: 'Authority is temporarily unavailable.',
+        },
+      });
+      expect(heldTurn.statusCode, heldTurn.body).toBe(200);
+      expect(heldTurn.json()).toMatchObject({
+        kind: 'HOLD',
+        nodeCode: 'A4003',
+        status: 'IN_PROGRESS',
+        reasonCode: 'DOWNSTREAM_AI_UNAVAILABLE',
+      });
+
+      authorityAvailable = true;
+      const turn = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-recovery-turn-current'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          simulatedChildInput: 'Authority is current again.',
+        },
+      });
+      expect(turn.statusCode, turn.body).toBe(201);
+      expect(turn.json()).toMatchObject({
+        modelRef: currentAuthority.model.modelRef,
+        promptVersionRef: currentAuthority.prompt.promptVersionRef,
+      });
+
+      authorityAvailable = false;
+      const heldSelect = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/select`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-recovery-select-hold'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          turnId: turn.json().id,
+          expectedNodeRevision: heldTurn.json().nodeRevision,
+        },
+      });
+      expect(heldSelect.statusCode, heldSelect.body).toBe(200);
+      expect(heldSelect.json()).toMatchObject({
+        kind: 'HOLD',
+        nodeCode: 'A4003',
+        status: 'IN_PROGRESS',
+        reasonCode: 'DOWNSTREAM_AI_UNAVAILABLE',
+      });
+
+      const heldState = await admin.query(
+        `SELECT
+           (SELECT count(*)::int FROM scene_node_states
+             WHERE case_id=$1 AND node_code='A4004') AS a4004,
+           (SELECT selected_turn_id FROM roleplay_sessions
+             WHERE id=$2) AS selected_turn_id`,
+        [f.caseId, created.json().id]
+      );
+      expect(heldState.rows[0]).toEqual({
+        a4004: 0,
+        selected_turn_id: null,
+      });
+
+      authorityAvailable = true;
+      const selected = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/select`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-recovery-select-current'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          turnId: turn.json().id,
+          expectedNodeRevision: heldSelect.json().nodeRevision,
+        },
+      });
+      expect(selected.statusCode, selected.body).toBe(200);
+      expect(selected.json().selectedTurn.id).toBe(turn.json().id);
+
+      const completed = await admin.query(
+        `SELECT node_code,status::text AS status
+           FROM scene_node_states
+          WHERE case_id=$1 AND node_code IN ('A4003','A4004')
+          ORDER BY node_code`,
+        [f.caseId]
+      );
+      expect(completed.rows).toEqual([
+        { node_code: 'A4003', status: 'COMPLETED' },
+        { node_code: 'A4004', status: 'AVAILABLE' },
+      ]);
+    } finally {
+      await authorityApp.close();
+    }
+  });
+
   it('A4003 revalidates current Model / Prompt authority between turn and select', async () => {
     let currentModelRef = 'test-model:v1';
     let currentPromptVersionRef = 'test-prompt:v1';
