@@ -48,9 +48,9 @@ function proofFor(stream: ProfessionalReviewStream): ProfessionalReviewPackagePr
   });
 }
 
-function validateNormalizedResponse(
+function validateAndNormalizeResponse(
   response: Readonly<Record<string, unknown>>
-): void {
+): Readonly<Record<string, unknown>> {
   const keys = Object.keys(response).sort();
   if (
     keys.length !== 2 ||
@@ -63,6 +63,10 @@ function validateNormalizedResponse(
   ) {
     throw new Error('TEST_PACKAGE_RESPONSE_INVALID');
   }
+  return Object.freeze({
+    outcome: String(response['outcome']),
+    note: response['note'].trim(),
+  });
 }
 
 function packageFor(stream: ProfessionalReviewStream): ProfessionalReviewResolvedPackage {
@@ -70,7 +74,7 @@ function packageFor(stream: ProfessionalReviewStream): ProfessionalReviewResolve
   return {
     proof,
     loadedContentHash: proof.contentHash,
-    validateNormalizedResponse,
+    validateAndNormalizeResponse,
   };
 }
 
