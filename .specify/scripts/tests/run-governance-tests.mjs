@@ -13,6 +13,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeAuthoritySnapshot } from "../authority-inputs.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const validator = path.resolve(here, "..", "validate-governance.mjs");
@@ -131,6 +132,7 @@ function writeFile(root, rel, content) {
 function makeProject() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "xiaoshuyin-gov-"));
   for (const rel of MANDATORY_FILES) writeFile(root, rel, "placeholder\n");
+  writeAuthoritySnapshot(root);
   fs.mkdirSync(path.join(root, "specs"), { recursive: true });
   return root;
 }
@@ -336,6 +338,27 @@ function docsFixture(lines) {
     note: `docs gate=${guard.code}`,
     out: validation.out,
   });
+  cleanup(root);
+}
+
+// ---------------------------------------------------------------- Authority input binding
+{
+  const root = makeProject();
+  writeFile(root, "Docs/V1产品需求.md", "authority changed after snapshot\n");
+  const actual = run(validator, root);
+  const pass = record("J authority Doc drift fails until snapshot is refreshed", 1, actual);
+  if (pass && !actual.out.includes("Authority input drift: Docs/V1产品需求.md")) {
+    results[results.length - 1].pass = false;
+    results[results.length - 1].note = "missing explicit authority drift evidence";
+  }
+  cleanup(root);
+}
+
+{
+  const root = makeProject();
+  writeFile(root, "Docs/V1产品需求.md", "reviewed authority revision\n");
+  writeAuthoritySnapshot(root);
+  record("K refreshed machine-derived authority snapshot passes", 0, run(validator, root));
   cleanup(root);
 }
 
