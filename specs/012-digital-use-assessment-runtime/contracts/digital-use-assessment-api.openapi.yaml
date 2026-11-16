@@ -30,6 +30,7 @@ paths:
         '409': { description: Scene or business gate conflict }
         '422': { description: Validation failure }
         '500': { description: Internal error }
+        '503': { description: Professional review dependency unavailable }
 
   /api/v1/cases/{id}/scene:
     get:
