@@ -20,6 +20,7 @@ import {
   coherentCurrentSelectionRevision,
   ensureSceneNodeAvailable,
   getLatestSceneArtifact,
+  getCurrentProblemFormulation,
   getSceneNodeState,
   insertDigitalUseNodeCompletedAudit,
   insertDigitalUseNodeCompletedEvent,
@@ -30,6 +31,7 @@ import {
   lockSceneCase,
   recordStatement,
   validateSceneRefs,
+  isProblemFormulationAuthoritativeExecutionBasis,
   type DigitalUseTargetItemRow,
   type SceneNodeStateRow,
   type StoredSceneRef,
@@ -362,6 +364,14 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
     // Slice 13 Family Alliance subject while the Case remains in GOALS.
     if (caseRow.phase !== 'GOALS') throw reviewError('CASE_PHASE_CONFLICT');
 
+    const formulation = await getCurrentProblemFormulation(tx, input.caseId);
+    if (
+      formulation === null ||
+      !isProblemFormulationAuthoritativeExecutionBasis(formulation)
+    ) {
+      throw reviewError('PROBLEM_FORMULATION_DEPENDENCY_INVALID');
+    }
+
     const packageAnchor = await getSceneNodeState(tx, input.caseId, 'A1001', true);
     const binding = packageAnchor?.scene_package_version ?? null;
     if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
@@ -635,6 +645,14 @@ export async function executeFamilyAllianceReviewNodeInTransaction(
     ) {
       throw reviewError('STALE_CASE_VERSION');
     }
+    const finalFormulation = await getCurrentProblemFormulation(tx, input.caseId);
+    if (
+      finalFormulation === null ||
+      !isProblemFormulationAuthoritativeExecutionBasis(finalFormulation)
+    ) {
+      throw reviewError('PROBLEM_FORMULATION_DEPENDENCY_INVALID');
+    }
+
     const finalSubject = await resolveA5001SubjectSnapshot(tx, input.caseId);
     if (!sameSubject(subject, finalSubject)) {
       throw reviewError('STALE_TARGET_REVISION');
