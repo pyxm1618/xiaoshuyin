@@ -3,76 +3,173 @@ import {
   canonicalDependencyKey,
   canonicalEvidenceKey,
   contentOf,
+  decideOrdinaryProgression,
   deriveAuthoritativeEvidenceSet,
+  effectiveParticipationState,
   evaluateInterventionEligibility,
   getCaseById,
   getCurrentProblemFormulation,
   getExactInterventionDefinition,
+  getParticipationById,
   getScenePackageBinding,
   isProblemFormulationAuthoritativeExecutionBasis,
+  type InterventionDefinitionExactRef,
   type InterventionEligibilityResult,
   type InterventionGateState,
 } from '@xiaoshuyin/domain';
 import {
+  DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+  getCurrentPurposeScopedConsentDecision,
+} from '@xiaoshuyin/compliance';
+import {
   resolveProductionDigitalUseInterventionInclusion,
 } from '@xiaoshuyin/scenes/digital-use';
 import { requireFamilyAction } from '../authz.js';
-import { withRlsTransaction } from '../db/tx.js';
+import { withDrizzleRlsTransaction } from '../db/drizzle-tx.js';
 import {
   resolveInterventionProfessionalAuthority,
   unavailableProductionInterventionProfessionalAuthorityProvider,
   type InterventionProfessionalAuthorityProvider,
 } from './intervention-professional-authority.js';
 
+const UUID_REF =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export interface InterventionEligibilityOwnerAdapters {
   readonly resolveAgeDevelopment: (
     tx: pg.PoolClient,
-    input: { familyId: string; caseId: string }
+    input: {
+      familyId: string;
+      caseId: string;
+      actor: { accountId: string; personId: string };
+    }
   ) => Promise<{ ageYears: number | null; developmentStages: readonly string[] }>;
   readonly resolveFacts: (
     tx: pg.PoolClient,
-    input: { familyId: string; caseId: string }
-  ) => Promise<Readonly<Record<string, string | number | boolean | readonly (string | number | boolean)[]>>>;
+    input: {
+      familyId: string;
+      caseId: string;
+      actor: { accountId: string; personId: string };
+    }
+  ) => Promise<
+    Readonly<
+      Record<
+        string,
+        string | number | boolean | readonly (string | number | boolean)[]
+      >
+    >
+  >;
   readonly resolveParticipation: (
     tx: pg.PoolClient,
-    input: { familyId: string; caseId: string; requiredRefs: readonly string[] }
+    input: {
+      familyId: string;
+      caseId: string;
+      actor: { accountId: string; personId: string };
+      requiredRefs: readonly string[];
+    }
   ) => Promise<Readonly<Record<string, InterventionGateState>>>;
   readonly resolveConsent: (
     tx: pg.PoolClient,
-    input: { familyId: string; caseId: string; requiredPurposes: readonly string[] }
+    input: {
+      familyId: string;
+      caseId: string;
+      actor: { accountId: string; personId: string };
+      requiredPurposes: readonly string[];
+    }
   ) => Promise<Readonly<Record<string, InterventionGateState>>>;
   readonly evaluateCompliance: (
     tx: pg.PoolClient,
-    input: { familyId: string; caseId: string }
-  ) => Promise<InterventionGateState>;
-  readonly evaluateSafety: (
-    tx: pg.PoolClient,
-    input: { familyId: string; caseId: string }
+    input: {
+      familyId: string;
+      caseId: string;
+      actor: { accountId: string; personId: string };
+    }
   ) => Promise<InterventionGateState>;
 }
 
 /**
- * No fake production owner values. Until concrete existing-owner adapters are
- * composed by a caller, every unresolved control is UNKNOWN and fail-closed.
+ * Production owner composition is intentionally bounded to authority that
+ * already exists today:
+ * - exact case_participants refs use the existing Participation owner;
+ * - the currently-approved case-scoped supplemental Consent purpose uses the
+ *   existing Consent owner;
+ * - no Slice 16 Compliance feature identity/legal authority exists, so
+ *   Compliance remains UNKNOWN instead of inventing a policy;
+ * - no target-person age/development identity is assigned by the frozen
+ *   contract, so age/facts remain UNKNOWN unless a future authorized caller
+ *   supplies an existing-owner adapter.
  */
-export const failClosedProductionInterventionOwnerAdapters:
+export const productionInterventionOwnerAdapters:
   InterventionEligibilityOwnerAdapters = Object.freeze({
-    async resolveAgeDevelopment() { return { ageYears: null, developmentStages: [] }; },
-    async resolveFacts() { return {}; },
+    async resolveAgeDevelopment() {
+      return { ageYears: null, developmentStages: [] };
+    },
+    async resolveFacts() {
+      return {};
+    },
     async resolveParticipation(
-      _tx: pg.PoolClient,
-      input: { familyId: string; caseId: string; requiredRefs: readonly string[] }
+      tx,
+      input
     ): Promise<Readonly<Record<string, InterventionGateState>>> {
-      return Object.fromEntries(input.requiredRefs.map((ref: string) => [ref, 'UNKNOWN' as const]));
+      const result: Record<string, InterventionGateState> = {};
+      for (const ref of input.requiredRefs) {
+        if (!UUID_REF.test(ref)) {
+          result[ref] = 'UNKNOWN';
+          continue;
+        }
+        const row = await getParticipationById(tx, ref);
+        if (
+          row === null ||
+          row.family_id !== input.familyId ||
+          row.case_id !== input.caseId
+        ) {
+          result[ref] = 'BLOCK';
+          continue;
+        }
+        const state = effectiveParticipationState(
+          row.state,
+          row.invite_expires_at
+        );
+        result[ref] =
+          state === 'ACTIVE'
+            ? 'PASS'
+            : state === 'PENDING'
+              ? 'UNKNOWN'
+              : 'BLOCK';
+      }
+      return result;
     },
     async resolveConsent(
-      _tx: pg.PoolClient,
-      input: { familyId: string; caseId: string; requiredPurposes: readonly string[] }
+      tx,
+      input
     ): Promise<Readonly<Record<string, InterventionGateState>>> {
-      return Object.fromEntries(input.requiredPurposes.map((ref: string) => [ref, 'UNKNOWN' as const]));
+      const result: Record<string, InterventionGateState> = {};
+      for (const purpose of input.requiredPurposes) {
+        if (purpose !== DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT) {
+          // No generic Consent owner is invented for unsupported purposes.
+          result[purpose] = 'UNKNOWN';
+          continue;
+        }
+        const current = await getCurrentPurposeScopedConsentDecision(tx, {
+          familyId: input.familyId,
+          caseId: input.caseId,
+          actor: input.actor,
+          purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+        });
+        result[purpose] =
+          current === null
+            ? 'BLOCK'
+            : current.decision === 'GRANTED'
+              ? 'PASS'
+              : 'BLOCK';
+      }
+      return result;
     },
-    async evaluateCompliance(): Promise<InterventionGateState> { return 'UNKNOWN'; },
-    async evaluateSafety(): Promise<InterventionGateState> { return 'UNKNOWN'; },
+    async evaluateCompliance(): Promise<InterventionGateState> {
+      // A Compliance Feature Descriptor / Legal Authority for Intervention
+      // eligibility has not been assigned. Truthful fail-closed dependency.
+      return 'UNKNOWN';
+    },
   });
 
 export async function evaluateCurrentInterventionEligibilityInTransaction(
@@ -82,12 +179,15 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     familyId: string;
     caseId: string;
     definition: { id: string; version: number; contentHash: string };
-    consideredInterventionCodes?: readonly string[];
+    consideredDefinitions?: readonly InterventionDefinitionExactRef[];
   },
   adapters: InterventionEligibilityOwnerAdapters,
   professionalProvider: InterventionProfessionalAuthorityProvider =
     unavailableProductionInterventionProfessionalAuthorityProvider
 ): Promise<InterventionEligibilityResult> {
+  // Authorization is first and uses the frozen CASE_READ + FAMILY_MANAGEMENT
+  // composition. No protected professional/package/family details are read
+  // before this succeeds.
   await requireFamilyAction(tx, {
     accountId: input.actor.accountId,
     personId: input.actor.personId,
@@ -100,37 +200,68 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
 
   const caseRow = await getCaseById(tx, input.caseId);
   if (caseRow === null || caseRow.family_id !== input.familyId) {
-    throw Object.assign(new Error('CASE_NOT_FOUND'), { code: 'CASE_NOT_FOUND', statusCode: 404 });
+    throw Object.assign(new Error('CASE_NOT_FOUND'), {
+      code: 'CASE_NOT_FOUND',
+      statusCode: 404,
+    });
   }
+
+  const definition = await getExactInterventionDefinition(tx, input.definition);
 
   const formulation = await getCurrentProblemFormulation(tx, input.caseId);
   const authoritativeFormulation =
-    formulation !== null && isProblemFormulationAuthoritativeExecutionBasis(formulation)
+    formulation !== null &&
+    isProblemFormulationAuthoritativeExecutionBasis(formulation)
       ? formulation
       : null;
+
+  // Read only Evidence required by this exact definition. The existing
+  // Formulation/Evidence owner still derives authority/provenance; Slice 16
+  // merely filters the returned owner snapshot to exact required refs.
+  const requiredEvidence = new Set(
+    definition?.semantic.supporting_evidence_requirements ?? []
+  );
   const evidenceSet =
-    authoritativeFormulation === null
+    authoritativeFormulation === null || requiredEvidence.size === 0
       ? { refs: [], members: [] }
-      : await deriveAuthoritativeEvidenceSet(tx, input.caseId, contentOf(authoritativeFormulation));
-  const evidence: Record<string, { state: 'VALUE' | 'UNKNOWN' | 'DECLINED' | 'NOT_COLLECTED' | 'CONFLICTING' | 'NOT_APPLICABLE'; revisionRef: string }> = {};
+      : await deriveAuthoritativeEvidenceSet(
+          tx,
+          input.caseId,
+          contentOf(authoritativeFormulation)
+        );
+  const evidence: Record<
+    string,
+    {
+      state:
+        | 'VALUE'
+        | 'UNKNOWN'
+        | 'DECLINED'
+        | 'NOT_COLLECTED'
+        | 'CONFLICTING'
+        | 'NOT_APPLICABLE';
+      revisionRef: string;
+    }
+  > = {};
   for (const member of evidenceSet.members) {
     const ref = canonicalEvidenceKey(member.ref);
+    if (!requiredEvidence.has(ref)) continue;
     evidence[ref] = {
       state:
         member.conflictGroupId !== null
           ? 'CONFLICTING'
           : member.unknownState === null
-            ? member.usable ? 'VALUE' : 'UNKNOWN'
+            ? member.usable
+              ? 'VALUE'
+              : 'UNKNOWN'
             : member.unknownState,
       revisionRef: ref,
     };
   }
 
   const scenePackageVersion = await getScenePackageBinding(tx, input.caseId);
-  const definition = await getExactInterventionDefinition(tx, input.definition);
   const professional =
     definition === null
-      ? { status: 'INVALID' as const, reason: 'WRONG_DEFINITION' as const }
+      ? ({ status: 'INVALID', reason: 'WRONG_DEFINITION' } as const)
       : await resolveInterventionProfessionalAuthority(
           professionalProvider,
           {
@@ -145,23 +276,52 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         );
 
   const requiredParticipation =
-    definition?.semantic.participation_and_consent_requirements.required_participation_refs ?? [];
+    definition?.semantic.participation_and_consent_requirements
+      .required_participation_refs ?? [];
   const requiredConsent =
-    definition?.semantic.participation_and_consent_requirements.required_consent_purposes ?? [];
-  const [ageDevelopment, facts, participation, consent, compliance, safety] =
+    definition?.semantic.participation_and_consent_requirements
+      .required_consent_purposes ?? [];
+
+  const [ageDevelopment, facts, participation, consent, compliance] =
     await Promise.all([
-      adapters.resolveAgeDevelopment(tx, { familyId: input.familyId, caseId: input.caseId }),
-      adapters.resolveFacts(tx, { familyId: input.familyId, caseId: input.caseId }),
-      adapters.resolveParticipation(tx, { familyId: input.familyId, caseId: input.caseId, requiredRefs: requiredParticipation }),
-      adapters.resolveConsent(tx, { familyId: input.familyId, caseId: input.caseId, requiredPurposes: requiredConsent }),
-      adapters.evaluateCompliance(tx, { familyId: input.familyId, caseId: input.caseId }),
-      adapters.evaluateSafety(tx, { familyId: input.familyId, caseId: input.caseId }),
+      adapters.resolveAgeDevelopment(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actor: input.actor,
+      }),
+      adapters.resolveFacts(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actor: input.actor,
+      }),
+      adapters.resolveParticipation(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actor: input.actor,
+        requiredRefs: requiredParticipation,
+      }),
+      adapters.resolveConsent(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actor: input.actor,
+        requiredPurposes: requiredConsent,
+      }),
+      adapters.evaluateCompliance(tx, {
+        familyId: input.familyId,
+        caseId: input.caseId,
+        actor: input.actor,
+      }),
     ]);
 
+  // Safety consumes the existing single ordinary-progression rule. It remains
+  // independent from Professional Approval and Compliance.
+  const safety = decideOrdinaryProgression(caseRow.status).allowed
+    ? ('PASS' as const)
+    : ('BLOCK' as const);
 
-  // Final exact-row lock prevents retirement/supersession from racing the
-  // eligibility decision. Professional proof is then revalidated against this
-  // locked exact version/hash immediately before the pure evaluator.
+  // Final exact-row lock prevents retirement/supersession from crossing the
+  // decision. This is in the same REPEATABLE READ transaction as the family
+  // snapshot. Revalidate the exact professional proof only after that lock.
   const finalDefinition =
     definition === null
       ? null
@@ -220,7 +380,8 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
             version: authoritativeFormulation.version,
             status: authoritativeFormulation.status,
             reviewState: authoritativeFormulation.review_state,
-            dependencyRefs: authoritativeFormulation.dependency_refs.map(canonicalDependencyKey),
+            dependencyRefs:
+              authoritativeFormulation.dependency_refs.map(canonicalDependencyKey),
           },
     evidence,
     scenePackageVersion,
@@ -234,8 +395,12 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     definition: finalDefinition,
     professionalAuthority: {
       state: finalProfessional.status,
-      approvalProofRef: finalProfessional.status === 'VALID' ? finalProfessional.approvalProofRef : null,
-      reason: finalProfessional.status === 'VALID' ? null : finalProfessional.reason,
+      approvalProofRef:
+        finalProfessional.status === 'VALID'
+          ? finalProfessional.approvalProofRef
+          : null,
+      reason:
+        finalProfessional.status === 'VALID' ? null : finalProfessional.reason,
     },
     packageInclusion,
     ageYears: ageDevelopment.ageYears,
@@ -243,13 +408,18 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     facts,
     participation,
     consent,
-    consideredInterventionCodes: input.consideredInterventionCodes ?? [],
+    consideredDefinitions: input.consideredDefinitions ?? [],
     compliance,
     safety,
     dependencyRevisionRefs: [
       'CASE:' + caseRow.id + ':v' + caseRow.version,
       ...(authoritativeFormulation
-        ? ['FORMULATION:' + authoritativeFormulation.id + ':v' + authoritativeFormulation.version]
+        ? [
+            'FORMULATION:' +
+              authoritativeFormulation.id +
+              ':v' +
+              authoritativeFormulation.version,
+          ]
         : []),
       ...Object.values(evidence).map((item) => item.revisionRef),
       ...(scenePackageVersion ? ['PACKAGE:' + scenePackageVersion] : []),
@@ -259,22 +429,29 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
 
 export function evaluateCurrentInterventionEligibility(
   pool: pg.Pool,
-  input: Parameters<typeof evaluateCurrentInterventionEligibilityInTransaction>[1],
+  input: Parameters<
+    typeof evaluateCurrentInterventionEligibilityInTransaction
+  >[1],
   adapters: InterventionEligibilityOwnerAdapters =
-    failClosedProductionInterventionOwnerAdapters,
+    productionInterventionOwnerAdapters,
   professionalProvider: InterventionProfessionalAuthorityProvider =
     unavailableProductionInterventionProfessionalAuthorityProvider
 ): Promise<InterventionEligibilityResult> {
-  return withRlsTransaction(
+  return withDrizzleRlsTransaction(
     pool,
     {
       familyId: input.familyId,
       accountId: input.actor.accountId,
       personId: input.actor.personId,
       purpose: 'FAMILY_MANAGEMENT',
+      isolationLevel: 'REPEATABLE READ',
     },
-    (tx) => evaluateCurrentInterventionEligibilityInTransaction(
-      tx, input, adapters, professionalProvider
-    )
+    (_tx, client) =>
+      evaluateCurrentInterventionEligibilityInTransaction(
+        client,
+        input,
+        adapters,
+        professionalProvider
+      )
   );
 }
