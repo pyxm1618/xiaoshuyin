@@ -12,7 +12,8 @@
  * The guard:
  *   - re-reads the real Case state INSIDE the caller-owned transaction;
  *   - never trusts a caller-supplied status snapshot;
- *   - fails closed with a stable, non-leaking `SAFETY_HOLD_BLOCKED`;
+ *   - blocks SAFETY_HOLD, WAITING and CLOSED ordinary progression with
+ *     stable non-leaking codes;
  *   - performs no mutation and advances no version;
  *   - is NOT globally installed: Evidence capture, Consent, Authorization and
  *     Data Rights paths are not blocked merely because a Case is held.
@@ -34,7 +35,10 @@ export interface RawTxClient {
 
 export type OrdinaryProgressionDecision =
   | { allowed: true }
-  | { allowed: false; code: 'SAFETY_HOLD_BLOCKED' };
+  | {
+      allowed: false;
+      code: 'SAFETY_HOLD_BLOCKED' | 'CASE_NOT_OPEN' | 'CASE_CLOSED';
+    };
 
 /** The single Safety decision rule for ordinary progression. */
 export function decideOrdinaryProgression(
@@ -45,6 +49,8 @@ export function decideOrdinaryProgression(
   // never reveals another Family's existence.
   if (status === null) return { allowed: false, code: 'SAFETY_HOLD_BLOCKED' };
   if (status === 'SAFETY_HOLD') return { allowed: false, code: 'SAFETY_HOLD_BLOCKED' };
+  if (status === 'WAITING') return { allowed: false, code: 'CASE_NOT_OPEN' };
+  if (status === 'CLOSED') return { allowed: false, code: 'CASE_CLOSED' };
   return { allowed: true };
 }
 
