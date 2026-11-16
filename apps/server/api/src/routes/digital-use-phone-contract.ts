@@ -174,9 +174,13 @@ export function registerDigitalUsePhoneContractRoutes(
  for(const operation of ['turns','rate','select'] as const){
   const path=`/api/v1/cases/:id/digital-use/roleplays/:sessionId/${operation}`;
   if(operation==='turns'){
-   app.post(path,{onRequest:app.authenticate,schema:{operationId:'addPhoneUseRoleplayTurn',summary:'Generate one simulated-parent roleplay turn',tags:TAGS,security:BEARER_SECURITY,params:RoleplayParams,body:CreatePhoneUseRoleplayTurnRequest,response:{201:PhoneUseRoleplayTurnDto,...Errors}}},async(req,reply)=>{
+   app.post(path,{onRequest:app.authenticate,schema:{operationId:'addPhoneUseRoleplayTurn',summary:'Generate one simulated-parent roleplay turn',tags:TAGS,security:BEARER_SECURITY,params:RoleplayParams,body:CreatePhoneUseRoleplayTurnRequest,response:{200:PhoneUseRoleplayHoldResponse,201:PhoneUseRoleplayTurnDto,...Errors}}},async(req,reply)=>{
     const actor=actorOf(req),params=req.params as {id:string;sessionId:string},caseId=caseIdOf(params.id),body=CreatePhoneUseRoleplayTurnRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
-    return reply.status(201).send(await addPhoneUseRoleplayTurn(pool,{actor,familyId,caseId,sessionId:params.sessionId,idempotencyKey:readIdempotencyKey(req),...body},roleplayAdapter,roleplayProfessionalContent,roleplayModelPromptAuthority));
+    const result=await addPhoneUseRoleplayTurn(pool,{actor,familyId,caseId,sessionId:params.sessionId,idempotencyKey:readIdempotencyKey(req),...body},roleplayAdapter,roleplayProfessionalContent,roleplayModelPromptAuthority);
+    if(typeof result==='object'&&result!==null&&'kind' in result&&result.kind==='HOLD'){
+     return reply.status(200).send(result);
+    }
+    return reply.status(201).send(result);
    });
   }else if(operation==='rate'){
    app.post(path,{onRequest:app.authenticate,schema:{operationId:'ratePhoneUseRoleplayTurn',summary:'Rate one simulated roleplay turn',tags:TAGS,security:BEARER_SECURITY,params:RoleplayParams,body:RatePhoneUseRoleplayRequest,response:{200:PhoneUseRoleplayTurnDto,...Errors}}},async(req,reply)=>{
@@ -184,7 +188,7 @@ export function registerDigitalUsePhoneContractRoutes(
     return reply.status(200).send(await ratePhoneUseRoleplay(pool,{actor,familyId,caseId,sessionId:params.sessionId,idempotencyKey:readIdempotencyKey(req),...body},roleplayProfessionalContent));
    });
   }else{
-   app.post(path,{onRequest:app.authenticate,schema:{operationId:'selectPhoneUseRoleplayTurn',summary:'Select one SIMULATION result and complete A4003 atomically',tags:TAGS,security:BEARER_SECURITY,params:RoleplayParams,body:SelectPhoneUseRoleplayRequest,response:{200:PhoneUseRoleplaySelectionResponse,...Errors}}},async(req,reply)=>{
+   app.post(path,{onRequest:app.authenticate,schema:{operationId:'selectPhoneUseRoleplayTurn',summary:'Select one SIMULATION result and complete A4003 atomically',tags:TAGS,security:BEARER_SECURITY,params:RoleplayParams,body:SelectPhoneUseRoleplayRequest,response:{200:z.union([PhoneUseRoleplaySelectionResponse,PhoneUseRoleplayHoldResponse]),...Errors}}},async(req,reply)=>{
     const actor=actorOf(req),params=req.params as {id:string;sessionId:string},caseId=caseIdOf(params.id),body=SelectPhoneUseRoleplayRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
     return reply.status(200).send(await selectPhoneUseRoleplay(pool,{actor,familyId,caseId,sessionId:params.sessionId,idempotencyKey:readIdempotencyKey(req),...body},roleplayProfessionalContent,roleplayModelPromptAuthority));
    });
