@@ -71,6 +71,7 @@ import {
   type DigitalUseActor,
 } from './digital-use-assessment.js';
 import { assertNodeCasePreconditions, requireResolvedRoute } from './digital-use-node-response.js';
+import { assertCurrentDigitalUseProblemFormulation } from './digital-use-case-lifecycle.js';
 
 function contractError(code:string,message?:string):Error & {statusCode:number;code:string}{
   const mapped=toHttpError(code,message);
@@ -120,6 +121,7 @@ async function lockManagerContractCase(
  const node=resolveDigitalUseRuntimeNode(nodeCode);
  assertNodeCasePreconditions(caseRow,node,input.expectedCaseVersion);
  await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
+ await assertCurrentDigitalUseProblemFormulation(tx,input.caseId);
  await assertAssessmentCompliance(tx,input.actor.personId);
  const binding=await getScenePackageBinding(tx,input.caseId);
  if(binding!==DIGITAL_USE_PACKAGE_VERSION) throw contractError(binding===null?'SCENE_NODE_UNREACHABLE':'STALE_SCENE_PACKAGE');
@@ -528,9 +530,11 @@ async function childConfirm(
   if(!(await lockFamilyForPrimaryDecision(tx,input.familyId))) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
   const caseRow=await lockSceneCase(tx,input.caseId);
   if(!caseRow||caseRow.version!==input.expectedCaseVersion) throw contractError(!caseRow?'PHONE_USE_CONTRACT_NOT_FOUND':'STALE_CASE_VERSION');
+  assertNodeCasePreconditions(caseRow,resolveDigitalUseRuntimeNode('A4010'),input.expectedCaseVersion);
   const row=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
   if(!row) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
+  await assertCurrentDigitalUseProblemFormulation(tx,input.caseId);
   await assertAssessmentCompliance(tx,input.actor.personId);
   const participation=await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id});
   await requirePhoneUseContractChildConfirmation(tx,{accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,contract:row,participation});
@@ -639,6 +643,7 @@ async function readProfessionalAssetGate(
   }, async (tx) => {
     await authorizeManager(tx, input, 'CASE_READ_ASSESSMENT_SCENE');
     await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+    await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
     await assertAssessmentCompliance(tx, input.actor.personId);
     const binding = await getScenePackageBinding(tx, input.caseId);
     if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
