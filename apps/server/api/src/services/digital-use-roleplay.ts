@@ -13,12 +13,14 @@ import {
 import {
   assertOrdinaryProgressionAllowedRaw,
   casCompleteSceneNodeState,
+  casRecordSceneNodeProgress,
   casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
   getLatestSceneArtifact,
   getRoleplaySession,
   getRoleplayTurn,
   getSceneNodeState,
+  getScenePackageBinding,
   hashPayload,
   insertDigitalUseNodeCompletedAudit,
   insertDigitalUseNodeCompletedEvent,
@@ -34,7 +36,6 @@ import {
 import {
   DIGITAL_USE_PACKAGE_VERSION,
   DIGITAL_USE_SCENE_CODE,
-  PHONE_USE_CONTRACT_CONTENT_VERSION,
   resolveDigitalUseRuntimeNode,
   routeDigitalUseTopology,
 } from '@xiaoshuyin/scenes/digital-use';
@@ -46,8 +47,10 @@ import { assertNodeCasePreconditions, requireResolvedRoute } from './digital-use
 import {
   unavailableProductionRoleplayAdapter,
   type RoleplayAdapter,
+  type RoleplayProfessionalContentAuthority,
 } from './digital-use-roleplay-adapter.js';
 import type { DigitalUseActor } from './digital-use-assessment.js';
+import { assertCurrentDigitalUseProblemFormulation } from './digital-use-case-lifecycle.js';
 
 const ROLEPLAY_FEATURE=createServerFeatureDescriptor({
   featureCode:'DIGITAL_USE_ROLEPLAY_A4003',
@@ -82,6 +85,11 @@ async function authorizeRoleplay(
   const node=resolveDigitalUseRuntimeNode('A4003');
   assertNodeCasePreconditions(caseRow,node,input.expectedCaseVersion);
   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
+  await assertCurrentDigitalUseProblemFormulation(tx,input.caseId);
+  const binding=await getScenePackageBinding(tx,input.caseId);
+  if(binding!==DIGITAL_USE_PACKAGE_VERSION) {
+    throw roleplayError(binding===null?'SCENE_NODE_UNREACHABLE':'STALE_SCENE_PACKAGE');
+  }
   const scene=await getSceneNodeState(tx,input.caseId,'A4003',true);
   if(!scene || scene.scene_package_version!==DIGITAL_USE_PACKAGE_VERSION) throw roleplayError('SCENE_NODE_UNREACHABLE');
   if(
