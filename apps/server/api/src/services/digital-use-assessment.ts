@@ -250,6 +250,17 @@ export function buildSceneEnvelope(input: {
     a3000?.status === 'COMPLETED' &&
     a3002?.status === 'COMPLETED' &&
     targetSelectionRevision > 0;
+  const hasA5002State = input.nodes.some((node) => node.node_code === 'A5002');
+  const latestContractDocument = input.artifacts
+    .filter((artifact) => artifact.artifact_type === 'PHONE_USE_CONTRACT_DOCUMENT')
+    .sort((a, b) => b.revision - a.revision)[0];
+  const a5002FirstEntryEligible =
+    !hasA5002State &&
+    input.caseRow.status === 'OPEN' &&
+    input.caseRow.is_primary &&
+    latestContractDocument?.data['status'] === 'ACTIVE' &&
+    typeof latestContractDocument.data['contractVersionId'] === 'string' &&
+    typeof latestContractDocument.data['version'] === 'number';
   const reachableNodes = reachableRows.map((row) => {
     const manifest: DigitalUseNodeManifestEntry =
       resolveDigitalUseRuntimeNode(row.node_code);
@@ -268,6 +279,18 @@ export function buildSceneEnvelope(input: {
   });
   if (a5001FirstEntryEligible) {
     const manifest = resolveDigitalUseRuntimeNode('A5001');
+    reachableNodes.push({
+      nodeCode: manifest.nodeCode,
+      sourceNodeCode: manifest.sourceNodeCode,
+      entryModes: [...manifest.entryMode],
+      interactionRefs: [...manifest.interactionRefs],
+      outputRefs: [...manifest.outputRefs],
+      helpOrReentryRefs: [...manifest.helpOrReentryRefs],
+      reasonCode: 'USER_INITIATED_AVAILABLE',
+    });
+  }
+  if (a5002FirstEntryEligible) {
+    const manifest = resolveDigitalUseRuntimeNode('A5002');
     reachableNodes.push({
       nodeCode: manifest.nodeCode,
       sourceNodeCode: manifest.sourceNodeCode,
