@@ -1,6 +1,5 @@
 import Fastify from 'fastify';
 import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
 import pg from 'pg';
 import { configPlugin } from './plugins/config.js';
 import { registerAuthPlugin } from './plugins/auth.js';
@@ -115,10 +114,11 @@ export async function buildApp(options: BuildAppOptions = {}) {
   // Config (re-validates the same runtime contract and exposes the channel)
   await app.register(configPlugin, { env });
 
-  // Baseline HTTP hardening. Keep Fastify's existing request.ip semantics:
-  // trustProxy remains unchanged because no proxy boundary is authority-frozen.
+  // Baseline HTTP response hardening. This is independent of proxy/client-IP
+  // trust semantics, so it is safe across the current deployment shapes.
+  // Global request-rate limiting remains intentionally deferred until the
+  // authoritative proxy/client-IP boundary is frozen.
   await app.register(helmet);
-  await app.register(rateLimit);
 
   // Database pool
   const pool = new pg.Pool({
@@ -148,13 +148,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerAuthPlugin(app, pool, runtime.sessionSecret);
 
   // Health check (no auth)
-  app.get(
-    '/healthz',
-    { config: { rateLimit: false } },
-    async () => {
-      return { status: 'ok' };
-    }
-  );
+  app.get('/healthz', async () => {
+    return { status: 'ok' };
+  });
 
   // Routes
   registerAuthRoutes(app, pool, wechatProvider, runtime.sessionSecret);
