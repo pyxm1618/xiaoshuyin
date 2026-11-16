@@ -505,7 +505,7 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     }
   }
 
-  it('AS-02/04/06/24/27-29/52 records one exact ACTIVE Contract review and never executes A4012', async () => {
+  it('AS-02/04/06/10/24/27-29/39/52 records one exact ACTIVE Contract review and never executes A4012', async () => {
     const f = await fixture('legal');
     const scene = await getScene(f);
     expect(
