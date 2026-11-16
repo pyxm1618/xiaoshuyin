@@ -230,14 +230,14 @@ export async function createPhoneUseRoleplay(
 export async function addPhoneUseRoleplayTurn(
  pool:pg.Pool,
  input:RoleplayCommandContext & {readonly sessionId:string;readonly expectedSessionRevision:number;readonly simulatedChildInput:string},
- adapter:RoleplayAdapter=unavailableProductionRoleplayAdapter
+ adapter:RoleplayAdapter=unavailableProductionRoleplayAdapter,
+ professionalContentAuthority?:RoleplayProfessionalContentAuthority
 ){
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
    await authorizeRoleplay(tx,input);
    await assertRoleplayCompliance(tx,input.actor.personId);
-   await requireAdapterAvailable(adapter);
    const requestHash=hashPayload({sessionId:input.sessionId,expectedSessionRevision:input.expectedSessionRevision,simulatedChildInput:input.simulatedChildInput});
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
@@ -245,8 +245,11 @@ export async function addPhoneUseRoleplayTurn(
    },async()=>{
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
-     assertRoleplaySessionCurrent(session);
+     assertRoleplaySessionCurrent(session,professionalContentAuthority);
      if(session.status!=='OPEN'||session.revision!==input.expectedSessionRevision) throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
+     if(!(await adapterAvailable(adapter,session.professional_content_version))) {
+       throw roleplayError('DOWNSTREAM_AI_UNAVAILABLE');
+     }
      const roundNumber=await nextRoleplayRound(tx,session.id);
      const generated=await adapter.createTurn({
        sessionId:session.id,roundNumber,simulatedChildInput:input.simulatedChildInput,actorPersonId:input.actor.personId,
@@ -269,7 +272,8 @@ export async function addPhoneUseRoleplayTurn(
 
 export async function ratePhoneUseRoleplay(
  pool:pg.Pool,
- input:RoleplayCommandContext & {readonly sessionId:string;readonly turnId:string;readonly rating:number}
+ input:RoleplayCommandContext & {readonly sessionId:string;readonly turnId:string;readonly rating:number},
+ professionalContentAuthority?:RoleplayProfessionalContentAuthority
 ){
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
@@ -283,7 +287,7 @@ export async function ratePhoneUseRoleplay(
    },async()=>{
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
-     assertRoleplaySessionCurrent(session);
+     assertRoleplaySessionCurrent(session,professionalContentAuthority);
      const turn=await rateRoleplayTurnCas(tx,{sessionId:session.id,turnId:input.turnId,rating:input.rating});
      if(!turn) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
      return {status:200,body:roleplayTurnDto(turn)};
@@ -295,7 +299,8 @@ export async function ratePhoneUseRoleplay(
 
 export async function selectPhoneUseRoleplay(
  pool:pg.Pool,
- input:RoleplayCommandContext & {readonly sessionId:string;readonly turnId:string;readonly expectedSessionRevision:number;readonly expectedNodeRevision:number}
+ input:RoleplayCommandContext & {readonly sessionId:string;readonly turnId:string;readonly expectedSessionRevision:number;readonly expectedNodeRevision:number},
+ professionalContentAuthority?:RoleplayProfessionalContentAuthority
 ){
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
@@ -313,7 +318,7 @@ export async function selectPhoneUseRoleplay(
    },async()=>{
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
-     assertRoleplaySessionCurrent(session);
+     assertRoleplaySessionCurrent(session,professionalContentAuthority);
      if(correction&&session.status!=='COMPLETED') throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
      if(!correction&&session.status!=='OPEN') throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
      const turn=await getRoleplayTurn(tx,session.id,input.turnId);
