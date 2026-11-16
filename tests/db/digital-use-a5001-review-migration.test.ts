@@ -53,7 +53,7 @@ describe('Slice 15 A5001 additive Scene Artifact migration', () => {
 
   it('adds no Review table, policy, grant, A5002 or Slice 14 business vocabulary', async () => {
     const sql = readFileSync(
-      join(process.cwd(), 'db/migrations/018_digital_use_review_runtime.sql'),
+      join(process.cwd(), 'db/migrations/022_digital_use_review_runtime.sql'),
       'utf8'
     );
     expect(sql).not.toMatch(/CREATE\s+TABLE|CREATE\s+POLICY|\bGRANT\b/i);

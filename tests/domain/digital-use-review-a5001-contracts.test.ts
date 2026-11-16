@@ -197,9 +197,9 @@ describe('Slice 15 A5001 typed contract and negative space', () => {
     expect(routes).not.toContain('digital-use-reviews.ts');
 
     const migrations = readdirSync(join(root, 'db/migrations'));
-    expect(migrations).toContain('018_digital_use_review_runtime.sql');
+    expect(migrations).toContain('022_digital_use_review_runtime.sql');
     const migration = readFileSync(
-      join(root, 'db/migrations/018_digital_use_review_runtime.sql'),
+      join(root, 'db/migrations/022_digital_use_review_runtime.sql'),
       'utf8'
     );
     expect(migration).not.toMatch(/CREATE\s+TABLE|CREATE\s+POLICY|PHONE_USE_CONTRACT|A5002/i);
