@@ -203,6 +203,7 @@ export async function insertInterventionDefinitionAudit(
   tx: Tx,
   input: {
     actorAccountId: string;
+    familyId?: string | null;
     eventType:
       | 'INTERVENTION_DEFINITION_CANDIDATE_CREATED'
       | 'INTERVENTION_DEFINITION_SUCCESSOR_CREATED'
@@ -217,8 +218,9 @@ export async function insertInterventionDefinitionAudit(
   await tx.query(
     'INSERT INTO business_audit_events ' +
       '(family_id,actor_account_id,event_type,resource_type,resource_id,metadata) ' +
-      "VALUES (NULL,$1,$2,'INTERVENTION_DEFINITION',$3,$4::jsonb)",
+      "VALUES ($1,$2,$3,'INTERVENTION_DEFINITION',$4,$5::jsonb)",
     [
+      input.familyId ?? null,
       input.actorAccountId,
       input.eventType,
       input.definitionId,

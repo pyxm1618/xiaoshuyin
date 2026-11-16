@@ -11,6 +11,7 @@ import {
   getCurrentProblemFormulation,
   getExactInterventionDefinition,
   getParticipationById,
+  insertInterventionDefinitionAudit,
   getScenePackageBinding,
   isProblemFormulationAuthoritativeExecutionBasis,
   type InterventionDefinitionExactRef,
@@ -372,7 +373,7 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         : 'BLOCK'
       : 'UNKNOWN';
 
-  return evaluateInterventionEligibility({
+  const result = evaluateInterventionEligibility({
     authorization: 'PASS',
     case: {
       id: caseRow.id,
@@ -435,6 +436,30 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       ...(scenePackageVersion ? ['PACKAGE:' + scenePackageVersion] : []),
     ],
   });
+
+  await insertInterventionDefinitionAudit(tx, {
+    familyId: input.familyId,
+    actorAccountId: input.actor.accountId,
+    eventType: result.allowed
+      ? 'INTERVENTION_ELIGIBILITY_EVALUATED'
+      : 'INTERVENTION_ELIGIBILITY_BLOCKED',
+    definitionId: input.definition.id,
+    metadata: {
+      definitionVersion: input.definition.version,
+      contentHash: input.definition.contentHash,
+      sceneId: result.sceneId,
+      scenePackageVersion: result.scenePackageVersion,
+      approvalProofRef: result.approvalProofRef,
+      approvalStatus: result.approvalStatus,
+      allowed: result.allowed,
+      reasonCodes: result.reasonCodes,
+      caseRevision: result.caseRevision,
+      formulationVersion: result.formulationVersion,
+      dependencyRevisionRefs: result.dependencyRevisionRefs,
+    },
+  });
+
+  return result;
 }
 
 export function evaluateCurrentInterventionEligibility(
