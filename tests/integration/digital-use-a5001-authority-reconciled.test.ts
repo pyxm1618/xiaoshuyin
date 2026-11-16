@@ -550,6 +550,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
 
   it('T1511 package authority drift at commit-time barrier rolls back all A5001 truth', async () => {
     const f = await fixture('package-drift-barrier');
+    const before = await counts(f);
     professional.restore('FAMILY_ALLIANCE_REVIEW');
     const barrier = professional.pauseNextRevalidation('FAMILY_ALLIANCE_REVIEW');
 
@@ -567,12 +568,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     const result = await request;
     expect(result.statusCode, result.body).toBe(503);
     expect(result.json().code).toBe('DEPENDENCY_UNAVAILABLE');
-    const after = await counts(f);
-    expect(after.artifacts).toBe(0);
-    expect(after.nodes).toBe(0);
-    expect(after.events).toBe(0);
-    expect(after.audits).toBe(0);
-    expect(after.idempotency).toBe(0);
+    expect(await counts(f)).toEqual(before);
     professional.restore('FAMILY_ALLIANCE_REVIEW');
   });
 
