@@ -173,6 +173,25 @@ export async function runLockedIdempotentCommandInTransaction(
   return { action: 'EXECUTED', status: response.status, body: response.body };
 }
 
+export async function runPreparedIdempotentCommandInTransaction(
+  tx: pg.PoolClient,
+  cfg: Omit<IdempotentCommandConfig, 'requestHash'>,
+  prepareRequestHash: (tx: pg.PoolClient) => Promise<string>,
+  fn: (tx: pg.PoolClient) => Promise<CommandResponse>
+): Promise<CommandOutcome> {
+  // Some commands require an authority-owned normalization step before their
+  // canonical request hash exists. Preserve the global lock order by acquiring
+  // the existing idempotency lock first, then prepare the hash, then use the
+  // same lookup/decision/settlement owner.
+  await lockIdempotentCommandInTransaction(tx, cfg);
+  const requestHash = await prepareRequestHash(tx);
+  return runLockedIdempotentCommandInTransaction(
+    tx,
+    { ...cfg, requestHash },
+    fn
+  );
+}
+
 export async function runIdempotentCommandInTransaction(
   tx: pg.PoolClient,
   cfg: IdempotentCommandConfig,
