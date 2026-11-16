@@ -64,7 +64,8 @@ export type InterventionProfessionalAuthorityFailureReason =
   | 'UNPUBLISHED'
   | 'RETIRED'
   | 'SUPERSEDED'
-  | 'APPROVAL_EXPIRED';
+  | 'APPROVAL_EXPIRED'
+  | 'APPROVAL_PROOF_CHANGED';
 
 export type InterventionProfessionalAuthorityResult =
   | {

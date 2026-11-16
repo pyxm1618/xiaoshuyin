@@ -164,7 +164,7 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
       revalidated.qualificationRef === professional.qualificationRef
         ? revalidated
-        : ({ status: 'INVALID', reason: 'PROOF_CHANGED' } as const);
+        : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
   }
 
   const packageInclusion =
