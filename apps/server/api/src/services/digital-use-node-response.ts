@@ -602,14 +602,23 @@ export async function completeDigitalUseNodeResponse(
             };
           }
 
-          const handoffCandidate = await shouldPrepareProblemFormulationHandoff({
-            tx,
-            actor: input.actor,
-            familyId: input.familyId,
-            caseId: input.caseId,
-            nodeCode: node.nodeCode,
-            response: input.response,
-          });
+          const previewCase = await getCaseById(tx, input.caseId);
+          const previewNode = await getSceneNodeState(tx, input.caseId, node.nodeCode);
+          const recoveringAfterFormulation =
+            previewCase !== null &&
+            previewCase.phase !== 'ASSESSMENT' &&
+            previewNode !== null &&
+            isRecoverableTriageProjection(node.nodeCode, previewNode.status);
+          const handoffCandidate =
+            !recoveringAfterFormulation &&
+            await shouldPrepareProblemFormulationHandoff({
+              tx,
+              actor: input.actor,
+              familyId: input.familyId,
+              caseId: input.caseId,
+              nodeCode: node.nodeCode,
+              response: input.response,
+            });
           if (handoffCandidate) {
             return {
               status: 200,
@@ -627,6 +636,9 @@ export async function completeDigitalUseNodeResponse(
           assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
           await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
           await assertAssessmentCompliance(tx, input.actor.personId);
+          if (node.stream === 'PHONE_USE_CONTRACT') {
+            await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
+          }
 
           const binding = await getScenePackageBinding(tx, input.caseId);
           if (binding === null) throw nodeError('SCENE_NODE_UNREACHABLE');
@@ -634,6 +646,7 @@ export async function completeDigitalUseNodeResponse(
 
           let current = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
           let recompleting = false;
+          let reevaluatingTriage = false;
           if (
             current?.status === 'COMPLETED' &&
             (node.entryMode as readonly string[]).includes('USER_INITIATED') &&
@@ -643,6 +656,15 @@ export async function completeDigitalUseNodeResponse(
               throw nodeError('STALE_NODE_REVISION');
             }
             recompleting = true;
+          }
+          if (
+            current !== null &&
+            isRecoverableTriageProjection(node.nodeCode, current.status)
+          ) {
+            if (current.revision !== input.expectedNodeRevision) {
+              throw nodeError('STALE_NODE_REVISION');
+            }
+            reevaluatingTriage = true;
           }
           if (
             !current &&
@@ -673,7 +695,8 @@ export async function completeDigitalUseNodeResponse(
           if (
             current.status !== 'AVAILABLE' &&
             current.status !== 'IN_PROGRESS' &&
-            !(recompleting && current.status === 'COMPLETED')
+            !(recompleting && current.status === 'COMPLETED') &&
+            !reevaluatingTriage
           ) {
             throw nodeError('SCENE_NODE_UNREACHABLE');
           }
