@@ -5,6 +5,12 @@ import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { recordStatement } from '@xiaoshuyin/domain';
 import {
+  buildConsentEvidence,
+  getAcceptanceTextHash,
+  getCurrentNoticeHash,
+  runtimeConsentChannel,
+} from '@xiaoshuyin/compliance';
+import {
   PHONE_USE_CONTRACT_CONTENT_VERSION,
   resolveDigitalUseRuntimeNode,
 } from '@xiaoshuyin/scenes/digital-use';
@@ -171,6 +177,95 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     const f = { manager, familyId, caseId, caseVersion };
     await seedConfirmedFormulation(f, message.json().id as string, phase);
     return f;
+  }
+
+  async function seedRevokedConsentForActor(f: BaseFixture): Promise<void> {
+    const guardian = await loginWithLabel(app, `slice15-guardian-${crypto.randomUUID()}`);
+    const guardianOwnFamily = await createFamily(
+      app,
+      guardian.token,
+      `slice15-guardian-own-${crypto.randomUUID()}`
+    );
+    expect(guardianOwnFamily.statusCode, guardianOwnFamily.body).toBe(201);
+    await admin.query(
+      `INSERT INTO family_members (family_id,person_id)
+       VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [f.familyId, guardian.personId]
+    );
+
+    const noticeHash = getCurrentNoticeHash();
+    const acceptedTextHash = getAcceptanceTextHash('v1');
+    if (!acceptedTextHash) throw new Error('missing v1 acceptance text');
+    const evidence = buildConsentEvidence({
+      channel: runtimeConsentChannel(),
+      acceptedTextHash,
+      clientIp: null,
+      userAgent: null,
+      pepper: 'slice15-review-consent-fixture',
+    });
+
+    const request = await admin.query<{ id: string }>(
+      `INSERT INTO guardian_consent_requests
+         (family_id,guardian_person_id,subject_person_id,declared_age_band,
+          notice_version,notice_hash,status,expires_at,completed_at)
+       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',
+               now()+interval '24 hours',now())
+       RETURNING id`,
+      [f.familyId, guardian.personId, f.manager.personId, noticeHash]
+    );
+    const granted = await admin.query<{ id: string }>(
+      `INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,
+          onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,
+          policy_version,evidence)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,
+               $4,$5,now(),'v1',$6,'v1',$7::jsonb)
+       RETURNING id`,
+      [
+        f.familyId,
+        guardian.personId,
+        guardian.accountId,
+        request.rows[0]!.id,
+        f.manager.personId,
+        noticeHash,
+        JSON.stringify(evidence),
+      ]
+    );
+    const revoked = await admin.query<{ id: string }>(
+      `INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,version,
+          onboarding_request_id,bound_person_id,bound_at,notice_version,notice_hash,
+          policy_version,evidence,supersedes_id)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','REVOKED',2,
+               NULL,$4,now(),'v1',$5,'v1',$6::jsonb,$7)
+       RETURNING id`,
+      [
+        f.familyId,
+        guardian.personId,
+        guardian.accountId,
+        f.manager.personId,
+        noticeHash,
+        JSON.stringify(evidence),
+        granted.rows[0]!.id,
+      ]
+    );
+
+    await admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,verified_source,guardian_person_id,
+          guardian_consent_record_id,guardian_consent_version)
+       VALUES ($1,'UNDER_14',true,'GUARDIAN_RELAY',$2,$3,2)
+       ON CONFLICT (person_id) DO UPDATE SET
+         age_band='UNDER_14',
+         minor_mode=true,
+         verified_source='GUARDIAN_RELAY',
+         guardian_person_id=EXCLUDED.guardian_person_id,
+         guardian_consent_record_id=EXCLUDED.guardian_consent_record_id,
+         guardian_consent_version=2,
+         effective_at=now(),
+         updated_at=now()`,
+      [f.manager.personId, guardian.personId, revoked.rows[0]!.id]
+    );
   }
 
   async function seedAssessmentEvidence(f: BaseFixture): Promise<void> {
@@ -1126,6 +1221,111 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       completed: 0,
       events: 0,
     });
+  });
+
+  it('T1509 valid Professional package cannot override revoked Consent', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const target = await prepareA5001(app, 'a5001-revoked-consent');
+    await seedRevokedConsentForActor(target.f);
+
+    const result = await submitA5001(
+      app,
+      target.f,
+      target.scene,
+      target.payload,
+      `a5001-revoked-consent-${crypto.randomUUID()}`
+    );
+    expect(result.statusCode).toBe(409);
+    expect(result.json()).toMatchObject({ code: 'CONSENT_BLOCKED' });
+    expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
+      artifacts: 0,
+      completed: 0,
+      events: 0,
+    });
+  });
+
+  it('T1509 valid Professional package cannot override Compliance unavailable/deny', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const target = await prepareA5001(app, 'a5001-compliance-blocked');
+    const publisher = new pg.Client({
+      connectionString: process.env['MIGRATION_DATABASE_URL'],
+    });
+    await publisher.connect();
+
+    let blockedVersion: number | null = null;
+    try {
+      const current = await publisher.query<{ policy_version: number }>(
+        `SELECT policy_version
+           FROM compliance_feature_policies
+          WHERE feature_code='DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME'
+            AND feature_contract_revision='v1'
+            AND superseded_by_policy_id IS NULL
+          ORDER BY policy_version DESC
+          LIMIT 1`
+      );
+      const currentVersion = current.rows[0]?.policy_version;
+      if (!currentVersion) throw new Error('missing current Family Alliance compliance policy');
+      blockedVersion = currentVersion + 1;
+
+      await publisher.query(
+        `SELECT app.publish_compliance_feature_policy(
+           'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','v1',$1,$2,
+           'UNKNOWN','BASELINE','BASELINE','BASELINE','BASELINE',
+           NULL,NULL,clock_timestamp() - interval '1 second',
+           $3
+         )`,
+        [
+          currentVersion,
+          blockedVersion,
+          `test:slice15-compliance-blocked:${crypto.randomUUID()}`,
+        ]
+      );
+
+      const result = await submitA5001(
+        app,
+        target.f,
+        target.scene,
+        target.payload,
+        `a5001-compliance-blocked-${crypto.randomUUID()}`
+      );
+      expect(result.statusCode).toBe(409);
+      expect(result.json()).toMatchObject({ code: 'COMPLIANCE_BLOCKED' });
+      expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
+        artifacts: 0,
+        completed: 0,
+        events: 0,
+      });
+    } finally {
+      if (blockedVersion !== null) {
+        const current = await publisher.query<{ policy_version: number }>(
+          `SELECT policy_version
+             FROM compliance_feature_policies
+            WHERE feature_code='DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME'
+              AND feature_contract_revision='v1'
+              AND superseded_by_policy_id IS NULL
+            ORDER BY policy_version DESC
+            LIMIT 1`
+        );
+        const currentVersion = current.rows[0]?.policy_version;
+        if (currentVersion === blockedVersion) {
+          await publisher.query(
+            `SELECT app.publish_compliance_feature_policy(
+               'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','v1',$1,$2,
+               'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+               'Slice 15 restored reviewed basis',
+               'evidence://slice15/compliance-restored',
+               clock_timestamp(),$3
+             )`,
+            [
+              currentVersion,
+              currentVersion + 1,
+              `test:slice15-compliance-restore:${crypto.randomUUID()}`,
+            ]
+          );
+        }
+      }
+      await publisher.end().catch(() => undefined);
+    }
   });
 
   it('T1509 valid Professional package cannot override DISABLED account authority', async () => {
