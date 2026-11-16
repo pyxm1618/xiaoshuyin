@@ -409,7 +409,7 @@ describe('Digital Use vertical convergence', () => {
     expect(template.statusCode, template.body).toBe(200);
     expect(template.json().meta).toMatchObject({
       contentVersion: 'phone-use-contract-v1',
-      authorityScope: 'PRODUCT_BASELINE',
+      approved: true,
     });
 
     const examples = await productionBoundaryApp.inject({
@@ -419,7 +419,7 @@ describe('Digital Use vertical convergence', () => {
     });
     expect(examples.statusCode, examples.body).toBe(409);
     expect(examples.json()).toMatchObject({
-      code: 'PROFESSIONAL_CONTENT_UNAVAILABLE',
+      code: 'PHONE_USE_CONTRACT_CONTENT_STALE',
     });
 
     scene = await respondNode(
@@ -627,15 +627,26 @@ describe('Digital Use vertical convergence', () => {
       productionBoundaryApp
     );
     sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
-    expect(sleep.helpHistoryRefs[0]?.contentRef).toMatchObject({
+    expect(sleep.helpHistoryRefs).toHaveLength(1);
+
+    const sleepHelpReadback = await admin.query<{ help_history_refs: any[] }>(
+      `SELECT help_history_refs
+         FROM digital_use_target_items
+        WHERE case_id=$1
+          AND target_code='SLEEP'
+          AND superseded_at IS NULL`,
+      [f.caseId]
+    );
+    const sleepHelpContentRef = sleepHelpReadback.rows[0]?.help_history_refs[0]?.contentRef;
+    expect(sleepHelpContentRef).toMatchObject({
       nodeCode: 'A3013',
       contentVersion: 'family-alliance-product-v1',
       sourceBlob: '8eb660cd905d8fba4b52fe0f74bbc214b3113117',
     });
     expect(
       resolveFamilyAllianceContent(
-        sleep.helpHistoryRefs[0].contentRef.nodeCode,
-        sleep.helpHistoryRefs[0].contentRef.contentVersion
+        sleepHelpContentRef.nodeCode,
+        sleepHelpContentRef.contentVersion
       ).body.length
     ).toBeGreaterThan(0);
 
