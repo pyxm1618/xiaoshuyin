@@ -738,12 +738,13 @@ export async function executePhoneUseContractReviewNodeInTransaction(
     });
 
     const finalCase = await lockSceneCase(tx, input.caseId);
-    if (
-      !finalCase ||
-      finalCase.status !== 'OPEN' ||
-      !finalCase.is_primary ||
-      finalCase.version !== input.expectedCaseVersion
-    ) {
+    if (!finalCase) throw reviewError('CASE_NOT_FOUND', 'Case not found');
+    if (finalCase.status === 'SAFETY_HOLD') {
+      throw reviewError('SAFETY_HOLD_BLOCKED');
+    }
+    if (finalCase.status !== 'OPEN') throw reviewError('CASE_NOT_OPEN');
+    if (!finalCase.is_primary) throw reviewError('CASE_NOT_PRIMARY');
+    if (finalCase.version !== input.expectedCaseVersion) {
       throw reviewError('STALE_CASE_VERSION');
     }
     const finalFormulation = await getCurrentProblemFormulation(tx, input.caseId);

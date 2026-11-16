@@ -1149,6 +1149,85 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     expect((await counts(f)).a4012).toBe(0);
   });
 
+  it('AS-33/35/50 T1511 catches commit-time Case drift after review writes and rolls everything back', async () => {
+    const scenarios = [
+      {
+        label: 'safety-hold',
+        mutation: `UPDATE cases SET status='SAFETY_HOLD' WHERE id=NEW.case_id`,
+        code: 'SAFETY_HOLD_BLOCKED',
+      },
+      {
+        label: 'primary',
+        mutation: `UPDATE cases SET is_primary=false WHERE id=NEW.case_id`,
+        code: 'CASE_NOT_PRIMARY',
+      },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      const f = await fixture(`commit-drift-${scenario.label}`);
+      const scene = await getScene(f);
+      const safe = crypto.randomUUID().replaceAll('-', '');
+      const fn = `slice15_a5002_drift_fn_${safe}`;
+      const tr = `slice15_a5002_drift_tr_${safe}`;
+
+      await admin.query(
+        `CREATE FUNCTION ${fn}() RETURNS trigger
+         LANGUAGE plpgsql SECURITY DEFINER
+         SET search_path = pg_catalog, public AS $
+         BEGIN
+           IF NEW.artifact_type='DIGITAL_USE_A5002_EFFECT_EVALUATION' THEN
+             ${scenario.mutation};
+           END IF;
+           RETURN NEW;
+         END $;
+         CREATE TRIGGER ${tr}
+         AFTER INSERT ON scene_artifacts
+         FOR EACH ROW EXECUTE FUNCTION ${fn}();`
+      );
+
+      try {
+        const key = `a5002-commit-drift-${scenario.label}-${crypto.randomUUID()}`;
+        const result = await submit(
+          f,
+          scene,
+          key,
+          payload(f, `commit-drift-${scenario.label}`)
+        );
+        expect(result.statusCode, result.body).toBe(409);
+        expect(result.json().code).toBe(scenario.code);
+
+        const c = await counts(f);
+        expect(c.artifacts).toBe(0);
+        expect(c.evidence).toBe(0);
+        expect(c.node).toBe(0);
+
+        const restored = await admin.query<{
+          status: string;
+          is_primary: boolean;
+        }>(
+          `SELECT status,is_primary FROM cases WHERE id=$1`,
+          [f.caseId]
+        );
+        expect(restored.rows[0]).toEqual({
+          status: 'OPEN',
+          is_primary: true,
+        });
+
+        const idem = await admin.query<{ n: number }>(
+          `SELECT count(*)::int AS n FROM idempotency_keys
+            WHERE actor_account_id=$1
+              AND command_type='DIGITAL_USE_NODE_RESPONSE'
+              AND idempotency_key=$2`,
+          [f.manager.accountId, key]
+        );
+        expect(idem.rows[0]!.n).toBe(0);
+      } finally {
+        await admin.query(`DROP TRIGGER IF EXISTS ${tr} ON scene_artifacts`);
+        await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
+      }
+    }
+  });
+
   it('AS-44/45 rolls Evidence/node/artifact/idempotency back when artifact persistence fails', async () => {
     const f = await fixture('atomic');
     const scene = await getScene(f);
