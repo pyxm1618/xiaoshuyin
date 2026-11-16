@@ -257,4 +257,77 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
       }, TEST_ONLY_QUALIFICATION_PROVIDER)
     ).rejects.toMatchObject({ code: 'INTERVENTION_STAFF_AUTHORITY_INVALID' });
   });
+
+  it('serializes a fresh mutation ahead of a truly concurrent Staff revocation', async () => {
+    await ensureActiveAssignment();
+
+    let call = 0;
+    let enteredSecond!: () => void;
+    let releaseSecond!: () => void;
+    const entered = new Promise<void>((resolve) => { enteredSecond = resolve; });
+    const release = new Promise<void>((resolve) => { releaseSecond = resolve; });
+    const stableQualification: InterventionProfessionalQualificationProvider = {
+      async resolve(input) {
+        call += 1;
+        if (call === 2) {
+          enteredSecond();
+          await release;
+        }
+        return {
+          qualificationRef: 'Q:STABLE',
+          scopeRef: input.approvalScope,
+          status: 'VALID',
+        };
+      },
+    };
+
+    const interventionCode = code('STAFF_REVOKE_RACE');
+    const mutation = createInterventionDefinitionCandidate(
+      appPool,
+      {
+        actor: actor(),
+        sceneId: 'DIGITAL_USE',
+        interventionCode,
+        semantic: interventionSemantic(),
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: key('staff-revoke-race'),
+      },
+      stableQualification
+    );
+
+    await entered;
+
+    let revokeSettled = false;
+    const revoke = admin.query(
+      'UPDATE staff_assignments ' +
+        'SET revoked_at=clock_timestamp(),revoked_by_account_id=$1 WHERE id=$2',
+      [accountId, assignmentId]
+    ).finally(() => {
+      revokeSettled = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(revokeSettled).toBe(false);
+
+    releaseSecond();
+    const [created] = await Promise.all([mutation, revoke]);
+    expect(created.interventionCode).toBe(interventionCode);
+    expect(revokeSettled).toBe(true);
+
+    await expect(
+      createInterventionDefinitionCandidate(
+        appPool,
+        {
+          actor: actor(),
+          sceneId: 'DIGITAL_USE',
+          interventionCode: code('POST_CONCURRENT_REVOKE'),
+          semantic: interventionSemantic(),
+          approvalScope: 'DIGITAL_USE',
+          idempotencyKey: key('post-concurrent-revoke'),
+        },
+        TEST_ONLY_QUALIFICATION_PROVIDER
+      )
+    ).rejects.toMatchObject({ code: 'INTERVENTION_STAFF_AUTHORITY_INVALID' });
+  });
+
 });

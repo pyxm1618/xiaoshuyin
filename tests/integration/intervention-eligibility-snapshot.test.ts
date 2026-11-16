@@ -3,11 +3,13 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import { retireInterventionDefinition } from '../../apps/server/api/src/services/intervention-definitions.js';
 import {
   evaluateCurrentInterventionEligibility,
   type InterventionEligibilityOwnerAdapters,
 } from '../../apps/server/api/src/services/intervention-eligibility.js';
 import { prepareInterventionDefinition } from '../../packages/domain/src/index.js';
+import type { DigitalUseInterventionInclusionProvider } from '../../packages/scenes/digital-use/index.js';
 import { createAdminPool } from '../setup/db.js';
 import {
   commandHeaders,
@@ -17,6 +19,7 @@ import {
 } from '../setup/api.js';
 import { createCase } from '../setup/participation.js';
 import {
+  TEST_ONLY_QUALIFICATION_PROVIDER,
   interventionSemantic,
   professionalProof,
   professionalProvider,
@@ -285,4 +288,158 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     );
     expect(after.rows[0]!.count).toBe(before.rows[0]!.count);
   });
+
+  it('blocks when reviewer authority proof changes between resolve and final revalidation', async () => {
+    const f = await fixture('proof-drift-' + crypto.randomUUID());
+    const exactPackage: DigitalUseInterventionInclusionProvider = {
+      async resolve(input) {
+        return { status: 'INCLUDED', inclusion: input };
+      },
+    };
+    const valid = professionalProof({
+      definitionId: f.definitionId,
+      definitionVersion: f.version,
+      contentHash: f.contentHash,
+    });
+    const revoked = professionalProof({
+      definitionId: f.definitionId,
+      definitionVersion: f.version,
+      contentHash: f.contentHash,
+      staffAuthority: {
+        assignmentRef: 'TEST_STAFF_ASSIGNMENT:1',
+        capability: 'PROFESSIONAL_REVIEW',
+        scopeRef: 'GLOBAL',
+        status: 'REVOKED',
+      },
+    });
+
+    const result = await evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      professionalProvider(valid, revoked),
+      exactPackage
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.approvalStatus).toBe('INVALID');
+    expect(result.professionalAuthorityBlockers).toContain(
+      'APPROVAL_PROOF_CHANGED'
+    );
+  });
+
+  it('serializes exact package inclusion consumption before concurrent retirement and blocks every later use', async () => {
+    const f = await fixture('package-retire-' + crypto.randomUUID());
+    await admin.query(
+      "INSERT INTO staff_assignments " +
+        "(account_id,person_id,capability,scope_type,granted_by_account_id) " +
+        "VALUES ($1,$2,'PROFESSIONAL_REVIEW','GLOBAL',$1)",
+      [f.manager.accountId, f.manager.personId]
+    );
+
+    let enteredResolve!: () => void;
+    let releaseResolve!: () => void;
+    const entered = new Promise<void>((resolve) => { enteredResolve = resolve; });
+    const release = new Promise<void>((resolve) => { releaseResolve = resolve; });
+    const blockingPackage: DigitalUseInterventionInclusionProvider = {
+      async resolve(input) {
+        enteredResolve();
+        await release;
+        return { status: 'INCLUDED', inclusion: input };
+      },
+    };
+    const exactPackage: DigitalUseInterventionInclusionProvider = {
+      async resolve(input) {
+        return { status: 'INCLUDED', inclusion: input };
+      },
+    };
+    const authority = professionalProvider(
+      professionalProof({
+        definitionId: f.definitionId,
+        definitionVersion: f.version,
+        contentHash: f.contentHash,
+      })
+    );
+
+    const eligibilityPromise = evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      authority,
+      blockingPackage
+    );
+
+    await entered;
+
+    let retirementSettled = false;
+    const retirementPromise = retireInterventionDefinition(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+          expectedRevision: 1,
+        },
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: 's16-package-retire-' + crypto.randomUUID(),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    ).finally(() => {
+      retirementSettled = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(retirementSettled).toBe(false);
+
+    releaseResolve();
+    const [beforeRetire, retired] = await Promise.all([
+      eligibilityPromise,
+      retirementPromise,
+    ]);
+    expect(beforeRetire.allowed).toBe(true);
+    expect(retired.state).toBe('RETIRED');
+
+    const afterRetire = await evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      authority,
+      exactPackage
+    );
+    expect(afterRetire.allowed).toBe(false);
+    expect(afterRetire.reasonCodes).toContain('DEFINITION_RETIRED');
+  });
+
 });
