@@ -157,9 +157,15 @@ export function registerDigitalUsePhoneContractRoutes(
  },async(req,reply)=>{
   const actor=actorOf(req),caseId=caseIdOf((req.params as {id:string}).id),body=CreatePhoneUseRoleplayRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
   const result=await createPhoneUseRoleplay(pool,{actor,familyId,caseId,idempotencyKey:readIdempotencyKey(req),...body},roleplayAdapter,roleplayProfessionalContent);
-  return 'kind' in result && result.kind==='HOLD'
-    ? reply.status(200).send(result)
-    : reply.status(201).send(result);
+  if (
+    typeof result === 'object' &&
+    result !== null &&
+    'kind' in result &&
+    result.kind === 'HOLD'
+  ) {
+    return reply.status(200).send(result);
+  }
+  return reply.status(201).send(result);
  });
 
  for(const operation of ['turns','rate','select'] as const){
