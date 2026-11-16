@@ -3,12 +3,14 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
-import { retireInterventionDefinition } from '../../apps/server/api/src/services/intervention-definitions.js';
+import {
+  createInterventionDefinitionCandidate,
+  retireInterventionDefinition,
+} from '../../apps/server/api/src/services/intervention-definitions.js';
 import {
   evaluateCurrentInterventionEligibility,
   type InterventionEligibilityOwnerAdapters,
 } from '../../apps/server/api/src/services/intervention-eligibility.js';
-import { prepareInterventionDefinition } from '../../packages/domain/src/index.js';
 import type { DigitalUseInterventionInclusionProvider } from '../../packages/scenes/digital-use/index.js';
 import { createAdminPool } from '../setup/db.js';
 import {
@@ -125,57 +127,26 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
         required_consent_purposes: [],
       },
     });
-    const prepared = prepareInterventionDefinition({
-      sceneId: 'DIGITAL_USE',
-      interventionCode:
-        'TEST_SNAPSHOT_' + crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase(),
-      version: 1,
-      semantic,
-    });
-    const inserted = await admin.query<{ id: string }>(
-      "INSERT INTO intervention_definitions " +
-        "(scene_id,intervention_code,version,content_hash,definition_state," +
-        "target_problem_or_mechanism,formulation_dependencies,supporting_evidence_requirements," +
-        "applicable_conditions,exclusion_or_contraindication_conditions,age_and_development_scope," +
-        "rationale,intervention_steps,participation_and_consent_requirements,baseline_and_observation," +
-        "expected_observable_change,burden_and_barriers,adverse_or_worsening_signals," +
-        "review_window_and_criteria,stop_reassess_safety_referral_conditions,allowed_combinations," +
-        "conflicting_interventions,professional_source_refs,created_by_person_id) VALUES " +
-        "($1,$2,$3,$4,'CANDIDATE',$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb," +
-        "$11,$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18::jsonb," +
-        "$19::jsonb,$20::jsonb,$21::jsonb,$22::jsonb,$23) RETURNING id",
-      [
-        prepared.sceneId, prepared.interventionCode, prepared.version, prepared.contentHash,
-        semantic.target_problem_or_mechanism,
-        JSON.stringify(semantic.formulation_dependencies),
-        JSON.stringify(semantic.supporting_evidence_requirements),
-        JSON.stringify(semantic.applicable_conditions),
-        JSON.stringify(semantic.exclusion_or_contraindication_conditions),
-        JSON.stringify(semantic.age_and_development_scope),
-        semantic.rationale,
-        JSON.stringify(semantic.intervention_steps),
-        JSON.stringify(semantic.participation_and_consent_requirements),
-        JSON.stringify(semantic.baseline_and_observation),
-        JSON.stringify(semantic.expected_observable_change),
-        JSON.stringify(semantic.burden_and_barriers),
-        JSON.stringify(semantic.adverse_or_worsening_signals),
-        JSON.stringify(semantic.review_window_and_criteria),
-        JSON.stringify(semantic.stop_reassess_safety_referral_conditions),
-        JSON.stringify(semantic.allowed_combinations),
-        JSON.stringify(semantic.conflicting_interventions),
-        JSON.stringify(semantic.professional_source_refs),
-        manager.personId,
-      ]
+    await admin.query(
+      "INSERT INTO staff_assignments " +
+        "(account_id,person_id,capability,scope_type,granted_by_account_id) " +
+        "VALUES ($1,$2,'PROFESSIONAL_REVIEW','GLOBAL',$1)",
+      [manager.accountId, manager.personId]
     );
-
-    return {
-      manager,
-      familyId,
-      caseId,
-      definitionId: inserted.rows[0]!.id,
-      version: prepared.version,
-      contentHash: prepared.contentHash,
-    };
+    const created = await createInterventionDefinitionCandidate(
+      appDb,
+      {
+        actor: { accountId: manager.accountId, personId: manager.personId },
+        sceneId: 'DIGITAL_USE',
+        interventionCode:
+          'TEST_SNAPSHOT_' +
+          crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase(),
+        semantic,
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: 's16-snapshot-definition-' + crypto.randomUUID(),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    );
   }
 
   const passAdapters: InterventionEligibilityOwnerAdapters = {
@@ -340,13 +311,6 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
 
   it('serializes exact package inclusion consumption before concurrent retirement and blocks every later use', async () => {
     const f = await fixture('package-retire-' + crypto.randomUUID());
-    await admin.query(
-      "INSERT INTO staff_assignments " +
-        "(account_id,person_id,capability,scope_type,granted_by_account_id) " +
-        "VALUES ($1,$2,'PROFESSIONAL_REVIEW','GLOBAL',$1)",
-      [f.manager.accountId, f.manager.personId]
-    );
-
     let enteredResolve!: () => void;
     let releaseResolve!: () => void;
     const entered = new Promise<void>((resolve) => { enteredResolve = resolve; });
