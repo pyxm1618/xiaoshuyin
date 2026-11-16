@@ -65,6 +65,14 @@ export interface FamilyAllianceFeasibilityPayload {
 export interface FamilyAllianceHelpHistoryEntry {
   readonly nodeCode: string;
   readonly scenePackageVersion: string;
+  readonly contentRef?: {
+    readonly nodeCode: string;
+    readonly contentVersion: string;
+    readonly authorityDocument: 'Docs/V1产品需求.md';
+    readonly authorityDocumentVersion: 'v3.9';
+    readonly sourceBlob: string;
+    readonly sectionHeading: string;
+  };
   readonly interactionRefs: readonly string[];
   readonly helpOrReentryRefs: readonly string[];
   readonly authorityRefs: readonly string[];

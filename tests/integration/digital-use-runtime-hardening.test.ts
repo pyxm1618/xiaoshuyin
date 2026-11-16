@@ -1844,19 +1844,27 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(acknowledged.statusCode, acknowledged.body).toBe(200);
     expect(acknowledged.json().currentNode?.nodeCode).toBe('A4003');
 
-    for (const suffix of ['template','examples'] as const) {
-      const asset = await app.inject({
-        method: 'GET',
-        url: `/api/v1/cases/${f.caseId}/digital-use/contract/${suffix}`,
-        headers: auth(f.manager.token),
-      });
-      expect(asset.statusCode, asset.body).toBe(200);
-      expect(asset.json().meta).toMatchObject({
-        contentVersion: 'phone-use-contract-v1',
-        sourceBlob: '97a8db200013746faff64230ab7cbf5f15b41615',
-        approved: true,
-      });
-    }
+    const template = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/template`,
+      headers: auth(f.manager.token),
+    });
+    expect(template.statusCode, template.body).toBe(200);
+    expect(template.json().meta).toMatchObject({
+      contentVersion: 'phone-use-contract-v1',
+      sourceBlob: '97a8db200013746faff64230ab7cbf5f15b41615',
+      approved: true,
+    });
+
+    const examples = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/examples`,
+      headers: auth(f.manager.token),
+    });
+    expect(examples.statusCode, examples.body).toBe(409);
+    expect(examples.json()).toMatchObject({
+      code: 'PHONE_USE_CONTRACT_CONTENT_STALE',
+    });
   });
 
   it('A4003 fails closed as recoverable HOLD when Professional Content authority is unassigned', async () => {
@@ -3240,13 +3248,11 @@ describe('T1218 Digital Use runtime hardening', () => {
       url:`/api/v1/cases/${f.caseId}/digital-use/contract/faq`,
       headers:auth(f.manager.token),
     });
-    expect(faq.statusCode,faq.body).toBe(200);
-    expect(faq.json().contract).toEqual({
-      id:childConfirm.json().id,
-      version:1,
-      status:'ACTIVE',
+    expect(faq.statusCode,faq.body).toBe(409);
+    expect(faq.json()).toMatchObject({
+      code:'PHONE_USE_CONTRACT_CONTENT_STALE',
+      message:'Professional Content authority unavailable',
     });
-    expect(faq.json().topics.length).toBeGreaterThanOrEqual(15);
 
     const supportFaq=await respondSceneNode(
       f,'A4011',1,

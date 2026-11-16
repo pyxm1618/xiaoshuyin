@@ -37,6 +37,7 @@ import {
   getPhoneUseContractTemplate,
   revisePhoneUseContract,
   updatePhoneUseContractDraft,
+  type PhoneUseStaticProfessionalContentAuthority,
 } from '../services/digital-use-phone-contract.js';
 import {
   addPhoneUseRoleplayTurn,
@@ -75,11 +76,13 @@ async function resolveFamily(pool:pg.Pool,accountId:string,personId:string){
 
 export function registerDigitalUsePhoneContractRoutes(
  app:FastifyInstance,pool:pg.Pool,options:{
+  staticProfessionalContent?:PhoneUseStaticProfessionalContentAuthority;
   roleplayAdapter?:RoleplayAdapter;
   roleplayProfessionalContent?:RoleplayProfessionalContentAuthority;
   roleplayModelPromptAuthority?:RoleplayModelPromptAuthorityProvider;
  }={}
 ){
+ const staticProfessionalContent=options.staticProfessionalContent;
  const roleplayAdapter=options.roleplayAdapter??unavailableProductionRoleplayAdapter;
  const roleplayProfessionalContent=options.roleplayProfessionalContent;
  const roleplayModelPromptAuthority=options.roleplayModelPromptAuthority;
@@ -97,7 +100,9 @@ export function registerDigitalUsePhoneContractRoutes(
   schema:{operationId:'getPhoneUseContractExamples',summary:'Read the four approved professional examples',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,response:{200:PhoneUseContractExamplesResponse,...Errors}},
  },async(req,reply)=>{
   const actor=actorOf(req),caseId=caseIdOf((req.params as {id:string}).id),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
-  return reply.status(200).send(await getPhoneUseContractExamples(pool,{actor,familyId,caseId}));
+  return reply.status(200).send(await getPhoneUseContractExamples(
+    pool,{actor,familyId,caseId},staticProfessionalContent
+   ));
  });
 
  app.get('/api/v1/cases/:id/digital-use/contract/current',{
@@ -151,7 +156,9 @@ export function registerDigitalUsePhoneContractRoutes(
   schema:{operationId:'getPhoneUseContractFaq',summary:'Read approved static Contract execution FAQ support',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,response:{200:PhoneUseContractFaqResponse,...Errors}},
  },async(req,reply)=>{
   const actor=actorOf(req),caseId=caseIdOf((req.params as {id:string}).id),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
-  return reply.status(200).send(await getPhoneUseContractFaq(pool,{actor,familyId,caseId}));
+  return reply.status(200).send(await getPhoneUseContractFaq(
+    pool,{actor,familyId,caseId},staticProfessionalContent
+   ));
  });
 
  app.post('/api/v1/cases/:id/digital-use/roleplays',{

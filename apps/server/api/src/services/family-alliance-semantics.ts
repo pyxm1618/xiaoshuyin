@@ -31,6 +31,7 @@ import {
 } from '@xiaoshuyin/contracts';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
+  resolveFamilyAllianceContent,
   type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
@@ -187,6 +188,7 @@ async function applyA3000(
   const parsed = FamilyAllianceSelfAssessmentResponse.safeParse(context.response);
   if (!parsed.success) familyError('SCENE_RESPONSE_INVALID');
 
+  const content = resolveFamilyAllianceContent('A3000');
   const refs: StoredSceneRef[] = [];
   const entries = Object.entries(parsed.data.answers) as Array<
     [keyof typeof parsed.data.answers, (typeof parsed.data.answers)[keyof typeof parsed.data.answers]]
@@ -208,7 +210,15 @@ async function applyA3000(
     schemaVersion: 'v1',
     sourceNodeCode: 'A3000',
     data: {
-      contentVersion: DIGITAL_USE_PACKAGE_VERSION,
+      contentVersion: content.contentVersion,
+      contentRef: {
+        nodeCode: content.nodeCode,
+        contentVersion: content.contentVersion,
+        authorityDocument: content.authorityDocument,
+        authorityDocumentVersion: content.authorityDocumentVersion,
+        sourceBlob: content.sourceBlob,
+        sectionHeading: content.sectionHeading,
+      },
       interactionRefs: [...context.node.interactionRefs],
       authorityRefs: [...context.node.authorityRefs],
       displayProjection: entries.map(([key], index) => ({
@@ -429,9 +439,18 @@ async function applyTargetFamily(
     familyError('STALE_TARGET_REVISION');
   }
 
+  const content = resolveFamilyAllianceContent(context.node.nodeCode);
   const helpEntry = {
     nodeCode: context.node.nodeCode,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    contentRef: {
+      nodeCode: content.nodeCode,
+      contentVersion: content.contentVersion,
+      authorityDocument: content.authorityDocument,
+      authorityDocumentVersion: content.authorityDocumentVersion,
+      sourceBlob: content.sourceBlob,
+      sectionHeading: content.sectionHeading,
+    },
     interactionRefs: [...context.node.interactionRefs],
     helpOrReentryRefs: [...context.node.helpOrReentryRefs],
     authorityRefs: [...context.node.authorityRefs],

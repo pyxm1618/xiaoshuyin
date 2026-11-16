@@ -1,6 +1,8 @@
 /**
- * Slice 14 approved professional assets, embedded from the approved source.
- * They are professional examples, never Family facts or Contract truth.
+ * Slice 14 product-frozen Phone Contract source material.
+ *
+ * Product authority preserves the exact V1 body/version, but does not confer
+ * Professional Reviewer approval on examples or FAQ guidance.
  */
 export const PHONE_USE_CONTRACT_CONTENT_VERSION='phone-use-contract-v1' as const;
 export const PHONE_USE_CONTRACT_SOURCE_BLOB='97a8db200013746faff64230ab7cbf5f15b41615' as const;

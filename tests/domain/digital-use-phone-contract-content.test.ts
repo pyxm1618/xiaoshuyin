@@ -19,7 +19,7 @@ import {
   unavailableProductionRoleplayAdapter,
 } from '../../apps/server/api/src/services/digital-use-roleplay-adapter.js';
 
-describe('Slice 14 phone-use Contract professional content boundary', () => {
+describe('Slice 14 phone-use Contract content authority boundary', () => {
   it('binds the exact approved source blob and exposes one immutable V1 content identity', () => {
     expect(PHONE_USE_CONTRACT_CONTENT_VERSION).toBe('phone-use-contract-v1');
     expect(PHONE_USE_CONTRACT_SOURCE_BLOB).toBe('97a8db200013746faff64230ab7cbf5f15b41615');
