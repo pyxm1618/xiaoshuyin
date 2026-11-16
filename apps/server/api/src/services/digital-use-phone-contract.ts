@@ -146,7 +146,7 @@ async function ensureContractNode(
    branchReasonCodes:['USER_INITIATED_CONTRACT_ENTRY'],inputRefs:input.inputRefs,
  });
 }
-async function assertDependencies(
+export async function assertDependencies(
  tx:pg.PoolClient,
  input:{
   actor:DigitalUseActor;
@@ -268,7 +268,7 @@ async function assertDependencies(
 
  return refs;
 }
-async function assertChildParticipation(
+export async function assertChildParticipation(
  tx:pg.PoolClient,input:{familyId:string;caseId:string;childPersonId:string;participationId:string}
 ){
  const p=await lockParticipationById(tx,input.participationId);
