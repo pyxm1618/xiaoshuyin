@@ -19,6 +19,7 @@ import {
   casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
   getCurrentProblemFormulation,
+  getCurrentActivePhoneUseContract,
   getLatestSceneArtifact,
   getPhoneUseContractById,
   getSceneNodeState,
@@ -437,9 +438,12 @@ export async function executePhoneUseContractReviewNodeInTransaction(
     await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
     await assertAssessmentCompliance(tx, input.actor.personId);
 
-    const contract = await getPhoneUseContractById(
+    // The client supplies exact optimistic expectations, but does not choose
+    // the business subject. Slice 14's current ACTIVE Contract owner resolves
+    // the authoritative subject; every supplied identity/revision must match.
+    const contract = await getCurrentActivePhoneUseContract(
       tx,
-      parsed.data.contractVersionId,
+      input.caseId,
       true
     );
     assertExactContract(contract, {
@@ -729,9 +733,9 @@ export async function executePhoneUseContractReviewNodeInTransaction(
       throw reviewError('STALE_SCENE_PACKAGE');
     }
 
-    const finalContract = await getPhoneUseContractById(
+    const finalContract = await getCurrentActivePhoneUseContract(
       tx,
-      parsed.data.contractVersionId,
+      input.caseId,
       true
     );
     assertExactContract(finalContract, {
