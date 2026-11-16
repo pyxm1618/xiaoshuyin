@@ -28,7 +28,7 @@ import { requireFamilyAction, requireSelfAction } from '../authz.js';
 import { requireEvidencePepper } from '../evidence-pepper.js';
 import { consentRecordDto } from '../consent-dto.js';
 import {
-  getConsentRecordForUpdate,
+  lockGuardianConsentChainHead,
   insertConsentRecord,
   updateComplianceProfileConsent,
   getConsentsByFamily,
@@ -83,10 +83,18 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
 
           await setFamilyContext(tx, familyId, personId, 'GUARDIAN_CONSENT');
 
-          const consent = await getConsentRecordForUpdate(tx, consentId);
-          if (!consent) {
+          const lockedChain = await lockGuardianConsentChainHead(tx, consentId);
+          if (!lockedChain) {
             // Frozen OpenAPI declares no 404 for this endpoint.
             const err = toHttpError('FORBIDDEN', 'Consent not found');
+            throw Object.assign(new Error(err.message), err);
+          }
+          const consent = lockedChain.target;
+          if (lockedChain.head.id !== consent.id) {
+            const err = toHttpError(
+              'GUARDIAN_CONSENT_STALE',
+              'Consent record is not the current chain head'
+            );
             throw Object.assign(new Error(err.message), err);
           }
           if (consent.family_id !== familyId) {
@@ -143,8 +151,27 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
             await updateComplianceProfileConsent(tx, consent.bound_person_id, newConsent.id, newVersion);
           }
 
-          // Audit
-          await insertAuditEvent(tx, familyId, accountId, 'CONSENT_REVOKED', 'CONSENT', newConsent.id);
+          // Audit belongs to the same transaction as the authoritative
+          // Consent mutation. Resource identity + metadata preserve the exact
+          // actor/subject/purpose/version/provenance/operation linkage.
+          await insertAuditEvent(
+            tx,
+            familyId,
+            accountId,
+            'CONSENT_REVOKED',
+            'CONSENT',
+            newConsent.id,
+            {
+              actorPersonId: personId,
+              subjectPersonId: consent.bound_person_id,
+              purpose: consent.purpose,
+              decision: 'REVOKED',
+              version: newVersion,
+              supersedesId: consent.id,
+              operation: 'GUARDIAN_CONSENT_REVOKE',
+              provenanceChannel: evidence.channel,
+            }
+          );
 
           // AUTH-006: only formulations pinned to the exact superseded Consent
           // version enter review. Other Cases/objects remain untouched.

@@ -329,12 +329,14 @@ export async function insertAuditEvent(
   actorAccountId: string,
   eventType: string,
   resourceType: string,
-  resourceId: string
+  resourceId: string,
+  metadata: Readonly<Record<string, unknown>> = {}
 ): Promise<void> {
   await tx.query(
-    `INSERT INTO business_audit_events (family_id, actor_account_id, event_type, resource_type, resource_id)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [familyId, actorAccountId, eventType, resourceType, resourceId]
+    `INSERT INTO business_audit_events
+       (family_id, actor_account_id, event_type, resource_type, resource_id, metadata)
+     VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+    [familyId, actorAccountId, eventType, resourceType, resourceId, JSON.stringify(metadata)]
   );
 }
 

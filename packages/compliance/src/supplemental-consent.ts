@@ -647,9 +647,25 @@ export async function recordPurposeScopedConsentDecision(
 
   await tx.query(
     `INSERT INTO business_audit_events
-       (family_id, actor_account_id, event_type, resource_type, resource_id)
-     VALUES ($1, $2, $3, 'CONSENT', $4)`,
-    [input.familyId, input.actor.accountId, auditEventType(inserted.decision), inserted.id]
+       (family_id, actor_account_id, event_type, resource_type, resource_id, metadata)
+     VALUES ($1, $2, $3, 'CONSENT', $4, $5::jsonb)`,
+    [
+      input.familyId,
+      input.actor.accountId,
+      auditEventType(inserted.decision),
+      inserted.id,
+      JSON.stringify({
+        actorPersonId: input.actor.personId,
+        subjectPersonId: input.actor.personId,
+        purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+        decision: inserted.decision,
+        version: inserted.version,
+        supersedesId: inserted.supersedes_id,
+        caseId: input.caseId,
+        operation: 'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT_DECISION',
+        disclosureReference: approvedDisclosure.reference,
+      }),
+    ]
   );
 
   return referenceFromRow(inserted, input, false);
