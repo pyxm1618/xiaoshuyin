@@ -241,7 +241,11 @@ async function readUnlockedHandoffPreconditions(
   if (current.revision !== input.expectedNodeRevision) {
     throw nodeError('STALE_NODE_REVISION');
   }
-  if (current.status !== 'AVAILABLE' && current.status !== 'IN_PROGRESS') {
+  if (
+    current.status !== 'AVAILABLE' &&
+    current.status !== 'IN_PROGRESS' &&
+    !isRecoverableTriageProjection(node.nodeCode, current.status)
+  ) {
     throw nodeError('SCENE_NODE_UNREACHABLE');
   }
   return current;
@@ -328,12 +332,25 @@ async function recordBlockedHandoffCandidate(
     !current ||
     current.scene_package_version !== DIGITAL_USE_PACKAGE_VERSION ||
     current.revision !== input.expectedNodeRevision ||
-    (current.status !== 'AVAILABLE' && current.status !== 'IN_PROGRESS')
+    (current.status !== 'AVAILABLE' &&
+      current.status !== 'IN_PROGRESS' &&
+      !isRecoverableTriageProjection(node.nodeCode, current.status))
   ) {
     throw nodeError('STALE_NODE_REVISION');
   }
 
-  const blocked = await casCompleteSceneNodeState(tx, {
+  const blocked = isRecoverableTriageProjection(node.nodeCode, current.status)
+    ? await casReevaluateSceneNodeState(tx, {
+        caseId: input.caseId,
+        nodeCode: node.nodeCode,
+        scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+        expectedRevision: input.expectedNodeRevision,
+        status: 'BLOCKED',
+        branchReasonCodes: [reasonCode],
+        inputRefs: semantic.inputRefs,
+        outputRefs: semantic.outputRefs,
+      })
+    : await casCompleteSceneNodeState(tx, {
     caseId: input.caseId,
     nodeCode: node.nodeCode,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
@@ -447,12 +464,25 @@ async function executeProblemFormulationHandoffPath(
   if (
     !lockedNode ||
     lockedNode.revision !== input.expectedNodeRevision ||
-    (lockedNode.status !== 'AVAILABLE' && lockedNode.status !== 'IN_PROGRESS')
+    (lockedNode.status !== 'AVAILABLE' &&
+      lockedNode.status !== 'IN_PROGRESS' &&
+      !isRecoverableTriageProjection(node.nodeCode, lockedNode.status))
   ) {
     throw nodeError('STALE_NODE_REVISION');
   }
 
-  const completed = await casCompleteSceneNodeState(tx, {
+  const completed = isRecoverableTriageProjection(node.nodeCode, lockedNode.status)
+    ? await casReevaluateSceneNodeState(tx, {
+        caseId: input.caseId,
+        nodeCode: node.nodeCode,
+        scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+        expectedRevision: input.expectedNodeRevision,
+        status: 'COMPLETED',
+        branchReasonCodes: [route.reasonCode],
+        inputRefs: semantic.inputRefs,
+        outputRefs: semantic.outputRefs,
+      })
+    : await casCompleteSceneNodeState(tx, {
     caseId: input.caseId,
     nodeCode: node.nodeCode,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
