@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import { createAdminPool } from '../setup/db.js';
 
-describe('Slice 15 A5001 additive Scene Artifact migration', () => {
+describe('Slice 15 A5001/A5002 additive Scene Artifact migration', () => {
   let admin: pg.Pool;
 
   beforeAll(() => {
@@ -15,7 +15,7 @@ describe('Slice 15 A5001 additive Scene Artifact migration', () => {
     await admin.end();
   });
 
-  it('extends only the authoritative Scene Artifact vocabulary for A5001', async () => {
+  it('extends only the authoritative Scene Artifact vocabulary for A5001/A5002', async () => {
     const { rows } = await admin.query<{ conname: string; definition: string }>(
       `SELECT conname, pg_get_constraintdef(oid, true) AS definition
          FROM pg_constraint
@@ -33,11 +33,19 @@ describe('Slice 15 A5001 additive Scene Artifact migration', () => {
     expect(defs['scene_artifacts_type_check']).toContain(
       'DIGITAL_USE_A5001_EFFECT_EVALUATION'
     );
+    expect(defs['scene_artifacts_type_check']).toContain(
+      'DIGITAL_USE_A5002_EFFECT_EVALUATION'
+    );
     expect(defs['scene_artifacts_source_node_check']).toContain('A5001');
+    expect(defs['scene_artifacts_source_node_check']).toContain('A5002');
     expect(defs['scene_artifacts_type_source_check']).toContain(
       'DIGITAL_USE_A5001_EFFECT_EVALUATION'
     );
     expect(defs['scene_artifacts_type_source_check']).toContain('A5001');
+    expect(defs['scene_artifacts_type_source_check']).toContain(
+      'DIGITAL_USE_A5002_EFFECT_EVALUATION'
+    );
+    expect(defs['scene_artifacts_type_source_check']).toContain('A5002');
 
     // Existing authoritative Slice 12/13 vocabulary remains valid.
     for (const token of [
@@ -51,13 +59,14 @@ describe('Slice 15 A5001 additive Scene Artifact migration', () => {
     }
   });
 
-  it('adds no Review table, policy, grant, A5002 or Slice 14 business vocabulary', async () => {
+  it('adds no Review table, policy, grant or duplicate Contract owner', async () => {
     const sql = readFileSync(
       join(process.cwd(), 'db/migrations/022_digital_use_review_runtime.sql'),
       'utf8'
     );
     expect(sql).not.toMatch(/CREATE\s+TABLE|CREATE\s+POLICY|\bGRANT\b/i);
-    expect(sql).not.toMatch(/A5002|PHONE_USE_CONTRACT|A4001/i);
+    expect(sql).not.toMatch(/digital_use_contract_versions|A4012|A4001/i);
+    expect(sql).toContain('DIGITAL_USE_A5002_EFFECT_EVALUATION');
 
     const { rows } = await admin.query<{
       reviews: string | null;
