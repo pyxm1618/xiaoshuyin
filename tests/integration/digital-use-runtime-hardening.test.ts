@@ -1844,19 +1844,27 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(acknowledged.statusCode, acknowledged.body).toBe(200);
     expect(acknowledged.json().currentNode?.nodeCode).toBe('A4003');
 
-    for (const suffix of ['template','examples'] as const) {
-      const asset = await app.inject({
-        method: 'GET',
-        url: `/api/v1/cases/${f.caseId}/digital-use/contract/${suffix}`,
-        headers: auth(f.manager.token),
-      });
-      expect(asset.statusCode, asset.body).toBe(200);
-      expect(asset.json().meta).toMatchObject({
-        contentVersion: 'phone-use-contract-v1',
-        sourceBlob: '97a8db200013746faff64230ab7cbf5f15b41615',
-        approved: true,
-      });
-    }
+    const template = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/template`,
+      headers: auth(f.manager.token),
+    });
+    expect(template.statusCode, template.body).toBe(200);
+    expect(template.json().meta).toMatchObject({
+      contentVersion: 'phone-use-contract-v1',
+      sourceBlob: '97a8db200013746faff64230ab7cbf5f15b41615',
+      authorityScope: 'PRODUCT_BASELINE',
+    });
+
+    const examples = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/examples`,
+      headers: auth(f.manager.token),
+    });
+    expect(examples.statusCode, examples.body).toBe(409);
+    expect(examples.json()).toMatchObject({
+      code: 'PROFESSIONAL_CONTENT_UNAVAILABLE',
+    });
   });
 
   it('A4003 fails closed as recoverable HOLD when Professional Content authority is unassigned', async () => {
