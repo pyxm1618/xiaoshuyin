@@ -515,6 +515,13 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       expect(target.helpHistoryRefs[0]).toMatchObject({
         nodeCode: family.nodes[3],
         scenePackageVersion: 'v1',
+        contentRef: {
+          nodeCode: family.nodes[3],
+          contentVersion: 'family-alliance-product-v1',
+          authorityDocument: 'Docs/V1产品需求.md',
+          authorityDocumentVersion: 'v3.9',
+          sourceBlob: '8eb660cd905d8fba4b52fe0f74bbc214b3113117',
+        },
       });
       expect(target.helpHistoryRefs[0].interactionRefs.length).toBeGreaterThan(0);
       expect(target.helpHistoryRefs[0].authorityRefs.length).toBeGreaterThan(0);
@@ -541,6 +548,11 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect(sleepReadback.feasibility_payload.replacementBehavior.need.rating).toBe(8);
     expect(sleepReadback.progress_payload.kind).toBe('GENERAL_MATRIX');
     expect(sleepReadback.help_history_refs[0].authorityRefs.length).toBeGreaterThan(0);
+    expect(sleepReadback.help_history_refs[0].contentRef).toMatchObject({
+      nodeCode: 'A3013',
+      contentVersion: 'family-alliance-product-v1',
+      sourceBlob: '8eb660cd905d8fba4b52fe0f74bbc214b3113117',
+    });
 
     const er1Readback = semanticReadback.rows.find(
       (row) => row.target_code === 'EMOTION_REGULATION_1'
