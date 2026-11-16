@@ -64,7 +64,7 @@ describe('Slice 15 authority-reconciled architecture boundaries', () => {
         }],
       },
       professionalPackage: TEST_A5001_PACKAGE,
-      normalizedResponse: normalizedReviewResponse,
+      packageResponse: normalizedReviewResponse,
       evidenceRefs: [],
       provenance: [],
     });
@@ -79,7 +79,7 @@ describe('Slice 15 authority-reconciled architecture boundaries', () => {
         contractStatus: 'ACTIVE',
       },
       professionalPackage: TEST_A5002_PACKAGE,
-      normalizedResponse: normalizedReviewResponse,
+      packageResponse: normalizedReviewResponse,
       evidenceRefs: [],
       provenance: [],
     });
