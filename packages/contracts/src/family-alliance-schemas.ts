@@ -48,21 +48,113 @@ export const FamilyAllianceConcreteDimension = z.union([
   z.strictObject({ state: UnresolvedFamilyAllianceValueState }),
 ]);
 
+export const FamilyAllianceNarrativeDimension = z.union([
+  z.strictObject({
+    state: z.literal('KNOWN'),
+    text: z.string().trim().min(1).max(4000),
+  }),
+  z.strictObject({ state: UnresolvedFamilyAllianceValueState }),
+]);
+
+/**
+ * Authority preserves two feasibility rows rather than collapsing them:
+ * problem behaviour is a narrative child-perspective record; replacement
+ * behaviour is the concrete/quantified target plus four 1–10 user ratings.
+ */
 export const FamilyAllianceFeasibilityPayload = z.strictObject({
-  concreteQuantified: FamilyAllianceConcreteDimension,
-  need: FamilyAllianceRatingDimension,
-  motivationBenefit: FamilyAllianceRatingDimension,
-  abilityPossibility: FamilyAllianceRatingDimension,
-  challengeResistance: FamilyAllianceRatingDimension,
+  problemBehavior: z.strictObject({
+    concreteBehavior: FamilyAllianceNarrativeDimension,
+    need: FamilyAllianceNarrativeDimension,
+    motivationBenefit: FamilyAllianceNarrativeDimension,
+    abilityConditions: FamilyAllianceNarrativeDimension,
+    challengeResistance: FamilyAllianceNarrativeDimension,
+  }),
+  replacementBehavior: z.strictObject({
+    concreteQuantified: FamilyAllianceConcreteDimension,
+    need: FamilyAllianceRatingDimension,
+    motivationBenefit: FamilyAllianceRatingDimension,
+    abilityPossibility: FamilyAllianceRatingDimension,
+    challengeResistance: FamilyAllianceRatingDimension,
+  }),
 });
 export type FamilyAllianceFeasibilityPayloadType =
   z.infer<typeof FamilyAllianceFeasibilityPayload>;
 
-export const FamilyAllianceProgressPayload = z.strictObject({
-  stage: z.enum(['COMMUNICATION', 'EXECUTION', 'OBSERVATION', 'ADJUSTMENT']),
-  state: FamilyAllianceValueState,
-  modifyTarget: z.enum(['YES', 'NO', 'NOT_DECIDED']).optional(),
+const FamilyAllianceProgressMatrixRow = z.strictObject({
+  needMatch: FamilyAllianceNarrativeDimension,
+  motivationMatch: FamilyAllianceNarrativeDimension,
+  abilityMatch: FamilyAllianceNarrativeDimension,
+  challengeResistance: FamilyAllianceNarrativeDimension,
 });
+
+const FamilyAllianceModifyTarget = z.enum(['YES', 'NO', 'NOT_DECIDED']);
+
+export const FamilyAllianceGeneralProgressPayload = z.strictObject({
+  kind: z.literal('GENERAL_MATRIX'),
+  taskPlan: FamilyAllianceNarrativeDimension,
+  communication: FamilyAllianceProgressMatrixRow,
+  childFeedback: FamilyAllianceProgressMatrixRow,
+  userObservation: FamilyAllianceProgressMatrixRow,
+  otherFamilyFeedback: FamilyAllianceProgressMatrixRow,
+  modifyTarget: FamilyAllianceModifyTarget,
+});
+
+const FamilyAllianceCountRecord = z.union([
+  z.strictObject({ state: z.literal('KNOWN'), count: z.number().int().min(0).max(PG_INTEGER_MAX) }),
+  z.strictObject({ state: UnresolvedFamilyAllianceValueState }),
+]);
+const FamilyAllianceThreeObservationRecord = z.union([
+  z.strictObject({
+    state: z.literal('KNOWN'),
+    observations: z.array(z.string().trim().min(1).max(1000)).length(3),
+  }),
+  z.strictObject({ state: UnresolvedFamilyAllianceValueState }),
+]);
+const FamilyAllianceJournalRecord = z.union([
+  z.strictObject({ state: z.literal('KNOWN'), text: z.string().trim().min(1).max(8000) }),
+  z.strictObject({ state: UnresolvedFamilyAllianceValueState }),
+]);
+const FamilyAllianceSelfCareRecord = z.union([
+  z.strictObject({
+    state: z.literal('KNOWN'),
+    durationMinutes: z.number().int().min(0).max(1440),
+    activities: z.array(z.string().trim().min(1).max(1000)).min(1).max(32),
+  }),
+  z.strictObject({ state: UnresolvedFamilyAllianceValueState }),
+]);
+
+export const FamilyAllianceEmotionRegulation1ProgressPayload = z.strictObject({
+  kind: z.literal('EMOTION_REGULATION_1'),
+  listening: FamilyAllianceCountRecord,
+  affirmation: FamilyAllianceThreeObservationRecord,
+  reducedEvaluation: FamilyAllianceCountRecord,
+  selfRegulationJournal: FamilyAllianceJournalRecord,
+  selfCare: FamilyAllianceSelfCareRecord,
+  effectEvaluation: z.strictObject({
+    intrinsicMotivation: FamilyAllianceNarrativeDimension,
+    selfEsteemConfidence: FamilyAllianceNarrativeDimension,
+    abilityPotential: FamilyAllianceNarrativeDimension,
+  }),
+  modifyTarget: FamilyAllianceModifyTarget,
+});
+
+export const FamilyAllianceEmotionRegulation2ProgressPayload = z.strictObject({
+  kind: z.literal('EMOTION_REGULATION_2_LOG'),
+  entries: z.array(z.strictObject({
+    time: z.string().trim().min(1).max(200),
+    childEmotion: FamilyAllianceNarrativeDimension,
+    emotionFeedback: FamilyAllianceNarrativeDimension,
+    childStress: FamilyAllianceNarrativeDimension,
+    selfGrowth: FamilyAllianceNarrativeDimension,
+  })).min(1).max(64),
+  modifyTarget: FamilyAllianceModifyTarget,
+});
+
+export const FamilyAllianceProgressPayload = z.discriminatedUnion('kind', [
+  FamilyAllianceGeneralProgressPayload,
+  FamilyAllianceEmotionRegulation1ProgressPayload,
+  FamilyAllianceEmotionRegulation2ProgressPayload,
+]);
 export type FamilyAllianceProgressPayloadType =
   z.infer<typeof FamilyAllianceProgressPayload>;
 
@@ -138,6 +230,7 @@ export const FamilyAllianceHelpHistoryEntry = z.strictObject({
   scenePackageVersion: z.literal('v1'),
   interactionRefs: z.array(z.string().min(1).max(160)),
   helpOrReentryRefs: z.array(z.string().min(1).max(160)),
+  authorityRefs: z.array(z.string().min(1).max(160)),
   evidenceRefs: z.array(
     z.object({ type: z.string(), id: z.string().uuid() }).passthrough()
   ),
