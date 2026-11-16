@@ -13,6 +13,7 @@
 import type { PoolClient } from 'pg';
 import { getCaseForUpdate, type CaseRow, type CasePhaseValue } from './cases.js';
 import { canonicalJson, hashPayload } from './idempotency.js';
+import { decideOrdinaryProgression } from './safety/guard.js';
 
 type Tx = PoolClient;
 
@@ -161,6 +162,7 @@ export type ProblemFormulationErrorCode =
   | 'CASE_PHASE_CONFLICT'
   | 'STALE_CASE_VERSION'
   | 'CASE_NOT_PRIMARY'
+  | 'CASE_NOT_OPEN'
   | 'CASE_CLOSED'
   | 'SAFETY_HOLD_BLOCKED'
   | 'CORRECTION_NOOP'
@@ -363,11 +365,12 @@ export function assertCaseGuards(
   expectedCaseVersion: number,
   requiredPhase: CasePhaseValue
 ): void {
-  if (caseRow.status === 'SAFETY_HOLD') {
-    throw pfError('SAFETY_HOLD_BLOCKED');
-  }
-  if (caseRow.status === 'CLOSED') {
-    throw pfError('CASE_CLOSED');
+  // Common Core ordinary-progression status authority lives in safety/guard.
+  // Problem Formulation consumes that decision instead of maintaining a
+  // parallel OPEN/WAITING/SAFETY_HOLD/CLOSED truth table.
+  const progression = decideOrdinaryProgression(caseRow.status);
+  if (!progression.allowed) {
+    throw pfError(progression.code);
   }
   if (!caseRow.is_primary) {
     throw pfError('CASE_NOT_PRIMARY');
