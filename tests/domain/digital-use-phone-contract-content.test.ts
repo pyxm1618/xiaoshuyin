@@ -20,13 +20,13 @@ import {
 } from '../../apps/server/api/src/services/digital-use-roleplay-adapter.js';
 
 describe('Slice 14 phone-use Contract content authority boundary', () => {
-  it('binds the exact product source blob without claiming Professional Reviewer approval', () => {
+  it('binds the exact product source blob; approved is product-baseline identity only', () => {
     expect(PHONE_USE_CONTRACT_CONTENT_VERSION).toBe('phone-use-contract-v1');
     expect(PHONE_USE_CONTRACT_SOURCE_BLOB).toBe('97a8db200013746faff64230ab7cbf5f15b41615');
     expect(PHONE_USE_CONTRACT_CONTENT_META).toEqual({
       contentVersion: PHONE_USE_CONTRACT_CONTENT_VERSION,
       sourceBlob: PHONE_USE_CONTRACT_SOURCE_BLOB,
-      authorityScope: 'PRODUCT_BASELINE',
+      approved: true,
     });
     expect(resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION).meta)
       .toEqual(PHONE_USE_CONTRACT_CONTENT_META);
