@@ -983,6 +983,62 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     expect(rows[1].data.professionalPackage).toMatchObject(TEST_A5001_PACKAGE);
   });
 
+  it('T1509 valid Professional package cannot override wrong-Family authorization', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const target = await prepareA5001(app, 'a5001-wrong-family');
+    const outsider = await loginWithLabel(app, 'slice15-outsider');
+    const outsiderFamily = await createFamily(app, outsider.token, 'slice15-outsider');
+    expect(outsiderFamily.statusCode, outsiderFamily.body).toBe(201);
+
+    const result = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${target.f.caseId}/scene/nodes/A5001/responses`,
+      headers: {
+        ...auth(outsider.token),
+        'idempotency-key': `a5001-wrong-family-${crypto.randomUUID()}`,
+      },
+      payload: {
+        expectedCaseVersion: target.f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: target.scene.targetSelectionRevision,
+        response: target.payload,
+      },
+    });
+    expect(result.statusCode).toBe(404);
+    expect(result.json()).toMatchObject({ code: 'CASE_NOT_FOUND' });
+    expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
+      artifacts: 0,
+      completed: 0,
+      events: 0,
+    });
+  });
+
+  it('T1509 valid Professional package cannot override DISABLED account authority', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const target = await prepareA5001(app, 'a5001-disabled-account');
+    await admin.query(
+      `UPDATE accounts
+          SET status='DISABLED',session_epoch=session_epoch+1
+        WHERE id=$1`,
+      [target.f.manager.accountId]
+    );
+
+    const result = await submitA5001(
+      app,
+      target.f,
+      target.scene,
+      target.payload,
+      `a5001-disabled-${crypto.randomUUID()}`
+    );
+    expect(result.statusCode).toBe(401);
+    expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
+      artifacts: 0,
+      completed: 0,
+      events: 0,
+    });
+  });
+
   it('T1509 stale Problem Formulation and Safety Hold fail closed with zero A5001 professional truth', async () => {
     provider.restore('FAMILY_ALLIANCE_REVIEW');
 
