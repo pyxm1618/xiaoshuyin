@@ -2151,6 +2151,162 @@ describe('T1218 Digital Use runtime hardening', () => {
     }
   );
 
+  it('A4003 rejects a turn when Model / Prompt authority rotates during adapter generation', async () => {
+    let currentModelRef = 'test-model:post-generation-v1';
+    let currentPromptVersionRef = 'test-prompt:post-generation-v1';
+    let rotateDuringGeneration = true;
+    let generationReturned = false;
+    let postGenerationAuthorityReadObserved = false;
+
+    const adapter: RoleplayAdapter = {
+      adapterRef: 'test:post-generation-authority-rotation',
+      async isAvailable(context) {
+        expect(context.expectedModelRef).toBe(currentModelRef);
+        expect(context.expectedPromptVersionRef).toBe(currentPromptVersionRef);
+        return true;
+      },
+      async createTurn(input) {
+        const generatedModelRef = input.expectedModelRef;
+        const generatedPromptVersionRef = input.expectedPromptVersionRef;
+
+        if (rotateDuringGeneration) {
+          expect(input.expectedModelRef).toBe('test-model:post-generation-v1');
+          expect(input.expectedPromptVersionRef).toBe('test-prompt:post-generation-v1');
+
+          rotateDuringGeneration = false;
+          currentModelRef = 'test-model:post-generation-v2';
+          currentPromptVersionRef = 'test-prompt:post-generation-v2';
+        } else {
+          expect(input.expectedModelRef).toBe('test-model:post-generation-v2');
+          expect(input.expectedPromptVersionRef).toBe('test-prompt:post-generation-v2');
+        }
+
+        generationReturned = true;
+        return {
+          simulatedParentOutput: `simulated-parent:${input.simulatedChildInput}`,
+          adapterRef: 'test:post-generation-authority-rotation',
+          modelRef: generatedModelRef,
+          promptVersionRef: generatedPromptVersionRef,
+        };
+      },
+    };
+
+    const authorityApp = await buildApp({
+      phoneUseContract: {
+        roleplayAdapter: adapter,
+        roleplayProfessionalContent: {
+          status: 'APPROVED_PUBLISHED',
+          version: 'test-professional-roleplay-v1',
+          authorityRef: 'test-authority:roleplay-v1',
+        },
+        roleplayModelPromptAuthority: async () => {
+          if (generationReturned) {
+            postGenerationAuthorityReadObserved = true;
+          }
+          return {
+            model: {
+              status: 'CURRENT_APPROVED',
+              modelRef: currentModelRef,
+              authorityRef: `test-authority:model:${currentModelRef}`,
+            },
+            prompt: {
+              status: 'CURRENT_APPROVED',
+              promptVersionRef: currentPromptVersionRef,
+              authorityRef: `test-authority:prompt:${currentPromptVersionRef}`,
+            },
+          };
+        },
+      },
+    });
+    await authorityApp.ready();
+
+    try {
+      const f = await fixture('s14-roleplay-post-generation-authority-rotation', authorityApp);
+      await forceSceneNode(f, 'A4003');
+
+      const created = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-post-generation-create'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          professionalContentVersion: 'test-professional-roleplay-v1',
+        },
+      });
+      expect(created.statusCode, created.body).toBe(201);
+
+      const staleTurn = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-post-generation-turn-v1'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          simulatedChildInput: 'Rotate authority while generation is executing.',
+        },
+      });
+      expect(staleTurn.statusCode, staleTurn.body).toBe(409);
+      expect(staleTurn.json().code).toBe('PHONE_USE_CONTRACT_PACKAGE_DRIFT');
+      expect(postGenerationAuthorityReadObserved).toBe(true);
+      expect(currentModelRef).toBe('test-model:post-generation-v2');
+      expect(currentPromptVersionRef).toBe('test-prompt:post-generation-v2');
+
+      const afterRejectedGeneration = await admin.query(
+        `SELECT
+           (SELECT count(*)::int FROM roleplay_turns
+             WHERE session_id=$2) AS turns,
+           (SELECT status::text FROM scene_node_states
+             WHERE case_id=$1 AND node_code='A4003') AS a4003,
+           (SELECT count(*)::int FROM scene_node_states
+             WHERE case_id=$1 AND node_code='A4004') AS a4004,
+           (SELECT status::text FROM roleplay_sessions
+             WHERE id=$2) AS session_status,
+           (SELECT selected_turn_id FROM roleplay_sessions
+             WHERE id=$2) AS selected_turn_id`,
+        [f.caseId, created.json().id]
+      );
+      expect(afterRejectedGeneration.rows[0]).toEqual({
+        turns: 0,
+        a4003: 'AVAILABLE',
+        a4004: 0,
+        session_status: 'OPEN',
+        selected_turn_id: null,
+      });
+
+      generationReturned = false;
+      const currentTurn = await authorityApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-post-generation-turn-v2'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedSessionRevision: created.json().revision,
+          simulatedChildInput: 'Generate again under the current v2 authority.',
+        },
+      });
+      expect(currentTurn.statusCode, currentTurn.body).toBe(201);
+      expect(currentTurn.json()).toMatchObject({
+        modelRef: 'test-model:post-generation-v2',
+        promptVersionRef: 'test-prompt:post-generation-v2',
+      });
+
+      const recovered = await admin.query(
+        `SELECT id,model_ref,prompt_version_ref
+           FROM roleplay_turns
+          WHERE session_id=$1
+          ORDER BY round_number`,
+        [created.json().id]
+      );
+      expect(recovered.rows).toEqual([{
+        id: currentTurn.json().id,
+        model_ref: 'test-model:post-generation-v2',
+        prompt_version_ref: 'test-prompt:post-generation-v2',
+      }]);
+    } finally {
+      await authorityApp.close();
+    }
+  });
+
   it('A4003 idempotency cannot replay a stale turn after Model / Prompt authority rotation', async () => {
     let currentModelRef='test-model:idempotency-v1';
     let currentPromptVersionRef='test-prompt:idempotency-v1';
