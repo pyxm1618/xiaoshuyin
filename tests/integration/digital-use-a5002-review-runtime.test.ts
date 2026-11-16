@@ -123,6 +123,19 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     expect(message.statusCode, message.body).toBe(201);
     const messageId = message.json().id as string;
 
+    // Establish the authoritative Scene package anchor as durable truth before
+    // creating any Slice 14/15 Scene Artifact projection. This mirrors the
+    // production owner ordering and lets the existing insert guard prove the
+    // package binding instead of bypassing it inside fixture setup.
+    await admin.query(
+      `INSERT INTO scene_node_states
+         (family_id,case_id,scene_package_version,node_code,source_node_code,
+          status,branch_reason_codes,input_refs,output_refs,completed_at,revision)
+       VALUES ($1,$2,'v1','A1001','A1001','COMPLETED',
+               ARRAY['SLICE15_A5002_FIXTURE'],'[]'::jsonb,'[]'::jsonb,now(),1)`,
+      [familyId, caseId]
+    );
+
     const client = await admin.connect();
     try {
       await client.query('BEGIN');
@@ -149,15 +162,6 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
           }),
           manager.personId,
         ]
-      );
-
-      await client.query(
-        `INSERT INTO scene_node_states
-           (family_id,case_id,scene_package_version,node_code,source_node_code,
-            status,branch_reason_codes,input_refs,output_refs,completed_at,revision)
-         VALUES ($1,$2,'v1','A1001','A1001','COMPLETED',
-                 ARRAY['SLICE15_A5002_FIXTURE'],'[]'::jsonb,'[]'::jsonb,now(),1)`,
-        [familyId, caseId]
       );
 
       const tokenHash = crypto.randomUUID().replaceAll('-', '').repeat(2);
