@@ -76,13 +76,14 @@ export interface ProfessionalReviewResolvedPackage {
   readonly loadedContentHash: string;
 
   /**
-   * Package-owned validation only. The request carries the exact normalized
-   * package response so idempotency can be computed without consulting mutable
-   * approval state on replay. Slice 15 does not know, invent or score fields.
+   * Package-owned validation + normalization. Slice 15 treats the submitted
+   * response as opaque and never invents questionnaire fields, unresolved-state
+   * semantics, scoring or interpretation. The returned value is the only
+   * response form eligible for idempotency hashing and artifact persistence.
    */
-  validateNormalizedResponse(
+  validateAndNormalizeResponse(
     response: Readonly<Record<string, unknown>>
-  ): void;
+  ): Readonly<Record<string, unknown>>;
 }
 
 export interface ProfessionalReviewContentProvider {
