@@ -89,7 +89,7 @@ export function registerDigitalUsePhoneContractRoutes(
 
  app.get('/api/v1/cases/:id/digital-use/contract/template',{
   onRequest:app.authenticate,exposeHeadRoute:false,
-  schema:{operationId:'getPhoneUseContractTemplate',summary:'Read the product-frozen versioned phone-use Contract template',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,response:{200:PhoneUseContractTemplateResponse,...Errors}},
+  schema:{operationId:'getPhoneUseContractTemplate',summary:'Read the approved versioned phone-use Contract template',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,response:{200:PhoneUseContractTemplateResponse,...Errors}},
  },async(req,reply)=>{
   const actor=actorOf(req),caseId=caseIdOf((req.params as {id:string}).id),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
   return reply.status(200).send(await getPhoneUseContractTemplate(pool,{actor,familyId,caseId}));
@@ -97,7 +97,7 @@ export function registerDigitalUsePhoneContractRoutes(
 
  app.get('/api/v1/cases/:id/digital-use/contract/examples',{
   onRequest:app.authenticate,exposeHeadRoute:false,
-  schema:{operationId:'getPhoneUseContractExamples',summary:'Read four professional examples when current approval authority is available',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,response:{200:PhoneUseContractExamplesResponse,...Errors}},
+  schema:{operationId:'getPhoneUseContractExamples',summary:'Read the four approved professional examples',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,response:{200:PhoneUseContractExamplesResponse,...Errors}},
  },async(req,reply)=>{
   const actor=actorOf(req),caseId=caseIdOf((req.params as {id:string}).id),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
   return reply.status(200).send(await getPhoneUseContractExamples(
@@ -153,7 +153,7 @@ export function registerDigitalUsePhoneContractRoutes(
 
  app.get('/api/v1/cases/:id/digital-use/contract/faq',{
   onRequest:app.authenticate,exposeHeadRoute:false,
-  schema:{operationId:'getPhoneUseContractFaq',summary:'Read Contract FAQ guidance when current professional approval authority is available',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,response:{200:PhoneUseContractFaqResponse,...Errors}},
+  schema:{operationId:'getPhoneUseContractFaq',summary:'Read approved static Contract execution FAQ support',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,response:{200:PhoneUseContractFaqResponse,...Errors}},
  },async(req,reply)=>{
   const actor=actorOf(req),caseId=caseIdOf((req.params as {id:string}).id),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
   return reply.status(200).send(await getPhoneUseContractFaq(
