@@ -57,7 +57,9 @@ export interface DigitalUseInterventionInclusionProvider {
  */
 export const productionDigitalUseInterventionInclusionProvider:
   DigitalUseInterventionInclusionProvider = Object.freeze({
-    async resolve(input) {
+    async resolve(
+      input: DigitalUseInterventionInclusion
+    ): Promise<InterventionPackageInclusionResult> {
       return resolveProductionDigitalUseInterventionInclusion(input);
     },
   });
