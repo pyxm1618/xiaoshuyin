@@ -13,10 +13,13 @@ import {
 import {
   requireProfessionalReviewPackage,
   unavailableProductionProfessionalReviewContentProvider,
+  type ProfessionalReviewContentProvider,
+  type ProfessionalReviewResolvedPackage,
 } from '../../apps/server/api/src/services/digital-use-review-professional-content.js';
 import {
   TEST_A5001_PACKAGE,
   TEST_A5002_PACKAGE,
+  TestProfessionalReviewContentProvider,
   normalizedReviewResponse,
 } from '../support/digital-use-review-professional-content.js';
 
@@ -187,5 +190,111 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
         }],
       }).success
     ).toBe(false);
+  });
+
+
+  it('T1502 rejects every non-current Professional package proof state', async () => {
+    const input = {
+      stream: 'FAMILY_ALLIANCE_REVIEW' as const,
+      scenePackageVersion: 'v1',
+      ...TEST_A5001_PACKAGE,
+    };
+    const fixture = new TestProfessionalReviewContentProvider();
+    const valid = await fixture.resolve(input);
+    if (valid === null) throw new Error('missing test package fixture');
+
+    const providerFor = (
+      value: ProfessionalReviewResolvedPackage | null
+    ): ProfessionalReviewContentProvider => ({
+      async resolve() {
+        return value;
+      },
+      async revalidate() {
+        return value;
+      },
+    });
+
+    const expectUnavailable = async (
+      value: ProfessionalReviewResolvedPackage | null
+    ) => {
+      await expect(
+        requireProfessionalReviewPackage(providerFor(value), input, 'RESOLVE')
+      ).rejects.toMatchObject({ code: 'DEPENDENCY_UNAVAILABLE' });
+    };
+
+    await expectUnavailable(null);
+    await expectUnavailable({
+      ...valid,
+      proof: { ...valid.proof, reviewStatus: 'DRAFT' },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: { ...valid.proof, publicationStatus: 'UNPUBLISHED' },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: {
+        ...valid.proof,
+        effectiveTo: '2025-01-01T00:00:00.000Z',
+      },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: { ...valid.proof, lifecycleStatus: 'RETIRED' },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: { ...valid.proof, lifecycleStatus: 'SUPERSEDED' },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: {
+        ...valid.proof,
+        scope: [{
+          stream: 'PHONE_USE_CONTRACT_REVIEW',
+          scenePackageVersion: 'v1',
+        }],
+      },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: { ...valid.proof, packageVersion: 'wrong-version' },
+    });
+    await expectUnavailable({
+      ...valid,
+      loadedContentHash: 'sha256:loaded-content-does-not-match-proof',
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: { ...valid.proof, reviewerProofStatus: 'REVOKED' },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: {
+        ...valid.proof,
+        approvalBinding: {
+          ...valid.proof.approvalBinding,
+          contentHash: 'sha256:approval-bound-to-different-content',
+        },
+      },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: {
+        ...valid.proof,
+        effectiveFrom: '2099-01-01T00:00:00.000Z',
+      },
+    });
+    await expectUnavailable({
+      ...valid,
+      proof: {
+        ...valid.proof,
+        publishedAt: '2099-01-01T00:00:00.000Z',
+      },
+    });
+
+    await expect(
+      requireProfessionalReviewPackage(providerFor(valid), input, 'RESOLVE')
+    ).resolves.toEqual(valid);
   });
 });
