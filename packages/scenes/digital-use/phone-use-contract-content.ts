@@ -7,7 +7,7 @@
 export const PHONE_USE_CONTRACT_CONTENT_VERSION='phone-use-contract-v1' as const;
 export const PHONE_USE_CONTRACT_SOURCE_BLOB='97a8db200013746faff64230ab7cbf5f15b41615' as const;
 export const PHONE_USE_CONTRACT_CONTENT_META=Object.freeze({
- contentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,sourceBlob:PHONE_USE_CONTRACT_SOURCE_BLOB,authorityScope:'PRODUCT_BASELINE' as const,
+ contentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,sourceBlob:PHONE_USE_CONTRACT_SOURCE_BLOB,approved:true as const,
 });
 export const PHONE_USE_CONTRACT_QUIZ=Object.freeze([
  {id:'Q1',statement:'手机使用合约的每一个项目都要由家长和孩子一起来制订；',answer:true,explanation:'合约条款应由家长邀请孩子共同制订并共同确认。'},
