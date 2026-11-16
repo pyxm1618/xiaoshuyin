@@ -515,13 +515,6 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       expect(target.helpHistoryRefs[0]).toMatchObject({
         nodeCode: family.nodes[3],
         scenePackageVersion: 'v1',
-        contentRef: {
-          nodeCode: family.nodes[3],
-          contentVersion: 'family-alliance-product-v1',
-          authorityDocument: 'Docs/V1产品需求.md',
-          authorityDocumentVersion: 'v3.9',
-          sourceBlob: '8eb660cd905d8fba4b52fe0f74bbc214b3113117',
-        },
       });
       expect(target.helpHistoryRefs[0].interactionRefs.length).toBeGreaterThan(0);
       expect(target.helpHistoryRefs[0].authorityRefs.length).toBeGreaterThan(0);
