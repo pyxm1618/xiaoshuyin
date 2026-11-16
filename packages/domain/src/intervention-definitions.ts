@@ -43,7 +43,7 @@ export type InterventionDefinitionErrorCode =
 
 export class InterventionDefinitionError extends Error {
   readonly code: InterventionDefinitionErrorCode;
-  constructor(code: InterventionDefinitionErrorCode, message = code) {
+  constructor(code: InterventionDefinitionErrorCode, message: string = code) {
     super(message);
     this.name = 'InterventionDefinitionError';
     this.code = code;

@@ -142,7 +142,11 @@ function condition(value: unknown, field: string): InterventionFactCondition {
         typeof entry === 'boolean'
     );
   if (!scalar && !list) invalid(field + '.value');
-  return { fact_ref: factRef, operator, value: conditionValue as InterventionFactCondition['value'] };
+  return {
+    fact_ref: factRef,
+    operator,
+    value: conditionValue as string | number | boolean | readonly (string | number | boolean)[],
+  };
 }
 
 function conditions(value: unknown, field: string): readonly InterventionFactCondition[] {
