@@ -90,3 +90,92 @@ export const A5001_TARGET_DIMENSION_KEYS = [
   'adverseChange',
   'uncertainty',
 ] as const;
+
+/**
+ * Slice 15 A5002 only.
+ *
+ * This is a bounded Scene-local Phone Use Contract effect-evaluation contract.
+ * It binds one exact Contract version and cannot be used as A5001 or generic Review.
+ */
+export const A5002ArtifactDiscriminator =
+  z.literal('DIGITAL_USE_A5002_EFFECT_EVALUATION');
+
+export const A5002ReviewUnresolvedState = z.enum([
+  'UNKNOWN',
+  'NOT_COLLECTED',
+  'DECLINED',
+]);
+
+export const A5002ReviewDimension = z.union([
+  z.strictObject({
+    state: z.literal('KNOWN'),
+    note: z.string().trim().min(1).max(4000),
+  }),
+  z.strictObject({ state: A5002ReviewUnresolvedState }),
+]);
+export type A5002ReviewDimensionType = z.infer<typeof A5002ReviewDimension>;
+
+export const A5002ContractStatusAtReview = z.enum([
+  'ACTIVE',
+  'SUPERSEDED',
+  'PAUSED',
+]);
+
+export const A5002TriggerObservation = z.union([
+  z.strictObject({
+    state: z.literal('KNOWN'),
+    trigger: z.enum([
+      'PERIOD_COMPLETE',
+      'NEW_PROBLEM',
+      'APPROVED_ADJUSTMENT_CONDITION',
+    ]),
+    note: z.string().trim().min(1).max(4000),
+  }),
+  z.strictObject({ state: A5002ReviewUnresolvedState }),
+]);
+
+export const A5002ContractDimensions = z.strictObject({
+  execution: A5002ReviewDimension,
+  partialExecution: A5002ReviewDimension,
+  parentCooperation: A5002ReviewDimension,
+  supervision: A5002ReviewDimension,
+  incentives: A5002ReviewDimension,
+  breachResponsibilities: A5002ReviewDimension,
+  benefits: A5002ReviewDimension,
+  adverseChanges: A5002ReviewDimension,
+  newProblems: A5002ReviewDimension,
+  uncertainty: A5002ReviewDimension,
+});
+
+export const A5002EvidenceRef = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('DIALOGUE_MESSAGE'), id: z.string().uuid() }),
+  z.strictObject({ type: z.literal('ASSERTION'), id: z.string().uuid() }),
+  z.strictObject({ type: z.literal('OBSERVATION'), id: z.string().uuid() }),
+]);
+
+export const A5002PhoneUseContractReviewResponse = z.strictObject({
+  kind: z.literal('PHONE_USE_CONTRACT_REVIEW'),
+  contractVersionId: z.string().uuid(),
+  contractVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
+  expectedContractDraftRevision: z.number().int().min(1).max(PG_INTEGER_MAX),
+  expectedContractStatus: A5002ContractStatusAtReview,
+  dimensions: A5002ContractDimensions,
+  a4012TriggerObservation: A5002TriggerObservation,
+  evidenceRefs: z.array(A5002EvidenceRef).max(100).default([]),
+});
+export type A5002PhoneUseContractReviewResponseType =
+  z.infer<typeof A5002PhoneUseContractReviewResponse>;
+
+export const A5002_DIMENSION_KEYS = [
+  'execution',
+  'partialExecution',
+  'parentCooperation',
+  'supervision',
+  'incentives',
+  'breachResponsibilities',
+  'benefits',
+  'adverseChanges',
+  'newProblems',
+  'uncertainty',
+] as const;
+
