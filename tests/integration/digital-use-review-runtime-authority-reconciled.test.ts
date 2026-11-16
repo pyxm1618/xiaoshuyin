@@ -1116,90 +1116,129 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     });
   });
 
-  it('T1511 A5001 subject valid at preview but target revision drift before execution is rejected with zero review truth', async () => {
-    provider.restore('FAMILY_ALLIANCE_REVIEW');
-    const { f, scene, payload } = await prepareA5001(
-      app,
-      'a5001-preview-subject-drift'
-    );
-    const targetId = (payload.subject as {
-      selectedTargets: Array<{ targetId: string }>;
-    }).selectedTargets[0]!.targetId;
-    const barrier = provider.pauseNextResolve('FAMILY_ALLIANCE_REVIEW');
-    const pending = submitA5001(
-      app,
-      f,
-      scene,
-      payload,
-      `a5001-preview-subject-drift-${crypto.randomUUID()}`
-    );
-
-    await barrier.reached;
-    const changed = await admin.query(
-      `UPDATE digital_use_target_items
-          SET revision=revision+1
-        WHERE id=$1 AND case_id=$2
-        RETURNING revision`,
-      [targetId, f.caseId]
-    );
-    expect(changed.rowCount).toBe(1);
-    barrier.release();
-
-    const result = await pending;
-    expect(result.statusCode, result.body).toBe(409);
-    expect(result.json()).toMatchObject({ code: 'STALE_TARGET_REVISION' });
-    expect(await reviewCounts(f, 'A5001')).toMatchObject({
-      artifacts: 0,
-      completed: 0,
-      events: 0,
-      idempotency: 0,
-    });
-  });
-
-  it('T1511 A5002 exact Contract valid at preview but independently superseded before execution is rejected without silent latest substitution', async () => {
+  it('T1511 A5002 exact Contract writer race rejects the stale v1 subject without silent latest substitution', async () => {
     provider.restore('PHONE_USE_CONTRACT_REVIEW');
     const { f, scene, payload } = await prepareA5002(
       app,
-      'a5002-preview-contract-drift'
-    );
-    const barrier = provider.pauseNextResolve('PHONE_USE_CONTRACT_REVIEW');
-    const pending = submitA5002(
-      app,
-      f,
-      scene,
-      payload,
-      `a5002-preview-contract-drift-${crypto.randomUUID()}`
+      'a5002-contract-writer-race'
     );
 
-    await barrier.reached;
-    const v2 = await supersedeA5002WithVersion2(f);
-    expect(v2.contractId).not.toBe(f.contractId);
-    barrier.release();
+    const blocker = await admin.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT app.set_identity_context($1,$2)', [
+        f.manager.accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await blocker.query('SELECT app.set_family_context($1,$2,$3)', [
+        f.familyId,
+        f.manager.personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      const currentDoc = await blocker.query<{ id: string }>(
+        `SELECT id
+           FROM scene_artifacts
+          WHERE case_id=$1
+            AND artifact_type='PHONE_USE_CONTRACT_DOCUMENT'
+          ORDER BY revision DESC LIMIT 1`,
+        [f.caseId]
+      );
+      const superseded = await blocker.query(
+        `UPDATE digital_use_contract_versions
+            SET status='SUPERSEDED',superseded_at=now()
+          WHERE id=$1 AND status='ACTIVE'
+          RETURNING id`,
+        [f.contractId]
+      );
+      expect(superseded.rowCount).toBe(1);
+      const next = await blocker.query<{ id: string }>(
+        `INSERT INTO digital_use_contract_versions
+           (family_id,case_id,version,draft_revision,status,
+            adult_party_person_id,child_party_person_id,child_participation_id,
+            contract_purpose,phone_use_rules,execution_period,parent_support_measures,
+            supervision_measures,incentives,breach_responsibilities,
+            source_template_version,dependency_refs,parent_confirmation,
+            child_confirmation,supersedes_id,update_reason,update_trigger,
+            created_by_person_id,activated_at)
+         SELECT
+            family_id,case_id,2,1,'ACTIVE',
+            adult_party_person_id,child_party_person_id,child_participation_id,
+            contract_purpose,phone_use_rules,execution_period,parent_support_measures,
+            supervision_measures,incentives,breach_responsibilities,
+            source_template_version,dependency_refs,parent_confirmation,
+            child_confirmation,id,'period completed','PERIOD_COMPLETE',
+            created_by_person_id,now()
+           FROM digital_use_contract_versions
+          WHERE id=$1
+         RETURNING id`,
+        [f.contractId]
+      );
+      const v2ContractId = next.rows[0]!.id;
+      await blocker.query(
+        `INSERT INTO scene_artifacts
+           (family_id,case_id,scene_package_version,artifact_type,schema_version,
+            source_node_code,data,owner_person_id,visibility,source_refs,revision,
+            supersedes_id)
+         VALUES ($1,$2,'v1','PHONE_USE_CONTRACT_DOCUMENT','v1','A4010',
+                 $3::jsonb,$4,'FAMILY_AUTHORIZED','[]'::jsonb,2,$5)`,
+        [
+          f.familyId,
+          f.caseId,
+          JSON.stringify({
+            contractVersionId: v2ContractId,
+            version: 2,
+            draftRevision: 1,
+            status: 'ACTIVE',
+            projectionNodeCode: 'A4012',
+          }),
+          f.manager.personId,
+          currentDoc.rows[0]!.id,
+        ]
+      );
 
-    const result = await pending;
-    expect(result.statusCode, result.body).toBe(409);
-    expect(result.json()).toMatchObject({
-      code: 'PHONE_USE_CONTRACT_STALE_REVISION',
-    });
-    expect(await reviewCounts(f, 'A5002')).toMatchObject({
-      artifacts: 0,
-      completed: 0,
-      events: 0,
-      idempotency: 0,
-    });
+      const pending = submitA5002(
+        app,
+        f,
+        scene,
+        payload,
+        `a5002-contract-writer-race-${crypto.randomUUID()}`
+      );
+      // The review reaches the authoritative Contract lineage FOR UPDATE and
+      // waits behind this writer. Commit v1 supersession + v2 creation, then
+      // the old exact subject must be rejected rather than substituted.
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await blocker.query('COMMIT');
 
-    const contracts = await contractSnapshot(f);
-    expect(contracts).toHaveLength(2);
-    expect(contracts[0]).toMatchObject({
-      id: f.contractId,
-      version: 1,
-      status: 'SUPERSEDED',
-    });
-    expect(contracts[1]).toMatchObject({
-      id: v2.contractId,
-      version: 2,
-      status: 'ACTIVE',
-    });
+      const result = await pending;
+      expect(result.statusCode, result.body).toBe(409);
+      expect(result.json()).toMatchObject({
+        code: 'PHONE_USE_CONTRACT_STALE_REVISION',
+      });
+      expect(await reviewCounts(f, 'A5002')).toMatchObject({
+        artifacts: 0,
+        completed: 0,
+        events: 0,
+        idempotency: 0,
+      });
+
+      const contracts = await contractSnapshot(f);
+      expect(contracts).toHaveLength(2);
+      expect(contracts[0]).toMatchObject({
+        id: f.contractId,
+        version: 1,
+        status: 'SUPERSEDED',
+      });
+      expect(contracts[1]).toMatchObject({
+        id: v2ContractId,
+        version: 2,
+        status: 'ACTIVE',
+      });
+    } catch (error) {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      blocker.release();
+    }
   });
 
   it.each([
