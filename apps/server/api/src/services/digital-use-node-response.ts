@@ -600,11 +600,26 @@ export async function completeDigitalUseNodeResponse(
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
+      const professionalReviewContent =
+        options.professionalReviewContent ??
+        unavailableProductionProfessionalReviewContentProvider;
       const reviewFingerprint =
         node.stream === 'FAMILY_ALLIANCE_REVIEW'
-          ? a5001CanonicalRequestFingerprint(input).fingerprint
+          ? (
+              await a5001CanonicalRequestFingerprint(
+                tx,
+                input,
+                professionalReviewContent
+              )
+            ).fingerprint
           : node.stream === 'PHONE_USE_CONTRACT_REVIEW'
-            ? a5002CanonicalRequestFingerprint(input).fingerprint
+            ? (
+                await a5002CanonicalRequestFingerprint(
+                  tx,
+                  input,
+                  professionalReviewContent
+                )
+              ).fingerprint
             : null;
       const requestHash = hashPayload(
         reviewFingerprint ?? {
@@ -631,9 +646,6 @@ export async function completeDigitalUseNodeResponse(
           requestHash,
         },
         async () => {
-          const professionalReviewContent =
-            options.professionalReviewContent ??
-            unavailableProductionProfessionalReviewContentProvider;
           if (node.stream === 'FAMILY_ALLIANCE_REVIEW') {
             return {
               status: 200,
