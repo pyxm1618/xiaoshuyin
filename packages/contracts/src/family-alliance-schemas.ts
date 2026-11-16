@@ -225,19 +225,9 @@ export const FamilyAllianceNodeResponsePayload = z.discriminatedUnion('kind', [
 export type FamilyAllianceNodeResponsePayloadType =
   z.infer<typeof FamilyAllianceNodeResponsePayload>;
 
-export const FamilyAllianceContentRef = z.strictObject({
-  nodeCode: z.string().min(1).max(64),
-  contentVersion: z.string().min(1).max(128),
-  authorityDocument: z.literal('Docs/V1产品需求.md'),
-  authorityDocumentVersion: z.literal('v3.9'),
-  sourceBlob: z.string().regex(/^[0-9a-f]{40}$/),
-  sectionHeading: z.string().min(1).max(200),
-});
-
 export const FamilyAllianceHelpHistoryEntry = z.strictObject({
   nodeCode: z.string().min(1).max(64),
   scenePackageVersion: z.literal('v1'),
-  contentRef: FamilyAllianceContentRef.optional(),
   interactionRefs: z.array(z.string().min(1).max(160)),
   helpOrReentryRefs: z.array(z.string().min(1).max(160)),
   authorityRefs: z.array(z.string().min(1).max(160)),
