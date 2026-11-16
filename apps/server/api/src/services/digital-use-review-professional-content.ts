@@ -31,12 +31,13 @@ export interface ProfessionalReviewPackageProof {
 export interface ProfessionalReviewResolvedPackage {
   readonly proof: ProfessionalReviewPackageProof;
   /**
-   * Package-owned validation/normalization only. Slice 15 does not know,
-   * invent or score questionnaire dimensions.
+   * Package-owned validation only. The request carries the exact normalized
+   * package response so idempotency can be computed without consulting mutable
+   * approval state on replay. Slice 15 does not know, invent or score fields.
    */
-  validateAndNormalizeResponse(
+  validateNormalizedResponse(
     response: Readonly<Record<string, unknown>>
-  ): Readonly<Record<string, unknown>>;
+  ): void;
 }
 
 export interface ProfessionalReviewContentProvider {
