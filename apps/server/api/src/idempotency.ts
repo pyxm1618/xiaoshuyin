@@ -173,23 +173,81 @@ export async function runLockedIdempotentCommandInTransaction(
   return { action: 'EXECUTED', status: response.status, body: response.body };
 }
 
+interface PreparedIdempotencyReplayEnvelope {
+  readonly __preparedIdempotencyV1: true;
+  readonly replayDiscriminator: string;
+  readonly body: unknown;
+}
+
+function isPreparedReplayEnvelope(
+  value: unknown
+): value is PreparedIdempotencyReplayEnvelope {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record['__preparedIdempotencyV1'] === true &&
+    typeof record['replayDiscriminator'] === 'string' &&
+    Object.prototype.hasOwnProperty.call(record, 'body')
+  );
+}
+
 export async function runPreparedIdempotentCommandInTransaction(
   tx: pg.PoolClient,
-  cfg: Omit<IdempotentCommandConfig, 'requestHash'>,
+  cfg: Omit<IdempotentCommandConfig, 'requestHash'> & {
+    readonly replayDiscriminator: string;
+  },
   prepareRequestHash: (tx: pg.PoolClient) => Promise<string>,
   fn: (tx: pg.PoolClient) => Promise<CommandResponse>
 ): Promise<CommandOutcome> {
-  // Some commands require an authority-owned normalization step before their
-  // canonical request hash exists. Preserve the global lock order by acquiring
-  // the existing idempotency lock first, then prepare the hash, then use the
-  // same lookup/decision/settlement owner.
+  // Authority-owned normalization may be unavailable after an already
+  // committed command (for example when a Professional package is retired).
+  // Lock and inspect the existing canonical idempotency record first. An exact
+  // raw request replay can therefore return the original result without
+  // re-running mutable authority gates, while any changed raw request remains
+  // a same-key conflict. The stored request_hash is still the normalized
+  // authority-bound canonical hash for the original execution.
   await lockIdempotentCommandInTransaction(tx, cfg);
-  const requestHash = await prepareRequestHash(tx);
-  return runLockedIdempotentCommandInTransaction(
+  const existing = await getIdempotencyKey(
     tx,
-    { ...cfg, requestHash },
-    fn
+    cfg.accountId,
+    cfg.commandType,
+    cfg.idempotencyKey
   );
+  if (existing !== null && isPreparedReplayEnvelope(existing.response_body)) {
+    if (
+      existing.response_body.replayDiscriminator === cfg.replayDiscriminator
+    ) {
+      return {
+        action: 'REPLAY',
+        status: existing.response_status,
+        body: existing.response_body.body,
+      };
+    }
+    return { action: 'MISMATCH' };
+  }
+
+  const requestHash = await prepareRequestHash(tx);
+  if (existing !== null) {
+    const decision = decide(existing, requestHash);
+    if (decision) return decision;
+  }
+
+  const response = await fn(tx);
+  const persisted: PreparedIdempotencyReplayEnvelope = {
+    __preparedIdempotencyV1: true,
+    replayDiscriminator: cfg.replayDiscriminator,
+    body: response.body,
+  };
+  await insertIdempotencyKey(
+    tx,
+    cfg.accountId,
+    cfg.commandType,
+    cfg.idempotencyKey,
+    requestHash,
+    response.status,
+    JSON.stringify(persisted)
+  );
+  return { action: 'EXECUTED', status: response.status, body: response.body };
 }
 
 export async function runIdempotentCommandInTransaction(
