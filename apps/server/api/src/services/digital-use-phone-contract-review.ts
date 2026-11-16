@@ -154,14 +154,18 @@ export interface A5002SubjectSnapshot {
   }[];
 }
 
-export function a5002CanonicalRequestFingerprint(input: {
-  readonly actor: DigitalUseActor;
-  readonly familyId: string;
-  readonly caseId: string;
-  readonly nodeCode: string;
-  readonly expectedScenePackageVersion?: 'v1' | undefined;
-  readonly response: Readonly<Record<string, unknown>>;
-}) {
+export function a5002CanonicalRequestFingerprint(
+  input: {
+    readonly actor: DigitalUseActor;
+    readonly familyId: string;
+    readonly caseId: string;
+    readonly nodeCode: string;
+    readonly expectedScenePackageVersion?: 'v1' | undefined;
+    readonly response: Readonly<Record<string, unknown>>;
+  },
+  normalizedResponse: Readonly<Record<string, unknown>>,
+  exactSubject?: A5002SubjectSnapshot
+) {
   const parsed = A5002PhoneUseContractReviewSubmission.safeParse(input.response);
   if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
   return {
@@ -176,9 +180,9 @@ export function a5002CanonicalRequestFingerprint(input: {
       node: 'A5002',
       stream: 'PHONE_USE_CONTRACT_REVIEW',
       scenePackageVersion: input.expectedScenePackageVersion ?? null,
-      subject: parsed.data.subject,
+      subject: exactSubject ?? parsed.data.subject,
       professionalPackage: parsed.data.professionalPackage,
-      normalizedResponse: parsed.data.normalizedResponse,
+      normalizedResponse,
       evidenceRefs: parsed.data.evidenceRefs,
       provenance: parsed.data.provenance,
     },
@@ -336,6 +340,124 @@ function sameProof(
   );
 }
 
+export async function prepareA5002ReviewFingerprintInTransaction(
+  tx: pg.PoolClient,
+  input: {
+    readonly actor: DigitalUseActor;
+    readonly familyId: string;
+    readonly caseId: string;
+    readonly nodeCode: string;
+    readonly expectedCaseVersion: number;
+    readonly expectedNodeRevision: number;
+    readonly expectedScenePackageVersion?: 'v1' | undefined;
+    readonly expectedSelectionRevision?: number | undefined;
+    readonly expectedTargetRevision?: number | undefined;
+    readonly response: Readonly<Record<string, unknown>>;
+  },
+  node: DigitalUseNodeManifestEntry,
+  provider: ProfessionalReviewContentProvider
+): Promise<Readonly<Record<string, unknown>>> {
+  if (
+    node.nodeCode !== 'A5002' ||
+    node.stream !== 'PHONE_USE_CONTRACT_REVIEW' ||
+    node.role !== 'PHONE_USE_CONTRACT_REVIEW'
+  ) {
+    throw reviewError('SCENE_NODE_UNREACHABLE');
+  }
+  if (input.expectedScenePackageVersion !== DIGITAL_USE_PACKAGE_VERSION) {
+    throw reviewError('STALE_SCENE_PACKAGE');
+  }
+  if (
+    input.expectedSelectionRevision !== undefined ||
+    input.expectedTargetRevision !== undefined
+  ) {
+    throw reviewError('SCENE_RESPONSE_INVALID');
+  }
+
+  const parsed = A5002PhoneUseContractReviewSubmission.safeParse(input.response);
+  if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
+
+  await assertCurrentAccountAuthority(tx, input.actor.accountId);
+  if (!(await lockFamilyForPrimaryDecision(tx, input.familyId))) {
+    throw reviewError('CASE_NOT_FOUND', 'Case not found');
+  }
+  const caseRow = await lockSceneCase(tx, input.caseId);
+  if (!caseRow) throw reviewError('CASE_NOT_FOUND', 'Case not found');
+  assertDigitalUseCaseLifecycle(caseRow, node, input.expectedCaseVersion);
+  await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+  await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
+  await assertAssessmentCompliance(tx, input.actor.personId);
+
+  const binding = await getScenePackageBinding(tx, input.caseId);
+  if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
+    throw reviewError(
+      binding === null ? 'SCENE_NODE_UNREACHABLE' : 'STALE_SCENE_PACKAGE'
+    );
+  }
+
+  const { row: contract, snapshot: subject } =
+    await resolveA5002SubjectSnapshot(tx, {
+      familyId: input.familyId,
+      caseId: input.caseId,
+      contractId: parsed.data.subject.contractId,
+      contractVersion: parsed.data.subject.contractVersion,
+      contractRevision: parsed.data.subject.contractRevision,
+      lock: true,
+    });
+  assertSubjectExpectation(contract, parsed.data);
+
+  await assertPhoneUseContractDependencies(tx, {
+    actor: input.actor,
+    familyId: input.familyId,
+    caseId: input.caseId,
+    dependencyRefs: contract.dependency_refs,
+  });
+  await assertPhoneUseContractChildParticipation(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    childPersonId: contract.child_party_person_id,
+    participationId: contract.child_participation_id,
+  });
+  await assertProfessionalReviewProvenance(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorPersonId: input.actor.personId,
+    evidenceRefs: parsed.data.evidenceRefs,
+    provenance: parsed.data.provenance,
+    exactChildSubject: {
+      personId: contract.child_party_person_id,
+      participationId: contract.child_participation_id,
+    },
+  });
+
+  const professionalPackage = await requireProfessionalReviewPackage(
+    provider,
+    {
+      stream: 'PHONE_USE_CONTRACT_REVIEW',
+      scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+      packageId: parsed.data.professionalPackage.packageId,
+      packageVersion: parsed.data.professionalPackage.packageVersion,
+      contentHash: parsed.data.professionalPackage.contentHash,
+    },
+    'RESOLVE'
+  );
+
+  let normalizedResponse: Readonly<Record<string, unknown>>;
+  try {
+    normalizedResponse = professionalPackage.validateAndNormalizeResponse(
+      parsed.data.packageResponse
+    );
+  } catch {
+    throw reviewError('SCENE_RESPONSE_INVALID');
+  }
+
+  return a5002CanonicalRequestFingerprint(
+    input,
+    normalizedResponse,
+    subject
+  ).fingerprint;
+}
+
 export async function executeA5002ReviewInTransaction(
   tx: pg.PoolClient,
   input: {
@@ -438,8 +560,11 @@ export async function executeA5002ReviewInTransaction(
       packageInput,
       'RESOLVE'
     );
+    let normalizedResponse: Readonly<Record<string, unknown>>;
     try {
-      professionalPackage.validateNormalizedResponse(parsed.data.normalizedResponse);
+      normalizedResponse = professionalPackage.validateAndNormalizeResponse(
+        parsed.data.packageResponse
+      );
     } catch {
       throw reviewError('SCENE_RESPONSE_INVALID');
     }
@@ -510,7 +635,7 @@ export async function executeA5002ReviewInTransaction(
         professionalPackage: professionalReviewPackageProofIdentity(
           professionalPackage.proof
         ),
-        normalizedResponse: parsed.data.normalizedResponse,
+        normalizedResponse,
         evidenceRefs: parsed.data.evidenceRefs,
         provenance: parsed.data.provenance,
         submittedBy: {
@@ -643,8 +768,21 @@ export async function executeA5002ReviewInTransaction(
       throw reviewError('DEPENDENCY_UNAVAILABLE');
     }
     try {
-      finalPackage.validateNormalizedResponse(parsed.data.normalizedResponse);
-    } catch {
+      const finalNormalizedResponse =
+        finalPackage.validateAndNormalizeResponse(parsed.data.packageResponse);
+      if (
+        hashPayload(finalNormalizedResponse) !== hashPayload(normalizedResponse)
+      ) {
+        throw reviewError('DEPENDENCY_UNAVAILABLE');
+      }
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        (error as { code?: unknown }).code === 'DEPENDENCY_UNAVAILABLE'
+      ) {
+        throw error;
+      }
       throw reviewError('DEPENDENCY_UNAVAILABLE');
     }
 
