@@ -5,6 +5,8 @@ import type {
 } from '@xiaoshuyin/contracts';
 import {
   canonicalEvidenceKey,
+  isParticipationProcessingAllowed,
+  lockParticipationById,
   resolveEvidenceRefs,
   type EvidenceRef,
 } from '@xiaoshuyin/domain';
@@ -23,6 +25,10 @@ export async function assertProfessionalReviewProvenance(
     readonly actorPersonId: string;
     readonly evidenceRefs: readonly ProfessionalReviewEvidenceRefType[];
     readonly provenance: readonly ProfessionalReviewProvenanceType[];
+    readonly exactChildSubject?: {
+      readonly personId: string;
+      readonly participationId: string;
+    };
   }
 ): Promise<void> {
   const refs = input.evidenceRefs as readonly EvidenceRef[];
@@ -44,6 +50,36 @@ export async function assertProfessionalReviewProvenance(
   }
 
   const evidenceKeys = new Set(refs.map(canonicalEvidenceKey));
+
+  const assertActiveChildParticipation = async (
+    personId: string,
+    participationId: string
+  ): Promise<void> => {
+    if (
+      input.exactChildSubject !== undefined &&
+      (
+        input.exactChildSubject.personId !== personId ||
+        input.exactChildSubject.participationId !== participationId
+      )
+    ) {
+      invalid();
+    }
+    const participation = await lockParticipationById(tx, participationId);
+    if (
+      participation === null ||
+      participation.family_id !== input.familyId ||
+      participation.case_id !== input.caseId ||
+      participation.person_id !== personId ||
+      participation.state !== 'ACTIVE'
+    ) {
+      invalid();
+    }
+    if (!(await isParticipationProcessingAllowed(tx, personId))) {
+      throw Object.assign(new Error('Child review processing is not permitted'), {
+        code: 'CONSENT_BLOCKED',
+      });
+    }
+  };
   for (const provenance of input.provenance) {
     if (provenance.kind === 'SYSTEM_METADATA') continue;
 
@@ -54,6 +90,10 @@ export async function assertProfessionalReviewProvenance(
 
     if (provenance.kind === 'CHILD_AUTHORED_INPUT') {
       if (provenance.sourcePersonId === input.actorPersonId) invalid();
+      await assertActiveChildParticipation(
+        provenance.sourcePersonId,
+        provenance.participationId
+      );
       const ref: EvidenceRef = {
         type: 'DIALOGUE_MESSAGE',
         id: provenance.sourceMessageId,
@@ -73,6 +113,10 @@ export async function assertProfessionalReviewProvenance(
 
     if (provenance.transcriberPersonId !== input.actorPersonId) invalid();
     if (provenance.childPersonId === input.actorPersonId) invalid();
+    await assertActiveChildParticipation(
+      provenance.childPersonId,
+      provenance.participationId
+    );
     const key = canonicalEvidenceKey(provenance.evidenceRef as EvidenceRef);
     if (!evidenceKeys.has(key)) invalid();
     const member = resolution.members.get(key);
