@@ -426,7 +426,7 @@ Slice 16 does not create InterventionInstance. Combination/conflict evaluation o
 
 ### 8.1 Family/Case eligibility
 
-Eligibility is family/case scoped and begins with the existing authorization entry point, using a current Case read/eligibility-compatible action and purpose already authorized by then-current main. Request IDs are untrusted parameters.
+Eligibility is family/case scoped and begins with the existing authorization entry point, using the current CASE_READ action with FAMILY_MANAGEMENT purpose on the exact Case, unless T1601 finds a semantic Authority change (which would STOP rather than silently substitute a new action). Request IDs are untrusted parameters.
 
 The composition must remain:
 
@@ -740,46 +740,89 @@ Coverage: 64/64.
 
 ## 17. Traceability — Acceptance Scenarios
 
-| Acceptance scenarios | Plan owner | Tasks |
+Every AS is listed individually so exact-ID coverage can be mechanically audited.
+
+| AS | Planned verification | Tasks |
 |---|---|---|
-| AS-001–AS-005 | §5 capability/qualification/fixture/developer boundaries | T1603, T1610, T1613 |
-| AS-006–AS-013 | §5 approval/publication/lifecycle/staff/effective period | T1603, T1608, T1610 |
-| AS-014 | §8 Authorization anti-enumeration | T1606 |
-| AS-015–AS-017 | §8 Consent/Compliance/Safety independence | T1606, T1607 |
-| AS-018 | §7 UNKNOWN/Formulation | T1605, T1607 |
-| AS-019 | §6 package cannot legalize unpublished definition | T1604, T1607 |
-| AS-020 | §9 historical retired definition | T1608 |
-| AS-021 | §1/§5 production reviewer unassigned | T1610 |
-| AS-022–AS-023 | §5 exact hash/version proof binding | T1603 |
-| AS-024 | §4.2/§9 successor version | T1602, T1608 |
-| AS-025 | §7 positive bounded result, no Phase 4 object | T1607 |
-| AS-026–AS-029 | §7 age/exclusion/conflict/evidence gates | T1607 |
-| AS-030–AS-031 | §3/§7 Case Phase/Formulation owner and staleness | T1605, T1607 |
-| AS-032–AS-035 | §10 replay/mismatch/race/rollback | T1609 |
-| AS-036 | §8 anti-enumeration | T1606 |
-| AS-037–AS-038 | §4.4/§7 no RAG/AI promotion | T1610, T1613 |
-| AS-039 | §7.5 Phase 4 guard | T1613 |
-| AS-040 | §6 second-registry guard | T1613 |
+| AS-001 | Capability present, qualification absent -> invalid approval | T1603 |
+| AS-002 | Qualification present, Staff authority absent -> invalid approval | T1603 |
+| AS-003 | AI draft remains candidate | T1610/T1613 |
+| AS-004 | Test reviewer proof stays test-only | T1610/T1613 |
+| AS-005 | Developer approved=true cannot create approval | T1610/T1613 |
+| AS-006 | Approved but unpublished -> no use | T1603/T1607 |
+| AS-007 | Retired published definition -> no new use, history retained | T1603/T1608 |
+| AS-008 | Wrong approval scope -> fail closed | T1603/T1604 |
+| AS-009 | Wrong Scene/package version -> fail closed | T1604/T1607 |
+| AS-010 | Correct code, wrong exact version -> no fallback | T1602/T1604 |
+| AS-011 | Stale/revoked assignment for new approval attempt -> fail closed | T1603 |
+| AS-012 | PROFESSIONAL_REVIEW revoked -> fail closed | T1603 |
+| AS-013 | Qualification/approval effective period expired -> fail closed | T1603 |
+| AS-014 | Wrong Family/Case -> anti-enumerated fail closed | T1606 |
+| AS-015 | Required Consent missing/revoked/expired -> fail closed | T1606/T1607 |
+| AS-016 | Compliance block cannot be overridden by approval | T1606/T1607 |
+| AS-017 | Safety block cannot be overridden by approval | T1606/T1607 |
+| AS-018 | Missing/UNKNOWN Formulation dependency stays blocked/UNKNOWN | T1605/T1607 |
+| AS-019 | Package snapshot with unpublished definition is invalid | T1604/T1607 |
+| AS-020 | Historical retired definition remains inspectable | T1608 |
+| AS-021 | No real reviewer -> truthful unavailable | T1610 |
+| AS-022 | Approval hash mismatch -> fail closed | T1603 |
+| AS-023 | Proof binds another definition/version -> fail closed | T1603 |
+| AS-024 | Substantive edit requires successor + fresh approval | T1602/T1608 |
+| AS-025 | All gates pass -> bounded allowed=true only | T1607 |
+| AS-026 | Age/development mismatch -> fail closed | T1607 |
+| AS-027 | Exclusion/contraindication hit -> blocked | T1607 |
+| AS-028 | Conflicting Intervention combination -> blocked | T1607 |
+| AS-029 | Required supporting Evidence absent -> blocked | T1605/T1607 |
+| AS-030 | Later legal Case phase does not create shadow exact-phase gate | T1605/T1607 |
+| AS-031 | Material Formulation correction stales eligibility; no Case-phase write | T1605/T1607 |
+| AS-032 | Exact idempotent replay -> same result/no duplicate effect | T1609 |
+| AS-033 | Same key + different payload -> conflict | T1609 |
+| AS-034 | Publish/bind vs retire/supersede race -> one valid winner | T1609 |
+| AS-035 | Failure before audit/idempotency settlement -> rollback | T1609 |
+| AS-036 | Unauthorized target guessing preserves anti-enumeration | T1606/T1611 |
+| AS-037 | RAG text cannot legalize unapproved definition | T1607/T1613 |
+| AS-038 | AI-created Intervention remains candidate, not activated | T1610/T1613 |
+| AS-039 | InterventionInstance/Plan attempt rejected by scope guard | T1613 |
+| AS-040 | Second intervention package registry rejected | T1604/T1613 |
 
 Coverage: 40/40.
 
 ## 18. Traceability — Negative Scope
 
-| Negative scope | Guard owner | Task |
+Every NS is listed individually so guard coverage can be mechanically audited.
+
+| NS | Required guard | Tasks |
 |---|---|---|
-| NS-001–NS-003 | no CMS/content platform/expert marketplace | T1613 |
-| NS-004–NS-005 | no generic/duplicate Staff platform/table | T1613 |
-| NS-006 | no qualification owner/platform | T1603/T1613 |
-| NS-007 | no duplicate Approval Plane | T1603/T1613 |
-| NS-008 | no ADMIN=true | T1613 |
-| NS-009–NS-013 | no AI/RAG/developer/fixture/auto-published approval | T1610/T1613 |
-| NS-014–NS-018 | no Phase 4 business objects | T1613 |
-| NS-019–NS-023 | no Knowledge/RAG/vector/Context Builder/AI runtime | T1613 |
-| NS-024–NS-025 | no second Scene package/Manifest owner | T1604/T1613 |
-| NS-026 | no second Case phase owner | T1605/T1613 |
-| NS-027–NS-028 | no duplicate Evidence/Formulation/Consent/Compliance/Safety | T1605/T1606/T1613 |
-| NS-029 | no generic approval workflow engine | T1603/T1613 |
-| NS-030 | no legal interpretation/platform | T1606/T1613 |
+| NS-001 | No generic Professional CMS | T1613 |
+| NS-002 | No Professional Content Platform | T1613 |
+| NS-003 | No expert marketplace | T1613 |
+| NS-004 | No generic Staff platform | T1613 |
+| NS-005 | No duplicate staff_assignments | T1613 |
+| NS-006 | No professional qualification owner/platform | T1603/T1613 |
+| NS-007 | No duplicate Professional Content Approval Plane | T1603/T1613 |
+| NS-008 | No ADMIN=true universal authority | T1613 |
+| NS-009 | No AI reviewer | T1610/T1613 |
+| NS-010 | No RAG reviewer | T1610/T1613 |
+| NS-011 | No developer approval | T1610/T1613 |
+| NS-012 | No production fixture approval | T1610/T1613 |
+| NS-013 | No automatically PUBLISHED seed | T1610/T1613 |
+| NS-014 | No Phase 4 InterventionInstance | T1613 |
+| NS-015 | No Goal object | T1613 |
+| NS-016 | No Plan/PlanVersion activation | T1613 |
+| NS-017 | No Task or Checkin | T1613 |
+| NS-018 | No Outcome/Follow-up/Schedule/Notification | T1613 |
+| NS-019 | No Professional Knowledge owner | T1613 |
+| NS-020 | No RAG implementation | T1613 |
+| NS-021 | No pgvector/embedding/reranking work | T1613 |
+| NS-022 | No Context Builder | T1613 |
+| NS-023 | No AI Task Runtime/model gateway | T1613 |
+| NS-024 | No second Scene package registry | T1604/T1613 |
+| NS-025 | No second Scene Manifest/routing owner | T1604/T1613 |
+| NS-026 | No second Case phase/status owner | T1605/T1613 |
+| NS-027 | No duplicate Evidence/Problem Formulation owner | T1605/T1613 |
+| NS-028 | No duplicate Consent/Compliance/Safety owner | T1606/T1613 |
+| NS-029 | No generic approval workflow engine | T1603/T1613 |
+| NS-030 | No legal interpretation/Legal Authority platform | T1606/T1613 |
 
 Coverage: 30/30.
 
