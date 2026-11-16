@@ -31,22 +31,35 @@ export type FamilyAllianceValueState =
   | 'CONFLICT'
   | 'NOT_APPLICABLE';
 
+export type FamilyAllianceNarrativeDimension =
+  | { readonly state: 'KNOWN'; readonly text: string }
+  | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+
 export interface FamilyAllianceFeasibilityPayload {
-  readonly concreteQuantified:
-    | { readonly state: 'KNOWN'; readonly concreteTargetText: string }
-    | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
-  readonly need:
-    | { readonly state: 'KNOWN'; readonly rating: number }
-    | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
-  readonly motivationBenefit:
-    | { readonly state: 'KNOWN'; readonly rating: number }
-    | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
-  readonly abilityPossibility:
-    | { readonly state: 'KNOWN'; readonly rating: number }
-    | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
-  readonly challengeResistance:
-    | { readonly state: 'KNOWN'; readonly rating: number }
-    | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+  readonly problemBehavior: {
+    readonly concreteBehavior: FamilyAllianceNarrativeDimension;
+    readonly need: FamilyAllianceNarrativeDimension;
+    readonly motivationBenefit: FamilyAllianceNarrativeDimension;
+    readonly abilityConditions: FamilyAllianceNarrativeDimension;
+    readonly challengeResistance: FamilyAllianceNarrativeDimension;
+  };
+  readonly replacementBehavior: {
+    readonly concreteQuantified:
+      | { readonly state: 'KNOWN'; readonly concreteTargetText: string }
+      | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+    readonly need:
+      | { readonly state: 'KNOWN'; readonly rating: number }
+      | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+    readonly motivationBenefit:
+      | { readonly state: 'KNOWN'; readonly rating: number }
+      | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+    readonly abilityPossibility:
+      | { readonly state: 'KNOWN'; readonly rating: number }
+      | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+    readonly challengeResistance:
+      | { readonly state: 'KNOWN'; readonly rating: number }
+      | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+  };
 }
 
 export interface FamilyAllianceHelpHistoryEntry {
@@ -54,18 +67,66 @@ export interface FamilyAllianceHelpHistoryEntry {
   readonly scenePackageVersion: string;
   readonly interactionRefs: readonly string[];
   readonly helpOrReentryRefs: readonly string[];
+  readonly authorityRefs: readonly string[];
   readonly evidenceRefs: readonly StoredSceneRef[];
 }
 
-export interface FamilyAllianceProgressPayload {
-  readonly stage:
-    | 'COMMUNICATION'
-    | 'EXECUTION'
-    | 'OBSERVATION'
-    | 'ADJUSTMENT';
-  readonly state: FamilyAllianceValueState;
-  readonly modifyTarget?: 'YES' | 'NO' | 'NOT_DECIDED' | undefined;
+export interface FamilyAllianceProgressMatrixRow {
+  readonly needMatch: FamilyAllianceNarrativeDimension;
+  readonly motivationMatch: FamilyAllianceNarrativeDimension;
+  readonly abilityMatch: FamilyAllianceNarrativeDimension;
+  readonly challengeResistance: FamilyAllianceNarrativeDimension;
 }
+
+export type FamilyAllianceProgressPayload =
+  | {
+      readonly kind: 'GENERAL_MATRIX';
+      readonly taskPlan: FamilyAllianceNarrativeDimension;
+      readonly communication: FamilyAllianceProgressMatrixRow;
+      readonly childFeedback: FamilyAllianceProgressMatrixRow;
+      readonly userObservation: FamilyAllianceProgressMatrixRow;
+      readonly otherFamilyFeedback: FamilyAllianceProgressMatrixRow;
+      readonly modifyTarget: 'YES' | 'NO' | 'NOT_DECIDED';
+    }
+  | {
+      readonly kind: 'EMOTION_REGULATION_1';
+      readonly listening:
+        | { readonly state: 'KNOWN'; readonly count: number }
+        | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+      readonly affirmation:
+        | { readonly state: 'KNOWN'; readonly observations: readonly string[] }
+        | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+      readonly reducedEvaluation:
+        | { readonly state: 'KNOWN'; readonly count: number }
+        | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+      readonly selfRegulationJournal:
+        | { readonly state: 'KNOWN'; readonly text: string }
+        | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+      readonly selfCare:
+        | {
+            readonly state: 'KNOWN';
+            readonly durationMinutes: number;
+            readonly activities: readonly string[];
+          }
+        | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
+      readonly effectEvaluation: {
+        readonly intrinsicMotivation: FamilyAllianceNarrativeDimension;
+        readonly selfEsteemConfidence: FamilyAllianceNarrativeDimension;
+        readonly abilityPotential: FamilyAllianceNarrativeDimension;
+      };
+      readonly modifyTarget: 'YES' | 'NO' | 'NOT_DECIDED';
+    }
+  | {
+      readonly kind: 'EMOTION_REGULATION_2_LOG';
+      readonly entries: readonly {
+        readonly time: string;
+        readonly childEmotion: FamilyAllianceNarrativeDimension;
+        readonly emotionFeedback: FamilyAllianceNarrativeDimension;
+        readonly childStress: FamilyAllianceNarrativeDimension;
+        readonly selfGrowth: FamilyAllianceNarrativeDimension;
+      }[];
+      readonly modifyTarget: 'YES' | 'NO' | 'NOT_DECIDED';
+    };
 
 export interface DigitalUseTargetItemRow {
   id: string;
