@@ -68,3 +68,9 @@ export * from './family-alliance-repository.js';
 // Slice 14 — bounded phone-use Contract/roleplay persistence.
 export * from './phone-use-contract-schema.js';
 export * from './phone-use-contract-repository.js';
+
+// Slice 16 — InterventionDefinition domain truth and deterministic eligibility only.
+export * from './intervention-definition-schema.js';
+export * from './intervention-definitions.js';
+export * from './intervention-definition-repository.js';
+export * from './intervention-eligibility.js';
