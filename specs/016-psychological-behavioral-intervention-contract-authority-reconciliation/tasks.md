@@ -509,7 +509,7 @@ Use existing authorize/RLS/Consent/Compliance/Safety owners only.
 
 1. Authenticate actor before protected reads.
 2. Open one existing family/RLS transaction for family/case evaluation.
-3. Use current authorization entry point for exact actor/family/case/purpose; identifiers remain untrusted parameters.
+3. Use the current authorization entry point with action CASE_READ + purpose FAMILY_MANAGEMENT for the exact Case; identifiers remain untrusted parameters. If T1601 finds this semantic contract changed, STOP as Authority drift rather than inventing a replacement.
 4. Ensure denied callers do not receive professional/package/family object existence details.
 5. Read participation requirements from exact definition and current participant context.
 6. Resolve required current Consent through existing owner. Missing/revoked/expired/unverifiable -> BLOCK/UNKNOWN.
@@ -980,7 +980,7 @@ tests/domain/intervention-eligibility.test.ts
 tests/domain/intervention-eligibility-unknown.test.ts
 tests/domain/intervention-failure-semantics.test.ts
 tests/integration/intervention-professional-authority.test.ts
-tests/integration/intervention-package-binding.test.ts
+tests/scenes/digital-use/intervention-package-binding.test.ts
 tests/integration/intervention-eligibility-snapshot.test.ts
 tests/integration/intervention-authorization-rls.test.ts
 tests/integration/intervention-gates.test.ts
