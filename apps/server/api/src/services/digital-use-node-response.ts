@@ -637,11 +637,34 @@ export async function completeDigitalUseNodeResponse(
           expectedTargetRevision: input.expectedTargetRevision ?? null,
           response: input.response,
         });
+        const {
+          packageResponse: _packageResponse,
+          ...reviewResponseAuthorityIdentity
+        } = input.response;
+        const reviewAuthorityDiscriminator = hashPayload({
+          actor: {
+            accountId: input.actor.accountId,
+            personId: input.actor.personId,
+          },
+          familyId: input.familyId,
+          caseId: input.caseId,
+          node: node.nodeCode,
+          stream: node.stream,
+          expectedCaseVersion: input.expectedCaseVersion,
+          expectedNodeRevision: input.expectedNodeRevision,
+          expectedScenePackageVersion:
+            input.expectedScenePackageVersion ?? null,
+          expectedSelectionRevision:
+            input.expectedSelectionRevision ?? null,
+          expectedTargetRevision: input.expectedTargetRevision ?? null,
+          response: reviewResponseAuthorityIdentity,
+        });
         const reviewOutcome = await runPreparedIdempotentCommandInTransaction(
           tx,
           {
             ...idempotencyBase,
             replayDiscriminator: reviewReplayDiscriminator,
+            authorityDiscriminator: reviewAuthorityDiscriminator,
           },
           async () => {
             const fingerprint =
