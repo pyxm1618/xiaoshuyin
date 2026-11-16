@@ -203,9 +203,10 @@ export async function runPreparedIdempotentCommandInTransaction(
   // committed command (for example when a Professional package is retired).
   // Lock and inspect the existing canonical idempotency record first. An exact
   // raw request replay can therefore return the original result without
-  // re-running mutable authority gates, while any changed raw request remains
-  // a same-key conflict. The stored request_hash is still the normalized
-  // authority-bound canonical hash for the original execution.
+  // re-running mutable authority gates. A raw-different request must still be
+  // normalized before replay/mismatch is decided because T1510 defines request
+  // identity by the authority-owned canonical response, not wire syntax. The
+  // stored request_hash remains the normalized authority-bound canonical hash.
   await lockIdempotentCommandInTransaction(tx, cfg);
   const existing = await getIdempotencyKey(
     tx,
@@ -213,19 +214,21 @@ export async function runPreparedIdempotentCommandInTransaction(
     cfg.commandType,
     cfg.idempotencyKey
   );
-  if (existing !== null && isPreparedReplayEnvelope(existing.response_body)) {
-    if (
-      existing.response_body.replayDiscriminator === cfg.replayDiscriminator
-    ) {
-      return {
-        action: 'REPLAY',
-        status: existing.response_status,
-        body: existing.response_body.body,
-      };
-    }
-    return { action: 'MISMATCH' };
+  if (
+    existing !== null &&
+    isPreparedReplayEnvelope(existing.response_body) &&
+    existing.response_body.replayDiscriminator === cfg.replayDiscriminator
+  ) {
+    return {
+      action: 'REPLAY',
+      status: existing.response_status,
+      body: existing.response_body.body,
+    };
   }
 
+  // A raw-different request is not automatically a mismatch: package-owned
+  // normalization may map two wire representations to the same canonical
+  // review request. Resolve/normalize it and compare the frozen canonical hash.
   const requestHash = await prepareRequestHash(tx);
   if (existing !== null) {
     const decision = decide(existing, requestHash);
