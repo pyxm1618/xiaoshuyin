@@ -232,6 +232,14 @@ export async function runPreparedIdempotentCommandInTransaction(
   const requestHash = await prepareRequestHash(tx);
   if (existing !== null) {
     const decision = decide(existing, requestHash);
+    if (decision?.action === 'REPLAY') {
+      return {
+        ...decision,
+        body: isPreparedReplayEnvelope(decision.body)
+          ? decision.body.body
+          : decision.body,
+      };
+    }
     if (decision) return decision;
   }
 
