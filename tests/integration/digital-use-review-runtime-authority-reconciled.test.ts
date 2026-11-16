@@ -1135,14 +1135,9 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
          BEFORE INSERT ON scene_artifacts
          FOR EACH ROW EXECUTE FUNCTION ${fn}()`
     );
+    const key = `a5002-atomicity-${crypto.randomUUID()}`;
     try {
-      const result = await submitA5002(
-        app,
-        f,
-        scene,
-        payload,
-        `a5002-atomicity-${crypto.randomUUID()}`
-      );
+      const result = await submitA5002(app, f, scene, payload, key);
       expect(result.statusCode).toBe(500);
       expect(await reviewCounts(f, 'A5002')).toMatchObject({
         artifacts: 0,
@@ -1154,6 +1149,15 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON scene_artifacts`);
       await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
     }
+
+    const retry = await submitA5002(app, f, scene, payload, key);
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect(await reviewCounts(f, 'A5002')).toMatchObject({
+      artifacts: 1,
+      completed: 1,
+      events: 1,
+      idempotency: 1,
+    });
   });
 
   it('T1513 re-entry appends/supersedes A5001 history without destructive overwrite', async () => {
