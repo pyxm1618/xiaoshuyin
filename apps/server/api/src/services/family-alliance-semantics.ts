@@ -188,6 +188,7 @@ async function applyA3000(
   const parsed = FamilyAllianceSelfAssessmentResponse.safeParse(context.response);
   if (!parsed.success) familyError('SCENE_RESPONSE_INVALID');
 
+  const content = resolveFamilyAllianceContent('A3000');
   const refs: StoredSceneRef[] = [];
   const entries = Object.entries(parsed.data.answers) as Array<
     [keyof typeof parsed.data.answers, (typeof parsed.data.answers)[keyof typeof parsed.data.answers]]
