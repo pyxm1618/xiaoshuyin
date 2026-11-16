@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
-import { recordObservation, recordStatement, reviseDigitalUseTargetItem } from '@xiaoshuyin/domain';
+import { recordStatement, reviseDigitalUseTargetItem } from '@xiaoshuyin/domain';
 import { recordDialogueMessage } from '../../packages/domain/src/internal/message-writer.js';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import { createAdminPool } from '../setup/db.js';
