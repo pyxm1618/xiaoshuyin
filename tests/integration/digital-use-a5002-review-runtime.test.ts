@@ -842,6 +842,62 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     }
   });
 
+  it('T1511 A5002 rechecks primary Case, participation and package tokens at execution time', async () => {
+    {
+      const f = await fixture('not-primary');
+      const scene = await getScene(f);
+      await admin.query(`UPDATE cases SET is_primary=false WHERE id=$1`, [f.caseId]);
+      const result = await submit(
+        f,
+        scene,
+        `a5002-not-primary-${crypto.randomUUID()}`
+      );
+      expect(result.statusCode).toBe(409);
+      expect(result.json().code).toBe('CASE_NOT_PRIMARY');
+      expect((await counts(f)).artifacts).toBe(0);
+    }
+
+    {
+      const f = await fixture('withdrawn-participation');
+      const scene = await getScene(f);
+      await admin.query(
+        `UPDATE case_participants
+            SET state='WITHDRAWN',withdrawn_at=now(),updated_at=now()
+          WHERE id=$1`,
+        [f.participationId]
+      );
+      const result = await submit(
+        f,
+        scene,
+        `a5002-withdrawn-${crypto.randomUUID()}`
+      );
+      expect(result.statusCode).toBe(422);
+      expect(result.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+      expect((await counts(f)).artifacts).toBe(0);
+    }
+
+    {
+      const f = await fixture('package-token');
+      const scene = await getScene(f);
+      const result = await app.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/scene/nodes/A5002/responses`,
+        headers: {
+          ...auth(f.manager.token),
+          'idempotency-key': `a5002-package-${crypto.randomUUID()}`,
+        },
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedNodeRevision: 0,
+          response: payload(f, 'package-token'),
+        },
+      });
+      expect(result.statusCode).toBe(409);
+      expect(result.json().code).toBe('STALE_SCENE_PACKAGE');
+      expect((await counts(f)).artifacts).toBe(0);
+    }
+  });
+
   it('AS-31 rejects an exact Contract bound to another Case in the same Family', async () => {
     const f = await fixture('wrong-case');
     const otherCase = await createCase(
