@@ -21,12 +21,12 @@ const FAMILY_DB =
 
 const acceptance: readonly AcceptanceEvidence[] = [
   { id: 'AS-01', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-01..AS-13 executes legal entry' }] },
-  { id: 'AS-02', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-01..AS-13 executes legal entry' }, { file: FAMILY_GOV, anchor: 'FA-GOV-05 feasibility' }] },
+  { id: 'AS-02', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-01..AS-13 executes legal entry' }, { file: FAMILY_GOV, anchor: 'FA-GOV-05 preserves both feasibility rows and five approved dimensions without a score/cutoff engine' }] },
   { id: 'AS-03', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-03/06/09/38 preserves A3000' }] },
   { id: 'AS-04', evidence: [{ file: FAMILY_RUNTIME, anchor: 'A3002 is legal while A3001 remains incomplete' }, { file: FAMILY_GOV, anchor: 'FA-GOV-03 preserves reciprocal A3001/A3002 parallel topology' }] },
   { id: 'AS-05', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-05/31/32/33 gives stable idempotent A3002 semantics' }] },
   { id: 'AS-06', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-03/06/09/38 preserves A3000' }] },
-  { id: 'AS-07', evidence: [{ file: FAMILY_RUNTIME, anchor: "kind: 'FEASIBILITY'" }, { file: FAMILY_GOV, anchor: 'FA-GOV-05 feasibility' }] },
+  { id: 'AS-07', evidence: [{ file: FAMILY_RUNTIME, anchor: "kind: 'FEASIBILITY'" }, { file: FAMILY_GOV, anchor: 'FA-GOV-05 preserves both feasibility rows and five approved dimensions without a score/cutoff engine' }] },
   { id: 'AS-08', evidence: [{ file: FAMILY_RUNTIME, anchor: "kind: 'PROGRESS'" }] },
   { id: 'AS-09', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-03/06/09/38 preserves A3000' }] },
   { id: 'AS-10', evidence: [{ file: FAMILY_GOV, anchor: 'FA-GOV-01 protects the exact 43-node canonical inventory' }] },
