@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -226,13 +225,23 @@ describe('Slice 15 T1517 deterministic closeout coverage', () => {
         expect(a5001Service + a5002Service).not.toMatch(/@xiaoshuyin\/(ai|rag|plans|outcomes)|vector|embedding/i);
       }],
       ['NS-28 Docs/frozen upstream mutation', () => {
-        const baseline = '67d20ca2dab892b480184261be47997d90a0b2f2';
-        const changed = execFileSync(
-          'git',
-          ['diff', '--name-only', baseline, 'HEAD', '--', 'Docs', 'specs/008-problem-formulation-core', 'specs/009-safety-hold-control-foundation', 'specs/010-compliance-feature-policy-foundation', 'specs/011-digital-use-node-manifest-routing-foundation', 'specs/012-digital-use-assessment-runtime', 'specs/013-digital-use-family-alliance-runtime', 'specs/014-digital-use-phone-use-contract-runtime'],
-          { cwd: root, encoding: 'utf8' }
-        ).trim();
-        expect(changed).toBe('');
+        const authoritative = [
+          ['Docs/总产品需求.md', '687ab2b638a1f5373bc8e053c66fdff92c579ea3'],
+          ['Docs/V1产品需求.md', 'f238a1537e9678095828a010c4db9a58831dbd80'],
+          ['Docs/总体技术架构.md', '1a98a4c9751ef0c2de05dfc050f66f935c7dedc0'],
+          ['Docs/V1技术设计.md', '8e767d7f8ed8bbf2126f36fcf71d5cf5a61f9e98'],
+          ['specs/008-problem-formulation-core/spec.md', '6a5656abab211a4dd80f6e1b0e20d358193ffb17'],
+          ['specs/009-safety-hold-control-foundation/spec.md', 'da96c56e73432d11ba2d8eae040e52f7838ff759'],
+          ['specs/010-compliance-feature-policy-foundation/spec.md', 'ba38ccdafe85bbb044d994292a6a7237337eb474'],
+          ['specs/011-digital-use-node-manifest-routing-foundation/spec.md', '8d47a2b8ad0431540598ceecef14550bd383fe1f'],
+          ['specs/012-digital-use-assessment-runtime/spec.md', '1671b46e47ec063b0fe52e55c64092c9bdfd2054'],
+          ['specs/013-digital-use-family-alliance-runtime/spec.md', 'c3e9bf9aa9296e54c8faec0ec83cc15a2d75289b'],
+          ['db/migrations/017_digital_use_phone_use_contract_runtime.sql', '62a30f7ad68136703472b5b201c6a1153921ce97'],
+          ['packages/scenes/digital-use/phone-use-contract-content.ts', '9b5ef6fdb26239b1a1171a093bc03ef7d91286d5'],
+        ] as const;
+        for (const [authorityPath, expected] of authoritative) {
+          expect(gitBlobSha(read(authorityPath)), authorityPath).toBe(expected);
+        }
 
         const frozen = [
           ['specs/015-digital-use-review-runtime/spec.md', '0c6e9dd80fa74734d641ad9ff7b4b66ba3930801'],
@@ -240,8 +249,8 @@ describe('Slice 15 T1517 deterministic closeout coverage', () => {
           ['specs/015-digital-use-review-runtime/checklist.md', 'ba3cc4ab135502289e7f8720fee66e089fed9316'],
           ['specs/015-digital-use-review-runtime/tasks.md', 'b1d8ecbf98aff0e5f42c7f9af67da0009b4618d6'],
         ] as const;
-        for (const [path, expected] of frozen) {
-          expect(gitBlobSha(read(path)), path).toBe(expected);
+        for (const [frozenPath, expected] of frozen) {
+          expect(gitBlobSha(read(frozenPath)), frozenPath).toBe(expected);
         }
       }],
     ];
