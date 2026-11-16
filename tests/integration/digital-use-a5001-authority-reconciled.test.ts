@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
-import { recordObservation, recordStatement } from '@xiaoshuyin/domain';
+import { recordObservation, recordStatement, reviseDigitalUseTargetItem } from '@xiaoshuyin/domain';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import { createAdminPool } from '../setup/db.js';
 import {
@@ -495,6 +495,85 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     ]);
     expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
     expect((await counts(f)).artifacts).toBe(1);
+  });
+
+  it('T1511 target revision race cannot last-write-win against an exact A5001 subject', async () => {
+    const f = await fixture('target-drift-barrier');
+    const selected = f.scene.targets.find((target: any) => target.selected);
+    expect(selected).toBeTruthy();
+
+    const blocker = await appDb.connect();
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('SELECT app.set_identity_context($1,$2)', [
+        f.manager.accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await blocker.query('SELECT app.set_family_context($1,$2,$3)', [
+        f.familyId,
+        f.manager.personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await reviseDigitalUseTargetItem(blocker, {
+        familyId: f.familyId,
+        caseId: f.caseId,
+        scenePackageVersion: 'v1',
+        targetCode: selected.targetCode,
+        expectedSelectionRevision: f.scene.targetSelectionRevision,
+        expectedTargetRevision: selected.revision,
+        createdByPersonId: f.manager.personId,
+        patch: {
+          concreteTargetText: 'Concurrent target revision committed before review subject lock.',
+        },
+      });
+
+      const review = submit(
+        f,
+        `slice15-a5001-target-drift-barrier-${crypto.randomUUID()}`
+      );
+      // The review acquires Family/Case locks, then waits behind the target row
+      // revision writer. Commit the authoritative target revision and release it.
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      await blocker.query('COMMIT');
+
+      const result = await review;
+      expect(result.statusCode, result.body).toBe(409);
+      expect(result.json().code).toBe('STALE_TARGET_REVISION');
+      expect((await counts(f)).artifacts).toBe(0);
+    } catch (error) {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      blocker.release();
+    }
+  });
+
+  it('T1511 package authority drift at commit-time barrier rolls back all A5001 truth', async () => {
+    const f = await fixture('package-drift-barrier');
+    professional.restore('FAMILY_ALLIANCE_REVIEW');
+    const barrier = professional.pauseNextRevalidation('FAMILY_ALLIANCE_REVIEW');
+
+    const request = submit(
+      f,
+      `slice15-a5001-package-drift-barrier-${crypto.randomUUID()}`
+    );
+    await barrier.reached;
+    professional.setNextRevalidationDrift(
+      'FAMILY_ALLIANCE_REVIEW',
+      'RETIRED'
+    );
+    barrier.release();
+
+    const result = await request;
+    expect(result.statusCode, result.body).toBe(503);
+    expect(result.json().code).toBe('DEPENDENCY_UNAVAILABLE');
+    const after = await counts(f);
+    expect(after.artifacts).toBe(0);
+    expect(after.nodes).toBe(0);
+    expect(after.events).toBe(0);
+    expect(after.audits).toBe(0);
+    expect(after.idempotency).toBe(0);
+    professional.restore('FAMILY_ALLIANCE_REVIEW');
   });
 
   it('package retirement at commit-time rolls back artifact, Scene state, audit/event and idempotency', async () => {
