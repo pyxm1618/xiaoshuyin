@@ -58,7 +58,11 @@ export interface KeyFactor {
   evidenceRefs: EvidenceRef[];
 }
 
-export type UnknownState = 'UNKNOWN' | 'NOT_COLLECTED' | 'DECLINED';
+export type UnknownState =
+  | 'UNKNOWN'
+  | 'NOT_COLLECTED'
+  | 'DECLINED'
+  | 'NOT_APPLICABLE';
 
 export interface UnknownItem {
   topic: string;
@@ -523,7 +527,8 @@ export async function resolveEvidenceRefs(
       const unknownState: UnknownState | null =
         row.value_state === 'UNKNOWN' ||
         row.value_state === 'NOT_COLLECTED' ||
-        row.value_state === 'DECLINED'
+        row.value_state === 'DECLINED' ||
+        row.value_state === 'NOT_APPLICABLE'
           ? row.value_state
           : null;
       members.set(canonicalEvidenceKey(ref), {
