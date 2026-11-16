@@ -184,18 +184,30 @@ export interface RoleplayCommandContext {
 export async function createPhoneUseRoleplay(
  pool:pg.Pool,
  input:RoleplayCommandContext & {readonly professionalContentVersion:string},
- adapter:RoleplayAdapter=unavailableProductionRoleplayAdapter
+ adapter:RoleplayAdapter=unavailableProductionRoleplayAdapter,
+ professionalContentAuthority?:RoleplayProfessionalContentAuthority
 ){
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   await authorizeRoleplay(tx,input);
-   if(input.professionalContentVersion!==PHONE_USE_CONTRACT_CONTENT_VERSION) throw roleplayError('PHONE_USE_CONTRACT_CONTENT_STALE');
+   const {scene}=await authorizeRoleplay(tx,input);
    const compliance=await assertRoleplayCompliance(tx,input.actor.personId);
-   await requireAdapterAvailable(adapter);
+
+   const professionalContent=requireProfessionalContentAuthority(
+     input.professionalContentVersion,
+     professionalContentAuthority
+   );
+   if(professionalContent===null){
+     return recordRoleplayHold(tx,scene,'PROFESSIONAL_CONTENT_UNAVAILABLE');
+   }
+   if(!(await adapterAvailable(adapter,professionalContent.version))){
+     return recordRoleplayHold(tx,scene,'DOWNSTREAM_AI_UNAVAILABLE');
+   }
+
    const requestHash=hashPayload({
      familyId:input.familyId,caseId:input.caseId,expectedCaseVersion:input.expectedCaseVersion,
-     professionalContentVersion:input.professionalContentVersion,
+     professionalContentVersion:professionalContent.version,
+     professionalContentAuthorityRef:professionalContent.authorityRef,
    });
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
@@ -204,7 +216,7 @@ export async function createPhoneUseRoleplay(
      const row=await insertRoleplaySession(tx,{
        familyId:input.familyId,caseId:input.caseId,actorPersonId:input.actor.personId,
        scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
-       professionalContentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,
+       professionalContentVersion:professionalContent.version,
        compliancePolicyRef:`${compliance.featureCode}@${compliance.featureContractRevision}:policy-${compliance.policyVersion ?? 'none'}`,
        adapterRef:adapter.adapterRef,
      });
