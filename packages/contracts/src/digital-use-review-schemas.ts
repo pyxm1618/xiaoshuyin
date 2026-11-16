@@ -53,7 +53,7 @@ export const ProfessionalReviewProvenance = z.discriminatedUnion('kind', [
 export type ProfessionalReviewProvenanceType =
   z.infer<typeof ProfessionalReviewProvenance>;
 
-const PackageOwnedNormalizedResponse = z.record(
+const PackageOwnedResponse = z.record(
   z.string().min(1).max(160),
   z.unknown()
 );
@@ -78,7 +78,7 @@ export const A5001FamilyAllianceReviewSubmission = z.strictObject({
   kind: z.literal('FAMILY_ALLIANCE_REVIEW'),
   subject: A5001FamilyAllianceSubjectExpectation,
   professionalPackage: ProfessionalReviewPackageExpectation,
-  normalizedResponse: PackageOwnedNormalizedResponse,
+  packageResponse: PackageOwnedResponse,
   evidenceRefs: z.array(ProfessionalReviewEvidenceRef).max(100).default([]),
   provenance: z.array(ProfessionalReviewProvenance).max(100).default([]),
 });
@@ -98,7 +98,7 @@ export const A5002PhoneUseContractReviewSubmission = z.strictObject({
   kind: z.literal('PHONE_USE_CONTRACT_REVIEW'),
   subject: A5002PhoneUseContractSubject,
   professionalPackage: ProfessionalReviewPackageExpectation,
-  normalizedResponse: PackageOwnedNormalizedResponse,
+  packageResponse: PackageOwnedResponse,
   evidenceRefs: z.array(ProfessionalReviewEvidenceRef).max(100).default([]),
   provenance: z.array(ProfessionalReviewProvenance).max(100).default([]),
 });
