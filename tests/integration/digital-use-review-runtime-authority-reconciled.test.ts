@@ -1046,6 +1046,88 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     });
   });
 
+  it('T1509 valid Professional package cannot override same-Family participant privilege', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const target = await prepareA5001(app, 'a5001-participant-auth');
+    const participant = await loginWithLabel(app, 'slice15-participant-auth');
+    const participantOwnFamily = await createFamily(
+      app,
+      participant.token,
+      'slice15-participant-own'
+    );
+    expect(participantOwnFamily.statusCode, participantOwnFamily.body).toBe(201);
+    await admin.query(
+      `INSERT INTO family_members (family_id,person_id)
+       VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+      [target.f.familyId, participant.personId]
+    );
+    const tokenHash = crypto.randomUUID().replaceAll('-', '').padEnd(64, '0');
+    await admin.query(
+      `INSERT INTO case_participants
+         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,
+          created_by_person_id,accepted_at)
+       VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())`,
+      [
+        target.f.familyId,
+        target.f.caseId,
+        participant.personId,
+        tokenHash,
+        target.f.manager.personId,
+      ]
+    );
+
+    const result = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${target.f.caseId}/scene/nodes/A5001/responses`,
+      headers: {
+        ...auth(participant.token),
+        'idempotency-key': `a5001-participant-${crypto.randomUUID()}`,
+      },
+      payload: {
+        expectedCaseVersion: target.f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: target.scene.targetSelectionRevision,
+        response: target.payload,
+      },
+    });
+    expect(result.statusCode).toBe(404);
+    expect(result.json()).toMatchObject({ code: 'CASE_NOT_FOUND' });
+    expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
+      artifacts: 0,
+      completed: 0,
+      events: 0,
+    });
+  });
+
+  it('T1509 provenance labels cannot fabricate child-authored input without Evidence-owner proof', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const target = await prepareA5001(app, 'a5001-provenance-forgery');
+    const forged = {
+      ...target.payload,
+      evidenceRefs: [],
+      provenance: [{
+        kind: 'CHILD_AUTHORED_INPUT',
+        sourcePersonId: crypto.randomUUID(),
+        sourceMessageId: crypto.randomUUID(),
+      }],
+    };
+    const result = await submitA5001(
+      app,
+      target.f,
+      target.scene,
+      forged,
+      `a5001-forged-child-${crypto.randomUUID()}`
+    );
+    expect(result.statusCode).toBe(422);
+    expect(result.json()).toMatchObject({ code: 'SCENE_RESPONSE_INVALID' });
+    expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
+      artifacts: 0,
+      completed: 0,
+      events: 0,
+    });
+  });
+
   it('T1509 valid Professional package cannot override DISABLED account authority', async () => {
     provider.restore('FAMILY_ALLIANCE_REVIEW');
     const target = await prepareA5001(app, 'a5001-disabled-account');
