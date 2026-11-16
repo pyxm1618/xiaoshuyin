@@ -57,38 +57,78 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
   let appDb: pg.Pool;
   let migrator: pg.Client;
 
+  const compliancePolicyTestLockKey = (featureCode: string) =>
+    `test:compliance-policy:${featureCode}:v1`;
+
   async function ensureBaselinePolicy(featureCode: string): Promise<void> {
-    await migrator.query(
-      'SELECT pg_advisory_lock(hashtextextended($1,0))',
-      [`slice15-authority-reconciled:${featureCode}`]
+    const current = await migrator.query<{
+      policy_version: number;
+      anthropomorphic_applicability: string;
+      minor_access_rule: string;
+      ai_disclosure_rule: string;
+      generated_content_label_rule: string;
+      usage_reminder_rule: string;
+    }>(
+      `SELECT policy_version,anthropomorphic_applicability,minor_access_rule,
+              ai_disclosure_rule,generated_content_label_rule,usage_reminder_rule
+         FROM compliance_feature_policies
+        WHERE feature_code=$1
+          AND feature_contract_revision='v1'
+          AND superseded_by_policy_id IS NULL
+        ORDER BY policy_version DESC
+        LIMIT 1`,
+      [featureCode]
     );
-    try {
-      const current = await migrator.query<{ n: number }>(
-        `SELECT count(*)::int AS n
-           FROM compliance_feature_policies
-          WHERE feature_code=$1
-            AND feature_contract_revision='v1'
-            AND superseded_by_policy_id IS NULL`,
-        [featureCode]
-      );
-      if ((current.rows[0]?.n ?? 0) > 0) return;
-      await migrator.query(
-        `SELECT app.publish_compliance_feature_policy(
-           $1,'v1',NULL,1,
-           'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
-           $2,$3,now() - interval '1 minute',$4
-         )`,
-        [
-          featureCode,
-          `Slice 15 authority-reconciled test basis for ${featureCode}`,
-          `evidence://slice15/authority-reconciled/${featureCode}`,
-          `migration:slice15-authority-reconciled-${featureCode}`,
-        ]
-      );
-    } finally {
-      await migrator.query(
-        'SELECT pg_advisory_unlock(hashtextextended($1,0))',
-        [`slice15-authority-reconciled:${featureCode}`]
+    const row = current.rows[0] ?? null;
+    if (
+      row !== null &&
+      row.anthropomorphic_applicability === 'NOT_APPLICABLE' &&
+      row.minor_access_rule === 'BASELINE' &&
+      row.ai_disclosure_rule === 'BASELINE' &&
+      row.generated_content_label_rule === 'BASELINE' &&
+      row.usage_reminder_rule === 'BASELINE'
+    ) {
+      return;
+    }
+
+    const max = await migrator.query<{ max_version: number | null }>(
+      `SELECT max(policy_version)::int AS max_version
+         FROM compliance_feature_policies
+        WHERE feature_code=$1
+          AND feature_contract_revision='v1'`,
+      [featureCode]
+    );
+    const nextVersion = (max.rows[0]?.max_version ?? 0) + 1;
+    await migrator.query(
+      `SELECT app.publish_compliance_feature_policy(
+         $1,'v1',$2,$3,
+         'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+         $4,$5,now() - interval '1 minute',$6
+       )`,
+      [
+        featureCode,
+        row?.policy_version ?? null,
+        nextVersion,
+        `Slice 15 authority-reconciled test basis for ${featureCode}`,
+        `evidence://slice15/authority-reconciled/${featureCode}`,
+        `test:slice15-authority-reconciled:${featureCode}:${nextVersion}`,
+      ]
+    );
+  }
+
+  async function clearCompliancePolicyFixture(featureCode: string): Promise<void> {
+    const { rows } = await admin.query<{ id: string }>(
+      `SELECT id
+         FROM compliance_feature_policies
+        WHERE feature_code=$1
+          AND feature_contract_revision='v1'
+        ORDER BY policy_version ASC`,
+      [featureCode]
+    );
+    for (const row of rows) {
+      await admin.query(
+        'DELETE FROM compliance_feature_policies WHERE id=$1',
+        [row.id]
       );
     }
   }
@@ -106,11 +146,29 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       connectionString: process.env['MIGRATION_DATABASE_URL'],
     });
     await migrator.connect();
-    await ensureBaselinePolicy('DIGITAL_USE_ASSESSMENT_RUNTIME');
-    await ensureBaselinePolicy('DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME');
+    for (const featureCode of [
+      'DIGITAL_USE_ASSESSMENT_RUNTIME',
+      'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME',
+    ] as const) {
+      await migrator.query(
+        'SELECT pg_advisory_lock(hashtextextended($1,0))',
+        [compliancePolicyTestLockKey(featureCode)]
+      );
+      await ensureBaselinePolicy(featureCode);
+    }
   });
 
   afterAll(async () => {
+    for (const featureCode of [
+      'DIGITAL_USE_ASSESSMENT_RUNTIME',
+      'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME',
+    ] as const) {
+      await clearCompliancePolicyFixture(featureCode).catch(() => undefined);
+      await migrator.query(
+        'SELECT pg_advisory_unlock(hashtextextended($1,0))',
+        [compliancePolicyTestLockKey(featureCode)]
+      ).catch(() => undefined);
+    }
     await appDb.end().catch(() => undefined);
     await migrator.end().catch(() => undefined);
     await admin.end().catch(() => undefined);
