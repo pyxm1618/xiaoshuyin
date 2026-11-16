@@ -582,17 +582,19 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
          FOR EACH ROW EXECUTE FUNCTION ${fn}()`
     );
     const before = await counts(f);
+    const key = `slice15-a5001-atomic-${crypto.randomUUID()}`;
     try {
-      const result = await submit(
-        f,
-        `slice15-a5001-atomic-${crypto.randomUUID()}`
-      );
+      const result = await submit(f, key);
       expect(result.statusCode).toBe(500);
     } finally {
       await admin.query(`DROP TRIGGER IF EXISTS ${trigger} ON case_events`);
       await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
     }
     expect(await counts(f)).toEqual(before);
+
+    const retry = await submit(f, key);
+    expect(retry.statusCode, retry.body).toBe(200);
+    expect((await counts(f)).artifacts).toBe(1);
   });
 
   it('T1509 accepts child-authored input only when exact Case participation and Evidence-owner proof agree', async () => {
