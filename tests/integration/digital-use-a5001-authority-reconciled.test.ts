@@ -443,6 +443,25 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
   });
 
+  it('same key canonical-equivalent wire response replays the original Scene body', async () => {
+    const f = await fixture('idempotency-normalized-equivalent');
+    const key = `slice15-a5001-idem-normalized-${crypto.randomUUID()}`;
+    const request = payload(f);
+    const first = await submit(f, key, request);
+    expect(first.statusCode, first.body).toBe(200);
+
+    const equivalent = await submit(f, key, {
+      ...request,
+      packageResponse: {
+        ...request.packageResponse,
+        note: `  ${String(request.packageResponse.note)}  `,
+      },
+    });
+    expect(equivalent.statusCode, equivalent.body).toBe(200);
+    expect(equivalent.json()).toEqual(first.json());
+    expect(equivalent.json()).not.toHaveProperty('__preparedIdempotencyV1');
+  });
+
   it('same Scene revision permits exactly one writer', async () => {
     const f = await fixture('concurrency');
     const exact = f.scene;
