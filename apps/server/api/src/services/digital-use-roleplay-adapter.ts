@@ -16,10 +16,37 @@ export interface RoleplayProfessionalContentAuthority {
   readonly authorityRef: string;
 }
 
+/**
+ * A4003-only current Model / Prompt authority.
+ *
+ * This is intentionally narrower than the future TaskModelRegistry. It is a
+ * server-side authority seam only: production has no implicit/default approval,
+ * while tests may inject deterministic current authority.
+ */
+export interface RoleplayModelPromptAuthority {
+  readonly model: {
+    readonly status: 'CURRENT_APPROVED';
+    readonly modelRef: string;
+    readonly authorityRef: string;
+  } | null;
+  readonly prompt: {
+    readonly status: 'CURRENT_APPROVED';
+    readonly promptVersionRef: string;
+    readonly authorityRef: string;
+  } | null;
+}
+
+export type RoleplayModelPromptAuthorityProvider =
+  () => Promise<RoleplayModelPromptAuthority | null>;
+
 export interface RoleplayCapabilityContext {
   readonly scenePackageVersion: string;
   readonly professionalContentVersion: string;
   readonly featureCode: 'DIGITAL_USE_ROLEPLAY_A4003';
+  readonly expectedModelRef: string;
+  readonly expectedPromptVersionRef: string;
+  readonly modelAuthorityRef: string;
+  readonly promptAuthorityRef: string;
 }
 
 export interface RoleplayTurnInput {
@@ -29,6 +56,10 @@ export interface RoleplayTurnInput {
   readonly actorPersonId: string;
   readonly scenePackageVersion: string;
   readonly professionalContentVersion: string;
+  readonly expectedModelRef: string;
+  readonly expectedPromptVersionRef: string;
+  readonly modelAuthorityRef: string;
+  readonly promptAuthorityRef: string;
 }
 
 export interface RoleplayTurnOutput {

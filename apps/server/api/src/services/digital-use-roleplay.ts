@@ -48,6 +48,7 @@ import { assertNodeCasePreconditions, requireResolvedRoute } from './digital-use
 import {
   unavailableProductionRoleplayAdapter,
   type RoleplayAdapter,
+  type RoleplayModelPromptAuthorityProvider,
   type RoleplayProfessionalContentAuthority,
 } from './digital-use-roleplay-adapter.js';
 import type { DigitalUseActor } from './digital-use-assessment.js';
@@ -127,6 +128,37 @@ function requireProfessionalContentAuthority(
   return authority;
 }
 
+interface CurrentRoleplayModelPromptBinding {
+ readonly modelRef:string;
+ readonly promptVersionRef:string;
+ readonly modelAuthorityRef:string;
+ readonly promptAuthorityRef:string;
+}
+
+async function resolveCurrentRoleplayModelPromptAuthority(
+ provider:RoleplayModelPromptAuthorityProvider|undefined
+):Promise<CurrentRoleplayModelPromptBinding|null>{
+ if(provider===undefined) return null;
+ const authority=await provider();
+ if(
+  authority===null
+  || authority.model===null
+  || authority.prompt===null
+  || authority.model.status!=='CURRENT_APPROVED'
+  || authority.prompt.status!=='CURRENT_APPROVED'
+  || authority.model.modelRef.trim().length===0
+  || authority.prompt.promptVersionRef.trim().length===0
+  || authority.model.authorityRef.trim().length===0
+  || authority.prompt.authorityRef.trim().length===0
+ ) return null;
+ return {
+  modelRef:authority.model.modelRef,
+  promptVersionRef:authority.prompt.promptVersionRef,
+  modelAuthorityRef:authority.model.authorityRef,
+  promptAuthorityRef:authority.prompt.authorityRef,
+ };
+}
+
 function assertRoleplaySessionCurrent(
  session:{
   scene_package_version:string;
@@ -144,12 +176,17 @@ function assertRoleplaySessionCurrent(
 
 async function adapterAvailable(
  adapter:RoleplayAdapter,
- professionalContentVersion:string
+ professionalContentVersion:string,
+ modelPromptAuthority:CurrentRoleplayModelPromptBinding
 ):Promise<boolean>{
  return adapter.isAvailable({
    scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
    professionalContentVersion,
    featureCode:'DIGITAL_USE_ROLEPLAY_A4003',
+   expectedModelRef:modelPromptAuthority.modelRef,
+   expectedPromptVersionRef:modelPromptAuthority.promptVersionRef,
+   modelAuthorityRef:modelPromptAuthority.modelAuthorityRef,
+   promptAuthorityRef:modelPromptAuthority.promptAuthorityRef,
  });
 }
 
@@ -186,7 +223,8 @@ export async function createPhoneUseRoleplay(
  pool:pg.Pool,
  input:RoleplayCommandContext & {readonly professionalContentVersion:string},
  adapter:RoleplayAdapter=unavailableProductionRoleplayAdapter,
- professionalContentAuthority?:RoleplayProfessionalContentAuthority
+ professionalContentAuthority?:RoleplayProfessionalContentAuthority,
+ modelPromptAuthorityProvider?:RoleplayModelPromptAuthorityProvider
 ){
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
@@ -218,7 +256,20 @@ export async function createPhoneUseRoleplay(
          ),
        };
      }
-     if(!(await adapterAvailable(adapter,professionalContent.version))){
+     const modelPromptAuthority=await resolveCurrentRoleplayModelPromptAuthority(
+       modelPromptAuthorityProvider
+     );
+     if(modelPromptAuthority===null){
+       return {
+         status:200,
+         body:await recordRoleplayHold(tx,scene,'DOWNSTREAM_AI_UNAVAILABLE'),
+       };
+     }
+     if(!(await adapterAvailable(
+       adapter,
+       professionalContent.version,
+       modelPromptAuthority
+     ))){
        return {
          status:200,
          body:await recordRoleplayHold(tx,scene,'DOWNSTREAM_AI_UNAVAILABLE'),
@@ -243,7 +294,8 @@ export async function addPhoneUseRoleplayTurn(
  pool:pg.Pool,
  input:RoleplayCommandContext & {readonly sessionId:string;readonly expectedSessionRevision:number;readonly simulatedChildInput:string},
  adapter:RoleplayAdapter=unavailableProductionRoleplayAdapter,
- professionalContentAuthority?:RoleplayProfessionalContentAuthority
+ professionalContentAuthority?:RoleplayProfessionalContentAuthority,
+ modelPromptAuthorityProvider?:RoleplayModelPromptAuthorityProvider
 ){
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
@@ -259,16 +311,36 @@ export async function addPhoneUseRoleplayTurn(
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
      assertRoleplaySessionCurrent(session,professionalContentAuthority);
      if(session.status!=='OPEN'||session.revision!==input.expectedSessionRevision) throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
-     if(!(await adapterAvailable(adapter,session.professional_content_version))) {
+     const modelPromptAuthority=await resolveCurrentRoleplayModelPromptAuthority(
+       modelPromptAuthorityProvider
+     );
+     if(modelPromptAuthority===null) {
+       throw roleplayError('DOWNSTREAM_AI_UNAVAILABLE','Current roleplay Model / Prompt authority unavailable');
+     }
+     if(!(await adapterAvailable(
+       adapter,
+       session.professional_content_version,
+       modelPromptAuthority
+     ))) {
        throw roleplayError('DOWNSTREAM_AI_UNAVAILABLE');
      }
      const roundNumber=await nextRoleplayRound(tx,session.id);
      const generated=await adapter.createTurn({
        sessionId:session.id,roundNumber,simulatedChildInput:input.simulatedChildInput,actorPersonId:input.actor.personId,
        scenePackageVersion:session.scene_package_version,professionalContentVersion:session.professional_content_version,
+       expectedModelRef:modelPromptAuthority.modelRef,
+       expectedPromptVersionRef:modelPromptAuthority.promptVersionRef,
+       modelAuthorityRef:modelPromptAuthority.modelAuthorityRef,
+       promptAuthorityRef:modelPromptAuthority.promptAuthorityRef,
      });
      if(generated.adapterRef!==session.adapter_ref){
        throw roleplayError('PHONE_USE_CONTRACT_PACKAGE_DRIFT','Roleplay adapter provenance drift');
+     }
+     if(generated.modelRef!==modelPromptAuthority.modelRef){
+       throw roleplayError('PHONE_USE_CONTRACT_PACKAGE_DRIFT','Roleplay model provenance drift');
+     }
+     if(generated.promptVersionRef!==modelPromptAuthority.promptVersionRef){
+       throw roleplayError('PHONE_USE_CONTRACT_PACKAGE_DRIFT','Roleplay prompt provenance drift');
      }
      const turn=await insertRoleplayTurn(tx,{
        familyId:input.familyId,caseId:input.caseId,sessionId:session.id,roundNumber,
@@ -312,7 +384,8 @@ export async function ratePhoneUseRoleplay(
 export async function selectPhoneUseRoleplay(
  pool:pg.Pool,
  input:RoleplayCommandContext & {readonly sessionId:string;readonly turnId:string;readonly expectedSessionRevision:number;readonly expectedNodeRevision:number},
- professionalContentAuthority?:RoleplayProfessionalContentAuthority
+ professionalContentAuthority?:RoleplayProfessionalContentAuthority,
+ modelPromptAuthorityProvider?:RoleplayModelPromptAuthorityProvider
 ){
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
@@ -331,10 +404,22 @@ export async function selectPhoneUseRoleplay(
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
      assertRoleplaySessionCurrent(session,professionalContentAuthority);
+     const modelPromptAuthority=await resolveCurrentRoleplayModelPromptAuthority(
+       modelPromptAuthorityProvider
+     );
+     if(modelPromptAuthority===null) {
+       throw roleplayError('DOWNSTREAM_AI_UNAVAILABLE','Current roleplay Model / Prompt authority unavailable');
+     }
      if(correction&&session.status!=='COMPLETED') throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
      if(!correction&&session.status!=='OPEN') throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
      const turn=await getRoleplayTurn(tx,session.id,input.turnId);
      if(!turn) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
+     if(
+       turn.model_ref!==modelPromptAuthority.modelRef
+       || turn.prompt_version_ref!==modelPromptAuthority.promptVersionRef
+     ) {
+       throw roleplayError('PHONE_USE_CONTRACT_PACKAGE_DRIFT','Selected roleplay turn is not current Model / Prompt provenance');
+     }
      const selected=await selectRoleplayTurnCas(tx,{
        sessionId:session.id,expectedRevision:input.expectedSessionRevision,turnId:turn.id
      });
@@ -348,6 +433,10 @@ export async function selectPhoneUseRoleplay(
          roleplaySessionId:selected.id,selectedTurnId:turn.id,roundNumber:turn.round_number,
          provenance:'SIMULATION',actorPersonId:input.actor.personId,
          professionalContentVersion:selected.professional_content_version,
+         modelRef:turn.model_ref,
+         promptVersionRef:turn.prompt_version_ref,
+         modelAuthorityRef:modelPromptAuthority.modelAuthorityRef,
+         promptAuthorityRef:modelPromptAuthority.promptAuthorityRef,
        },
        ownerPersonId:input.actor.personId,sourceRefs:scene.input_refs,revision:previous===null?1:previous.revision+1,
        ...(previous?{supersedesId:previous.id}:{}),

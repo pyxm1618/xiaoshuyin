@@ -47,6 +47,7 @@ import {
 import {
   unavailableProductionRoleplayAdapter,
   type RoleplayAdapter,
+  type RoleplayModelPromptAuthorityProvider,
   type RoleplayProfessionalContentAuthority,
 } from '../services/digital-use-roleplay-adapter.js';
 
@@ -76,10 +77,12 @@ export function registerDigitalUsePhoneContractRoutes(
  app:FastifyInstance,pool:pg.Pool,options:{
   roleplayAdapter?:RoleplayAdapter;
   roleplayProfessionalContent?:RoleplayProfessionalContentAuthority;
+  roleplayModelPromptAuthority?:RoleplayModelPromptAuthorityProvider;
  }={}
 ){
  const roleplayAdapter=options.roleplayAdapter??unavailableProductionRoleplayAdapter;
  const roleplayProfessionalContent=options.roleplayProfessionalContent;
+ const roleplayModelPromptAuthority=options.roleplayModelPromptAuthority;
 
  app.get('/api/v1/cases/:id/digital-use/contract/template',{
   onRequest:app.authenticate,exposeHeadRoute:false,
@@ -156,7 +159,7 @@ export function registerDigitalUsePhoneContractRoutes(
   schema:{operationId:'createPhoneUseRoleplay',summary:'Create or recoverably hold an adult-only A4003 simulated-parent roleplay session',tags:TAGS,security:BEARER_SECURITY,params:CaseParams,body:CreatePhoneUseRoleplayRequest,response:{200:PhoneUseRoleplayHoldResponse,201:PhoneUseRoleplaySessionDto,...Errors}},
  },async(req,reply)=>{
   const actor=actorOf(req),caseId=caseIdOf((req.params as {id:string}).id),body=CreatePhoneUseRoleplayRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
-  const result=await createPhoneUseRoleplay(pool,{actor,familyId,caseId,idempotencyKey:readIdempotencyKey(req),...body},roleplayAdapter,roleplayProfessionalContent);
+  const result=await createPhoneUseRoleplay(pool,{actor,familyId,caseId,idempotencyKey:readIdempotencyKey(req),...body},roleplayAdapter,roleplayProfessionalContent,roleplayModelPromptAuthority);
   if (
     typeof result === 'object' &&
     result !== null &&
@@ -173,7 +176,7 @@ export function registerDigitalUsePhoneContractRoutes(
   if(operation==='turns'){
    app.post(path,{onRequest:app.authenticate,schema:{operationId:'addPhoneUseRoleplayTurn',summary:'Generate one simulated-parent roleplay turn',tags:TAGS,security:BEARER_SECURITY,params:RoleplayParams,body:CreatePhoneUseRoleplayTurnRequest,response:{201:PhoneUseRoleplayTurnDto,...Errors}}},async(req,reply)=>{
     const actor=actorOf(req),params=req.params as {id:string;sessionId:string},caseId=caseIdOf(params.id),body=CreatePhoneUseRoleplayTurnRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
-    return reply.status(201).send(await addPhoneUseRoleplayTurn(pool,{actor,familyId,caseId,sessionId:params.sessionId,idempotencyKey:readIdempotencyKey(req),...body},roleplayAdapter,roleplayProfessionalContent));
+    return reply.status(201).send(await addPhoneUseRoleplayTurn(pool,{actor,familyId,caseId,sessionId:params.sessionId,idempotencyKey:readIdempotencyKey(req),...body},roleplayAdapter,roleplayProfessionalContent,roleplayModelPromptAuthority));
    });
   }else if(operation==='rate'){
    app.post(path,{onRequest:app.authenticate,schema:{operationId:'ratePhoneUseRoleplayTurn',summary:'Rate one simulated roleplay turn',tags:TAGS,security:BEARER_SECURITY,params:RoleplayParams,body:RatePhoneUseRoleplayRequest,response:{200:PhoneUseRoleplayTurnDto,...Errors}}},async(req,reply)=>{
@@ -183,7 +186,7 @@ export function registerDigitalUsePhoneContractRoutes(
   }else{
    app.post(path,{onRequest:app.authenticate,schema:{operationId:'selectPhoneUseRoleplayTurn',summary:'Select one SIMULATION result and complete A4003 atomically',tags:TAGS,security:BEARER_SECURITY,params:RoleplayParams,body:SelectPhoneUseRoleplayRequest,response:{200:PhoneUseRoleplaySelectionResponse,...Errors}}},async(req,reply)=>{
     const actor=actorOf(req),params=req.params as {id:string;sessionId:string},caseId=caseIdOf(params.id),body=SelectPhoneUseRoleplayRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
-    return reply.status(200).send(await selectPhoneUseRoleplay(pool,{actor,familyId,caseId,sessionId:params.sessionId,idempotencyKey:readIdempotencyKey(req),...body},roleplayProfessionalContent));
+    return reply.status(200).send(await selectPhoneUseRoleplay(pool,{actor,familyId,caseId,sessionId:params.sessionId,idempotencyKey:readIdempotencyKey(req),...body},roleplayProfessionalContent,roleplayModelPromptAuthority));
    });
   }
  }

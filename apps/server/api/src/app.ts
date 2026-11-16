@@ -28,6 +28,7 @@ import { Slice4InvitationPort } from './identity-binding/invitation-slice4-adapt
 import type { InvitationResolutionPort } from './identity-binding/invitation-port.js';
 import type {
   RoleplayAdapter,
+  RoleplayModelPromptAuthorityProvider,
   RoleplayProfessionalContentAuthority,
 } from './services/digital-use-roleplay-adapter.js';
 
@@ -47,12 +48,14 @@ export interface BuildAppOptions {
     wechatProvider?: WechatAuthProvider;
   };
   /**
-   * Bounded A4003 test seams. Production has neither a roleplay adapter nor an
-   * assigned approved/published Professional Content package.
+   * Bounded A4003 test seams. Production has neither a roleplay adapter, an
+   * assigned approved/published Professional Content package, nor implicit
+   * current Model / Prompt authority.
    */
   phoneUseContract?: {
     roleplayAdapter?: RoleplayAdapter;
     roleplayProfessionalContent?: RoleplayProfessionalContentAuthority;
+    roleplayModelPromptAuthority?: RoleplayModelPromptAuthorityProvider;
   };
 }
 
@@ -178,6 +181,12 @@ export async function buildApp(options: BuildAppOptions = {}) {
       ? {
           roleplayProfessionalContent:
             options.phoneUseContract.roleplayProfessionalContent,
+        }
+      : {}),
+    ...(options.phoneUseContract?.roleplayModelPromptAuthority
+      ? {
+          roleplayModelPromptAuthority:
+            options.phoneUseContract.roleplayModelPromptAuthority,
         }
       : {}),
   });
