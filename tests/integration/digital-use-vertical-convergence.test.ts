@@ -455,6 +455,13 @@ describe('Digital Use vertical convergence', () => {
     expect(scene.nodes.find((node: any) => node.nodeCode === 'A2003')?.status)
       .toBe('AVAILABLE');
 
+    // Confirm through the real Common Core lifecycle. Subsequent Evidence
+    // supersession must still be able to re-enter triage from GOALS and mark
+    // this confirmed formulation for review rather than freezing the old route.
+    scene = await confirmCurrentFormulation(f);
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A2003')?.status)
+      .toBe('AVAILABLE');
+
     await withRlsTransaction(
       appPool,
       {
