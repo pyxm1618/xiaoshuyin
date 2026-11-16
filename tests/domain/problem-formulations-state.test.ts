@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  assertCaseGuards,
   assertStatusAllows,
   canonicalDependencies,
   canonicalEvidenceRefs,
@@ -17,6 +18,7 @@ import {
   ProblemFormulationError,
   assertProblemFormulationReviewCurrent,
   isProblemFormulationAuthoritativeExecutionBasis,
+  type CaseRow,
   type ProblemFormulationContent,
   type ProblemFormulationRow,
 } from '@xiaoshuyin/domain';
@@ -68,6 +70,32 @@ function row(overrides: Partial<ProblemFormulationRow> = {}): ProblemFormulation
 }
 
 describe('problem formulation state policy', () => {
+  it('uses the Common Core progression authority and denies WAITING ordinary progression', () => {
+    const baseCase = {
+      id: '55555555-5555-4555-8555-555555555555',
+      family_id: '33333333-3333-4333-8333-333333333333',
+      created_by_person_id: '66666666-6666-4666-8666-666666666666',
+      status: 'OPEN',
+      phase: 'ASSESSMENT',
+      is_primary: true,
+      version: 3,
+      created_at: new Date(),
+      updated_at: new Date(),
+    } satisfies CaseRow;
+
+    expect(() => assertCaseGuards(baseCase, 3, 'ASSESSMENT')).not.toThrow();
+
+    try {
+      assertCaseGuards({ ...baseCase, status: 'WAITING' }, 3, 'ASSESSMENT');
+      throw new Error('expected WAITING to be denied');
+    } catch (error) {
+      expect(error).toMatchObject({
+        name: 'ProblemFormulationError',
+        code: 'CASE_NOT_OPEN',
+      });
+    }
+  });
+
   it('accepts exactly the frozen legal transitions', () => {
     expect(() => assertStatusAllows('CONFIRM', 'PRESENTED')).not.toThrow();
     expect(() => assertStatusAllows('DISPUTE', 'PRESENTED')).not.toThrow();
