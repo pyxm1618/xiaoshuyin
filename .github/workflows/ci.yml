@@ -8,6 +8,7 @@ on:
 
 env:
   NODE_VERSION: '26.13.0'
+  BUN_VERSION: '1.4.4'
 
 jobs:
   static:
@@ -20,7 +21,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
       - run: bun install
       - name: Typecheck
         run: bun run typecheck
@@ -37,7 +38,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
       - run: bun install
       - name: Run unit tests
         run: bunx vitest run tests/domain
@@ -68,7 +69,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
       - run: bun install
       - name: Bootstrap roles
         run: bash db/init/01-roles.sh
@@ -113,7 +114,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
       - run: bun install
       - name: Bootstrap roles
         run: bash db/init/01-roles.sh
@@ -167,7 +168,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: ${{ env.BUN_VERSION }}
       - run: bun install
       - name: OpenAPI generate + check
         run: |
