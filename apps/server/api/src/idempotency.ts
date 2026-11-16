@@ -176,6 +176,7 @@ export async function runLockedIdempotentCommandInTransaction(
 interface PreparedIdempotencyReplayEnvelope {
   readonly __preparedIdempotencyV1: true;
   readonly replayDiscriminator: string;
+  readonly authorityDiscriminator: string;
   readonly body: unknown;
 }
 
@@ -187,6 +188,7 @@ function isPreparedReplayEnvelope(
   return (
     record['__preparedIdempotencyV1'] === true &&
     typeof record['replayDiscriminator'] === 'string' &&
+    typeof record['authorityDiscriminator'] === 'string' &&
     Object.prototype.hasOwnProperty.call(record, 'body')
   );
 }
@@ -195,6 +197,7 @@ export async function runPreparedIdempotentCommandInTransaction(
   tx: pg.PoolClient,
   cfg: Omit<IdempotentCommandConfig, 'requestHash'> & {
     readonly replayDiscriminator: string;
+    readonly authorityDiscriminator: string;
   },
   prepareRequestHash: (tx: pg.PoolClient) => Promise<string>,
   fn: (tx: pg.PoolClient) => Promise<CommandResponse>
@@ -213,20 +216,41 @@ export async function runPreparedIdempotentCommandInTransaction(
   );
   if (
     existing !== null &&
-    isPreparedReplayEnvelope(existing.response_body) &&
-    existing.response_body.replayDiscriminator === cfg.replayDiscriminator
+    isPreparedReplayEnvelope(existing.response_body)
   ) {
-    return {
-      action: 'REPLAY',
-      status: existing.response_status,
-      body: existing.response_body.body,
-    };
+    if (existing.response_body.replayDiscriminator === cfg.replayDiscriminator) {
+      return {
+        action: 'REPLAY',
+        status: existing.response_status,
+        body: existing.response_body.body,
+      };
+    }
+    if (
+      existing.response_body.authorityDiscriminator !==
+      cfg.authorityDiscriminator
+    ) {
+      return { action: 'MISMATCH' };
+    }
   }
 
   // A wire-different request is not automatically different canonically.
   // Current authority must normalize it first; only the normalized canonical
   // hash decides replay vs mismatch.
-  const requestHash = await prepareRequestHash(tx);
+  let requestHash: string;
+  try {
+    requestHash = await prepareRequestHash(tx);
+  } catch (error) {
+    if (
+      existing !== null &&
+      isPreparedReplayEnvelope(existing.response_body) &&
+      typeof error === 'object' &&
+      error !== null &&
+      (error as { code?: unknown }).code === 'DEPENDENCY_UNAVAILABLE'
+    ) {
+      return { action: 'MISMATCH' };
+    }
+    throw error;
+  }
   if (existing !== null) {
     const decision = decide(existing, requestHash);
     if (decision) {
@@ -248,6 +272,7 @@ export async function runPreparedIdempotentCommandInTransaction(
   const persisted: PreparedIdempotencyReplayEnvelope = {
     __preparedIdempotencyV1: true,
     replayDiscriminator: cfg.replayDiscriminator,
+    authorityDiscriminator: cfg.authorityDiscriminator,
     body: response.body,
   };
   await insertIdempotencyKey(
