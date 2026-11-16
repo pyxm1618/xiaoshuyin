@@ -5,6 +5,7 @@ import {
   createInterventionDefinitionCandidate,
   createInterventionDefinitionSuccessor,
   retireInterventionDefinition,
+  supersedeInterventionDefinition,
 } from '../../apps/server/api/src/services/intervention-definitions.js';
 import { createAdminPool } from '../setup/db.js';
 import {
@@ -328,6 +329,133 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
         TEST_ONLY_QUALIFICATION_PROVIDER
       )
     ).rejects.toMatchObject({ code: 'INTERVENTION_STAFF_AUTHORITY_INVALID' });
+  });
+
+
+  it('same idempotency key under a different actor cannot replay the first actor result', async () => {
+    await ensureActiveAssignment();
+    const sharedKey = 's16-cross-actor-' + crypto.randomUUID();
+    const first = await createInterventionDefinitionCandidate(
+      appPool,
+      {
+        actor: actor(),
+        sceneId: 'DIGITAL_USE',
+        interventionCode: code('ACTOR_ONE'),
+        semantic: interventionSemantic(),
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: sharedKey,
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    );
+
+    const account = await admin.query<{ id: string }>(
+      'INSERT INTO accounts (wechat_openid) VALUES ($1) RETURNING id',
+      ['s16-second-actor-' + crypto.randomUUID()]
+    );
+    const secondAccountId = account.rows[0]!.id;
+    const person = await admin.query<{ id: string }>(
+      'INSERT INTO persons (account_id,created_by_account_id) VALUES ($1,$1) RETURNING id',
+      [secondAccountId]
+    );
+    const secondPersonId = person.rows[0]!.id;
+    await admin.query(
+      "INSERT INTO staff_assignments " +
+        "(account_id,person_id,capability,scope_type,granted_by_account_id) " +
+        "VALUES ($1,$2,'PROFESSIONAL_REVIEW','GLOBAL',$1)",
+      [secondAccountId, secondPersonId]
+    );
+
+    try {
+      const second = await createInterventionDefinitionCandidate(
+        appPool,
+        {
+          actor: { accountId: secondAccountId, personId: secondPersonId },
+          sceneId: 'DIGITAL_USE',
+          interventionCode: code('ACTOR_TWO'),
+          semantic: interventionSemantic(),
+          approvalScope: 'DIGITAL_USE',
+          idempotencyKey: sharedKey,
+        },
+        TEST_ONLY_QUALIFICATION_PROVIDER
+      );
+      expect(second.id).not.toBe(first.id);
+      expect(second.createdByPersonId).toBe(secondPersonId);
+    } finally {
+      await admin.query(
+        'DELETE FROM business_audit_events WHERE actor_account_id=$1',
+        [secondAccountId]
+      ).catch(() => undefined);
+      await admin.query(
+        'DELETE FROM idempotency_keys WHERE actor_account_id=$1',
+        [secondAccountId]
+      ).catch(() => undefined);
+      await admin.query(
+        'DELETE FROM intervention_definitions WHERE created_by_person_id=$1',
+        [secondPersonId]
+      ).catch(() => undefined);
+      await admin.query(
+        'DELETE FROM staff_assignments WHERE account_id=$1',
+        [secondAccountId]
+      ).catch(() => undefined);
+      await admin.query('DELETE FROM persons WHERE id=$1', [secondPersonId])
+        .catch(() => undefined);
+      await admin.query('DELETE FROM accounts WHERE id=$1', [secondAccountId])
+        .catch(() => undefined);
+    }
+  });
+
+  it('supersede versus retire on the same revision has exactly one terminal winner', async () => {
+    await ensureActiveAssignment();
+    const interventionCode = code('TERMINAL_RACE');
+    const first = await createInterventionDefinitionCandidate(
+      appPool,
+      {
+        actor: actor(),
+        sceneId: 'DIGITAL_USE',
+        interventionCode,
+        semantic: interventionSemantic(),
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: key('terminal-pred'),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    );
+    const exact = {
+      id: first.id,
+      version: first.version,
+      contentHash: first.contentHash,
+      expectedRevision: first.revision,
+    };
+
+    const results = await Promise.allSettled([
+      retireInterventionDefinition(
+        appPool,
+        {
+          actor: actor(),
+          definition: exact,
+          approvalScope: 'DIGITAL_USE',
+          idempotencyKey: key('terminal-retire'),
+        },
+        TEST_ONLY_QUALIFICATION_PROVIDER
+      ),
+      supersedeInterventionDefinition(
+        appPool,
+        {
+          actor: actor(),
+          definition: exact,
+          approvalScope: 'DIGITAL_USE',
+          idempotencyKey: key('terminal-supersede'),
+        },
+        TEST_ONLY_QUALIFICATION_PROVIDER
+      ),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const row = await admin.query<{ definition_state: string; revision: number }>(
+      'SELECT definition_state,revision FROM intervention_definitions WHERE id=$1',
+      [first.id]
+    );
+    expect(['RETIRED', 'SUPERSEDED']).toContain(row.rows[0]!.definition_state);
+    expect(row.rows[0]!.revision).toBe(2);
   });
 
 });

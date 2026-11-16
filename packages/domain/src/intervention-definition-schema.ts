@@ -213,20 +213,11 @@ export function parseInterventionDefinitionSemanticPayload(value: unknown): Inte
   };
 }
 
-function canonicalNested(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalNested);
-  if (value === null || typeof value !== 'object') return value;
-  const input = value as Record<string, unknown>;
-  const output: Record<string, unknown> = {};
-  for (const key of Object.keys(input).sort()) output[key] = canonicalNested(input[key]);
-  return output;
-}
-
 export function canonicalInterventionDefinitionJson(payload: InterventionDefinitionSemanticPayload): string {
   return (
     '{' +
     INTERVENTION_DEFINITION_SEMANTIC_FIELDS.map(
-      (field) => JSON.stringify(field) + ':' + JSON.stringify(canonicalNested(payload[field]))
+      (field) => JSON.stringify(field) + ':' + JSON.stringify(payload[field])
     ).join(',') +
     '}'
   );
