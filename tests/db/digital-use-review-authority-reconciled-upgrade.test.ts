@@ -77,8 +77,25 @@ describe('Slice 15 022 -> 023 review runtime migration upgrade', () => {
         '022_foundation_remaining_consent_chain_integrity.sql'
       );
 
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+          filename   text PRIMARY KEY,
+          applied_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
       for (const filename of before) {
-        await applySql(client, filename);
+        await client.query('BEGIN');
+        try {
+          await applySql(client, filename);
+          await client.query(
+            'INSERT INTO schema_migrations (filename) VALUES ($1)',
+            [filename]
+          );
+          await client.query('COMMIT');
+        } catch (error) {
+          await client.query('ROLLBACK');
+          throw error;
+        }
       }
 
       const prior = await constraintDefinitions(client);
