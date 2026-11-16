@@ -130,7 +130,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     // Audit 2 remediation adds one forward supersession guard migration.
     expect(output).toContain('APPLY 014_consent_01004_cross_purpose_supersede_guard.sql');
-    expect(output).toMatch(/Migration complete: 19 new, 3 previously applied\./);
+    expect(output).toMatch(/Migration complete: 20 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -211,6 +211,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '019_auth_disabled_hard_disable.sql',
       '020_problem_formulation_review_state.sql',
       '021_safety_resolver_staff_authority.sql',
+      '022_foundation_remaining_consent_chain_integrity.sql',
     ]);
 
     // New Evidence schema exists.
@@ -320,7 +321,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 22 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 23 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
     expect(output).not.toContain('APPLY 005_case_participant_core.sql');
