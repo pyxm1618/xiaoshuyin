@@ -47,12 +47,32 @@ export const ProfessionalReviewProvenance = z.discriminatedUnion('kind', [
 export type ProfessionalReviewProvenanceType =
   z.infer<typeof ProfessionalReviewProvenance>;
 
-const PackageOwnedResponses = z.record(z.string().min(1).max(160), z.unknown());
+const PackageOwnedNormalizedResponse = z.record(
+  z.string().min(1).max(160),
+  z.unknown()
+);
+
+export const A5001FamilyAllianceSubjectExpectation = z.strictObject({
+  selectionRevision: z.number().int().min(1).max(PG_INTEGER_MAX),
+  selectedTargets: z.array(z.strictObject({
+    targetId: z.string().uuid(),
+    targetCode: z.string().trim().min(1).max(64),
+    targetRevision: z.number().int().min(1).max(PG_INTEGER_MAX),
+  })).min(1).max(20).refine(
+    (targets) =>
+      new Set(targets.map((target) => target.targetId)).size === targets.length &&
+      new Set(targets.map((target) => target.targetCode)).size === targets.length,
+    { message: 'selected target identities must be unique' }
+  ),
+});
+export type A5001FamilyAllianceSubjectExpectationType =
+  z.infer<typeof A5001FamilyAllianceSubjectExpectation>;
 
 export const A5001FamilyAllianceReviewSubmission = z.strictObject({
   kind: z.literal('FAMILY_ALLIANCE_REVIEW'),
+  subject: A5001FamilyAllianceSubjectExpectation,
   professionalPackage: ProfessionalReviewPackageExpectation,
-  responses: PackageOwnedResponses,
+  normalizedResponse: PackageOwnedNormalizedResponse,
   evidenceRefs: z.array(ProfessionalReviewEvidenceRef).max(100).default([]),
   provenance: z.array(ProfessionalReviewProvenance).max(100).default([]),
 });
@@ -72,7 +92,7 @@ export const A5002PhoneUseContractReviewSubmission = z.strictObject({
   kind: z.literal('PHONE_USE_CONTRACT_REVIEW'),
   subject: A5002PhoneUseContractSubject,
   professionalPackage: ProfessionalReviewPackageExpectation,
-  responses: PackageOwnedResponses,
+  normalizedResponse: PackageOwnedNormalizedResponse,
   evidenceRefs: z.array(ProfessionalReviewEvidenceRef).max(100).default([]),
   provenance: z.array(ProfessionalReviewProvenance).max(100).default([]),
 });
