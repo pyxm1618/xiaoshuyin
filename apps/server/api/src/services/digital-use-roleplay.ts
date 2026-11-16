@@ -179,6 +179,24 @@ function assertRoleplaySessionCurrent(
   ) throw roleplayError('PHONE_USE_CONTRACT_PACKAGE_DRIFT');
 }
 
+function modelPromptAuthorityHashBinding(
+ binding:CurrentRoleplayModelPromptBinding|null
+){
+ return binding===null
+  ? {status:'UNAVAILABLE' as const}
+  : {status:'CURRENT_APPROVED' as const,...binding};
+}
+
+function sameModelPromptBinding(
+ left:CurrentRoleplayModelPromptBinding,
+ right:CurrentRoleplayModelPromptBinding
+):boolean{
+ return left.modelRef===right.modelRef
+  && left.promptVersionRef===right.promptVersionRef
+  && left.modelAuthorityRef===right.modelAuthorityRef
+  && left.promptAuthorityRef===right.promptAuthorityRef;
+}
+
 async function adapterAvailable(
  adapter:RoleplayAdapter,
  professionalContentVersion:string,
@@ -236,21 +254,25 @@ export async function createPhoneUseRoleplay(
  },async tx=>{
    const {scene}=await authorizeRoleplay(tx,input);
    const compliance=await assertRoleplayCompliance(tx,input.actor.personId);
+   const professionalContent=requireProfessionalContentAuthority(
+     input.professionalContentVersion,
+     professionalContentAuthority
+   );
+   const authorityAtRequest=professionalContent===null
+     ? null
+     : await resolveCurrentRoleplayModelPromptAuthority(modelPromptAuthorityProvider);
 
    const requestHash=hashPayload({
      familyId:input.familyId,
      caseId:input.caseId,
      expectedCaseVersion:input.expectedCaseVersion,
      professionalContentVersion:input.professionalContentVersion,
+     modelPromptAuthority:modelPromptAuthorityHashBinding(authorityAtRequest),
    });
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_CREATE',idempotencyKey:input.idempotencyKey,requestHash,
    },async()=>{
-     const professionalContent=requireProfessionalContentAuthority(
-       input.professionalContentVersion,
-       professionalContentAuthority
-     );
      if(professionalContent===null){
        return {
          status:200,
@@ -264,11 +286,20 @@ export async function createPhoneUseRoleplay(
      const modelPromptAuthority=await resolveCurrentRoleplayModelPromptAuthority(
        modelPromptAuthorityProvider
      );
-     if(modelPromptAuthority===null){
+     if(
+       authorityAtRequest===null
+       || modelPromptAuthority===null
+     ){
        return {
          status:200,
          body:await recordRoleplayHold(tx,scene,'DOWNSTREAM_AI_UNAVAILABLE'),
        };
+     }
+     if(!sameModelPromptBinding(authorityAtRequest,modelPromptAuthority)){
+       throw roleplayError(
+         'PHONE_USE_CONTRACT_PACKAGE_DRIFT',
+         'Roleplay Model / Prompt authority changed during create'
+       );
      }
      if(!(await adapterAvailable(
        adapter,
@@ -307,7 +338,15 @@ export async function addPhoneUseRoleplayTurn(
  },async tx=>{
    const {scene}=await authorizeRoleplay(tx,input);
    await assertRoleplayCompliance(tx,input.actor.personId);
-   const requestHash=hashPayload({sessionId:input.sessionId,expectedSessionRevision:input.expectedSessionRevision,simulatedChildInput:input.simulatedChildInput});
+   const authorityAtRequest=await resolveCurrentRoleplayModelPromptAuthority(
+     modelPromptAuthorityProvider
+   );
+   const requestHash=hashPayload({
+     sessionId:input.sessionId,
+     expectedSessionRevision:input.expectedSessionRevision,
+     simulatedChildInput:input.simulatedChildInput,
+     modelPromptAuthority:modelPromptAuthorityHashBinding(authorityAtRequest),
+   });
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_TURN',idempotencyKey:input.idempotencyKey,requestHash,
@@ -319,11 +358,17 @@ export async function addPhoneUseRoleplayTurn(
      const modelPromptAuthority=await resolveCurrentRoleplayModelPromptAuthority(
        modelPromptAuthorityProvider
      );
-     if(modelPromptAuthority===null) {
+     if(authorityAtRequest===null||modelPromptAuthority===null) {
        return {
          status:200,
          body:await recordRoleplayHold(tx,scene,'DOWNSTREAM_AI_UNAVAILABLE'),
        };
+     }
+     if(!sameModelPromptBinding(authorityAtRequest,modelPromptAuthority)){
+       throw roleplayError(
+         'PHONE_USE_CONTRACT_PACKAGE_DRIFT',
+         'Roleplay Model / Prompt authority changed before generation'
+       );
      }
      if(!(await adapterAvailable(
        adapter,
@@ -422,8 +467,15 @@ export async function selectPhoneUseRoleplay(
    if(scene.revision!==input.expectedNodeRevision) throw roleplayError('STALE_NODE_REVISION');
    const correction=scene.status==='COMPLETED';
    await assertRoleplayCompliance(tx,input.actor.personId);
+   const authorityAtRequest=await resolveCurrentRoleplayModelPromptAuthority(
+     modelPromptAuthorityProvider
+   );
    const requestHash=hashPayload({
-     sessionId:input.sessionId,turnId:input.turnId,expectedSessionRevision:input.expectedSessionRevision,expectedNodeRevision:input.expectedNodeRevision
+     sessionId:input.sessionId,
+     turnId:input.turnId,
+     expectedSessionRevision:input.expectedSessionRevision,
+     expectedNodeRevision:input.expectedNodeRevision,
+     modelPromptAuthority:modelPromptAuthorityHashBinding(authorityAtRequest),
    });
    const outcome=await runIdempotentCommandInTransaction(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
@@ -435,7 +487,7 @@ export async function selectPhoneUseRoleplay(
      const modelPromptAuthority=await resolveCurrentRoleplayModelPromptAuthority(
        modelPromptAuthorityProvider
      );
-     if(modelPromptAuthority===null) {
+     if(authorityAtRequest===null||modelPromptAuthority===null) {
        if(correction) {
          throw roleplayError('DOWNSTREAM_AI_UNAVAILABLE','Current roleplay Model / Prompt authority unavailable');
        }
@@ -443,6 +495,12 @@ export async function selectPhoneUseRoleplay(
          status:200,
          body:await recordRoleplayHold(tx,scene,'DOWNSTREAM_AI_UNAVAILABLE'),
        };
+     }
+     if(!sameModelPromptBinding(authorityAtRequest,modelPromptAuthority)){
+       throw roleplayError(
+         'PHONE_USE_CONTRACT_PACKAGE_DRIFT',
+         'Roleplay Model / Prompt authority changed before selection'
+       );
      }
      if(correction&&session.status!=='COMPLETED') throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');
      if(!correction&&session.status!=='OPEN') throw roleplayError('PHONE_USE_CONTRACT_STALE_REVISION');

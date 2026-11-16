@@ -2151,6 +2151,100 @@ describe('T1218 Digital Use runtime hardening', () => {
     }
   );
 
+  it('A4003 idempotency cannot replay a stale turn after Model / Prompt authority rotation', async () => {
+    let currentModelRef='test-model:idempotency-v1';
+    let currentPromptVersionRef='test-prompt:idempotency-v1';
+    const authorityApp=await buildApp({
+      phoneUseContract:{
+        roleplayAdapter:{
+          adapterRef:'test:model-prompt-idempotency',
+          async isAvailable(){ return true; },
+          async createTurn(input){
+            return {
+              simulatedParentOutput:`simulated-parent:${input.simulatedChildInput}`,
+              adapterRef:'test:model-prompt-idempotency',
+              modelRef:input.expectedModelRef,
+              promptVersionRef:input.expectedPromptVersionRef,
+            };
+          },
+        },
+        roleplayProfessionalContent:{
+          status:'APPROVED_PUBLISHED',
+          version:'test-professional-roleplay-v1',
+          authorityRef:'test-authority:roleplay-v1',
+        },
+        roleplayModelPromptAuthority:async()=>({
+          model:{
+            status:'CURRENT_APPROVED',
+            modelRef:currentModelRef,
+            authorityRef:`test-authority:model:${currentModelRef}`,
+          },
+          prompt:{
+            status:'CURRENT_APPROVED',
+            promptVersionRef:currentPromptVersionRef,
+            authorityRef:`test-authority:prompt:${currentPromptVersionRef}`,
+          },
+        }),
+      },
+    });
+    await authorityApp.ready();
+    try{
+      const f=await fixture('s14-roleplay-idempotency-authority-rotation',authorityApp);
+      await forceSceneNode(f,'A4003');
+      const created=await authorityApp.inject({
+        method:'POST',
+        url:`/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+        headers:commandHeaders(f.manager.token,'s14-roleplay-idempotency-create'),
+        payload:{
+          expectedCaseVersion:f.caseVersion,
+          professionalContentVersion:'test-professional-roleplay-v1',
+        },
+      });
+      expect(created.statusCode,created.body).toBe(201);
+
+      const turnKey='s14-roleplay-idempotency-turn';
+      const turnRequest=()=>authorityApp.inject({
+        method:'POST',
+        url:`/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+        headers:commandHeaders(f.manager.token,turnKey),
+        payload:{
+          expectedCaseVersion:f.caseVersion,
+          expectedSessionRevision:created.json().revision,
+          simulatedChildInput:'Idempotency must bind to current authority.',
+        },
+      });
+
+      const v1=await turnRequest();
+      expect(v1.statusCode,v1.body).toBe(201);
+      expect(v1.json()).toMatchObject({
+        modelRef:'test-model:idempotency-v1',
+        promptVersionRef:'test-prompt:idempotency-v1',
+      });
+
+      currentModelRef='test-model:idempotency-v2';
+      currentPromptVersionRef='test-prompt:idempotency-v2';
+
+      const replayAfterRotation=await turnRequest();
+      expect(replayAfterRotation.statusCode,replayAfterRotation.body).toBe(409);
+      expect(replayAfterRotation.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+
+      const turns=await admin.query(
+        `SELECT id,model_ref,prompt_version_ref
+           FROM roleplay_turns
+          WHERE session_id=$1
+          ORDER BY round_number`,
+        [created.json().id]
+      );
+      expect(turns.rows).toEqual([{
+        id:v1.json().id,
+        model_ref:'test-model:idempotency-v1',
+        prompt_version_ref:'test-prompt:idempotency-v1',
+      }]);
+    }finally{
+      await authorityApp.close();
+    }
+  });
+
   it('A4003 keeps turn and select recoverable when current Model / Prompt authority disappears', async () => {
     let authorityAvailable = true;
     const currentAuthority = {
