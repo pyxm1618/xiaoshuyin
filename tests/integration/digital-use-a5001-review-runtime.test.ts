@@ -38,29 +38,40 @@ describe('Slice 15 A5001 FAMILY_ALLIANCE_REVIEW runtime', () => {
   let migrator: pg.Client;
 
   async function ensureBaselinePolicy(featureCode: string): Promise<void> {
-    const current = await migrator.query<{ n: number }>(
-      `SELECT count(*)::int AS n
-         FROM compliance_feature_policies
-        WHERE feature_code=$1
-          AND feature_contract_revision='v1'
-          AND superseded_by_policy_id IS NULL`,
-      [featureCode]
-    );
-    if ((current.rows[0]?.n ?? 0) > 0) return;
-
     await migrator.query(
-      `SELECT app.publish_compliance_feature_policy(
-         $1,'v1',NULL,1,
-         'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
-         $2,$3,now() - interval '1 minute',$4
-       )`,
-      [
-        featureCode,
-        `Slice 15 A5001 integration baseline for ${featureCode}`,
-        `evidence://slice15/a5001/${featureCode}`,
-        `migration:slice15-a5001-${featureCode}`,
-      ]
+      `SELECT pg_advisory_lock(hashtextextended($1,0))`,
+      [`slice15-test-policy:${featureCode}`]
     );
+    try {
+      const current = await migrator.query<{ n: number }>(
+        `SELECT count(*)::int AS n
+           FROM compliance_feature_policies
+          WHERE feature_code=$1
+            AND feature_contract_revision='v1'
+            AND superseded_by_policy_id IS NULL`,
+        [featureCode]
+      );
+      if ((current.rows[0]?.n ?? 0) > 0) return;
+
+      await migrator.query(
+        `SELECT app.publish_compliance_feature_policy(
+           $1,'v1',NULL,1,
+           'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+           $2,$3,now() - interval '1 minute',$4
+         )`,
+        [
+          featureCode,
+          `Slice 15 A5001 integration baseline for ${featureCode}`,
+          `evidence://slice15/a5001/${featureCode}`,
+          `migration:slice15-a5001-${featureCode}`,
+        ]
+      );
+    } finally {
+      await migrator.query(
+        `SELECT pg_advisory_unlock(hashtextextended($1,0))`,
+        [`slice15-test-policy:${featureCode}`]
+      );
+    }
   }
 
   beforeAll(async () => {
