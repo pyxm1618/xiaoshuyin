@@ -32,6 +32,7 @@ import {
   nextRoleplayRound,
   rateRoleplayTurnCas,
   selectRoleplayTurnCas,
+  type SceneNodeStateRow,
 } from '@xiaoshuyin/domain';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
@@ -154,7 +155,7 @@ async function adapterAvailable(
 
 async function recordRoleplayHold(
  tx:pg.PoolClient,
- scene:Awaited<ReturnType<typeof getSceneNodeState>> extends infer T ? NonNullable<T> : never,
+ scene:SceneNodeStateRow,
  reasonCode:'PROFESSIONAL_CONTENT_UNAVAILABLE'|'DOWNSTREAM_AI_UNAVAILABLE'
 ){
  const progressed=await casRecordSceneNodeProgress(tx,{
