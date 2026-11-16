@@ -115,11 +115,7 @@ export const A5002ReviewDimension = z.union([
 ]);
 export type A5002ReviewDimensionType = z.infer<typeof A5002ReviewDimension>;
 
-export const A5002ContractStatusAtReview = z.enum([
-  'ACTIVE',
-  'SUPERSEDED',
-  'PAUSED',
-]);
+export const A5002ContractStatusAtReview = z.literal('ACTIVE');
 
 export const A5002TriggerObservation = z.union([
   z.strictObject({
