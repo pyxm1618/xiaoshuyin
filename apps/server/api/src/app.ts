@@ -26,6 +26,7 @@ import {
 import type { WechatAuthProvider } from './auth/wechat-provider.js';
 import { Slice4InvitationPort } from './identity-binding/invitation-slice4-adapter.js';
 import type { InvitationResolutionPort } from './identity-binding/invitation-port.js';
+import type { PhoneUseStaticProfessionalContentAuthority } from './services/digital-use-phone-contract.js';
 import type {
   RoleplayAdapter,
   RoleplayModelPromptAuthorityProvider,
@@ -48,11 +49,11 @@ export interface BuildAppOptions {
     wechatProvider?: WechatAuthProvider;
   };
   /**
-   * Bounded A4003 test seams. Production has neither a roleplay adapter, an
-   * assigned approved/published Professional Content package, nor implicit
-   * current Model / Prompt authority.
+   * Bounded Phone Contract authority seams. Production has neither an assigned
+   * static Professional Content package nor A4003 roleplay/model/prompt authority.
    */
   phoneUseContract?: {
+    staticProfessionalContent?: PhoneUseStaticProfessionalContentAuthority;
     roleplayAdapter?: RoleplayAdapter;
     roleplayProfessionalContent?: RoleplayProfessionalContentAuthority;
     roleplayModelPromptAuthority?: RoleplayModelPromptAuthorityProvider;
@@ -174,6 +175,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerProblemFormulationRoutes(app, pool);
   registerDigitalUseAssessmentRoutes(app, pool, { evidencePepper: runtime.evidencePepper });
   registerDigitalUsePhoneContractRoutes(app, pool, {
+    ...(options.phoneUseContract?.staticProfessionalContent
+      ? { staticProfessionalContent: options.phoneUseContract.staticProfessionalContent }
+      : {}),
     ...(options.phoneUseContract?.roleplayAdapter
       ? { roleplayAdapter: options.phoneUseContract.roleplayAdapter }
       : {}),
