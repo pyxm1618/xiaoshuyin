@@ -898,6 +898,126 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     }
   });
 
+  it('T1511 A5002 rechecks Compliance and Consent independently with no review residue', async () => {
+    {
+      const f = await fixture('compliance-profile');
+      const scene = await getScene(f);
+      await admin.query(
+        `DELETE FROM person_compliance_profiles WHERE person_id=$1`,
+        [f.manager.personId]
+      );
+      const result = await submit(
+        f,
+        scene,
+        `a5002-compliance-${crypto.randomUUID()}`
+      );
+      expect(result.statusCode).toBe(409);
+      expect(result.json().code).toBe('COMPLIANCE_BLOCKED');
+      expect((await counts(f)).artifacts).toBe(0);
+    }
+
+    {
+      const f = await fixture('consent-missing');
+      const scene = await getScene(f);
+      await admin.query(
+        `UPDATE person_compliance_profiles
+            SET age_band='UNDER_14',
+                minor_mode=true,
+                guardian_person_id=$2,
+                guardian_consent_record_id=NULL,
+                guardian_consent_version=NULL,
+                verified_source='GUARDIAN_RELAY',
+                updated_at=now()
+          WHERE person_id=$1`,
+        [f.child.personId, f.manager.personId]
+      );
+      const result = await submit(
+        f,
+        scene,
+        `a5002-consent-${crypto.randomUUID()}`
+      );
+      expect(result.statusCode).toBe(409);
+      expect(result.json().code).toBe('PHONE_USE_CONTRACT_CONSENT_BLOCKED');
+      expect((await counts(f)).artifacts).toBe(0);
+    }
+  });
+
+  it('AS-49/50 A5002 USER_TIMELINE_REVIEW appends same-Contract history and reruns current gates', async () => {
+    const f = await fixture('same-contract-reentry');
+    const firstScene = await getScene(f);
+    const first = await submit(
+      f,
+      firstScene,
+      `a5002-reentry-1-${crypto.randomUUID()}`,
+      payload(f, 'first')
+    );
+    expect(first.statusCode, first.body).toBe(200);
+
+    const secondScene = await getScene(f);
+    expect(
+      secondScene.reachableNodes.some((item: any) => item.nodeCode === 'A5002')
+    ).toBe(true);
+    const second = await submit(
+      f,
+      secondScene,
+      `a5002-reentry-2-${crypto.randomUUID()}`,
+      payload(f, 'second')
+    );
+    expect(second.statusCode, second.body).toBe(200);
+
+    const history = await admin.query<{
+      id: string;
+      revision: number;
+      supersedes_id: string | null;
+      data: any;
+    }>(
+      `SELECT id,revision,supersedes_id,data
+         FROM scene_artifacts
+        WHERE case_id=$1
+          AND artifact_type='DIGITAL_USE_A5002_EFFECT_EVALUATION'
+        ORDER BY revision`,
+      [f.caseId]
+    );
+    expect(history.rows).toHaveLength(2);
+    expect(history.rows[0]!.revision).toBe(1);
+    expect(history.rows[0]!.supersedes_id).toBeNull();
+    expect(history.rows[1]!.revision).toBe(2);
+    expect(history.rows[1]!.supersedes_id).toBe(history.rows[0]!.id);
+    expect(history.rows[0]!.data.subject.contractVersionId).toBe(f.contractId);
+    expect(history.rows[1]!.data.subject.contractVersionId).toBe(f.contractId);
+    expect(history.rows[1]!.data.subject.priorReviewArtifact).toEqual({
+      artifactId: history.rows[0]!.id,
+      revision: 1,
+    });
+    expect(history.rows[0]!.data.evaluation.dimensions.execution.note).toContain(
+      'first'
+    );
+    expect(history.rows[1]!.data.evaluation.dimensions.execution.note).toContain(
+      'second'
+    );
+
+    await admin.query(`UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1`, [
+      f.caseId,
+    ]);
+    const blocked = await submit(
+      f,
+      second.json(),
+      `a5002-reentry-blocked-${crypto.randomUUID()}`,
+      payload(f, 'blocked')
+    );
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().code).toBe('SAFETY_HOLD_BLOCKED');
+
+    const finalCount = await admin.query<{ n: number }>(
+      `SELECT count(*)::int AS n
+         FROM scene_artifacts
+        WHERE case_id=$1
+          AND artifact_type='DIGITAL_USE_A5002_EFFECT_EVALUATION'`,
+      [f.caseId]
+    );
+    expect(finalCount.rows[0]!.n).toBe(2);
+  });
+
   it('AS-31 rejects an exact Contract bound to another Case in the same Family', async () => {
     const f = await fixture('wrong-case');
     const otherCase = await createCase(
