@@ -1173,13 +1173,13 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
       await admin.query(
         `CREATE FUNCTION ${fn}() RETURNS trigger
          LANGUAGE plpgsql SECURITY DEFINER
-         SET search_path = pg_catalog, public AS $
+         SET search_path = pg_catalog, public AS $slice15$
          BEGIN
            IF NEW.artifact_type='DIGITAL_USE_A5002_EFFECT_EVALUATION' THEN
              ${scenario.mutation};
            END IF;
            RETURN NEW;
-         END $;
+         END $slice15$;
          CREATE TRIGGER ${tr}
          AFTER INSERT ON scene_artifacts
          FOR EACH ROW EXECUTE FUNCTION ${fn}();`
