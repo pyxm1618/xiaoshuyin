@@ -1014,6 +1014,38 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     });
   });
 
+  it('T1509 Family membership without review action privilege cannot submit', async () => {
+    provider.restore('FAMILY_ALLIANCE_REVIEW');
+    const target = await prepareA5001(app, 'a5001-member-no-privilege');
+    const participant = await loginWithLabel(app, 'slice15-participant-no-privilege');
+    await admin.query(
+      'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [target.f.familyId, participant.personId]
+    );
+
+    const result = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${target.f.caseId}/scene/nodes/A5001/responses`,
+      headers: {
+        ...auth(participant.token),
+        'idempotency-key': `a5001-no-privilege-${crypto.randomUUID()}`,
+      },
+      payload: {
+        expectedCaseVersion: target.f.caseVersion,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: target.scene.targetSelectionRevision,
+        response: target.payload,
+      },
+    });
+    expect([403, 404]).toContain(result.statusCode);
+    expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
+      artifacts: 0,
+      completed: 0,
+      events: 0,
+    });
+  });
+
   it('T1509 valid Professional package cannot override DISABLED account authority', async () => {
     provider.restore('FAMILY_ALLIANCE_REVIEW');
     const target = await prepareA5001(app, 'a5001-disabled-account');
