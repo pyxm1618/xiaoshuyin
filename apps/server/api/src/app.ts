@@ -32,6 +32,7 @@ import type {
   RoleplayModelPromptAuthorityProvider,
   RoleplayProfessionalContentAuthority,
 } from './services/digital-use-roleplay-adapter.js';
+import type { ProfessionalReviewContentProvider } from './services/digital-use-review-professional-content.js';
 
 export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
@@ -57,6 +58,13 @@ export interface BuildAppOptions {
     roleplayAdapter?: RoleplayAdapter;
     roleplayProfessionalContent?: RoleplayProfessionalContentAuthority;
     roleplayModelPromptAuthority?: RoleplayModelPromptAuthorityProvider;
+  };
+  /**
+   * Slice 15 test seam. Production omits this and therefore uses the
+   * fail-closed unavailable Professional Review Content provider.
+   */
+  digitalUseReview?: {
+    professionalContent?: ProfessionalReviewContentProvider;
   };
 }
 
@@ -173,7 +181,15 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);
-  registerDigitalUseAssessmentRoutes(app, pool, { evidencePepper: runtime.evidencePepper });
+  registerDigitalUseAssessmentRoutes(app, pool, {
+    evidencePepper: runtime.evidencePepper,
+    ...(options.digitalUseReview?.professionalContent === undefined
+      ? {}
+      : {
+          professionalReviewContent:
+            options.digitalUseReview.professionalContent,
+        }),
+  });
   registerDigitalUsePhoneContractRoutes(app, pool, {
     ...(options.phoneUseContract?.staticProfessionalContent
       ? { staticProfessionalContent: options.phoneUseContract.staticProfessionalContent }
