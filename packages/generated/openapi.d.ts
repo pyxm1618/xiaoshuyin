@@ -7176,6 +7176,41 @@ export interface operations {
                         message: string;
                     };
                 };
+            };            /** @description `DEPENDENCY_UNAVAILABLE` */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        code: "UNAUTHENTICATED";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_NOT_FOUND";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CURRENT_FAMILY_AMBIGUOUS";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "VALIDATION_ERROR";
+                        message: string;
+                        details?: {
+                            [key: string]: unknown;
+                        };
+                    } | {
+                        /** @enum {string} */
+                        code: "INTERNAL_ERROR";
+                        message: string;
+                    } | {
+                        /** @enum {string} */
+                        code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
+                        message: string;
+                    };
+                };
             };
         };
     };
