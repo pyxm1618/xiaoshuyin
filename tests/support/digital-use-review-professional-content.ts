@@ -111,11 +111,34 @@ function packageFor(
  * approved/published package can drive the legal runtime path. It is not
  * Professional approval and is intentionally unreachable from production.
  */
+export type TestProfessionalReviewRevalidationDrift =
+  | 'VERSION'
+  | 'HASH'
+  | 'RETIRED'
+  | 'SUPERSEDED'
+  | 'SCOPE'
+  | 'APPROVAL';
+
+interface TestRevalidationBarrier {
+  readonly reached: Promise<void>;
+  reachedResolve: () => void;
+  readonly released: Promise<void>;
+  releaseResolve: () => void;
+}
+
 export class TestProfessionalReviewContentProvider
   implements ProfessionalReviewContentProvider
 {
   private unavailable = new Set<ProfessionalReviewStream>();
   private failRevalidation = new Set<ProfessionalReviewStream>();
+  private revalidationBarriers = new Map<
+    ProfessionalReviewStream,
+    TestRevalidationBarrier
+  >();
+  private revalidationDrift = new Map<
+    ProfessionalReviewStream,
+    TestProfessionalReviewRevalidationDrift
+  >();
 
   retire(stream: ProfessionalReviewStream): void {
     this.unavailable.add(stream);
@@ -124,10 +147,50 @@ export class TestProfessionalReviewContentProvider
   restore(stream: ProfessionalReviewStream): void {
     this.unavailable.delete(stream);
     this.failRevalidation.delete(stream);
+    this.revalidationDrift.delete(stream);
+    const barrier = this.revalidationBarriers.get(stream);
+    if (barrier !== undefined) {
+      barrier.releaseResolve();
+      this.revalidationBarriers.delete(stream);
+    }
   }
 
   failNextRevalidation(stream: ProfessionalReviewStream): void {
     this.failRevalidation.add(stream);
+  }
+
+  pauseNextRevalidation(stream: ProfessionalReviewStream): {
+    readonly reached: Promise<void>;
+    release(): void;
+  } {
+    const existing = this.revalidationBarriers.get(stream);
+    if (existing !== undefined) {
+      throw new Error(`TEST_REVALIDATION_BARRIER_ALREADY_ARMED:${stream}`);
+    }
+    let reachedResolve!: () => void;
+    let releaseResolve!: () => void;
+    const barrier: TestRevalidationBarrier = {
+      reached: new Promise<void>((resolve) => {
+        reachedResolve = resolve;
+      }),
+      reachedResolve: () => reachedResolve(),
+      released: new Promise<void>((resolve) => {
+        releaseResolve = resolve;
+      }),
+      releaseResolve: () => releaseResolve(),
+    };
+    this.revalidationBarriers.set(stream, barrier);
+    return {
+      reached: barrier.reached,
+      release: () => barrier.releaseResolve(),
+    };
+  }
+
+  setNextRevalidationDrift(
+    stream: ProfessionalReviewStream,
+    drift: TestProfessionalReviewRevalidationDrift
+  ): void {
+    this.revalidationDrift.set(stream, drift);
   }
 
   async resolve(input: {
@@ -155,8 +218,72 @@ export class TestProfessionalReviewContentProvider
     readonly packageVersion: string;
     readonly contentHash: string;
   }): Promise<ProfessionalReviewResolvedPackage | null> {
+    const barrier = this.revalidationBarriers.get(input.stream);
+    if (barrier !== undefined) {
+      this.revalidationBarriers.delete(input.stream);
+      barrier.reachedResolve();
+      await barrier.released;
+    }
+
     if (this.failRevalidation.delete(input.stream)) return null;
-    return this.resolve(input);
+
+    const resolved = await this.resolve(input);
+    const drift = this.revalidationDrift.get(input.stream);
+    this.revalidationDrift.delete(input.stream);
+    if (resolved === null || drift === undefined) return resolved;
+
+    if (drift === 'HASH') {
+      return {
+        ...resolved,
+        loadedContentHash: `${resolved.loadedContentHash}:drifted`,
+      };
+    }
+
+    if (drift === 'VERSION') {
+      return {
+        ...resolved,
+        proof: {
+          ...resolved.proof,
+          packageVersion: `${resolved.proof.packageVersion}:drifted`,
+        },
+      };
+    }
+
+    if (drift === 'RETIRED' || drift === 'SUPERSEDED') {
+      return {
+        ...resolved,
+        proof: {
+          ...resolved.proof,
+          lifecycleStatus: drift,
+        },
+      };
+    }
+
+    if (drift === 'SCOPE') {
+      return {
+        ...resolved,
+        proof: {
+          ...resolved.proof,
+          scope: Object.freeze([
+            {
+              stream:
+                input.stream === 'FAMILY_ALLIANCE_REVIEW'
+                  ? 'PHONE_USE_CONTRACT_REVIEW'
+                  : 'FAMILY_ALLIANCE_REVIEW',
+              scenePackageVersion: input.scenePackageVersion,
+            },
+          ]),
+        },
+      };
+    }
+
+    return {
+      ...resolved,
+      proof: {
+        ...resolved.proof,
+        reviewerProofStatus: 'REVOKED',
+      },
+    };
   }
 }
 
