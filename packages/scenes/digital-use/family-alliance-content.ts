@@ -83,7 +83,7 @@ const FAMILY_ALLIANCE_CONTENT = Object.freeze({
     authorityDocumentVersion: FAMILY_ALLIANCE_AUTHORITY_DOCUMENT_VERSION,
     sourceBlob: FAMILY_ALLIANCE_AUTHORITY_SOURCE_BLOB,
     sectionHeading: "帮助选项（外出活动）",
-    body: "对常见的问题进行解答\n\n外出活动可以作为一种特殊的家庭聚会，原则是一样的\n\n如果孩子要单独外出活动怎么办？\n\n制订好计划和安全措施可以让孩子单独外出活动\n\n孩子单独外出时使用手机怎么办？\n\n需要和孩子建立相互信任感，这个问题在制订手机使用合约时会有解释\n\n**情绪调节1**\n\n这个任务要求家长和孩子配合一起来进行。适合家长和孩子之间偶尔有冲突，闹一些情绪，容易发脾气、冲动、不耐烦、焦虑等",
+    body: "对常见的问题进行解答\n\n外出活动可以作为一种特殊的家庭聚会，原则是一样的\n\n如果孩子要单独外出活动怎么办？\n\n制订好计划和安全措施可以让孩子单独外出活动\n\n孩子单独外出时使用手机怎么办？\n\n需要和孩子建立相互信任感，这个问题在制订手机使用合约时会有解释",
   }),
   A3083: Object.freeze({
     nodeCode: 'A3083' as const,
@@ -92,7 +92,7 @@ const FAMILY_ALLIANCE_CONTENT = Object.freeze({
     authorityDocumentVersion: FAMILY_ALLIANCE_AUTHORITY_DOCUMENT_VERSION,
     sourceBlob: FAMILY_ALLIANCE_AUTHORITY_SOURCE_BLOB,
     sectionHeading: "帮助选项（情绪调节1）",
-    body: "对常见的问题进行解答\n\n情绪调节不仅仅是期待孩子做些什么，要同时有家长的参与\n\n“情绪问题”“负面情绪”这些说法都是为了沟通的需要，事实上情绪没有好坏之分，但是有程度的区别\n\n在肯定孩子表扬孩子的时候不要附带着对孩子提出期待或者要求，比如“希望你下次表现得更好”之类的\n\n对于青春期的孩子，不要当着外人夸他们，这会造成他们尴尬\n\n**时间管理。**",
+    body: "对常见的问题进行解答\n\n情绪调节不仅仅是期待孩子做些什么，要同时有家长的参与\n\n“情绪问题”“负面情绪”这些说法都是为了沟通的需要，事实上情绪没有好坏之分，但是有程度的区别\n\n在肯定孩子表扬孩子的时候不要附带着对孩子提出期待或者要求，比如“希望你下次表现得更好”之类的\n\n对于青春期的孩子，不要当着外人夸他们，这会造成他们尴尬",
   }),
   A3093: Object.freeze({
     nodeCode: 'A3093' as const,
@@ -119,7 +119,7 @@ const FAMILY_ALLIANCE_CONTENT = Object.freeze({
     authorityDocumentVersion: FAMILY_ALLIANCE_AUTHORITY_DOCUMENT_VERSION,
     sourceBlob: FAMILY_ALLIANCE_AUTHORITY_SOURCE_BLOB,
     sectionHeading: "帮助选项（情绪调节2）",
-    body: "对常见的问题进行解答\n\n关于自我成长：\n\n自我成长不等于我们通常所说的学习、自我提升或者认知提升。因为家长的自我成长不能只停留在任职的层面。因为家长也有情绪、也有压力，也有原生家庭带给自己的影响，如果家长不能处理好自己的这些问题，就很难帮助孩子处理这些问题。\n\n关于平等：\n\n每个人对于平等的理解不一样，家长天然地拥有更多权力，因此家长和孩子是不可能完全平等的。\n\n这里所说的平等主要是主要指的是在涉及到情绪调节这个问题的时候\n\n具体的原则是：我们在关于情绪进行沟通的时候，我既不会觉得自己比你更好，也不会觉得自己比你差，我既不会高高在上，也不会低你一等，我不是给你指导、给你命令，也不是对你怜悯，对你同情。我和你站在同一战线，我给你完全的理解和情感支持。\n\n目标可行性评估\n\n<table>\n<colgroup>\n<col style=\"width: 16%\" />\n<col style=\"width: 16%\" />\n<col style=\"width: 16%\" />\n<col style=\"width: 16%\" />\n<col style=\"width: 16%\" />\n<col style=\"width: 16%\" />\n</colgroup>\n<thead>\n<tr class=\"header\">\n<th>行为选项</th>\n<th>具体化/量化</th>\n<th>需求</th>\n<th>动机/获益</th>\n<th><p>能力/可能性</p>\n<p>（孩子的完成这个任务的能力）</p></th>\n<th>挑战/阻力</th>\n</tr>\n</thead>\n<tbody>\n<tr class=\"odd\">\n<td>问题行为：玩手机</td>\n<td>7-8小时</td>\n<td>自主性、娱乐性</td>\n<td><p>人际交往</p>\n<p>应对压力</p>\n<p>逃避学习</p></td>\n<td>轻松</td>\n<td>家长禁止</td>\n</tr>\n<tr class=\"even\">\n<td>目标替换行为：（此处的内容是用户初选的目标清单，包括必选项）</td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n</tr>\n<tr class=\"odd\">\n<td>睡眠</td>\n<td><p>每天多长时间</p>\n<p>几点到几点</p></td>\n<td><p>对上述需求的满足</p>\n<p>1-10 打一个分数（量尺的呈现形式）</p></td>\n<td><p>是否符合上述的动机</p>\n<p>1-10 打一个分数（量尺的呈现形式）</p></td>\n<td>对能力打一个分数</td>\n<td>对阻力打一个分数</td>\n</tr>\n<tr class=\"even\">\n<td>运动</td>\n<td>项目、频率</td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n</tr>\n<tr class=\"odd\">\n<td>兴趣爱好</td>\n<td>项目、从事的时间时间</td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n</tr>\n<tr class=\"even\">\n<td>家务</td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n</tr>\n<tr class=\"odd\">\n<td>家庭聚会</td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n</tr>\n<tr class=\"even\">\n<td>外出活动</td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n<td></td>\n</tr>\n</tbody>\n</table>\n\n可行性评估不再把所有项目放在同一个表里评估，而是每个项目逐一进行评估\n\n打分时，提示用户可以调整“具体化/量化”的时间然后重新打分\n\n打分完成以后，提示家长是否要进行目标清单的调整\n\n如不再调整，则保存目标清单",
+    body: "对常见的问题进行解答\n\n关于自我成长：\n\n自我成长不等于我们通常所说的学习、自我提升或者认知提升。因为家长的自我成长不能只停留在任职的层面。因为家长也有情绪、也有压力，也有原生家庭带给自己的影响，如果家长不能处理好自己的这些问题，就很难帮助孩子处理这些问题。\n\n关于平等：\n\n每个人对于平等的理解不一样，家长天然地拥有更多权力，因此家长和孩子是不可能完全平等的。\n\n这里所说的平等主要是主要指的是在涉及到情绪调节这个问题的时候\n\n具体的原则是：我们在关于情绪进行沟通的时候，我既不会觉得自己比你更好，也不会觉得自己比你差，我既不会高高在上，也不会低你一等，我不是给你指导、给你命令，也不是对你怜悯，对你同情。我和你站在同一战线，我给你完全的理解和情感支持。",
   }),
 } satisfies Record<FamilyAllianceContentNodeCode, FamilyAllianceContentAsset>);
 
