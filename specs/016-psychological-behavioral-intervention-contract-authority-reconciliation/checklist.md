@@ -109,7 +109,7 @@ Status vocabulary: PASS / FAIL / N/A. Audit 1 may pass only with FAIL = 0.
 ## Coverage summary
 
 ~~~text
-Checklist PASS: 53
+Checklist PASS: 60
 Checklist FAIL: 0
 Checklist N/A: 0
 
