@@ -3,6 +3,7 @@ import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import {
   PHONE_USE_CONTRACT_CONTENT_VERSION,
+  resolveDigitalUseRuntimeNode,
 } from '@xiaoshuyin/scenes/digital-use';
 import {
   auth,
@@ -33,14 +34,57 @@ const term = (value: string) => ({ state: 'VALUE', value });
 describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
   let admin: pg.Pool;
+  let migrator: pg.Client;
+
+  async function ensureBaselinePolicy(featureCode: string): Promise<void> {
+    await migrator.query(
+      `SELECT pg_advisory_lock(hashtextextended($1,0))`,
+      [`slice15-test-policy:${featureCode}`]
+    );
+    try {
+      const current = await migrator.query<{ n: number }>(
+        `SELECT count(*)::int AS n
+           FROM compliance_feature_policies
+          WHERE feature_code=$1
+            AND feature_contract_revision='v1'
+            AND superseded_by_policy_id IS NULL`,
+        [featureCode]
+      );
+      if ((current.rows[0]?.n ?? 0) > 0) return;
+      await migrator.query(
+        `SELECT app.publish_compliance_feature_policy(
+           $1,'v1',NULL,1,
+           'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+           $2,$3,now() - interval '1 minute',$4
+         )`,
+        [
+          featureCode,
+          `Slice 15 combined review integration baseline for ${featureCode}`,
+          `evidence://slice15/review/${featureCode}`,
+          `migration:slice15-review-${featureCode}`,
+        ]
+      );
+    } finally {
+      await migrator.query(
+        `SELECT pg_advisory_unlock(hashtextextended($1,0))`,
+        [`slice15-test-policy:${featureCode}`]
+      );
+    }
+  }
 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
     admin = createAdminPool();
+    migrator = new pg.Client({
+      connectionString: process.env['MIGRATION_DATABASE_URL'],
+    });
+    await migrator.connect();
+    await ensureBaselinePolicy('DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME');
   });
 
   afterAll(async () => {
+    await migrator.end().catch(() => undefined);
     await admin.end();
     await app.close();
   });
