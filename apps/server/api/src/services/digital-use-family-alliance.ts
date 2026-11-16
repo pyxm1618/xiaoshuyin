@@ -146,7 +146,7 @@ async function assertFamilyAllianceConsentOwnerGate(
   }
 }
 
-async function pinAndAssertFamilyAllianceGates(
+export async function pinAndAssertFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
   actorPersonId: string
@@ -161,7 +161,7 @@ async function pinAndAssertFamilyAllianceGates(
   return compliance;
 }
 
-async function revalidateFamilyAllianceGates(
+export async function revalidateFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
   actorPersonId: string

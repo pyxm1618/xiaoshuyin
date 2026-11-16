@@ -16,7 +16,7 @@
 
 import pg from 'pg';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { join } from 'node:path';
 
@@ -427,31 +427,29 @@ async function upgradeFrom003() {
         /SKIP 002_case_core\.sql/.test(output) &&
         /SKIP 003_case_idempotency_key_bytes\.sql/.test(output)
     );
-check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_participant + 006 + 007 + 008 + 009 + 010 + 011 + 012 + 013 + 014 + 015 + 016 + 017 + 018 + 019 + 020 + 021 + 022', true,
-      /APPLY 004_evidence_core\.sql/.test(output) &&
-      /APPLY 004_identity_binding_runtime\.sql/.test(output) &&
-      /APPLY 005_case_participant_core\.sql/.test(output) &&
-      /APPLY 006_case_status_paused_removal\.sql/.test(output) &&
-      /APPLY 007_case_primary_switch\.sql/.test(output) &&
-      /APPLY 008_problem_formulation_core\.sql/.test(output) &&
-      /APPLY 009_safety_hold_control_foundation\.sql/.test(output) &&
-      /APPLY 010_problem_formulation_safety_vocabulary_reconcile\.sql/.test(output) &&
-      /APPLY 011_compliance_feature_policy_foundation\.sql/.test(output) &&
-      /APPLY 012_consent_01004_supplemental_enums\.sql/.test(output) &&
-      /APPLY 013_consent_01004_supplemental_assessment\.sql/.test(output) &&
-      /APPLY 014_consent_01004_cross_purpose_supersede_guard\.sql/.test(output) &&
-      /APPLY 015_digital_use_assessment_runtime\.sql/.test(output) &&
-      /APPLY 016_digital_use_family_alliance_runtime\.sql/.test(output) &&
-      /APPLY 017_digital_use_phone_use_contract_runtime\.sql/.test(output) &&
-      /APPLY 018_foundation_database_integrity_1\.sql/.test(output) &&
-      /APPLY 019_auth_disabled_hard_disable\.sql/.test(output) &&
-      /APPLY 020_problem_formulation_review_state\.sql/.test(output) &&
-      /APPLY 021_safety_resolver_staff_authority\.sql/.test(output) &&
-      /APPLY 022_foundation_remaining_consent_chain_integrity\.sql/.test(output));
+    const allMigrationFiles = readdirSync(join(ROOT, 'db', 'migrations'))
+      .filter((file) => file.endsWith('.sql'))
+      .sort();
+    const baselineFiles = [
+      '001_initial_schema.sql',
+      '002_case_core.sql',
+      '003_case_idempotency_key_bytes.sql',
+    ];
+    const forwardFiles = allMigrationFiles.filter(
+      (file) => !baselineFiles.includes(file)
+    );
     check(
-      'upgrade 结果为 20 new / 3 previously applied',
+      'upgrade applies every current forward migration exactly once',
       true,
-      /Migration complete: 20 new, 3 previously applied\./.test(output)
+      forwardFiles.every((file) => output.includes(`APPLY ${file}`)) &&
+        baselineFiles.every((file) => !output.includes(`APPLY ${file}`))
+    );
+    check(
+      `upgrade 结果为 ${forwardFiles.length} new / 3 previously applied`,
+      true,
+      output.includes(
+        `Migration complete: ${forwardFiles.length} new, 3 previously applied.`
+      )
     );
 
     client = new pg.Client({ connectionString: tmpUrl.toString() });
@@ -459,41 +457,11 @@ check('upgrade 仅 APPLY 004_evidence_core + 004_identity_binding + 005_case_par
     const afterRecords = await client.query(
       'SELECT filename, applied_at FROM schema_migrations ORDER BY filename'
     );
-    check('schema_migrations records added for forward migrations', [
-      '001_initial_schema.sql',
-      '002_case_core.sql',
-      '003_case_idempotency_key_bytes.sql',
-      '004_evidence_core.sql',
-      '004_identity_binding_runtime.sql',
-      '005_case_participant_core.sql',
-      '006_case_status_paused_removal.sql',
-      '007_case_primary_switch.sql',
-      '008_problem_formulation_core.sql',
-      // Slice 9 reviewed Safety migration.
-      '009_safety_hold_control_foundation.sql',
-      '010_problem_formulation_safety_vocabulary_reconcile.sql',
-      // Slice 10 reviewed compliance feature-policy migration.
-      '011_compliance_feature_policy_foundation.sql',
-      // Slice 1 Consent Owner 01004 narrow post-merge remediation.
-      '012_consent_01004_supplemental_enums.sql',
-      '013_consent_01004_supplemental_assessment.sql',
-      '014_consent_01004_cross_purpose_supersede_guard.sql',
-      // Slice 12 reviewed Digital Use Assessment runtime migration.
-      '015_digital_use_assessment_runtime.sql',
-      // Slice 13 reviewed Digital Use Family Alliance runtime migration.
-      '016_digital_use_family_alliance_runtime.sql',
-      // Slice 14 reviewed Digital Use Phone Use Contract runtime migration.
-      '017_digital_use_phone_use_contract_runtime.sql',
-      // Foundation Remediation 1 database / migration integrity hardening.
-      '018_foundation_database_integrity_1.sql',
-      // AUTH-001 Account Hard Disable session invalidation.
-      '019_auth_disabled_hard_disable.sql',
-      // AUTH-006 Problem Formulation lifecycle / review-state reconciliation.
-      '020_problem_formulation_review_state.sql',
-      // AUTH-007/AUTH-008 minimum Safety resolver Staff authority foundation.
-      '021_safety_resolver_staff_authority.sql',
-      '022_foundation_remaining_consent_chain_integrity.sql',
-    ], afterRecords.rows.map((r) => r.filename));
+    check(
+      'schema_migrations records added for every current migration',
+      allMigrationFiles,
+      afterRecords.rows.map((r) => r.filename)
+    );
     check(
       '001–003 历史记录时间戳未被改写',
       true,

@@ -179,6 +179,21 @@ function collectCollidingSchemaNames(frozenDocs) {
   return collisions;
 }
 
+const ADDITIVE_RESPONSE_STATUS_POLICY = new Map([
+  [
+    '012-digital-use-assessment-runtime|POST /api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
+    new Map([
+      [
+        '503',
+        {
+          description: '`DEPENDENCY_UNAVAILABLE`',
+          sameSchemaAsStatus: '500',
+        },
+      ],
+    ]),
+  ],
+]);
+
 function compareSubset(frozen, generated, label, collidingSchemaNames, options = {}) {
   const frozenOps = collectOperations(frozen);
   const generatedOps = collectOperations(generated);
@@ -213,8 +228,46 @@ function compareSubset(frozen, generated, label, collidingSchemaNames, options =
 
     const frozenStatuses = Object.keys(f.responses ?? {}).sort();
     const generatedStatuses = Object.keys(g.responses ?? {}).sort();
-    if (!equal(frozenStatuses, generatedStatuses)) {
-      fail(`[${label}] ${key}: response status set differs (${frozenStatuses} vs ${generatedStatuses})`);
+    const additiveStatusPolicy =
+      ADDITIVE_RESPONSE_STATUS_POLICY.get(`${label}|${key}`) ?? new Map();
+    const expectedGeneratedStatuses = [
+      ...new Set([...frozenStatuses, ...additiveStatusPolicy.keys()]),
+    ].sort();
+    if (!equal(expectedGeneratedStatuses, generatedStatuses)) {
+      fail(
+        `[${label}] ${key}: response status set differs (${expectedGeneratedStatuses} vs ${generatedStatuses})`
+      );
+    }
+
+    // Slice 15 adds only one bounded response to the existing Digital Use
+    // mutation surface. Keep the historical frozen contract exact everywhere
+    // else, and mechanically constrain the additive status rather than
+    // weakening the checker to permit arbitrary new responses.
+    for (const [status, policy] of additiveStatusPolicy) {
+      const generatedResponse = resolveLocalRef(g.responses?.[status], generated);
+      const baselineResponse = resolveLocalRef(
+        g.responses?.[policy.sameSchemaAsStatus],
+        generated
+      );
+      if (generatedResponse?.description !== policy.description) {
+        fail(
+          `[${label}] ${key}: additive response ${status} description differs`
+        );
+      }
+      const generatedSchema =
+        generatedResponse?.content?.['application/json']?.schema ?? null;
+      const baselineSchema =
+        baselineResponse?.content?.['application/json']?.schema ?? null;
+      if (
+        !equal(
+          normalize(generatedSchema, generated, options),
+          normalize(baselineSchema, generated, options)
+        )
+      ) {
+        fail(
+          `[${label}] ${key}: additive response ${status} schema differs from ${policy.sameSchemaAsStatus}`
+        );
+      }
     }
 
     // Slice 4 requires full response-body equivalence. For older slices, keep

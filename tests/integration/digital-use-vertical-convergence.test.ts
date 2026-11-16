@@ -86,6 +86,75 @@ function familySelfAssessment() {
   };
 }
 
+const COMPLIANCE_POLICY_TEST_LOCK_PREFIX =
+  'test:compliance-policy:';
+
+function compliancePolicyTestLockKey(featureCode: string): string {
+  return `${COMPLIANCE_POLICY_TEST_LOCK_PREFIX}${featureCode}:v1`;
+}
+
+async function ensureVerticalCompliancePolicy(
+  client: pg.Client,
+  featureCode: string,
+  minorAccessRule: 'BASELINE' | 'MINORS_BLOCKED'
+): Promise<void> {
+  const { rows } = await client.query<{
+    policy_version: number;
+    anthropomorphic_applicability: string;
+    minor_access_rule: string;
+    ai_disclosure_rule: string;
+    generated_content_label_rule: string;
+    usage_reminder_rule: string;
+  }>(
+    `SELECT policy_version,anthropomorphic_applicability,minor_access_rule,
+            ai_disclosure_rule,generated_content_label_rule,usage_reminder_rule
+       FROM compliance_feature_policies
+      WHERE feature_code=$1
+        AND feature_contract_revision='v1'
+        AND superseded_by_policy_id IS NULL
+      ORDER BY policy_version DESC
+      LIMIT 1`,
+    [featureCode]
+  );
+  const current = rows[0] ?? null;
+  if (
+    current !== null &&
+    current.anthropomorphic_applicability === 'NOT_APPLICABLE' &&
+    current.minor_access_rule === minorAccessRule &&
+    current.ai_disclosure_rule === 'BASELINE' &&
+    current.generated_content_label_rule === 'BASELINE' &&
+    current.usage_reminder_rule === 'BASELINE'
+  ) {
+    return;
+  }
+
+  const { rows: maxRows } = await client.query<{ max_version: number | null }>(
+    `SELECT max(policy_version)::int AS max_version
+       FROM compliance_feature_policies
+      WHERE feature_code=$1
+        AND feature_contract_revision='v1'`,
+    [featureCode]
+  );
+  const nextVersion = (maxRows[0]?.max_version ?? 0) + 1;
+  await client.query(
+    `SELECT app.publish_compliance_feature_policy(
+       $1,'v1',$2,$3,
+       'NOT_APPLICABLE',$4,'BASELINE','BASELINE','BASELINE',
+       'Digital Use vertical convergence test basis',
+       'evidence://vertical-convergence/test',
+       now() - interval '1 minute',
+       $5
+     )`,
+    [
+      featureCode,
+      current?.policy_version ?? null,
+      nextVersion,
+      minorAccessRule,
+      `test:vertical-convergence:${featureCode}:${nextVersion}`,
+    ]
+  );
+}
+
 describe('Digital Use vertical convergence', () => {
   let app: FastifyInstance;
   let productionBoundaryApp: FastifyInstance;
@@ -147,17 +216,14 @@ describe('Digital Use vertical convergence', () => {
       ['DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME', 'BASELINE'],
       ['DIGITAL_USE_ROLEPLAY_A4003', 'MINORS_BLOCKED'],
     ] as const) {
+      // These policies are global test fixtures. Hold a session advisory lock
+      // for the full suite so another integration file cannot temporarily
+      // supersede the policy while Golden E2E is executing.
       await migrator.query(
-        `SELECT app.publish_compliance_feature_policy(
-           $1,'v1',NULL,1,
-           'NOT_APPLICABLE',$2,'BASELINE','BASELINE','BASELINE',
-           'Digital Use vertical convergence test basis',
-           'evidence://vertical-convergence/test',
-           now() - interval '1 minute',
-           'migration:vertical-convergence-test'
-         )`,
-        [featureCode, ageRule]
+        'SELECT pg_advisory_lock(hashtextextended($1,0))',
+        [compliancePolicyTestLockKey(featureCode)]
       );
+      await ensureVerticalCompliancePolicy(migrator, featureCode, ageRule);
     }
   });
 
@@ -181,6 +247,16 @@ describe('Digital Use vertical convergence', () => {
         )
           AND feature_contract_revision='v1'`
     ).catch(() => undefined);
+    for (const featureCode of [
+      'DIGITAL_USE_ASSESSMENT_RUNTIME',
+      'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME',
+      'DIGITAL_USE_ROLEPLAY_A4003',
+    ] as const) {
+      await migrator.query(
+        'SELECT pg_advisory_unlock(hashtextextended($1,0))',
+        [compliancePolicyTestLockKey(featureCode)]
+      ).catch(() => undefined);
+    }
     await migrator.end().catch(() => undefined);
     await appPool.end().catch(() => undefined);
     await admin.end().catch(() => undefined);

@@ -3879,7 +3879,9 @@
                               "PHONE_USE_BREACH_COMPONENT",
                               "PARENT_SELF_REGULATION_CHECKLIST",
                               "PHONE_USE_CONTRACT_DOCUMENT",
-                              "PHONE_USE_CONTRACT_SUPPORT_LOG"
+                              "PHONE_USE_CONTRACT_SUPPORT_LOG",
+                              "DIGITAL_USE_A5001_EFFECT_EVALUATION",
+                              "DIGITAL_USE_A5002_EFFECT_EVALUATION"
                             ]
                           },
                           "schemaVersion": {
@@ -3904,7 +3906,9 @@
                               "A4009",
                               "A4010",
                               "A4011",
-                              "A4012"
+                              "A4012",
+                              "A5001",
+                              "A5002"
                             ]
                           },
                           "revision": {
@@ -8679,7 +8683,9 @@
                               "PHONE_USE_BREACH_COMPONENT",
                               "PARENT_SELF_REGULATION_CHECKLIST",
                               "PHONE_USE_CONTRACT_DOCUMENT",
-                              "PHONE_USE_CONTRACT_SUPPORT_LOG"
+                              "PHONE_USE_CONTRACT_SUPPORT_LOG",
+                              "DIGITAL_USE_A5001_EFFECT_EVALUATION",
+                              "DIGITAL_USE_A5002_EFFECT_EVALUATION"
                             ]
                           },
                           "schemaVersion": {
@@ -8704,7 +8710,9 @@
                               "A4009",
                               "A4010",
                               "A4011",
-                              "A4012"
+                              "A4012",
+                              "A5001",
+                              "A5002"
                             ]
                           },
                           "revision": {
@@ -12996,7 +13004,9 @@
                               "PHONE_USE_BREACH_COMPONENT",
                               "PARENT_SELF_REGULATION_CHECKLIST",
                               "PHONE_USE_CONTRACT_DOCUMENT",
-                              "PHONE_USE_CONTRACT_SUPPORT_LOG"
+                              "PHONE_USE_CONTRACT_SUPPORT_LOG",
+                              "DIGITAL_USE_A5001_EFFECT_EVALUATION",
+                              "DIGITAL_USE_A5002_EFFECT_EVALUATION"
                             ]
                           },
                           "schemaVersion": {
@@ -13021,7 +13031,9 @@
                               "A4009",
                               "A4010",
                               "A4011",
-                              "A4012"
+                              "A4012",
+                              "A5001",
+                              "A5002"
                             ]
                           },
                           "revision": {
@@ -17833,7 +17845,9 @@
                               "PHONE_USE_BREACH_COMPONENT",
                               "PARENT_SELF_REGULATION_CHECKLIST",
                               "PHONE_USE_CONTRACT_DOCUMENT",
-                              "PHONE_USE_CONTRACT_SUPPORT_LOG"
+                              "PHONE_USE_CONTRACT_SUPPORT_LOG",
+                              "DIGITAL_USE_A5001_EFFECT_EVALUATION",
+                              "DIGITAL_USE_A5002_EFFECT_EVALUATION"
                             ]
                           },
                           "schemaVersion": {
@@ -17858,7 +17872,9 @@
                               "A4009",
                               "A4010",
                               "A4011",
-                              "A4012"
+                              "A4012",
+                              "A5001",
+                              "A5002"
                             ]
                           },
                           "revision": {
@@ -20883,6 +20899,177 @@
           },
           "500": {
             "description": "`INTERNAL_ERROR`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "UNAUTHENTICATED"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CURRENT_FAMILY_NOT_FOUND"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CURRENT_FAMILY_AMBIGUOUS"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "VALIDATION_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "INTERNAL_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "CASE_NOT_FOUND",
+                            "CASE_NOT_PRIMARY",
+                            "CASE_PHASE_CONFLICT",
+                            "CASE_NOT_OPEN",
+                            "STALE_CASE_VERSION",
+                            "SAFETY_HOLD_BLOCKED",
+                            "SCENE_NODE_NOT_FOUND",
+                            "SCENE_NODE_UNREACHABLE",
+                            "SCENE_PACKAGE_MISMATCH",
+                            "STALE_SCENE_PACKAGE",
+                            "STALE_NODE_REVISION",
+                            "STALE_SELECTION_REVISION",
+                            "STALE_TARGET_REVISION",
+                            "TARGET_SELECTION_INVALID",
+                            "TARGET_CODE_INVALID",
+                            "TARGET_NOT_SELECTED",
+                            "TARGET_SCOPE_INVALID",
+                            "TARGET_SELECTION_STATE_INVALID",
+                            "FAMILY_ALLIANCE_ENTRY_BLOCKED",
+                            "PROBLEM_FORMULATION_REQUIRED",
+                            "CONSENT_BLOCKED",
+                            "DEPENDENCY_UNAVAILABLE",
+                            "SCENE_RESPONSE_INVALID",
+                            "SCENE_ROUTE_BLOCKED",
+                            "SCENE_ROUTE_UNRESOLVED",
+                            "IDEMPOTENCY_PAYLOAD_MISMATCH",
+                            "INTEGRATED_TRIAGE_INSUFFICIENT",
+                            "INTEGRATED_TRIAGE_BLOCKED",
+                            "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED",
+                            "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED",
+                            "APPROVED_INSTRUMENT_UNAVAILABLE",
+                            "DOWNSTREAM_RUNTIME_UNAVAILABLE",
+                            "COMPLIANCE_BLOCKED",
+                            "PHONE_USE_CONTRACT_NOT_FOUND",
+                            "PHONE_USE_CONTRACT_STALE_REVISION",
+                            "PHONE_USE_CONTRACT_CONSENT_BLOCKED",
+                            "DOWNSTREAM_AI_UNAVAILABLE",
+                            "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE",
+                            "VALIDATION_ERROR",
+                            "INTERNAL_ERROR"
+                          ]
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "code",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`DEPENDENCY_UNAVAILABLE`",
             "content": {
               "application/json": {
                 "schema": {

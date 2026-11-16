@@ -51,6 +51,12 @@ export async function getCurrentPhoneUseContract(tx:Tx,caseId:string):Promise<Ph
     ORDER BY CASE status WHEN 'DRAFT' THEN 0 WHEN 'PENDING_CONFIRMATION' THEN 1 WHEN 'ACTIVE' THEN 2 WHEN 'PAUSED' THEN 3 ELSE 4 END,version DESC LIMIT 1`,
   [caseId]); return rows[0]??null;
 }
+export async function listPhoneUseContractVersions(tx:Tx,caseId:string,lock=false):Promise<PhoneUseContractVersionRow[]>{
+ const {rows}=await tx.query<PhoneUseContractVersionRow>(
+  `SELECT ${CONTRACT_COLUMNS} FROM digital_use_contract_versions WHERE case_id=$1 ORDER BY version ASC ${lock?'FOR UPDATE':''}`,
+  [caseId]);
+ return rows;
+}
 export async function nextPhoneUseContractVersion(tx:Tx,caseId:string):Promise<number>{
  const {rows}=await tx.query<{next_version:number}>(`SELECT COALESCE(MAX(version),0)::integer+1 AS next_version FROM digital_use_contract_versions WHERE case_id=$1`,[caseId]);
  return rows[0]?.next_version??1;

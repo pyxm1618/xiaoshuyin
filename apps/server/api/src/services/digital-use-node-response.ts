@@ -44,7 +44,10 @@ import type {
 } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
 import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
-import { runIdempotentCommandInTransaction } from '../idempotency.js';
+import {
+  runIdempotentCommandInTransaction,
+  runPreparedIdempotentCommandInTransaction,
+} from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
   assertAssessmentCompliance,
@@ -62,6 +65,18 @@ import {
   assertCurrentDigitalUseProblemFormulation,
   assertDigitalUseCaseLifecycle,
 } from './digital-use-case-lifecycle.js';
+import {
+  executeA5001ReviewInTransaction,
+  prepareA5001ReviewFingerprintInTransaction,
+} from './digital-use-family-alliance-review.js';
+import {
+  executeA5002ReviewInTransaction,
+  prepareA5002ReviewFingerprintInTransaction,
+} from './digital-use-phone-contract-review.js';
+import {
+  unavailableProductionProfessionalReviewContentProvider,
+  type ProfessionalReviewContentProvider,
+} from './digital-use-review-professional-content.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -548,14 +563,18 @@ async function executeProblemFormulationHandoffPath(
 /**
  * Complete one currently reachable node.
  *
- * Authorization is re-established before idempotency replay. Mutable business
- * gates are intentionally evaluated only for a new execution, so a same-key
- * replay returns the original committed result without duplicating effects or
- * changing semantics because Safety/Compliance state changed later.
+ * Authorization is re-established before idempotency replay. Ordinary nodes
+ * keep mutable business gates execution-only. Professional review nodes are a
+ * deliberate exception: under the existing idempotency lock they prepare the
+ * exact subject/package authority and package-owned normalized response because
+ * those facts are part of the frozen canonical request fingerprint.
  */
 export async function completeDigitalUseNodeResponse(
   pool: pg.Pool,
-  input: CompleteDigitalUseNodeInput
+  input: CompleteDigitalUseNodeInput,
+  options: {
+    readonly professionalReviewContent?: ProfessionalReviewContentProvider;
+  } = {}
 ): Promise<DigitalUseSceneResponseType> {
   return withRlsTransaction(
     pool,
@@ -585,6 +604,109 @@ export async function completeDigitalUseNodeResponse(
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
+      const professionalReviewContent =
+        options.professionalReviewContent ??
+        unavailableProductionProfessionalReviewContentProvider;
+      const idempotencyBase = {
+        accountId: input.actor.accountId,
+        personId: input.actor.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+        commandType: 'DIGITAL_USE_NODE_RESPONSE' as const,
+        idempotencyKey: input.idempotencyKey,
+      };
+
+      if (
+        node.stream === 'FAMILY_ALLIANCE_REVIEW' ||
+        node.stream === 'PHONE_USE_CONTRACT_REVIEW'
+      ) {
+        const reviewReplayDiscriminator = hashPayload({
+          actor: {
+            accountId: input.actor.accountId,
+            personId: input.actor.personId,
+          },
+          familyId: input.familyId,
+          caseId: input.caseId,
+          node: node.nodeCode,
+          stream: node.stream,
+          expectedCaseVersion: input.expectedCaseVersion,
+          expectedNodeRevision: input.expectedNodeRevision,
+          expectedScenePackageVersion:
+            input.expectedScenePackageVersion ?? null,
+          expectedSelectionRevision:
+            input.expectedSelectionRevision ?? null,
+          expectedTargetRevision: input.expectedTargetRevision ?? null,
+          response: input.response,
+        });
+        const {
+          packageResponse: _packageResponse,
+          ...reviewResponseAuthorityIdentity
+        } = input.response;
+        const reviewAuthorityDiscriminator = hashPayload({
+          actor: {
+            accountId: input.actor.accountId,
+            personId: input.actor.personId,
+          },
+          familyId: input.familyId,
+          caseId: input.caseId,
+          node: node.nodeCode,
+          stream: node.stream,
+          expectedCaseVersion: input.expectedCaseVersion,
+          expectedNodeRevision: input.expectedNodeRevision,
+          expectedScenePackageVersion:
+            input.expectedScenePackageVersion ?? null,
+          expectedSelectionRevision:
+            input.expectedSelectionRevision ?? null,
+          expectedTargetRevision: input.expectedTargetRevision ?? null,
+          response: reviewResponseAuthorityIdentity,
+        });
+        const reviewOutcome = await runPreparedIdempotentCommandInTransaction(
+          tx,
+          {
+            ...idempotencyBase,
+            replayDiscriminator: reviewReplayDiscriminator,
+            authorityDiscriminator: reviewAuthorityDiscriminator,
+          },
+          async () => {
+            const fingerprint =
+              node.stream === 'FAMILY_ALLIANCE_REVIEW'
+                ? await prepareA5001ReviewFingerprintInTransaction(
+                    tx,
+                    input,
+                    node,
+                    professionalReviewContent
+                  )
+                : await prepareA5002ReviewFingerprintInTransaction(
+                    tx,
+                    input,
+                    node,
+                    professionalReviewContent
+                  );
+            return hashPayload(fingerprint);
+          },
+          async () => ({
+            status: 200,
+            body:
+              node.stream === 'FAMILY_ALLIANCE_REVIEW'
+                ? await executeA5001ReviewInTransaction(
+                    tx,
+                    input,
+                    node,
+                    professionalReviewContent
+                  )
+                : await executeA5002ReviewInTransaction(
+                    tx,
+                    input,
+                    node,
+                    professionalReviewContent
+                  ),
+          })
+        );
+        if (reviewOutcome.action === 'MISMATCH') {
+          throw nodeError('IDEMPOTENCY_PAYLOAD_MISMATCH');
+        }
+        return reviewOutcome.body as DigitalUseSceneResponseType;
+      }
+
       const requestHash = hashPayload({
         familyId: input.familyId,
         caseId: input.caseId,
@@ -600,11 +722,7 @@ export async function completeDigitalUseNodeResponse(
       const outcome = await runIdempotentCommandInTransaction(
         tx,
         {
-          accountId: input.actor.accountId,
-          personId: input.actor.personId,
-          purpose: 'FAMILY_MANAGEMENT',
-          commandType: 'DIGITAL_USE_NODE_RESPONSE',
-          idempotencyKey: input.idempotencyKey,
+          ...idempotencyBase,
           requestHash,
         },
         async () => {

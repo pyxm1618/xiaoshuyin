@@ -136,15 +136,22 @@ async function peekIdempotency(
  * Using it before authorization would re-open H-01; every call site MUST
  * authorize first in that same transaction.
  */
-export async function runIdempotentCommandInTransaction(
+export async function lockIdempotentCommandInTransaction(
+  tx: pg.PoolClient,
+  cfg: Pick<
+    IdempotentCommandConfig,
+    'accountId' | 'commandType' | 'idempotencyKey'
+  >
+): Promise<void> {
+  await lockIdempotencyKey(tx, cfg.accountId, cfg.commandType, cfg.idempotencyKey);
+}
+
+export async function runLockedIdempotentCommandInTransaction(
   tx: pg.PoolClient,
   cfg: IdempotentCommandConfig,
   fn: (tx: pg.PoolClient) => Promise<CommandResponse>
 ): Promise<CommandOutcome> {
-  // Serialize same-key commands BEFORE the second lookup.
-  await lockIdempotencyKey(tx, cfg.accountId, cfg.commandType, cfg.idempotencyKey);
-
-  // Re-check under the lock: a concurrent request may have committed already.
+  // Caller already holds the canonical transaction-scoped idempotency lock.
   const existing = await getIdempotencyKey(
     tx, cfg.accountId, cfg.commandType, cfg.idempotencyKey
   );
@@ -164,6 +171,130 @@ export async function runIdempotentCommandInTransaction(
   );
 
   return { action: 'EXECUTED', status: response.status, body: response.body };
+}
+
+interface PreparedIdempotencyReplayEnvelope {
+  readonly __preparedIdempotencyV1: true;
+  readonly replayDiscriminator: string;
+  readonly authorityDiscriminator: string;
+  readonly body: unknown;
+}
+
+function isPreparedReplayEnvelope(
+  value: unknown
+): value is PreparedIdempotencyReplayEnvelope {
+  if (typeof value !== 'object' || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    record['__preparedIdempotencyV1'] === true &&
+    typeof record['replayDiscriminator'] === 'string' &&
+    typeof record['authorityDiscriminator'] === 'string' &&
+    Object.prototype.hasOwnProperty.call(record, 'body')
+  );
+}
+
+export async function runPreparedIdempotentCommandInTransaction(
+  tx: pg.PoolClient,
+  cfg: Omit<IdempotentCommandConfig, 'requestHash'> & {
+    readonly replayDiscriminator: string;
+    readonly authorityDiscriminator: string;
+  },
+  prepareRequestHash: (tx: pg.PoolClient) => Promise<string>,
+  fn: (tx: pg.PoolClient) => Promise<CommandResponse>
+): Promise<CommandOutcome> {
+  // request_hash remains the package-normalized canonical authority identity.
+  // An exact retry of an already-committed request replays historical truth:
+  // later Professional package retirement must not rewrite that committed
+  // result. The replay discriminator is only a private snapshot discriminator;
+  // it never participates in canonical request_hash authority.
+  await lockIdempotentCommandInTransaction(tx, cfg);
+  const existing = await getIdempotencyKey(
+    tx,
+    cfg.accountId,
+    cfg.commandType,
+    cfg.idempotencyKey
+  );
+  if (
+    existing !== null &&
+    isPreparedReplayEnvelope(existing.response_body)
+  ) {
+    if (existing.response_body.replayDiscriminator === cfg.replayDiscriminator) {
+      return {
+        action: 'REPLAY',
+        status: existing.response_status,
+        body: existing.response_body.body,
+      };
+    }
+    if (
+      existing.response_body.authorityDiscriminator !==
+      cfg.authorityDiscriminator
+    ) {
+      return { action: 'MISMATCH' };
+    }
+  }
+
+  // A wire-different request is not automatically different canonically.
+  // Current authority must normalize it first; only the normalized canonical
+  // hash decides replay vs mismatch.
+  let requestHash: string;
+  try {
+    requestHash = await prepareRequestHash(tx);
+  } catch (error) {
+    if (
+      existing !== null &&
+      isPreparedReplayEnvelope(existing.response_body) &&
+      typeof error === 'object' &&
+      error !== null &&
+      (error as { code?: unknown }).code === 'DEPENDENCY_UNAVAILABLE'
+    ) {
+      return { action: 'MISMATCH' };
+    }
+    throw error;
+  }
+  if (existing !== null) {
+    const decision = decide(existing, requestHash);
+    if (decision) {
+      if (
+        decision.action === 'REPLAY' &&
+        isPreparedReplayEnvelope(existing.response_body)
+      ) {
+        return {
+          action: 'REPLAY',
+          status: decision.status,
+          body: existing.response_body.body,
+        };
+      }
+      return decision;
+    }
+  }
+
+  const response = await fn(tx);
+  const persisted: PreparedIdempotencyReplayEnvelope = {
+    __preparedIdempotencyV1: true,
+    replayDiscriminator: cfg.replayDiscriminator,
+    authorityDiscriminator: cfg.authorityDiscriminator,
+    body: response.body,
+  };
+  await insertIdempotencyKey(
+    tx,
+    cfg.accountId,
+    cfg.commandType,
+    cfg.idempotencyKey,
+    requestHash,
+    response.status,
+    JSON.stringify(persisted)
+  );
+  return { action: 'EXECUTED', status: response.status, body: response.body };
+}
+
+export async function runIdempotentCommandInTransaction(
+  tx: pg.PoolClient,
+  cfg: IdempotentCommandConfig,
+  fn: (tx: pg.PoolClient) => Promise<CommandResponse>
+): Promise<CommandOutcome> {
+  // Preserve the canonical lock-before-business order for every existing caller.
+  await lockIdempotentCommandInTransaction(tx, cfg);
+  return runLockedIdempotentCommandInTransaction(tx, cfg, fn);
 }
 
 export async function runIdempotentCommand(

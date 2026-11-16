@@ -25,6 +25,7 @@ import {
   startOrResumeDigitalUseAssessment,
 } from '../services/digital-use-assessment.js';
 import { completeDigitalUseNodeResponse } from '../services/digital-use-node-response.js';
+import type { ProfessionalReviewContentProvider } from '../services/digital-use-review-professional-content.js';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -87,12 +88,16 @@ const MutationErrors = {
   409: DigitalUseApiError,
   422: DigitalUseApiError,
   500: DigitalUseApiError,
+  503: DigitalUseApiError,
 } as const;
 
 export function registerDigitalUseAssessmentRoutes(
   app: FastifyInstance,
   pool: pg.Pool,
-  options: { readonly evidencePepper: string }
+  options: {
+    readonly evidencePepper: string;
+    readonly professionalReviewContent?: ProfessionalReviewContentProvider;
+  }
 ): void {
   app.post(
     '/api/v1/cases/:id/assessments',
@@ -234,6 +239,10 @@ export function registerDigitalUseAssessmentRoutes(
           userAgent,
           pepper: options.evidencePepper,
         },
+      }, {
+        ...(options.professionalReviewContent === undefined
+          ? {}
+          : { professionalReviewContent: options.professionalReviewContent }),
       });
       return reply.status(200).send(result);
     }
