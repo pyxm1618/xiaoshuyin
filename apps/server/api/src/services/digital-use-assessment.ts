@@ -175,7 +175,6 @@ function targetDto(row: DigitalUseTargetItemRow) {
     helpHistoryRefs: row.help_history_refs.map((entry) => ({
       nodeCode: entry.nodeCode,
       scenePackageVersion: entry.scenePackageVersion as 'v1',
-      ...(entry.contentRef === undefined ? {} : { contentRef: { ...entry.contentRef } }),
       interactionRefs: [...entry.interactionRefs],
       helpOrReentryRefs: [...entry.helpOrReentryRefs],
       authorityRefs: [...(entry.authorityRefs ?? [])],
