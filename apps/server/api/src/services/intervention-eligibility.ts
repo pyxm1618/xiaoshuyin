@@ -23,7 +23,8 @@ import {
   getCurrentPurposeScopedConsentDecision,
 } from '@xiaoshuyin/compliance';
 import {
-  resolveProductionDigitalUseInterventionInclusion,
+  productionDigitalUseInterventionInclusionProvider,
+  type DigitalUseInterventionInclusionProvider,
 } from '@xiaoshuyin/scenes/digital-use';
 import { requireFamilyAction } from '../authz.js';
 import { withDrizzleRlsTransaction } from '../db/drizzle-tx.js';
@@ -194,7 +195,9 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
   },
   adapters: InterventionEligibilityOwnerAdapters,
   professionalProvider: InterventionProfessionalAuthorityProvider =
-    unavailableProductionInterventionProfessionalAuthorityProvider
+    unavailableProductionInterventionProfessionalAuthorityProvider,
+  packageInclusionProvider: DigitalUseInterventionInclusionProvider =
+    productionDigitalUseInterventionInclusionProvider
 ): Promise<InterventionEligibilityResult> {
   // Authorization is first and uses the frozen CASE_READ + FAMILY_MANAGEMENT
   // composition. No protected professional/package/family details are read
@@ -361,17 +364,21 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
   }
 
-  const packageInclusion =
-    finalDefinition !== null && scenePackageVersion !== null
-      ? resolveProductionDigitalUseInterventionInclusion({
-          scenePackageVersion,
-          definitionId: finalDefinition.id,
-          definitionVersion: finalDefinition.version,
-          contentHash: finalDefinition.contentHash,
-        }).status === 'INCLUDED'
-        ? 'PASS'
-        : 'BLOCK'
-      : 'UNKNOWN';
+  let packageInclusion: InterventionGateState = 'UNKNOWN';
+  if (finalDefinition !== null && scenePackageVersion !== null) {
+    try {
+      const inclusion = await packageInclusionProvider.resolve({
+        scenePackageVersion,
+        definitionId: finalDefinition.id,
+        definitionVersion: finalDefinition.version,
+        contentHash: finalDefinition.contentHash,
+      });
+      packageInclusion = inclusion.status === 'INCLUDED' ? 'PASS' : 'BLOCK';
+    } catch {
+      // Technical package-owner failure is not equivalent to "not included".
+      packageInclusion = 'UNKNOWN';
+    }
+  }
 
   const result = evaluateInterventionEligibility({
     authorization: 'PASS',
@@ -470,7 +477,9 @@ export function evaluateCurrentInterventionEligibility(
   adapters: InterventionEligibilityOwnerAdapters =
     productionInterventionOwnerAdapters,
   professionalProvider: InterventionProfessionalAuthorityProvider =
-    unavailableProductionInterventionProfessionalAuthorityProvider
+    unavailableProductionInterventionProfessionalAuthorityProvider,
+  packageInclusionProvider: DigitalUseInterventionInclusionProvider =
+    productionDigitalUseInterventionInclusionProvider
 ): Promise<InterventionEligibilityResult> {
   return withDrizzleRlsTransaction(
     pool,
@@ -486,7 +495,8 @@ export function evaluateCurrentInterventionEligibility(
         client,
         input,
         adapters,
-        professionalProvider
+        professionalProvider,
+        packageInclusionProvider
       )
   );
 }

@@ -41,3 +41,23 @@ export function resolveProductionDigitalUseInterventionInclusion(
     input
   );
 }
+
+
+export interface DigitalUseInterventionInclusionProvider {
+  resolve(
+    input: DigitalUseInterventionInclusion
+  ): Promise<InterventionPackageInclusionResult>;
+}
+
+/**
+ * Production package consumer. It deliberately resolves only the package-owned
+ * production inclusion set, which remains empty while release authority is
+ * operationally unavailable. Tests may inject a provider; production never
+ * imports a fixture.
+ */
+export const productionDigitalUseInterventionInclusionProvider:
+  DigitalUseInterventionInclusionProvider = Object.freeze({
+    async resolve(input) {
+      return resolveProductionDigitalUseInterventionInclusion(input);
+    },
+  });
