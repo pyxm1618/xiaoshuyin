@@ -92,7 +92,10 @@ function requireStaticProfessionalContentAuthority(
     || authority.status !== 'APPROVED_PUBLISHED'
     || authority.version !== PHONE_USE_CONTRACT_CONTENT_VERSION
   ) {
-    throw contractError('PROFESSIONAL_CONTENT_UNAVAILABLE');
+    throw contractError(
+      'PHONE_USE_CONTRACT_CONTENT_STALE',
+      'Professional Content authority unavailable'
+    );
   }
   return authority;
 }
@@ -713,7 +716,8 @@ export async function getPhoneUseContractExamples(
     professionalContentAuthority
   );
   const content = resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
-  return { meta: content.meta, professionalAuthority, examples: content.examples };
+  void professionalAuthority;
+  return { meta: content.meta, examples: content.examples };
 }
 
 export async function getPhoneUseContractFaq(
@@ -723,13 +727,10 @@ export async function getPhoneUseContractFaq(
 ) {
   const active = await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4011' });
   if (!active) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
-  const professionalAuthority = requireStaticProfessionalContentAuthority(
-    professionalContentAuthority
-  );
+  requireStaticProfessionalContentAuthority(professionalContentAuthority);
   const content = resolvePhoneUseContractContent(active.source_template_version);
   return {
     meta: content.meta,
-    professionalAuthority,
     contract: { id: active.id, version: active.version, status: 'ACTIVE' as const },
     ...content.faq,
   };
