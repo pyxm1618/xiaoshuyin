@@ -563,15 +563,17 @@ describe('Digital Use vertical convergence', () => {
       .toBe('AVAILABLE');
 
     const beforeHold = await getScene(f);
-    const hold = await app.inject({
+    const holdKey = 'du-vertical-roleplay-hold';
+    const holdRequest = () => app.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
-      headers: commandHeaders(f.manager.token, 'du-vertical-roleplay-hold'),
+      headers: commandHeaders(f.manager.token, holdKey),
       payload: {
         expectedCaseVersion: beforeHold.caseVersion,
         professionalContentVersion: 'test-professional-roleplay-v1',
       },
     });
+    const hold = await holdRequest();
     expect(hold.statusCode, hold.body).toBe(200);
     expect(hold.json()).toMatchObject({
       kind: 'HOLD',
@@ -579,6 +581,9 @@ describe('Digital Use vertical convergence', () => {
       status: 'IN_PROGRESS',
       reasonCode: 'DOWNSTREAM_AI_UNAVAILABLE',
     });
+    const holdReplay = await holdRequest();
+    expect(holdReplay.statusCode, holdReplay.body).toBe(200);
+    expect(holdReplay.json()).toEqual(hold.json());
 
     scene = await getScene(f);
     expect(scene.nodes.find((node: any) => node.nodeCode === 'A4003')?.status)
