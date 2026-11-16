@@ -367,6 +367,13 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       expect(feasibilityResponse.statusCode, `${family.nodes[1]} ${feasibilityResponse.body}`).toBe(200);
       body = feasibilityResponse.json();
       target = body.targets.find((item: any) => item.targetCode === family.code);
+      expect(target.feasibility.problemBehavior.concreteBehavior).toMatchObject({
+        state: 'KNOWN',
+      });
+      expect(target.feasibility.replacementBehavior.need).toMatchObject({
+        state: 'KNOWN',
+        rating: 8,
+      });
       expect(target.feasibility).not.toHaveProperty('score');
       expect(target.feasibility).not.toHaveProperty('cutoff');
       expect(target.sourceRefs).toEqual(
@@ -452,6 +459,35 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       body = progressResponse.json();
       target = body.targets.find((item: any) => item.targetCode === family.code);
       expect(target.progressEvidenceRefs.length).toBeGreaterThanOrEqual(1);
+      if (family.code === 'EMOTION_REGULATION_1') {
+        expect(target.progress).toMatchObject({
+          kind: 'EMOTION_REGULATION_1',
+          affirmation: {
+            state: 'KNOWN',
+            observations: ['affirmed effort', 'affirmed feeling', 'affirmed choice'],
+          },
+        });
+      } else if (family.code === 'EMOTION_REGULATION_2') {
+        expect(target.progress).toMatchObject({
+          kind: 'EMOTION_REGULATION_2_LOG',
+          entries: [
+            expect.objectContaining({
+              childEmotion: { state: 'KNOWN', text: 'Frustrated' },
+              selfGrowth: { state: 'KNOWN', text: 'Parent paused before reacting.' },
+            }),
+          ],
+        });
+      } else {
+        expect(target.progress).toMatchObject({
+          kind: 'GENERAL_MATRIX',
+          communication: {
+            needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+          },
+          otherFamilyFeedback: {
+            needMatch: { state: 'NOT_COLLECTED' },
+          },
+        });
+      }
       if (family.code === 'SLEEP') {
         // AS-19: one target may have progress while the others remain
         // independently reachable; no false stream-global completion exists.
@@ -481,7 +517,42 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         scenePackageVersion: 'v1',
       });
       expect(target.helpHistoryRefs[0].interactionRefs.length).toBeGreaterThan(0);
+      expect(target.helpHistoryRefs[0].authorityRefs.length).toBeGreaterThan(0);
     }
+
+    const semanticReadback = await admin.query<{
+      target_code: string;
+      feasibility_payload: any;
+      progress_payload: any;
+      help_history_refs: any[];
+    }>(
+      `SELECT target_code, feasibility_payload, progress_payload, help_history_refs
+         FROM digital_use_target_items
+        WHERE case_id=$1
+          AND superseded_at IS NULL
+          AND selected=true
+        ORDER BY target_code`,
+      [f.caseId]
+    );
+    expect(semanticReadback.rows).toHaveLength(10);
+    const sleepReadback = semanticReadback.rows.find((row) => row.target_code === 'SLEEP')!;
+    expect(sleepReadback.feasibility_payload.problemBehavior.concreteBehavior.state)
+      .toBe('KNOWN');
+    expect(sleepReadback.feasibility_payload.replacementBehavior.need.rating).toBe(8);
+    expect(sleepReadback.progress_payload.kind).toBe('GENERAL_MATRIX');
+    expect(sleepReadback.help_history_refs[0].authorityRefs.length).toBeGreaterThan(0);
+
+    const er1Readback = semanticReadback.rows.find(
+      (row) => row.target_code === 'EMOTION_REGULATION_1'
+    )!;
+    expect(er1Readback.progress_payload.kind).toBe('EMOTION_REGULATION_1');
+    expect(er1Readback.progress_payload.affirmation.observations).toHaveLength(3);
+
+    const er2Readback = semanticReadback.rows.find(
+      (row) => row.target_code === 'EMOTION_REGULATION_2'
+    )!;
+    expect(er2Readback.progress_payload.kind).toBe('EMOTION_REGULATION_2_LOG');
+    expect(er2Readback.progress_payload.entries[0].childStress.state).toBe('KNOWN');
 
     // A3001 can still complete after A3002 and all target-family activity.
     const a3001 = await respond(f, 'A3001', {
