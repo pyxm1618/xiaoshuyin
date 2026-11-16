@@ -409,7 +409,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         })),
       },
       professionalPackage: TEST_A5001_PACKAGE,
-      normalizedResponse: normalizedReviewResponse,
+      packageResponse: normalizedReviewResponse,
       evidenceRefs: [],
       provenance: [{
         kind: 'PARENT_AUTHORED_OBSERVATION',
@@ -585,7 +585,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
           contractStatus: 'ACTIVE',
         },
         professionalPackage: TEST_A5002_PACKAGE,
-        normalizedResponse: normalizedReviewResponse,
+        packageResponse: normalizedReviewResponse,
         evidenceRefs: [],
         provenance: [{
           kind: 'PARENT_AUTHORED_OBSERVATION',
@@ -886,7 +886,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         contractRevision: 1,
         contractStatus: 'ACTIVE',
       },
-      normalizedResponse: {
+      packageResponse: {
         outcome: 'SAME',
         note: 'Explicit review of the independently-created Contract v2.',
       },
@@ -935,7 +935,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
 
     const changed = {
       ...payload,
-      normalizedResponse: {
+      packageResponse: {
         ...normalizedReviewResponse,
         note: 'Changed package-owned normalized response.',
       },
@@ -1045,7 +1045,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     const refreshed = first.json();
     const secondPayload = {
       ...payload,
-      normalizedResponse: {
+      packageResponse: {
         outcome: 'SAME',
         note: 'Second package-owned normalized observation.',
       },
@@ -1072,8 +1072,8 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     expect(rows[0].supersedes_id).toBeNull();
     expect(rows[1].revision).toBe(2);
     expect(rows[1].supersedes_id).toBe(rows[0].id);
-    expect(rows[0].data.normalizedResponse).toEqual(normalizedReviewResponse);
-    expect(rows[1].data.normalizedResponse).toMatchObject({ outcome: 'SAME' });
+    expect(rows[0].data.packageResponse).toEqual(normalizedReviewResponse);
+    expect(rows[1].data.packageResponse).toMatchObject({ outcome: 'SAME' });
     expect(rows[0].data.professionalPackage).toMatchObject(TEST_A5001_PACKAGE);
     expect(rows[1].data.professionalPackage).toMatchObject(TEST_A5001_PACKAGE);
   });
