@@ -180,6 +180,10 @@ export async function getCurrentProfessionalReviewStaffAssignment(
   tx: Tx,
   input: { accountId: string; personId: string }
 ): Promise<{ assignmentRef: string } | null> {
+  await tx.query(
+    'SELECT pg_advisory_xact_lock(hashtextextended($1, 0::bigint))',
+    ['AUTH_ACCOUNT:' + input.accountId]
+  );
   const result = await tx.query<{ id: string }>(
     "SELECT id FROM staff_assignments " +
       "WHERE account_id=$1 AND person_id=$2 AND capability='PROFESSIONAL_REVIEW' " +

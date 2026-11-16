@@ -101,6 +101,11 @@ export async function createInterventionDefinitionCandidate(
       };
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
+        const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
+        if (
+          finalAuthority.assignmentRef !== authority.assignmentRef ||
+          finalAuthority.qualificationRef !== authority.qualificationRef
+        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
         await lockInterventionDefinitionChain(tx, prepared.sceneId, prepared.interventionCode);
         const current = await getCurrentInterventionDefinitionChainHead(tx, prepared, true);
         if (current !== null) {
@@ -176,6 +181,11 @@ export async function createInterventionDefinitionSuccessor(
       };
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
+        const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
+        if (
+          finalAuthority.assignmentRef !== authority.assignmentRef ||
+          finalAuthority.qualificationRef !== authority.qualificationRef
+        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
         await lockInterventionDefinitionChain(tx, prepared.sceneId, prepared.interventionCode);
         const locked = await getExactInterventionDefinition(tx, input.predecessor, true);
         if (
@@ -268,6 +278,11 @@ async function terminalTransition(
       } as const;
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
+        const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
+        if (
+          finalAuthority.assignmentRef !== authority.assignmentRef ||
+          finalAuthority.qualificationRef !== authority.qualificationRef
+        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
         const current = await getExactInterventionDefinition(tx, input.definition, true);
         if (
           current === null ||

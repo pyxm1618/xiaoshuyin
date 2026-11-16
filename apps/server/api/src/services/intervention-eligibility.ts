@@ -59,14 +59,20 @@ export const failClosedProductionInterventionOwnerAdapters:
   InterventionEligibilityOwnerAdapters = Object.freeze({
     async resolveAgeDevelopment() { return { ageYears: null, developmentStages: [] }; },
     async resolveFacts() { return {}; },
-    async resolveParticipation(_tx, input) {
-      return Object.fromEntries(input.requiredRefs.map((ref) => [ref, 'UNKNOWN' as const]));
+    async resolveParticipation(
+      _tx: pg.PoolClient,
+      input: { familyId: string; caseId: string; requiredRefs: readonly string[] }
+    ): Promise<Readonly<Record<string, InterventionGateState>>> {
+      return Object.fromEntries(input.requiredRefs.map((ref: string) => [ref, 'UNKNOWN' as const]));
     },
-    async resolveConsent(_tx, input) {
-      return Object.fromEntries(input.requiredPurposes.map((ref) => [ref, 'UNKNOWN' as const]));
+    async resolveConsent(
+      _tx: pg.PoolClient,
+      input: { familyId: string; caseId: string; requiredPurposes: readonly string[] }
+    ): Promise<Readonly<Record<string, InterventionGateState>>> {
+      return Object.fromEntries(input.requiredPurposes.map((ref: string) => [ref, 'UNKNOWN' as const]));
     },
-    async evaluateCompliance() { return 'UNKNOWN'; },
-    async evaluateSafety() { return 'UNKNOWN'; },
+    async evaluateCompliance(): Promise<InterventionGateState> { return 'UNKNOWN'; },
+    async evaluateSafety(): Promise<InterventionGateState> { return 'UNKNOWN'; },
   });
 
 export async function evaluateCurrentInterventionEligibilityInTransaction(
@@ -138,6 +144,29 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
           'RESOLVE'
         );
 
+  let finalProfessional = professional;
+  if (professional.status === 'VALID' && definition !== null) {
+    const revalidated = await resolveInterventionProfessionalAuthority(
+      professionalProvider,
+      {
+        definitionId: definition.id,
+        definitionVersion: definition.version,
+        contentHash: definition.contentHash,
+        sceneId: definition.sceneId,
+        sourceRefs: definition.semantic.professional_source_refs,
+        approvalScope: definition.sceneId,
+      },
+      'REVALIDATE'
+    );
+    finalProfessional =
+      revalidated.status === 'VALID' &&
+      revalidated.approvalProofRef === professional.approvalProofRef &&
+      revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
+      revalidated.qualificationRef === professional.qualificationRef
+        ? revalidated
+        : ({ status: 'INVALID', reason: 'PROOF_CHANGED' } as const);
+  }
+
   const packageInclusion =
     definition !== null && scenePackageVersion !== null
       ? resolveProductionDigitalUseInterventionInclusion({
@@ -195,9 +224,9 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     },
     definition,
     professionalAuthority: {
-      state: professional.status,
-      approvalProofRef: professional.status === 'VALID' ? professional.approvalProofRef : null,
-      reason: professional.status === 'VALID' ? null : professional.reason,
+      state: finalProfessional.status,
+      approvalProofRef: finalProfessional.status === 'VALID' ? finalProfessional.approvalProofRef : null,
+      reason: finalProfessional.status === 'VALID' ? null : finalProfessional.reason,
     },
     packageInclusion,
     ageYears: ageDevelopment.ageYears,
