@@ -38,7 +38,6 @@ import {
   type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
 import { toHttpError } from '../plugins/error-handler.js';
-import { assertCurrentAccountAuthority } from '../auth/account-authority.js';
 import {
   assertAssessmentCompliance,
   currentSceneEnvelope,
@@ -381,8 +380,6 @@ export async function prepareA5002ReviewFingerprintInTransaction(
 
   const parsed = A5002PhoneUseContractReviewSubmission.safeParse(input.response);
   if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
-
-  await assertCurrentAccountAuthority(tx, input.actor.accountId);
   if (!(await lockFamilyForPrimaryDecision(tx, input.familyId))) {
     throw reviewError('CASE_NOT_FOUND', 'Case not found');
   }
@@ -500,8 +497,6 @@ export async function executeA5002ReviewInTransaction(
 
     const parsed = A5002PhoneUseContractReviewSubmission.safeParse(input.response);
     if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
-
-    await assertCurrentAccountAuthority(tx, input.actor.accountId);
 
     if (!(await lockFamilyForPrimaryDecision(tx, input.familyId))) {
       throw reviewError('CASE_NOT_FOUND', 'Case not found');
@@ -737,7 +732,6 @@ export async function executeA5002ReviewInTransaction(
     await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
     await assertAssessmentCompliance(tx, input.actor.personId);
-    await assertCurrentAccountAuthority(tx, input.actor.accountId);
 
     const { row: finalContract, snapshot: finalSubject } =
       await resolveA5002SubjectSnapshot(tx, {
