@@ -262,14 +262,14 @@ describe('Consent Revoke Integration (T058)', () => {
 
     await queryDb(`
       CREATE OR REPLACE FUNCTION fnd_rem_fail_revoke_audit() RETURNS trigger
-      LANGUAGE plpgsql AS $
+      LANGUAGE plpgsql AS $fnd$
       BEGIN
         IF NEW.event_type = 'CONSENT_REVOKED'
            AND NEW.family_id = '${actor.familyId}'::uuid THEN
           RAISE EXCEPTION 'FND_REM_REVOKE_AUDIT_FAILURE';
         END IF;
         RETURN NEW;
-      END $;
+      END $fnd$;
       DROP TRIGGER IF EXISTS fnd_rem_fail_revoke_audit_trigger ON business_audit_events;
       CREATE TRIGGER fnd_rem_fail_revoke_audit_trigger
         BEFORE INSERT ON business_audit_events

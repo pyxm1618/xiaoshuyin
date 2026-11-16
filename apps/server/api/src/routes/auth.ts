@@ -43,7 +43,7 @@ export function registerAuthRoutes(
       // Reuse the identity-binding Account owner instead of a second
       // SELECT-none -> INSERT implementation. ON CONFLICT serializes concurrent
       // first-login creation and then re-reads the one authoritative Account.
-      const { account, inserted } = await createOrReuseAccount(client, openid);
+      const { account, inserted } = await createOrReuseAccount(client, openid, false);
       const accountId = account.id;
       if (!isAccountAuthorityEligible({ status: account.status })) {
         const err = toHttpError('UNAUTHENTICATED');
@@ -70,9 +70,10 @@ export function registerAuthRoutes(
         personId = newPerson[0].id;
         personCreatedAt = newPerson[0].created_at;
       } else {
-        // Issuance linearization point: createOrReuseAccount already holds the
-        // Account row lock; this conditional UPDATE preserves hard-disable and
-        // advances the existing session epoch without exposing uniqueness races.
+        // Issuance linearization point: after the authoritative conflict re-read,
+        // establish exact Account context and acquire the row lock through this
+        // conditional UPDATE. This preserves hard-disable without requiring the
+        // pre-context OpenID lookup itself to hold UPDATE authority.
         const { rows: updated } = await client.query(
           `UPDATE accounts
               SET last_login_at = now(), session_epoch = session_epoch + 1

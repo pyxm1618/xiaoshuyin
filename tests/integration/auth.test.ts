@@ -54,13 +54,13 @@ describe('Auth Integration (T042)', () => {
     // only this test OpenID and changes timing, never business truth.
     await admin.query(`
       CREATE OR REPLACE FUNCTION fnd_rem_slow_first_login() RETURNS trigger
-      LANGUAGE plpgsql AS $
+      LANGUAGE plpgsql AS $fnd$
       BEGIN
         IF NEW.wechat_openid = '${openid}' THEN
           PERFORM pg_sleep(0.20);
         END IF;
         RETURN NEW;
-      END $;
+      END $fnd$;
       DROP TRIGGER IF EXISTS fnd_rem_slow_first_login_trigger ON accounts;
       CREATE TRIGGER fnd_rem_slow_first_login_trigger
         BEFORE INSERT ON accounts

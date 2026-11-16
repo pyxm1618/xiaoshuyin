@@ -56,7 +56,8 @@ export async function getAccountById(
  */
 export async function createOrReuseAccount(
   tx: pg.PoolClient,
-  openid: string
+  openid: string,
+  lockExisting = true
 ): Promise<{ account: AccountRow; inserted: boolean }> {
   await tx.query('SELECT app.set_account_openid_context($1)', [openid]);
   const inserted = await tx.query(
@@ -69,7 +70,7 @@ export async function createOrReuseAccount(
   if (inserted.rows[0]) {
     return { account: mapRow(inserted.rows[0]), inserted: true };
   }
-  const existing = await findAccountByOpenid(tx, openid, true);
+  const existing = await findAccountByOpenid(tx, openid, lockExisting);
   if (!existing) {
     throw Object.assign(new Error('ACCOUNT_CONFLICT_UNRESOLVED'), {
       statusCode: 500,

@@ -656,7 +656,10 @@ export async function recordPurposeScopedConsentDecision(
       inserted.id,
       JSON.stringify({
         actorPersonId: input.actor.personId,
-        subjectPersonId: input.actor.personId,
+        subject: {
+          kind: 'ACTOR',
+          personId: input.actor.personId,
+        },
         purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
         decision: inserted.decision,
         version: inserted.version,

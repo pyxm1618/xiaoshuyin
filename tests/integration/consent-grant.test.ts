@@ -180,14 +180,14 @@ describe('Consent Grant Integration (T054)', () => {
 
     await queryDb(`
       CREATE OR REPLACE FUNCTION fnd_rem_fail_grant_audit() RETURNS trigger
-      LANGUAGE plpgsql AS $
+      LANGUAGE plpgsql AS $fnd$
       BEGIN
         IF NEW.event_type = 'CONSENT_GRANTED'
            AND NEW.family_id = '${familyId}'::uuid THEN
           RAISE EXCEPTION 'FND_REM_GRANT_AUDIT_FAILURE';
         END IF;
         RETURN NEW;
-      END $;
+      END $fnd$;
       DROP TRIGGER IF EXISTS fnd_rem_fail_grant_audit_trigger ON business_audit_events;
       CREATE TRIGGER fnd_rem_fail_grant_audit_trigger
         BEFORE INSERT ON business_audit_events
