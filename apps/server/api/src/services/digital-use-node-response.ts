@@ -494,6 +494,16 @@ async function executeProblemFormulationHandoffPath(
   });
   if (!completed) throw nodeError('STALE_NODE_REVISION');
 
+  if (isRecoverableTriageProjection(node.nodeCode, lockedNode.status)) {
+    await convergeSupersededTriageRoute(tx, {
+      caseId: input.caseId,
+      sourceNodeCode: node.nodeCode,
+      newNextNodeCode: routedNext.nodeCode,
+      branchReasonCode: route.reasonCode,
+      nextInputRefs: nextInputRefs(semantic),
+    });
+  }
+
   await ensureSceneNodeAvailable(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
