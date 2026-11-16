@@ -348,6 +348,309 @@ describe('Digital Use vertical convergence', () => {
     return scene;
   }
 
+  it('Golden E2E reaches real authority boundary without business-state fabrication', async () => {
+    const f = await fixture('golden-e2e', productionBoundaryApp);
+    let scene = await advanceToParallelLanes(f, productionBoundaryApp);
+
+    // Wrong quiz answers are a real retry, not a forced node transition.
+    scene = await respondNode(
+      f,
+      'A4001',
+      {
+        contentVersion: 'phone-use-contract-v1',
+        answers: [true, true, true, true, true],
+      },
+      {},
+      productionBoundaryApp
+    );
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A4001')?.status)
+      .toBe('IN_PROGRESS');
+    expect(scene.nodes.some((node: any) => node.nodeCode === 'A4002')).toBe(false);
+
+    const wrongAttempt = await admin.query<{ data: any }>(
+      `SELECT data
+         FROM scene_artifacts
+        WHERE case_id=$1
+          AND artifact_type='PHONE_USE_CONTRACT_QUIZ_ATTEMPT'
+        ORDER BY revision DESC
+        LIMIT 1`,
+      [f.caseId]
+    );
+    expect(wrongAttempt.rows[0]?.data.allCorrect).toBe(false);
+    expect(wrongAttempt.rows[0]?.data.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          correct: false,
+          explanation: expect.any(String),
+        }),
+      ])
+    );
+
+    scene = await respondNode(
+      f,
+      'A4001',
+      {
+        contentVersion: 'phone-use-contract-v1',
+        answers: [true, false, false, false, false],
+      },
+      {},
+      productionBoundaryApp
+    );
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A4002')?.status)
+      .toBe('AVAILABLE');
+
+    // Product-frozen template is readable. Professional examples are not
+    // silently promoted when no Professional Reviewer authority is assigned.
+    const template = await productionBoundaryApp.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/template`,
+      headers: auth(f.manager.token),
+    });
+    expect(template.statusCode, template.body).toBe(200);
+    expect(template.json().meta).toMatchObject({
+      contentVersion: 'phone-use-contract-v1',
+      authorityScope: 'PRODUCT_BASELINE',
+    });
+
+    const examples = await productionBoundaryApp.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/examples`,
+      headers: auth(f.manager.token),
+    });
+    expect(examples.statusCode, examples.body).toBe(409);
+    expect(examples.json()).toMatchObject({
+      code: 'PROFESSIONAL_CONTENT_UNAVAILABLE',
+    });
+
+    scene = await respondNode(
+      f,
+      'A4002',
+      {
+        contentVersion: 'phone-use-contract-v1',
+        action: 'ACKNOWLEDGE_TEMPLATE',
+      },
+      {},
+      productionBoundaryApp
+    );
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A4003')?.status)
+      .toBe('AVAILABLE');
+
+    // Production has no assigned Professional Content authority. A4003 must
+    // HOLD without creating fake sessions/selections or unlocking A4004.
+    const beforeHold = await getScene(f, productionBoundaryApp);
+    const hold = await productionBoundaryApp.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+      headers: commandHeaders(f.manager.token, 'du-golden-a4003-hold'),
+      payload: {
+        expectedCaseVersion: beforeHold.caseVersion,
+        professionalContentVersion: 'unassigned-production-roleplay',
+      },
+    });
+    expect(hold.statusCode, hold.body).toBe(200);
+    expect(hold.json()).toMatchObject({
+      kind: 'HOLD',
+      nodeCode: 'A4003',
+      status: 'IN_PROGRESS',
+      reasonCode: 'PROFESSIONAL_CONTENT_UNAVAILABLE',
+    });
+
+    const roleplayReadback = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM roleplay_sessions WHERE case_id=$1) AS sessions,
+         (SELECT count(*)::int FROM scene_artifacts
+           WHERE case_id=$1
+             AND artifact_type='PHONE_USE_ROLEPLAY_SELECTION') AS selections,
+         (SELECT count(*)::int FROM scene_node_states
+           WHERE case_id=$1 AND node_code='A4004') AS a4004`,
+      [f.caseId]
+    );
+    expect(roleplayReadback.rows[0]).toEqual({
+      sessions: 0,
+      selections: 0,
+      a4004: 0,
+    });
+
+    // Family Alliance continues independently on the same Case while A4003 is held.
+    scene = await respondNode(
+      f,
+      'A3000',
+      familySelfAssessment(),
+      {},
+      productionBoundaryApp
+    );
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A4003')?.status)
+      .toBe('IN_PROGRESS');
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A3002')?.status)
+      .toBe('AVAILABLE');
+
+    const a3000Artifact = await admin.query<{ data: any }>(
+      `SELECT data
+         FROM scene_artifacts
+        WHERE case_id=$1
+          AND artifact_type='FAMILY_ALLIANCE_SELF_ASSESSMENT'
+        ORDER BY revision DESC
+        LIMIT 1`,
+      [f.caseId]
+    );
+    const a3000ContentRef = a3000Artifact.rows[0]?.data.contentRef;
+    expect(a3000ContentRef).toMatchObject({
+      nodeCode: 'A3000',
+      contentVersion: 'family-alliance-product-v1',
+      authorityDocument: 'Docs/V1产品需求.md',
+      authorityDocumentVersion: 'v3.9',
+      sourceBlob: '8eb660cd905d8fba4b52fe0f74bbc214b3113117',
+    });
+    expect(
+      resolveFamilyAllianceContent(
+        a3000ContentRef.nodeCode,
+        a3000ContentRef.contentVersion
+      ).body.length
+    ).toBeGreaterThan(0);
+
+    scene = await respondNode(
+      f,
+      'A3002',
+      {
+        kind: 'TARGET_SELECTION',
+        confirmed: true,
+        selectedTargets: ['SLEEP'],
+      },
+      { expectedSelectionRevision: scene.targetSelectionRevision ?? 0 },
+      productionBoundaryApp
+    );
+    let sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
+    expect(sleep?.selected).toBe(true);
+
+    scene = await respondNode(
+      f,
+      'A3010',
+      {
+        kind: 'TARGET_DEFINITION',
+        concreteTargetText: 'Keep a consistent sleep schedule this week.',
+      },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      },
+      productionBoundaryApp
+    );
+    sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
+
+    scene = await respondNode(
+      f,
+      'A3011',
+      {
+        kind: 'FEASIBILITY',
+        feasibility: {
+          problemBehavior: {
+            concreteBehavior: { state: 'KNOWN', text: 'Bedtime is currently inconsistent.' },
+            need: { state: 'KNOWN', text: 'Evening decompression.' },
+            motivationBenefit: { state: 'KNOWN', text: 'More rest the next day.' },
+            abilityConditions: { state: 'KNOWN', text: 'Family can prepare earlier.' },
+            challengeResistance: { state: 'UNKNOWN' },
+          },
+          replacementBehavior: {
+            concreteQuantified: {
+              state: 'KNOWN',
+              concreteTargetText: 'Keep a consistent sleep schedule this week.',
+            },
+            need: { state: 'KNOWN', rating: 8 },
+            motivationBenefit: { state: 'KNOWN', rating: 8 },
+            abilityPossibility: { state: 'KNOWN', rating: 7 },
+            challengeResistance: { state: 'UNKNOWN' },
+          },
+        },
+      },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      },
+      productionBoundaryApp
+    );
+    sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
+    expect(sleep.feasibility).not.toHaveProperty('score');
+    expect(sleep.feasibility).not.toHaveProperty('cutoff');
+
+    scene = await respondNode(
+      f,
+      'A3012',
+      {
+        kind: 'PROGRESS',
+        progress: {
+          kind: 'GENERAL_MATRIX',
+          taskPlan: { state: 'KNOWN', text: 'Start the bedtime routine earlier.' },
+          communication: {
+            needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+            motivationMatch: { state: 'KNOWN', text: 'Benefit discussed.' },
+            abilityMatch: { state: 'KNOWN', text: 'Ability discussed.' },
+            challengeResistance: { state: 'KNOWN', text: 'One barrier discussed.' },
+          },
+          childFeedback: {
+            needMatch: { state: 'NOT_COLLECTED' },
+            motivationMatch: { state: 'NOT_COLLECTED' },
+            abilityMatch: { state: 'NOT_COLLECTED' },
+            challengeResistance: { state: 'NOT_COLLECTED' },
+          },
+          userObservation: {
+            needMatch: { state: 'KNOWN', text: 'Routine started earlier.' },
+            motivationMatch: { state: 'KNOWN', text: 'Less bedtime resistance.' },
+            abilityMatch: { state: 'KNOWN', text: 'Schedule was feasible.' },
+            challengeResistance: { state: 'KNOWN', text: 'Late homework remains a barrier.' },
+          },
+          otherFamilyFeedback: {
+            needMatch: { state: 'NOT_COLLECTED' },
+            motivationMatch: { state: 'NOT_COLLECTED' },
+            abilityMatch: { state: 'NOT_COLLECTED' },
+            challengeResistance: { state: 'NOT_COLLECTED' },
+          },
+          modifyTarget: 'NO',
+        },
+        note: 'Golden E2E sleep progress observation.',
+      },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      },
+      productionBoundaryApp
+    );
+    sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
+
+    scene = await respondNode(
+      f,
+      'A3013',
+      { kind: 'HELP', action: 'VIEWED' },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      },
+      productionBoundaryApp
+    );
+    sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
+    expect(sleep.helpHistoryRefs[0]?.contentRef).toMatchObject({
+      nodeCode: 'A3013',
+      contentVersion: 'family-alliance-product-v1',
+      sourceBlob: '8eb660cd905d8fba4b52fe0f74bbc214b3113117',
+    });
+    expect(
+      resolveFamilyAllianceContent(
+        sleep.helpHistoryRefs[0].contentRef.nodeCode,
+        sleep.helpHistoryRefs[0].contentRef.contentVersion
+      ).body.length
+    ).toBeGreaterThan(0);
+
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A4003')?.status)
+      .toBe('IN_PROGRESS');
+    expect(scene.nodes.some((node: any) => node.nodeCode === 'A4004')).toBe(false);
+
+    const caseReadback = await admin.query(
+      `SELECT phase::text AS phase,status::text AS status
+         FROM cases WHERE id=$1`,
+      [f.caseId]
+    );
+    expect(caseReadback.rows[0]).toEqual({ phase: 'GOALS', status: 'OPEN' });
+  });
+
   it('recovers INSUFFICIENT Evidence in place without false completion', async () => {
     const f = await fixture('insufficient');
     await respondNode(f, 'A1001', a1001(false));
