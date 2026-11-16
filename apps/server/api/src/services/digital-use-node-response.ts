@@ -9,11 +9,16 @@ import type pg from 'pg';
 import {
   assertOrdinaryProgressionAllowedRaw,
   casCompleteSceneNodeState,
+  casInvalidateSceneNodeForRouteSupersession,
   casRecordSceneNodeProgress,
   casRecompleteSceneNodeState,
+  casReevaluateSceneNodeState,
+  casReopenSceneNodeForRouteConvergence,
   ensureSceneNodeAvailable,
   getCaseById,
+  getLatestDigitalUseNodeCompletionRoute,
   getSceneNodeState,
+  listSceneNodeStates,
   getScenePackageBinding,
   hashPayload,
   insertDigitalUseNodeCompletedAudit,
@@ -53,6 +58,10 @@ import {
 } from './digital-use-node-semantics.js';
 import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
 import { executeFamilyAllianceNodeInTransaction } from './digital-use-family-alliance.js';
+import {
+  assertCurrentDigitalUseProblemFormulation,
+  assertDigitalUseCaseLifecycle,
+} from './digital-use-case-lifecycle.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -89,20 +98,92 @@ export interface CompleteDigitalUseNodeInput extends CompleteDigitalUseNodeReque
 
 export function assertNodeCasePreconditions(
   caseRow: Pick<SceneCaseRow, 'status' | 'phase' | 'is_primary' | 'version'>,
-  node: Pick<DigitalUseNodeManifestEntry, 'phase'>,
+  node: Pick<DigitalUseNodeManifestEntry, 'nodeCode' | 'stream'>,
   expectedCaseVersion: number
 ): void {
-  if (caseRow.status === 'CLOSED') throw nodeError('CASE_CLOSED');
-  if (caseRow.status === 'SAFETY_HOLD') throw nodeError('SAFETY_HOLD_BLOCKED');
-  if (caseRow.status !== 'OPEN') throw nodeError('CASE_NOT_OPEN');
-  if (!caseRow.is_primary) throw nodeError('CASE_NOT_PRIMARY');
-  if (caseRow.version !== expectedCaseVersion) throw nodeError('STALE_CASE_VERSION');
-  // Digital Use A/010xx phases are Scene metadata, not a second global Case
-  // phase machine. Slice 12 owns only the ASSESSMENT -> PROBLEM_FORMULATION
-  // Common Core bridge; Goal/Planning runtime is explicitly out of scope.
-  const requiredCasePhase =
-    node.phase === 'ASSESSMENT' ? 'ASSESSMENT' : 'PROBLEM_FORMULATION';
-  if (caseRow.phase !== requiredCasePhase) throw nodeError('CASE_PHASE_CONFLICT');
+  try {
+    assertDigitalUseCaseLifecycle(caseRow, node, expectedCaseVersion);
+  } catch (error) {
+    rethrowKnownBusinessError(error);
+  }
+}
+
+function isRecoverableTriageNode(nodeCode: string): boolean {
+  return nodeCode === '01002' || nodeCode === '01003';
+}
+
+function isRecoverableTriageProjection(
+  nodeCode: string,
+  status: SceneNodeStateRow['status']
+): boolean {
+  return isRecoverableTriageNode(nodeCode)
+    && (status === 'BLOCKED' || status === 'COMPLETED');
+}
+
+function manifestDescendants(nodeCode: string): ReadonlySet<string> {
+  const visited = new Set<string>();
+  const pending = [nodeCode];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    const node = resolveDigitalUseRuntimeNode(current);
+    for (const edge of node.allowedNext) {
+      if (edge.kind === 'NODE' && !visited.has(edge.targetNodeCode)) {
+        pending.push(edge.targetNodeCode);
+      }
+    }
+  }
+  return visited;
+}
+
+async function convergeSupersededTriageRoute(
+  tx: pg.PoolClient,
+  input: {
+    caseId: string;
+    sourceNodeCode: string;
+    newNextNodeCode: string | null;
+    branchReasonCode: string;
+    nextInputRefs: readonly StoredSceneRef[];
+  }
+): Promise<void> {
+  const prior = await getLatestDigitalUseNodeCompletionRoute(
+    tx,
+    input.caseId,
+    input.sourceNodeCode
+  );
+  const oldNext = prior?.nextNodeCode ?? null;
+  if (oldNext !== null && oldNext !== input.newNextNodeCode) {
+    const descendants = manifestDescendants(oldNext);
+    const states = await listSceneNodeStates(tx, input.caseId);
+    for (const state of states) {
+      if (!descendants.has(state.node_code)) continue;
+      if (state.node_code === input.newNextNodeCode) continue;
+      if (state.status === 'SKIPPED') continue;
+      const invalidated = await casInvalidateSceneNodeForRouteSupersession(tx, {
+        caseId: input.caseId,
+        nodeCode: state.node_code,
+        scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+        expectedRevision: state.revision,
+      });
+      if (!invalidated) throw nodeError('STALE_NODE_REVISION');
+    }
+  }
+
+  if (input.newNextNodeCode === null) return;
+  const next = resolveDigitalUseRuntimeNode(input.newNextNodeCode);
+  const existing = await getSceneNodeState(tx, input.caseId, next.nodeCode, true);
+  if (existing && (existing.status === 'SKIPPED' || existing.status === 'BLOCKED')) {
+    const reopened = await casReopenSceneNodeForRouteConvergence(tx, {
+      caseId: input.caseId,
+      nodeCode: next.nodeCode,
+      scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+      expectedRevision: existing.revision,
+      branchReasonCodes: [input.branchReasonCode],
+      inputRefs: input.nextInputRefs,
+    });
+    if (!reopened) throw nodeError('STALE_NODE_REVISION');
+  }
 }
 
 export type ResolvedRoute =
