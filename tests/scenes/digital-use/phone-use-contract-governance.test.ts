@@ -56,10 +56,16 @@ describe('Slice 14 PHONE_USE_CONTRACT frozen-scope governance', () => {
     expect(contract).not.toMatch(/parentAsChild|managerOverride|aiAsChild|roleplayAsChild/i);
   });
 
-  it('S14-GOV-06 keeps A5002 and scheduler/notification execution outside Slice 14', () => {
-    const slice14 = [contract, roleplay, nodeResponse, migration].join('\n');
-    expect(slice14).not.toMatch(/A5002/);
-    expect(slice14).not.toMatch(/CREATE TABLE\s+(review|reviews|followup|followups|notification|notifications|jobs)\b/i);
+  it('S14-GOV-06 keeps A5002 ownership outside Slice 14 while allowing the canonical Slice 15 dispatch seam', () => {
+    const slice14Owners = [contract, roleplay, migration].join('\n');
+    expect(slice14Owners).not.toMatch(/nodeCode\s*:\s*['"]A5002['"]/);
+    expect(slice14Owners).not.toMatch(/DIGITAL_USE_A5002_EFFECT_EVALUATION/);
+    expect(slice14Owners).not.toMatch(/CREATE TABLE\s+(review|reviews|followup|followups|notification|notifications|jobs)\b/i);
+
+    // Slice 15 may route the Manifest-owned A5002 through the existing
+    // node-response transaction shell; this does not make Slice 14 the owner.
+    expect(nodeResponse).toContain("node.stream === 'PHONE_USE_CONTRACT_REVIEW'");
+    expect(nodeResponse).toContain('executeA5002ReviewInTransaction');
     expect(contractSemantics).toContain('PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE');
   });
 
