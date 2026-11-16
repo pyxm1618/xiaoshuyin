@@ -154,8 +154,7 @@ export interface A5002SubjectSnapshot {
   }[];
 }
 
-export async function a5002CanonicalRequestFingerprint(
-  tx: pg.PoolClient,
+export function a5002CanonicalRequestFingerprint(
   input: {
     readonly actor: DigitalUseActor;
     readonly familyId: string;
@@ -166,45 +165,11 @@ export async function a5002CanonicalRequestFingerprint(
     readonly expectedScenePackageVersion?: 'v1' | undefined;
     readonly response: Readonly<Record<string, unknown>>;
   },
-  provider: ProfessionalReviewContentProvider
+  normalizedResponse: Readonly<Record<string, unknown>>,
+  exactSubject: A5002SubjectSnapshot
 ) {
   const parsed = A5002PhoneUseContractReviewSubmission.safeParse(input.response);
   if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
-  if (input.expectedScenePackageVersion !== DIGITAL_USE_PACKAGE_VERSION) {
-    throw reviewError('STALE_SCENE_PACKAGE');
-  }
-
-  const { snapshot: subject } = await resolveA5002SubjectSnapshot(tx, {
-    familyId: input.familyId,
-    caseId: input.caseId,
-    contractId: parsed.data.subject.contractId,
-    contractVersion: parsed.data.subject.contractVersion,
-    contractRevision: parsed.data.subject.contractRevision,
-    lock: false,
-  });
-
-  const packageInput = {
-    stream: 'PHONE_USE_CONTRACT_REVIEW' as const,
-    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-    packageId: parsed.data.professionalPackage.packageId,
-    packageVersion: parsed.data.professionalPackage.packageVersion,
-    contentHash: parsed.data.professionalPackage.contentHash,
-  };
-  const professionalPackage = await requireProfessionalReviewPackage(
-    provider,
-    packageInput,
-    'RESOLVE'
-  );
-
-  let normalizedResponse: Readonly<Record<string, unknown>>;
-  try {
-    normalizedResponse = professionalPackage.validateAndNormalizeResponse(
-      parsed.data.packageResponse
-    );
-  } catch {
-    throw reviewError('SCENE_RESPONSE_INVALID');
-  }
-
   return {
     parsed: parsed.data,
     normalizedResponse,
@@ -219,8 +184,8 @@ export async function a5002CanonicalRequestFingerprint(
       stream: 'PHONE_USE_CONTRACT_REVIEW',
       expectedCaseVersion: input.expectedCaseVersion,
       expectedNodeRevision: input.expectedNodeRevision,
-      scenePackageVersion: input.expectedScenePackageVersion,
-      subject,
+      scenePackageVersion: input.expectedScenePackageVersion ?? null,
+      subject: exactSubject,
       professionalPackage: parsed.data.professionalPackage,
       normalizedResponse,
       evidenceRefs: parsed.data.evidenceRefs,
