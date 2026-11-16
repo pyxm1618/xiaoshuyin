@@ -40,7 +40,7 @@ function a5001Response() {
       }],
     },
     professionalPackage: TEST_A5001_PACKAGE,
-    normalizedResponse: normalizedReviewResponse,
+    packageResponse: normalizedReviewResponse,
     evidenceRefs: [],
     provenance: [{
       kind: 'PARENT_AUTHORED_OBSERVATION',
@@ -59,7 +59,7 @@ function a5002Response() {
       contractStatus: 'ACTIVE',
     },
     professionalPackage: TEST_A5002_PACKAGE,
-    normalizedResponse: normalizedReviewResponse,
+    packageResponse: normalizedReviewResponse,
     evidenceRefs: [],
     provenance: [{
       kind: 'PARENT_AUTHORED_OBSERVATION',
@@ -112,7 +112,7 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
       ...base,
       response: {
         ...a5001Response(),
-        normalizedResponse: {
+        packageResponse: {
           outcome: 'SAME',
           note: 'Different normalized response.',
         },
