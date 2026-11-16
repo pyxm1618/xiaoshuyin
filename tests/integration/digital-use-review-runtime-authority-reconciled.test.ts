@@ -29,6 +29,7 @@ import {
   TEST_A5001_PACKAGE_V2,
   TEST_A5002_PACKAGE,
   normalizedReviewResponse,
+  type TestProfessionalReviewRevalidationDrift,
 } from '../support/digital-use-review-professional-content.js';
 
 interface BaseFixture {
@@ -1113,6 +1114,78 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       outcome: 'SAME',
       note: 'Synthetic package v2 reassessment.',
     });
+  });
+
+  it.each([
+    'VERSION',
+    'HASH',
+    'RETIRED',
+    'SUPERSEDED',
+    'SCOPE',
+    'APPROVAL',
+  ] satisfies readonly TestProfessionalReviewRevalidationDrift[])(
+    'T1511 preview-valid A5001 package %s drift before commit fails closed with zero professional truth',
+    async (drift) => {
+      provider.restore('FAMILY_ALLIANCE_REVIEW');
+      const { f, scene, payload } = await prepareA5001(
+        app,
+        `a5001-barrier-${drift.toLowerCase()}`
+      );
+      const barrier = provider.pauseNextRevalidation('FAMILY_ALLIANCE_REVIEW');
+      const pending = submitA5001(
+        app,
+        f,
+        scene,
+        payload,
+        `a5001-barrier-${drift.toLowerCase()}-${crypto.randomUUID()}`
+      );
+
+      await barrier.reached;
+      provider.setNextRevalidationDrift('FAMILY_ALLIANCE_REVIEW', drift);
+      barrier.release();
+
+      const result = await pending;
+      expect(result.statusCode, result.body).toBe(503);
+      expect(result.json()).toMatchObject({ code: 'DEPENDENCY_UNAVAILABLE' });
+      expect(await reviewCounts(f, 'A5001')).toMatchObject({
+        artifacts: 0,
+        completed: 0,
+        events: 0,
+        idempotency: 0,
+      });
+    }
+  );
+
+  it('T1511 preview-valid A5002 approval drift before commit fails closed and leaves exact Contract untouched', async () => {
+    provider.restore('PHONE_USE_CONTRACT_REVIEW');
+    const { f, scene, payload } = await prepareA5002(
+      app,
+      'a5002-barrier-approval'
+    );
+    const contractBefore = await contractSnapshot(f);
+    const barrier = provider.pauseNextRevalidation('PHONE_USE_CONTRACT_REVIEW');
+    const pending = submitA5002(
+      app,
+      f,
+      scene,
+      payload,
+      `a5002-barrier-approval-${crypto.randomUUID()}`
+    );
+
+    await barrier.reached;
+    provider.setNextRevalidationDrift('PHONE_USE_CONTRACT_REVIEW', 'APPROVAL');
+    barrier.release();
+
+    const result = await pending;
+    expect(result.statusCode, result.body).toBe(503);
+    expect(result.json()).toMatchObject({ code: 'DEPENDENCY_UNAVAILABLE' });
+    expect(await reviewCounts(f, 'A5002')).toMatchObject({
+      artifacts: 0,
+      completed: 0,
+      events: 0,
+      idempotency: 0,
+    });
+    expect(await contractSnapshot(f)).toEqual(contractBefore);
   });
 
   it('T1512 injected A5002 artifact failure leaves no partial professional truth or idempotency settlement', async () => {
