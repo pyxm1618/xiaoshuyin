@@ -51,10 +51,10 @@ function proofFor(
     ...identity,
     scope: Object.freeze([{ stream, scenePackageVersion: 'v1' }]),
     sourceRefs: Object.freeze([
-      `test://professional-authority/${stream.toLowerCase()}/test-v1`,
+      `test://professional-authority/${stream.toLowerCase()}/${identity.packageVersion}`,
     ]),
     approvalProofRef:
-      `test://professional-authority/${stream.toLowerCase()}/approval/test-v1`,
+      `test://professional-authority/${stream.toLowerCase()}/approval/${identity.packageVersion}`,
     approvalBinding: Object.freeze({
       packageId: identity.packageId,
       packageVersion: identity.packageVersion,
