@@ -782,6 +782,15 @@ export async function completeDigitalUseNodeResponse(
                   outputRefs: semantic.outputRefs,
                 });
             if (!blocked) throw nodeError('STALE_NODE_REVISION');
+            if (reevaluatingTriage) {
+              await convergeSupersededTriageRoute(tx, {
+                caseId: input.caseId,
+                sourceNodeCode: node.nodeCode,
+                newNextNodeCode: null,
+                branchReasonCode: reasonCode,
+                nextInputRefs: nextInputRefs(semantic),
+              });
+            }
             await insertDigitalUseNodeCompletedEvent(tx, {
               familyId: input.familyId,
               caseId: input.caseId,
@@ -795,15 +804,6 @@ export async function completeDigitalUseNodeResponse(
               nextNodeCode: null,
               terminalCode: null,
             });
-            if (reevaluatingTriage) {
-              await convergeSupersededTriageRoute(tx, {
-                caseId: input.caseId,
-                sourceNodeCode: node.nodeCode,
-                newNextNodeCode: null,
-                branchReasonCode: reasonCode,
-                nextInputRefs: nextInputRefs(semantic),
-              });
-            }
             await insertDigitalUseNodeCompletedAudit(tx, {
               familyId: input.familyId,
               caseId: input.caseId,
