@@ -32,7 +32,7 @@ const acceptance: readonly AcceptanceEvidence[] = [
   { id: 'AS-10', evidence: [{ file: FAMILY_GOV, anchor: 'FA-GOV-01 protects the exact 43-node canonical inventory' }] },
   { id: 'AS-11', evidence: [{ file: FAMILY_GOV, anchor: 'FA-GOV-02 retains A3033' }] },
   { id: 'AS-12', evidence: [{ file: FAMILY_GOV, anchor: 'A3090-A3093' }] },
-  { id: 'AS-13', evidence: [{ file: FAMILY_GOV, anchor: 'A3111 exactly' }, { file: FAMILY_GOV, anchor: 'no score/cutoff engine' }] },
+  { id: 'AS-13', evidence: [{ file: FAMILY_GOV, anchor: 'A3111 exactly' }, { file: FAMILY_GOV, anchor: 'without a score/cutoff engine' }] },
   { id: 'AS-14', evidence: [{ file: FAMILY_RUNTIME, anchor: 'AS-14/15 rejects fabricated target codes' }] },
   { id: 'AS-15', evidence: [{ file: FAMILY_RUNTIME, anchor: 'client-owned next-node control' }, { file: FAMILY_GOV, anchor: 'no local topology declarations exist' }] },
   { id: 'AS-16', evidence: [{ file: FAMILY_GOV, anchor: 'explicit unknown/declined states' }] },
