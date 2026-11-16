@@ -22,7 +22,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - name: Capture generated lockfile delta
         run: git diff -- bun.lock
       - name: Typecheck
@@ -41,7 +41,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - name: Run unit tests
         run: bunx vitest run tests/domain
       - name: Run Digital Use Scene foundation tests
@@ -72,7 +72,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - name: Bootstrap roles
         run: bash db/init/01-roles.sh
         env:
@@ -117,7 +117,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - name: Bootstrap roles
         run: bash db/init/01-roles.sh
         env:
@@ -171,7 +171,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - name: OpenAPI generate + check
         run: |
           bun run openapi:generate
