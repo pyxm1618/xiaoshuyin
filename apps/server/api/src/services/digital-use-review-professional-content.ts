@@ -121,6 +121,7 @@ export const unavailableProductionProfessionalReviewContentProvider:
 
 function unavailable(): never {
   throw Object.assign(new Error('Professional Content package unavailable'), {
+    statusCode: 503,
     code: 'DEPENDENCY_UNAVAILABLE',
   });
 }
