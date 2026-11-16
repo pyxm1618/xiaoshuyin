@@ -1094,33 +1094,33 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
       before.reachableNodes.some((item: any) => item.nodeCode === 'A5002')
     ).toBe(true);
 
-    const a5001 = await app.inject({
-      method: 'POST',
-      url: `/api/v1/cases/${f.caseId}/scene/nodes/A5001/responses`,
-      headers: {
-        ...auth(f.manager.token),
-        'idempotency-key': `slice15-dual-a5001-${crypto.randomUUID()}`,
-      },
-      payload: {
-        expectedCaseVersion: f.caseVersion,
-        expectedNodeRevision: 0,
-        expectedScenePackageVersion: 'v1',
-        expectedSelectionRevision: 1,
-        response: a5001Payload(),
-      },
-    });
+    const [a5001, a5002] = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/scene/nodes/A5001/responses`,
+        headers: {
+          ...auth(f.manager.token),
+          'idempotency-key': `slice15-dual-a5001-${crypto.randomUUID()}`,
+        },
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          expectedSelectionRevision: 1,
+          response: a5001Payload(),
+        },
+      }),
+      submit(
+        f,
+        before,
+        `slice15-dual-a5002-${crypto.randomUUID()}`,
+        payload(f, 'dual')
+      ),
+    ]);
     expect(a5001.statusCode, a5001.body).toBe(200);
-
-    const afterA5001 = await getScene(f);
-    const a5002 = await submit(
-      f,
-      afterA5001,
-      `slice15-dual-a5002-${crypto.randomUUID()}`,
-      payload(f, 'dual')
-    );
     expect(a5002.statusCode, a5002.body).toBe(200);
 
-    const finalScene = a5002.json();
+    const finalScene = await getScene(f);
     expect(finalScene.nodes.find((n: any) => n.nodeCode === 'A5001')).toMatchObject({
       status: 'COMPLETED',
     });
