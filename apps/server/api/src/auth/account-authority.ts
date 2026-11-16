@@ -1,4 +1,3 @@
-import type pg from 'pg';
 /**
  * Single authoritative Account eligibility boundary for authenticated authority.
  *
@@ -25,28 +24,4 @@ export function hasAuthenticatedSessionAuthority(
   tokenEpoch: number
 ): boolean {
   return isAccountAuthorityEligible(account) && account.sessionEpoch === tokenEpoch;
-}
-
-/**
- * Transaction-time revalidation of the existing authenticated Account owner.
- *
- * The row lock is intentionally acquired inside the high-impact review
- * transaction so ACTIVE -> DISABLED drift cannot race a professional
- * REVIEW_COMPLETE commit or an idempotent replay.
- */
-export async function assertCurrentAccountAuthority(
-  tx: pg.PoolClient,
-  accountId: string
-): Promise<void> {
-  const { rows } = await tx.query<{ status: AccountStatus }>(
-    'SELECT status FROM accounts WHERE id=$1 FOR UPDATE',
-    [accountId]
-  );
-  const account = rows[0] ?? null;
-  if (account === null || !isAccountAuthorityEligible(account)) {
-    throw Object.assign(
-      new Error('Authenticated Account authority unavailable'),
-      { statusCode: 401, code: 'UNAUTHENTICATED' }
-    );
-  }
 }

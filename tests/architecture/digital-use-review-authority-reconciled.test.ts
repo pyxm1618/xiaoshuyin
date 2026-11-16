@@ -101,6 +101,33 @@ describe('Slice 15 authority-reconciled architecture boundaries', () => {
     }
   });
 
+  it('review runtime does not bypass Account RLS purpose ownership', () => {
+    const accountAuthority = read(
+      'apps/server/api/src/auth/account-authority.ts'
+    );
+    const nodeResponse = read(
+      'apps/server/api/src/services/digital-use-node-response.ts'
+    );
+    const a5001 = read(
+      'apps/server/api/src/services/digital-use-family-alliance-review.ts'
+    );
+    const a5002 = read(
+      'apps/server/api/src/services/digital-use-phone-contract-review.ts'
+    );
+
+    // Account status/session authority remains owned by request authentication
+    // under SELF_IDENTITY. Review transactions run under FAMILY_MANAGEMENT;
+    // widening accounts RLS or re-querying/locking accounts here would create
+    // a second authority path and violate the existing purpose boundary.
+    expect(accountAuthority).not.toContain('assertCurrentAccountAuthority');
+    for (const source of [nodeResponse, a5001, a5002]) {
+      expect(source).not.toContain('assertCurrentAccountAuthority');
+      expect(source).not.toMatch(/\bFROM\s+accounts\b/i);
+      expect(source).not.toMatch(/\bUPDATE\s+accounts\b/i);
+      expect(source).not.toMatch(/set_config\s*\(\s*['"]app\.purpose/i);
+    }
+  });
+
   it('professional response normalization is package-owned rather than client-asserted', () => {
     const contracts = read('packages/contracts/src/digital-use-review-schemas.ts');
     const provider = read(
