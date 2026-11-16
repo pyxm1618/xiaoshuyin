@@ -16,7 +16,6 @@ import {
   casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
   getLatestSceneArtifact,
-  getPhoneUseContractById,
   getSceneNodeState,
   getScenePackageBinding,
   hashPayload,
@@ -192,7 +191,11 @@ export async function resolveA5002SubjectSnapshot(
   }
 ): Promise<{ row: PhoneUseContractVersionRow; snapshot: A5002SubjectSnapshot }> {
   const lock = input.lock ?? false;
-  const row = await getPhoneUseContractById(tx, input.contractId, lock);
+  // Deterministic Contract lock order is owned by the repository query
+  // (version ASC). Resolve the exact requested Contract from that locked lineage
+  // instead of locking one row first and then the rest in a different order.
+  const versions = await listPhoneUseContractVersions(tx, input.caseId, lock);
+  const row = versions.find((candidate) => candidate.id === input.contractId) ?? null;
   if (
     row === null ||
     row.family_id !== input.familyId ||
@@ -210,7 +213,6 @@ export async function resolveA5002SubjectSnapshot(
     throw reviewError('PHONE_USE_CONTRACT_STALE_REVISION');
   }
 
-  const versions = await listPhoneUseContractVersions(tx, input.caseId, lock);
   return {
     row,
     snapshot: {
