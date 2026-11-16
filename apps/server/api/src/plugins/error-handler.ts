@@ -121,6 +121,7 @@ const ERROR_MAP: Record<string, number> = {
   FAMILY_ALREADY_OWNED: 409,
   MEMBER_ALREADY_EXISTS: 409,
   GUARDIAN_CONSENT_ALREADY_GRANTED: 409,
+  GUARDIAN_CONSENT_STALE: 409,
 };
 
 export function toHttpError(code: string, message?: string, details?: Record<string, unknown>): HttpError {

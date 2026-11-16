@@ -39,10 +39,10 @@ describe('Consent Grant Integration (T054)', () => {
   });
 
   async function setupManagerAndFamily(label: string) {
-    const { token, personId } = await loginWithLabel(app, `cg_${label}`);
+    const { token, personId, accountId } = await loginWithLabel(app, `cg_${label}`);
     const famRes = await createFamily(app, token, label);
     expect(famRes.statusCode).toBe(201);
-    return { token, personId, familyId: famRes.json().id as string };
+    return { token, personId, accountId, familyId: famRes.json().id as string };
   }
 
   async function createRequest(token: string, label: string) {
@@ -152,5 +152,74 @@ describe('Consent Grant Integration (T054)', () => {
     expect(rows[0].bound_at).toBeNull();
     expect(rows[0].notice_version).toBe('v1');
     expect(rows[0].notice_hash).toBe(request.noticeHash);
+
+    const audit = await queryDb(
+      `SELECT actor_account_id, event_type, resource_id, metadata, occurred_at
+         FROM business_audit_events
+        WHERE resource_id = $1 AND event_type = 'CONSENT_GRANTED'`,
+      [body.id]
+    );
+    expect(audit.rows).toHaveLength(1);
+    expect(audit.rows[0].actor_account_id).toBeDefined();
+    expect(audit.rows[0].resource_id).toBe(body.id);
+    expect(audit.rows[0].occurred_at).toBeInstanceOf(Date);
+    expect(audit.rows[0].metadata).toMatchObject({
+      purpose: 'UNDER_14_GUARDIAN_CONSENT',
+      decision: 'GRANTED',
+      version: 1,
+      supersedesId: null,
+      onboardingRequestId: request.requestId,
+      operation: 'GUARDIAN_CONSENT_GRANT',
+      provenanceChannel: 'TEST',
+    });
+  });
+
+  it('FND-REM-002: audit failure rolls the GRANT mutation back atomically', async () => {
+    const { token, familyId } = await setupManagerAndFamily('fnd-audit-rollback');
+    const request = await createRequest(token, 'fnd-audit-rollback');
+
+    await queryDb(`
+      CREATE OR REPLACE FUNCTION fnd_rem_fail_grant_audit() RETURNS trigger
+      LANGUAGE plpgsql AS $
+      BEGIN
+        IF NEW.event_type = 'CONSENT_GRANTED'
+           AND NEW.family_id = '${familyId}'::uuid THEN
+          RAISE EXCEPTION 'FND_REM_GRANT_AUDIT_FAILURE';
+        END IF;
+        RETURN NEW;
+      END $;
+      DROP TRIGGER IF EXISTS fnd_rem_fail_grant_audit_trigger ON business_audit_events;
+      CREATE TRIGGER fnd_rem_fail_grant_audit_trigger
+        BEFORE INSERT ON business_audit_events
+        FOR EACH ROW EXECUTE FUNCTION fnd_rem_fail_grant_audit();
+    `);
+
+    try {
+      const res = await grant(token, 'fnd-audit-rollback', {
+        onboardingRequestId: request.requestId,
+        noticeVersion: 'v1',
+        accepted: true,
+      });
+      expect(res.statusCode).toBe(500);
+
+      const facts = await queryDb(
+        `SELECT
+           (SELECT status::text FROM guardian_consent_requests WHERE id = $1) AS request_status,
+           (SELECT count(*)::int FROM consent_records WHERE onboarding_request_id = $1) AS consent_count,
+           (SELECT count(*)::int FROM business_audit_events
+             WHERE family_id = $2 AND event_type = 'CONSENT_GRANTED') AS audit_count`,
+        [request.requestId, familyId]
+      );
+      expect(facts.rows[0]).toEqual({
+        request_status: 'PENDING',
+        consent_count: 0,
+        audit_count: 0,
+      });
+    } finally {
+      await queryDb(
+        `DROP TRIGGER IF EXISTS fnd_rem_fail_grant_audit_trigger ON business_audit_events;
+         DROP FUNCTION IF EXISTS fnd_rem_fail_grant_audit()`
+      );
+    }
   });
 });

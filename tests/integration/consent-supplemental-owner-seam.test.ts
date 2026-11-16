@@ -300,6 +300,48 @@ describe('Consent owner — 01004 supplemental assessment owner seam', () => {
     expect(current[0].decision).toBe('REVOKED');
   });
 
+  it('FND-REM-002: supplemental decision audit preserves decision + supersession identity', async () => {
+    const scope = await newScope('fnd-audit-chain');
+    const declined = await record(scope, inputFor(scope, { decision: 'DECLINED' }));
+    const granted = await record(
+      scope,
+      inputFor(scope, { decision: 'GRANTED', expectedVersion: declined.version })
+    );
+    const revoked = await record(
+      scope,
+      inputFor(scope, { decision: 'REVOKED', expectedVersion: granted.version })
+    );
+
+    const audit = await admin.query(
+      `SELECT event_type, resource_id, metadata, occurred_at
+         FROM business_audit_events
+        WHERE family_id = $1
+          AND event_type LIKE 'CONSENT_SUPPLEMENTAL_ASSESSMENT_%'
+        ORDER BY occurred_at, event_type`,
+      [scope.familyId]
+    );
+
+    expect(audit.rows).toHaveLength(3);
+    expect(audit.rows.map((row: any) => row.metadata.decision)).toEqual([
+      'DECLINED',
+      'GRANTED',
+      'REVOKED',
+    ]);
+    expect(audit.rows[0].metadata).toMatchObject({
+      actorPersonId: scope.manager.personId,
+      subjectPersonId: scope.manager.personId,
+      purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+      version: 1,
+      supersedesId: null,
+      caseId: scope.caseId,
+      operation: 'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT_DECISION',
+    });
+    expect(audit.rows[1].metadata.supersedesId).toBe(declined.consentRecordId);
+    expect(audit.rows[2].metadata.supersedesId).toBe(granted.consentRecordId);
+    expect(audit.rows.every((row: any) => row.occurred_at instanceof Date)).toBe(true);
+    expect(revoked.supersedesId).toBe(granted.consentRecordId);
+  });
+
   it('rejects a non-revocation refusal after GRANTED and never rewrites it', async () => {
     const scope = await newScope('grant-decline');
     const v1 = await record(scope, inputFor(scope));

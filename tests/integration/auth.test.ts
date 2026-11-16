@@ -10,16 +10,21 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import { createAdminPool } from '../setup/db.js';
+import pg from 'pg';
 
 describe('Auth Integration (T042)', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
+  let admin: pg.Pool;
 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
+    admin = createAdminPool();
   });
 
   afterAll(async () => {
+    await admin.end();
     await app.close();
   });
 
@@ -39,6 +44,62 @@ describe('Auth Integration (T042)', () => {
     expect(body.person.profile).toBeUndefined();
     // Must NOT contain wechat_openid
     expect(JSON.stringify(body)).not.toContain('wechat_openid');
+  });
+
+  it('FND-REM-003: concurrent first login converges on one Account + Person without 500', async () => {
+    const code = `fnd_concurrent_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`;
+    const openid = `fake_${code}`;
+
+    // Widen the pre-insert race deterministically. This trigger is scoped to
+    // only this test OpenID and changes timing, never business truth.
+    await admin.query(`
+      CREATE OR REPLACE FUNCTION fnd_rem_slow_first_login() RETURNS trigger
+      LANGUAGE plpgsql AS $
+      BEGIN
+        IF NEW.wechat_openid = '${openid}' THEN
+          PERFORM pg_sleep(0.20);
+        END IF;
+        RETURN NEW;
+      END $;
+      DROP TRIGGER IF EXISTS fnd_rem_slow_first_login_trigger ON accounts;
+      CREATE TRIGGER fnd_rem_slow_first_login_trigger
+        BEFORE INSERT ON accounts
+        FOR EACH ROW EXECUTE FUNCTION fnd_rem_slow_first_login();
+    `);
+
+    try {
+      const [a, b] = await Promise.all([
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/auth/wechat',
+          payload: { code },
+        }),
+        app.inject({
+          method: 'POST',
+          url: '/api/v1/auth/wechat',
+          payload: { code },
+        }),
+      ]);
+
+      expect([a.statusCode, b.statusCode]).toEqual([200, 200]);
+      const bodyA = a.json();
+      const bodyB = b.json();
+      expect(bodyB.accountId).toBe(bodyA.accountId);
+      expect(bodyB.person.id).toBe(bodyA.person.id);
+
+      const accountFacts = await admin.query(
+        `SELECT
+           (SELECT count(*)::int FROM accounts WHERE wechat_openid = $1) AS accounts,
+           (SELECT count(*)::int FROM persons WHERE account_id = $2) AS persons`,
+        [openid, bodyA.accountId]
+      );
+      expect(accountFacts.rows[0]).toEqual({ accounts: 1, persons: 1 });
+    } finally {
+      await admin.query(
+        `DROP TRIGGER IF EXISTS fnd_rem_slow_first_login_trigger ON accounts;
+         DROP FUNCTION IF EXISTS fnd_rem_slow_first_login()`
+      );
+    }
   });
 
   it('repeat login reuses Account + Person', async () => {
