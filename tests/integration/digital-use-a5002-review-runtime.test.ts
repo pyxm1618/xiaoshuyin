@@ -25,6 +25,7 @@ interface Fixture {
   contractVersion: number;
   contractDraftRevision: number;
   contractDocumentId: string;
+  supervisionArtifactId: string;
 }
 
 const term = (value: string) => ({ state: 'VALUE', value });
@@ -228,6 +229,28 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
         ]
       );
 
+      const supervision = await client.query<{ id: string }>(
+        `INSERT INTO scene_artifacts
+           (family_id,case_id,scene_package_version,artifact_type,schema_version,
+            source_node_code,data,owner_person_id,visibility,source_refs,revision)
+         VALUES ($1,$2,'v1','PHONE_USE_SUPERVISION_LOG','v1','A4006',
+                 $3::jsonb,$4,'FAMILY_AUTHORIZED',$5::jsonb,1)
+         RETURNING id`,
+        [
+          familyId,
+          caseId,
+          JSON.stringify({
+            action: 'LOG',
+            note: 'Observed supervision during the Contract execution period.',
+            actorPersonId: manager.personId,
+            provenance: 'AUTHENTICATED_ACTOR_INPUT',
+          }),
+          manager.personId,
+          JSON.stringify([{ type: 'SCENE_ARTIFACT', id: contractDocumentId }]),
+        ]
+      );
+      const supervisionArtifactId = supervision.rows[0]!.id;
+
       await client.query('COMMIT');
       return {
         manager,
@@ -240,6 +263,7 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
         contractVersion: 1,
         contractDraftRevision: 1,
         contractDocumentId,
+        supervisionArtifactId,
       };
     } catch (error) {
       await client.query('ROLLBACK');
@@ -527,6 +551,18 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
       },
     });
     expect(artifact.data.subject.a4011SupportArtifacts).toHaveLength(1);
+    expect(artifact.data.subject.a4006SupervisionArtifacts).toEqual([
+      expect.objectContaining({
+        artifactId: f.supervisionArtifactId,
+        artifactType: 'PHONE_USE_SUPERVISION_LOG',
+        revision: 1,
+      }),
+    ]);
+    expect(artifact.sourceRefs).toEqual(
+      expect.arrayContaining([
+        { type: 'SCENE_ARTIFACT', id: f.supervisionArtifactId },
+      ])
+    );
 
     expect(await contractSnapshot(f)).toEqual(beforeContract);
     const after = await counts(f);

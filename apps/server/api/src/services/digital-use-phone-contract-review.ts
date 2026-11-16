@@ -184,6 +184,19 @@ function artifactMatchesContract(
   );
 }
 
+function a5002SupervisionHistory(
+  artifacts: readonly SceneArtifactRow[]
+): readonly SceneArtifactRow[] {
+  return artifacts
+    .filter(
+      (artifact) =>
+        artifact.source_node_code === 'A4006' &&
+        (artifact.artifact_type === 'PHONE_USE_SUPERVISION_COMPONENT' ||
+          artifact.artifact_type === 'PHONE_USE_SUPERVISION_LOG')
+    )
+    .sort((left, right) => left.created_at.getTime() - right.created_at.getTime());
+}
+
 function sourceRefsFor(
   contract: PhoneUseContractVersionRow,
   artifacts: readonly SceneArtifactRow[],
@@ -194,9 +207,12 @@ function sourceRefsFor(
   const relevantArtifacts = artifacts
     .filter(
       (artifact) =>
-        (artifact.artifact_type === 'PHONE_USE_CONTRACT_DOCUMENT' ||
+        ((artifact.artifact_type === 'PHONE_USE_CONTRACT_DOCUMENT' ||
           artifact.artifact_type === 'PHONE_USE_CONTRACT_SUPPORT_LOG') &&
-        artifactMatchesContract(artifact, contract)
+          artifactMatchesContract(artifact, contract)) ||
+        (artifact.source_node_code === 'A4006' &&
+          (artifact.artifact_type === 'PHONE_USE_SUPERVISION_COMPONENT' ||
+            artifact.artifact_type === 'PHONE_USE_SUPERVISION_LOG'))
     )
     .map((artifact) => ({
       type: 'SCENE_ARTIFACT' as const,
@@ -579,6 +595,14 @@ export async function executePhoneUseContractReviewNodeInTransaction(
         artifactId: artifact.id,
         revision: artifact.revision,
       }));
+    const supervisionHistory = a5002SupervisionHistory(artifacts).map(
+      (artifact) => ({
+        artifactId: artifact.id,
+        artifactType: artifact.artifact_type,
+        revision: artifact.revision,
+        createdAt: artifact.created_at.toISOString(),
+      })
+    );
 
     const artifact = await insertSceneArtifact(tx, {
       familyId: input.familyId,
@@ -607,6 +631,7 @@ export async function executePhoneUseContractReviewNodeInTransaction(
                   revision: matchingDocument.revision,
                 },
           a4011SupportArtifacts: supportArtifacts,
+          a4006SupervisionArtifacts: supervisionHistory,
           contractLineage: contractLineage(history),
           priorReviewArtifact:
             previous === null
