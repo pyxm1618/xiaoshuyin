@@ -174,9 +174,12 @@ function artifactMatchesContract(
   artifact: SceneArtifactRow,
   contract: PhoneUseContractVersionRow
 ): boolean {
+  const artifactVersion =
+    dataNumber(artifact.data, 'contractVersion') ??
+    dataNumber(artifact.data, 'version');
   return (
     dataString(artifact.data, 'contractVersionId') === contract.id &&
-    dataNumber(artifact.data, 'contractVersion') === contract.version
+    artifactVersion === contract.version
   );
 }
 
