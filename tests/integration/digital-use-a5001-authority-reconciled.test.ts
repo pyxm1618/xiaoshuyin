@@ -421,16 +421,27 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     const f = await fixture('idempotency');
     const key = `slice15-a5001-idem-${crypto.randomUUID()}`;
     const request = payload(f);
-    const first = await submit(f, key, request);
+    const originalNodeRevision =
+      f.scene.nodes.find((item: any) => item.nodeCode === 'A5001')?.revision ?? 0;
+    const exactReplay = (body = request) =>
+      submit(
+        f,
+        key,
+        body,
+        app,
+        f.manager.token,
+        { expectedNodeRevision: originalNodeRevision }
+      );
+    const first = await exactReplay();
     expect(first.statusCode, first.body).toBe(200);
 
     professional.retire('FAMILY_ALLIANCE_REVIEW');
     try {
-      const replay = await submit(f, key, request);
+      const replay = await exactReplay();
       expect(replay.statusCode, replay.body).toBe(200);
       expect(replay.json()).toEqual(first.json());
 
-      const changedPayload = await submit(f, key, {
+      const changedPayload = await exactReplay({
         ...request,
         packageResponse: {
           outcome: 'SAME',
@@ -440,7 +451,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       expect(changedPayload.statusCode, changedPayload.body).toBe(409);
       expect(changedPayload.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
 
-      const changedPackage = await submit(f, key, {
+      const changedPackage = await exactReplay({
         ...request,
         professionalPackage: {
           ...request.professionalPackage,
@@ -458,10 +469,21 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     const f = await fixture('idempotency-normalized-equivalent');
     const key = `slice15-a5001-idem-normalized-${crypto.randomUUID()}`;
     const request = payload(f);
-    const first = await submit(f, key, request);
+    const originalNodeRevision =
+      f.scene.nodes.find((item: any) => item.nodeCode === 'A5001')?.revision ?? 0;
+    const exactReplay = (body = request) =>
+      submit(
+        f,
+        key,
+        body,
+        app,
+        f.manager.token,
+        { expectedNodeRevision: originalNodeRevision }
+      );
+    const first = await exactReplay();
     expect(first.statusCode, first.body).toBe(200);
 
-    const equivalent = await submit(f, key, {
+    const equivalent = await exactReplay({
       ...request,
       packageResponse: {
         ...request.packageResponse,

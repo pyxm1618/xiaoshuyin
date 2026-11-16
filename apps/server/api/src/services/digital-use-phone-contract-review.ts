@@ -361,6 +361,7 @@ export async function prepareA5002ReviewFingerprintInTransaction(
   node: DigitalUseNodeManifestEntry,
   provider: ProfessionalReviewContentProvider
 ): Promise<Readonly<Record<string, unknown>>> {
+  try {
   if (
     node.nodeCode !== 'A5002' ||
     node.stream !== 'PHONE_USE_CONTRACT_REVIEW' ||
@@ -458,6 +459,9 @@ export async function prepareA5002ReviewFingerprintInTransaction(
     normalizedResponse,
     subject
   ).fingerprint;
+  } catch (error) {
+    rethrowKnown(error);
+  }
 }
 
 export async function executeA5002ReviewInTransaction(
