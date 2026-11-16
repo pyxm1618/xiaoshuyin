@@ -177,14 +177,16 @@ export function isFamilyAllianceTargetCode(
 
 export async function listCurrentDigitalUseTargetItems(
   tx: Tx,
-  caseId: string
+  caseId: string,
+  lock = false
 ): Promise<DigitalUseTargetItemRow[]> {
   const { rows } = await tx.query<DigitalUseTargetItemRow>(
     `SELECT ${TARGET_COLUMNS}
        FROM digital_use_target_items
       WHERE case_id = $1
         AND superseded_at IS NULL
-      ORDER BY target_code ASC`,
+      ORDER BY target_code ASC
+      ${lock ? 'FOR UPDATE' : ''}`,
     [caseId]
   );
   return rows;
