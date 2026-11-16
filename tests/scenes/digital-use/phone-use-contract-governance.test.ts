@@ -56,10 +56,19 @@ describe('Slice 14 PHONE_USE_CONTRACT frozen-scope governance', () => {
     expect(contract).not.toMatch(/parentAsChild|managerOverride|aiAsChild|roleplayAsChild/i);
   });
 
-  it('S14-GOV-06 keeps A5002 and scheduler/notification execution outside Slice 14', () => {
-    const slice14 = [contract, roleplay, nodeResponse, migration].join('\n');
-    expect(slice14).not.toMatch(/A5002/);
-    expect(slice14).not.toMatch(/CREATE TABLE\s+(review|reviews|followup|followups|notification|notifications|jobs)\b/i);
+  it('S14-GOV-06 keeps A5002 implementation and scheduler/notification execution outside Slice 14 owners', () => {
+    // node-response.ts is a cross-slice Scene dispatcher. Slice 15 may add an
+    // A5002 dispatch there, but Slice 14-owned Contract/Roleplay/Migration
+    // files must remain free of A5002 implementation truth.
+    const slice14Owned = [contract, roleplay, migration].join('\n');
+    expect(slice14Owned).not.toMatch(/A5002/);
+    expect(slice14Owned).not.toMatch(/CREATE TABLE\s+(review|reviews|followup|followups|notification|notifications|jobs)\b/i);
+    expect(nodeResponse).toContain(
+      "from './digital-use-phone-contract-review.js'"
+    );
+    expect(nodeResponse).toContain(
+      'executePhoneUseContractReviewNodeInTransaction'
+    );
     expect(contractSemantics).toContain('PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE');
   });
 
