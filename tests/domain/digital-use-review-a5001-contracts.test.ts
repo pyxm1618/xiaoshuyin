@@ -151,7 +151,7 @@ describe('Slice 15 A5001 typed contract and negative space', () => {
     ).toBe(false);
   });
 
-  it('preserves exact A5002 Contract identity without scoring or generic Review semantics', () => {
+  it('AS-08 preserves exact A5002 Contract identity and rejects A5001/scoring semantics', () => {
     const parsed = A5002PhoneUseContractReviewResponse.parse(validA5002Payload());
     expect(parsed).toMatchObject({
       kind: 'PHONE_USE_CONTRACT_REVIEW',
