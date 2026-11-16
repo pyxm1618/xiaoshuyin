@@ -360,6 +360,152 @@ export async function casRecompleteSceneNodeState(
   return rows[0] ?? null;
 }
 
+/**
+ * Digital Use vertical convergence CAS for authoritative triage re-evaluation.
+ * Only previously BLOCKED/COMPLETED triage nodes may use this primitive; the
+ * caller owns that bounded reachability decision. History remains in append-only
+ * Case Event/Audit/Evidence stores while this current Scene projection advances.
+ */
+export async function casReevaluateSceneNodeState(
+  tx: Tx,
+  input: {
+    caseId: string;
+    nodeCode: string;
+    scenePackageVersion: string;
+    expectedRevision: number;
+    status: 'IN_PROGRESS' | 'COMPLETED' | 'BLOCKED';
+    branchReasonCodes: readonly string[];
+    inputRefs: readonly StoredSceneRef[];
+    outputRefs: readonly StoredSceneRef[];
+  }
+): Promise<SceneNodeStateRow | null> {
+  const completed = input.status === 'IN_PROGRESS' ? null : new Date();
+  const { rows } = await tx.query<SceneNodeStateRow>(
+    `UPDATE scene_node_states
+        SET status = $5,
+            branch_reason_codes = $6,
+            input_refs = $7::jsonb,
+            output_refs = $8::jsonb,
+            completed_at = $9,
+            revision = revision + 1
+      WHERE case_id = $1
+        AND node_code = $2
+        AND scene_package_version = $3
+        AND revision = $4
+        AND status IN ('BLOCKED','COMPLETED')
+      RETURNING ${NODE_COLUMNS}`,
+    [
+      input.caseId,
+      input.nodeCode,
+      input.scenePackageVersion,
+      input.expectedRevision,
+      input.status,
+      [...input.branchReasonCodes],
+      JSON.stringify(input.inputRefs),
+      JSON.stringify(input.outputRefs),
+      completed,
+    ]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Marks a persisted Scene projection stale after its upstream authoritative
+ * route is superseded. This never deletes Evidence, Artifacts, Events or Audit.
+ */
+export async function casInvalidateSceneNodeForRouteSupersession(
+  tx: Tx,
+  input: {
+    caseId: string;
+    nodeCode: string;
+    scenePackageVersion: string;
+    expectedRevision: number;
+  }
+): Promise<SceneNodeStateRow | null> {
+  const { rows } = await tx.query<SceneNodeStateRow>(
+    `UPDATE scene_node_states
+        SET status = 'SKIPPED',
+            branch_reason_codes = ARRAY['UPSTREAM_ROUTE_SUPERSEDED']::text[],
+            output_refs = '[]'::jsonb,
+            completed_at = now(),
+            revision = revision + 1
+      WHERE case_id = $1
+        AND node_code = $2
+        AND scene_package_version = $3
+        AND revision = $4
+        AND status <> 'SKIPPED'
+      RETURNING ${NODE_COLUMNS}`,
+    [
+      input.caseId,
+      input.nodeCode,
+      input.scenePackageVersion,
+      input.expectedRevision,
+    ]
+  );
+  return rows[0] ?? null;
+}
+
+/**
+ * Reopens only an already persisted route projection that had previously been
+ * invalidated/blocked. New nodes still use ensureSceneNodeAvailable().
+ */
+export async function casReopenSceneNodeForRouteConvergence(
+  tx: Tx,
+  input: {
+    caseId: string;
+    nodeCode: string;
+    scenePackageVersion: string;
+    expectedRevision: number;
+    branchReasonCodes: readonly string[];
+    inputRefs: readonly StoredSceneRef[];
+  }
+): Promise<SceneNodeStateRow | null> {
+  const { rows } = await tx.query<SceneNodeStateRow>(
+    `UPDATE scene_node_states
+        SET status = 'AVAILABLE',
+            branch_reason_codes = $5,
+            input_refs = $6::jsonb,
+            output_refs = '[]'::jsonb,
+            completed_at = NULL,
+            revision = revision + 1
+      WHERE case_id = $1
+        AND node_code = $2
+        AND scene_package_version = $3
+        AND revision = $4
+        AND status IN ('SKIPPED','BLOCKED')
+      RETURNING ${NODE_COLUMNS}`,
+    [
+      input.caseId,
+      input.nodeCode,
+      input.scenePackageVersion,
+      input.expectedRevision,
+      [...input.branchReasonCodes],
+      JSON.stringify(input.inputRefs),
+    ]
+  );
+  return rows[0] ?? null;
+}
+
+export async function getLatestDigitalUseNodeCompletionRoute(
+  tx: Tx,
+  caseId: string,
+  nodeCode: string
+): Promise<{ nextNodeCode: string | null; nodeRevision: number } | null> {
+  const { rows } = await tx.query<{ next_node_code: string | null; node_revision: number }>(
+    `SELECT NULLIF(metadata->>'nextNodeCode','') AS next_node_code,
+            (metadata->>'nodeRevision')::integer AS node_revision
+       FROM case_events
+      WHERE case_id = $1
+        AND event_type = 'CASE_DIGITAL_USE_NODE_COMPLETED'
+        AND metadata->>'nodeCode' = $2
+      ORDER BY occurred_at DESC, id DESC
+      LIMIT 1`,
+    [caseId, nodeCode]
+  );
+  const row = rows[0];
+  return row ? { nextNodeCode: row.next_node_code, nodeRevision: row.node_revision } : null;
+}
+
 export async function listSceneArtifacts(
   tx: Tx,
   caseId: string
