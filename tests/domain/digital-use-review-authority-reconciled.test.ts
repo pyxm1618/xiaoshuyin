@@ -210,6 +210,48 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
     })).not.toBe(original);
   });
 
+  it('T1510 A5001 and A5002 canonical fingerprints cannot collide under the same actor/Family/Case/revisions', () => {
+    const familyId = a5001ExactSubject.familyId;
+    const caseId = a5001ExactSubject.caseId;
+    const a5001 = hashPayload(
+      a5001CanonicalRequestFingerprint(
+        {
+          actor,
+          familyId,
+          caseId,
+          nodeCode: 'A5001',
+          expectedCaseVersion: 5,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          response: a5001Response(),
+        },
+        normalizedReviewResponse,
+        a5001ExactSubject
+      ).fingerprint
+    );
+    const a5002 = hashPayload(
+      a5002CanonicalRequestFingerprint(
+        {
+          actor,
+          familyId,
+          caseId,
+          nodeCode: 'A5002',
+          expectedCaseVersion: 5,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          response: a5002Response(),
+        },
+        normalizedReviewResponse,
+        {
+          ...a5002ExactSubject,
+          familyId,
+          caseId,
+        }
+      ).fingerprint
+    );
+    expect(a5002).not.toBe(a5001);
+  });
+
   it('T1503 production provider has no valid Professional package by default', async () => {
     await expect(
       requireProfessionalReviewPackage(
