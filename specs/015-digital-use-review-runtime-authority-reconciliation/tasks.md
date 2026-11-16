@@ -471,3 +471,40 @@ STOP on any CI failure, head drift, authority drift, production fixture leakage 
 
 **Acceptance / Evidence Ownership**  
 Developer provides exact-head evidence; independent Audit 2 owns final merge-safety decision.
+
+## Requirement Traceability Matrix
+
+| Spec requirement | Requirement | Plan design owner | Task owner | Verification evidence |
+|---|---|---|---|---|
+| FR-001 | A5001 identity | A5001 Subject Design | T1505/T1506 | A5001 integration + sibling non-completion |
+| FR-002 | A5002 identity | A5002 Subject Design | T1507/T1508 | A5002 integration + sibling non-completion |
+| FR-003 | independent streams | A5001/A5002 Subject Design | T1505–T1508 | cross-stream independence tests |
+| FR-004 | no forced sequence | Common Core Review / Phase 4 Boundary | T1505–T1508/T1516 | manifest/integration no-unlock assertions |
+| FR-005 | A5001 exact subject | A5001 Subject Design | T1505/T1511 | selection/target DB readback + drift race |
+| FR-006 | A5002 exact Contract | A5002 Subject Design | T1507/T1511 | exact-version DB readback + no-latest test |
+| FR-007 | re-entry history | History / Re-entry / Supersession | T1513 | old/new artifact DB readback |
+| FR-008 | currentness/NEEDS_REVIEW | A5001/A5002 + History | T1505/T1507/T1513 | stale subject/currentness integration |
+| FR-009 | valid package required | Professional Content Consumer Seam | T1502/T1506/T1508 | default fail-closed + positive fixture |
+| FR-010 | package proof fields | Professional Content Consumer Seam | T1502/T1504 | proof/hash/scope/reviewer contract tests |
+| FR-011 | candidate dimensions not authority | Response / Package Contract Design | T1504 | architecture/domain absence assertions |
+| FR-012 | missing/invalid package fail closed | Professional Content Consumer Seam | T1502/T1505/T1507 | negative package matrix |
+| FR-013 | no REVIEW_COMPLETE without package | REVIEW_COMPLETE path across stream tasks | T1505–T1508 | DB zero-residue negative tests |
+| FR-014 | no code/test fake approval | Production / Test Isolation | T1503 | static production-fixture isolation test |
+| FR-015 | professional content external-owned | Response / Package Contract Design | T1502/T1504 | no scoring/forms/AI fallback assertions |
+| FR-016 | reuse Scene owners | Artifact Design | T1504/T1515 | artifact constraint + no generic Review owner |
+| FR-017 | Evidence provenance | Evidence and Provenance | T1505/T1507/T1509 | parent/child/source integration |
+| FR-018 | immutable traceable history | History / Re-entry / Supersession | T1513 | package/subject history DB readback |
+| FR-019 | reuse idempotency | Idempotency | T1510 | replay/mismatch integration |
+| FR-020 | stale writes fail | Concurrency | T1511 | barrier-based subject/package races |
+| FR-021 | atomic effects | Atomicity | T1512 | fault injection + DB rollback |
+| FR-022 | Authorization/RLS | Authorization / RLS / Consent / Compliance / Safety | T1509 | wrong-family/actor + forced RLS |
+| FR-023 | Consent independent | Authorization / RLS / Consent / Compliance / Safety | T1509 | consent revoke zero-residue |
+| FR-024 | Compliance independent | Authorization / RLS / Consent / Compliance / Safety | T1509 | deny/unavailable zero-residue |
+| FR-025 | Safety independent | Authorization / RLS / Consent / Compliance / Safety | T1509 | SAFETY_HOLD zero-residue |
+| FR-026 | AI not authority/fact | AI / Phase 3 Boundary | T1503/T1509 | no AI fallback + provenance tests |
+| FR-027 | no Phase 4 truth | Common Core Review / Phase 4 Boundary | T1515/T1516 | architecture/static negative-space scan |
+| FR-028 | no real AI required | AI / Phase 3 Boundary | T1502/T1503/T1516 | deterministic suites without model |
+| FR-029 | A5002 cannot execute A4012 | A4012 Boundary | T1507/T1508/T1515 | Contract before/after + no A4012 event |
+| FR-030 | SCHEDULED eligibility only | USER_INITIATED / SCHEDULED | T1503/T1514/T1515 | no production trigger/scheduler route |
+
+Mechanical Audit 1 rule: every FR-001 through FR-030 must appear explicitly in this matrix. A missing row is a planning FAIL, even if a range elsewhere would imply coverage.
