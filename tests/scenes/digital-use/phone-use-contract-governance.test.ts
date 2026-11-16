@@ -56,7 +56,7 @@ describe('Slice 14 PHONE_USE_CONTRACT frozen-scope governance', () => {
     expect(contract).not.toMatch(/parentAsChild|managerOverride|aiAsChild|roleplayAsChild/i);
   });
 
-  it('S14-GOV-06 keeps A5002 ownership outside Slice 14 while allowing the canonical Slice 15 dispatch seam', () => {
+  it('S14-GOV-06 keeps A5002 and scheduler/notification execution outside Slice 14', () => {
     const slice14Owners = [contract, roleplay, migration].join('\n');
     expect(slice14Owners).not.toMatch(/nodeCode\s*:\s*['"]A5002['"]/);
     expect(slice14Owners).not.toMatch(/DIGITAL_USE_A5002_EFFECT_EVALUATION/);
