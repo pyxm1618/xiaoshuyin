@@ -238,6 +238,7 @@ describe('Digital Use vertical convergence', () => {
       payload: {
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: node.revision,
+        expectedScenePackageVersion: scene.scenePackageVersion,
         response,
         ...extra,
       },
