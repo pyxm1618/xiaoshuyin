@@ -88,6 +88,7 @@ const MutationErrors = {
   409: DigitalUseApiError,
   422: DigitalUseApiError,
   500: DigitalUseApiError,
+  503: DigitalUseApiError,
 } as const;
 
 export function registerDigitalUseAssessmentRoutes(
