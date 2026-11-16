@@ -123,7 +123,7 @@ export function a5001CanonicalRequestFingerprint(input: {
   readonly familyId: string;
   readonly caseId: string;
   readonly nodeCode: string;
-  readonly expectedScenePackageVersion?: 'v1';
+  readonly expectedScenePackageVersion?: 'v1' | undefined;
   readonly response: Readonly<Record<string, unknown>>;
 }) {
   const parsed = A5001FamilyAllianceReviewSubmission.safeParse(input.response);
@@ -330,9 +330,9 @@ export async function executeA5001ReviewInTransaction(
     readonly nodeCode: string;
     readonly expectedCaseVersion: number;
     readonly expectedNodeRevision: number;
-    readonly expectedScenePackageVersion?: 'v1';
-    readonly expectedSelectionRevision?: number;
-    readonly expectedTargetRevision?: number;
+    readonly expectedScenePackageVersion?: 'v1' | undefined;
+    readonly expectedSelectionRevision?: number | undefined;
+    readonly expectedTargetRevision?: number | undefined;
     readonly response: Readonly<Record<string, unknown>>;
   },
   node: DigitalUseNodeManifestEntry,
