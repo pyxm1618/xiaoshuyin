@@ -170,7 +170,7 @@ async function ensureContractNode(
    branchReasonCodes:['USER_INITIATED_CONTRACT_ENTRY'],inputRefs:input.inputRefs,
  });
 }
-async function assertDependencies(
+export async function assertPhoneUseContractDependencies(
  tx:pg.PoolClient,
  input:{
   actor:DigitalUseActor;
@@ -292,7 +292,7 @@ async function assertDependencies(
 
  return refs;
 }
-async function assertChildParticipation(
+export async function assertPhoneUseContractChildParticipation(
  tx:pg.PoolClient,input:{familyId:string;caseId:string;childPersonId:string;participationId:string}
 ){
  const p=await lockParticipationById(tx,input.participationId);
@@ -336,7 +336,7 @@ export async function getPhoneUseContractCurrent(
  },async tx=>{
    const row=await getCurrentPhoneUseContract(tx,input.caseId);
    if(!row) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
-   const p=await assertChildParticipation(tx,{
+   const p=await assertPhoneUseContractChildParticipation(tx,{
      familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id,
    });
    await requirePhoneUseContractChildConfirmation(tx,{
@@ -361,8 +361,8 @@ export async function createPhoneUseContractDraft(
   await lockManagerContractCase(tx,input,'A4010');
   if(input.adultPartyPersonId!==input.actor.personId||input.childPartyPersonId===input.actor.personId) throw contractError('PHONE_USE_CONTRACT_UNAUTHORIZED');
   resolvePhoneUseContractContent(input.sourceTemplateVersion);
-  const refs=await assertDependencies(tx,input);
-  await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:input.childPartyPersonId,participationId:input.childParticipationId});
+  const refs=await assertPhoneUseContractDependencies(tx,input);
+  await assertPhoneUseContractChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:input.childPartyPersonId,participationId:input.childParticipationId});
   await ensureContractNode(tx,{familyId:input.familyId,caseId:input.caseId,nodeCode:'A4010',inputRefs:refs});
   if(await getCurrentActivePhoneUseContract(tx,input.caseId,true)) throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Use A4012 revision for an active Contract');
   const requestHash=hashPayload({
@@ -407,8 +407,8 @@ export async function updatePhoneUseContractDraft(
   const current=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
   if(!current||current.adult_party_person_id!==input.actor.personId) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
   resolvePhoneUseContractContent(current.source_template_version);
-  const refs=await assertDependencies(tx,input);
-  await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:current.child_party_person_id,participationId:current.child_participation_id});
+  const refs=await assertPhoneUseContractDependencies(tx,input);
+  await assertPhoneUseContractChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:current.child_party_person_id,participationId:current.child_participation_id});
   const requestHash=hashPayload({caseId:input.caseId,version:input.version,expectedCaseVersion:input.expectedCaseVersion,expectedDraftRevision:input.expectedDraftRevision,dependencyRefs:input.dependencyRefs,terms:input.terms});
   const outcome=await runIdempotentCommandInTransaction(tx,{
    accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
@@ -439,11 +439,11 @@ async function activateConfirmedContract(
    throw contractError('PHONE_USE_CONTRACT_MISSING_CONFIRMATION');
  }
  resolvePhoneUseContractContent(row.source_template_version);
- const refs=await assertDependencies(tx,{
+ const refs=await assertPhoneUseContractDependencies(tx,{
   actor:{accountId:row.parent_confirmation.accountId,personId:row.parent_confirmation.personId},
   familyId:input.familyId,caseId:input.caseId,dependencyRefs:row.dependency_refs,
  });
- await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id});
+ await assertPhoneUseContractChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id});
  const nodeCode:'A4010'|'A4012'=row.supersedes_id?'A4012':'A4010';
  const scene=await ensureContractNode(tx,{familyId:input.familyId,caseId:input.caseId,nodeCode,inputRefs:refs});
  if(row.supersedes_id){
@@ -504,7 +504,7 @@ async function managerConfirm(
   const row=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
   if(!row||row.adult_party_person_id!==input.actor.personId) throw contractError('PHONE_USE_CONTRACT_UNAUTHORIZED');
   if((row.supersedes_id!==null)!==(preview.supersedes_id!==null)) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
-  await assertChildParticipation(tx,{
+  await assertPhoneUseContractChildParticipation(tx,{
    familyId:input.familyId,caseId:input.caseId,
    childPersonId:row.child_party_person_id,participationId:row.child_participation_id,
   });
@@ -558,7 +558,7 @@ async function childConfirm(
   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
   await assertCurrentDigitalUseProblemFormulation(tx,input.caseId);
   await assertAssessmentCompliance(tx,input.actor.personId);
-  const participation=await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id});
+  const participation=await assertPhoneUseContractChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id});
   await requirePhoneUseContractChildConfirmation(tx,{accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,contract:row,participation});
   const requestHash=hashPayload({caseId:input.caseId,version:input.version,expectedCaseVersion:input.expectedCaseVersion,expectedDraftRevision:input.expectedDraftRevision,party:'CHILD'});
   const outcome=await runIdempotentCommandInTransaction(tx,{
@@ -622,13 +622,13 @@ export async function revisePhoneUseContract(
     throw contractError('PHONE_USE_CONTRACT_STALE_REVISION','An open Contract revision already exists');
   }
   resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
-  const activeDependencyRefs=await assertDependencies(tx,{
+  const activeDependencyRefs=await assertPhoneUseContractDependencies(tx,{
    actor:active.parent_confirmation
     ? {accountId:active.parent_confirmation.accountId,personId:active.parent_confirmation.personId}
     : input.actor,
    familyId:input.familyId,caseId:input.caseId,dependencyRefs:active.dependency_refs,
   });
-  await assertChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:active.child_party_person_id,participationId:active.child_participation_id});
+  await assertPhoneUseContractChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:active.child_party_person_id,participationId:active.child_participation_id});
   await ensureContractNode(tx,{familyId:input.familyId,caseId:input.caseId,nodeCode:'A4012',inputRefs:activeDependencyRefs});
   const requestHash=hashPayload({caseId:input.caseId,expectedCaseVersion:input.expectedCaseVersion,expectedActiveDraftRevision:input.expectedActiveDraftRevision,activeId:active.id,updateTrigger:input.updateTrigger,updateReason:input.updateReason});
   const outcome=await runIdempotentCommandInTransaction(tx,{
@@ -679,13 +679,13 @@ async function readProfessionalAssetGate(
       const active = await getCurrentActivePhoneUseContract(tx, input.caseId, true);
       if (!active) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
       resolvePhoneUseContractContent(active.source_template_version);
-      await assertDependencies(tx,{
+      await assertPhoneUseContractDependencies(tx,{
         actor:active.parent_confirmation
           ? {accountId:active.parent_confirmation.accountId,personId:active.parent_confirmation.personId}
           : input.actor,
         familyId:input.familyId,caseId:input.caseId,dependencyRefs:active.dependency_refs,
       });
-      await assertChildParticipation(tx, {
+      await assertPhoneUseContractChildParticipation(tx, {
         familyId: input.familyId,
         caseId: input.caseId,
         childPersonId: active.child_party_person_id,
