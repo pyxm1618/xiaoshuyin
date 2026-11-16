@@ -77,6 +77,25 @@ function contractError(code:string,message?:string):Error & {statusCode:number;c
   const mapped=toHttpError(code,message);
   return Object.assign(new Error(mapped.message),{statusCode:mapped.statusCode,code:mapped.code});
 }
+
+export interface PhoneUseStaticProfessionalContentAuthority {
+  readonly status: 'APPROVED_PUBLISHED';
+  readonly version: string;
+  readonly authorityRef: string;
+}
+
+function requireStaticProfessionalContentAuthority(
+  authority: PhoneUseStaticProfessionalContentAuthority | undefined
+): PhoneUseStaticProfessionalContentAuthority {
+  if (
+    !authority
+    || authority.status !== 'APPROVED_PUBLISHED'
+    || authority.version !== PHONE_USE_CONTRACT_CONTENT_VERSION
+  ) {
+    throw contractError('PROFESSIONAL_CONTENT_UNAVAILABLE');
+  }
+  return authority;
+}
 function toStoredRefs(refs:readonly unknown[]):readonly StoredSceneRef[]{
   return refs as readonly StoredSceneRef[];
 }
@@ -686,22 +705,31 @@ export async function getPhoneUseContractTemplate(
 
 export async function getPhoneUseContractExamples(
   pool: pg.Pool,
-  input: { actor: DigitalUseActor; familyId: string; caseId: string }
+  input: { actor: DigitalUseActor; familyId: string; caseId: string },
+  professionalContentAuthority?: PhoneUseStaticProfessionalContentAuthority
 ) {
   await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4002' });
+  const professionalAuthority = requireStaticProfessionalContentAuthority(
+    professionalContentAuthority
+  );
   const content = resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
-  return { meta: content.meta, examples: content.examples };
+  return { meta: content.meta, professionalAuthority, examples: content.examples };
 }
 
 export async function getPhoneUseContractFaq(
   pool: pg.Pool,
-  input: { actor: DigitalUseActor; familyId: string; caseId: string }
+  input: { actor: DigitalUseActor; familyId: string; caseId: string },
+  professionalContentAuthority?: PhoneUseStaticProfessionalContentAuthority
 ) {
   const active = await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4011' });
   if (!active) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
+  const professionalAuthority = requireStaticProfessionalContentAuthority(
+    professionalContentAuthority
+  );
   const content = resolvePhoneUseContractContent(active.source_template_version);
   return {
     meta: content.meta,
+    professionalAuthority,
     contract: { id: active.id, version: active.version, status: 'ACTIVE' as const },
     ...content.faq,
   };
