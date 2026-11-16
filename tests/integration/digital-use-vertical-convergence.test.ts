@@ -233,7 +233,7 @@ describe('Digital Use vertical convergence', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/${nodeCode}/responses`,
       headers: commandHeaders(
         f.manager.token,
-        `du-vertical-${nodeCode.toLowerCase()}`
+        `du-vertical-${nodeCode.toLowerCase()}-${crypto.randomUUID()}`
       ),
       payload: {
         expectedCaseVersion: scene.caseVersion,
