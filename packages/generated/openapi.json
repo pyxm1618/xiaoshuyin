@@ -3879,7 +3879,9 @@
                               "PHONE_USE_BREACH_COMPONENT",
                               "PARENT_SELF_REGULATION_CHECKLIST",
                               "PHONE_USE_CONTRACT_DOCUMENT",
-                              "PHONE_USE_CONTRACT_SUPPORT_LOG"
+                              "PHONE_USE_CONTRACT_SUPPORT_LOG",
+                              "DIGITAL_USE_A5001_EFFECT_EVALUATION",
+                              "DIGITAL_USE_A5002_EFFECT_EVALUATION"
                             ]
                           },
                           "schemaVersion": {
@@ -3904,7 +3906,9 @@
                               "A4009",
                               "A4010",
                               "A4011",
-                              "A4012"
+                              "A4012",
+                              "A5001",
+                              "A5002"
                             ]
                           },
                           "revision": {
@@ -8679,7 +8683,9 @@
                               "PHONE_USE_BREACH_COMPONENT",
                               "PARENT_SELF_REGULATION_CHECKLIST",
                               "PHONE_USE_CONTRACT_DOCUMENT",
-                              "PHONE_USE_CONTRACT_SUPPORT_LOG"
+                              "PHONE_USE_CONTRACT_SUPPORT_LOG",
+                              "DIGITAL_USE_A5001_EFFECT_EVALUATION",
+                              "DIGITAL_USE_A5002_EFFECT_EVALUATION"
                             ]
                           },
                           "schemaVersion": {
@@ -8704,7 +8710,9 @@
                               "A4009",
                               "A4010",
                               "A4011",
-                              "A4012"
+                              "A4012",
+                              "A5001",
+                              "A5002"
                             ]
                           },
                           "revision": {
@@ -12996,7 +13004,9 @@
                               "PHONE_USE_BREACH_COMPONENT",
                               "PARENT_SELF_REGULATION_CHECKLIST",
                               "PHONE_USE_CONTRACT_DOCUMENT",
-                              "PHONE_USE_CONTRACT_SUPPORT_LOG"
+                              "PHONE_USE_CONTRACT_SUPPORT_LOG",
+                              "DIGITAL_USE_A5001_EFFECT_EVALUATION",
+                              "DIGITAL_USE_A5002_EFFECT_EVALUATION"
                             ]
                           },
                           "schemaVersion": {
@@ -13021,7 +13031,9 @@
                               "A4009",
                               "A4010",
                               "A4011",
-                              "A4012"
+                              "A4012",
+                              "A5001",
+                              "A5002"
                             ]
                           },
                           "revision": {
@@ -17833,7 +17845,9 @@
                               "PHONE_USE_BREACH_COMPONENT",
                               "PARENT_SELF_REGULATION_CHECKLIST",
                               "PHONE_USE_CONTRACT_DOCUMENT",
-                              "PHONE_USE_CONTRACT_SUPPORT_LOG"
+                              "PHONE_USE_CONTRACT_SUPPORT_LOG",
+                              "DIGITAL_USE_A5001_EFFECT_EVALUATION",
+                              "DIGITAL_USE_A5002_EFFECT_EVALUATION"
                             ]
                           },
                           "schemaVersion": {
@@ -17858,7 +17872,9 @@
                               "A4009",
                               "A4010",
                               "A4011",
-                              "A4012"
+                              "A4012",
+                              "A5001",
+                              "A5002"
                             ]
                           },
                           "revision": {
