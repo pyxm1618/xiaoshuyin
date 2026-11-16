@@ -152,3 +152,38 @@ export async function resolveInterventionProfessionalAuthority(
     proof,
   };
 }
+
+
+export interface InterventionProfessionalQualificationProvider {
+  resolve(input: {
+    readonly reviewerIdentityRef: string;
+    readonly approvalScope: string;
+  }): Promise<{
+    readonly qualificationRef: string;
+    readonly scopeRef: string;
+    readonly status: 'VALID' | 'REVOKED' | 'EXPIRED' | 'UNVERIFIABLE';
+  } | null>;
+}
+
+export const unavailableProductionInterventionProfessionalQualificationProvider:
+  InterventionProfessionalQualificationProvider = Object.freeze({
+    async resolve() { return null; },
+  });
+
+export async function requireInterventionProfessionalQualification(
+  provider: InterventionProfessionalQualificationProvider,
+  input: { reviewerIdentityRef: string; approvalScope: string }
+): Promise<{ qualificationRef: string; scopeRef: string }> {
+  const proof = await provider.resolve(input).catch(() => null);
+  if (
+    proof === null ||
+    proof.status !== 'VALID' ||
+    proof.qualificationRef.trim().length === 0 ||
+    proof.scopeRef !== input.approvalScope
+  ) {
+    throw Object.assign(new Error('INTERVENTION_QUALIFICATION_MISSING'), {
+      code: 'INTERVENTION_QUALIFICATION_MISSING',
+    });
+  }
+  return { qualificationRef: proof.qualificationRef, scopeRef: proof.scopeRef };
+}
