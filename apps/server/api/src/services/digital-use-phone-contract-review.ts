@@ -154,7 +154,7 @@ export function a5002CanonicalRequestFingerprint(input: {
   readonly familyId: string;
   readonly caseId: string;
   readonly nodeCode: string;
-  readonly expectedScenePackageVersion?: 'v1';
+  readonly expectedScenePackageVersion?: 'v1' | undefined;
   readonly response: Readonly<Record<string, unknown>>;
 }) {
   const parsed = A5002PhoneUseContractReviewSubmission.safeParse(input.response);
@@ -352,9 +352,9 @@ export async function executeA5002ReviewInTransaction(
     readonly nodeCode: string;
     readonly expectedCaseVersion: number;
     readonly expectedNodeRevision: number;
-    readonly expectedScenePackageVersion?: 'v1';
-    readonly expectedSelectionRevision?: number;
-    readonly expectedTargetRevision?: number;
+    readonly expectedScenePackageVersion?: 'v1' | undefined;
+    readonly expectedSelectionRevision?: number | undefined;
+    readonly expectedTargetRevision?: number | undefined;
     readonly response: Readonly<Record<string, unknown>>;
   },
   node: DigitalUseNodeManifestEntry,
