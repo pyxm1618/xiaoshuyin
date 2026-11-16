@@ -139,6 +139,18 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     const client = await admin.connect();
     try {
       await client.query('BEGIN');
+      // scene_artifacts_insert_guard is SECURITY DEFINER + FORCE RLS.
+      // Establish the same authoritative identity/Family context that the
+      // production withRlsTransaction seam sets before artifact writes.
+      await client.query('SELECT app.set_identity_context($1, $2)', [
+        manager.accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await client.query('SELECT app.set_family_context($1, $2, $3)', [
+        familyId,
+        manager.personId,
+        'FAMILY_MANAGEMENT',
+      ]);
       await client.query(`UPDATE cases SET phase='REVIEW' WHERE id=$1`, [caseId]);
       await client.query(
         `INSERT INTO problem_formulations
