@@ -1010,29 +1010,6 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     });
   });
 
-  it('T1510 A5001 and A5002 cannot collide on the same idempotency key', async () => {
-    provider.restore('FAMILY_ALLIANCE_REVIEW');
-    provider.restore('PHONE_USE_CONTRACT_REVIEW');
-    const a5001 = await prepareA5001(app, 'review-stream-idem-collision-a5001');
-    const a5002 = await prepareA5002(app, 'review-stream-idem-collision-a5002');
-    const key = `review-stream-collision-${crypto.randomUUID()}`;
-
-    const first = await submitA5001(
-      app,
-      a5001.f,
-      a5001.scene,
-      a5001.payload,
-      key
-    );
-    expect(first.statusCode, first.body).toBe(200);
-
-    // Idempotency keys are account-scoped. Use the A5001 manager against A5002
-    // would fail authorization before idempotency, so collision identity is
-    // mechanically proven at the pure canonical fingerprint layer instead of
-    // fabricating cross-Family authorization here.
-    expect(a5001.f.manager.accountId).not.toBe(a5002.f.manager.accountId);
-  });
-
   it('T1511 concurrent same-revision A5002 writers produce one winner and one stale loser without Contract mutation', async () => {
     provider.restore('PHONE_USE_CONTRACT_REVIEW');
     const { f, scene, payload } = await prepareA5002(app, 'a5002-race');
