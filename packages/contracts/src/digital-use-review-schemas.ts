@@ -32,12 +32,16 @@ export const ProfessionalReviewProvenance = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('CHILD_AUTHORED_INPUT'),
     sourcePersonId: z.string().uuid(),
-    sourceMessageId: z.string().uuid().optional(),
+    sourceMessageId: z.string().uuid(),
   }),
   z.strictObject({
     kind: z.literal('PARENT_TRANSCRIBED_CHILD_CLAIM'),
     transcriberPersonId: z.string().uuid(),
     childPersonId: z.string().uuid(),
+    evidenceRef: z.discriminatedUnion('type', [
+      z.strictObject({ type: z.literal('ASSERTION'), id: z.string().uuid() }),
+      z.strictObject({ type: z.literal('OBSERVATION'), id: z.string().uuid() }),
+    ]),
   }),
   z.strictObject({
     kind: z.literal('SYSTEM_METADATA'),
