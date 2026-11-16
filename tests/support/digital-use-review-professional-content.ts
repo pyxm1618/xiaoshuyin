@@ -28,12 +28,23 @@ function proofFor(stream: ProfessionalReviewStream): ProfessionalReviewPackagePr
     sourceRefs: Object.freeze([
       `test://professional-authority/${stream.toLowerCase()}/test-v1`,
     ]),
+    approvalProofRef:
+      `test://professional-authority/${stream.toLowerCase()}/approval/test-v1`,
+    approvalBinding: Object.freeze({
+      packageId: identity.packageId,
+      packageVersion: identity.packageVersion,
+      contentHash: identity.contentHash,
+    }),
     reviewerIdentity: 'test-only:synthetic-professional-reviewer',
     reviewerQualificationRef: 'test://qualification/synthetic-review-fixture',
-    approvalStatus: 'APPROVED',
+    reviewerProofStatus: 'VALID',
+    reviewStatus: 'APPROVED',
     publicationStatus: 'PUBLISHED',
-    reviewedAt: '2026-11-16T00:00:00.000Z',
-    effectiveAt: '2026-11-16T00:00:00.000Z',
+    lifecycleStatus: 'CURRENT',
+    reviewedAt: '2026-11-15T00:00:00.000Z',
+    effectiveFrom: '2026-01-01T00:00:00.000Z',
+    effectiveTo: '2027-12-31T23:59:59.999Z',
+    publishedAt: '2026-11-15T00:00:00.000Z',
   });
 }
 
@@ -55,8 +66,10 @@ function validateNormalizedResponse(
 }
 
 function packageFor(stream: ProfessionalReviewStream): ProfessionalReviewResolvedPackage {
+  const proof = proofFor(stream);
   return {
-    proof: proofFor(stream),
+    proof,
+    loadedContentHash: proof.contentHash,
     validateNormalizedResponse,
   };
 }
