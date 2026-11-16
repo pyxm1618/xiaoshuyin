@@ -114,23 +114,68 @@ async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
   }
   return result;
 }
-function assertRoleplaySessionCurrent(session:{
+function requireProfessionalContentAuthority(
+  requestedVersion:string,
+  authority:RoleplayProfessionalContentAuthority|undefined
+):RoleplayProfessionalContentAuthority|null{
+  if(
+    authority===undefined ||
+    authority.status!=='APPROVED_PUBLISHED' ||
+    authority.version!==requestedVersion
+  ) return null;
+  return authority;
+}
+
+function assertRoleplaySessionCurrent(
+ session:{
   scene_package_version:string;
   professional_content_version:string;
-}):void{
+ },
+ authority:RoleplayProfessionalContentAuthority|undefined
+):void{
   if(
     session.scene_package_version!==DIGITAL_USE_PACKAGE_VERSION
-    || session.professional_content_version!==PHONE_USE_CONTRACT_CONTENT_VERSION
+    || authority===undefined
+    || authority.status!=='APPROVED_PUBLISHED'
+    || session.professional_content_version!==authority.version
   ) throw roleplayError('PHONE_USE_CONTRACT_PACKAGE_DRIFT');
 }
-async function requireAdapterAvailable(adapter:RoleplayAdapter){
-  const available=await adapter.isAvailable({
-    scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
-    professionalContentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,
-    featureCode:'DIGITAL_USE_ROLEPLAY_A4003',
-  });
-  if(!available) throw roleplayError('DOWNSTREAM_AI_UNAVAILABLE');
+
+async function adapterAvailable(
+ adapter:RoleplayAdapter,
+ professionalContentVersion:string
+):Promise<boolean>{
+ return adapter.isAvailable({
+   scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
+   professionalContentVersion,
+   featureCode:'DIGITAL_USE_ROLEPLAY_A4003',
+ });
 }
+
+async function recordRoleplayHold(
+ tx:pg.PoolClient,
+ scene:Awaited<ReturnType<typeof getSceneNodeState>> extends infer T ? NonNullable<T> : never,
+ reasonCode:'PROFESSIONAL_CONTENT_UNAVAILABLE'|'DOWNSTREAM_AI_UNAVAILABLE'
+){
+ const progressed=await casRecordSceneNodeProgress(tx,{
+   caseId:scene.case_id,
+   nodeCode:'A4003',
+   scenePackageVersion:DIGITAL_USE_PACKAGE_VERSION,
+   expectedRevision:scene.revision,
+   branchReasonCodes:[reasonCode],
+   inputRefs:scene.input_refs,
+   outputRefs:[],
+ });
+ if(!progressed) throw roleplayError('STALE_NODE_REVISION');
+ return {
+   kind:'HOLD' as const,
+   nodeCode:'A4003' as const,
+   status:'IN_PROGRESS' as const,
+   nodeRevision:progressed.revision,
+   reasonCode,
+ };
+}
+
 export interface RoleplayCommandContext {
   readonly actor:DigitalUseActor; readonly familyId:string; readonly caseId:string;
   readonly expectedCaseVersion:number; readonly idempotencyKey:string;
