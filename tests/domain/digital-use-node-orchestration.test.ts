@@ -5,7 +5,10 @@ import {
 } from '../../apps/server/api/src/services/digital-use-node-response.js';
 
 describe('T1209 canonical node orchestration guards', () => {
-  const node = { phase: 'ASSESSMENT' as const };
+  const node = {
+    nodeCode: 'A1001',
+    stream: 'ASSESSMENT' as const,
+  };
   const row = {
     status: 'OPEN' as const,
     phase: 'ASSESSMENT' as const,
@@ -13,7 +16,7 @@ describe('T1209 canonical node orchestration guards', () => {
     version: 7,
   };
 
-  it('accepts only the current primary/open/version/phase tuple', () => {
+  it('enforces the current primary/open/version tuple with a monotonic minimum Case phase', () => {
     expect(() => assertNodeCasePreconditions(row, node, 7)).not.toThrow();
     expect(() =>
       assertNodeCasePreconditions({ ...row, is_primary: false }, node, 7)
@@ -22,7 +25,14 @@ describe('T1209 canonical node orchestration guards', () => {
       assertNodeCasePreconditions({ ...row, version: 8 }, node, 7)
     ).toThrow('STALE_CASE_VERSION');
     expect(() =>
-      assertNodeCasePreconditions({ ...row, phase: 'PROBLEM_FORMULATION' }, node, 7)
+      assertNodeCasePreconditions(
+        { ...row, phase: 'PROBLEM_FORMULATION' },
+        node,
+        7
+      )
+    ).not.toThrow();
+    expect(() =>
+      assertNodeCasePreconditions({ ...row, phase: 'INTAKE' }, node, 7)
     ).toThrow('CASE_PHASE_CONFLICT');
     expect(() =>
       assertNodeCasePreconditions({ ...row, status: 'WAITING' }, node, 7)
