@@ -842,6 +842,34 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     }
   });
 
+  it('AS-31 rejects an exact Contract bound to another Case in the same Family', async () => {
+    const f = await fixture('wrong-case');
+    const otherCase = await createCase(
+      app,
+      f.manager.token,
+      `a5002-other-case-${crypto.randomUUID()}`
+    );
+    expect(otherCase.statusCode, otherCase.body).toBe(201);
+    const otherCaseId = otherCase.json().id as string;
+    const result = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${otherCaseId}/scene/nodes/A5002/responses`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': `a5002-wrong-case-${crypto.randomUUID()}`,
+      },
+      payload: {
+        expectedCaseVersion: otherCase.json().version,
+        expectedNodeRevision: 0,
+        expectedScenePackageVersion: 'v1',
+        response: payload(f, 'wrong-case'),
+      },
+    });
+    expect(result.statusCode).toBe(404);
+    expect(result.json().code).toBe('PHONE_USE_CONTRACT_NOT_FOUND');
+    expect((await counts(f)).artifacts).toBe(0);
+  });
+
   it('AS-12/30 rejects another Family Contract without cross-family enumeration', async () => {
     const own = await fixture('scope-own');
     const other = await fixture('scope-other');
