@@ -138,6 +138,10 @@ export interface A5002SubjectSnapshot {
   readonly contractRevision: number;
   readonly contractStatus: PhoneUseContractVersionRow['status'];
   readonly sourceTemplateVersion: string;
+  readonly executionPeriod: PhoneUseContractVersionRow['execution_period'];
+  readonly adultPartyPersonId: string;
+  readonly childPartyPersonId: string;
+  readonly childParticipationId: string;
   readonly contractTermsFingerprint: string;
   readonly supersedesId: string | null;
   readonly lineage: readonly {
@@ -225,6 +229,10 @@ export async function resolveA5002SubjectSnapshot(
       contractRevision: row.draft_revision,
       contractStatus: row.status,
       sourceTemplateVersion: row.source_template_version,
+      executionPeriod: row.execution_period,
+      adultPartyPersonId: row.adult_party_person_id,
+      childPartyPersonId: row.child_party_person_id,
+      childParticipationId: row.child_participation_id,
       contractTermsFingerprint: contractTermsFingerprint(row),
       supersedesId: row.supersedes_id,
       lineage: lineageFor(row, versions),
