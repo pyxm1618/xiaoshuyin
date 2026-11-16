@@ -706,15 +706,26 @@ export async function completeDigitalUseNodeResponse(
 
           if (semantic.progression === 'HOLD') {
             const reasonCode = semantic.holdReasonCode ?? 'INTEGRATED_TRIAGE_INSUFFICIENT';
-            const progressed = await casRecordSceneNodeProgress(tx, {
-              caseId: input.caseId,
-              nodeCode: node.nodeCode,
-              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-              expectedRevision: input.expectedNodeRevision,
-              branchReasonCodes: [reasonCode],
-              inputRefs: semantic.inputRefs,
-              outputRefs: semantic.outputRefs,
-            });
+            const progressed = reevaluatingTriage
+              ? await casReevaluateSceneNodeState(tx, {
+                  caseId: input.caseId,
+                  nodeCode: node.nodeCode,
+                  scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                  expectedRevision: input.expectedNodeRevision,
+                  status: 'IN_PROGRESS',
+                  branchReasonCodes: [reasonCode],
+                  inputRefs: semantic.inputRefs,
+                  outputRefs: semantic.outputRefs,
+                })
+              : await casRecordSceneNodeProgress(tx, {
+                  caseId: input.caseId,
+                  nodeCode: node.nodeCode,
+                  scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                  expectedRevision: input.expectedNodeRevision,
+                  branchReasonCodes: [reasonCode],
+                  inputRefs: semantic.inputRefs,
+                  outputRefs: semantic.outputRefs,
+                });
             if (!progressed) throw nodeError('STALE_NODE_REVISION');
             return {
               status: 200,
@@ -724,16 +735,27 @@ export async function completeDigitalUseNodeResponse(
 
           if (semantic.progression === 'BLOCKED') {
             const reasonCode = semantic.blockReasonCode ?? 'INTEGRATED_TRIAGE_BLOCKED';
-            const blocked = await casCompleteSceneNodeState(tx, {
-              caseId: input.caseId,
-              nodeCode: node.nodeCode,
-              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-              expectedRevision: input.expectedNodeRevision,
-              status: 'BLOCKED',
-              branchReasonCodes: [reasonCode],
-              inputRefs: semantic.inputRefs,
-              outputRefs: semantic.outputRefs,
-            });
+            const blocked = reevaluatingTriage
+              ? await casReevaluateSceneNodeState(tx, {
+                  caseId: input.caseId,
+                  nodeCode: node.nodeCode,
+                  scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                  expectedRevision: input.expectedNodeRevision,
+                  status: 'BLOCKED',
+                  branchReasonCodes: [reasonCode],
+                  inputRefs: semantic.inputRefs,
+                  outputRefs: semantic.outputRefs,
+                })
+              : await casCompleteSceneNodeState(tx, {
+                  caseId: input.caseId,
+                  nodeCode: node.nodeCode,
+                  scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                  expectedRevision: input.expectedNodeRevision,
+                  status: 'BLOCKED',
+                  branchReasonCodes: [reasonCode],
+                  inputRefs: semantic.inputRefs,
+                  outputRefs: semantic.outputRefs,
+                });
             if (!blocked) throw nodeError('STALE_NODE_REVISION');
             await insertDigitalUseNodeCompletedEvent(tx, {
               familyId: input.familyId,
@@ -817,17 +839,28 @@ export async function completeDigitalUseNodeResponse(
 
           const route = routeSemantic(node, semantic);
 
-          const completed = recompleting
-            ? await casRecompleteSceneNodeState(tx, {
+          const completed = reevaluatingTriage
+            ? await casReevaluateSceneNodeState(tx, {
                 caseId: input.caseId,
                 nodeCode: node.nodeCode,
                 scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
                 expectedRevision: current.revision,
+                status: 'COMPLETED',
                 branchReasonCodes: [route.reasonCode],
                 inputRefs: semantic.inputRefs,
                 outputRefs: semantic.outputRefs,
               })
-            : await casCompleteSceneNodeState(tx, {
+            : recompleting
+              ? await casRecompleteSceneNodeState(tx, {
+                  caseId: input.caseId,
+                  nodeCode: node.nodeCode,
+                  scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+                  expectedRevision: current.revision,
+                  branchReasonCodes: [route.reasonCode],
+                  inputRefs: semantic.inputRefs,
+                  outputRefs: semantic.outputRefs,
+                })
+              : await casCompleteSceneNodeState(tx, {
                 caseId: input.caseId,
                 nodeCode: node.nodeCode,
                 scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
