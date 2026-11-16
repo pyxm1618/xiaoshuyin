@@ -39,7 +39,9 @@ export type InterventionDefinitionErrorCode =
   | 'INTERVENTION_SAFETY_BLOCK'
   | 'INTERVENTION_COMBINATION_CONFLICT'
   | 'INTERVENTION_DEPENDENCY_UNAVAILABLE'
-  | 'INTERVENTION_AUTHORIZATION_DENIED';
+  | 'INTERVENTION_AUTHORIZATION_DENIED'
+  | 'INTERVENTION_IDEMPOTENCY_MISMATCH'
+  | 'INTERVENTION_INFRASTRUCTURE_FAILURE';
 
 export class InterventionDefinitionError extends Error {
   readonly code: InterventionDefinitionErrorCode;
@@ -112,4 +114,68 @@ export function assertExactInterventionDefinition(
 export function assertDefinitionAvailableForNewFormalUse(definition: InterventionDefinitionRecord): void {
   if (definition.state === 'RETIRED') throw new InterventionDefinitionError('INTERVENTION_DEFINITION_RETIRED');
   if (definition.state === 'SUPERSEDED') throw new InterventionDefinitionError('INTERVENTION_DEFINITION_SUPERSEDED');
+}
+
+
+export type InterventionSafeDisclosureCode =
+  | 'INTERVENTION_NOT_AVAILABLE'
+  | 'INTERVENTION_CONTEXT_BLOCKED'
+  | 'INTERVENTION_CONFLICT'
+  | 'DEPENDENCY_UNAVAILABLE';
+
+const AUTHORITY_SENSITIVE_FAILURES = new Set<InterventionDefinitionErrorCode>([
+  'INTERVENTION_DEFINITION_NOT_FOUND',
+  'INTERVENTION_DEFINITION_VERSION_MISMATCH',
+  'INTERVENTION_DEFINITION_HASH_MISMATCH',
+  'INTERVENTION_PROFESSIONAL_AUTHORITY_UNAVAILABLE',
+  'INTERVENTION_PROFESSIONAL_AUTHORITY_INVALID',
+  'INTERVENTION_QUALIFICATION_MISSING',
+  'INTERVENTION_STAFF_AUTHORITY_INVALID',
+  'INTERVENTION_APPROVAL_SCOPE_MISMATCH',
+  'INTERVENTION_APPROVAL_EXPIRED',
+  'INTERVENTION_UNPUBLISHED',
+  'INTERVENTION_AUTHORIZATION_DENIED',
+]);
+
+const CONFLICT_FAILURES = new Set<InterventionDefinitionErrorCode>([
+  'INTERVENTION_DEFINITION_STALE_REVISION',
+  'INTERVENTION_DEFINITION_CONFLICT',
+  'INTERVENTION_IDEMPOTENCY_MISMATCH',
+]);
+
+const DEPENDENCY_FAILURES = new Set<InterventionDefinitionErrorCode>([
+  'INTERVENTION_DEPENDENCY_UNAVAILABLE',
+  'INTERVENTION_INFRASTRUCTURE_FAILURE',
+]);
+
+/**
+ * Safe future-consumer disclosure. There is intentionally no public Slice 16
+ * route; this helper only defines the bounded disclosure contract should an
+ * authorized future consumer expose a result.
+ */
+export function discloseInterventionFailure(
+  code: InterventionDefinitionErrorCode,
+  options: { authorizedForDiagnostics: boolean }
+): {
+  readonly code: InterventionSafeDisclosureCode | InterventionDefinitionErrorCode;
+  readonly internalCode?: InterventionDefinitionErrorCode;
+} {
+  if (CONFLICT_FAILURES.has(code)) {
+    return options.authorizedForDiagnostics
+      ? { code, internalCode: code }
+      : { code: 'INTERVENTION_CONFLICT' };
+  }
+  if (DEPENDENCY_FAILURES.has(code)) {
+    return options.authorizedForDiagnostics
+      ? { code: 'DEPENDENCY_UNAVAILABLE', internalCode: code }
+      : { code: 'DEPENDENCY_UNAVAILABLE' };
+  }
+  if (AUTHORITY_SENSITIVE_FAILURES.has(code)) {
+    return options.authorizedForDiagnostics
+      ? { code, internalCode: code }
+      : { code: 'INTERVENTION_NOT_AVAILABLE' };
+  }
+  return options.authorizedForDiagnostics
+    ? { code, internalCode: code }
+    : { code: 'INTERVENTION_CONTEXT_BLOCKED' };
 }

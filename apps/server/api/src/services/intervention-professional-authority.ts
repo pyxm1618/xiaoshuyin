@@ -65,7 +65,8 @@ export type InterventionProfessionalAuthorityFailureReason =
   | 'RETIRED'
   | 'SUPERSEDED'
   | 'APPROVAL_EXPIRED'
-  | 'APPROVAL_PROOF_CHANGED';
+  | 'APPROVAL_PROOF_CHANGED'
+  | 'DEPENDENCY_UNAVAILABLE';
 
 export type InterventionProfessionalAuthorityResult =
   | {
@@ -106,7 +107,7 @@ export async function resolveInterventionProfessionalAuthority(
   try {
     proof = mode === 'RESOLVE' ? await provider.resolve(request) : await provider.revalidate(request);
   } catch {
-    return { status: 'UNAVAILABLE', reason: 'NOT_PROFESSIONALLY_APPROVED' };
+    return { status: 'UNAVAILABLE', reason: 'DEPENDENCY_UNAVAILABLE' };
   }
   if (proof === null) return { status: 'UNAVAILABLE', reason: 'NOT_PROFESSIONALLY_APPROVED' };
   if (proof.definitionId !== request.definitionId) return invalid('WRONG_DEFINITION');
@@ -175,7 +176,14 @@ export async function requireInterventionProfessionalQualification(
   provider: InterventionProfessionalQualificationProvider,
   input: { reviewerIdentityRef: string; approvalScope: string }
 ): Promise<{ qualificationRef: string; scopeRef: string }> {
-  const proof = await provider.resolve(input).catch(() => null);
+  let proof: Awaited<ReturnType<InterventionProfessionalQualificationProvider['resolve']>>;
+  try {
+    proof = await provider.resolve(input);
+  } catch {
+    throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), {
+      code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE',
+    });
+  }
   if (
     proof === null ||
     proof.status !== 'VALID' ||

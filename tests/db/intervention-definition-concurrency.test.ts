@@ -204,6 +204,11 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
     };
     const interventionCode = code('ROLLBACK');
     const idem = key('rollback');
+    const auditBefore = await admin.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM business_audit_events " +
+        "WHERE actor_account_id=$1 AND resource_type='INTERVENTION_DEFINITION'",
+      [accountId]
+    );
     await expect(
       createInterventionDefinitionCandidate(appPool, {
         actor: actor(), sceneId: 'DIGITAL_USE', interventionCode,
@@ -219,7 +224,7 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
     ]);
     expect(defs.rows[0]!.count).toBe('0');
     expect(idems.rows[0]!.count).toBe('0');
-    expect(Number(audits.rows[0]!.count)).toBeGreaterThanOrEqual(0);
+    expect(audits.rows[0]!.count).toBe(auditBefore.rows[0]!.count);
   });
 
   it('revoked Staff authority cannot authorize a fresh mutation, while historical exact replay stays replay-only', async () => {

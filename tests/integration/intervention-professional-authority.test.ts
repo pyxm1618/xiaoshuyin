@@ -39,6 +39,30 @@ describe('Slice 16 Professional Approval / qualification consumer seam', () => {
     ).rejects.toMatchObject({ code: 'INTERVENTION_QUALIFICATION_MISSING' });
   });
 
+  it('distinguishes technical authority dependency failure from a real missing approval', async () => {
+    const technicalFailure = {
+      async resolve() { throw new Error('provider unavailable'); },
+      async revalidate() { throw new Error('provider unavailable'); },
+    };
+    await expect(
+      resolveInterventionProfessionalAuthority(
+        technicalFailure,
+        request,
+        'RESOLVE'
+      )
+    ).resolves.toEqual({
+      status: 'UNAVAILABLE',
+      reason: 'DEPENDENCY_UNAVAILABLE',
+    });
+
+    await expect(
+      requireInterventionProfessionalQualification(
+        { async resolve() { throw new Error('qualification provider unavailable'); } },
+        { reviewerIdentityRef: 'reviewer', approvalScope: 'DIGITAL_USE' }
+      )
+    ).rejects.toMatchObject({ code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
+  });
+
   it('accepts only an exact valid approval proof', async () => {
     const result = await resolveInterventionProfessionalAuthority(
       professionalProvider(),
