@@ -118,10 +118,35 @@ describe('Consent owner — single implementation and scope guards', () => {
       expect(body, String(forbidden)).not.toMatch(forbidden);
     }
 
-    // It must consume the caller's already-joined client and never derive a
-    // second subject.
+    // It must consume the caller's already-joined client and never accept or
+    // derive a second subject truth. Audit metadata may name the subject; the
+    // prohibited condition is a caller-controlled independent subject input.
     expect(source).toContain('tx: PurposeScopedConsentTx');
-    expect(body).not.toContain('subjectPersonId');
+    expect(body).toContain('assertNoForbiddenInput(input)');
+
+    const inputStart = source.indexOf(
+      'export interface RecordPurposeScopedConsentDecisionInput'
+    );
+    const inputEnd = source.indexOf(
+      'export interface PurposeScopedConsentDecisionReference',
+      inputStart
+    );
+    const inputContract = source.slice(inputStart, inputEnd);
+    expect(inputStart).toBeGreaterThanOrEqual(0);
+    expect(inputEnd).toBeGreaterThan(inputStart);
+    expect(inputContract).not.toMatch(/\\bsubjectPersonId\\s*:/);
+    expect(inputContract).not.toMatch(/\\bsubject_person_id\\s*:/);
+
+    const forbiddenKeysStart = source.indexOf('const FORBIDDEN_INPUT_KEYS = [');
+    const forbiddenKeysEnd = source.indexOf('] as const;', forbiddenKeysStart);
+    const forbiddenInputKeys = source.slice(forbiddenKeysStart, forbiddenKeysEnd);
+    expect(forbiddenKeysStart).toBeGreaterThanOrEqual(0);
+    expect(forbiddenKeysEnd).toBeGreaterThan(forbiddenKeysStart);
+    expect(forbiddenInputKeys).toContain("'subjectPersonId'");
+
+    expect(body).not.toContain('input.subjectPersonId');
+    expect(body).not.toContain('input.subject_person_id');
+    expect(body).toContain('decisionActorPersonId: input.actor.personId');
   });
 
   it('creates no second consent table / ledger', () => {
