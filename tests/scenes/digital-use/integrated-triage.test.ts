@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   evaluateIntegratedTriage,
+  type EmotionOption,
   type IntegratedTriageEvidence,
   type TriageEvidenceState,
 } from '@xiaoshuyin/scenes/digital-use';
@@ -86,6 +87,32 @@ describe('T1211 Integrated Triage authority matrix', () => {
     }), 'INSUFFICIENT'],
   ] as const)('%s -> %s', (_name, evidence, expected) => {
     expect(evaluateIntegratedTriage(evidence).outcome).toBe(expected);
+  });
+
+  it.each([
+    ['A+B', ['A', 'B'] as const, 'A2002'],
+    ['A+C', ['A', 'C'] as const, 'A2002'],
+    ['A+D', ['A', 'D'] as const, 'A2002'],
+    ['A+E', ['A', 'E'] as const, 'A2002'],
+    ['A+F', ['A', 'F'] as const, '01005'],
+  ] as const)('01002 %s is a valid Authority selection', (_label, emotionValues, expected) => {
+    const evaluated = evaluateIntegratedTriage(
+      fixture({ emotion01002: v(emotionValues) })
+    );
+    expect(evaluated.outcome).toBe(expected);
+    expect(evaluated.reasonCode).not.toBe('01002_INCOMPATIBLE_CURRENT_VALUE');
+  });
+
+  it.each([
+    ['more than two selections', ['A', 'B', 'C'] as readonly EmotionOption[]],
+    ['duplicate selections', ['A', 'A'] as readonly EmotionOption[]],
+    ['malformed option', ['Z'] as unknown as readonly EmotionOption[]],
+  ])('01002 %s remains fail-closed', (_label, emotionValues) => {
+    const evaluated = evaluateIntegratedTriage(
+      fixture({ emotion01002: v(emotionValues) })
+    );
+    expect(evaluated.outcome).toBe('BLOCKED');
+    expect(evaluated.reasonCode).toBe('01002_INVALID_CURRENT_VALUE');
   });
 
   it.each([

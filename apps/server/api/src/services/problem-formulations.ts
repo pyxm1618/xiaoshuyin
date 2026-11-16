@@ -10,6 +10,7 @@ import type pg from 'pg';
 import {
   assertCaseGuards,
   assertProblemFormulationReviewCurrent,
+  assertReviewEvidenceCoversAffectedDependencies,
   assertStatusAllows,
   assertTransferableStatus,
   assertVersionBound,
@@ -1533,6 +1534,13 @@ export async function resolveProblemFormulationReview(
                   );
                 }
               }
+              await assertReviewEvidenceCoversAffectedDependencies(
+                tx,
+                input.caseId,
+                current.dependency_refs,
+                reviewEvidenceRefs
+              );
+
               const authoritative: AuthoritativeEvidenceSet = {
                 refs: reviewEvidenceRefs,
                 members: [...reviewResolution.members.values()],

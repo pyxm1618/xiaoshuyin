@@ -94,6 +94,18 @@ function stateClass<T>(state: TriageEvidenceState<T>): 'VALUE' | 'MISSING' | 'CO
   return state.kind;
 }
 
+function hasOnlyValidEmotionOptions(values: readonly EmotionOption[]): boolean {
+  return values.every(
+    (value) =>
+      value === 'A' ||
+      value === 'B' ||
+      value === 'C' ||
+      value === 'D' ||
+      value === 'E' ||
+      value === 'F'
+  );
+}
+
 function hasNonSevereEmotionNeed(values: readonly EmotionOption[]): boolean {
   return values.some((value) => value === 'B' || value === 'C' || value === 'D' || value === 'E');
 }
@@ -129,19 +141,10 @@ export function evaluateIntegratedTriage(
   if (
     emotionValues.length < 1 ||
     emotionValues.length > 2 ||
-    new Set(emotionValues).size !== emotionValues.length
+    new Set(emotionValues).size !== emotionValues.length ||
+    !hasOnlyValidEmotionOptions(emotionValues)
   ) {
     return result('BLOCKED', { ...p, MATERIAL_UNRESOLVED: true }, '01002_INVALID_CURRENT_VALUE');
-  }
-  if (
-    emotionValues.includes('A') &&
-    emotionValues.some((value) => value !== 'A')
-  ) {
-    return result(
-      'BLOCKED',
-      { ...p, MATERIAL_UNRESOLVED: true },
-      '01002_INCOMPATIBLE_CURRENT_VALUE'
-    );
   }
 
   const emotionF = emotionValues.includes('F');
