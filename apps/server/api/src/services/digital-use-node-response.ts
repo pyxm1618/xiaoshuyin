@@ -43,7 +43,6 @@ import type {
   DigitalUseSceneResponseType,
 } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
-import { assertCurrentAccountAuthority } from '../auth/account-authority.js';
 import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import {
   runIdempotentCommandInTransaction,
@@ -620,10 +619,6 @@ export async function completeDigitalUseNodeResponse(
         node.stream === 'FAMILY_ALLIANCE_REVIEW' ||
         node.stream === 'PHONE_USE_CONTRACT_REVIEW'
       ) {
-        // Request authentication already used the single Account authority owner.
-        // Revalidate and lock that same authoritative row inside this review
-        // transaction so DISABLED/session drift cannot race REVIEW_COMPLETE.
-        await assertCurrentAccountAuthority(tx, input.actor.accountId);
         const reviewReplayDiscriminator = hashPayload({
           actor: {
             accountId: input.actor.accountId,

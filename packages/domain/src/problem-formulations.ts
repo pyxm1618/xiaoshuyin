@@ -423,6 +423,7 @@ export interface ResolvedEvidenceMember {
   unknownState: UnknownState | null;
   conflictGroupId: string | null;
   assertionKind: string | null;
+  sourceKind: string | null;
   confirmationStatus: string | null;
 }
 
@@ -479,6 +480,7 @@ export async function resolveEvidenceRefs(
         unknownState: null,
         conflictGroupId: null,
         assertionKind: null,
+        sourceKind: null,
         confirmationStatus: null,
       });
     }
@@ -487,7 +489,7 @@ export async function resolveEvidenceRefs(
   if (byType.ASSERTION.length > 0) {
     const { rows } = await tx.query(
       `SELECT id, case_id, family_id, subject_person_id, source_person_id,
-              valid_from, valid_until, supersedes_id, conflict_group_id, kind,
+              source_kind, valid_from, valid_until, supersedes_id, conflict_group_id, kind,
               confirmation_status
        FROM assertions
        WHERE case_id = $1 AND id = ANY($2::uuid[])`,
@@ -509,6 +511,7 @@ export async function resolveEvidenceRefs(
         unknownState: null,
         conflictGroupId: row.conflict_group_id,
         assertionKind: row.kind,
+        sourceKind: row.source_kind,
         confirmationStatus: row.confirmation_status,
       });
     }
@@ -517,7 +520,7 @@ export async function resolveEvidenceRefs(
   if (byType.OBSERVATION.length > 0) {
     const { rows } = await tx.query(
       `SELECT id, case_id, family_id, subject_person_id, source_person_id,
-              valid_from, valid_until, supersedes_id, conflict_group_id, value_state,
+              source_kind, valid_from, valid_until, supersedes_id, conflict_group_id, value_state,
               confirmation_status
        FROM observations
        WHERE case_id = $1 AND id = ANY($2::uuid[])`,
@@ -546,6 +549,7 @@ export async function resolveEvidenceRefs(
         unknownState,
         conflictGroupId: row.conflict_group_id,
         assertionKind: null,
+        sourceKind: row.source_kind,
         confirmationStatus: row.confirmation_status,
       });
     }

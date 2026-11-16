@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
-import { recordStatement, reviseDigitalUseTargetItem } from '@xiaoshuyin/domain';
+import { recordObservation, recordStatement, reviseDigitalUseTargetItem } from '@xiaoshuyin/domain';
 import { recordDialogueMessage } from '../../packages/domain/src/internal/message-writer.js';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import { createAdminPool } from '../setup/db.js';
@@ -856,6 +856,95 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     expect(artifact.data.normalizedResponse).toMatchObject({
       outcome: 'UNCERTAIN',
     });
+  });
+
+  it('T1509 rejects a guardian observation mislabeled as a parent-transcribed child claim', async () => {
+    const f = await fixture('transcribed-observation-forgery');
+    const child = await loginWithLabel(app, 'slice15-a5001-transcribed-observation-child');
+    await admin.query(
+      'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [f.familyId, child.personId]
+    );
+    const participation = await admin.query<{ id: string }>(
+      `INSERT INTO case_participants
+         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,
+          created_by_person_id,accepted_at)
+       VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())
+       RETURNING id`,
+      [
+        f.familyId,
+        f.caseId,
+        child.personId,
+        crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'),
+        f.manager.personId,
+      ]
+    );
+    await admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,verified_source,guardian_person_id)
+       VALUES ($1,'MINOR_14_17',true,'GUARDIAN_RELAY',$2)
+       ON CONFLICT (person_id) DO UPDATE SET
+         age_band='MINOR_14_17',
+         minor_mode=true,
+         verified_source='GUARDIAN_RELAY',
+         guardian_person_id=EXCLUDED.guardian_person_id,
+         guardian_consent_record_id=NULL,
+         guardian_consent_version=NULL,
+         effective_at=now(),
+         updated_at=now()`,
+      [child.personId, f.manager.personId]
+    );
+
+    const observation = await withRlsTransaction(
+      appDb,
+      {
+        familyId: f.familyId,
+        accountId: f.manager.accountId,
+        personId: f.manager.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) =>
+        recordObservation(
+          tx,
+          {
+            familyId: f.familyId,
+            caseId: f.caseId,
+            actorAccountId: f.manager.accountId,
+            actorPersonId: f.manager.personId,
+            purpose: 'FAMILY_MANAGEMENT',
+          },
+          {
+            subjectPersonId: child.personId,
+            sourceKind: 'GUARDIAN_OBSERVATION',
+            sourcePersonId: f.manager.personId,
+            occurredTimeState: 'UNKNOWN',
+            confirmationStatus: 'UNCONFIRMED',
+            content: 'Parent observed that the child appeared unsure whether the target helped.',
+            observationCode: 'slice15.guardian_observed_effect',
+            value: { state: 'UNKNOWN' },
+          }
+        )
+    );
+    const evidenceRef = { type: 'OBSERVATION' as const, id: observation.id };
+    const before = await counts(f);
+    const result = await submit(
+      f,
+      `slice15-a5001-transcribed-observation-forgery-${crypto.randomUUID()}`,
+      {
+        ...payload(f),
+        evidenceRefs: [evidenceRef],
+        provenance: [{
+          kind: 'PARENT_TRANSCRIBED_CHILD_CLAIM',
+          transcriberPersonId: f.manager.personId,
+          childPersonId: child.personId,
+          participationId: participation.rows[0]!.id,
+          evidenceRef,
+        }],
+      }
+    );
+    expect(result.statusCode, result.body).toBe(422);
+    expect(result.json()).toMatchObject({ code: 'SCENE_RESPONSE_INVALID' });
+    expect(await counts(f)).toEqual(before);
   });
 
   it('T1509 FORCE RLS keeps completed A5001 artifact invisible outside its Family context', async () => {

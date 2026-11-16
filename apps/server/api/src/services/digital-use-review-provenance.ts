@@ -122,7 +122,8 @@ export async function assertProfessionalReviewProvenance(
     const member = resolution.members.get(key);
     if (
       member === undefined ||
-      member.kind === 'DIALOGUE_MESSAGE' ||
+      member.kind !== 'ASSERTION' ||
+      member.sourceKind !== 'GUARDIAN_RELAY' ||
       !member.personIds.includes(provenance.transcriberPersonId) ||
       !member.personIds.includes(provenance.childPersonId)
     ) {
