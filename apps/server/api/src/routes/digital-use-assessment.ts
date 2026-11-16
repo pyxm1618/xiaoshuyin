@@ -214,7 +214,7 @@ export function registerDigitalUseAssessmentRoutes(
       preValidation: async (req) => {
         const params = req.params as { nodeCode?: unknown };
         if (
-          params.nodeCode === 'A5001' &&
+          (params.nodeCode === 'A5001' || params.nodeCode === 'A5002') &&
           hasUntrustedScheduledClaim(req.body)
         ) {
           // SCHEDULED is Manifest eligibility only. Until the future Phase-4
