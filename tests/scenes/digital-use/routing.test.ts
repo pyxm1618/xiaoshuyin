@@ -69,13 +69,13 @@ describe('Slice 11 pure deterministic routing', () => {
   });
 
   it('requires integrated Evidence basis and refuses duration-only triage', () => {
-    expect(route('01003', { TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED: true }, ['TOTAL_DURATION'])).toMatchObject({
+    expect(route('01003', { FAMILY_CONFLICT_SEVERE_F: false, TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED: true }, ['TOTAL_DURATION'])).toMatchObject({
       kind: 'BLOCKED', code: 'INSUFFICIENT_INTEGRATED_EVIDENCE',
     });
-    expect(route('01003', { TRIAGE_NO_INTERVENTION_INTEGRATED: true }, ['HISTORICAL_DURATION_BAND'])).toMatchObject({
+    expect(route('01003', { FAMILY_CONFLICT_SEVERE_F: false, TRIAGE_NO_INTERVENTION_INTEGRATED: true }, ['HISTORICAL_DURATION_BAND'])).toMatchObject({
       kind: 'BLOCKED', code: 'INSUFFICIENT_INTEGRATED_EVIDENCE',
     });
-    expect(route('01003', { TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED: true }, ['FUNCTIONAL_IMPACT'])).toMatchObject({
+    expect(route('01003', { FAMILY_CONFLICT_SEVERE_F: false, TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED: true }, ['FUNCTIONAL_IMPACT'])).toMatchObject({
       kind: 'NODE_ROUTE', nextNodeCode: 'A2003',
     });
   });

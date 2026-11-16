@@ -162,6 +162,24 @@ describe('T1211 Integrated Triage authority matrix', () => {
     expect(other.predicates.OTHER_NEEDS_POSITIVE).toBe(true);
   });
 
+  it('exports explicit non-severe 01003 priority truth for every ordinary route', () => {
+    for (const evidence of [
+      fixture(),
+      fixture({ emotion01002: v(['B']) }),
+      fixture({
+        directImpact: {
+          sleep: v(true),
+          studyOrNecessaryAffairs: v(false),
+          realWorldActivityDisplacement: v(false),
+        },
+      }),
+    ]) {
+      const result = evaluateIntegratedTriage(evidence);
+      expect(['A2001', 'A2002', 'A2003']).toContain(result.outcome);
+      expect(result.conditions.FAMILY_CONFLICT_SEVERE_F).toBe(false);
+    }
+  });
+
   it('emits at most one normal routing condition', () => {
     for (const evidence of [
       fixture(),

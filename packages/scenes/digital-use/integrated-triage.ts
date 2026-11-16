@@ -201,6 +201,7 @@ export function evaluateIntegratedTriage(
       OTHER_NEEDS_MATERIAL_UNRESOLVED: false,
     };
     return result('A2003', p, 'TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED', {
+      FAMILY_CONFLICT_SEVERE_F: false,
       TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED: true,
     });
   }
@@ -262,6 +263,7 @@ export function evaluateIntegratedTriage(
       OTHER_NEEDS_MATERIAL_UNRESOLVED: false,
     };
     return result('A2002', p, 'TRIAGE_FURTHER_ASSESSMENT_INTEGRATED', {
+      FAMILY_CONFLICT_SEVERE_F: false,
       TRIAGE_FURTHER_ASSESSMENT_INTEGRATED: true,
     });
   }
@@ -280,6 +282,7 @@ export function evaluateIntegratedTriage(
       OTHER_NEEDS_MATERIAL_UNRESOLVED: true,
     };
     return result('A2002', p, 'TRIAGE_FURTHER_ASSESSMENT_INTEGRATED', {
+      FAMILY_CONFLICT_SEVERE_F: false,
       TRIAGE_FURTHER_ASSESSMENT_INTEGRATED: true,
     });
   }
@@ -302,6 +305,7 @@ export function evaluateIntegratedTriage(
 
   if (clean) {
     return result('A2001', p, 'TRIAGE_NO_INTERVENTION_INTEGRATED', {
+      FAMILY_CONFLICT_SEVERE_F: false,
       TRIAGE_NO_INTERVENTION_INTEGRATED: true,
     });
   }

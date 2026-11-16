@@ -412,6 +412,55 @@ expect(blocked.status).toBe(409);
     });
   });
 
+  it('FND-REM-007: stale superseded Evidence cannot clear NEEDS_REVIEW', async () => {
+    const fx = await confirmedWithReview('stale-review-evidence');
+
+    const stale = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('review-stale-evidence'),
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '旧证据不得解除复核状态',
+      reviewEvidenceRefs: [evidenceRef(fx.statement.id)],
+    });
+
+    expect(stale.status).toBe(422);
+    expect(stale.body).toMatchObject({
+      code: 'PROBLEM_FORMULATION_EVIDENCE_INVALID',
+    });
+    expect(await formulationFacts(fx.created.id)).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'CONFIRMED',
+        review_state: 'NEEDS_REVIEW',
+      }),
+    ]);
+
+    const current = await resolveProblemFormulationReview(pool, {
+      actor: { accountId: fx.owner.accountId, personId: fx.owner.personId },
+      familyId: fx.familyId,
+      caseId: fx.created.id,
+      expectedCaseVersion: fx.confirmed.body.caseVersion,
+      idempotencyKey: key('review-current-evidence'),
+      formulationId: fx.presented.body.current.id,
+      formulationVersion: 1,
+      decision: 'NO_MATERIAL_IMPACT',
+      reviewBasis: '当前 successor Evidence 复核后无实质影响',
+      reviewEvidenceRefs: [evidenceRef(fx.successorStatement.id)],
+    });
+
+    expect(current.status).toBe(200);
+    expect(current.body.current).toMatchObject({
+      version: 1,
+      status: 'CONFIRMED',
+      reviewState: 'CURRENT',
+    });
+  });
+
   it('Case D — authorized NO_MATERIAL_IMPACT review restores CURRENT on the same version', async () => {
     const fx = await confirmedWithReview('no-material-impact');
 
