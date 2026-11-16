@@ -416,7 +416,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     expect(after.audits).toBe(1);
   });
 
-  it('same key replays only under exact current authority; retirement fails closed and canonical changes conflict', async () => {
+  it('same key replays committed history after retirement while changed package/payload remains a conflict', async () => {
     const f = await fixture('idempotency');
     const key = `slice15-a5001-idem-${crypto.randomUUID()}`;
     const request = payload(f);
@@ -425,26 +425,32 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
 
     professional.retire('FAMILY_ALLIANCE_REVIEW');
     try {
-      const retired = await submit(f, key, request);
-      expect(retired.statusCode, retired.body).toBe(503);
-      expect(retired.json().code).toBe('DEPENDENCY_UNAVAILABLE');
+      const replay = await submit(f, key, request);
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json()).toEqual(first.json());
+
+      const changedPayload = await submit(f, key, {
+        ...request,
+        packageResponse: {
+          outcome: 'SAME',
+          note: 'Different package-owned response.',
+        },
+      });
+      expect(changedPayload.statusCode, changedPayload.body).toBe(409);
+      expect(changedPayload.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+
+      const changedPackage = await submit(f, key, {
+        ...request,
+        professionalPackage: {
+          ...request.professionalPackage,
+          packageVersion: 'different-v2',
+        },
+      });
+      expect(changedPackage.statusCode, changedPackage.body).toBe(409);
+      expect(changedPackage.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
     } finally {
       professional.restore('FAMILY_ALLIANCE_REVIEW');
     }
-
-    const replay = await submit(f, key, request);
-    expect(replay.statusCode, replay.body).toBe(200);
-    expect(replay.json()).toEqual(first.json());
-
-    const mismatch = await submit(f, key, {
-      ...request,
-      packageResponse: {
-        outcome: 'SAME',
-        note: 'Different package-owned response.',
-      },
-    });
-    expect(mismatch.statusCode, mismatch.body).toBe(409);
-    expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
   });
 
   it('same key canonical-equivalent wire response replays the original Scene body', async () => {
