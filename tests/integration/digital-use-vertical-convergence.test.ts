@@ -571,11 +571,14 @@ describe('Digital Use vertical convergence', () => {
       .toBe('AVAILABLE');
 
     const beforeHold = await getScene(f);
-    const holdKey = 'du-vertical-roleplay-hold';
+    const holdKey = `du-vertical-roleplay-hold-${crypto.randomUUID()}`;
     const holdRequest = () => app.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
-      headers: commandHeaders(f.manager.token, holdKey),
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': holdKey,
+      },
       payload: {
         expectedCaseVersion: beforeHold.caseVersion,
         professionalContentVersion: 'test-professional-roleplay-v1',
