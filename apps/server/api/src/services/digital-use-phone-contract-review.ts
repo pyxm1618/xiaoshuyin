@@ -57,6 +57,7 @@ import {
   type ProfessionalReviewContentProvider,
   type ProfessionalReviewPackageProof,
 } from './digital-use-review-professional-content.js';
+import { assertProfessionalReviewProvenance } from './digital-use-review-provenance.js';
 
 const ARTIFACT_TYPE = 'DIGITAL_USE_A5002_EFFECT_EVALUATION' as const;
 const ARTIFACT_SCHEMA_VERSION = 'v1' as const;
@@ -245,25 +246,6 @@ function assertSubjectExpectation(
   }
 }
 
-function assertProvenance(
-  actor: DigitalUseActor,
-  submission: A5002PhoneUseContractReviewSubmissionType
-): void {
-  for (const provenance of submission.provenance) {
-    if (
-      provenance.kind === 'PARENT_AUTHORED_OBSERVATION' &&
-      provenance.sourcePersonId !== actor.personId
-    ) {
-      throw reviewError('SCENE_RESPONSE_INVALID');
-    }
-    if (
-      provenance.kind === 'PARENT_TRANSCRIBED_CHILD_CLAIM' &&
-      provenance.transcriberPersonId !== actor.personId
-    ) {
-      throw reviewError('SCENE_RESPONSE_INVALID');
-    }
-  }
-}
 
 function dataString(data: Record<string, unknown>, key: string): string | null {
   const value = data[key];
@@ -382,7 +364,6 @@ export async function executeA5002ReviewInTransaction(
 
     const parsed = A5002PhoneUseContractReviewSubmission.safeParse(input.response);
     if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
-    assertProvenance(input.actor, parsed.data);
 
     if (!(await lockFamilyForPrimaryDecision(tx, input.familyId))) {
       throw reviewError('CASE_NOT_FOUND', 'Case not found');
@@ -393,6 +374,13 @@ export async function executeA5002ReviewInTransaction(
     await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
     await assertAssessmentCompliance(tx, input.actor.personId);
+    await assertProfessionalReviewProvenance(tx, {
+      familyId: input.familyId,
+      caseId: input.caseId,
+      actorPersonId: input.actor.personId,
+      evidenceRefs: parsed.data.evidenceRefs,
+      provenance: parsed.data.provenance,
+    });
 
     const binding = await getScenePackageBinding(tx, input.caseId);
     if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
