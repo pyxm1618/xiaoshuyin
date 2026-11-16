@@ -53,21 +53,21 @@ function expandAcceptanceMarkers(text: string): Set<number> {
   return out;
 }
 
+function testTitleAcceptanceMarkers(text: string): Set<number> {
+  const covered = new Set<number>();
+  for (const match of text.matchAll(/\bit\(\s*(['"`])([^'"`]*?)\1\s*,/g)) {
+    for (const n of expandAcceptanceMarkers(match[2]!)) covered.add(n);
+  }
+  return covered;
+}
+
 function acceptanceEvidenceMarkers(): Set<number> {
   const covered = new Set<number>();
 
-  // Runtime/domain evidence may advertise AS coverage in test titles/ranges.
-  // The closeout file itself is intentionally excluded from whole-file scans:
-  // FR_TO_AS contains every scenario number and must never self-certify 70/70.
-  for (const path of runtimeAcceptanceFiles) {
-    for (const n of expandAcceptanceMarkers(read(path))) covered.add(n);
-  }
-
-  // AS-57..69 are proven by the executable negative-space closeout test in
-  // this file. Read only test titles here, never FR_TO_AS or assertion data.
-  const closeout = read(closeoutEvidenceFile);
-  for (const match of closeout.matchAll(/\bit\(\s*(['"`])([^'"`]*?)\1\s*,/g)) {
-    for (const n of expandAcceptanceMarkers(match[2]!)) covered.add(n);
+  // Only executable test titles may advertise Acceptance coverage. Comments,
+  // helper data and FR_TO_AS mapping text must never self-certify scenarios.
+  for (const path of [...runtimeAcceptanceFiles, closeoutEvidenceFile]) {
+    for (const n of testTitleAcceptanceMarkers(read(path))) covered.add(n);
   }
 
   return covered;
