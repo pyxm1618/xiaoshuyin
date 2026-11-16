@@ -172,6 +172,83 @@ describe('Consent Revoke Integration (T058)', () => {
     expect(successors.rows[0]).toMatchObject({ decision: 'REVOKED', version: 2 });
   });
 
+  it('FND-REM-001: concurrent supersede/revoke race preserves one authoritative head', async () => {
+    const actor = await setupManagerAndFamily('fnd-supersede-revoke-race');
+    const v1 = await createAndGrantConsent(actor, 'fnd-supersede-revoke-race');
+    const member = await createMember(
+      app,
+      actor.token,
+      actor.familyId,
+      'fnd-supersede-revoke-race',
+      {
+        ageBand: 'UNDER_14',
+        ageBandSource: 'GUARDIAN_RELAY',
+        guardianConsentId: v1.id,
+      }
+    );
+    expect(member.statusCode).toBe(201);
+    const subjectId = member.json().personId as string;
+
+    const revokeV1 = await revokeConsent(
+      app,
+      actor.token,
+      'fnd-supersede-revoke-race-v2',
+      v1.id
+    );
+    expect(revokeV1.statusCode).toBe(200);
+    const v2 = revokeV1.json();
+
+    const request = await createConsentRequest(
+      app,
+      actor.token,
+      'fnd-supersede-revoke-race-v3',
+      { existingSubjectPersonId: subjectId }
+    );
+    expect(request.statusCode).toBe(201);
+
+    const [grantV3, revokeV2] = await Promise.all([
+      grantConsent(
+        app,
+        actor.token,
+        'fnd-supersede-revoke-race-v3',
+        request.json().requestId
+      ),
+      revokeConsent(
+        app,
+        actor.token,
+        'fnd-supersede-revoke-race-v2-again',
+        v2.id
+      ),
+    ]);
+
+    expect(grantV3.statusCode).toBe(201);
+    expect(revokeV2.statusCode).toBe(409);
+
+    const successors = await queryDb(
+      `SELECT id, decision, version
+         FROM consent_records
+        WHERE supersedes_id = $1
+          AND purpose = 'UNDER_14_GUARDIAN_CONSENT'`,
+      [v2.id]
+    );
+    expect(successors.rows).toHaveLength(1);
+    expect(successors.rows[0]).toMatchObject({
+      decision: 'GRANTED',
+      version: 3,
+    });
+
+    const profile = await queryDb(
+      `SELECT guardian_consent_record_id, guardian_consent_version
+         FROM person_compliance_profiles
+        WHERE person_id = $1`,
+      [subjectId]
+    );
+    expect(profile.rows[0]).toEqual({
+      guardian_consent_record_id: successors.rows[0].id,
+      guardian_consent_version: 3,
+    });
+  });
+
   it('FND-REM-001: revoke audit failure rolls back the successor and pointer', async () => {
     const actor = await setupManagerAndFamily('fnd-revoke-rollback');
     const v1 = await createAndGrantConsent(actor, 'fnd-revoke-rollback');
