@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   A5001FamilyAllianceReviewResponse,
+  A5002PhoneUseContractReviewResponse,
   CompleteDigitalUseNodeRequest,
 } from '@xiaoshuyin/contracts';
 import { IDEMPOTENCY_COMMAND_TYPES } from '@xiaoshuyin/domain';
@@ -41,6 +42,34 @@ function validPayload() {
         },
       },
     ],
+    evidenceRefs: [],
+  };
+}
+
+function validA5002Payload() {
+  return {
+    kind: 'PHONE_USE_CONTRACT_REVIEW' as const,
+    contractVersionId: '00000000-0000-7000-8000-000000000002',
+    contractVersion: 2,
+    expectedContractDraftRevision: 3,
+    expectedContractStatus: 'ACTIVE' as const,
+    dimensions: {
+      execution: { state: 'KNOWN' as const, note: 'The agreed period was attempted.' },
+      partialExecution: dimension('UNKNOWN'),
+      parentCooperation: { state: 'KNOWN' as const, note: 'Parent support was consistent.' },
+      supervision: dimension('NOT_COLLECTED'),
+      incentives: dimension('DECLINED'),
+      breachResponsibilities: dimension('UNKNOWN'),
+      benefits: { state: 'KNOWN' as const, note: 'Bedtime conflict reduced.' },
+      adverseChanges: dimension('UNKNOWN'),
+      newProblems: dimension('NOT_COLLECTED'),
+      uncertainty: dimension('UNKNOWN'),
+    },
+    a4012TriggerObservation: {
+      state: 'KNOWN' as const,
+      trigger: 'PERIOD_COMPLETE' as const,
+      note: 'The agreed execution period ended.',
+    },
     evidenceRefs: [],
   };
 }
@@ -120,6 +149,62 @@ describe('Slice 15 A5001 typed contract and negative space', () => {
         ],
       }).success
     ).toBe(false);
+  });
+
+  it('preserves exact A5002 Contract identity without scoring or generic Review semantics', () => {
+    const parsed = A5002PhoneUseContractReviewResponse.parse(validA5002Payload());
+    expect(parsed).toMatchObject({
+      kind: 'PHONE_USE_CONTRACT_REVIEW',
+      contractVersion: 2,
+      expectedContractDraftRevision: 3,
+      expectedContractStatus: 'ACTIVE',
+    });
+    expect(parsed.dimensions.partialExecution).toEqual({ state: 'UNKNOWN' });
+    expect(parsed.dimensions.supervision).toEqual({ state: 'NOT_COLLECTED' });
+    expect(parsed).not.toHaveProperty('score');
+    expect(parsed).not.toHaveProperty('successPercentage');
+
+    expect(
+      A5002PhoneUseContractReviewResponse.safeParse({
+        ...validA5002Payload(),
+        kind: 'FAMILY_ALLIANCE_REVIEW',
+      }).success
+    ).toBe(false);
+    expect(
+      A5002PhoneUseContractReviewResponse.safeParse({
+        ...validA5002Payload(),
+        targetEvaluations: [],
+      }).success
+    ).toBe(false);
+    expect(
+      A5002PhoneUseContractReviewResponse.safeParse({
+        ...validA5002Payload(),
+        universalScore: 80,
+      }).success
+    ).toBe(false);
+  });
+
+  it('uses the Manifest-owned A5002 terminal without executing A4012', () => {
+    const node = resolveDigitalUseRuntimeNode('A5002');
+    expect(node).toMatchObject({
+      nodeCode: 'A5002',
+      stream: 'PHONE_USE_CONTRACT_REVIEW',
+      role: 'PHONE_USE_CONTRACT_REVIEW',
+    });
+    expect(node.entryMode).toEqual(
+      expect.arrayContaining(['USER_INITIATED', 'SCHEDULED'])
+    );
+    const route = routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A5002',
+      conditions: { CONTRACT_REVIEW_COMPLETE: true },
+    });
+    expect(route).toMatchObject({
+      kind: 'TERMINAL_ROUTE',
+      terminalCode: 'REVIEW_COMPLETE',
+      reasonCode: 'CONTRACT_REVIEW_COMPLETE',
+    });
   });
 
   it('keeps node/stream/scheduled authority server-owned at the existing Scene API', () => {
@@ -202,8 +287,10 @@ describe('Slice 15 A5001 typed contract and negative space', () => {
       join(root, 'db/migrations/022_digital_use_review_runtime.sql'),
       'utf8'
     );
-    expect(migration).not.toMatch(/CREATE\s+TABLE|CREATE\s+POLICY|PHONE_USE_CONTRACT|A5002/i);
+    expect(migration).not.toMatch(/CREATE\s+TABLE|CREATE\s+POLICY|\bGRANT\b/i);
     expect(migration).toContain('DIGITAL_USE_A5001_EFFECT_EVALUATION');
+    expect(migration).toContain('DIGITAL_USE_A5002_EFFECT_EVALUATION');
     expect(migration).toContain('A5001');
+    expect(migration).toContain('A5002');
   });
 });
