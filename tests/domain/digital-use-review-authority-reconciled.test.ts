@@ -28,6 +28,58 @@ const actor = {
   personId: '00000000-0000-4000-8000-000000000011',
 };
 
+const a5001ExactSubject: Parameters<
+  typeof a5001CanonicalRequestFingerprint
+>[2] = {
+  familyId: '00000000-0000-4000-8000-000000000020',
+  caseId: '00000000-0000-4000-8000-000000000021',
+  scenePackageVersion: 'v1',
+  familyAllianceSubject: {
+    selfAssessmentArtifactId: '00000000-0000-4000-8000-000000000022',
+    selfAssessmentRevision: 2,
+    targetSelectionNodeRevision: 3,
+    selectionRevision: 3,
+  },
+  selectedTargets: [{
+    id: '00000000-0000-4000-8000-000000000012',
+    targetCode: 'SLEEP',
+    revision: 4,
+    selectionRevision: 3,
+    concreteTargetText: null,
+    feasibility: null,
+    progress: null,
+    progressEvidenceRefs: [],
+    helpHistoryRefs: [],
+    sourceRefs: [],
+  }],
+};
+
+const a5002ExactSubject: Parameters<
+  typeof a5002CanonicalRequestFingerprint
+>[2] = {
+  familyId: '00000000-0000-4000-8000-000000000030',
+  caseId: '00000000-0000-4000-8000-000000000031',
+  scenePackageVersion: 'v1',
+  contractId: '00000000-0000-4000-8000-000000000013',
+  contractVersion: 2,
+  contractRevision: 7,
+  contractStatus: 'ACTIVE',
+  sourceTemplateVersion: 'v1',
+  executionPeriod: { state: 'VALUE', value: 'Two weeks.' },
+  adultPartyPersonId: actor.personId,
+  childPartyPersonId: '00000000-0000-4000-8000-000000000014',
+  childParticipationId: '00000000-0000-4000-8000-000000000015',
+  contractTermsFingerprint: 'sha256:test-contract-terms',
+  supersedesId: null,
+  lineage: [{
+    contractId: '00000000-0000-4000-8000-000000000013',
+    version: 2,
+    revision: 7,
+    status: 'ACTIVE',
+    supersedesId: null,
+  }],
+};
+
 function a5001Response() {
   return {
     kind: 'FAMILY_ALLIANCE_REVIEW',
@@ -69,18 +121,25 @@ function a5002Response() {
 }
 
 describe('Slice 15 authority-reconciled review contracts and fingerprints', () => {
-  it('T1510 A5001 fingerprint binds actor, Case, exact subject, package and normalized response', () => {
+  it('T1510 A5001 fingerprint binds actor, Case, server exact subject, package and normalized response', () => {
     const base = {
       actor,
-      familyId: '00000000-0000-4000-8000-000000000020',
-      caseId: '00000000-0000-4000-8000-000000000021',
+      familyId: a5001ExactSubject.familyId,
+      caseId: a5001ExactSubject.caseId,
       nodeCode: 'A5001',
+      expectedCaseVersion: 5,
+      expectedNodeRevision: 0,
       expectedScenePackageVersion: 'v1' as const,
+      expectedSelectionRevision: 3,
       response: a5001Response(),
     };
     const fingerprint = (
-      value: Parameters<typeof a5001CanonicalRequestFingerprint>[0]
-    ) => hashPayload(a5001CanonicalRequestFingerprint(value).fingerprint);
+      value: Parameters<typeof a5001CanonicalRequestFingerprint>[0],
+      normalized = normalizedReviewResponse,
+      subject = a5001ExactSubject
+    ) => hashPayload(
+      a5001CanonicalRequestFingerprint(value, normalized, subject).fingerprint
+    );
     const original = fingerprint(base);
     expect(fingerprint(base)).toBe(original);
 
@@ -88,16 +147,17 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
       ...base,
       actor: { ...actor, personId: '00000000-0000-4000-8000-000000000099' },
     })).not.toBe(original);
-    expect(fingerprint({
-      ...base,
-      response: {
-        ...a5001Response(),
-        subject: {
-          ...a5001Response().subject,
+    expect(fingerprint(
+      base,
+      normalizedReviewResponse,
+      {
+        ...a5001ExactSubject,
+        familyAllianceSubject: {
+          ...a5001ExactSubject.familyAllianceSubject,
           selectionRevision: 4,
         },
-      },
-    })).not.toBe(original);
+      }
+    )).not.toBe(original);
     expect(fingerprint({
       ...base,
       response: {
@@ -108,41 +168,36 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
         },
       },
     })).not.toBe(original);
-    expect(fingerprint({
-      ...base,
-      response: {
-        ...a5001Response(),
-        packageResponse: {
-          outcome: 'SAME',
-          note: 'Different normalized response.',
-        },
-      },
+    expect(fingerprint(base, {
+      outcome: 'SAME',
+      note: 'Different normalized response.',
     })).not.toBe(original);
   });
 
-  it('T1510 A5002 fingerprint binds exact Contract version/revision and package identity', () => {
+  it('T1510 A5002 fingerprint binds server exact Contract revision and package identity', () => {
     const base = {
       actor,
-      familyId: '00000000-0000-4000-8000-000000000030',
-      caseId: '00000000-0000-4000-8000-000000000031',
+      familyId: a5002ExactSubject.familyId,
+      caseId: a5002ExactSubject.caseId,
       nodeCode: 'A5002',
+      expectedCaseVersion: 5,
+      expectedNodeRevision: 0,
       expectedScenePackageVersion: 'v1' as const,
       response: a5002Response(),
     };
     const fingerprint = (
-      value: Parameters<typeof a5002CanonicalRequestFingerprint>[0]
-    ) => hashPayload(a5002CanonicalRequestFingerprint(value).fingerprint);
+      value: Parameters<typeof a5002CanonicalRequestFingerprint>[0],
+      normalized = normalizedReviewResponse,
+      subject = a5002ExactSubject
+    ) => hashPayload(
+      a5002CanonicalRequestFingerprint(value, normalized, subject).fingerprint
+    );
     const original = fingerprint(base);
-    expect(fingerprint({
-      ...base,
-      response: {
-        ...a5002Response(),
-        subject: {
-          ...a5002Response().subject,
-          contractRevision: 8,
-        },
-      },
-    })).not.toBe(original);
+    expect(fingerprint(
+      base,
+      normalizedReviewResponse,
+      { ...a5002ExactSubject, contractRevision: 8 }
+    )).not.toBe(original);
     expect(fingerprint({
       ...base,
       response: {
