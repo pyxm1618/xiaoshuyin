@@ -136,6 +136,22 @@ async function peekIdempotency(
  * Using it before authorization would re-open H-01; every call site MUST
  * authorize first in that same transaction.
  */
+export async function peekIdempotentCommandInTransaction(
+  tx: pg.PoolClient,
+  cfg: Pick<
+    IdempotentCommandConfig,
+    'accountId' | 'commandType' | 'idempotencyKey' | 'requestHash'
+  >
+): Promise<CommandOutcome | null> {
+  const existing = await getIdempotencyKey(
+    tx,
+    cfg.accountId,
+    cfg.commandType,
+    cfg.idempotencyKey
+  );
+  return decide(existing, cfg.requestHash);
+}
+
 export async function lockIdempotentCommandInTransaction(
   tx: pg.PoolClient,
   cfg: Pick<

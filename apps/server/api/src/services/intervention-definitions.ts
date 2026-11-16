@@ -14,6 +14,7 @@ import {
 import { withIdentityTransaction } from '../db/tx.js';
 import {
   lockIdempotentCommandInTransaction,
+  peekIdempotentCommandInTransaction,
   runLockedIdempotentCommandInTransaction,
 } from '../idempotency.js';
 import {
@@ -74,9 +75,6 @@ export async function createInterventionDefinitionCandidate(
     pool,
     { accountId: input.actor.accountId, purpose: 'SELF_IDENTITY' },
     async (tx) => {
-      const authority = await assertMutationAuthority(
-        tx, input.actor, qualificationProvider, input.approvalScope
-      );
       const prepared = prepareInterventionDefinition({
         sceneId: input.sceneId,
         interventionCode: input.interventionCode,
@@ -88,8 +86,6 @@ export async function createInterventionDefinitionCandidate(
         interventionCode: prepared.interventionCode,
         contentHash: prepared.contentHash,
         approvalScope: input.approvalScope,
-        qualificationRef: authority.qualificationRef,
-        staffAssignmentRef: authority.assignmentRef,
       });
       const cfg = {
         accountId: input.actor.accountId,
@@ -99,6 +95,9 @@ export async function createInterventionDefinitionCandidate(
         idempotencyKey: input.idempotencyKey,
         requestHash,
       };
+      const early = await peekIdempotentCommandInTransaction(tx, cfg);
+      if (early) return outcomeBody(early);
+      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
         const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
@@ -153,9 +152,6 @@ export async function createInterventionDefinitionSuccessor(
     pool,
     { accountId: input.actor.accountId, purpose: 'SELF_IDENTITY' },
     async (tx) => {
-      const authority = await assertMutationAuthority(
-        tx, input.actor, qualificationProvider, input.approvalScope
-      );
       const predecessor = await getExactInterventionDefinition(tx, input.predecessor, false);
       if (predecessor === null) throw Object.assign(new Error('INTERVENTION_DEFINITION_NOT_FOUND'), { code: 'INTERVENTION_DEFINITION_NOT_FOUND' });
       const prepared = prepareInterventionDefinition({
@@ -168,8 +164,6 @@ export async function createInterventionDefinitionSuccessor(
         predecessor: input.predecessor,
         contentHash: prepared.contentHash,
         approvalScope: input.approvalScope,
-        qualificationRef: authority.qualificationRef,
-        staffAssignmentRef: authority.assignmentRef,
       });
       const cfg = {
         accountId: input.actor.accountId,
@@ -179,6 +173,9 @@ export async function createInterventionDefinitionSuccessor(
         idempotencyKey: input.idempotencyKey,
         requestHash,
       };
+      const early = await peekIdempotentCommandInTransaction(tx, cfg);
+      if (early) return outcomeBody(early);
+      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
         const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
@@ -254,15 +251,10 @@ async function terminalTransition(
     pool,
     { accountId: input.actor.accountId, purpose: 'SELF_IDENTITY' },
     async (tx) => {
-      const authority = await assertMutationAuthority(
-        tx, input.actor, qualificationProvider, input.approvalScope
-      );
       const requestHash = hashPayload({
         definition: input.definition,
         nextState: input.nextState,
         approvalScope: input.approvalScope,
-        qualificationRef: authority.qualificationRef,
-        staffAssignmentRef: authority.assignmentRef,
       });
       const commandType =
         input.nextState === 'RETIRED'
@@ -276,6 +268,9 @@ async function terminalTransition(
         idempotencyKey: input.idempotencyKey,
         requestHash,
       } as const;
+      const early = await peekIdempotentCommandInTransaction(tx, cfg);
+      if (early) return outcomeBody(early);
+      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
         const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
