@@ -43,6 +43,7 @@ import type {
   DigitalUseSceneResponseType,
 } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
+import { assertCurrentAccountAuthority } from '../auth/account-authority.js';
 import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import {
   runIdempotentCommandInTransaction,
@@ -619,6 +620,9 @@ export async function completeDigitalUseNodeResponse(
         node.stream === 'FAMILY_ALLIANCE_REVIEW' ||
         node.stream === 'PHONE_USE_CONTRACT_REVIEW'
       ) {
+        // Reuse the existing Account authority owner inside the review
+        // transaction. The FOR UPDATE lock is held through settlement.
+        await assertCurrentAccountAuthority(tx, input.actor.accountId);
         const reviewReplayDiscriminator = hashPayload({
           actor: {
             accountId: input.actor.accountId,
