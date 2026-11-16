@@ -144,7 +144,7 @@ describe('Slice 15 T1517 deterministic closeout coverage', () => {
         expect(productionReview).not.toMatch(/INSERT\s+INTO\s+(plans|tasks|checkins)\b/i);
       }],
       ['NS-06 Follow-up Schedule write', () => {
-        expect(productionReview).not.toMatch(/INSERT\s+INTO\s+followup_?schedules?\b/i);
+        expect(productionReview).not.toMatch(/INSERT\s+INTO\s+follow_?up_?schedules?\b/i);
       }],
       ['NS-07 scheduler/cron/pg-boss', () => {
         expect(productionReview).not.toMatch(/pg-boss|node-cron|cron\.schedule/i);

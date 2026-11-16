@@ -1014,17 +1014,17 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     const phase4 = await admin.query<{
       reviews: string | null;
       outcomes: string | null;
-      followup_schedules: string | null;
+      follow_up_schedules: string | null;
     }>(
       `SELECT
          to_regclass('public.reviews')::text AS reviews,
          to_regclass('public.outcomes')::text AS outcomes,
-         to_regclass('public.followup_schedules')::text AS followup_schedules`
+         to_regclass('public.follow_up_schedules')::text AS follow_up_schedules`
     );
     expect(phase4.rows[0]).toEqual({
       reviews: null,
       outcomes: null,
-      followup_schedules: null,
+      follow_up_schedules: null,
     });
     expect((await counts(f)).a4012).toBe(0);
   });
