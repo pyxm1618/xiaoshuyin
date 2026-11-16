@@ -6,10 +6,17 @@ import {
   resolveDigitalUseRuntimeNode,
 } from '@xiaoshuyin/scenes/digital-use';
 import {
+  buildConsentEvidence,
+  getAcceptanceTextHash,
+  getCurrentNoticeHash,
+  runtimeConsentChannel,
+} from '@xiaoshuyin/compliance';
+import {
   auth,
   commandHeaders,
   createFamily,
   loginWithLabel,
+  revokeConsent,
   type LoginResult,
 } from '../setup/api.js';
 import { createCase } from '../setup/participation.js';
@@ -80,6 +87,7 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
       connectionString: process.env['MIGRATION_DATABASE_URL'],
     });
     await migrator.connect();
+    await ensureBaselinePolicy('DIGITAL_USE_ASSESSMENT_RUNTIME');
     await ensureBaselinePolicy('DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME');
   });
 
@@ -339,6 +347,15 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     const client = await admin.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT app.set_identity_context($1, $2)', [
+        f.manager.accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await client.query('SELECT app.set_family_context($1, $2, $3)', [
+        f.familyId,
+        f.manager.personId,
+        'FAMILY_MANAGEMENT',
+      ]);
       await client.query(`UPDATE cases SET phase='GOALS' WHERE id=$1`, [f.caseId]);
       for (const node of [a3000, a3002]) {
         await client.query(
@@ -651,6 +668,72 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     }
   }
 
+  async function seedRevokedUnder14ChildConsent(f: Fixture): Promise<void> {
+    const noticeHash = getCurrentNoticeHash();
+    const acceptedTextHash = getAcceptanceTextHash('v1');
+    if (!acceptedTextHash) throw new Error('missing v1 acceptance text');
+
+    const requestSeed = await admin.query<{ id: string }>(
+      `INSERT INTO guardian_consent_requests
+         (family_id,guardian_person_id,subject_person_id,declared_age_band,
+          notice_version,notice_hash,status,expires_at,completed_at)
+       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',
+               now() + interval '24 hours',now())
+       RETURNING id`,
+      [f.familyId, f.manager.personId, f.child.personId, noticeHash]
+    );
+    const evidence = buildConsentEvidence({
+      channel: runtimeConsentChannel(),
+      acceptedTextHash,
+      clientIp: null,
+      userAgent: null,
+      pepper: 'slice15-a5002-consent-fixture',
+    });
+    const consentSeed = await admin.query<{ id: string }>(
+      `INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,
+          version,onboarding_request_id,bound_person_id,bound_at,
+          notice_version,notice_hash,policy_version,evidence)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',
+               1,$4,$5,now(),'v1',$6,'v1',$7::jsonb)
+       RETURNING id`,
+      [
+        f.familyId,
+        f.manager.personId,
+        f.manager.accountId,
+        requestSeed.rows[0]!.id,
+        f.child.personId,
+        noticeHash,
+        JSON.stringify(evidence),
+      ]
+    );
+    await admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,verified_source,guardian_person_id,
+          guardian_consent_record_id,guardian_consent_version)
+       VALUES ($1,'UNDER_14',true,'GUARDIAN_RELAY',$2,$3,1)
+       ON CONFLICT (person_id) DO UPDATE SET
+         age_band='UNDER_14',
+         minor_mode=true,
+         verified_source='GUARDIAN_RELAY',
+         guardian_person_id=EXCLUDED.guardian_person_id,
+         guardian_consent_record_id=EXCLUDED.guardian_consent_record_id,
+         guardian_consent_version=1,
+         effective_at=now(),
+         updated_at=now()`,
+      [f.child.personId, f.manager.personId, consentSeed.rows[0]!.id]
+    );
+
+    const revoked = await revokeConsent(
+      app,
+      f.manager.token,
+      `a5002-consent-revoke-${crypto.randomUUID()}`,
+      consentSeed.rows[0]!.id,
+      { reason: 'A5002 independent child Consent gate test' }
+    );
+    expect(revoked.statusCode, revoked.body).toBe(200);
+  }
+
   it('AS-02/04/06/10/24/27-29/39/52 records one exact ACTIVE Contract review and never executes A4012', async () => {
     const f = await fixture('legal');
     const scene = await getScene(f);
@@ -933,20 +1016,9 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     }
 
     {
-      const f = await fixture('consent-missing');
+      const f = await fixture('consent-revoked');
       const scene = await getScene(f);
-      await admin.query(
-        `UPDATE person_compliance_profiles
-            SET age_band='UNDER_14',
-                minor_mode=true,
-                guardian_person_id=$2,
-                guardian_consent_record_id=NULL,
-                guardian_consent_version=NULL,
-                verified_source='GUARDIAN_RELAY',
-                updated_at=now()
-          WHERE person_id=$1`,
-        [f.child.personId, f.manager.personId]
-      );
+      await seedRevokedUnder14ChildConsent(f);
       const result = await submit(
         f,
         scene,
