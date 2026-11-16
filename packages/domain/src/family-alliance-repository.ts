@@ -94,7 +94,7 @@ export type FamilyAllianceProgressPayload =
         | { readonly state: 'KNOWN'; readonly count: number }
         | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
       readonly affirmation:
-        | { readonly state: 'KNOWN'; readonly observations: readonly string[] }
+        | { readonly state: 'KNOWN'; readonly observations: string[] }
         | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
       readonly reducedEvaluation:
         | { readonly state: 'KNOWN'; readonly count: number }
@@ -106,7 +106,7 @@ export type FamilyAllianceProgressPayload =
         | {
             readonly state: 'KNOWN';
             readonly durationMinutes: number;
-            readonly activities: readonly string[];
+            readonly activities: string[];
           }
         | { readonly state: Exclude<FamilyAllianceValueState, 'KNOWN'> };
       readonly effectEvaluation: {
@@ -118,7 +118,7 @@ export type FamilyAllianceProgressPayload =
     }
   | {
       readonly kind: 'EMOTION_REGULATION_2_LOG';
-      readonly entries: readonly {
+      readonly entries: {
         readonly time: string;
         readonly childEmotion: FamilyAllianceNarrativeDimension;
         readonly emotionFeedback: FamilyAllianceNarrativeDimension;
