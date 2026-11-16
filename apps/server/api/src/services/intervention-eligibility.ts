@@ -144,41 +144,6 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
           'RESOLVE'
         );
 
-  let finalProfessional = professional;
-  if (professional.status === 'VALID' && definition !== null) {
-    const revalidated = await resolveInterventionProfessionalAuthority(
-      professionalProvider,
-      {
-        definitionId: definition.id,
-        definitionVersion: definition.version,
-        contentHash: definition.contentHash,
-        sceneId: definition.sceneId,
-        sourceRefs: definition.semantic.professional_source_refs,
-        approvalScope: definition.sceneId,
-      },
-      'REVALIDATE'
-    );
-    finalProfessional =
-      revalidated.status === 'VALID' &&
-      revalidated.approvalProofRef === professional.approvalProofRef &&
-      revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
-      revalidated.qualificationRef === professional.qualificationRef
-        ? revalidated
-        : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
-  }
-
-  const packageInclusion =
-    definition !== null && scenePackageVersion !== null
-      ? resolveProductionDigitalUseInterventionInclusion({
-          scenePackageVersion,
-          definitionId: definition.id,
-          definitionVersion: definition.version,
-          contentHash: definition.contentHash,
-        }).status === 'INCLUDED'
-        ? 'PASS'
-        : 'BLOCK'
-      : 'UNKNOWN';
-
   const requiredParticipation =
     definition?.semantic.participation_and_consent_requirements.required_participation_refs ?? [];
   const requiredConsent =
@@ -192,6 +157,50 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       adapters.evaluateCompliance(tx, { familyId: input.familyId, caseId: input.caseId }),
       adapters.evaluateSafety(tx, { familyId: input.familyId, caseId: input.caseId }),
     ]);
+
+
+  // Final exact-row lock prevents retirement/supersession from racing the
+  // eligibility decision. Professional proof is then revalidated against this
+  // locked exact version/hash immediately before the pure evaluator.
+  const finalDefinition =
+    definition === null
+      ? null
+      : await getExactInterventionDefinition(tx, input.definition, true);
+
+  let finalProfessional = professional;
+  if (professional.status === 'VALID' && finalDefinition !== null) {
+    const revalidated = await resolveInterventionProfessionalAuthority(
+      professionalProvider,
+      {
+        definitionId: finalDefinition.id,
+        definitionVersion: finalDefinition.version,
+        contentHash: finalDefinition.contentHash,
+        sceneId: finalDefinition.sceneId,
+        sourceRefs: finalDefinition.semantic.professional_source_refs,
+        approvalScope: finalDefinition.sceneId,
+      },
+      'REVALIDATE'
+    );
+    finalProfessional =
+      revalidated.status === 'VALID' &&
+      revalidated.approvalProofRef === professional.approvalProofRef &&
+      revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
+      revalidated.qualificationRef === professional.qualificationRef
+        ? revalidated
+        : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
+  }
+
+  const packageInclusion =
+    finalDefinition !== null && scenePackageVersion !== null
+      ? resolveProductionDigitalUseInterventionInclusion({
+          scenePackageVersion,
+          definitionId: finalDefinition.id,
+          definitionVersion: finalDefinition.version,
+          contentHash: finalDefinition.contentHash,
+        }).status === 'INCLUDED'
+        ? 'PASS'
+        : 'BLOCK'
+      : 'UNKNOWN';
 
   return evaluateInterventionEligibility({
     authorization: 'PASS',
@@ -217,12 +226,12 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     scenePackageVersion,
     expectedDefinition: {
       id: input.definition.id,
-      sceneId: definition?.sceneId ?? '',
-      interventionCode: definition?.interventionCode ?? '',
+      sceneId: finalDefinition?.sceneId ?? '',
+      interventionCode: finalDefinition?.interventionCode ?? '',
       version: input.definition.version,
       contentHash: input.definition.contentHash,
     },
-    definition,
+    definition: finalDefinition,
     professionalAuthority: {
       state: finalProfessional.status,
       approvalProofRef: finalProfessional.status === 'VALID' ? finalProfessional.approvalProofRef : null,

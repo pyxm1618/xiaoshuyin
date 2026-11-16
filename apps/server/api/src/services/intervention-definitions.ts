@@ -47,6 +47,43 @@ async function assertMutationAuthority(
   return { assignmentRef: staff.assignmentRef, qualificationRef: qualification.qualificationRef };
 }
 
+function hydrateInterventionDefinitionRecord(value: unknown): InterventionDefinitionRecord {
+  if (typeof value !== 'object' || value === null) {
+    throw Object.assign(new Error('INTERVENTION_REPLAY_INVALID'), {
+      code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE',
+    });
+  }
+  const row = value as InterventionDefinitionRecord & {
+    createdAt: Date | string;
+    supersededAt: Date | string | null;
+    retiredAt: Date | string | null;
+  };
+  const toDate = (date: Date | string | null): Date | null =>
+    date === null ? null : date instanceof Date ? date : new Date(date);
+  const createdAt = toDate(row.createdAt);
+  if (createdAt === null || Number.isNaN(createdAt.getTime())) {
+    throw Object.assign(new Error('INTERVENTION_REPLAY_INVALID'), {
+      code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE',
+    });
+  }
+  const supersededAt = toDate(row.supersededAt);
+  const retiredAt = toDate(row.retiredAt);
+  if (
+    (supersededAt !== null && Number.isNaN(supersededAt.getTime())) ||
+    (retiredAt !== null && Number.isNaN(retiredAt.getTime()))
+  ) {
+    throw Object.assign(new Error('INTERVENTION_REPLAY_INVALID'), {
+      code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE',
+    });
+  }
+  return {
+    ...row,
+    createdAt,
+    supersededAt,
+    retiredAt,
+  };
+}
+
 function outcomeBody(outcome: Awaited<ReturnType<typeof runLockedIdempotentCommandInTransaction>>):
   InterventionDefinitionRecord {
   if (outcome.action === 'MISMATCH') {
@@ -55,7 +92,7 @@ function outcomeBody(outcome: Awaited<ReturnType<typeof runLockedIdempotentComma
       statusCode: 409,
     });
   }
-  return outcome.body as InterventionDefinitionRecord;
+  return hydrateInterventionDefinitionRecord(outcome.body);
 }
 
 export async function createInterventionDefinitionCandidate(
