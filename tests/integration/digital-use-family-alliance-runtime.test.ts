@@ -1531,7 +1531,35 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         expectedTargetRevision: sleep.revision,
         response: {
           kind: 'PROGRESS',
-          progress: { stage: 'EXECUTION', state: 'KNOWN', modifyTarget: 'NO' },
+          progress: {
+            kind: 'GENERAL_MATRIX',
+            taskPlan: { state: 'KNOWN', text: 'Concurrent sleep execution plan.' },
+            communication: {
+              needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+              motivationMatch: { state: 'KNOWN', text: 'Motivation discussed.' },
+              abilityMatch: { state: 'KNOWN', text: 'Ability discussed.' },
+              challengeResistance: { state: 'KNOWN', text: 'Barrier discussed.' },
+            },
+            childFeedback: {
+              needMatch: { state: 'KNOWN', text: 'Need feedback.' },
+              motivationMatch: { state: 'KNOWN', text: 'Motivation feedback.' },
+              abilityMatch: { state: 'KNOWN', text: 'Ability feedback.' },
+              challengeResistance: { state: 'KNOWN', text: 'Barrier feedback.' },
+            },
+            userObservation: {
+              needMatch: { state: 'KNOWN', text: 'Observed need.' },
+              motivationMatch: { state: 'KNOWN', text: 'Observed motivation.' },
+              abilityMatch: { state: 'KNOWN', text: 'Observed ability.' },
+              challengeResistance: { state: 'KNOWN', text: 'Observed barrier.' },
+            },
+            otherFamilyFeedback: {
+              needMatch: { state: 'NOT_COLLECTED' },
+              motivationMatch: { state: 'NOT_COLLECTED' },
+              abilityMatch: { state: 'NOT_COLLECTED' },
+              challengeResistance: { state: 'NOT_COLLECTED' },
+            },
+            modifyTarget: 'NO',
+          },
           note: 'concurrent progress observation',
         },
       },
