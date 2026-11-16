@@ -33,9 +33,6 @@ const runtimeAcceptanceFiles = [
   'tests/domain/digital-use-review-a5001-contracts.test.ts',
 ] as const;
 
-const closeoutEvidenceFile =
-  'tests/domain/digital-use-review-slice15-closeout.test.ts';
-
 function expandAcceptanceMarkers(text: string): Set<number> {
   const out = new Set<number>();
   for (const match of text.matchAll(/AS-([0-9]{2}(?:[/-][0-9]{2})*)/g)) {
@@ -66,9 +63,89 @@ function acceptanceEvidenceMarkers(): Set<number> {
 
   // Only executable test titles may advertise Acceptance coverage. Comments,
   // helper data and FR_TO_AS mapping text must never self-certify scenarios.
-  for (const path of [...runtimeAcceptanceFiles, closeoutEvidenceFile]) {
+  for (const path of runtimeAcceptanceFiles) {
     for (const n of testTitleAcceptanceMarkers(read(path))) covered.add(n);
   }
+
+  // AS-57–69 are phase-boundary/negative-space scenarios. They are not
+  // self-certified from this closeout file's own title. Each marker is added
+  // only after its executable repository assertion succeeds.
+  const productionReview = [
+    a5001Service,
+    a5002Service,
+    phoneGates,
+    nodeResponse,
+    route,
+    reviewSchemas,
+  ].join('\n');
+  const routeFiles = readdirSync(join(root, 'apps/server/api/src/routes'));
+  const completeStart = contracts.indexOf(
+    'export const CompleteDigitalUseNodeRequest'
+  );
+  const completeEnd = contracts.indexOf(
+    'export type CompleteDigitalUseNodeRequestType',
+    completeStart
+  );
+  const completeContract = contracts.slice(completeStart, completeEnd);
+  const prove = (scenario: number, check: () => void) => {
+    check();
+    covered.add(scenario);
+  };
+
+  prove(57, () => {
+    expect(a5001Service).not.toMatch(/INSERT\s+INTO\s+reviews\b/i);
+    expect(migration).not.toMatch(/CREATE\s+TABLE\s+reviews\b/i);
+  });
+  prove(58, () => {
+    expect(a5002Service).not.toMatch(/INSERT\s+INTO\s+reviews\b/i);
+    expect(migration).not.toMatch(/CREATE\s+TABLE\s+reviews\b/i);
+  });
+  prove(59, () => {
+    expect(productionReview).not.toContain('CASE_OVERALL');
+  });
+  prove(60, () => {
+    expect(productionReview).not.toMatch(/INSERT\s+INTO\s+outcomes\b/i);
+  });
+  prove(61, () => {
+    expect(productionReview).not.toMatch(/INSERT\s+INTO\s+plans\b/i);
+  });
+  prove(62, () => {
+    expect(productionReview).not.toMatch(/INSERT\s+INTO\s+(tasks|checkins)\b/i);
+  });
+  prove(63, () => {
+    expect(productionReview).not.toMatch(/INSERT\s+INTO\s+follow_?up_?schedules?\b/i);
+  });
+  prove(64, () => {
+    expect(productionReview).not.toMatch(/pg-boss|node-cron|cron\.schedule/i);
+    expect(productionReview).not.toMatch(/INSERT\s+INTO\s+notifications?\b|delivery_status/i);
+  });
+  prove(65, () => {
+    expect(productionReview).not.toMatch(/@openai|\bopenai\b|anthropic|generateText|model_ref/i);
+    expect(
+      testTitleAcceptanceMarkers(read('tests/integration/digital-use-a5002-review-runtime.test.ts')).has(70)
+    ).toBe(true);
+  });
+  prove(66, () => {
+    expect(productionReview).not.toMatch(/@openai|\bopenai\b|anthropic|generateText|model_ref/i);
+    expect(completeContract).not.toMatch(/model|aiOutput|generatedResult/i);
+  });
+  prove(67, () => {
+    expect(a5001Service + a5002Service).not.toMatch(
+      /const\s+digitalUseNodeManifest\b|new\s+Map\([^)]*A500[12]/
+    );
+    expect(a5001Service + a5002Service).not.toContain('allowedNext');
+    expect(a5001Service + a5002Service).toContain('routeDigitalUseTopology');
+  });
+  prove(68, () => {
+    expect(migration).not.toMatch(/CREATE\s+TABLE/i);
+    expect(routeFiles).not.toContain('reviews.ts');
+    expect(routeFiles).not.toContain('digital-use-reviews.ts');
+    expect(productionReview).not.toMatch(/class\s+Review\b|interface\s+ReviewAggregate\b/);
+  });
+  prove(69, () => {
+    expect(productionReview).not.toMatch(/questionnaire|form[_ -]?builder/i);
+    expect(productionReview).not.toMatch(/universalScore|effectivenessScore|successPercentage/i);
+  });
 
   return covered;
 }
