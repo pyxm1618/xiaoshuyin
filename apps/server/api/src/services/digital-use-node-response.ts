@@ -62,6 +62,18 @@ import {
   assertCurrentDigitalUseProblemFormulation,
   assertDigitalUseCaseLifecycle,
 } from './digital-use-case-lifecycle.js';
+import {
+  a5001CanonicalRequestFingerprint,
+  executeA5001ReviewInTransaction,
+} from './digital-use-family-alliance-review.js';
+import {
+  a5002CanonicalRequestFingerprint,
+  executeA5002ReviewInTransaction,
+} from './digital-use-phone-contract-review.js';
+import {
+  unavailableProductionProfessionalReviewContentProvider,
+  type ProfessionalReviewContentProvider,
+} from './digital-use-review-professional-content.js';
 
 function nodeError(code: string, message?: string): Error & { statusCode: number; code: string } {
   const mapped = toHttpError(code, message);
@@ -555,7 +567,10 @@ async function executeProblemFormulationHandoffPath(
  */
 export async function completeDigitalUseNodeResponse(
   pool: pg.Pool,
-  input: CompleteDigitalUseNodeInput
+  input: CompleteDigitalUseNodeInput,
+  options: {
+    readonly professionalReviewContent?: ProfessionalReviewContentProvider;
+  } = {}
 ): Promise<DigitalUseSceneResponseType> {
   return withRlsTransaction(
     pool,
@@ -585,17 +600,25 @@ export async function completeDigitalUseNodeResponse(
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
-      const requestHash = hashPayload({
-        familyId: input.familyId,
-        caseId: input.caseId,
-        nodeCode: node.nodeCode,
-        expectedCaseVersion: input.expectedCaseVersion,
-        expectedNodeRevision: input.expectedNodeRevision,
-        expectedScenePackageVersion: input.expectedScenePackageVersion ?? null,
-        expectedSelectionRevision: input.expectedSelectionRevision ?? null,
-        expectedTargetRevision: input.expectedTargetRevision ?? null,
-        response: input.response,
-      });
+      const reviewFingerprint =
+        node.stream === 'FAMILY_ALLIANCE_REVIEW'
+          ? a5001CanonicalRequestFingerprint(input).fingerprint
+          : node.stream === 'PHONE_USE_CONTRACT_REVIEW'
+            ? a5002CanonicalRequestFingerprint(input).fingerprint
+            : null;
+      const requestHash = hashPayload(
+        reviewFingerprint ?? {
+          familyId: input.familyId,
+          caseId: input.caseId,
+          nodeCode: node.nodeCode,
+          expectedCaseVersion: input.expectedCaseVersion,
+          expectedNodeRevision: input.expectedNodeRevision,
+          expectedScenePackageVersion: input.expectedScenePackageVersion ?? null,
+          expectedSelectionRevision: input.expectedSelectionRevision ?? null,
+          expectedTargetRevision: input.expectedTargetRevision ?? null,
+          response: input.response,
+        }
+      );
 
       const outcome = await runIdempotentCommandInTransaction(
         tx,
@@ -608,6 +631,31 @@ export async function completeDigitalUseNodeResponse(
           requestHash,
         },
         async () => {
+          const professionalReviewContent =
+            options.professionalReviewContent ??
+            unavailableProductionProfessionalReviewContentProvider;
+          if (node.stream === 'FAMILY_ALLIANCE_REVIEW') {
+            return {
+              status: 200,
+              body: await executeA5001ReviewInTransaction(
+                tx,
+                input,
+                node,
+                professionalReviewContent
+              ),
+            };
+          }
+          if (node.stream === 'PHONE_USE_CONTRACT_REVIEW') {
+            return {
+              status: 200,
+              body: await executeA5002ReviewInTransaction(
+                tx,
+                input,
+                node,
+                professionalReviewContent
+              ),
+            };
+          }
           if (node.stream === 'FAMILY_ALLIANCE') {
             return {
               status: 200,
