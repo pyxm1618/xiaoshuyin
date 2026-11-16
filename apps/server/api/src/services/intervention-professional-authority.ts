@@ -1,5 +1,3 @@
-import type pg from 'pg';
-
 export type InterventionApprovalStatus = 'APPROVED' | 'DRAFT' | 'REJECTED' | 'REVOKED';
 export type InterventionPublicationStatus = 'PUBLISHED' | 'UNPUBLISHED';
 export type InterventionApprovalLifecycle = 'CURRENT' | 'RETIRED' | 'SUPERSEDED';
@@ -52,6 +50,22 @@ export const unavailableProductionInterventionProfessionalAuthorityProvider:
     async revalidate() { return null; },
   });
 
+export type InterventionProfessionalAuthorityFailureReason =
+  | 'NOT_PROFESSIONALLY_APPROVED'
+  | 'WRONG_DEFINITION'
+  | 'WRONG_VERSION'
+  | 'WRONG_HASH'
+  | 'SOURCE_REFS_MISMATCH'
+  | 'APPROVAL_SCOPE_MISMATCH'
+  | 'REVIEWER_IDENTITY_MISSING'
+  | 'STAFF_AUTHORITY_INVALID'
+  | 'QUALIFICATION_MISSING'
+  | 'APPROVAL_NOT_APPROVED'
+  | 'UNPUBLISHED'
+  | 'RETIRED'
+  | 'SUPERSEDED'
+  | 'APPROVAL_EXPIRED';
+
 export type InterventionProfessionalAuthorityResult =
   | {
       readonly status: 'VALID';
@@ -62,21 +76,7 @@ export type InterventionProfessionalAuthorityResult =
     }
   | {
       readonly status: 'UNAVAILABLE' | 'INVALID';
-      readonly reason:
-        | 'NOT_PROFESSIONALLY_APPROVED'
-        | 'WRONG_DEFINITION'
-        | 'WRONG_VERSION'
-        | 'WRONG_HASH'
-        | 'SOURCE_REFS_MISMATCH'
-        | 'APPROVAL_SCOPE_MISMATCH'
-        | 'REVIEWER_IDENTITY_MISSING'
-        | 'STAFF_AUTHORITY_INVALID'
-        | 'QUALIFICATION_MISSING'
-        | 'APPROVAL_NOT_APPROVED'
-        | 'UNPUBLISHED'
-        | 'RETIRED'
-        | 'SUPERSEDED'
-        | 'APPROVAL_EXPIRED';
+      readonly reason: InterventionProfessionalAuthorityFailureReason;
     };
 
 function timestamp(value: string): number | null {
@@ -90,7 +90,7 @@ function sameStringArray(a: readonly string[], b: readonly string[]): boolean {
 }
 
 function invalid(
-  reason: Extract<InterventionProfessionalAuthorityResult, { status: 'INVALID' }>['reason']
+  reason: InterventionProfessionalAuthorityFailureReason
 ): InterventionProfessionalAuthorityResult {
   return { status: 'INVALID', reason };
 }
@@ -151,29 +151,4 @@ export async function resolveInterventionProfessionalAuthority(
     qualificationRef: proof.professionalQualification.qualificationRef,
     proof,
   };
-}
-
-/**
- * Bounded Staff self-authority read. It deliberately does not call or
- * generalize SAFETY_RESOLVE's app.set_staff_case_context()/staff_case_authorized().
- */
-export async function assertCurrentProfessionalReviewStaffAuthority(
-  tx: pg.PoolClient,
-  input: { accountId: string; personId: string }
-): Promise<{ assignmentRef: string }> {
-  const result = await tx.query<{ id: string }>(
-    "SELECT id FROM staff_assignments " +
-      "WHERE account_id=$1 AND person_id=$2 AND capability='PROFESSIONAL_REVIEW' " +
-      "AND scope_type='GLOBAL' AND revoked_at IS NULL " +
-      "AND valid_from <= clock_timestamp() " +
-      "AND (valid_until IS NULL OR valid_until > clock_timestamp()) " +
-      "ORDER BY granted_at DESC, id LIMIT 2",
-    [input.accountId, input.personId]
-  );
-  if (result.rows.length !== 1 || !result.rows[0]) {
-    throw Object.assign(new Error('INTERVENTION_STAFF_AUTHORITY_INVALID'), {
-      code: 'INTERVENTION_STAFF_AUTHORITY_INVALID',
-    });
-  }
-  return { assignmentRef: result.rows[0].id };
 }

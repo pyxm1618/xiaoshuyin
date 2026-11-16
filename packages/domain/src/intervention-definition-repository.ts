@@ -145,7 +145,7 @@ export async function insertInterventionDefinitionCandidate(
     'burden_and_barriers,adverse_or_worsening_signals,review_window_and_criteria,' +
     'stop_reassess_safety_referral_conditions,allowed_combinations,conflicting_interventions,' +
     'professional_source_refs,supersedes_id,created_by_person_id) VALUES ' +
-    '($1,$2,$3,$4,\\'CANDIDATE\\',$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,' +
+    '($1,$2,$3,$4,\'CANDIDATE\',$5,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11,' +
     '$12::jsonb,$13::jsonb,$14::jsonb,$15::jsonb,$16::jsonb,$17::jsonb,$18::jsonb,' +
     '$19::jsonb,$20::jsonb,$21::jsonb,$22::jsonb,$23,$24) RETURNING ' + COLUMNS,
     values
@@ -169,4 +169,27 @@ export async function transitionInterventionDefinitionStateCas(
     [input.id,input.expectedRevision,input.expectedState,input.nextState]
   );
   return result.rows[0] ? toRecord(result.rows[0]) : null;
+}
+
+
+/**
+ * Reuses the one staff_assignments authority table. This read is deliberately
+ * GLOBAL PROFESSIONAL_REVIEW only and never calls the SAFETY_RESOLVE context.
+ */
+export async function getCurrentProfessionalReviewStaffAssignment(
+  tx: Tx,
+  input: { accountId: string; personId: string }
+): Promise<{ assignmentRef: string } | null> {
+  const result = await tx.query<{ id: string }>(
+    "SELECT id FROM staff_assignments " +
+      "WHERE account_id=$1 AND person_id=$2 AND capability='PROFESSIONAL_REVIEW' " +
+      "AND scope_type='GLOBAL' AND revoked_at IS NULL " +
+      "AND valid_from <= clock_timestamp() " +
+      "AND (valid_until IS NULL OR valid_until > clock_timestamp()) " +
+      "ORDER BY granted_at DESC, id LIMIT 2",
+    [input.accountId, input.personId]
+  );
+  return result.rows.length === 1 && result.rows[0]
+    ? { assignmentRef: result.rows[0].id }
+    : null;
 }
