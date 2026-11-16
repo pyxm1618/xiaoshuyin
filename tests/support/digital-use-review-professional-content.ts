@@ -43,7 +43,7 @@ function proofFor(stream: ProfessionalReviewStream): ProfessionalReviewPackagePr
     lifecycleStatus: 'CURRENT',
     reviewedAt: '2026-11-15T00:00:00.000Z',
     effectiveFrom: '2026-01-01T00:00:00.000Z',
-    effectiveTo: '2027-12-31T23:59:59.999Z',
+    effectiveTo: null,
     publishedAt: '2026-11-15T00:00:00.000Z',
   });
 }
