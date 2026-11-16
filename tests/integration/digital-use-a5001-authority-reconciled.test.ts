@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
-import { recordStatement } from '@xiaoshuyin/domain';
+import { recordObservation, recordStatement } from '@xiaoshuyin/domain';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import { createAdminPool } from '../setup/db.js';
 import {
@@ -570,6 +570,218 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       await admin.query(`DROP FUNCTION IF EXISTS ${fn}()`);
     }
     expect(await counts(f)).toEqual(before);
+  });
+
+  it('T1509 accepts child-authored input only when exact Case participation and Evidence-owner proof agree', async () => {
+    const f = await fixture('child-authored-provenance');
+    const child = await loginWithLabel(app, 'slice15-a5001-child-authored');
+    await admin.query(
+      'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [f.familyId, child.personId]
+    );
+    const participation = await admin.query<{ id: string }>(
+      `INSERT INTO case_participants
+         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,
+          created_by_person_id,accepted_at)
+       VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())
+       RETURNING id`,
+      [
+        f.familyId,
+        f.caseId,
+        child.personId,
+        crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'),
+        f.manager.personId,
+      ]
+    );
+    await admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,verified_source,guardian_person_id)
+       VALUES ($1,'MINOR_14_17',true,'GUARDIAN_RELAY',$2)
+       ON CONFLICT (person_id) DO UPDATE SET
+         age_band='MINOR_14_17',
+         minor_mode=true,
+         verified_source='GUARDIAN_RELAY',
+         guardian_person_id=EXCLUDED.guardian_person_id,
+         guardian_consent_record_id=NULL,
+         guardian_consent_version=NULL,
+         effective_at=now(),
+         updated_at=now()`,
+      [child.personId, f.manager.personId]
+    );
+
+    const message = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/messages`,
+      headers: commandHeaders(
+        child.token,
+        `slice15-a5001-child-message-${crypto.randomUUID()}`
+      ),
+      payload: { content: 'I followed the agreed sleep target this week.' },
+    });
+    expect(message.statusCode, message.body).toBe(201);
+    const messageId = message.json().id as string;
+
+    const body = {
+      ...payload(f),
+      evidenceRefs: [{ type: 'DIALOGUE_MESSAGE', id: messageId }],
+      provenance: [{
+        kind: 'CHILD_AUTHORED_INPUT',
+        sourcePersonId: child.personId,
+        participationId: participation.rows[0]!.id,
+        sourceMessageId: messageId,
+      }],
+    };
+    const result = await submit(
+      f,
+      `slice15-a5001-child-provenance-${crypto.randomUUID()}`,
+      body
+    );
+    expect(result.statusCode, result.body).toBe(200);
+    const artifact = result.json().artifacts.find(
+      (item: any) => item.type === 'DIGITAL_USE_A5001_EFFECT_EVALUATION'
+    );
+    expect(artifact.data.provenance).toEqual(body.provenance);
+  });
+
+  it('T1509 accepts parent-transcribed child claim only through exact active participation + Evidence, preserving explicit UNKNOWN', async () => {
+    const f = await fixture('transcribed-child-provenance');
+    const child = await loginWithLabel(app, 'slice15-a5001-transcribed-child');
+    await admin.query(
+      'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+      [f.familyId, child.personId]
+    );
+    const participation = await admin.query<{ id: string }>(
+      `INSERT INTO case_participants
+         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,
+          created_by_person_id,accepted_at)
+       VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())
+       RETURNING id`,
+      [
+        f.familyId,
+        f.caseId,
+        child.personId,
+        crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'),
+        f.manager.personId,
+      ]
+    );
+    await admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,verified_source,guardian_person_id)
+       VALUES ($1,'MINOR_14_17',true,'GUARDIAN_RELAY',$2)
+       ON CONFLICT (person_id) DO UPDATE SET
+         age_band='MINOR_14_17',
+         minor_mode=true,
+         verified_source='GUARDIAN_RELAY',
+         guardian_person_id=EXCLUDED.guardian_person_id,
+         guardian_consent_record_id=NULL,
+         guardian_consent_version=NULL,
+         effective_at=now(),
+         updated_at=now()`,
+      [child.personId, f.manager.personId]
+    );
+
+    const observation = await withRlsTransaction(
+      appDb,
+      {
+        familyId: f.familyId,
+        accountId: f.manager.accountId,
+        personId: f.manager.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) =>
+        recordObservation(
+          tx,
+          {
+            familyId: f.familyId,
+            caseId: f.caseId,
+            actorAccountId: f.manager.accountId,
+            actorPersonId: f.manager.personId,
+            purpose: 'FAMILY_MANAGEMENT',
+          },
+          {
+            subjectPersonId: child.personId,
+            sourceKind: 'GUARDIAN_OBSERVATION',
+            sourcePersonId: f.manager.personId,
+            occurredTimeState: 'UNKNOWN',
+            confirmationStatus: 'UNCONFIRMED',
+            content: 'Parent transcribed that the child was unsure whether the target helped.',
+            observationCode: 'SLICE15_CHILD_TRANSCRIBED_EFFECT',
+            value: { state: 'UNKNOWN' },
+          }
+        )
+    );
+
+    const evidenceRef = { type: 'OBSERVATION' as const, id: observation.id };
+    const body = {
+      ...payload(f),
+      evidenceRefs: [evidenceRef],
+      provenance: [{
+        kind: 'PARENT_TRANSCRIBED_CHILD_CLAIM',
+        transcriberPersonId: f.manager.personId,
+        childPersonId: child.personId,
+        participationId: participation.rows[0]!.id,
+        evidenceRef,
+      }],
+    };
+    const result = await submit(
+      f,
+      `slice15-a5001-transcribed-provenance-${crypto.randomUUID()}`,
+      body
+    );
+    expect(result.statusCode, result.body).toBe(200);
+    const artifact = result.json().artifacts.find(
+      (item: any) => item.type === 'DIGITAL_USE_A5001_EFFECT_EVALUATION'
+    );
+    expect(artifact.data.provenance).toEqual(body.provenance);
+
+    const { rows } = await admin.query<{ value_state: string }>(
+      'SELECT value_state FROM observations WHERE id=$1',
+      [observation.id]
+    );
+    expect(rows[0]?.value_state).toBe('UNKNOWN');
+  });
+
+  it('T1509 rejects cross-Family Evidence refs even with an otherwise valid package and subject', async () => {
+    const f = await fixture('cross-family-evidence');
+    const outsider = await loginWithLabel(app, 'slice15-a5001-cross-family-outsider');
+    const outsiderFamily = await createFamily(
+      app,
+      outsider.token,
+      'slice15-a5001-cross-family-outsider'
+    );
+    expect(outsiderFamily.statusCode, outsiderFamily.body).toBe(201);
+    const outsiderCase = await createCase(
+      app,
+      outsider.token,
+      'slice15-a5001-cross-family-outsider'
+    );
+    expect(outsiderCase.statusCode, outsiderCase.body).toBe(201);
+    const outsiderMessage = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${outsiderCase.json().id as string}/messages`,
+      headers: commandHeaders(
+        outsider.token,
+        `slice15-a5001-cross-family-message-${crypto.randomUUID()}`
+      ),
+      payload: { content: 'Evidence from a different Family and Case.' },
+    });
+    expect(outsiderMessage.statusCode, outsiderMessage.body).toBe(201);
+
+    const body = {
+      ...payload(f),
+      evidenceRefs: [{
+        type: 'DIALOGUE_MESSAGE',
+        id: outsiderMessage.json().id as string,
+      }],
+    };
+    const result = await submit(
+      f,
+      `slice15-a5001-cross-family-${crypto.randomUUID()}`,
+      body
+    );
+    expect(result.statusCode, result.body).toBe(422);
+    expect(result.json().code).toBe('SCENE_RESPONSE_INVALID');
+    expect((await counts(f)).artifacts).toBe(0);
   });
 
   it('USER_TIMELINE_REVIEW appends + supersedes history without destructive overwrite', async () => {
