@@ -24,9 +24,10 @@ BEGIN
   current_expr := substring(current_def FROM 8 FOR char_length(current_def) - 8);
   ALTER TABLE scene_artifacts DROP CONSTRAINT scene_artifacts_type_check;
   EXECUTE format(
-    'ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_check CHECK ((%s) OR artifact_type = %L)',
+    'ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_check CHECK ((%s) OR artifact_type IN (%L,%L))',
     current_expr,
-    'DIGITAL_USE_A5001_EFFECT_EVALUATION'
+    'DIGITAL_USE_A5001_EFFECT_EVALUATION',
+    'DIGITAL_USE_A5002_EFFECT_EVALUATION'
   );
 
   SELECT pg_get_constraintdef(oid, true)
@@ -42,9 +43,10 @@ BEGIN
   current_expr := substring(current_def FROM 8 FOR char_length(current_def) - 8);
   ALTER TABLE scene_artifacts DROP CONSTRAINT scene_artifacts_source_node_check;
   EXECUTE format(
-    'ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_source_node_check CHECK ((%s) OR source_node_code = %L)',
+    'ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_source_node_check CHECK ((%s) OR source_node_code IN (%L,%L))',
     current_expr,
-    'A5001'
+    'A5001',
+    'A5002'
   );
 
   SELECT pg_get_constraintdef(oid, true)
@@ -60,10 +62,12 @@ BEGIN
   current_expr := substring(current_def FROM 8 FOR char_length(current_def) - 8);
   ALTER TABLE scene_artifacts DROP CONSTRAINT scene_artifacts_type_source_check;
   EXECUTE format(
-    'ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_source_check CHECK ((%s) OR (artifact_type = %L AND source_node_code = %L))',
+    'ALTER TABLE scene_artifacts ADD CONSTRAINT scene_artifacts_type_source_check CHECK ((%s) OR (artifact_type = %L AND source_node_code = %L) OR (artifact_type = %L AND source_node_code = %L))',
     current_expr,
     'DIGITAL_USE_A5001_EFFECT_EVALUATION',
-    'A5001'
+    'A5001',
+    'DIGITAL_USE_A5002_EFFECT_EVALUATION',
+    'A5002'
   );
 END
 $$;
