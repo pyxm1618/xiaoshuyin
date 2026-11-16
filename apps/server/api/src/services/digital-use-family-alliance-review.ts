@@ -161,10 +161,9 @@ export async function resolveA5001SubjectSnapshot(
   input: { familyId: string; caseId: string; lock?: boolean }
 ): Promise<A5001SubjectSnapshot> {
   const lock = input.lock ?? false;
-  const [a3000, a3002] = await Promise.all([
-    getSceneNodeState(tx, input.caseId, 'A3000', lock),
-    getSceneNodeState(tx, input.caseId, 'A3002', lock),
-  ]);
+  // Deterministic lock order: A3000 -> A3002 -> target_code ASC.
+  const a3000 = await getSceneNodeState(tx, input.caseId, 'A3000', lock);
+  const a3002 = await getSceneNodeState(tx, input.caseId, 'A3002', lock);
   if (!completed(a3000) || !completed(a3002)) {
     throw reviewError('FAMILY_ALLIANCE_ENTRY_BLOCKED');
   }
