@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
+import { replaceDigitalUseTargetSelection } from '@xiaoshuyin/domain';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import {
   PHONE_USE_CONTRACT_CONTENT_VERSION,
@@ -380,23 +381,16 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
           f.manager.personId,
         ]
       );
-      await client.query(
-        `INSERT INTO digital_use_target_items
-           (family_id,case_id,scene_package_version,target_code,selection_revision,
-            revision,selected,concrete_target_text,feasibility_payload,
-            progress_payload,progress_evidence_refs,help_history_refs,source_refs,
-            created_by_person_id)
-         VALUES
-           ($1,$2,'v1','SLEEP',1,1,true,'Keep the agreed bedtime',
-            $3::jsonb,$4::jsonb,'[]'::jsonb,'[]'::jsonb,'[]'::jsonb,$5)`,
-        [
-          f.familyId,
-          f.caseId,
-          JSON.stringify({ state: 'KNOWN', note: 'Feasible with parent support.' }),
-          JSON.stringify({ state: 'PARTIAL', note: 'Tried on several evenings.' }),
-          f.manager.personId,
-        ]
-      );
+      await replaceDigitalUseTargetSelection(client, {
+        familyId: f.familyId,
+        caseId: f.caseId,
+        scenePackageVersion: 'v1',
+        expectedSelectionRevision: 0,
+        selectionRevision: 1,
+        selectedTargets: ['SLEEP'],
+        createdByPersonId: f.manager.personId,
+        sourceRefs: [],
+      });
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
@@ -558,9 +552,15 @@ describe('Slice 15 A5002 exact Phone Use Contract effect review runtime', () => 
     const client = await admin.connect();
     try {
       await client.query('BEGIN');
-      await client.query(
-        `SELECT set_config('app.purpose','FAMILY_MANAGEMENT',true)`
-      );
+      await client.query('SELECT app.set_identity_context($1, $2)', [
+        f.manager.accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await client.query('SELECT app.set_family_context($1, $2, $3)', [
+        f.familyId,
+        f.manager.personId,
+        'FAMILY_MANAGEMENT',
+      ]);
       await client.query(
         `UPDATE digital_use_contract_versions
             SET status='SUPERSEDED',superseded_at=now()
