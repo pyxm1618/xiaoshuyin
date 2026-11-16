@@ -764,6 +764,43 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     expect(rows[0]?.value_state).toBe('UNKNOWN');
   });
 
+  it('T1509 FORCE RLS keeps completed A5001 artifact invisible outside its Family context', async () => {
+    const f = await fixture('rls-isolation');
+    const result = await submit(
+      f,
+      `slice15-a5001-rls-${crypto.randomUUID()}`,
+      payload(f)
+    );
+    expect(result.statusCode, result.body).toBe(200);
+    const artifact = result.json().artifacts.find(
+      (item: any) => item.type === 'DIGITAL_USE_A5001_EFFECT_EVALUATION'
+    );
+    expect(artifact?.id).toBeTruthy();
+
+    const outsider = await loginWithLabel(app, 'slice15-a5001-rls-outsider');
+    const outsiderFamily = await createFamily(
+      app,
+      outsider.token,
+      'slice15-a5001-rls-outsider'
+    );
+    expect(outsiderFamily.statusCode, outsiderFamily.body).toBe(201);
+
+    const visible = await withRlsTransaction(
+      appDb,
+      {
+        familyId: outsiderFamily.json().id as string,
+        accountId: outsider.accountId,
+        personId: outsider.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      (tx) => tx.query(
+        'SELECT id FROM scene_artifacts WHERE id=$1',
+        [artifact.id]
+      )
+    );
+    expect(visible.rows).toHaveLength(0);
+  });
+
   it('T1509 rejects cross-Family Evidence refs even with an otherwise valid package and subject', async () => {
     const f = await fixture('cross-family-evidence');
     const outsider = await loginWithLabel(app, 'slice15-a5001-cross-family-outsider');
