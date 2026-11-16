@@ -54,8 +54,12 @@ describe('Slice 15 authority-reconciled Scene Artifact migration', () => {
       ),
       'utf8'
     );
-    expect(sql).not.toMatch(/CREATE\s+TABLE|CREATE\s+POLICY|\bGRANT\b/i);
-    expect(sql).not.toMatch(
+    const ddl = sql
+      .split('\n')
+      .filter((line) => !line.trimStart().startsWith('--'))
+      .join('\n');
+    expect(ddl).not.toMatch(/CREATE\s+TABLE|CREATE\s+POLICY|\bGRANT\b/i);
+    expect(ddl).not.toMatch(
       /professional_packages|reviewers\b|scheduler|digital_use_contract_versions/i
     );
 
