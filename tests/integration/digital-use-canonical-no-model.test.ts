@@ -82,28 +82,43 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     migrator = new pg.Client({ connectionString: process.env['MIGRATION_DATABASE_URL'] });
     await migrator.connect();
 
+    const featureCode = 'DIGITAL_USE_ASSESSMENT_RUNTIME';
+    const lockKey = `slice15-test-policy:${featureCode}`;
     await migrator.query(
-      `SELECT app.publish_compliance_feature_policy(
-         'DIGITAL_USE_ASSESSMENT_RUNTIME','v1',NULL,1,
-         'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
-         'Slice 12 canonical no-model reviewed basis','evidence://slice12/canonical-no-model',
-         now() - interval '1 minute','migration:slice12-canonical-no-model'
-       )`
+      `SELECT pg_advisory_lock(hashtextextended($1,0))`,
+      [lockKey]
     );
+    try {
+      const current = await migrator.query<{ n: number }>(
+        `SELECT count(*)::int AS n
+           FROM compliance_feature_policies
+          WHERE feature_code=$1
+            AND feature_contract_revision='v1'
+            AND superseded_by_policy_id IS NULL`,
+        [featureCode]
+      );
+      if ((current.rows[0]?.n ?? 0) === 0) {
+        await migrator.query(
+          `SELECT app.publish_compliance_feature_policy(
+             $1,'v1',NULL,1,
+             'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+             'Slice 12 canonical no-model reviewed basis','evidence://slice12/canonical-no-model',
+             now() - interval '1 minute','migration:slice12-canonical-no-model'
+           )`,
+          [featureCode]
+        );
+      }
+    } finally {
+      await migrator.query(
+        `SELECT pg_advisory_unlock(hashtextextended($1,0))`,
+        [lockKey]
+      );
+    }
   });
 
   afterAll(async () => {
-    await admin.query(
-      `UPDATE compliance_feature_policies
-          SET superseded_by_policy_id = NULL
-        WHERE feature_code='DIGITAL_USE_ASSESSMENT_RUNTIME'
-          AND feature_contract_revision='v1'`
-    ).catch(() => undefined);
-    await admin.query(
-      `DELETE FROM compliance_feature_policies
-        WHERE feature_code='DIGITAL_USE_ASSESSMENT_RUNTIME'
-          AND feature_contract_revision='v1'`
-    ).catch(() => undefined);
+    // Shared reviewed baseline policy: do not delete it while concurrent
+    // Digital Use suites are still using the same authoritative feature policy.
     await migrator.end().catch(() => undefined);
     await admin.end();
     await app.close();
