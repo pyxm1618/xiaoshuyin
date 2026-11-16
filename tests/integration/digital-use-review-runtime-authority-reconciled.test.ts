@@ -543,8 +543,15 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
             AND metadata->>'nodeCode'=$3) AS events,
         (SELECT count(*)::int FROM idempotency_keys
           WHERE actor_account_id=$4
-            AND command_type='DIGITAL_USE_NODE_RESPONSE') AS idempotency`,
-      [f.caseId, artifactType, nodeCode, f.manager.accountId]
+            AND command_type='DIGITAL_USE_NODE_RESPONSE'
+            AND idempotency_key LIKE $5) AS idempotency`,
+      [
+        f.caseId,
+        artifactType,
+        nodeCode,
+        f.manager.accountId,
+        nodeCode === 'A5001' ? 'a5001-%' : 'a5002-%',
+      ]
     );
     return rows[0] as {
       artifacts: number;
