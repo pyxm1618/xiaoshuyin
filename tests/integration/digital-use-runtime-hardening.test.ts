@@ -1833,27 +1833,89 @@ describe('T1218 Digital Use runtime hardening', () => {
     }
   });
 
-  it('Slice 14 production A4003 is truthfully unavailable and writes no fake session', async () => {
-    const f = await fixture('s14-roleplay-unavailable');
+  it('A4003 fails closed as recoverable HOLD when Professional Content authority is unassigned', async () => {
+    const f = await fixture('s14-roleplay-professional-unassigned');
     await forceSceneNode(f, 'A4003');
 
     const response = await app.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
-      headers: commandHeaders(f.manager.token, 's14-roleplay-unavailable'),
+      headers: commandHeaders(f.manager.token, 's14-roleplay-professional-unassigned'),
       payload: {
         expectedCaseVersion: f.caseVersion,
-        professionalContentVersion: 'phone-use-contract-v1',
+        professionalContentVersion: 'requested-professional-roleplay-v1',
       },
     });
-    expect(response.statusCode, response.body).toBe(409);
-    expect(response.json().code).toBe('DOWNSTREAM_AI_UNAVAILABLE');
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      kind: 'HOLD',
+      nodeCode: 'A4003',
+      status: 'IN_PROGRESS',
+      reasonCode: 'PROFESSIONAL_CONTENT_UNAVAILABLE',
+    });
 
     const rows = await admin.query(
       `SELECT count(*)::int AS n FROM roleplay_sessions WHERE case_id=$1`,
       [f.caseId]
     );
     expect(rows.rows[0].n).toBe(0);
+    const scene = await admin.query(
+      `SELECT status::text AS status,branch_reason_codes
+         FROM scene_node_states WHERE case_id=$1 AND node_code='A4003'`,
+      [f.caseId]
+    );
+    expect(scene.rows[0]).toMatchObject({
+      status: 'IN_PROGRESS',
+      branch_reason_codes: ['PROFESSIONAL_CONTENT_UNAVAILABLE'],
+    });
+  });
+
+  it('A4003 approved test content plus unavailable production adapter remains recoverable HOLD', async () => {
+    const unavailableApp = await buildApp({
+      phoneUseContract: {
+        roleplayProfessionalContent: {
+          status: 'APPROVED_PUBLISHED',
+          version: 'test-professional-roleplay-v1',
+          authorityRef: 'test-authority:roleplay-v1',
+        },
+      },
+    });
+    await unavailableApp.ready();
+    try {
+      const f = await fixture('s14-roleplay-ai-unavailable', unavailableApp);
+      await forceSceneNode(f, 'A4003');
+
+      const response = await unavailableApp.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+        headers: commandHeaders(f.manager.token, 's14-roleplay-ai-unavailable'),
+        payload: {
+          expectedCaseVersion: f.caseVersion,
+          professionalContentVersion: 'test-professional-roleplay-v1',
+        },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        kind: 'HOLD',
+        nodeCode: 'A4003',
+        status: 'IN_PROGRESS',
+        reasonCode: 'DOWNSTREAM_AI_UNAVAILABLE',
+      });
+
+      const rows = await admin.query(
+        `SELECT count(*)::int AS n FROM roleplay_sessions WHERE case_id=$1`,
+        [f.caseId]
+      );
+      expect(rows.rows[0].n).toBe(0);
+      const a4004 = await admin.query(
+        `SELECT count(*)::int AS n FROM scene_node_states
+          WHERE case_id=$1 AND node_code='A4004'`,
+        [f.caseId]
+      );
+      expect(a4004.rows[0].n).toBe(0);
+    } finally {
+      await unavailableApp.close();
+    }
   });
 
   it('Slice 14 A4003 denies MINOR and UNKNOWN actors before adapter/session creation', async () => {
@@ -1909,7 +1971,16 @@ describe('T1218 Digital Use runtime hardening', () => {
         };
       },
     };
-    const roleplayApp = await buildApp({ phoneUseContract: { roleplayAdapter: adapter } });
+    const roleplayApp = await buildApp({
+      phoneUseContract: {
+        roleplayAdapter: adapter,
+        roleplayProfessionalContent: {
+          status: 'APPROVED_PUBLISHED',
+          version: 'test-professional-roleplay-v1',
+          authorityRef: 'test-authority:roleplay-v1',
+        },
+      },
+    });
     await roleplayApp.ready();
     try {
       const f = await fixture('s14-roleplay-positive', roleplayApp);
@@ -1921,7 +1992,7 @@ describe('T1218 Digital Use runtime hardening', () => {
         headers: commandHeaders(f.manager.token, 's14-roleplay-create'),
         payload: {
           expectedCaseVersion: f.caseVersion,
-          professionalContentVersion: 'phone-use-contract-v1',
+          professionalContentVersion: 'test-professional-roleplay-v1',
         },
       });
       expect(created.statusCode, created.body).toBe(201);
