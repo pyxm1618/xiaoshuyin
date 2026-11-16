@@ -101,6 +101,31 @@ describe('Slice 15 authority-reconciled architecture boundaries', () => {
     }
   });
 
+  it('professional response normalization is package-owned rather than client-asserted', () => {
+    const contracts = read('packages/contracts/src/digital-use-review-schemas.ts');
+    const provider = read(
+      'apps/server/api/src/services/digital-use-review-professional-content.ts'
+    );
+    const a5001 = read(
+      'apps/server/api/src/services/digital-use-family-alliance-review.ts'
+    );
+    const a5002 = read(
+      'apps/server/api/src/services/digital-use-phone-contract-review.ts'
+    );
+
+    expect(contracts).toContain('packageResponse: PackageOwnedResponse');
+    expect(contracts).not.toContain('normalizedResponse: PackageOwnedResponse');
+    expect(provider).toContain('validateAndNormalizeResponse(');
+    expect(a5001).toContain(
+      'professionalPackage.validateAndNormalizeResponse'
+    );
+    expect(a5002).toContain(
+      'professionalPackage.validateAndNormalizeResponse'
+    );
+    expect(a5001).toContain('normalizedResponse,');
+    expect(a5002).toContain('normalizedResponse,');
+  });
+
   it('adds no generic Review owner, CMS, reviewer platform, scheduler, AI/RAG or Phase-4 storage', () => {
     const files = [
       'apps/server/api/src/services/digital-use-family-alliance-review.ts',
