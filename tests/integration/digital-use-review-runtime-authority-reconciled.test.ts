@@ -1072,8 +1072,8 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     expect(rows[0].supersedes_id).toBeNull();
     expect(rows[1].revision).toBe(2);
     expect(rows[1].supersedes_id).toBe(rows[0].id);
-    expect(rows[0].data.packageResponse).toEqual(normalizedReviewResponse);
-    expect(rows[1].data.packageResponse).toMatchObject({ outcome: 'SAME' });
+    expect(rows[0].data.normalizedResponse).toEqual(normalizedReviewResponse);
+    expect(rows[1].data.normalizedResponse).toMatchObject({ outcome: 'SAME' });
     expect(rows[0].data.professionalPackage).toMatchObject(TEST_A5001_PACKAGE);
     expect(rows[1].data.professionalPackage).toMatchObject(TEST_A5001_PACKAGE);
   });
