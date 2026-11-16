@@ -120,8 +120,7 @@ function targetIdentity(
     );
 }
 
-export async function a5001CanonicalRequestFingerprint(
-  tx: pg.PoolClient,
+export function a5001CanonicalRequestFingerprint(
   input: {
     readonly actor: DigitalUseActor;
     readonly familyId: string;
@@ -130,48 +129,13 @@ export async function a5001CanonicalRequestFingerprint(
     readonly expectedCaseVersion: number;
     readonly expectedNodeRevision: number;
     readonly expectedScenePackageVersion?: 'v1' | undefined;
-    readonly expectedSelectionRevision?: number | undefined;
     readonly response: Readonly<Record<string, unknown>>;
   },
-  provider: ProfessionalReviewContentProvider
+  normalizedResponse: Readonly<Record<string, unknown>>,
+  exactSubject: A5001SubjectSnapshot
 ) {
   const parsed = A5001FamilyAllianceReviewSubmission.safeParse(input.response);
   if (!parsed.success) throw reviewError('SCENE_RESPONSE_INVALID');
-  if (input.expectedScenePackageVersion !== DIGITAL_USE_PACKAGE_VERSION) {
-    throw reviewError('STALE_SCENE_PACKAGE');
-  }
-
-  // Preview is intentionally non-locking. Execution re-resolves under the
-  // authoritative owner locks and commit-time revalidation rejects drift.
-  const subject = await resolveA5001SubjectSnapshot(tx, {
-    familyId: input.familyId,
-    caseId: input.caseId,
-    lock: false,
-  });
-  assertSubjectExpectation(subject, parsed.data, input.expectedSelectionRevision);
-
-  const packageInput = {
-    stream: 'FAMILY_ALLIANCE_REVIEW' as const,
-    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-    packageId: parsed.data.professionalPackage.packageId,
-    packageVersion: parsed.data.professionalPackage.packageVersion,
-    contentHash: parsed.data.professionalPackage.contentHash,
-  };
-  const professionalPackage = await requireProfessionalReviewPackage(
-    provider,
-    packageInput,
-    'RESOLVE'
-  );
-
-  let normalizedResponse: Readonly<Record<string, unknown>>;
-  try {
-    normalizedResponse = professionalPackage.validateAndNormalizeResponse(
-      parsed.data.packageResponse
-    );
-  } catch {
-    throw reviewError('SCENE_RESPONSE_INVALID');
-  }
-
   return {
     parsed: parsed.data,
     normalizedResponse,
@@ -186,13 +150,13 @@ export async function a5001CanonicalRequestFingerprint(
       stream: 'FAMILY_ALLIANCE_REVIEW',
       expectedCaseVersion: input.expectedCaseVersion,
       expectedNodeRevision: input.expectedNodeRevision,
-      scenePackageVersion: input.expectedScenePackageVersion,
+      scenePackageVersion: input.expectedScenePackageVersion ?? null,
       subject: {
-        familyId: subject.familyId,
-        caseId: subject.caseId,
-        scenePackageVersion: subject.scenePackageVersion,
-        familyAllianceSubject: subject.familyAllianceSubject,
-        selectedTargets: targetIdentity(subject),
+        familyId: exactSubject.familyId,
+        caseId: exactSubject.caseId,
+        scenePackageVersion: exactSubject.scenePackageVersion,
+        familyAllianceSubject: exactSubject.familyAllianceSubject,
+        selectedTargets: targetIdentity(exactSubject),
       },
       professionalPackage: parsed.data.professionalPackage,
       normalizedResponse,
