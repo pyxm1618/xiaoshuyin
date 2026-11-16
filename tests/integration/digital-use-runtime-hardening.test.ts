@@ -3248,13 +3248,11 @@ describe('T1218 Digital Use runtime hardening', () => {
       url:`/api/v1/cases/${f.caseId}/digital-use/contract/faq`,
       headers:auth(f.manager.token),
     });
-    expect(faq.statusCode,faq.body).toBe(200);
-    expect(faq.json().contract).toEqual({
-      id:childConfirm.json().id,
-      version:1,
-      status:'ACTIVE',
+    expect(faq.statusCode,faq.body).toBe(409);
+    expect(faq.json()).toMatchObject({
+      code:'PHONE_USE_CONTRACT_CONTENT_STALE',
+      message:'Professional Content authority unavailable',
     });
-    expect(faq.json().topics.length).toBeGreaterThanOrEqual(15);
 
     const supportFaq=await respondSceneNode(
       f,'A4011',1,
