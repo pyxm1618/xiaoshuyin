@@ -17,11 +17,36 @@ export const TEST_A5002_PACKAGE = Object.freeze({
   contentHash: 'sha256:test-a5002-authority-package-v1',
 });
 
-function proofFor(stream: ProfessionalReviewStream): ProfessionalReviewPackageProof {
-  const identity =
-    stream === 'FAMILY_ALLIANCE_REVIEW'
-      ? TEST_A5001_PACKAGE
-      : TEST_A5002_PACKAGE;
+export const TEST_A5001_PACKAGE_V2 = Object.freeze({
+  packageId: 'test:professional-review:a5001',
+  packageVersion: 'test-v2',
+  contentHash: 'sha256:test-a5001-authority-package-v2',
+});
+
+export const TEST_A5002_PACKAGE_V2 = Object.freeze({
+  packageId: 'test:professional-review:a5002',
+  packageVersion: 'test-v2',
+  contentHash: 'sha256:test-a5002-authority-package-v2',
+});
+
+type TestPackageIdentity = Readonly<{
+  packageId: string;
+  packageVersion: string;
+  contentHash: string;
+}>;
+
+function identitiesFor(
+  stream: ProfessionalReviewStream
+): readonly TestPackageIdentity[] {
+  return stream === 'FAMILY_ALLIANCE_REVIEW'
+    ? [TEST_A5001_PACKAGE, TEST_A5001_PACKAGE_V2]
+    : [TEST_A5002_PACKAGE, TEST_A5002_PACKAGE_V2];
+}
+
+function proofFor(
+  stream: ProfessionalReviewStream,
+  identity: TestPackageIdentity
+): ProfessionalReviewPackageProof {
   return Object.freeze({
     ...identity,
     scope: Object.freeze([{ stream, scenePackageVersion: 'v1' }]),
@@ -69,8 +94,11 @@ function validateAndNormalizeResponse(
   });
 }
 
-function packageFor(stream: ProfessionalReviewStream): ProfessionalReviewResolvedPackage {
-  const proof = proofFor(stream);
+function packageFor(
+  stream: ProfessionalReviewStream,
+  identity: TestPackageIdentity
+): ProfessionalReviewResolvedPackage {
+  const proof = proofFor(stream, identity);
   return {
     proof,
     loadedContentHash: proof.contentHash,
@@ -110,15 +138,14 @@ export class TestProfessionalReviewContentProvider
     readonly contentHash: string;
   }): Promise<ProfessionalReviewResolvedPackage | null> {
     if (this.unavailable.has(input.stream)) return null;
-    const candidate = packageFor(input.stream);
-    return (
-      input.scenePackageVersion === 'v1' &&
-      candidate.proof.packageId === input.packageId &&
-      candidate.proof.packageVersion === input.packageVersion &&
-      candidate.proof.contentHash === input.contentHash
-    )
-      ? candidate
-      : null;
+    if (input.scenePackageVersion !== 'v1') return null;
+    const identity = identitiesFor(input.stream).find(
+      (candidate) =>
+        candidate.packageId === input.packageId &&
+        candidate.packageVersion === input.packageVersion &&
+        candidate.contentHash === input.contentHash
+    );
+    return identity === undefined ? null : packageFor(input.stream, identity);
   }
 
   async revalidate(input: {
