@@ -416,22 +416,18 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     expect(after.audits).toBe(1);
   });
 
-  it('same exact authority replays; retired authority fails closed; changed canonical request conflicts', async () => {
+  it('same canonical request replays original committed history after package retirement; changed canonical request conflicts', async () => {
     const f = await fixture('idempotency');
     const key = `slice15-a5001-idem-${crypto.randomUUID()}`;
     const request = payload(f);
     const first = await submit(f, key, request);
     expect(first.statusCode, first.body).toBe(200);
 
-    const replay = await submit(f, key, request);
-    expect(replay.statusCode, replay.body).toBe(200);
-    expect(replay.json()).toEqual(first.json());
-
     professional.retire('FAMILY_ALLIANCE_REVIEW');
     try {
-      const retired = await submit(f, key, request);
-      expect(retired.statusCode, retired.body).toBe(503);
-      expect(retired.json().code).toBe('DEPENDENCY_UNAVAILABLE');
+      const replay = await submit(f, key, request);
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json()).toEqual(first.json());
     } finally {
       professional.restore('FAMILY_ALLIANCE_REVIEW');
     }
