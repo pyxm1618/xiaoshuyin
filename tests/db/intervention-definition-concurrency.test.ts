@@ -20,9 +20,12 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
   let accountId: string;
   let personId: string;
   let assignmentId: string;
+  let secondAccountId: string;
+  let secondPersonId: string;
   const prefix = 's16race_' + crypto.randomUUID();
   const key = (label: string) => 's16-race-' + label + '-' + crypto.randomUUID();
   const actor = () => ({ accountId, personId });
+  const secondActor = () => ({ accountId: secondAccountId, personId: secondPersonId });
   const code = (label: string) =>
     ('TEST_' + label + '_' + crypto.randomUUID().replaceAll('-', '').slice(0, 12)).toUpperCase();
 
@@ -46,9 +49,32 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
       [accountId, personId]
     );
     assignmentId = assignment.rows[0]!.id;
+
+    const secondAccount = await admin.query<{ id: string }>(
+      'INSERT INTO accounts (wechat_openid) VALUES ($1) RETURNING id',
+      [prefix + '_second']
+    );
+    secondAccountId = secondAccount.rows[0]!.id;
+    const secondPerson = await admin.query<{ id: string }>(
+      'INSERT INTO persons (account_id,created_by_account_id) VALUES ($1,$1) RETURNING id',
+      [secondAccountId]
+    );
+    secondPersonId = secondPerson.rows[0]!.id;
+    await admin.query(
+      "INSERT INTO staff_assignments " +
+        "(account_id,person_id,capability,scope_type,granted_by_account_id) " +
+        "VALUES ($1,$2,'PROFESSIONAL_REVIEW','GLOBAL',$1)",
+      [secondAccountId, secondPersonId]
+    );
   });
 
   afterAll(async () => {
+    await admin.query('DELETE FROM business_audit_events WHERE actor_account_id=$1', [secondAccountId]).catch(() => undefined);
+    await admin.query('DELETE FROM idempotency_keys WHERE actor_account_id=$1', [secondAccountId]).catch(() => undefined);
+    await admin.query('DELETE FROM intervention_definitions WHERE created_by_person_id=$1', [secondPersonId]).catch(() => undefined);
+    await admin.query('DELETE FROM staff_assignments WHERE account_id=$1', [secondAccountId]).catch(() => undefined);
+    await admin.query('DELETE FROM persons WHERE id=$1', [secondPersonId]).catch(() => undefined);
+    await admin.query('DELETE FROM accounts WHERE id=$1', [secondAccountId]).catch(() => undefined);
     await admin.query('DELETE FROM business_audit_events WHERE actor_account_id=$1', [accountId]).catch(() => undefined);
     await admin.query('DELETE FROM idempotency_keys WHERE actor_account_id=$1', [accountId]).catch(() => undefined);
     await admin.query('DELETE FROM intervention_definitions WHERE created_by_person_id=$1', [personId]).catch(() => undefined);
@@ -69,6 +95,139 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
         [accountId, personId]
       );
       assignmentId = assignment.rows[0]!.id;
+    }
+  }
+
+  async function waitForQueuedChainWaiters(
+    gatePid: number,
+    minimum: number
+  ): Promise<void> {
+    for (let attempt = 0; attempt < 500; attempt += 1) {
+      const result = await admin.query<{ waiters: number }>(
+        `SELECT count(*)::int AS waiters
+           FROM pg_locks waiting
+           JOIN pg_locks gate
+             ON waiting.locktype = gate.locktype
+            AND waiting.database IS NOT DISTINCT FROM gate.database
+            AND waiting.classid = gate.classid
+            AND waiting.objid = gate.objid
+            AND waiting.objsubid = gate.objsubid
+          WHERE gate.pid=$1
+            AND gate.locktype='advisory'
+            AND gate.granted
+            AND NOT waiting.granted`,
+        [gatePid]
+      );
+      if ((result.rows[0]?.waiters ?? 0) >= minimum) return;
+    }
+    throw new Error('INTERVENTION_TEST_BARRIER_NOT_REACHED:' + minimum);
+  }
+
+  async function runDifferentReviewerSuccessorVsTerminal(
+    terminal: 'retire' | 'supersede'
+  ): Promise<void> {
+    await ensureActiveAssignment();
+    const interventionCode = code(
+      terminal === 'retire' ? 'DIFF_REVIEWER_RETIRE' : 'DIFF_REVIEWER_SUPERSEDE'
+    );
+    const first = await createInterventionDefinitionCandidate(
+      appPool,
+      {
+        actor: actor(),
+        sceneId: 'DIGITAL_USE',
+        interventionCode,
+        semantic: interventionSemantic(),
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: key('different-reviewer-pred'),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    );
+    const exact = {
+      id: first.id,
+      version: first.version,
+      contentHash: first.contentHash,
+      expectedRevision: first.revision,
+    };
+
+    const gate = await admin.connect();
+    let gateCommitted = false;
+    try {
+      await gate.query('BEGIN');
+      const pid = await gate.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
+      const gatePid = pid.rows[0]!.pid;
+      await gate.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0::bigint))',
+        ['INTERVENTION_DEFINITION:DIGITAL_USE:' + interventionCode]
+      );
+
+      const successor = createInterventionDefinitionSuccessor(
+        appPool,
+        {
+          actor: actor(),
+          predecessor: exact,
+          semantic: interventionSemantic({ rationale: 'DIFFERENT_REVIEWER_SUCCESSOR' }),
+          approvalScope: 'DIGITAL_USE',
+          idempotencyKey: key('different-reviewer-successor'),
+        },
+        TEST_ONLY_QUALIFICATION_PROVIDER
+      );
+      await waitForQueuedChainWaiters(gatePid, 1);
+
+      const terminalMutation =
+        terminal === 'retire'
+          ? retireInterventionDefinition(
+              appPool,
+              {
+                actor: secondActor(),
+                definition: exact,
+                approvalScope: 'DIGITAL_USE',
+                idempotencyKey: key('different-reviewer-retire'),
+              },
+              TEST_ONLY_QUALIFICATION_PROVIDER
+            )
+          : supersedeInterventionDefinition(
+              appPool,
+              {
+                actor: secondActor(),
+                definition: exact,
+                approvalScope: 'DIGITAL_USE',
+                idempotencyKey: key('different-reviewer-supersede'),
+              },
+              TEST_ONLY_QUALIFICATION_PROVIDER
+            );
+
+      await waitForQueuedChainWaiters(gatePid, 2);
+      await gate.query('COMMIT');
+      gateCommitted = true;
+
+      const results = await Promise.allSettled([successor, terminalMutation]);
+      expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+      const rejected = results.find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected'
+      );
+      expect(rejected).toBeDefined();
+      expect(rejected!.reason?.code).not.toBe('40P01');
+      expect(rejected!.reason).toMatchObject({
+        code: 'INTERVENTION_DEFINITION_STALE_REVISION',
+      });
+
+      const rows = await admin.query<{ version: number; definition_state: string }>(
+        'SELECT version,definition_state FROM intervention_definitions ' +
+          'WHERE intervention_code=$1 ORDER BY version',
+        [interventionCode]
+      );
+      if (rows.rows.length === 1) {
+        expect(rows.rows[0]!.definition_state).toBe(
+          terminal === 'retire' ? 'RETIRED' : 'SUPERSEDED'
+        );
+      } else {
+        expect(rows.rows).toHaveLength(2);
+        expect(rows.rows[0]!.definition_state).toBe('SUPERSEDED');
+        expect(rows.rows[1]!.definition_state).toBe('CANDIDATE');
+      }
+    } finally {
+      if (!gateCommitted) await gate.query('ROLLBACK').catch(() => undefined);
+      gate.release();
     }
   }
 
@@ -188,6 +347,14 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
       expect(rows.rows[0]!.definition_state).toBe('SUPERSEDED');
       expect(rows.rows[1]!.definition_state).toBe('CANDIDATE');
     }
+  });
+
+  it('different reviewers: successor versus retire has no lock-order deadlock', async () => {
+    await runDifferentReviewerSuccessorVsTerminal('retire');
+  });
+
+  it('different reviewers: successor versus supersede has no lock-order deadlock', async () => {
+    await runDifferentReviewerSuccessorVsTerminal('supersede');
   });
 
   it('qualification proof changing between prepare and mutation rolls back definition, audit and idempotency', async () => {
