@@ -14,6 +14,7 @@ import {
 } from '../packages/domain/src/professional-knowledge-repository.js';
 import {
   hashPayload,
+  hashProfessionalKnowledgeApprovalBinding,
   hashProfessionalKnowledgeContent,
   hashProfessionalKnowledgeSourceSet,
   validateProfessionalApproval,
@@ -134,11 +135,12 @@ async function seedExactApprovalCandidate() {
      RETURNING id`,
     [accountId, personId]
   );
+  const knowledgeKey = `proof-race-${tag}`;
   const knowledge = await admin.query<{ id: string }>(
     `INSERT INTO professional_knowledge_items
        (knowledge_key, created_by_account_id, created_by_person_id)
      VALUES ($1,$2,$3) RETURNING id`,
-    [`proof-race-${tag}`, accountId, personId]
+    [knowledgeKey, accountId, personId]
   );
   const content = { body: 'exact approval race candidate' };
   const sources = [{
@@ -207,6 +209,14 @@ async function seedExactApprovalCandidate() {
     semanticVersion: '1.0.0',
     contentHash,
     sourceSetHash,
+    semanticBindingHash: hashProfessionalKnowledgeApprovalBinding({
+      knowledgeId: knowledge.rows[0]!.id,
+      knowledgeKey,
+      semanticVersion: '1.0.0',
+      contentHash,
+      sourceSetHash,
+      scope,
+    }),
     sourceRefs: [sources[0]!.sourceRef],
     scope: approvalScope,
     reviewerIdentity: `reviewer:${tag}`,
@@ -721,6 +731,7 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       semanticVersion: '1.0.0',
       contentHash: '0'.repeat(64),
       sourceSetHash: 'b'.repeat(64),
+      semanticBindingHash: 'f'.repeat(64),
       sourceRefs: ['source:1'],
       scope: {
         product: 'V1',
