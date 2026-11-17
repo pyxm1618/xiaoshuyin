@@ -46,6 +46,16 @@ describe('Slice 16 static authority / negative-scope guard', () => {
     }
   });
 
+  it('keeps @xiaoshuyin/domain package exports closed to raw repository subpaths', () => {
+    const manifest = JSON.parse(
+      readFileSync(resolve(ROOT, 'packages/domain/package.json'), 'utf8')
+    ) as { exports?: Record<string, unknown> };
+    expect(manifest.exports).toEqual({ '.': './src/index.ts' });
+    expect(JSON.stringify(manifest.exports)).not.toContain(
+      'intervention-definition-repository'
+    );
+  });
+
   it('mechanically prevents raw InterventionDefinition writers from the domain package root', () => {
     const root = source['packages/domain/src/index.ts'];
     expect(root).not.toMatch(/export\s+\*\s+from\s+['"]\.\/intervention-definition-repository\.js['"]/);
