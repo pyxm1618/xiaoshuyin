@@ -122,7 +122,11 @@ export const productionInterventionOwnerAdapters:
       }
     ): Promise<Readonly<Record<string, InterventionGateState>>> {
       const result: Record<string, InterventionGateState> = {};
-      for (const ref of input.requiredRefs) {
+      // Deterministic owner-row lock order prevents two concurrent eligibility
+      // reads with the same required Participation set in different semantic
+      // array orders from creating an A<->B row-lock cycle.
+      const orderedRefs = [...new Set(input.requiredRefs)].sort();
+      for (const ref of orderedRefs) {
         if (!UUID_REF.test(ref)) {
           result[ref] = 'UNKNOWN';
           continue;
