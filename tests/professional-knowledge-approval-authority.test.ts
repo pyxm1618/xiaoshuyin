@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  hashProfessionalKnowledgeApprovalBinding,
   hashProfessionalKnowledgeContent,
   hashProfessionalKnowledgeSourceSet,
   validateProfessionalApproval,
@@ -43,7 +44,8 @@ function proof(v: ProfessionalKnowledgeVersionSnapshot): ProfessionalApprovalPro
   return {
     proofId: 'proof-1', knowledgeId: v.knowledgeId,
     semanticVersion: v.semanticVersion, contentHash: v.contentHash,
-    sourceSetHash: v.sourceSetHash, sourceRefs: ['source:1'], scope,
+    sourceSetHash: v.sourceSetHash,
+    semanticBindingHash: hashProfessionalKnowledgeApprovalBinding(v), sourceRefs: ['source:1'], scope,
     reviewerIdentity: 'reviewer-1', reviewerAccountId: 'account-1',
     reviewerPersonId: 'person-1', staffAssignmentRef: 'assignment-1',
     staffCapability: 'PROFESSIONAL_REVIEW', qualificationRef: 'qualification-1',
@@ -100,9 +102,9 @@ describe('professional knowledge external approval authority', () => {
         version: v,
         provider: { status: 'UNAVAILABLE', reason: 'TIMEOUT' },
         staffAuthority: { status: 'RESOLVED', assignmentRef: 'assignment-1', accountId: 'account-1', personId: 'person-1', capability: 'PROFESSIONAL_REVIEW', scope: 'GLOBAL' },
-        qualification: { status: 'INVALID', reason: 'not-used' },
+        qualification: { status: 'INVALID', reason: 'known-expired' },
       })
-    ).toEqual({ status: 'UNAVAILABLE', dependency: 'APPROVAL:TIMEOUT' });
+    ).toEqual({ status: 'INVALID', reason: 'PROFESSIONAL_QUALIFICATION_INVALID' });
     expect(
       validateProfessionalApproval({
         version: v,
