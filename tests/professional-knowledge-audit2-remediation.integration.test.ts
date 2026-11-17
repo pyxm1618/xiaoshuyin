@@ -715,4 +715,779 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     expect(serviceSource).not.toContain('evaluateInterventionEligibility');
     expect(serviceSource).not.toContain('SLICE_16_AUTHORITATIVE_OWNER_NOT_MERGED');
   });
+
+  it('PHASE2 HIGH-001: real edit -> review rejects stale semantic proof and releases only with fresh exact proof', async () => {
+    const reviewer = await seedActor('phase2-semantic-reviewer');
+    const releaseActor = await seedActor('phase2-semantic-release');
+    const knowledge = await seedKnowledge(releaseActor, {
+      reviewState: 'CURRENT',
+      validityState: 'VALID',
+    });
+    const staleProof = approvalProof(
+      knowledge,
+      reviewer,
+      `phase2-stale-${crypto.randomUUID()}`
+    );
+    const changedScope: ProfessionalKnowledgeScopeMetadata = {
+      ...knowledge.scope,
+      applicability: ['sleep-impact', 'family-conflict'],
+      exclusions: ['acute-safety-risk'],
+      riskLevels: ['LOW', 'MODERATE'],
+    };
+
+    await expect(
+      editKnowledgeCandidate({
+        pool: app,
+        accountId: releaseActor.accountId,
+        personId: releaseActor.personId,
+        assignmentId: releaseActor.assignmentId,
+        idempotencyKey: `phase2-edit-${crypto.randomUUID()}`,
+        versionId: knowledge.versionId,
+        expectedRevision: 1,
+        content: knowledge.content,
+        contentHash: knowledge.contentHash,
+        sourceSetHash: knowledge.sourceSetHash,
+        sources: knowledge.sources,
+        scope: changedScope,
+      })
+    ).resolves.toEqual({ versionId: knowledge.versionId, revision: 2 });
+
+    const reviewedAt = new Date('2026-11-17T04:00:00Z');
+    await expect(
+      recordKnowledgeReview({
+        pool: app,
+        accountId: releaseActor.accountId,
+        personId: releaseActor.personId,
+        assignmentId: releaseActor.assignmentId,
+        idempotencyKey: `phase2-review-${crypto.randomUUID()}`,
+        versionId: knowledge.versionId,
+        expectedRevision: 2,
+        reviewerIdentity: `reviewer:${releaseActor.personId}`,
+        qualificationRef: `qualification:${releaseActor.personId}`,
+        qualificationProvider: qualificationProvider(),
+        outcome: 'REVIEWED',
+        reviewedAt,
+        now: reviewedAt,
+      })
+    ).resolves.toMatchObject({
+      revision: 3,
+      reviewState: 'CURRENT',
+      validityState: 'VALID',
+    });
+
+    const changedKnowledge: SeededKnowledge = { ...knowledge, scope: changedScope };
+    const staleKey = `phase2-stale-release-${crypto.randomUUID()}`;
+    await expect(
+      releaseKnowledgeVersion({
+        pool: app,
+        accountId: releaseActor.accountId,
+        personId: releaseActor.personId,
+        assignmentId: releaseActor.assignmentId,
+        idempotencyKey: staleKey,
+        versionId: knowledge.versionId,
+        expectedRevision: 3,
+        approvalProofId: staleProof.proofId,
+        approvalProvider: approvalProvider(staleProof),
+        qualificationProvider: qualificationProvider(),
+        sceneBindingResolver: sceneBinding(changedKnowledge),
+        now: new Date('2026-11-17T05:00:00Z'),
+      })
+    ).rejects.toMatchObject({
+      code: 'PROFESSIONAL_AUTHORITY_INVALID',
+      reason: 'APPROVAL_PROOF_MISMATCH',
+    });
+
+    const afterStale = await admin.query<{
+      lifecycle_status: string;
+      revision: number;
+    }>(
+      'SELECT lifecycle_status, revision FROM professional_knowledge_versions WHERE id=$1',
+      [knowledge.versionId]
+    );
+    expect(afterStale.rows[0]).toEqual({
+      lifecycle_status: 'CANDIDATE',
+      revision: 3,
+    });
+    const afterStaleEvidence = await admin.query<{ n: string }>(
+      'SELECT count(*)::text AS n FROM professional_knowledge_approval_evidence WHERE knowledge_version_id=$1',
+      [knowledge.versionId]
+    );
+    expect(afterStaleEvidence.rows[0]!.n).toBe('0');
+
+    const freshProof = approvalProof(
+      changedKnowledge,
+      reviewer,
+      `phase2-fresh-${crypto.randomUUID()}`
+    );
+    expect(freshProof.contentHash).toBe(staleProof.contentHash);
+    expect(freshProof.semanticBindingHash).not.toBe(staleProof.semanticBindingHash);
+
+    await expect(
+      releaseKnowledgeVersion({
+        pool: app,
+        accountId: releaseActor.accountId,
+        personId: releaseActor.personId,
+        assignmentId: releaseActor.assignmentId,
+        idempotencyKey: `phase2-fresh-release-${crypto.randomUUID()}`,
+        versionId: knowledge.versionId,
+        expectedRevision: 3,
+        approvalProofId: freshProof.proofId,
+        approvalProvider: approvalProvider(freshProof),
+        qualificationProvider: qualificationProvider(),
+        sceneBindingResolver: sceneBinding(changedKnowledge),
+        now: new Date('2026-11-17T05:00:00Z'),
+      })
+    ).resolves.toMatchObject({
+      versionId: knowledge.versionId,
+      revision: 4,
+      lifecycleStatus: 'PUBLISHED',
+    });
+  });
+
+  it('PHASE2 MEDIUM-002: review exact-validates qualification facts with zero business side effects on mismatch', async () => {
+    const mutations = [
+      ['qualificationRef', (r: any) => ({ ...r, qualificationRef: 'qualification:wrong' })],
+      ['reviewerIdentity', (r: any) => ({ ...r, reviewerIdentity: 'reviewer:wrong' })],
+      ['reviewerAccountId', (r: any) => ({ ...r, reviewerAccountId: crypto.randomUUID() })],
+      ['reviewerPersonId', (r: any) => ({ ...r, reviewerPersonId: crypto.randomUUID() })],
+      ['scope', (r: any) => ({ ...r, scope: { ...r.scope, locale: 'en-US' } })],
+      ['expired', (r: any) => ({ ...r, validTo: '2026-11-17T03:59:59Z' })],
+    ] as const;
+
+    for (const [label, mutate] of mutations) {
+      const actor = await seedActor(`phase2-review-q-${label}`);
+      const knowledge = await seedKnowledge(actor, {
+        reviewState: 'PENDING',
+        validityState: 'UNKNOWN',
+      });
+      const idempotencyKey = `phase2-review-q-${label}-${crypto.randomUUID()}`;
+      const now = new Date('2026-11-17T04:00:00Z');
+      const provider = {
+        async resolve(input: {
+          qualificationRef: string;
+          reviewerIdentity: string;
+          reviewerAccountId: string;
+          reviewerPersonId: string;
+          scope: any;
+        }) {
+          return mutate({
+            status: 'RESOLVED' as const,
+            qualificationRef: input.qualificationRef,
+            reviewerIdentity: input.reviewerIdentity,
+            reviewerAccountId: input.reviewerAccountId,
+            reviewerPersonId: input.reviewerPersonId,
+            scope: input.scope,
+            validFrom: '2026-01-01T00:00:00Z',
+            validTo: '2027-01-01T00:00:00Z',
+          });
+        },
+      };
+
+      await expect(
+        recordKnowledgeReview({
+          pool: app,
+          accountId: actor.accountId,
+          personId: actor.personId,
+          assignmentId: actor.assignmentId,
+          idempotencyKey,
+          versionId: knowledge.versionId,
+          expectedRevision: 1,
+          reviewerIdentity: `reviewer:${actor.personId}`,
+          qualificationRef: `qualification:${actor.personId}`,
+          qualificationProvider: provider,
+          outcome: 'REVIEWED',
+          reviewedAt: now,
+          now,
+        })
+      ).rejects.toMatchObject({
+        code: 'PROFESSIONAL_AUTHORITY_INVALID',
+        reason: 'PROFESSIONAL_QUALIFICATION_MISMATCH',
+      });
+
+      const state = await admin.query<{
+        revision: number;
+        review_state: string;
+        validity_state: string;
+      }>(
+        'SELECT revision, review_state, validity_state FROM professional_knowledge_versions WHERE id=$1',
+        [knowledge.versionId]
+      );
+      expect(state.rows[0]).toEqual({
+        revision: 1,
+        review_state: 'PENDING',
+        validity_state: 'UNKNOWN',
+      });
+      const evidence = await admin.query<{ n: string }>(
+        'SELECT count(*)::text AS n FROM professional_knowledge_review_evidence WHERE knowledge_version_id=$1',
+        [knowledge.versionId]
+      );
+      expect(evidence.rows[0]!.n).toBe('0');
+      const successAudit = await admin.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM business_audit_events
+          WHERE resource_id=$1 AND event_type='PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED'`,
+        [knowledge.versionId]
+      );
+      expect(successAudit.rows[0]!.n).toBe('0');
+      const outcome = await readProfessionalKnowledgeMutationOutcome({
+        pool: app,
+        accountId: actor.accountId,
+        assignmentId: actor.assignmentId,
+        commandType: 'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
+        idempotencyKey,
+        versionId: knowledge.versionId,
+      });
+      expect(outcome.status).toBe('OUTCOME_UNKNOWN');
+    }
+  });
+
+  it('PHASE2 MEDIUM-005/006: Scene exact-binding denials rollback business state and leave one durable bounded receipt', async () => {
+    const cases = [
+      ['wrong-scene', 'INVALID', (k: SeededKnowledge) => () => ({
+        status: 'RESOLVED' as const,
+        sceneCode: 'OTHER_SCENE',
+        scenePackageVersion: k.scope.scenePackageVersion,
+        refs: [{ knowledgeId: k.knowledgeId, semanticVersion: '1.0.0', contentHash: k.contentHash, sourceSetHash: k.sourceSetHash }],
+      })],
+      ['wrong-version', 'INVALID', (k: SeededKnowledge) => () => ({
+        status: 'RESOLVED' as const,
+        sceneCode: k.scope.sceneCode,
+        scenePackageVersion: 'wrong-version',
+        refs: [{ knowledgeId: k.knowledgeId, semanticVersion: '1.0.0', contentHash: k.contentHash, sourceSetHash: k.sourceSetHash }],
+      })],
+      ['missing-ref', 'INVALID', (k: SeededKnowledge) => () => ({
+        status: 'RESOLVED' as const,
+        sceneCode: k.scope.sceneCode,
+        scenePackageVersion: k.scope.scenePackageVersion,
+        refs: [],
+      })],
+      ['wrong-semantic-version', 'INVALID', (k: SeededKnowledge) => () => ({
+        status: 'RESOLVED' as const,
+        sceneCode: k.scope.sceneCode,
+        scenePackageVersion: k.scope.scenePackageVersion,
+        refs: [{ knowledgeId: k.knowledgeId, semanticVersion: '9.9.9', contentHash: k.contentHash, sourceSetHash: k.sourceSetHash }],
+      })],
+      ['wrong-content-hash', 'INVALID', (k: SeededKnowledge) => () => ({
+        status: 'RESOLVED' as const,
+        sceneCode: k.scope.sceneCode,
+        scenePackageVersion: k.scope.scenePackageVersion,
+        refs: [{ knowledgeId: k.knowledgeId, semanticVersion: '1.0.0', contentHash: 'f'.repeat(64), sourceSetHash: k.sourceSetHash }],
+      })],
+      ['wrong-source-set-hash', 'INVALID', (k: SeededKnowledge) => () => ({
+        status: 'RESOLVED' as const,
+        sceneCode: k.scope.sceneCode,
+        scenePackageVersion: k.scope.scenePackageVersion,
+        refs: [{ knowledgeId: k.knowledgeId, semanticVersion: '1.0.0', contentHash: k.contentHash, sourceSetHash: 'e'.repeat(64) }],
+      })],
+      ['owner-unavailable', 'UNAVAILABLE', (_k: SeededKnowledge) => () => ({
+        status: 'UNAVAILABLE' as const,
+        reason: 'SCENE_OWNER_OUTAGE',
+      })],
+    ] as const;
+
+    for (const [label, decision, resolverFactory] of cases) {
+      const reviewer = await seedActor(`phase2-scene-reviewer-${label}`);
+      const actor = await seedActor(`phase2-scene-actor-${label}`);
+      const knowledge = await seedKnowledge(actor);
+      const p = approvalProof(knowledge, reviewer, `proof-${crypto.randomUUID()}`);
+      const idempotencyKey = `phase2-scene-${label}-${crypto.randomUUID()}`;
+      const request = {
+        pool: app,
+        accountId: actor.accountId,
+        personId: actor.personId,
+        assignmentId: actor.assignmentId,
+        idempotencyKey,
+        versionId: knowledge.versionId,
+        expectedRevision: 1,
+        approvalProofId: p.proofId,
+        approvalProvider: approvalProvider(p),
+        qualificationProvider: qualificationProvider(),
+        sceneBindingResolver: resolverFactory(knowledge),
+        now: new Date('2026-11-17T06:00:00Z'),
+      };
+
+      await expect(releaseKnowledgeVersion(request)).rejects.toMatchObject(
+        decision === 'INVALID'
+          ? { code: 'PROFESSIONAL_AUTHORITY_INVALID', reason: 'SCENE_PACKAGE_BINDING_INVALID' }
+          : { code: 'DEPENDENCY_UNAVAILABLE', dependency: 'SCENE_PACKAGE_BINDING' }
+      );
+
+      const state = await admin.query<{ lifecycle_status: string; revision: number }>(
+        'SELECT lifecycle_status, revision FROM professional_knowledge_versions WHERE id=$1',
+        [knowledge.versionId]
+      );
+      expect(state.rows[0]).toEqual({ lifecycle_status: 'CANDIDATE', revision: 1 });
+      const evidence = await admin.query<{ n: string }>(
+        'SELECT count(*)::text AS n FROM professional_knowledge_approval_evidence WHERE knowledge_version_id=$1',
+        [knowledge.versionId]
+      );
+      expect(evidence.rows[0]!.n).toBe('0');
+      const settlement = await readProfessionalKnowledgeMutationOutcome({
+        pool: app,
+        accountId: actor.accountId,
+        assignmentId: actor.assignmentId,
+        commandType: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
+        idempotencyKey,
+        versionId: knowledge.versionId,
+      });
+      expect(settlement.status).toBe('OUTCOME_UNKNOWN');
+      const receipt = await admin.query<{
+        metadata: { decisionCategory: string; reasonCode: string; dependencyCategory: string };
+      }>(
+        `SELECT metadata FROM business_audit_events
+          WHERE resource_id=$1 AND event_type='PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED'`,
+        [knowledge.versionId]
+      );
+      expect(receipt.rowCount).toBe(1);
+      expect(receipt.rows[0]!.metadata).toMatchObject({
+        decisionCategory: decision,
+        reasonCode: decision === 'INVALID'
+          ? 'SCENE_PACKAGE_BINDING_INVALID'
+          : 'SCENE_PACKAGE_BINDING_UNAVAILABLE',
+        dependencyCategory: 'SCENE_PACKAGE_BINDING',
+      });
+
+      // Exact failed logical-command retry may record no more than one receipt.
+      await expect(releaseKnowledgeVersion(request)).rejects.toBeDefined();
+      const deduped = await admin.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM business_audit_events
+          WHERE resource_id=$1 AND event_type='PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED'`,
+        [knowledge.versionId]
+      );
+      expect(deduped.rows[0]!.n).toBe('1');
+    }
+  });
+
+  it('PHASE2 MEDIUM-001/006: approval/qualification/Staff INVALID and UNAVAILABLE remain distinct in durable receipts', async () => {
+    const reviewer = await seedActor('phase2-denial-reviewer');
+    const actor = await seedActor('phase2-denial-actor');
+
+    const runCase = async (
+      label: string,
+      configure: (knowledge: SeededKnowledge, p: ProfessionalApprovalProof) => {
+        approvalProvider: any;
+        qualificationProvider: any;
+        approvalProofId?: string;
+      },
+      expected: { code: string; reasonOrDependency: string; decision: string; reasonCode: string }
+    ) => {
+      const knowledge = await seedKnowledge(actor);
+      const p = approvalProof(knowledge, reviewer, `proof-${label}-${crypto.randomUUID()}`);
+      const configured = configure(knowledge, p);
+      const idempotencyKey = `phase2-denial-${label}-${crypto.randomUUID()}`;
+      const promise = releaseKnowledgeVersion({
+        pool: app,
+        accountId: actor.accountId,
+        personId: actor.personId,
+        assignmentId: actor.assignmentId,
+        idempotencyKey,
+        versionId: knowledge.versionId,
+        expectedRevision: 1,
+        approvalProofId: configured.approvalProofId ?? p.proofId,
+        approvalProvider: configured.approvalProvider,
+        qualificationProvider: configured.qualificationProvider,
+        sceneBindingResolver: sceneBinding(knowledge),
+        now: new Date('2026-11-17T07:00:00Z'),
+      });
+      await expect(promise).rejects.toMatchObject(
+        expected.code === 'PROFESSIONAL_AUTHORITY_INVALID'
+          ? { code: expected.code, reason: expected.reasonOrDependency }
+          : { code: expected.code, dependency: expected.reasonOrDependency }
+      );
+      const receipt = await admin.query<{ metadata: Record<string, string> }>(
+        `SELECT metadata FROM business_audit_events
+          WHERE resource_id=$1 AND event_type='PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED'`,
+        [knowledge.versionId]
+      );
+      expect(receipt.rowCount).toBe(1);
+      expect(receipt.rows[0]!.metadata).toMatchObject({
+        decisionCategory: expected.decision,
+        reasonCode: expected.reasonCode,
+      });
+      const sideEffects = await admin.query<{ approvals: string; success_audits: string }>(
+        `SELECT
+           (SELECT count(*)::text FROM professional_knowledge_approval_evidence WHERE knowledge_version_id=$1) AS approvals,
+           (SELECT count(*)::text FROM business_audit_events
+             WHERE resource_id=$1 AND event_type='PROFESSIONAL_KNOWLEDGE_RELEASED') AS success_audits`,
+        [knowledge.versionId]
+      );
+      expect(sideEffects.rows[0]).toEqual({ approvals: '0', success_audits: '0' });
+    };
+
+    await runCase(
+      'approval-invalid',
+      (_k, _p) => ({
+        approvalProvider: {
+          async resolve() { return { status: 'INVALID' as const, reason: 'REVOKED' }; },
+          async revalidate() { return { status: 'INVALID' as const, reason: 'REVOKED' }; },
+        },
+        qualificationProvider: qualificationProvider(),
+      }),
+      { code: 'PROFESSIONAL_AUTHORITY_INVALID', reasonOrDependency: 'APPROVAL:REVOKED', decision: 'INVALID', reasonCode: 'APPROVAL_INVALID' }
+    );
+
+    await runCase(
+      'approval-unavailable',
+      (_k, _p) => ({
+        approvalProvider: {
+          async resolve() { return { status: 'UNAVAILABLE' as const, reason: 'TIMEOUT' as const }; },
+          async revalidate() { return { status: 'UNAVAILABLE' as const, reason: 'TIMEOUT' as const }; },
+        },
+        qualificationProvider: qualificationProvider(),
+      }),
+      { code: 'DEPENDENCY_UNAVAILABLE', reasonOrDependency: 'APPROVAL:TIMEOUT', decision: 'UNAVAILABLE', reasonCode: 'APPROVAL_UNAVAILABLE' }
+    );
+
+    await runCase(
+      'proof-id-mismatch',
+      (_k, p) => ({
+        approvalProvider: approvalProvider({ ...p, proofId: `substitute-${crypto.randomUUID()}` }),
+        qualificationProvider: qualificationProvider(),
+        approvalProofId: p.proofId,
+      }),
+      { code: 'PROFESSIONAL_AUTHORITY_INVALID', reasonOrDependency: 'APPROVAL_PROOF_ID_MISMATCH', decision: 'INVALID', reasonCode: 'APPROVAL_PROOF_ID_MISMATCH' }
+    );
+
+    await runCase(
+      'qualification-invalid',
+      (_k, p) => ({
+        approvalProvider: approvalProvider(p),
+        qualificationProvider: { async resolve() { return { status: 'INVALID' as const, reason: 'REVOKED' }; } },
+      }),
+      { code: 'PROFESSIONAL_AUTHORITY_INVALID', reasonOrDependency: 'PROFESSIONAL_QUALIFICATION_INVALID', decision: 'INVALID', reasonCode: 'PROFESSIONAL_QUALIFICATION_INVALID' }
+    );
+
+    await runCase(
+      'qualification-unavailable',
+      (_k, p) => ({
+        approvalProvider: approvalProvider(p),
+        qualificationProvider: { async resolve() { return { status: 'UNAVAILABLE' as const, reason: 'OUTAGE' }; } },
+      }),
+      { code: 'DEPENDENCY_UNAVAILABLE', reasonOrDependency: 'PROFESSIONAL_QUALIFICATION', decision: 'UNAVAILABLE', reasonCode: 'PROFESSIONAL_QUALIFICATION_UNAVAILABLE' }
+    );
+
+    const revokedKnowledge = await seedKnowledge(actor);
+    const revokedProof = approvalProof(
+      revokedKnowledge,
+      reviewer,
+      `proof-revoked-${crypto.randomUUID()}`
+    );
+    await admin.query(
+      `UPDATE staff_assignments
+          SET revoked_at=clock_timestamp(), revoked_by_account_id=$2
+        WHERE id=$1`,
+      [reviewer.assignmentId, actor.accountId]
+    );
+    const revokedKey = `phase2-denial-staff-invalid-${crypto.randomUUID()}`;
+    await expect(
+      releaseKnowledgeVersion({
+        pool: app,
+        accountId: actor.accountId,
+        personId: actor.personId,
+        assignmentId: actor.assignmentId,
+        idempotencyKey: revokedKey,
+        versionId: revokedKnowledge.versionId,
+        expectedRevision: 1,
+        approvalProofId: revokedProof.proofId,
+        approvalProvider: approvalProvider(revokedProof),
+        qualificationProvider: qualificationProvider(),
+        sceneBindingResolver: sceneBinding(revokedKnowledge),
+        now: new Date('2026-11-17T07:00:00Z'),
+      })
+    ).rejects.toMatchObject({
+      code: 'PROFESSIONAL_AUTHORITY_INVALID',
+      reason: 'STAFF_AUTHORITY_INVALID',
+    });
+    const staffReceipt = await admin.query<{ metadata: Record<string, string> }>(
+      `SELECT metadata FROM business_audit_events
+        WHERE resource_id=$1 AND event_type='PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED'`,
+      [revokedKnowledge.versionId]
+    );
+    expect(staffReceipt.rows[0]!.metadata).toMatchObject({
+      decisionCategory: 'INVALID',
+      reasonCode: 'STAFF_AUTHORITY_INVALID',
+      dependencyCategory: 'STAFF_AUTHORITY',
+    });
+  });
+
+  it('PHASE2 HIGH-002: malformed approval and qualification expiry fail closed in a real release', async () => {
+    const reviewer = await seedActor('phase2-time-reviewer');
+    const actor = await seedActor('phase2-time-actor');
+
+    for (const target of ['approval', 'qualification'] as const) {
+      const knowledge = await seedKnowledge(actor);
+      const base = approvalProof(knowledge, reviewer, `proof-time-${target}-${crypto.randomUUID()}`);
+      const p = target === 'approval' ? { ...base, effectiveTo: 'not-a-time' } : base;
+      const q = target === 'qualification'
+        ? {
+            async resolve(input: any) {
+              return {
+                status: 'RESOLVED' as const,
+                qualificationRef: input.qualificationRef,
+                reviewerIdentity: input.reviewerIdentity,
+                reviewerAccountId: input.reviewerAccountId,
+                reviewerPersonId: input.reviewerPersonId,
+                scope: input.scope,
+                validFrom: '2026-01-01T00:00:00Z',
+                validTo: 'not-a-time',
+              };
+            },
+          }
+        : qualificationProvider();
+
+      await expect(
+        releaseKnowledgeVersion({
+          pool: app,
+          accountId: actor.accountId,
+          personId: actor.personId,
+          assignmentId: actor.assignmentId,
+          idempotencyKey: `phase2-time-${target}-${crypto.randomUUID()}`,
+          versionId: knowledge.versionId,
+          expectedRevision: 1,
+          approvalProofId: p.proofId,
+          approvalProvider: approvalProvider(p),
+          qualificationProvider: q,
+          sceneBindingResolver: sceneBinding(knowledge),
+          now: new Date('2026-11-17T08:00:00Z'),
+        })
+      ).rejects.toMatchObject({
+        code: 'PROFESSIONAL_AUTHORITY_INVALID',
+      });
+
+      const state = await admin.query<{ lifecycle_status: string; revision: number }>(
+        'SELECT lifecycle_status, revision FROM professional_knowledge_versions WHERE id=$1',
+        [knowledge.versionId]
+      );
+      expect(state.rows[0]).toEqual({ lifecycle_status: 'CANDIDATE', revision: 1 });
+    }
+  });
+
+  it('PHASE2 HIGH-003: reviewer revocation serializes after a release that already locked exact Reviewer authority', async () => {
+    const reviewer = await seedActor('phase2-race-revoke-reviewer');
+    const actor = await seedActor('phase2-race-revoke-actor');
+    const knowledge = await seedKnowledge(actor);
+    const p = approvalProof(knowledge, reviewer, `proof-race-${crypto.randomUUID()}`);
+
+    let qualificationEntered!: () => void;
+    const entered = new Promise<void>((resolve) => { qualificationEntered = resolve; });
+    let continueQualification!: () => void;
+    const proceed = new Promise<void>((resolve) => { continueQualification = resolve; });
+    const gatedQualification = {
+      async resolve(input: any) {
+        qualificationEntered();
+        await proceed;
+        return {
+          status: 'RESOLVED' as const,
+          qualificationRef: input.qualificationRef,
+          reviewerIdentity: input.reviewerIdentity,
+          reviewerAccountId: input.reviewerAccountId,
+          reviewerPersonId: input.reviewerPersonId,
+          scope: input.scope,
+          validFrom: '2026-01-01T00:00:00Z',
+          validTo: '2027-01-01T00:00:00Z',
+        };
+      },
+    };
+
+    const release = releaseKnowledgeVersion({
+      pool: app,
+      accountId: actor.accountId,
+      personId: actor.personId,
+      assignmentId: actor.assignmentId,
+      idempotencyKey: `phase2-race-release-${crypto.randomUUID()}`,
+      versionId: knowledge.versionId,
+      expectedRevision: 1,
+      approvalProofId: p.proofId,
+      approvalProvider: approvalProvider(p),
+      qualificationProvider: gatedQualification,
+      sceneBindingResolver: sceneBinding(knowledge),
+      now: new Date('2026-11-17T09:00:00Z'),
+    });
+
+    await entered;
+    const revoker = await admin.connect();
+    try {
+      const pid = (await revoker.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      const revocation = revoker.query(
+        `UPDATE staff_assignments
+            SET revoked_at=clock_timestamp(), revoked_by_account_id=$2
+          WHERE id=$1`,
+        [reviewer.assignmentId, actor.accountId]
+      );
+
+      let blocked = false;
+      for (let i = 0; i < 100 && !blocked; i += 1) {
+        const check = await admin.query<{ blocked: boolean }>(
+          'SELECT cardinality(pg_blocking_pids($1)) > 0 AS blocked',
+          [pid]
+        );
+        blocked = check.rows[0]?.blocked === true;
+      }
+      expect(blocked).toBe(true);
+
+      continueQualification();
+      await expect(release).resolves.toMatchObject({ lifecycleStatus: 'PUBLISHED' });
+      await revocation;
+
+      const staffState = await admin.query<{ revoked: boolean }>(
+        'SELECT revoked_at IS NOT NULL AS revoked FROM staff_assignments WHERE id=$1',
+        [reviewer.assignmentId]
+      );
+      expect(staffState.rows[0]!.revoked).toBe(true);
+    } finally {
+      revoker.release();
+    }
+  });
+
+  it('PHASE2 HIGH-003: reviewer Account disable serializes after a release that already locked exact Reviewer authority', async () => {
+    const reviewer = await seedActor('phase2-race-disable-reviewer');
+    const actor = await seedActor('phase2-race-disable-actor');
+    const knowledge = await seedKnowledge(actor);
+    const p = approvalProof(knowledge, reviewer, `proof-race-disable-${crypto.randomUUID()}`);
+
+    let enteredResolve!: () => void;
+    const entered = new Promise<void>((resolve) => { enteredResolve = resolve; });
+    let proceedResolve!: () => void;
+    const proceed = new Promise<void>((resolve) => { proceedResolve = resolve; });
+    const gatedQualification = {
+      async resolve(input: any) {
+        enteredResolve();
+        await proceed;
+        return {
+          status: 'RESOLVED' as const,
+          qualificationRef: input.qualificationRef,
+          reviewerIdentity: input.reviewerIdentity,
+          reviewerAccountId: input.reviewerAccountId,
+          reviewerPersonId: input.reviewerPersonId,
+          scope: input.scope,
+          validFrom: '2026-01-01T00:00:00Z',
+          validTo: '2027-01-01T00:00:00Z',
+        };
+      },
+    };
+    const release = releaseKnowledgeVersion({
+      pool: app,
+      accountId: actor.accountId,
+      personId: actor.personId,
+      assignmentId: actor.assignmentId,
+      idempotencyKey: `phase2-disable-release-${crypto.randomUUID()}`,
+      versionId: knowledge.versionId,
+      expectedRevision: 1,
+      approvalProofId: p.proofId,
+      approvalProvider: approvalProvider(p),
+      qualificationProvider: gatedQualification,
+      sceneBindingResolver: sceneBinding(knowledge),
+      now: new Date('2026-11-17T09:00:00Z'),
+    });
+
+    await entered;
+    const disabler = await admin.connect();
+    try {
+      const pid = (await disabler.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      const disable = disabler.query(
+        `UPDATE accounts SET status='DISABLED' WHERE id=$1`,
+        [reviewer.accountId]
+      );
+      let blocked = false;
+      for (let i = 0; i < 100 && !blocked; i += 1) {
+        const check = await admin.query<{ blocked: boolean }>(
+          'SELECT cardinality(pg_blocking_pids($1)) > 0 AS blocked',
+          [pid]
+        );
+        blocked = check.rows[0]?.blocked === true;
+      }
+      expect(blocked).toBe(true);
+
+      proceedResolve();
+      await expect(release).resolves.toMatchObject({ lifecycleStatus: 'PUBLISHED' });
+      await disable;
+      const account = await admin.query<{ status: string }>(
+        'SELECT status FROM accounts WHERE id=$1',
+        [reviewer.accountId]
+      );
+      expect(account.rows[0]!.status).toBe('DISABLED');
+    } finally {
+      disabler.release();
+    }
+  });
+
+  it('PHASE2 HIGH-003: Reviewer authority expiring after validation but before transition is rejected by the final DB guard', async () => {
+    const reviewer = await seedActor('phase2-race-expiry-reviewer');
+    const actor = await seedActor('phase2-race-expiry-actor');
+    const knowledge = await seedKnowledge(actor);
+    const p = approvalProof(knowledge, reviewer, `proof-race-expiry-${crypto.randomUUID()}`);
+    await admin.query(
+      `UPDATE staff_assignments
+          SET valid_until = clock_timestamp() + interval '250 milliseconds'
+        WHERE id=$1`,
+      [reviewer.assignmentId]
+    );
+
+    let enteredResolve!: () => void;
+    const entered = new Promise<void>((resolve) => { enteredResolve = resolve; });
+    let proceedResolve!: () => void;
+    const proceed = new Promise<void>((resolve) => { proceedResolve = resolve; });
+    const gatedQualification = {
+      async resolve(input: any) {
+        enteredResolve();
+        await proceed;
+        return {
+          status: 'RESOLVED' as const,
+          qualificationRef: input.qualificationRef,
+          reviewerIdentity: input.reviewerIdentity,
+          reviewerAccountId: input.reviewerAccountId,
+          reviewerPersonId: input.reviewerPersonId,
+          scope: input.scope,
+          validFrom: '2026-01-01T00:00:00Z',
+          validTo: '2027-01-01T00:00:00Z',
+        };
+      },
+    };
+
+    const release = releaseKnowledgeVersion({
+      pool: app,
+      accountId: actor.accountId,
+      personId: actor.personId,
+      assignmentId: actor.assignmentId,
+      idempotencyKey: `phase2-expiry-release-${crypto.randomUUID()}`,
+      versionId: knowledge.versionId,
+      expectedRevision: 1,
+      approvalProofId: p.proofId,
+      approvalProvider: approvalProvider(p),
+      qualificationProvider: gatedQualification,
+      sceneBindingResolver: sceneBinding(knowledge),
+      now: new Date('2026-11-17T09:00:00Z'),
+    });
+
+    await entered;
+    let expired = false;
+    for (let i = 0; i < 1000 && !expired; i += 1) {
+      const check = await admin.query<{ expired: boolean }>(
+        `SELECT clock_timestamp() >= valid_until AS expired
+           FROM staff_assignments WHERE id=$1`,
+        [reviewer.assignmentId]
+      );
+      expired = check.rows[0]?.expired === true;
+    }
+    expect(expired).toBe(true);
+
+    proceedResolve();
+    await expect(release).rejects.toMatchObject({ code: '42501' });
+
+    const state = await admin.query<{ lifecycle_status: string; revision: number }>(
+      'SELECT lifecycle_status, revision FROM professional_knowledge_versions WHERE id=$1',
+      [knowledge.versionId]
+    );
+    expect(state.rows[0]).toEqual({ lifecycle_status: 'CANDIDATE', revision: 1 });
+    const receipt = await admin.query<{ metadata: Record<string, string> }>(
+      `SELECT metadata FROM business_audit_events
+        WHERE resource_id=$1 AND event_type='PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED'`,
+      [knowledge.versionId]
+    );
+    expect(receipt.rowCount).toBe(1);
+    expect(receipt.rows[0]!.metadata).toMatchObject({
+      decisionCategory: 'INVALID',
+      reasonCode: 'STAFF_AUTHORITY_INVALID',
+    });
+  });
+
 });
