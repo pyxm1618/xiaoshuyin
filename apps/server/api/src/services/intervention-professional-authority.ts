@@ -13,6 +13,7 @@ export interface InterventionProfessionalAuthorityRequest {
 
 export interface InterventionProfessionalAuthorityProof {
   readonly approvalProofRef: string;
+  readonly artifactIdentity: string;
   readonly definitionId: string;
   readonly definitionVersion: number;
   readonly contentHash: string;
@@ -39,9 +40,18 @@ export interface InterventionProfessionalAuthorityProof {
   readonly publishedAt: string;
 }
 
+export interface InterventionProfessionalAuthorityExactProofIdentity {
+  readonly approvalProofRef: string;
+  readonly artifactIdentity: string;
+}
+
+export interface InterventionProfessionalAuthorityRevalidationRequest
+  extends InterventionProfessionalAuthorityRequest,
+    InterventionProfessionalAuthorityExactProofIdentity {}
+
 export interface InterventionProfessionalAuthorityProvider {
   resolve(input: InterventionProfessionalAuthorityRequest): Promise<InterventionProfessionalAuthorityProof | null>;
-  revalidate(input: InterventionProfessionalAuthorityRequest): Promise<InterventionProfessionalAuthorityProof | null>;
+  revalidate(input: InterventionProfessionalAuthorityRevalidationRequest): Promise<InterventionProfessionalAuthorityProof | null>;
 }
 
 export const unavailableProductionInterventionProfessionalAuthorityProvider:
@@ -52,6 +62,8 @@ export const unavailableProductionInterventionProfessionalAuthorityProvider:
 
 export type InterventionProfessionalAuthorityFailureReason =
   | 'NOT_PROFESSIONALLY_APPROVED'
+  | 'APPROVAL_PROOF_REF_MISSING'
+  | 'ARTIFACT_IDENTITY_MISSING'
   | 'WRONG_DEFINITION'
   | 'WRONG_VERSION'
   | 'WRONG_HASH'
@@ -72,6 +84,7 @@ export type InterventionProfessionalAuthorityResult =
   | {
       readonly status: 'VALID';
       readonly approvalProofRef: string;
+      readonly artifactIdentity: string;
       readonly reviewerIdentityRef: string;
       readonly qualificationRef: string;
       readonly proof: InterventionProfessionalAuthorityProof;
@@ -101,15 +114,39 @@ export async function resolveInterventionProfessionalAuthority(
   provider: InterventionProfessionalAuthorityProvider,
   request: InterventionProfessionalAuthorityRequest,
   mode: 'RESOLVE' | 'REVALIDATE',
-  now = Date.now()
+  now = Date.now(),
+  exactProofIdentity?: InterventionProfessionalAuthorityExactProofIdentity
 ): Promise<InterventionProfessionalAuthorityResult> {
   let proof: InterventionProfessionalAuthorityProof | null;
+  let expectedExactProof: InterventionProfessionalAuthorityExactProofIdentity | null = null;
+  if (mode === 'REVALIDATE') {
+    if (
+      exactProofIdentity === undefined ||
+      exactProofIdentity.approvalProofRef.trim().length === 0 ||
+      exactProofIdentity.artifactIdentity.trim().length === 0
+    ) {
+      return invalid('APPROVAL_PROOF_CHANGED');
+    }
+    expectedExactProof = exactProofIdentity;
+  }
   try {
-    proof = mode === 'RESOLVE' ? await provider.resolve(request) : await provider.revalidate(request);
+    proof =
+      mode === 'RESOLVE'
+        ? await provider.resolve(request)
+        : await provider.revalidate({ ...request, ...expectedExactProof! });
   } catch {
     return { status: 'UNAVAILABLE', reason: 'DEPENDENCY_UNAVAILABLE' };
   }
   if (proof === null) return { status: 'UNAVAILABLE', reason: 'NOT_PROFESSIONALLY_APPROVED' };
+  if (proof.approvalProofRef.trim().length === 0) return invalid('APPROVAL_PROOF_REF_MISSING');
+  if (proof.artifactIdentity.trim().length === 0) return invalid('ARTIFACT_IDENTITY_MISSING');
+  if (
+    expectedExactProof !== null &&
+    (proof.approvalProofRef !== expectedExactProof.approvalProofRef ||
+      proof.artifactIdentity !== expectedExactProof.artifactIdentity)
+  ) {
+    return invalid('APPROVAL_PROOF_CHANGED');
+  }
   if (proof.definitionId !== request.definitionId) return invalid('WRONG_DEFINITION');
   if (proof.definitionVersion !== request.definitionVersion) return invalid('WRONG_VERSION');
   if (proof.contentHash !== request.contentHash) return invalid('WRONG_HASH');
@@ -149,6 +186,7 @@ export async function resolveInterventionProfessionalAuthority(
   return {
     status: 'VALID',
     approvalProofRef: proof.approvalProofRef,
+    artifactIdentity: proof.artifactIdentity,
     reviewerIdentityRef: proof.reviewerIdentityRef,
     qualificationRef: proof.professionalQualification.qualificationRef,
     proof,
