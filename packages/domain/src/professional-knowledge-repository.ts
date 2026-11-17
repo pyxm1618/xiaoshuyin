@@ -60,21 +60,27 @@ export async function resolveProfessionalReviewStaffAuthority(
     personId: string;
   }
 ): Promise<StaffProfessionalReviewAuthorityResult> {
-  const { rows } = await tx.query<{ valid: boolean }>(
-    `SELECT app.validate_professional_review_assignment_target($1,$2,$3) AS valid`,
-    [input.assignmentRef, input.accountId, input.personId]
-  );
-  if (rows[0]?.valid !== true) {
-    return { status: 'INVALID', reason: 'STAFF_ASSIGNMENT_INVALID' };
+  try {
+    const { rows } = await tx.query<{ valid: boolean }>(
+      `SELECT app.lock_professional_review_assignment_target($1,$2,$3) AS valid`,
+      [input.assignmentRef, input.accountId, input.personId]
+    );
+    if (rows[0]?.valid !== true) {
+      return { status: 'INVALID', reason: 'STAFF_ASSIGNMENT_INVALID' };
+    }
+    return {
+      status: 'RESOLVED',
+      assignmentRef: input.assignmentRef,
+      accountId: input.accountId,
+      personId: input.personId,
+      capability: 'PROFESSIONAL_REVIEW',
+      scope: 'GLOBAL',
+    };
+  } catch {
+    // A database/owner seam failure is not proof invalidity. The surrounding
+    // command will roll back and classify this as dependency unavailable.
+    return { status: 'UNAVAILABLE', reason: 'STAFF_AUTHORITY_UNAVAILABLE' };
   }
-  return {
-    status: 'RESOLVED',
-    assignmentRef: input.assignmentRef,
-    accountId: input.accountId,
-    personId: input.personId,
-    capability: 'PROFESSIONAL_REVIEW',
-    scope: 'GLOBAL',
-  };
 }
 
 async function insertSources(
@@ -424,16 +430,17 @@ export async function appendConsumedProfessionalApprovalEvidence(
   await tx.query(
     `INSERT INTO professional_knowledge_approval_evidence
        (knowledge_version_id, approval_proof_ref, content_hash, source_set_hash,
-        approval_scope, reviewer_identity, reviewer_account_id, reviewer_person_id,
-        staff_assignment_ref, qualification_ref, qualification_scope,
+        semantic_binding_hash, approval_scope, reviewer_identity, reviewer_account_id,
+        reviewer_person_id, staff_assignment_ref, qualification_ref, qualification_scope,
         reviewed_at, effective_from, effective_to,
         professional_content_package_ref, scene_binding_ref)
-     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15::jsonb,$16::jsonb)`,
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16::jsonb,$17::jsonb)`,
     [
       versionId,
       proof.proofId,
       proof.contentHash,
       proof.sourceSetHash,
+      proof.semanticBindingHash ?? null,
       JSON.stringify(proof.scope),
       proof.reviewerIdentity,
       proof.reviewerAccountId,
@@ -477,6 +484,45 @@ export async function appendProfessionalKnowledgeAudit(
       input.eventType,
       input.versionId,
       JSON.stringify(input.metadata),
+    ]
+  );
+}
+
+
+export async function appendProfessionalKnowledgeAuthorityDenialReceipt(
+  tx: Tx,
+  input: {
+    versionId: string;
+    denialFingerprint: string;
+    decisionCategory: 'INVALID' | 'UNAVAILABLE';
+    reasonCode:
+      | 'APPROVAL_INVALID'
+      | 'APPROVAL_PROOF_ID_MISMATCH'
+      | 'STAFF_AUTHORITY_INVALID'
+      | 'STAFF_AUTHORITY_UNAVAILABLE'
+      | 'PROFESSIONAL_QUALIFICATION_INVALID'
+      | 'PROFESSIONAL_QUALIFICATION_UNAVAILABLE'
+      | 'SCENE_PACKAGE_BINDING_INVALID'
+      | 'SCENE_PACKAGE_BINDING_UNAVAILABLE'
+      | 'INTERVENTION_DEFINITION_INVALID'
+      | 'INTERVENTION_DEFINITION_UNAVAILABLE';
+    dependencyCategory:
+      | 'APPROVAL'
+      | 'STAFF_AUTHORITY'
+      | 'PROFESSIONAL_QUALIFICATION'
+      | 'SCENE_PACKAGE_BINDING'
+      | 'INTERVENTION_DEFINITION'
+      | null;
+  }
+): Promise<void> {
+  await tx.query(
+    `SELECT app.append_professional_knowledge_authority_denial($1,$2,$3,$4,$5)`,
+    [
+      input.versionId,
+      input.denialFingerprint,
+      input.decisionCategory,
+      input.reasonCode,
+      input.dependencyCategory,
     ]
   );
 }
