@@ -4,6 +4,7 @@ import {
   PROFESSIONAL_KNOWLEDGE_REVIEW_STATES,
   PROFESSIONAL_KNOWLEDGE_VALIDITY_STATES,
   evaluateProfessionalKnowledgeEligibility,
+  hashProfessionalKnowledgeApprovalBinding,
   hashProfessionalKnowledgeContent,
   hashProfessionalKnowledgeSourceSet,
   projectProfessionalKnowledgeDependencyImpact,
@@ -68,6 +69,7 @@ function validProof(v: ProfessionalKnowledgeVersionSnapshot): ProfessionalApprov
     semanticVersion: v.semanticVersion,
     contentHash: v.contentHash,
     sourceSetHash: v.sourceSetHash,
+    semanticBindingHash: hashProfessionalKnowledgeApprovalBinding(v),
     sourceRefs: v.sources.map((item) => item.sourceRef),
     scope: {
       product: 'V1',
