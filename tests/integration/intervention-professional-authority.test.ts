@@ -88,6 +88,7 @@ describe('Slice 16 Professional Approval / qualification consumer seam', () => {
     ['retired', { lifecycleStatus: 'RETIRED' as const }, 'RETIRED'],
     ['superseded', { lifecycleStatus: 'SUPERSEDED' as const }, 'SUPERSEDED'],
     ['expired', { effectiveTo: '2026-01-01T00:00:00.000Z' }, 'APPROVAL_EXPIRED'],
+    ['not yet effective', { effectiveFrom: '2026-12-01T00:00:00.000Z' }, 'APPROVAL_EXPIRED'],
   ] as const;
 
   for (const [label, override, reason] of failures) {
