@@ -1,5 +1,8 @@
 # Tasks: Foundation Remaining Remediation
 
+**Status**: **IMPLEMENTATION MERGED / INDEPENDENT AUDIT COMPLETE / TASK TRUTH RECONCILED**  
+**Evidence**: `.specify/task-evidence/foundation-remaining-remediation.json`
+
 - [x] T001 Converge guardian Consent current-head revoke and chain concurrency. [REQ:V1-C39,V1-X06] [VERIFY:real PostgreSQL stale/supersede/race/rollback tests]
 - [x] T002 Make Consent grant/revoke audit atomic with authoritative mutation. [REQ:V1-C39,V1-X06] [VERIFY:integration audit + rollback tests]
 - [x] T003 Reuse the race-safe Account owner for concurrent first login. [REQ:V1-C44,V1-X06] [VERIFY:concurrent HTTP integration test]
