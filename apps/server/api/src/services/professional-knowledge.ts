@@ -587,7 +587,7 @@ export const resolveCurrentInterventionDefinition:
       if (definition === null) {
         return { status: 'INVALID', reason: 'INTERVENTION_DEFINITION_NOT_EXACT' };
       }
-      if (definition.state !== 'CURRENT') {
+      if (definition.state === 'SUPERSEDED' || definition.state === 'RETIRED') {
         return {
           status: 'INVALID',
           reason: `INTERVENTION_DEFINITION_${definition.state}`,

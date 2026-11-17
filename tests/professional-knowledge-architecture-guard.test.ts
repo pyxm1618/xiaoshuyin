@@ -97,7 +97,7 @@ describe('Slice 17 single-owner architecture + mechanical traceability', () => {
     ).toBe(traceability.tasksBlob);
   });
 
-  it('covers exactly FR 52/52, AS 50/50, NS 24/24 from authoritative T1701-T1716 mappings', () => {
+  it('Structural Mapping: covers exactly FR 52/52, AS 50/50, NS 24/24 from authoritative T1701-T1716 mappings', () => {
     const chunks = frozenTaskChunks();
     expect([...chunks.keys()].sort()).toEqual(
       Array.from({ length: 16 }, (_, i) => `T17${String(i + 1).padStart(2, '0')}`)
@@ -121,6 +121,36 @@ describe('Slice 17 single-owner architecture + mechanical traceability', () => {
           ).toBe(true);
         }
       }
+    }
+  });
+
+  it('Semantic Executable Evidence: every mapped requirement points to assertions and Audit 2 sentinels are non-structural', () => {
+    for (const entries of [traceability.FR, traceability.AS, traceability.NS]) {
+      for (const entry of entries) {
+        for (const mapping of entry.mappings) {
+          const evidence = readFileSync(
+            new URL(`../${mapping.evidence}`, import.meta.url),
+            'utf8'
+          );
+          expect(evidence, `${entry.id} / ${mapping.task} needs executable/static assertions`)
+            .toMatch(/\b(?:it|test)\s*\(/);
+          expect(evidence, `${entry.id} / ${mapping.task} needs semantic assertions`)
+            .toMatch(/\bexpect\s*\(/);
+        }
+      }
+    }
+
+    const remediation = readFileSync(
+      new URL('./professional-knowledge-audit2-remediation.integration.test.ts', import.meta.url),
+      'utf8'
+    );
+    for (const [id, assertion] of Object.entries({
+      'FR-028': "expect(Number(reviewEvidence.rows[0]!.n)).toBe(1);",
+      'FR-031': "expect(reviewReadback.status).toBe('SETTLED');",
+      'FR-046': "expect(Number(releaseEvidence.rows[0]!.n)).toBe(1);",
+      'FR-052': "expect(hiddenReviewer.rows[0]!.n).toBe('0');",
+    })) {
+      expect(remediation, `${id} semantic sentinel deleted`).toContain(assertion);
     }
   });
 

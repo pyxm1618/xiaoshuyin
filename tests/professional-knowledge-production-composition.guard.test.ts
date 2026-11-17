@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   unavailableProductionProfessionalApprovalProvider,
   unavailableProductionProfessionalQualificationProvider,
-  unavailableProductionInterventionDefinitionResolver,
 } from '../apps/server/api/src/services/professional-knowledge.js';
 import {
   digitalUseProfessionalKnowledgePackageBindings,
@@ -37,13 +36,11 @@ describe('Professional Knowledge production composition guard', () => {
     ).resolves.toMatchObject({ status: 'UNAVAILABLE' });
   });
 
-  it('keeps optional Slice 16 integration unavailable rather than importing candidate authority', async () => {
-    await expect(
-      unavailableProductionInterventionDefinitionResolver({
-        definitionId: 'i', definitionVersion: '1.0.0', contentHash: 'c'.repeat(64),
-      })
-    ).resolves.toMatchObject({ status: 'UNAVAILABLE' });
-    expect(productionFiles.join('\n')).not.toMatch(/PR\s*#?57|feat\/016-/i);
+  it('consumes the merged Slice 16 authoritative owner without candidate-era branch assumptions', () => {
+    const source = productionFiles.join('\n');
+    expect(source).toContain('getExactInterventionDefinition');
+    expect(source).not.toContain('SLICE_16_AUTHORITATIVE_OWNER_NOT_MERGED');
+    expect(source).not.toMatch(/PR\s*#?57|feat\/016-/i);
   });
 
   it('has an exact empty production-approved Knowledge set for current Scene v1', () => {

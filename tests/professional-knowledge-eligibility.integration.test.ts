@@ -81,13 +81,13 @@ describe('deterministic Professional Knowledge production eligibility', () => {
     })).toEqual({ status: 'UNAVAILABLE', dependency: 'APPROVAL:TIMEOUT' });
   });
 
-  it('keeps optional InterventionDefinition unavailable until authoritative Slice 16 owner exists', () => {
+  it('fails closed when the merged authoritative InterventionDefinition dependency is unavailable', () => {
     const { base, version } = fixture();
-    const expected = { definitionId: 'i1', definitionVersion: '1.0.0', contentHash: 'f'.repeat(64) };
+    const expected = { definitionId: 'i1', definitionVersion: 1, contentHash: 'f'.repeat(64) };
     expect(evaluateProfessionalKnowledgeEligibility({
       ...base,
       version: { ...version, scope: { ...version.scope, interventionDefinitionRef: expected } },
-      intervention: { status: 'UNAVAILABLE', reason: 'SLICE_16_AUTHORITATIVE_OWNER_NOT_MERGED' },
+      intervention: { status: 'UNAVAILABLE', reason: 'INTERVENTION_DEFINITION_DEPENDENCY_UNAVAILABLE' },
     })).toEqual({ status: 'UNAVAILABLE', dependency: 'INTERVENTION_DEFINITION' });
   });
 });
