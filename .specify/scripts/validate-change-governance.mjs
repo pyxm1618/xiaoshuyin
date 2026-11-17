@@ -304,7 +304,13 @@ function validateAuthorityImpact(changed, opts, errors) {
     }
 
     for (const artifact of requiredArtifacts) {
-      if (typeof artifact !== "string" || !artifact || artifact.startsWith("Docs/")) {
+      if (
+        typeof artifact !== "string" ||
+        !artifact ||
+        artifact.startsWith("Docs/") ||
+        artifact === ".specify/authority-inputs.json" ||
+        artifact.startsWith(".specify/authority-impacts/")
+      ) {
         errors.push(`Invalid required downstream artifact: ${String(artifact)}`);
         continue;
       }
@@ -411,6 +417,10 @@ function validateTaskCompletionEvidence(errors) {
       for (const rel of evidence.artifactPaths) {
         if (typeof rel !== "string" || !fs.existsSync(path.join(root, rel))) {
           errors.push(`${evidenceRel}: evidence artifact does not exist: ${String(rel)}`);
+          continue;
+        }
+        if (!fs.statSync(path.join(root, rel)).isFile()) {
+          errors.push(`${evidenceRel}: evidence artifact must be a concrete file, not a directory: ${rel}`);
           continue;
         }
         if (!rel.startsWith("specs/") && !rel.startsWith(".specify/")) substantive = true;
