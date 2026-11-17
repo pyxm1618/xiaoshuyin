@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  hashProfessionalKnowledgeApprovalBinding,
   hashProfessionalKnowledgeContent,
   hashProfessionalKnowledgeSourceSet,
   projectProfessionalKnowledgeDependencyImpact,
@@ -89,6 +90,7 @@ describe('impact-scoped Professional Knowledge dependency propagation', () => {
       semanticVersion: version.semanticVersion,
       contentHash: version.contentHash,
       sourceSetHash: version.sourceSetHash,
+      semanticBindingHash: hashProfessionalKnowledgeApprovalBinding(version),
       sourceRefs: ['source:renewal'],
       scope,
       reviewerIdentity: 'reviewer-1',
