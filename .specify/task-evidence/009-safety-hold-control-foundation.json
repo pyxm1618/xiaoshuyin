@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "taskFile": "specs/009-safety-hold-control-foundation/tasks.md",
+  "implementationPr": 28,
+  "implementationHeadSha": "7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef",
+  "mergeCommitSha": "6fab0b79a942c5bf961a2201138ed02bf3197859",
+  "mergedAt": "2026-11-11T11:30:22Z",
+  "taskIds": [
+    "T901",
+    "T902",
+    "T903",
+    "T904",
+    "T905",
+    "T906",
+    "T907",
+    "T908",
+    "T909",
+    "T910",
+    "T911",
+    "T912",
+    "T913",
+    "T914",
+    "T915",
+    "T916",
+    "T917",
+    "T918",
+    "T919",
+    "T920"
+  ],
+  "artifactPaths": [
+    "apps/server/api/src/authz.ts",
+    "apps/server/api/src/db/drizzle-tx.ts",
+    "apps/server/api/src/plugins/error-handler.ts",
+    "apps/server/api/src/routes/cases.ts",
+    "tests/db/case-primary-switch-shared-vocabulary.test.ts",
+    "tests/db/cases-rls.test.ts",
+    "tests/db/migration-case-primary-switch-upgrade.test.ts",
+    "tests/db/migration-case-status-paused-removal.test.ts",
+    "scripts/db-evidence.mjs",
+    "scripts/guard-static.mjs"
+  ],
+  "ciRuns": [
+    {
+      "name": "Spec Governance",
+      "runId": 43009288028,
+      "conclusion": "success",
+      "headSha": "7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef"
+    },
+    {
+      "name": "CI",
+      "runId": 43009288032,
+      "conclusion": "success",
+      "headSha": "7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef"
+    }
+  ]
+}
