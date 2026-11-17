@@ -270,7 +270,7 @@ describe('Slice 17 Phase 2 exact Professional Authority domain matrix', () => {
     expect(validateProfessionalApproval({
       version: v,
       provider: { status: 'UNAVAILABLE', reason: 'TIMEOUT' },
-      staffAuthority: { status: 'RESOLVED', ...staff() },
+      staffAuthority: staff(),
       qualification: { status: 'UNAVAILABLE', reason: 'SERVICE_OUTAGE' },
       now: NOW,
     })).toEqual({ status: 'UNAVAILABLE', dependency: 'APPROVAL:TIMEOUT' });
