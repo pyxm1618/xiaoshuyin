@@ -629,6 +629,10 @@ interface SeedIds {
  * clause is re-imposed by `consent_purpose_field_binding`, so no guardian
  * invariant is dropped or widened.
  */
+const SLICE16_REPLACED_CONSTRAINTS = [
+  'business_audit_events_family_id_not_null',
+];
+
 const CONSENT_OWNER_REPLACED_CONSTRAINTS = [
   'consent_records_guardian_person_id_not_null',
   'consent_records_guardian_account_id_not_null',
@@ -822,11 +826,17 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeConstraintNames = Object.keys(beforeConstraints).sort();
     const afterConstraintNames = Object.keys(afterConstraints).sort();
     for (const name of beforeConstraintNames) {
-      if (CONSENT_OWNER_REPLACED_CONSTRAINTS.includes(name)) continue;
+      if (
+        CONSENT_OWNER_REPLACED_CONSTRAINTS.includes(name) ||
+        SLICE16_REPLACED_CONSTRAINTS.includes(name)
+      ) continue;
       expect(afterConstraintNames).toContain(name);
     }
     // The replaced guardian invariants are re-imposed by the purpose branch.
     for (const name of CONSENT_OWNER_REPLACED_CONSTRAINTS.slice(0, 2)) {
+      expect(afterConstraintNames).not.toContain(name);
+    }
+    for (const name of SLICE16_REPLACED_CONSTRAINTS) {
       expect(afterConstraintNames).not.toContain(name);
     }
     expect(afterConstraintNames).toContain('consent_purpose_field_binding');

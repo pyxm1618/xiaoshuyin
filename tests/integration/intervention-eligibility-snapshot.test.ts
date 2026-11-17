@@ -56,7 +56,7 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
 
   async function fixture(label: string): Promise<Fixture> {
     const manager = await loginWithLabel(app, 's16-snapshot-' + label);
-    const family = await createFamily(app, manager.token, 's16-snapshot-' + label);
+    const family = await createFamily(app, manager.token, 's16-' + label.slice(0, 20));
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
 
@@ -147,6 +147,14 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
       },
       TEST_ONLY_QUALIFICATION_PROVIDER
     );
+    return {
+      manager,
+      familyId,
+      caseId,
+      definitionId: created.id,
+      version: created.version,
+      contentHash: created.contentHash,
+    };
   }
 
   const passAdapters: InterventionEligibilityOwnerAdapters = {
