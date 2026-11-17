@@ -402,7 +402,7 @@ function validateAuthorityImpact(changed, opts, errors) {
   if (registryChanged) {
     loadAuthorityRegistry(errors);
     const forbidden = changed.filter((file) =>
-      AUTHORITY_DOCS.includes(file) || /^specs\\/[^/]+\\/spec\\.md$/.test(file) || isProductPath(file) || file.startsWith(".specify/authority-impacts/")
+      AUTHORITY_DOCS.includes(file) || /^specs\/[^/]+\/spec\.md$/.test(file) || isProductPath(file) || file.startsWith(".specify/authority-impacts/")
     );
     if (forbidden.length > 0) {
       errors.push("Authority Unit registry changes are governance-sensitive and must land separately from Authority Docs, specs, production, and impact contracts: " + forbidden.join(", "));
