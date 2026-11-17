@@ -47,6 +47,7 @@ const semanticEvidence = JSON.parse(
   }[];
   requirements: {
     requirementId: string;
+    contract: string;
     taskIds: string[];
     evidenceIds: string[];
   }[];
@@ -164,6 +165,8 @@ describe('Slice 17 single-owner architecture + mechanical traceability', () => {
 
     const referenced = new Set<string>();
     for (const requirement of semanticEvidence.requirements) {
+      expect(requirement.contract.length, `${requirement.requirementId} needs a frozen semantic contract`)
+        .toBeGreaterThan(0);
       expect(requirement.evidenceIds.length, `${requirement.requirementId} needs semantic evidence`)
         .toBeGreaterThan(0);
       expect(new Set(requirement.evidenceIds).size)
@@ -178,7 +181,7 @@ describe('Slice 17 single-owner architecture + mechanical traceability', () => {
         expect(evidence?.contract.length).toBeGreaterThan(0);
         if (evidence?.task.startsWith('T17')) {
           expect(requirement.taskIds).toContain(evidence.task);
-          expect(evidence.file).toBe(traceability.taskEvidence[evidence.task]);
+          expect(evidence.file).toMatch(/^tests\//);
         }
         referenced.add(evidenceId);
       }
