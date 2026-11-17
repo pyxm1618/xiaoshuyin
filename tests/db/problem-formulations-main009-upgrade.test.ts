@@ -384,7 +384,8 @@ async function assertUnionConstraints(
   includeSupplementalConsentAudit = true,
   includeSlice12 = includeSupplementalConsentAudit,
   includeSlice14 = includeSlice12,
-  includeAuth006 = includeSlice14
+  includeAuth006 = includeSlice14,
+  includeSlice17 = includeAuth006
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -477,6 +478,17 @@ async function assertUnionConstraints(
           'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
         ]
       : []),
+    ...(includeSlice17
+      ? [
+          'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATED',
+          'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDITED',
+          'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED',
+          'PROFESSIONAL_KNOWLEDGE_RELEASED',
+          'PROFESSIONAL_KNOWLEDGE_SUPERSEDED',
+          'PROFESSIONAL_KNOWLEDGE_RETIRED',
+          'PROFESSIONAL_KNOWLEDGE_VALIDITY_CHANGED',
+        ]
+      : []),
   ]);
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
@@ -491,6 +503,7 @@ async function assertUnionConstraints(
     'OBSERVATION',
     'CASE_PARTICIPANT',
     'PROBLEM_FORMULATION',
+    ...(includeSlice17 ? ['PROFESSIONAL_KNOWLEDGE'] : []),
   ]);
   const resourceLiterals = literalsOf(
     definitions.get('business_audit_events_resource_type_check')!
@@ -528,6 +541,17 @@ async function assertUnionConstraints(
         ]
       : []),
     ...(includeAuth006 ? ['PROBLEM_FORMULATION_REVIEW_RESOLVE'] : []),
+    ...(includeSlice17
+      ? [
+          'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',
+          'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
+          'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT',
+          'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
+          'PROFESSIONAL_KNOWLEDGE_RELEASE',
+          'PROFESSIONAL_KNOWLEDGE_RETIRE',
+          'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE',
+        ]
+      : []),
   ]);
   const commandLiterals = literalsOf(definitions.get('idempotency_keys_command_type_check')!);
   expect(new Set(commandLiterals)).toEqual(commandSet);
