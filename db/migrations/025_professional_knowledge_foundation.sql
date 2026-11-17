@@ -579,120 +579,98 @@ GRANT SELECT, INSERT ON professional_knowledge_sources TO xiaoshuyin_app;
 GRANT SELECT, INSERT ON professional_knowledge_review_evidence TO xiaoshuyin_app;
 GRANT SELECT, INSERT ON professional_knowledge_approval_evidence TO xiaoshuyin_app;
 
--- Extend the existing shared idempotency vocabulary; no knowledge-specific
--- idempotency table is introduced.
-ALTER TABLE idempotency_keys
-  DROP CONSTRAINT idempotency_keys_command_type_check;
-ALTER TABLE idempotency_keys
-  ADD CONSTRAINT idempotency_keys_command_type_check CHECK (
-    command_type IN (
-      'FAMILY_CREATE',
-      'MEMBER_CREATE',
-      'MEMBER_UPDATE',
-      'GUARDIAN_CONSENT_REQUEST',
-      'GUARDIAN_CONSENT_GRANT',
-      'GUARDIAN_CONSENT_REVOKE',
-      'CASE_CREATE',
-      'CASE_MESSAGE_CREATE',
-      'PARTICIPATION_INVITE_CREATE',
-      'PARTICIPATION_ACCEPT',
-      'PARTICIPATION_DECLINE',
-      'PARTICIPATION_WITHDRAW',
-      'CASE_SWITCH_PRIMARY',
-      'CASE_START_ASSESSMENT',
-      'PROBLEM_FORMULATION_PRESENT',
-      'PROBLEM_FORMULATION_CONFIRM',
-      'PROBLEM_FORMULATION_DISPUTE',
-      'PROBLEM_FORMULATION_CORRECT',
-      'CASE_REASSESS_FROM_FORMULATION',
-      'PROBLEM_FORMULATION_REVIEW_RESOLVE',
-      'CASE_ENTER_SAFETY_HOLD',
-      'CASE_RESOLVE_RISK',
-      'DIGITAL_USE_ASSESSMENT_RESUME',
-      'DIGITAL_USE_NODE_RESPONSE',
-      'PHONE_USE_CONTRACT_DRAFT_SAVE',
-      'PHONE_USE_CONTRACT_CONFIRM',
-      'PHONE_USE_CONTRACT_REVISE',
-      'PHONE_USE_ROLEPLAY_CREATE',
-      'PHONE_USE_ROLEPLAY_TURN',
-      'PHONE_USE_ROLEPLAY_RATE',
-      'PHONE_USE_ROLEPLAY_SELECT',
-      'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',
-      'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
-      'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT',
-      'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
-      'PROFESSIONAL_KNOWLEDGE_RELEASE',
-      'PROFESSIONAL_KNOWLEDGE_RETIRE',
-      'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE'
-    )
+-- Extend the existing shared idempotency vocabulary additively. Migration 024
+-- is already authoritative on current main, so 025 must preserve every prior
+-- command rather than recreate a pre-Slice16 snapshot.
+DO $$
+DECLARE current_def text; current_expr text;
+BEGIN
+  SELECT pg_get_constraintdef(oid, true) INTO current_def
+    FROM pg_constraint
+   WHERE conrelid='idempotency_keys'::regclass
+     AND conname='idempotency_keys_command_type_check';
+  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
+    RAISE EXCEPTION 'idempotency command authority missing';
+  END IF;
+  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
+  ALTER TABLE idempotency_keys
+    DROP CONSTRAINT idempotency_keys_command_type_check;
+  EXECUTE format(
+    'ALTER TABLE idempotency_keys ADD CONSTRAINT idempotency_keys_command_type_check CHECK ((%s) OR command_type IN (%L,%L,%L,%L,%L,%L,%L))',
+    current_expr,
+    'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',
+    'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
+    'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT',
+    'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
+    'PROFESSIONAL_KNOWLEDGE_RELEASE',
+    'PROFESSIONAL_KNOWLEDGE_RETIRE',
+    'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE'
   );
+END $$;
 
--- Reuse business_audit_events for global Professional Knowledge. Existing
--- family audit semantics are preserved; NULL family_id is permitted only by
--- the Professional Knowledge policies below.
+-- Reuse business_audit_events for global Professional Knowledge. Slice 16
+-- already made the audit owner global-capable for InterventionDefinition;
+-- extend that exact authority shape instead of replacing it.
 ALTER TABLE business_audit_events
   ALTER COLUMN family_id DROP NOT NULL;
 
-ALTER TABLE business_audit_events
-  DROP CONSTRAINT business_audit_events_resource_type_check;
-ALTER TABLE business_audit_events
-  ADD CONSTRAINT business_audit_events_resource_type_check CHECK (
-    resource_type IN (
-      'FAMILY', 'PERSON', 'CONSENT', 'CASE', 'DIALOGUE_MESSAGE',
-      'ASSERTION', 'OBSERVATION', 'CASE_PARTICIPANT', 'PROBLEM_FORMULATION',
-      'PROFESSIONAL_KNOWLEDGE'
-    )
+DO $$
+DECLARE current_def text; current_expr text;
+BEGIN
+  SELECT pg_get_constraintdef(oid, true) INTO current_def
+    FROM pg_constraint
+   WHERE conrelid='business_audit_events'::regclass
+     AND conname='business_audit_events_scope_shape_check';
+  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
+    RAISE EXCEPTION 'business audit scope authority missing';
+  END IF;
+  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
+  ALTER TABLE business_audit_events
+    DROP CONSTRAINT business_audit_events_scope_shape_check;
+  EXECUTE format(
+    'ALTER TABLE business_audit_events ADD CONSTRAINT business_audit_events_scope_shape_check CHECK ((%s) OR resource_type=%L)',
+    current_expr,
+    'PROFESSIONAL_KNOWLEDGE'
   );
 
-ALTER TABLE business_audit_events
-  DROP CONSTRAINT business_audit_events_event_type_check;
-ALTER TABLE business_audit_events
-  ADD CONSTRAINT business_audit_events_event_type_check CHECK (
-    event_type IN (
-      'FAMILY_CREATED',
-      'MEMBER_CREATED',
-      'MEMBER_PROFILE_VALUE_RECORDED',
-      'CONSENT_REQUEST_CREATED',
-      'CONSENT_GRANTED',
-      'CONSENT_REVOKED',
-      'CASE_CREATED',
-      'MESSAGE_RECORDED',
-      'ASSERTION_RECORDED',
-      'OBSERVATION_RECORDED',
-      'PARTICIPATION_INVITE_CREATED',
-      'PARTICIPATION_ACCEPTED',
-      'PARTICIPATION_DECLINED',
-      'PARTICIPATION_EXPIRED',
-      'PARTICIPATION_WITHDRAWN',
-      'CASE_PRIMARY_SWITCHED',
-      'CASE_ASSESSMENT_STARTED',
-      'CASE_PROBLEM_FORMULATION_PRESENTED',
-      'CASE_PROBLEM_FORMULATION_CONFIRMED',
-      'CASE_PROBLEM_FORMULATION_DISPUTED',
-      'CASE_PROBLEM_FORMULATION_CORRECTED',
-      'CASE_REASSESSMENT_STARTED',
-      'CONSENT_SUPPLEMENTAL_ASSESSMENT_GRANTED',
-      'CONSENT_SUPPLEMENTAL_ASSESSMENT_DECLINED',
-      'CONSENT_SUPPLEMENTAL_ASSESSMENT_REVOKED',
-      'DIGITAL_USE_NODE_COMPLETED',
-      'PHONE_USE_CONTRACT_DRAFT_SAVED',
-      'PHONE_USE_CONTRACT_CONFIRMED',
-      'PHONE_USE_CONTRACT_ACTIVATED',
-      'PHONE_USE_CONTRACT_SUPERSEDED',
-      'PHONE_USE_ROLEPLAY_RECORDED',
-      'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED',
-      'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
-      'CASE_SAFETY_HOLD_ENTERED',
-      'CASE_RISK_RESOLVED',
-      'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATED',
-      'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDITED',
-      'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED',
-      'PROFESSIONAL_KNOWLEDGE_RELEASED',
-      'PROFESSIONAL_KNOWLEDGE_SUPERSEDED',
-      'PROFESSIONAL_KNOWLEDGE_RETIRED',
-      'PROFESSIONAL_KNOWLEDGE_VALIDITY_CHANGED'
-    )
+  SELECT pg_get_constraintdef(oid, true) INTO current_def
+    FROM pg_constraint
+   WHERE conrelid='business_audit_events'::regclass
+     AND conname='business_audit_events_resource_type_check';
+  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
+    RAISE EXCEPTION 'business audit resource authority missing';
+  END IF;
+  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
+  ALTER TABLE business_audit_events
+    DROP CONSTRAINT business_audit_events_resource_type_check;
+  EXECUTE format(
+    'ALTER TABLE business_audit_events ADD CONSTRAINT business_audit_events_resource_type_check CHECK ((%s) OR resource_type=%L)',
+    current_expr,
+    'PROFESSIONAL_KNOWLEDGE'
   );
+
+  SELECT pg_get_constraintdef(oid, true) INTO current_def
+    FROM pg_constraint
+   WHERE conrelid='business_audit_events'::regclass
+     AND conname='business_audit_events_event_type_check';
+  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
+    RAISE EXCEPTION 'business audit event authority missing';
+  END IF;
+  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
+  ALTER TABLE business_audit_events
+    DROP CONSTRAINT business_audit_events_event_type_check;
+  EXECUTE format(
+    'ALTER TABLE business_audit_events ADD CONSTRAINT business_audit_events_event_type_check CHECK ((%s) OR event_type IN (%L,%L,%L,%L,%L,%L,%L))',
+    current_expr,
+    'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATED',
+    'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDITED',
+    'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED',
+    'PROFESSIONAL_KNOWLEDGE_RELEASED',
+    'PROFESSIONAL_KNOWLEDGE_SUPERSEDED',
+    'PROFESSIONAL_KNOWLEDGE_RETIRED',
+    'PROFESSIONAL_KNOWLEDGE_VALIDITY_CHANGED'
+  );
+END $$;
 
 CREATE POLICY audit_professional_knowledge_select
   ON business_audit_events

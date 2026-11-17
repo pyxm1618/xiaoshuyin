@@ -41,6 +41,27 @@ describe('RLS', () => {
     }
   });
 
+  it('Slice 16 owner subset still covers all 32 tables before the five Slice 17 owner tables', async () => {
+    const { rows } = await client.query<{ relname: string }>(`
+      SELECT relname
+      FROM pg_class
+      WHERE relkind = 'r'
+        AND relnamespace = 'public'::regnamespace
+        AND relname != 'schema_migrations'
+        AND relrowsecurity
+      ORDER BY relname
+    `);
+    const slice17Owners = new Set([
+      'professional_knowledge_items',
+      'professional_knowledge_versions',
+      'professional_knowledge_sources',
+      'professional_knowledge_review_evidence',
+      'professional_knowledge_approval_evidence',
+    ]);
+    expect(rows.filter((row) => !slice17Owners.has(row.relname)).length).toBe(32);
+    expect(rows.some((row) => row.relname === 'intervention_definitions')).toBe(true);
+  });
+
   it('94 policies exist after Slice 16 + Slice 17 authority composition', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
