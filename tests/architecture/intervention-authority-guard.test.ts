@@ -1,25 +1,74 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const ROOT = resolve(new URL('../..', import.meta.url).pathname);
-const productionFiles = [
-  'packages/domain/src/intervention-definition-schema.ts',
-  'packages/domain/src/intervention-definitions.ts',
-  'packages/domain/src/intervention-definition-repository.ts',
-  'packages/domain/src/intervention-eligibility.ts',
-  'packages/scenes/digital-use/intervention-definitions.ts',
-  'apps/server/api/src/services/intervention-professional-authority.ts',
-  'apps/server/api/src/services/intervention-definitions.ts',
-  'apps/server/api/src/services/intervention-eligibility.ts',
+function walk(relativeDir: string): string[] {
+  const absolute = resolve(ROOT, relativeDir);
+  return readdirSync(absolute)
+    .flatMap((name) => {
+      const relative = relativeDir + '/' + name;
+      const full = resolve(ROOT, relative);
+      return statSync(full).isDirectory() ? walk(relative) : [relative];
+    })
+    .filter((path) => path.endsWith('.ts'));
+}
+
+const productionFiles = Array.from(new Set([
+  'packages/domain/src/index.ts',
+  'packages/domain/src/idempotency.ts',
+  ...walk('packages/domain/src').filter((path) => /intervention/.test(path)),
+  'packages/scenes/digital-use/index.ts',
+  ...walk('packages/scenes/digital-use').filter((path) => /intervention/.test(path)),
+  'db/schema/index.ts',
+  'apps/server/api/src/idempotency.ts',
+  ...walk('apps/server/api/src/services').filter((path) => /intervention/.test(path)),
   'db/migrations/024_psychological_behavioral_intervention_contract.sql',
-] as const;
+])).sort();
 
 const source = Object.fromEntries(
   productionFiles.map((path) => [path, readFileSync(resolve(ROOT, path), 'utf8')])
 );
 
 describe('Slice 16 static authority / negative-scope guard', () => {
+  it('derives the actual Slice 16 production/export graph including all required barrels and integrations', () => {
+    for (const required of [
+      'packages/domain/src/index.ts',
+      'packages/scenes/digital-use/index.ts',
+      'db/schema/index.ts',
+      'packages/domain/src/idempotency.ts',
+      'apps/server/api/src/idempotency.ts',
+      'packages/domain/src/intervention-definition-repository.ts',
+      'apps/server/api/src/services/intervention-definitions.ts',
+      'apps/server/api/src/services/intervention-eligibility.ts',
+    ]) {
+      expect(productionFiles, required).toContain(required);
+    }
+  });
+
+  it('mechanically prevents raw InterventionDefinition writers from the domain package root', () => {
+    const root = source['packages/domain/src/index.ts'];
+    expect(root).not.toMatch(/export\s+\*\s+from\s+['"]\.\/intervention-definition-repository\.js['"]/);
+    for (const rawWriter of [
+      'insertInterventionDefinitionCandidate',
+      'transitionInterventionDefinitionStateCas',
+      'insertInterventionDefinitionAudit',
+    ]) {
+      expect(root, rawWriter).not.toContain(rawWriter);
+      for (const [path, content] of Object.entries(source)) {
+        if (!content.includes(rawWriter)) continue;
+        expect(
+          [
+            'packages/domain/src/intervention-definition-repository.ts',
+            'apps/server/api/src/services/intervention-definitions.ts',
+            'apps/server/api/src/services/intervention-eligibility.ts',
+          ],
+          rawWriter + ' leaked into ' + path
+        ).toContain(path);
+      }
+    }
+  });
+
   it('does not create duplicate authority-owner tables or generic approval platforms', () => {
     const migration = source['db/migrations/024_psychological_behavioral_intervention_contract.sql'];
     for (const forbidden of [
