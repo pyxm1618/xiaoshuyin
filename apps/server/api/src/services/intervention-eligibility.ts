@@ -409,24 +409,27 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         artifactIdentity: professional.artifactIdentity,
       }
     );
-    finalProfessional =
-      revalidated.status === 'VALID' &&
-      revalidated.approvalProofRef === professional.approvalProofRef &&
-      revalidated.artifactIdentity === professional.artifactIdentity &&
-      revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
-      revalidated.qualificationRef === professional.qualificationRef &&
-      revalidated.proof.staffAuthority.assignmentRef ===
-        professional.proof.staffAuthority.assignmentRef &&
-      revalidated.proof.staffAuthority.scopeRef ===
-        professional.proof.staffAuthority.scopeRef &&
-      revalidated.proof.professionalQualification.scopeRef ===
-        professional.proof.professionalQualification.scopeRef &&
-      revalidated.proof.reviewedAt === professional.proof.reviewedAt &&
-      revalidated.proof.effectiveFrom === professional.proof.effectiveFrom &&
-      revalidated.proof.effectiveTo === professional.proof.effectiveTo &&
-      revalidated.proof.publishedAt === professional.proof.publishedAt
-        ? revalidated
-        : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
+    if (revalidated.status !== 'VALID') {
+      finalProfessional = revalidated;
+    } else {
+      finalProfessional =
+        revalidated.approvalProofRef === professional.approvalProofRef &&
+        revalidated.artifactIdentity === professional.artifactIdentity &&
+        revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
+        revalidated.qualificationRef === professional.qualificationRef &&
+        revalidated.proof.staffAuthority.assignmentRef ===
+          professional.proof.staffAuthority.assignmentRef &&
+        revalidated.proof.staffAuthority.scopeRef ===
+          professional.proof.staffAuthority.scopeRef &&
+        revalidated.proof.professionalQualification.scopeRef ===
+          professional.proof.professionalQualification.scopeRef &&
+        revalidated.proof.reviewedAt === professional.proof.reviewedAt &&
+        revalidated.proof.effectiveFrom === professional.proof.effectiveFrom &&
+        revalidated.proof.effectiveTo === professional.proof.effectiveTo &&
+        revalidated.proof.publishedAt === professional.proof.publishedAt
+          ? revalidated
+          : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
+    }
   }
 
   const result = evaluateInterventionEligibility({
