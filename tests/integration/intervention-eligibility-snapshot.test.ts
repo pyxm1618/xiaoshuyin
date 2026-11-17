@@ -34,6 +34,7 @@ interface Fixture {
   definitionId: string;
   version: number;
   contentHash: string;
+  evidenceAssertionId: string | null;
 }
 
 describe('Slice 16 current eligibility snapshot / audit integration', () => {
@@ -54,7 +55,10 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     await app.close().catch(() => undefined);
   });
 
-  async function fixture(label: string): Promise<Fixture> {
+  async function fixture(
+    label: string,
+    options: { requiredAssertion?: boolean } = {}
+  ): Promise<Fixture> {
     const manager = await loginWithLabel(app, 's16-snapshot-' + label);
     const family = await createFamily(app, manager.token, 's16-' + label.slice(0, 20));
     expect(family.statusCode, family.body).toBe(201);
@@ -72,9 +76,27 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     });
     expect(message.statusCode, message.body).toBe(201);
     const messageId = message.json().id as string;
+    let evidenceAssertionId: string | null = null;
 
     await admin.query('BEGIN');
     try {
+      if (options.requiredAssertion === true) {
+        const assertion = await admin.query<{ id: string }>(
+          "INSERT INTO assertions " +
+            "(family_id,case_id,subject_person_id,source_kind,source_person_id," +
+            "source_message_id,occurred_time_state,confirmation_status,kind,content) " +
+            "VALUES ($1,$2,$3,'SELF_STATEMENT',$3,$4,'UNKNOWN','UNCONFIRMED'," +
+            "'STATEMENT',$5) RETURNING id",
+          [
+            familyId,
+            caseId,
+            manager.personId,
+            messageId,
+            'Slice 16 authoritative evidence fixture.',
+          ]
+        );
+        evidenceAssertionId = assertion.rows[0]!.id;
+      }
       await admin.query("UPDATE cases SET phase='GOALS' WHERE id=$1", [caseId]);
       await admin.query(
         "INSERT INTO problem_formulations " +
@@ -84,18 +106,32 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
           "supersedes_version) VALUES " +
           "($1,$2,1,'CONFIRMED',$3::jsonb,'[]'::jsonb,$4::jsonb,'[]'::jsonb," +
           "'[]'::jsonb,'DIGITAL_USE','[]'::jsonb,'[]'::jsonb,'[]'::jsonb,$5::jsonb," +
-          "$6,now(),'[]'::jsonb,NULL)",
+          "$6,now(),$7::jsonb,NULL)",
         [
           familyId,
           caseId,
           JSON.stringify({ text: 'Current Slice 16 formulation.' }),
-          JSON.stringify([{ type: 'DIALOGUE_MESSAGE', id: messageId }]),
+          JSON.stringify(
+            evidenceAssertionId === null
+              ? [{ type: 'DIALOGUE_MESSAGE', id: messageId }]
+              : [{ type: 'ASSERTION', id: evidenceAssertionId }]
+          ),
           JSON.stringify({
             kind: 'CONFIRM',
             actorPersonId: manager.personId,
             respondedAt: new Date().toISOString(),
           }),
           manager.personId,
+          JSON.stringify(
+            evidenceAssertionId === null
+              ? []
+              : [
+                  {
+                    type: 'EVIDENCE',
+                    evidence: { type: 'ASSERTION', id: evidenceAssertionId },
+                  },
+                ]
+          ),
         ]
       );
       await admin.query(
@@ -114,7 +150,10 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
 
     const semantic = interventionSemantic({
       formulation_dependencies: [],
-      supporting_evidence_requirements: [],
+      supporting_evidence_requirements:
+        evidenceAssertionId === null
+          ? []
+          : ['ASSERTION:' + evidenceAssertionId.toLowerCase()],
       applicable_conditions: [],
       exclusion_or_contraindication_conditions: [],
       age_and_development_scope: {
@@ -154,6 +193,7 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
       definitionId: created.id,
       version: created.version,
       contentHash: created.contentHash,
+      evidenceAssertionId,
     };
   }
 
@@ -164,6 +204,32 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     async resolveConsent() { return {}; },
     async evaluateCompliance() { return 'PASS'; },
   };
+
+  const exactPackage: DigitalUseInterventionInclusionProvider = {
+    async resolve(input) {
+      return { status: 'INCLUDED', inclusion: input };
+    },
+  };
+
+  function authorityFor(f: Fixture) {
+    return professionalProvider(
+      professionalProof({
+        definitionId: f.definitionId,
+        definitionVersion: f.version,
+        contentHash: f.contentHash,
+      })
+    );
+  }
+
+  async function expectEligibilityStillWaiting(
+    promise: Promise<unknown>,
+    milliseconds = 50
+  ): Promise<void> {
+    let settled = false;
+    void promise.finally(() => { settled = true; });
+    await new Promise((resolve) => setTimeout(resolve, milliseconds));
+    expect(settled).toBe(false);
+  }
 
   it('reads one current snapshot and audits exact provenance without writing Case phase', async () => {
     const f = await fixture('exact-' + crypto.randomUUID());
@@ -201,6 +267,17 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     expect(result.definitionVersion).toBe(f.version);
     expect(result.definitionContentHash).toBe(f.contentHash);
     expect(result.approvalProofRef).toBe('TEST_APPROVAL:1');
+    expect(result.approvalArtifactIdentity).toBe('TEST_APPROVAL_ARTIFACT:1');
+    expect(result.approvalProvenance).toMatchObject({
+      approvalProofRef: 'TEST_APPROVAL:1',
+      artifactIdentity: 'TEST_APPROVAL_ARTIFACT:1',
+      reviewerIdentityRef: 'TEST_REVIEWER:1',
+      staffAssignmentRef: 'TEST_STAFF_ASSIGNMENT:1',
+      qualificationRef: 'TEST_QUALIFICATION:1',
+      sourceRefs: ['TEST_SOURCE:v1'],
+      approvalScope: 'DIGITAL_USE',
+      publicationStatus: 'PUBLISHED',
+    });
     expect(result.dependencyRevisionRefs).toContain('PACKAGE:v1');
 
     const after = await admin.query<{ phase: string; version: number }>(
@@ -231,6 +308,23 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
       sceneId: 'DIGITAL_USE',
       scenePackageVersion: 'v1',
       approvalProofRef: 'TEST_APPROVAL:1',
+      approvalArtifactIdentity: 'TEST_APPROVAL_ARTIFACT:1',
+      approvalProvenance: {
+        approvalProofRef: 'TEST_APPROVAL:1',
+        artifactIdentity: 'TEST_APPROVAL_ARTIFACT:1',
+        reviewerIdentityRef: 'TEST_REVIEWER:1',
+        staffAssignmentRef: 'TEST_STAFF_ASSIGNMENT:1',
+        staffAuthorityScopeRef: 'GLOBAL',
+        qualificationRef: 'TEST_QUALIFICATION:1',
+        qualificationScopeRef: 'DIGITAL_USE',
+        sourceRefs: ['TEST_SOURCE:v1'],
+        approvalScope: 'DIGITAL_USE',
+        reviewedAt: '2026-01-01T00:00:00.000Z',
+        effectiveFrom: '2026-01-01T00:00:00.000Z',
+        effectiveTo: '2027-01-01T00:00:00.000Z',
+        publicationStatus: 'PUBLISHED',
+        publishedAt: '2026-01-02T00:00:00.000Z',
+      },
       approvalStatus: 'VALID',
       allowed: false,
       caseRevision: before.rows[0]!.version,
@@ -315,6 +409,227 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     expect(result.professionalAuthorityBlockers).toContain(
       'APPROVAL_PROOF_CHANGED'
     );
+  });
+
+  it('FR-049 blocks Case -> SAFETY_HOLD committed while eligibility is waiting on current Case authority', async () => {
+    const f = await fixture('case-race-' + crypto.randomUUID());
+    const writer = await admin.connect();
+    try {
+      await writer.query('BEGIN');
+      await writer.query(
+        "UPDATE cases SET status='SAFETY_HOLD', version=version+1, updated_at=now() WHERE id=$1",
+        [f.caseId]
+      );
+
+      const eligibility = evaluateCurrentInterventionEligibility(
+        appDb,
+        {
+          actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+          familyId: f.familyId,
+          caseId: f.caseId,
+          definition: {
+            id: f.definitionId,
+            version: f.version,
+            contentHash: f.contentHash,
+          },
+          consideredDefinitions: [],
+        },
+        passAdapters,
+        authorityFor(f),
+        exactPackage
+      );
+      await expectEligibilityStillWaiting(eligibility);
+      await writer.query('COMMIT');
+
+      const result = await eligibility;
+      expect(result.allowed).toBe(false);
+      expect(result.reasonCodes).toContain('CASE_NOT_CURRENT');
+      expect(result.safetyResult).toBe('BLOCK');
+      expect(result.caseRevision).toBeGreaterThan(1);
+    } catch (error) {
+      await writer.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      writer.release();
+    }
+  });
+
+  it('AS-031 material Formulation correction/supersession cannot leave old eligibility authoritative', async () => {
+    const f = await fixture('formulation-race-' + crypto.randomUUID());
+    const writer = await admin.connect();
+    try {
+      await writer.query('BEGIN');
+      const current = await writer.query<{ id: string }>(
+        "SELECT id FROM problem_formulations WHERE case_id=$1 AND status<>'SUPERSEDED' FOR UPDATE",
+        [f.caseId]
+      );
+      const currentId = current.rows[0]!.id;
+      await writer.query(
+        "UPDATE problem_formulations SET status='SUPERSEDED', updated_at=now() WHERE id=$1",
+        [currentId]
+      );
+      await writer.query(
+        "INSERT INTO problem_formulations " +
+          "(family_id,case_id,version,status,primary_problem,key_factors,evidence_refs," +
+          "unknowns,conflicts,scene_fit,alternative_explanations,reassessment_conditions," +
+          "exit_conditions,user_response,confirmed_by_person_id,confirmed_at,dependency_refs," +
+          "supersedes_version) " +
+          "SELECT family_id,case_id,version+1,'PRESENTED'," +
+          "jsonb_build_object('text','Materially corrected formulation'),key_factors," +
+          "evidence_refs,unknowns,conflicts,scene_fit,alternative_explanations," +
+          "reassessment_conditions,exit_conditions,NULL,NULL,NULL,dependency_refs,version " +
+          "FROM problem_formulations WHERE id=$1",
+        [currentId]
+      );
+
+      const eligibility = evaluateCurrentInterventionEligibility(
+        appDb,
+        {
+          actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+          familyId: f.familyId,
+          caseId: f.caseId,
+          definition: {
+            id: f.definitionId,
+            version: f.version,
+            contentHash: f.contentHash,
+          },
+          consideredDefinitions: [],
+        },
+        passAdapters,
+        authorityFor(f),
+        exactPackage
+      );
+      await expectEligibilityStillWaiting(eligibility);
+      await writer.query('COMMIT');
+
+      const result = await eligibility;
+      expect(result.allowed).toBe(false);
+      expect(result.reasonCodes).toContain('FORMULATION_MISSING_OR_STALE');
+      expect(result.formulationVersion === null || result.formulationVersion === 2).toBe(true);
+    } catch (error) {
+      await writer.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      writer.release();
+    }
+  });
+
+  it('FR-049 required Evidence supersession commit cannot cross a positive eligibility decision', async () => {
+    const f = await fixture('evidence-race-' + crypto.randomUUID(), {
+      requiredAssertion: true,
+    });
+    expect(f.evidenceAssertionId).not.toBeNull();
+    const evidenceId = f.evidenceAssertionId!;
+    const writer = await admin.connect();
+    try {
+      await writer.query('BEGIN');
+      await writer.query(
+        "INSERT INTO assertions " +
+          "(family_id,case_id,subject_person_id,source_kind,source_person_id," +
+          "source_message_id,occurred_time_state,occurred_at,valid_from,valid_until," +
+          "confirmation_status,supersedes_id,kind,content) " +
+          "SELECT family_id,case_id,subject_person_id,source_kind,source_person_id," +
+          "source_message_id,occurred_time_state,occurred_at,valid_from,valid_until," +
+          "confirmation_status,id,kind,'Corrected authoritative evidence' " +
+          "FROM assertions WHERE id=$1",
+        [evidenceId]
+      );
+      await writer.query(
+        "UPDATE problem_formulations SET review_state='NEEDS_REVIEW', updated_at=now() " +
+          "WHERE case_id=$1 AND status<>'SUPERSEDED' AND review_state='CURRENT' " +
+          "AND dependency_refs @> $2::jsonb",
+        [
+          f.caseId,
+          JSON.stringify([
+            {
+              type: 'EVIDENCE',
+              evidence: { type: 'ASSERTION', id: evidenceId.toLowerCase() },
+            },
+          ]),
+        ]
+      );
+
+      const eligibility = evaluateCurrentInterventionEligibility(
+        appDb,
+        {
+          actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+          familyId: f.familyId,
+          caseId: f.caseId,
+          definition: {
+            id: f.definitionId,
+            version: f.version,
+            contentHash: f.contentHash,
+          },
+          consideredDefinitions: [],
+        },
+        passAdapters,
+        authorityFor(f),
+        exactPackage
+      );
+      await expectEligibilityStillWaiting(eligibility);
+      await writer.query('COMMIT');
+
+      const result = await eligibility;
+      expect(result.allowed).toBe(false);
+      expect(result.reasonCodes).toContain('FORMULATION_MISSING_OR_STALE');
+      expect(result.reasonCodes).toContain('EVIDENCE_MISSING_OR_UNKNOWN');
+    } catch (error) {
+      await writer.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      writer.release();
+    }
+  });
+
+  it('FR-049 Scene package binding revision committed during eligibility is re-read before decision', async () => {
+    const f = await fixture('package-race-' + crypto.randomUUID());
+    const writer = await admin.connect();
+    const v1OnlyPackage: DigitalUseInterventionInclusionProvider = {
+      async resolve(input) {
+        return input.scenePackageVersion === 'v1'
+          ? { status: 'INCLUDED', inclusion: input }
+          : { status: 'NOT_INCLUDED' };
+      },
+    };
+    try {
+      await writer.query('BEGIN');
+      await writer.query(
+        "UPDATE scene_node_states SET scene_package_version='v2', revision=revision+1 " +
+          "WHERE case_id=$1 AND node_code='A1001'",
+        [f.caseId]
+      );
+
+      const eligibility = evaluateCurrentInterventionEligibility(
+        appDb,
+        {
+          actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+          familyId: f.familyId,
+          caseId: f.caseId,
+          definition: {
+            id: f.definitionId,
+            version: f.version,
+            contentHash: f.contentHash,
+          },
+          consideredDefinitions: [],
+        },
+        passAdapters,
+        authorityFor(f),
+        v1OnlyPackage
+      );
+      await expectEligibilityStillWaiting(eligibility);
+      await writer.query('COMMIT');
+
+      const result = await eligibility;
+      expect(result.allowed).toBe(false);
+      expect(result.scenePackageVersion).toBe('v2');
+      expect(result.reasonCodes).toContain('PACKAGE_NOT_INCLUDED');
+      expect(result.dependencyRevisionRefs).toContain('PACKAGE:v2');
+    } catch (error) {
+      await writer.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      writer.release();
+    }
   });
 
   it('serializes exact package inclusion consumption before concurrent retirement and blocks every later use', async () => {
