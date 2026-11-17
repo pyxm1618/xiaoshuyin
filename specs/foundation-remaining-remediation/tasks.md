@@ -8,5 +8,5 @@
 - [x] T006 Converge WAITING ordinary-progression authority in Common Core consumers. [REQ:V1-X09] [VERIFY:Common Core DB guard + Problem Formulation domain regression]
 - [x] T007 Verify Evidence invalidation/review lifecycle re-reads authoritative current Evidence. [REQ:V1-X05,V1-X06] [VERIFY:PostgreSQL review-state integration counterfactual]
 - [x] T008 Bind governance directly to the four authoritative Docs without runtime Markdown parsing. [REQ:V1-X09] [VERIFY:governance drift self-test]
-- [ ] T009 Complete reproducibility and evidence-based HTTP hardening assessment. [REQ:V1-X09] [VERIFY:exact PR CI and dependency/config evidence]
-- [ ] T010 Run final exact-head gates and prepare the independent-audit PR report. [REQ:V1-X06,V1-X09] [VERIFY:CI + Spec Governance exact final head]
+- [x] T009 Complete reproducibility and evidence-based HTTP hardening assessment. [REQ:V1-X09] [VERIFY:exact PR CI and dependency/config evidence]
+- [x] T010 Run final exact-head gates and prepare the independent-audit PR report. [REQ:V1-X06,V1-X09] [VERIFY:CI + Spec Governance exact final head]
