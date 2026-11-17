@@ -1,8 +1,8 @@
 # Slice 10 Engineering Tasks — 010-compliance-feature-policy-foundation
 
-Status: **PLANNING COMPLETE / TARGETED AUDIT 1 PASS / FINAL RE-AUDIT PASS / PLAN RE-FROZEN / IMPLEMENT GATE OPEN**
+Status: **IMPLEMENTATION MERGED / INDEPENDENT AUDIT PASS / TASK TRUTH RECONCILED**
 
-These are future Development AI tasks. They do not authorize implementation now.
+These are preserved historical implementation tasks. Checkbox state is reconciled against `.specify/task-evidence/010-compliance-feature-policy-foundation.json`; task wording, REQ, VERIFY and frozen product semantics are unchanged.
 
 Global rules for every task:
 
