@@ -111,6 +111,8 @@ export interface CandidatePayload {
   scope: ProfessionalKnowledgeScopeMetadata;
 }
 
+export type SuccessorCandidatePayload = Omit<CandidatePayload, 'knowledgeKey'>;
+
 export async function createKnowledgeCandidate(input: {
   pool: pg.Pool;
   accountId: string;
@@ -460,6 +462,73 @@ export async function persistValidatedApprovalEvidence(
   }
   await appendConsumedProfessionalApprovalEvidence(
     tx, versionId, validation.proof, sceneBindingRef
+  );
+}
+
+export async function createKnowledgeSuccessor(input: {
+  pool: pg.Pool;
+  accountId: string;
+  personId: string;
+  assignmentId: string;
+  idempotencyKey: string;
+  knowledgeId: string;
+  predecessorVersionId: string;
+  expectedPredecessorRevision: number;
+  candidate: SuccessorCandidatePayload;
+}): Promise<{ versionId: string; revision: number }> {
+  return withProfessionalKnowledgeAdminTransaction(
+    input.pool,
+    { accountId: input.accountId, assignmentId: input.assignmentId },
+    async (tx) => {
+      const requestHash = hashPayload({
+        command: 'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
+        knowledgeId: input.knowledgeId,
+        predecessorVersionId: input.predecessorVersionId,
+        expectedPredecessorRevision: input.expectedPredecessorRevision,
+        candidate: input.candidate,
+      });
+      const outcome = await runIdempotentCommandInTransaction(
+        tx,
+        {
+          accountId: input.accountId,
+          personId: input.personId,
+          purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN',
+          commandType: 'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
+          idempotencyKey: input.idempotencyKey,
+          requestHash,
+        },
+        async () => {
+          const created = await createProfessionalKnowledgeSuccessor(tx, {
+            knowledgeId: input.knowledgeId,
+            predecessorVersionId: input.predecessorVersionId,
+            expectedPredecessorRevision: input.expectedPredecessorRevision,
+            ...input.candidate,
+            accountId: input.accountId,
+            personId: input.personId,
+          });
+          const version = await lockProfessionalKnowledgeVersion(tx, created.versionId);
+          if (!version) {
+            throw new Error('PROFESSIONAL_KNOWLEDGE_SUCCESSOR_READBACK_FAILED');
+          }
+          assertVersionContract(version);
+          await appendProfessionalKnowledgeAudit(tx, {
+            actorAccountId: input.accountId,
+            eventType: 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATED',
+            versionId: created.versionId,
+            metadata: {
+              knowledgeId: input.knowledgeId,
+              predecessorVersionId: input.predecessorVersionId,
+              semanticVersion: input.candidate.semanticVersion,
+              contentHash: input.candidate.contentHash,
+              sourceSetHash: input.candidate.sourceSetHash,
+              revision: created.revision,
+            },
+          });
+          return { status: 201, body: created };
+        }
+      );
+      return commandResult(outcome);
+    }
   );
 }
 
@@ -820,6 +889,7 @@ export async function propagateKnowledgeDependencyImpact(input: {
 
 export type ProfessionalKnowledgeMutationCommand =
   | 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE'
+  | 'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE'
   | 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT'
   | 'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD'
   | 'PROFESSIONAL_KNOWLEDGE_RELEASE'

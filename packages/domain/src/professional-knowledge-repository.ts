@@ -169,6 +169,7 @@ export async function createProfessionalKnowledgeSuccessor(
   input: {
     knowledgeId: string;
     predecessorVersionId: string;
+    expectedPredecessorRevision: number;
     semanticVersion: string;
     content: Readonly<Record<string, unknown>>;
     contentHash: string;
@@ -179,16 +180,40 @@ export async function createProfessionalKnowledgeSuccessor(
     personId: string;
   }
 ): Promise<{ versionId: string; revision: number }> {
-  const predecessor = await tx.query<{ lifecycle_status: string }>(
-    `SELECT lifecycle_status
+  const predecessor = await tx.query<{ lifecycle_status: string; revision: number }>(
+    `SELECT lifecycle_status, revision
        FROM professional_knowledge_versions
       WHERE id = $1 AND knowledge_id = $2
       FOR UPDATE`,
     [input.predecessorVersionId, input.knowledgeId]
   );
-  if (predecessor.rows[0]?.lifecycle_status !== 'PUBLISHED') {
+  const current = predecessor.rows[0];
+  if (current?.lifecycle_status !== 'PUBLISHED') {
     throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_PREDECESSOR_NOT_PUBLISHED'), {
       code: 'PROFESSIONAL_KNOWLEDGE_STATE_CONFLICT',
+    });
+  }
+  if (current.revision !== input.expectedPredecessorRevision) {
+    throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_STALE_PREDECESSOR_REVISION'), {
+      code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+    });
+  }
+
+  // Reserve the predecessor chain head in the same transaction. This makes
+  // successor-create vs retire a real CAS race: once a successor exists, a
+  // stale retirement cannot also commit as if the chain were unchanged.
+  const reserved = await tx.query<{ revision: number }>(
+    `UPDATE professional_knowledge_versions
+        SET revision = revision + 1
+      WHERE id = $1
+        AND revision = $2
+        AND lifecycle_status = 'PUBLISHED'
+      RETURNING revision`,
+    [input.predecessorVersionId, input.expectedPredecessorRevision]
+  );
+  if (reserved.rowCount !== 1) {
+    throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CHAIN_CONFLICT'), {
+      code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
     });
   }
 
@@ -544,6 +569,12 @@ export async function retireProfessionalKnowledgeVersion(
       WHERE id = $1
         AND revision = $2
         AND lifecycle_status IN ('CANDIDATE','PUBLISHED')
+        AND NOT EXISTS (
+          SELECT 1
+            FROM professional_knowledge_versions successor
+           WHERE successor.supersedes_version_id = professional_knowledge_versions.id
+             AND successor.lifecycle_status = 'CANDIDATE'
+        )
       RETURNING revision`,
     [input.versionId, input.expectedRevision]
   );

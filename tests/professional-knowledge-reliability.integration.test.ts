@@ -345,6 +345,7 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       const successorAttempt = createProfessionalKnowledgeSuccessor(successor, {
         knowledgeId: seeded.knowledgeId,
         predecessorVersionId: seeded.versionId,
+        expectedPredecessorRevision: 1,
         semanticVersion: '1.1.0',
         ...editPayload,
         accountId: seeded.accountId,
@@ -373,6 +374,48 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       await rollbackRelease(successor);
       throw error;
     }
+  });
+
+  it('successor creation reserves the predecessor chain so later retirement cannot also win', async () => {
+    const seeded = await seedCandidate({
+      lifecycle: 'PUBLISHED',
+      reviewState: 'CURRENT',
+      validityState: 'VALID',
+    });
+
+    const successor = await createProfessionalKnowledgeSuccessor(admin as any, {
+      knowledgeId: seeded.knowledgeId,
+      predecessorVersionId: seeded.versionId,
+      expectedPredecessorRevision: 1,
+      semanticVersion: '1.1.0',
+      ...editPayload,
+      accountId: seeded.accountId,
+      personId: seeded.personId,
+    });
+    expect(successor.revision).toBe(1);
+
+    const predecessor = await admin.query<{ revision: number; lifecycle_status: string }>(
+      'SELECT revision, lifecycle_status FROM professional_knowledge_versions WHERE id=$1',
+      [seeded.versionId]
+    );
+    expect(predecessor.rows[0]).toEqual({
+      revision: 2,
+      lifecycle_status: 'PUBLISHED',
+    });
+
+    await expect(
+      retireProfessionalKnowledgeVersion(admin as any, {
+        versionId: seeded.versionId,
+        expectedRevision: 1,
+      })
+    ).rejects.toMatchObject({ code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT' });
+
+    await expect(
+      retireProfessionalKnowledgeVersion(admin as any, {
+        versionId: seeded.versionId,
+        expectedRevision: 2,
+      })
+    ).rejects.toMatchObject({ code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT' });
   });
 
   it('validity propagation vs release cannot publish a stale CURRENT/VALID snapshot', async () => {

@@ -14,6 +14,7 @@ describe('professional knowledge mutations contract', () => {
     expect(IDEMPOTENCY_COMMAND_TYPES).toEqual(
       expect.arrayContaining([
         'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',
+        'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
         'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT',
         'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
         'PROFESSIONAL_KNOWLEDGE_RELEASE',
