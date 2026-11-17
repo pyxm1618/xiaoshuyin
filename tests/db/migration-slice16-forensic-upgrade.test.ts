@@ -236,6 +236,21 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
       expect(await definitionInvariant(db, existingDefinitionId)).toEqual(
         beforeDefinition
       );
+
+      const retired = await db.query(
+        `UPDATE intervention_definitions
+            SET definition_state='RETIRED',
+                revision=revision+1,
+                retired_at=clock_timestamp()
+          WHERE id=$1
+          RETURNING id,definition_state,revision`,
+        [existingDefinitionId]
+      );
+      expect(retired.rows[0]).toEqual({
+        id: existingDefinitionId,
+        definition_state: 'RETIRED',
+        revision: 2,
+      });
     } finally {
       await db.end();
     }
