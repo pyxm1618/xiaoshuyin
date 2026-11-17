@@ -482,7 +482,15 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
           ]
         : []),
       ...Object.values(evidence).map((item) => item.revisionRef),
-      ...(scenePackageVersion ? ['PACKAGE:' + scenePackageVersion] : []),
+      ...(scenePackageEntry
+        ? [
+            'PACKAGE:' + scenePackageEntry.scene_package_version,
+            'PACKAGE:' +
+              scenePackageEntry.scene_package_version +
+              ':r' +
+              scenePackageEntry.revision,
+          ]
+        : []),
     ],
   });
 
