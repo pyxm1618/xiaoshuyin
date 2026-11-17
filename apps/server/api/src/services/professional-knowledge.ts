@@ -44,6 +44,7 @@ import {
   type CommandOutcome,
 } from '../idempotency.js';
 import { withProfessionalKnowledgeAdminTransaction } from '../db/tx.js';
+import { getExactInterventionDefinition } from '../../../../../packages/domain/src/intervention-definition-repository.js';
 
 export const unavailableProductionProfessionalApprovalProvider:
   ProfessionalApprovalProvider = {
@@ -127,6 +128,7 @@ export async function createKnowledgeCandidate(input: {
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',
+        actor: { personId: input.personId, assignmentId: input.assignmentId },
         candidate: input.candidate,
       });
       const outcome = await runIdempotentCommandInTransaction(
@@ -188,8 +190,10 @@ export async function editKnowledgeCandidate(input: {
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT',
+        actor: { personId: input.personId, assignmentId: input.assignmentId },
         versionId: input.versionId,
         expectedRevision: input.expectedRevision,
+        content: input.content,
         contentHash: input.contentHash,
         sourceSetHash: input.sourceSetHash,
         sources: input.sources,
@@ -279,51 +283,17 @@ export async function recordKnowledgeReview(input: {
     input.pool,
     { accountId: input.accountId, assignmentId: input.assignmentId },
     async (tx) => {
-      const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
-      if (!version || version.revision !== input.expectedRevision) {
-        conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
-      }
-
-      const staff = await resolveProfessionalReviewStaffAuthority(tx, {
-        assignmentRef: input.assignmentId,
-        accountId: input.accountId,
-        personId: input.personId,
-      });
-      if (staff.status !== 'RESOLVED') invalidAuthority('STAFF_AUTHORITY_INVALID');
-
-      const scope = {
-        product: version.scope.product,
-        sceneCode: version.scope.sceneCode,
-        scenePackageVersion: version.scope.scenePackageVersion,
-        stages: version.scope.stages,
-        ageBands: version.scope.ageBands,
-        locale: version.scope.locale,
-      } as const;
-      await requireQualification({
-        provider: qualificationProvider,
-        qualificationRef: input.qualificationRef,
-        reviewerIdentity: input.reviewerIdentity,
-        reviewerAccountId: input.accountId,
-        reviewerPersonId: input.personId,
-        scope,
-      });
-
-      const next =
-        input.outcome === 'NEEDS_REVIEW'
-          ? { reviewState: 'NEEDS_REVIEW' as const, validityState: 'UNKNOWN' as const }
-          : { reviewState: 'CURRENT' as const, validityState: 'VALID' as const };
-
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
-        versionId: version.id,
-        expectedRevision: version.revision,
-        contentHash: version.contentHash,
-        sourceSetHash: version.sourceSetHash,
+        actor: { personId: input.personId, assignmentId: input.assignmentId },
+        versionId: input.versionId,
+        expectedRevision: input.expectedRevision,
+        reviewerIdentity: input.reviewerIdentity,
         qualificationRef: input.qualificationRef,
         outcome: input.outcome,
         reasonCode: input.reasonCode ?? null,
+        reviewedAt: input.reviewedAt?.toISOString() ?? null,
       });
-
       const outcome = await runIdempotentCommandInTransaction(
         tx,
         {
@@ -335,6 +305,40 @@ export async function recordKnowledgeReview(input: {
           requestHash,
         },
         async () => {
+          const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
+          if (!version || version.revision !== input.expectedRevision) {
+            conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
+          }
+
+          const staff = await resolveProfessionalReviewStaffAuthority(tx, {
+            assignmentRef: input.assignmentId,
+            accountId: input.accountId,
+            personId: input.personId,
+          });
+          if (staff.status !== 'RESOLVED') invalidAuthority('STAFF_AUTHORITY_INVALID');
+
+          const scope = {
+            product: version.scope.product,
+            sceneCode: version.scope.sceneCode,
+            scenePackageVersion: version.scope.scenePackageVersion,
+            stages: version.scope.stages,
+            ageBands: version.scope.ageBands,
+            locale: version.scope.locale,
+          } as const;
+          await requireQualification({
+            provider: qualificationProvider,
+            qualificationRef: input.qualificationRef,
+            reviewerIdentity: input.reviewerIdentity,
+            reviewerAccountId: input.accountId,
+            reviewerPersonId: input.personId,
+            scope,
+          });
+
+          const next =
+            input.outcome === 'NEEDS_REVIEW'
+              ? { reviewState: 'NEEDS_REVIEW' as const, validityState: 'UNKNOWN' as const }
+              : { reviewState: 'CURRENT' as const, validityState: 'VALID' as const };
+
           const revision = await appendProfessionalKnowledgeReviewEvidence(tx, {
             version,
             reviewerIdentity: input.reviewerIdentity,
@@ -418,6 +422,13 @@ export async function resolveAndValidateKnowledgeApproval(input: {
   }
 
   const proof = providerResult.proof;
+  if (
+    input.mode === 'REVALIDATE' &&
+    input.proofId !== undefined &&
+    proof.proofId !== input.proofId
+  ) {
+    return { status: 'INVALID', reason: 'APPROVAL_PROOF_ID_MISMATCH' };
+  }
   const staff = await resolveProfessionalReviewStaffAuthority(input.tx, {
     assignmentRef: proof.staffAssignmentRef,
     accountId: proof.reviewerAccountId,
@@ -482,6 +493,7 @@ export async function createKnowledgeSuccessor(input: {
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
+        actor: { personId: input.personId, assignmentId: input.assignmentId },
         knowledgeId: input.knowledgeId,
         predecessorVersionId: input.predecessorVersionId,
         expectedPredecessorRevision: input.expectedPredecessorRevision,
@@ -552,6 +564,7 @@ export type KnowledgeSceneBindingResolver = (
 ) => ReturnType<typeof resolveDigitalUseProfessionalKnowledgeBinding>;
 
 export type KnowledgeInterventionResolver = (
+  tx: pg.PoolClient,
   ref: NonNullable<ProfessionalKnowledgeScopeMetadata['interventionDefinitionRef']>
 ) => Promise<
   | { readonly status: 'RESOLVED'; readonly ref: NonNullable<ProfessionalKnowledgeScopeMetadata['interventionDefinitionRef']> }
@@ -559,11 +572,39 @@ export type KnowledgeInterventionResolver = (
   | { readonly status: 'UNAVAILABLE'; readonly reason: string }
 >;
 
-export const unavailableProductionInterventionDefinitionResolver:
-  KnowledgeInterventionResolver = async () => ({
-    status: 'UNAVAILABLE',
-    reason: 'SLICE_16_AUTHORITATIVE_OWNER_NOT_MERGED',
-  });
+export const resolveCurrentInterventionDefinition:
+  KnowledgeInterventionResolver = async (tx, ref) => {
+    try {
+      const definition = await getExactInterventionDefinition(
+        tx,
+        {
+          id: ref.definitionId,
+          version: ref.definitionVersion,
+          contentHash: ref.contentHash,
+        },
+        false
+      );
+      if (definition === null) {
+        return { status: 'INVALID', reason: 'INTERVENTION_DEFINITION_NOT_EXACT' };
+      }
+      if (definition.state !== 'CURRENT') {
+        return {
+          status: 'INVALID',
+          reason: `INTERVENTION_DEFINITION_${definition.state}`,
+        };
+      }
+      return {
+        status: 'RESOLVED',
+        ref: {
+          definitionId: definition.id,
+          definitionVersion: definition.version,
+          contentHash: definition.contentHash,
+        },
+      };
+    } catch {
+      return { status: 'UNAVAILABLE', reason: 'INTERVENTION_DEFINITION_DEPENDENCY_UNAVAILABLE' };
+    }
+  };
 
 function exactSceneBindingForVersion(
   version: ProfessionalKnowledgeVersionSnapshot,
@@ -604,7 +645,7 @@ export async function releaseKnowledgeVersion(input: {
   const sceneBindingResolver =
     input.sceneBindingResolver ?? resolveDigitalUseProfessionalKnowledgeBinding;
   const interventionResolver =
-    input.interventionResolver ?? unavailableProductionInterventionDefinitionResolver;
+    input.interventionResolver ?? resolveCurrentInterventionDefinition;
 
   return withProfessionalKnowledgeAdminTransaction(
     input.pool,
@@ -612,9 +653,12 @@ export async function releaseKnowledgeVersion(input: {
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
+        actor: { personId: input.personId, assignmentId: input.assignmentId },
         versionId: input.versionId,
         expectedRevision: input.expectedRevision,
         approvalProofId: input.approvalProofId,
+        effectiveFrom: input.effectiveFrom?.toISOString() ?? null,
+        now: input.now?.toISOString() ?? null,
       });
       const outcome = await runIdempotentCommandInTransaction(
         tx,
@@ -647,6 +691,7 @@ export async function releaseKnowledgeVersion(input: {
 
           if (version.scope.interventionDefinitionRef) {
             const intervention = await interventionResolver(
+              tx,
               version.scope.interventionDefinitionRef
             );
             if (intervention.status === 'UNAVAILABLE') {
@@ -759,6 +804,7 @@ export async function retireKnowledgeVersion(input: {
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_RETIRE',
+        actor: { personId: input.personId, assignmentId: input.assignmentId },
         versionId: input.versionId,
         expectedRevision: input.expectedRevision,
       });
@@ -814,29 +860,11 @@ export async function propagateKnowledgeDependencyImpact(input: {
     input.pool,
     { accountId: input.accountId, assignmentId: input.assignmentId },
     async (tx) => {
-      const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
-      if (!version || version.revision !== input.expectedRevision) {
-        conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
-      }
-      const projected = projectProfessionalKnowledgeDependencyImpact({
-        current: {
-          reviewState: version.reviewState,
-          validityState: version.validityState,
-        },
-        impact: input.impact,
-        exactDependent: input.exactDependent,
-        ...(input.materialImpact === undefined
-          ? {}
-          : { materialImpact: input.materialImpact }),
-      });
-      const stateChanged =
-        projected.reviewState !== version.reviewState ||
-        projected.validityState !== version.validityState;
-
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE',
-        versionId: version.id,
-        expectedRevision: version.revision,
+        actor: { personId: input.personId, assignmentId: input.assignmentId },
+        versionId: input.versionId,
+        expectedRevision: input.expectedRevision,
         impact: input.impact,
         exactDependent: input.exactDependent,
         materialImpact: input.materialImpact ?? null,
@@ -852,11 +880,21 @@ export async function propagateKnowledgeDependencyImpact(input: {
           requestHash,
         },
         async () => {
+          const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
+          if (!version || version.revision !== input.expectedRevision) {
+            conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
+          }
+          const projected = projectProfessionalKnowledgeDependencyImpact({
+            current: { reviewState: version.reviewState, validityState: version.validityState },
+            impact: input.impact,
+            exactDependent: input.exactDependent,
+            ...(input.materialImpact === undefined ? {} : { materialImpact: input.materialImpact }),
+          });
+          const stateChanged =
+            projected.reviewState !== version.reviewState ||
+            projected.validityState !== version.validityState;
           if (!stateChanged) {
-            return {
-              status: 200,
-              body: { versionId: version.id, revision: version.revision, changed: false },
-            };
+            return { status: 200, body: { versionId: version.id, revision: version.revision, changed: false } };
           }
           const revision = await applyProfessionalKnowledgeDependencyState(tx, {
             versionId: version.id,
@@ -875,17 +913,13 @@ export async function propagateKnowledgeDependencyImpact(input: {
               revision,
             },
           });
-          return {
-            status: 200,
-            body: { versionId: version.id, revision, changed: true },
-          };
+          return { status: 200, body: { versionId: version.id, revision, changed: true } };
         }
       );
       return commandResult(outcome);
     }
   );
 }
-
 
 export type ProfessionalKnowledgeMutationCommand =
   | 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE'

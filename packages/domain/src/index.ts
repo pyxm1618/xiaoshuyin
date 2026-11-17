@@ -69,6 +69,14 @@ export * from './family-alliance-repository.js';
 export * from './phone-use-contract-schema.js';
 export * from './phone-use-contract-repository.js';
 
+// Slice 16 — InterventionDefinition domain truth and deterministic eligibility only.
+export * from './intervention-definition-schema.js';
+export * from './intervention-definitions.js';
+// Raw InterventionDefinition persistence is intentionally package-internal.
+// Reviewed server services may compose it directly, but @xiaoshuyin/domain
+// must never expose authority-bearing repository mutation primitives.
+export * from './intervention-eligibility.js';
+
 // Slice 17 — Professional Knowledge Foundation domain contracts.
 export * from './professional-knowledge.js';
 

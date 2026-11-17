@@ -32,6 +32,10 @@ import {
   isKnownAuthorizationDenial,
   requireFamilyAction,
 } from '../authz.js';
+import {
+  resolveCurrentInterventionDefinition,
+  type KnowledgeInterventionResolver,
+} from './professional-knowledge.js';
 
 const KNOWLEDGE_CONSUMPTION_FEATURE = createServerFeatureDescriptor({
   featureCode: 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION',
@@ -93,6 +97,7 @@ export interface ProfessionalKnowledgeConsumptionDependencies {
   readonly resolveSceneBinding: (
     scenePackageVersion: string
   ) => ScenePackageKnowledgeBindingResult;
+  readonly resolveIntervention?: KnowledgeInterventionResolver;
 }
 
 const productionConsumptionDependencies:
@@ -114,6 +119,7 @@ const productionConsumptionDependencies:
       };
     },
     resolveSceneBinding: resolveDigitalUseProfessionalKnowledgeBinding,
+    resolveIntervention: resolveCurrentInterventionDefinition,
   };
 
 async function assertKnowledgeCompliance(
@@ -219,17 +225,17 @@ export async function consumeProfessionalKnowledge(input: {
       const sceneBinding = dependencies.resolveSceneBinding(
         version.scope.scenePackageVersion
       );
+      const intervention = version.scope.interventionDefinitionRef
+        ? await (
+            dependencies.resolveIntervention ?? resolveCurrentInterventionDefinition
+          )(tx, version.scope.interventionDefinitionRef)
+        : { status: 'NOT_REQUIRED' as const };
       const eligibility = evaluateProfessionalKnowledgeEligibility({
         version,
         approval,
         sceneBinding,
         ...facts,
-        intervention: version.scope.interventionDefinitionRef
-          ? {
-              status: 'UNAVAILABLE',
-              reason: 'SLICE_16_AUTHORITATIVE_OWNER_NOT_MERGED',
-            }
-          : { status: 'NOT_REQUIRED' },
+        intervention,
       });
       if (eligibility.status === 'UNAVAILABLE') {
         dependencyUnavailable(eligibility.dependency);

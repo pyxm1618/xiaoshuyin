@@ -61,7 +61,7 @@ export interface ProfessionalContentPackageRef {
 
 export interface ProfessionalKnowledgeInterventionRef {
   readonly definitionId: string;
-  readonly definitionVersion: string;
+  readonly definitionVersion: number;
   readonly contentHash: string;
 }
 

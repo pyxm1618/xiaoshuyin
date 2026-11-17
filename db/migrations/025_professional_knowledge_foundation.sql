@@ -278,6 +278,61 @@ $function$;
 REVOKE ALL ON FUNCTION app.professional_review_authorized() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.professional_review_authorized() TO xiaoshuyin_app;
 
+-- Exact cross-reviewer Staff Authority read seam for Professional Knowledge.
+-- The release/admin actor must first hold a current PROFESSIONAL_REVIEW
+-- assignment through the existing owner. Only then may this function validate
+-- another reviewer's exact assignment/account/person tuple. It does not widen
+-- staff_assignments RLS, return Staff rows, create a reviewer registry, or
+-- derive professional qualification.
+CREATE FUNCTION app.validate_professional_review_assignment_target(
+  p_assignment_id uuid,
+  p_account_id uuid,
+  p_person_id uuid
+) RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE
+  v_actor_account_id text;
+  v_actor_person_id text;
+  v_valid boolean := false;
+BEGIN
+  IF p_assignment_id IS NULL
+     OR p_account_id IS NULL
+     OR p_person_id IS NULL
+     OR app_current_purpose() <> 'PROFESSIONAL_KNOWLEDGE_ADMIN'
+     OR app.professional_review_authorized() IS NOT TRUE THEN
+    RETURN false;
+  END IF;
+
+  v_actor_account_id := app_account_id()::text;
+  v_actor_person_id := app_person_id()::text;
+
+  PERFORM set_config('app.account_id', p_account_id::text, true);
+  PERFORM set_config('app.person_id', p_person_id::text, true);
+  BEGIN
+    SELECT app.validate_professional_review_assignment(
+      p_assignment_id, p_account_id, p_person_id
+    ) INTO v_valid;
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('app.account_id', v_actor_account_id, true);
+    PERFORM set_config('app.person_id', v_actor_person_id, true);
+    RAISE;
+  END;
+  PERFORM set_config('app.account_id', v_actor_account_id, true);
+  PERFORM set_config('app.person_id', v_actor_person_id, true);
+
+  RETURN COALESCE(v_valid, false);
+END
+$function$;
+
+REVOKE ALL ON FUNCTION app.validate_professional_review_assignment_target(uuid, uuid, uuid)
+  FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.validate_professional_review_assignment_target(uuid, uuid, uuid)
+  TO xiaoshuyin_app;
+
 CREATE FUNCTION app.set_professional_review_context(p_assignment_id uuid)
 RETURNS void
 LANGUAGE plpgsql
