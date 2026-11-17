@@ -73,6 +73,42 @@ describe('Slice 16 InterventionDefinition schema / canonical hash', () => {
     );
   });
 
+  it('rejects NaN, Infinity and -Infinity condition scalars before canonical hashing', () => {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const semantic = interventionSemantic({
+        applicable_conditions: [
+          { fact_ref: 'numeric.scalar', operator: 'EQUALS', value },
+        ],
+      });
+      expect(() =>
+        prepareInterventionDefinition({
+          sceneId: 'DIGITAL_USE',
+          interventionCode: 'TEST_NON_FINITE_SCALAR',
+          version: 1,
+          semantic,
+        })
+      ).toThrowError(/INTERVENTION_DEFINITION_INVALID/);
+    }
+  });
+
+  it('rejects arrays containing NaN, Infinity or -Infinity before canonical hashing', () => {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const semantic = interventionSemantic({
+        applicable_conditions: [
+          { fact_ref: 'numeric.array', operator: 'IN', value: [1, value] },
+        ],
+      });
+      expect(() =>
+        prepareInterventionDefinition({
+          sceneId: 'DIGITAL_USE',
+          interventionCode: 'TEST_NON_FINITE_ARRAY',
+          version: 1,
+          semantic,
+        })
+      ).toThrowError(/INTERVENTION_DEFINITION_INVALID/);
+    }
+  });
+
   it('normalizes stable intervention_code and never trusts client version/hash fields', () => {
     const prepared = prepareInterventionDefinition({
       sceneId: 'DIGITAL_USE',
