@@ -153,18 +153,35 @@ const PHASE_ORDER = [
 function conditionResult(
   condition: InterventionFactCondition,
   facts: InterventionEligibilityInput['facts']
-): true | false | 'UNKNOWN' {
+): true | false | 'UNKNOWN' | 'INVALID' {
   if (!Object.prototype.hasOwnProperty.call(facts, condition.fact_ref)) return 'UNKNOWN';
   const current = facts[condition.fact_ref];
-  if (condition.operator === 'EXISTS') return true;
-  if (condition.operator === 'EQUALS') return current === condition.value;
-  if (condition.operator === 'NOT_EQUALS') return current !== condition.value;
-  if (!Array.isArray(condition.value)) return false;
-  const expected = condition.value;
-  if (Array.isArray(current)) {
-    return current.some((entry) => expected.includes(entry));
+  if (condition.operator === 'EXISTS') {
+    return Object.prototype.hasOwnProperty.call(condition, 'value') ? 'INVALID' : true;
   }
-  return expected.some((value) => value === current);
+
+  const scalar =
+    typeof condition.value === 'string' ||
+    (typeof condition.value === 'number' && Number.isFinite(condition.value)) ||
+    typeof condition.value === 'boolean';
+  if (condition.operator === 'EQUALS' || condition.operator === 'NOT_EQUALS') {
+    if (!scalar) return 'INVALID';
+    const equal = current === condition.value;
+    return condition.operator === 'EQUALS' ? equal : !equal;
+  }
+
+  if (
+    (condition.operator !== 'IN' && condition.operator !== 'NOT_IN') ||
+    !Array.isArray(condition.value) ||
+    condition.value.length === 0
+  ) {
+    return 'INVALID';
+  }
+  const expected = condition.value;
+  const included = Array.isArray(current)
+    ? current.some((entry) => expected.includes(entry))
+    : expected.some((value) => value === current);
+  return condition.operator === 'IN' ? included : !included;
 }
 
 function gateResult(state: InterventionGateState): 'ALLOW' | 'BLOCK' | 'UNKNOWN' {
@@ -290,11 +307,17 @@ export function evaluateInterventionEligibility(
     const scope = definition.semantic.age_and_development_scope;
     const needsAge = scope.min_age_years !== null || scope.max_age_years !== null;
     const needsDevelopment = scope.development_stages.length > 0;
+    const ageInvalid =
+      input.ageYears !== null && !Number.isFinite(input.ageYears);
     const ageUnknown = needsAge && input.ageYears === null;
     const developmentUnknown = needsDevelopment && input.developmentStages.length === 0;
-    if (ageUnknown || developmentUnknown) {
+    if (ageInvalid || ageUnknown || developmentUnknown) {
       ageScopeResult = 'UNKNOWN';
-      block('ageDevelopment', 'UNKNOWN', 'AGE_OR_DEVELOPMENT_MISMATCH');
+      block(
+        'ageDevelopment',
+        ageInvalid ? 'BLOCK' : 'UNKNOWN',
+        'AGE_OR_DEVELOPMENT_MISMATCH'
+      );
     } else {
       const mismatch =
         (scope.min_age_years !== null &&
@@ -350,13 +373,13 @@ export function evaluateInterventionEligibility(
     let applicabilityFalse = false;
     for (const condition of definition.semantic.applicable_conditions) {
       const value = conditionResult(condition, input.facts);
-      if (value === false) applicabilityFalse = true;
+      if (value === false || value === 'INVALID') applicabilityFalse = true;
       if (value === 'UNKNOWN') applicabilityUnknown = true;
       if (value !== true) {
         block(
           'applicability',
           value === 'UNKNOWN' ? 'UNKNOWN' : 'BLOCK',
-          'APPLICABILITY_NOT_SATISFIED',
+          value === 'INVALID' ? 'UNKNOWN_DEPENDENCY' : 'APPLICABILITY_NOT_SATISFIED',
           condition.fact_ref
         );
       }
@@ -380,6 +403,8 @@ export function evaluateInterventionEligibility(
         );
       } else if (value === 'UNKNOWN') {
         block('exclusion', 'UNKNOWN', 'UNKNOWN_DEPENDENCY', condition.fact_ref);
+      } else if (value === 'INVALID') {
+        block('exclusion', 'BLOCK', 'UNKNOWN_DEPENDENCY', condition.fact_ref);
       }
     }
 
