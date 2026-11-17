@@ -3,9 +3,11 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import { withIdentityTransaction } from '../../apps/server/api/src/db/tx.js';
 import {
   createInterventionDefinitionCandidate,
   retireInterventionDefinition,
+  supersedeInterventionDefinition,
 } from '../../apps/server/api/src/services/intervention-definitions.js';
 import {
   evaluateCurrentInterventionEligibility,
@@ -58,7 +60,10 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
 
   async function fixture(
     label: string,
-    options: { requiredAssertion?: boolean } = {}
+    options: {
+      requiredAssertion?: boolean;
+      nonStaffFamilyActor?: boolean;
+    } = {}
   ): Promise<Fixture> {
     const manager = await loginWithLabel(app, 's16-snapshot-' + label);
     const family = await createFamily(app, manager.token, 's16-' + label.slice(0, 20));
@@ -167,16 +172,23 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
         required_consent_purposes: [],
       },
     });
+    const definitionActor =
+      options.nonStaffFamilyActor === true
+        ? await loginWithLabel(app, 's16-reviewer-' + label)
+        : manager;
     await admin.query(
       "INSERT INTO staff_assignments " +
         "(account_id,person_id,capability,scope_type,granted_by_account_id) " +
         "VALUES ($1,$2,'PROFESSIONAL_REVIEW','GLOBAL',$1)",
-      [manager.accountId, manager.personId]
+      [definitionActor.accountId, definitionActor.personId]
     );
     const created = await createInterventionDefinitionCandidate(
       appDb,
       {
-        actor: { accountId: manager.accountId, personId: manager.personId },
+        actor: {
+          accountId: definitionActor.accountId,
+          personId: definitionActor.personId,
+        },
         sceneId: 'DIGITAL_USE',
         interventionCode:
           'TEST_SNAPSHOT_' +
@@ -231,6 +243,81 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     await new Promise((resolve) => setTimeout(resolve, milliseconds));
     expect(settled).toBe(false);
   }
+
+  it('allows an authorized non-staff Family manager to evaluate exact eligibility while mutation stays blocked', async () => {
+    const f = await fixture('non-staff-' + crypto.randomUUID(), {
+      nonStaffFamilyActor: true,
+    });
+
+    const staff = await admin.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM staff_assignments " +
+        "WHERE account_id=$1 AND person_id=$2 AND capability='PROFESSIONAL_REVIEW' " +
+        "AND scope_type='GLOBAL' AND revoked_at IS NULL",
+      [f.manager.accountId, f.manager.personId]
+    );
+    expect(staff.rows[0]!.count).toBe('0');
+
+    const result = await evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      authorityFor(f),
+      exactPackage
+    );
+
+    expect(result.allowed).toBe(true);
+    expect(result.reasonCodes).not.toContain('DEFINITION_NOT_EXACT');
+
+    await withIdentityTransaction(
+      appDb,
+      { accountId: f.manager.accountId, purpose: 'SELF_IDENTITY' },
+      async (tx) => {
+        const visible = await tx.query<{ id: string }>(
+          'SELECT id FROM intervention_definitions WHERE id=$1',
+          [f.definitionId]
+        );
+        expect(visible.rows).toEqual([{ id: f.definitionId }]);
+
+        const attemptedUpdate = await tx.query<{ id: string }>(
+          "UPDATE intervention_definitions SET definition_state='RETIRED', " +
+            "revision=revision+1, retired_at=clock_timestamp() WHERE id=$1 RETURNING id",
+          [f.definitionId]
+        );
+        expect(attemptedUpdate.rowCount).toBe(0);
+      }
+    );
+
+    await expect(
+      retireInterventionDefinition(
+        appDb,
+        {
+          actor: {
+            accountId: f.manager.accountId,
+            personId: f.manager.personId,
+          },
+          definition: {
+            id: f.definitionId,
+            version: f.version,
+            contentHash: f.contentHash,
+            expectedRevision: 1,
+          },
+          approvalScope: 'DIGITAL_USE',
+          idempotencyKey: 's16-non-staff-retire-' + crypto.randomUUID(),
+        },
+        TEST_ONLY_QUALIFICATION_PROVIDER
+      )
+    ).rejects.toMatchObject({ code: 'INTERVENTION_STAFF_AUTHORITY_INVALID' });
+  });
 
   it('reads one current snapshot and audits exact provenance without writing Case phase', async () => {
     const f = await fixture('exact-' + crypto.randomUUID());
@@ -629,6 +716,91 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     } finally {
       writer.release();
     }
+  });
+
+  it('serializes exact package inclusion consumption before concurrent supersession and blocks every later use', async () => {
+    const f = await fixture('package-supersede-' + crypto.randomUUID());
+    let enteredResolve!: () => void;
+    let releaseResolve!: () => void;
+    const entered = new Promise<void>((resolve) => { enteredResolve = resolve; });
+    const release = new Promise<void>((resolve) => { releaseResolve = resolve; });
+    const blockingPackage: DigitalUseInterventionInclusionProvider = {
+      async resolve(input) {
+        enteredResolve();
+        await release;
+        return { status: 'INCLUDED', inclusion: input };
+      },
+    };
+
+    const eligibilityPromise = evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      authorityFor(f),
+      blockingPackage
+    );
+
+    await entered;
+
+    let supersessionSettled = false;
+    const supersessionPromise = supersedeInterventionDefinition(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+          expectedRevision: 1,
+        },
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: 's16-package-supersede-' + crypto.randomUUID(),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    ).finally(() => {
+      supersessionSettled = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(supersessionSettled).toBe(false);
+
+    releaseResolve();
+    const [beforeSupersede, superseded] = await Promise.all([
+      eligibilityPromise,
+      supersessionPromise,
+    ]);
+    expect(beforeSupersede.allowed).toBe(true);
+    expect(superseded.state).toBe('SUPERSEDED');
+
+    const afterSupersede = await evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      authorityFor(f),
+      exactPackage
+    );
+    expect(afterSupersede.allowed).toBe(false);
+    expect(afterSupersede.reasonCodes).toContain('DEFINITION_SUPERSEDED');
   });
 
   it('serializes exact package inclusion consumption before concurrent retirement and blocks every later use', async () => {

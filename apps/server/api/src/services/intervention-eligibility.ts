@@ -19,6 +19,7 @@ import {
 import {
   getExactInterventionDefinition,
   insertInterventionDefinitionAudit,
+  lockInterventionDefinitionChain,
 } from '../../../../../packages/domain/src/intervention-definition-repository.js';
 import {
   DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
@@ -345,14 +346,21 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     ? ('PASS' as const)
     : ('BLOCK' as const);
 
-  // Final exact-row lock prevents retirement/supersession from crossing the
-  // decision. Case/Formulation/package authority is already pinned above and
-  // Consent uses its existing owner advisory lock. Revalidate the exact
-  // professional proof only after the exact definition lock.
+  // Serialize the final exact-definition decision with the same lifecycle
+  // chain lock used by professional mutations. Advisory locking does not
+  // require UPDATE-RLS authority, so an authorized Family consumer remains a
+  // read-only consumer while retire/supersede cannot cross this decision.
+  if (definition !== null) {
+    await lockInterventionDefinitionChain(
+      tx,
+      definition.sceneId,
+      definition.interventionCode
+    );
+  }
   const finalDefinition =
     definition === null
       ? null
-      : await getExactInterventionDefinition(tx, input.definition, true);
+      : await getExactInterventionDefinition(tx, input.definition);
 
   let finalProfessional = professional;
   if (professional.status === 'VALID' && finalDefinition !== null) {

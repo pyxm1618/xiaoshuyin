@@ -1,11 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import * as domainRoot from '../../packages/domain/src/index.js';
 import { resolveInterventionProfessionalAuthority } from '../../apps/server/api/src/services/intervention-professional-authority.js';
 import { professionalProof, professionalProvider } from '../support/intervention.js';
 
 const ROOT = resolve(new URL('../..', import.meta.url).pathname);
+const FROZEN_SLICE16_DIR = resolve(
+  ROOT,
+  'specs/016-psychological-behavioral-intervention-contract-authority-reconciliation'
+);
+const FROZEN_SLICE16_BLOBS = {
+  'spec.md': '5bc22645af2008d6f774e39f57bae391fa2543c7',
+  'plan.md': '41300acbce1fd973d478348185f5d8860f4da841',
+  'checklist.md': 'f35f31b93758eeb98a2c53cbae1dcdc1f5b6f837',
+  'tasks.md': '76805596e6a3dff389317207d8e4c14040127698',
+} as const;
+
+function gitBlobSha(content: string): string {
+  const bytes = Buffer.from(content, 'utf8');
+  return createHash('sha1')
+    .update('blob ' + bytes.byteLength + '\0')
+    .update(bytes)
+    .digest('hex');
+}
 
 const EXPECTED_FR = ["FR-001", "FR-002", "FR-003", "FR-004", "FR-005", "FR-006", "FR-007", "FR-008", "FR-009", "FR-010", "FR-011", "FR-012", "FR-013", "FR-014", "FR-015", "FR-016", "FR-017", "FR-018", "FR-019", "FR-020", "FR-021", "FR-022", "FR-023", "FR-024", "FR-025", "FR-026", "FR-027", "FR-028", "FR-029", "FR-030", "FR-031", "FR-032", "FR-033", "FR-034", "FR-035", "FR-036", "FR-037", "FR-038", "FR-039", "FR-040", "FR-041", "FR-042", "FR-043", "FR-044", "FR-045", "FR-046", "FR-047", "FR-048", "FR-049", "FR-050", "FR-051", "FR-052", "FR-053", "FR-054", "FR-055", "FR-056", "FR-057", "FR-058", "FR-059", "FR-060", "FR-061", "FR-062", "FR-063", "FR-064"] as const;
 const EXPECTED_AS = ["AS-001", "AS-002", "AS-003", "AS-004", "AS-005", "AS-006", "AS-007", "AS-008", "AS-009", "AS-010", "AS-011", "AS-012", "AS-013", "AS-014", "AS-015", "AS-016", "AS-017", "AS-018", "AS-019", "AS-020", "AS-021", "AS-022", "AS-023", "AS-024", "AS-025", "AS-026", "AS-027", "AS-028", "AS-029", "AS-030", "AS-031", "AS-032", "AS-033", "AS-034", "AS-035", "AS-036", "AS-037", "AS-038", "AS-039", "AS-040"] as const;
@@ -149,6 +168,16 @@ const TRACEABILITY = {
 } as const;
 
 describe('Slice 16 exact requirement traceability', () => {
+  it('binds traceability to the exact frozen Slice 16 authority artifacts', () => {
+    expect(existsSync(FROZEN_SLICE16_DIR)).toBe(true);
+    for (const [name, expectedBlob] of Object.entries(FROZEN_SLICE16_BLOBS)) {
+      const artifactPath = resolve(FROZEN_SLICE16_DIR, name);
+      expect(existsSync(artifactPath), name).toBe(true);
+      const content = readFileSync(artifactPath, 'utf8');
+      expect(gitBlobSha(content), name).toBe(expectedBlob);
+    }
+  });
+
   it('T1611 mechanically proves raw InterventionDefinition writers are absent from the domain root', () => {
     for (const rawWriter of [
       'insertInterventionDefinitionCandidate',
