@@ -462,7 +462,7 @@ Approval expiry, revocation, or proof invalidity immediately removes production 
 
 It does not mechanically rewrite Knowledge lifecycle.
 
-If the Knowledge content/hash/source/scope is unchanged and Authority permits a new approval for the same exact version, a new valid approval proof may restore production eligibility without forcing a semantic successor version.
+If the Knowledge content/hash/source/scope is unchanged, approval expiry/revocation alone does not force a semantic successor version. A later new valid approval proof for that same exact version may restore production eligibility; any external issuer requirement for a different artifact version remains external Professional Authority, not Slice 17 content-version semantics.
 
 If the content/source/scope changed materially, a successor version and fresh approval are required.
 
@@ -940,7 +940,7 @@ Functional Requirements: 52.
 - AS-020 — No-material-impact re-review restores CURRENT/VALID without changing lifecycle.
 - AS-021 — Material source/content/scope change creates a successor version and requires fresh approval.
 - AS-022 — Source withdrawal that makes current use invalid immediately suppresses new use and preserves historical citations.
-- AS-023 — Approval expires while content is unchanged; production use stops, and a later valid new proof may restore exact-version eligibility without forced content version churn if Authority permits.
+- AS-023 — Approval expires while content/hash/source/scope is unchanged; production use stops, and a later new valid proof for that same exact version restores eligibility without forced Knowledge content-version churn.
 - AS-024 — Scene Package v1 historical binding remains unchanged when Scene Package v2 binds another Knowledge version.
 - AS-025 — Scene Package supersession alone does not mark unrelated Knowledge NEEDS_REVIEW.
 - AS-026 — Scene Package change that materially changes Knowledge applicability marks only affected Knowledge NEEDS_REVIEW.
