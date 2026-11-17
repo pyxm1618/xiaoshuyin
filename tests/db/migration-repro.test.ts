@@ -19,10 +19,10 @@ const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATA
 
 // Expected final object counts (Slice 1/2 + Case Core + Slice 3 Evidence + Slice 6 binding)
 const EXPECTED_ENUMS = 24; // + independent problem_formulation_review_state (AUTH-006)
-const EXPECTED_TABLES = 31; // + minimal staff authority source // + Slice 13 target items + Slice 14 Contract/roleplay tables
+const EXPECTED_TABLES = 36; // + Slice 17 Professional Knowledge owner tables
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
-const EXPECTED_POLICIES = 76; // + 9 exact-Case Staff Safety policies
+const EXPECTED_POLICIES = 89; // + Slice 17 exact Professional Knowledge policies
 const EXPECTED_TRIGGERS = 9; // + Staff mutation serialization + Account serialization + final transition guard
 
 const EXPECTED_ENUM_NAMES = [
@@ -80,6 +80,11 @@ const EXPECTED_TABLE_NAMES = [
   'person_profile_values',
   'persons',
   'problem_formulations',
+  'professional_knowledge_approval_evidence',
+  'professional_knowledge_items',
+  'professional_knowledge_review_evidence',
+  'professional_knowledge_sources',
+  'professional_knowledge_versions',
   'risk_events',
   'scene_artifacts',
   'scene_node_states',
@@ -114,7 +119,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(enumNames.length).toBe(EXPECTED_ENUMS);
   });
 
-  it('should have all 31 tables', async () => {
+  it('should have all 36 tables', async () => {
     const { rows } = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -156,7 +161,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 76 RLS policies', async () => {
+  it('should have 89 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'

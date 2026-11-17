@@ -18,6 +18,10 @@ let verifyPool: pg.Pool;
 let app: Awaited<ReturnType<typeof buildApp>>;
 
 const APPROVED_TABLES = ['assertions', 'dialogue_messages', 'observations'];
+const LATER_REVIEWED_EVIDENCE_TABLES = [
+  'professional_knowledge_approval_evidence',
+  'professional_knowledge_review_evidence',
+];
 
 const FORBIDDEN_TABLES = [
   'evidence_items',
@@ -83,7 +87,9 @@ describe('Evidence scope guard (T029)', () => {
       expect(names, `forbidden table ${table}`).not.toContain(table);
     }
     const evidenceLike = names.filter((n: string) => /evidence|assert|observ|dialogue/i.test(n));
-    expect(evidenceLike.sort()).toEqual(APPROVED_TABLES);
+    expect(evidenceLike.sort()).toEqual(
+      [...APPROVED_TABLES, ...LATER_REVIEWED_EVIDENCE_TABLES].sort()
+    );
   });
 
   it('routes retain the message POST and expose no generic Evidence / FACT endpoint', () => {
