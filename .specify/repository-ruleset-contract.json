@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "repository": "pyxm1618/xiaoshuyin",
+  "rulesetId": 27341100,
+  "rulesetName": "main-protection",
+  "target": "branch",
+  "enforcement": "active",
+  "requiredPullRequestPolicy": {
+    "minimumApprovingReviews": 1,
+    "requireLastPushApproval": true,
+    "requiredReviewThreadResolution": true
+  },
+  "requiredStatusChecks": [
+    "Contract",
+    "Static Checks",
+    "DB Migration",
+    "Unit Tests",
+    "Integration Tests",
+    "Spec Governance"
+  ]
+}
