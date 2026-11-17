@@ -883,6 +883,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '021_safety_resolver_staff_authority.sql',
       '022_foundation_remaining_consent_chain_integrity.sql',
       '023_digital_use_review_runtime_authority_reconciled.sql',
+      '025_professional_knowledge_foundation.sql',
     ]);
   }, 180_000);
 });
