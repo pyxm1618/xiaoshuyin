@@ -517,7 +517,22 @@ export async function appendProfessionalKnowledgeAuthorityDenialReceipt(
   }
 ): Promise<void> {
   await tx.query(
-    `SELECT app.append_professional_knowledge_authority_denial($1,$2,$3,$4,$5)`,
+    `INSERT INTO business_audit_events
+       (family_id, actor_account_id, event_type, resource_type, resource_id, metadata)
+     VALUES (
+       NULL,
+       app_account_id(),
+       'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED',
+       'PROFESSIONAL_KNOWLEDGE',
+       $1,
+       jsonb_build_object(
+         'denialFingerprint', $2::text,
+         'decisionCategory', $3::text,
+         'reasonCode', $4::text,
+         'dependencyCategory', $5::text
+       )
+     )
+     ON CONFLICT DO NOTHING`,
     [
       input.versionId,
       input.denialFingerprint,
