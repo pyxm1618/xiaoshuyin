@@ -74,6 +74,8 @@ describe('Slice 16 Professional Approval / qualification consumer seam', () => {
   });
 
   const failures = [
+    ['empty approval proof ref', { approvalProofRef: '' }, 'APPROVAL_PROOF_REF_MISSING'],
+    ['missing artifact identity', { artifactIdentity: '' }, 'ARTIFACT_IDENTITY_MISSING'],
     ['wrong definition', { definitionId: 'wrong' }, 'WRONG_DEFINITION'],
     ['wrong version', { definitionVersion: 2 }, 'WRONG_VERSION'],
     ['wrong hash', { contentHash: 'b'.repeat(64) }, 'WRONG_HASH'],
@@ -95,6 +97,79 @@ describe('Slice 16 Professional Approval / qualification consumer seam', () => {
         request,
         'RESOLVE',
         Date.parse('2026-11-16T00:00:00.000Z')
+      );
+      expect(result).toMatchObject({ status: 'INVALID', reason });
+    });
+  }
+
+  it('revalidates the exact original approvalProofRef and artifactIdentity', async () => {
+    const proof = professionalProof();
+    let observed: unknown = null;
+    const provider = {
+      async resolve() { return proof; },
+      async revalidate(input: unknown) {
+        observed = input;
+        return proof;
+      },
+    };
+    const result = await resolveInterventionProfessionalAuthority(
+      provider,
+      request,
+      'REVALIDATE',
+      Date.parse('2026-11-16T00:00:00.000Z'),
+      {
+        approvalProofRef: proof.approvalProofRef,
+        artifactIdentity: proof.artifactIdentity,
+      }
+    );
+    expect(result.status).toBe('VALID');
+    expect(observed).toMatchObject({
+      ...request,
+      approvalProofRef: proof.approvalProofRef,
+      artifactIdentity: proof.artifactIdentity,
+    });
+  });
+
+  const exactRevalidationFailures = [
+    [
+      'different exact proofRef',
+      { approvalProofRef: 'TEST_APPROVAL:DIFFERENT' },
+      'APPROVAL_PROOF_CHANGED',
+    ],
+    [
+      'AS-023 approvalProofRef bound to another definition',
+      { approvalProofRef: 'TEST_APPROVAL:OTHER_DEFINITION', definitionId: 'other-definition' },
+      'APPROVAL_PROOF_CHANGED',
+    ],
+    [
+      'AS-023 approvalProofRef bound to another version',
+      { approvalProofRef: 'TEST_APPROVAL:OTHER_VERSION', definitionVersion: 2 },
+      'APPROVAL_PROOF_CHANGED',
+    ],
+    [
+      'wrong artifactIdentity',
+      { artifactIdentity: 'TEST_APPROVAL_ARTIFACT:DIFFERENT' },
+      'APPROVAL_PROOF_CHANGED',
+    ],
+    [
+      'wrong definition hash during exact revalidation',
+      { contentHash: 'b'.repeat(64) },
+      'WRONG_HASH',
+    ],
+  ] as const;
+
+  for (const [label, override, reason] of exactRevalidationFailures) {
+    it('blocks ' + label, async () => {
+      const original = professionalProof();
+      const result = await resolveInterventionProfessionalAuthority(
+        professionalProvider(original, professionalProof(override)),
+        request,
+        'REVALIDATE',
+        Date.parse('2026-11-16T00:00:00.000Z'),
+        {
+          approvalProofRef: original.approvalProofRef,
+          artifactIdentity: original.artifactIdentity,
+        }
       );
       expect(result).toMatchObject({ status: 'INVALID', reason });
     });
