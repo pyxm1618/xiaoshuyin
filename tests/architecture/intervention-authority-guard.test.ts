@@ -180,6 +180,20 @@ function addExportOrigins(
   if (bucket.size > 0) target.set(exportedName, bucket);
 }
 
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
 function exportedOriginsFrom(
   path: string,
   overrides: VirtualSources,
@@ -189,8 +203,7 @@ function exportedOriginsFrom(
   if (cached !== undefined) return cached;
 
   const result: ExportOriginMap = new Map();
-  // Seed before recursion so cyclic barrels terminate fail-closed without
-  // inventing symbols that have not actually been resolved.
+  // Seed before recursion so cyclic barrels terminate without unbounded traversal.
   cache.set(path, result);
 
   const source = readSource(path, overrides);
@@ -199,29 +212,112 @@ function exportedOriginsFrom(
     string,
     { target: string; exportedName: string }
   >();
+  const namespaceImports = new Map<string, string>();
+  const variableInitializers = new Map<string, ts.Expression>();
+  const localRawDeclarations = new Set<string>();
 
   for (const statement of file.statements) {
     if (
       ts.isImportDeclaration(statement) &&
       statement.moduleSpecifier &&
       ts.isStringLiteral(statement.moduleSpecifier) &&
-      statement.importClause?.namedBindings &&
-      ts.isNamedImports(statement.importClause.namedBindings)
+      statement.importClause &&
+      !statement.importClause.isTypeOnly
     ) {
       const target = resolveProductionModule(
         path,
         statement.moduleSpecifier.text,
         overrides
       );
-      if (target === null) continue;
-      for (const element of statement.importClause.namedBindings.elements) {
-        imported.set(element.name.text, {
-          target,
-          exportedName: element.propertyName?.text ?? element.name.text,
-        });
+      if (target !== null) {
+        if (statement.importClause.name) {
+          imported.set(statement.importClause.name.text, {
+            target,
+            exportedName: 'default',
+          });
+        }
+        const bindings = statement.importClause.namedBindings;
+        if (bindings && ts.isNamedImports(bindings)) {
+          for (const element of bindings.elements) {
+            if (element.isTypeOnly) continue;
+            imported.set(element.name.text, {
+              target,
+              exportedName: element.propertyName?.text ?? element.name.text,
+            });
+          }
+        } else if (bindings && ts.isNamespaceImport(bindings)) {
+          namespaceImports.set(bindings.name.text, target);
+        }
+      }
+    }
+
+    if (
+      (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+      statement.name &&
+      RAW_WRITERS.has(statement.name.text)
+    ) {
+      localRawDeclarations.add(statement.name.text);
+    }
+
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name)) continue;
+        const name = declaration.name.text;
+        if (declaration.initializer) {
+          variableInitializers.set(name, declaration.initializer);
+        }
+        if (RAW_WRITERS.has(name)) localRawDeclarations.add(name);
       }
     }
   }
+
+  const identifierOrigins = (
+    name: string,
+    visited: ReadonlySet<string>
+  ): Set<string> => {
+    if (visited.has(name)) return new Set();
+    const nextVisited = new Set(visited);
+    nextVisited.add(name);
+
+    if (localRawDeclarations.has(name)) return new Set([name]);
+
+    const binding = imported.get(name);
+    if (binding !== undefined) {
+      const targetOrigins = exportedOriginsFrom(
+        binding.target,
+        overrides,
+        cache
+      );
+      return new Set(targetOrigins.get(binding.exportedName) ?? []);
+    }
+
+    const initializer = variableInitializers.get(name);
+    return initializer === undefined
+      ? new Set()
+      : expressionOrigins(initializer, nextVisited);
+  };
+
+  const expressionOrigins = (
+    expression: ts.Expression,
+    visited: ReadonlySet<string>
+  ): Set<string> => {
+    const current = unwrapExpression(expression);
+    if (ts.isIdentifier(current)) {
+      return identifierOrigins(current.text, visited);
+    }
+    if (
+      ts.isPropertyAccessExpression(current) &&
+      ts.isIdentifier(unwrapExpression(current.expression))
+    ) {
+      const namespace = unwrapExpression(current.expression) as ts.Identifier;
+      const target = namespaceImports.get(namespace.text);
+      if (target !== undefined) {
+        const targetOrigins = exportedOriginsFrom(target, overrides, cache);
+        return new Set(targetOrigins.get(current.name.text) ?? []);
+      }
+    }
+    return new Set();
+  };
 
   for (const statement of file.statements) {
     if (
@@ -230,14 +326,24 @@ function exportedOriginsFrom(
       statement.name
     ) {
       const name = statement.name.text;
-      if (RAW_WRITERS.has(name)) addExportOrigins(result, name, [name]);
+      if (localRawDeclarations.has(name)) {
+        addExportOrigins(result, name, [name]);
+      }
     }
 
     if (hasExportModifier(statement) && ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name)) continue;
         const name = declaration.name.text;
-        if (RAW_WRITERS.has(name)) addExportOrigins(result, name, [name]);
+        if (declaration.initializer) {
+          addExportOrigins(
+            result,
+            name,
+            expressionOrigins(declaration.initializer, new Set([name]))
+          );
+        } else if (localRawDeclarations.has(name)) {
+          addExportOrigins(result, name, [name]);
+        }
       }
     }
 
@@ -253,6 +359,7 @@ function exportedOriginsFrom(
 
     if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
       for (const element of statement.exportClause.elements) {
+        if (element.isTypeOnly) continue;
         const original = element.propertyName?.text ?? element.name.text;
         const exposed = element.name.text;
 
@@ -262,24 +369,11 @@ function exportedOriginsFrom(
           continue;
         }
 
-        const binding = imported.get(original);
-        if (binding !== undefined) {
-          const targetOrigins = exportedOriginsFrom(
-            binding.target,
-            overrides,
-            cache
-          );
-          addExportOrigins(
-            result,
-            exposed,
-            targetOrigins.get(binding.exportedName) ?? []
-          );
-          continue;
-        }
-
-        if (RAW_WRITERS.has(original)) {
-          addExportOrigins(result, exposed, [original]);
-        }
+        addExportOrigins(
+          result,
+          exposed,
+          identifierOrigins(original, new Set())
+        );
       }
       continue;
     }
@@ -323,9 +417,254 @@ function assertRawWriterPackageBoundary(overrides: VirtualSources = {}): void {
   if (findings.length > 0) throw new Error(findings.join('\n'));
 }
 
-function nodeName(node: ts.MethodDeclaration | ts.PropertyAssignment): string | null {
-  if (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) return node.name.text;
+function propertyNameText(name: ts.PropertyName): string | null {
+  if (
+    ts.isIdentifier(name) ||
+    ts.isStringLiteral(name) ||
+    ts.isNumericLiteral(name)
+  ) {
+    return name.text;
+  }
   return null;
+}
+
+type QualificationFunction =
+  | ts.ArrowFunction
+  | ts.FunctionExpression
+  | ts.FunctionDeclaration
+  | ts.MethodDeclaration;
+
+type ValueDeclarationMap = Map<string, ts.Declaration[]>;
+
+function collectValueDeclarations(file: ts.SourceFile): ValueDeclarationMap {
+  const declarations: ValueDeclarationMap = new Map();
+  const add = (name: string, declaration: ts.Declaration): void => {
+    const bucket = declarations.get(name) ?? [];
+    bucket.push(declaration);
+    declarations.set(name, bucket);
+  };
+  const visit = (node: ts.Node): void => {
+    if (ts.isFunctionDeclaration(node) && node.name) {
+      add(node.name.text, node);
+    } else if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      add(node.name.text, node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return declarations;
+}
+
+function objectLiteralIsSyntheticValidQualification(
+  object: ts.ObjectLiteralExpression
+): boolean {
+  let qualificationRef = false;
+  let scopeRef = false;
+  let validStatus = false;
+
+  for (const property of object.properties) {
+    if (
+      !ts.isPropertyAssignment(property) &&
+      !ts.isShorthandPropertyAssignment(property)
+    ) {
+      continue;
+    }
+    const name = propertyNameText(property.name);
+    if (name === 'qualificationRef') qualificationRef = true;
+    if (name === 'scopeRef') scopeRef = true;
+    if (
+      name === 'status' &&
+      ts.isPropertyAssignment(property)
+    ) {
+      const status = unwrapExpression(property.initializer);
+      validStatus =
+        ts.isStringLiteralLike(status) &&
+        status.text === 'VALID';
+    }
+  }
+
+  return qualificationRef && scopeRef && validStatus;
+}
+
+function expressionProducesSyntheticValidQualification(
+  expression: ts.Expression,
+  declarations: ValueDeclarationMap,
+  file: ts.SourceFile,
+  visited: ReadonlySet<string>
+): boolean {
+  const current = unwrapExpression(expression);
+
+  if (ts.isObjectLiteralExpression(current)) {
+    return objectLiteralIsSyntheticValidQualification(current);
+  }
+
+  if (ts.isIdentifier(current)) {
+    if (visited.has(current.text)) return false;
+    const nextVisited = new Set(visited);
+    nextVisited.add(current.text);
+    for (const declaration of declarations.get(current.text) ?? []) {
+      if (
+        ts.isVariableDeclaration(declaration) &&
+        declaration.initializer &&
+        expressionProducesSyntheticValidQualification(
+          declaration.initializer,
+          declarations,
+          file,
+          nextVisited
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  if (ts.isConditionalExpression(current)) {
+    return (
+      expressionProducesSyntheticValidQualification(
+        current.whenTrue,
+        declarations,
+        file,
+        visited
+      ) ||
+      expressionProducesSyntheticValidQualification(
+        current.whenFalse,
+        declarations,
+        file,
+        visited
+      )
+    );
+  }
+
+  if (
+    ts.isCallExpression(current) &&
+    ts.isIdentifier(current.expression)
+  ) {
+    return identifierFunctionReturnsSyntheticQualification(
+      current.expression.text,
+      declarations,
+      file,
+      visited
+    );
+  }
+
+  return false;
+}
+
+function functionReturnsSyntheticQualification(
+  fn: QualificationFunction,
+  declarations: ValueDeclarationMap,
+  file: ts.SourceFile,
+  visited: ReadonlySet<string>
+): boolean {
+  if (ts.isArrowFunction(fn) && !ts.isBlock(fn.body)) {
+    return expressionProducesSyntheticValidQualification(
+      fn.body,
+      declarations,
+      file,
+      visited
+    );
+  }
+
+  const body = fn.body;
+  if (!body || !ts.isBlock(body)) return false;
+
+  let found = false;
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+    if (
+      node !== body &&
+      (
+        ts.isArrowFunction(node) ||
+        ts.isFunctionExpression(node) ||
+        ts.isFunctionDeclaration(node) ||
+        ts.isMethodDeclaration(node)
+      )
+    ) {
+      return;
+    }
+    if (
+      ts.isReturnStatement(node) &&
+      node.expression &&
+      expressionProducesSyntheticValidQualification(
+        node.expression,
+        declarations,
+        file,
+        visited
+      )
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(body);
+  return found;
+}
+
+function callableExpressionReturnsSyntheticQualification(
+  expression: ts.Expression,
+  declarations: ValueDeclarationMap,
+  file: ts.SourceFile,
+  visited: ReadonlySet<string>
+): boolean {
+  const current = unwrapExpression(expression);
+  if (ts.isArrowFunction(current) || ts.isFunctionExpression(current)) {
+    return functionReturnsSyntheticQualification(
+      current,
+      declarations,
+      file,
+      visited
+    );
+  }
+  if (ts.isIdentifier(current)) {
+    return identifierFunctionReturnsSyntheticQualification(
+      current.text,
+      declarations,
+      file,
+      visited
+    );
+  }
+  return false;
+}
+
+function identifierFunctionReturnsSyntheticQualification(
+  name: string,
+  declarations: ValueDeclarationMap,
+  file: ts.SourceFile,
+  visited: ReadonlySet<string>
+): boolean {
+  const key = 'function:' + name;
+  if (visited.has(key)) return false;
+  const nextVisited = new Set(visited);
+  nextVisited.add(key);
+
+  for (const declaration of declarations.get(name) ?? []) {
+    if (
+      ts.isFunctionDeclaration(declaration) &&
+      functionReturnsSyntheticQualification(
+        declaration,
+        declarations,
+        file,
+        nextVisited
+      )
+    ) {
+      return true;
+    }
+    if (
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      callableExpressionReturnsSyntheticQualification(
+        declaration.initializer,
+        declarations,
+        file,
+        nextVisited
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function assertNoSyntheticQualificationProvider(
@@ -333,19 +672,46 @@ function assertNoSyntheticQualificationProvider(
 ): void {
   for (const [path, source] of Object.entries(graph)) {
     const file = parseSource(path, source);
+    const declarations = collectValueDeclarations(file);
     const visit = (node: ts.Node): void => {
+      let synthetic = false;
+
       if (
-        (ts.isMethodDeclaration(node) || ts.isPropertyAssignment(node)) &&
-        nodeName(node) === 'resolve'
+        ts.isMethodDeclaration(node) &&
+        propertyNameText(node.name) === 'resolve'
       ) {
-        const text = node.getText(file);
-        if (
-          /\bqualificationRef\b/.test(text) &&
-          /\bscopeRef\b/.test(text) &&
-          /\bstatus\s*:\s*['"]VALID['"]/.test(text)
-        ) {
-          throw new Error('synthetic VALID qualification provider in production: ' + path);
-        }
+        synthetic = functionReturnsSyntheticQualification(
+          node,
+          declarations,
+          file,
+          new Set()
+        );
+      } else if (
+        ts.isPropertyAssignment(node) &&
+        propertyNameText(node.name) === 'resolve'
+      ) {
+        synthetic = callableExpressionReturnsSyntheticQualification(
+          node.initializer,
+          declarations,
+          file,
+          new Set()
+        );
+      } else if (
+        ts.isShorthandPropertyAssignment(node) &&
+        propertyNameText(node.name) === 'resolve'
+      ) {
+        synthetic = identifierFunctionReturnsSyntheticQualification(
+          node.name.text,
+          declarations,
+          file,
+          new Set()
+        );
+      }
+
+      if (synthetic) {
+        throw new Error(
+          'synthetic VALID qualification provider in production: ' + path
+        );
       }
       ts.forEachChild(node, visit);
     };
@@ -553,4 +919,178 @@ export const credentialSource = {
     expect(() => assertRawWriterPackageBoundary(overrides))
       .toThrow(/raw writer/);
   });
+
+  it('counterfactual: detects direct raw writer export from the public package root', () => {
+    const domainIndex = readSource(DOMAIN_ROOT);
+    const overrides = {
+      [DOMAIN_ROOT]:
+        domainIndex +
+        "\nexport { insertInterventionDefinitionCandidate } from './intervention-definition-repository.js';\n",
+    };
+    expect(() => assertRawWriterPackageBoundary(overrides))
+      .toThrow(/raw writer/);
+  });
+
+  it('counterfactual: detects directly aliased raw writer export from the public package root', () => {
+    const domainIndex = readSource(DOMAIN_ROOT);
+    const overrides = {
+      [DOMAIN_ROOT]:
+        domainIndex +
+        "\nexport { insertInterventionDefinitionCandidate as safeFacade } from './intervention-definition-repository.js';\n",
+    };
+    expect(() => assertRawWriterPackageBoundary(overrides))
+      .toThrow(/raw writer/);
+  });
+
+  it('counterfactual: detects raw writer laundering through identifier assignments and multi-hop barrels', () => {
+    const domainIndex = readSource(DOMAIN_ROOT);
+    const overrides = {
+      [DOMAIN_ROOT]:
+        domainIndex +
+        "\nexport { safeFacade } from './neutral-writer-assignment-barrel.js';\n",
+      'packages/domain/src/neutral-writer-assignment-barrel.ts':
+        "export { safeFacade } from './neutral-writer-assignment.js';\n",
+      'packages/domain/src/neutral-writer-assignment.ts': [
+        "import { insertInterventionDefinitionCandidate as internal } from './intervention-definition-repository.js';",
+        'const first = internal;',
+        'const second = first;',
+        'export { second as safeFacade };',
+        '',
+      ].join('\n'),
+    };
+    expect(() => assertRawWriterPackageBoundary(overrides))
+      .toThrow(/raw writer/);
+  });
+
+  it('counterfactual: detects direct production fixture import', () => {
+    const domainIndex = readSource(DOMAIN_ROOT);
+    const overrides = {
+      [DOMAIN_ROOT]:
+        domainIndex +
+        "\nimport '../../../tests/fixtures/synthetic-authority.js';\n",
+    };
+    expect(() => assertNoFixtureLeakage(buildProductionGraph(overrides)))
+      .toThrow(/production fixture dependency/);
+  });
+
+  it('counterfactual: detects shorthand VALID qualification provider via resolved identifier origin', () => {
+    const definitions =
+      readSource('apps/server/api/src/services/intervention-definitions.ts');
+    const overrides = {
+      'apps/server/api/src/services/intervention-definitions.ts':
+        definitions + "\nimport './credential-shorthand-source.js';\n",
+      'apps/server/api/src/services/credential-shorthand-source.ts': [
+        "const resolve = async (input: { approvalScope: string }) => ({",
+        "  qualificationRef: 'local:credential',",
+        '  scopeRef: input.approvalScope,',
+        "  status: 'VALID' as const,",
+        '});',
+        'export const credentialSource = { resolve };',
+        '',
+      ].join('\n'),
+    };
+    expect(() =>
+      assertNoSyntheticQualificationProvider(buildProductionGraph(overrides))
+    ).toThrow(/synthetic VALID qualification provider/);
+  });
+
+  it('counterfactual: detects factory-returned shorthand VALID qualification provider', () => {
+    const definitions =
+      readSource('apps/server/api/src/services/intervention-definitions.ts');
+    const overrides = {
+      'apps/server/api/src/services/intervention-definitions.ts':
+        definitions + "\nimport './credential-factory-source.js';\n",
+      'apps/server/api/src/services/credential-factory-source.ts': [
+        "const resolve = async (input: { approvalScope: string }) => ({",
+        "  qualificationRef: 'local:credential',",
+        '  scopeRef: input.approvalScope,',
+        "  status: 'VALID' as const,",
+        '});',
+        'function createProvider() {',
+        '  return { resolve };',
+        '}',
+        'export const credentialSource = createProvider();',
+        '',
+      ].join('\n'),
+    };
+    expect(() =>
+      assertNoSyntheticQualificationProvider(buildProductionGraph(overrides))
+    ).toThrow(/synthetic VALID qualification provider/);
+  });
+
+  it('counterfactual: detects future qualification registry', () => {
+    expect(() =>
+      assertMigrationAuthorityPolicy(
+        migrationSources({
+          'db/migrations/999_counterfactual_qualification.sql':
+            'CREATE TABLE professional_qualifications (id uuid primary key);',
+        })
+      )
+    ).toThrow(/duplicate\/out-of-scope authority/);
+  });
+
+  it('counterfactual: detects a second intervention Staff authority truth', () => {
+    expect(() =>
+      assertMigrationAuthorityPolicy(
+        migrationSources({
+          'db/migrations/999_counterfactual_staff.sql':
+            'CREATE TABLE intervention_professional_staff (id uuid primary key);',
+        })
+      )
+    ).toThrow(/duplicate\/out-of-scope authority/);
+  });
+
+  it('counterfactual: detects production InterventionDefinition seed', () => {
+    expect(() =>
+      assertMigrationAuthorityPolicy(
+        migrationSources({
+          'db/migrations/999_counterfactual_definition_seed.sql':
+            "INSERT INTO intervention_definitions (id) VALUES ('00000000-0000-0000-0000-000000000000');",
+        })
+      )
+    ).toThrow(/duplicate\/out-of-scope authority/);
+  });
+
+  it('control: harmless aliases, UNAVAILABLE shorthand providers and unreachable test fixtures remain allowed', () => {
+    const domainIndex = readSource(DOMAIN_ROOT);
+    const definitions =
+      readSource('apps/server/api/src/services/intervention-definitions.ts');
+    const overrides = {
+      [DOMAIN_ROOT]:
+        domainIndex +
+        "\nexport { safeFacade } from './neutral-harmless-assignment.js';\n",
+      'packages/domain/src/neutral-harmless-assignment.ts': [
+        'const harmlessFunction = () => true;',
+        'const x = harmlessFunction;',
+        'export const safeFacade = x;',
+        '',
+      ].join('\n'),
+      'apps/server/api/src/services/intervention-definitions.ts':
+        definitions + "\nimport './credential-unavailable-source.js';\n",
+      'apps/server/api/src/services/credential-unavailable-source.ts': [
+        "const resolve = async (input: { approvalScope: string }) => ({",
+        "  qualificationRef: 'local:none',",
+        '  scopeRef: input.approvalScope,',
+        "  status: 'UNAVAILABLE' as const,",
+        '});',
+        'export const credentialSource = { resolve };',
+        '',
+      ].join('\n'),
+      'tests/support/unreachable-valid-provider.ts': [
+        "const resolve = async () => ({",
+        "  qualificationRef: 'test:only',",
+        "  scopeRef: 'test',",
+        "  status: 'VALID' as const,",
+        '});',
+        'export const provider = { resolve };',
+        '',
+      ].join('\n'),
+    };
+
+    expect(() => assertRawWriterPackageBoundary(overrides)).not.toThrow();
+    const graph = buildProductionGraph(overrides);
+    expect(graph).not.toHaveProperty('tests/support/unreachable-valid-provider.ts');
+    expect(() => assertNoSyntheticQualificationProvider(graph)).not.toThrow();
+  });
+
 });
