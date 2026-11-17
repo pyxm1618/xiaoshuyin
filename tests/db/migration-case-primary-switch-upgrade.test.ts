@@ -195,6 +195,151 @@ const AUTH008_NEW_OBJECTS = [
   'trigger:zz_cases_staff_resolve_authority_guard',
 ].sort();
 
+/** Slice 17 Professional Knowledge exact catalog delta created by migration 025. */
+const SLICE17_REMOVED_CONSTRAINTS = [
+  // Global Professional Knowledge audit events intentionally have no Family.
+  'business_audit_events_family_id_not_null',
+].sort();
+
+const SLICE17_NEW_CONSTRAINTS = [
+  'professional_knowledge_approval_e_knowledge_version_id_not_null',
+  'professional_knowledge_approval_e_staff_assignment_ref_not_null',
+  'professional_knowledge_approval_ev_qualification_scope_not_null',
+  'professional_knowledge_approval_ev_reviewer_account_id_not_null',
+  'professional_knowledge_approval_evi_approval_proof_ref_not_null',
+  'professional_knowledge_approval_evi_reviewer_person_id_not_null',
+  'professional_knowledge_approval_evid_qualification_ref_not_null',
+  'professional_knowledge_approval_evid_reviewer_identity_not_null',
+  'professional_knowledge_approval_evid_scene_binding_ref_not_null',
+  'professional_knowledge_approval_evide_knowledge_version_id_fkey',
+  'professional_knowledge_approval_evide_staff_assignment_ref_fkey',
+  'professional_knowledge_approval_eviden_reviewer_account_id_fkey',
+  'professional_knowledge_approval_eviden_source_set_hash_not_null',
+  'professional_knowledge_approval_evidenc_approval_scope_not_null',
+  'professional_knowledge_approval_evidenc_effective_from_not_null',
+  'professional_knowledge_approval_evidence_consumed_at_not_null',
+  'professional_knowledge_approval_evidence_content_hash_check',
+  'professional_knowledge_approval_evidence_content_hash_not_null',
+  'professional_knowledge_approval_evidence_id_not_null',
+  'professional_knowledge_approval_evidence_pkey',
+  'professional_knowledge_approval_evidence_proof_check',
+  'professional_knowledge_approval_evidence_proof_key',
+  'professional_knowledge_approval_evidence_reviewed_at_not_null',
+  'professional_knowledge_approval_evidence_reviewer_fk',
+  'professional_knowledge_approval_evidence_source_hash_check',
+  'professional_knowledge_approval_evidence_window_check',
+  'professional_knowledge_items_created_at_not_null',
+  'professional_knowledge_items_created_by_account_id_fkey',
+  'professional_knowledge_items_created_by_account_id_not_null',
+  'professional_knowledge_items_created_by_person_id_not_null',
+  'professional_knowledge_items_creator_fk',
+  'professional_knowledge_items_id_not_null',
+  'professional_knowledge_items_key_check',
+  'professional_knowledge_items_knowledge_key_key',
+  'professional_knowledge_items_knowledge_key_not_null',
+  'professional_knowledge_items_pkey',
+  'professional_knowledge_review_evi_knowledge_version_id_not_null',
+  'professional_knowledge_review_evi_staff_assignment_ref_not_null',
+  'professional_knowledge_review_evid_reviewer_account_id_not_null',
+  'professional_knowledge_review_evide_reviewer_person_id_not_null',
+  'professional_knowledge_review_eviden_qualification_ref_not_null',
+  'professional_knowledge_review_eviden_reviewed_revision_not_null',
+  'professional_knowledge_review_eviden_reviewer_identity_not_null',
+  'professional_knowledge_review_evidenc_knowledge_version_id_fkey',
+  'professional_knowledge_review_evidenc_staff_assignment_ref_fkey',
+  'professional_knowledge_review_evidence_content_hash_check',
+  'professional_knowledge_review_evidence_content_hash_not_null',
+  'professional_knowledge_review_evidence_id_not_null',
+  'professional_knowledge_review_evidence_outcome_check',
+  'professional_knowledge_review_evidence_pkey',
+  'professional_knowledge_review_evidence_qualification_check',
+  'professional_knowledge_review_evidence_recorded_at_not_null',
+  'professional_knowledge_review_evidence_review_outcome_not_null',
+  'professional_knowledge_review_evidence_reviewed_at_not_null',
+  'professional_knowledge_review_evidence_reviewer_account_id_fkey',
+  'professional_knowledge_review_evidence_reviewer_fk',
+  'professional_knowledge_review_evidence_revision_check',
+  'professional_knowledge_review_evidence_source_hash_check',
+  'professional_knowledge_review_evidence_source_set_hash_not_null',
+  'professional_knowledge_sources_created_at_not_null',
+  'professional_knowledge_sources_hash_check',
+  'professional_knowledge_sources_id_not_null',
+  'professional_knowledge_sources_knowledge_revision_not_null',
+  'professional_knowledge_sources_knowledge_version_id_fkey',
+  'professional_knowledge_sources_knowledge_version_id_not_null',
+  'professional_knowledge_sources_ordinal_check',
+  'professional_knowledge_sources_ordinal_key',
+  'professional_knowledge_sources_ordinal_not_null',
+  'professional_knowledge_sources_pkey',
+  'professional_knowledge_sources_ref_check',
+  'professional_knowledge_sources_ref_version_key',
+  'professional_knowledge_sources_revision_check',
+  'professional_knowledge_sources_snapshot_metadata_not_null',
+  'professional_knowledge_sources_source_hash_not_null',
+  'professional_knowledge_sources_source_ref_not_null',
+  'professional_knowledge_sources_source_version_not_null',
+  'professional_knowledge_sources_version_check',
+  'professional_knowledge_versions_content_hash_check',
+  'professional_knowledge_versions_content_hash_not_null',
+  'professional_knowledge_versions_content_not_null',
+  'professional_knowledge_versions_created_at_not_null',
+  'professional_knowledge_versions_created_by_account_id_fkey',
+  'professional_knowledge_versions_created_by_account_id_not_null',
+  'professional_knowledge_versions_created_by_person_id_not_null',
+  'professional_knowledge_versions_creator_fk',
+  'professional_knowledge_versions_effective_window_check',
+  'professional_knowledge_versions_id_not_null',
+  'professional_knowledge_versions_identity_key',
+  'professional_knowledge_versions_knowledge_id_fkey',
+  'professional_knowledge_versions_knowledge_id_not_null',
+  'professional_knowledge_versions_lifecycle_check',
+  'professional_knowledge_versions_lifecycle_status_not_null',
+  'professional_knowledge_versions_locale_check',
+  'professional_knowledge_versions_locale_not_null',
+  'professional_knowledge_versions_not_self_superseding',
+  'professional_knowledge_versions_pkey',
+  'professional_knowledge_versions_release_shape_check',
+  'professional_knowledge_versions_review_state_check',
+  'professional_knowledge_versions_review_state_not_null',
+  'professional_knowledge_versions_revision_check',
+  'professional_knowledge_versions_revision_not_null',
+  'professional_knowledge_versions_scope_metadata_not_null',
+  'professional_knowledge_versions_semantic_version_not_null',
+  'professional_knowledge_versions_semver_check',
+  'professional_knowledge_versions_source_set_hash_check',
+  'professional_knowledge_versions_source_set_hash_not_null',
+  'professional_knowledge_versions_supersedes_version_id_fkey',
+  'professional_knowledge_versions_updated_at_not_null',
+  'professional_knowledge_versions_validity_state_check',
+  'professional_knowledge_versions_validity_state_not_null',
+].sort();
+
+const SLICE17_NEW_OBJECTS = [
+  'table:professional_knowledge_approval_evidence',
+  'table:professional_knowledge_items',
+  'table:professional_knowledge_review_evidence',
+  'table:professional_knowledge_sources',
+  'table:professional_knowledge_versions',
+  'policy:accounts_runtime_professional_knowledge_admin_read',
+  'policy:audit_professional_knowledge_insert',
+  'policy:audit_professional_knowledge_select',
+  'policy:professional_knowledge_approval_evidence_admin',
+  'policy:professional_knowledge_approval_evidence_admin_insert',
+  'policy:professional_knowledge_items_admin',
+  'policy:professional_knowledge_items_family_read',
+  'policy:professional_knowledge_review_evidence_admin',
+  'policy:professional_knowledge_review_evidence_admin_insert',
+  'policy:professional_knowledge_sources_admin',
+  'policy:professional_knowledge_sources_admin_insert',
+  'policy:professional_knowledge_sources_family_read',
+  'policy:professional_knowledge_versions_admin',
+  'policy:professional_knowledge_versions_family_read',
+  'trigger:professional_knowledge_approval_evidence_append_only',
+  'trigger:professional_knowledge_review_evidence_append_only',
+  'trigger:professional_knowledge_sources_append_only',
+  'trigger:professional_knowledge_versions_update_guard',
+].sort();
+
 /** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
 const SLICE8_NEW_CONSTRAINTS = [
   'problem_formulations_alternative_explanations_not_null',
@@ -774,11 +919,17 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeConstraintNames = Object.keys(beforeConstraints).sort();
     const afterConstraintNames = Object.keys(afterConstraints).sort();
     for (const name of beforeConstraintNames) {
-      if (CONSENT_OWNER_REPLACED_CONSTRAINTS.includes(name)) continue;
+      if (
+        CONSENT_OWNER_REPLACED_CONSTRAINTS.includes(name) ||
+        SLICE17_REMOVED_CONSTRAINTS.includes(name)
+      ) continue;
       expect(afterConstraintNames).toContain(name);
     }
     // The replaced guardian invariants are re-imposed by the purpose branch.
     for (const name of CONSENT_OWNER_REPLACED_CONSTRAINTS.slice(0, 2)) {
+      expect(afterConstraintNames).not.toContain(name);
+    }
+    for (const name of SLICE17_REMOVED_CONSTRAINTS) {
       expect(afterConstraintNames).not.toContain(name);
     }
     expect(afterConstraintNames).toContain('consent_purpose_field_binding');
@@ -803,6 +954,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...FOUNDATION_REM1_NEW_CONSTRAINTS,
         ...AUTH006_NEW_CONSTRAINTS,
         ...AUTH008_NEW_CONSTRAINTS,
+        ...SLICE17_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -839,6 +991,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...SLICE14_NEW_OBJECTS,
       ...FOUNDATION_REM1_NEW_OBJECTS,
       ...AUTH008_NEW_OBJECTS,
+      ...SLICE17_NEW_OBJECTS,
       'trigger:accounts_status_invalidates_sessions',
     ].sort());
 
