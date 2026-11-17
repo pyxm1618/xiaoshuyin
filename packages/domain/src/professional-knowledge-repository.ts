@@ -95,17 +95,19 @@ export async function resolveProfessionalReviewStaffAuthority(
 async function insertSources(
   tx: Tx,
   versionId: string,
+  knowledgeRevision: number,
   sources: readonly ProfessionalKnowledgeSourceSnapshot[]
 ): Promise<void> {
   for (let index = 0; index < sources.length; index += 1) {
     const source = sources[index]!;
     await tx.query(
       `INSERT INTO professional_knowledge_sources
-         (knowledge_version_id, ordinal, source_ref, source_version,
+         (knowledge_version_id, knowledge_revision, ordinal, source_ref, source_version,
           source_hash, locator, snapshot_metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
       [
         versionId,
+        knowledgeRevision,
         index + 1,
         source.sourceRef,
         source.sourceVersion,
@@ -158,7 +160,7 @@ export async function createProfessionalKnowledgeCandidate(
     ]
   );
   const row = version.rows[0]!;
-  await insertSources(tx, row.id, input.sources);
+  await insertSources(tx, row.id, row.revision, input.sources);
   return { knowledgeId, versionId: row.id, revision: row.revision };
 }
 
@@ -211,7 +213,7 @@ export async function createProfessionalKnowledgeSuccessor(
     ]
   );
   const row = version.rows[0]!;
-  await insertSources(tx, row.id, input.sources);
+  await insertSources(tx, row.id, row.revision, input.sources);
   return { versionId: row.id, revision: row.revision };
 }
 
@@ -252,6 +254,8 @@ export async function editProfessionalKnowledgeCandidate(
             source_set_hash = $4,
             scope_metadata = $5::jsonb,
             locale = $6,
+            review_state = 'PENDING',
+            validity_state = 'UNKNOWN',
             revision = revision + 1
       WHERE id = $1 AND revision = $7 AND lifecycle_status = 'CANDIDATE'
       RETURNING revision`,
@@ -271,11 +275,7 @@ export async function editProfessionalKnowledgeCandidate(
     });
   }
 
-  await tx.query(
-    'DELETE FROM professional_knowledge_sources WHERE knowledge_version_id = $1',
-    [input.versionId]
-  );
-  await insertSources(tx, input.versionId, input.sources);
+  await insertSources(tx, input.versionId, updated.rows[0]!.revision, input.sources);
   return updated.rows[0]!.revision;
 }
 
@@ -302,8 +302,9 @@ export async function lockProfessionalKnowledgeVersion(
     `SELECT source_ref, source_version, source_hash, locator, snapshot_metadata
        FROM professional_knowledge_sources
       WHERE knowledge_version_id = $1
+        AND knowledge_revision = $2
       ORDER BY ordinal`,
-    [versionId]
+    [versionId, row.revision]
   );
 
   return {
@@ -603,8 +604,9 @@ export async function getProfessionalKnowledgeVersion(
     `SELECT source_ref, source_version, source_hash, locator, snapshot_metadata
        FROM professional_knowledge_sources
       WHERE knowledge_version_id = $1
+        AND knowledge_revision = $2
       ORDER BY ordinal`,
-    [versionId]
+    [versionId, row.revision]
   );
   return {
     id: row.id,

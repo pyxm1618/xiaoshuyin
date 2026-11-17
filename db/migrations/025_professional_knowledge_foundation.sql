@@ -106,6 +106,7 @@ CREATE TABLE professional_knowledge_sources (
   knowledge_version_id uuid NOT NULL
                     REFERENCES professional_knowledge_versions(id)
                     ON DELETE RESTRICT,
+  knowledge_revision integer NOT NULL,
   ordinal          integer NOT NULL,
   source_ref       text NOT NULL,
   source_version   text NOT NULL,
@@ -114,9 +115,10 @@ CREATE TABLE professional_knowledge_sources (
   snapshot_metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at       timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT professional_knowledge_sources_ordinal_key
-    UNIQUE (knowledge_version_id, ordinal),
+    UNIQUE (knowledge_version_id, knowledge_revision, ordinal),
   CONSTRAINT professional_knowledge_sources_ref_version_key
-    UNIQUE (knowledge_version_id, source_ref, source_version),
+    UNIQUE (knowledge_version_id, knowledge_revision, source_ref, source_version),
+  CONSTRAINT professional_knowledge_sources_revision_check CHECK (knowledge_revision > 0),
   CONSTRAINT professional_knowledge_sources_ordinal_check CHECK (ordinal > 0),
   CONSTRAINT professional_knowledge_sources_ref_check
     CHECK (length(source_ref) BETWEEN 1 AND 500 AND source_ref = btrim(source_ref)),
@@ -373,41 +375,6 @@ CREATE TRIGGER professional_knowledge_versions_update_guard
   FOR EACH ROW
   EXECUTE FUNCTION app.guard_professional_knowledge_version_update();
 
-CREATE FUNCTION app.guard_professional_knowledge_source_mutation()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = pg_catalog, public
-AS $function$
-DECLARE
-  v_version_id uuid;
-  v_lifecycle text;
-BEGIN
-  v_version_id := CASE WHEN TG_OP = 'DELETE'
-    THEN OLD.knowledge_version_id ELSE NEW.knowledge_version_id END;
-
-  SELECT lifecycle_status
-    INTO v_lifecycle
-    FROM professional_knowledge_versions
-   WHERE id = v_version_id
-   FOR UPDATE;
-
-  IF v_lifecycle IS DISTINCT FROM 'CANDIDATE' THEN
-    RAISE EXCEPTION 'PROFESSIONAL_KNOWLEDGE_RELEASED_SOURCE_IMMUTABLE'
-      USING ERRCODE = '23514';
-  END IF;
-
-  IF TG_OP = 'DELETE' THEN
-    RETURN OLD;
-  END IF;
-  RETURN NEW;
-END
-$function$;
-
-CREATE TRIGGER professional_knowledge_sources_candidate_only_mutation
-  BEFORE UPDATE OR DELETE ON professional_knowledge_sources
-  FOR EACH ROW EXECUTE FUNCTION app.guard_professional_knowledge_source_mutation();
-
 CREATE FUNCTION app.guard_professional_knowledge_append_only()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -419,6 +386,10 @@ BEGIN
     USING ERRCODE = '23514';
 END
 $function$;
+
+CREATE TRIGGER professional_knowledge_sources_append_only
+  BEFORE UPDATE OR DELETE ON professional_knowledge_sources
+  FOR EACH ROW EXECUTE FUNCTION app.guard_professional_knowledge_append_only();
 
 CREATE TRIGGER professional_knowledge_review_evidence_append_only
   BEFORE UPDATE OR DELETE ON professional_knowledge_review_evidence
@@ -458,15 +429,6 @@ CREATE POLICY professional_knowledge_sources_admin_insert
   ON professional_knowledge_sources
   FOR INSERT TO xiaoshuyin_app
   WITH CHECK (app.professional_review_authorized());
-CREATE POLICY professional_knowledge_sources_admin_update
-  ON professional_knowledge_sources
-  FOR UPDATE TO xiaoshuyin_app
-  USING (app.professional_review_authorized())
-  WITH CHECK (app.professional_review_authorized());
-CREATE POLICY professional_knowledge_sources_admin_delete
-  ON professional_knowledge_sources
-  FOR DELETE TO xiaoshuyin_app
-  USING (app.professional_review_authorized());
 
 CREATE POLICY professional_knowledge_review_evidence_admin
   ON professional_knowledge_review_evidence
@@ -534,7 +496,7 @@ FROM xiaoshuyin_app;
 
 GRANT SELECT, INSERT ON professional_knowledge_items TO xiaoshuyin_app;
 GRANT SELECT, INSERT, UPDATE ON professional_knowledge_versions TO xiaoshuyin_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON professional_knowledge_sources TO xiaoshuyin_app;
+GRANT SELECT, INSERT ON professional_knowledge_sources TO xiaoshuyin_app;
 GRANT SELECT, INSERT ON professional_knowledge_review_evidence TO xiaoshuyin_app;
 GRANT SELECT, INSERT ON professional_knowledge_approval_evidence TO xiaoshuyin_app;
 
