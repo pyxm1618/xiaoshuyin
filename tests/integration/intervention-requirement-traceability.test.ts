@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import * as domainRoot from '../../packages/domain/src/index.js';
+import { resolveInterventionProfessionalAuthority } from '../../apps/server/api/src/services/intervention-professional-authority.js';
+import { professionalProof, professionalProvider } from '../support/intervention.js';
 
 const ROOT = resolve(new URL('../..', import.meta.url).pathname);
 
@@ -57,7 +60,7 @@ const TRACEABILITY = {
   "FR-046": { requirement: "Eligibility SHALL consume authoritative Safety and block ordinary progression under Safety block.", file: "tests/domain/intervention-eligibility-unknown.test.ts", anchor: "UNKNOWN-family eligibility semantics" },
   "FR-047": { requirement: "Eligibility SHALL reject wrong-family/wrong-case/wrong-actor/wrong-purpose contexts.", file: "tests/integration/intervention-eligibility-snapshot.test.ts", anchor: "authorizes before protected reads and wrong-family context creates no eligibility audit" },
   "FR-048": { requirement: "Eligibility allowed=true SHALL NOT create or activate an InterventionInstance or Plan.", file: "tests/domain/intervention-eligibility.test.ts", anchor: "eligibility result contains no Phase-4 execution object" },
-  "FR-049": { requirement: "A stale eligibility result SHALL NOT remain authoritative after a relevant dependency revision.", file: "tests/integration/intervention-eligibility-snapshot.test.ts", anchor: "reads one current snapshot and audits exact provenance without writing Case phase" },
+  "FR-049": { requirement: "A stale eligibility result SHALL NOT remain authoritative after a relevant dependency revision.", file: "tests/integration/intervention-eligibility-snapshot.test.ts", anchor: "FR-049 blocks Case -> SAFETY_HOLD committed while eligibility is waiting on current Case authority" },
   "FR-050": { requirement: "RAG/model output SHALL NOT override deterministic eligibility.", file: "tests/domain/intervention-eligibility.test.ts", anchor: "returns allowed=true only when every independent gate passes" },
   "FR-051": { requirement: "Professional definition mutation SHALL NOT be authorized by Family/Case ownership alone.", file: "tests/integration/intervention-error-disclosure.test.ts", anchor: "anti-enumerates definition guessing and professional-authority detail for unauthorized consumers" },
   "FR-052": { requirement: "Slice 16 SHALL reuse current RLS/Authorization boundaries and preserve anti-enumeration.", file: "tests/integration/intervention-error-disclosure.test.ts", anchor: "anti-enumerates definition guessing and professional-authority detail for unauthorized consumers" },
@@ -67,7 +70,7 @@ const TRACEABILITY = {
   "FR-056": { requirement: "Same idempotency key with materially different canonical payload SHALL conflict.", file: "tests/db/intervention-definition-runtime.test.ts", anchor: "same key + same semantic payload replays exact definition identity; different payload conflicts" },
   "FR-057": { requirement: "Concurrent lifecycle/version/binding mutations SHALL prevent lost updates and resurrection.", file: "tests/db/intervention-definition-concurrency.test.ts", anchor: "two concurrent successor creates yield one next version and a stale-writer loser" },
   "FR-058": { requirement: "Applicable domain mutation, audit and idempotency settlement SHALL be atomic.", file: "tests/db/intervention-definition-concurrency.test.ts", anchor: "qualification proof changing between prepare and mutation rolls back definition, audit and idempotency" },
-  "FR-059": { requirement: "Audit SHALL bind exact definition/version/hash, approval proof ref and package context.", file: "tests/integration/intervention-eligibility-snapshot.test.ts", anchor: "audits exact provenance" },
+  "FR-059": { requirement: "Audit SHALL bind exact definition/version/hash, approval proof ref and package context.", file: "tests/integration/intervention-eligibility-snapshot.test.ts", anchor: "reads one current snapshot and audits exact provenance without writing Case phase" },
   "FR-060": { requirement: "Audit SHALL not become a second professional truth store.", file: "tests/integration/intervention-eligibility-snapshot.test.ts", anchor: "audits exact provenance" },
   "FR-061": { requirement: "Development SHALL permit candidate/draft definitions without falsely marking them production approved.", file: "tests/db/intervention-definition-runtime.test.ts", anchor: "creates a server-hashed candidate and records global business audit without fake Family" },
   "FR-062": { requirement: "Production without a real qualified approved reviewer SHALL fail closed as candidate/unavailable.", file: "tests/db/intervention-definition-runtime.test.ts", anchor: "keeps production candidate mutation unavailable without a real qualification consumer" },
@@ -95,7 +98,7 @@ const TRACEABILITY = {
   "AS-020": { requirement: "Historical retired definition is referenced by an old record: exact historical version and provenance remain inspectable and are not rewritten.", file: "tests/db/intervention-definition-runtime.test.ts", anchor: "creates immutable successor versions, CAS-supersedes predecessor and retires terminally" },
   "AS-021": { requirement: "No real reviewer is configured: runtime remains truthful candidate/unavailable; no fake APPROVED/PUBLISHED state is produced.", file: "tests/integration/intervention-professional-authority.test.ts", anchor: "production Professional Approval and qualification are truthfully unavailable" },
   "AS-022": { requirement: "Approval proof content hash differs from the definition content hash: fail closed.", file: "tests/integration/intervention-professional-authority.test.ts", anchor: "['wrong hash'," },
-  "AS-023": { requirement: "approvalProofRef binds a different definition/version: fail closed.", file: "tests/integration/intervention-professional-authority.test.ts", anchor: "['wrong definition'," },
+  "AS-023": { requirement: "approvalProofRef binds a different definition/version: fail closed.", file: "tests/integration/intervention-requirement-traceability.test.ts", anchor: "AS-023 executes exact approvalProofRef binding fail-closed" },
   "AS-024": { requirement: "A published definition receives substantive semantic edits: in-place mutation is rejected; a successor version and fresh approval are required.", file: "tests/db/intervention-definition-runtime.test.ts", anchor: "creates immutable successor versions, CAS-supersedes predecessor and retires terminally" },
   "AS-025": { requirement: "Exact definition/version/hash has valid approval, valid publication, exact package inclusion and all current family gates pass: bounded eligibility may return allowed=true without creating a Phase 4 object.", file: "tests/domain/intervention-eligibility.test.ts", anchor: "returns allowed=true only when every independent gate passes" },
   "AS-026": { requirement: "Definition age/development scope does not match current authorized context: fail closed.", file: "tests/domain/intervention-eligibility.test.ts", anchor: "label: 'unknown age'" },
@@ -103,7 +106,7 @@ const TRACEABILITY = {
   "AS-028": { requirement: "Known conflicting Intervention combination is present: conflicting combination is blocked.", file: "tests/domain/intervention-eligibility.test.ts", anchor: "label: 'combination conflict'" },
   "AS-029": { requirement: "Required supporting Evidence is absent: allowed cannot become true.", file: "tests/domain/intervention-eligibility.test.ts", anchor: "label: 'missing formulation'" },
   "AS-030": { requirement: "Case phase has advanced while an otherwise valid parallel Scene stream remains legal: Slice 16 reads central Case truth and does not enforce a shadow exact-equality phase machine.", file: "tests/domain/intervention-eligibility.test.ts", anchor: "does not require exact Case phase equality and remains read-only past GOALS" },
-  "AS-031": { requirement: "Material Problem Formulation correction changes the authoritative formulation: old eligibility becomes stale and must be recalculated; Slice 16 does not write Case phase itself.", file: "tests/integration/intervention-eligibility-snapshot.test.ts", anchor: "reads one current snapshot and audits exact provenance without writing Case phase" },
+  "AS-031": { requirement: "Material Problem Formulation correction changes the authoritative formulation: old eligibility becomes stale and must be recalculated; Slice 16 does not write Case phase itself.", file: "tests/integration/intervention-eligibility-snapshot.test.ts", anchor: "AS-031 material Formulation correction/supersession cannot leave old eligibility authoritative" },
   "AS-032": { requirement: "Exact idempotent replay of an already committed mutation: same business result, no duplicate definition/audit effect.", file: "tests/db/intervention-definition-runtime.test.ts", anchor: "same key + same semantic payload replays exact definition identity; different payload conflicts" },
   "AS-033": { requirement: "Same idempotency key with materially different definition/approval payload: conflict.", file: "tests/db/intervention-definition-runtime.test.ts", anchor: "same key + same semantic payload replays exact definition identity; different payload conflicts" },
   "AS-034": { requirement: "Concurrent publish-binding and retirement/supersession attempt: serialization/version precondition allows at most one valid current outcome.", file: "tests/db/intervention-definition-concurrency.test.ts", anchor: "retire versus successor has one authoritative winner and cannot resurrect the chain" },
@@ -146,6 +149,46 @@ const TRACEABILITY = {
 } as const;
 
 describe('Slice 16 exact requirement traceability', () => {
+  it('T1611 mechanically proves raw InterventionDefinition writers are absent from the domain root', () => {
+    for (const rawWriter of [
+      'insertInterventionDefinitionCandidate',
+      'transitionInterventionDefinitionStateCas',
+      'insertInterventionDefinitionAudit',
+    ]) {
+      expect(domainRoot).not.toHaveProperty(rawWriter);
+    }
+  });
+
+  it('AS-023 executes exact approvalProofRef binding fail-closed', async () => {
+    const request = {
+      definitionId: '00000000-0000-7000-8000-000000000016',
+      definitionVersion: 1,
+      contentHash: 'a'.repeat(64),
+      sceneId: 'DIGITAL_USE',
+      sourceRefs: ['TEST_SOURCE:v1'],
+      approvalScope: 'DIGITAL_USE',
+    };
+    const original = professionalProof();
+    const rebound = professionalProof({
+      approvalProofRef: 'TEST_APPROVAL:OTHER_DEFINITION',
+      definitionId: 'other-definition',
+    });
+    const result = await resolveInterventionProfessionalAuthority(
+      professionalProvider(original, rebound),
+      request,
+      'REVALIDATE',
+      Date.parse('2026-11-16T00:00:00.000Z'),
+      {
+        approvalProofRef: original.approvalProofRef,
+        artifactIdentity: original.artifactIdentity,
+      }
+    );
+    expect(result).toEqual({
+      status: 'INVALID',
+      reason: 'APPROVAL_PROOF_CHANGED',
+    });
+  });
+
   it('maps the frozen 64 FR exact IDs one-for-one', () => {
     const actual = Object.keys(TRACEABILITY).filter((id) => id.startsWith('FR-'));
     expect(actual).toEqual([...EXPECTED_FR]);
@@ -164,13 +207,50 @@ describe('Slice 16 exact requirement traceability', () => {
     expect(new Set(actual).size).toBe(30);
   });
 
-  it('binds every exact ID to a concrete executable file and assertion anchor', () => {
+  it('binds every exact ID to a concrete executable test file and named behavioral assertion', () => {
     for (const [id, entry] of Object.entries(TRACEABILITY)) {
       const absolute = resolve(ROOT, entry.file);
       expect(existsSync(absolute), id + ' -> ' + entry.file).toBe(true);
       const source = readFileSync(absolute, 'utf8');
       expect(source.includes(entry.anchor), id + ' anchor: ' + entry.anchor).toBe(true);
+      expect(source).toMatch(/\b(it|test)\s*\(/);
       expect(entry.requirement.length, id).toBeGreaterThan(20);
+    }
+  });
+
+  it('binds the Audit-2 critical requirements to tests that execute their actual failure mode', () => {
+    const critical = {
+      'FR-049': [
+        'tests/integration/intervention-eligibility-snapshot.test.ts',
+        'SAFETY_HOLD',
+        'expectEligibilityStillWaiting',
+      ],
+      'FR-055': [
+        'tests/db/intervention-definition-runtime.test.ts',
+        'IDEMPOTENCY_PAYLOAD_MISMATCH',
+        'replays exact definition identity',
+      ],
+      'FR-058': [
+        'tests/db/intervention-definition-concurrency.test.ts',
+        'rolls back definition, audit and idempotency',
+        'rejects',
+      ],
+      'FR-059': [
+        'tests/integration/intervention-eligibility-snapshot.test.ts',
+        'approvalProvenance',
+        'approvalArtifactIdentity',
+      ],
+      'AS-031': [
+        'tests/integration/intervention-eligibility-snapshot.test.ts',
+        'Materially corrected formulation',
+        'FORMULATION_MISSING_OR_STALE',
+      ],
+    } as const;
+    for (const [id, [file, ...proofs]] of Object.entries(critical)) {
+      const source = readFileSync(resolve(ROOT, file), 'utf8');
+      for (const proof of proofs) {
+        expect(source.includes(proof), id + ' executable proof: ' + proof).toBe(true);
+      }
     }
   });
 
