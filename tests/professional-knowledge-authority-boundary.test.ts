@@ -5,6 +5,7 @@ import {
   type ProfessionalKnowledgeVersionSnapshot,
 } from '../packages/domain/src/professional-knowledge.js';
 import {
+  hashProfessionalKnowledgeApprovalBinding,
   hashProfessionalKnowledgeContent,
   hashProfessionalKnowledgeSourceSet,
 } from '../packages/domain/src/professional-knowledge.js';
@@ -60,6 +61,7 @@ function fixture() {
     semanticVersion: version.semanticVersion,
     contentHash: version.contentHash,
     sourceSetHash: version.sourceSetHash,
+    semanticBindingHash: hashProfessionalKnowledgeApprovalBinding(version),
     sourceRefs: ['source:1'],
     scope,
     reviewerIdentity: 'external:reviewer:1',
