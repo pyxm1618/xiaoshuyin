@@ -166,86 +166,56 @@ CREATE UNIQUE INDEX business_audit_events_professional_denial_dedupe_idx
     AND resource_type = 'PROFESSIONAL_KNOWLEDGE'
     AND family_id IS NULL;
 
--- Narrow SECURITY DEFINER write seam: it can only append one bounded denial
--- shape to the existing general audit owner. It derives the actor from the
--- transaction identity and never accepts raw proof/qualification/source bodies.
-CREATE FUNCTION app.append_professional_knowledge_authority_denial(
-  p_version_id uuid,
-  p_denial_fingerprint text,
-  p_decision_category text,
-  p_reason_code text,
-  p_dependency_category text
-) RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = pg_catalog, public
-AS $function$
-DECLARE
-  v_actor_account_id uuid;
-BEGIN
-  v_actor_account_id := app_account_id();
-
-  IF app_current_purpose() <> 'PROFESSIONAL_KNOWLEDGE_ADMIN'
-     OR v_actor_account_id IS NULL
-     OR p_version_id IS NULL
-     OR p_denial_fingerprint !~ '^[0-9a-f]{64}$'
-     OR p_decision_category NOT IN ('INVALID','UNAVAILABLE')
-     OR p_reason_code NOT IN (
-       'APPROVAL_INVALID',
-       'APPROVAL_UNAVAILABLE',
-       'APPROVAL_PROOF_ID_MISMATCH',
-       'STAFF_AUTHORITY_INVALID',
-       'STAFF_AUTHORITY_UNAVAILABLE',
-       'PROFESSIONAL_QUALIFICATION_INVALID',
-       'PROFESSIONAL_QUALIFICATION_UNAVAILABLE',
-       'SCENE_PACKAGE_BINDING_INVALID',
-       'SCENE_PACKAGE_BINDING_UNAVAILABLE',
-       'INTERVENTION_DEFINITION_INVALID',
-       'INTERVENTION_DEFINITION_UNAVAILABLE'
-     )
-     OR (
-       p_dependency_category IS NOT NULL
-       AND p_dependency_category NOT IN (
-         'APPROVAL',
-         'STAFF_AUTHORITY',
-         'PROFESSIONAL_QUALIFICATION',
-         'SCENE_PACKAGE_BINDING',
-         'INTERVENTION_DEFINITION'
-       )
-     )
-     OR NOT EXISTS (
-       SELECT 1
-         FROM public.professional_knowledge_versions v
-        WHERE v.id = p_version_id
-     ) THEN
-    RAISE EXCEPTION 'PROFESSIONAL_KNOWLEDGE_DENIAL_AUDIT_INVALID'
-      USING ERRCODE = '42501';
-  END IF;
-
-  INSERT INTO public.business_audit_events
-    (family_id, actor_account_id, event_type, resource_type, resource_id, metadata)
-  VALUES (
-    NULL,
-    v_actor_account_id,
-    'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED',
-    'PROFESSIONAL_KNOWLEDGE',
-    p_version_id,
-    jsonb_build_object(
-      'denialFingerprint', p_denial_fingerprint,
-      'decisionCategory', p_decision_category,
-      'reasonCode', p_reason_code,
-      'dependencyCategory', p_dependency_category
+-- Durable denial receipts must remain subject to FORCE RLS. Do not use
+-- SECURITY DEFINER/BYPASSRLS: add one narrow insert-only policy for the exact
+-- denial event shape. The normal success-audit policy remains Staff-authorized.
+CREATE POLICY audit_professional_knowledge_authority_denial_insert
+  ON business_audit_events
+  FOR INSERT TO xiaoshuyin_app
+  WITH CHECK (
+    family_id IS NULL
+    AND actor_account_id = app_account_id()
+    AND app_current_purpose() = 'PROFESSIONAL_KNOWLEDGE_ADMIN'
+    AND event_type = 'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED'
+    AND resource_type = 'PROFESSIONAL_KNOWLEDGE'
+    AND jsonb_typeof(metadata) = 'object'
+    AND metadata ?& ARRAY[
+      'denialFingerprint',
+      'decisionCategory',
+      'reasonCode',
+      'dependencyCategory'
+    ]
+    AND (metadata - ARRAY[
+      'denialFingerprint',
+      'decisionCategory',
+      'reasonCode',
+      'dependencyCategory'
+    ]::text[]) = '{}'::jsonb
+    AND (metadata ->> 'denialFingerprint') ~ '^[0-9a-f]{64}$'
+    AND (metadata ->> 'decisionCategory') IN ('INVALID','UNAVAILABLE')
+    AND (metadata ->> 'reasonCode') IN (
+      'APPROVAL_INVALID',
+      'APPROVAL_UNAVAILABLE',
+      'APPROVAL_PROOF_ID_MISMATCH',
+      'STAFF_AUTHORITY_INVALID',
+      'STAFF_AUTHORITY_UNAVAILABLE',
+      'PROFESSIONAL_QUALIFICATION_INVALID',
+      'PROFESSIONAL_QUALIFICATION_UNAVAILABLE',
+      'SCENE_PACKAGE_BINDING_INVALID',
+      'SCENE_PACKAGE_BINDING_UNAVAILABLE',
+      'INTERVENTION_DEFINITION_INVALID',
+      'INTERVENTION_DEFINITION_UNAVAILABLE'
     )
-  )
-  ON CONFLICT DO NOTHING;
-END
-$function$;
-
-REVOKE ALL ON FUNCTION app.append_professional_knowledge_authority_denial(
-  uuid, text, text, text, text
-) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app.append_professional_knowledge_authority_denial(
-  uuid, text, text, text, text
-) TO xiaoshuyin_app;
+    AND (
+      metadata -> 'dependencyCategory' = 'null'::jsonb
+      OR metadata ->> 'dependencyCategory' IN (
+        'APPROVAL',
+        'STAFF_AUTHORITY',
+        'PROFESSIONAL_QUALIFICATION',
+        'SCENE_PACKAGE_BINDING',
+        'INTERVENTION_DEFINITION'
+      )
+    )
+  );
 
 COMMIT;
