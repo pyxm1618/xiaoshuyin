@@ -270,6 +270,15 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     });
     expect(reviewReadback.status).toBe('SETTLED');
 
+    await admin.query(
+      `UPDATE staff_assignments
+          SET revoked_at=clock_timestamp(), revoked_by_account_id=$2
+        WHERE id=$1`,
+      [actor.assignmentId, actor.accountId]
+    );
+
+    // Replay must resolve before both current Staff authority and the
+    // post-commit revision can veto the already-settled command.
     await expect(recordKnowledgeReview(request)).resolves.toMatchObject({
       versionId: knowledge.versionId,
       revision: 2,
@@ -285,6 +294,17 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
         reviewedAt: new Date('2026-11-17T01:00:01Z'),
       })
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
+
+    // A genuinely new command still enters the Staff boundary and fails
+    // closed after revocation; replay ordering does not weaken authority.
+    await expect(
+      recordKnowledgeReview({
+        ...request,
+        idempotencyKey: `review-new-after-revoke-${crypto.randomUUID()}`,
+        expectedRevision: 2,
+        reviewedAt: new Date('2026-11-17T01:00:02Z'),
+      })
+    ).rejects.toMatchObject({ code: '42501' });
 
     const reviewEvidence = await admin.query<{ n: string }>(
       `SELECT count(*)::text AS n
@@ -353,6 +373,25 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     const idempotencyKey = `release-replay-${crypto.randomUUID()}`;
     const now = new Date('2026-11-17T02:00:00Z');
     const effectiveFrom = new Date('2026-11-17T02:00:00Z');
+
+    await withProfessionalKnowledgeAdminTransaction(
+      app,
+      { accountId: reviewer.accountId, assignmentId: reviewer.assignmentId },
+      async (tx) => {
+        await expect(
+          resolveProfessionalReviewStaffAuthority(tx, {
+            assignmentRef: reviewer.assignmentId,
+            accountId: reviewer.accountId,
+            personId: reviewer.personId,
+          })
+        ).resolves.toMatchObject({
+          status: 'RESOLVED',
+          assignmentRef: reviewer.assignmentId,
+          accountId: reviewer.accountId,
+          personId: reviewer.personId,
+        });
+      }
+    );
 
     await withProfessionalKnowledgeAdminTransaction(
       app,
@@ -612,6 +651,34 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     ).resolves.toMatchObject({
       status: 'INVALID',
       reason: 'INTERVENTION_DEFINITION_SUPERSEDED',
+    });
+
+    const retiredPrepared = prepareInterventionDefinition({
+      sceneId: 'DIGITAL_USE',
+      interventionCode: `AUDIT2_RET_${crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase()}`,
+      version: 1,
+      semantic: interventionSemantic(),
+    });
+    const retired = await insertInterventionDefinitionCandidate(admin as any, {
+      ...retiredPrepared,
+      supersedesId: null,
+      createdByPersonId: actor.personId,
+    });
+    await transitionInterventionDefinitionStateCas(admin as any, {
+      id: retired.id,
+      expectedRevision: 1,
+      expectedState: 'CANDIDATE',
+      nextState: 'RETIRED',
+    });
+    await expect(
+      resolveCurrentInterventionDefinition(admin as any, {
+        definitionId: retired.id,
+        definitionVersion: retired.version,
+        contentHash: retired.contentHash,
+      })
+    ).resolves.toMatchObject({
+      status: 'INVALID',
+      reason: 'INTERVENTION_DEFINITION_RETIRED',
     });
 
     const unavailableTx = {

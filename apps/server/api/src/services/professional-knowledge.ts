@@ -43,7 +43,7 @@ import {
   runIdempotentCommandInTransaction,
   type CommandOutcome,
 } from '../idempotency.js';
-import { withProfessionalKnowledgeAdminTransaction } from '../db/tx.js';
+import { withIdentityTransaction, withProfessionalKnowledgeAdminTransaction } from '../db/tx.js';
 import { getExactInterventionDefinition } from '../../../../../packages/domain/src/intervention-definition-repository.js';
 
 export const unavailableProductionProfessionalApprovalProvider:
@@ -122,9 +122,9 @@ export async function createKnowledgeCandidate(input: {
   idempotencyKey: string;
   candidate: CandidatePayload;
 }): Promise<{ knowledgeId: string; versionId: string; revision: number }> {
-  return withProfessionalKnowledgeAdminTransaction(
+  return withIdentityTransaction(
     input.pool,
-    { accountId: input.accountId, assignmentId: input.assignmentId },
+    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',
@@ -142,6 +142,9 @@ export async function createKnowledgeCandidate(input: {
           requestHash,
         },
         async () => {
+          // Settled replay and semantic mismatch are decided by the shared
+          // idempotency owner before Staff/revision-sensitive execution.
+          await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
           const created = await createProfessionalKnowledgeCandidate(tx, {
             ...input.candidate,
             accountId: input.accountId,
@@ -184,9 +187,9 @@ export async function editKnowledgeCandidate(input: {
   sources: readonly ProfessionalKnowledgeSourceSnapshot[];
   scope: ProfessionalKnowledgeScopeMetadata;
 }): Promise<{ versionId: string; revision: number }> {
-  return withProfessionalKnowledgeAdminTransaction(
+  return withIdentityTransaction(
     input.pool,
-    { accountId: input.accountId, assignmentId: input.assignmentId },
+    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT',
@@ -210,6 +213,9 @@ export async function editKnowledgeCandidate(input: {
           requestHash,
         },
         async () => {
+          // Settled replay and semantic mismatch are decided by the shared
+          // idempotency owner before Staff/revision-sensitive execution.
+          await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
           const revision = await editProfessionalKnowledgeCandidate(tx, {
             versionId: input.versionId,
             expectedRevision: input.expectedRevision,
@@ -279,9 +285,9 @@ export async function recordKnowledgeReview(input: {
   const qualificationProvider =
     input.qualificationProvider ?? unavailableProductionProfessionalQualificationProvider;
 
-  return withProfessionalKnowledgeAdminTransaction(
+  return withIdentityTransaction(
     input.pool,
-    { accountId: input.accountId, assignmentId: input.assignmentId },
+    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
@@ -305,6 +311,9 @@ export async function recordKnowledgeReview(input: {
           requestHash,
         },
         async () => {
+          // Settled replay and semantic mismatch are decided by the shared
+          // idempotency owner before Staff/revision-sensitive execution.
+          await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
           const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
           if (!version || version.revision !== input.expectedRevision) {
             conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
@@ -487,9 +496,9 @@ export async function createKnowledgeSuccessor(input: {
   expectedPredecessorRevision: number;
   candidate: SuccessorCandidatePayload;
 }): Promise<{ versionId: string; revision: number }> {
-  return withProfessionalKnowledgeAdminTransaction(
+  return withIdentityTransaction(
     input.pool,
-    { accountId: input.accountId, assignmentId: input.assignmentId },
+    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
@@ -510,6 +519,9 @@ export async function createKnowledgeSuccessor(input: {
           requestHash,
         },
         async () => {
+          // Settled replay and semantic mismatch are decided by the shared
+          // idempotency owner before Staff/revision-sensitive execution.
+          await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
           const created = await createProfessionalKnowledgeSuccessor(tx, {
             knowledgeId: input.knowledgeId,
             predecessorVersionId: input.predecessorVersionId,
@@ -647,9 +659,9 @@ export async function releaseKnowledgeVersion(input: {
   const interventionResolver =
     input.interventionResolver ?? resolveCurrentInterventionDefinition;
 
-  return withProfessionalKnowledgeAdminTransaction(
+  return withIdentityTransaction(
     input.pool,
-    { accountId: input.accountId, assignmentId: input.assignmentId },
+    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
@@ -671,6 +683,9 @@ export async function releaseKnowledgeVersion(input: {
           requestHash,
         },
         async () => {
+          // Settled replay and semantic mismatch are decided by the shared
+          // idempotency owner before Staff/revision-sensitive execution.
+          await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
           const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
           if (!version || version.revision !== input.expectedRevision) {
             conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
@@ -798,9 +813,9 @@ export async function retireKnowledgeVersion(input: {
   versionId: string;
   expectedRevision: number;
 }): Promise<{ versionId: string; revision: number; lifecycleStatus: 'RETIRED' }> {
-  return withProfessionalKnowledgeAdminTransaction(
+  return withIdentityTransaction(
     input.pool,
-    { accountId: input.accountId, assignmentId: input.assignmentId },
+    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_RETIRE',
@@ -819,6 +834,9 @@ export async function retireKnowledgeVersion(input: {
           requestHash,
         },
         async () => {
+          // Settled replay and semantic mismatch are decided by the shared
+          // idempotency owner before Staff/revision-sensitive execution.
+          await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
           const revision = await retireProfessionalKnowledgeVersion(tx, {
             versionId: input.versionId,
             expectedRevision: input.expectedRevision,
@@ -856,9 +874,9 @@ export async function propagateKnowledgeDependencyImpact(input: {
   exactDependent: boolean;
   materialImpact?: boolean;
 }): Promise<{ versionId: string; revision: number; changed: boolean }> {
-  return withProfessionalKnowledgeAdminTransaction(
+  return withIdentityTransaction(
     input.pool,
-    { accountId: input.accountId, assignmentId: input.assignmentId },
+    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE',
@@ -880,6 +898,9 @@ export async function propagateKnowledgeDependencyImpact(input: {
           requestHash,
         },
         async () => {
+          // Settled replay and semantic mismatch are decided by the shared
+          // idempotency owner before Staff/revision-sensitive execution.
+          await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
           const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
           if (!version || version.revision !== input.expectedRevision) {
             conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
