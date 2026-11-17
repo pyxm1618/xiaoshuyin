@@ -89,23 +89,17 @@ This Spec does not amend any Authority Doc.
 
 ### 2.1 Current main
 
-Current main contains Slice 1–12 runtime plus the narrow Authorization owner remediation merged through PR #37.
-
-PR #37:
+At this reconciliation freeze, current main is:
 
 ~~~text
-Title:
-fix(auth): add narrow child Contract-confirmation owner seam
-
-Merged:
-YES
-
-Merge commit:
-e7bb22d1abad58a6c9df6350744f092d88370aa3
+9aceaedf12b611d41fba06866dcd00e20eb5ea8d
+Merge pull request #57
+feat(slice16): authority-reconciled psychological behavioral intervention contract foundation
 ~~~
 
-The remediation does not implement Slice 14.
+The original Slice 18 freeze-time statement that main contained only Slice 1–12 plus PR #37 is historical and is **retired as current truth**.
 
+Current main includes the merged Slice 16 runtime from PR #57. This does **not** mean Slice 16 is a clean prerequisite: §2.3 separately records the post-merge forensic blockers and unmerged remediation state. Slice 17 remains unmerged and therefore is not current-main runtime truth.
 ### 2.2 Current PostgreSQL baseline
 
 Current CI already uses PostgreSQL 18 for database migration/integration jobs.
@@ -129,57 +123,65 @@ Current reconciliation snapshot:
 
 Older Slice 13–15 freeze-time runtime statements are not T1801 predicates and are retired from this Spec as current-gate evidence.
 
-### 2.4 Slice 17 authority convergence
+### 2.4 Current Slice 17 authority truth
 
-Remote branch truth was re-read.
+Slice 18 consumes the **authority-reconciled** Slice 17 planning package, not the older pre-reconciliation Slice 17 freeze as current authority.
 
-~~~text
-spec/017-professional-knowledge-foundation
-  spec.md       PRESENT
-  plan.md       ABSENT
-  checklist.md  ABSENT
-  tasks.md      ABSENT
-
-plan/017-professional-knowledge-foundation
-  spec.md       PRESENT
-  plan.md       PRESENT
-  checklist.md  PRESENT
-  tasks.md      PRESENT
-~~~
-
-Exact Slice 17 Frozen Spec blob remains:
+Current remote authority package at this reconciliation freeze:
 
 ~~~text
-866c3f77dd269c94d420d9c0ae6b918f114286ce
+spec/017-professional-knowledge-foundation-authority-reconciliation
+  Head:
+  9763bfd796aca9dbac20a94137dc330ef2b15971
+
+  spec.md blob:
+  83222f41929689f5d98ca45027c78a262ae6449f
+
+plan/017-professional-knowledge-foundation-authority-reconciliation
+  Head / Planning Freeze:
+  62020e02c908b870ff4aa445d068d6b09c19405a
+
+  plan.md:
+  6120f92ebb891fb2a149c70ee2ba311fc578e94b
+
+  checklist.md:
+  5d087965a168e9a538583320e2e855b4466fd94e
+
+  tasks.md:
+  aee7ae367b74ace5fbb4f9c9b2edde21682ff53a
 ~~~
 
-The spec branch head is the authority-convergence commit:
+The older `spec/017-professional-knowledge-foundation` and `plan/017-professional-knowledge-foundation` snapshots remain historical evidence only; they are not the current authority consumed by this reconciliation.
+
+Runtime truth is separate from planning authority: PR #58 is still OPEN / DRAFT / NOT MERGED at the reconciliation snapshot, so its feature implementation cannot satisfy T1801 until exact merge/Audit/runtime usability are revalidated.
+### 2.5 Existing Slice 18 authority before reconciliation
+
+Immediately before this Authority Reconciliation created new branches, exhaustive `018` branch search found exactly:
 
 ~~~text
-22e69a546e00a37b6bf26fb3e28b10e18fd6f024
-chore(slice17): retire non-authoritative tasks from spec branch
+spec/018-professional-retrieval-gold-dataset
+  Head:
+  4624b3df6d59c6055421e175b95051782615de9a
+  spec.md:
+  bf7540ff3097ef14ca1c62a395b155abd4fde66a
+
+plan/018-professional-retrieval-gold-dataset
+  Head / original Planning Freeze:
+  9254c6bf387dd5471f7935be056c122fd5508672
+  plan.md:
+  4a773fa48d26eb8dcabc5611767a9e40a8cbdc7b
+  checklist.md:
+  ca07705de0e280f233e7a8eec2d9da26eb03af54
+  tasks.md:
+  754dc21d714550503c8b18193461beaf9f414275
+
+feat/018-*
+  NONE
 ~~~
 
-The authoritative Plan branch head remains:
+Those original spec/plan branches are preserved historically. They are superseded as **current Slice 18 authority** only by the unique authority-reconciliation Spec/Plan branches created by this task; they are not deleted or rewritten.
 
-~~~text
-a1d4e4390d313502696493573243adf401dbae90
-plan(slice17): finalize Audit 1 and planning freeze
-~~~
-
-Slice 17 competing planning authority is therefore retired. PASS.
-
-### 2.5 Existing Slice 18 authority
-
-Immediately before branch creation, remote search found:
-
-~~~text
-spec/018-*  NONE
-plan/018-*  NONE
-feat/018-*  NONE
-~~~
-
-No competing Slice 18 authority existed.
+No competing `018-*authority*` branch existed before reconciliation.
 
 ---
 
