@@ -130,7 +130,7 @@ function condition(value: unknown, field: string): InterventionFactCondition {
   const conditionValue = row['value'];
   const scalar =
     typeof conditionValue === 'string' ||
-    typeof conditionValue === 'number' ||
+    (typeof conditionValue === 'number' && Number.isFinite(conditionValue)) ||
     typeof conditionValue === 'boolean';
   const list =
     Array.isArray(conditionValue) &&
@@ -138,7 +138,7 @@ function condition(value: unknown, field: string): InterventionFactCondition {
     conditionValue.every(
       (entry) =>
         typeof entry === 'string' ||
-        typeof entry === 'number' ||
+        (typeof entry === 'number' && Number.isFinite(entry)) ||
         typeof entry === 'boolean'
     );
   if (!scalar && !list) invalid(field + '.value');
