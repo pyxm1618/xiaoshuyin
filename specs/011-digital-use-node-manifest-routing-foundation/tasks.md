@@ -67,7 +67,7 @@ Tasks that touch the same manifest/routing/validator contract are intentionally 
 
 ---
 
-- [ ] T1101 [REQ:FR-027,FR-030,V1-C20,V1-C25,§38] Re-run the development-start Authority/Implement Gate against latest main and stop before any edit unless all Phase 1 blockers are truly closed [VERIFY:git fetch; git rev-parse origin/main; compare Frozen Spec blob; inspect four Docs blobs, PR #26 merge/audit state, Slice 9 Safety+Drizzle/Data Access authority, Slice 10 merged Compliance foundation, migrations/shared contracts, and current CI]
+- [x] T1101 [REQ:FR-027,FR-030,V1-C20,V1-C25,§38] Re-run the development-start Authority/Implement Gate against latest main and stop before any edit unless all Phase 1 blockers are truly closed [VERIFY:git fetch; git rev-parse origin/main; compare Frozen Spec blob; inspect four Docs blobs, PR #26 merge/audit state, Slice 9 Safety+Drizzle/Data Access authority, Slice 10 merged Compliance foundation, migrations/shared contracts, and current CI]
 
 ### T1101 — Development-start Authority / Implement Gate
 
@@ -145,7 +145,7 @@ At the planning baseline of 2026-11-11 this task would **not pass** because the 
 
 ---
 
-- [ ] T1102 [REQ:FR-002,FR-004,FR-006,FR-009,FR-011,FR-012,FR-014,FR-015,FR-021,FR-022,FR-035] Create the independent V1-product snapshot and smallest failing Digital Use contract tests before production Scene code exists [VERIFY:bunx vitest run tests/scenes/digital-use; expected initial failures prove missing manifest/router/validators while snapshot itself parses and contains exactly the approved canonical expectations]
+- [x] T1102 [REQ:FR-002,FR-004,FR-006,FR-009,FR-011,FR-012,FR-014,FR-015,FR-021,FR-022,FR-035] Create the independent V1-product snapshot and smallest failing Digital Use contract tests before production Scene code exists [VERIFY:bunx vitest run tests/scenes/digital-use; expected initial failures prove missing manifest/router/validators while snapshot itself parses and contains exactly the approved canonical expectations]
 
 ### T1102 — Canonical Snapshot + Failing Contract Evidence
 
@@ -207,7 +207,7 @@ Stop if the snapshot requires any node, branch, threshold, terminal or parallel 
 
 ---
 
-- [ ] T1103 [REQ:FR-001,FR-023,FR-024,FR-027,§3,§12.1] Establish the minimal approved @xiaoshuyin/scenes workspace shell at packages/scenes/digital-use without business runtime or external dependencies [VERIFY:bun install --frozen-lockfile where applicable; bun run typecheck; workspace package resolves and only foundation exports exist]
+- [x] T1103 [REQ:FR-001,FR-023,FR-024,FR-027,§3,§12.1] Establish the minimal approved @xiaoshuyin/scenes workspace shell at packages/scenes/digital-use without business runtime or external dependencies [VERIFY:bun install --frozen-lockfile where applicable; bun run typecheck; workspace package resolves and only foundation exports exist]
 
 ### T1103 — Minimal Scene Workspace
 
@@ -266,7 +266,7 @@ Stop if the authoritative repository layout has changed such that `packages/scen
 
 ---
 
-- [ ] T1104 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-009,FR-010,FR-011,FR-012,FR-014,FR-015,FR-031,FR-032,FR-035] Implement the explicit 75-entry production node-manifest.ts and structural types with no numeric generation or second inventory [VERIFY:bunx vitest run tests/scenes/digital-use/manifest-completeness.test.ts tests/scenes/digital-use/source-identity.test.ts; bun run typecheck]
+- [x] T1104 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-009,FR-010,FR-011,FR-012,FR-014,FR-015,FR-031,FR-032,FR-035] Implement the explicit 75-entry production node-manifest.ts and structural types with no numeric generation or second inventory [VERIFY:bunx vitest run tests/scenes/digital-use/manifest-completeness.test.ts tests/scenes/digital-use/source-identity.test.ts; bun run typecheck]
 
 ### T1104 — Full Node Manifest
 
@@ -329,7 +329,7 @@ Stop on any node/field whose meaning cannot be traced to Frozen Spec/current app
 
 ---
 
-- [ ] T1105 [REQ:FR-002,FR-003,FR-004,FR-016,FR-017,FR-019,FR-021,FR-031,FR-032,FR-035] Implement pure inventory/source/field/target/branch validators that hard-fail invalid manifests without auto-fix [VERIFY:bunx vitest run tests/scenes/digital-use/manifest-completeness.test.ts tests/scenes/digital-use/source-identity.test.ts tests/scenes/digital-use/graph-validation.test.ts]
+- [x] T1105 [REQ:FR-002,FR-003,FR-004,FR-016,FR-017,FR-019,FR-021,FR-031,FR-032,FR-035] Implement pure inventory/source/field/target/branch validators that hard-fail invalid manifests without auto-fix [VERIFY:bunx vitest run tests/scenes/digital-use/manifest-completeness.test.ts tests/scenes/digital-use/source-identity.test.ts tests/scenes/digital-use/graph-validation.test.ts]
 
 ### T1105 — Core Manifest Validators
 
@@ -389,7 +389,7 @@ Any validator that “repairs”, drops or silently normalizes an invalid semant
 
 ---
 
-- [ ] T1106 [REQ:FR-008,FR-009,FR-010,FR-016,FR-017,FR-023,FR-024,FR-025,FR-026,FR-033] Implement routing.ts as a pure manifest-consuming topology router with NODE_ROUTE/TERMINAL_ROUTE/BLOCKED/UNKNOWN and no default or external authority [VERIFY:bunx vitest run tests/scenes/digital-use/routing.test.ts; static dependency scan; repeated-identical-input determinism assertions]
+- [x] T1106 [REQ:FR-008,FR-009,FR-010,FR-016,FR-017,FR-023,FR-024,FR-025,FR-026,FR-033] Implement routing.ts as a pure manifest-consuming topology router with NODE_ROUTE/TERMINAL_ROUTE/BLOCKED/UNKNOWN and no default or external authority [VERIFY:bunx vitest run tests/scenes/digital-use/routing.test.ts; static dependency scan; repeated-identical-input determinism assertions]
 
 ### T1106 — Deterministic Router
 
@@ -454,7 +454,7 @@ Stop if a branch requires a new professional threshold or business authorization
 
 ---
 
-- [ ] T1107 [REQ:FR-011,FR-015,FR-018,FR-019,FR-034,DU-011-A,DU-011-C] Implement typed non-linear graph reachability, orphan and dead-end validation across routed/user/scheduled/help/re-entry/parallel entry semantics [VERIFY:bunx vitest run tests/scenes/digital-use/graph-validation.test.ts; all 75 nodes receive a legitimate reachability classification and injected orphan/dead-end mutations fail]
+- [x] T1107 [REQ:FR-011,FR-015,FR-018,FR-019,FR-034,DU-011-A,DU-011-C] Implement typed non-linear graph reachability, orphan and dead-end validation across routed/user/scheduled/help/re-entry/parallel entry semantics [VERIFY:bunx vitest run tests/scenes/digital-use/graph-validation.test.ts; all 75 nodes receive a legitimate reachability classification and injected orphan/dead-end mutations fail]
 
 ### T1107 — Reachability / Orphan / Dead-End Validator
 
@@ -514,7 +514,7 @@ If a node can only be made reachable by inventing an unsupported transition, sto
 
 ---
 
-- [ ] T1108 [REQ:FR-011,FR-013,FR-014,FR-015,FR-020,V1-D40] Implement explicit parallel-fidelity validation for A3001/target work, FAMILY_ALLIANCE vs PHONE_USE_CONTRACT, refusal independence, and A5001/A5002 separation [VERIFY:bunx vitest run tests/scenes/digital-use/parallel-fidelity.test.ts; missing/serialized relation mutations fail]
+- [x] T1108 [REQ:FR-011,FR-013,FR-014,FR-015,FR-020,V1-D40] Implement explicit parallel-fidelity validation for A3001/target work, FAMILY_ALLIANCE vs PHONE_USE_CONTRACT, refusal independence, and A5001/A5002 separation [VERIFY:bunx vitest run tests/scenes/digital-use/parallel-fidelity.test.ts; missing/serialized relation mutations fail]
 
 ### T1108 — Parallel Fidelity
 
@@ -564,7 +564,7 @@ Stop if current product authority no longer supports the frozen parallel relatio
 
 ---
 
-- [ ] T1109 [REQ:FR-005,FR-006,FR-007,FR-008,FR-009,V1-D01,V1-D02,§32.2] Add deterministic regression proving current device/age/purpose/duration/integrated-Evidence semantics and 01005/01006 priority routing [VERIFY:bunx vitest run tests/scenes/digital-use/authority-regression.test.ts; pre-PR#25 semantic mutations all fail]
+- [x] T1109 [REQ:FR-005,FR-006,FR-007,FR-008,FR-009,V1-D01,V1-D02,§32.2] Add deterministic regression proving current device/age/purpose/duration/integrated-Evidence semantics and 01005/01006 priority routing [VERIFY:bunx vitest run tests/scenes/digital-use/authority-regression.test.ts; pre-PR#25 semantic mutations all fail]
 
 ### T1109 — Current Digital Use Authority Regression
 
@@ -618,7 +618,7 @@ If passing requires inventing how evidence thresholds produce a professional con
 
 ---
 
-- [ ] T1110 [REQ:FR-003,FR-011,FR-012,FR-014,FR-034,FR-035,DU-011-A,DU-011-B] Add focused sparse/non-linear topology tests for A3033, A200401, A3002 target families, A4004–A4009 and A5001/A5002 [VERIFY:bunx vitest run tests/scenes/digital-use/source-identity.test.ts tests/scenes/digital-use/graph-validation.test.ts; all forbidden inferred identities/edges remain absent]
+- [x] T1110 [REQ:FR-003,FR-011,FR-012,FR-014,FR-034,FR-035,DU-011-A,DU-011-B] Add focused sparse/non-linear topology tests for A3033, A200401, A3002 target families, A4004–A4009 and A5001/A5002 [VERIFY:bunx vitest run tests/scenes/digital-use/source-identity.test.ts tests/scenes/digital-use/graph-validation.test.ts; all forbidden inferred identities/edges remain absent]
 
 ### T1110 — Sparse / Non-Linear Topology Regression
 
@@ -670,7 +670,7 @@ Any test proposal that assumes numeric adjacency without source authority must b
 
 ---
 
-- [ ] T1111 [REQ:FR-021,FR-022,FR-030,§12.2A] Implement a one-way semantic comparison from production manifest/routing projection to the independent checked-in snapshot, failing on drift without rewriting the fixture [VERIFY:bunx vitest run tests/scenes/digital-use/snapshot-fidelity.test.ts; intentional semantic mutation yields readable FAIL and snapshot file remains byte-identical]
+- [x] T1111 [REQ:FR-021,FR-022,FR-030,§12.2A] Implement a one-way semantic comparison from production manifest/routing projection to the independent checked-in snapshot, failing on drift without rewriting the fixture [VERIFY:bunx vitest run tests/scenes/digital-use/snapshot-fidelity.test.ts; intentional semantic mutation yields readable FAIL and snapshot file remains byte-identical]
 
 ### T1111 — Snapshot Fidelity / Diff Gate
 
@@ -722,7 +722,7 @@ If a mismatch reflects a real product-authority change, stop and return to upstr
 
 ---
 
-- [ ] T1112 [REQ:FR-001,FR-003,FR-023,FR-024,FR-025,FR-027,FR-028,SC-011,SC-012] Replace only the obsolete packages/scenes blanket ban with narrow static single-source/architecture/scope guards and add guard regression tests [VERIFY:bun run guard:static; bunx vitest run tests/scenes/digital-use/architecture-guard.test.ts; injected node-registry/snapshot-import/numeric-generator/forbidden-router-dependency fixtures fail]
+- [x] T1112 [REQ:FR-001,FR-003,FR-023,FR-024,FR-025,FR-027,FR-028,SC-011,SC-012] Replace only the obsolete packages/scenes blanket ban with narrow static single-source/architecture/scope guards and add guard regression tests [VERIFY:bun run guard:static; bunx vitest run tests/scenes/digital-use/architecture-guard.test.ts; injected node-registry/snapshot-import/numeric-generator/forbidden-router-dependency fixtures fail]
 
 ### T1112 — Static Architecture / Single-Source Guard
 
@@ -778,7 +778,7 @@ Stop if enforcing single-source would require a brittle blanket ban that breaks 
 
 ---
 
-- [ ] T1113 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035] Complete the full negative-mutation matrix and map all 35 Frozen Acceptance Scenarios to executable evidence [VERIFY:bunx vitest run tests/scenes/digital-use; acceptance mapping shows 35/35 PASS and every required mutation is observed to fail for the intended reason]
+- [x] T1113 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035] Complete the full negative-mutation matrix and map all 35 Frozen Acceptance Scenarios to executable evidence [VERIFY:bunx vitest run tests/scenes/digital-use; acceptance mapping shows 35/35 PASS and every required mutation is observed to fail for the intended reason]
 
 ### T1113 — Full Acceptance / Negative Mutation Convergence
 
@@ -846,7 +846,7 @@ Any acceptance scenario requiring out-of-scope runtime causes a scope review; do
 
 ---
 
-- [ ] T1114 [REQ:FR-030,§12.2A,§32.2] Add the minimal existing-CI hook that explicitly runs the Digital Use foundation suite while retaining exact-head full regression and existing contract gates [VERIFY:inspect .github/workflows/ci.yml; CI run on exact head shows Digital Use foundation, typecheck, guard:static, verify-all and OpenAPI checks all PASS]
+- [x] T1114 [REQ:FR-030,§12.2A,§32.2] Add the minimal existing-CI hook that explicitly runs the Digital Use foundation suite while retaining exact-head full regression and existing contract gates [VERIFY:inspect .github/workflows/ci.yml; CI run on exact head shows Digital Use foundation, typecheck, guard:static, verify-all and OpenAPI checks all PASS]
 
 ### T1114 — CI Integration
 
@@ -897,7 +897,7 @@ Stop if CI integration requires broad workflow restructuring unrelated to Slice 
 
 ---
 
-- [ ] T1115 [REQ:FR-026,FR-027,FR-028,FR-029,FR-030,SC-013,SC-014] Run targeted and full repository regression, prove exact implementation scope, and verify no Docs/spec/DB/API/UI/AI/runtime leakage [VERIFY:bun run typecheck; bun run guard:static; bunx vitest run tests/scenes/digital-use; bun run openapi:check; bun run verify-all; git diff --name-only <development-base>...HEAD against the approved allowlist]
+- [x] T1115 [REQ:FR-026,FR-027,FR-028,FR-029,FR-030,SC-013,SC-014] Run targeted and full repository regression, prove exact implementation scope, and verify no Docs/spec/DB/API/UI/AI/runtime leakage [VERIFY:bun run typecheck; bun run guard:static; bunx vitest run tests/scenes/digital-use; bun run openapi:check; bun run verify-all; git diff --name-only <development-base>...HEAD against the approved allowlist]
 
 ### T1115 — Full Regression / Scope Proof
 
@@ -960,7 +960,7 @@ Any pre-existing unrelated failure must be classified honestly; any Slice-caused
 
 ---
 
-- [ ] T1116 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,Constitution] Perform final exact-head convergence/governance verification, freeze implementation evidence, and stop for a new independent Audit 2 without merging [VERIFY:node .specify/scripts/validate-governance.mjs; node .specify/scripts/tests/run-governance-tests.mjs; bun run verify-all; git diff <development-base>...HEAD; exact-head CI evidence; acceptance matrix 35/35]
+- [x] T1116 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,Constitution] Perform final exact-head convergence/governance verification, freeze implementation evidence, and stop for a new independent Audit 2 without merging [VERIFY:node .specify/scripts/validate-governance.mjs; node .specify/scripts/tests/run-governance-tests.mjs; bun run verify-all; git diff <development-base>...HEAD; exact-head CI evidence; acceptance matrix 35/35]
 
 ### T1116 — Exact-Head Convergence / Independent Audit Handoff
 
