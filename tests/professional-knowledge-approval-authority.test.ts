@@ -114,16 +114,47 @@ describe('professional knowledge external approval authority', () => {
   });
 
   it.each([
+    ['knowledge id', (p: ProfessionalApprovalProof) => ({ ...p, knowledgeId: 'other' })],
+    ['semantic version', (p: ProfessionalApprovalProof) => ({ ...p, semanticVersion: '9.9.9' })],
     ['content hash', (p: ProfessionalApprovalProof) => ({ ...p, contentHash: 'b'.repeat(64) })],
     ['source set hash', (p: ProfessionalApprovalProof) => ({ ...p, sourceSetHash: 'b'.repeat(64) })],
     ['source refs', (p: ProfessionalApprovalProof) => ({ ...p, sourceRefs: ['source:other'] })],
+    ['reviewer identity', (p: ProfessionalApprovalProof) => ({ ...p, reviewerIdentity: 'reviewer-other' })],
+    ['reviewer account', (p: ProfessionalApprovalProof) => ({ ...p, reviewerAccountId: 'account-other' })],
+    ['reviewer person', (p: ProfessionalApprovalProof) => ({ ...p, reviewerPersonId: 'person-other' })],
     ['Staff assignment', (p: ProfessionalApprovalProof) => ({ ...p, staffAssignmentRef: 'other' })],
     ['qualification', (p: ProfessionalApprovalProof) => ({ ...p, qualificationRef: 'other' })],
     ['scope', (p: ProfessionalApprovalProof) => ({ ...p, scope: { ...p.scope, locale: 'en-US' } })],
-    ['status', (p: ProfessionalApprovalProof) => ({ ...p, approvalStatus: 'REVOKED' as const })],
+    ['qualification scope', (p: ProfessionalApprovalProof) => ({ ...p, qualificationScope: { ...p.qualificationScope, locale: 'en-US' } })],
+    ['approval status', (p: ProfessionalApprovalProof) => ({ ...p, approvalStatus: 'REVOKED' as const })],
+    ['publication status', (p: ProfessionalApprovalProof) => ({ ...p, publicationStatus: 'WITHDRAWN' as const })],
+    ['reviewed time', (p: ProfessionalApprovalProof) => ({ ...p, reviewedAt: '2027-01-01T00:00:00Z' })],
+    ['effective from', (p: ProfessionalApprovalProof) => ({ ...p, effectiveFrom: '2027-01-01T00:00:00Z' })],
+    ['effective to', (p: ProfessionalApprovalProof) => ({ ...p, effectiveTo: '2026-01-01T00:00:00Z' })],
   ])('rejects exact-proof mismatch: %s', (_label, mutate) => {
     const v = version();
     expect(validate(v, mutate(proof(v))).status).toBe('INVALID');
+  });
+
+  it('accepts only an exact Professional Content Package member binding when one is required', () => {
+    const base = version();
+    const packageRef = {
+      packageId: 'professional-package-1',
+      packageVersion: '2026.11',
+      contentHash: 'c'.repeat(64),
+    };
+    const v: ProfessionalKnowledgeVersionSnapshot = {
+      ...base,
+      scope: { ...base.scope, professionalContentPackageRef: packageRef },
+    };
+    const exact = { ...proof(v), professionalContentPackageRef: packageRef };
+    expect(validate(v, exact).status).toBe('VALID');
+    expect(
+      validate(v, {
+        ...exact,
+        professionalContentPackageRef: { ...packageRef, contentHash: 'd'.repeat(64) },
+      }).status
+    ).toBe('INVALID');
   });
 
   it('accepts only an exact synthetic protocol proof', () => {
