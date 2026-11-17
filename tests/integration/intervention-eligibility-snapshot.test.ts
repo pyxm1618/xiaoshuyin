@@ -528,6 +528,48 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     );
   });
 
+  it('blocks same proof identity when final reviewer Staff binding changes', async () => {
+    const f = await fixture('staff-binding-drift-' + crypto.randomUUID());
+    const original = professionalProof({
+      definitionId: f.definitionId,
+      definitionVersion: f.version,
+      contentHash: f.contentHash,
+    });
+    const rebound = professionalProof({
+      definitionId: f.definitionId,
+      definitionVersion: f.version,
+      contentHash: f.contentHash,
+      staffAuthority: {
+        ...original.staffAuthority,
+        assignmentRef: 'TEST_STAFF_ASSIGNMENT:DIFFERENT',
+      },
+    });
+
+    const result = await evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      professionalProvider(original, rebound),
+      exactPackage
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.approvalStatus).toBe('INVALID');
+    expect(result.professionalAuthorityBlockers).toContain(
+      'APPROVAL_PROOF_CHANGED'
+    );
+  });
+
   it('FR-049 blocks Case -> SAFETY_HOLD committed while eligibility is waiting on current Case authority', async () => {
     const f = await fixture('case-race-' + crypto.randomUUID());
     const writer = await admin.connect();
