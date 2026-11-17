@@ -1490,4 +1490,73 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     });
   });
 
+
+  it('PHASE2 MEDIUM-006: Staff owner timeout is UNAVAILABLE, rolls back release, and leaves one durable receipt', async () => {
+    const reviewer = await seedActor('phase2-staff-unavailable-reviewer');
+    const actor = await seedActor('phase2-staff-unavailable-actor');
+    const knowledge = await seedKnowledge(actor);
+    const p = approvalProof(
+      knowledge,
+      reviewer,
+      `proof-staff-unavailable-${crypto.randomUUID()}`
+    );
+
+    const blocker = await admin.connect();
+    const timedApp = new pg.Pool({
+      connectionString: process.env['DATABASE_URL'],
+      max: 2,
+      options: '-c statement_timeout=150',
+    });
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        `SELECT pg_advisory_xact_lock(
+           hashtextextended('AUTH_ACCOUNT:' || $1::text, 0)
+         )`,
+        [reviewer.accountId]
+      );
+
+      await expect(
+        releaseKnowledgeVersion({
+          pool: timedApp,
+          accountId: actor.accountId,
+          personId: actor.personId,
+          assignmentId: actor.assignmentId,
+          idempotencyKey: `phase2-staff-unavailable-${crypto.randomUUID()}`,
+          versionId: knowledge.versionId,
+          expectedRevision: 1,
+          approvalProofId: p.proofId,
+          approvalProvider: approvalProvider(p),
+          qualificationProvider: qualificationProvider(),
+          sceneBindingResolver: sceneBinding(knowledge),
+          now: new Date('2026-11-17T10:00:00Z'),
+        })
+      ).rejects.toMatchObject({
+        code: 'DEPENDENCY_UNAVAILABLE',
+        dependency: 'STAFF_AUTHORITY',
+      });
+
+      const state = await admin.query<{ lifecycle_status: string; revision: number }>(
+        'SELECT lifecycle_status, revision FROM professional_knowledge_versions WHERE id=$1',
+        [knowledge.versionId]
+      );
+      expect(state.rows[0]).toEqual({ lifecycle_status: 'CANDIDATE', revision: 1 });
+      const receipt = await admin.query<{ metadata: Record<string, string> }>(
+        `SELECT metadata FROM business_audit_events
+          WHERE resource_id=$1 AND event_type='PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED'`,
+        [knowledge.versionId]
+      );
+      expect(receipt.rowCount).toBe(1);
+      expect(receipt.rows[0]!.metadata).toMatchObject({
+        decisionCategory: 'UNAVAILABLE',
+        reasonCode: 'STAFF_AUTHORITY_UNAVAILABLE',
+        dependencyCategory: 'STAFF_AUTHORITY',
+      });
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => undefined);
+      blocker.release();
+      await timedApp.end();
+    }
+  });
+
 });
