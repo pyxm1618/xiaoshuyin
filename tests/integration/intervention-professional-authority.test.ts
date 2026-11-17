@@ -102,6 +102,48 @@ describe('Slice 16 Professional Approval / qualification consumer seam', () => {
     });
   }
 
+  it('accepts only exact CURRENT lifecycle and rejects every other runtime value', async () => {
+    const valid = await resolveInterventionProfessionalAuthority(
+      professionalProvider(professionalProof({ lifecycleStatus: 'CURRENT' })),
+      request,
+      'RESOLVE',
+      Date.parse('2026-11-16T00:00:00.000Z')
+    );
+    expect(valid.status).toBe('VALID');
+
+    const invalidLifecycleValues: Array<{
+      label: string;
+      value: unknown;
+      reason: string;
+    }> = [
+      { label: 'RETIRED', value: 'RETIRED', reason: 'RETIRED' },
+      { label: 'SUPERSEDED', value: 'SUPERSEDED', reason: 'SUPERSEDED' },
+      { label: 'EXPIRED', value: 'EXPIRED', reason: 'APPROVAL_EXPIRED' },
+      { label: 'UNKNOWN', value: 'UNKNOWN', reason: 'APPROVAL_LIFECYCLE_INVALID' },
+      { label: 'missing', value: undefined, reason: 'APPROVAL_LIFECYCLE_INVALID' },
+      { label: 'null', value: null, reason: 'APPROVAL_LIFECYCLE_INVALID' },
+      { label: 'arbitrary', value: 'SOMETHING_ELSE', reason: 'APPROVAL_LIFECYCLE_INVALID' },
+    ];
+
+    for (const row of invalidLifecycleValues) {
+      const proof = {
+        ...professionalProof(),
+        lifecycleStatus: row.value,
+      };
+      if (row.value === undefined) delete (proof as Record<string, unknown>).lifecycleStatus;
+      const result = await resolveInterventionProfessionalAuthority(
+        professionalProvider(proof as never),
+        request,
+        'RESOLVE',
+        Date.parse('2026-11-16T00:00:00.000Z')
+      );
+      expect(result, row.label).toMatchObject({
+        status: 'INVALID',
+        reason: row.reason,
+      });
+    }
+  });
+
   it('revalidates the exact original approvalProofRef and artifactIdentity', async () => {
     const proof = professionalProof();
     let observed: unknown = null;
