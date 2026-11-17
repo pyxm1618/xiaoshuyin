@@ -11,10 +11,14 @@ import {
 } from '../../apps/server/api/src/services/intervention-definitions.js';
 import {
   evaluateCurrentInterventionEligibility,
+  productionInterventionOwnerAdapters,
   type InterventionEligibilityOwnerAdapters,
 } from '../../apps/server/api/src/services/intervention-eligibility.js';
 import type { DigitalUseInterventionInclusionProvider } from '../../packages/scenes/digital-use/index.js';
-import { casRecordSceneNodeProgress } from '../../packages/domain/src/index.js';
+import {
+  casRecordSceneNodeProgress,
+  withdrawParticipation as withdrawParticipationOwner,
+} from '../../packages/domain/src/index.js';
 import { createAdminPool } from '../setup/db.js';
 import {
   commandHeaders,
@@ -38,6 +42,7 @@ interface Fixture {
   version: number;
   contentHash: string;
   evidenceAssertionId: string | null;
+  participationId: string | null;
 }
 
 describe('Slice 16 current eligibility snapshot / audit integration', () => {
@@ -63,6 +68,7 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     options: {
       requiredAssertion?: boolean;
       nonStaffFamilyActor?: boolean;
+      requiredParticipation?: boolean;
     } = {}
   ): Promise<Fixture> {
     const manager = await loginWithLabel(app, 's16-snapshot-' + label);
@@ -83,6 +89,8 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     expect(message.statusCode, message.body).toBe(201);
     const messageId = message.json().id as string;
     let evidenceAssertionId: string | null = null;
+    const participationId =
+      options.requiredParticipation === true ? crypto.randomUUID() : null;
 
     await admin.query('BEGIN');
     try {
@@ -148,6 +156,25 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
           "'[]'::jsonb,'[]'::jsonb,1)",
         [familyId, caseId]
       );
+      if (participationId !== null) {
+        const inviteTokenHash = crypto
+          .createHash('sha256')
+          .update('s16-participation-' + participationId)
+          .digest('hex');
+        await admin.query(
+          "INSERT INTO case_participants " +
+            "(id,family_id,case_id,person_id,state,invite_token_hash,invite_expires_at," +
+            "created_by_person_id,accepted_at) " +
+            "VALUES ($1,$2,$3,$4,'ACTIVE',$5,now()+interval '1 day',$4,now())",
+          [
+            participationId,
+            familyId,
+            caseId,
+            manager.personId,
+            inviteTokenHash,
+          ]
+        );
+      }
       await admin.query('COMMIT');
     } catch (error) {
       await admin.query('ROLLBACK');
@@ -168,7 +195,8 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
         development_stages: [],
       },
       participation_and_consent_requirements: {
-        required_participation_refs: [],
+        required_participation_refs:
+          participationId === null ? [] : [participationId],
         required_consent_purposes: [],
       },
     });
@@ -207,6 +235,7 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
       version: created.version,
       contentHash: created.contentHash,
       evidenceAssertionId,
+      participationId,
     };
   }
 
@@ -450,7 +479,7 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     expect(after.rows[0]!.count).toBe(before.rows[0]!.count);
   });
 
-  it('blocks when reviewer authority proof changes between resolve and final revalidation', async () => {
+  it('preserves final Staff-authority invalidity when reviewer authority is revoked before decision', async () => {
     const f = await fixture('proof-drift-' + crypto.randomUUID());
     const exactPackage: DigitalUseInterventionInclusionProvider = {
       async resolve(input) {
@@ -489,6 +518,48 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
       },
       passAdapters,
       professionalProvider(valid, revoked),
+      exactPackage
+    );
+
+    expect(result.allowed).toBe(false);
+    expect(result.approvalStatus).toBe('INVALID');
+    expect(result.professionalAuthorityBlockers).toContain(
+      'STAFF_AUTHORITY_INVALID'
+    );
+  });
+
+  it('blocks same proof identity when final reviewer Staff binding changes', async () => {
+    const f = await fixture('staff-binding-drift-' + crypto.randomUUID());
+    const original = professionalProof({
+      definitionId: f.definitionId,
+      definitionVersion: f.version,
+      contentHash: f.contentHash,
+    });
+    const rebound = professionalProof({
+      definitionId: f.definitionId,
+      definitionVersion: f.version,
+      contentHash: f.contentHash,
+      staffAuthority: {
+        ...original.staffAuthority,
+        assignmentRef: 'TEST_STAFF_ASSIGNMENT:DIFFERENT',
+      },
+    });
+
+    const result = await evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      professionalProvider(original, rebound),
       exactPackage
     );
 
@@ -898,6 +969,147 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     );
     expect(afterRetire.allowed).toBe(false);
     expect(afterRetire.reasonCodes).toContain('DEFINITION_RETIRED');
+  });
+
+
+  it('blocks when exact Approval expires during package await before the final decision boundary', async () => {
+    const f = await fixture('approval-expiry-race-' + crypto.randomUUID());
+    let proof: ReturnType<typeof professionalProof> | null = null;
+    const provider = {
+      async resolve() {
+        proof = professionalProof({
+          definitionId: f.definitionId,
+          definitionVersion: f.version,
+          contentHash: f.contentHash,
+          effectiveTo: new Date(Date.now() + 180).toISOString(),
+        });
+        return proof;
+      },
+      async revalidate() {
+        return proof;
+      },
+    };
+
+    let enteredPackage!: () => void;
+    let releasePackage!: () => void;
+    const packageEntered = new Promise<void>((resolve) => { enteredPackage = resolve; });
+    const packageRelease = new Promise<void>((resolve) => { releasePackage = resolve; });
+    const blockingPackage: DigitalUseInterventionInclusionProvider = {
+      async resolve(input) {
+        enteredPackage();
+        await packageRelease;
+        return { status: 'INCLUDED', inclusion: input };
+      },
+    };
+
+    const eligibility = evaluateCurrentInterventionEligibility(
+      appDb,
+      {
+        actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+        familyId: f.familyId,
+        caseId: f.caseId,
+        definition: {
+          id: f.definitionId,
+          version: f.version,
+          contentHash: f.contentHash,
+        },
+        consideredDefinitions: [],
+      },
+      passAdapters,
+      provider,
+      blockingPackage
+    );
+
+    await packageEntered;
+    expect(proof).not.toBeNull();
+    const expiry = Date.parse(proof!.effectiveTo!);
+    const remaining = Math.max(0, expiry - Date.now() + 30);
+    await new Promise((resolve) => setTimeout(resolve, remaining));
+    releasePackage();
+
+    const result = await eligibility;
+    expect(result.allowed).toBe(false);
+    expect(result.approvalStatus).toBe('INVALID');
+    expect(result.professionalAuthorityBlockers).toContain('APPROVAL_EXPIRED');
+
+    const positiveAudit = await admin.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM business_audit_events " +
+        "WHERE family_id=$1 AND resource_type='INTERVENTION_DEFINITION' " +
+        "AND resource_id=$2 AND metadata->>'allowed'='true'",
+      [f.familyId, f.definitionId]
+    );
+    expect(positiveAudit.rows[0]!.count).toBe('0');
+  });
+
+  it('waits for the existing Participation owner withdrawal and never emits a stale-positive eligibility audit', async () => {
+    const f = await fixture('participation-withdraw-race-' + crypto.randomUUID(), {
+      requiredParticipation: true,
+    });
+    expect(f.participationId).not.toBeNull();
+
+    const ownerAwareAdapters: InterventionEligibilityOwnerAdapters = {
+      ...passAdapters,
+      resolveParticipation: productionInterventionOwnerAdapters.resolveParticipation,
+    };
+
+    const writer = await admin.connect();
+    let committed = false;
+    try {
+      await writer.query('BEGIN');
+      const withdrawn = await withdrawParticipationOwner(writer, f.participationId!);
+      expect(withdrawn?.state).toBe('WITHDRAWN');
+
+      const eligibility = evaluateCurrentInterventionEligibility(
+        appDb,
+        {
+          actor: { accountId: f.manager.accountId, personId: f.manager.personId },
+          familyId: f.familyId,
+          caseId: f.caseId,
+          definition: {
+            id: f.definitionId,
+            version: f.version,
+            contentHash: f.contentHash,
+          },
+          consideredDefinitions: [],
+        },
+        ownerAwareAdapters,
+        authorityFor(f),
+        exactPackage
+      );
+
+      // A stale plain SELECT would observe the old ACTIVE row and finish here.
+      // The authoritative owner lock must instead wait for the withdrawal.
+      await expectEligibilityStillWaiting(eligibility);
+      await writer.query('COMMIT');
+      committed = true;
+
+      const result = await eligibility;
+      expect(result.allowed).toBe(false);
+      expect(result.reasonCodes).toContain('PARTICIPATION_BLOCK');
+
+      const positiveAudit = await admin.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM business_audit_events " +
+          "WHERE family_id=$1 AND resource_type='INTERVENTION_DEFINITION' " +
+          "AND resource_id=$2 AND metadata->>'allowed'='true'",
+        [f.familyId, f.definitionId]
+      );
+      expect(positiveAudit.rows[0]!.count).toBe('0');
+
+      const blockedAudit = await admin.query<{
+        event_type: string;
+        metadata: Record<string, unknown>;
+      }>(
+        "SELECT event_type,metadata FROM business_audit_events " +
+          "WHERE family_id=$1 AND resource_type='INTERVENTION_DEFINITION' " +
+          "AND resource_id=$2 ORDER BY occurred_at DESC,id DESC LIMIT 1",
+        [f.familyId, f.definitionId]
+      );
+      expect(blockedAudit.rows[0]!.event_type).toBe('INTERVENTION_ELIGIBILITY_BLOCKED');
+      expect(blockedAudit.rows[0]!.metadata).toMatchObject({ allowed: false });
+    } finally {
+      if (!committed) await writer.query('ROLLBACK').catch(() => undefined);
+      writer.release();
+    }
   });
 
 });

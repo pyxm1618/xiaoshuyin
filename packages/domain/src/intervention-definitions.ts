@@ -1,4 +1,5 @@
 import {
+  canonicalInterventionDefinitionJson,
   interventionDefinitionContentHash,
   parseInterventionDefinitionSemanticPayload,
   type InterventionDefinitionSemanticPayload,
@@ -86,13 +87,31 @@ export function normalizeInterventionCode(value: string): string {
   return code;
 }
 
+function deepFreezeSemanticSnapshot(
+  value: InterventionDefinitionSemanticPayload
+): InterventionDefinitionSemanticPayload {
+  const freeze = (candidate: unknown): void => {
+    if (typeof candidate !== 'object' || candidate === null || Object.isFrozen(candidate)) return;
+    for (const nested of Object.values(candidate as Record<string, unknown>)) freeze(nested);
+    Object.freeze(candidate);
+  };
+  freeze(value);
+  return value;
+}
+
 export function prepareInterventionDefinition(
   input: PrepareInterventionDefinitionInput
 ): Omit<InterventionDefinitionExactRef, 'id'> & { readonly semantic: InterventionDefinitionSemanticPayload } {
   if (!Number.isInteger(input.version) || input.version < 1 || input.sceneId.trim().length === 0) {
     throw new InterventionDefinitionError('INTERVENTION_DEFINITION_INVALID');
   }
-  const semantic = parseInterventionDefinitionSemanticPayload(input.semantic);
+  const parsed = parseInterventionDefinitionSemanticPayload(input.semantic);
+  // Detach the validated semantic value completely from caller-owned objects
+  // before any async boundary can occur. Canonical JSON is produced only after
+  // validation, so non-finite numeric values cannot be normalized into null.
+  const semantic = deepFreezeSemanticSnapshot(
+    JSON.parse(canonicalInterventionDefinitionJson(parsed)) as InterventionDefinitionSemanticPayload
+  );
   return {
     sceneId: input.sceneId,
     interventionCode: normalizeInterventionCode(input.interventionCode),

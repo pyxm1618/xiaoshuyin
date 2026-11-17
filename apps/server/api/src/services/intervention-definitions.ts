@@ -30,6 +30,15 @@ export interface InterventionDefinitionMutationActor {
   readonly personId: string;
 }
 
+function assertExpectedApprovalScope(assertedScope: string, authoritativeScope: string): string {
+  if (assertedScope !== authoritativeScope) {
+    throw Object.assign(new Error('INTERVENTION_APPROVAL_SCOPE_MISMATCH'), {
+      code: 'INTERVENTION_APPROVAL_SCOPE_MISMATCH',
+    });
+  }
+  return authoritativeScope;
+}
+
 async function assertMutationAuthority(
   tx: pg.PoolClient,
   actor: InterventionDefinitionMutationActor,
@@ -120,11 +129,15 @@ export async function createInterventionDefinitionCandidate(
         version: 1,
         semantic: input.semantic,
       });
+      const authoritativeScope = assertExpectedApprovalScope(
+        input.approvalScope,
+        prepared.sceneId
+      );
       const requestHash = hashPayload({
         sceneId: prepared.sceneId,
         interventionCode: prepared.interventionCode,
         contentHash: prepared.contentHash,
-        approvalScope: input.approvalScope,
+        approvalScope: authoritativeScope,
       });
       const cfg = {
         accountId: input.actor.accountId,
@@ -136,14 +149,9 @@ export async function createInterventionDefinitionCandidate(
       };
       const early = await peekIdempotentCommandInTransaction(tx, cfg);
       if (early) return outcomeBody(early);
-      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
+      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, authoritativeScope);
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
-        const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
-        if (
-          finalAuthority.assignmentRef !== authority.assignmentRef ||
-          finalAuthority.qualificationRef !== authority.qualificationRef
-        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
         await lockInterventionDefinitionChain(tx, prepared.sceneId, prepared.interventionCode);
         const current = await getCurrentInterventionDefinitionChainHead(tx, prepared, true);
         if (current !== null) {
@@ -151,6 +159,16 @@ export async function createInterventionDefinitionCandidate(
             code: 'INTERVENTION_DEFINITION_CONFLICT',
           });
         }
+        const finalAuthority = await assertMutationAuthority(
+          tx,
+          input.actor,
+          qualificationProvider,
+          authoritativeScope
+        );
+        if (
+          finalAuthority.assignmentRef !== authority.assignmentRef ||
+          finalAuthority.qualificationRef !== authority.qualificationRef
+        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
         const created = await insertInterventionDefinitionCandidate(tx, {
           ...prepared,
           supersedesId: null,
@@ -199,10 +217,14 @@ export async function createInterventionDefinitionSuccessor(
         version: predecessor.version + 1,
         semantic: input.semantic,
       });
+      const authoritativeScope = assertExpectedApprovalScope(
+        input.approvalScope,
+        predecessor.sceneId
+      );
       const requestHash = hashPayload({
         predecessor: input.predecessor,
         contentHash: prepared.contentHash,
-        approvalScope: input.approvalScope,
+        approvalScope: authoritativeScope,
       });
       const cfg = {
         accountId: input.actor.accountId,
@@ -214,14 +236,9 @@ export async function createInterventionDefinitionSuccessor(
       };
       const early = await peekIdempotentCommandInTransaction(tx, cfg);
       if (early) return outcomeBody(early);
-      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
+      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, authoritativeScope);
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
-        const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
-        if (
-          finalAuthority.assignmentRef !== authority.assignmentRef ||
-          finalAuthority.qualificationRef !== authority.qualificationRef
-        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
         await lockInterventionDefinitionChain(tx, prepared.sceneId, prepared.interventionCode);
         const locked = await getExactInterventionDefinition(tx, input.predecessor, true);
         if (
@@ -243,6 +260,17 @@ export async function createInterventionDefinitionSuccessor(
             code: 'INTERVENTION_DEFINITION_STALE_REVISION',
           });
         }
+        const lockedScope = assertExpectedApprovalScope(authoritativeScope, locked.sceneId);
+        const finalAuthority = await assertMutationAuthority(
+          tx,
+          input.actor,
+          qualificationProvider,
+          lockedScope
+        );
+        if (
+          finalAuthority.assignmentRef !== authority.assignmentRef ||
+          finalAuthority.qualificationRef !== authority.qualificationRef
+        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
         const created = await insertInterventionDefinitionCandidate(tx, {
           ...prepared,
           supersedesId: locked.id,
@@ -290,10 +318,20 @@ async function terminalTransition(
     pool,
     { accountId: input.actor.accountId, purpose: 'SELF_IDENTITY' },
     async (tx) => {
+      const chainIdentity = await getExactInterventionDefinition(tx, input.definition, false);
+      if (chainIdentity === null) {
+        throw Object.assign(new Error('INTERVENTION_DEFINITION_STALE_REVISION'), {
+          code: 'INTERVENTION_DEFINITION_STALE_REVISION',
+        });
+      }
+      const authoritativeScope = assertExpectedApprovalScope(
+        input.approvalScope,
+        chainIdentity.sceneId
+      );
       const requestHash = hashPayload({
         definition: input.definition,
         nextState: input.nextState,
-        approvalScope: input.approvalScope,
+        approvalScope: authoritativeScope,
       });
       const commandType =
         input.nextState === 'RETIRED'
@@ -309,20 +347,9 @@ async function terminalTransition(
       } as const;
       const early = await peekIdempotentCommandInTransaction(tx, cfg);
       if (early) return outcomeBody(early);
-      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
+      const authority = await assertMutationAuthority(tx, input.actor, qualificationProvider, authoritativeScope);
       await lockIdempotentCommandInTransaction(tx, cfg);
       const outcome = await runLockedIdempotentCommandInTransaction(tx, cfg, async () => {
-        const finalAuthority = await assertMutationAuthority(tx, input.actor, qualificationProvider, input.approvalScope);
-        if (
-          finalAuthority.assignmentRef !== authority.assignmentRef ||
-          finalAuthority.qualificationRef !== authority.qualificationRef
-        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
-        const chainIdentity = await getExactInterventionDefinition(tx, input.definition, false);
-        if (chainIdentity === null) {
-          throw Object.assign(new Error('INTERVENTION_DEFINITION_STALE_REVISION'), {
-            code: 'INTERVENTION_DEFINITION_STALE_REVISION',
-          });
-        }
         await lockInterventionDefinitionChain(
           tx,
           chainIdentity.sceneId,
@@ -334,6 +361,17 @@ async function terminalTransition(
           current.revision !== input.definition.expectedRevision ||
           (current.state !== 'CANDIDATE' && current.state !== 'CURRENT')
         ) throw Object.assign(new Error('INTERVENTION_DEFINITION_STALE_REVISION'), { code: 'INTERVENTION_DEFINITION_STALE_REVISION' });
+        const lockedScope = assertExpectedApprovalScope(authoritativeScope, current.sceneId);
+        const finalAuthority = await assertMutationAuthority(
+          tx,
+          input.actor,
+          qualificationProvider,
+          lockedScope
+        );
+        if (
+          finalAuthority.assignmentRef !== authority.assignmentRef ||
+          finalAuthority.qualificationRef !== authority.qualificationRef
+        ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
         const changed = await transitionInterventionDefinitionStateCas(tx, {
           id: current.id,
           expectedRevision: current.revision,

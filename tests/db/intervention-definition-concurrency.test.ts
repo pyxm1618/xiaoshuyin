@@ -2,6 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import {
+  interventionDefinitionContentHash,
+  prepareInterventionDefinition,
+} from '../../packages/domain/src/index.js';
+import {
   createInterventionDefinitionCandidate,
   createInterventionDefinitionSuccessor,
   retireInterventionDefinition,
@@ -623,6 +627,410 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
     );
     expect(['RETIRED', 'SUPERSEDED']).toContain(row.rows[0]!.definition_state);
     expect(row.rows[0]!.revision).toBe(2);
+  });
+
+
+  it('detaches the validated semantic snapshot before qualification await and persists the same hashed value', async () => {
+    await ensureActiveAssignment();
+    const semantic = structuredClone(
+      interventionSemantic({
+        applicable_conditions: [
+          { fact_ref: 'family.state', operator: 'IN', value: ['READY', 'STABLE'] },
+        ],
+      })
+    ) as any;
+    const interventionCode = code('ALIAS_SNAPSHOT');
+    const expected = prepareInterventionDefinition({
+      sceneId: 'DIGITAL_USE',
+      interventionCode,
+      version: 1,
+      semantic,
+    });
+
+    let entered!: () => void;
+    let release!: () => void;
+    const atBarrier = new Promise<void>((resolve) => { entered = resolve; });
+    const continueBarrier = new Promise<void>((resolve) => { release = resolve; });
+    let calls = 0;
+    const barrierProvider: InterventionProfessionalQualificationProvider = {
+      async resolve(input) {
+        calls += 1;
+        if (calls === 1) {
+          entered();
+          await continueBarrier;
+        }
+        return {
+          qualificationRef: 'Q:ALIAS_SNAPSHOT',
+          scopeRef: input.approvalScope,
+          status: 'VALID',
+        };
+      },
+    };
+
+    const mutation = createInterventionDefinitionCandidate(
+      appPool,
+      {
+        actor: actor(),
+        sceneId: 'DIGITAL_USE',
+        interventionCode,
+        semantic,
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: key('alias-snapshot'),
+      },
+      barrierProvider
+    );
+    await atBarrier;
+
+    const mutateArrays = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.push('__CALLER_MUTATION__');
+        for (const nested of value) mutateArrays(nested);
+        return;
+      }
+      if (typeof value === 'object' && value !== null) {
+        for (const nested of Object.values(value as Record<string, unknown>)) {
+          mutateArrays(nested);
+        }
+      }
+    };
+    mutateArrays(semantic);
+    semantic.target_problem_or_mechanism = 'CALLER_MUTATED_AFTER_HASH';
+    semantic.age_and_development_scope.min_age_years = 99;
+    release();
+
+    const created = await mutation;
+    expect(created.semantic).toEqual(expected.semantic);
+    expect(created.contentHash).toBe(expected.contentHash);
+    expect(interventionDefinitionContentHash(created.semantic)).toBe(created.contentHash);
+
+    const stored = await admin.query<{
+      content_hash: string;
+      target_problem_or_mechanism: string;
+      applicable_conditions: unknown;
+      age_and_development_scope: unknown;
+      intervention_steps: unknown;
+      professional_source_refs: unknown;
+    }>(
+      'SELECT content_hash,target_problem_or_mechanism,applicable_conditions,' +
+        'age_and_development_scope,intervention_steps,professional_source_refs ' +
+        'FROM intervention_definitions WHERE id=$1',
+      [created.id]
+    );
+    expect(stored.rows[0]!.content_hash).toBe(expected.contentHash);
+    expect(stored.rows[0]!.target_problem_or_mechanism)
+      .toBe(expected.semantic.target_problem_or_mechanism);
+    expect(stored.rows[0]!.applicable_conditions)
+      .toEqual(expected.semantic.applicable_conditions);
+    expect(stored.rows[0]!.age_and_development_scope)
+      .toEqual(expected.semantic.age_and_development_scope);
+    expect(stored.rows[0]!.intervention_steps)
+      .toEqual(expected.semantic.intervention_steps);
+    expect(stored.rows[0]!.professional_source_refs)
+      .toEqual(expected.semantic.professional_source_refs);
+  });
+
+  it('derives qualification scope from authoritative Definition context, never caller assertion', async () => {
+    await ensureActiveAssignment();
+    let providerCalls = 0;
+    const otherOnly: InterventionProfessionalQualificationProvider = {
+      async resolve(input) {
+        providerCalls += 1;
+        return input.approvalScope === 'OTHER'
+          ? { qualificationRef: 'Q:OTHER', scopeRef: 'OTHER', status: 'VALID' }
+          : null;
+      },
+    };
+
+    await expect(
+      createInterventionDefinitionCandidate(
+        appPool,
+        {
+          actor: actor(),
+          sceneId: 'DIGITAL_USE',
+          interventionCode: code('WRONG_SCOPE_CREATE'),
+          semantic: interventionSemantic(),
+          approvalScope: 'OTHER',
+          idempotencyKey: key('wrong-scope-create'),
+        },
+        otherOnly
+      )
+    ).rejects.toMatchObject({ code: 'INTERVENTION_APPROVAL_SCOPE_MISMATCH' });
+    expect(providerCalls).toBe(0);
+
+    const created = await createInterventionDefinitionCandidate(
+      appPool,
+      {
+        actor: actor(),
+        sceneId: 'DIGITAL_USE',
+        interventionCode: code('RIGHT_SCOPE_BASE'),
+        semantic: interventionSemantic(),
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: key('right-scope-base'),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    );
+    const exact = {
+      id: created.id,
+      version: created.version,
+      contentHash: created.contentHash,
+      expectedRevision: created.revision,
+    };
+
+    for (const mutate of [
+      () => retireInterventionDefinition(
+        appPool,
+        {
+          actor: actor(),
+          definition: exact,
+          approvalScope: 'OTHER',
+          idempotencyKey: key('wrong-scope-retire'),
+        },
+        otherOnly
+      ),
+      () => supersedeInterventionDefinition(
+        appPool,
+        {
+          actor: actor(),
+          definition: exact,
+          approvalScope: 'OTHER',
+          idempotencyKey: key('wrong-scope-supersede'),
+        },
+        otherOnly
+      ),
+      () => createInterventionDefinitionSuccessor(
+        appPool,
+        {
+          actor: actor(),
+          predecessor: exact,
+          semantic: interventionSemantic({ rationale: 'WRONG_SCOPE_SUCCESSOR' }),
+          approvalScope: 'OTHER',
+          idempotencyKey: key('wrong-scope-successor'),
+        },
+        otherOnly
+      ),
+    ]) {
+      await expect(mutate()).rejects.toMatchObject({
+        code: 'INTERVENTION_APPROVAL_SCOPE_MISMATCH',
+      });
+    }
+    const unchanged = await admin.query<{ definition_state: string; revision: number }>(
+      'SELECT definition_state,revision FROM intervention_definitions WHERE id=$1',
+      [created.id]
+    );
+    expect(unchanged.rows[0]).toEqual({
+      definition_state: 'CANDIDATE',
+      revision: 1,
+    });
+  });
+
+  it('revalidates qualification after a real chain-lock wait and rolls back when the external owner revokes and commits', async () => {
+    await ensureActiveAssignment();
+    const interventionCode = code('QUALIFICATION_REVOKE_WAIT');
+    const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 16);
+    const tableName = 's16_test_qualification_' + suffix;
+    let calls = 0;
+
+    await admin.query(
+      `CREATE TABLE ${tableName} (
+        reviewer_identity_ref uuid PRIMARY KEY,
+        qualification_ref text NOT NULL,
+        scope_ref text NOT NULL,
+        status text NOT NULL
+      )`
+    );
+    await admin.query(
+      `INSERT INTO ${tableName}
+       (reviewer_identity_ref,qualification_ref,scope_ref,status)
+       VALUES ($1,'Q:REVOCABLE','DIGITAL_USE','VALID')`,
+      [personId]
+    );
+
+    const revocableProvider: InterventionProfessionalQualificationProvider = {
+      async resolve(input) {
+        calls += 1;
+        const result = await admin.query<{
+          qualification_ref: string;
+          scope_ref: string;
+          status: 'VALID' | 'REVOKED' | 'EXPIRED' | 'UNVERIFIABLE';
+        }>(
+          `SELECT qualification_ref,scope_ref,status
+             FROM ${tableName}
+            WHERE reviewer_identity_ref=$1`,
+          [input.reviewerIdentityRef]
+        );
+        const row = result.rows[0];
+        return row === undefined
+          ? null
+          : {
+              qualificationRef: row.qualification_ref,
+              scopeRef: row.scope_ref,
+              status: row.status,
+            };
+      },
+    };
+    const idem = key('qualification-revoke-wait');
+    const auditBefore = await admin.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM business_audit_events " +
+        "WHERE actor_account_id=$1 AND event_type='INTERVENTION_DEFINITION_CANDIDATE_CREATED'",
+      [accountId]
+    );
+    const gate = await admin.connect();
+    const revoker = await admin.connect();
+    let gateCommitted = false;
+    let revokerCommitted = false;
+    try {
+      await gate.query('BEGIN');
+      const pid = await gate.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
+      const gatePid = pid.rows[0]!.pid;
+      await gate.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0::bigint))',
+        ['INTERVENTION_DEFINITION:DIGITAL_USE:' + interventionCode]
+      );
+
+      const mutation = createInterventionDefinitionCandidate(
+        appPool,
+        {
+          actor: actor(),
+          sceneId: 'DIGITAL_USE',
+          interventionCode,
+          semantic: interventionSemantic(),
+          approvalScope: 'DIGITAL_USE',
+          idempotencyKey: idem,
+        },
+        revocableProvider
+      );
+      await waitForQueuedChainWaiters(gatePid, 1);
+      expect(calls).toBe(1);
+
+      // T2 is an independent external qualification-owner transaction. Its
+      // revocation commits while T1 is still blocked on the Definition chain.
+      await revoker.query('BEGIN');
+      await revoker.query(
+        `UPDATE ${tableName}
+            SET status='REVOKED'
+          WHERE reviewer_identity_ref=$1`,
+        [personId]
+      );
+      await revoker.query('COMMIT');
+      revokerCommitted = true;
+
+      await gate.query('COMMIT');
+      gateCommitted = true;
+
+      await expect(mutation).rejects.toMatchObject({
+        code: 'INTERVENTION_QUALIFICATION_MISSING',
+      });
+      expect(calls).toBeGreaterThanOrEqual(2);
+
+      const [defs, audits, idems] = await Promise.all([
+        admin.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM intervention_definitions WHERE intervention_code=$1',
+          [interventionCode]
+        ),
+        admin.query<{ count: string }>(
+          "SELECT count(*)::text AS count FROM business_audit_events " +
+            "WHERE actor_account_id=$1 AND event_type='INTERVENTION_DEFINITION_CANDIDATE_CREATED'",
+          [accountId]
+        ),
+        admin.query<{ count: string }>(
+          "SELECT count(*)::text AS count FROM idempotency_keys " +
+            "WHERE actor_account_id=$1 AND command_type='INTERVENTION_DEFINITION_CREATE' " +
+            "AND idempotency_key=$2",
+          [accountId, idem]
+        ),
+      ]);
+      expect(defs.rows[0]!.count).toBe('0');
+      expect(idems.rows[0]!.count).toBe('0');
+      expect(audits.rows[0]!.count).toBe(auditBefore.rows[0]!.count);
+    } finally {
+      if (!revokerCommitted) await revoker.query('ROLLBACK').catch(() => undefined);
+      if (!gateCommitted) await gate.query('ROLLBACK').catch(() => undefined);
+      revoker.release();
+      gate.release();
+      await admin.query(`DROP TABLE IF EXISTS ${tableName}`).catch(() => undefined);
+    }
+  });
+
+  it('AS-035 fails after the domain INSERT and rolls back definition, audit and idempotency settlement', async () => {
+    await ensureActiveAssignment();
+    const interventionCode = code('POST_WRITE_ROLLBACK');
+    const idem = key('post-write-rollback');
+    const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 16);
+    const functionName = 'test_s16_post_write_' + suffix;
+    const triggerName = 'test_s16_post_write_' + suffix;
+    const auditBefore = await admin.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM business_audit_events " +
+        "WHERE actor_account_id=$1 AND resource_type='INTERVENTION_DEFINITION'",
+      [accountId]
+    );
+
+    try {
+      await admin.query(
+        `CREATE FUNCTION app.${functionName}() RETURNS trigger
+         LANGUAGE plpgsql SECURITY INVOKER
+         SET search_path=pg_catalog,public
+         AS $$
+         BEGIN
+           IF NEW.actor_account_id = '${accountId}'::uuid
+              AND NEW.event_type = 'INTERVENTION_DEFINITION_CANDIDATE_CREATED' THEN
+             PERFORM 1 FROM intervention_definitions WHERE id=NEW.resource_id;
+             IF FOUND THEN
+               RAISE EXCEPTION 'POST_DOMAIN_WRITE_FAILURE_INJECTED';
+             END IF;
+           END IF;
+           RETURN NEW;
+         END
+         $$`
+      );
+      await admin.query(
+        `CREATE TRIGGER ${triggerName}
+         BEFORE INSERT ON business_audit_events
+         FOR EACH ROW EXECUTE FUNCTION app.${functionName}()`
+      );
+
+      await expect(
+        createInterventionDefinitionCandidate(
+          appPool,
+          {
+            actor: actor(),
+            sceneId: 'DIGITAL_USE',
+            interventionCode,
+            semantic: interventionSemantic(),
+            approvalScope: 'DIGITAL_USE',
+            idempotencyKey: idem,
+          },
+          TEST_ONLY_QUALIFICATION_PROVIDER
+        )
+      ).rejects.toThrow(/POST_DOMAIN_WRITE_FAILURE_INJECTED/);
+
+      const [defs, audits, idems] = await Promise.all([
+        admin.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM intervention_definitions WHERE intervention_code=$1',
+          [interventionCode]
+        ),
+        admin.query<{ count: string }>(
+          "SELECT count(*)::text AS count FROM business_audit_events " +
+            "WHERE actor_account_id=$1 AND resource_type='INTERVENTION_DEFINITION'",
+          [accountId]
+        ),
+        admin.query<{ count: string }>(
+          "SELECT count(*)::text AS count FROM idempotency_keys " +
+            "WHERE actor_account_id=$1 AND command_type='INTERVENTION_DEFINITION_CREATE' " +
+            "AND idempotency_key=$2",
+          [accountId, idem]
+        ),
+      ]);
+      expect(defs.rows[0]!.count).toBe('0');
+      expect(audits.rows[0]!.count).toBe(auditBefore.rows[0]!.count);
+      expect(idems.rows[0]!.count).toBe('0');
+    } finally {
+      await admin.query(
+        `DROP TRIGGER IF EXISTS ${triggerName} ON business_audit_events`
+      ).catch(() => undefined);
+      await admin.query(
+        `DROP FUNCTION IF EXISTS app.${functionName}()`
+      ).catch(() => undefined);
+    }
   });
 
 });

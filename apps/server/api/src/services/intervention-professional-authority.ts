@@ -1,6 +1,6 @@
 export type InterventionApprovalStatus = 'APPROVED' | 'DRAFT' | 'REJECTED' | 'REVOKED';
 export type InterventionPublicationStatus = 'PUBLISHED' | 'UNPUBLISHED';
-export type InterventionApprovalLifecycle = 'CURRENT' | 'RETIRED' | 'SUPERSEDED';
+export type InterventionApprovalLifecycle = 'CURRENT' | 'RETIRED' | 'SUPERSEDED' | 'EXPIRED';
 
 export interface InterventionProfessionalAuthorityRequest {
   readonly definitionId: string;
@@ -76,6 +76,7 @@ export type InterventionProfessionalAuthorityFailureReason =
   | 'UNPUBLISHED'
   | 'RETIRED'
   | 'SUPERSEDED'
+  | 'APPROVAL_LIFECYCLE_INVALID'
   | 'APPROVAL_EXPIRED'
   | 'APPROVAL_PROOF_CHANGED'
   | 'DEPENDENCY_UNAVAILABLE';
@@ -94,8 +95,8 @@ export type InterventionProfessionalAuthorityResult =
       readonly reason: InterventionProfessionalAuthorityFailureReason;
     };
 
-function timestamp(value: string): number | null {
-  if (value.trim().length === 0) return null;
+function timestamp(value: unknown): number | null {
+  if (typeof value !== 'string' || value.trim().length === 0) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -114,7 +115,7 @@ export async function resolveInterventionProfessionalAuthority(
   provider: InterventionProfessionalAuthorityProvider,
   request: InterventionProfessionalAuthorityRequest,
   mode: 'RESOLVE' | 'REVALIDATE',
-  now = Date.now(),
+  now: number | (() => number) = () => Date.now(),
   exactProofIdentity?: InterventionProfessionalAuthorityExactProofIdentity
 ): Promise<InterventionProfessionalAuthorityResult> {
   let proof: InterventionProfessionalAuthorityProof | null;
@@ -166,9 +167,15 @@ export async function resolveInterventionProfessionalAuthority(
   ) return invalid('QUALIFICATION_MISSING');
   if (proof.reviewStatus !== 'APPROVED') return invalid('APPROVAL_NOT_APPROVED');
   if (proof.publicationStatus !== 'PUBLISHED') return invalid('UNPUBLISHED');
-  if (proof.lifecycleStatus === 'RETIRED') return invalid('RETIRED');
-  if (proof.lifecycleStatus === 'SUPERSEDED') return invalid('SUPERSEDED');
+  const lifecycleStatus = (proof as { lifecycleStatus?: unknown }).lifecycleStatus;
+  if (lifecycleStatus === 'RETIRED') return invalid('RETIRED');
+  if (lifecycleStatus === 'SUPERSEDED') return invalid('SUPERSEDED');
+  if (lifecycleStatus === 'EXPIRED') return invalid('APPROVAL_EXPIRED');
+  if (lifecycleStatus !== 'CURRENT') return invalid('APPROVAL_LIFECYCLE_INVALID');
 
+  // Evaluate temporal validity after the provider await. Production callers can
+  // supply a callback to capture the exact synchronous decision-boundary time.
+  const validationNow = typeof now === 'function' ? now() : now;
   const reviewedAt = timestamp(proof.reviewedAt);
   const effectiveFrom = timestamp(proof.effectiveFrom);
   const effectiveTo = proof.effectiveTo === null ? null : timestamp(proof.effectiveTo);
@@ -177,10 +184,10 @@ export async function resolveInterventionProfessionalAuthority(
     reviewedAt === null ||
     effectiveFrom === null ||
     publishedAt === null ||
-    reviewedAt > now ||
-    effectiveFrom > now ||
-    publishedAt > now ||
-    (proof.effectiveTo !== null && (effectiveTo === null || effectiveTo <= now))
+    reviewedAt > validationNow ||
+    effectiveFrom > validationNow ||
+    publishedAt > validationNow ||
+    (proof.effectiveTo !== null && (effectiveTo === null || effectiveTo <= validationNow))
   ) return invalid('APPROVAL_EXPIRED');
 
   return {
