@@ -130,7 +130,8 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     // Audit 2 remediation adds one forward supersession guard migration.
     expect(output).toContain('APPLY 014_consent_01004_cross_purpose_supersede_guard.sql');
-    expect(output).toMatch(/Migration complete: 24 new, 3 previously applied\./);
+    expect(output).toContain('APPLY 026_professional_authority_release_remediation.sql');
+    expect(output).toMatch(/Migration complete: 25 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -216,6 +217,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '024_psychological_behavioral_intervention_contract.sql',
       '025_professional_knowledge_foundation.sql',
       '025_slice16_post_merge_forensic_remediation.sql',
+      '026_professional_authority_release_remediation.sql',
     ]);
 
     // New Evidence schema exists.
@@ -269,7 +271,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(94); // + Slice 16 InterventionDefinition + Slice 17 Professional Knowledge RLS policies
+    expect(policyRows[0].count).toBe(95); // + Phase 2 bounded Professional Knowledge authority-denial insert policy
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
@@ -325,12 +327,13 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 27 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 28 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
     expect(output).not.toContain('APPLY 005_case_participant_core.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
+    expect(output).not.toContain('APPLY 026_professional_authority_release_remediation.sql');
     expect(await fingerprint(migrator)).toEqual(before);
   }, 120_000);
 });
