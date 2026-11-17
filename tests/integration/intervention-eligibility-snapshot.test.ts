@@ -12,6 +12,7 @@ import {
   type InterventionEligibilityOwnerAdapters,
 } from '../../apps/server/api/src/services/intervention-eligibility.js';
 import type { DigitalUseInterventionInclusionProvider } from '../../packages/scenes/digital-use/index.js';
+import { casRecordSceneNodeProgress } from '../../packages/domain/src/index.js';
 import { createAdminPool } from '../setup/db.js';
 import {
   commandHeaders,
@@ -584,20 +585,18 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
   it('FR-049 Scene package binding revision committed during eligibility is re-read before decision', async () => {
     const f = await fixture('package-race-' + crypto.randomUUID());
     const writer = await admin.connect();
-    const v1OnlyPackage: DigitalUseInterventionInclusionProvider = {
-      async resolve(input) {
-        return input.scenePackageVersion === 'v1'
-          ? { status: 'INCLUDED', inclusion: input }
-          : { status: 'NOT_INCLUDED' };
-      },
-    };
     try {
       await writer.query('BEGIN');
-      await writer.query(
-        "UPDATE scene_node_states SET scene_package_version='v2', revision=revision+1 " +
-          "WHERE case_id=$1 AND node_code='A1001'",
-        [f.caseId]
-      );
+      const revised = await casRecordSceneNodeProgress(writer, {
+        caseId: f.caseId,
+        nodeCode: 'A1001',
+        scenePackageVersion: 'v1',
+        expectedRevision: 1,
+        branchReasonCodes: [],
+        inputRefs: [],
+        outputRefs: [],
+      });
+      expect(revised?.revision).toBe(2);
 
       const eligibility = evaluateCurrentInterventionEligibility(
         appDb,
@@ -614,16 +613,16 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
         },
         passAdapters,
         authorityFor(f),
-        v1OnlyPackage
+        exactPackage
       );
       await expectEligibilityStillWaiting(eligibility);
       await writer.query('COMMIT');
 
       const result = await eligibility;
-      expect(result.allowed).toBe(false);
-      expect(result.scenePackageVersion).toBe('v2');
-      expect(result.reasonCodes).toContain('PACKAGE_NOT_INCLUDED');
-      expect(result.dependencyRevisionRefs).toContain('PACKAGE:v2');
+      expect(result.allowed).toBe(true);
+      expect(result.scenePackageVersion).toBe('v1');
+      expect(result.dependencyRevisionRefs).toContain('PACKAGE:v1:r2');
+      expect(result.dependencyRevisionRefs).not.toContain('PACKAGE:v1:r1');
     } catch (error) {
       await writer.query('ROLLBACK').catch(() => undefined);
       throw error;
