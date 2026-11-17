@@ -30,6 +30,64 @@ const source = Object.fromEntries(
   productionFiles.map((path) => [path, readFileSync(resolve(ROOT, path), 'utf8')])
 );
 
+const qualificationProductionSource = Object.fromEntries(
+  walk('apps/server/api/src')
+    .sort()
+    .map((path) => [path, readFileSync(resolve(ROOT, path), 'utf8')])
+) as Record<string, string>;
+
+function assertProductionQualificationProviderPolicy(
+  graph: Readonly<Record<string, string>>
+): void {
+  const authorityPath =
+    'apps/server/api/src/services/intervention-professional-authority.ts';
+  const definitionsPath =
+    'apps/server/api/src/services/intervention-definitions.ts';
+  const authority = graph[authorityPath];
+  const definitions = graph[definitionsPath];
+  if (authority === undefined || definitions === undefined) {
+    throw new Error('qualification authority production graph incomplete');
+  }
+
+  const canonicalUnavailable =
+    /export const unavailableProductionInterventionProfessionalQualificationProvider:\s*InterventionProfessionalQualificationProvider\s*=\s*Object\.freeze\(\{\s*async resolve\(\)\s*\{\s*return null;\s*\},\s*\}\);/s;
+  const canonicalMatches =
+    authority.match(new RegExp(canonicalUnavailable.source, 'gs')) ?? [];
+  if (canonicalMatches.length !== 1) {
+    throw new Error('production qualification provider must have one unavailable canonical implementation');
+  }
+
+  const providerType = 'InterventionProfessionalQualificationProvider';
+  const explicitConcretePatterns = [
+    new RegExp('class\\s+\\w+\\s+implements\\s+' + providerType + '\\b'),
+    new RegExp('(?:const|let|var)\\s+\\w+\\s*:\\s*' + providerType + '\\s*='),
+    new RegExp('\\bsatisfies\\s+' + providerType + '\\b'),
+    new RegExp('\\bas\\s+' + providerType + '\\b'),
+    new RegExp('\\)\\s*:\\s*' + providerType + '\\s*(?:=>|\\{)'),
+  ];
+  const syntheticValidResolve =
+    /(?:async\s+)?resolve\s*\([^)]*\)\s*(?::[^{]+)?\{[\s\S]{0,1600}?return\s*\{(?=[\s\S]{0,700}?\bqualificationRef\s*:)(?=[\s\S]{0,700}?\bscopeRef\s*:)(?=[\s\S]{0,700}?\bstatus\s*:\s*['"]VALID['"])[\s\S]{0,700}?\}/m;
+
+  for (const [path, original] of Object.entries(graph)) {
+    const inspected =
+      path === authorityPath ? original.replace(canonicalUnavailable, '') : original;
+    if (explicitConcretePatterns.some((pattern) => pattern.test(inspected))) {
+      throw new Error('non-canonical production qualification provider implementation: ' + path);
+    }
+    if (syntheticValidResolve.test(inspected)) {
+      throw new Error('synthetic VALID qualification provider in production: ' + path);
+    }
+  }
+
+  const failClosedDefaults =
+    definitions.match(
+      /qualificationProvider:\s*InterventionProfessionalQualificationProvider\s*=\s*unavailableProductionInterventionProfessionalQualificationProvider/g
+    ) ?? [];
+  if (failClosedDefaults.length !== 4) {
+    throw new Error('production qualification composition is not unavailable-only');
+  }
+}
+
 describe('Slice 16 static authority / negative-scope guard', () => {
   it('derives the actual Slice 16 production/export graph including all required barrels and integrations', () => {
     for (const required of [
@@ -109,6 +167,30 @@ describe('Slice 16 static authority / negative-scope guard', () => {
     for (const [path, content] of Object.entries(source)) {
       expect(content, path).not.toMatch(/tests\/(support|fixtures)|TEST_ONLY_QUALIFICATION_PROVIDER/);
     }
+  });
+
+  it('keeps production qualification composition unavailable-only and rejects a structural synthetic VALID provider', () => {
+    expect(() =>
+      assertProductionQualificationProviderPolicy(qualificationProductionSource)
+    ).not.toThrow();
+
+    const mutatedGraph = {
+      ...qualificationProductionSource,
+      'apps/server/api/src/services/credential-source.ts': `
+export const localCredentialSource = {
+  async resolve(input: { reviewerIdentityRef: string; approvalScope: string }) {
+    return {
+      qualificationRef: 'local:credential',
+      scopeRef: input.approvalScope,
+      status: 'VALID' as const,
+    };
+  },
+};
+`,
+    };
+    expect(() =>
+      assertProductionQualificationProviderPolicy(mutatedGraph)
+    ).toThrow(/synthetic VALID qualification provider/);
   });
 
   it('contains no developer/AI/RAG/environment approval laundering', () => {
