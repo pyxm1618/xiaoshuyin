@@ -278,6 +278,58 @@ describe('Slice 16 InterventionDefinition DB runtime', () => {
     ).rejects.toBeTruthy();
   });
 
+  it('DB guard rejects a successor whose predecessor is already SUPERSEDED', async () => {
+    const code =
+      'TEST_TERMINAL_' +
+      crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase();
+    const predecessor = await createInterventionDefinitionCandidate(
+      appPool,
+      {
+        actor: actor(),
+        sceneId: 'DIGITAL_USE',
+        interventionCode: code,
+        semantic: interventionSemantic(),
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: key('terminal-predecessor'),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    );
+
+    await admin.query(
+      "UPDATE intervention_definitions " +
+        "SET definition_state='SUPERSEDED', revision=revision+1, " +
+        "superseded_at=clock_timestamp() WHERE id=$1",
+      [predecessor.id]
+    );
+
+    await expect(
+      admin.query(
+        "INSERT INTO intervention_definitions (" +
+          "scene_id,intervention_code,version,content_hash,definition_state," +
+          "target_problem_or_mechanism,formulation_dependencies," +
+          "supporting_evidence_requirements,applicable_conditions," +
+          "exclusion_or_contraindication_conditions,age_and_development_scope," +
+          "rationale,intervention_steps,participation_and_consent_requirements," +
+          "baseline_and_observation,expected_observable_change,burden_and_barriers," +
+          "adverse_or_worsening_signals,review_window_and_criteria," +
+          "stop_reassess_safety_referral_conditions,allowed_combinations," +
+          "conflicting_interventions,professional_source_refs,supersedes_id," +
+          "created_by_person_id) " +
+          "SELECT scene_id,intervention_code,version+1,$2,'CANDIDATE'," +
+          "target_problem_or_mechanism,formulation_dependencies," +
+          "supporting_evidence_requirements,applicable_conditions," +
+          "exclusion_or_contraindication_conditions,age_and_development_scope," +
+          "rationale,intervention_steps,participation_and_consent_requirements," +
+          "baseline_and_observation,expected_observable_change,burden_and_barriers," +
+          "adverse_or_worsening_signals,review_window_and_criteria," +
+          "stop_reassess_safety_referral_conditions,allowed_combinations," +
+          "conflicting_interventions,professional_source_refs,id,created_by_person_id " +
+          "FROM intervention_definitions WHERE id=$1",
+        [predecessor.id, 'f'.repeat(64)]
+      )
+    ).rejects.toMatchObject({ code: '23514' });
+  });
+
   it('registers only the bounded Slice 16 command vocabulary in the shared idempotency store', async () => {
     const constraint = await admin.query<{ definition: string }>(
       "SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint " +
