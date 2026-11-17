@@ -44,21 +44,24 @@ import {
 import { withProfessionalKnowledgeAdminTransaction } from '../db/tx.js';
 
 export const unavailableProductionProfessionalApprovalProvider:
-  ProfessionalApprovalProvider = Object.freeze({
-    async resolve() {
+  ProfessionalApprovalProvider = {
+    async resolve(): Promise<ProfessionalApprovalProviderResult> {
       return { status: 'UNAVAILABLE', reason: 'PROVIDER_UNAVAILABLE' };
     },
-    async revalidate() {
+    async revalidate(): Promise<ProfessionalApprovalProviderResult> {
       return { status: 'UNAVAILABLE', reason: 'PROVIDER_UNAVAILABLE' };
     },
-  });
+  };
 
 export const unavailableProductionProfessionalQualificationProvider:
-  ProfessionalQualificationProvider = Object.freeze({
-    async resolve() {
-      return { status: 'UNAVAILABLE', reason: 'APPROVED PROFESSIONAL REVIEWER — UNASSIGNED' };
+  ProfessionalQualificationProvider = {
+    async resolve(): Promise<ProfessionalQualificationResult> {
+      return {
+        status: 'UNAVAILABLE',
+        reason: 'APPROVED PROFESSIONAL REVIEWER — UNASSIGNED',
+      };
     },
-  });
+  };
 
 function conflict(code: string): never {
   throw Object.assign(new Error(code), { code, statusCode: 409 });
@@ -406,7 +409,7 @@ export async function resolveAndValidateKnowledgeApproval(input: {
       provider: providerResult,
       staffAuthority: { status: 'UNAVAILABLE', reason: 'NOT_RESOLVED' },
       qualification: { status: 'UNAVAILABLE', reason: 'NOT_RESOLVED' },
-      now: input.now,
+      ...(input.now === undefined ? {} : { now: input.now }),
     });
   }
 
