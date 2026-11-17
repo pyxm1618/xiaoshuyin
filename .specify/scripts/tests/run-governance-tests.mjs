@@ -3,8 +3,8 @@
  * Self-test for the Xiaoshuyin governance gate.
  *
  * Proves the validator accepts the legitimate Spec Kit lifecycle and still
- * rejects every broken combination, and that the Docs gate enforces the
- * approval override. Runs against throwaway fixtures in the OS temp directory,
+ * rejects every broken combination, and proves that labels cannot override
+ * the Docs guard. Runs against throwaway fixtures in the OS temp directory,
  * never against the repository working tree.
  */
 
@@ -137,8 +137,12 @@ function makeProject() {
   return root;
 }
 
-function run(script, cwd, args = []) {
-  const result = spawnSync(process.execPath, [script, ...args], { cwd, encoding: "utf8" });
+function run(script, cwd, args = [], extraEnv = {}) {
+  const result = spawnSync(process.execPath, [script, ...args], {
+    cwd,
+    encoding: "utf8",
+    env: { ...process.env, ...extraEnv },
+  });
   return {
     code: result.status,
     out: `${result.stdout ?? ""}${result.stderr ?? ""}`,
@@ -279,7 +283,7 @@ for (const fixture of [
   cleanup(root);
 }
 
-// ---------------------------------------------------------------- Cases G–H
+// ---------------------------------------------------------------- Docs immutability / label non-authority
 const DOCS_CHANGES = ["Docs/V1产品需求.md", "Docs/reference/legacy-digital-use-requirements.md"];
 const NON_DOCS_CHANGES = [".specify/README.md", "AGENTS.md"];
 
@@ -292,52 +296,22 @@ function docsFixture(lines) {
 
 {
   const { root, file } = docsFixture(DOCS_CHANGES);
-  const actual = run(docsGuard, root, ["--changed-files", file, "--labels", "chore,internal", "--mode", "enforce"]);
-  record("G Docs change without approval fails", 1, actual);
+  record("G Docs change fails in enforce mode", 1, run(docsGuard, root, ["--changed-files", file, "--mode", "enforce"]));
   cleanup(root);
 }
 
 {
   const { root, file } = docsFixture(DOCS_CHANGES);
-  const actual = run(docsGuard, root, [
-    "--changed-files",
-    file,
-    "--labels",
-    "chore,approved-docs-change",
-    "--mode",
-    "enforce",
-  ]);
-  const mentionsAudit = /Audit note/.test(actual.out) && /PRESENT/.test(actual.out);
-  const pass = record("H approved Docs override passes the Docs gate", 0, actual, mentionsAudit ? "" : "missing audit note");
-  if (pass && !mentionsAudit) results[results.length - 1].pass = false;
+  const actual = run(docsGuard, root, ["--changed-files", file, "--mode", "enforce"], {
+    PR_LABELS: "approved-docs-change",
+  });
+  record("H approved-docs-change label cannot bypass Docs guard", 1, actual);
   cleanup(root);
 }
 
 {
   const { root, file } = docsFixture(NON_DOCS_CHANGES);
-  record("I no Docs change passes without a label", 0, run(docsGuard, root, ["--changed-files", file, "--mode", "enforce"]));
-  cleanup(root);
-}
-
-{
-  // The label admits Docs to review; it must never mask another governance failure.
-  const root = makeProject();
-  featureDir(root, "007-broken-with-override");
-  writeFile(root, path.join("specs", "007-broken-with-override", "spec.md"), SPEC_MD);
-  writeFile(root, path.join("specs", "007-broken-with-override", "plan.md"), PLAN_MD);
-  writeFile(root, path.join("specs", "007-broken-with-override", "tasks.md"), buildTasks({ verify: "" }));
-  const validation = run(validator, root);
-  const { file } = docsFixture(DOCS_CHANGES);
-  const guard = run(docsGuard, root, ["--changed-files", file, "--labels", "approved-docs-change", "--mode", "enforce"]);
-  const pass = validation.code === 1 && guard.code === 0;
-  results.push({
-    name: "H2 override does not disable other governance checks",
-    expectCode: 1,
-    actualCode: validation.code,
-    pass,
-    note: `docs gate=${guard.code}`,
-    out: validation.out,
-  });
+  record("I no Docs change passes", 0, run(docsGuard, root, ["--changed-files", file, "--mode", "enforce"]));
   cleanup(root);
 }
 
