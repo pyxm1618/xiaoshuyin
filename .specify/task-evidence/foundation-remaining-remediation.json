@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "taskFile": "specs/foundation-remaining-remediation/tasks.md",
+  "implementationPr": 53,
+  "implementationHeadSha": "470a46d46bbca2a0da48fb3eea253913e967108e",
+  "mergeCommitSha": "b3d840c8dd1b8083b217bd72d9bd46919f1b6a2f",
+  "mergedAt": "2026-11-16T04:08:32Z",
+  "taskIds": [
+    "T001",
+    "T002",
+    "T003",
+    "T004",
+    "T005",
+    "T006",
+    "T007",
+    "T008",
+    "T009",
+    "T010"
+  ],
+  "artifactPaths": [
+    "apps/server/api/src/app.ts",
+    "apps/server/api/src/routes/auth.ts",
+    "apps/server/api/src/routes/consents.ts",
+    "packages/domain/src/problem-formulations.ts",
+    "tests/integration",
+    ".github/workflows/ci.yml",
+    ".specify/authority-inputs.json"
+  ],
+  "ciRuns": [
+    {
+      "name": "CI",
+      "runId": 43800852665,
+      "conclusion": "success",
+      "headSha": "470a46d46bbca2a0da48fb3eea253913e967108e"
+    },
+    {
+      "name": "Spec Governance",
+      "runId": 43800852660,
+      "conclusion": "success",
+      "headSha": "470a46d46bbca2a0da48fb3eea253913e967108e"
+    }
+  ]
+}
