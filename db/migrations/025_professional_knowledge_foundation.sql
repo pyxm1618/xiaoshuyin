@@ -1,5 +1,5 @@
 -- Slice 17 — Professional Knowledge Foundation.
--- Conflict-safe number 025: active Slice 16 PR #57 owns candidate migration 024.
+-- Conflict-safe number 025: the active upstream Slice 16 candidate already owns migration 024.
 -- This migration creates only Professional Knowledge truth and extends the
 -- existing Staff, idempotency and business-audit owners. It does not create
 -- reviewer/qualification/approval authorities, Scene Package storage, RAG,
