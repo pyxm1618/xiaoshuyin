@@ -21,8 +21,10 @@
     "apps/server/api/src/app.ts",
     "apps/server/api/src/routes/auth.ts",
     "apps/server/api/src/routes/consents.ts",
-    "packages/domain/src/problem-formulations.ts",
-    "tests/integration",
+    "tests/integration/auth.test.ts",
+    "tests/integration/consent-revoke.test.ts",
+    "tests/integration/http-security-boundary.test.ts",
+    "tests/scenes/digital-use/integrated-triage.test.ts",
     ".github/workflows/ci.yml",
     ".specify/authority-inputs.json"
   ],
