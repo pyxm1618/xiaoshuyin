@@ -713,7 +713,10 @@ function classifyReleaseAuthorityDenial(error: unknown): Omit<ReleaseAuthorityDe
 
   if (
     code === '42501' &&
-    reason.includes('PROFESSIONAL_REVIEW_ASSIGNMENT_REQUIRED')
+    (
+      reason.includes('PROFESSIONAL_REVIEW_ASSIGNMENT_REQUIRED') ||
+      reason.includes('PROFESSIONAL_REVIEW_TARGET_AUTHORITY_REQUIRED')
+    )
   ) {
     return {
       decisionCategory: 'INVALID',
@@ -769,7 +772,7 @@ function classifyReleaseAuthorityDenial(error: unknown): Omit<ReleaseAuthorityDe
     if (dependency.startsWith('APPROVAL:')) {
       return {
         decisionCategory: 'UNAVAILABLE',
-        reasonCode: 'APPROVAL_INVALID',
+        reasonCode: 'APPROVAL_UNAVAILABLE',
         dependencyCategory: 'APPROVAL',
       };
     }
