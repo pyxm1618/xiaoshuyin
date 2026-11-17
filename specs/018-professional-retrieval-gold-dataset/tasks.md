@@ -36,8 +36,8 @@ Decide from then-current remote truth whether any Slice 18 implementation work i
 READ-ONLY. Re-read and record all of the following:
 1. current main exact SHA;
 2. reconciled Slice 18 Frozen Spec exact blob and unique current authority;
-3. Slice 16 current merge state, post-merge audit state, remediation state and runtime dependency usability;
-4. Slice 17 current merge state, independent Audit 2 result and runtime dependency usability;
+3. Slice 16 current merge state plus remediation PR #59 current exact Head, CI/check state, independent targeted findings re-audit state, merge state and runtime dependency usability;
+4. Slice 17 PR #58 current exact Head, draft/mergeability/CI state, merge state, independent Audit 2 result and runtime dependency usability;
 5. exact merged Knowledge id/version/content hash/lifecycle/package resolution;
 6. representative real PUBLISHED Professional Knowledge corpus;
 7. real Staff assignment for the approving reviewer;
@@ -66,8 +66,8 @@ Return exactly one state:
 - no treating merged state alone as proof of clean/usable upstream runtime.
 
 **Verification**  
-- compare exact main to upstream merge/remediation heads;
-- verify independent audit/remediation status separately from merge state;
+- compare exact main to PR #59 / PR #58 current Heads and upstream merge/remediation truth;
+- verify each PR's CI/check state, independent audit/remediation status and merge state separately;
 - read actual merged Knowledge owner/seams and representative published corpus;
 - prove reviewer Staff assignment, PROFESSIONAL_REVIEW and qualification/scope through actual authority owner, not a populated field;
 - prove approval binding shape and current validity;

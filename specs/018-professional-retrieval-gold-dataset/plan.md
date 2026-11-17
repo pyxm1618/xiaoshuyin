@@ -1020,6 +1020,9 @@ Remediation: removed the moving PR Head from Frozen/Planning Authority and deleg
 
 MEDIUM-04 — Q12 was previously asserted from aggregate coverage while Checklist/Tasks did not expose a complete one-by-one FR/AS/NS → Plan/Checklist/Task/Verification/Evidence crosswalk.
 Remediation: §24A remains the exact plan mapping; Tasks T1820 now carries the canonical 97-row exact planning traceability ledger and Checklist §U verifies every individual FR/AS/NS row. Range notation elsewhere is summary-only and cannot satisfy Q12.
+
+LOW-01 — T1801 referred to Slice 16/17 remediation and audit truth generically without naming the active PR read-backs.
+Remediation: T1801 now explicitly re-reads PR #59 and PR #58 exact current Heads, CI/check state, audit/remediation state and merge/runtime usability without freezing their values.
 ~~~
 
 Complete post-remediation Audit 1:
@@ -1052,7 +1055,7 @@ Scope Drift: 0
 Planning Freeze: PASS
 ~~~
 
-The four MEDIUM findings above are closed findings, not open findings at freeze.
+The four MEDIUM findings and one LOW finding above are closed findings, not open findings at freeze.
 
 Planning Freeze does not grant development authorization. Runtime truth remains a separate T1801 gate and must be re-read at development start:
 
