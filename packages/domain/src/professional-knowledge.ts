@@ -389,8 +389,16 @@ export type ProfessionalApprovalValidation =
   | { readonly status: 'INVALID'; readonly reason: string }
   | { readonly status: 'UNAVAILABLE'; readonly dependency: string };
 
+const AUTHORITY_TIMESTAMP =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+
 function parseAuthorityTime(value: unknown): number | null {
-  if (typeof value !== 'string' || value.trim().length === 0 || value !== value.trim()) {
+  if (
+    typeof value !== 'string' ||
+    value.trim().length === 0 ||
+    value !== value.trim() ||
+    !AUTHORITY_TIMESTAMP.test(value)
+  ) {
     return null;
   }
   const parsed = Date.parse(value);
