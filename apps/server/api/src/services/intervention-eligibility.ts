@@ -8,7 +8,7 @@ import {
   effectiveParticipationState,
   evaluateInterventionEligibility,
   getCaseForUpdate,
-  getParticipationById,
+  lockParticipationById,
   getSceneNodeState,
   isProblemFormulationAuthoritativeExecutionBasis,
   lockCurrentProblemFormulation,
@@ -127,7 +127,7 @@ export const productionInterventionOwnerAdapters:
           result[ref] = 'UNKNOWN';
           continue;
         }
-        const row = await getParticipationById(tx, ref);
+        const row = await lockParticipationById(tx, ref);
         if (
           row === null ||
           row.family_id !== input.familyId ||
@@ -362,35 +362,6 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       ? null
       : await getExactInterventionDefinition(tx, input.definition);
 
-  let finalProfessional = professional;
-  if (professional.status === 'VALID' && finalDefinition !== null) {
-    const revalidated = await resolveInterventionProfessionalAuthority(
-      professionalProvider,
-      {
-        definitionId: finalDefinition.id,
-        definitionVersion: finalDefinition.version,
-        contentHash: finalDefinition.contentHash,
-        sceneId: finalDefinition.sceneId,
-        sourceRefs: finalDefinition.semantic.professional_source_refs,
-        approvalScope: finalDefinition.sceneId,
-      },
-      'REVALIDATE',
-      Date.now(),
-      {
-        approvalProofRef: professional.approvalProofRef,
-        artifactIdentity: professional.artifactIdentity,
-      }
-    );
-    finalProfessional =
-      revalidated.status === 'VALID' &&
-      revalidated.approvalProofRef === professional.approvalProofRef &&
-      revalidated.artifactIdentity === professional.artifactIdentity &&
-      revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
-      revalidated.qualificationRef === professional.qualificationRef
-        ? revalidated
-        : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
-  }
-
   let packageInclusion: InterventionGateState = 'UNKNOWN';
   if (finalDefinition !== null && scenePackageVersion !== null) {
     try {
@@ -406,6 +377,48 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       packageInclusion = 'UNKNOWN';
     }
   }
+
+  // All other async authority dependencies are now complete. Re-establish the
+  // exact original Professional Approval proof last, and capture the timestamp
+  // used by the synchronous lifecycle/effective-period validation. No external
+  // authority await occurs between this point and deterministic eligibility.
+  let finalProfessional = professional;
+  let decisionTimestamp = Date.now();
+  if (professional.status === 'VALID' && finalDefinition !== null) {
+    const revalidated = await resolveInterventionProfessionalAuthority(
+      professionalProvider,
+      {
+        definitionId: finalDefinition.id,
+        definitionVersion: finalDefinition.version,
+        contentHash: finalDefinition.contentHash,
+        sceneId: finalDefinition.sceneId,
+        sourceRefs: finalDefinition.semantic.professional_source_refs,
+        approvalScope: finalDefinition.sceneId,
+      },
+      'REVALIDATE',
+      () => {
+        decisionTimestamp = Date.now();
+        return decisionTimestamp;
+      },
+      {
+        approvalProofRef: professional.approvalProofRef,
+        artifactIdentity: professional.artifactIdentity,
+      }
+    );
+    finalProfessional =
+      revalidated.status === 'VALID' &&
+      revalidated.approvalProofRef === professional.approvalProofRef &&
+      revalidated.artifactIdentity === professional.artifactIdentity &&
+      revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
+      revalidated.qualificationRef === professional.qualificationRef
+        ? revalidated
+        : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
+  }
+
+  const validAgeYears =
+    ageDevelopment.ageYears === null || Number.isFinite(ageDevelopment.ageYears)
+      ? ageDevelopment.ageYears
+      : null;
 
   const result = evaluateInterventionEligibility({
     authorization: 'PASS',
@@ -471,7 +484,7 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         finalProfessional.status === 'VALID' ? null : finalProfessional.reason,
     },
     packageInclusion,
-    ageYears: ageDevelopment.ageYears,
+    ageYears: validAgeYears,
     developmentStages: ageDevelopment.developmentStages,
     facts,
     participation,
@@ -523,6 +536,7 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       caseRevision: result.caseRevision,
       formulationVersion: result.formulationVersion,
       dependencyRevisionRefs: result.dependencyRevisionRefs,
+      decisionAt: new Date(decisionTimestamp).toISOString(),
     },
   });
 
