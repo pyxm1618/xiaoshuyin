@@ -232,10 +232,15 @@ export function parseInterventionDefinitionSemanticPayload(value: unknown): Inte
 }
 
 export function canonicalInterventionDefinitionJson(payload: InterventionDefinitionSemanticPayload): string {
+  // PostgreSQL jsonb does not preserve nested object key order. Re-run the
+  // validated semantic parser so a DB-rehydrated value is reconstructed in
+  // the same deterministic shape that was originally hashed before INSERT.
+  // For an already prepared semantic snapshot this is hash-preserving.
+  const canonical = parseInterventionDefinitionSemanticPayload(payload);
   return (
     '{' +
     INTERVENTION_DEFINITION_SEMANTIC_FIELDS.map(
-      (field) => JSON.stringify(field) + ':' + JSON.stringify(payload[field])
+      (field) => JSON.stringify(field) + ':' + JSON.stringify(canonical[field])
     ).join(',') +
     '}'
   );
