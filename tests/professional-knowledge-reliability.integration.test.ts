@@ -711,6 +711,7 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
   it('stale approval proof is invalid after an exact content/source mutation', () => {
     const version = {
       knowledgeId: 'k1',
+      knowledgeKey: 'reliability-k1',
       semanticVersion: '1.0.0',
       contentHash: 'a'.repeat(64),
       sourceSetHash: 'b'.repeat(64),
@@ -721,8 +722,12 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
         scenePackageVersion: 'v-test',
         stages: ['ASSESSMENT'],
         ageBands: ['MINOR_14_17'],
+        applicability: ['sleep-impact'],
+        exclusions: [],
+        riskLevels: ['LOW'],
         locale: 'zh-CN',
         professionalContentPackageRef: null,
+        interventionDefinitionRef: null,
       },
     } as unknown as ProfessionalKnowledgeVersionSnapshot;
     const proof: ProfessionalApprovalProof = {

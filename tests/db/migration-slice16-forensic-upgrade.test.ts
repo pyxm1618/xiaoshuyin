@@ -162,7 +162,7 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
         [REMEDIATION]
       );
       beforeHistoricalChecksums = checksums.rows;
-      expect(beforeHistoricalChecksums).toHaveLength(26);
+      expect(beforeHistoricalChecksums).toHaveLength(27);
     } finally {
       await db.end();
     }
@@ -191,7 +191,7 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
     const output = runMigrator(ROOT, databaseUrl);
     expect(output).toContain('SKIP 024_psychological_behavioral_intervention_contract.sql');
     expect(output).toContain('APPLY ' + REMEDIATION);
-    expect(output).toMatch(/Migration complete: 1 new, 26 previously applied\./);
+    expect(output).toMatch(/Migration complete: 1 new, 27 previously applied\./);
 
     const db = new Client({
       connectionString: urlForDatabase(ADMIN_URL, database),
@@ -268,7 +268,7 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
         constraints: await constraintFingerprint(db),
       };
       const output = runMigrator(ROOT, databaseUrl);
-      expect(output).toMatch(/Migration complete: 0 new, 27 previously applied\./);
+      expect(output).toMatch(/Migration complete: 0 new, 28 previously applied\./);
       expect(output).not.toContain('APPLY ' + REMEDIATION);
       expect({
         definition: await definitionInvariant(db, existingDefinitionId),

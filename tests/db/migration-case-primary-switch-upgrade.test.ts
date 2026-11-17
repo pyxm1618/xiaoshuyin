@@ -113,6 +113,7 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'INTERVENTION_DEFINITION_RETIRED',
     'INTERVENTION_ELIGIBILITY_EVALUATED',
     'INTERVENTION_ELIGIBILITY_BLOCKED',
+    'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED',
     'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATED',
     'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDITED',
     'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED',
@@ -376,6 +377,7 @@ const SLICE17_NEW_CONSTRAINTS = [
   'professional_knowledge_versions_updated_at_not_null',
   'professional_knowledge_versions_validity_state_check',
   'professional_knowledge_versions_validity_state_not_null',
+  'professional_knowledge_approval_evidence_semantic_binding_hash_check',
 ].sort();
 
 const SLICE17_NEW_OBJECTS = [
@@ -387,6 +389,7 @@ const SLICE17_NEW_OBJECTS = [
   'policy:accounts_runtime_professional_knowledge_admin_read',
   'policy:audit_professional_knowledge_insert',
   'policy:audit_professional_knowledge_select',
+  'policy:audit_professional_knowledge_authority_denial_insert',
   'policy:professional_knowledge_approval_evidence_admin',
   'policy:professional_knowledge_approval_evidence_admin_insert',
   'policy:professional_knowledge_items_admin',
@@ -402,6 +405,7 @@ const SLICE17_NEW_OBJECTS = [
   'trigger:professional_knowledge_review_evidence_append_only',
   'trigger:professional_knowledge_sources_append_only',
   'trigger:professional_knowledge_versions_update_guard',
+  'trigger:zz_professional_knowledge_release_authority_guard',
 ].sort();
 
 /** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */
@@ -911,7 +915,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 20 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 21 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -1086,7 +1090,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 27 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 28 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -1119,6 +1123,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '024_psychological_behavioral_intervention_contract.sql',
       '025_professional_knowledge_foundation.sql',
       '025_slice16_post_merge_forensic_remediation.sql',
+      '026_professional_authority_release_remediation.sql',
     ]);
   }, 180_000);
 });

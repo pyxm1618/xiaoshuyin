@@ -315,7 +315,7 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     expect(output).toContain('APPLY 008_problem_formulation_core.sql');
     expect(output).toContain('APPLY 010_problem_formulation_safety_vocabulary_reconcile.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 18 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 19 new, 9 previously applied\./);
 
     const client = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await client.connect();
@@ -491,6 +491,7 @@ async function assertUnionConstraints(
       : []),
     ...(includeSlice17
       ? [
+          'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED',
           'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATED',
           'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDITED',
           'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED',

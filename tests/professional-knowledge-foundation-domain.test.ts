@@ -236,8 +236,8 @@ describe('professional knowledge foundation domain contract', () => {
         provider: { status: 'INVALID', reason: 'REVOKED' },
         staffAuthority: { status: 'UNAVAILABLE', reason: 'not-read' },
         qualification: { status: 'UNAVAILABLE', reason: 'not-read' },
-      }).status
-    ).toBe('UNAVAILABLE');
+      })
+    ).toEqual({ status: 'INVALID', reason: 'APPROVAL:REVOKED' });
   });
 
   it('allows only lifecycle/projection changes after release, not semantic mutation', () => {
