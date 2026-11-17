@@ -25,6 +25,17 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
     expect(repository).toContain("review_state = 'PENDING'");
     expect(repository).toContain("validity_state = 'UNKNOWN'");
     expect(repository).toContain('knowledge_revision');
+    expect(repository).toContain('max(snapshot.knowledge_revision)');
+    expect(repository).toContain('snapshot.knowledge_revision <= $2');
+  });
+
+  it('allows candidate retirement without manufacturing a release timestamp', () => {
+    const migration = readFileSync(
+      new URL('../db/migrations/025_professional_knowledge_foundation.sql', import.meta.url),
+      'utf8'
+    );
+    expect(migration).toContain("(lifecycle_status = 'RETIRED')");
+    expect(migration).toContain("lifecycle_status IN ('PUBLISHED','SUPERSEDED','EXPIRED')");
   });
 
   it('provider outage remains unavailable, never a business invalidation', () => {

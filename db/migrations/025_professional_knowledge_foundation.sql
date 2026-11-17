@@ -87,7 +87,12 @@ CREATE TABLE professional_knowledge_versions (
     CHECK (
       (lifecycle_status = 'CANDIDATE' AND released_at IS NULL)
       OR
-      (lifecycle_status <> 'CANDIDATE' AND released_at IS NOT NULL)
+      (lifecycle_status = 'RETIRED')
+      OR
+      (
+        lifecycle_status IN ('PUBLISHED','SUPERSEDED','EXPIRED')
+        AND released_at IS NOT NULL
+      )
     ),
   CONSTRAINT professional_knowledge_versions_not_self_superseding
     CHECK (supersedes_version_id IS NULL OR supersedes_version_id <> id)

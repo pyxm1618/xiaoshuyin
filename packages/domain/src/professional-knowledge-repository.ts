@@ -302,7 +302,12 @@ export async function lockProfessionalKnowledgeVersion(
     `SELECT source_ref, source_version, source_hash, locator, snapshot_metadata
        FROM professional_knowledge_sources
       WHERE knowledge_version_id = $1
-        AND knowledge_revision = $2
+        AND knowledge_revision = (
+          SELECT max(snapshot.knowledge_revision)
+            FROM professional_knowledge_sources snapshot
+           WHERE snapshot.knowledge_version_id = $1
+             AND snapshot.knowledge_revision <= $2
+        )
       ORDER BY ordinal`,
     [versionId, row.revision]
   );
@@ -603,7 +608,12 @@ export async function getProfessionalKnowledgeVersion(
     `SELECT source_ref, source_version, source_hash, locator, snapshot_metadata
        FROM professional_knowledge_sources
       WHERE knowledge_version_id = $1
-        AND knowledge_revision = $2
+        AND knowledge_revision = (
+          SELECT max(snapshot.knowledge_revision)
+            FROM professional_knowledge_sources snapshot
+           WHERE snapshot.knowledge_version_id = $1
+             AND snapshot.knowledge_revision <= $2
+        )
       ORDER BY ordinal`,
     [versionId, row.revision]
   );
