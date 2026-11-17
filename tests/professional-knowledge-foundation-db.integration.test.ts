@@ -143,6 +143,19 @@ describe('Slice 17 Professional Knowledge persistence', () => {
     expect(policy.rows[0]!.qual).toContain('knowledge_id');
   });
 
+  it('exposes only the current Staff Account to the existing reviewer verifier purpose', async () => {
+    const policy = await admin.query<{ qual: string }>(
+      `SELECT qual
+         FROM pg_policies
+        WHERE schemaname='public'
+          AND tablename='accounts'
+          AND policyname='accounts_runtime_professional_knowledge_admin_read'`
+    );
+    expect(policy.rows).toHaveLength(1);
+    expect(policy.rows[0]!.qual).toContain("PROFESSIONAL_KNOWLEDGE_ADMIN");
+    expect(policy.rows[0]!.qual).toContain('app_account_id()');
+  });
+
   it('keeps Professional Review Staff authority separate from qualification', async () => {
     const fn = await admin.query<{ definition: string }>(
       `SELECT pg_get_functiondef(

@@ -414,6 +414,17 @@ ALTER TABLE professional_knowledge_review_evidence FORCE ROW LEVEL SECURITY;
 ALTER TABLE professional_knowledge_approval_evidence ENABLE ROW LEVEL SECURITY;
 ALTER TABLE professional_knowledge_approval_evidence FORCE ROW LEVEL SECURITY;
 
+-- The existing Staff verifier checks the current reviewer Account is ACTIVE.
+-- Under FORCE RLS that exact self Account must be visible for this purpose;
+-- no other Account and no Family role gains visibility.
+CREATE POLICY accounts_runtime_professional_knowledge_admin_read
+  ON accounts
+  FOR SELECT TO xiaoshuyin_app
+  USING (
+    app_current_purpose() = 'PROFESSIONAL_KNOWLEDGE_ADMIN'
+    AND id = app_account_id()
+  );
+
 CREATE POLICY professional_knowledge_items_admin
   ON professional_knowledge_items
   FOR ALL TO xiaoshuyin_app

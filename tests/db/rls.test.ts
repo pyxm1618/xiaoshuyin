@@ -41,11 +41,11 @@ describe('RLS', () => {
     }
   });
 
-  it('89 policies exist after Slice 17 Professional Knowledge composition', async () => {
+  it('90 policies exist after Slice 17 Professional Knowledge composition', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(89);
+    expect(rows.length).toBe(90);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
