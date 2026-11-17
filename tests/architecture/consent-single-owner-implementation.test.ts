@@ -258,6 +258,7 @@ describe('Consent owner — single implementation and scope guards', () => {
       'db/migrations/013_consent_01004_supplemental_assessment.sql',
       'apps/server/api/src/services/digital-use-node-semantics.ts',
       'apps/server/api/src/services/digital-use-phone-contract.ts',
+      'apps/server/api/src/services/intervention-eligibility.ts',
       'packages/compliance/src/evidence.ts',
       'packages/compliance/src/supplemental-assessment-disclosure.ts',
       'packages/compliance/src/supplemental-consent.ts',

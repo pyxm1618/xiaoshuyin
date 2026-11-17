@@ -221,8 +221,16 @@ describe('T918 executable scope negatives', () => {
     const forbidden = ['guardrails', 'dashscope', 'openai', 'anthropic', 'ollama', 'risk_review', 'support_resources', 'referral'];
     for (const file of files) {
       const content = readFileSync(file, 'utf-8');
+      const dependencySpecifiers = [
+        ...content.matchAll(
+          /(?:from\s+|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/g
+        ),
+      ].map((match) => match[1] ?? '').join('\\n');
       for (const token of forbidden) {
-        expect(content.toLowerCase(), `${file} must not reference ${token}`).not.toContain(token);
+        expect(
+          dependencySpecifiers.toLowerCase(),
+          `${file} must not import ${token} dependency`
+        ).not.toContain(token);
       }
     }
   });

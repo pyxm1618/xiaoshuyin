@@ -315,7 +315,7 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     expect(output).toContain('APPLY 008_problem_formulation_core.sql');
     expect(output).toContain('APPLY 010_problem_formulation_safety_vocabulary_reconcile.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 15 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 16 new, 9 previously applied\./);
 
     const client = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await client.connect();
@@ -384,7 +384,8 @@ async function assertUnionConstraints(
   includeSupplementalConsentAudit = true,
   includeSlice12 = includeSupplementalConsentAudit,
   includeSlice14 = includeSlice12,
-  includeAuth006 = includeSlice14
+  includeAuth006 = includeSlice14,
+  includeSlice16 = includeAuth006
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -477,6 +478,16 @@ async function assertUnionConstraints(
           'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
         ]
       : []),
+    ...(includeSlice16
+      ? [
+          'INTERVENTION_DEFINITION_CANDIDATE_CREATED',
+          'INTERVENTION_DEFINITION_SUCCESSOR_CREATED',
+          'INTERVENTION_DEFINITION_SUPERSEDED',
+          'INTERVENTION_DEFINITION_RETIRED',
+          'INTERVENTION_ELIGIBILITY_EVALUATED',
+          'INTERVENTION_ELIGIBILITY_BLOCKED',
+        ]
+      : []),
   ]);
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
@@ -491,6 +502,7 @@ async function assertUnionConstraints(
     'OBSERVATION',
     'CASE_PARTICIPANT',
     'PROBLEM_FORMULATION',
+    ...(includeSlice16 ? ['INTERVENTION_DEFINITION'] : []),
   ]);
   const resourceLiterals = literalsOf(
     definitions.get('business_audit_events_resource_type_check')!
@@ -528,6 +540,14 @@ async function assertUnionConstraints(
         ]
       : []),
     ...(includeAuth006 ? ['PROBLEM_FORMULATION_REVIEW_RESOLVE'] : []),
+    ...(includeSlice16
+      ? [
+          'INTERVENTION_DEFINITION_CREATE',
+          'INTERVENTION_DEFINITION_SUCCESSOR_CREATE',
+          'INTERVENTION_DEFINITION_RETIRE',
+          'INTERVENTION_DEFINITION_SUPERSEDE',
+        ]
+      : []),
   ]);
   const commandLiterals = literalsOf(definitions.get('idempotency_keys_command_type_check')!);
   expect(new Set(commandLiterals)).toEqual(commandSet);

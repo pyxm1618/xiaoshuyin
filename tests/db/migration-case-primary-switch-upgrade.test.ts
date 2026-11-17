@@ -107,6 +107,12 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'PHONE_USE_ROLEPLAY_RECORDED',
     'CASE_PROBLEM_FORMULATION_REVIEW_RESOLVED',
     'CASE_PROBLEM_FORMULATION_MATERIAL_CHANGE_RESOLVED',
+    'INTERVENTION_DEFINITION_CANDIDATE_CREATED',
+    'INTERVENTION_DEFINITION_SUCCESSOR_CREATED',
+    'INTERVENTION_DEFINITION_SUPERSEDED',
+    'INTERVENTION_DEFINITION_RETIRED',
+    'INTERVENTION_ELIGIBILITY_EVALUATED',
+    'INTERVENTION_ELIGIBILITY_BLOCKED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -128,6 +134,10 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'PHONE_USE_ROLEPLAY_RATE',
     'PHONE_USE_ROLEPLAY_SELECT',
     'PROBLEM_FORMULATION_REVIEW_RESOLVE',
+    'INTERVENTION_DEFINITION_CREATE',
+    'INTERVENTION_DEFINITION_SUCCESSOR_CREATE',
+    'INTERVENTION_DEFINITION_RETIRE',
+    'INTERVENTION_DEFINITION_SUPERSEDE',
   ],
 };
 
@@ -161,6 +171,60 @@ const AUTH008_NEW_CONSTRAINTS = [
   'staff_assignments_scope_type_not_null',
   'staff_assignments_valid_from_not_null',
   'staff_assignments_validity_window_check',
+].sort();
+
+const SLICE16_NEW_CONSTRAINTS = [
+  'business_audit_events_scope_shape_check',
+  'intervention_definitions_adverse_or_worsening_signals_not_null',
+  'intervention_definitions_age_and_development_scope_not_null',
+  'intervention_definitions_baseline_and_observation_not_null',
+  'intervention_definitions_allowed_combinations_not_null',
+  'intervention_definitions_applicable_conditions_not_null',
+  'intervention_definitions_burden_and_barriers_not_null',
+  'intervention_definitions_conflicting_interventions_not_null',
+  'intervention_definitions_content_hash_check',
+  'intervention_definitions_content_hash_not_null',
+  'intervention_definitions_created_at_not_null',
+  'intervention_definitions_created_by_person_id_fkey',
+  'intervention_definitions_created_by_person_id_not_null',
+  'intervention_definitions_definition_state_check',
+  'intervention_definitions_definition_state_not_null',
+  'intervention_definitions_exclusion_or_contraindication_not_null',
+  'intervention_definitions_expected_observable_change_not_null',
+  'intervention_definitions_formulation_dependencies_not_null',
+  'intervention_definitions_id_not_null',
+  'intervention_definitions_identity_version_key',
+  'intervention_definitions_intervention_code_check',
+  'intervention_definitions_intervention_code_not_null',
+  'intervention_definitions_intervention_steps_not_null',
+  'intervention_definitions_participation_and_consent_req_not_null',
+  'intervention_definitions_pkey',
+  'intervention_definitions_professional_source_refs_not_null',
+  'intervention_definitions_rationale_check',
+  'intervention_definitions_rationale_not_null',
+  'intervention_definitions_revision_check',
+  'intervention_definitions_revision_not_null',
+  'intervention_definitions_review_window_and_criteria_not_null',
+  'intervention_definitions_scene_id_check',
+  'intervention_definitions_scene_id_not_null',
+  'intervention_definitions_state_time_check',
+  'intervention_definitions_stop_reassess_safety_referral_not_null',
+  'intervention_definitions_supporting_evidence_requireme_not_null',
+  'intervention_definitions_supersedes_id_fkey',
+  'intervention_definitions_target_problem_or_mechanism_check',
+  'intervention_definitions_target_problem_or_mechanism_not_null',
+  'intervention_definitions_version_check',
+  'intervention_definitions_version_not_null',
+].sort();
+
+const SLICE16_NEW_OBJECTS = [
+  'policy:audit_staff_intervention_insert',
+  'policy:intervention_definitions_professional_insert',
+  'policy:intervention_definitions_professional_update',
+  'policy:intervention_definitions_runtime_read',
+  'table:intervention_definitions',
+  'trigger:intervention_definition_immutable_update_guard',
+  'trigger:intervention_definition_insert_guard',
 ].sort();
 
 const AUTH008_NEW_OBJECTS = [
@@ -567,6 +631,10 @@ interface SeedIds {
  * clause is re-imposed by `consent_purpose_field_binding`, so no guardian
  * invariant is dropped or widened.
  */
+const SLICE16_REPLACED_CONSTRAINTS = [
+  'business_audit_events_family_id_not_null',
+];
+
 const CONSENT_OWNER_REPLACED_CONSTRAINTS = [
   'consent_records_guardian_person_id_not_null',
   'consent_records_guardian_account_id_not_null',
@@ -688,7 +756,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 17 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 18 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -760,11 +828,17 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeConstraintNames = Object.keys(beforeConstraints).sort();
     const afterConstraintNames = Object.keys(afterConstraints).sort();
     for (const name of beforeConstraintNames) {
-      if (CONSENT_OWNER_REPLACED_CONSTRAINTS.includes(name)) continue;
+      if (
+        CONSENT_OWNER_REPLACED_CONSTRAINTS.includes(name) ||
+        SLICE16_REPLACED_CONSTRAINTS.includes(name)
+      ) continue;
       expect(afterConstraintNames).toContain(name);
     }
     // The replaced guardian invariants are re-imposed by the purpose branch.
     for (const name of CONSENT_OWNER_REPLACED_CONSTRAINTS.slice(0, 2)) {
+      expect(afterConstraintNames).not.toContain(name);
+    }
+    for (const name of SLICE16_REPLACED_CONSTRAINTS) {
       expect(afterConstraintNames).not.toContain(name);
     }
     expect(afterConstraintNames).toContain('consent_purpose_field_binding');
@@ -789,6 +863,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...FOUNDATION_REM1_NEW_CONSTRAINTS,
         ...AUTH006_NEW_CONSTRAINTS,
         ...AUTH008_NEW_CONSTRAINTS,
+        ...SLICE16_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -825,6 +900,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...SLICE14_NEW_OBJECTS,
       ...FOUNDATION_REM1_NEW_OBJECTS,
       ...AUTH008_NEW_OBJECTS,
+      ...SLICE16_NEW_OBJECTS,
       'trigger:accounts_status_invalidates_sessions',
     ].sort());
 
@@ -853,7 +929,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 24 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 25 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -883,6 +959,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '021_safety_resolver_staff_authority.sql',
       '022_foundation_remaining_consent_chain_integrity.sql',
       '023_digital_use_review_runtime_authority_reconciled.sql',
+      '024_psychological_behavioral_intervention_contract.sql',
     ]);
   }, 180_000);
 });
