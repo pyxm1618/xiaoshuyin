@@ -7,17 +7,19 @@ import {
   deriveAuthoritativeEvidenceSet,
   effectiveParticipationState,
   evaluateInterventionEligibility,
-  getCaseById,
-  getCurrentProblemFormulation,
-  getExactInterventionDefinition,
+  getCaseForUpdate,
   getParticipationById,
-  insertInterventionDefinitionAudit,
-  getScenePackageBinding,
+  getSceneNodeState,
   isProblemFormulationAuthoritativeExecutionBasis,
+  lockCurrentProblemFormulation,
   type InterventionDefinitionExactRef,
   type InterventionEligibilityResult,
   type InterventionGateState,
 } from '@xiaoshuyin/domain';
+import {
+  getExactInterventionDefinition,
+  insertInterventionDefinitionAudit,
+} from '../../../../../packages/domain/src/intervention-definition-repository.js';
 import {
   DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
   getCurrentPurposeScopedConsentDecision,
@@ -212,7 +214,10 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     resource: { type: 'CASE', familyId: input.familyId, caseId: input.caseId },
   });
 
-  const caseRow = await getCaseById(tx, input.caseId);
+  // Decision-boundary authority pin: use the existing Case owner row lock.
+  // Under READ COMMITTED this sees the latest committed authority and prevents
+  // status/phase/primary/version writes from crossing this eligibility decision.
+  const caseRow = await getCaseForUpdate(tx, input.caseId);
   if (caseRow === null || caseRow.family_id !== input.familyId) {
     throw Object.assign(new Error('CASE_NOT_FOUND'), {
       code: 'CASE_NOT_FOUND',
@@ -222,7 +227,11 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
 
   const definition = await getExactInterventionDefinition(tx, input.definition);
 
-  const formulation = await getCurrentProblemFormulation(tx, input.caseId);
+  // The existing Formulation owner is also the serialization point used by
+  // Evidence correction propagation (review_state -> NEEDS_REVIEW). Holding
+  // this lock therefore prevents a relevant Evidence supersession commit from
+  // crossing a positive decision.
+  const formulation = await lockCurrentProblemFormulation(tx, input.caseId);
   const authoritativeFormulation =
     formulation !== null &&
     isProblemFormulationAuthoritativeExecutionBasis(formulation)
@@ -272,7 +281,10 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     };
   }
 
-  const scenePackageVersion = await getScenePackageBinding(tx, input.caseId);
+  // Pin the canonical A1001 package binding with the existing Scene runtime
+  // row lock. No second package registry or package authority is introduced.
+  const scenePackageEntry = await getSceneNodeState(tx, input.caseId, 'A1001', true);
+  const scenePackageVersion = scenePackageEntry?.scene_package_version ?? null;
   const professional =
     definition === null
       ? ({ status: 'INVALID', reason: 'WRONG_DEFINITION' } as const)
@@ -334,8 +346,9 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     : ('BLOCK' as const);
 
   // Final exact-row lock prevents retirement/supersession from crossing the
-  // decision. This is in the same REPEATABLE READ transaction as the family
-  // snapshot. Revalidate the exact professional proof only after that lock.
+  // decision. Case/Formulation/package authority is already pinned above and
+  // Consent uses its existing owner advisory lock. Revalidate the exact
+  // professional proof only after the exact definition lock.
   const finalDefinition =
     definition === null
       ? null
@@ -488,7 +501,7 @@ export function evaluateCurrentInterventionEligibility(
       accountId: input.actor.accountId,
       personId: input.actor.personId,
       purpose: 'FAMILY_MANAGEMENT',
-      isolationLevel: 'REPEATABLE READ',
+      isolationLevel: 'READ COMMITTED',
     },
     (_tx, client) =>
       evaluateCurrentInterventionEligibilityInTransaction(
