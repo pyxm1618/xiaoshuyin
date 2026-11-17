@@ -497,6 +497,7 @@ export async function appendProfessionalKnowledgeAuthorityDenialReceipt(
     decisionCategory: 'INVALID' | 'UNAVAILABLE';
     reasonCode:
       | 'APPROVAL_INVALID'
+      | 'APPROVAL_UNAVAILABLE'
       | 'APPROVAL_PROOF_ID_MISMATCH'
       | 'STAFF_AUTHORITY_INVALID'
       | 'STAFF_AUTHORITY_UNAVAILABLE'
