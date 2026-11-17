@@ -94,6 +94,14 @@ If implementation reveals that an approved requirement or architecture decision 
 - update affected spec/plan/tasks/tests afterward;
 - never back-propagate an implementation convenience into the requirements silently.
 
-`Docs/**` is enforced, not merely requested. Any change under `Docs/**` fails the `Spec Governance` check by default. An intended document change requires the `approved-docs-change` pull request label, applied by a human after reviewing the document diff. Agents MUST NOT add that label themselves, and the label does not excuse the change from review or from the validator.
+`Docs/**` is enforced, not merely requested. The historical `approved-docs-change` label is **not** approval evidence and has no governance authority: agents, connectors, or humans adding that label cannot satisfy the Human Gate.
+
+Any intended change to one of the four Authority Docs MUST:
+- refresh `.specify/authority-inputs.json`;
+- add exactly one machine-readable `.specify/authority-impacts/*.json` contract for the same change;
+- declare the old/new Authority blob identities, impact classification, affected authoritative specs, required downstream artifacts, and `CONVERGED` completion state;
+- change every declared downstream spec/artifact in the same reviewed change when downstream impact exists;
+- use only the validator's finite exemption classes for a genuine metadata-only/no-downstream-impact correction;
+- obtain GitHub-native independent approval, with approval required after the latest reviewable push. PR authors cannot self-approve through repository prose, labels, or agent/connector actions.
 
 Feature work never edits `Docs/**` as a side effect. If a slice appears to need a requirement change, report the conflict and stop.
