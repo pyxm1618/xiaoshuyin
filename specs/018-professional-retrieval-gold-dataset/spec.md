@@ -118,7 +118,7 @@ Current reconciliation snapshot:
 |---|---|---|
 | origin/main | 9aceaedf12b611d41fba06866dcd00e20eb5ea8d | current reconciliation base |
 | Slice 16 | PR #57 MERGED at 9aceaedf12b611d41fba06866dcd00e20eb5ea8d; post-merge forensic audit found 12 blocking findings; remediation PR #59 is OPEN / NOT MERGED and its PR contract requires independent targeted re-audit before merge; its moving exact Head/CI/audit state is deliberately re-read by T1801 rather than frozen here | merged = YES; remediation exists, but clean prerequisite / runtime usability = NOT YET PROVEN |
-| Slice 17 | PR #58 OPEN / DRAFT / NOT MERGED; exact implementation Head at reconciliation time c62ed5a9fd8b90f6d909e03440bceabceeedd4c3 | implementation exists, but it is not current-main runtime truth and cannot satisfy T1801 |
+| Slice 17 | PR #58 was NOT MERGED at the reconciliation snapshot; its moving exact Head / draft / mergeability / CI / audit / merge state is deliberately re-read by T1801 rather than frozen here | implementation exists, but it is not current-main runtime truth and cannot satisfy T1801 until T1801 proves the current merged / audited / runtime-usable state |
 | Professional Reviewer | APPROVED PROFESSIONAL REVIEWER — UNASSIGNED | production Gold-label approval prerequisite = BLOCKED |
 
 Older Slice 13–15 freeze-time runtime statements are not T1801 predicates and are retired from this Spec as current-gate evidence.
@@ -153,7 +153,7 @@ plan/017-professional-knowledge-foundation-authority-reconciliation
 
 The older `spec/017-professional-knowledge-foundation` and `plan/017-professional-knowledge-foundation` snapshots remain historical evidence only; they are not the current authority consumed by this reconciliation.
 
-Runtime truth is separate from planning authority: PR #58 is still OPEN / DRAFT / NOT MERGED at the reconciliation snapshot, so its feature implementation cannot satisfy T1801 until exact merge/Audit/runtime usability are revalidated.
+Runtime truth is separate from planning authority: PR #58 was not merged at the reconciliation snapshot. Its current Head, draft/mergeability/CI state, merge state, independent audit result and runtime usability are volatile execution truth and are re-read by T1801; the planning package alone cannot satisfy that gate.
 ### 2.5 Existing Slice 18 authority before reconciliation
 
 Immediately before this Authority Reconciliation created new branches, exhaustive `018` branch search found exactly:
