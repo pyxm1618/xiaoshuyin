@@ -28,6 +28,25 @@ const traceability = JSON.parse(
   NS: { id: string; mappings: { task: string; evidence: string }[] }[];
 };
 
+const TASK_SEMANTIC_SENTINELS: Readonly<Record<string, string>> = {
+  T1701: "creates exactly one normalized Professional Knowledge owner and no forbidden owner tables",
+  T1702: "separates lifecycle, review state, and validity state",
+  T1703: "creates only the minimal normalized Professional Knowledge tables",
+  T1704: "accepts only exact current bounded Staff + qualification + approval facts",
+  T1705: "requires opaque refs, exact versions and hashes in the domain contract",
+  T1706: "creates a successor exactly once, replays exactly, rejects mismatch, and reserves predecessor revision",
+  T1707: "does not promote review activity into Professional Approval",
+  T1708: "accepts only an exact synthetic protocol proof",
+  T1709: "fails closed on wrong version and never floats to latest",
+  T1710: "accepts only the exact fully eligible version",
+  T1711: "rolls back lifecycle and audit together on transaction failure",
+  T1712: "same exact Knowledge version becomes approval-valid again when a fresh proof replaces an expired proof",
+  T1713: "delivers only an authorized exact eligible version with Consent Compliance and Safety passing",
+  T1714: "provides exact version history readback ordered by authoritative audit time/id",
+  T1715: "has no real production approval/qualification provider while reviewer is unassigned",
+  T1716: "lost response converges through shared idempotency replay and mismatched payload is rejected",
+};
+
 function git(...args: string[]): string {
   return execFileSync('git', args, {
     cwd: new URL('..', import.meta.url),
@@ -136,6 +155,15 @@ describe('Slice 17 single-owner architecture + mechanical traceability', () => {
             .toMatch(/\b(?:it|test)\s*\(/);
           expect(evidence, `${entry.id} / ${mapping.task} needs semantic assertions`)
             .toMatch(/\bexpect\s*\(/);
+          const semanticSentinel = TASK_SEMANTIC_SENTINELS[mapping.task];
+          expect(
+            semanticSentinel,
+            `${entry.id} / ${mapping.task} must bind to a task-specific semantic assertion`
+          ).toBeTruthy();
+          expect(
+            evidence,
+            `${entry.id} / ${mapping.task} task-specific semantic assertion deleted`
+          ).toContain(semanticSentinel);
         }
       }
     }

@@ -12,9 +12,11 @@ import {
 } from '../apps/server/api/src/services/professional-knowledge.js';
 import {
   insertInterventionDefinitionCandidate,
-  resolveProfessionalReviewStaffAuthority,
   transitionInterventionDefinitionStateCas,
 } from '../packages/domain/src/intervention-definition-repository.js';
+import {
+  resolveProfessionalReviewStaffAuthority,
+} from '../packages/domain/src/professional-knowledge-repository.js';
 import {
   hashProfessionalKnowledgeContent,
   hashProfessionalKnowledgeSourceSet,
