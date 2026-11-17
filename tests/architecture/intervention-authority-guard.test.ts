@@ -168,87 +168,158 @@ function hasExportModifier(node: ts.Node): boolean {
     (ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false);
 }
 
-function rawWriterExportsFrom(
+type ExportOriginMap = Map<string, Set<string>>;
+
+function addExportOrigins(
+  target: ExportOriginMap,
+  exportedName: string,
+  origins: Iterable<string>
+): void {
+  const bucket = target.get(exportedName) ?? new Set<string>();
+  for (const origin of origins) bucket.add(origin);
+  if (bucket.size > 0) target.set(exportedName, bucket);
+}
+
+function exportedOriginsFrom(
   path: string,
   overrides: VirtualSources,
-  visited = new Set<string>()
-): string[] {
-  if (visited.has(path)) return [];
-  visited.add(path);
+  cache = new Map<string, ExportOriginMap>()
+): ExportOriginMap {
+  const cached = cache.get(path);
+  if (cached !== undefined) return cached;
+
+  const result: ExportOriginMap = new Map();
+  // Seed before recursion so cyclic barrels terminate fail-closed without
+  // inventing symbols that have not actually been resolved.
+  cache.set(path, result);
+
   const source = readSource(path, overrides);
   const file = parseSource(path, source);
-  const findings: string[] = [];
-  const imported = new Map<string, string>();
+  const imported = new Map<
+    string,
+    { target: string; exportedName: string }
+  >();
 
   for (const statement of file.statements) {
     if (
       ts.isImportDeclaration(statement) &&
+      statement.moduleSpecifier &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
       statement.importClause?.namedBindings &&
       ts.isNamedImports(statement.importClause.namedBindings)
     ) {
+      const target = resolveProductionModule(
+        path,
+        statement.moduleSpecifier.text,
+        overrides
+      );
+      if (target === null) continue;
       for (const element of statement.importClause.namedBindings.elements) {
-        imported.set(
-          element.name.text,
-          element.propertyName?.text ?? element.name.text
-        );
+        imported.set(element.name.text, {
+          target,
+          exportedName: element.propertyName?.text ?? element.name.text,
+        });
       }
     }
   }
 
   for (const statement of file.statements) {
-    if (ts.isExportDeclaration(statement)) {
-      const specifier =
-        statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
-          ? statement.moduleSpecifier.text
-          : null;
-      const target = specifier === null
+    if (
+      hasExportModifier(statement) &&
+      (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) &&
+      statement.name
+    ) {
+      const name = statement.name.text;
+      if (RAW_WRITERS.has(name)) addExportOrigins(result, name, [name]);
+    }
+
+    if (hasExportModifier(statement) && ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name)) continue;
+        const name = declaration.name.text;
+        if (RAW_WRITERS.has(name)) addExportOrigins(result, name, [name]);
+      }
+    }
+
+    if (!ts.isExportDeclaration(statement)) continue;
+    const specifier =
+      statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+        ? statement.moduleSpecifier.text
+        : null;
+    const target =
+      specifier === null
         ? null
         : resolveProductionModule(path, specifier, overrides);
 
-      if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
-        for (const element of statement.exportClause.elements) {
-          const original = element.propertyName?.text ?? element.name.text;
-          if (RAW_WRITERS.has(original)) {
-            findings.push(path + ' exports raw writer ' + original);
-          }
-          if (specifier === null) {
-            const importedOriginal = imported.get(original);
-            if (importedOriginal && RAW_WRITERS.has(importedOriginal)) {
-              findings.push(path + ' re-exports aliased raw writer ' + importedOriginal);
-            }
-          }
+    if (statement.exportClause && ts.isNamedExports(statement.exportClause)) {
+      for (const element of statement.exportClause.elements) {
+        const original = element.propertyName?.text ?? element.name.text;
+        const exposed = element.name.text;
+
+        if (target !== null) {
+          const targetOrigins = exportedOriginsFrom(target, overrides, cache);
+          addExportOrigins(result, exposed, targetOrigins.get(original) ?? []);
+          continue;
         }
-      } else if (target !== null) {
-        findings.push(...rawWriterExportsFrom(target, overrides, visited));
+
+        const binding = imported.get(original);
+        if (binding !== undefined) {
+          const targetOrigins = exportedOriginsFrom(
+            binding.target,
+            overrides,
+            cache
+          );
+          addExportOrigins(
+            result,
+            exposed,
+            targetOrigins.get(binding.exportedName) ?? []
+          );
+          continue;
+        }
+
+        if (RAW_WRITERS.has(original)) {
+          addExportOrigins(result, exposed, [original]);
+        }
       }
       continue;
     }
 
     if (
-      hasExportModifier(statement) &&
-      (
-        ts.isFunctionDeclaration(statement) ||
-        ts.isClassDeclaration(statement)
-      ) &&
-      statement.name &&
-      RAW_WRITERS.has(statement.name.text)
+      statement.exportClause &&
+      ts.isNamespaceExport(statement.exportClause) &&
+      target !== null
     ) {
-      findings.push(path + ' defines public raw writer ' + statement.name.text);
+      const namespace = statement.exportClause.name.text;
+      const targetOrigins = exportedOriginsFrom(target, overrides, cache);
+      for (const [name, origins] of targetOrigins) {
+        addExportOrigins(result, namespace + '.' + name, origins);
+      }
+      continue;
     }
 
-    if (hasExportModifier(statement) && ts.isVariableStatement(statement)) {
-      for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name) && RAW_WRITERS.has(declaration.name.text)) {
-          findings.push(path + ' defines public raw writer ' + declaration.name.text);
-        }
+    if (statement.exportClause === undefined && target !== null) {
+      const targetOrigins = exportedOriginsFrom(target, overrides, cache);
+      for (const [name, origins] of targetOrigins) {
+        addExportOrigins(result, name, origins);
       }
     }
   }
-  return findings;
+
+  return result;
 }
 
 function assertRawWriterPackageBoundary(overrides: VirtualSources = {}): void {
-  const findings = rawWriterExportsFrom(DOMAIN_ROOT, overrides);
+  const exported = exportedOriginsFrom(DOMAIN_ROOT, overrides);
+  const findings: string[] = [];
+  for (const [exposed, origins] of exported) {
+    for (const origin of origins) {
+      if (RAW_WRITERS.has(origin)) {
+        findings.push(
+          DOMAIN_ROOT + ' exposes raw writer ' + origin + ' as ' + exposed
+        );
+      }
+    }
+  }
   if (findings.length > 0) throw new Error(findings.join('\n'));
 }
 
@@ -468,12 +539,13 @@ export const credentialSource = {
     ).toThrow(/Phase4 owner reachable/);
   });
 
-  it('counterfactual: detects indirect aliased raw writer re-export through neutral barrels', () => {
+  it('counterfactual: detects multi-hop aliased raw writer reachability through neutral named barrels', () => {
     const domainIndex = readSource(DOMAIN_ROOT);
     const overrides = {
-      [DOMAIN_ROOT]: domainIndex + "\nexport * from './neutral-writer-barrel.js';\n",
+      [DOMAIN_ROOT]:
+        domainIndex + "\nexport { safeFacade } from './neutral-writer-barrel.js';\n",
       'packages/domain/src/neutral-writer-barrel.ts':
-        "export * from './neutral-writer.js';\n",
+        "export { harmlessWriter as safeFacade } from './neutral-writer.js';\n",
       'packages/domain/src/neutral-writer.ts':
         "export { insertInterventionDefinitionCandidate as harmlessWriter } " +
         "from './intervention-definition-repository.js';\n",
