@@ -18,6 +18,23 @@ export interface InterventionEligibilityEvidence {
   readonly revisionRef: string;
 }
 
+export interface InterventionProfessionalApprovalProvenance {
+  readonly approvalProofRef: string;
+  readonly artifactIdentity: string;
+  readonly reviewerIdentityRef: string;
+  readonly staffAssignmentRef: string;
+  readonly staffAuthorityScopeRef: string;
+  readonly qualificationRef: string;
+  readonly qualificationScopeRef: string;
+  readonly sourceRefs: readonly string[];
+  readonly approvalScope: string;
+  readonly reviewedAt: string;
+  readonly effectiveFrom: string;
+  readonly effectiveTo: string | null;
+  readonly publicationStatus: string;
+  readonly publishedAt: string;
+}
+
 export interface InterventionEligibilityInput {
   readonly authorization: InterventionGateState;
   readonly case: {
@@ -42,6 +59,8 @@ export interface InterventionEligibilityInput {
   readonly professionalAuthority: {
     readonly state: 'VALID' | 'INVALID' | 'UNAVAILABLE';
     readonly approvalProofRef: string | null;
+    readonly artifactIdentity?: string | null;
+    readonly provenance?: InterventionProfessionalApprovalProvenance | null;
     readonly reason: string | null;
   };
   readonly packageInclusion: InterventionGateState;
@@ -95,6 +114,8 @@ export interface InterventionEligibilityResult {
   readonly sceneId: string;
   readonly scenePackageVersion: string | null;
   readonly approvalProofRef: string | null;
+  readonly approvalArtifactIdentity: string | null;
+  readonly approvalProvenance: InterventionProfessionalApprovalProvenance | null;
   readonly approvalStatus: 'VALID' | 'INVALID' | 'UNAVAILABLE';
   readonly professionalAuthorityBlockers: readonly string[];
   readonly missingFormulationDependencies: readonly string[];
@@ -452,6 +473,8 @@ export function evaluateInterventionEligibility(
     sceneId: input.expectedDefinition.sceneId,
     scenePackageVersion: input.scenePackageVersion,
     approvalProofRef: input.professionalAuthority.approvalProofRef,
+    approvalArtifactIdentity: input.professionalAuthority.artifactIdentity ?? null,
+    approvalProvenance: input.professionalAuthority.provenance ?? null,
     approvalStatus: input.professionalAuthority.state,
     professionalAuthorityBlockers,
     missingFormulationDependencies,
