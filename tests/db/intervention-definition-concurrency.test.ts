@@ -845,6 +845,11 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
       },
     };
     const idem = key('qualification-revoke-wait');
+    const auditBefore = await admin.query<{ count: string }>(
+      "SELECT count(*)::text AS count FROM business_audit_events " +
+        "WHERE actor_account_id=$1 AND event_type='INTERVENTION_DEFINITION_CANDIDATE_CREATED'",
+      [accountId]
+    );
     const gate = await admin.connect();
     let gateCommitted = false;
     try {
@@ -887,8 +892,7 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
         ),
         admin.query<{ count: string }>(
           "SELECT count(*)::text AS count FROM business_audit_events " +
-            "WHERE actor_account_id=$1 AND event_type='INTERVENTION_DEFINITION_CANDIDATE_CREATED' " +
-            "AND metadata->>'contentHash' IS NOT NULL",
+            "WHERE actor_account_id=$1 AND event_type='INTERVENTION_DEFINITION_CANDIDATE_CREATED'",
           [accountId]
         ),
         admin.query<{ count: string }>(
@@ -900,8 +904,7 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
       ]);
       expect(defs.rows[0]!.count).toBe('0');
       expect(idems.rows[0]!.count).toBe('0');
-      // No audit for this definition can survive because no definition was committed.
-      expect(Number(audits.rows[0]!.count)).toBeGreaterThanOrEqual(0);
+      expect(audits.rows[0]!.count).toBe(auditBefore.rows[0]!.count);
     } finally {
       if (!gateCommitted) await gate.query('ROLLBACK').catch(() => undefined);
       gate.release();
