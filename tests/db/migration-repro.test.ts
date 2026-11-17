@@ -132,6 +132,29 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(tableNames).toEqual(EXPECTED_TABLE_NAMES);
   });
 
+  it('preserves Slice 16 all 32 tables as the exact pre-Slice17 owner subset', async () => {
+    const { rows } = await client.query<{ tablename: string }>(`
+      SELECT tablename
+      FROM pg_tables
+      WHERE schemaname = 'public'
+        AND tablename != 'schema_migrations'
+      ORDER BY tablename
+    `);
+    const slice17Owners = new Set([
+      'professional_knowledge_items',
+      'professional_knowledge_versions',
+      'professional_knowledge_sources',
+      'professional_knowledge_review_evidence',
+      'professional_knowledge_approval_evidence',
+    ]);
+    const slice16Tables = rows
+      .map((row) => row.tablename)
+      .filter((table) => !slice17Owners.has(table));
+
+    expect(slice16Tables).toHaveLength(32);
+    expect(slice16Tables).toContain('intervention_definitions');
+  });
+
   it('should have RLS context getter functions', async () => {
     const { rows } = await client.query(`
       SELECT proname FROM pg_proc p
