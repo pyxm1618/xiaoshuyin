@@ -159,6 +159,37 @@ export function hashProfessionalKnowledgeSourceSet(
   return sha256(canonicalize(normalized));
 }
 
+/**
+ * Exact Professional Approval semantic identity. This deliberately does not
+ * change contentHash (body-only) or sourceSetHash (provenance-only) semantics.
+ * It binds the complete release-affecting Knowledge identity and scope.
+ */
+export function hashProfessionalKnowledgeApprovalBinding(
+  value: ProfessionalKnowledgeVersionSnapshot
+): string {
+  const scope = value.scope;
+  return sha256(canonicalize({
+    knowledgeId: value.knowledgeId,
+    knowledgeKey: value.knowledgeKey,
+    semanticVersion: value.semanticVersion,
+    contentHash: value.contentHash,
+    sourceSetHash: value.sourceSetHash,
+    scope: {
+      product: scope.product,
+      sceneCode: scope.sceneCode,
+      scenePackageVersion: scope.scenePackageVersion,
+      stages: normalizedUnique(scope.stages),
+      ageBands: normalizedUnique(scope.ageBands),
+      applicability: normalizedUnique(scope.applicability),
+      exclusions: normalizedUnique(scope.exclusions),
+      riskLevels: normalizedUnique(scope.riskLevels),
+      locale: scope.locale,
+      professionalContentPackageRef: scope.professionalContentPackageRef ?? null,
+      interventionDefinitionRef: scope.interventionDefinitionRef ?? null,
+    },
+  }));
+}
+
 export type ProfessionalKnowledgeContractIssue =
   | 'IDENTITY_INVALID'
   | 'SEMANTIC_VERSION_INVALID'
@@ -265,6 +296,12 @@ export interface ProfessionalApprovalProof {
   readonly semanticVersion: string;
   readonly contentHash: string;
   readonly sourceSetHash: string;
+  /**
+   * Canonical hash of the complete authority-relevant Knowledge semantics.
+   * Optional in the transport type for backward-compatible decoding; validation
+   * requires an exact value, so legacy/stale proofs fail closed.
+   */
+  readonly semanticBindingHash?: string;
   readonly sourceRefs: readonly string[];
   readonly scope: ProfessionalApprovalScope;
   readonly reviewerIdentity: string;
@@ -296,6 +333,7 @@ export interface ProfessionalApprovalProvider {
     readonly semanticVersion: string;
     readonly contentHash: string;
     readonly sourceSetHash: string;
+    readonly semanticBindingHash?: string;
   }): Promise<ProfessionalApprovalProviderResult>;
   revalidate(input: {
     readonly proofId: string;
@@ -303,6 +341,7 @@ export interface ProfessionalApprovalProvider {
     readonly semanticVersion: string;
     readonly contentHash: string;
     readonly sourceSetHash: string;
+    readonly semanticBindingHash?: string;
   }): Promise<ProfessionalApprovalProviderResult>;
 }
 
@@ -347,9 +386,22 @@ export type ProfessionalApprovalValidation =
   | { readonly status: 'INVALID'; readonly reason: string }
   | { readonly status: 'UNAVAILABLE'; readonly dependency: string };
 
-function parseTime(value: string): number | null {
+function parseAuthorityTime(value: unknown): number | null {
+  if (typeof value !== 'string' || value.trim().length === 0 || value !== value.trim()) {
+    return null;
+  }
   const parsed = Date.parse(value);
-  return value.trim().length > 0 && Number.isFinite(parsed) ? parsed : null;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseOptionalAuthorityEnd(
+  value: unknown
+): { readonly valid: boolean; readonly value: number | null } {
+  if (value === null) return { valid: true, value: null };
+  const parsed = parseAuthorityTime(value);
+  return parsed === null
+    ? { valid: false, value: null }
+    : { valid: true, value: parsed };
 }
 
 function sameApprovalScope(
@@ -392,6 +444,49 @@ function samePackageRef(
   );
 }
 
+export type ProfessionalQualificationValidation =
+  | { readonly status: 'VALID'; readonly qualification: Extract<ProfessionalQualificationResult, { status: 'RESOLVED' }> }
+  | { readonly status: 'INVALID'; readonly reason: string }
+  | { readonly status: 'UNAVAILABLE'; readonly dependency: 'PROFESSIONAL_QUALIFICATION' };
+
+export function validateProfessionalQualification(input: {
+  readonly result: ProfessionalQualificationResult;
+  readonly expected: {
+    readonly qualificationRef: string;
+    readonly reviewerIdentity: string;
+    readonly reviewerAccountId: string;
+    readonly reviewerPersonId: string;
+    readonly scope: ProfessionalApprovalScope;
+  };
+  readonly now?: Date;
+}): ProfessionalQualificationValidation {
+  if (input.result.status === 'INVALID') {
+    return { status: 'INVALID', reason: 'PROFESSIONAL_QUALIFICATION_INVALID' };
+  }
+  if (input.result.status === 'UNAVAILABLE') {
+    return { status: 'UNAVAILABLE', dependency: 'PROFESSIONAL_QUALIFICATION' };
+  }
+
+  const now = (input.now ?? new Date()).getTime();
+  const validFrom = parseAuthorityTime(input.result.validFrom);
+  const validTo = parseOptionalAuthorityEnd(input.result.validTo);
+  const exact =
+    Number.isFinite(now) &&
+    input.result.qualificationRef === input.expected.qualificationRef &&
+    input.result.reviewerIdentity === input.expected.reviewerIdentity &&
+    input.result.reviewerAccountId === input.expected.reviewerAccountId &&
+    input.result.reviewerPersonId === input.expected.reviewerPersonId &&
+    sameApprovalScope(input.result.scope, input.expected.scope) &&
+    validFrom !== null &&
+    validTo.valid &&
+    validFrom <= now &&
+    (validTo.value === null || validTo.value > now);
+
+  return exact
+    ? { status: 'VALID', qualification: input.result }
+    : { status: 'INVALID', reason: 'PROFESSIONAL_QUALIFICATION_MISMATCH' };
+}
+
 export function validateProfessionalApproval(input: {
   readonly version: ProfessionalKnowledgeVersionSnapshot;
   readonly provider: ProfessionalApprovalProviderResult;
@@ -399,15 +494,8 @@ export function validateProfessionalApproval(input: {
   readonly qualification: ProfessionalQualificationResult;
   readonly now?: Date;
 }): ProfessionalApprovalValidation {
-  if (input.provider.status === 'UNAVAILABLE') {
-    return { status: 'UNAVAILABLE', dependency: `APPROVAL:${input.provider.reason}` };
-  }
-  if (input.staffAuthority.status === 'UNAVAILABLE') {
-    return { status: 'UNAVAILABLE', dependency: 'STAFF_AUTHORITY' };
-  }
-  if (input.qualification.status === 'UNAVAILABLE') {
-    return { status: 'UNAVAILABLE', dependency: 'PROFESSIONAL_QUALIFICATION' };
-  }
+  // A known-invalid authority fact must never be laundered into UNAVAILABLE by
+  // a different placeholder/outage fact.
   if (input.provider.status === 'INVALID') {
     return { status: 'INVALID', reason: `APPROVAL:${input.provider.reason}` };
   }
@@ -417,16 +505,26 @@ export function validateProfessionalApproval(input: {
   if (input.qualification.status === 'INVALID') {
     return { status: 'INVALID', reason: 'PROFESSIONAL_QUALIFICATION_INVALID' };
   }
+  if (input.provider.status === 'UNAVAILABLE') {
+    return { status: 'UNAVAILABLE', dependency: `APPROVAL:${input.provider.reason}` };
+  }
+  if (input.staffAuthority.status === 'UNAVAILABLE') {
+    return { status: 'UNAVAILABLE', dependency: 'STAFF_AUTHORITY' };
+  }
+  if (input.qualification.status === 'UNAVAILABLE') {
+    return { status: 'UNAVAILABLE', dependency: 'PROFESSIONAL_QUALIFICATION' };
+  }
 
   const proof = input.provider.proof;
   const expectedScope = knowledgeApprovalScope(input.version.scope);
+  const expectedSemanticBinding =
+    hashProfessionalKnowledgeApprovalBinding(input.version);
   const now = (input.now ?? new Date()).getTime();
-  const reviewedAt = parseTime(proof.reviewedAt);
-  const effectiveFrom = parseTime(proof.effectiveFrom);
-  const effectiveTo = proof.effectiveTo === null ? null : parseTime(proof.effectiveTo);
-  const qualificationFrom = parseTime(input.qualification.validFrom);
-  const qualificationTo =
-    input.qualification.validTo === null ? null : parseTime(input.qualification.validTo);
+  const reviewedAt = parseAuthorityTime(proof.reviewedAt);
+  const effectiveFrom = parseAuthorityTime(proof.effectiveFrom);
+  const effectiveTo = parseOptionalAuthorityEnd(proof.effectiveTo);
+  const qualificationFrom = parseAuthorityTime(input.qualification.validFrom);
+  const qualificationTo = parseOptionalAuthorityEnd(input.qualification.validTo);
 
   const expectedSourceRefs = normalizedUnique(
     input.version.sources.map((source) => source.sourceRef)
@@ -434,11 +532,13 @@ export function validateProfessionalApproval(input: {
   const proofSourceRefs = normalizedUnique(proof.sourceRefs);
 
   const exact =
+    Number.isFinite(now) &&
     exactNonEmpty(proof.proofId) &&
     proof.knowledgeId === input.version.knowledgeId &&
     proof.semanticVersion === input.version.semanticVersion &&
     proof.contentHash === input.version.contentHash &&
     proof.sourceSetHash === input.version.sourceSetHash &&
+    proof.semanticBindingHash === expectedSemanticBinding &&
     canonicalize(expectedSourceRefs) === canonicalize(proofSourceRefs) &&
     sameApprovalScope(proof.scope, expectedScope) &&
     proof.approvalStatus === 'APPROVED' &&
@@ -462,12 +562,14 @@ export function validateProfessionalApproval(input: {
     ) &&
     reviewedAt !== null &&
     effectiveFrom !== null &&
+    effectiveTo.valid &&
     qualificationFrom !== null &&
+    qualificationTo.valid &&
     reviewedAt <= now &&
     effectiveFrom <= now &&
     qualificationFrom <= now &&
-    (effectiveTo === null || effectiveTo > now) &&
-    (qualificationTo === null || qualificationTo > now);
+    (effectiveTo.value === null || effectiveTo.value > now) &&
+    (qualificationTo.value === null || qualificationTo.value > now);
 
   return exact
     ? { status: 'VALID', proof }
