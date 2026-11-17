@@ -2,784 +2,1580 @@
   "frozenSpecCommit": "9763bfd796aca9dbac20a94137dc330ef2b15971",
   "frozenSpecBlob": "83222f41929689f5d98ca45027c78a262ae6449f",
   "planningFreeze": "62020e02c908b870ff4aa445d068d6b09c19405a",
+  "planBlob": "6120f92ebb891fb2a149c70ee2ba311fc578e94b",
+  "checklistBlob": "5d087965a168e9a538583320e2e855b4466fd94e",
   "tasksBlob": "aee7ae367b74ace5fbb4f9c9b2edde21682ff53a",
-  "evidence": {
-    "domain": "tests/professional-knowledge-foundation-domain.test.ts",
-    "db": "tests/professional-knowledge-foundation-db.integration.test.ts",
-    "authority": "tests/professional-knowledge-authority-boundary.test.ts",
-    "provenance": "tests/professional-knowledge-provenance.test.ts",
-    "mutations": "tests/professional-knowledge-mutations.integration.test.ts",
-    "review": "tests/professional-knowledge-review-validity.integration.test.ts",
-    "approval": "tests/professional-knowledge-approval-authority.test.ts",
-    "scene": "tests/professional-knowledge-scene-binding.test.ts",
-    "eligibility": "tests/professional-knowledge-eligibility.integration.test.ts",
-    "release": "tests/professional-knowledge-release.integration.test.ts",
-    "dependency": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
-    "consumption": "tests/professional-knowledge-consumption.integration.test.ts",
-    "audit": "tests/professional-knowledge-audit-readback.integration.test.ts",
-    "production": "tests/professional-knowledge-production-composition.guard.test.ts",
-    "reliability": "tests/professional-knowledge-reliability.integration.test.ts",
-    "architecture": "tests/professional-knowledge-architecture-guard.test.ts"
+  "taskEvidence": {
+    "T1701": "tests/professional-knowledge-architecture-guard.test.ts",
+    "T1702": "tests/professional-knowledge-foundation-domain.test.ts",
+    "T1703": "tests/professional-knowledge-foundation-db.integration.test.ts",
+    "T1704": "tests/professional-knowledge-authority-boundary.test.ts",
+    "T1705": "tests/professional-knowledge-provenance.test.ts",
+    "T1706": "tests/professional-knowledge-mutations.integration.test.ts",
+    "T1707": "tests/professional-knowledge-review-validity.integration.test.ts",
+    "T1708": "tests/professional-knowledge-approval-authority.test.ts",
+    "T1709": "tests/professional-knowledge-scene-binding.test.ts",
+    "T1710": "tests/professional-knowledge-eligibility.integration.test.ts",
+    "T1711": "tests/professional-knowledge-release.integration.test.ts",
+    "T1712": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+    "T1713": "tests/professional-knowledge-consumption.integration.test.ts",
+    "T1714": "tests/professional-knowledge-audit-readback.integration.test.ts",
+    "T1715": "tests/professional-knowledge-production-composition.guard.test.ts",
+    "T1716": "tests/professional-knowledge-reliability.integration.test.ts"
   },
   "FR": [
     {
       "id": "FR-001",
-      "evidence": [
-        "tests/professional-knowledge-foundation-domain.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-002",
-      "evidence": [
-        "tests/professional-knowledge-foundation-db.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-003",
-      "evidence": [
-        "tests/professional-knowledge-authority-boundary.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-004",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-005",
-      "evidence": [
-        "tests/professional-knowledge-mutations.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-006",
-      "evidence": [
-        "tests/professional-knowledge-review-validity.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        }
       ]
     },
     {
       "id": "FR-007",
-      "evidence": [
-        "tests/professional-knowledge-approval-authority.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-008",
-      "evidence": [
-        "tests/professional-knowledge-scene-binding.test.ts"
+      "mappings": [
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-009",
-      "evidence": [
-        "tests/professional-knowledge-eligibility.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "FR-010",
-      "evidence": [
-        "tests/professional-knowledge-release.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        },
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-011",
-      "evidence": [
-        "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-012",
-      "evidence": [
-        "tests/professional-knowledge-consumption.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        }
       ]
     },
     {
       "id": "FR-013",
-      "evidence": [
-        "tests/professional-knowledge-audit-readback.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-014",
-      "evidence": [
-        "tests/professional-knowledge-production-composition.guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-015",
-      "evidence": [
-        "tests/professional-knowledge-reliability.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        },
+        {
+          "task": "T1714",
+          "evidence": "tests/professional-knowledge-audit-readback.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-016",
-      "evidence": [
-        "tests/professional-knowledge-architecture-guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-017",
-      "evidence": [
-        "tests/professional-knowledge-foundation-domain.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-018",
-      "evidence": [
-        "tests/professional-knowledge-foundation-db.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        },
+        {
+          "task": "T1714",
+          "evidence": "tests/professional-knowledge-audit-readback.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-019",
-      "evidence": [
-        "tests/professional-knowledge-authority-boundary.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-020",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-021",
-      "evidence": [
-        "tests/professional-knowledge-mutations.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-022",
-      "evidence": [
-        "tests/professional-knowledge-review-validity.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-023",
-      "evidence": [
-        "tests/professional-knowledge-approval-authority.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-024",
-      "evidence": [
-        "tests/professional-knowledge-scene-binding.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-025",
-      "evidence": [
-        "tests/professional-knowledge-eligibility.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-026",
-      "evidence": [
-        "tests/professional-knowledge-release.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-027",
-      "evidence": [
-        "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "FR-028",
-      "evidence": [
-        "tests/professional-knowledge-consumption.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-029",
-      "evidence": [
-        "tests/professional-knowledge-audit-readback.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-030",
-      "evidence": [
-        "tests/professional-knowledge-production-composition.guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-031",
-      "evidence": [
-        "tests/professional-knowledge-reliability.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1714",
+          "evidence": "tests/professional-knowledge-audit-readback.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-032",
-      "evidence": [
-        "tests/professional-knowledge-architecture-guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1714",
+          "evidence": "tests/professional-knowledge-audit-readback.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-033",
-      "evidence": [
-        "tests/professional-knowledge-foundation-domain.test.ts"
+      "mappings": [
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-034",
-      "evidence": [
-        "tests/professional-knowledge-foundation-db.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "FR-035",
-      "evidence": [
-        "tests/professional-knowledge-authority-boundary.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "FR-036",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-037",
-      "evidence": [
-        "tests/professional-knowledge-mutations.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "FR-038",
-      "evidence": [
-        "tests/professional-knowledge-review-validity.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        }
       ]
     },
     {
       "id": "FR-039",
-      "evidence": [
-        "tests/professional-knowledge-approval-authority.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-040",
-      "evidence": [
-        "tests/professional-knowledge-scene-binding.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "FR-041",
-      "evidence": [
-        "tests/professional-knowledge-eligibility.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-042",
-      "evidence": [
-        "tests/professional-knowledge-release.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-043",
-      "evidence": [
-        "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-044",
-      "evidence": [
-        "tests/professional-knowledge-consumption.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "FR-045",
-      "evidence": [
-        "tests/professional-knowledge-audit-readback.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "FR-046",
-      "evidence": [
-        "tests/professional-knowledge-production-composition.guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-047",
-      "evidence": [
-        "tests/professional-knowledge-reliability.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-048",
-      "evidence": [
-        "tests/professional-knowledge-architecture-guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1714",
+          "evidence": "tests/professional-knowledge-audit-readback.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-049",
-      "evidence": [
-        "tests/professional-knowledge-foundation-domain.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "FR-050",
-      "evidence": [
-        "tests/professional-knowledge-foundation-db.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "FR-051",
-      "evidence": [
-        "tests/professional-knowledge-authority-boundary.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        }
       ]
     },
     {
       "id": "FR-052",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        }
       ]
     }
   ],
   "AS": [
     {
       "id": "AS-001",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-002",
-      "evidence": [
-        "tests/professional-knowledge-mutations.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-003",
-      "evidence": [
-        "tests/professional-knowledge-review-validity.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-004",
-      "evidence": [
-        "tests/professional-knowledge-approval-authority.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-005",
-      "evidence": [
-        "tests/professional-knowledge-scene-binding.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-006",
-      "evidence": [
-        "tests/professional-knowledge-eligibility.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "AS-007",
-      "evidence": [
-        "tests/professional-knowledge-release.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "AS-008",
-      "evidence": [
-        "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-009",
-      "evidence": [
-        "tests/professional-knowledge-consumption.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-010",
-      "evidence": [
-        "tests/professional-knowledge-audit-readback.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-011",
-      "evidence": [
-        "tests/professional-knowledge-production-composition.guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "AS-012",
-      "evidence": [
-        "tests/professional-knowledge-reliability.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-013",
-      "evidence": [
-        "tests/professional-knowledge-architecture-guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "AS-014",
-      "evidence": [
-        "tests/professional-knowledge-foundation-domain.test.ts"
+      "mappings": [
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "AS-015",
-      "evidence": [
-        "tests/professional-knowledge-foundation-db.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-016",
-      "evidence": [
-        "tests/professional-knowledge-authority-boundary.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-017",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "AS-018",
-      "evidence": [
-        "tests/professional-knowledge-mutations.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        },
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-019",
-      "evidence": [
-        "tests/professional-knowledge-review-validity.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-020",
-      "evidence": [
-        "tests/professional-knowledge-approval-authority.test.ts"
+      "mappings": [
+        {
+          "task": "T1707",
+          "evidence": "tests/professional-knowledge-review-validity.integration.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-021",
-      "evidence": [
-        "tests/professional-knowledge-scene-binding.test.ts"
+      "mappings": [
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        },
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-022",
-      "evidence": [
-        "tests/professional-knowledge-eligibility.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-023",
-      "evidence": [
-        "tests/professional-knowledge-release.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-024",
-      "evidence": [
-        "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-025",
-      "evidence": [
-        "tests/professional-knowledge-consumption.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-026",
-      "evidence": [
-        "tests/professional-knowledge-audit-readback.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-027",
-      "evidence": [
-        "tests/professional-knowledge-production-composition.guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-028",
-      "evidence": [
-        "tests/professional-knowledge-reliability.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-029",
-      "evidence": [
-        "tests/professional-knowledge-architecture-guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-030",
-      "evidence": [
-        "tests/professional-knowledge-foundation-domain.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-031",
-      "evidence": [
-        "tests/professional-knowledge-foundation-db.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-032",
-      "evidence": [
-        "tests/professional-knowledge-authority-boundary.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-033",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-034",
-      "evidence": [
-        "tests/professional-knowledge-mutations.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-035",
-      "evidence": [
-        "tests/professional-knowledge-review-validity.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-036",
-      "evidence": [
-        "tests/professional-knowledge-approval-authority.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-037",
-      "evidence": [
-        "tests/professional-knowledge-scene-binding.test.ts"
+      "mappings": [
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        },
+        {
+          "task": "T1714",
+          "evidence": "tests/professional-knowledge-audit-readback.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-038",
-      "evidence": [
-        "tests/professional-knowledge-eligibility.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1702",
+          "evidence": "tests/professional-knowledge-foundation-domain.test.ts"
+        },
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-039",
-      "evidence": [
-        "tests/professional-knowledge-release.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-040",
-      "evidence": [
-        "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-041",
-      "evidence": [
-        "tests/professional-knowledge-consumption.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-042",
-      "evidence": [
-        "tests/professional-knowledge-audit-readback.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1706",
+          "evidence": "tests/professional-knowledge-mutations.integration.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-043",
-      "evidence": [
-        "tests/professional-knowledge-production-composition.guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1711",
+          "evidence": "tests/professional-knowledge-release.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-044",
-      "evidence": [
-        "tests/professional-knowledge-reliability.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1714",
+          "evidence": "tests/professional-knowledge-audit-readback.integration.test.ts"
+        },
+        {
+          "task": "T1716",
+          "evidence": "tests/professional-knowledge-reliability.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-045",
-      "evidence": [
-        "tests/professional-knowledge-architecture-guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-046",
-      "evidence": [
-        "tests/professional-knowledge-foundation-domain.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-047",
-      "evidence": [
-        "tests/professional-knowledge-foundation-db.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-048",
-      "evidence": [
-        "tests/professional-knowledge-authority-boundary.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "AS-049",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "AS-050",
-      "evidence": [
-        "tests/professional-knowledge-mutations.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     }
   ],
   "NS": [
     {
       "id": "NS-001",
-      "evidence": [
-        "tests/professional-knowledge-scene-binding.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "NS-002",
-      "evidence": [
-        "tests/professional-knowledge-eligibility.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "NS-003",
-      "evidence": [
-        "tests/professional-knowledge-release.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        }
       ]
     },
     {
       "id": "NS-004",
-      "evidence": [
-        "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        }
       ]
     },
     {
       "id": "NS-005",
-      "evidence": [
-        "tests/professional-knowledge-consumption.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        }
       ]
     },
     {
       "id": "NS-006",
-      "evidence": [
-        "tests/professional-knowledge-audit-readback.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        }
       ]
     },
     {
       "id": "NS-007",
-      "evidence": [
-        "tests/professional-knowledge-production-composition.guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "NS-008",
-      "evidence": [
-        "tests/professional-knowledge-reliability.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1703",
+          "evidence": "tests/professional-knowledge-foundation-db.integration.test.ts"
+        },
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        }
       ]
     },
     {
       "id": "NS-009",
-      "evidence": [
-        "tests/professional-knowledge-architecture-guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1704",
+          "evidence": "tests/professional-knowledge-authority-boundary.test.ts"
+        }
       ]
     },
     {
       "id": "NS-010",
-      "evidence": [
-        "tests/professional-knowledge-foundation-domain.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        }
       ]
     },
     {
       "id": "NS-011",
-      "evidence": [
-        "tests/professional-knowledge-foundation-db.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        }
       ]
     },
     {
       "id": "NS-012",
-      "evidence": [
-        "tests/professional-knowledge-authority-boundary.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        },
+        {
+          "task": "T1710",
+          "evidence": "tests/professional-knowledge-eligibility.integration.test.ts"
+        }
       ]
     },
     {
       "id": "NS-013",
-      "evidence": [
-        "tests/professional-knowledge-provenance.test.ts"
+      "mappings": [
+        {
+          "task": "T1713",
+          "evidence": "tests/professional-knowledge-consumption.integration.test.ts"
+        }
       ]
     },
     {
       "id": "NS-014",
-      "evidence": [
-        "tests/professional-knowledge-mutations.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        }
       ]
     },
     {
       "id": "NS-015",
-      "evidence": [
-        "tests/professional-knowledge-review-validity.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "NS-016",
-      "evidence": [
-        "tests/professional-knowledge-approval-authority.test.ts"
+      "mappings": [
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "NS-017",
-      "evidence": [
-        "tests/professional-knowledge-scene-binding.test.ts"
+      "mappings": [
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "NS-018",
-      "evidence": [
-        "tests/professional-knowledge-eligibility.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "NS-019",
-      "evidence": [
-        "tests/professional-knowledge-release.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        }
       ]
     },
     {
       "id": "NS-020",
-      "evidence": [
-        "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1705",
+          "evidence": "tests/professional-knowledge-provenance.test.ts"
+        }
       ]
     },
     {
       "id": "NS-021",
-      "evidence": [
-        "tests/professional-knowledge-consumption.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        },
+        {
+          "task": "T1715",
+          "evidence": "tests/professional-knowledge-production-composition.guard.test.ts"
+        }
       ]
     },
     {
       "id": "NS-022",
-      "evidence": [
-        "tests/professional-knowledge-audit-readback.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1709",
+          "evidence": "tests/professional-knowledge-scene-binding.test.ts"
+        },
+        {
+          "task": "T1712",
+          "evidence": "tests/professional-knowledge-dependency-propagation.integration.test.ts"
+        }
       ]
     },
     {
       "id": "NS-023",
-      "evidence": [
-        "tests/professional-knowledge-production-composition.guard.test.ts"
+      "mappings": [
+        {
+          "task": "T1708",
+          "evidence": "tests/professional-knowledge-approval-authority.test.ts"
+        }
       ]
     },
     {
       "id": "NS-024",
-      "evidence": [
-        "tests/professional-knowledge-reliability.integration.test.ts"
+      "mappings": [
+        {
+          "task": "T1701",
+          "evidence": "tests/professional-knowledge-architecture-guard.test.ts"
+        }
       ]
     }
   ]

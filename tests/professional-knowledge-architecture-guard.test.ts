@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -18,11 +19,21 @@ const traceability = JSON.parse(
   frozenSpecCommit: string;
   frozenSpecBlob: string;
   planningFreeze: string;
+  planBlob: string;
+  checklistBlob: string;
   tasksBlob: string;
-  FR: { id: string; evidence: string[] }[];
-  AS: { id: string; evidence: string[] }[];
-  NS: { id: string; evidence: string[] }[];
+  taskEvidence: Record<string, string>;
+  FR: { id: string; mappings: { task: string; evidence: string }[] }[];
+  AS: { id: string; mappings: { task: string; evidence: string }[] }[];
+  NS: { id: string; mappings: { task: string; evidence: string }[] }[];
 };
+
+function git(...args: string[]): string {
+  return execFileSync('git', args, {
+    cwd: new URL('..', import.meta.url),
+    encoding: 'utf8',
+  }).trim();
+}
 
 function ids(prefix: string, count: number): string[] {
   return Array.from({ length: count }, (_, i) =>
@@ -30,22 +41,85 @@ function ids(prefix: string, count: number): string[] {
   );
 }
 
+function frozenTaskChunks(): Map<string, string> {
+  const frozen = git(
+    'show',
+    `${traceability.planningFreeze}:specs/017-professional-knowledge-foundation/tasks.md`
+  );
+  const chunks = new Map<string, string>();
+  for (const match of frozen.matchAll(
+    /- \[ \] \*\*(T17\d{2})[^]*?(?=\n- \[ \] \*\*T17|\n## Dependencies)/g
+  )) {
+    const task = match[1]!;
+    if (task >= 'T1701' && task <= 'T1716') chunks.set(task, match[0]);
+  }
+  return chunks;
+}
+
+function expectedTasksFor(
+  chunks: Map<string, string>,
+  id: string
+): string[] {
+  return [...chunks.entries()]
+    .filter(([, body]) => {
+      const kind = id.slice(0, 2);
+      return (body.match(new RegExp(`${kind}-\\d{3}`, 'g')) ?? []).includes(id);
+    })
+    .map(([task]) => task)
+    .sort();
+}
+
 describe('Slice 17 single-owner architecture + mechanical traceability', () => {
-  it('binds traceability to the exact frozen authority package', () => {
-    expect(traceability.frozenSpecCommit).toBe('9763bfd796aca9dbac20a94137dc330ef2b15971');
-    expect(traceability.frozenSpecBlob).toBe('83222f41929689f5d98ca45027c78a262ae6449f');
-    expect(traceability.planningFreeze).toBe('62020e02c908b870ff4aa445d068d6b09c19405a');
-    expect(traceability.tasksBlob).toBe('aee7ae367b74ace5fbb4f9c9b2edde21682ff53a');
+  it('binds to exact Frozen Spec and Planning Freeze blobs', () => {
+    expect(
+      git(
+        'rev-parse',
+        `${traceability.frozenSpecCommit}:specs/017-professional-knowledge-foundation/spec.md`
+      )
+    ).toBe(traceability.frozenSpecBlob);
+    expect(
+      git(
+        'rev-parse',
+        `${traceability.planningFreeze}:specs/017-professional-knowledge-foundation/plan.md`
+      )
+    ).toBe(traceability.planBlob);
+    expect(
+      git(
+        'rev-parse',
+        `${traceability.planningFreeze}:specs/017-professional-knowledge-foundation/checklist.md`
+      )
+    ).toBe(traceability.checklistBlob);
+    expect(
+      git(
+        'rev-parse',
+        `${traceability.planningFreeze}:specs/017-professional-knowledge-foundation/tasks.md`
+      )
+    ).toBe(traceability.tasksBlob);
   });
 
-  it('covers exactly FR 52/52, AS 50/50, NS 24/24 with existing evidence files', () => {
-    expect(traceability.FR.map((x) => x.id)).toEqual(ids('FR', 52));
-    expect(traceability.AS.map((x) => x.id)).toEqual(ids('AS', 50));
-    expect(traceability.NS.map((x) => x.id)).toEqual(ids('NS', 24));
-    for (const entry of [...traceability.FR, ...traceability.AS, ...traceability.NS]) {
-      expect(entry.evidence.length).toBeGreaterThan(0);
-      for (const evidence of entry.evidence) {
-        expect(existsSync(new URL(`../${evidence}`, import.meta.url))).toBe(true);
+  it('covers exactly FR 52/52, AS 50/50, NS 24/24 from authoritative T1701-T1716 mappings', () => {
+    const chunks = frozenTaskChunks();
+    expect([...chunks.keys()].sort()).toEqual(
+      Array.from({ length: 16 }, (_, i) => `T17${String(i + 1).padStart(2, '0')}`)
+    );
+
+    for (const [entries, prefix, count] of [
+      [traceability.FR, 'FR', 52],
+      [traceability.AS, 'AS', 50],
+      [traceability.NS, 'NS', 24],
+    ] as const) {
+      expect(entries.map((entry) => entry.id)).toEqual(ids(prefix, count));
+      for (const entry of entries) {
+        const expectedTasks = expectedTasksFor(chunks, entry.id);
+        expect(expectedTasks.length, `${entry.id} must be mapped by frozen tasks`).toBeGreaterThan(0);
+        expect(entry.mappings.map((mapping) => mapping.task).sort()).toEqual(expectedTasks);
+        for (const mapping of entry.mappings) {
+          expect(mapping.evidence).toBe(traceability.taskEvidence[mapping.task]);
+          expect(
+            existsSync(new URL(`../${mapping.evidence}`, import.meta.url)),
+            `${entry.id} / ${mapping.task} evidence missing`
+          ).toBe(true);
+        }
       }
     }
   });
@@ -78,7 +152,7 @@ describe('Slice 17 single-owner architecture + mechanical traceability', () => {
     ).toBe(false);
   });
 
-  it('contains no deprecated planning package identity', () => {
+  it('contains no deprecated planning package identity or candidate Slice 16 imports', () => {
     const slice17 = [
       migration,
       domain,
@@ -86,5 +160,6 @@ describe('Slice 17 single-owner architecture + mechanical traceability', () => {
     ].join('\n');
     expect(slice17).not.toContain('a1d4e4390d313502696493573243adf401dbae90');
     expect(slice17).not.toContain('plan/017-professional-knowledge-foundation\n');
+    expect(slice17).not.toMatch(/PR\s*#?57|feat\/016-/i);
   });
 });
