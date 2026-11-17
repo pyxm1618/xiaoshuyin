@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Finite immutable grandfather baseline for task completion states that predate evidence-manifest enforcement. New entries are not automatic exemptions.",
+  "files": [
+    {
+      "path": "specs/001-family-identity-core/tasks.md",
+      "blobSha": "828ae1435973df81415578e71785f18cc8d59889"
+    },
+    {
+      "path": "specs/002-case-core/tasks.md",
+      "blobSha": "44f7d97a33a5826dc7e919817a9ab84d7f0b4391"
+    },
+    {
+      "path": "specs/003-evidence-core/tasks.md",
+      "blobSha": "469722dbb8d43f9502de50301bd4691e8de58411"
+    },
+    {
+      "path": "specs/006-identity-binding-runtime/tasks.md",
+      "blobSha": "db88189dacafc0f52ad8917d48c5cbd6c0712029"
+    },
+    {
+      "path": "specs/007-case-primary-switch/tasks.md",
+      "blobSha": "138d181c0af0e8cefe11a4837930d713203b3bb3"
+    }
+  ]
+}
