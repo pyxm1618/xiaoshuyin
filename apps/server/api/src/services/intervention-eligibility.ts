@@ -532,7 +532,6 @@ export function evaluateCurrentInterventionEligibility(
       accountId: input.actor.accountId,
       personId: input.actor.personId,
       purpose: 'FAMILY_MANAGEMENT',
-      isolationLevel: 'READ COMMITTED',
     },
     (_tx, client) =>
       evaluateCurrentInterventionEligibilityInTransaction(
