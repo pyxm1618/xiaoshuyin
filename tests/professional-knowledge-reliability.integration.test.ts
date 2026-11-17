@@ -120,8 +120,13 @@ async function beginClient() {
 async function rollbackRelease(client: Awaited<ReturnType<typeof beginClient>>) {
   try {
     await client.query('ROLLBACK');
-  } finally {
+  } catch {
+    // Already committed/released or transaction already aborted.
+  }
+  try {
     client.release();
+  } catch {
+    // Already released.
   }
 }
 
@@ -198,8 +203,8 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       );
       expect(Number(snapshots.rows[0]!.n)).toBe(2);
     } catch (error) {
-      if (!first.released) await rollbackRelease(first);
-      if (!second.released) await rollbackRelease(second);
+      await rollbackRelease(first);
+      await rollbackRelease(second);
       throw error;
     }
   });
@@ -249,8 +254,8 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       );
       expect(Number(evidence.rows[0]!.n)).toBe(0);
     } catch (error) {
-      if (!editor.released) await rollbackRelease(editor);
-      if (!reviewer.released) await rollbackRelease(reviewer);
+      await rollbackRelease(editor);
+      await rollbackRelease(reviewer);
       throw error;
     }
   });
@@ -285,8 +290,8 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       );
       expect(row.rows[0]).toEqual({ lifecycle_status: 'PUBLISHED', revision: 2 });
     } catch (error) {
-      if (!releaser.released) await rollbackRelease(releaser);
-      if (!editor.released) await rollbackRelease(editor);
+      await rollbackRelease(releaser);
+      await rollbackRelease(editor);
       throw error;
     }
   });
@@ -364,8 +369,8 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
         { semantic_version: '1.0.0', lifecycle_status: 'RETIRED' },
       ]);
     } catch (error) {
-      if (!retirer.released) await rollbackRelease(retirer);
-      if (!successor.released) await rollbackRelease(successor);
+      await rollbackRelease(retirer);
+      await rollbackRelease(successor);
       throw error;
     }
   });
@@ -406,8 +411,8 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
         validity_state: 'INVALID',
       });
     } catch (error) {
-      if (!invalidator.released) await rollbackRelease(invalidator);
-      if (!releaser.released) await rollbackRelease(releaser);
+      await rollbackRelease(invalidator);
+      await rollbackRelease(releaser);
       throw error;
     }
   });
@@ -527,8 +532,8 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       );
       expect(row.rows[0]).toEqual({ revision: 1, content_hash: 'a'.repeat(64) });
     } catch (error) {
-      if (!waiter.released) await rollbackRelease(waiter);
-      if (!locker.released) await rollbackRelease(locker);
+      await rollbackRelease(waiter);
+      await rollbackRelease(locker);
       throw error;
     }
   });
