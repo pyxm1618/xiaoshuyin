@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "taskFile": "specs/011-digital-use-node-manifest-routing-foundation/tasks.md",
+  "implementationPr": 31,
+  "implementationHeadSha": "e7ad9975c25d8fc4ddf30b769d7e74a16e42cf8d",
+  "mergeCommitSha": "eaf2bb3adc2d9499a4ed84d0ca560c55209628f8",
+  "mergedAt": "2026-11-12T09:39:46Z",
+  "taskIds": [
+    "T1101",
+    "T1102",
+    "T1103",
+    "T1104",
+    "T1105",
+    "T1106",
+    "T1107",
+    "T1108",
+    "T1109",
+    "T1110",
+    "T1111",
+    "T1112",
+    "T1113",
+    "T1114",
+    "T1115",
+    "T1116"
+  ],
+  "artifactPaths": [
+    "packages/scenes/digital-use/node-manifest.ts",
+    "packages/scenes/digital-use/routing.ts",
+    "packages/scenes/digital-use/validators.ts",
+    "tests/scenes/digital-use/acceptance-matrix.test.ts",
+    "tests/scenes/digital-use/negative-mutations.test.ts",
+    "tests/scenes/digital-use/architecture-guard.test.ts",
+    ".github/workflows/ci.yml"
+  ],
+  "ciRuns": [
+    {
+      "name": "CI",
+      "runId": 43185841324,
+      "conclusion": "success",
+      "headSha": "e7ad9975c25d8fc4ddf30b769d7e74a16e42cf8d"
+    },
+    {
+      "name": "Spec Governance",
+      "runId": 43185841308,
+      "conclusion": "success",
+      "headSha": "e7ad9975c25d8fc4ddf30b769d7e74a16e42cf8d"
+    }
+  ]
+}
