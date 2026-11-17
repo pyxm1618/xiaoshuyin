@@ -11,6 +11,8 @@ on:
 
 permissions:
   contents: read
+  actions: read
+  pull-requests: read
 
 jobs:
   governance:
@@ -35,6 +37,11 @@ jobs:
           node .specify/scripts/validate-change-governance.mjs \
             --base "$GOVERNANCE_BASE" \
             --head HEAD
+
+      - name: Validate historical task evidence provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .specify/scripts/validate-task-evidence-remote.mjs
 
       - name: Validate governance artifacts and feature traceability
         run: node .specify/scripts/validate-governance.mjs
