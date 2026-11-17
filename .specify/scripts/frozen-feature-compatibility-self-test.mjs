@@ -27,6 +27,7 @@ for (const inheritedLike of [
   "valueOf",
   "__proto__",
   "hasOwnProperty",
+  "016-nearby-but-not-registered",
 ]) {
   assert(
     !isExactReviewedFrozenFeatureSet(root, inheritedLike, realDir),
