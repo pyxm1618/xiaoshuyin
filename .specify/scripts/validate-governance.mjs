@@ -9,14 +9,17 @@ import {
 const root = process.cwd();
 const errors = [];
 
-const reviewedFrozenFeatureSets = {
-  "016-psychological-behavioral-intervention-contract-authority-reconciliation": {
-    "spec.md": "5bc22645af2008d6f774e39f57bae391fa2543c7",
-    "plan.md": "41300acbce1fd973d478348185f5d8860f4da841",
-    "checklist.md": "f35f31b93758eeb98a2c53cbae1dcdc1f5b6f837",
-    "tasks.md": "76805596e6a3dff389317207d8e4c14040127698",
-  },
-};
+const reviewedFrozenFeatureSets = new Map([
+  [
+    "016-psychological-behavioral-intervention-contract-authority-reconciliation",
+    Object.freeze({
+      "spec.md": "5bc22645af2008d6f774e39f57bae391fa2543c7",
+      "plan.md": "41300acbce1fd973d478348185f5d8860f4da841",
+      "checklist.md": "f35f31b93758eeb98a2c53cbae1dcdc1f5b6f837",
+      "tasks.md": "76805596e6a3dff389317207d8e4c14040127698",
+    }),
+  ],
+]);
 
 function gitBlobSha(rel) {
   const bytes = fs.readFileSync(path.join(root, rel));
@@ -27,13 +30,27 @@ function gitBlobSha(rel) {
 }
 
 function isExactReviewedFrozenFeatureSet(featureName, dir) {
-  const expected = reviewedFrozenFeatureSets[featureName];
-  if (!expected) return false;
-  return Object.entries(expected).every(
-    ([name, expectedSha]) =>
+  const expected = reviewedFrozenFeatureSets.get(featureName);
+  if (expected === undefined) return false;
+
+  const requiredNames = ["spec.md", "plan.md", "checklist.md", "tasks.md"];
+  const actualNames = Object.keys(expected).sort();
+  if (
+    actualNames.length !== requiredNames.length ||
+    !requiredNames.every((name, index) => actualNames[index] === [...requiredNames].sort()[index])
+  ) {
+    return false;
+  }
+
+  return requiredNames.every((name) => {
+    const expectedSha = expected[name];
+    return (
+      typeof expectedSha === "string" &&
+      /^[0-9a-f]{40}$/.test(expectedSha) &&
       exists(path.join(dir, name)) &&
       gitBlobSha(path.join(dir, name)) === expectedSha
-  );
+    );
+  });
 }
 
 function exists(rel) {
