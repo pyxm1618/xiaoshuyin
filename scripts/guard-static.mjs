@@ -815,6 +815,129 @@ function runAssessmentRuntimeRules() {
 
 runAssessmentRuntimeRules();
 
+// ─── Rule 17: Slice 17 Professional Knowledge production boundary ───
+// Synthetic authority is test-only. Professional Knowledge production files
+// must not acquire RAG/AI runtime, test-fixture imports, env-selected approval,
+// or a second owner for approval/Scene/audit/idempotency/source ingestion.
+const SLICE17_FORBIDDEN_OWNER_TABLES = [
+  'knowledge_embeddings',
+  'knowledge_chunks',
+  'knowledge_package_inclusions',
+  'scene_packages',
+  'reviewers',
+  'qualifications',
+  'professional_approvals',
+  'knowledge_audit_ledger',
+  'knowledge_idempotency',
+];
+
+function checkProfessionalKnowledgeBoundaries(relPath, content, report) {
+  const isSlice17Production =
+    !relPath.startsWith('tests/') &&
+    (
+      relPath.includes('professional-knowledge') ||
+      relPath.includes('025_professional_knowledge_foundation.sql')
+    );
+  if (!isSlice17Production) return;
+
+  if (/\.(?:ts|tsx|js|mjs|cjs)$/.test(relPath)) {
+    content.split('\n').forEach((line, i) => {
+      if (isComment(line)) return;
+
+      const importMatch = /from\s+['"]([^'"]+)['"]/.exec(line);
+      if (importMatch) {
+        const specifier = importMatch[1];
+        if (/(?:^|\/)(?:tests|fixtures)(?:\/|$)/i.test(specifier)) {
+          report(
+            'R17-professional-knowledge-production-authority',
+            relPath,
+            i + 1,
+            `Production Slice 17 import reaches test/fixture authority: ${specifier}`
+          );
+        }
+        if (
+          /(?:@xiaoshuyin\/(?:rag|ai)|pgvector|sparsevec|pg_jieba|promptfoo|langchain|openai|anthropic)/i.test(
+            specifier
+          )
+        ) {
+          report(
+            'R17-professional-knowledge-no-rag-runtime',
+            relPath,
+            i + 1,
+            `Forbidden Slice 18/19 or model runtime dependency: ${specifier}`
+          );
+        }
+      }
+
+      if (
+        /process\.env[^\n]*(?:APPROV|QUALIF|SYNTHETIC|FAKE|REVIEWER)/i.test(line)
+      ) {
+        report(
+          'R17-professional-knowledge-production-authority',
+          relPath,
+          i + 1,
+          'Production authority must not be selectable by environment/config'
+        );
+      }
+
+      if (/\bapproved\s*=\s*true\b/i.test(line)) {
+        report(
+          'R17-professional-knowledge-production-authority',
+          relPath,
+          i + 1,
+          'approved=true must never manufacture Professional Approval'
+        );
+      }
+
+      if (
+        /\b(?:TaskModelRegistry|Context\s+Builder|AI\s+Task\s+Runtime|Jev\s+runtime|RRF|reranker|hybrid[-_ ]search)\b/i.test(
+          line
+        )
+      ) {
+        report(
+          'R17-professional-knowledge-no-rag-runtime',
+          relPath,
+          i + 1,
+          'Forbidden Slice 18/19 retrieval/model runtime in Slice 17'
+        );
+      }
+    });
+  }
+
+  if (relPath.startsWith('db/')) {
+    const normalized = normalizeSql(content);
+    for (const table of SLICE17_FORBIDDEN_OWNER_TABLES) {
+      const pattern = new RegExp(
+        `\\bCREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:${SQL_IDENT}\\s*\\.\\s*)?["'\\`]?${table}["'\\`]?\\b`,
+        'i'
+      );
+      const match = pattern.exec(normalized);
+      if (match) {
+        report(
+          'R17-professional-knowledge-single-owner',
+          relPath,
+          lineOf(normalized, match.index),
+          `Forbidden duplicate/out-of-scope Slice 17 owner table: ${table}`
+        );
+      }
+    }
+  }
+}
+
+function runProfessionalKnowledgeRules() {
+  scanDir(ROOT, (file) => {
+    const relPath = getRelPath(file);
+    const content = readFileSync(file, 'utf-8');
+    checkProfessionalKnowledgeBoundaries(
+      relPath,
+      content,
+      (rule, f, line, message) => addViolation(rule, f, line, message)
+    );
+  }, ALL_SCAN_EXTENSIONS);
+}
+
+runProfessionalKnowledgeRules();
+
 // ─── Self-test: synthetic forbidden bypass fixtures ───
 // `node scripts/guard-static.mjs --self-test` proves the Safety rules detect a
 // bypass even when the real tree is clean. Not part of `bun run guard:static`.
