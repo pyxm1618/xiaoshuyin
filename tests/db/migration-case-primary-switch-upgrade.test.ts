@@ -175,7 +175,9 @@ const AUTH008_NEW_CONSTRAINTS = [
 
 const SLICE16_NEW_CONSTRAINTS = [
   'business_audit_events_scope_shape_check',
+  'intervention_definitions_adverse_or_worsening_signals_not_null',
   'intervention_definitions_age_and_development_scope_not_null',
+  'intervention_definitions_baseline_and_observation_not_null',
   'intervention_definitions_allowed_combinations_not_null',
   'intervention_definitions_applicable_conditions_not_null',
   'intervention_definitions_burden_and_barriers_not_null',

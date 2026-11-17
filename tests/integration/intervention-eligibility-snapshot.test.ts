@@ -217,7 +217,7 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     }>(
       "SELECT family_id,event_type,resource_id,metadata FROM business_audit_events " +
         "WHERE family_id=$1 AND resource_type='INTERVENTION_DEFINITION' " +
-        "AND resource_id=$2 ORDER BY created_at DESC,id DESC LIMIT 1",
+        "AND resource_id=$2 ORDER BY occurred_at DESC,id DESC LIMIT 1",
       [f.familyId, f.definitionId]
     );
     expect(audit.rows[0]).toMatchObject({

@@ -223,7 +223,7 @@ describe('T918 executable scope negatives', () => {
       const content = readFileSync(file, 'utf-8');
       const dependencySpecifiers = [
         ...content.matchAll(
-          /(?:from\\s+|import\\s*\\(|require\\s*\\()\\s*['"]([^'"]+)['"]/g
+          /(?:from\s+|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/g
         ),
       ].map((match) => match[1] ?? '').join('\\n');
       for (const token of forbidden) {
