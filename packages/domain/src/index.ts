@@ -68,3 +68,6 @@ export * from './family-alliance-repository.js';
 // Slice 14 — bounded phone-use Contract/roleplay persistence.
 export * from './phone-use-contract-schema.js';
 export * from './phone-use-contract-repository.js';
+
+// Slice 17 — Professional Knowledge Foundation domain contracts.
+export * from './professional-knowledge.js';
