@@ -117,7 +117,7 @@ Current reconciliation snapshot:
 | Upstream | Current remote truth | Slice 18 interpretation |
 |---|---|---|
 | origin/main | 9aceaedf12b611d41fba06866dcd00e20eb5ea8d | current reconciliation base |
-| Slice 16 | PR #57 MERGED at 9aceaedf12b611d41fba06866dcd00e20eb5ea8d; post-merge forensic audit found 12 blocking findings; remediation PR #59 is OPEN / NOT MERGED at Head 83e8dd8ad163351f59d5f2a2e5607eff4587ca90, with CI still running and its PR contract requiring independent targeted re-audit before merge | merged = YES; remediation exists, but clean prerequisite / runtime usability = NOT YET PROVEN |
+| Slice 16 | PR #57 MERGED at 9aceaedf12b611d41fba06866dcd00e20eb5ea8d; post-merge forensic audit found 12 blocking findings; remediation PR #59 is OPEN / NOT MERGED and its PR contract requires independent targeted re-audit before merge; its moving exact Head/CI/audit state is deliberately re-read by T1801 rather than frozen here | merged = YES; remediation exists, but clean prerequisite / runtime usability = NOT YET PROVEN |
 | Slice 17 | PR #58 OPEN / DRAFT / NOT MERGED; exact implementation Head at reconciliation time c62ed5a9fd8b90f6d909e03440bceabceeedd4c3 | implementation exists, but it is not current-main runtime truth and cannot satisfy T1801 |
 | Professional Reviewer | APPROVED PROFESSIONAL REVIEWER — UNASSIGNED | production Gold-label approval prerequisite = BLOCKED |
 
