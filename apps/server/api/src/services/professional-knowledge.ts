@@ -8,12 +8,14 @@ import type pg from 'pg';
 import {
   appendConsumedProfessionalApprovalEvidence,
   appendProfessionalKnowledgeAudit,
+  appendProfessionalKnowledgeAuthorityDenialReceipt,
   appendProfessionalKnowledgeReviewEvidence,
   applyProfessionalKnowledgeDependencyState,
   createProfessionalKnowledgeCandidate,
   createProfessionalKnowledgeSuccessor,
   editProfessionalKnowledgeCandidate,
   hashPayload,
+  hashProfessionalKnowledgeApprovalBinding,
   getIdempotencyKey,
   getProfessionalKnowledgePredecessorId,
   lockProfessionalKnowledgeVersion,
@@ -26,6 +28,7 @@ import {
   evaluateProfessionalKnowledgeEligibility,
   projectProfessionalKnowledgeDependencyImpact,
   validateProfessionalApproval,
+  validateProfessionalQualification,
   validateProfessionalKnowledgeVersionContract,
   type ProfessionalApprovalProvider,
   type ProfessionalApprovalProviderResult,
@@ -254,17 +257,34 @@ async function requireQualification(input: {
   reviewerAccountId: string;
   reviewerPersonId: string;
   scope: Parameters<ProfessionalQualificationProvider['resolve']>[0]['scope'];
+  now?: Date;
 }): Promise<Extract<ProfessionalQualificationResult, { status: 'RESOLVED' }>> {
-  const result = await input.provider.resolve({
-    qualificationRef: input.qualificationRef,
-    reviewerIdentity: input.reviewerIdentity,
-    reviewerAccountId: input.reviewerAccountId,
-    reviewerPersonId: input.reviewerPersonId,
-    scope: input.scope,
+  let result: ProfessionalQualificationResult;
+  try {
+    result = await input.provider.resolve({
+      qualificationRef: input.qualificationRef,
+      reviewerIdentity: input.reviewerIdentity,
+      reviewerAccountId: input.reviewerAccountId,
+      reviewerPersonId: input.reviewerPersonId,
+      scope: input.scope,
+    });
+  } catch {
+    unavailable('PROFESSIONAL_QUALIFICATION');
+  }
+  const validation = validateProfessionalQualification({
+    result,
+    expected: {
+      qualificationRef: input.qualificationRef,
+      reviewerIdentity: input.reviewerIdentity,
+      reviewerAccountId: input.reviewerAccountId,
+      reviewerPersonId: input.reviewerPersonId,
+      scope: input.scope,
+    },
+    ...(input.now === undefined ? {} : { now: input.now }),
   });
-  if (result.status === 'UNAVAILABLE') unavailable('PROFESSIONAL_QUALIFICATION');
-  if (result.status === 'INVALID') invalidAuthority('PROFESSIONAL_QUALIFICATION_INVALID');
-  return result;
+  if (validation.status === 'UNAVAILABLE') unavailable(validation.dependency);
+  if (validation.status === 'INVALID') invalidAuthority(validation.reason);
+  return validation.qualification;
 }
 
 export async function recordKnowledgeReview(input: {
@@ -281,6 +301,8 @@ export async function recordKnowledgeReview(input: {
   outcome: 'REVIEWED' | 'NEEDS_REVIEW' | 'NO_MATERIAL_IMPACT';
   reasonCode?: string | null;
   reviewedAt?: Date;
+  /** deterministic authority clock injection; not part of caller command semantics */
+  now?: Date;
 }): Promise<{ versionId: string; revision: number; reviewState: string; validityState: string }> {
   const qualificationProvider =
     input.qualificationProvider ?? unavailableProductionProfessionalQualificationProvider;
@@ -326,6 +348,16 @@ export async function recordKnowledgeReview(input: {
           });
           if (staff.status !== 'RESOLVED') invalidAuthority('STAFF_AUTHORITY_INVALID');
 
+          const authorityNow = input.now ?? new Date();
+          const reviewedAt = input.reviewedAt ?? authorityNow;
+          if (
+            !Number.isFinite(authorityNow.getTime()) ||
+            !Number.isFinite(reviewedAt.getTime()) ||
+            reviewedAt.getTime() > authorityNow.getTime()
+          ) {
+            invalidAuthority('REVIEWED_AT_INVALID');
+          }
+
           const scope = {
             product: version.scope.product,
             sceneCode: version.scope.sceneCode,
@@ -341,6 +373,7 @@ export async function recordKnowledgeReview(input: {
             reviewerAccountId: input.accountId,
             reviewerPersonId: input.personId,
             scope,
+            now: authorityNow,
           });
 
           const next =
@@ -357,7 +390,7 @@ export async function recordKnowledgeReview(input: {
             qualificationRef: input.qualificationRef,
             reviewOutcome: input.outcome,
             reviewReasonCode: input.reasonCode ?? null,
-            reviewedAt: input.reviewedAt ?? new Date(),
+            reviewedAt,
             nextReviewState: next.reviewState,
             nextValidityState: next.validityState,
           });
@@ -399,35 +432,40 @@ export async function resolveAndValidateKnowledgeApproval(input: {
   proofId?: string;
   now?: Date;
 }): Promise<ProfessionalApprovalValidation> {
+  const semanticBindingHash =
+    hashProfessionalKnowledgeApprovalBinding(input.version);
   let providerResult: ProfessionalApprovalProviderResult;
-  if (input.mode === 'RESOLVE') {
-    providerResult = await input.provider.resolve({
-      knowledgeId: input.version.knowledgeId,
-      semanticVersion: input.version.semanticVersion,
-      contentHash: input.version.contentHash,
-      sourceSetHash: input.version.sourceSetHash,
-    });
-  } else {
-    if (!input.proofId) {
-      return { status: 'INVALID', reason: 'APPROVAL_PROOF_ID_REQUIRED' };
+  try {
+    if (input.mode === 'RESOLVE') {
+      providerResult = await input.provider.resolve({
+        knowledgeId: input.version.knowledgeId,
+        semanticVersion: input.version.semanticVersion,
+        contentHash: input.version.contentHash,
+        sourceSetHash: input.version.sourceSetHash,
+        semanticBindingHash,
+      });
+    } else {
+      if (!input.proofId) {
+        return { status: 'INVALID', reason: 'APPROVAL_PROOF_ID_REQUIRED' };
+      }
+      providerResult = await input.provider.revalidate({
+        proofId: input.proofId,
+        knowledgeId: input.version.knowledgeId,
+        semanticVersion: input.version.semanticVersion,
+        contentHash: input.version.contentHash,
+        sourceSetHash: input.version.sourceSetHash,
+        semanticBindingHash,
+      });
     }
-    providerResult = await input.provider.revalidate({
-      proofId: input.proofId,
-      knowledgeId: input.version.knowledgeId,
-      semanticVersion: input.version.semanticVersion,
-      contentHash: input.version.contentHash,
-      sourceSetHash: input.version.sourceSetHash,
-    });
+  } catch {
+    return { status: 'UNAVAILABLE', dependency: 'APPROVAL:TRANSPORT' };
   }
 
-  if (providerResult.status !== 'RESOLVED') {
-    return validateProfessionalApproval({
-      version: input.version,
-      provider: providerResult,
-      staffAuthority: { status: 'UNAVAILABLE', reason: 'NOT_RESOLVED' },
-      qualification: { status: 'UNAVAILABLE', reason: 'NOT_RESOLVED' },
-      ...(input.now === undefined ? {} : { now: input.now }),
-    });
+  if (providerResult.status === 'INVALID') {
+    return { status: 'INVALID', reason: `APPROVAL:${providerResult.reason}` };
+  }
+  if (providerResult.status === 'UNAVAILABLE') {
+    return { status: 'UNAVAILABLE', dependency: `APPROVAL:${providerResult.reason}` };
   }
 
   const proof = providerResult.proof;
@@ -438,18 +476,34 @@ export async function resolveAndValidateKnowledgeApproval(input: {
   ) {
     return { status: 'INVALID', reason: 'APPROVAL_PROOF_ID_MISMATCH' };
   }
+
   const staff = await resolveProfessionalReviewStaffAuthority(input.tx, {
     assignmentRef: proof.staffAssignmentRef,
     accountId: proof.reviewerAccountId,
     personId: proof.reviewerPersonId,
   });
-  const qualification = await input.qualificationProvider.resolve({
-    qualificationRef: proof.qualificationRef,
-    reviewerIdentity: proof.reviewerIdentity,
-    reviewerAccountId: proof.reviewerAccountId,
-    reviewerPersonId: proof.reviewerPersonId,
-    scope: proof.qualificationScope,
-  });
+  if (staff.status === 'INVALID') {
+    return { status: 'INVALID', reason: 'STAFF_AUTHORITY_INVALID' };
+  }
+  if (staff.status === 'UNAVAILABLE') {
+    return { status: 'UNAVAILABLE', dependency: 'STAFF_AUTHORITY' };
+  }
+
+  let qualification: ProfessionalQualificationResult;
+  try {
+    qualification = await input.qualificationProvider.resolve({
+      qualificationRef: proof.qualificationRef,
+      reviewerIdentity: proof.reviewerIdentity,
+      reviewerAccountId: proof.reviewerAccountId,
+      reviewerPersonId: proof.reviewerPersonId,
+      scope: proof.qualificationScope,
+    });
+  } catch {
+    qualification = {
+      status: 'UNAVAILABLE',
+      reason: 'PROFESSIONAL_QUALIFICATION_UNAVAILABLE',
+    };
+  }
 
   return validateProfessionalApproval({
     version: input.version,
@@ -622,8 +676,19 @@ function exactSceneBindingForVersion(
   version: ProfessionalKnowledgeVersionSnapshot,
   resolver: KnowledgeSceneBindingResolver
 ) {
-  const binding = resolver(version.scope.scenePackageVersion);
+  let binding: ReturnType<KnowledgeSceneBindingResolver>;
+  try {
+    binding = resolver(version.scope.scenePackageVersion);
+  } catch {
+    return { status: 'UNAVAILABLE' as const, reason: 'SCENE_BINDING_RESOLVER_FAILURE' };
+  }
   if (binding.status !== 'RESOLVED') return binding;
+  if (
+    binding.sceneCode !== version.scope.sceneCode ||
+    binding.scenePackageVersion !== version.scope.scenePackageVersion
+  ) {
+    return { status: 'INVALID' as const, reason: 'SCENE_PACKAGE_IDENTITY_MISMATCH' };
+  }
   const exact = binding.refs.some(
     (ref) =>
       ref.knowledgeId === version.knowledgeId &&
@@ -632,6 +697,112 @@ function exactSceneBindingForVersion(
       ref.sourceSetHash === version.sourceSetHash
   );
   return exact ? binding : { status: 'INVALID' as const, reason: 'KNOWLEDGE_NOT_BOUND' };
+}
+
+type ReleaseAuthorityDenial = Parameters<
+  typeof appendProfessionalKnowledgeAuthorityDenialReceipt
+>[1];
+
+function classifyReleaseAuthorityDenial(error: unknown): Omit<ReleaseAuthorityDenial, 'versionId' | 'denialFingerprint'> | null {
+  const value = error as { code?: unknown; reason?: unknown; dependency?: unknown; message?: unknown };
+  const code = typeof value?.code === 'string' ? value.code : '';
+  const reason = typeof value?.reason === 'string'
+    ? value.reason
+    : typeof value?.message === 'string' ? value.message : '';
+  const dependency = typeof value?.dependency === 'string' ? value.dependency : '';
+
+  if (
+    code === '42501' &&
+    reason.includes('PROFESSIONAL_REVIEW_ASSIGNMENT_REQUIRED')
+  ) {
+    return {
+      decisionCategory: 'INVALID',
+      reasonCode: 'STAFF_AUTHORITY_INVALID',
+      dependencyCategory: 'STAFF_AUTHORITY',
+    };
+  }
+
+  if (code === 'PROFESSIONAL_AUTHORITY_INVALID') {
+    if (reason === 'APPROVAL_PROOF_ID_MISMATCH') {
+      return {
+        decisionCategory: 'INVALID',
+        reasonCode: 'APPROVAL_PROOF_ID_MISMATCH',
+        dependencyCategory: 'APPROVAL',
+      };
+    }
+    if (reason.startsWith('STAFF_AUTHORITY')) {
+      return {
+        decisionCategory: 'INVALID',
+        reasonCode: 'STAFF_AUTHORITY_INVALID',
+        dependencyCategory: 'STAFF_AUTHORITY',
+      };
+    }
+    if (reason.startsWith('PROFESSIONAL_QUALIFICATION')) {
+      return {
+        decisionCategory: 'INVALID',
+        reasonCode: 'PROFESSIONAL_QUALIFICATION_INVALID',
+        dependencyCategory: 'PROFESSIONAL_QUALIFICATION',
+      };
+    }
+    if (reason.startsWith('SCENE_PACKAGE_BINDING')) {
+      return {
+        decisionCategory: 'INVALID',
+        reasonCode: 'SCENE_PACKAGE_BINDING_INVALID',
+        dependencyCategory: 'SCENE_PACKAGE_BINDING',
+      };
+    }
+    if (reason.startsWith('INTERVENTION_DEFINITION')) {
+      return {
+        decisionCategory: 'INVALID',
+        reasonCode: 'INTERVENTION_DEFINITION_INVALID',
+        dependencyCategory: 'INTERVENTION_DEFINITION',
+      };
+    }
+    return {
+      decisionCategory: 'INVALID',
+      reasonCode: 'APPROVAL_INVALID',
+      dependencyCategory: 'APPROVAL',
+    };
+  }
+
+  if (code === 'DEPENDENCY_UNAVAILABLE') {
+    if (dependency.startsWith('APPROVAL:')) {
+      return {
+        decisionCategory: 'UNAVAILABLE',
+        reasonCode: 'APPROVAL_INVALID',
+        dependencyCategory: 'APPROVAL',
+      };
+    }
+    if (dependency === 'STAFF_AUTHORITY') {
+      return {
+        decisionCategory: 'UNAVAILABLE',
+        reasonCode: 'STAFF_AUTHORITY_UNAVAILABLE',
+        dependencyCategory: 'STAFF_AUTHORITY',
+      };
+    }
+    if (dependency === 'PROFESSIONAL_QUALIFICATION') {
+      return {
+        decisionCategory: 'UNAVAILABLE',
+        reasonCode: 'PROFESSIONAL_QUALIFICATION_UNAVAILABLE',
+        dependencyCategory: 'PROFESSIONAL_QUALIFICATION',
+      };
+    }
+    if (dependency === 'SCENE_PACKAGE_BINDING') {
+      return {
+        decisionCategory: 'UNAVAILABLE',
+        reasonCode: 'SCENE_PACKAGE_BINDING_UNAVAILABLE',
+        dependencyCategory: 'SCENE_PACKAGE_BINDING',
+      };
+    }
+    if (dependency === 'INTERVENTION_DEFINITION') {
+      return {
+        decisionCategory: 'UNAVAILABLE',
+        reasonCode: 'INTERVENTION_DEFINITION_UNAVAILABLE',
+        dependencyCategory: 'INTERVENTION_DEFINITION',
+      };
+    }
+  }
+  return null;
 }
 
 export async function releaseKnowledgeVersion(input: {
@@ -659,149 +830,190 @@ export async function releaseKnowledgeVersion(input: {
   const interventionResolver =
     input.interventionResolver ?? resolveCurrentInterventionDefinition;
 
-  return withIdentityTransaction(
-    input.pool,
-    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
-    async (tx) => {
-      const requestHash = hashPayload({
-        command: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
-        actor: { personId: input.personId, assignmentId: input.assignmentId },
-        versionId: input.versionId,
-        expectedRevision: input.expectedRevision,
-        approvalProofId: input.approvalProofId,
-        effectiveFrom: input.effectiveFrom?.toISOString() ?? null,
-        now: input.now?.toISOString() ?? null,
-      });
-      const outcome = await runIdempotentCommandInTransaction(
-        tx,
-        {
-          accountId: input.accountId,
-          personId: input.personId,
-          purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN',
-          commandType: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
-          idempotencyKey: input.idempotencyKey,
-          requestHash,
-        },
-        async () => {
-          // Settled replay and semantic mismatch are decided by the shared
-          // idempotency owner before Staff/revision-sensitive execution.
-          await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
-          const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
-          if (!version || version.revision !== input.expectedRevision) {
-            conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
-          }
-          assertVersionContract(version);
-          if (
-            version.lifecycleStatus !== 'CANDIDATE' ||
-            version.reviewState !== 'CURRENT' ||
-            version.validityState !== 'VALID'
-          ) {
-            conflict('PROFESSIONAL_KNOWLEDGE_RELEASE_STATE_INVALID');
-          }
+  const requestHash = hashPayload({
+    command: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
+    actor: { personId: input.personId, assignmentId: input.assignmentId },
+    versionId: input.versionId,
+    expectedRevision: input.expectedRevision,
+    approvalProofId: input.approvalProofId,
+    effectiveFrom: input.effectiveFrom?.toISOString() ?? null,
+  });
 
-          const sceneBinding = exactSceneBindingForVersion(version, sceneBindingResolver);
-          if (sceneBinding.status !== 'RESOLVED') {
-            invalidAuthority('SCENE_PACKAGE_BINDING_INVALID');
-          }
-
-          if (version.scope.interventionDefinitionRef) {
-            const intervention = await interventionResolver(
-              tx,
-              version.scope.interventionDefinitionRef
-            );
-            if (intervention.status === 'UNAVAILABLE') {
-              unavailable('INTERVENTION_DEFINITION');
+  try {
+    return await withIdentityTransaction(
+      input.pool,
+      { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
+      async (tx) => {
+        const outcome = await runIdempotentCommandInTransaction(
+          tx,
+          {
+            accountId: input.accountId,
+            personId: input.personId,
+            purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN',
+            commandType: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
+            idempotencyKey: input.idempotencyKey,
+            requestHash,
+          },
+          async () => {
+            // Settled exact replay is decided before current authority checks.
+            await setProfessionalKnowledgeAdminContext(tx, input.assignmentId);
+            const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
+            if (!version || version.revision !== input.expectedRevision) {
+              conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
             }
+            assertVersionContract(version);
             if (
-              intervention.status !== 'RESOLVED' ||
-              intervention.ref.definitionId !==
-                version.scope.interventionDefinitionRef.definitionId ||
-              intervention.ref.definitionVersion !==
-                version.scope.interventionDefinitionRef.definitionVersion ||
-              intervention.ref.contentHash !==
-                version.scope.interventionDefinitionRef.contentHash
+              version.lifecycleStatus !== 'CANDIDATE' ||
+              version.reviewState !== 'CURRENT' ||
+              version.validityState !== 'VALID'
             ) {
-              invalidAuthority('INTERVENTION_DEFINITION_INVALID');
+              conflict('PROFESSIONAL_KNOWLEDGE_RELEASE_STATE_INVALID');
             }
-          }
 
-          const approval = await resolveAndValidateKnowledgeApproval({
-            tx,
-            version,
-            provider: approvalProvider,
-            qualificationProvider,
-            mode: 'REVALIDATE',
-            proofId: input.approvalProofId,
-            ...(input.now === undefined ? {} : { now: input.now }),
-          });
-          if (approval.status === 'UNAVAILABLE') unavailable(approval.dependency);
-          if (approval.status !== 'VALID') invalidAuthority(approval.reason);
+            const sceneBinding = exactSceneBindingForVersion(version, sceneBindingResolver);
+            if (sceneBinding.status === 'UNAVAILABLE') {
+              unavailable('SCENE_PACKAGE_BINDING');
+            }
+            if (sceneBinding.status !== 'RESOLVED') {
+              invalidAuthority('SCENE_PACKAGE_BINDING_INVALID');
+            }
 
-          const revision = await releaseProfessionalKnowledgeVersion(tx, {
-            versionId: version.id,
-            expectedRevision: version.revision,
-            effectiveFrom: input.effectiveFrom ?? input.now ?? new Date(),
-          });
+            if (version.scope.interventionDefinitionRef) {
+              const intervention = await interventionResolver(
+                tx,
+                version.scope.interventionDefinitionRef
+              );
+              if (intervention.status === 'UNAVAILABLE') {
+                unavailable('INTERVENTION_DEFINITION');
+              }
+              if (
+                intervention.status !== 'RESOLVED' ||
+                intervention.ref.definitionId !==
+                  version.scope.interventionDefinitionRef.definitionId ||
+                intervention.ref.definitionVersion !==
+                  version.scope.interventionDefinitionRef.definitionVersion ||
+                intervention.ref.contentHash !==
+                  version.scope.interventionDefinitionRef.contentHash
+              ) {
+                invalidAuthority('INTERVENTION_DEFINITION_INVALID');
+              }
+            }
 
-          const sceneBindingRef = {
-            sceneCode: sceneBinding.sceneCode,
-            scenePackageVersion: sceneBinding.scenePackageVersion,
-            knowledgeId: version.knowledgeId,
-            semanticVersion: version.semanticVersion,
-            contentHash: version.contentHash,
-            sourceSetHash: version.sourceSetHash,
-          };
-          await persistValidatedApprovalEvidence(
-            tx,
-            version.id,
-            approval,
-            sceneBindingRef
-          );
-
-          const predecessorId = await getProfessionalKnowledgePredecessorId(
-            tx,
-            version.id
-          );
-          if (predecessorId) {
-            await markProfessionalKnowledgeVersionSuperseded(tx, {
-              versionId: predecessorId,
+            const approval = await resolveAndValidateKnowledgeApproval({
+              tx,
+              version,
+              provider: approvalProvider,
+              qualificationProvider,
+              mode: 'REVALIDATE',
+              proofId: input.approvalProofId,
+              ...(input.now === undefined ? {} : { now: input.now }),
             });
-            await appendProfessionalKnowledgeAudit(tx, {
-              actorAccountId: input.accountId,
-              eventType: 'PROFESSIONAL_KNOWLEDGE_SUPERSEDED',
-              versionId: predecessorId,
-              metadata: { successorVersionId: version.id },
-            });
-          }
+            if (approval.status === 'UNAVAILABLE') unavailable(approval.dependency);
+            if (approval.status !== 'VALID') invalidAuthority(approval.reason);
 
-          await appendProfessionalKnowledgeAudit(tx, {
-            actorAccountId: input.accountId,
-            eventType: 'PROFESSIONAL_KNOWLEDGE_RELEASED',
-            versionId: version.id,
-            metadata: {
+            // The DB transition trigger revalidates the exact locked Reviewer
+            // Staff authority at physical CANDIDATE -> PUBLISHED time.
+            const revision = await releaseProfessionalKnowledgeVersion(tx, {
+              versionId: version.id,
+              expectedRevision: version.revision,
+              effectiveFrom: input.effectiveFrom ?? input.now ?? new Date(),
+            });
+
+            const sceneBindingRef = {
+              sceneCode: sceneBinding.sceneCode,
+              scenePackageVersion: sceneBinding.scenePackageVersion,
               knowledgeId: version.knowledgeId,
               semanticVersion: version.semanticVersion,
               contentHash: version.contentHash,
               sourceSetHash: version.sourceSetHash,
-              approvalProofRef: approval.proof.proofId,
-              sceneBindingRef,
-              revision,
-            },
-          });
+            };
+            await persistValidatedApprovalEvidence(
+              tx,
+              version.id,
+              approval,
+              sceneBindingRef
+            );
 
-          return {
-            status: 200,
-            body: {
+            const predecessorId = await getProfessionalKnowledgePredecessorId(
+              tx,
+              version.id
+            );
+            if (predecessorId) {
+              await markProfessionalKnowledgeVersionSuperseded(tx, {
+                versionId: predecessorId,
+              });
+              await appendProfessionalKnowledgeAudit(tx, {
+                actorAccountId: input.accountId,
+                eventType: 'PROFESSIONAL_KNOWLEDGE_SUPERSEDED',
+                versionId: predecessorId,
+                metadata: { successorVersionId: version.id },
+              });
+            }
+
+            await appendProfessionalKnowledgeAudit(tx, {
+              actorAccountId: input.accountId,
+              eventType: 'PROFESSIONAL_KNOWLEDGE_RELEASED',
               versionId: version.id,
-              revision,
-              lifecycleStatus: 'PUBLISHED' as const,
-            },
-          };
-        }
-      );
-      return commandResult(outcome);
+              metadata: {
+                knowledgeId: version.knowledgeId,
+                semanticVersion: version.semanticVersion,
+                contentHash: version.contentHash,
+                sourceSetHash: version.sourceSetHash,
+                semanticBindingHash:
+                  hashProfessionalKnowledgeApprovalBinding(version),
+                approvalProofRef: approval.proof.proofId,
+                sceneBindingRef,
+                revision,
+              },
+            });
+
+            return {
+              status: 200,
+              body: {
+                versionId: version.id,
+                revision,
+                lifecycleStatus: 'PUBLISHED' as const,
+              },
+            };
+          }
+        );
+        return commandResult(outcome);
+      }
+    );
+  } catch (error) {
+    const denial = classifyReleaseAuthorityDenial(error);
+    if (denial !== null) {
+      const denialFingerprint = hashPayload({
+        command: 'PROFESSIONAL_KNOWLEDGE_RELEASE_DENIAL',
+        accountId: input.accountId,
+        idempotencyKey: input.idempotencyKey,
+        requestHash,
+      });
+      try {
+        await withIdentityTransaction(
+          input.pool,
+          { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
+          async (tx) => {
+            await appendProfessionalKnowledgeAuthorityDenialReceipt(tx, {
+              versionId: input.versionId,
+              denialFingerprint,
+              ...denial,
+            });
+          }
+        );
+      } catch (auditError) {
+        throw Object.assign(
+          new Error('PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIAL_AUDIT_FAILED'),
+          {
+            code: 'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIAL_AUDIT_FAILED',
+            cause: error,
+            auditError,
+          }
+        );
+      }
     }
-  );
+    throw error;
+  }
 }
 
 export async function retireKnowledgeVersion(input: {
