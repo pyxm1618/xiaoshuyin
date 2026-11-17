@@ -1,0 +1,4127 @@
+{
+  "schemaVersion": 1,
+  "slice": "017-professional-knowledge-foundation",
+  "semanticBinding": "requirement -> task -> evidenceId -> exact Vitest identity -> runner PASS",
+  "executableProofPolicy": "No source-string or test-title-presence scan is accepted as executable proof.",
+  "staticProofPolicy": "STATIC evidence is still an actually executed Vitest guard and must report PASS.",
+  "evidence": [
+    {
+      "evidenceId": "S17-EVID-T1701-01",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-architecture-guard.test.ts",
+      "test": "creates exactly one normalized Professional Knowledge owner and no forbidden owner tables",
+      "contract": "creates exactly one normalized Professional Knowledge owner and no forbidden owner tables",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1701-02",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-architecture-guard.test.ts",
+      "test": "keeps lifecycle/review/validity truth independent",
+      "contract": "keeps lifecycle/review/validity truth independent",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1701-03",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-architecture-guard.test.ts",
+      "test": "does not reserve or create Slice 16 migration 024",
+      "contract": "does not reserve or create Slice 16 migration 024",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1701-04",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-architecture-guard.test.ts",
+      "test": "contains no deprecated planning package identity or candidate Slice 16 imports",
+      "contract": "contains no deprecated planning package identity or candidate Slice 16 imports",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-01",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "separates lifecycle, review state, and validity state",
+      "contract": "separates lifecycle, review state, and validity state",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-02",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "hashes content and source sets deterministically",
+      "contract": "hashes content and source sets deterministically",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-03",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "validates stable identity, semantic version, hashes and scope",
+      "contract": "validates stable identity, semantic version, hashes and scope",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-04",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "keeps candidate content non-production even with otherwise valid proof",
+      "contract": "keeps candidate content non-production even with otherwise valid proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-05",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "fails closed on missing or UNKNOWN applicability inputs",
+      "contract": "fails closed on missing or UNKNOWN applicability inputs",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-06",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "keeps provider outage distinct from invalid approval",
+      "contract": "keeps provider outage distinct from invalid approval",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-07",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "allows only lifecycle/projection changes after release, not semantic mutation",
+      "contract": "allows only lifecycle/projection changes after release, not semantic mutation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-08",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "propagates only exact dependency impacts and does not invalidate on scene supersession alone",
+      "contract": "propagates only exact dependency impacts and does not invalidate on scene supersession alone",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-01",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "creates only the minimal normalized Professional Knowledge tables",
+      "contract": "creates only the minimal normalized Professional Knowledge tables",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-02",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "separates lifecycle, review and validity constraints mechanically",
+      "contract": "separates lifecycle, review and validity constraints mechanically",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-03",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "enables and forces RLS and keeps runtime grants least privilege",
+      "contract": "enables and forces RLS and keeps runtime grants least privilege",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-04",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "reuses shared idempotency and business audit vocabularies",
+      "contract": "reuses shared idempotency and business audit vocabularies",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-05",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "does not expose candidate-only Knowledge identity through Family RLS",
+      "contract": "does not expose candidate-only Knowledge identity through Family RLS",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-06",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "exposes only the current Staff Account to the existing reviewer verifier purpose",
+      "contract": "exposes only the current Staff Account to the existing reviewer verifier purpose",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-07",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "keeps Professional Review Staff authority separate from qualification",
+      "contract": "keeps Professional Review Staff authority separate from qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-01",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "rejects Staff-valid / qualification-missing without laundering Staff into qualification",
+      "contract": "rejects Staff-valid / qualification-missing without laundering Staff into qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-02",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "rejects qualification-valid / Staff-missing without laundering qualification into Staff authority",
+      "contract": "rejects qualification-valid / Staff-missing without laundering qualification into Staff authority",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-03",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "accepts only exact current bounded Staff + qualification + approval facts",
+      "contract": "accepts only exact current bounded Staff + qualification + approval facts",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-04",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "fails closed for revoked Staff authority",
+      "contract": "fails closed for revoked Staff authority",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-05",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "fails closed for expired Staff authority",
+      "contract": "fails closed for expired Staff authority",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-06",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "fails closed for revoked qualification",
+      "contract": "fails closed for revoked qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-07",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "fails closed for expired qualification",
+      "contract": "fails closed for expired qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1705-01",
+      "task": "T1705",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-provenance.test.ts",
+      "test": "hashes the exact source set independently of input order",
+      "contract": "hashes the exact source set independently of input order",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1705-02",
+      "task": "T1705",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-provenance.test.ts",
+      "test": "requires opaque refs, exact versions and hashes in the domain contract",
+      "contract": "requires opaque refs, exact versions and hashes in the domain contract",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1705-03",
+      "task": "T1705",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-provenance.test.ts",
+      "test": "contains no source ingestion/archive/OCR/crawler behavior",
+      "contract": "contains no source ingestion/archive/OCR/crawler behavior",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1706-01",
+      "task": "T1706",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-mutations.integration.test.ts",
+      "test": "registers every Knowledge mutation in the shared idempotency owner",
+      "contract": "registers every Knowledge mutation in the shared idempotency owner",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1706-02",
+      "task": "T1706",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-mutations.integration.test.ts",
+      "test": "creates a successor exactly once, replays exactly, rejects mismatch, and reserves predecessor revision",
+      "contract": "creates a successor exactly once, replays exactly, rejects mismatch, and reserves predecessor revision",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1706-03",
+      "task": "T1706",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-mutations.integration.test.ts",
+      "test": "candidate edit increments revision, exact-replays, rejects stale revision, and resets review/validity",
+      "contract": "candidate edit increments revision, exact-replays, rejects stale revision, and resets review/validity",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1706-04",
+      "task": "T1706",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-mutations.integration.test.ts",
+      "test": "released semantic columns are immutable and must use a successor version",
+      "contract": "released semantic columns are immutable and must use a successor version",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1707-01",
+      "task": "T1707",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-review-validity.integration.test.ts",
+      "test": "keeps NEEDS_REVIEW outside lifecycle and independently invalidates use",
+      "contract": "keeps NEEDS_REVIEW outside lifecycle and independently invalidates use",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1707-02",
+      "task": "T1707",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-review-validity.integration.test.ts",
+      "test": "restores CURRENT/VALID without a lifecycle mutation when review finds no material impact",
+      "contract": "restores CURRENT/VALID without a lifecycle mutation when review finds no material impact",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1707-03",
+      "task": "T1707",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-review-validity.integration.test.ts",
+      "test": "does not promote review activity into Professional Approval",
+      "contract": "does not promote review activity into Professional Approval",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-01",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "keeps production approval and qualification providers unavailable/fail-closed",
+      "contract": "keeps production approval and qualification providers unavailable/fail-closed",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-02",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "distinguishes provider timeout/unavailability from invalid proof",
+      "contract": "distinguishes provider timeout/unavailability from invalid proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-03",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "accepts only an exact synthetic protocol proof",
+      "contract": "accepts only an exact synthetic protocol proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-04",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: content hash",
+      "contract": "rejects exact-proof mismatch: content hash",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-05",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: source set hash",
+      "contract": "rejects exact-proof mismatch: source set hash",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-06",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: source refs",
+      "contract": "rejects exact-proof mismatch: source refs",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-07",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: Staff assignment",
+      "contract": "rejects exact-proof mismatch: Staff assignment",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-08",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: qualification",
+      "contract": "rejects exact-proof mismatch: qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-09",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: scope",
+      "contract": "rejects exact-proof mismatch: scope",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-10",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: status",
+      "contract": "rejects exact-proof mismatch: status",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-01",
+      "task": "T1709",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "keeps production v1 history as an exact immutable empty set",
+      "contract": "keeps production v1 history as an exact immutable empty set",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-02",
+      "task": "T1709",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "allows a successor package version to own an independent exact set",
+      "contract": "allows a successor package version to own an independent exact set",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-03",
+      "task": "T1709",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "fails closed on wrong version and never floats to latest",
+      "contract": "fails closed on wrong version and never floats to latest",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-04",
+      "task": "T1709",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "does not mark Knowledge NEEDS_REVIEW for Scene package supersession alone",
+      "contract": "does not mark Knowledge NEEDS_REVIEW for Scene package supersession alone",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-05",
+      "task": "T1709",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "has one Scene binding owner and no knowledge_package_inclusions table",
+      "contract": "has one Scene binding owner and no knowledge_package_inclusions table",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-01",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "accepts only the exact fully eligible version",
+      "contract": "accepts only the exact fully eligible version",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-02",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects lifecycle mismatch",
+      "contract": "rejects lifecycle mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-03",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects review mismatch",
+      "contract": "rejects review mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-04",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects validity mismatch",
+      "contract": "rejects validity mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-05",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects scene version mismatch",
+      "contract": "rejects scene version mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-06",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects stage mismatch",
+      "contract": "rejects stage mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-07",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects age mismatch",
+      "contract": "rejects age mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-08",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects locale mismatch",
+      "contract": "rejects locale mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-09",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects risk mismatch",
+      "contract": "rejects risk mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-10",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects applicability mismatch",
+      "contract": "rejects applicability mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-11",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects exclusion mismatch",
+      "contract": "rejects exclusion mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-12",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "treats empty approved Scene set as ineligible and never nearest-matches",
+      "contract": "treats empty approved Scene set as ineligible and never nearest-matches",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-13",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "fails closed on missing/UNKNOWN metadata and dependency outage",
+      "contract": "fails closed on missing/UNKNOWN metadata and dependency outage",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-14",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "fails closed when the merged authoritative InterventionDefinition dependency is unavailable",
+      "contract": "fails closed when the merged authoritative InterventionDefinition dependency is unavailable",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1711-01",
+      "task": "T1711",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-release.integration.test.ts",
+      "test": "production-default approval remains unavailable",
+      "contract": "production-default approval remains unavailable",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1711-02",
+      "task": "T1711",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-release.integration.test.ts",
+      "test": "rolls back lifecycle and audit together on transaction failure",
+      "contract": "rolls back lifecycle and audit together on transaction failure",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1711-03",
+      "task": "T1711",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-release.integration.test.ts",
+      "test": "serializes two releases with revision CAS; there is no last-write-wins",
+      "contract": "serializes two releases with revision CAS; there is no last-write-wins",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1711-04",
+      "task": "T1711",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-release.integration.test.ts",
+      "test": "serializes release vs retire on the same revision",
+      "contract": "serializes release vs retire on the same revision",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-01",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "SOURCE_WITHDRAWAL affects only its exact dependent with expected projection",
+      "contract": "SOURCE_WITHDRAWAL affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-02",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "SOURCE_CORRECTION affects only its exact dependent with expected projection",
+      "contract": "SOURCE_CORRECTION affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-03",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "SCENE_APPLICABILITY_MATERIAL_CHANGE affects only its exact dependent with expected projection",
+      "contract": "SCENE_APPLICABILITY_MATERIAL_CHANGE affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-04",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "APPROVAL_EXPIRED affects only its exact dependent with expected projection",
+      "contract": "APPROVAL_EXPIRED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-05",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "APPROVAL_REVOKED affects only its exact dependent with expected projection",
+      "contract": "APPROVAL_REVOKED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-06",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "STAFF_AUTHORITY_REVOKED affects only its exact dependent with expected projection",
+      "contract": "STAFF_AUTHORITY_REVOKED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-07",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "QUALIFICATION_REVOKED affects only its exact dependent with expected projection",
+      "contract": "QUALIFICATION_REVOKED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-08",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "SCENE_PACKAGE_SUPERSEDED affects only its exact dependent with expected projection",
+      "contract": "SCENE_PACKAGE_SUPERSEDED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-09",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "does not require a new content version for approval expiry/revocation",
+      "contract": "does not require a new content version for approval expiry/revocation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-10",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "same exact Knowledge version becomes approval-valid again when a fresh proof replaces an expired proof",
+      "contract": "same exact Knowledge version becomes approval-valid again when a fresh proof replaces an expired proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-01",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "allows only exact Family/Case manager consumption context",
+      "contract": "allows only exact Family/Case manager consumption context",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-02",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "fails closed for wrong purpose",
+      "contract": "fails closed for wrong purpose",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-03",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "fails closed for wrong family",
+      "contract": "fails closed for wrong family",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-04",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "fails closed for wrong case",
+      "contract": "fails closed for wrong case",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-05",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "fails closed for missing case",
+      "contract": "fails closed for missing case",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-06",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "does not grant any Professional Knowledge administration action",
+      "contract": "does not grant any Professional Knowledge administration action",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-07",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "delivers only an authorized exact eligible version with Consent Compliance and Safety passing",
+      "contract": "delivers only an authorized exact eligible version with Consent Compliance and Safety passing",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-08",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "collapses wrong Family Case and protected asset state into one non-enumerating denial",
+      "contract": "collapses wrong Family Case and protected asset state into one non-enumerating denial",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-09",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "Compliance restriction blocks delivery even when Knowledge metadata claims an age match",
+      "contract": "Compliance restriction blocks delivery even when Knowledge metadata claims an age match",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-10",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "Safety Hold blocks delivery without Knowledge changing Safety truth",
+      "contract": "Safety Hold blocks delivery without Knowledge changing Safety truth",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-11",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "Consent withdrawal blocks downstream processing without mutating generic Knowledge history",
+      "contract": "Consent withdrawal blocks downstream processing without mutating generic Knowledge history",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-12",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "keeps dependency failure truthful rather than collapsing infrastructure into 404",
+      "contract": "keeps dependency failure truthful rather than collapsing infrastructure into 404",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1714-01",
+      "task": "T1714",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit-readback.integration.test.ts",
+      "test": "reuses business_audit_events and never creates a second audit ledger",
+      "contract": "reuses business_audit_events and never creates a second audit ledger",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1714-02",
+      "task": "T1714",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit-readback.integration.test.ts",
+      "test": "keeps audit metadata bounded away from narratives, credentials and raw sources",
+      "contract": "keeps audit metadata bounded away from narratives, credentials and raw sources",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1714-03",
+      "task": "T1714",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit-readback.integration.test.ts",
+      "test": "provides exact version history readback ordered by authoritative audit time/id",
+      "contract": "provides exact version history readback ordered by authoritative audit time/id",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-01",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "has no real production approval/qualification provider while reviewer is unassigned",
+      "contract": "has no real production approval/qualification provider while reviewer is unassigned",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-02",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "consumes the merged Slice 16 authoritative owner without candidate-era branch assumptions",
+      "contract": "consumes the merged Slice 16 authoritative owner without candidate-era branch assumptions",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-03",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "has an exact empty production-approved Knowledge set for current Scene v1",
+      "contract": "has an exact empty production-approved Knowledge set for current Scene v1",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-04",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "cannot import test fixtures or enable synthetic authority through env/config",
+      "contract": "cannot import test fixtures or enable synthetic authority through env/config",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-05",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "adds no Slice 18/19 RAG or AI runtime implementation",
+      "contract": "adds no Slice 18/19 RAG or AI runtime implementation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-01",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "two candidate editors serialize; one exact revision wins and one stale editor fails",
+      "contract": "two candidate editors serialize; one exact revision wins and one stale editor fails",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-02",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "review vs edit cannot leave stale review evidence committed",
+      "contract": "review vs edit cannot leave stale review evidence committed",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-03",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "proof arrival vs edit is serialized behind the locked exact release revision",
+      "contract": "proof arrival vs edit is serialized behind the locked exact release revision",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-04",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "release vs edit serializes on the same revision; release wins without last-write-wins",
+      "contract": "release vs edit serializes on the same revision; release wins without last-write-wins",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-05",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "release vs retire and two releases converge through the same CAS",
+      "contract": "release vs retire and two releases converge through the same CAS",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-06",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "retire vs successor preserves terminal history and prevents successor creation from a retired predecessor",
+      "contract": "retire vs successor preserves terminal history and prevents successor creation from a retired predecessor",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-07",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "successor creation reserves the predecessor chain so later retirement cannot also win",
+      "contract": "successor creation reserves the predecessor chain so later retirement cannot also win",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-08",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "validity propagation vs release cannot publish a stale CURRENT/VALID snapshot",
+      "contract": "validity propagation vs release cannot publish a stale CURRENT/VALID snapshot",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-09",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "stale approval proof is invalid after an exact content/source mutation",
+      "contract": "stale approval proof is invalid after an exact content/source mutation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-10",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "provider timeout remains UNAVAILABLE rather than an invalid business proof",
+      "contract": "provider timeout remains UNAVAILABLE rather than an invalid business proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-11",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "DB statement timeout under an aggregate lock rolls back without half mutation",
+      "contract": "DB statement timeout under an aggregate lock rolls back without half mutation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-12",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "lost response converges through shared idempotency replay and mismatched payload is rejected",
+      "contract": "lost response converges through shared idempotency replay and mismatched payload is rejected",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-13",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "Scene package binding is immutable exact-version truth, so no floating currentness race exists",
+      "contract": "Scene package binding is immutable exact-version truth, so no floating currentness race exists",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-01",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "FR-028 / FR-031: review commit then lost-response retry exact-replays before stale revision; semantic mismatches conflict",
+      "contract": "FR-028 / FR-031: review commit then lost-response retry exact-replays before stale revision; semantic mismatches conflict",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-02",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "FR-028 / FR-031: dependency propagation exact-replays after mutation and changed semantics mismatch without duplicate audit",
+      "contract": "FR-028 / FR-031: dependency propagation exact-replays after mutation and changed semantics mismatch without duplicate audit",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-03",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "FR-046 / FR-052: release actor B may consume exact reviewer A Staff authority; replay precedes CAS and effectiveFrom changes mismatch",
+      "contract": "FR-046 / FR-052: release actor B may consume exact reviewer A Staff authority; replay precedes CAS and effectiveFrom changes mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-04",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "FR-046: requested approval proof identity is exact-bound; provider proof substitution rolls back release/evidence/audit/idempotency",
+      "contract": "FR-046: requested approval proof identity is exact-bound; provider proof substitution rolls back release/evidence/audit/idempotency",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-05",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "HIGH-001: exact Slice 16 InterventionDefinition owner is consumed read-only; wrong/missing/terminal/outage refs fail closed",
+      "contract": "HIGH-001: exact Slice 16 InterventionDefinition owner is consumed read-only; wrong/missing/terminal/outage refs fail closed",
+      "enabled": true
+    }
+  ],
+  "requirements": [
+    {
+      "requirementId": "FR-001",
+      "taskIds": [
+        "T1701",
+        "T1703"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07"
+      ]
+    },
+    {
+      "requirementId": "FR-002",
+      "taskIds": [
+        "T1702",
+        "T1703",
+        "T1706"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04"
+      ]
+    },
+    {
+      "requirementId": "FR-003",
+      "taskIds": [
+        "T1702",
+        "T1703"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07"
+      ]
+    },
+    {
+      "requirementId": "FR-004",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "FR-005",
+      "taskIds": [
+        "T1705",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "FR-006",
+      "taskIds": [
+        "T1702",
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03"
+      ]
+    },
+    {
+      "requirementId": "FR-007",
+      "taskIds": [
+        "T1702",
+        "T1706"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04"
+      ]
+    },
+    {
+      "requirementId": "FR-008",
+      "taskIds": [
+        "T1707"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03"
+      ]
+    },
+    {
+      "requirementId": "FR-009",
+      "taskIds": [
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "FR-010",
+      "taskIds": [
+        "T1705",
+        "T1706",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03",
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "FR-011",
+      "taskIds": [
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04"
+      ]
+    },
+    {
+      "requirementId": "FR-012",
+      "taskIds": [
+        "T1709"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05"
+      ]
+    },
+    {
+      "requirementId": "FR-013",
+      "taskIds": [
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "FR-014",
+      "taskIds": [
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "FR-015",
+      "taskIds": [
+        "T1712",
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10",
+        "S17-EVID-T1714-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "FR-016",
+      "taskIds": [
+        "T1706",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "FR-017",
+      "taskIds": [
+        "T1703",
+        "T1706"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04"
+      ]
+    },
+    {
+      "requirementId": "FR-018",
+      "taskIds": [
+        "T1709",
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05",
+        "S17-EVID-T1714-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "FR-019",
+      "taskIds": [
+        "T1701",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14",
+        "S17-EVID-AUDIT2-05"
+      ]
+    },
+    {
+      "requirementId": "FR-020",
+      "taskIds": [
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14",
+        "S17-EVID-AUDIT2-05"
+      ]
+    },
+    {
+      "requirementId": "FR-021",
+      "taskIds": [
+        "T1704",
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "FR-022",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "FR-023",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "FR-024",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "FR-025",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "FR-026",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "FR-027",
+      "taskIds": [
+        "T1706",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "FR-028",
+      "taskIds": [
+        "T1706",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13",
+        "S17-EVID-AUDIT2-01",
+        "S17-EVID-AUDIT2-02"
+      ]
+    },
+    {
+      "requirementId": "FR-029",
+      "taskIds": [
+        "T1706",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "FR-030",
+      "taskIds": [
+        "T1711",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "FR-031",
+      "taskIds": [
+        "T1714",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1714-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-T1714-03",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13",
+        "S17-EVID-AUDIT2-01",
+        "S17-EVID-AUDIT2-02"
+      ]
+    },
+    {
+      "requirementId": "FR-032",
+      "taskIds": [
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1714-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "FR-033",
+      "taskIds": [
+        "T1705",
+        "T1712",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "FR-034",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "FR-035",
+      "taskIds": [
+        "T1708",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "FR-036",
+      "taskIds": [
+        "T1708",
+        "T1709",
+        "T1710",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "FR-037",
+      "taskIds": [
+        "T1710",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "FR-038",
+      "taskIds": [
+        "T1701"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04"
+      ]
+    },
+    {
+      "requirementId": "FR-039",
+      "taskIds": [
+        "T1710",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "FR-040",
+      "taskIds": [
+        "T1701",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "FR-041",
+      "taskIds": [
+        "T1702",
+        "T1703",
+        "T1707"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03"
+      ]
+    },
+    {
+      "requirementId": "FR-042",
+      "taskIds": [
+        "T1707",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "FR-043",
+      "taskIds": [
+        "T1707",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "FR-044",
+      "taskIds": [
+        "T1704",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "FR-045",
+      "taskIds": [
+        "T1704",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "FR-046",
+      "taskIds": [
+        "T1708",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04",
+        "S17-EVID-AUDIT2-03",
+        "S17-EVID-AUDIT2-04"
+      ]
+    },
+    {
+      "requirementId": "FR-047",
+      "taskIds": [
+        "T1708",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "FR-048",
+      "taskIds": [
+        "T1703",
+        "T1708",
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1714-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "FR-049",
+      "taskIds": [
+        "T1701",
+        "T1709",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "FR-050",
+      "taskIds": [
+        "T1701",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "FR-051",
+      "taskIds": [
+        "T1701",
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03"
+      ]
+    },
+    {
+      "requirementId": "FR-052",
+      "taskIds": [
+        "T1704",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04",
+        "S17-EVID-AUDIT2-03"
+      ]
+    },
+    {
+      "requirementId": "AS-001",
+      "taskIds": [
+        "T1702",
+        "T1706"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04"
+      ]
+    },
+    {
+      "requirementId": "AS-002",
+      "taskIds": [
+        "T1708",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04"
+      ]
+    },
+    {
+      "requirementId": "AS-003",
+      "taskIds": [
+        "T1704",
+        "T1707"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03"
+      ]
+    },
+    {
+      "requirementId": "AS-004",
+      "taskIds": [
+        "T1704",
+        "T1707"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03"
+      ]
+    },
+    {
+      "requirementId": "AS-005",
+      "taskIds": [
+        "T1704",
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "AS-006",
+      "taskIds": [
+        "T1708",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "AS-007",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "AS-008",
+      "taskIds": [
+        "T1708",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04"
+      ]
+    },
+    {
+      "requirementId": "AS-009",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-010",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-011",
+      "taskIds": [
+        "T1705",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "AS-012",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-013",
+      "taskIds": [
+        "T1704",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "AS-014",
+      "taskIds": [
+        "T1704",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "AS-015",
+      "taskIds": [
+        "T1708",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-016",
+      "taskIds": [
+        "T1708",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "AS-017",
+      "taskIds": [
+        "T1707",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "AS-018",
+      "taskIds": [
+        "T1710",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14",
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04"
+      ]
+    },
+    {
+      "requirementId": "AS-019",
+      "taskIds": [
+        "T1702",
+        "T1707",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-020",
+      "taskIds": [
+        "T1707",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1707-03",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-021",
+      "taskIds": [
+        "T1705",
+        "T1706",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03",
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-022",
+      "taskIds": [
+        "T1705",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-023",
+      "taskIds": [
+        "T1708",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-024",
+      "taskIds": [
+        "T1709",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-025",
+      "taskIds": [
+        "T1709",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-026",
+      "taskIds": [
+        "T1709",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-027",
+      "taskIds": [
+        "T1710",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-028",
+      "taskIds": [
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-029",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-030",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-031",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-032",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-033",
+      "taskIds": [
+        "T1709",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-034",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-035",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-036",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "AS-037",
+      "taskIds": [
+        "T1712",
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10",
+        "S17-EVID-T1714-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "AS-038",
+      "taskIds": [
+        "T1702",
+        "T1706",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1702-06",
+        "S17-EVID-T1702-07",
+        "S17-EVID-T1702-08",
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-039",
+      "taskIds": [
+        "T1706",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "AS-040",
+      "taskIds": [
+        "T1706",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "AS-041",
+      "taskIds": [
+        "T1711",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "AS-042",
+      "taskIds": [
+        "T1706",
+        "T1708",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "AS-043",
+      "taskIds": [
+        "T1711",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1711-01",
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "AS-044",
+      "taskIds": [
+        "T1714",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1714-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-T1714-03",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-02",
+        "S17-EVID-T1716-03",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05",
+        "S17-EVID-T1716-06",
+        "S17-EVID-T1716-07",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09",
+        "S17-EVID-T1716-10",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "AS-045",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "AS-046",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "AS-047",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "AS-048",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "AS-049",
+      "taskIds": [
+        "T1710",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "AS-050",
+      "taskIds": [
+        "T1701",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "NS-001",
+      "taskIds": [
+        "T1703",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "NS-002",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "NS-003",
+      "taskIds": [
+        "T1703",
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03"
+      ]
+    },
+    {
+      "requirementId": "NS-004",
+      "taskIds": [
+        "T1703"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07"
+      ]
+    },
+    {
+      "requirementId": "NS-005",
+      "taskIds": [
+        "T1703"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07"
+      ]
+    },
+    {
+      "requirementId": "NS-006",
+      "taskIds": [
+        "T1703",
+        "T1704"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07"
+      ]
+    },
+    {
+      "requirementId": "NS-007",
+      "taskIds": [
+        "T1703",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "NS-008",
+      "taskIds": [
+        "T1703",
+        "T1704"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1703-03",
+        "S17-EVID-T1703-04",
+        "S17-EVID-T1703-05",
+        "S17-EVID-T1703-06",
+        "S17-EVID-T1703-07",
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07"
+      ]
+    },
+    {
+      "requirementId": "NS-009",
+      "taskIds": [
+        "T1701",
+        "T1704"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07"
+      ]
+    },
+    {
+      "requirementId": "NS-010",
+      "taskIds": [
+        "T1701",
+        "T1709"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05"
+      ]
+    },
+    {
+      "requirementId": "NS-011",
+      "taskIds": [
+        "T1701",
+        "T1709"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05"
+      ]
+    },
+    {
+      "requirementId": "NS-012",
+      "taskIds": [
+        "T1701",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1710-01",
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1710-14"
+      ]
+    },
+    {
+      "requirementId": "NS-013",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-05",
+        "S17-EVID-T1713-06",
+        "S17-EVID-T1713-07",
+        "S17-EVID-T1713-08",
+        "S17-EVID-T1713-09",
+        "S17-EVID-T1713-10",
+        "S17-EVID-T1713-11",
+        "S17-EVID-T1713-12"
+      ]
+    },
+    {
+      "requirementId": "NS-014",
+      "taskIds": [
+        "T1701"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04"
+      ]
+    },
+    {
+      "requirementId": "NS-015",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "NS-016",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "NS-017",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "NS-018",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "NS-019",
+      "taskIds": [
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03"
+      ]
+    },
+    {
+      "requirementId": "NS-020",
+      "taskIds": [
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03"
+      ]
+    },
+    {
+      "requirementId": "NS-021",
+      "taskIds": [
+        "T1708",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-02",
+        "S17-EVID-T1715-03",
+        "S17-EVID-T1715-04",
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "NS-022",
+      "taskIds": [
+        "T1709",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1709-05",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "NS-023",
+      "taskIds": [
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10"
+      ]
+    },
+    {
+      "requirementId": "NS-024",
+      "taskIds": [
+        "T1701"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1701-02",
+        "S17-EVID-T1701-03",
+        "S17-EVID-T1701-04"
+      ]
+    }
+  ]
+}
