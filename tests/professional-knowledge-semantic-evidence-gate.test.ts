@@ -15,6 +15,10 @@ describe('Slice 17 semantic evidence gate fail-closed mechanics',()=>{
     const r=loadRegistry(); const x=reconcileExecution(r,allPassed(r),loadTraceability());
     expect(x.ok).toBe(true); expect(x.provenRequirements).toHaveLength(126);
   });
+  it('fails closed when runner reports a duplicate exact evidence identity',()=>{
+    const r=loadRegistry(),e=allPassed(r),ev=r.evidence[0]; const a=assertion(e,ev); const f=e.testResults.find((x:any)=>x.name.endsWith(ev.file)); f.assertionResults.push(clone(a)); const x=reconcileExecution(r,e,loadTraceability());
+    expect(f.assertionResults.filter((v:any)=>v.title===ev.test && v.fullName===a.fullName)).toHaveLength(2); expect(x.ambiguousEvidence).toContain(ev.evidenceId); expect(x.passedEvidence).not.toContain(ev.evidenceId); expect(x.ok).toBe(false);
+  });
   it('fails when a mapped test is removed or evidence did not execute',()=>{
     const r=loadRegistry(),e=allPassed(r); remove(e,r.evidence[0]); const x=reconcileExecution(r,e,loadTraceability());
     expect(x.ok).toBe(false); expect(x.unexecutedEvidence).toContain(r.evidence[0].evidenceId); expect(x.unprovenRequirements.length).toBeGreaterThan(0);
