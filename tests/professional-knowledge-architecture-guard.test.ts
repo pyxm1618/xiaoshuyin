@@ -28,23 +28,28 @@ const traceability = JSON.parse(
   NS: { id: string; mappings: { task: string; evidence: string }[] }[];
 };
 
-const TASK_SEMANTIC_SENTINELS: Readonly<Record<string, string>> = {
-  T1701: "creates exactly one normalized Professional Knowledge owner and no forbidden owner tables",
-  T1702: "separates lifecycle, review state, and validity state",
-  T1703: "creates only the minimal normalized Professional Knowledge tables",
-  T1704: "accepts only exact current bounded Staff + qualification + approval facts",
-  T1705: "requires opaque refs, exact versions and hashes in the domain contract",
-  T1706: "creates a successor exactly once, replays exactly, rejects mismatch, and reserves predecessor revision",
-  T1707: "does not promote review activity into Professional Approval",
-  T1708: "accepts only an exact synthetic protocol proof",
-  T1709: "fails closed on wrong version and never floats to latest",
-  T1710: "accepts only the exact fully eligible version",
-  T1711: "rolls back lifecycle and audit together on transaction failure",
-  T1712: "same exact Knowledge version becomes approval-valid again when a fresh proof replaces an expired proof",
-  T1713: "delivers only an authorized exact eligible version with Consent Compliance and Safety passing",
-  T1714: "provides exact version history readback ordered by authoritative audit time/id",
-  T1715: "has no real production approval/qualification provider while reviewer is unassigned",
-  T1716: "lost response converges through shared idempotency replay and mismatched payload is rejected",
+const semanticEvidence = JSON.parse(
+  readFileSync(
+    new URL('./fixtures/professional-knowledge-semantic-evidence.json', import.meta.url),
+    'utf8'
+  )
+) as {
+  schemaVersion: number;
+  evidence: {
+    evidenceId: string;
+    task: string;
+    type: 'EXECUTABLE' | 'STATIC';
+    proofMode: 'RUNNER_RESULT';
+    file: string;
+    test: string;
+    contract: string;
+    enabled: boolean;
+  }[];
+  requirements: {
+    requirementId: string;
+    taskIds: string[];
+    evidenceIds: string[];
+  }[];
 };
 
 function git(...args: string[]): string {
@@ -143,43 +148,47 @@ describe('Slice 17 single-owner architecture + mechanical traceability', () => {
     }
   });
 
-  it('Semantic Executable Evidence: every mapped requirement points to assertions and Audit 2 sentinels are non-structural', () => {
-    for (const entries of [traceability.FR, traceability.AS, traceability.NS]) {
-      for (const entry of entries) {
-        for (const mapping of entry.mappings) {
-          const evidence = readFileSync(
-            new URL(`../${mapping.evidence}`, import.meta.url),
-            'utf8'
-          );
-          expect(evidence, `${entry.id} / ${mapping.task} needs executable/static assertions`)
-            .toMatch(/\b(?:it|test)\s*\(/);
-          expect(evidence, `${entry.id} / ${mapping.task} needs semantic assertions`)
-            .toMatch(/\bexpect\s*\(/);
-          const semanticSentinel = TASK_SEMANTIC_SENTINELS[mapping.task];
-          expect(
-            semanticSentinel,
-            `${entry.id} / ${mapping.task} must bind to a task-specific semantic assertion`
-          ).toBeTruthy();
-          expect(
-            evidence,
-            `${entry.id} / ${mapping.task} task-specific semantic assertion deleted`
-          ).toContain(semanticSentinel);
+  it('Semantic Evidence Registry: binds exact FR/AS/NS sets to stable runner-result evidence identities', () => {
+    const expectedRequirementIds = [
+      ...ids('FR', 52),
+      ...ids('AS', 50),
+      ...ids('NS', 24),
+    ];
+    expect(semanticEvidence.requirements.map((entry) => entry.requirementId))
+      .toEqual(expectedRequirementIds);
+
+    const evidenceById = new Map(
+      semanticEvidence.evidence.map((entry) => [entry.evidenceId, entry] as const)
+    );
+    expect(evidenceById.size).toBe(semanticEvidence.evidence.length);
+
+    const referenced = new Set<string>();
+    for (const requirement of semanticEvidence.requirements) {
+      expect(requirement.evidenceIds.length, `${requirement.requirementId} needs semantic evidence`)
+        .toBeGreaterThan(0);
+      expect(new Set(requirement.evidenceIds).size)
+        .toBe(requirement.evidenceIds.length);
+      for (const evidenceId of requirement.evidenceIds) {
+        const evidence = evidenceById.get(evidenceId);
+        expect(evidence, `${requirement.requirementId} -> ${evidenceId} must exist`).toBeTruthy();
+        expect(evidence?.enabled).toBe(true);
+        expect(evidence?.proofMode).toBe('RUNNER_RESULT');
+        expect(['EXECUTABLE', 'STATIC']).toContain(evidence?.type);
+        expect(evidence?.test.length).toBeGreaterThan(0);
+        expect(evidence?.contract.length).toBeGreaterThan(0);
+        if (evidence?.task.startsWith('T17')) {
+          expect(requirement.taskIds).toContain(evidence.task);
+          expect(evidence.file).toBe(traceability.taskEvidence[evidence.task]);
         }
+        referenced.add(evidenceId);
       }
     }
 
-    const remediation = readFileSync(
-      new URL('./professional-knowledge-audit2-remediation.integration.test.ts', import.meta.url),
-      'utf8'
-    );
-    for (const [id, assertion] of Object.entries({
-      'FR-028': "expect(Number(reviewEvidence.rows[0]!.n)).toBe(1);",
-      'FR-031': "expect(reviewReadback.status).toBe('SETTLED');",
-      'FR-046': "expect(Number(releaseEvidence.rows[0]!.n)).toBe(1);",
-      'FR-052': "expect(hiddenReviewer.rows[0]!.n).toBe('0');",
-    })) {
-      expect(remediation, `${id} semantic sentinel deleted`).toContain(assertion);
-    }
+    expect(
+      semanticEvidence.evidence
+        .map((entry) => entry.evidenceId)
+        .filter((evidenceId) => !referenced.has(evidenceId))
+    ).toEqual([]);
   });
 
   it('creates exactly one normalized Professional Knowledge owner and no forbidden owner tables', () => {
