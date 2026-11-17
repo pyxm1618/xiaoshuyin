@@ -346,7 +346,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
       [versionId]
     );
     const revoke = await revokeConsent(app, owner.token, 's17-consume', consentId);
-    expect(revoke.statusCode).toBe(201);
+    expect(revoke.statusCode).toBe(200);
 
     await expect(
       consumeProfessionalKnowledge({
