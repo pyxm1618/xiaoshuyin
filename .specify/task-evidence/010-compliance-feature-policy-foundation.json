@@ -1,5 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "featureId": "010-compliance-feature-policy-foundation",
+  "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/010-compliance-feature-policy-foundation/tasks.md",
   "implementationPr": 30,
   "implementationHeadSha": "542f5aeb946b6a650daf1d8c0ea6017597cab219",
@@ -20,11 +22,17 @@
     "T1012",
     "T1013"
   ],
+  "taskVerificationDigest": "b469ba4bb7e83dc1a1a775e800505f09a5e9e4dc",
   "artifactPaths": [
     "packages/compliance/src/feature-policy.ts",
     "packages/compliance/src/feature-policy-service.ts",
     "apps/server/api/src/compliance/evaluate-compliance.ts",
     "db/migrations/011_compliance_feature_policy_foundation.sql",
+    "tests/db/compliance-feature-policy-schema.test.ts",
+    "tests/db/compliance-feature-policy-publication.test.ts",
+    "scripts/guard-static.mjs"
+  ],
+  "verificationPaths": [
     "tests/db/compliance-feature-policy-schema.test.ts",
     "tests/db/compliance-feature-policy-publication.test.ts",
     "scripts/guard-static.mjs"

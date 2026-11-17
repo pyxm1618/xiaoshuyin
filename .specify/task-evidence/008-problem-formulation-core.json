@@ -1,5 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "featureId": "008-problem-formulation-core",
+  "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/008-problem-formulation-core/tasks.md",
   "implementationPr": 26,
   "implementationHeadSha": "2a6fea2e5e449830fc20016fd99bba8e03098f73",
@@ -54,6 +56,7 @@
     "T846",
     "T847"
   ],
+  "taskVerificationDigest": "c4c7e3e90f347e6b358d91fb01be5dddbbf3ff5a",
   "artifactPaths": [
     "apps/server/api/src/app.ts",
     "apps/server/api/src/openapi-spec.ts",
@@ -65,6 +68,11 @@
     "tests/db/migration-case-status-paused-removal.test.ts",
     "scripts/db-evidence.mjs",
     "scripts/guard-static.mjs"
+  ],
+  "verificationPaths": [
+    "tests/db/case-primary-switch-shared-vocabulary.test.ts",
+    "tests/db/cases-rls.test.ts",
+    "tests/db/migration-case-primary-switch-upgrade.test.ts"
   ],
   "ciRuns": [
     {

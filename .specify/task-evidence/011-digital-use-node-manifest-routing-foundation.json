@@ -1,5 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "featureId": "011-digital-use-node-manifest-routing-foundation",
+  "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/011-digital-use-node-manifest-routing-foundation/tasks.md",
   "implementationPr": 31,
   "implementationHeadSha": "e7ad9975c25d8fc4ddf30b769d7e74a16e42cf8d",
@@ -23,6 +25,7 @@
     "T1115",
     "T1116"
   ],
+  "taskVerificationDigest": "fae7e80bb1d105b06220defc7c35b20e7b32f0de",
   "artifactPaths": [
     "packages/scenes/digital-use/node-manifest.ts",
     "packages/scenes/digital-use/routing.ts",
@@ -31,6 +34,11 @@
     "tests/scenes/digital-use/negative-mutations.test.ts",
     "tests/scenes/digital-use/architecture-guard.test.ts",
     ".github/workflows/ci.yml"
+  ],
+  "verificationPaths": [
+    "tests/scenes/digital-use/acceptance-matrix.test.ts",
+    "tests/scenes/digital-use/negative-mutations.test.ts",
+    "tests/scenes/digital-use/architecture-guard.test.ts"
   ],
   "ciRuns": [
     {

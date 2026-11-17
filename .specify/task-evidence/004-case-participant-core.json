@@ -1,5 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "featureId": "004-case-participant-core",
+  "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/004-case-participant-core/tasks.md",
   "implementationPr": 19,
   "implementationHeadSha": "79a3267152b16bce65f668c1a57313956fc885b5",
@@ -104,6 +106,7 @@
     "T096",
     "T097"
   ],
+  "taskVerificationDigest": "cec9938c796605f307f6287f132714dac998f925",
   "artifactPaths": [
     "apps/server/api/src/app.ts",
     "apps/server/api/src/authz.ts",
@@ -115,6 +118,11 @@
     "tests/db/participants-evidence-boundary.test.ts",
     ".github/workflows/ci.yml",
     "scripts/db-evidence.mjs"
+  ],
+  "verificationPaths": [
+    "tests/db/migration-repro.test.ts",
+    "tests/db/migration-upgrade-evidence.test.ts",
+    "tests/db/participants-constraints.test.ts"
   ],
   "ciRuns": [
     {

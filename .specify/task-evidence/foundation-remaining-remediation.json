@@ -1,5 +1,7 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "featureId": "foundation-remaining-remediation",
+  "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/foundation-remaining-remediation/tasks.md",
   "implementationPr": 53,
   "implementationHeadSha": "470a46d46bbca2a0da48fb3eea253913e967108e",
@@ -17,6 +19,7 @@
     "T009",
     "T010"
   ],
+  "taskVerificationDigest": "8ce36b2bdf2adb4c2d0eba4fc9648d61a869cf5f",
   "artifactPaths": [
     "apps/server/api/src/app.ts",
     "apps/server/api/src/routes/auth.ts",
@@ -27,6 +30,11 @@
     "tests/scenes/digital-use/integrated-triage.test.ts",
     ".github/workflows/ci.yml",
     ".specify/authority-inputs.json"
+  ],
+  "verificationPaths": [
+    "tests/integration/auth.test.ts",
+    "tests/integration/consent-revoke.test.ts",
+    "tests/integration/http-security-boundary.test.ts"
   ],
   "ciRuns": [
     {

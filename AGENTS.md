@@ -104,4 +104,20 @@ Any intended change to one of the four Authority Docs MUST:
 - use only the validator's finite exemption classes for a genuine metadata-only/no-downstream-impact correction;
 - obtain GitHub-native independent approval, with approval required after the latest reviewable push. PR authors cannot self-approve through repository prose, labels, or agent/connector actions.
 
+Repository governance additionally enforces three machine-verifiable provenance boundaries:
+
+- production paths are owned only by the finite repository-controlled
+  `.specify/implementation-ownership.json`; a change manifest cannot invent path ownership,
+  shared ownership is explicit, and unknown production paths fail closed;
+- Authority changes are evaluated through repository-controlled Authority Units in
+  `.specify/authority-unit-registry.json`; a changed substantive unit must converge through
+  a pre-registered feature/spec/downstream-requirement/artifact binding, while
+  `NO_DOWNSTREAM_IMPACT` is restricted to mechanically bounded non-normative units;
+- completed task evidence must bind the feature/task to the real merged implementation PR,
+  exact implementation head, files actually changed by that PR, concrete verification
+  artifacts, and the task's current `[VERIFY:...]` contracts.
+
+These registries are governance authority, not per-PR self-declarations. Do not modify a
+registry in the same change to authorize the product/Authority change that needs it.
+
 Feature work never edits `Docs/**` as a side effect. If a slice appears to need a requirement change, report the conflict and stop.

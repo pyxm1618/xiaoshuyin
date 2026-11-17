@@ -33,6 +33,29 @@ requirement to have *later* artifacts; nothing about traceability is relaxed.
 
 `specs/` directories starting with `.` or `_` are reserved and not treated as features.
 
+## Machine-verifiable change provenance
+
+Production implementation ownership is repository-controlled by
+`.specify/implementation-ownership.json`. A change-binding manifest may select only a
+feature that the registry already authorizes for each production path. Shared ownership is
+finite and explicit, longest-match resolution is deterministic, and an unknown production
+path fails closed. Ownership-registry changes are governance-sensitive and must not be
+combined with product implementation/change-binding changes.
+
+Authority convergence is repository-controlled by
+`.specify/authority-unit-registry.json`. The registry defines stable Authority Unit
+identities and, where an Authority unit is allowed to affect an existing feature, the exact
+feature/spec, downstream requirement selector, and required artifact set. A PR cannot
+create these bindings while changing the Authority text. `NO_DOWNSTREAM_IMPACT` is
+available only for a registry-declared non-normative unit and a finite allowed exemption
+kind; substantive units fail closed until their downstream convergence binding exists.
+
+Completed task evidence uses feature-bound provenance: task feature identity → merged
+implementation PR/head → actual PR changed-file set → concrete implementation and
+verification artifacts. Evidence artifacts must be present in the referenced PR delta, and
+the checked task `[VERIFY:...]` contracts are digest-bound. A successful unrelated PR or
+generic successful CI run cannot be reused as universal task evidence.
+
 ## Docs/** change control
 
 `Docs/**` contains the approved product and technical sources. The old

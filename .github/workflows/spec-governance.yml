@@ -41,7 +41,9 @@ jobs:
       - name: Validate historical task evidence provenance
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node .specify/scripts/validate-task-evidence-remote.mjs
+        run: |
+          node .specify/scripts/validate-task-evidence-remote.mjs
+          node .specify/scripts/tests/run-remote-task-evidence-tests.mjs
 
       - name: Validate governance artifacts and feature traceability
         run: node .specify/scripts/validate-governance.mjs

@@ -1,0 +1,191 @@
+{
+  "schemaVersion": 1,
+  "resolution": "LONGEST_MATCH",
+  "policy": "Unknown production paths fail closed. Registry changes are governance-sensitive and may not ride with product implementation.",
+  "rules": [
+    {
+      "id": "compliance-package",
+      "match": { "kind": "PREFIX", "path": "packages/compliance/" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-consent-01004-narrow-post-merge-remediation",
+          "010-compliance-feature-policy-foundation",
+          "foundation-remaining-remediation"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-scene-package",
+      "match": { "kind": "PREFIX", "path": "packages/scenes/digital-use/" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "011-digital-use-node-manifest-routing-foundation",
+          "012-digital-use-assessment-runtime",
+          "013-digital-use-family-alliance-runtime",
+          "foundation-remaining-remediation"
+        ]
+      }
+    },
+    {
+      "id": "problem-formulation-domain",
+      "match": { "kind": "EXACT", "path": "packages/domain/src/problem-formulations.ts" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": ["008-problem-formulation-core", "foundation-remaining-remediation"]
+      }
+    },
+    {
+      "id": "problem-formulation-route",
+      "match": { "kind": "EXACT", "path": "apps/server/api/src/routes/problem-formulations.ts" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": ["008-problem-formulation-core", "foundation-remaining-remediation"]
+      }
+    },
+    {
+      "id": "safety-domain",
+      "match": { "kind": "PREFIX", "path": "packages/domain/src/safety/" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "009-safety-hold-control-foundation",
+          "016-psychological-behavioral-intervention-contract-authority-reconciliation",
+          "foundation-remaining-remediation"
+        ]
+      }
+    },
+    {
+      "id": "intervention-domain",
+      "match": { "kind": "PREFIX", "path": "packages/domain/src/intervention-" },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": ["016-psychological-behavioral-intervention-contract-authority-reconciliation"]
+      }
+    },
+    {
+      "id": "intervention-service",
+      "match": { "kind": "PREFIX", "path": "apps/server/api/src/services/intervention-" },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": ["016-psychological-behavioral-intervention-contract-authority-reconciliation"]
+      }
+    },
+    {
+      "id": "identity-binding-api",
+      "match": { "kind": "PREFIX", "path": "apps/server/api/src/identity-binding/" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "004-case-participant-core",
+          "005-invited-identity-binding-contract",
+          "006-identity-binding-runtime"
+        ]
+      }
+    },
+    {
+      "id": "identity-binding-domain",
+      "match": { "kind": "PREFIX", "path": "packages/domain/src/identity-binding" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "005-invited-identity-binding-contract",
+          "006-identity-binding-runtime"
+        ]
+      }
+    },
+    {
+      "id": "identity-binding-contract",
+      "match": { "kind": "EXACT", "path": "packages/contracts/src/identity-binding-schemas.ts" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "005-invited-identity-binding-contract",
+          "006-identity-binding-runtime"
+        ]
+      }
+    },
+    {
+      "id": "participation-route",
+      "match": { "kind": "EXACT", "path": "apps/server/api/src/routes/participations.ts" },
+      "ownership": { "kind": "FEATURE", "features": ["004-case-participant-core"] }
+    },
+    {
+      "id": "participation-domain",
+      "match": { "kind": "EXACT", "path": "packages/domain/src/participants.ts" },
+      "ownership": { "kind": "FEATURE", "features": ["004-case-participant-core"] }
+    },
+    {
+      "id": "participation-migration",
+      "match": { "kind": "EXACT", "path": "db/migrations/005_case_participant_core.sql" },
+      "ownership": { "kind": "FEATURE", "features": ["004-case-participant-core"] }
+    },
+    {
+      "id": "case-route",
+      "match": { "kind": "EXACT", "path": "apps/server/api/src/routes/cases.ts" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "002-case-core",
+          "007-case-primary-switch",
+          "009-safety-hold-control-foundation"
+        ]
+      }
+    },
+    {
+      "id": "case-domain",
+      "match": { "kind": "EXACT", "path": "packages/domain/src/cases.ts" },
+      "ownership": { "kind": "FEATURE", "features": ["002-case-core"] }
+    },
+    {
+      "id": "case-primary-switch-domain",
+      "match": { "kind": "EXACT", "path": "packages/domain/src/case-primary-switch.ts" },
+      "ownership": { "kind": "FEATURE", "features": ["007-case-primary-switch"] }
+    },
+    {
+      "id": "problem-formulation-migration",
+      "match": { "kind": "EXACT", "path": "db/migrations/008_problem_formulation_core.sql" },
+      "ownership": { "kind": "FEATURE", "features": ["008-problem-formulation-core"] }
+    },
+    {
+      "id": "safety-hold-migration",
+      "match": { "kind": "EXACT", "path": "db/migrations/009_safety_hold_control_foundation.sql" },
+      "ownership": { "kind": "FEATURE", "features": ["009-safety-hold-control-foundation"] }
+    },
+    {
+      "id": "compliance-policy-migration",
+      "match": { "kind": "EXACT", "path": "db/migrations/011_compliance_feature_policy_foundation.sql" },
+      "ownership": { "kind": "FEATURE", "features": ["010-compliance-feature-policy-foundation"] }
+    },
+    {
+      "id": "shared-api-composition",
+      "match": { "kind": "EXACT", "path": "apps/server/api/src/app.ts" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "004-case-participant-core",
+          "008-problem-formulation-core",
+          "009-safety-hold-control-foundation",
+          "010-compliance-feature-policy-foundation",
+          "011-digital-use-node-manifest-routing-foundation",
+          "012-digital-use-assessment-runtime",
+          "013-digital-use-family-alliance-runtime",
+          "foundation-remaining-remediation"
+        ]
+      }
+    },
+    {
+      "id": "shared-openapi-composition",
+      "match": { "kind": "EXACT", "path": "apps/server/api/src/openapi-spec.ts" },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "004-case-participant-core",
+          "008-problem-formulation-core",
+          "foundation-remaining-remediation"
+        ]
+      }
+    }
+  ]
+}

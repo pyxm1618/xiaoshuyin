@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "policy": "Authority Units are repository-owned. Unit/binding registry changes must land separately from Authority Docs and downstream implementation/spec deltas.",
+  "documents": [
+    {
+      "path": "Docs/总产品需求.md",
+      "units": [
+        {
+          "id": "AUTH-GLOBAL-PRODUCT-NORMATIVE",
+          "selector": { "kind": "WHOLE_DOCUMENT" },
+          "normative": true,
+          "downstreamBindings": []
+        }
+      ]
+    },
+    {
+      "path": "Docs/V1产品需求.md",
+      "units": [
+        {
+          "id": "AUTH-V1-PRODUCT-NORMATIVE",
+          "selector": { "kind": "WHOLE_DOCUMENT" },
+          "normative": true,
+          "downstreamBindings": []
+        }
+      ]
+    },
+    {
+      "path": "Docs/总体技术架构.md",
+      "units": [
+        {
+          "id": "AUTH-GLOBAL-ARCH-NORMATIVE",
+          "selector": { "kind": "WHOLE_DOCUMENT" },
+          "normative": true,
+          "downstreamBindings": []
+        }
+      ]
+    },
+    {
+      "path": "Docs/V1技术设计.md",
+      "units": [
+        {
+          "id": "AUTH-V1-TECH-NORMATIVE",
+          "selector": { "kind": "WHOLE_DOCUMENT" },
+          "normative": true,
+          "downstreamBindings": []
+        }
+      ]
+    }
+  ]
+}
