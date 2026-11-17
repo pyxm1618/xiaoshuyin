@@ -377,7 +377,7 @@ const SLICE17_NEW_CONSTRAINTS = [
   'professional_knowledge_versions_updated_at_not_null',
   'professional_knowledge_versions_validity_state_check',
   'professional_knowledge_versions_validity_state_not_null',
-  'professional_knowledge_approval_evidence_semantic_binding_hash_check',
+  'professional_knowledge_approval_evidence_semantic_binding_hash_',
 ].sort();
 
 const SLICE17_NEW_OBJECTS = [

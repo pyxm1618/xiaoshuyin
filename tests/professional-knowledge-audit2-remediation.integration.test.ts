@@ -1459,8 +1459,11 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     });
 
     await entered;
+    // Explicit barrier above proves the initial Staff validation already
+    // completed. Poll the authoritative DB clock until the known expiry boundary
+    // is crossed; no sleep/timer race and no iteration-count timing assumption.
     let expired = false;
-    for (let i = 0; i < 1000 && !expired; i += 1) {
+    while (!expired) {
       const check = await admin.query<{ expired: boolean }>(
         `SELECT clock_timestamp() >= valid_until AS expired
            FROM staff_assignments WHERE id=$1`,
@@ -1468,7 +1471,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       );
       expired = check.rows[0]?.expired === true;
     }
-    expect(expired).toBe(true);
 
     proceedResolve();
     await expect(release).rejects.toMatchObject({ code: '42501' });
