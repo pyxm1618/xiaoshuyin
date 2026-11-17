@@ -18,6 +18,7 @@ import {
   resolveProfessionalReviewStaffAuthority,
 } from '../packages/domain/src/professional-knowledge-repository.js';
 import {
+  hashProfessionalKnowledgeApprovalBinding,
   hashProfessionalKnowledgeContent,
   hashProfessionalKnowledgeSourceSet,
   prepareInterventionDefinition,
@@ -46,6 +47,7 @@ type Actor = {
 
 type SeededKnowledge = {
   knowledgeId: string;
+  knowledgeKey: string;
   versionId: string;
   contentHash: string;
   sourceSetHash: string;
@@ -111,11 +113,12 @@ async function seedKnowledge(
     locale: 'zh-CN',
     interventionDefinitionRef: input.interventionDefinitionRef ?? null,
   };
+  const knowledgeKey = `audit2-${tag}`;
   const item = await admin.query<{ id: string }>(
     `INSERT INTO professional_knowledge_items
        (knowledge_key, created_by_account_id, created_by_person_id)
      VALUES ($1,$2,$3) RETURNING id`,
-    [`audit2-${tag}`, actor.accountId, actor.personId]
+    [knowledgeKey, actor.accountId, actor.personId]
   );
   const knowledgeId = item.rows[0]!.id;
   const version = await admin.query<{ id: string }>(
@@ -145,7 +148,7 @@ async function seedKnowledge(
      VALUES ($1,1,1,$2,'1',$3,NULL,'{}'::jsonb)`,
     [versionId, sourceRef, 'a'.repeat(64)]
   );
-  return { knowledgeId, versionId, contentHash, sourceSetHash, sourceRef, scope };
+  return { knowledgeId, knowledgeKey, versionId, contentHash, sourceSetHash, sourceRef, scope };
 }
 
 function qualificationProvider() {
@@ -190,6 +193,14 @@ function approvalProof(
     semanticVersion: '1.0.0',
     contentHash: knowledge.contentHash,
     sourceSetHash: knowledge.sourceSetHash,
+    semanticBindingHash: hashProfessionalKnowledgeApprovalBinding({
+      knowledgeId: knowledge.knowledgeId,
+      knowledgeKey: knowledge.knowledgeKey,
+      semanticVersion: '1.0.0',
+      contentHash: knowledge.contentHash,
+      sourceSetHash: knowledge.sourceSetHash,
+      scope: knowledge.scope,
+    }),
     sourceRefs: [knowledge.sourceRef],
     scope,
     reviewerIdentity: `reviewer:${reviewer.personId}`,
