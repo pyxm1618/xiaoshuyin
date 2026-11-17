@@ -2,8 +2,8 @@
 
 **Feature**: `specs/004-case-participant-core/spec.md`
 **Phase**: Phase 1 — Common Core 地基（`Docs/V1技术设计.md` §38）
-**Stage**: Tasks（authoring only）
-**Status**: Tasks authored；**IMPLEMENT GATE = BLOCKED**（Slice 2 未 merge；005 runtime 未实现）
+**Stage**: Historical implementation record（task truth reconciled）
+**Status**: **IMPLEMENTATION MERGED / INDEPENDENT RE-AUDIT PASS / TASK TRUTH RECONCILED**
 **Source of truth**:
 - `spec.md`（31 FR / 19 Acceptance / 15 SC，已冻结）
 - `plan.md`（D-1—D-17）
@@ -15,7 +15,7 @@
 - `quickstart.md`
 - `checklists/requirements-quality.md`（130/130 PASS；F-01—F-06）
 
-> 本文件把已冻结并通过 Checklist 的实现 Plan 拆成可执行的 Implement 工作单元。它不是实现、不是 migration、不是测试代码、不是伪代码，也不重新解释需求。`tasks.md` 只允许 Implement AI 在 Task 完成后更新 checkbox / completion evidence / evidence reference；不得借 checkbox 修改需求或设计。
+> 本文件保留已冻结 Implement 工作单元的历史契约。当前 checkbox 依据 `.specify/task-evidence/004-case-participant-core.json` 与已合并 exact-head CI/审计证据完成 truth reconciliation；本次治理修复不修改任何 Task、REQ、VERIFY、需求或设计语义。
 
 ---
 
