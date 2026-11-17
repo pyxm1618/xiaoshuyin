@@ -2,6 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createAdminPool } from './setup/db.js';
 import { withTransactionClient } from '../apps/server/api/src/db/tx.js';
 import { runIdempotentCommandInTransaction } from '../apps/server/api/src/idempotency.js';
+import { releaseKnowledgeVersion } from '../apps/server/api/src/services/professional-knowledge.js';
 import {
   appendProfessionalKnowledgeReviewEvidence,
   applyProfessionalKnowledgeDependencyState,
@@ -13,6 +14,8 @@ import {
 } from '../packages/domain/src/professional-knowledge-repository.js';
 import {
   hashPayload,
+  hashProfessionalKnowledgeContent,
+  hashProfessionalKnowledgeSourceSet,
   validateProfessionalApproval,
   type ProfessionalApprovalProof,
   type ProfessionalKnowledgeVersionSnapshot,
@@ -108,6 +111,128 @@ async function seedCandidate(input: {
     versionId,
     revision: version.rows[0]!.revision,
     staffAssignmentId: staff.rows[0]!.id,
+  };
+}
+
+async function seedExactApprovalCandidate() {
+  const tag = crypto.randomUUID();
+  const account = await admin.query<{ id: string }>(
+    'INSERT INTO accounts (wechat_openid) VALUES ($1) RETURNING id',
+    [`slice17-proof-race-${tag}`]
+  );
+  const accountId = account.rows[0]!.id;
+  const person = await admin.query<{ id: string }>(
+    `INSERT INTO persons (account_id, created_by_account_id)
+     VALUES ($1,$1) RETURNING id`,
+    [accountId]
+  );
+  const personId = person.rows[0]!.id;
+  const assignment = await admin.query<{ id: string }>(
+    `INSERT INTO staff_assignments
+       (account_id, person_id, capability, scope_type, granted_by_account_id)
+     VALUES ($1,$2,'PROFESSIONAL_REVIEW','GLOBAL',$1)
+     RETURNING id`,
+    [accountId, personId]
+  );
+  const knowledge = await admin.query<{ id: string }>(
+    `INSERT INTO professional_knowledge_items
+       (knowledge_key, created_by_account_id, created_by_person_id)
+     VALUES ($1,$2,$3) RETURNING id`,
+    [`proof-race-${tag}`, accountId, personId]
+  );
+  const content = { body: 'exact approval race candidate' };
+  const sources = [{
+    sourceRef: `source:proof-race:${tag}`,
+    sourceVersion: '1',
+    sourceHash: '9'.repeat(64),
+    locator: null,
+    metadata: {},
+  }];
+  const contentHash = hashProfessionalKnowledgeContent(content);
+  const sourceSetHash = hashProfessionalKnowledgeSourceSet(sources);
+  const scope = {
+    product: 'V1' as const,
+    sceneCode: 'DIGITAL_USE',
+    scenePackageVersion: 'v-proof-race',
+    stages: ['ASSESSMENT'],
+    ageBands: ['MINOR_14_17'] as const,
+    applicability: ['sleep-impact'],
+    exclusions: [],
+    riskLevels: ['LOW'] as const,
+    locale: 'zh-CN',
+  };
+  const version = await admin.query<{ id: string }>(
+    `INSERT INTO professional_knowledge_versions
+       (knowledge_id, semantic_version, review_state, validity_state,
+        content, content_hash, source_set_hash, scope_metadata, locale,
+        created_by_account_id, created_by_person_id)
+     VALUES ($1,'1.0.0','CURRENT','VALID',$2::jsonb,$3,$4,$5::jsonb,'zh-CN',$6,$7)
+     RETURNING id`,
+    [
+      knowledge.rows[0]!.id,
+      JSON.stringify(content),
+      contentHash,
+      sourceSetHash,
+      JSON.stringify(scope),
+      accountId,
+      personId,
+    ]
+  );
+  const versionId = version.rows[0]!.id;
+  await admin.query(
+    `INSERT INTO professional_knowledge_sources
+       (knowledge_version_id, knowledge_revision, ordinal, source_ref,
+        source_version, source_hash, locator, snapshot_metadata)
+     VALUES ($1,1,1,$2,$3,$4,$5,$6::jsonb)`,
+    [
+      versionId,
+      sources[0]!.sourceRef,
+      sources[0]!.sourceVersion,
+      sources[0]!.sourceHash,
+      sources[0]!.locator,
+      JSON.stringify(sources[0]!.metadata),
+    ]
+  );
+  const approvalScope = {
+    product: 'V1' as const,
+    sceneCode: scope.sceneCode,
+    scenePackageVersion: scope.scenePackageVersion,
+    stages: scope.stages,
+    ageBands: scope.ageBands,
+    locale: scope.locale,
+  };
+  const proof: ProfessionalApprovalProof = {
+    proofId: `proof:${tag}`,
+    knowledgeId: knowledge.rows[0]!.id,
+    semanticVersion: '1.0.0',
+    contentHash,
+    sourceSetHash,
+    sourceRefs: [sources[0]!.sourceRef],
+    scope: approvalScope,
+    reviewerIdentity: `reviewer:${tag}`,
+    reviewerAccountId: accountId,
+    reviewerPersonId: personId,
+    staffAssignmentRef: assignment.rows[0]!.id,
+    staffCapability: 'PROFESSIONAL_REVIEW',
+    qualificationRef: `qualification:${tag}`,
+    qualificationScope: approvalScope,
+    approvalStatus: 'APPROVED',
+    publicationStatus: 'EFFECTIVE',
+    reviewedAt: '2026-11-01T00:00:00Z',
+    effectiveFrom: '2026-11-01T00:00:00Z',
+    effectiveTo: '2027-11-01T00:00:00Z',
+  };
+  return {
+    accountId,
+    personId,
+    assignmentId: assignment.rows[0]!.id,
+    knowledgeId: knowledge.rows[0]!.id,
+    versionId,
+    contentHash,
+    sourceSetHash,
+    scope,
+    sources,
+    proof,
   };
 }
 
@@ -258,6 +383,119 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       await rollbackRelease(reviewer);
       throw error;
     }
+  });
+
+  it('proof arrival vs edit is serialized behind the locked exact release revision', async () => {
+    const seeded = await seedExactApprovalCandidate();
+    let providerEntered!: () => void;
+    const entered = new Promise<void>((resolve) => { providerEntered = resolve; });
+    let providerContinue!: () => void;
+    const continueProvider = new Promise<void>((resolve) => { providerContinue = resolve; });
+
+    const approvalProvider = {
+      async resolve() {
+        return { status: 'RESOLVED' as const, proof: seeded.proof };
+      },
+      async revalidate() {
+        providerEntered();
+        await continueProvider;
+        return { status: 'RESOLVED' as const, proof: seeded.proof };
+      },
+    };
+    const qualificationProvider = {
+      async resolve() {
+        return {
+          status: 'RESOLVED' as const,
+          qualificationRef: seeded.proof.qualificationRef,
+          reviewerIdentity: seeded.proof.reviewerIdentity,
+          reviewerAccountId: seeded.accountId,
+          reviewerPersonId: seeded.personId,
+          scope: seeded.proof.qualificationScope,
+          validFrom: '2026-01-01T00:00:00Z',
+          validTo: '2027-01-01T00:00:00Z',
+        };
+      },
+    };
+
+    const release = releaseKnowledgeVersion({
+      pool: admin,
+      accountId: seeded.accountId,
+      personId: seeded.personId,
+      assignmentId: seeded.assignmentId,
+      idempotencyKey: `proof-race-release-${crypto.randomUUID()}`,
+      versionId: seeded.versionId,
+      expectedRevision: 1,
+      approvalProofId: seeded.proof.proofId,
+      approvalProvider,
+      qualificationProvider,
+      sceneBindingResolver(scenePackageVersion) {
+        return {
+          status: 'RESOLVED',
+          sceneCode: seeded.scope.sceneCode,
+          scenePackageVersion,
+          refs: [{
+            knowledgeId: seeded.knowledgeId,
+            semanticVersion: '1.0.0',
+            contentHash: seeded.contentHash,
+            sourceSetHash: seeded.sourceSetHash,
+          }],
+        };
+      },
+      now: new Date('2026-11-17T00:00:00Z'),
+    });
+
+    await entered;
+
+    const editor = await beginClient();
+    const editedContent = { body: 'late editor must lose' };
+    const editedSources = [{
+      sourceRef: 'source:late-editor',
+      sourceVersion: '2',
+      sourceHash: '8'.repeat(64),
+      locator: null,
+      metadata: {},
+    }];
+    const editAttempt = editProfessionalKnowledgeCandidate(editor, {
+      versionId: seeded.versionId,
+      expectedRevision: 1,
+      content: editedContent,
+      contentHash: hashProfessionalKnowledgeContent(editedContent),
+      sourceSetHash: hashProfessionalKnowledgeSourceSet(editedSources),
+      sources: editedSources,
+      scope: seeded.scope,
+    });
+
+    await sleep(30);
+    let editSettled = false;
+    void editAttempt.then(
+      () => { editSettled = true; },
+      () => { editSettled = true; }
+    );
+    await sleep(30);
+    expect(editSettled).toBe(false);
+
+    providerContinue();
+    await expect(release).resolves.toMatchObject({
+      versionId: seeded.versionId,
+      revision: 2,
+      lifecycleStatus: 'PUBLISHED',
+    });
+    await expect(editAttempt).rejects.toMatchObject({
+      code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+    });
+    await editor.query('ROLLBACK');
+    editor.release();
+
+    const final = await admin.query<{ lifecycle_status: string; content_hash: string; revision: number }>(
+      `SELECT lifecycle_status, content_hash, revision
+         FROM professional_knowledge_versions WHERE id=$1`,
+      [seeded.versionId]
+    );
+    expect(final.rows[0]).toEqual({
+      lifecycle_status: 'PUBLISHED',
+      content_hash: seeded.contentHash,
+      revision: 2,
+    });
   });
 
   it('release vs edit serializes on the same revision; release wins without last-write-wins', async () => {
