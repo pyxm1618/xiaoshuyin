@@ -9,13 +9,20 @@ import {
   appendConsumedProfessionalApprovalEvidence,
   appendProfessionalKnowledgeAudit,
   appendProfessionalKnowledgeReviewEvidence,
+  applyProfessionalKnowledgeDependencyState,
   createProfessionalKnowledgeCandidate,
   createProfessionalKnowledgeSuccessor,
   editProfessionalKnowledgeCandidate,
   hashPayload,
+  getProfessionalKnowledgePredecessorId,
   lockProfessionalKnowledgeVersion,
+  markProfessionalKnowledgeVersionSuperseded,
+  releaseProfessionalKnowledgeVersion,
   resolveProfessionalReviewStaffAuthority,
+  retireProfessionalKnowledgeVersion,
   setProfessionalKnowledgeAdminContext,
+  evaluateProfessionalKnowledgeEligibility,
+  projectProfessionalKnowledgeDependencyImpact,
   validateProfessionalApproval,
   validateProfessionalKnowledgeVersionContract,
   type ProfessionalApprovalProvider,
@@ -27,6 +34,9 @@ import {
   type ProfessionalQualificationProvider,
   type ProfessionalQualificationResult,
 } from '@xiaoshuyin/domain';
+import {
+  resolveDigitalUseProfessionalKnowledgeBinding,
+} from '@xiaoshuyin/scenes/digital-use';
 import {
   runIdempotentCommandInTransaction,
   type CommandOutcome,
@@ -430,12 +440,22 @@ export async function resolveAndValidateKnowledgeApproval(input: {
 export async function persistValidatedApprovalEvidence(
   tx: pg.PoolClient,
   versionId: string,
-  validation: ProfessionalApprovalValidation
+  validation: ProfessionalApprovalValidation,
+  sceneBindingRef: {
+    readonly sceneCode: string;
+    readonly scenePackageVersion: string;
+    readonly knowledgeId: string;
+    readonly semanticVersion: string;
+    readonly contentHash: string;
+    readonly sourceSetHash: string;
+  }
 ): Promise<void> {
   if (validation.status !== 'VALID') {
     throw new Error('PROFESSIONAL_APPROVAL_MUST_BE_VALID');
   }
-  await appendConsumedProfessionalApprovalEvidence(tx, versionId, validation.proof);
+  await appendConsumedProfessionalApprovalEvidence(
+    tx, versionId, validation.proof, sceneBindingRef
+  );
 }
 
 export async function createKnowledgeSuccessorInTransaction(
@@ -450,4 +470,342 @@ export async function reassertProfessionalKnowledgeAdminContext(
   assignmentId: string
 ): Promise<void> {
   await setProfessionalKnowledgeAdminContext(tx, assignmentId);
+}
+
+
+export type KnowledgeSceneBindingResolver = (
+  scenePackageVersion: string
+) => ReturnType<typeof resolveDigitalUseProfessionalKnowledgeBinding>;
+
+export type KnowledgeInterventionResolver = (
+  ref: NonNullable<ProfessionalKnowledgeScopeMetadata['interventionDefinitionRef']>
+) => Promise<
+  | { readonly status: 'RESOLVED'; readonly ref: NonNullable<ProfessionalKnowledgeScopeMetadata['interventionDefinitionRef']> }
+  | { readonly status: 'INVALID'; readonly reason: string }
+  | { readonly status: 'UNAVAILABLE'; readonly reason: string }
+>;
+
+export const unavailableProductionInterventionDefinitionResolver:
+  KnowledgeInterventionResolver = async () => ({
+    status: 'UNAVAILABLE',
+    reason: 'SLICE_16_AUTHORITATIVE_OWNER_NOT_MERGED',
+  });
+
+function exactSceneBindingForVersion(
+  version: ProfessionalKnowledgeVersionSnapshot,
+  resolver: KnowledgeSceneBindingResolver
+) {
+  const binding = resolver(version.scope.scenePackageVersion);
+  if (binding.status !== 'RESOLVED') return binding;
+  const exact = binding.refs.some(
+    (ref) =>
+      ref.knowledgeId === version.knowledgeId &&
+      ref.semanticVersion === version.semanticVersion &&
+      ref.contentHash === version.contentHash &&
+      ref.sourceSetHash === version.sourceSetHash
+  );
+  return exact ? binding : { status: 'INVALID' as const, reason: 'KNOWLEDGE_NOT_BOUND' };
+}
+
+export async function releaseKnowledgeVersion(input: {
+  pool: pg.Pool;
+  accountId: string;
+  personId: string;
+  assignmentId: string;
+  idempotencyKey: string;
+  versionId: string;
+  expectedRevision: number;
+  approvalProofId: string;
+  approvalProvider?: ProfessionalApprovalProvider;
+  qualificationProvider?: ProfessionalQualificationProvider;
+  sceneBindingResolver?: KnowledgeSceneBindingResolver;
+  interventionResolver?: KnowledgeInterventionResolver;
+  effectiveFrom?: Date;
+  now?: Date;
+}): Promise<{ versionId: string; revision: number; lifecycleStatus: 'PUBLISHED' }> {
+  const approvalProvider =
+    input.approvalProvider ?? unavailableProductionProfessionalApprovalProvider;
+  const qualificationProvider =
+    input.qualificationProvider ?? unavailableProductionProfessionalQualificationProvider;
+  const sceneBindingResolver =
+    input.sceneBindingResolver ?? resolveDigitalUseProfessionalKnowledgeBinding;
+  const interventionResolver =
+    input.interventionResolver ?? unavailableProductionInterventionDefinitionResolver;
+
+  return withProfessionalKnowledgeAdminTransaction(
+    input.pool,
+    { accountId: input.accountId, assignmentId: input.assignmentId },
+    async (tx) => {
+      const requestHash = hashPayload({
+        command: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
+        versionId: input.versionId,
+        expectedRevision: input.expectedRevision,
+        approvalProofId: input.approvalProofId,
+      });
+      const outcome = await runIdempotentCommandInTransaction(
+        tx,
+        {
+          accountId: input.accountId,
+          personId: input.personId,
+          purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN',
+          commandType: 'PROFESSIONAL_KNOWLEDGE_RELEASE',
+          idempotencyKey: input.idempotencyKey,
+          requestHash,
+        },
+        async () => {
+          const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
+          if (!version || version.revision !== input.expectedRevision) {
+            conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
+          }
+          assertVersionContract(version);
+          if (
+            version.lifecycleStatus !== 'CANDIDATE' ||
+            version.reviewState !== 'CURRENT' ||
+            version.validityState !== 'VALID'
+          ) {
+            conflict('PROFESSIONAL_KNOWLEDGE_RELEASE_STATE_INVALID');
+          }
+
+          const sceneBinding = exactSceneBindingForVersion(version, sceneBindingResolver);
+          if (sceneBinding.status !== 'RESOLVED') {
+            invalidAuthority('SCENE_PACKAGE_BINDING_INVALID');
+          }
+
+          if (version.scope.interventionDefinitionRef) {
+            const intervention = await interventionResolver(
+              version.scope.interventionDefinitionRef
+            );
+            if (intervention.status === 'UNAVAILABLE') {
+              unavailable('INTERVENTION_DEFINITION');
+            }
+            if (
+              intervention.status !== 'RESOLVED' ||
+              intervention.ref.definitionId !==
+                version.scope.interventionDefinitionRef.definitionId ||
+              intervention.ref.definitionVersion !==
+                version.scope.interventionDefinitionRef.definitionVersion ||
+              intervention.ref.contentHash !==
+                version.scope.interventionDefinitionRef.contentHash
+            ) {
+              invalidAuthority('INTERVENTION_DEFINITION_INVALID');
+            }
+          }
+
+          const approval = await resolveAndValidateKnowledgeApproval({
+            tx,
+            version,
+            provider: approvalProvider,
+            qualificationProvider,
+            mode: 'REVALIDATE',
+            proofId: input.approvalProofId,
+            now: input.now,
+          });
+          if (approval.status === 'UNAVAILABLE') unavailable(approval.dependency);
+          if (approval.status !== 'VALID') invalidAuthority(approval.reason);
+
+          const revision = await releaseProfessionalKnowledgeVersion(tx, {
+            versionId: version.id,
+            expectedRevision: version.revision,
+            effectiveFrom: input.effectiveFrom ?? input.now ?? new Date(),
+          });
+
+          const sceneBindingRef = {
+            sceneCode: sceneBinding.sceneCode,
+            scenePackageVersion: sceneBinding.scenePackageVersion,
+            knowledgeId: version.knowledgeId,
+            semanticVersion: version.semanticVersion,
+            contentHash: version.contentHash,
+            sourceSetHash: version.sourceSetHash,
+          };
+          await persistValidatedApprovalEvidence(
+            tx,
+            version.id,
+            approval,
+            sceneBindingRef
+          );
+
+          const predecessorId = await getProfessionalKnowledgePredecessorId(
+            tx,
+            version.id
+          );
+          if (predecessorId) {
+            await markProfessionalKnowledgeVersionSuperseded(tx, {
+              versionId: predecessorId,
+            });
+            await appendProfessionalKnowledgeAudit(tx, {
+              actorAccountId: input.accountId,
+              eventType: 'PROFESSIONAL_KNOWLEDGE_SUPERSEDED',
+              versionId: predecessorId,
+              metadata: { successorVersionId: version.id },
+            });
+          }
+
+          await appendProfessionalKnowledgeAudit(tx, {
+            actorAccountId: input.accountId,
+            eventType: 'PROFESSIONAL_KNOWLEDGE_RELEASED',
+            versionId: version.id,
+            metadata: {
+              knowledgeId: version.knowledgeId,
+              semanticVersion: version.semanticVersion,
+              contentHash: version.contentHash,
+              sourceSetHash: version.sourceSetHash,
+              approvalProofRef: approval.proof.proofId,
+              sceneBindingRef,
+              revision,
+            },
+          });
+
+          return {
+            status: 200,
+            body: {
+              versionId: version.id,
+              revision,
+              lifecycleStatus: 'PUBLISHED' as const,
+            },
+          };
+        }
+      );
+      return commandResult(outcome);
+    }
+  );
+}
+
+export async function retireKnowledgeVersion(input: {
+  pool: pg.Pool;
+  accountId: string;
+  personId: string;
+  assignmentId: string;
+  idempotencyKey: string;
+  versionId: string;
+  expectedRevision: number;
+}): Promise<{ versionId: string; revision: number; lifecycleStatus: 'RETIRED' }> {
+  return withProfessionalKnowledgeAdminTransaction(
+    input.pool,
+    { accountId: input.accountId, assignmentId: input.assignmentId },
+    async (tx) => {
+      const requestHash = hashPayload({
+        command: 'PROFESSIONAL_KNOWLEDGE_RETIRE',
+        versionId: input.versionId,
+        expectedRevision: input.expectedRevision,
+      });
+      const outcome = await runIdempotentCommandInTransaction(
+        tx,
+        {
+          accountId: input.accountId,
+          personId: input.personId,
+          purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN',
+          commandType: 'PROFESSIONAL_KNOWLEDGE_RETIRE',
+          idempotencyKey: input.idempotencyKey,
+          requestHash,
+        },
+        async () => {
+          const revision = await retireProfessionalKnowledgeVersion(tx, {
+            versionId: input.versionId,
+            expectedRevision: input.expectedRevision,
+          });
+          await appendProfessionalKnowledgeAudit(tx, {
+            actorAccountId: input.accountId,
+            eventType: 'PROFESSIONAL_KNOWLEDGE_RETIRED',
+            versionId: input.versionId,
+            metadata: { revision },
+          });
+          return {
+            status: 200,
+            body: {
+              versionId: input.versionId,
+              revision,
+              lifecycleStatus: 'RETIRED' as const,
+            },
+          };
+        }
+      );
+      return commandResult(outcome);
+    }
+  );
+}
+
+export async function propagateKnowledgeDependencyImpact(input: {
+  pool: pg.Pool;
+  accountId: string;
+  personId: string;
+  assignmentId: string;
+  idempotencyKey: string;
+  versionId: string;
+  expectedRevision: number;
+  impact: Parameters<typeof projectProfessionalKnowledgeDependencyImpact>[0]['impact'];
+  exactDependent: boolean;
+  materialImpact?: boolean;
+}): Promise<{ versionId: string; revision: number; changed: boolean }> {
+  return withProfessionalKnowledgeAdminTransaction(
+    input.pool,
+    { accountId: input.accountId, assignmentId: input.assignmentId },
+    async (tx) => {
+      const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
+      if (!version || version.revision !== input.expectedRevision) {
+        conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
+      }
+      const projected = projectProfessionalKnowledgeDependencyImpact({
+        current: {
+          reviewState: version.reviewState,
+          validityState: version.validityState,
+        },
+        impact: input.impact,
+        exactDependent: input.exactDependent,
+        materialImpact: input.materialImpact,
+      });
+      const stateChanged =
+        projected.reviewState !== version.reviewState ||
+        projected.validityState !== version.validityState;
+
+      const requestHash = hashPayload({
+        command: 'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE',
+        versionId: version.id,
+        expectedRevision: version.revision,
+        impact: input.impact,
+        exactDependent: input.exactDependent,
+        materialImpact: input.materialImpact ?? null,
+      });
+      const outcome = await runIdempotentCommandInTransaction(
+        tx,
+        {
+          accountId: input.accountId,
+          personId: input.personId,
+          purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN',
+          commandType: 'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE',
+          idempotencyKey: input.idempotencyKey,
+          requestHash,
+        },
+        async () => {
+          if (!stateChanged) {
+            return {
+              status: 200,
+              body: { versionId: version.id, revision: version.revision, changed: false },
+            };
+          }
+          const revision = await applyProfessionalKnowledgeDependencyState(tx, {
+            versionId: version.id,
+            expectedRevision: version.revision,
+            reviewState: projected.reviewState,
+            validityState: projected.validityState,
+          });
+          await appendProfessionalKnowledgeAudit(tx, {
+            actorAccountId: input.accountId,
+            eventType: 'PROFESSIONAL_KNOWLEDGE_VALIDITY_CHANGED',
+            versionId: version.id,
+            metadata: {
+              impact: input.impact,
+              reviewState: projected.reviewState,
+              validityState: projected.validityState,
+              revision,
+            },
+          });
+          return {
+            status: 200,
+            body: { versionId: version.id, revision, changed: true },
+          };
+        }
+      );
+      return commandResult(outcome);
+    }
+  );
 }

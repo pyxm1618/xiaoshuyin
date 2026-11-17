@@ -190,6 +190,7 @@ CREATE TABLE professional_knowledge_approval_evidence (
   effective_from         timestamptz NOT NULL,
   effective_to           timestamptz,
   professional_content_package_ref jsonb,
+  scene_binding_ref      jsonb NOT NULL,
   consumed_at            timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT professional_knowledge_approval_evidence_proof_key
     UNIQUE (knowledge_version_id, approval_proof_ref),

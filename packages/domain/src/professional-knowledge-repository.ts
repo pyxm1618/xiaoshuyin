@@ -395,7 +395,15 @@ export async function appendProfessionalKnowledgeReviewEvidence(
 export async function appendConsumedProfessionalApprovalEvidence(
   tx: Tx,
   versionId: string,
-  proof: ProfessionalApprovalProof
+  proof: ProfessionalApprovalProof,
+  sceneBindingRef: {
+    readonly sceneCode: string;
+    readonly scenePackageVersion: string;
+    readonly knowledgeId: string;
+    readonly semanticVersion: string;
+    readonly contentHash: string;
+    readonly sourceSetHash: string;
+  }
 ): Promise<void> {
   await tx.query(
     `INSERT INTO professional_knowledge_approval_evidence
@@ -403,8 +411,8 @@ export async function appendConsumedProfessionalApprovalEvidence(
         approval_scope, reviewer_identity, reviewer_account_id, reviewer_person_id,
         staff_assignment_ref, qualification_ref, qualification_scope,
         reviewed_at, effective_from, effective_to,
-        professional_content_package_ref)
-     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15::jsonb)
+        professional_content_package_ref, scene_binding_ref)
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15::jsonb,$16::jsonb)
      ON CONFLICT (knowledge_version_id, approval_proof_ref) DO NOTHING`,
     [
       versionId,
@@ -424,6 +432,7 @@ export async function appendConsumedProfessionalApprovalEvidence(
       proof.professionalContentPackageRef === undefined
         ? null
         : JSON.stringify(proof.professionalContentPackageRef),
+      JSON.stringify(sceneBindingRef),
     ]
   );
 }
@@ -455,4 +464,119 @@ export async function appendProfessionalKnowledgeAudit(
       JSON.stringify(input.metadata),
     ]
   );
+}
+
+
+export async function releaseProfessionalKnowledgeVersion(
+  tx: Tx,
+  input: {
+    versionId: string;
+    expectedRevision: number;
+    effectiveFrom: Date;
+  }
+): Promise<number> {
+  const updated = await tx.query<{ revision: number }>(
+    `UPDATE professional_knowledge_versions
+        SET lifecycle_status = 'PUBLISHED',
+            released_at = clock_timestamp(),
+            effective_from = $3,
+            revision = revision + 1
+      WHERE id = $1
+        AND revision = $2
+        AND lifecycle_status = 'CANDIDATE'
+        AND review_state = 'CURRENT'
+        AND validity_state = 'VALID'
+      RETURNING revision`,
+    [input.versionId, input.expectedRevision, input.effectiveFrom]
+  );
+  if (updated.rowCount !== 1) {
+    throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_RELEASE_CONFLICT'), {
+      code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+    });
+  }
+  return updated.rows[0]!.revision;
+}
+
+export async function getProfessionalKnowledgePredecessorId(
+  tx: Tx,
+  versionId: string
+): Promise<string | null> {
+  const { rows } = await tx.query<{ supersedes_version_id: string | null }>(
+    `SELECT supersedes_version_id
+       FROM professional_knowledge_versions
+      WHERE id = $1`,
+    [versionId]
+  );
+  return rows[0]?.supersedes_version_id ?? null;
+}
+
+export async function markProfessionalKnowledgeVersionSuperseded(
+  tx: Tx,
+  input: { versionId: string }
+): Promise<void> {
+  const updated = await tx.query(
+    `UPDATE professional_knowledge_versions
+        SET lifecycle_status = 'SUPERSEDED',
+            revision = revision + 1
+      WHERE id = $1 AND lifecycle_status = 'PUBLISHED'`,
+    [input.versionId]
+  );
+  if (updated.rowCount !== 1) {
+    throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_SUPERSEDE_CONFLICT'), {
+      code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+    });
+  }
+}
+
+export async function retireProfessionalKnowledgeVersion(
+  tx: Tx,
+  input: { versionId: string; expectedRevision: number }
+): Promise<number> {
+  const updated = await tx.query<{ revision: number }>(
+    `UPDATE professional_knowledge_versions
+        SET lifecycle_status = 'RETIRED',
+            revision = revision + 1
+      WHERE id = $1
+        AND revision = $2
+        AND lifecycle_status IN ('CANDIDATE','PUBLISHED')
+      RETURNING revision`,
+    [input.versionId, input.expectedRevision]
+  );
+  if (updated.rowCount !== 1) {
+    throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_RETIRE_CONFLICT'), {
+      code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+    });
+  }
+  return updated.rows[0]!.revision;
+}
+
+export async function applyProfessionalKnowledgeDependencyState(
+  tx: Tx,
+  input: {
+    versionId: string;
+    expectedRevision: number;
+    reviewState: ProfessionalKnowledgeVersionSnapshot['reviewState'];
+    validityState: ProfessionalKnowledgeVersionSnapshot['validityState'];
+  }
+): Promise<number> {
+  const updated = await tx.query<{ revision: number }>(
+    `UPDATE professional_knowledge_versions
+        SET review_state = $3,
+            validity_state = $4,
+            revision = revision + 1
+      WHERE id = $1 AND revision = $2
+      RETURNING revision`,
+    [
+      input.versionId,
+      input.expectedRevision,
+      input.reviewState,
+      input.validityState,
+    ]
+  );
+  if (updated.rowCount !== 1) {
+    throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_DEPENDENCY_CONFLICT'), {
+      code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+    });
+  }
+  return updated.rows[0]!.revision;
 }
