@@ -38,6 +38,8 @@ export type Action =
   // Slice 12 Digital Use Assessment Scene. These reuse FAMILY_MANAGEMENT and
   // never promote participant presence into Assessment authority.
   | 'CASE_READ_ASSESSMENT_SCENE' | 'CASE_RESPOND_ASSESSMENT_SCENE'
+  // Slice 17 bounded family consumption. This never grants Knowledge admin.
+  | 'CASE_READ_PROFESSIONAL_KNOWLEDGE'
   // Narrow Authorization-owner seam for Slice 14. This action authorizes only
   // the authenticated child Contract party to attempt confirmation of one
   // exact phone-use Contract version; Contract lifecycle remains domain-owned.
@@ -61,7 +63,8 @@ export type Purpose =
   | 'PARTICIPATION' | 'IDENTITY_BINDING' | 'SAFETY_RESOLUTION'
   // Existing Digital Use stream identity; deliberately distinct from
   // PARTICIPATION, FAMILY_MANAGEMENT and GUARDIAN_CONSENT.
-  | 'PHONE_USE_CONTRACT';
+  | 'PHONE_USE_CONTRACT'
+  | 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION';
 
 /**
  * Structured resource contract (authorization-and-rls.md §2.1).
@@ -235,6 +238,7 @@ const REGISTERED_ACTIONS: Action[] = [
   'CASE_CORRECT_PROBLEM_FORMULATION', 'CASE_REASSESS_FROM_FORMULATION',
   'CASE_ENTER_SAFETY_HOLD', 'CASE_RESOLVE_RISK',
   'CASE_READ_ASSESSMENT_SCENE', 'CASE_RESPOND_ASSESSMENT_SCENE',
+  'CASE_READ_PROFESSIONAL_KNOWLEDGE',
   'PHONE_USE_CONTRACT_CONFIRM_SELF',
   'PARTICIPATION_INVITE_CREATE', 'PARTICIPATION_READ_SELF',
   'PARTICIPATION_ACCEPT_SELF', 'PARTICIPATION_DECLINE_SELF',
@@ -247,6 +251,7 @@ const REGISTERED_ACTIONS: Action[] = [
 const REGISTERED_PURPOSES: Purpose[] = [
   'SELF_IDENTITY', 'FAMILY_MANAGEMENT', 'GUARDIAN_CONSENT', 'PARTICIPATION', 'IDENTITY_BINDING',
   'PHONE_USE_CONTRACT', 'SAFETY_RESOLUTION',
+  'PROFESSIONAL_KNOWLEDGE_CONSUMPTION',
 ];
 
 const BINDING_ACTIONS: Action[] = [
@@ -274,6 +279,7 @@ const CASE_ACTIONS: Action[] = [
   'CASE_CORRECT_PROBLEM_FORMULATION', 'CASE_REASSESS_FROM_FORMULATION',
   'CASE_ENTER_SAFETY_HOLD', 'CASE_RESOLVE_RISK',
   'CASE_READ_ASSESSMENT_SCENE', 'CASE_RESPOND_ASSESSMENT_SCENE',
+  'CASE_READ_PROFESSIONAL_KNOWLEDGE',
 ];
 
 const PHONE_USE_CONTRACT_ACTIONS: Action[] = [
@@ -470,6 +476,26 @@ function decideCaseAction(
     }
 
     return allow(false, input.purpose, false, 'SAFETY_RESOLVER');
+  }
+
+  // Slice 17 family consumption is a separate bounded purpose. It reuses the
+  // same verified Family/Case facts but cannot authorize Knowledge admin.
+  if (input.action === 'CASE_READ_PROFESSIONAL_KNOWLEDGE') {
+    if (input.purpose !== 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION') {
+      return deny('UNSUPPORTED_PURPOSE');
+    }
+    if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
+    const manager = facts.familyCreatedByPersonId === actorPersonId;
+    if (!manager) return deny('NOT_FAMILY_MANAGER');
+    if (input.case === null) return deny('CASE_CONTEXT_REQUIRED');
+    if (input.resource.type !== 'CASE') return deny('NOT_FAMILY_MEMBER');
+    if (
+      input.resource.familyId !== input.family.familyId ||
+      input.resource.caseId !== input.case.caseId
+    ) {
+      return deny('NOT_FAMILY_MEMBER');
+    }
+    return allow(true, input.purpose);
   }
 
   // b. Ordinary Case management reuses FAMILY_MANAGEMENT; no Staff fact can

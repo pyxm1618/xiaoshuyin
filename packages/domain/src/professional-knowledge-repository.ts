@@ -580,3 +580,79 @@ export async function applyProfessionalKnowledgeDependencyState(
   }
   return updated.rows[0]!.revision;
 }
+
+
+export async function getProfessionalKnowledgeVersion(
+  tx: Tx,
+  versionId: string
+): Promise<ProfessionalKnowledgeVersionSnapshot | null> {
+  const version = await tx.query<KnowledgeVersionDbRow>(
+    `SELECT
+       v.id, v.knowledge_id, i.knowledge_key, v.semantic_version, v.revision,
+       v.lifecycle_status, v.review_state, v.validity_state, v.content,
+       v.content_hash, v.source_set_hash, v.scope_metadata, v.locale,
+       v.released_at, v.effective_from, v.effective_to
+     FROM professional_knowledge_versions v
+     JOIN professional_knowledge_items i ON i.id = v.knowledge_id
+     WHERE v.id = $1`,
+    [versionId]
+  );
+  const row = version.rows[0];
+  if (!row) return null;
+  const sources = await tx.query<KnowledgeSourceDbRow>(
+    `SELECT source_ref, source_version, source_hash, locator, snapshot_metadata
+       FROM professional_knowledge_sources
+      WHERE knowledge_version_id = $1
+      ORDER BY ordinal`,
+    [versionId]
+  );
+  return {
+    id: row.id,
+    knowledgeId: row.knowledge_id,
+    knowledgeKey: row.knowledge_key,
+    semanticVersion: row.semantic_version,
+    revision: row.revision,
+    lifecycleStatus: row.lifecycle_status,
+    reviewState: row.review_state,
+    validityState: row.validity_state,
+    content: row.content,
+    contentHash: row.content_hash,
+    sourceSetHash: row.source_set_hash,
+    sources: sources.rows.map((source) => ({
+      sourceRef: source.source_ref,
+      sourceVersion: source.source_version,
+      sourceHash: source.source_hash,
+      locator: source.locator,
+      metadata: source.snapshot_metadata,
+    })),
+    scope: row.scope_metadata,
+    releasedAt: iso(row.released_at),
+    effectiveFrom: iso(row.effective_from),
+    effectiveTo: iso(row.effective_to),
+  };
+}
+
+export interface ProfessionalKnowledgeAuditRow {
+  id: string;
+  actor_account_id: string;
+  event_type: string;
+  resource_id: string;
+  metadata: Readonly<Record<string, unknown>>;
+  occurred_at: Date;
+}
+
+export async function readProfessionalKnowledgeAuditHistory(
+  tx: Tx,
+  versionId: string
+): Promise<ProfessionalKnowledgeAuditRow[]> {
+  const { rows } = await tx.query<ProfessionalKnowledgeAuditRow>(
+    `SELECT id, actor_account_id, event_type, resource_id, metadata, occurred_at
+       FROM business_audit_events
+      WHERE family_id IS NULL
+        AND resource_type = 'PROFESSIONAL_KNOWLEDGE'
+        AND resource_id = $1
+      ORDER BY occurred_at, id`,
+    [versionId]
+  );
+  return rows;
+}
