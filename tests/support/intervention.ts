@@ -73,6 +73,7 @@ export function professionalProof(
 ): InterventionProfessionalAuthorityProof {
   return {
     approvalProofRef: 'TEST_APPROVAL:1',
+    artifactIdentity: 'TEST_APPROVAL_ARTIFACT:1',
     definitionId: '00000000-0000-7000-8000-000000000016',
     definitionVersion: 1,
     contentHash: 'a'.repeat(64),
