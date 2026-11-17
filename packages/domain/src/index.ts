@@ -71,3 +71,5 @@ export * from './phone-use-contract-repository.js';
 
 // Slice 17 — Professional Knowledge Foundation domain contracts.
 export * from './professional-knowledge.js';
+
+export * from './professional-knowledge-repository.js';
