@@ -165,7 +165,10 @@ export function hashProfessionalKnowledgeSourceSet(
  * It binds the complete release-affecting Knowledge identity and scope.
  */
 export function hashProfessionalKnowledgeApprovalBinding(
-  value: ProfessionalKnowledgeVersionSnapshot
+  value: Pick<
+    ProfessionalKnowledgeVersionSnapshot,
+    'knowledgeId' | 'knowledgeKey' | 'semanticVersion' | 'contentHash' | 'sourceSetHash' | 'scope'
+  >
 ): string {
   const scope = value.scope;
   return sha256(canonicalize({
