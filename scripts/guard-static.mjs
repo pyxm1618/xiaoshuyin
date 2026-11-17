@@ -908,7 +908,7 @@ function checkProfessionalKnowledgeBoundaries(relPath, content, report) {
     const normalized = normalizeSql(content);
     for (const table of SLICE17_FORBIDDEN_OWNER_TABLES) {
       const pattern = new RegExp(
-        `\\bCREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:${SQL_IDENT}\\s*\\.\\s*)?["'\\`]?${table}["'\\`]?\\b`,
+        `\\bCREATE\\s+(?:UNLOGGED\\s+)?TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?(?:${SQL_IDENT}\\s*\\.\\s*)?[\"']?${table}[\"']?\\b`,
         'i'
       );
       const match = pattern.exec(normalized);
