@@ -432,7 +432,7 @@ export async function resolveAndValidateKnowledgeApproval(input: {
     provider: providerResult,
     staffAuthority: staff,
     qualification,
-    now: input.now,
+    ...(input.now === undefined ? {} : { now: input.now }),
   });
 }
 
@@ -601,7 +601,7 @@ export async function releaseKnowledgeVersion(input: {
             qualificationProvider,
             mode: 'REVALIDATE',
             proofId: input.approvalProofId,
-            now: input.now,
+            ...(input.now === undefined ? {} : { now: input.now }),
           });
           if (approval.status === 'UNAVAILABLE') unavailable(approval.dependency);
           if (approval.status !== 'VALID') invalidAuthority(approval.reason);
@@ -754,7 +754,9 @@ export async function propagateKnowledgeDependencyImpact(input: {
         },
         impact: input.impact,
         exactDependent: input.exactDependent,
-        materialImpact: input.materialImpact,
+        ...(input.materialImpact === undefined
+          ? {}
+          : { materialImpact: input.materialImpact }),
       });
       const stateChanged =
         projected.reviewState !== version.reviewState ||
