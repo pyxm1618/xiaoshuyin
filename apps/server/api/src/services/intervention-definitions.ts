@@ -317,13 +317,23 @@ async function terminalTransition(
           finalAuthority.assignmentRef !== authority.assignmentRef ||
           finalAuthority.qualificationRef !== authority.qualificationRef
         ) throw Object.assign(new Error('INTERVENTION_DEPENDENCY_UNAVAILABLE'), { code: 'INTERVENTION_DEPENDENCY_UNAVAILABLE' });
+        const chainIdentity = await getExactInterventionDefinition(tx, input.definition, false);
+        if (chainIdentity === null) {
+          throw Object.assign(new Error('INTERVENTION_DEFINITION_STALE_REVISION'), {
+            code: 'INTERVENTION_DEFINITION_STALE_REVISION',
+          });
+        }
+        await lockInterventionDefinitionChain(
+          tx,
+          chainIdentity.sceneId,
+          chainIdentity.interventionCode
+        );
         const current = await getExactInterventionDefinition(tx, input.definition, true);
         if (
           current === null ||
           current.revision !== input.definition.expectedRevision ||
           (current.state !== 'CANDIDATE' && current.state !== 'CURRENT')
         ) throw Object.assign(new Error('INTERVENTION_DEFINITION_STALE_REVISION'), { code: 'INTERVENTION_DEFINITION_STALE_REVISION' });
-        await lockInterventionDefinitionChain(tx, current.sceneId, current.interventionCode);
         const changed = await transitionInterventionDefinitionStateCas(tx, {
           id: current.id,
           expectedRevision: current.revision,
