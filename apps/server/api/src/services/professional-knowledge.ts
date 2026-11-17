@@ -346,7 +346,8 @@ export async function recordKnowledgeReview(input: {
             accountId: input.accountId,
             personId: input.personId,
           });
-          if (staff.status !== 'RESOLVED') invalidAuthority('STAFF_AUTHORITY_INVALID');
+          if (staff.status === 'INVALID') invalidAuthority('STAFF_AUTHORITY_INVALID');
+          if (staff.status === 'UNAVAILABLE') unavailable('STAFF_AUTHORITY');
 
           const authorityNow = input.now ?? new Date();
           const reviewedAt = input.reviewedAt ?? authorityNow;
