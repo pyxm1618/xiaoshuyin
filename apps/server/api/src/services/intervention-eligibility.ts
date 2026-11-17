@@ -415,11 +415,6 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
   }
 
-  const validAgeYears =
-    ageDevelopment.ageYears === null || Number.isFinite(ageDevelopment.ageYears)
-      ? ageDevelopment.ageYears
-      : null;
-
   const result = evaluateInterventionEligibility({
     authorization: 'PASS',
     case: {
@@ -484,7 +479,7 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         finalProfessional.status === 'VALID' ? null : finalProfessional.reason,
     },
     packageInclusion,
-    ageYears: validAgeYears,
+    ageYears: ageDevelopment.ageYears,
     developmentStages: ageDevelopment.developmentStages,
     facts,
     participation,
