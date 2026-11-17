@@ -482,3 +482,26 @@ export async function withInviteTokenTransaction<T>(
     return fn(tx);
   });
 }
+
+
+/**
+ * Slice 17 — global Professional Knowledge administration transaction.
+ * Reuses identity context and the existing Staff Authority owner; there is no
+ * Family role or credential/qualification fact created here.
+ */
+export async function withProfessionalKnowledgeAdminTransaction<T>(
+  pool: pg.Pool,
+  opts: { accountId: string; assignmentId: string },
+  fn: (tx: TxClient) => Promise<T>
+): Promise<T> {
+  return withTransactionClient(pool, async (client) => {
+    await client.query(
+      'SELECT app.set_identity_context($1, $2)',
+      [opts.accountId, 'PROFESSIONAL_KNOWLEDGE_ADMIN']
+    );
+    await client.query('SELECT app.set_professional_review_context($1)', [
+      opts.assignmentId,
+    ]);
+    return fn(client);
+  });
+}
