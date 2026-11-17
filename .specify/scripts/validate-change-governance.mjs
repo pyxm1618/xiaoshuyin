@@ -691,7 +691,7 @@ function parseTaskRecords(content, checkedOnly = false) {
 
 function extractVerificationPatterns(verify) {
   if (typeof verify !== "string") return [];
-  return [...new Set(verify.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.\/-*?]+/g) || [])];
+  return [...new Set(verify.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.*?\/-]+/g) || [])];
 }
 
 function globMatches(pattern, value) {

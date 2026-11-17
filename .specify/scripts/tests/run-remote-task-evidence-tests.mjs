@@ -20,7 +20,7 @@ const canonical = JSON.parse(
 const canonicalTasks = fs.readFileSync(path.join(root, canonical.taskFile), "utf8");
 
 function verificationPatterns(verify) {
-  return [...new Set((verify?.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.\/-*?]+/g)) || [])];
+  return [...new Set((verify?.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.*?\/-]+/g)) || [])];
 }
 function globMatches(pattern, value) {
   let source = "";
