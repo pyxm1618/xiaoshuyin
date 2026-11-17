@@ -479,7 +479,7 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     expect(after.rows[0]!.count).toBe(before.rows[0]!.count);
   });
 
-  it('blocks when reviewer authority proof changes between resolve and final revalidation', async () => {
+  it('preserves final Staff-authority invalidity when reviewer authority is revoked before decision', async () => {
     const f = await fixture('proof-drift-' + crypto.randomUUID());
     const exactPackage: DigitalUseInterventionInclusionProvider = {
       async resolve(input) {
@@ -524,7 +524,7 @@ describe('Slice 16 current eligibility snapshot / audit integration', () => {
     expect(result.allowed).toBe(false);
     expect(result.approvalStatus).toBe('INVALID');
     expect(result.professionalAuthorityBlockers).toContain(
-      'APPROVAL_PROOF_CHANGED'
+      'STAFF_AUTHORITY_INVALID'
     );
   });
 
