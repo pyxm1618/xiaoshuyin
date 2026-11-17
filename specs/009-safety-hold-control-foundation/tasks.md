@@ -2,7 +2,7 @@
 
 ## Governance Task Index
 
-These lines are a machine-readable governance index for the existing T901–T920 contracts below. They keep the same Task IDs, order and dependencies. The checkbox syntax is governance metadata only; it does not assert or alter implementation completion state.
+These lines are the machine-readable historical completion index for the existing T901–T920 contracts below. They keep the same Task IDs, order and dependencies. `[x]` is evidence-backed by `.specify/task-evidence/009-safety-hold-control-foundation.json`; no task contract or product semantics is altered by this reconciliation.
 
 - [x] T901 Development-start environment isolation and input reconciliation [REQ:plan §24 Implement Gate] [VERIFY:clean independent worktree + baseline CI-equivalent verification + latest-main/migration/shared-vocabulary reconciliation]
 - [x] T902 Establish the narrow Drizzle §7.0 foundation without weakening identity/RLS defence [REQ:FR-027; plan §5 Drizzle Strategy] [VERIFY:Drizzle CLI/config/schema-loading smoke + migrated-DB schema parity + same-client identity/Family/RLS transaction tests]
@@ -25,7 +25,7 @@ These lines are a machine-readable governance index for the existing T901–T920
 - [x] T919 Reconcile migration, RLS and existing shared-regression evidence after parallel development [REQ:FR-018,FR-019,FR-027; plan §§16,24] [VERIFY:latest-main re-fetch + migration-order/CHECK/grant reconciliation + fresh/upgrade/replay/failed-migration regressions]
 - [x] T920 Final combined regression, acceptance proof and scope closeout [REQ:FR-001 through FR-028; plan §§17,23,24] [VERIFY:focused Safety suites + shared DB/migration regressions + scope-negative scans + bun run guard:static + bun run test -- --run + bun run verify-all + changed-file review]
 
-Status: **READY FOR DEVELOPMENT after Audit 1 PASS**
+Status: **IMPLEMENTATION MERGED / POST-MERGE CI REMEDIATION MERGED / TASK TRUTH RECONCILED**
 
 These tasks are ordered by dependency. A Development AI executes them; it may not reopen product scope.
 
