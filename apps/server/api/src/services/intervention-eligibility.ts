@@ -8,7 +8,7 @@ import {
   effectiveParticipationState,
   evaluateInterventionEligibility,
   getCaseForUpdate,
-  getParticipationById,
+  lockParticipationById,
   getSceneNodeState,
   isProblemFormulationAuthoritativeExecutionBasis,
   lockCurrentProblemFormulation,
@@ -122,12 +122,16 @@ export const productionInterventionOwnerAdapters:
       }
     ): Promise<Readonly<Record<string, InterventionGateState>>> {
       const result: Record<string, InterventionGateState> = {};
-      for (const ref of input.requiredRefs) {
+      // Deterministic owner-row lock order prevents two concurrent eligibility
+      // reads with the same required Participation set in different semantic
+      // array orders from creating an A<->B row-lock cycle.
+      const orderedRefs = [...new Set(input.requiredRefs)].sort();
+      for (const ref of orderedRefs) {
         if (!UUID_REF.test(ref)) {
           result[ref] = 'UNKNOWN';
           continue;
         }
-        const row = await getParticipationById(tx, ref);
+        const row = await lockParticipationById(tx, ref);
         if (
           row === null ||
           row.family_id !== input.familyId ||
@@ -362,35 +366,6 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       ? null
       : await getExactInterventionDefinition(tx, input.definition);
 
-  let finalProfessional = professional;
-  if (professional.status === 'VALID' && finalDefinition !== null) {
-    const revalidated = await resolveInterventionProfessionalAuthority(
-      professionalProvider,
-      {
-        definitionId: finalDefinition.id,
-        definitionVersion: finalDefinition.version,
-        contentHash: finalDefinition.contentHash,
-        sceneId: finalDefinition.sceneId,
-        sourceRefs: finalDefinition.semantic.professional_source_refs,
-        approvalScope: finalDefinition.sceneId,
-      },
-      'REVALIDATE',
-      Date.now(),
-      {
-        approvalProofRef: professional.approvalProofRef,
-        artifactIdentity: professional.artifactIdentity,
-      }
-    );
-    finalProfessional =
-      revalidated.status === 'VALID' &&
-      revalidated.approvalProofRef === professional.approvalProofRef &&
-      revalidated.artifactIdentity === professional.artifactIdentity &&
-      revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
-      revalidated.qualificationRef === professional.qualificationRef
-        ? revalidated
-        : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
-  }
-
   let packageInclusion: InterventionGateState = 'UNKNOWN';
   if (finalDefinition !== null && scenePackageVersion !== null) {
     try {
@@ -404,6 +379,56 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
     } catch {
       // Technical package-owner failure is not equivalent to "not included".
       packageInclusion = 'UNKNOWN';
+    }
+  }
+
+  // All other async authority dependencies are now complete. Re-establish the
+  // exact original Professional Approval proof last, and capture the timestamp
+  // used by the synchronous lifecycle/effective-period validation. No external
+  // authority await occurs between this point and deterministic eligibility.
+  let finalProfessional = professional;
+  let decisionTimestamp = Date.now();
+  if (professional.status === 'VALID' && finalDefinition !== null) {
+    const revalidated = await resolveInterventionProfessionalAuthority(
+      professionalProvider,
+      {
+        definitionId: finalDefinition.id,
+        definitionVersion: finalDefinition.version,
+        contentHash: finalDefinition.contentHash,
+        sceneId: finalDefinition.sceneId,
+        sourceRefs: finalDefinition.semantic.professional_source_refs,
+        approvalScope: finalDefinition.sceneId,
+      },
+      'REVALIDATE',
+      () => {
+        decisionTimestamp = Date.now();
+        return decisionTimestamp;
+      },
+      {
+        approvalProofRef: professional.approvalProofRef,
+        artifactIdentity: professional.artifactIdentity,
+      }
+    );
+    if (revalidated.status !== 'VALID') {
+      finalProfessional = revalidated;
+    } else {
+      finalProfessional =
+        revalidated.approvalProofRef === professional.approvalProofRef &&
+        revalidated.artifactIdentity === professional.artifactIdentity &&
+        revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
+        revalidated.qualificationRef === professional.qualificationRef &&
+        revalidated.proof.staffAuthority.assignmentRef ===
+          professional.proof.staffAuthority.assignmentRef &&
+        revalidated.proof.staffAuthority.scopeRef ===
+          professional.proof.staffAuthority.scopeRef &&
+        revalidated.proof.professionalQualification.scopeRef ===
+          professional.proof.professionalQualification.scopeRef &&
+        revalidated.proof.reviewedAt === professional.proof.reviewedAt &&
+        revalidated.proof.effectiveFrom === professional.proof.effectiveFrom &&
+        revalidated.proof.effectiveTo === professional.proof.effectiveTo &&
+        revalidated.proof.publishedAt === professional.proof.publishedAt
+          ? revalidated
+          : ({ status: 'INVALID', reason: 'APPROVAL_PROOF_CHANGED' } as const);
     }
   }
 
@@ -523,6 +548,7 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       caseRevision: result.caseRevision,
       formulationVersion: result.formulationVersion,
       dependencyRevisionRefs: result.dependencyRevisionRefs,
+      decisionAt: new Date(decisionTimestamp).toISOString(),
     },
   });
 

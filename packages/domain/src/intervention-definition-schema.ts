@@ -30,6 +30,7 @@ export type InterventionConditionOperator =
   | 'EQUALS'
   | 'NOT_EQUALS'
   | 'IN'
+  | 'NOT_IN'
   | 'EXISTS';
 
 export interface InterventionFactCondition {
@@ -120,13 +121,20 @@ function condition(value: unknown, field: string): InterventionFactCondition {
   if (Object.keys(row).some((key) => !allowed.includes(key))) invalid(field);
   const factRef = nonEmptyString(row['fact_ref'], field + '.fact_ref');
   const operator = row['operator'];
-  if (operator !== 'EQUALS' && operator !== 'NOT_EQUALS' && operator !== 'IN' && operator !== 'EXISTS') {
+  if (
+    operator !== 'EQUALS' &&
+    operator !== 'NOT_EQUALS' &&
+    operator !== 'IN' &&
+    operator !== 'NOT_IN' &&
+    operator !== 'EXISTS'
+  ) {
     invalid(field + '.operator');
   }
   if (operator === 'EXISTS') {
     if (Object.prototype.hasOwnProperty.call(row, 'value')) invalid(field + '.value');
     return { fact_ref: factRef, operator };
   }
+
   const conditionValue = row['value'];
   const scalar =
     typeof conditionValue === 'string' ||
@@ -141,11 +149,21 @@ function condition(value: unknown, field: string): InterventionFactCondition {
         (typeof entry === 'number' && Number.isFinite(entry)) ||
         typeof entry === 'boolean'
     );
-  if (!scalar && !list) invalid(field + '.value');
+
+  if (operator === 'EQUALS' || operator === 'NOT_EQUALS') {
+    if (!scalar) invalid(field + '.value');
+    return {
+      fact_ref: factRef,
+      operator,
+      value: conditionValue as string | number | boolean,
+    };
+  }
+
+  if (!list) invalid(field + '.value');
   return {
     fact_ref: factRef,
     operator,
-    value: conditionValue as string | number | boolean | readonly (string | number | boolean)[],
+    value: [...(conditionValue as readonly (string | number | boolean)[])],
   };
 }
 
@@ -214,10 +232,15 @@ export function parseInterventionDefinitionSemanticPayload(value: unknown): Inte
 }
 
 export function canonicalInterventionDefinitionJson(payload: InterventionDefinitionSemanticPayload): string {
+  // PostgreSQL jsonb does not preserve nested object key order. Re-run the
+  // validated semantic parser so a DB-rehydrated value is reconstructed in
+  // the same deterministic shape that was originally hashed before INSERT.
+  // For an already prepared semantic snapshot this is hash-preserving.
+  const canonical = parseInterventionDefinitionSemanticPayload(payload);
   return (
     '{' +
     INTERVENTION_DEFINITION_SEMANTIC_FIELDS.map(
-      (field) => JSON.stringify(field) + ':' + JSON.stringify(payload[field])
+      (field) => JSON.stringify(field) + ':' + JSON.stringify(canonical[field])
     ).join(',') +
     '}'
   );

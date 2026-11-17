@@ -7,6 +7,7 @@ import {
   retireInterventionDefinition,
 } from '../../apps/server/api/src/services/intervention-definitions.js';
 import { interventionDefinitionContentHash } from '../../packages/domain/src/index.js';
+import { withIdentityTransaction } from '../../apps/server/api/src/db/tx.js';
 import { createAdminPool } from '../setup/db.js';
 import {
   TEST_ONLY_QUALIFICATION_PROVIDER,
@@ -328,6 +329,71 @@ describe('Slice 16 InterventionDefinition DB runtime', () => {
         [predecessor.id, 'f'.repeat(64)]
       )
     ).rejects.toMatchObject({ code: '23514' });
+  });
+
+  it('forward DB guard rejects id mutation even when the rest of the terminal transition is valid', async () => {
+    const code =
+      'TEST_IMMUTABLE_ID_' +
+      crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase();
+    const created = await createInterventionDefinitionCandidate(
+      appPool,
+      {
+        actor: actor(),
+        sceneId: 'DIGITAL_USE',
+        interventionCode: code,
+        semantic: interventionSemantic(),
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: key('immutable-id-create'),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    );
+    const replacementId = crypto.randomUUID();
+
+    await expect(
+      withIdentityTransaction(
+        appPool,
+        { accountId, purpose: 'SELF_IDENTITY' },
+        async (tx) =>
+          tx.query(
+            "UPDATE intervention_definitions " +
+              "SET id=$2,definition_state='RETIRED',revision=revision+1," +
+              "retired_at=clock_timestamp() WHERE id=$1",
+            [created.id, replacementId]
+          )
+      )
+    ).rejects.toMatchObject({ code: '23514' });
+
+    const unchanged = await admin.query<{
+      id: string;
+      definition_state: string;
+      revision: number;
+    }>(
+      'SELECT id,definition_state,revision FROM intervention_definitions WHERE id=$1',
+      [created.id]
+    );
+    expect(unchanged.rows[0]).toEqual({
+      id: created.id,
+      definition_state: 'CANDIDATE',
+      revision: 1,
+    });
+
+    const retired = await retireInterventionDefinition(
+      appPool,
+      {
+        actor: actor(),
+        definition: {
+          id: created.id,
+          version: created.version,
+          contentHash: created.contentHash,
+          expectedRevision: created.revision,
+        },
+        approvalScope: 'DIGITAL_USE',
+        idempotencyKey: key('immutable-id-valid-retire'),
+      },
+      TEST_ONLY_QUALIFICATION_PROVIDER
+    );
+    expect(retired.id).toBe(created.id);
+    expect(retired.state).toBe('RETIRED');
   });
 
   it('registers only the bounded Slice 16 command vocabulary in the shared idempotency store', async () => {

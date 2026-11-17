@@ -1,40 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { createHash } from "node:crypto";
 import {
   AUTHORITY_SNAPSHOT_PATH,
   validateAuthoritySnapshot,
 } from "./authority-inputs.mjs";
+import {
+  isExactReviewedFrozenFeatureSet,
+} from "./frozen-feature-compatibility.mjs";
 
 const root = process.cwd();
 const errors = [];
-
-const reviewedFrozenFeatureSets = {
-  "016-psychological-behavioral-intervention-contract-authority-reconciliation": {
-    "spec.md": "5bc22645af2008d6f774e39f57bae391fa2543c7",
-    "plan.md": "41300acbce1fd973d478348185f5d8860f4da841",
-    "checklist.md": "f35f31b93758eeb98a2c53cbae1dcdc1f5b6f837",
-    "tasks.md": "76805596e6a3dff389317207d8e4c14040127698",
-  },
-};
-
-function gitBlobSha(rel) {
-  const bytes = fs.readFileSync(path.join(root, rel));
-  return createHash("sha1")
-    .update(Buffer.from(`blob ${bytes.length}\0`))
-    .update(bytes)
-    .digest("hex");
-}
-
-function isExactReviewedFrozenFeatureSet(featureName, dir) {
-  const expected = reviewedFrozenFeatureSets[featureName];
-  if (!expected) return false;
-  return Object.entries(expected).every(
-    ([name, expectedSha]) =>
-      exists(path.join(dir, name)) &&
-      gitBlobSha(path.join(dir, name)) === expectedSha
-  );
-}
 
 function exists(rel) {
   return fs.existsSync(path.join(root, rel));
@@ -133,7 +108,7 @@ if (fs.existsSync(specsRoot)) {
     // provenance contract than rewriting them to match a later template. This
     // compatibility path is intentionally fail-closed: any byte drift in any
     // frozen artifact falls through to the normal current-schema validation.
-    if (isExactReviewedFrozenFeatureSet(entry.name, dir)) continue;
+    if (isExactReviewedFrozenFeatureSet(root, entry.name, dir)) continue;
 
     // A feature directory always starts from a specification.
     if (!hasSpec) {

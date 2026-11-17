@@ -109,6 +109,86 @@ describe('Slice 16 InterventionDefinition schema / canonical hash', () => {
     }
   });
 
+  it('enforces one parser/evaluator condition shape contract', () => {
+    const scalar = (operator: 'EQUALS' | 'NOT_EQUALS') =>
+      interventionSemantic({
+        applicable_conditions: [
+          { fact_ref: 'family.ready', operator, value: true },
+        ],
+      });
+    const list = (operator: 'IN' | 'NOT_IN') =>
+      interventionSemantic({
+        applicable_conditions: [
+          { fact_ref: 'family.state', operator, value: ['READY', 'STABLE'] },
+        ],
+      });
+
+    expect(() => parseInterventionDefinitionSemanticPayload(scalar('EQUALS'))).not.toThrow();
+    expect(() => parseInterventionDefinitionSemanticPayload(scalar('NOT_EQUALS'))).not.toThrow();
+    expect(() => parseInterventionDefinitionSemanticPayload(list('IN'))).not.toThrow();
+    expect(() => parseInterventionDefinitionSemanticPayload(list('NOT_IN'))).not.toThrow();
+
+    for (const condition of [
+      { fact_ref: 'bad.equals', operator: 'EQUALS', value: ['READY'] },
+      { fact_ref: 'bad.notEquals', operator: 'NOT_EQUALS', value: ['READY'] },
+      { fact_ref: 'bad.in', operator: 'IN', value: 'READY' },
+      { fact_ref: 'bad.notIn', operator: 'NOT_IN', value: 'READY' },
+      { fact_ref: 'bad.exists', operator: 'EXISTS', value: true },
+    ]) {
+      expect(() =>
+        parseInterventionDefinitionSemanticPayload(
+          interventionSemantic({
+            applicable_conditions: [condition as never],
+          })
+        )
+      ).toThrowError(/INTERVENTION_DEFINITION_INVALID/);
+    }
+  });
+
+  it('detaches and recursively freezes the canonical semantic snapshot before hashing', () => {
+    const conditionValues = ['READY', 'STABLE'];
+    const steps = ['STEP:A'];
+    const stages = ['ADOLESCENCE'];
+    const semantic = interventionSemantic({
+      applicable_conditions: [
+        { fact_ref: 'family.state', operator: 'IN', value: conditionValues },
+      ],
+      intervention_steps: steps,
+      age_and_development_scope: {
+        min_age_years: 10,
+        max_age_years: 17,
+        development_stages: stages,
+      },
+    });
+    const prepared = prepareInterventionDefinition({
+      sceneId: 'DIGITAL_USE',
+      interventionCode: 'SNAPSHOT_ALIAS',
+      version: 1,
+      semantic,
+    });
+    const before = JSON.stringify(prepared.semantic);
+    const beforeHash = prepared.contentHash;
+
+    conditionValues.push('MUTATED');
+    steps.push('STEP:MUTATED');
+    stages.push('MUTATED_STAGE');
+
+    expect(JSON.stringify(prepared.semantic)).toBe(before);
+    expect(prepared.contentHash).toBe(beforeHash);
+    expect(prepared.contentHash).toBe(
+      interventionDefinitionContentHash(prepared.semantic)
+    );
+    expect(Object.isFrozen(prepared.semantic)).toBe(true);
+    expect(Object.isFrozen(prepared.semantic.applicable_conditions)).toBe(true);
+    expect(
+      Object.isFrozen(prepared.semantic.applicable_conditions[0]!.value)
+    ).toBe(true);
+    expect(Object.isFrozen(prepared.semantic.age_and_development_scope)).toBe(true);
+    expect(
+      Object.isFrozen(prepared.semantic.age_and_development_scope.development_stages)
+    ).toBe(true);
+  });
+
   it('normalizes stable intervention_code and never trusts client version/hash fields', () => {
     const prepared = prepareInterventionDefinition({
       sceneId: 'DIGITAL_USE',
