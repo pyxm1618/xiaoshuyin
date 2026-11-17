@@ -4,6 +4,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createAdminPool } from './setup/db.js';
 import { withProfessionalKnowledgeAdminTransaction } from '../apps/server/api/src/db/tx.js';
 import {
+  editKnowledgeCandidate,
   propagateKnowledgeDependencyImpact,
   readProfessionalKnowledgeMutationOutcome,
   recordKnowledgeReview,
@@ -49,7 +50,9 @@ type SeededKnowledge = {
   knowledgeId: string;
   knowledgeKey: string;
   versionId: string;
+  content: Readonly<Record<string, unknown>>;
   contentHash: string;
+  sources: readonly { sourceRef: string; sourceVersion: string; sourceHash: string; locator: string | null; metadata: Readonly<Record<string, string | number | boolean | null>> }[];
   sourceSetHash: string;
   sourceRef: string;
   scope: ProfessionalKnowledgeScopeMetadata;
@@ -148,7 +151,7 @@ async function seedKnowledge(
      VALUES ($1,1,1,$2,'1',$3,NULL,'{}'::jsonb)`,
     [versionId, sourceRef, 'a'.repeat(64)]
   );
-  return { knowledgeId, knowledgeKey, versionId, contentHash, sourceSetHash, sourceRef, scope };
+  return { knowledgeId, knowledgeKey, versionId, content, contentHash, sources, sourceSetHash, sourceRef, scope };
 }
 
 function qualificationProvider() {
