@@ -267,7 +267,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(89); // + Slice 17 Professional Knowledge RLS policies
+    expect(policyRows[0].count).toBe(90); // + Slice 17 Professional Knowledge RLS policies
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(

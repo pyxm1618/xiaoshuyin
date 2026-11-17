@@ -22,7 +22,7 @@ const EXPECTED_ENUMS = 24; // + independent problem_formulation_review_state (AU
 const EXPECTED_TABLES = 36; // + Slice 17 Professional Knowledge owner tables
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
-const EXPECTED_POLICIES = 89; // + Slice 17 exact Professional Knowledge policies
+const EXPECTED_POLICIES = 90; // + Slice 17 exact Professional Knowledge policies
 const EXPECTED_TRIGGERS = 9; // + Staff mutation serialization + Account serialization + final transition guard
 
 const EXPECTED_ENUM_NAMES = [
