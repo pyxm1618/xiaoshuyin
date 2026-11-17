@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('all 36 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
+  it('all 37 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -32,8 +32,8 @@ describe('RLS', () => {
     const rlsTables = rows.filter((r: any) => r.relrowsecurity);
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
-    // Prior reviewed owners plus Slice 17 Professional Knowledge tables.
-    expect(rlsTables.length).toBe(36);
+    // Prior reviewed owners plus Slice 16 InterventionDefinition and Slice 17 Professional Knowledge tables.
+    expect(rlsTables.length).toBe(37);
     expect(noRlsTables).toEqual([]);
 
     for (const t of rlsTables) {
@@ -41,11 +41,11 @@ describe('RLS', () => {
     }
   });
 
-  it('90 policies exist after Slice 17 Professional Knowledge composition', async () => {
+  it('94 policies exist after Slice 16 + Slice 17 authority composition', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(90);
+    expect(rows.length).toBe(94);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
