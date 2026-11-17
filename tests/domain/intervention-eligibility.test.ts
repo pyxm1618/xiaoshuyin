@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   evaluateInterventionEligibility,
+  parseInterventionDefinitionSemanticPayload,
   type InterventionEligibilityInput,
 } from '../../packages/domain/src/index.js';
-import { interventionDefinition } from '../support/intervention.js';
+import {
+  interventionDefinition,
+  interventionSemantic,
+} from '../support/intervention.js';
 
 const EVIDENCE = 'DIALOGUE_MESSAGE:00000000-0000-7000-8000-000000000001';
 
@@ -107,6 +111,59 @@ describe('Slice 16 deterministic intervention eligibility', () => {
       expect(result.reasonCodes).toContain(row.reason);
     });
   }
+
+  it('parses the condition contract and evaluates that exact parsed semantic end-to-end', () => {
+    const parsed = parseInterventionDefinitionSemanticPayload(
+      interventionSemantic({
+        applicable_conditions: [
+          { fact_ref: 'family.ready', operator: 'EQUALS', value: true },
+          { fact_ref: 'family.mode', operator: 'NOT_EQUALS', value: 'BLOCKED' },
+          { fact_ref: 'family.tags', operator: 'IN', value: ['READY', 'STABLE'] },
+          { fact_ref: 'family.risk', operator: 'NOT_IN', value: ['HIGH', 'CRITICAL'] },
+        ],
+        exclusion_or_contraindication_conditions: [
+          { fact_ref: 'safety.signals', operator: 'IN', value: ['WORSENING'] },
+        ],
+      })
+    );
+    const definition = interventionDefinition(parsed);
+    const base = allowedInput();
+    const common = {
+      ...base,
+      expectedDefinition: {
+        id: definition.id,
+        sceneId: definition.sceneId,
+        interventionCode: definition.interventionCode,
+        version: definition.version,
+        contentHash: definition.contentHash,
+      },
+      definition,
+      facts: {
+        'family.ready': true,
+        'family.mode': 'OPEN',
+        'family.tags': ['READY'],
+        'family.risk': 'LOW',
+        'safety.signals': ['STABLE'],
+      },
+    };
+
+    const allowed = evaluateInterventionEligibility(common);
+    expect(allowed.allowed).toBe(true);
+    expect(allowed.applicableConditionResult).toBe('MATCH');
+
+    const contraindicated = evaluateInterventionEligibility({
+      ...common,
+      facts: {
+        ...common.facts,
+        'safety.signals': ['WORSENING'],
+      },
+    });
+    expect(contraindicated.allowed).toBe(false);
+    expect(contraindicated.exclusionHits).toContain('safety.signals');
+    expect(contraindicated.reasonCodes).toContain(
+      'EXCLUSION_OR_CONTRAINDICATION'
+    );
+  });
 
   it('evaluates scalar equality and list membership deterministically', () => {
     const base = allowedInput();
