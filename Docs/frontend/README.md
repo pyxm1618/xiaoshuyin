@@ -77,9 +77,9 @@ apps/miniprogram/ 与 apps/operations/
 - `design-system/`：视觉与组件 Design System；
 - `screens/`：冻结后的关键页面与屏幕级设计 Authority。
 
-首个正式体验正文预计为：
+首个正式体验正文为：
 
-`experience/v1-gameful-experience-model.md`
+`experience/V1前端体验原则.md`
 
 ## 6. Freeze / Change Rules
 
