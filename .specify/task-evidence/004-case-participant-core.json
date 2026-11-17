@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "featureId": "004-case-participant-core",
   "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/004-case-participant-core/tasks.md",
@@ -8,19 +8,12 @@
   "mergeCommitSha": "d5ea2613a7c4c94c3dbf5182a6a2ec0f86ad7f29",
   "mergedAt": "2026-11-10T01:26:31Z",
   "taskIds": [
-    "T001",
-    "T002",
-    "T003",
-    "T004",
-    "T005",
-    "T006",
     "T007",
     "T008",
     "T009",
     "T010",
     "T011",
     "T012",
-    "T013",
     "T014",
     "T015",
     "T016",
@@ -41,7 +34,6 @@
     "T031",
     "T032",
     "T033",
-    "T034",
     "T035",
     "T036",
     "T037",
@@ -71,7 +63,6 @@
     "T061",
     "T062",
     "T063",
-    "T064",
     "T065",
     "T066",
     "T067",
@@ -92,37 +83,89 @@
     "T082",
     "T083",
     "T084",
-    "T085",
-    "T086",
-    "T087",
     "T088",
-    "T089",
-    "T090",
-    "T091",
-    "T092",
-    "T093",
-    "T094",
-    "T095",
-    "T096",
-    "T097"
+    "T089"
   ],
-  "taskVerificationDigest": "cec9938c796605f307f6287f132714dac998f925",
   "artifactPaths": [
+    ".github/workflows/ci.yml",
     "apps/server/api/src/app.ts",
     "apps/server/api/src/authz.ts",
     "apps/server/api/src/db/tx.ts",
     "apps/server/api/src/idempotency.ts",
+    "scripts/db-evidence.mjs",
     "tests/db/migration-repro.test.ts",
     "tests/db/migration-upgrade-evidence.test.ts",
     "tests/db/participants-constraints.test.ts",
     "tests/db/participants-evidence-boundary.test.ts",
-    ".github/workflows/ci.yml",
-    "scripts/db-evidence.mjs"
+    "tests/db/participants-history.test.ts",
+    "tests/db/participants-live-uniqueness.test.ts",
+    "tests/db/participants-rls.test.ts",
+    "tests/db/participants-schema.test.ts",
+    "tests/db/participants-structure.test.ts",
+    "tests/db/participants-token-view.test.ts",
+    "tests/domain/participants-authorization.test.ts",
+    "tests/domain/participants-domain.test.ts",
+    "tests/domain/participants-token.test.ts",
+    "tests/domain/participation-contracts.test.ts",
+    "tests/domain/participation-env.test.ts",
+    "tests/domain/participation-types.test.ts",
+    "tests/integration/openapi-participations.test.ts",
+    "tests/integration/participations-accept-concurrency.test.ts",
+    "tests/integration/participations-accept.test.ts",
+    "tests/integration/participations-anti-enumeration.test.ts",
+    "tests/integration/participations-audit.test.ts",
+    "tests/integration/participations-authorization.test.ts",
+    "tests/integration/participations-compliance.test.ts",
+    "tests/integration/participations-cross-family.test.ts",
+    "tests/integration/participations-decline.test.ts",
+    "tests/integration/participations-expiry.test.ts",
+    "tests/integration/participations-http-boundary.test.ts",
+    "tests/integration/participations-idempotency.test.ts",
+    "tests/integration/participations-identity-seam.test.ts",
+    "tests/integration/participations-invite-lookup.test.ts",
+    "tests/integration/participations-invite.test.ts",
+    "tests/integration/participations-read.test.ts",
+    "tests/integration/participations-rollback.test.ts",
+    "tests/integration/participations-route-surface.test.ts",
+    "tests/integration/participations-scope.test.ts",
+    "tests/integration/participations-withdraw.test.ts"
   ],
   "verificationPaths": [
     "tests/db/migration-repro.test.ts",
-    "tests/db/migration-upgrade-evidence.test.ts",
-    "tests/db/participants-constraints.test.ts"
+    "tests/db/participants-constraints.test.ts",
+    "tests/db/participants-evidence-boundary.test.ts",
+    "tests/db/participants-history.test.ts",
+    "tests/db/participants-live-uniqueness.test.ts",
+    "tests/db/participants-rls.test.ts",
+    "tests/db/participants-schema.test.ts",
+    "tests/db/participants-structure.test.ts",
+    "tests/db/participants-token-view.test.ts",
+    "tests/domain/participants-authorization.test.ts",
+    "tests/domain/participants-domain.test.ts",
+    "tests/domain/participants-token.test.ts",
+    "tests/domain/participation-contracts.test.ts",
+    "tests/domain/participation-env.test.ts",
+    "tests/domain/participation-types.test.ts",
+    "tests/integration/openapi-participations.test.ts",
+    "tests/integration/participations-accept-concurrency.test.ts",
+    "tests/integration/participations-accept.test.ts",
+    "tests/integration/participations-anti-enumeration.test.ts",
+    "tests/integration/participations-audit.test.ts",
+    "tests/integration/participations-authorization.test.ts",
+    "tests/integration/participations-compliance.test.ts",
+    "tests/integration/participations-cross-family.test.ts",
+    "tests/integration/participations-decline.test.ts",
+    "tests/integration/participations-expiry.test.ts",
+    "tests/integration/participations-http-boundary.test.ts",
+    "tests/integration/participations-idempotency.test.ts",
+    "tests/integration/participations-identity-seam.test.ts",
+    "tests/integration/participations-invite-lookup.test.ts",
+    "tests/integration/participations-invite.test.ts",
+    "tests/integration/participations-read.test.ts",
+    "tests/integration/participations-rollback.test.ts",
+    "tests/integration/participations-route-surface.test.ts",
+    "tests/integration/participations-scope.test.ts",
+    "tests/integration/participations-withdraw.test.ts"
   ],
   "ciRuns": [
     {
@@ -137,5 +180,678 @@
       "conclusion": "success",
       "headSha": "79a3267152b16bce65f668c1a57313956fc885b5"
     }
+  ],
+  "taskVerifications": [
+    {
+      "taskId": "T007",
+      "reqContract": "FR-015 / FR-026 / FR-027 / D-5",
+      "verifyContract": "`bunx vitest run tests/domain/participation-contracts.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/domain/participation-contracts.test.ts"
+      ]
+    },
+    {
+      "taskId": "T008",
+      "reqContract": "FR-026 / FR-027 / D-5",
+      "verifyContract": "`bunx vitest run tests/domain/participation-contracts.test.ts`；`bun run typecheck`",
+      "verificationPaths": [
+        "tests/domain/participation-contracts.test.ts"
+      ]
+    },
+    {
+      "taskId": "T009",
+      "reqContract": "FR-015 / D-14",
+      "verifyContract": "`bunx vitest run tests/domain/participation-env.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/domain/participation-env.test.ts"
+      ]
+    },
+    {
+      "taskId": "T010",
+      "reqContract": "FR-015 / D-14",
+      "verifyContract": "`bunx vitest run tests/domain/participation-env.test.ts`",
+      "verificationPaths": [
+        "tests/domain/participation-env.test.ts"
+      ]
+    },
+    {
+      "taskId": "T011",
+      "reqContract": "FR-001 / FR-002 / D-2 / D-4",
+      "verifyContract": "`bunx vitest run tests/domain/participation-types.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/domain/participation-types.test.ts"
+      ]
+    },
+    {
+      "taskId": "T012",
+      "reqContract": "FR-001 / FR-002 / D-2 / D-4",
+      "verifyContract": "`bunx vitest run tests/domain/participation-types.test.ts`；`bun run typecheck`",
+      "verificationPaths": [
+        "tests/domain/participation-types.test.ts"
+      ]
+    },
+    {
+      "taskId": "T014",
+      "reqContract": "FR-026 / FR-027 / FR-028 / D-5",
+      "verifyContract": "`bunx vitest run tests/integration/openapi-participations.test.ts`；`bun run openapi:check`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/integration/openapi-participations.test.ts"
+      ]
+    },
+    {
+      "taskId": "T015",
+      "reqContract": "FR-001 / FR-002 / FR-029 / D-2 / D-9",
+      "verifyContract": "`bunx vitest run tests/db/participants-schema.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/db/participants-schema.test.ts"
+      ]
+    },
+    {
+      "taskId": "T016",
+      "reqContract": "FR-002 / FR-015 / D-2 / D-4",
+      "verifyContract": "`bunx vitest run tests/db/participants-constraints.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/db/participants-constraints.test.ts"
+      ]
+    },
+    {
+      "taskId": "T017",
+      "reqContract": "FR-004 / FR-029 / D-2 / D-3",
+      "verifyContract": "`bunx vitest run tests/db/participants-constraints.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-constraints.test.ts"
+      ]
+    },
+    {
+      "taskId": "T018",
+      "reqContract": "FR-029 / D-2 / D-10",
+      "verifyContract": "`bunx vitest run tests/db/participants-live-uniqueness.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-live-uniqueness.test.ts"
+      ]
+    },
+    {
+      "taskId": "T019",
+      "reqContract": "FR-021 / D-11",
+      "verifyContract": "`bunx vitest run tests/db/participants-rls.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-rls.test.ts"
+      ]
+    },
+    {
+      "taskId": "T020",
+      "reqContract": "FR-006 / FR-022 / D-11 / D-14 / F-02",
+      "verifyContract": "`bunx vitest run tests/db/participants-token-view.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-token-view.test.ts"
+      ]
+    },
+    {
+      "taskId": "T021",
+      "reqContract": "FR-001 / FR-002 / D-3",
+      "verifyContract": "`bun run db:migrate`；`bunx vitest run tests/db/participants-schema.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-schema.test.ts"
+      ]
+    },
+    {
+      "taskId": "T022",
+      "reqContract": "FR-001 / FR-002 / FR-015 / D-2 / D-3",
+      "verifyContract": "`bun run db:migrate`；`bunx vitest run tests/db/participants-constraints.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-constraints.test.ts"
+      ]
+    },
+    {
+      "taskId": "T023",
+      "reqContract": "FR-002 / FR-004 / FR-029 / D-2 / D-3",
+      "verifyContract": "`bun run db:migrate`；`bunx vitest run tests/db/participants-constraints.test.ts tests/db/participants-live-uniqueness.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-constraints.test.ts",
+        "tests/db/participants-live-uniqueness.test.ts"
+      ]
+    },
+    {
+      "taskId": "T024",
+      "reqContract": "FR-006 / FR-021 / D-11 / D-14 / F-02",
+      "verifyContract": "`bun run db:migrate`；`bunx vitest run tests/db/participants-rls.test.ts tests/db/participants-token-view.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-rls.test.ts",
+        "tests/db/participants-token-view.test.ts"
+      ]
+    },
+    {
+      "taskId": "T025",
+      "reqContract": "FR-016 / FR-021 / FR-023 / D-3 / D-9 / D-12",
+      "verifyContract": "`bun run db:migrate`；`bun run db:evidence`；`bunx vitest run tests/db/migration-repro.test.ts`",
+      "verificationPaths": [
+        "tests/db/migration-repro.test.ts"
+      ]
+    },
+    {
+      "taskId": "T026",
+      "reqContract": "FR-007 / FR-015 / D-4 / D-14",
+      "verifyContract": "`bunx vitest run tests/domain/participants-domain.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/domain/participants-domain.test.ts"
+      ]
+    },
+    {
+      "taskId": "T027",
+      "reqContract": "FR-007 / FR-011 / FR-013 / FR-015 / D-4",
+      "verifyContract": "`bunx vitest run tests/domain/participants-domain.test.ts`",
+      "verificationPaths": [
+        "tests/domain/participants-domain.test.ts"
+      ]
+    },
+    {
+      "taskId": "T028",
+      "reqContract": "FR-015 / FR-031 / D-4 / D-10 / F-04",
+      "verifyContract": "`bunx vitest run tests/domain/participants-domain.test.ts`",
+      "verificationPaths": [
+        "tests/domain/participants-domain.test.ts"
+      ]
+    },
+    {
+      "taskId": "T029",
+      "reqContract": "FR-007 / FR-015 / FR-031 / D-10 / F-03 / F-06",
+      "verifyContract": "`bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-expiry.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-accept-concurrency.test.ts",
+        "tests/integration/participations-expiry.test.ts"
+      ]
+    },
+    {
+      "taskId": "T030",
+      "reqContract": "FR-007 / FR-015 / D-4 / D-14 / F-03",
+      "verifyContract": "`bunx vitest run tests/domain/participants-domain.test.ts`",
+      "verificationPaths": [
+        "tests/domain/participants-domain.test.ts"
+      ]
+    },
+    {
+      "taskId": "T031",
+      "reqContract": "FR-001 / FR-007 / FR-015 / FR-016 / D-2 / D-4 / D-9 / D-10 / F-01",
+      "verifyContract": "`bunx vitest run tests/db/participants-schema.test.ts tests/domain/participants-domain.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-schema.test.ts",
+        "tests/domain/participants-domain.test.ts"
+      ]
+    },
+    {
+      "taskId": "T032",
+      "reqContract": "FR-007 / FR-011 / FR-013 / FR-015 / FR-031 / D-4 / D-10 / F-03 / F-04 / F-06",
+      "verifyContract": "`bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-expiry.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-accept-concurrency.test.ts",
+        "tests/integration/participations-expiry.test.ts"
+      ]
+    },
+    {
+      "taskId": "T033",
+      "reqContract": "FR-014 / FR-015 / D-4",
+      "verifyContract": "`bunx vitest run tests/db/participants-history.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-history.test.ts"
+      ]
+    },
+    {
+      "taskId": "T035",
+      "reqContract": "FR-006 / D-2 / D-9 / D-14 / F-01",
+      "verifyContract": "`bunx vitest run tests/domain/participants-token.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/domain/participants-token.test.ts"
+      ]
+    },
+    {
+      "taskId": "T036",
+      "reqContract": "FR-006 / FR-023 / D-2 / D-9 / F-01",
+      "verifyContract": "`bunx vitest run tests/domain/participants-token.test.ts`",
+      "verificationPaths": [
+        "tests/domain/participants-token.test.ts"
+      ]
+    },
+    {
+      "taskId": "T037",
+      "reqContract": "FR-016 / D-9 / D-14 / F-01",
+      "verifyContract": "`bunx vitest run tests/integration/participations-idempotency.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-idempotency.test.ts"
+      ]
+    },
+    {
+      "taskId": "T038",
+      "reqContract": "FR-006 / FR-016 / D-2 / D-9 / D-14 / F-01",
+      "verifyContract": "`bunx vitest run tests/domain/participants-token.test.ts`",
+      "verificationPaths": [
+        "tests/domain/participants-token.test.ts"
+      ]
+    },
+    {
+      "taskId": "T039",
+      "reqContract": "FR-006 / FR-021 / D-11 / D-14 / F-02",
+      "verifyContract": "`bunx vitest run tests/db/participants-token-view.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-token-view.test.ts"
+      ]
+    },
+    {
+      "taskId": "T040",
+      "reqContract": "FR-006 / FR-022 / D-11 / D-14 / F-02",
+      "verifyContract": "`bunx vitest run tests/db/participants-token-view.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-token-view.test.ts"
+      ]
+    },
+    {
+      "taskId": "T041",
+      "reqContract": "FR-006 / FR-016 / D-9 / D-11 / F-01 / F-02",
+      "verifyContract": "`bunx vitest run tests/domain/participants-token.test.ts tests/db/participants-token-view.test.ts tests/integration/participations-idempotency.test.ts`；`rg -n \"inviteToken\" packages/domain/src/participants.ts apps/server/api/src`",
+      "verificationPaths": [
+        "tests/db/participants-token-view.test.ts",
+        "tests/domain/participants-token.test.ts",
+        "tests/integration/participations-idempotency.test.ts"
+      ]
+    },
+    {
+      "taskId": "T042",
+      "reqContract": "FR-020 / D-6",
+      "verifyContract": "`bunx vitest run tests/domain/participants-authorization.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/domain/participants-authorization.test.ts"
+      ]
+    },
+    {
+      "taskId": "T043",
+      "reqContract": "FR-003 / FR-020 / FR-021 / D-6 / D-11 / D-14",
+      "verifyContract": "`bunx vitest run tests/integration/participations-authorization.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-authorization.test.ts"
+      ]
+    },
+    {
+      "taskId": "T044",
+      "reqContract": "FR-020 / D-6 / D-1",
+      "verifyContract": "`bunx vitest run tests/domain/participants-authorization.test.ts`",
+      "verificationPaths": [
+        "tests/domain/participants-authorization.test.ts"
+      ]
+    },
+    {
+      "taskId": "T045",
+      "reqContract": "FR-020 / FR-021 / D-6 / D-11 / D-14",
+      "verifyContract": "`bunx vitest run tests/integration/participations-authorization.test.ts tests/db/participants-rls.test.ts`；`rg -n \"authorizeParticipation\" apps packages`",
+      "verificationPaths": [
+        "tests/db/participants-rls.test.ts",
+        "tests/integration/participations-authorization.test.ts"
+      ]
+    },
+    {
+      "taskId": "T046",
+      "reqContract": "FR-021 / D-11 / D-14",
+      "verifyContract": "`bunx vitest run tests/db/participants-rls.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-rls.test.ts"
+      ]
+    },
+    {
+      "taskId": "T047",
+      "reqContract": "FR-018 / FR-025 / D-6",
+      "verifyContract": "`rg -n \"authorizeParticipation|RBAC|role enum|Visibility Matrix\" apps packages`；`bunx vitest run tests/integration/participations-scope.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-scope.test.ts"
+      ]
+    },
+    {
+      "taskId": "T048",
+      "reqContract": "FR-020 / D-6 / D-8",
+      "verifyContract": "`bunx vitest run tests/integration/participations-authorization.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-authorization.test.ts"
+      ]
+    },
+    {
+      "taskId": "T049",
+      "reqContract": "FR-005 / FR-009 / FR-024 / D-7",
+      "verifyContract": "`bunx vitest run tests/integration/participations-identity-seam.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-identity-seam.test.ts"
+      ]
+    },
+    {
+      "taskId": "T050",
+      "reqContract": "FR-005 / FR-009 / FR-024 / D-7",
+      "verifyContract": "`bunx vitest run tests/integration/participations-identity-seam.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-identity-seam.test.ts"
+      ]
+    },
+    {
+      "taskId": "T051",
+      "reqContract": "FR-010 / FR-011 / FR-013 / FR-024 / D-8 / F-05",
+      "verifyContract": "`bunx vitest run tests/integration/participations-compliance.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-compliance.test.ts"
+      ]
+    },
+    {
+      "taskId": "T052",
+      "reqContract": "FR-005 / FR-009 / FR-024 / D-7",
+      "verifyContract": "`bunx vitest run tests/integration/participations-identity-seam.test.ts`；`rg -n \"persons.*account_id|account_id.*persons\" packages/domain/src/participants.ts apps/server/api/src/routes/participations.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-identity-seam.test.ts"
+      ]
+    },
+    {
+      "taskId": "T053",
+      "reqContract": "FR-010 / FR-011 / FR-013 / D-8 / F-05",
+      "verifyContract": "`bunx vitest run tests/integration/participations-compliance.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-compliance.test.ts"
+      ]
+    },
+    {
+      "taskId": "T054",
+      "reqContract": "FR-005 / FR-009 / D-7 / D-17",
+      "verifyContract": "`bunx vitest run tests/integration/participations-identity-seam.test.ts`；检查 005 runtime evidence",
+      "verificationPaths": [
+        "tests/integration/participations-identity-seam.test.ts"
+      ]
+    },
+    {
+      "taskId": "T055",
+      "reqContract": "FR-010 / FR-024 / D-8 / F-05",
+      "verifyContract": "`bunx vitest run tests/integration/participations-compliance.test.ts tests/integration/participations-identity-seam.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-compliance.test.ts",
+        "tests/integration/participations-identity-seam.test.ts"
+      ]
+    },
+    {
+      "taskId": "T056",
+      "reqContract": "FR-026 / FR-027 / FR-028 / D-5",
+      "verifyContract": "`bunx vitest run tests/integration/participations-route-surface.test.ts`（实现前预期 FAIL）",
+      "verificationPaths": [
+        "tests/integration/participations-route-surface.test.ts"
+      ]
+    },
+    {
+      "taskId": "T057",
+      "reqContract": "FR-015 / FR-026 / D-5",
+      "verifyContract": "`bunx vitest run tests/integration/participations-http-boundary.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-http-boundary.test.ts"
+      ]
+    },
+    {
+      "taskId": "T058",
+      "reqContract": "FR-003 / FR-004 / FR-026 / D-5 / D-14 / F-01",
+      "verifyContract": "`bunx vitest run tests/integration/participations-invite.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-invite.test.ts"
+      ]
+    },
+    {
+      "taskId": "T059",
+      "reqContract": "FR-006 / FR-022 / FR-027 / D-5 / D-14",
+      "verifyContract": "`bunx vitest run tests/integration/participations-invite-lookup.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-invite-lookup.test.ts"
+      ]
+    },
+    {
+      "taskId": "T060",
+      "reqContract": "FR-005 / FR-007 / FR-011 / FR-012 / FR-013 / FR-020 / FR-027 / D-5 / D-6 / D-14",
+      "verifyContract": "`bunx vitest run tests/integration/participations-accept.test.ts tests/integration/participations-decline.test.ts tests/integration/participations-withdraw.test.ts tests/integration/participations-read.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-accept.test.ts",
+        "tests/integration/participations-decline.test.ts",
+        "tests/integration/participations-read.test.ts",
+        "tests/integration/participations-withdraw.test.ts"
+      ]
+    },
+    {
+      "taskId": "T061",
+      "reqContract": "FR-003 / FR-004 / FR-026 / FR-027 / FR-028 / D-5",
+      "verifyContract": "`bunx vitest run tests/integration/participations-invite.test.ts tests/integration/participations-invite-lookup.test.ts tests/integration/participations-accept.test.ts tests/integration/participations-decline.test.ts tests/integration/participations-withdraw.test.ts tests/integration/participations-read.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-accept.test.ts",
+        "tests/integration/participations-decline.test.ts",
+        "tests/integration/participations-invite-lookup.test.ts",
+        "tests/integration/participations-invite.test.ts",
+        "tests/integration/participations-read.test.ts",
+        "tests/integration/participations-withdraw.test.ts"
+      ]
+    },
+    {
+      "taskId": "T062",
+      "reqContract": "FR-006 / FR-026 / D-5",
+      "verifyContract": "`bunx vitest run tests/integration/participations-route-surface.test.ts tests/integration/participations-invite-lookup.test.ts`；`rg -n \"participations\" apps/server/api/src/app.ts apps/server/api/src/plugins/auth.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-invite-lookup.test.ts",
+        "tests/integration/participations-route-surface.test.ts"
+      ]
+    },
+    {
+      "taskId": "T063",
+      "reqContract": "FR-022 / FR-031 / D-13",
+      "verifyContract": "`bunx vitest run tests/integration/participations-http-boundary.test.ts tests/integration/participations-anti-enumeration.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-anti-enumeration.test.ts",
+        "tests/integration/participations-http-boundary.test.ts"
+      ]
+    },
+    {
+      "taskId": "T065",
+      "reqContract": "FR-016 / D-9",
+      "verifyContract": "`bunx vitest run tests/integration/participations-idempotency.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-idempotency.test.ts"
+      ]
+    },
+    {
+      "taskId": "T066",
+      "reqContract": "FR-016 / D-9 / F-01",
+      "verifyContract": "`bunx vitest run tests/integration/participations-idempotency.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-idempotency.test.ts"
+      ]
+    },
+    {
+      "taskId": "T067",
+      "reqContract": "FR-007 / FR-011 / FR-012 / FR-013 / D-10",
+      "verifyContract": "`bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-decline.test.ts tests/integration/participations-withdraw.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-accept-concurrency.test.ts",
+        "tests/integration/participations-decline.test.ts",
+        "tests/integration/participations-withdraw.test.ts"
+      ]
+    },
+    {
+      "taskId": "T068",
+      "reqContract": "FR-007 / FR-015 / FR-031 / D-10 / F-03 / F-04",
+      "verifyContract": "`bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-expiry.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-accept-concurrency.test.ts",
+        "tests/integration/participations-expiry.test.ts"
+      ]
+    },
+    {
+      "taskId": "T069",
+      "reqContract": "FR-029 / D-10",
+      "verifyContract": "`bunx vitest run tests/db/participants-live-uniqueness.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-live-uniqueness.test.ts"
+      ]
+    },
+    {
+      "taskId": "T070",
+      "reqContract": "FR-016 / D-9",
+      "verifyContract": "`bunx vitest run tests/integration/participations-idempotency.test.ts tests/domain/participation-contracts.test.ts`",
+      "verificationPaths": [
+        "tests/domain/participation-contracts.test.ts",
+        "tests/integration/participations-idempotency.test.ts"
+      ]
+    },
+    {
+      "taskId": "T071",
+      "reqContract": "FR-016 / D-9 / D-14 / F-01",
+      "verifyContract": "`bunx vitest run tests/integration/participations-idempotency.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-idempotency.test.ts"
+      ]
+    },
+    {
+      "taskId": "T072",
+      "reqContract": "FR-007 / FR-015 / FR-029 / FR-031 / D-10",
+      "verifyContract": "`bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/db/participants-live-uniqueness.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-live-uniqueness.test.ts",
+        "tests/integration/participations-accept-concurrency.test.ts"
+      ]
+    },
+    {
+      "taskId": "T073",
+      "reqContract": "FR-007 / FR-015 / D-10 / D-14 / F-03 / F-04 / F-06",
+      "verifyContract": "`bunx vitest run tests/integration/participations-accept-concurrency.test.ts tests/integration/participations-expiry.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-accept-concurrency.test.ts",
+        "tests/integration/participations-expiry.test.ts"
+      ]
+    },
+    {
+      "taskId": "T074",
+      "reqContract": "FR-023 / D-12",
+      "verifyContract": "`bunx vitest run tests/integration/participations-audit.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-audit.test.ts"
+      ]
+    },
+    {
+      "taskId": "T075",
+      "reqContract": "FR-022 / D-13",
+      "verifyContract": "`bunx vitest run tests/integration/participations-anti-enumeration.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-anti-enumeration.test.ts"
+      ]
+    },
+    {
+      "taskId": "T076",
+      "reqContract": "FR-006 / FR-022 / D-13",
+      "verifyContract": "`bunx vitest run tests/integration/participations-invite-lookup.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-invite-lookup.test.ts"
+      ]
+    },
+    {
+      "taskId": "T077",
+      "reqContract": "FR-006 / FR-022 / FR-031 / D-13",
+      "verifyContract": "`bunx vitest run tests/integration/participations-anti-enumeration.test.ts tests/integration/participations-http-boundary.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-anti-enumeration.test.ts",
+        "tests/integration/participations-http-boundary.test.ts"
+      ]
+    },
+    {
+      "taskId": "T078",
+      "reqContract": "FR-023 / D-12",
+      "verifyContract": "`bunx vitest run tests/integration/participations-audit.test.ts`；`rg -n \"participation_audit_events|CASE_VIEWED|CASE_LISTED\" apps packages db`",
+      "verificationPaths": [
+        "tests/integration/participations-audit.test.ts"
+      ]
+    },
+    {
+      "taskId": "T079",
+      "reqContract": "FR-006 / FR-022 / FR-031 / D-13",
+      "verifyContract": "`bunx vitest run tests/integration/participations-anti-enumeration.test.ts tests/integration/participations-http-boundary.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-anti-enumeration.test.ts",
+        "tests/integration/participations-http-boundary.test.ts"
+      ]
+    },
+    {
+      "taskId": "T080",
+      "reqContract": "FR-023 / D-12 / F-06",
+      "verifyContract": "`bunx vitest run tests/integration/participations-audit.test.ts tests/integration/participations-expiry.test.ts`；`rg -n \"case_events|participation_audit_events\" packages/domain/src/participants.ts apps/server/api/src`",
+      "verificationPaths": [
+        "tests/integration/participations-audit.test.ts",
+        "tests/integration/participations-expiry.test.ts"
+      ]
+    },
+    {
+      "taskId": "T081",
+      "reqContract": "FR-019 / Acceptance 13 / SC-004 / D-12",
+      "verifyContract": "`bunx vitest run tests/db/participants-evidence-boundary.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-evidence-boundary.test.ts"
+      ]
+    },
+    {
+      "taskId": "T082",
+      "reqContract": "FR-031 / D-9 / D-12",
+      "verifyContract": "`bunx vitest run tests/integration/participations-rollback.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-rollback.test.ts"
+      ]
+    },
+    {
+      "taskId": "T083",
+      "reqContract": "FR-025 / SC-015 / D-17",
+      "verifyContract": "`bunx vitest run tests/db/participants-structure.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-structure.test.ts"
+      ]
+    },
+    {
+      "taskId": "T084",
+      "reqContract": "SC-001 / FR-004 / FR-022 / D-5 / D-6 / D-11 / D-13",
+      "verifyContract": "`bunx vitest run tests/integration/participations-cross-family.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-cross-family.test.ts"
+      ]
+    },
+    {
+      "taskId": "T088",
+      "reqContract": "FR-016 / FR-031 / D-9 / D-10",
+      "verifyContract": "`bunx vitest run tests/integration/participations-idempotency.test.ts tests/integration/participations-accept-concurrency.test.ts tests/db/participants-live-uniqueness.test.ts`",
+      "verificationPaths": [
+        "tests/db/participants-live-uniqueness.test.ts",
+        "tests/integration/participations-accept-concurrency.test.ts",
+        "tests/integration/participations-idempotency.test.ts"
+      ]
+    },
+    {
+      "taskId": "T089",
+      "reqContract": "FR-006 / FR-022 / D-13",
+      "verifyContract": "`bunx vitest run tests/integration/participations-anti-enumeration.test.ts tests/integration/participations-http-boundary.test.ts tests/integration/participations-identity-seam.test.ts`",
+      "verificationPaths": [
+        "tests/integration/participations-anti-enumeration.test.ts",
+        "tests/integration/participations-http-boundary.test.ts",
+        "tests/integration/participations-identity-seam.test.ts"
+      ]
+    }
+  ],
+  "historicalCompletionStatus": "PARTIAL_MACHINE_VERIFIED",
+  "historicalCompletionGaps": [
+    "T001",
+    "T002",
+    "T003",
+    "T004",
+    "T005",
+    "T006",
+    "T013",
+    "T034",
+    "T064",
+    "T085",
+    "T086",
+    "T087",
+    "T090",
+    "T091",
+    "T092",
+    "T093",
+    "T094",
+    "T095",
+    "T096",
+    "T097"
   ]
 }

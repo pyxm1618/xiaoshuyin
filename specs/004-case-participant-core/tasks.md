@@ -69,42 +69,42 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 
 > 只做只读依赖验证。不得写业务代码、migration、tests、scaffold。任一失败 → T006 停止。
 
-- [x] T001 [P] 验证 Slice 1 已合并 main 且有 **Independent Converge PASS** 证据。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: `git merge-base --is-ancestor origin/main HEAD`；检查 `specs/001-family-identity-core/**` 与 Converge evidence；记录证据路径]
+- [ ] T001 [P] 验证 Slice 1 已合并 main 且有 **Independent Converge PASS** 证据。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: `git merge-base --is-ancestor origin/main HEAD`；检查 `specs/001-family-identity-core/**` 与 Converge evidence；记录证据路径]
   - 目标：确认 Slice 1 是可用地基，而不是“设计存在”。
   - 文件/范围：只读 `specs/001-family-identity-core/**`、git 历史、CI / converge evidence。
   - 动作：确认 main 含 Slice 1 实现；确认独立 Converge PASS 证据（不是只看 Plan 或自检）；记录 SHA / 报告路径。
   - 前置：无。
   - 完成条件：证据存在且 PASS；否则 T006 触发整体停止。
 
-- [x] T002 [P] 验证 Slice 2 已合并 main 且有 **Independent Converge PASS** 证据。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: `git log --oneline origin/main`；`test -d specs/002-case-core`；检查 Slice 2 Converge evidence；记录证据路径]
+- [ ] T002 [P] 验证 Slice 2 已合并 main 且有 **Independent Converge PASS** 证据。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: `git log --oneline origin/main`；`test -d specs/002-case-core`；检查 Slice 2 Converge evidence；记录证据路径]
   - 目标：确认 Case Core、Case manager、Case RLS、CASE_CREATE 幂等、case_events 已真实可用。
   - 文件/范围：只读 `specs/002-case-core/**`、git 历史、CI / converge evidence。
   - 动作：确认 Slice 2 已 merge main；确认 Independent Converge PASS；确认不是仅分支设计。
   - 前置：无。
   - 完成条件：证据存在且 PASS；否则 T006 停止。
 
-- [x] T003 [P] 验证 005 identity contract 已 MERGED 到 main。 [REQ: FR-005 / FR-009 / D-7 / D-17] [VERIFY: `test -f specs/005-invited-identity-binding-contract/spec.md`；`git log --oneline origin/main`]
+- [ ] T003 [P] 验证 005 identity contract 已 MERGED 到 main。 [REQ: FR-005 / FR-009 / D-7 / D-17] [VERIFY: `test -f specs/005-invited-identity-binding-contract/spec.md`；`git log --oneline origin/main`]
   - 目标：确认 Slice 4 可消费已冻结的身份合同。
   - 文件/范围：只读 `specs/005-invited-identity-binding-contract/spec.md`、main 历史。
   - 动作：确认 PR #11 已 merge；记录 main SHA；不重新审核 / 不重新设计 005。
   - 前置：无。
   - 完成条件：contract 存在且 main 历史可追溯；否则 T006 停止。
 
-- [x] T004 [P] 验证 005 runtime（invitation-aware bootstrap / binding attempt / 双确认 / no-P2）已真实可用并独立验证；**不得在本 Slice 实现它**。 [REQ: FR-005 / FR-009 / FR-027 / D-7 / D-17] [VERIFY: `rg -n "invitation-aware|binding_attempt|participation-invites" apps packages db`；检查 005 runtime 独立验证证据]
+- [ ] T004 [P] 验证 005 runtime（invitation-aware bootstrap / binding attempt / 双确认 / no-P2）已真实可用并独立验证；**不得在本 Slice 实现它**。 [REQ: FR-005 / FR-009 / FR-027 / D-7 / D-17] [VERIFY: `rg -n "invitation-aware|binding_attempt|participation-invites" apps packages db`；检查 005 runtime 独立验证证据]
   - 目标：区分「005 contract MERGED」与「005 runtime available」。
   - 文件/范围：只读 `apps/**`、`packages/**`、`db/**`、005 runtime evidence。
   - 动作：确认 bootstrap 端点 / attempt 存储 / 双确认 / no-P2 运行时存在且独立验证；禁止在 Slice 4 新建这些能力。
   - 前置：T003。
   - 完成条件：runtime evidence 存在且 PASS；否则 T006 停止。若仅 contract merged → `STOP — 005 IDENTITY RUNTIME NOT AVAILABLE`。
 
-- [x] T005 [P] 验证 Slice 3 / `003-evidence-core` 不是 Slice 4 的 Implement dependency。 [REQ: FR-019 / FR-030 / D-17] [VERIFY: `rg -n "evidence|assertions|observations|003-evidence" specs/004-case-participant-core/plan.md specs/004-case-participant-core/contracts specs/004-case-participant-core/spec.md`]
+- [ ] T005 [P] 验证 Slice 3 / `003-evidence-core` 不是 Slice 4 的 Implement dependency。 [REQ: FR-019 / FR-030 / D-17] [VERIFY: `rg -n "evidence|assertions|observations|003-evidence" specs/004-case-participant-core/plan.md specs/004-case-participant-core/contracts specs/004-case-participant-core/spec.md`]
   - 目标：确认本 Slice 不写 Evidence，不因编号自动依赖 Slice 3。
   - 文件/范围：只读本 Feature artifacts。
   - 动作：确认没有 Evidence writer / assertions / observations 写入任务；若发现真实依赖，停止并报告。
   - 前置：无。
   - 完成条件：不存在 Evidence runtime dependency；否则 T006 停止。
 
-- [x] T006 汇总 Phase 0 gate；任一 T001—T005 失败时停止整个 Slice 4 Implement。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: 汇总 T001—T005 的真实输出；`git status --porcelain=v1`]
+- [ ] T006 汇总 Phase 0 gate；任一 T001—T005 失败时停止整个 Slice 4 Implement。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: 汇总 T001—T005 的真实输出；`git status --porcelain=v1`]
   - 目标：把依赖证据收敛为一个明确的 go / no-go。
   - 文件/范围：只读；不写任何文件。
   - 动作：如果全部 PASS → 进入 Phase 1；如果任一 FAIL → 输出 `STOP — IMPLEMENT GATE BLOCKED`，`changed files = 0`。
@@ -159,7 +159,7 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：T011。
   - 完成条件：T011 PASS。
 
-- [x] T013 [P] 新增 participation 测试 fixtures / helpers（family / person / case / manager / target / participation）。 [REQ: FR-002 / FR-004 / D-15] [VERIFY: `rg -n "participation" tests/setup tests/domain tests/integration`；`bun run typecheck`]
+- [ ] T013 [P] 新增 participation 测试 fixtures / helpers（family / person / case / manager / target / participation）。 [REQ: FR-002 / FR-004 / D-15] [VERIFY: `rg -n "participation" tests/setup tests/domain tests/integration`；`bun run typecheck`]
   - 目标：给后续测试提供可复用、不伪造业务结果的 fixture。
   - 文件：`tests/setup/participation-fixtures.ts`（或仓库现有 fixture 目录的等价文件）。
   - 动作：只创建测试数据 helper；不写生产代码；不直接写 `persons.account_id` 冒充 Case C。
@@ -318,7 +318,7 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：T032。
   - 完成条件：真实 DB 查询输出。
 
-- [x] T034 从 `packages/domain/src/index.ts` 导出 participants 模块并跑 typecheck。 [REQ: FR-001 / D-1 / D-15] [VERIFY: `bun run typecheck`；`rg -n "participants" packages/domain/src/index.ts`]
+- [ ] T034 从 `packages/domain/src/index.ts` 导出 participants 模块并跑 typecheck。 [REQ: FR-001 / D-1 / D-15] [VERIFY: `bun run typecheck`；`rg -n "participants" packages/domain/src/index.ts`]
   - 目标：让上层 route / service 可导入。
   - 文件：`packages/domain/src/index.ts`。
   - 动作：导出 participants API；不导出 SQL 字符串 / 内部游标。
@@ -552,7 +552,7 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：T062。
   - 完成条件：错误映射测试 PASS。
 
-- [x] T064 生成 OpenAPI 产物并验证确定性 / operation 数 / typecheck。 [REQ: FR-026 / FR-027 / FR-028 / D-5] [VERIFY: `bun run openapi:generate`；`bun run openapi:check`；`bun run typecheck`；两次生成 hash 一致]
+- [ ] T064 生成 OpenAPI 产物并验证确定性 / operation 数 / typecheck。 [REQ: FR-026 / FR-027 / FR-028 / D-5] [VERIFY: `bun run openapi:generate`；`bun run openapi:check`；`bun run typecheck`；两次生成 hash 一致]
   - 目标：让 generated artifacts 与契约源一致。
   - 文件：`packages/generated/openapi.json`、`packages/generated/openapi.d.ts`（只由生成器写）。
   - 动作：生成；断言 6 个 participation operations；不手工修改 generated 文件。
@@ -717,21 +717,21 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：T045 / T061；verification-only。
   - 完成条件：两类语义分别 PASS。
 
-- [x] T085 运行 domain / unit 测试。 [REQ: FR-001—FR-031 / D-15] [VERIFY: `bunx vitest run tests/domain`]
+- [ ] T085 运行 domain / unit 测试。 [REQ: FR-001—FR-031 / D-15] [VERIFY: `bunx vitest run tests/domain`]
   - 目标：确认纯规则 / 状态机 / token / authorize。
   - 文件：`tests/domain/**`。
   - 动作：执行；检查 0 failed / 0 skipped；不跳过失败。
   - 前置：Phase 1—9 实现完成。
   - 完成条件：domain 测试 PASS。
 
-- [x] T086 运行 DB / RLS / migration 测试（必须包含 T081 / T083）。 [REQ: FR-021 / FR-029 / D-3 / D-11] [VERIFY: `bunx vitest run tests/db`；`bun run db:evidence`]
+- [ ] T086 运行 DB / RLS / migration 测试（必须包含 T081 / T083）。 [REQ: FR-021 / FR-029 / D-3 / D-11] [VERIFY: `bunx vitest run tests/db`；`bun run db:evidence`]
   - 目标：确认 schema / RLS / role / migration replay。
   - 文件：`tests/db/**`。
   - 动作：执行；检查 `relrowsecurity` / `relforcerowsecurity` / runtime role / safe view。
   - 前置：T025 / T081 / T083。
   - 完成条件：DB 测试 PASS；db:evidence PASS；aggregate 覆盖 T081/T083。
 
-- [x] T087 运行 integration / API 测试（必须包含 T082 / T084）。 [REQ: FR-005—FR-027 / D-5 / D-7] [VERIFY: `bunx vitest run tests/integration`]
+- [ ] T087 运行 integration / API 测试（必须包含 T082 / T084）。 [REQ: FR-005—FR-027 / D-5 / D-7] [VERIFY: `bunx vitest run tests/integration`]
   - 目标：确认六 route / identity / compliance / scope。
   - 文件：`tests/integration/**`。
   - 动作：执行；检查 0 failed / 0 skipped。
@@ -752,21 +752,21 @@ Phase 11 T093—T097   Evidence / Implement Closeout
   - 前置：T079。
   - 完成条件：测试 PASS。
 
-- [x] T090 运行 OpenAPI 生成 / check / typecheck / static guard。 [REQ: FR-026 / FR-027 / D-5] [VERIFY: `bun run openapi:generate`；`bun run openapi:check`；`bun run typecheck`；`bun run guard:static`]
+- [ ] T090 运行 OpenAPI 生成 / check / typecheck / static guard。 [REQ: FR-026 / FR-027 / D-5] [VERIFY: `bun run openapi:generate`；`bun run openapi:check`；`bun run typecheck`；`bun run guard:static`]
   - 目标：确认契约 / 类型 / 静态边界。
   - 文件：generated artifacts（只由生成器写）。
   - 动作：执行；断言 6 个 participation operations；两次生成 hash 一致。
   - 前置：T064。
   - 完成条件：全部 PASS。
 
-- [x] T091 运行全量测试（必须包含 T081—T090 全部新增测试与 aggregate）。 [REQ: FR-001—FR-031 / D-15] [VERIFY: `bunx vitest run`]
+- [ ] T091 运行全量测试（必须包含 T081—T090 全部新增测试与 aggregate）。 [REQ: FR-001—FR-031 / D-15] [VERIFY: `bunx vitest run`]
   - 目标：确认无回归 / 无 skip。
   - 文件：`tests/**`。
   - 动作：执行；检查 0 failed / 0 skipped；不得削弱断言。
   - 前置：T081—T090。
   - 完成条件：全量 PASS；aggregate 覆盖所有最终测试。
 
-- [x] T092 运行 `quickstart.md` §1—§7 并记录 Case C / 005 runtime 状态。 [REQ: FR-030 / D-17 / Acceptance 19] [VERIFY: 按 `quickstart.md` 执行；记录真实输出]
+- [ ] T092 运行 `quickstart.md` §1—§7 并记录 Case C / 005 runtime 状态。 [REQ: FR-030 / D-17 / Acceptance 19] [VERIFY: 按 `quickstart.md` 执行；记录真实输出]
   - 目标：确认验证路径与依赖状态。
   - 文件：`quickstart.md`（只读）、`tests/evidence/**`（Implement 证据）。
   - 动作：执行 quickstart；若 005 runtime 不可用 → `BLOCKED — 005 IDENTITY RUNTIME NOT AVAILABLE`；不得声称 Case C E2E PASS。
@@ -779,35 +779,35 @@ Phase 11 T093—T097   Evidence / Implement Closeout
 
 > 只做 Implement 自检证据；不进入独立 Converge，不宣布 merge-ready。
 
-- [x] T093 记录 `IMPLEMENT_BASE_SHA` 并分类 diff。 [REQ: FR-030 / D-17] [VERIFY: `git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD`]
+- [ ] T093 记录 `IMPLEMENT_BASE_SHA` 并分类 diff。 [REQ: FR-030 / D-17] [VERIFY: `git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD`]
   - 目标：区分预期实现 / 生成物 / 测试证据 / unexpected。
   - 文件：evidence log（`tests/evidence/**` 或仓库现有 evidence 位置）。
   - 动作：记录 base SHA；列出 changed files；unexpected 必须为 0。
   - 前置：T091（full suite）。
   - 完成条件：分类清晰；unexpected = 0。
 
-- [x] T094 验证冻结上游 diff = 0。 [REQ: FR-030 / D-17] [VERIFY: `git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD -- Docs specs/004-case-participant-core/spec.md specs/004-case-participant-core/plan.md specs/004-case-participant-core/research.md specs/004-case-participant-core/data-model.md specs/004-case-participant-core/quickstart.md specs/004-case-participant-core/contracts specs/004-case-participant-core/checklists`]
+- [ ] T094 验证冻结上游 diff = 0。 [REQ: FR-030 / D-17] [VERIFY: `git diff --name-only "$IMPLEMENT_BASE_SHA"...HEAD -- Docs specs/004-case-participant-core/spec.md specs/004-case-participant-core/plan.md specs/004-case-participant-core/research.md specs/004-case-participant-core/data-model.md specs/004-case-participant-core/quickstart.md specs/004-case-participant-core/contracts specs/004-case-participant-core/checklists`]
   - 目标：确认实现没有改需求 / 设计。
   - 文件：只读 diff。
   - 动作：断言上述路径无语义修改；`tasks.md` 只允许 checkbox / evidence。
   - 前置：T093。
   - 完成条件：冻结输入 diff = 0。
 
-- [x] T095 验证 `tasks.md` 只更新 checkbox / completion evidence。 [REQ: FR-030 / D-17] [VERIFY: `git diff "$IMPLEMENT_BASE_SHA"...HEAD -- specs/004-case-participant-core/tasks.md`]
+- [ ] T095 验证 `tasks.md` 只更新 checkbox / completion evidence。 [REQ: FR-030 / D-17] [VERIFY: `git diff "$IMPLEMENT_BASE_SHA"...HEAD -- specs/004-case-participant-core/tasks.md`]
   - 目标：防止借 Tasks 偷改设计。
   - 文件：`specs/004-case-participant-core/tasks.md`。
   - 动作：只允许 `[ ]` → `[x]`、completion / evidence 引用；不得改需求 / Task graph。
   - 前置：T094。
   - 完成条件：diff 仅 checkbox / evidence。
 
-- [x] T096 生成 implementation evidence 汇总（只做自检，不宣称独立 Converge / merge-ready）。 [REQ: FR-030 / D-15 / D-17] [VERIFY: 检查 evidence 文件存在；运行 governance]
+- [ ] T096 生成 implementation evidence 汇总（只做自检，不宣称独立 Converge / merge-ready）。 [REQ: FR-030 / D-15 / D-17] [VERIFY: 检查 evidence 文件存在；运行 governance]
   - 目标：整理 requirement coverage / scope / contracts / tests / RLS / concurrency / idempotency / remaining gaps。
   - 文件：`tests/evidence/**` 或仓库现有 evidence 路径。
   - 动作：记录真实命令输出；不写“已独立 Converge”；不写“可 merge”。
   - 前置：T091（full suite）/ T092（quickstart）。
   - 完成条件：evidence 完整；无虚假 PASS。
 
-- [x] T097 Implement 最终 gate：重新核实依赖；输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE` 或 `BLOCKED`。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: 重跑 T001—T006；`bunx vitest run`；`bun run openapi:check`；`node .specify/scripts/validate-governance.mjs`]
+- [ ] T097 Implement 最终 gate：重新核实依赖；输出 `IMPLEMENT COMPLETE — READY FOR INDEPENDENT CONVERGE` 或 `BLOCKED`。 [REQ: FR-030 / Acceptance 19 / D-17] [VERIFY: 重跑 T001—T006；`bunx vitest run`；`bun run openapi:check`；`node .specify/scripts/validate-governance.mjs`]
   - 目标：防止 Tasks / Tests 通过掩盖 dependency 仍未满足。
   - 文件：只读 / evidence。
   - 动作：若 Slice 2 未 merge 或 005 runtime 不可用 → `BLOCKED`；否则输出 READY FOR INDEPENDENT CONVERGE；不得自行 merge。

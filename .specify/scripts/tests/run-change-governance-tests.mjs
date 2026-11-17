@@ -67,8 +67,11 @@ function addOwnership(root, rules) {
 function ownershipRule(id, kind, matchPath, ownershipKind, features) {
   return { id, match: { kind, path: matchPath }, ownership: { kind: ownershipKind, features } };
 }
-function addTaskProvenanceRegistry(root) {
-  write(root, ".specify/task-provenance-registry.json", JSON.stringify({ schemaVersion: 1, sharedRemediations: [] }, null, 2) + "\n");
+function addTaskProvenanceRegistry(root, sharedRemediations = []) {
+  write(root, ".specify/task-provenance-registry.json", JSON.stringify({
+    schemaVersion: 2,
+    sharedRemediations,
+  }, null, 2) + "\n");
 }
 function addAuthorityBase(root, targetUnits) {
   const docs = [
@@ -90,16 +93,19 @@ function addAuthorityBase(root, targetUnits) {
     path: rel,
     units: rel === "Docs/V1产品需求.md" ? targetUnits : [{
       id: "UNIT-" + rel,
-      selector: { kind: "WHOLE_DOCUMENT" },
+      selector: { kind: "MARKDOWN_SECTION_SHALLOW", heading: "# Authority" },
       normative: true,
+      lifecycle: "FUTURE_UNIMPLEMENTED",
+      futureReason: "fixture future authority",
       downstreamBindings: [],
     }],
   }));
   write(root, ".specify/authority-unit-registry.json", JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     documents,
   }, null, 2) + "\n");
 }
+
 function writeAuthoritySnapshot(root, overrideMap = null) {
   const docs = [
     "Docs/总产品需求.md",
@@ -120,30 +126,43 @@ function writeAuthoritySnapshot(root, overrideMap = null) {
 function refreshSnapshot(root) {
   writeAuthoritySnapshot(root);
 }
-function authorityUnits({ metadata = false, bind = true } = {}) {
-  const normative = {
-    id: "AUTH-A",
-    selector: { kind: "MARKDOWN_SECTION", heading: "## Normative A" },
-    normative: true,
-    downstreamBindings: bind ? [{
-      feature: "001-feature-a",
-      specPath: "specs/001-feature-a",
-      requirements: [{
-        id: "FR-001",
-        selector: { kind: "MARKDOWN_SECTION", heading: "## FR-001 Contract" },
-        requiredArtifacts: ["tests/a.test.ts"],
-      }],
-    }] : [],
-  };
-  const meta = {
-    id: "AUTH-METADATA",
-    selector: { kind: "MARKDOWN_SECTION", heading: "## Metadata" },
-    normative: false,
-    downstreamBindings: [],
-    allowedNoImpactKinds: ["NON_NORMATIVE_METADATA"],
-  };
-  return metadata ? [normative, meta] : [normative, meta];
+function authorityUnits({ bind = true } = {}) {
+  return [
+    {
+      id: "AUTH-V1-ROOT",
+      selector: { kind: "MARKDOWN_SECTION_SHALLOW", heading: "# V1" },
+      normative: true,
+      lifecycle: "FUTURE_UNIMPLEMENTED",
+      futureReason: "fixture future authority",
+      downstreamBindings: [],
+    },
+    {
+      id: "AUTH-A",
+      selector: { kind: "MARKDOWN_SECTION_SHALLOW", heading: "## Normative A" },
+      normative: true,
+      lifecycle: bind ? "IMPLEMENTED" : "FUTURE_UNIMPLEMENTED",
+      ...(bind ? {} : { futureReason: "fixture future authority" }),
+      downstreamBindings: bind ? [{
+        feature: "001-feature-a",
+        specPath: "specs/001-feature-a",
+        requirements: [{
+          id: "FR-001",
+          selector: { kind: "MARKDOWN_SECTION", heading: "## FR-001 Contract" },
+          requiredArtifacts: ["tests/a.test.ts"],
+        }],
+      }] : [],
+    },
+    {
+      id: "AUTH-METADATA",
+      selector: { kind: "MARKDOWN_SECTION_SHALLOW", heading: "## Metadata" },
+      normative: false,
+      lifecycle: "NON_NORMATIVE",
+      downstreamBindings: [],
+      allowedNoImpactKinds: ["NON_NORMATIVE_METADATA"],
+    },
+  ];
 }
+
 function impactManifest(root, base, unitImpacts, changeId = "authority-test") {
   const prev = Buffer.from(execFileSync("git", ["show", base + ":Docs/V1产品需求.md"], { cwd: root }));
   const next = fs.readFileSync(path.join(root, "Docs/V1产品需求.md"));
@@ -396,6 +415,47 @@ function setupG2() {
   cleanup(root);
 }
 
+// G2-R6: registry change cannot self-authorize the Authority change that consumes it.
+{
+  const root = setupG2();
+  const base = commit(root, "base");
+  const registryPath = ".specify/authority-unit-registry.json";
+  const registry = JSON.parse(fs.readFileSync(path.join(root, registryPath), "utf8"));
+  registry.policy = "changed in consuming change";
+  write(root, registryPath, JSON.stringify(registry, null, 2) + "\n");
+  write(root, "Docs/V1产品需求.md", "# V1\n## Normative A\nnew normative\n## Metadata\nold reference\n");
+  refreshSnapshot(root);
+  impactManifest(root, base, [{
+    authorityUnitId: "AUTH-A",
+    classification: "AFFECTS_EXISTING_FEATURES",
+    downstream: [{
+      feature: "001-feature-a",
+      specPath: "specs/001-feature-a",
+      requirementId: "FR-001",
+      requiredArtifacts: ["tests/a.test.ts"],
+    }],
+  }]);
+  commit(root, "registry self authorization attack");
+  record("G2-R6 registry plus same-change Authority consumption fails", 1, run(root, base), "cannot self-authorize");
+  cleanup(root);
+}
+
+// G2-R7: future/unimplemented authority has an explicit fail-closed reason.
+{
+  const root = setupG2();
+  const base = commit(root, "base");
+  write(root, "Docs/V1产品需求.md", "# V1\nchanged root authority\n## Normative A\nold normative\n## Metadata\nold reference\n");
+  refreshSnapshot(root);
+  impactManifest(root, base, [{
+    authorityUnitId: "AUTH-V1-ROOT",
+    classification: "CREATES_FUTURE_REQUIREMENT",
+    downstream: [],
+  }]);
+  commit(root, "future authority change");
+  record("G2-R7 future/unimplemented Authority fails closed explicitly", 1, run(root, base), "FUTURE_UNIMPLEMENTED Authority Unit AUTH-V1-ROOT");
+  cleanup(root);
+}
+
 // G5 local: fake completion without evidence fails.
 {
   const root = project();
@@ -418,7 +478,7 @@ function setupG2() {
   const verify = "tests/proof.test.ts";
   write(root, "specs/001-fixture/tasks.md", "# Tasks\n\n- [x] T001 implement [REQ:U01] [VERIFY:" + verify + "]\n");
   write(root, ".specify/task-evidence/001-fixture.json", JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     featureId: "999-wrong",
     provenanceKind: "FEATURE_IMPLEMENTATION",
     taskFile: "specs/001-fixture/tasks.md",
@@ -426,7 +486,12 @@ function setupG2() {
     implementationHeadSha: base,
     mergeCommitSha: base,
     taskIds: ["T001"],
-    taskVerificationDigest: taskDigest([{ id: "T001", verify }]),
+    taskVerifications: [{
+      taskId: "T001",
+      reqContract: "U01",
+      verifyContract: verify,
+      verificationPaths: ["tests/proof.test.ts"],
+    }],
     artifactPaths: ["tests/proof.test.ts"],
     verificationPaths: ["tests/proof.test.ts"],
     ciRuns: [{ name: "CI", runId: 1, conclusion: "success", headSha: base }],
@@ -446,7 +511,7 @@ function setupG2() {
   const verify = "tests/proof.test.ts";
   write(root, "specs/001-fixture/tasks.md", "# Tasks\n\n- [x] T001 implement [REQ:U01] [VERIFY:" + verify + "]\n");
   write(root, ".specify/task-evidence/001-fixture.json", JSON.stringify({
-    schemaVersion: 2,
+    schemaVersion: 3,
     featureId: "001-fixture",
     provenanceKind: "FEATURE_IMPLEMENTATION",
     taskFile: "specs/001-fixture/tasks.md",
@@ -454,13 +519,58 @@ function setupG2() {
     implementationHeadSha: base,
     mergeCommitSha: base,
     taskIds: ["T001"],
-    taskVerificationDigest: taskDigest([{ id: "T001", verify }]),
+    taskVerifications: [{
+      taskId: "T001",
+      reqContract: "U01",
+      verifyContract: verify,
+      verificationPaths: ["tests/proof.test.ts"],
+    }],
     artifactPaths: ["tests/proof.test.ts"],
     verificationPaths: ["tests/proof.test.ts"],
     ciRuns: [{ name: "CI", runId: 1, conclusion: "success", headSha: base }],
   }, null, 2) + "\n");
   commit(root, "valid evidence");
   record("G5-C task verification digest and concrete verification artifact pass locally", 0, run(root, base), "Change governance PASS");
+  cleanup(root);
+}
+
+// G5-R5: task provenance registry cannot self-authorize SHARED_REMEDIATION evidence.
+{
+  const root = project();
+  addTaskProvenanceRegistry(root);
+  write(root, "specs/001-fixture/spec.md", "# spec\n");
+  write(root, "specs/001-fixture/tasks.md", "# Tasks\n\n- [ ] T001 implement [REQ:U01] [VERIFY:tests/proof.test.ts]\n");
+  write(root, "tests/proof.test.ts", "export const proof = true;\n");
+  const base = commit(root, "base");
+  addTaskProvenanceRegistry(root, [{
+    id: "shared-1",
+    sourceFeature: "999-source",
+    targetFeatures: ["001-fixture"],
+    implementationPr: 1,
+  }]);
+  write(root, "specs/001-fixture/tasks.md", "# Tasks\n\n- [x] T001 implement [REQ:U01] [VERIFY:tests/proof.test.ts]\n");
+  write(root, ".specify/task-evidence/001-fixture.json", JSON.stringify({
+    schemaVersion: 3,
+    featureId: "001-fixture",
+    provenanceKind: "SHARED_REMEDIATION",
+    sharedRemediationBindingId: "shared-1",
+    taskFile: "specs/001-fixture/tasks.md",
+    implementationPr: 1,
+    implementationHeadSha: base,
+    mergeCommitSha: base,
+    taskIds: ["T001"],
+    taskVerifications: [{
+      taskId: "T001",
+      reqContract: "U01",
+      verifyContract: "tests/proof.test.ts",
+      verificationPaths: ["tests/proof.test.ts"],
+    }],
+    artifactPaths: ["tests/proof.test.ts"],
+    verificationPaths: ["tests/proof.test.ts"],
+    ciRuns: [{ name: "CI", runId: 1, conclusion: "success", headSha: base }],
+  }, null, 2) + "\n");
+  commit(root, "shared remediation self authorization");
+  record("G5-R5 shared-remediation registry plus consuming evidence fails", 1, run(root, base), "cannot self-authorize SHARED_REMEDIATION");
   cleanup(root);
 }
 

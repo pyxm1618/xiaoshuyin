@@ -17,87 +17,196 @@ if (!process.env.GITHUB_TOKEN || !process.env.GITHUB_REPOSITORY) {
 const canonical = JSON.parse(
   fs.readFileSync(path.join(root, ".specify", "task-evidence", "010-compliance-feature-policy-foundation.json"), "utf8")
 );
+const canonicalTasks = fs.readFileSync(path.join(root, canonical.taskFile), "utf8");
 
-function runCase(manifests) {
+function verificationPatterns(verify) {
+  return [...new Set((verify?.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.\/-*?]+/g)) || [])];
+}
+function globMatches(pattern, value) {
+  let source = "";
+  for (const ch of pattern) {
+    if (ch === "*") source += ".*";
+    else if (ch === "?") source += ".";
+    else source += /[\\^$.*+?()[\]{}|]/.test(ch) ? "\\" + ch : ch;
+  }
+  return new RegExp("^" + source + "$").test(value);
+}
+function runCase(manifests, options = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "xiaoshuyin-remote-evidence-"));
+  const evidenceDir = path.join(dir, "evidence");
+  fs.mkdirSync(evidenceDir, { recursive: true });
   for (const [name, value] of Object.entries(manifests)) {
-    fs.writeFileSync(path.join(dir, name), JSON.stringify(value, null, 2) + "\n", "utf8");
+    fs.writeFileSync(path.join(evidenceDir, name), JSON.stringify(value, null, 2) + "\n", "utf8");
+  }
+  const env = { ...process.env, TASK_EVIDENCE_DIR: evidenceDir };
+  if (options.registry) {
+    const registryPath = path.join(dir, "registry.json");
+    fs.writeFileSync(registryPath, JSON.stringify(options.registry, null, 2) + "\n", "utf8");
+    env.TASK_PROVENANCE_REGISTRY_PATH = registryPath;
+  }
+  if (options.taskFiles) {
+    const taskRoot = path.join(dir, "tasks");
+    for (const [rel, value] of Object.entries(options.taskFiles)) {
+      const file = path.join(taskRoot, rel);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, value, "utf8");
+    }
+    env.TASK_SOURCE_ROOT = taskRoot;
   }
   const result = spawnSync(process.execPath, [validator], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, TASK_EVIDENCE_DIR: dir },
+    env,
   });
   fs.rmSync(dir, { recursive: true, force: true });
   return { code: result.status, out: (result.stdout ?? "") + (result.stderr ?? "") };
 }
+function findWrongPath(mapping) {
+  const patterns = verificationPatterns(mapping.verifyContract);
+  return canonical.verificationPaths.find((candidate) =>
+    !mapping.verificationPaths.includes(candidate) &&
+    !patterns.some((pattern) => globMatches(pattern, candidate))
+  );
+}
 
 const cases = [];
 
+// G5-R1: correct feature/PR and a real test, but unrelated to the selected task VERIFY.
 {
-  const attack = {
-    ...canonical,
-    featureId: "004-case-participant-core",
-    taskFile: "specs/004-case-participant-core/tasks.md",
-  };
+  const mapping = canonical.taskVerifications.find((item) => findWrongPath(item));
+  const wrong = findWrongPath(mapping);
+  const attack = structuredClone(canonical);
+  attack.taskVerifications.find((item) => item.taskId === mapping.taskId).verificationPaths = [wrong];
+  attack.verificationPaths = [...new Set(attack.taskVerifications.flatMap((item) => item.verificationPaths))];
+  attack.artifactPaths = [...new Set([...attack.artifactPaths, wrong])];
   cases.push({
-    name: "G5-C1 unrelated real merged PR plus successful real CI is rejected",
+    name: "G5-R1 same-feature unrelated real test is rejected",
     expected: 1,
-    marker: "feature identity mismatch",
-    actual: runCase({ "004-case-participant-core.json": attack }),
-  });
-}
-
-{
-  const attack = {
-    ...canonical,
-    artifactPaths: [...canonical.artifactPaths, "README.md"],
-  };
-  cases.push({
-    name: "G5-C2 correct PR with artifact outside PR delta is rejected",
-    expected: 1,
-    marker: "artifact not present in implementation PR delta: README.md",
+    marker: "verification path is not authorized by task VERIFY contract",
     actual: runCase({ "010-compliance-feature-policy-foundation.json": attack }),
   });
 }
 
+// G5-R2: task A points to task B's verification artifact.
 {
+  let pair = null;
+  for (const a of canonical.taskVerifications) {
+    for (const b of canonical.taskVerifications) {
+      if (a.taskId === b.taskId) continue;
+      const candidate = b.verificationPaths[0];
+      if (!verificationPatterns(a.verifyContract).some((pattern) => globMatches(pattern, candidate))) {
+        pair = { a, b, candidate };
+        break;
+      }
+    }
+    if (pair) break;
+  }
+  const attack = structuredClone(canonical);
+  attack.taskVerifications.find((item) => item.taskId === pair.a.taskId).verificationPaths = [pair.candidate];
+  attack.verificationPaths = [...new Set(attack.taskVerifications.flatMap((item) => item.verificationPaths))];
+  attack.artifactPaths = [...new Set([...attack.artifactPaths, pair.candidate])];
   cases.push({
-    name: "G5-C3 correct feature, PR, actual artifacts and verification evidence pass",
-    expected: 0,
-    marker: "feature/PR-delta/verification provenance verified",
-    actual: runCase({ "010-compliance-feature-policy-foundation.json": canonical }),
-  });
-}
-
-{
-  const attack = {
-    ...canonical,
-    featureId: "004-case-participant-core",
-    taskFile: "specs/004-case-participant-core/tasks.md",
-  };
-  cases.push({
-    name: "G5-C4 task feature identity mismatch is rejected",
+    name: "G5-R2 task A to task B verification is rejected",
     expected: 1,
-    marker: "does not match manifest filename",
+    marker: "verification path is not authorized by task VERIFY contract",
     actual: runCase({ "010-compliance-feature-policy-foundation.json": attack }),
   });
 }
 
+// G5-R3: one completed task has no task-specific mapping.
 {
-  const attack = {
-    ...canonical,
-    featureId: "004-case-participant-core",
-    taskFile: "specs/004-case-participant-core/tasks.md",
+  const attack = structuredClone(canonical);
+  attack.taskVerifications = attack.taskVerifications.slice(1);
+  cases.push({
+    name: "G5-R3 completed task without mapping is rejected",
+    expected: 1,
+    marker: "completed task with no task-specific verification mapping",
+    actual: runCase({ "010-compliance-feature-policy-foundation.json": attack }),
+  });
+}
+
+// G5-R4: path matches task VERIFY contract but is absent from implementation PR delta.
+{
+  const mapping = canonical.taskVerifications.find((item) => item.verifyContract.includes("tests/db/*compliance*"));
+  const fake = "tests/db/not-in-pr-compliance-proof.test.ts";
+  const attack = structuredClone(canonical);
+  attack.taskVerifications.find((item) => item.taskId === mapping.taskId).verificationPaths = [fake];
+  attack.verificationPaths = [...new Set(attack.taskVerifications.flatMap((item) => item.verificationPaths))];
+  attack.artifactPaths = [...new Set([...attack.artifactPaths, fake])];
+  cases.push({
+    name: "G5-R4 verification outside implementation PR delta is rejected",
+    expected: 1,
+    marker: "artifact not present in implementation PR delta: " + fake,
+    actual: runCase({ "010-compliance-feature-policy-foundation.json": attack }),
+  });
+}
+
+// G5-R6: SHARED_REMEDIATION cannot name a nonexistent repository binding.
+{
+  const attack = structuredClone(canonical);
+  attack.provenanceKind = "SHARED_REMEDIATION";
+  attack.sharedRemediationBindingId = "does-not-exist";
+  cases.push({
+    name: "G5-R6 fake shared remediation binding is rejected",
+    expected: 1,
+    marker: "fake/nonexistent shared remediation binding",
+    actual: runCase({ "010-compliance-feature-policy-foundation.json": attack }),
+  });
+}
+
+// G5-R7: provenanceKind=SHARED_REMEDIATION cannot turn one real PR into universal evidence.
+{
+  const targetFeature = "999-shared-target";
+  const proof = canonical.verificationPaths[0];
+  const target = {
+    ...structuredClone(canonical),
+    featureId: targetFeature,
+    provenanceKind: "SHARED_REMEDIATION",
+    sharedRemediationBindingId: "shared-wrong-source",
+    taskFile: "specs/" + targetFeature + "/tasks.md",
+    taskIds: ["T001"],
+    taskVerifications: [{
+      taskId: "T001",
+      reqContract: "U01",
+      verifyContract: proof,
+      verificationPaths: [proof],
+    }],
+    artifactPaths: [proof],
+    verificationPaths: [proof],
+    historicalCompletionStatus: "MACHINE_VERIFIED",
+    historicalCompletionGaps: [],
+  };
+  const registry = {
+    schemaVersion: 2,
+    sharedRemediations: [{
+      id: "shared-wrong-source",
+      sourceFeature: "999-wrong-source",
+      targetFeatures: [targetFeature],
+      implementationPr: canonical.implementationPr,
+    }],
+  };
+  const taskFiles = {
+    [canonical.taskFile]: canonicalTasks,
+    ["specs/" + targetFeature + "/tasks.md"]: "# Tasks\n- [x] T001 shared [REQ:U01] [VERIFY:" + proof + "]\n",
   };
   cases.push({
-    name: "G5-C5 one successful PR cannot be reused as universal task evidence",
+    name: "G5-R7 universal PR reuse through SHARED_REMEDIATION is rejected",
     expected: 1,
-    marker: "cannot be reused as universal evidence",
+    marker: "cannot be reused as universal evidence for " + targetFeature,
     actual: runCase({
       "010-compliance-feature-policy-foundation.json": canonical,
-      "004-case-participant-core.json": attack,
-    }),
+      [targetFeature + ".json"]: target,
+    }, { registry, taskFiles }),
+  });
+}
+
+// G5-R8: fully task-specific provenance remains valid.
+{
+  cases.push({
+    name: "G5-R8 valid task-specific provenance passes",
+    expected: 0,
+    marker: "task→REQ/VERIFY→artifact→PR-delta→exact-head-CI provenance verified",
+    actual: runCase({ "010-compliance-feature-policy-foundation.json": canonical }),
   });
 }
 
@@ -105,7 +214,8 @@ let failed = 0;
 for (const item of cases) {
   const pass = item.actual.code === item.expected && item.actual.out.includes(item.marker);
   if (!pass) failed += 1;
-  console.log((pass ? "PASS" : "FAIL") + "  " + item.name + " — expected exit " + item.expected + ", got " + item.actual.code);
+  console.log((pass ? "PASS" : "FAIL") + "  " + item.name +
+    " — expected exit " + item.expected + ", got " + item.actual.code);
   if (!pass) {
     console.log("      expected marker: " + item.marker);
     console.log(item.actual.out.split("\n").map((line) => "      " + line).join("\n"));

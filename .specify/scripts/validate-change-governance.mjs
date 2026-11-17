@@ -305,13 +305,43 @@ function headingLevel(line) {
   return m ? m[1].length : null;
 }
 
+const FRONT_MATTER_FIELDS = Object.freeze({
+  VERSION: "> 版本：",
+  UPDATED_DATE: "> 更新日期：",
+});
+const FRONT_MATTER_EXCLUDABLE_PREFIXES = new Set(Object.values(FRONT_MATTER_FIELDS));
+
 function extractSelector(content, selector, label, errors) {
   if (selector?.kind === "WHOLE_DOCUMENT") return content;
-  if (selector?.kind !== "MARKDOWN_SECTION" || typeof selector.heading !== "string" || !/^#{1,6}\s+\S/.test(selector.heading)) {
-    errors.push(label + ": selector must be WHOLE_DOCUMENT or exact MARKDOWN_SECTION heading.");
+  const lines = content.split(/\r?\n/);
+
+  if (selector?.kind === "FRONT_MATTER_METADATA") {
+    if (!Array.isArray(selector.fields) || selector.fields.length === 0) {
+      errors.push(label + ": FRONT_MATTER_METADATA requires finite fields[].");
+      return null;
+    }
+    const selected = [];
+    for (const field of selector.fields) {
+      const prefix = FRONT_MATTER_FIELDS[field];
+      if (!prefix) {
+        errors.push(label + ": unsupported front-matter field " + String(field));
+        return null;
+      }
+      const hits = lines.filter((line) => line.startsWith(prefix));
+      if (hits.length !== 1) {
+        errors.push(label + ": front-matter field " + field + " must occur exactly once, found " + hits.length + ".");
+        return null;
+      }
+      selected.push(hits[0]);
+    }
+    return selected.join("\n");
+  }
+
+  if (!["MARKDOWN_SECTION", "MARKDOWN_SECTION_SHALLOW"].includes(selector?.kind) ||
+      typeof selector.heading !== "string" || !/^#{1,6}\s+\S/.test(selector.heading)) {
+    errors.push(label + ": selector must be WHOLE_DOCUMENT, FRONT_MATTER_METADATA, MARKDOWN_SECTION, or MARKDOWN_SECTION_SHALLOW.");
     return null;
   }
-  const lines = content.split(/\r?\n/);
   const hits = [];
   for (let i = 0; i < lines.length; i += 1) if (lines[i] === selector.heading) hits.push(i);
   if (hits.length !== 1) {
@@ -323,19 +353,33 @@ function extractSelector(content, selector, label, errors) {
   let end = lines.length;
   for (let i = start + 1; i < lines.length; i += 1) {
     const candidate = headingLevel(lines[i]);
-    if (candidate !== null && candidate <= level) {
+    if (candidate !== null && (selector.kind === "MARKDOWN_SECTION_SHALLOW" || candidate <= level)) {
       end = i;
       break;
     }
   }
-  return lines.slice(start, end).join("\n");
+  let selected = lines.slice(start, end);
+  if (selector.excludeLinePrefixes !== undefined) {
+    if (selector.kind !== "MARKDOWN_SECTION_SHALLOW" || !Array.isArray(selector.excludeLinePrefixes)) {
+      errors.push(label + ": excludeLinePrefixes is only valid on MARKDOWN_SECTION_SHALLOW.");
+      return null;
+    }
+    for (const prefix of selector.excludeLinePrefixes) {
+      if (!FRONT_MATTER_EXCLUDABLE_PREFIXES.has(prefix)) {
+        errors.push(label + ": unsupported excluded line prefix " + String(prefix));
+        return null;
+      }
+    }
+    selected = selected.filter((line) => !selector.excludeLinePrefixes.some((prefix) => line.startsWith(prefix)));
+  }
+  return selected.join("\n");
 }
 
 function loadAuthorityRegistry(errors) {
   const registry = readJson(AUTHORITY_UNIT_REGISTRY, errors, "Authority Unit registry");
   if (!registry) return null;
-  if (registry.schemaVersion !== 1 || !Array.isArray(registry.documents)) {
-    errors.push("Authority Unit registry must have schemaVersion=1 and documents[].");
+  if (registry.schemaVersion !== 2 || !Array.isArray(registry.documents)) {
+    errors.push("Authority Unit registry must have schemaVersion=2 and documents[].");
     return null;
   }
   const seenUnits = new Set();
@@ -349,23 +393,67 @@ function loadAuthorityRegistry(errors) {
       errors.push(label + ": units[] must be non-empty.");
       continue;
     }
+
+    let currentDoc = "";
+    try {
+      currentDoc = fs.readFileSync(path.join(root, doc.path), "utf8");
+    } catch {
+      errors.push(label + ": cannot read Authority Doc for structural coverage.");
+    }
+    const expectedHeadings = currentDoc.split(/\r?\n/).filter((line) => /^#{1,6}\s+\S/.test(line));
+    const registeredHeadings = doc.units
+      .filter((unit) => ["MARKDOWN_SECTION", "MARKDOWN_SECTION_SHALLOW"].includes(unit?.selector?.kind))
+      .map((unit) => unit.selector.heading);
+    assertExactSet(registeredHeadings, expectedHeadings, label + " structural heading coverage", errors);
+
     for (const [uIndex, unit] of doc.units.entries()) {
       const uLabel = label + ".units[" + uIndex + "]";
       if (typeof unit?.id !== "string" || !unit.id) errors.push(uLabel + ": id is required.");
       else if (seenUnits.has(unit.id)) errors.push(uLabel + ": duplicate global unit id " + unit.id);
       else seenUnits.add(unit.id);
       if (typeof unit?.normative !== "boolean") errors.push(uLabel + ": normative boolean is required.");
-      if (!unit?.selector || !["WHOLE_DOCUMENT", "MARKDOWN_SECTION"].includes(unit.selector.kind)) {
-        errors.push(uLabel + ": selector.kind is invalid.");
+      if (!["IMPLEMENTED", "FUTURE_UNIMPLEMENTED", "NON_NORMATIVE"].includes(unit?.lifecycle)) {
+        errors.push(uLabel + ": lifecycle must be IMPLEMENTED, FUTURE_UNIMPLEMENTED, or NON_NORMATIVE.");
       }
-      if (unit?.selector?.kind === "MARKDOWN_SECTION" && (typeof unit.selector.heading !== "string" || !/^#{1,6}\s+\S/.test(unit.selector.heading))) {
-        errors.push(uLabel + ": MARKDOWN_SECTION requires an exact markdown heading.");
+
+      const kind = unit?.selector?.kind;
+      if (!["MARKDOWN_SECTION", "MARKDOWN_SECTION_SHALLOW", "FRONT_MATTER_METADATA"].includes(kind)) {
+        errors.push(uLabel + ": Authority Unit selector.kind is invalid or too broad.");
       }
-      if (!Array.isArray(unit?.downstreamBindings)) errors.push(uLabel + ": downstreamBindings must be an array.");
-      for (const [bIndex, binding] of (unit?.downstreamBindings ?? []).entries()) {
+      if (["MARKDOWN_SECTION", "MARKDOWN_SECTION_SHALLOW"].includes(kind) &&
+          (typeof unit.selector.heading !== "string" || !/^#{1,6}\s+\S/.test(unit.selector.heading))) {
+        errors.push(uLabel + ": markdown selector requires an exact heading.");
+      }
+      if (kind === "FRONT_MATTER_METADATA") {
+        assertExactSet(unit.selector.fields ?? [], ["VERSION", "UPDATED_DATE"], uLabel + " metadata field set", errors);
+      }
+      if (!Array.isArray(unit?.downstreamBindings)) {
+        errors.push(uLabel + ": downstreamBindings must be an array.");
+        continue;
+      }
+
+      if (unit.normative) {
+        if (unit.lifecycle === "IMPLEMENTED" && unit.downstreamBindings.length === 0) {
+          errors.push(uLabel + ": IMPLEMENTED normative unit requires finite downstreamBindings.");
+        }
+        if (unit.lifecycle === "FUTURE_UNIMPLEMENTED") {
+          if (unit.downstreamBindings.length !== 0) errors.push(uLabel + ": FUTURE_UNIMPLEMENTED unit must not invent downstream bindings.");
+          if (typeof unit.futureReason !== "string" || !unit.futureReason.trim()) errors.push(uLabel + ": FUTURE_UNIMPLEMENTED unit requires futureReason.");
+        }
+        if (unit.lifecycle === "NON_NORMATIVE") errors.push(uLabel + ": normative unit cannot use NON_NORMATIVE lifecycle.");
+      } else {
+        if (unit.lifecycle !== "NON_NORMATIVE") errors.push(uLabel + ": non-normative unit must use NON_NORMATIVE lifecycle.");
+        if (unit.downstreamBindings.length !== 0) errors.push(uLabel + ": non-normative unit must not declare downstream bindings.");
+        if (!Array.isArray(unit.allowedNoImpactKinds) || unit.allowedNoImpactKinds.length === 0) {
+          errors.push(uLabel + ": non-normative unit requires finite allowedNoImpactKinds[].");
+        }
+      }
+
+      for (const [bIndex, binding] of unit.downstreamBindings.entries()) {
         const bLabel = uLabel + ".downstreamBindings[" + bIndex + "]";
         if (typeof binding?.feature !== "string" || !binding.feature) errors.push(bLabel + ": feature is required.");
         if (binding?.specPath !== "specs/" + binding?.feature) errors.push(bLabel + ": specPath must equal specs/<feature>.");
+        validateFeatureExists(binding?.feature, errors, bLabel);
         if (!Array.isArray(binding?.requirements) || binding.requirements.length === 0) {
           errors.push(bLabel + ": requirements[] must be non-empty.");
           continue;
@@ -375,11 +463,16 @@ function loadAuthorityRegistry(errors) {
           if (typeof req?.id !== "string" || !req.id) errors.push(rLabel + ": id is required.");
           if (!req?.selector || !["WHOLE_DOCUMENT", "MARKDOWN_SECTION"].includes(req.selector.kind)) errors.push(rLabel + ": selector is invalid.");
           if (!Array.isArray(req?.requiredArtifacts) || req.requiredArtifacts.length === 0) errors.push(rLabel + ": requiredArtifacts[] must be non-empty.");
-        }
-      }
-      if (!unit.normative) {
-        if (!Array.isArray(unit.allowedNoImpactKinds) || unit.allowedNoImpactKinds.length === 0) {
-          errors.push(uLabel + ": non-normative unit requires finite allowedNoImpactKinds[].");
+          const specFile = binding.specPath + "/spec.md";
+          if (fs.existsSync(path.join(root, specFile))) {
+            const specText = fs.readFileSync(path.join(root, specFile), "utf8");
+            extractSelector(specText, req.selector, rLabel + " current requirement selector", errors);
+          }
+          for (const artifact of req?.requiredArtifacts ?? []) {
+            if (typeof artifact !== "string" || !artifact || !fs.existsSync(path.join(root, artifact))) {
+              errors.push(rLabel + ": registered required artifact does not exist: " + String(artifact));
+            }
+          }
         }
       }
     }
@@ -505,6 +598,11 @@ function validateAuthorityImpact(changed, opts, errors) {
       continue;
     }
 
+    if (unit.lifecycle === "FUTURE_UNIMPLEMENTED") {
+      errors.push("FUTURE_UNIMPLEMENTED Authority Unit " + unit.id + " has no implemented downstream binding; topology must land in a separate governance change before this Authority Unit can change.");
+      continue;
+    }
+
     if (!["AFFECTS_EXISTING_FEATURES", "CREATES_FUTURE_REQUIREMENT"].includes(impact.classification)) {
       errors.push("Substantive Authority Unit " + unit.id + " cannot use " + String(impact.classification) + "; downstream convergence is required.");
       continue;
@@ -513,6 +611,14 @@ function validateAuthorityImpact(changed, opts, errors) {
       errors.push("Substantive Authority Unit " + unit.id + " requires non-empty downstream convergence.");
       continue;
     }
+
+    const expectedDownstream = unit.downstreamBindings.flatMap((binding) =>
+      binding.requirements.map((req) => binding.feature + "\0" + binding.specPath + "\0" + req.id)
+    );
+    const actualDownstream = downstream.map((target) =>
+      String(target?.feature) + "\0" + String(target?.specPath) + "\0" + String(target?.requirementId)
+    );
+    assertExactSet(actualDownstream, expectedDownstream, "Authority Unit " + unit.id + " downstream convergence set", errors);
 
     for (const [dIndex, target] of downstream.entries()) {
       const label = "Authority Unit " + unit.id + " downstream[" + dIndex + "]";
@@ -571,31 +677,123 @@ function parseTaskRecords(content, checkedOnly = false) {
     const match = line.match(/^- \[([ xX])\] (T\d{3,})\b/);
     if (!match) continue;
     if (checkedOnly && match[1] === " ") continue;
+    const req = line.match(/\[REQ:(.*?)\]/);
     const verify = line.match(/\[VERIFY:(.*)\]\s*$/);
-    records.push({ id: match[2], checked: match[1] !== " ", verify: verify ? verify[1].trim() : null });
+    records.push({
+      id: match[2],
+      checked: match[1] !== " ",
+      req: req ? req[1].trim() : null,
+      verify: verify ? verify[1].trim() : null,
+    });
   }
   return records;
 }
 
-function verificationDigest(records) {
-  const canonical = records.map((r) => r.id + "\0" + (r.verify ?? "")).join("\n");
-  return gitBlobSha(Buffer.from(canonical, "utf8"));
+function extractVerificationPatterns(verify) {
+  if (typeof verify !== "string") return [];
+  return [...new Set(verify.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.\/-*?]+/g) || [])];
+}
+
+function globMatches(pattern, value) {
+  let source = "";
+  for (const ch of pattern) {
+    if (ch === "*") source += ".*";
+    else if (ch === "?") source += ".";
+    else source += /[\\^$.*+?()[\]{}|]/.test(ch) ? "\\" + ch : ch;
+  }
+  return new RegExp("^" + source + "$").test(value);
+}
+
+function isAllowedVerificationPath(rel) {
+  return /^(tests\/|scripts\/|\.github\/workflows\/|\.specify\/scripts\/)/.test(rel);
 }
 
 function loadTaskProvenanceRegistry(errors) {
-  if (!fs.existsSync(path.join(root, TASK_PROVENANCE_REGISTRY))) return { schemaVersion: 1, sharedRemediations: [] };
+  if (!fs.existsSync(path.join(root, TASK_PROVENANCE_REGISTRY))) return { schemaVersion: 2, sharedRemediations: [] };
   const registry = readJson(TASK_PROVENANCE_REGISTRY, errors, "Task provenance registry");
-  if (!registry) return { schemaVersion: 1, sharedRemediations: [] };
-  if (registry.schemaVersion !== 1 || !Array.isArray(registry.sharedRemediations)) {
-    errors.push("Task provenance registry must have schemaVersion=1 and sharedRemediations[].");
-    return { schemaVersion: 1, sharedRemediations: [] };
+  if (!registry) return { schemaVersion: 2, sharedRemediations: [] };
+  if (registry.schemaVersion !== 2 || !Array.isArray(registry.sharedRemediations)) {
+    errors.push("Task provenance registry must have schemaVersion=2 and sharedRemediations[].");
+    return { schemaVersion: 2, sharedRemediations: [] };
+  }
+  const ids = new Set();
+  for (const [index, binding] of registry.sharedRemediations.entries()) {
+    const label = "Task provenance sharedRemediations[" + index + "]";
+    if (typeof binding?.id !== "string" || !binding.id) errors.push(label + ": id is required.");
+    else if (ids.has(binding.id)) errors.push(label + ": duplicate id " + binding.id);
+    else ids.add(binding.id);
+    if (typeof binding?.sourceFeature !== "string" || !binding.sourceFeature) errors.push(label + ": sourceFeature is required.");
+    if (!Array.isArray(binding?.targetFeatures) || binding.targetFeatures.length === 0) errors.push(label + ": targetFeatures[] must be finite and non-empty.");
+    if (!Number.isInteger(binding?.implementationPr) || binding.implementationPr <= 0) errors.push(label + ": implementationPr must be a positive integer.");
+    if (Array.isArray(binding?.targetFeatures) && binding.targetFeatures.includes(binding.sourceFeature)) {
+      errors.push(label + ": sourceFeature cannot self-target.");
+    }
   }
   return registry;
 }
 
-function validateTaskCompletionEvidence(errors) {
+function validateTaskVerificationMapping(evidence, records, evidenceRel, errors) {
+  const checkedIds = records.map((r) => r.id);
+  if (!Array.isArray(evidence.taskIds)) errors.push(evidenceRel + ": taskIds must be an array.");
+  else assertExactSet(evidence.taskIds, checkedIds, evidenceRel + " checked task evidence", errors);
+
+  if (!Array.isArray(evidence.taskVerifications)) {
+    errors.push(evidenceRel + ": taskVerifications must be an array.");
+    return new Set();
+  }
+  assertExactSet(evidence.taskVerifications.map((x) => x?.taskId), checkedIds, evidenceRel + " task-specific verification mapping", errors);
+  const mappingByTask = new Map(evidence.taskVerifications.map((x) => [x?.taskId, x]));
+  const used = new Set();
+
+  for (const record of records) {
+    if (!record.req) errors.push(evidenceRel + ": checked task " + record.id + " has no [REQ:...] contract.");
+    if (!record.verify) errors.push(evidenceRel + ": checked task " + record.id + " has no [VERIFY:...] contract.");
+    const mapping = mappingByTask.get(record.id);
+    if (!mapping) continue;
+    if (mapping.reqContract !== record.req) errors.push(evidenceRel + ": " + record.id + " REQ contract mismatch.");
+    if (mapping.verifyContract !== record.verify) errors.push(evidenceRel + ": " + record.id + " VERIFY contract mismatch.");
+    if (!Array.isArray(mapping.verificationPaths) || mapping.verificationPaths.length === 0) {
+      errors.push(evidenceRel + ": completed task " + record.id + " has no task-specific verification artifact.");
+      continue;
+    }
+    const patterns = extractVerificationPatterns(record.verify);
+    if (patterns.length === 0) {
+      errors.push(evidenceRel + ": completed task " + record.id + " VERIFY contract has no machine-verifiable repository path; task cannot be recorded complete.");
+      continue;
+    }
+    for (const rel of mapping.verificationPaths) {
+      if (typeof rel !== "string" || !isAllowedVerificationPath(rel)) {
+        errors.push(evidenceRel + ": " + record.id + " verification path is outside allowed roots: " + String(rel));
+        continue;
+      }
+      if (!patterns.some((pattern) => globMatches(pattern, rel))) {
+        errors.push(evidenceRel + ": " + record.id + " verification path is not authorized by task VERIFY contract: " + rel);
+      }
+      if (!evidence.verificationPaths?.includes(rel)) errors.push(evidenceRel + ": " + record.id + " verification path is missing from evidence.verificationPaths: " + rel);
+      if (!evidence.artifactPaths?.includes(rel)) errors.push(evidenceRel + ": " + record.id + " verification path is missing from evidence.artifactPaths: " + rel);
+      if (!fs.existsSync(path.join(root, rel))) errors.push(evidenceRel + ": " + record.id + " verification artifact does not exist: " + rel);
+      used.add(rel);
+    }
+  }
+
+  if (!Array.isArray(evidence.verificationPaths)) errors.push(evidenceRel + ": verificationPaths must be an array.");
+  else assertExactSet(evidence.verificationPaths, [...used], evidenceRel + " verificationPaths task ownership (no orphan verification)", errors);
+  return used;
+}
+
+function validateTaskCompletionEvidence(changed, opts, errors) {
   const specsRoot = path.join(root, "specs");
   if (!fs.existsSync(specsRoot)) return;
+
+  const provenanceRegistry = loadTaskProvenanceRegistry(errors);
+  if (changed.includes(TASK_PROVENANCE_REGISTRY)) {
+    for (const rel of changed.filter((file) => /^\.specify\/task-evidence\/[^/]+\.json$/.test(file))) {
+      const evidence = readJson(rel, errors, "Changed task evidence " + rel);
+      if (evidence?.provenanceKind === "SHARED_REMEDIATION") {
+        errors.push("Task provenance registry changes cannot self-authorize SHARED_REMEDIATION evidence in the same change: " + rel);
+      }
+    }
+  }
 
   const baselinePath = ".specify/legacy-task-completion-baseline.json";
   let baseline = { schemaVersion: 1, files: [] };
@@ -614,7 +812,7 @@ function validateTaskCompletionEvidence(errors) {
     baselineByPath.set(entry.path, entry.blobSha);
   }
 
-  const provenanceRegistry = loadTaskProvenanceRegistry(errors);
+  const provenanceUses = [];
   for (const entry of fs.readdirSync(specsRoot, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name.startsWith(".") || entry.name.startsWith("_")) continue;
     const taskRel = "specs/" + entry.name + "/tasks.md";
@@ -636,34 +834,28 @@ function validateTaskCompletionEvidence(errors) {
     const evidence = readJson(evidenceRel, errors, "Task evidence for " + entry.name);
     if (!evidence) continue;
 
-    if (evidence.schemaVersion !== 2) errors.push(evidenceRel + ": schemaVersion must be 2.");
+    if (evidence.schemaVersion !== 3) errors.push(evidenceRel + ": schemaVersion must be 3.");
     if (evidence.featureId !== entry.name) errors.push(evidenceRel + ": task feature identity mismatch; featureId must equal " + entry.name + ".");
     if (evidence.taskFile !== taskRel) errors.push(evidenceRel + ": taskFile must equal " + taskRel + ".");
     if (!["FEATURE_IMPLEMENTATION", "SHARED_REMEDIATION"].includes(evidence.provenanceKind)) {
       errors.push(evidenceRel + ": provenanceKind must be FEATURE_IMPLEMENTATION or SHARED_REMEDIATION.");
     }
+
+    let sharedBinding = null;
     if (evidence.provenanceKind === "SHARED_REMEDIATION") {
-      const allowed = provenanceRegistry.sharedRemediations.some((x) =>
-        x?.id === evidence.sharedRemediationBindingId &&
-        Array.isArray(x.features) &&
-        x.features.includes(entry.name) &&
-        x.implementationPr === evidence.implementationPr
-      );
-      if (!allowed) errors.push(evidenceRel + ": shared remediation relationship is not registered.");
+      sharedBinding = provenanceRegistry.sharedRemediations.find((x) => x?.id === evidence.sharedRemediationBindingId);
+      if (!sharedBinding || !sharedBinding.targetFeatures?.includes(entry.name) || sharedBinding.implementationPr !== evidence.implementationPr) {
+        errors.push(evidenceRel + ": shared remediation relationship is not registered.");
+      }
     }
+    provenanceUses.push({ feature: entry.name, kind: evidence.provenanceKind, implementationPr: evidence.implementationPr, sharedBinding });
 
     if (!Number.isInteger(evidence.implementationPr) || evidence.implementationPr <= 0) errors.push(evidenceRel + ": implementationPr must be a positive integer.");
     for (const field of ["implementationHeadSha", "mergeCommitSha"]) {
       if (typeof evidence[field] !== "string" || !/^[0-9a-f]{40}$/.test(evidence[field])) errors.push(evidenceRel + ": " + field + " must be a 40-char commit SHA.");
     }
-    if (Array.isArray(evidence.taskIds)) assertExactSet(evidence.taskIds, checkedIds, evidenceRel + " checked task evidence", errors);
-    else errors.push(evidenceRel + ": taskIds must be an array.");
 
-    for (const record of records) if (!record.verify) errors.push(evidenceRel + ": checked task " + record.id + " has no [VERIFY:...] contract.");
-    const digest = verificationDigest(records);
-    if (evidence.taskVerificationDigest !== digest) {
-      errors.push(evidenceRel + ": taskVerificationDigest mismatch; evidence is not bound to the current checked-task [VERIFY:] contracts.");
-    }
+    validateTaskVerificationMapping(evidence, records, evidenceRel, errors);
 
     if (!Array.isArray(evidence.artifactPaths) || evidence.artifactPaths.length === 0) {
       errors.push(evidenceRel + ": artifactPaths must be non-empty.");
@@ -683,17 +875,6 @@ function validateTaskCompletionEvidence(errors) {
       if (!substantive) errors.push(evidenceRel + ": artifactPaths must include implementation/test/governance evidence outside specs/.specify.");
     }
 
-    if (!Array.isArray(evidence.verificationPaths) || evidence.verificationPaths.length === 0) {
-      errors.push(evidenceRel + ": verificationPaths must be non-empty.");
-    } else {
-      for (const rel of evidence.verificationPaths) {
-        if (!evidence.artifactPaths?.includes(rel)) errors.push(evidenceRel + ": verificationPath must also be an artifactPath: " + rel);
-        if (!/^(tests\/|scripts\/|\.github\/workflows\/|\.specify\/scripts\/tests\/)/.test(rel)) {
-          errors.push(evidenceRel + ": verificationPath must be a concrete test/script/workflow artifact: " + rel);
-        }
-      }
-    }
-
     if (!Array.isArray(evidence.ciRuns) || evidence.ciRuns.length === 0) errors.push(evidenceRel + ": ciRuns must be non-empty.");
     else {
       for (const run of evidence.ciRuns) {
@@ -711,6 +892,26 @@ function validateTaskCompletionEvidence(errors) {
     if (/^[0-9a-f]{40}$/.test(evidence.mergeCommitSha || "")) {
       if (!gitOk(["cat-file", "-e", evidence.mergeCommitSha + "^{commit}"])) errors.push(evidenceRel + ": mergeCommitSha is not present in repository history.");
       else if (!gitOk(["merge-base", "--is-ancestor", evidence.mergeCommitSha, "HEAD"])) errors.push(evidenceRel + ": mergeCommitSha is not an ancestor of current HEAD.");
+    }
+  }
+
+  const byPr = new Map();
+  for (const use of provenanceUses) {
+    if (!Number.isInteger(use.implementationPr)) continue;
+    if (!byPr.has(use.implementationPr)) byPr.set(use.implementationPr, []);
+    byPr.get(use.implementationPr).push(use);
+  }
+  for (const [pr, uses] of byPr.entries()) {
+    if (uses.length <= 1) continue;
+    const direct = uses.filter((x) => x.kind === "FEATURE_IMPLEMENTATION");
+    if (direct.length !== 1) {
+      errors.push("Implementation PR #" + pr + " cannot be reused as universal evidence through SHARED_REMEDIATION; exactly one source FEATURE_IMPLEMENTATION provenance is required.");
+      continue;
+    }
+    for (const use of uses.filter((x) => x.kind === "SHARED_REMEDIATION")) {
+      if (!use.sharedBinding || use.sharedBinding.sourceFeature !== direct[0].feature) {
+        errors.push("Implementation PR #" + pr + " cannot be reused as universal evidence for " + use.feature + "; SHARED_REMEDIATION source relationship is invalid.");
+      }
     }
   }
 }
@@ -740,7 +941,7 @@ console.log("  authority docs changed: " + changed.filter((file) => AUTHORITY_DO
 
 validateChangeBinding(changed, errors);
 validateAuthorityImpact(changed, opts, errors);
-validateTaskCompletionEvidence(errors);
+validateTaskCompletionEvidence(changed, opts, errors);
 
 if (errors.length > 0) {
   console.error("Change governance FAILED:");

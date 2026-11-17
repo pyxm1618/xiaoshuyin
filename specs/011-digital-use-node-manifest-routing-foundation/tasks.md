@@ -67,7 +67,7 @@ Tasks that touch the same manifest/routing/validator contract are intentionally 
 
 ---
 
-- [x] T1101 [REQ:FR-027,FR-030,V1-C20,V1-C25,§38] Re-run the development-start Authority/Implement Gate against latest main and stop before any edit unless all Phase 1 blockers are truly closed [VERIFY:git fetch; git rev-parse origin/main; compare Frozen Spec blob; inspect four Docs blobs, PR #26 merge/audit state, Slice 9 Safety+Drizzle/Data Access authority, Slice 10 merged Compliance foundation, migrations/shared contracts, and current CI]
+- [ ] T1101 [REQ:FR-027,FR-030,V1-C20,V1-C25,§38] Re-run the development-start Authority/Implement Gate against latest main and stop before any edit unless all Phase 1 blockers are truly closed [VERIFY:git fetch; git rev-parse origin/main; compare Frozen Spec blob; inspect four Docs blobs, PR #26 merge/audit state, Slice 9 Safety+Drizzle/Data Access authority, Slice 10 merged Compliance foundation, migrations/shared contracts, and current CI]
 
 ### T1101 — Development-start Authority / Implement Gate
 
@@ -145,7 +145,7 @@ At the planning baseline of 2026-11-11 this task would **not pass** because the 
 
 ---
 
-- [x] T1102 [REQ:FR-002,FR-004,FR-006,FR-009,FR-011,FR-012,FR-014,FR-015,FR-021,FR-022,FR-035] Create the independent V1-product snapshot and smallest failing Digital Use contract tests before production Scene code exists [VERIFY:bunx vitest run tests/scenes/digital-use; expected initial failures prove missing manifest/router/validators while snapshot itself parses and contains exactly the approved canonical expectations]
+- [ ] T1102 [REQ:FR-002,FR-004,FR-006,FR-009,FR-011,FR-012,FR-014,FR-015,FR-021,FR-022,FR-035] Create the independent V1-product snapshot and smallest failing Digital Use contract tests before production Scene code exists [VERIFY:bunx vitest run tests/scenes/digital-use; expected initial failures prove missing manifest/router/validators while snapshot itself parses and contains exactly the approved canonical expectations]
 
 ### T1102 — Canonical Snapshot + Failing Contract Evidence
 
@@ -207,7 +207,7 @@ Stop if the snapshot requires any node, branch, threshold, terminal or parallel 
 
 ---
 
-- [x] T1103 [REQ:FR-001,FR-023,FR-024,FR-027,§3,§12.1] Establish the minimal approved @xiaoshuyin/scenes workspace shell at packages/scenes/digital-use without business runtime or external dependencies [VERIFY:bun install --frozen-lockfile where applicable; bun run typecheck; workspace package resolves and only foundation exports exist]
+- [ ] T1103 [REQ:FR-001,FR-023,FR-024,FR-027,§3,§12.1] Establish the minimal approved @xiaoshuyin/scenes workspace shell at packages/scenes/digital-use without business runtime or external dependencies [VERIFY:bun install --frozen-lockfile where applicable; bun run typecheck; workspace package resolves and only foundation exports exist]
 
 ### T1103 — Minimal Scene Workspace
 
@@ -778,7 +778,7 @@ Stop if enforcing single-source would require a brittle blanket ban that breaks 
 
 ---
 
-- [x] T1113 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035] Complete the full negative-mutation matrix and map all 35 Frozen Acceptance Scenarios to executable evidence [VERIFY:bunx vitest run tests/scenes/digital-use; acceptance mapping shows 35/35 PASS and every required mutation is observed to fail for the intended reason]
+- [ ] T1113 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035] Complete the full negative-mutation matrix and map all 35 Frozen Acceptance Scenarios to executable evidence [VERIFY:bunx vitest run tests/scenes/digital-use; acceptance mapping shows 35/35 PASS and every required mutation is observed to fail for the intended reason]
 
 ### T1113 — Full Acceptance / Negative Mutation Convergence
 
@@ -897,7 +897,7 @@ Stop if CI integration requires broad workflow restructuring unrelated to Slice 
 
 ---
 
-- [x] T1115 [REQ:FR-026,FR-027,FR-028,FR-029,FR-030,SC-013,SC-014] Run targeted and full repository regression, prove exact implementation scope, and verify no Docs/spec/DB/API/UI/AI/runtime leakage [VERIFY:bun run typecheck; bun run guard:static; bunx vitest run tests/scenes/digital-use; bun run openapi:check; bun run verify-all; git diff --name-only <development-base>...HEAD against the approved allowlist]
+- [ ] T1115 [REQ:FR-026,FR-027,FR-028,FR-029,FR-030,SC-013,SC-014] Run targeted and full repository regression, prove exact implementation scope, and verify no Docs/spec/DB/API/UI/AI/runtime leakage [VERIFY:bun run typecheck; bun run guard:static; bunx vitest run tests/scenes/digital-use; bun run openapi:check; bun run verify-all; git diff --name-only <development-base>...HEAD against the approved allowlist]
 
 ### T1115 — Full Regression / Scope Proof
 
@@ -960,7 +960,7 @@ Any pre-existing unrelated failure must be classified honestly; any Slice-caused
 
 ---
 
-- [x] T1116 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,Constitution] Perform final exact-head convergence/governance verification, freeze implementation evidence, and stop for a new independent Audit 2 without merging [VERIFY:node .specify/scripts/validate-governance.mjs; node .specify/scripts/tests/run-governance-tests.mjs; bun run verify-all; git diff <development-base>...HEAD; exact-head CI evidence; acceptance matrix 35/35]
+- [ ] T1116 [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,Constitution] Perform final exact-head convergence/governance verification, freeze implementation evidence, and stop for a new independent Audit 2 without merging [VERIFY:node .specify/scripts/validate-governance.mjs; node .specify/scripts/tests/run-governance-tests.mjs; bun run verify-all; git diff <development-base>...HEAD; exact-head CI evidence; acceptance matrix 35/35]
 
 ### T1116 — Exact-Head Convergence / Independent Audit Handoff
 

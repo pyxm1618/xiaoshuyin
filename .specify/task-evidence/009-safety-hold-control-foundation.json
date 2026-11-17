@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "featureId": "009-safety-hold-control-foundation",
   "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/009-safety-hold-control-foundation/tasks.md",
@@ -7,7 +7,37 @@
   "implementationHeadSha": "7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef",
   "mergeCommitSha": "6fab0b79a942c5bf961a2201138ed02bf3197859",
   "mergedAt": "2026-11-11T11:30:22Z",
-  "taskIds": [
+  "taskIds": [],
+  "artifactPaths": [
+    "apps/server/api/src/authz.ts",
+    "apps/server/api/src/db/drizzle-tx.ts",
+    "apps/server/api/src/plugins/error-handler.ts",
+    "apps/server/api/src/routes/cases.ts",
+    "scripts/db-evidence.mjs",
+    "scripts/guard-static.mjs",
+    "tests/db/case-primary-switch-shared-vocabulary.test.ts",
+    "tests/db/cases-rls.test.ts",
+    "tests/db/migration-case-primary-switch-upgrade.test.ts",
+    "tests/db/migration-case-status-paused-removal.test.ts"
+  ],
+  "verificationPaths": [],
+  "ciRuns": [
+    {
+      "name": "Spec Governance",
+      "runId": 43009288028,
+      "conclusion": "success",
+      "headSha": "7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef"
+    },
+    {
+      "name": "CI",
+      "runId": 43009288032,
+      "conclusion": "success",
+      "headSha": "7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef"
+    }
+  ],
+  "taskVerifications": [],
+  "historicalCompletionStatus": "PARTIAL_MACHINE_VERIFIED",
+  "historicalCompletionGaps": [
     "T901",
     "T902",
     "T903",
@@ -28,37 +58,5 @@
     "T918",
     "T919",
     "T920"
-  ],
-  "taskVerificationDigest": "5d66c00c1fc948b72818ff4b99b886c61108fd68",
-  "artifactPaths": [
-    "apps/server/api/src/authz.ts",
-    "apps/server/api/src/db/drizzle-tx.ts",
-    "apps/server/api/src/plugins/error-handler.ts",
-    "apps/server/api/src/routes/cases.ts",
-    "tests/db/case-primary-switch-shared-vocabulary.test.ts",
-    "tests/db/cases-rls.test.ts",
-    "tests/db/migration-case-primary-switch-upgrade.test.ts",
-    "tests/db/migration-case-status-paused-removal.test.ts",
-    "scripts/db-evidence.mjs",
-    "scripts/guard-static.mjs"
-  ],
-  "verificationPaths": [
-    "tests/db/case-primary-switch-shared-vocabulary.test.ts",
-    "tests/db/cases-rls.test.ts",
-    "tests/db/migration-case-primary-switch-upgrade.test.ts"
-  ],
-  "ciRuns": [
-    {
-      "name": "Spec Governance",
-      "runId": 43009288028,
-      "conclusion": "success",
-      "headSha": "7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef"
-    },
-    {
-      "name": "CI",
-      "runId": 43009288032,
-      "conclusion": "success",
-      "headSha": "7b4f5796ef1c6ac1126f9b7bb687293df8a8ceef"
-    }
   ]
 }

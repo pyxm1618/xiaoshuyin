@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "featureId": "011-digital-use-node-manifest-routing-foundation",
   "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/011-digital-use-node-manifest-routing-foundation/tasks.md",
@@ -8,9 +8,6 @@
   "mergeCommitSha": "eaf2bb3adc2d9499a4ed84d0ca560c55209628f8",
   "mergedAt": "2026-11-12T09:39:46Z",
   "taskIds": [
-    "T1101",
-    "T1102",
-    "T1103",
     "T1104",
     "T1105",
     "T1106",
@@ -20,25 +17,34 @@
     "T1110",
     "T1111",
     "T1112",
-    "T1113",
-    "T1114",
-    "T1115",
-    "T1116"
+    "T1114"
   ],
-  "taskVerificationDigest": "fae7e80bb1d105b06220defc7c35b20e7b32f0de",
   "artifactPaths": [
+    ".github/workflows/ci.yml",
     "packages/scenes/digital-use/node-manifest.ts",
     "packages/scenes/digital-use/routing.ts",
     "packages/scenes/digital-use/validators.ts",
     "tests/scenes/digital-use/acceptance-matrix.test.ts",
-    "tests/scenes/digital-use/negative-mutations.test.ts",
     "tests/scenes/digital-use/architecture-guard.test.ts",
-    ".github/workflows/ci.yml"
+    "tests/scenes/digital-use/authority-regression.test.ts",
+    "tests/scenes/digital-use/graph-validation.test.ts",
+    "tests/scenes/digital-use/manifest-completeness.test.ts",
+    "tests/scenes/digital-use/negative-mutations.test.ts",
+    "tests/scenes/digital-use/parallel-fidelity.test.ts",
+    "tests/scenes/digital-use/routing.test.ts",
+    "tests/scenes/digital-use/snapshot-fidelity.test.ts",
+    "tests/scenes/digital-use/source-identity.test.ts"
   ],
   "verificationPaths": [
-    "tests/scenes/digital-use/acceptance-matrix.test.ts",
-    "tests/scenes/digital-use/negative-mutations.test.ts",
-    "tests/scenes/digital-use/architecture-guard.test.ts"
+    ".github/workflows/ci.yml",
+    "tests/scenes/digital-use/architecture-guard.test.ts",
+    "tests/scenes/digital-use/authority-regression.test.ts",
+    "tests/scenes/digital-use/graph-validation.test.ts",
+    "tests/scenes/digital-use/manifest-completeness.test.ts",
+    "tests/scenes/digital-use/parallel-fidelity.test.ts",
+    "tests/scenes/digital-use/routing.test.ts",
+    "tests/scenes/digital-use/snapshot-fidelity.test.ts",
+    "tests/scenes/digital-use/source-identity.test.ts"
   ],
   "ciRuns": [
     {
@@ -53,5 +59,100 @@
       "conclusion": "success",
       "headSha": "e7ad9975c25d8fc4ddf30b769d7e74a16e42cf8d"
     }
+  ],
+  "taskVerifications": [
+    {
+      "taskId": "T1104",
+      "reqContract": "FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-009,FR-010,FR-011,FR-012,FR-014,FR-015,FR-031,FR-032,FR-035",
+      "verifyContract": "bunx vitest run tests/scenes/digital-use/manifest-completeness.test.ts tests/scenes/digital-use/source-identity.test.ts; bun run typecheck",
+      "verificationPaths": [
+        "tests/scenes/digital-use/manifest-completeness.test.ts",
+        "tests/scenes/digital-use/source-identity.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1105",
+      "reqContract": "FR-002,FR-003,FR-004,FR-016,FR-017,FR-019,FR-021,FR-031,FR-032,FR-035",
+      "verifyContract": "bunx vitest run tests/scenes/digital-use/manifest-completeness.test.ts tests/scenes/digital-use/source-identity.test.ts tests/scenes/digital-use/graph-validation.test.ts",
+      "verificationPaths": [
+        "tests/scenes/digital-use/graph-validation.test.ts",
+        "tests/scenes/digital-use/manifest-completeness.test.ts",
+        "tests/scenes/digital-use/source-identity.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1106",
+      "reqContract": "FR-008,FR-009,FR-010,FR-016,FR-017,FR-023,FR-024,FR-025,FR-026,FR-033",
+      "verifyContract": "bunx vitest run tests/scenes/digital-use/routing.test.ts; static dependency scan; repeated-identical-input determinism assertions",
+      "verificationPaths": [
+        "tests/scenes/digital-use/routing.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1107",
+      "reqContract": "FR-011,FR-015,FR-018,FR-019,FR-034,DU-011-A,DU-011-C",
+      "verifyContract": "bunx vitest run tests/scenes/digital-use/graph-validation.test.ts; all 75 nodes receive a legitimate reachability classification and injected orphan/dead-end mutations fail",
+      "verificationPaths": [
+        "tests/scenes/digital-use/graph-validation.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1108",
+      "reqContract": "FR-011,FR-013,FR-014,FR-015,FR-020,V1-D40",
+      "verifyContract": "bunx vitest run tests/scenes/digital-use/parallel-fidelity.test.ts; missing/serialized relation mutations fail",
+      "verificationPaths": [
+        "tests/scenes/digital-use/parallel-fidelity.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1109",
+      "reqContract": "FR-005,FR-006,FR-007,FR-008,FR-009,V1-D01,V1-D02,§32.2",
+      "verifyContract": "bunx vitest run tests/scenes/digital-use/authority-regression.test.ts; pre-PR#25 semantic mutations all fail",
+      "verificationPaths": [
+        "tests/scenes/digital-use/authority-regression.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1110",
+      "reqContract": "FR-003,FR-011,FR-012,FR-014,FR-034,FR-035,DU-011-A,DU-011-B",
+      "verifyContract": "bunx vitest run tests/scenes/digital-use/source-identity.test.ts tests/scenes/digital-use/graph-validation.test.ts; all forbidden inferred identities/edges remain absent",
+      "verificationPaths": [
+        "tests/scenes/digital-use/graph-validation.test.ts",
+        "tests/scenes/digital-use/source-identity.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1111",
+      "reqContract": "FR-021,FR-022,FR-030,§12.2A",
+      "verifyContract": "bunx vitest run tests/scenes/digital-use/snapshot-fidelity.test.ts; intentional semantic mutation yields readable FAIL and snapshot file remains byte-identical",
+      "verificationPaths": [
+        "tests/scenes/digital-use/snapshot-fidelity.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1112",
+      "reqContract": "FR-001,FR-003,FR-023,FR-024,FR-025,FR-027,FR-028,SC-011,SC-012",
+      "verifyContract": "bun run guard:static; bunx vitest run tests/scenes/digital-use/architecture-guard.test.ts; injected node-registry/snapshot-import/numeric-generator/forbidden-router-dependency fixtures fail",
+      "verificationPaths": [
+        "tests/scenes/digital-use/architecture-guard.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1114",
+      "reqContract": "FR-030,§12.2A,§32.2",
+      "verifyContract": "inspect .github/workflows/ci.yml; CI run on exact head shows Digital Use foundation, typecheck, guard:static, verify-all and OpenAPI checks all PASS",
+      "verificationPaths": [
+        ".github/workflows/ci.yml"
+      ]
+    }
+  ],
+  "historicalCompletionStatus": "PARTIAL_MACHINE_VERIFIED",
+  "historicalCompletionGaps": [
+    "T1101",
+    "T1102",
+    "T1103",
+    "T1113",
+    "T1115",
+    "T1116"
   ]
 }

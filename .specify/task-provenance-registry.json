@@ -1,4 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "policy": "SHARED_REMEDIATION bindings are repository-owned and must land separately from consuming task evidence.",
   "sharedRemediations": []
 }

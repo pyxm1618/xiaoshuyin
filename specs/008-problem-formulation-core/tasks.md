@@ -21,7 +21,7 @@
 
 ## T801 [S] — Revalidate immutable inputs
 
-- [x] T801 [REQ:all FRs; pre-development G1] Revalidate immutable inputs [VERIFY:Record exact SHA, merge-base, ahead/behind and changed-file list. STOP if frozen Spec or authoritative baseline changed without re-audit.]
+- [ ] T801 [REQ:all FRs; pre-development G1] Revalidate immutable inputs [VERIFY:Record exact SHA, merge-base, ahead/behind and changed-file list. STOP if frozen Spec or authoritative baseline changed without re-audit.]
 
 **Maps:** all FRs; pre-development G1
 
@@ -44,7 +44,7 @@ Record exact SHA, merge-base, ahead/behind and changed-file list. STOP if frozen
 
 ## T802 [S] — Run canonical baseline before RED work
 
-- [x] T802 [REQ:FR-023, FR-025; G11] Run canonical baseline before RED work [VERIFY:Baseline commands exit 0, or development stops with a diagnosed upstream blocker.]
+- [ ] T802 [REQ:FR-023, FR-025; G11] Run canonical baseline before RED work [VERIFY:Baseline commands exit 0, or development stops with a diagnosed upstream blocker.]
 
 **Maps:** FR-023, FR-025; G11
 
@@ -67,7 +67,7 @@ Baseline commands exit 0, or development stops with a diagnosed upstream blocker
 
 ## T803 [S] — Introspect real DB constraints, grants and roles
 
-- [x] T803 [REQ:FR-018, FR-021, FR-019; G2/G3/G5/G7/G8] Introspect real DB constraints, grants and roles [VERIFY:Evidence records exact constraint names/definitions and confirms app/migrator `NOBYPASSRLS`, Case table-level UPDATE=false, migrations through 007 present including both `004_*` files.]
+- [ ] T803 [REQ:FR-018, FR-021, FR-019; G2/G3/G5/G7/G8] Introspect real DB constraints, grants and roles [VERIFY:Evidence records exact constraint names/definitions and confirms app/migrator `NOBYPASSRLS`, Case table-level UPDATE=false, migrations through 007 present including both `004_*` files.]
 
 **Maps:** FR-018, FR-021, FR-019; G2/G3/G5/G7/G8
 
@@ -90,7 +90,7 @@ Evidence records exact constraint names/definitions and confirms app/migrator `N
 
 ## T804 [P] — Inventory negative-space guards that currently forbid Slice 8
 
-- [x] T804 [REQ:FR-022, FR-025, FR-028, FR-029; G10] Inventory negative-space guards that currently forbid Slice 8 [VERIFY:Inventory contains all current matches and a proposed exact replacement for each. No file modified yet.]
+- [ ] T804 [REQ:FR-022, FR-025, FR-028, FR-029; G10] Inventory negative-space guards that currently forbid Slice 8 [VERIFY:Inventory contains all current matches and a proposed exact replacement for each. No file modified yet.]
 
 **Maps:** FR-022, FR-025, FR-028, FR-029; G10
 
@@ -113,7 +113,7 @@ Inventory contains all current matches and a proposed exact replacement for each
 
 ## T805 [P] — Revalidate primary lock order and Evidence carrier seam
 
-- [x] T805 [REQ:FR-007, FR-015, FR-020, FR-030; G4/G6] Revalidate primary lock order and Evidence carrier seam [VERIFY:Confirm Family is still the canonical primary serialization point and dialogue/STATEMENT/supersedes/validity/conflict/value-state data remains available. STOP if incompatible.]
+- [ ] T805 [REQ:FR-007, FR-015, FR-020, FR-030; G4/G6] Revalidate primary lock order and Evidence carrier seam [VERIFY:Confirm Family is still the canonical primary serialization point and dialogue/STATEMENT/supersedes/validity/conflict/value-state data remains available. STOP if incompatible.]
 
 **Maps:** FR-007, FR-015, FR-020, FR-030; G4/G6
 
@@ -138,7 +138,7 @@ Confirm Family is still the canonical primary serialization point and dialogue/S
 
 ## T806 [P] — Add RED DB schema/current/history/RLS tests
 
-- [x] T806 [REQ:FR-001–FR-004, FR-018, FR-027; AS-12/16/17/20] Add RED DB schema/current/history/RLS tests [VERIFY:Tests fail only because 008 objects/grants do not yet exist; no unrelated failures.]
+- [ ] T806 [REQ:FR-001–FR-004, FR-018, FR-027; AS-12/16/17/20] Add RED DB schema/current/history/RLS tests [VERIFY:Tests fail only because 008 objects/grants do not yet exist; no unrelated failures.]
 
 **Maps:** FR-001–FR-004, FR-018, FR-027; AS-12/16/17/20
 
@@ -162,7 +162,7 @@ Tests fail only because 008 objects/grants do not yet exist; no unrelated failur
 
 ## T807 [P] — Add RED domain state/version tests
 
-- [x] T807 [REQ:FR-002–FR-004, FR-010–FR-013, FR-020, FR-027; AS-10/11/12/15/25] Add RED domain state/version tests [VERIFY:Tests compile against planned exported types or remain intentionally RED with explicit missing symbols; each frozen legal/illegal transition has an assertion.]
+- [ ] T807 [REQ:FR-002–FR-004, FR-010–FR-013, FR-020, FR-027; AS-10/11/12/15/25] Add RED domain state/version tests [VERIFY:Tests compile against planned exported types or remain intentionally RED with explicit missing symbols; each frozen legal/illegal transition has an assertion.]
 
 **Maps:** FR-002–FR-004, FR-010–FR-013, FR-020, FR-027; AS-10/11/12/15/25
 
@@ -186,7 +186,7 @@ Tests compile against planned exported types or remain intentionally RED with ex
 
 ## T808 [P] — Add RED Evidence/dependency fidelity tests
 
-- [x] T808 [REQ:FR-007, FR-009, FR-026, FR-030; AS-2/4/8/22] Add RED Evidence/dependency fidelity tests [VERIFY:Every frozen Evidence failure mode has an explicit expected domain error/category; contract/domain tests prove the five ConflictItem forms and prove client dependency refs cannot redefine or omit the server-derived mandatory set. Mandatory cases include group-only conflict → resolved Evidence A/B both present in `authoritativeEvidenceSet`, and omission of either resulting mandatory EVIDENCE dependency is rejected.]
+- [ ] T808 [REQ:FR-007, FR-009, FR-026, FR-030; AS-2/4/8/22] Add RED Evidence/dependency fidelity tests [VERIFY:Every frozen Evidence failure mode has an explicit expected domain error/category; contract/domain tests prove the five ConflictItem forms and prove client dependency refs cannot redefine or omit the server-derived mandatory set. Mandatory cases include group-only conflict → resolved Evidence A/B both present in `authoritativeEvidenceSet`, and omission of either resulting mandatory EVIDENCE dependency is rejected.]
 
 **Maps:** FR-007, FR-009, FR-026, FR-030; AS-2/4/8/22
 
@@ -209,7 +209,7 @@ Every frozen Evidence failure mode has an explicit expected domain error/categor
 
 ## T809 [P] — Add RED authorization/AI-boundary tests
 
-- [x] T809 [REQ:FR-014, FR-017; AS-9/16/18] Add RED authorization/AI-boundary tests [VERIFY:Tests identify required action registry additions and prove no synthetic principal is accepted by planned command types.]
+- [ ] T809 [REQ:FR-014, FR-017; AS-9/16/18] Add RED authorization/AI-boundary tests [VERIFY:Tests identify required action registry additions and prove no synthetic principal is accepted by planned command types.]
 
 **Maps:** FR-014, FR-017; AS-9/16/18
 
@@ -232,7 +232,7 @@ Tests identify required action registry additions and prove no synthetic princip
 
 ## T810 [P] — Add RED OpenAPI/runtime-surface tests
 
-- [x] T810 [REQ:FR-022, FR-024, FR-028; AS-5/20/21] Add RED OpenAPI/runtime-surface tests [VERIFY:New tests are RED because Slice 8 routes/schemas are absent, while all pre-existing route tests remain unchanged/green.]
+- [ ] T810 [REQ:FR-022, FR-024, FR-028; AS-5/20/21] Add RED OpenAPI/runtime-surface tests [VERIFY:New tests are RED because Slice 8 routes/schemas are absent, while all pre-existing route tests remain unchanged/green.]
 
 **Maps:** FR-022, FR-024, FR-028; AS-5/20/21
 
@@ -258,7 +258,7 @@ New tests are RED because Slice 8 routes/schemas are absent, while all pre-exist
 
 ## T811 [S] — Extend authorization action registry
 
-- [x] T811 [REQ:FR-014, FR-017] Extend authorization action registry [VERIFY:T809 becomes green for action matrices; old authorization tests remain green; no new Purpose/Resource/role.]
+- [ ] T811 [REQ:FR-014, FR-017] Extend authorization action registry [VERIFY:T809 becomes green for action matrices; old authorization tests remain green; no new Purpose/Resource/role.]
 
 **Maps:** FR-014, FR-017
 
@@ -281,7 +281,7 @@ T809 becomes green for action matrices; old authorization tests remain green; no
 
 ## T812 [S] — Add strict Zod/public/domain input schemas
 
-- [x] T812 [REQ:FR-002, FR-006–FR-012, FR-022, FR-024, FR-026] Add strict Zod/public/domain input schemas [VERIFY:Schema unit/integration tests reject unknown fields, client status/version/confirmed fields, empty changes, malformed refs and malformed/out-of-range If-Match. Explicit boundaries: 2147483647 accepted; 2147483648 rejected for path formulation version, numeric DB-backed versions/caseVersion where represented, and If-Match before DB access.]
+- [ ] T812 [REQ:FR-002, FR-006–FR-012, FR-022, FR-024, FR-026] Add strict Zod/public/domain input schemas [VERIFY:Schema unit/integration tests reject unknown fields, client status/version/confirmed fields, empty changes, malformed refs and malformed/out-of-range If-Match. Explicit boundaries: 2147483647 accepted; 2147483648 rejected for path formulation version, numeric DB-backed versions/caseVersion where represented, and If-Match before DB access.]
 
 **Maps:** FR-002, FR-006–FR-012, FR-022, FR-024, FR-026
 
@@ -304,7 +304,7 @@ Schema unit/integration tests reject unknown fields, client status/version/confi
 
 ## T813 [S] — Add Problem Formulation domain types and pure transition policy
 
-- [x] T813 [REQ:FR-001–FR-004, FR-008, FR-010–FR-013, FR-027, FR-029] Add Problem Formulation domain types and pure transition policy [VERIFY:T807 green; no Assessment/Scene/Goal/AI import/dependency exists.]
+- [ ] T813 [REQ:FR-001–FR-004, FR-008, FR-010–FR-013, FR-027, FR-029] Add Problem Formulation domain types and pure transition policy [VERIFY:T807 green; no Assessment/Scene/Goal/AI import/dependency exists.]
 
 **Maps:** FR-001–FR-004, FR-008, FR-010–FR-013, FR-027, FR-029
 
@@ -328,7 +328,7 @@ T807 green; no Assessment/Scene/Goal/AI import/dependency exists.
 
 ## T814 [S] — Add Evidence/current-validity resolvers and fidelity validator
 
-- [x] T814 [REQ:FR-007, FR-009, FR-026, FR-030] Add Evidence/current-validity resolvers and fidelity validator [VERIFY:T808 green; Evidence tables remain unmodified; no Evidence write is introduced. **Parallel note** Serial with T813/T815 if they edit the same domain file. Do not parallelize same-file edits.]
+- [ ] T814 [REQ:FR-007, FR-009, FR-026, FR-030] Add Evidence/current-validity resolvers and fidelity validator [VERIFY:T808 green; Evidence tables remain unmodified; no Evidence write is introduced. **Parallel note** Serial with T813/T815 if they edit the same domain file. Do not parallelize same-file edits.]
 
 **Maps:** FR-007, FR-009, FR-026, FR-030
 
@@ -355,7 +355,7 @@ Serial with T813/T815 if they edit the same domain file. Do not parallelize same
 
 ## T815 [S] — Extend idempotency command vocabulary/types
 
-- [x] T815 [REQ:FR-019, FR-020] Extend idempotency command vocabulary/types [VERIFY:Existing idempotency unit tests plus new command-type/key-representation tests compile and pass at TypeScript level; no second table/store.]
+- [ ] T815 [REQ:FR-019, FR-020] Extend idempotency command vocabulary/types [VERIFY:Existing idempotency unit tests plus new command-type/key-representation tests compile and pass at TypeScript level; no second table/store.]
 
 **Maps:** FR-019, FR-020
 
@@ -380,7 +380,7 @@ Existing idempotency unit tests plus new command-type/key-representation tests c
 
 ## T816 [S, MIGRATION] — Author `008_problem_formulation_core.sql`
 
-- [x] T816 [REQ:FR-001–FR-004, FR-018–FR-021, FR-027] Author `008_problem_formulation_core.sql` [VERIFY:Run only focused migration/schema/RLS tests first. Confirm no files `001`–`007` changed. Inspect exact SQL diff. Do not perform any other migration edit in parallel.]
+- [ ] T816 [REQ:FR-001–FR-004, FR-018–FR-021, FR-027] Author `008_problem_formulation_core.sql` [VERIFY:Run only focused migration/schema/RLS tests first. Confirm no files `001`–`007` changed. Inspect exact SQL diff. Do not perform any other migration edit in parallel.]
 
 **Maps:** FR-001–FR-004, FR-018–FR-021, FR-027
 
@@ -403,7 +403,7 @@ Run only focused migration/schema/RLS tests first. Confirm no files `001`–`007
 
 ## T817 [S] — Turn schema/RLS/role tests green
 
-- [x] T817 [REQ:FR-003, FR-004, FR-018, FR-027] Turn schema/RLS/role tests green [VERIFY:Focused DB tests pass under app/migrator/admin roles and direct-SQL negative cases.]
+- [ ] T817 [REQ:FR-003, FR-004, FR-018, FR-027] Turn schema/RLS/role tests green [VERIFY:Focused DB tests pass under app/migrator/admin roles and direct-SQL negative cases.]
 
 **Maps:** FR-003, FR-004, FR-018, FR-027
 
@@ -429,7 +429,7 @@ Focused DB tests pass under app/migrator/admin roles and direct-SQL negative cas
 
 ## T818 [S] — Implement shared transaction/lock/idempotency orchestration seam
 
-- [x] T818 [REQ:FR-015–FR-021, FR-023] Implement shared transaction/lock/idempotency orchestration seam [VERIFY:Unit/integration harness proves lock/helper call order and deterministic 4xx/no-business-write outcome persistence; no SQL appears in `apps/**`.]
+- [ ] T818 [REQ:FR-015–FR-021, FR-023] Implement shared transaction/lock/idempotency orchestration seam [VERIFY:Unit/integration harness proves lock/helper call order and deterministic 4xx/no-business-write outcome persistence; no SQL appears in `apps/**`.]
 
 **Maps:** FR-015–FR-021, FR-023
 
@@ -452,7 +452,7 @@ Unit/integration harness proves lock/helper call order and deterministic 4xx/no-
 
 ## T819 [S] — Implement StartAssessment
 
-- [x] T819 [REQ:FR-005, FR-015–FR-021, FR-023, FR-030; AS-1/2] Implement StartAssessment [VERIFY:Dedicated internal-service integration tests: success, no statement, nonprimary, Safety, wrong phase, stale Case, retry, missing Consent, revoked Consent, stale/notice-mismatched Consent, and UNDER_14 processing blocked. Every blocked compliance case asserts zero phase/event/audit/idempotent-business mutation; no Assessment/formulation object is created.]
+- [ ] T819 [REQ:FR-005, FR-015–FR-021, FR-023, FR-030; AS-1/2] Implement StartAssessment [VERIFY:Dedicated internal-service integration tests: success, no statement, nonprimary, Safety, wrong phase, stale Case, retry, missing Consent, revoked Consent, stale/notice-mismatched Consent, and UNDER_14 processing blocked. Every blocked compliance case asserts zero phase/event/audit/idempotent-business mutation; no Assessment/formulation object is created.]
 
 **Maps:** FR-005, FR-015–FR-021, FR-023, FR-030; AS-1/2
 
@@ -476,7 +476,7 @@ Dedicated internal-service integration tests: success, no statement, nonprimary,
 
 ## T820 [S] — Implement PresentProblemFormulation
 
-- [x] T820 [REQ:FR-006, FR-007, FR-015–FR-021, FR-023, FR-029; AS-3/4/22/24] Implement PresentProblemFormulation [VERIFY:Version-1 and post-Reassess version-N integration tests; invalid Evidence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted, and client dependency set incomplete all yield zero formulation/phase mutation. Mandatory group-only cases: a conflict group that expands to an UNDER_14 subject/source executes the existing consent gate; omission of any expanded side's mandatory EVIDENCE dependency rejects Present. No DRAFT/AI/Scene side effect.]
+- [ ] T820 [REQ:FR-006, FR-007, FR-015–FR-021, FR-023, FR-029; AS-3/4/22/24] Implement PresentProblemFormulation [VERIFY:Version-1 and post-Reassess version-N integration tests; invalid Evidence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted, and client dependency set incomplete all yield zero formulation/phase mutation. Mandatory group-only cases: a conflict group that expands to an UNDER_14 subject/source executes the existing consent gate; omission of any expanded side's mandatory EVIDENCE dependency rejects Present. No DRAFT/AI/Scene side effect.]
 
 **Maps:** FR-006, FR-007, FR-015–FR-021, FR-023, FR-029; AS-3/4/22/24
 
@@ -500,7 +500,7 @@ Version-1 and post-Reassess version-N integration tests; invalid Evidence, missi
 
 ## T821 [S] — Implement ConfirmProblemFormulation
 
-- [x] T821 [REQ:FR-008, FR-009, FR-013–FR-021, FR-023, FR-026; AS-6/7/8/9/11/13/14/24] Implement ConfirmProblemFormulation [VERIFY:Internal service tests prove exact guards, AI/system absence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted from stored current, stale dependency refusal and atomic outcome. Mandatory verification: a current group-only conflict is re-resolved; if an expanded Evidence side/dependency is now stale, invalid or missing from the current valid mandatory dependency set, Confirm is blocked. Confirm never trusts only top-level refs or the stored/client-supplied dependency list.]
+- [ ] T821 [REQ:FR-008, FR-009, FR-013–FR-021, FR-023, FR-026; AS-6/7/8/9/11/13/14/24] Implement ConfirmProblemFormulation [VERIFY:Internal service tests prove exact guards, AI/system absence, missing/revoked/stale Consent, UNDER_14 block, mandatory dependency omitted from stored current, stale dependency refusal and atomic outcome. Mandatory verification: a current group-only conflict is re-resolved; if an expanded Evidence side/dependency is now stale, invalid or missing from the current valid mandatory dependency set, Confirm is blocked. Confirm never trusts only top-level refs or the stored/client-supplied dependency list.]
 
 **Maps:** FR-008, FR-009, FR-013–FR-021, FR-023, FR-026; AS-6/7/8/9/11/13/14/24
 
@@ -524,7 +524,7 @@ Internal service tests prove exact guards, AI/system absence, missing/revoked/st
 
 ## T822 [S] — Implement DisputeProblemFormulation
 
-- [x] T822 [REQ:FR-010, FR-014–FR-021, FR-023; AS-10/11] Implement DisputeProblemFormulation [VERIFY:Service test asserts phase unchanged, repeated different-key dispute conflicts, same-key replay exact, Confirm after dispute conflicts.]
+- [ ] T822 [REQ:FR-010, FR-014–FR-021, FR-023; AS-10/11] Implement DisputeProblemFormulation [VERIFY:Service test asserts phase unchanged, repeated different-key dispute conflicts, same-key replay exact, Confirm after dispute conflicts.]
 
 **Maps:** FR-010, FR-014–FR-021, FR-023; AS-10/11
 
@@ -548,7 +548,7 @@ Service test asserts phase unchanged, repeated different-key dispute conflicts, 
 
 ## T823 [S] — Implement CorrectProblemFormulation
 
-- [x] T823 [REQ:FR-003, FR-004, FR-011, FR-014–FR-021, FR-023, FR-027; AS-12/24/25] Implement CorrectProblemFormulation [VERIFY:DB snapshot proves old content byte-equivalent except lifecycle fields; new row is complete; no-op/empty/GOALS/current-stale paths fail as planned. Add negative tests for dependency stripped by Correction, newly required dependency omitted after merge, missing/revoked/stale Consent and UNDER_14 processing blocked. Mandatory group-only case: merged content contains a group-only conflict whose resolved Evidence A/B are absent from candidate dependencyRefs → Correction rejects and leaves old current untouched.]
+- [ ] T823 [REQ:FR-003, FR-004, FR-011, FR-014–FR-021, FR-023, FR-027; AS-12/24/25] Implement CorrectProblemFormulation [VERIFY:DB snapshot proves old content byte-equivalent except lifecycle fields; new row is complete; no-op/empty/GOALS/current-stale paths fail as planned. Add negative tests for dependency stripped by Correction, newly required dependency omitted after merge, missing/revoked/stale Consent and UNDER_14 processing blocked. Mandatory group-only case: merged content contains a group-only conflict whose resolved Evidence A/B are absent from candidate dependencyRefs → Correction rejects and leaves old current untouched.]
 
 **Maps:** FR-003, FR-004, FR-011, FR-014–FR-021, FR-023, FR-027; AS-12/24/25
 
@@ -572,7 +572,7 @@ DB snapshot proves old content byte-equivalent except lifecycle fields; new row 
 
 ## T824 [S] — Implement ReassessFromFormulation
 
-- [x] T824 [REQ:FR-012, FR-015–FR-021, FR-023; AS-15] Implement ReassessFromFormulation [VERIFY:Before/after formulation row is identical; only Case phase/version + event/audit/idempotency changes. Follow-up Present supersedes old current into version+1.]
+- [ ] T824 [REQ:FR-012, FR-015–FR-021, FR-023; AS-15] Implement ReassessFromFormulation [VERIFY:Before/after formulation row is identical; only Case phase/version + event/audit/idempotency changes. Follow-up Present supersedes old current into version+1.]
 
 **Maps:** FR-012, FR-015–FR-021, FR-023; AS-15
 
@@ -598,7 +598,7 @@ Before/after formulation row is identical; only Case phase/version + event/audit
 
 ## T825 [S] — Add exact new error codes and mappings
 
-- [x] T825 [REQ:FR-008–FR-010, FR-015–FR-020, FR-023] Add exact new error codes and mappings [VERIFY:Error-map tests cover every new literal/status and preserve existing mappings; unknown failures still 500.]
+- [ ] T825 [REQ:FR-008–FR-010, FR-015–FR-020, FR-023] Add exact new error codes and mappings [VERIFY:Error-map tests cover every new literal/status and preserve existing mappings; unknown failures still 500.]
 
 **Maps:** FR-008–FR-010, FR-015–FR-020, FR-023
 
@@ -621,7 +621,7 @@ Error-map tests cover every new literal/status and preserve existing mappings; u
 
 ## T826 [S] — Implement the four public routes only
 
-- [x] T826 [REQ:FR-008–FR-011, FR-014, FR-017, FR-022–FR-024; AS-5–14/16/18/19/21/25] Implement the four public routes only [VERIFY:Focused route integration tests prove exact status/error bodies, no route-level SQL, path version 2147483647 accepted / 2147483648 rejected, and If-Match case-v2147483647 accepted / case-v2147483648 rejected before DB access.]
+- [ ] T826 [REQ:FR-008–FR-011, FR-014, FR-017, FR-022–FR-024; AS-5–14/16/18/19/21/25] Implement the four public routes only [VERIFY:Focused route integration tests prove exact status/error bodies, no route-level SQL, path version 2147483647 accepted / 2147483648 rejected, and If-Match case-v2147483647 accepted / case-v2147483648 rejected before DB access.]
 
 **Maps:** FR-008–FR-011, FR-014, FR-017, FR-022–FR-024; AS-5–14/16/18/19/21/25
 
@@ -644,7 +644,7 @@ Focused route integration tests prove exact status/error bodies, no route-level 
 
 ## T827 [S] — Register only the approved route plugin
 
-- [x] T827 [REQ:FR-022, FR-025, FR-028] Register only the approved route plugin [VERIFY:`app.printRoutes()` contains exactly the four Slice 8 operations and no fifth formulation/assessment transition route.]
+- [ ] T827 [REQ:FR-022, FR-025, FR-028] Register only the approved route plugin [VERIFY:`app.printRoutes()` contains exactly the four Slice 8 operations and no fifth formulation/assessment transition route.]
 
 **Maps:** FR-022, FR-025, FR-028
 
@@ -667,7 +667,7 @@ T826.
 
 ## T828 [S] — Add Slice 8 frozen YAML to semantic OpenAPI union
 
-- [x] T828 [REQ:FR-022] Add Slice 8 frozen YAML to semantic OpenAPI union [VERIFY:Before generation, checker reports only expected generated drift; old frozen contracts remain checked.]
+- [ ] T828 [REQ:FR-022] Add Slice 8 frozen YAML to semantic OpenAPI union [VERIFY:Before generation, checker reports only expected generated drift; old frozen contracts remain checked.]
 
 **Maps:** FR-022
 
@@ -690,7 +690,7 @@ Before generation, checker reports only expected generated drift; old frozen con
 
 ## T829 [S, GENERATOR] — Generate OpenAPI artifacts formally
 
-- [x] T829 [REQ:FR-022] Generate OpenAPI artifacts formally [VERIFY:`bun run openapi:generate` succeeds; immediate second run is diff-no-op; `bun run openapi:check` passes.]
+- [ ] T829 [REQ:FR-022] Generate OpenAPI artifacts formally [VERIFY:`bun run openapi:generate` succeeds; immediate second run is diff-no-op; `bun run openapi:check` passes.]
 
 **Maps:** FR-022
 
@@ -715,7 +715,7 @@ T828.
 
 ## T830 [S] — Turn OpenAPI/runtime-surface tests green
 
-- [x] T830 [REQ:FR-022, FR-024; AS-5/20/21] Turn OpenAPI/runtime-surface tests green [VERIFY:Dedicated tests + `openapi:check` pass and enumerate no fifth route. Contract tests cover group-only valid, evidence-pair valid, single evidence without group invalid, invalid/unresolvable group rejected by domain resolver, and integer boundary 2147483647/2147483648.]
+- [ ] T830 [REQ:FR-022, FR-024; AS-5/20/21] Turn OpenAPI/runtime-surface tests green [VERIFY:Dedicated tests + `openapi:check` pass and enumerate no fifth route. Contract tests cover group-only valid, evidence-pair valid, single evidence without group invalid, invalid/unresolvable group rejected by domain resolver, and integer boundary 2147483647/2147483648.]
 
 **Maps:** FR-022, FR-024; AS-5/20/21
 
@@ -741,7 +741,7 @@ Dedicated tests + `openapi:check` pass and enumerate no fifth route. Contract te
 
 ## T831 [S] — Narrow static scope guard exactly for Slice 8
 
-- [x] T831 [REQ:FR-001, FR-025, FR-028, FR-029] Narrow static scope guard exactly for Slice 8 [VERIFY:`bun run guard:static` passes; a temporary/fixture forbidden `goals` or `scene_node_states` definition is still caught by the guard test mechanism.]
+- [ ] T831 [REQ:FR-001, FR-025, FR-028, FR-029] Narrow static scope guard exactly for Slice 8 [VERIFY:`bun run guard:static` passes; a temporary/fixture forbidden `goals` or `scene_node_states` definition is still caught by the guard test mechanism.]
 
 **Maps:** FR-001, FR-025, FR-028, FR-029
 
@@ -764,7 +764,7 @@ T816.
 
 ## T832 [S] — Reconcile legacy Case scope tests without weakening them
 
-- [x] T832 [REQ:FR-022, FR-025] Reconcile legacy Case scope tests without weakening them [VERIFY:Old Case semantics remain green; all unrelated negative-space assertions still execute.]
+- [ ] T832 [REQ:FR-022, FR-025] Reconcile legacy Case scope tests without weakening them [VERIFY:Old Case semantics remain green; all unrelated negative-space assertions still execute.]
 
 **Maps:** FR-022, FR-025
 
@@ -788,7 +788,7 @@ Old Case semantics remain green; all unrelated negative-space assertions still e
 
 ## T833 [S] — Update migration reproduction and exact role tests
 
-- [x] T833 [REQ:FR-018, FR-023, FR-025, FR-027] Update migration reproduction and exact role tests [VERIFY:Both tests pass on fresh migrated DB; direct privilege queries match the Plan.]
+- [ ] T833 [REQ:FR-018, FR-023, FR-025, FR-027] Update migration reproduction and exact role tests [VERIFY:Both tests pass on fresh migrated DB; direct privilege queries match the Plan.]
 
 **Maps:** FR-018, FR-023, FR-025, FR-027
 
@@ -812,7 +812,7 @@ Both tests pass on fresh migrated DB; direct privilege queries match the Plan.
 
 ## T834 [S] — Update DB evidence script for 008
 
-- [x] T834 [REQ:FR-018, FR-023, FR-027] Update DB evidence script for 008 [VERIFY:`bun run db:evidence -- --no-archive` passes fresh rebuild, 001–007→008 upgrade and replay without modifying tracked evidence.]
+- [ ] T834 [REQ:FR-018, FR-023, FR-027] Update DB evidence script for 008 [VERIFY:`bun run db:evidence -- --no-archive` passes fresh rebuild, 001–007→008 upgrade and replay without modifying tracked evidence.]
 
 **Maps:** FR-018, FR-023, FR-027
 
@@ -837,7 +837,7 @@ T833.
 
 ## T835 [P] — Add idempotency replay/mismatch integration matrix
 
-- [x] T835 [REQ:FR-019, FR-021, FR-023; AS-14] Add idempotency replay/mismatch integration matrix [VERIFY:Matrix passes with exact row counts and original response snapshots.]
+- [ ] T835 [REQ:FR-019, FR-021, FR-023; AS-14] Add idempotency replay/mismatch integration matrix [VERIFY:Matrix passes with exact row counts and original response snapshots.]
 
 **Maps:** FR-019, FR-021, FR-023; AS-14
 
@@ -860,7 +860,7 @@ Matrix passes with exact row counts and original response snapshots.
 
 ## T836 [P] — Add same-current mutation race matrix
 
-- [x] T836 [REQ:FR-003, FR-020, FR-021, FR-023; AS-13] Add same-current mutation race matrix [VERIFY:Every race asserts one winner (or replay), loser 409 where applicable, one current row, valid Case phase/version and no duplicate event/audit.]
+- [ ] T836 [REQ:FR-003, FR-020, FR-021, FR-023; AS-13] Add same-current mutation race matrix [VERIFY:Every race asserts one winner (or replay), loser 409 where applicable, one current row, valid Case phase/version and no duplicate event/audit.]
 
 **Maps:** FR-003, FR-020, FR-021, FR-023; AS-13
 
@@ -884,7 +884,7 @@ Every race asserts one winner (or replay), loser 409 where applicable, one curre
 
 ## T837 [P] — Add Primary Switch cross-command race tests
 
-- [x] T837 [REQ:FR-015, FR-020; AS-19] Add Primary Switch cross-command race tests [VERIFY:For each of Present/Switch, Confirm/Switch, Correct/Switch and Reassess/Switch: if switch serializes first and demotes target, the formulation command is 409 with zero business mutation; if the formulation command serializes first, its complete valid result commits before switch. Correction assertions include exactly one current row, intact supersedes chain and correct Case version. Never a write that observes a post-switch nonprimary Case as primary.]
+- [ ] T837 [REQ:FR-015, FR-020; AS-19] Add Primary Switch cross-command race tests [VERIFY:For each of Present/Switch, Confirm/Switch, Correct/Switch and Reassess/Switch: if switch serializes first and demotes target, the formulation command is 409 with zero business mutation; if the formulation command serializes first, its complete valid result commits before switch. Correction assertions include exactly one current row, intact supersedes chain and correct Case version. Never a write that observes a post-switch nonprimary Case as primary.]
 
 **Maps:** FR-015, FR-020; AS-19
 
@@ -907,7 +907,7 @@ For each of Present/Switch, Confirm/Switch, Correct/Switch and Reassess/Switch: 
 
 ## T838 [P] — Add transaction fault-injection atomicity tests
 
-- [x] T838 [REQ:FR-021, FR-023; AS-24] Add transaction fault-injection atomicity tests [VERIFY:After each injected failure, formulation/version/current, Case phase/version, event, audit and idempotency state all match the pre-command snapshot.]
+- [ ] T838 [REQ:FR-021, FR-023; AS-24] Add transaction fault-injection atomicity tests [VERIFY:After each injected failure, formulation/version/current, Case phase/version, event, audit and idempotency state all match the pre-command snapshot.]
 
 **Maps:** FR-021, FR-023; AS-24
 
@@ -932,7 +932,7 @@ After each injected failure, formulation/version/current, Case phase/version, ev
 
 ## T839 [P] — Close StartAssessment + Present acceptance scenarios
 
-- [x] T839 [REQ:FR-005–FR-007, FR-015, FR-016, FR-030; AS-1–4; user A/B/G/I/J] Close StartAssessment + Present acceptance scenarios [VERIFY:AS-1–4 and A/B/G/I/J each have named assertions and DB row checks, plus named negatives for missing Consent, revoked Consent, stale/notice-mismatched Consent, UNDER_14 processing blocked, mandatory dependency omitted and client dependency set incomplete. Mandatory Test A: group-only conflict expands to an Evidence side whose subject/source is UNDER_14; that Person enters `processingPersonIds` and missing/revoked/stale/notice-mismatched Consent blocks Present. Mandatory Test B: group-only conflict expands Evidence A+B while candidate dependencyRefs omit A or B; Present rejects.]
+- [ ] T839 [REQ:FR-005–FR-007, FR-015, FR-016, FR-030; AS-1–4; user A/B/G/I/J] Close StartAssessment + Present acceptance scenarios [VERIFY:AS-1–4 and A/B/G/I/J each have named assertions and DB row checks, plus named negatives for missing Consent, revoked Consent, stale/notice-mismatched Consent, UNDER_14 processing blocked, mandatory dependency omitted and client dependency set incomplete. Mandatory Test A: group-only conflict expands to an Evidence side whose subject/source is UNDER_14; that Person enters `processingPersonIds` and missing/revoked/stale/notice-mismatched Consent blocks Present. Mandatory Test B: group-only conflict expands Evidence A+B while candidate dependencyRefs omit A or B; Present rejects.]
 
 **Maps:** FR-005–FR-007, FR-015, FR-016, FR-030; AS-1–4; user A/B/G/I/J
 
@@ -952,7 +952,7 @@ AS-1–4 and A/B/G/I/J each have named assertions and DB row checks, plus named 
 
 ## T840 [P] — Close current/Confirm acceptance scenarios
 
-- [x] T840 [REQ:FR-008, FR-009, FR-013–FR-018, FR-024, FR-026; AS-5–9/16–19/21; user C/H/I/J] Close current/Confirm acceptance scenarios [VERIFY:AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the real actor Person only. Explicit negatives: missing/revoked/stale Consent, UNDER_14 processing blocked, mandatory dependency omitted from stored current, and Confirm-time server mandatory set not contained in current valid dependency set. Mandatory group-only verification: re-resolve current conflict group; if an expanded Evidence mandatory dependency is missing/stale/invalid, Confirm is blocked before business mutation.]
+- [ ] T840 [REQ:FR-008, FR-009, FR-013–FR-018, FR-024, FR-026; AS-5–9/16–19/21; user C/H/I/J] Close current/Confirm acceptance scenarios [VERIFY:AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the real actor Person only. Explicit negatives: missing/revoked/stale Consent, UNDER_14 processing blocked, mandatory dependency omitted from stored current, and Confirm-time server mandatory set not contained in current valid dependency set. Mandatory group-only verification: re-resolve current conflict group; if an expanded Evidence mandatory dependency is missing/stale/invalid, Confirm is blocked before business mutation.]
 
 **Maps:** FR-008, FR-009, FR-013–FR-018, FR-024, FR-026; AS-5–9/16–19/21; user C/H/I/J
 
@@ -972,7 +972,7 @@ AS-5–9/16–19/21 and C/H/I/J map to explicit test names; confirmed_by is the 
 
 ## T841 [P] — Close Dispute/Correction/Reassess acceptance scenarios
 
-- [x] T841 [REQ:FR-003, FR-004, FR-010–FR-012, FR-020, FR-027; AS-10–12/15/25; user D/E/F/K] Close Dispute/Correction/Reassess acceptance scenarios [VERIFY:AS-10–12/15/25 and D/E/F/K have explicit before/after row snapshots.]
+- [ ] T841 [REQ:FR-003, FR-004, FR-010–FR-012, FR-020, FR-027; AS-10–12/15/25; user D/E/F/K] Close Dispute/Correction/Reassess acceptance scenarios [VERIFY:AS-10–12/15/25 and D/E/F/K have explicit before/after row snapshots.]
 
 **Maps:** FR-003, FR-004, FR-010–FR-012, FR-020, FR-027; AS-10–12/15/25; user D/E/F/K
 
@@ -992,7 +992,7 @@ AS-10–12/15/25 and D/E/F/K have explicit before/after row snapshots.
 
 ## T842 [P] — Close fidelity/out-of-scope/audit acceptance scenarios
 
-- [x] T842 [REQ:FR-007, FR-021–FR-023, FR-025, FR-028, FR-029; AS-20/22/23/24; user G] Close fidelity/out-of-scope/audit acceptance scenarios [VERIFY:AS-20/22/23/24 pass and no event/audit JSON contains primary problem, unknown/conflict content or response notes.]
+- [ ] T842 [REQ:FR-007, FR-021–FR-023, FR-025, FR-028, FR-029; AS-20/22/23/24; user G] Close fidelity/out-of-scope/audit acceptance scenarios [VERIFY:AS-20/22/23/24 pass and no event/audit JSON contains primary problem, unknown/conflict content or response notes.]
 
 **Maps:** FR-007, FR-021–FR-023, FR-025, FR-028, FR-029; AS-20/22/23/24; user G
 
@@ -1014,7 +1014,7 @@ AS-20/22/23/24 pass and no event/audit JSON contains primary problem, unknown/co
 
 ## T843 [S, MIGRATION] — Prove fresh / upgrade / replay / rollback behavior
 
-- [x] T843 [REQ:FR-018, FR-023, FR-027] Prove fresh / upgrade / replay / rollback behavior [VERIFY:Record exact `schema_migrations` filenames/timestamps, object fingerprints and zero partial objects after forced failure.]
+- [ ] T843 [REQ:FR-018, FR-023, FR-027] Prove fresh / upgrade / replay / rollback behavior [VERIFY:Record exact `schema_migrations` filenames/timestamps, object fingerprints and zero partial objects after forced failure.]
 
 **Maps:** FR-018, FR-023, FR-027
 
@@ -1037,7 +1037,7 @@ Record exact `schema_migrations` filenames/timestamps, object fingerprints and z
 
 ## T844 [S] — Prove OpenAPI semantic equivalence and runtime drift closure
 
-- [x] T844 [REQ:FR-022, FR-024] Prove OpenAPI semantic equivalence and runtime drift closure [VERIFY:`bun run openapi:generate` then `bun run openapi:check` pass; second generation is diff-no-op; runtime has exactly four Slice 8 public operations.]
+- [ ] T844 [REQ:FR-022, FR-024] Prove OpenAPI semantic equivalence and runtime drift closure [VERIFY:`bun run openapi:generate` then `bun run openapi:check` pass; second generation is diff-no-op; runtime has exactly four Slice 8 public operations.]
 
 **Maps:** FR-022, FR-024
 
@@ -1062,7 +1062,7 @@ T830, T832, T839–T842.
 
 ## T845 [S] — Run focused Slice 8 verification
 
-- [x] T845 [REQ:FR-001–FR-030; AS-1–AS-25; user A–K] Run focused Slice 8 verification [VERIFY:All focused test files pass in one run with real DB concurrency tests enabled.]
+- [ ] T845 [REQ:FR-001–FR-030; AS-1–AS-25; user A–K] Run focused Slice 8 verification [VERIFY:All focused test files pass in one run with real DB concurrency tests enabled.]
 
 **Maps:** FR-001–FR-030; AS-1–AS-25; user A–K
 
@@ -1085,7 +1085,7 @@ All focused test files pass in one run with real DB concurrency tests enabled.
 
 ## T846 [S] — Run repository-wide canonical verification
 
-- [x] T846 [REQ:FR-023, FR-025 plus regression safety for all upstream slices] Run repository-wide canonical verification [VERIFY:At minimum all exit 0: ```text bun run typecheck bun run guard:static bun run db:evidence -- --no-archive bun run openapi:generate bun run openapi:check bun run coverage:audit bun run test -- --run bun run verify-all ``` A second `openapi:generate` must be a no-op.]
+- [ ] T846 [REQ:FR-023, FR-025 plus regression safety for all upstream slices] Run repository-wide canonical verification [VERIFY:At minimum all exit 0: ```text bun run typecheck bun run guard:static bun run db:evidence -- --no-archive bun run openapi:generate bun run openapi:check bun run coverage:audit bun run test -- --run bun run verify-all ``` A second `openapi:generate` must be a no-op.]
 
 **Maps:** FR-023, FR-025 plus regression safety for all upstream slices
 
@@ -1121,7 +1121,7 @@ A second `openapi:generate` must be a no-op.
 
 ## T847 [S] — Final clean-tree / diff / scope review
 
-- [x] T847 [REQ:FR-022, FR-025, FR-028, FR-029; task governance] Final clean-tree / diff / scope review [VERIFY:Run and review: ```text git status --short git diff --check git diff --name-status <audited-development-base>...HEAD git diff <audited-development-base>...HEAD -- Docs/ specs/008-problem-formulation-core/spec.md db/migrations/001_initial_schema.sql db/migrations/002_case_core.sql db/migrations/003_case_idempotency_key_bytes.sql db/migrations/004_evidence_core.sql db/migrations/004_identity_binding_runtime.sql db/migrations/005_case_participant_core.sql db/migrations/006_case_status_paused_removal.sql db/migrations/007_case_primary_switch.sql ``` Required final facts: - working tree clean after the intended development commit(s); - frozen Spec unchanged; - `Docs/**` unchanged; - migrations 001–007 unchanged; - only one new migration 008; - no out-of-scope directories/tables/routes; - no fifth formulation public endpoint; - generated artifacts match generator output; - no test/static guard was broadly deleted or skipped. Stop at: ```text IMPLEMENTATION COMPLETE READY FOR INDEPENDENT IMPLEMENTATION AUDIT ``` The Development AI must not declare MERGE SAFE.]
+- [ ] T847 [REQ:FR-022, FR-025, FR-028, FR-029; task governance] Final clean-tree / diff / scope review [VERIFY:Run and review: ```text git status --short git diff --check git diff --name-status <audited-development-base>...HEAD git diff <audited-development-base>...HEAD -- Docs/ specs/008-problem-formulation-core/spec.md db/migrations/001_initial_schema.sql db/migrations/002_case_core.sql db/migrations/003_case_idempotency_key_bytes.sql db/migrations/004_evidence_core.sql db/migrations/004_identity_binding_runtime.sql db/migrations/005_case_participant_core.sql db/migrations/006_case_status_paused_removal.sql db/migrations/007_case_primary_switch.sql ``` Required final facts: - working tree clean after the intended development commit(s); - frozen Spec unchanged; - `Docs/**` unchanged; - migrations 001–007 unchanged; - only one new migration 008; - no out-of-scope directories/tables/routes; - no fifth formulation public endpoint; - generated artifacts match generator output; - no test/static guard was broadly deleted or skipped. Stop at: ```text IMPLEMENTATION COMPLETE READY FOR INDEPENDENT IMPLEMENTATION AUDIT ``` The Development AI must not declare MERGE SAFE.]
 
 **Maps:** FR-022, FR-025, FR-028, FR-029; task governance
 

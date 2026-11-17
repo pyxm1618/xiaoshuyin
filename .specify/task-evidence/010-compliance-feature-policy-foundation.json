@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "featureId": "010-compliance-feature-policy-foundation",
   "provenanceKind": "FEATURE_IMPLEMENTATION",
   "taskFile": "specs/010-compliance-feature-policy-foundation/tasks.md",
@@ -8,34 +8,38 @@
   "mergeCommitSha": "d7d00adeca87ac3ba7901cd0ca9b262d81006e90",
   "mergedAt": "2026-11-12T05:12:54Z",
   "taskIds": [
-    "T1001",
-    "T1002",
     "T1003",
     "T1004",
     "T1005",
     "T1006",
-    "T1007",
-    "T1008",
-    "T1009",
-    "T1010",
-    "T1011",
-    "T1012",
-    "T1013"
+    "T1007"
   ],
-  "taskVerificationDigest": "b469ba4bb7e83dc1a1a775e800505f09a5e9e4dc",
   "artifactPaths": [
-    "packages/compliance/src/feature-policy.ts",
-    "packages/compliance/src/feature-policy-service.ts",
     "apps/server/api/src/compliance/evaluate-compliance.ts",
     "db/migrations/011_compliance_feature_policy_foundation.sql",
-    "tests/db/compliance-feature-policy-schema.test.ts",
+    "packages/compliance/src/feature-policy-service.ts",
+    "packages/compliance/src/feature-policy.ts",
+    "scripts/guard-static.mjs",
     "tests/db/compliance-feature-policy-publication.test.ts",
-    "scripts/guard-static.mjs"
+    "tests/db/compliance-feature-policy-schema.test.ts",
+    "tests/domain/compliance-age-consent-composition.test.ts",
+    "tests/domain/compliance-feature-identity.test.ts",
+    "tests/domain/compliance-feature-policy-evaluator.test.ts",
+    "tests/integration/compliance-feature-policy-authorization.test.ts",
+    "tests/integration/compliance-feature-policy-evaluation.test.ts",
+    "tests/integration/compliance-feature-policy-scope.test.ts",
+    "tests/integration/compliance-feature-policy-snapshot.test.ts"
   ],
   "verificationPaths": [
-    "tests/db/compliance-feature-policy-schema.test.ts",
     "tests/db/compliance-feature-policy-publication.test.ts",
-    "scripts/guard-static.mjs"
+    "tests/db/compliance-feature-policy-schema.test.ts",
+    "tests/domain/compliance-age-consent-composition.test.ts",
+    "tests/domain/compliance-feature-identity.test.ts",
+    "tests/domain/compliance-feature-policy-evaluator.test.ts",
+    "tests/integration/compliance-feature-policy-authorization.test.ts",
+    "tests/integration/compliance-feature-policy-evaluation.test.ts",
+    "tests/integration/compliance-feature-policy-scope.test.ts",
+    "tests/integration/compliance-feature-policy-snapshot.test.ts"
   ],
   "ciRuns": [
     {
@@ -50,5 +54,68 @@
       "conclusion": "success",
       "headSha": "542f5aeb946b6a650daf1d8c0ea6017597cab219"
     }
+  ],
+  "taskVerifications": [
+    {
+      "taskId": "T1003",
+      "reqContract": "FR-001,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-029,V1-C43,§7.7A",
+      "verifyContract": "bun run test -- --run tests/db/*compliance*; bun run db:evidence -- --no-archive; migration fresh/upgrade/replay/rollback introspection",
+      "verificationPaths": [
+        "tests/db/compliance-feature-policy-publication.test.ts",
+        "tests/db/compliance-feature-policy-schema.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1004",
+      "reqContract": "FR-002,FR-003,FR-023,V1-C30",
+      "verifyContract": "bun run test -- --run tests/domain/*feature*identity*; bun run guard:static; code search proves no client-authoritative feature string or A4003/Digital Use branch in Common Core evaluator",
+      "verificationPaths": [
+        "tests/domain/compliance-feature-identity.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1005",
+      "reqContract": "FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-030,V1-C38,V1-C43",
+      "verifyContract": "bun run test -- --run tests/domain/*feature*policy*; fixed-time deterministic tests; no network/model imports",
+      "verificationPaths": [
+        "tests/domain/compliance-feature-policy-evaluator.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1006",
+      "reqContract": "FR-011,FR-012,FR-013,FR-014,FR-015,V1-C39,§7.7A,§27B",
+      "verifyContract": "bun run test -- --run tests/domain/*compliance* tests/integration/*compliance*; age/guardian/consent matrix passes",
+      "verificationPaths": [
+        "tests/domain/compliance-age-consent-composition.test.ts",
+        "tests/domain/compliance-feature-identity.test.ts",
+        "tests/domain/compliance-feature-policy-evaluator.test.ts",
+        "tests/integration/compliance-feature-policy-authorization.test.ts",
+        "tests/integration/compliance-feature-policy-evaluation.test.ts",
+        "tests/integration/compliance-feature-policy-scope.test.ts",
+        "tests/integration/compliance-feature-policy-snapshot.test.ts"
+      ]
+    },
+    {
+      "taskId": "T1007",
+      "reqContract": "FR-022,FR-027,FR-029,V1-C20,V1-C21,V1-C25,V1-C26,§9,§9.1",
+      "verifyContract": "bun run test -- --run tests/integration/*compliance* tests/integration/*scope*; unauthorized/cross-family/fault-injection tests; bun run guard:static",
+      "verificationPaths": [
+        "tests/integration/compliance-feature-policy-authorization.test.ts",
+        "tests/integration/compliance-feature-policy-evaluation.test.ts",
+        "tests/integration/compliance-feature-policy-scope.test.ts",
+        "tests/integration/compliance-feature-policy-snapshot.test.ts"
+      ]
+    }
+  ],
+  "historicalCompletionStatus": "PARTIAL_MACHINE_VERIFIED",
+  "historicalCompletionGaps": [
+    "T1001",
+    "T1002",
+    "T1008",
+    "T1009",
+    "T1010",
+    "T1011",
+    "T1012",
+    "T1013"
   ]
 }
