@@ -163,6 +163,7 @@ const cases = [];
     featureId: targetFeature,
     provenanceKind: "SHARED_REMEDIATION",
     sharedRemediationBindingId: "shared-wrong-source",
+    sharedSourceFeature: "999-wrong-source",
     taskFile: "specs/" + targetFeature + "/tasks.md",
     taskIds: ["T001"],
     taskVerifications: [{

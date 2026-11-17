@@ -204,10 +204,16 @@ for (const name of files) {
   let sharedBinding = null;
   if (evidence.provenanceKind === "SHARED_REMEDIATION") {
     sharedBinding = (registry.sharedRemediations ?? []).find((item) => item?.id === evidence.sharedRemediationBindingId);
-    if (!sharedBinding ||
-        sharedBinding.implementationPr !== evidence.implementationPr ||
-        !sharedBinding.targetFeatures?.includes(evidence.featureId)) {
+    if (!sharedBinding) {
       errors.push(rel + ": fake/nonexistent shared remediation binding.");
+    } else {
+      if (evidence.sharedSourceFeature !== sharedBinding.sourceFeature) {
+        errors.push(rel + ": shared remediation source feature mismatch.");
+      }
+      if (sharedBinding.implementationPr !== evidence.implementationPr ||
+          !sharedBinding.targetFeatures?.includes(evidence.featureId)) {
+        errors.push(rel + ": shared remediation target/PR relationship is not registered.");
+      }
     }
   } else if (evidence.provenanceKind !== "FEATURE_IMPLEMENTATION") {
     errors.push(rel + ": provenanceKind must be FEATURE_IMPLEMENTATION or SHARED_REMEDIATION.");

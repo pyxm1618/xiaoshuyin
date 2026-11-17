@@ -844,8 +844,15 @@ function validateTaskCompletionEvidence(changed, opts, errors) {
     let sharedBinding = null;
     if (evidence.provenanceKind === "SHARED_REMEDIATION") {
       sharedBinding = provenanceRegistry.sharedRemediations.find((x) => x?.id === evidence.sharedRemediationBindingId);
-      if (!sharedBinding || !sharedBinding.targetFeatures?.includes(entry.name) || sharedBinding.implementationPr !== evidence.implementationPr) {
-        errors.push(evidenceRel + ": shared remediation relationship is not registered.");
+      if (!sharedBinding) {
+        errors.push(evidenceRel + ": fake/nonexistent shared remediation binding.");
+      } else {
+        if (evidence.sharedSourceFeature !== sharedBinding.sourceFeature) {
+          errors.push(evidenceRel + ": shared remediation source feature mismatch.");
+        }
+        if (!sharedBinding.targetFeatures?.includes(entry.name) || sharedBinding.implementationPr !== evidence.implementationPr) {
+          errors.push(evidenceRel + ": shared remediation target/PR relationship is not registered.");
+        }
       }
     }
     provenanceUses.push({ feature: entry.name, kind: evidence.provenanceKind, implementationPr: evidence.implementationPr, sharedBinding });

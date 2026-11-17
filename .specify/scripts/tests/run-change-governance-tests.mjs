@@ -530,7 +530,7 @@ function setupG2() {
     ciRuns: [{ name: "CI", runId: 1, conclusion: "success", headSha: base }],
   }, null, 2) + "\n");
   commit(root, "valid evidence");
-  record("G5-C task verification digest and concrete verification artifact pass locally", 0, run(root, base), "Change governance PASS");
+  record("G5-C task REQ/VERIFY mapping and concrete verification artifact pass locally", 0, run(root, base), "Change governance PASS");
   cleanup(root);
 }
 
@@ -554,6 +554,7 @@ function setupG2() {
     featureId: "001-fixture",
     provenanceKind: "SHARED_REMEDIATION",
     sharedRemediationBindingId: "shared-1",
+    sharedSourceFeature: "999-source",
     taskFile: "specs/001-fixture/tasks.md",
     implementationPr: 1,
     implementationHeadSha: base,
