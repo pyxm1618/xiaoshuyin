@@ -60,6 +60,21 @@ export async function resolveProfessionalReviewStaffAuthority(
     personId: string;
   }
 ): Promise<StaffProfessionalReviewAuthorityResult> {
+  const identity = await tx.query<{ account_id: string | null; person_id: string | null }>(
+    `SELECT app_account_id()::text AS account_id,
+            app_person_id()::text AS person_id`
+  );
+  if (
+    identity.rows[0]?.account_id !== input.accountId ||
+    identity.rows[0]?.person_id !== input.personId
+  ) {
+    // Current merged Staff owner exposes only the authenticated Staff actor's
+    // rows under FORCE RLS. A different reviewer's proof is therefore not
+    // guessed invalid and is never bypassed; it remains unavailable until an
+    // authoritative cross-Staff verification seam exists.
+    return { status: 'UNAVAILABLE', reason: 'STAFF_AUTHORITY_LOOKUP_UNAVAILABLE' };
+  }
+
   const { rows } = await tx.query<{ valid: boolean }>(
     `SELECT app.validate_professional_review_assignment($1,$2,$3) AS valid`,
     [input.assignmentRef, input.accountId, input.personId]

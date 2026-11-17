@@ -220,9 +220,8 @@ CREATE FUNCTION app.validate_professional_review_assignment(
 ) RETURNS boolean
 LANGUAGE sql
 VOLATILE
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
-SET row_security = off
 AS $function$
   SELECT EXISTS (
     SELECT 1
