@@ -1,13 +1,13 @@
 ---
-description: "Slice 11 requirement-traceable implementation tasks — planning artifact only"
+description: "Slice 11 requirement-traceable implementation tasks — historical completion record"
 ---
 
 # Tasks: Digital Use Full Node Manifest / Deterministic Routing Foundation
 
 **Input**: Frozen spec.md + plan.md + checklist.md + four authoritative Docs  
 **Planning Branch**: plan/011-digital-use-node-manifest-routing-foundation  
-**Status**: TASKS COMPLETE / NOT AUTHORIZED FOR EXECUTION / IMPLEMENT GATE BLOCKED  
-**Execution rule**: T1101 is a mandatory future development-start gate. No production/test/CI implementation task may begin unless T1101 passes on then-current main.
+**Status**: IMPLEMENTATION MERGED / INDEPENDENT AUDIT PASS / TASK TRUTH RECONCILED  
+**Historical execution rule**: T1101 was the mandatory development-start gate and is retained as the original execution contract. Completion truth is bound by `.specify/task-evidence/011-digital-use-node-manifest-routing-foundation.json`.
 
 ## Required Task Format
 
