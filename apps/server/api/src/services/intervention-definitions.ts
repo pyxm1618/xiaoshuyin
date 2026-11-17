@@ -1,16 +1,18 @@
 import type pg from 'pg';
 import {
+  hashPayload,
+  prepareInterventionDefinition,
+  type InterventionDefinitionRecord,
+} from '@xiaoshuyin/domain';
+import {
   getCurrentInterventionDefinitionChainHead,
   getCurrentProfessionalReviewStaffAssignment,
   getExactInterventionDefinition,
-  hashPayload,
   insertInterventionDefinitionAudit,
   insertInterventionDefinitionCandidate,
   lockInterventionDefinitionChain,
-  prepareInterventionDefinition,
   transitionInterventionDefinitionStateCas,
-  type InterventionDefinitionRecord,
-} from '@xiaoshuyin/domain';
+} from '../../../../../packages/domain/src/intervention-definition-repository.js';
 import { withIdentityTransaction } from '../db/tx.js';
 import {
   lockIdempotentCommandInTransaction,
