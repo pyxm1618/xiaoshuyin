@@ -366,11 +366,17 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         sourceRefs: finalDefinition.semantic.professional_source_refs,
         approvalScope: finalDefinition.sceneId,
       },
-      'REVALIDATE'
+      'REVALIDATE',
+      Date.now(),
+      {
+        approvalProofRef: professional.approvalProofRef,
+        artifactIdentity: professional.artifactIdentity,
+      }
     );
     finalProfessional =
       revalidated.status === 'VALID' &&
       revalidated.approvalProofRef === professional.approvalProofRef &&
+      revalidated.artifactIdentity === professional.artifactIdentity &&
       revalidated.reviewerIdentityRef === professional.reviewerIdentityRef &&
       revalidated.qualificationRef === professional.qualificationRef
         ? revalidated
@@ -430,6 +436,29 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
         finalProfessional.status === 'VALID'
           ? finalProfessional.approvalProofRef
           : null,
+      artifactIdentity:
+        finalProfessional.status === 'VALID'
+          ? finalProfessional.artifactIdentity
+          : null,
+      provenance:
+        finalProfessional.status === 'VALID'
+          ? {
+              approvalProofRef: finalProfessional.proof.approvalProofRef,
+              artifactIdentity: finalProfessional.proof.artifactIdentity,
+              reviewerIdentityRef: finalProfessional.proof.reviewerIdentityRef,
+              staffAssignmentRef: finalProfessional.proof.staffAuthority.assignmentRef,
+              staffAuthorityScopeRef: finalProfessional.proof.staffAuthority.scopeRef,
+              qualificationRef: finalProfessional.proof.professionalQualification.qualificationRef,
+              qualificationScopeRef: finalProfessional.proof.professionalQualification.scopeRef,
+              sourceRefs: finalProfessional.proof.sourceRefs,
+              approvalScope: finalProfessional.proof.approvalScope,
+              reviewedAt: finalProfessional.proof.reviewedAt,
+              effectiveFrom: finalProfessional.proof.effectiveFrom,
+              effectiveTo: finalProfessional.proof.effectiveTo,
+              publicationStatus: finalProfessional.proof.publicationStatus,
+              publishedAt: finalProfessional.proof.publishedAt,
+            }
+          : null,
       reason:
         finalProfessional.status === 'VALID' ? null : finalProfessional.reason,
     },
@@ -470,6 +499,8 @@ export async function evaluateCurrentInterventionEligibilityInTransaction(
       sceneId: result.sceneId,
       scenePackageVersion: result.scenePackageVersion,
       approvalProofRef: result.approvalProofRef,
+      approvalArtifactIdentity: result.approvalArtifactIdentity,
+      approvalProvenance: result.approvalProvenance,
       approvalStatus: result.approvalStatus,
       allowed: result.allowed,
       reasonCodes: result.reasonCodes,
