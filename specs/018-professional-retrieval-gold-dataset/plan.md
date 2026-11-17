@@ -3,9 +3,9 @@
 **Role**: Slice 18 Plan AI 2 — Plan + Checklist + Tasks + Audit 1 only  
 **Repository**: pyxm1618/xiaoshuyin  
 **Planning branch**: plan/018-professional-retrieval-gold-dataset-authority-reconciliation  
-**Reconciled Frozen Spec**: commit f4ea6d8acfb175f15c6198e6b5e4354daf1102e6 / blob 16bed255125677de0dcc4ec71d740f1b0efaeccf  
+**Reconciled Frozen Spec**: commit 222ed94ad2036d7d86c2e79340b8a6f7f3e6a7e4 / blob 4133742701c33597bed9bfe11702862263cc5f0f  
 **Previous Frozen Spec**: commit 4624b3df6d59c6055421e175b95051782615de9a / blob bf7540ff3097ef14ca1c62a395b155abd4fde66a  
-**Planning base**: exact Reconciled Frozen Spec commit f4ea6d8acfb175f15c6198e6b5e4354daf1102e6  
+**Planning base**: exact Reconciled Frozen Spec commit 222ed94ad2036d7d86c2e79340b8a6f7f3e6a7e4  
 **Execution context**: REMOTE-ONLY. GitHub remote truth is authoritative. No local checkout, local HEAD, local working tree, or local git state is claimed.  
 **Planning status**: AUTHORITY RECONCILIATION DRAFT subject to complete Audit 1 and final remote read-back.  
 **Runtime status**: BLOCKED. T1801 is the only task allowed while the development-start gate is blocked.
@@ -18,15 +18,15 @@ This reconciliation is derived from the exact current four Authority Docs plus c
 |---|---|---|
 | origin/main | 9aceaedf12b611d41fba06866dcd00e20eb5ea8d | PASS as current base |
 | Reconciled Spec branch | spec/018-professional-retrieval-gold-dataset-authority-reconciliation | PASS |
-| Reconciled Spec head | f4ea6d8acfb175f15c6198e6b5e4354daf1102e6 | PASS |
-| Reconciled Spec blob | 16bed255125677de0dcc4ec71d740f1b0efaeccf | PASS |
+| Reconciled Spec head | 222ed94ad2036d7d86c2e79340b8a6f7f3e6a7e4 | PASS |
+| Reconciled Spec blob | 4133742701c33597bed9bfe11702862263cc5f0f | PASS |
 | Previous Frozen Spec | 4624b3df6d59c6055421e175b95051782615de9a / bf7540ff3097ef14ca1c62a395b155abd4fde66a | historical / preserved |
 | Docs/总产品需求.md | 97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29 | current |
 | Docs/V1产品需求.md | 8eb660cd905d8fba4b52fe0f74bbc214b3113117 | current |
 | Docs/总体技术架构.md | 6b4630803f371faf6d93f27361070223d0f661a0 | current |
 | Docs/V1技术设计.md | a0f09b8afda5532870150f03b713fed107359849 | current |
 | Slice 16 | PR #57 merged to main; remediation PR #59 is OPEN / NOT MERGED and independent targeted re-audit is required before merge; T1801 re-reads its moving exact Head/CI/audit state | merged YES; remediation exists; clean/runtime usability NOT YET PROVEN |
-| Slice 17 | PR #58 OPEN / DRAFT / merged=false; Head c62ed5a9fd8b90f6d909e03440bceabceeedd4c3 | implementation exists; NOT current-main runtime truth |
+| Slice 17 | PR #58 was not merged at the planning snapshot; T1801 re-reads its moving exact Head / draft / mergeability / CI / audit / merge state | implementation exists; planning state is NOT current-main runtime truth and cannot satisfy the runtime gate |
 | Professional Reviewer | APPROVED PROFESSIONAL REVIEWER — UNASSIGNED | BLOCKED |
 | Competing Slice 18 reconciliation authority | none found after exhaustive 018 branch search | PASS |
 
@@ -830,6 +830,8 @@ Acceptance scenarios AS-001..AS-037 are mapped in tasks.md to executable test/ev
 
 ## 24A. Exact Planning Traceability Matrix
 
+**Q12 canonical planning mapping:** the range-based family rows in §23 are readability summaries only and MUST NOT be used as mechanical traceability evidence. This §24A matrix plus the exact ledger in Tasks T1820 and Checklist §U is the authoritative one-by-one planning crosswalk.
+
 This matrix expands every Frozen FR/AS/NS individually so Developer AI and Audit 2 do not need to infer coverage from ranges.
 
 ### Functional Requirements
@@ -963,24 +965,27 @@ The following implementation-level decisions are fixed to eliminate Developer gu
 
 ## 26. Audit 1 Contract
 
-After reconciled Spec, Plan, Checklist and Tasks all exist, Audit 1 must re-read the **entire** planning package and answer:
+After reconciled Spec, Plan, Checklist and Tasks all exist, Audit 1 must re-read the **entire** planning package and answer exactly:
 
-- Q1 Current Authority Fidelity;
-- Q2 Selection Preservation;
-- Q3 Professional Authority;
-- Q4 Reviewer Authenticity;
-- Q5 Approval Binding;
-- Q6 Lifecycle Separation;
-- Q7 NEEDS_REVIEW;
-- Q8 Dependency Propagation;
-- Q9 Runtime Truth;
-- Q10 Scope;
+- Q1 Frozen Spec Identity;
+- Q2 Authority Fidelity;
+- Q3 Selection Preservation;
+- Q4 Professional Authority;
+- Q5 Reviewer Authority;
+- Q6 Approval Binding;
+- Q7 Lifecycle / Review-State Separation;
+- Q8 NEEDS_REVIEW;
+- Q9 Dependency Propagation;
+- Q10 Runtime Truth Volatility;
 - Q11 Gate Truth;
 - Q12 Traceability.
+
+Scope drift remains a separate cross-cutting Audit 1 condition and must be 0.
 
 Any CRITICAL/HIGH/MEDIUM planning defect is remediated only in the reconciled Spec/Plan/Checklist/Tasks when required by current Authority. Four Authority Docs, production code/tests/migrations and upstream Slice artifacts are not editable.
 
 Audit 1 must be complete, not delta-only.
+
 ## 27. Stop Boundary
 
 After Audit 1 FINAL PASS and Planning Freeze remote read-back, Plan AI 2 stops.
@@ -1001,7 +1006,7 @@ READY FOR DEVELOPMENT: NO
 
 Audit 1 was rerun over the complete reconciled Spec + Plan + Checklist + Tasks after all Authority-remediation edits.
 
-Initial reconciliation audit findings:
+Findings discovered and closed during reconciliation / final Audit 1:
 
 ~~~text
 MEDIUM-01 — stale pre-reconciliation current-main / Slice 17 authority snapshots remained in the Reconciled Spec.
@@ -1009,21 +1014,27 @@ Remediation: replaced them with current main, current Slice 17 authority-reconci
 
 MEDIUM-02 — Professional approval binding was semantically correct in direction but not mechanically canonical end-to-end.
 Remediation: normalized professional_approval_binding_id, qualification_ref, qualification_scope, auditable reviewer identity, exact approval binding and reconciled handoff/gate vocabulary.
+
+MEDIUM-03 — PR #58 moving exact runtime Head was still frozen in the reconciled Spec and Plan.
+Remediation: removed the moving PR Head from Frozen/Planning Authority and delegated exact Head/draft/mergeability/CI/audit/merge/runtime re-read to T1801.
+
+MEDIUM-04 — Q12 was previously asserted from aggregate coverage while Checklist/Tasks did not expose a complete one-by-one FR/AS/NS → Plan/Checklist/Task/Verification/Evidence crosswalk.
+Remediation: §24A remains the exact plan mapping; Tasks T1820 now carries the canonical 97-row exact planning traceability ledger and Checklist §U verifies every individual FR/AS/NS row. Range notation elsewhere is summary-only and cannot satisfy Q12.
 ~~~
 
 Complete post-remediation Audit 1:
 
 ~~~text
-Q1 Current Authority Fidelity: PASS
-Q2 Selection Preservation: PASS
-Q3 Professional Authority: PASS
-Q4 Reviewer Authenticity: PASS
-Q5 Approval Binding: PASS
-Q6 Lifecycle Separation: PASS
-Q7 NEEDS_REVIEW: PASS
-Q8 Dependency Propagation: PASS
-Q9 Runtime Truth: PASS
-Q10 Scope: PASS
+Q1 Frozen Spec Identity: PASS
+Q2 Authority Fidelity: PASS
+Q3 Selection Preservation: PASS
+Q4 Professional Authority: PASS
+Q5 Reviewer Authority: PASS
+Q6 Approval Binding: PASS
+Q7 Lifecycle / Review-State Separation: PASS
+Q8 NEEDS_REVIEW: PASS
+Q9 Dependency Propagation: PASS
+Q10 Runtime Truth Volatility: PASS
 Q11 Gate Truth: PASS
 Q12 Traceability: PASS
 
@@ -1041,9 +1052,9 @@ Scope Drift: 0
 Planning Freeze: PASS
 ~~~
 
-The two MEDIUM findings above were discovered and closed during Audit 1; they are not open findings at freeze.
+The four MEDIUM findings above are closed findings, not open findings at freeze.
 
-Planning Freeze does not grant development authorization. Current runtime truth remains:
+Planning Freeze does not grant development authorization. Runtime truth remains a separate T1801 gate and must be re-read at development start:
 
 ~~~text
 Runtime Dependency Gate: BLOCKED
@@ -1052,4 +1063,4 @@ Development Authorization: NOT GRANTED
 READY FOR DEVELOPMENT: NO
 ~~~
 
-Any future semantic Authority drift requires a new reconciliation; T1801 still re-reads runtime prerequisites at development start.
+Any future semantic Authority drift requires a new reconciliation; volatile PR/CI/remediation state remains T1801 runtime truth.

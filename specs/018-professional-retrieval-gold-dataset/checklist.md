@@ -326,41 +326,42 @@
 
 ## S. Audit 1 Questions
 
-### Q1 — Current Authority Fidelity
-- [x] S01 Reconciled artifacts obey current four Docs and do not retain contradictory old Authority.
+### Q1 — Frozen Spec Identity
+- [x] S01 Canonical reconciled spec-branch spec blob equals planning-branch spec blob byte-for-byte.
 
-### Q2 — Selection Preservation
-- [x] S02 Selection remains Professional Retrieval Gold Dataset Foundation; no re-selection occurred.
+### Q2 — Authority Fidelity
+- [x] S02 Current four Authority Docs → reconciled Spec → Plan → Checklist → Tasks contain no semantic conflict.
 
-### Q3 — Professional Authority
-- [x] S03 Gold labels/rubrics are Professional Authority and cannot be approved by product/architecture/developer/AI authority.
+### Q3 — Selection Preservation
+- [x] S03 Selection remains Professional Retrieval Gold Dataset Foundation; no re-selection occurred.
 
-### Q4 — Reviewer Authenticity
-- [x] S04 Real Staff assignment + PROFESSIONAL_REVIEW + matching qualification/scope + auditable identity are required.
+### Q4 — Professional Authority
+- [x] S04 Gold labels/rubrics are Professional Authority and cannot be approved by product/architecture/developer/AI authority.
 
-### Q5 — Approval Binding
-- [x] S05 Approval is exact to immutable artifact/content/source/scope and current approval identity.
+### Q5 — Reviewer Authority
+- [x] S05 Real Staff assignment + PROFESSIONAL_REVIEW + matching qualification/scope + auditable reviewer identity are mechanically required.
 
-### Q6 — Lifecycle Separation
-- [x] S06 lifecycle_status is separate from review_state/validity; REVIEWED is not a lifecycle status.
+### Q6 — Approval Binding
+- [x] S06 Approval binds exact artifact/package identity, immutable version/content hash, source refs, approval scope, reviewer identity, qualification ref/scope, reviewed_at, approval status and effective/published identity.
 
-### Q7 — NEEDS_REVIEW
-- [x] S07 NEEDS_REVIEW blocks affected RELEASED evidence without mechanically retiring it.
+### Q7 — Lifecycle / Review-State Separation
+- [x] S07 lifecycle_status is separate from review_state/validity_state; REVIEWED is not a lifecycle status.
 
-### Q8 — Dependency Propagation
-- [x] S08 Only truly dependent dataset/case objects are revalidated; unrelated objects are unaffected.
+### Q8 — NEEDS_REVIEW
+- [x] S08 CURRENT/VALID and NEEDS_REVIEW semantics are explicit; NEEDS_REVIEW fails closed for current authoritative route/model approval evidence without mechanically retiring the release.
 
-### Q9 — Runtime Truth
-- [x] S09 merged/audited/remediated/usable/planned states are not conflated for Slice 16/17.
+### Q9 — Dependency Propagation
+- [x] S09 Only truly dependent dataset/case objects are revalidated; unrelated objects remain CURRENT/VALID.
 
-### Q10 — Scope
-- [x] S10 No RAG runtime, pgvector, embedding, Promptfoo, generic platform or production DB scope was added.
+### Q10 — Runtime Truth Volatility
+- [x] S10 Frozen Spec/Plan do not freeze moving PR #58/#59 Heads, transient CI results or future remediation SHAs; T1801 re-reads them.
 
 ### Q11 — Gate Truth
-- [x] S11 Planning may pass while Runtime Dependency/Implement Gate remain BLOCKED.
+- [x] S11 Planning may pass while Runtime Dependency Gate / Implement Gate remain BLOCKED and Development Authorization remains NOT GRANTED.
 
 ### Q12 — Traceability
-- [x] S12 Every reconciled/new FR/AS requirement maps to Plan/Tasks/test-evidence expectations.
+- [x] S12 Every FR/AS/NS maps one-by-one through Plan §24A + Checklist §U + Tasks T1820 to exact task Verification and Evidence owners; range notation is summary-only and cannot satisfy this check.
+
 ## T. Planning Freeze Preconditions
 
 - [x] T01 Plan is complete.
@@ -377,3 +378,108 @@
 - [x] T12 Reconciled spec branch remains unpolluted.
 - [x] T13 No competing authority-reconciliation plan/018 branch exists.
 - [x] T14 Planning head is stable at final read-back.
+
+## U. Exact Requirement-by-Requirement Planning Traceability
+
+This is the Checklist side of Q12. Every Frozen requirement/scenario is named explicitly; no range expression may substitute for these rows.
+
+| Checklist item | Requirement | Plan mapping | Tasks mapping | Verification / Evidence | Status |
+|---|---|---|---|---|---|
+| U-FR-001 | FR-001 | Plan §24A/FR-001 | Tasks T1820/FR-001 → T1802, T1803, T1816 | task §Verification + §Evidence resolved | [x] |
+| U-FR-002 | FR-002 | Plan §24A/FR-002 | Tasks T1820/FR-002 → T1803, T1817 | task §Verification + §Evidence resolved | [x] |
+| U-FR-003 | FR-003 | Plan §24A/FR-003 | Tasks T1820/FR-003 → T1804, T1817 | task §Verification + §Evidence resolved | [x] |
+| U-FR-004 | FR-004 | Plan §24A/FR-004 | Tasks T1820/FR-004 → T1804, T1812 | task §Verification + §Evidence resolved | [x] |
+| U-FR-005 | FR-005 | Plan §24A/FR-005 | Tasks T1820/FR-005 → T1804, T1816 | task §Verification + §Evidence resolved | [x] |
+| U-FR-006 | FR-006 | Plan §24A/FR-006 | Tasks T1820/FR-006 → T1805, T1817 | task §Verification + §Evidence resolved | [x] |
+| U-FR-007 | FR-007 | Plan §24A/FR-007 | Tasks T1820/FR-007 → T1805, T1811 | task §Verification + §Evidence resolved | [x] |
+| U-FR-008 | FR-008 | Plan §24A/FR-008 | Tasks T1820/FR-008 → T1811, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-FR-009 | FR-009 | Plan §24A/FR-009 | Tasks T1820/FR-009 → T1806, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-FR-010 | FR-010 | Plan §24A/FR-010 | Tasks T1820/FR-010 → T1806, T1807 | task §Verification + §Evidence resolved | [x] |
+| U-FR-011 | FR-011 | Plan §24A/FR-011 | Tasks T1820/FR-011 → T1806, T1810, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-FR-012 | FR-012 | Plan §24A/FR-012 | Tasks T1820/FR-012 → T1806 | task §Verification + §Evidence resolved | [x] |
+| U-FR-013 | FR-013 | Plan §24A/FR-013 | Tasks T1820/FR-013 → T1807 | task §Verification + §Evidence resolved | [x] |
+| U-FR-014 | FR-014 | Plan §24A/FR-014 | Tasks T1820/FR-014 → T1804, T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-FR-015 | FR-015 | Plan §24A/FR-015 | Tasks T1820/FR-015 → T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-FR-016 | FR-016 | Plan §24A/FR-016 | Tasks T1820/FR-016 → T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-FR-017 | FR-017 | Plan §24A/FR-017 | Tasks T1820/FR-017 → T1814 | task §Verification + §Evidence resolved | [x] |
+| U-FR-018 | FR-018 | Plan §24A/FR-018 | Tasks T1820/FR-018 → T1814, T1815 | task §Verification + §Evidence resolved | [x] |
+| U-FR-019 | FR-019 | Plan §24A/FR-019 | Tasks T1820/FR-019 → T1814 | task §Verification + §Evidence resolved | [x] |
+| U-FR-020 | FR-020 | Plan §24A/FR-020 | Tasks T1820/FR-020 → T1814 | task §Verification + §Evidence resolved | [x] |
+| U-FR-021 | FR-021 | Plan §24A/FR-021 | Tasks T1820/FR-021 → T1814, T1815 | task §Verification + §Evidence resolved | [x] |
+| U-FR-022 | FR-022 | Plan §24A/FR-022 | Tasks T1820/FR-022 → T1808 | task §Verification + §Evidence resolved | [x] |
+| U-FR-023 | FR-023 | Plan §24A/FR-023 | Tasks T1820/FR-023 → T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-FR-024 | FR-024 | Plan §24A/FR-024 | Tasks T1820/FR-024 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-FR-025 | FR-025 | Plan §24A/FR-025 | Tasks T1820/FR-025 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-FR-026 | FR-026 | Plan §24A/FR-026 | Tasks T1820/FR-026 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-FR-027 | FR-027 | Plan §24A/FR-027 | Tasks T1820/FR-027 → T1814, T1816 | task §Verification + §Evidence resolved | [x] |
+| U-FR-028 | FR-028 | Plan §24A/FR-028 | Tasks T1820/FR-028 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-FR-029 | FR-029 | Plan §24A/FR-029 | Tasks T1820/FR-029 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-FR-030 | FR-030 | Plan §24A/FR-030 | Tasks T1820/FR-030 → T1810, T1817, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-FR-031 | FR-031 | Plan §24A/FR-031 | Tasks T1820/FR-031 → T1815, T1822 | task §Verification + §Evidence resolved | [x] |
+| U-FR-032 | FR-032 | Plan §24A/FR-032 | Tasks T1820/FR-032 → T1807, T1816 | task §Verification + §Evidence resolved | [x] |
+| U-FR-033 | FR-033 | Plan §24A/FR-033 | Tasks T1820/FR-033 → T1813 | task §Verification + §Evidence resolved | [x] |
+| U-FR-034 | FR-034 | Plan §24A/FR-034 | Tasks T1820/FR-034 → T1804, T1805, T1808 | task §Verification + §Evidence resolved | [x] |
+| U-FR-035 | FR-035 | Plan §24A/FR-035 | Tasks T1820/FR-035 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-FR-036 | FR-036 | Plan §24A/FR-036 | Tasks T1820/FR-036 → T1801, T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-FR-037 | FR-037 | Plan §24A/FR-037 | Tasks T1820/FR-037 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-FR-038 | FR-038 | Plan §24A/FR-038 | Tasks T1820/FR-038 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-FR-039 | FR-039 | Plan §24A/FR-039 | Tasks T1820/FR-039 → T1804, T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-FR-040 | FR-040 | Plan §24A/FR-040 | Tasks T1820/FR-040 → T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-FR-041 | FR-041 | Plan §24A/FR-041 | Tasks T1820/FR-041 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-FR-042 | FR-042 | Plan §24A/FR-042 | Tasks T1820/FR-042 → T1809, T1818, T1822 | task §Verification + §Evidence resolved | [x] |
+| U-AS-001 | AS-001 | Plan §24A/AS-001 | Tasks T1820/AS-001 → T1806, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-002 | AS-002 | Plan §24A/AS-002 | Tasks T1820/AS-002 → T1806, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-003 | AS-003 | Plan §24A/AS-003 | Tasks T1820/AS-003 → T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-004 | AS-004 | Plan §24A/AS-004 | Tasks T1820/AS-004 → T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-005 | AS-005 | Plan §24A/AS-005 | Tasks T1820/AS-005 → T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-006 | AS-006 | Plan §24A/AS-006 | Tasks T1820/AS-006 → T1807, T1812, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-007 | AS-007 | Plan §24A/AS-007 | Tasks T1820/AS-007 → T1804, T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-008 | AS-008 | Plan §24A/AS-008 | Tasks T1820/AS-008 → T1804, T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-009 | AS-009 | Plan §24A/AS-009 | Tasks T1820/AS-009 → T1804, T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-010 | AS-010 | Plan §24A/AS-010 | Tasks T1820/AS-010 → T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-011 | AS-011 | Plan §24A/AS-011 | Tasks T1820/AS-011 → T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-012 | AS-012 | Plan §24A/AS-012 | Tasks T1820/AS-012 → T1805, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-013 | AS-013 | Plan §24A/AS-013 | Tasks T1820/AS-013 → T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-014 | AS-014 | Plan §24A/AS-014 | Tasks T1820/AS-014 → T1806, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-015 | AS-015 | Plan §24A/AS-015 | Tasks T1820/AS-015 → T1806, T1810 | task §Verification + §Evidence resolved | [x] |
+| U-AS-016 | AS-016 | Plan §24A/AS-016 | Tasks T1820/AS-016 → T1804, T1812, T1817 | task §Verification + §Evidence resolved | [x] |
+| U-AS-017 | AS-017 | Plan §24A/AS-017 | Tasks T1820/AS-017 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-AS-018 | AS-018 | Plan §24A/AS-018 | Tasks T1820/AS-018 → T1805, T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-019 | AS-019 | Plan §24A/AS-019 | Tasks T1820/AS-019 → T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-020 | AS-020 | Plan §24A/AS-020 | Tasks T1820/AS-020 → T1811, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-021 | AS-021 | Plan §24A/AS-021 | Tasks T1820/AS-021 → T1812, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-022 | AS-022 | Plan §24A/AS-022 | Tasks T1820/AS-022 → T1812, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-023 | AS-023 | Plan §24A/AS-023 | Tasks T1820/AS-023 → T1817, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-024 | AS-024 | Plan §24A/AS-024 | Tasks T1820/AS-024 → T1814, T1815 | task §Verification + §Evidence resolved | [x] |
+| U-AS-025 | AS-025 | Plan §24A/AS-025 | Tasks T1820/AS-025 → T1807, T1814 | task §Verification + §Evidence resolved | [x] |
+| U-AS-026 | AS-026 | Plan §24A/AS-026 | Tasks T1820/AS-026 → T1807, T1816 | task §Verification + §Evidence resolved | [x] |
+| U-AS-027 | AS-027 | Plan §24A/AS-027 | Tasks T1820/AS-027 → T1810, T1813 | task §Verification + §Evidence resolved | [x] |
+| U-AS-028 | AS-028 | Plan §24A/AS-028 | Tasks T1820/AS-028 → T1809, T1822 | task §Verification + §Evidence resolved | [x] |
+| U-AS-029 | AS-029 | Plan §24A/AS-029 | Tasks T1820/AS-029 → T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-030 | AS-030 | Plan §24A/AS-030 | Tasks T1820/AS-030 → T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-031 | AS-031 | Plan §24A/AS-031 | Tasks T1820/AS-031 → T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-032 | AS-032 | Plan §24A/AS-032 | Tasks T1820/AS-032 → T1808, T1819 | task §Verification + §Evidence resolved | [x] |
+| U-AS-033 | AS-033 | Plan §24A/AS-033 | Tasks T1820/AS-033 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-AS-034 | AS-034 | Plan §24A/AS-034 | Tasks T1820/AS-034 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-AS-035 | AS-035 | Plan §24A/AS-035 | Tasks T1820/AS-035 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-AS-036 | AS-036 | Plan §24A/AS-036 | Tasks T1820/AS-036 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-AS-037 | AS-037 | Plan §24A/AS-037 | Tasks T1820/AS-037 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-NS-01 | NS-01 | Plan §24A/NS-01 | Tasks T1820/NS-01 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-02 | NS-02 | Plan §24A/NS-02 | Tasks T1820/NS-02 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-03 | NS-03 | Plan §24A/NS-03 | Tasks T1820/NS-03 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-04 | NS-04 | Plan §24A/NS-04 | Tasks T1820/NS-04 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-05 | NS-05 | Plan §24A/NS-05 | Tasks T1820/NS-05 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-06 | NS-06 | Plan §24A/NS-06 | Tasks T1820/NS-06 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-07 | NS-07 | Plan §24A/NS-07 | Tasks T1820/NS-07 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-08 | NS-08 | Plan §24A/NS-08 | Tasks T1820/NS-08 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-09 | NS-09 | Plan §24A/NS-09 | Tasks T1820/NS-09 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-10 | NS-10 | Plan §24A/NS-10 | Tasks T1820/NS-10 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-11 | NS-11 | Plan §24A/NS-11 | Tasks T1820/NS-11 → T1811, T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-12 | NS-12 | Plan §24A/NS-12 | Tasks T1820/NS-12 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-13 | NS-13 | Plan §24A/NS-13 | Tasks T1820/NS-13 → T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-14 | NS-14 | Plan §24A/NS-14 | Tasks T1820/NS-14 → T1814, T1816 | task §Verification + §Evidence resolved | [x] |
+| U-NS-15 | NS-15 | Plan §24A/NS-15 | Tasks T1820/NS-15 → T1812, T1815 | task §Verification + §Evidence resolved | [x] |
+| U-NS-16 | NS-16 | Plan §24A/NS-16 | Tasks T1820/NS-16 → T1813 | task §Verification + §Evidence resolved | [x] |
+| U-NS-17 | NS-17 | Plan §24A/NS-17 | Tasks T1820/NS-17 → T1809, T1818 | task §Verification + §Evidence resolved | [x] |
+| U-NS-18 | NS-18 | Plan §24A/NS-18 | Tasks T1820/NS-18 → T1807, T1816 | task §Verification + §Evidence resolved | [x] |
+

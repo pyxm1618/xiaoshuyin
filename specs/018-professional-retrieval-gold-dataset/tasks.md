@@ -2,7 +2,7 @@
 
 **Repository**: pyxm1618/xiaoshuyin  
 **Planning branch**: plan/018-professional-retrieval-gold-dataset-authority-reconciliation  
-**Reconciled Frozen Spec**: f4ea6d8acfb175f15c6198e6b5e4354daf1102e6 / 16bed255125677de0dcc4ec71d740f1b0efaeccf  
+**Reconciled Frozen Spec**: 222ed94ad2036d7d86c2e79340b8a6f7f3e6a7e4 / 4133742701c33597bed9bfe11702862263cc5f0f  
 **Previous Frozen Spec**: 4624b3df6d59c6055421e175b95051782615de9a / bf7540ff3097ef14ca1c62a395b155abd4fde66a  
 **Execution rule**: T1801 is mandatory and READ-ONLY. If T1801 is NO/BLOCKED, STOP. T1802–T1822 are not authorized in that run.
 
@@ -831,6 +831,111 @@ T1802–T1819 complete.
 
 **Inputs**  
 FR-001..042; AS-001..037; NS-01..18; actual files/tests/commands.
+
+
+### Planning-time exact requirement ledger
+
+This 97-row ledger is the canonical Q12 Tasks crosswalk. Range notation in task-local `Mapping` summaries is readability-only and MUST NOT be used as a substitute for these exact rows.
+
+| Requirement | Plan mapping | Checklist mapping | Task owner(s) | Verification owner(s) | Evidence owner(s) |
+|---|---|---|---|---|---|
+| FR-001 | Plan §24A/FR-001 | U-FR-001 | T1802, T1803, T1816 | T1802 §Verification; T1803 §Verification; T1816 §Verification | T1802 §Evidence; T1803 §Evidence; T1816 §Evidence |
+| FR-002 | Plan §24A/FR-002 | U-FR-002 | T1803, T1817 | T1803 §Verification; T1817 §Verification | T1803 §Evidence; T1817 §Evidence |
+| FR-003 | Plan §24A/FR-003 | U-FR-003 | T1804, T1817 | T1804 §Verification; T1817 §Verification | T1804 §Evidence; T1817 §Evidence |
+| FR-004 | Plan §24A/FR-004 | U-FR-004 | T1804, T1812 | T1804 §Verification; T1812 §Verification | T1804 §Evidence; T1812 §Evidence |
+| FR-005 | Plan §24A/FR-005 | U-FR-005 | T1804, T1816 | T1804 §Verification; T1816 §Verification | T1804 §Evidence; T1816 §Evidence |
+| FR-006 | Plan §24A/FR-006 | U-FR-006 | T1805, T1817 | T1805 §Verification; T1817 §Verification | T1805 §Evidence; T1817 §Evidence |
+| FR-007 | Plan §24A/FR-007 | U-FR-007 | T1805, T1811 | T1805 §Verification; T1811 §Verification | T1805 §Evidence; T1811 §Evidence |
+| FR-008 | Plan §24A/FR-008 | U-FR-008 | T1811, T1819 | T1811 §Verification; T1819 §Verification | T1811 §Evidence; T1819 §Evidence |
+| FR-009 | Plan §24A/FR-009 | U-FR-009 | T1806, T1814 | T1806 §Verification; T1814 §Verification | T1806 §Evidence; T1814 §Evidence |
+| FR-010 | Plan §24A/FR-010 | U-FR-010 | T1806, T1807 | T1806 §Verification; T1807 §Verification | T1806 §Evidence; T1807 §Evidence |
+| FR-011 | Plan §24A/FR-011 | U-FR-011 | T1806, T1810, T1814 | T1806 §Verification; T1810 §Verification; T1814 §Verification | T1806 §Evidence; T1810 §Evidence; T1814 §Evidence |
+| FR-012 | Plan §24A/FR-012 | U-FR-012 | T1806 | T1806 §Verification | T1806 §Evidence |
+| FR-013 | Plan §24A/FR-013 | U-FR-013 | T1807 | T1807 §Verification | T1807 §Evidence |
+| FR-014 | Plan §24A/FR-014 | U-FR-014 | T1804, T1807, T1814 | T1804 §Verification; T1807 §Verification; T1814 §Verification | T1804 §Evidence; T1807 §Evidence; T1814 §Evidence |
+| FR-015 | Plan §24A/FR-015 | U-FR-015 | T1807, T1814 | T1807 §Verification; T1814 §Verification | T1807 §Evidence; T1814 §Evidence |
+| FR-016 | Plan §24A/FR-016 | U-FR-016 | T1807, T1814 | T1807 §Verification; T1814 §Verification | T1807 §Evidence; T1814 §Evidence |
+| FR-017 | Plan §24A/FR-017 | U-FR-017 | T1814 | T1814 §Verification | T1814 §Evidence |
+| FR-018 | Plan §24A/FR-018 | U-FR-018 | T1814, T1815 | T1814 §Verification; T1815 §Verification | T1814 §Evidence; T1815 §Evidence |
+| FR-019 | Plan §24A/FR-019 | U-FR-019 | T1814 | T1814 §Verification | T1814 §Evidence |
+| FR-020 | Plan §24A/FR-020 | U-FR-020 | T1814 | T1814 §Verification | T1814 §Evidence |
+| FR-021 | Plan §24A/FR-021 | U-FR-021 | T1814, T1815 | T1814 §Verification; T1815 §Verification | T1814 §Evidence; T1815 §Evidence |
+| FR-022 | Plan §24A/FR-022 | U-FR-022 | T1808 | T1808 §Verification | T1808 §Evidence |
+| FR-023 | Plan §24A/FR-023 | U-FR-023 | T1808, T1819 | T1808 §Verification; T1819 §Verification | T1808 §Evidence; T1819 §Evidence |
+| FR-024 | Plan §24A/FR-024 | U-FR-024 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| FR-025 | Plan §24A/FR-025 | U-FR-025 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| FR-026 | Plan §24A/FR-026 | U-FR-026 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| FR-027 | Plan §24A/FR-027 | U-FR-027 | T1814, T1816 | T1814 §Verification; T1816 §Verification | T1814 §Evidence; T1816 §Evidence |
+| FR-028 | Plan §24A/FR-028 | U-FR-028 | T1816 | T1816 §Verification | T1816 §Evidence |
+| FR-029 | Plan §24A/FR-029 | U-FR-029 | T1816 | T1816 §Verification | T1816 §Evidence |
+| FR-030 | Plan §24A/FR-030 | U-FR-030 | T1810, T1817, T1819 | T1810 §Verification; T1817 §Verification; T1819 §Verification | T1810 §Evidence; T1817 §Evidence; T1819 §Evidence |
+| FR-031 | Plan §24A/FR-031 | U-FR-031 | T1815, T1822 | T1815 §Verification; T1822 §Verification | T1815 §Evidence; T1822 §Evidence |
+| FR-032 | Plan §24A/FR-032 | U-FR-032 | T1807, T1816 | T1807 §Verification; T1816 §Verification | T1807 §Evidence; T1816 §Evidence |
+| FR-033 | Plan §24A/FR-033 | U-FR-033 | T1813 | T1813 §Verification | T1813 §Evidence |
+| FR-034 | Plan §24A/FR-034 | U-FR-034 | T1804, T1805, T1808 | T1804 §Verification; T1805 §Verification; T1808 §Verification | T1804 §Evidence; T1805 §Evidence; T1808 §Evidence |
+| FR-035 | Plan §24A/FR-035 | U-FR-035 | T1816 | T1816 §Verification | T1816 §Evidence |
+| FR-036 | Plan §24A/FR-036 | U-FR-036 | T1801, T1808, T1819 | T1801 §Verification; T1808 §Verification; T1819 §Verification | T1801 §Evidence; T1808 §Evidence; T1819 §Evidence |
+| FR-037 | Plan §24A/FR-037 | U-FR-037 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| FR-038 | Plan §24A/FR-038 | U-FR-038 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| FR-039 | Plan §24A/FR-039 | U-FR-039 | T1804, T1809, T1818 | T1804 §Verification; T1809 §Verification; T1818 §Verification | T1804 §Evidence; T1809 §Evidence; T1818 §Evidence |
+| FR-040 | Plan §24A/FR-040 | U-FR-040 | T1808, T1819 | T1808 §Verification; T1819 §Verification | T1808 §Evidence; T1819 §Evidence |
+| FR-041 | Plan §24A/FR-041 | U-FR-041 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| FR-042 | Plan §24A/FR-042 | U-FR-042 | T1809, T1818, T1822 | T1809 §Verification; T1818 §Verification; T1822 §Verification | T1809 §Evidence; T1818 §Evidence; T1822 §Evidence |
+| AS-001 | Plan §24A/AS-001 | U-AS-001 | T1806, T1814 | T1806 §Verification; T1814 §Verification | T1806 §Evidence; T1814 §Evidence |
+| AS-002 | Plan §24A/AS-002 | U-AS-002 | T1806, T1814 | T1806 §Verification; T1814 §Verification | T1806 §Evidence; T1814 §Evidence |
+| AS-003 | Plan §24A/AS-003 | U-AS-003 | T1807, T1814 | T1807 §Verification; T1814 §Verification | T1807 §Evidence; T1814 §Evidence |
+| AS-004 | Plan §24A/AS-004 | U-AS-004 | T1807, T1814 | T1807 §Verification; T1814 §Verification | T1807 §Evidence; T1814 §Evidence |
+| AS-005 | Plan §24A/AS-005 | U-AS-005 | T1807, T1814 | T1807 §Verification; T1814 §Verification | T1807 §Evidence; T1814 §Evidence |
+| AS-006 | Plan §24A/AS-006 | U-AS-006 | T1807, T1812, T1814 | T1807 §Verification; T1812 §Verification; T1814 §Verification | T1807 §Evidence; T1812 §Evidence; T1814 §Evidence |
+| AS-007 | Plan §24A/AS-007 | U-AS-007 | T1804, T1807, T1814 | T1804 §Verification; T1807 §Verification; T1814 §Verification | T1804 §Evidence; T1807 §Evidence; T1814 §Evidence |
+| AS-008 | Plan §24A/AS-008 | U-AS-008 | T1804, T1807, T1814 | T1804 §Verification; T1807 §Verification; T1814 §Verification | T1804 §Evidence; T1807 §Evidence; T1814 §Evidence |
+| AS-009 | Plan §24A/AS-009 | U-AS-009 | T1804, T1807, T1814 | T1804 §Verification; T1807 §Verification; T1814 §Verification | T1804 §Evidence; T1807 §Evidence; T1814 §Evidence |
+| AS-010 | Plan §24A/AS-010 | U-AS-010 | T1807, T1814 | T1807 §Verification; T1814 §Verification | T1807 §Evidence; T1814 §Evidence |
+| AS-011 | Plan §24A/AS-011 | U-AS-011 | T1807, T1814 | T1807 §Verification; T1814 §Verification | T1807 §Evidence; T1814 §Evidence |
+| AS-012 | Plan §24A/AS-012 | U-AS-012 | T1805, T1814 | T1805 §Verification; T1814 §Verification | T1805 §Evidence; T1814 §Evidence |
+| AS-013 | Plan §24A/AS-013 | U-AS-013 | T1814 | T1814 §Verification | T1814 §Evidence |
+| AS-014 | Plan §24A/AS-014 | U-AS-014 | T1806, T1814 | T1806 §Verification; T1814 §Verification | T1806 §Evidence; T1814 §Evidence |
+| AS-015 | Plan §24A/AS-015 | U-AS-015 | T1806, T1810 | T1806 §Verification; T1810 §Verification | T1806 §Evidence; T1810 §Evidence |
+| AS-016 | Plan §24A/AS-016 | U-AS-016 | T1804, T1812, T1817 | T1804 §Verification; T1812 §Verification; T1817 §Verification | T1804 §Evidence; T1812 §Evidence; T1817 §Evidence |
+| AS-017 | Plan §24A/AS-017 | U-AS-017 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| AS-018 | Plan §24A/AS-018 | U-AS-018 | T1805, T1808, T1819 | T1805 §Verification; T1808 §Verification; T1819 §Verification | T1805 §Evidence; T1808 §Evidence; T1819 §Evidence |
+| AS-019 | Plan §24A/AS-019 | U-AS-019 | T1808, T1819 | T1808 §Verification; T1819 §Verification | T1808 §Evidence; T1819 §Evidence |
+| AS-020 | Plan §24A/AS-020 | U-AS-020 | T1811, T1819 | T1811 §Verification; T1819 §Verification | T1811 §Evidence; T1819 §Evidence |
+| AS-021 | Plan §24A/AS-021 | U-AS-021 | T1812, T1819 | T1812 §Verification; T1819 §Verification | T1812 §Evidence; T1819 §Evidence |
+| AS-022 | Plan §24A/AS-022 | U-AS-022 | T1812, T1819 | T1812 §Verification; T1819 §Verification | T1812 §Evidence; T1819 §Evidence |
+| AS-023 | Plan §24A/AS-023 | U-AS-023 | T1817, T1819 | T1817 §Verification; T1819 §Verification | T1817 §Evidence; T1819 §Evidence |
+| AS-024 | Plan §24A/AS-024 | U-AS-024 | T1814, T1815 | T1814 §Verification; T1815 §Verification | T1814 §Evidence; T1815 §Evidence |
+| AS-025 | Plan §24A/AS-025 | U-AS-025 | T1807, T1814 | T1807 §Verification; T1814 §Verification | T1807 §Evidence; T1814 §Evidence |
+| AS-026 | Plan §24A/AS-026 | U-AS-026 | T1807, T1816 | T1807 §Verification; T1816 §Verification | T1807 §Evidence; T1816 §Evidence |
+| AS-027 | Plan §24A/AS-027 | U-AS-027 | T1810, T1813 | T1810 §Verification; T1813 §Verification | T1810 §Evidence; T1813 §Evidence |
+| AS-028 | Plan §24A/AS-028 | U-AS-028 | T1809, T1822 | T1809 §Verification; T1822 §Verification | T1809 §Evidence; T1822 §Evidence |
+| AS-029 | Plan §24A/AS-029 | U-AS-029 | T1808, T1819 | T1808 §Verification; T1819 §Verification | T1808 §Evidence; T1819 §Evidence |
+| AS-030 | Plan §24A/AS-030 | U-AS-030 | T1808, T1819 | T1808 §Verification; T1819 §Verification | T1808 §Evidence; T1819 §Evidence |
+| AS-031 | Plan §24A/AS-031 | U-AS-031 | T1808, T1819 | T1808 §Verification; T1819 §Verification | T1808 §Evidence; T1819 §Evidence |
+| AS-032 | Plan §24A/AS-032 | U-AS-032 | T1808, T1819 | T1808 §Verification; T1819 §Verification | T1808 §Evidence; T1819 §Evidence |
+| AS-033 | Plan §24A/AS-033 | U-AS-033 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| AS-034 | Plan §24A/AS-034 | U-AS-034 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| AS-035 | Plan §24A/AS-035 | U-AS-035 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| AS-036 | Plan §24A/AS-036 | U-AS-036 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| AS-037 | Plan §24A/AS-037 | U-AS-037 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| NS-01 | Plan §24A/NS-01 | U-NS-01 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-02 | Plan §24A/NS-02 | U-NS-02 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-03 | Plan §24A/NS-03 | U-NS-03 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-04 | Plan §24A/NS-04 | U-NS-04 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-05 | Plan §24A/NS-05 | U-NS-05 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-06 | Plan §24A/NS-06 | U-NS-06 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-07 | Plan §24A/NS-07 | U-NS-07 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-08 | Plan §24A/NS-08 | U-NS-08 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-09 | Plan §24A/NS-09 | U-NS-09 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-10 | Plan §24A/NS-10 | U-NS-10 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-11 | Plan §24A/NS-11 | U-NS-11 | T1811, T1816 | T1811 §Verification; T1816 §Verification | T1811 §Evidence; T1816 §Evidence |
+| NS-12 | Plan §24A/NS-12 | U-NS-12 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-13 | Plan §24A/NS-13 | U-NS-13 | T1816 | T1816 §Verification | T1816 §Evidence |
+| NS-14 | Plan §24A/NS-14 | U-NS-14 | T1814, T1816 | T1814 §Verification; T1816 §Verification | T1814 §Evidence; T1816 §Evidence |
+| NS-15 | Plan §24A/NS-15 | U-NS-15 | T1812, T1815 | T1812 §Verification; T1815 §Verification | T1812 §Evidence; T1815 §Evidence |
+| NS-16 | Plan §24A/NS-16 | U-NS-16 | T1813 | T1813 §Verification | T1813 §Evidence |
+| NS-17 | Plan §24A/NS-17 | U-NS-17 | T1809, T1818 | T1809 §Verification; T1818 §Verification | T1809 §Evidence; T1818 §Evidence |
+| NS-18 | Plan §24A/NS-18 | U-NS-18 | T1807, T1816 | T1807 §Verification; T1816 §Verification | T1807 §Evidence; T1816 §Evidence |
 
 **Required behavior**  
 Create a traceability artifact/evidence table mapping each:
