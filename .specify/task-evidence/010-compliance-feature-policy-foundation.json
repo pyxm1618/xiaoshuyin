@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "taskFile": "specs/010-compliance-feature-policy-foundation/tasks.md",
+  "implementationPr": 30,
+  "implementationHeadSha": "542f5aeb946b6a650daf1d8c0ea6017597cab219",
+  "mergeCommitSha": "d7d00adeca87ac3ba7901cd0ca9b262d81006e90",
+  "mergedAt": "2026-11-12T05:12:54Z",
+  "taskIds": [
+    "T1001",
+    "T1002",
+    "T1003",
+    "T1004",
+    "T1005",
+    "T1006",
+    "T1007",
+    "T1008",
+    "T1009",
+    "T1010",
+    "T1011",
+    "T1012",
+    "T1013"
+  ],
+  "artifactPaths": [
+    "packages/compliance/src/feature-policy.ts",
+    "packages/compliance/src/feature-policy-service.ts",
+    "apps/server/api/src/compliance/evaluate-compliance.ts",
+    "db/migrations/011_compliance_feature_policy_foundation.sql",
+    "tests/db/compliance-feature-policy-schema.test.ts",
+    "tests/db/compliance-feature-policy-publication.test.ts",
+    "scripts/guard-static.mjs"
+  ],
+  "ciRuns": [
+    {
+      "name": "CI",
+      "runId": 43155618332,
+      "conclusion": "success",
+      "headSha": "542f5aeb946b6a650daf1d8c0ea6017597cab219"
+    },
+    {
+      "name": "Spec Governance",
+      "runId": 43155618470,
+      "conclusion": "success",
+      "headSha": "542f5aeb946b6a650daf1d8c0ea6017597cab219"
+    }
+  ]
+}
