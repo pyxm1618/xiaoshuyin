@@ -128,6 +128,21 @@ describe('Slice 17 Professional Knowledge persistence', () => {
     expect(duplicate.rows).toEqual([]);
   });
 
+  it('does not expose candidate-only Knowledge identity through Family RLS', async () => {
+    const policy = await admin.query<{ qual: string; with_check: string | null }>(
+      `SELECT qual, with_check
+         FROM pg_policies
+        WHERE schemaname='public'
+          AND tablename='professional_knowledge_items'
+          AND policyname='professional_knowledge_items_family_read'`
+    );
+    expect(policy.rows).toHaveLength(1);
+    expect(policy.rows[0]!.qual).toContain("lifecycle_status = 'PUBLISHED'");
+    expect(policy.rows[0]!.qual).toContain("review_state = 'CURRENT'");
+    expect(policy.rows[0]!.qual).toContain("validity_state = 'VALID'");
+    expect(policy.rows[0]!.qual).toContain('knowledge_id');
+  });
+
   it('keeps Professional Review Staff authority separate from qualification', async () => {
     const fn = await admin.query<{ definition: string }>(
       `SELECT pg_get_functiondef(

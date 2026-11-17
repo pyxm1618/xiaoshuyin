@@ -462,6 +462,14 @@ CREATE POLICY professional_knowledge_items_family_read
   USING (
     app_current_purpose() = 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION'
     AND app_family_id() IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+        FROM professional_knowledge_versions v
+       WHERE v.knowledge_id = professional_knowledge_items.id
+         AND v.lifecycle_status = 'PUBLISHED'
+         AND v.review_state = 'CURRENT'
+         AND v.validity_state = 'VALID'
+    )
   );
 
 CREATE POLICY professional_knowledge_versions_family_read
