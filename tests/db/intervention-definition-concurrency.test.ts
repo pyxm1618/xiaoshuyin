@@ -823,24 +823,48 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
     });
   });
 
-  it('revalidates qualification after a real chain-lock wait and rolls back when qualification was revoked', async () => {
+  it('revalidates qualification after a real chain-lock wait and rolls back when the external owner revokes and commits', async () => {
     await ensureActiveAssignment();
     const interventionCode = code('QUALIFICATION_REVOKE_WAIT');
-    let qualificationValid = true;
+    const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 16);
+    const tableName = 's16_test_qualification_' + suffix;
     let calls = 0;
+
+    await admin.query(
+      `CREATE TABLE ${tableName} (
+        reviewer_identity_ref uuid PRIMARY KEY,
+        qualification_ref text NOT NULL,
+        scope_ref text NOT NULL,
+        status text NOT NULL
+      )`
+    );
+    await admin.query(
+      `INSERT INTO ${tableName}
+       (reviewer_identity_ref,qualification_ref,scope_ref,status)
+       VALUES ($1,'Q:REVOCABLE','DIGITAL_USE','VALID')`,
+      [personId]
+    );
+
     const revocableProvider: InterventionProfessionalQualificationProvider = {
       async resolve(input) {
         calls += 1;
-        return qualificationValid
-          ? {
-              qualificationRef: 'Q:REVOCABLE',
-              scopeRef: input.approvalScope,
-              status: 'VALID',
-            }
+        const result = await admin.query<{
+          qualification_ref: string;
+          scope_ref: string;
+          status: 'VALID' | 'REVOKED' | 'EXPIRED' | 'UNVERIFIABLE';
+        }>(
+          `SELECT qualification_ref,scope_ref,status
+             FROM ${tableName}
+            WHERE reviewer_identity_ref=$1`,
+          [input.reviewerIdentityRef]
+        );
+        const row = result.rows[0];
+        return row === undefined
+          ? null
           : {
-              qualificationRef: 'Q:REVOCABLE',
-              scopeRef: input.approvalScope,
-              status: 'REVOKED',
+              qualificationRef: row.qualification_ref,
+              scopeRef: row.scope_ref,
+              status: row.status,
             };
       },
     };
@@ -851,7 +875,9 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
       [accountId]
     );
     const gate = await admin.connect();
+    const revoker = await admin.connect();
     let gateCommitted = false;
+    let revokerCommitted = false;
     try {
       await gate.query('BEGIN');
       const pid = await gate.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
@@ -876,7 +902,18 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
       await waitForQueuedChainWaiters(gatePid, 1);
       expect(calls).toBe(1);
 
-      qualificationValid = false;
+      // T2 is an independent external qualification-owner transaction. Its
+      // revocation commits while T1 is still blocked on the Definition chain.
+      await revoker.query('BEGIN');
+      await revoker.query(
+        `UPDATE ${tableName}
+            SET status='REVOKED'
+          WHERE reviewer_identity_ref=$1`,
+        [personId]
+      );
+      await revoker.query('COMMIT');
+      revokerCommitted = true;
+
       await gate.query('COMMIT');
       gateCommitted = true;
 
@@ -906,8 +943,11 @@ describe('Slice 16 InterventionDefinition real concurrency / atomicity', () => {
       expect(idems.rows[0]!.count).toBe('0');
       expect(audits.rows[0]!.count).toBe(auditBefore.rows[0]!.count);
     } finally {
+      if (!revokerCommitted) await revoker.query('ROLLBACK').catch(() => undefined);
       if (!gateCommitted) await gate.query('ROLLBACK').catch(() => undefined);
+      revoker.release();
       gate.release();
+      await admin.query(`DROP TABLE IF EXISTS ${tableName}`).catch(() => undefined);
     }
   });
 
