@@ -502,8 +502,7 @@ expected_empty
 evaluation_dimensions[]
 rationale
 requirement_refs[]
-review_owner_ref
-review_evidence_ref
+professional_approval_binding_id
 case_hash
 ~~~
 
@@ -522,7 +521,7 @@ Not allowed:
 - copied private chat;
 - real Case export.
 
-Model-assisted query drafts are allowed only as DRAFT and require human review before RELEASED.
+Model-assisted query drafts are allowed only as DRAFT and require valid Professional Authority approval through the exact `professional_approval_binding_id` before RELEASED.
 
 ### 11.2 Relevant labels
 
@@ -882,7 +881,7 @@ Dataset supports filter fidelity and forbidden leakage measurement.
 Dataset labels support future pre/post-rerank comparison.
 
 ### FR-022 — Exact Professional approval binding
-Professional approval binds the exact artifact/package identity, dataset/case hashes, corpus hash, source refs, approval scope, reviewer identity, Staff assignment, PROFESSIONAL_REVIEW capability, qualification_ref/scope, reviewed_at, approval status and effective/published identity.
+Professional approval binds the exact artifact/package identity, dataset/case hashes, corpus hash, source refs, approval scope, reviewer identity, Staff assignment, PROFESSIONAL_REVIEW capability, qualification_ref, qualification_scope, reviewed_at, approval status and effective/published identity.
 
 ### FR-023 — No authority laundering / self-approval
 Model/retrieval candidate/AI judge/developer/fixture/family-role reviewer cannot approve Gold labels, and a populated approved/status field cannot substitute for real Professional Authority.
@@ -1179,7 +1178,7 @@ Planning and implementation readiness are separate.
 
 ### 26.1 Planning dependencies
 
-Planning is permitted because the four Docs, Slice 16 Frozen professional-definition authority and Slice 17 Frozen Knowledge authority are sufficient to define the Gold Dataset contract without implementing them.
+Planning is permitted because the four current Docs plus the current authority-reconciled Slice 16 professional-definition contract and Slice 17 Professional Knowledge contract are sufficient to define the Gold Dataset contract without treating either feature implementation as current-main runtime truth.
 
 ### 26.2 Runtime / artifact dependencies for implementation
 
@@ -1195,13 +1194,14 @@ Developer AI must re-read then-current remote truth and prove:
 6. a representative real PUBLISHED Professional Knowledge corpus exists;
 7. a real Staff assignment exists for the approving reviewer;
 8. the reviewer has PROFESSIONAL_REVIEW capability;
-9. the reviewer has matching professional qualification/scope with auditable qualification_ref;
-10. a sanctioned professional review/approval evidence seam exists;
-11. approval binding supports exact artifact/package identity, version/content hash, source refs, approval scope, reviewer identity, qualification ref, reviewed_at, approval status and effective/published identity;
-12. exact Scene/package identity is available from its real owner;
-13. no duplicate Knowledge/package/reviewer/eval owner is required;
-14. no Authority drift exists in the four Docs or consumed upstream contracts;
-15. no competing Slice 18 spec/plan/feat authority exists.
+9. the reviewer has matching professional qualification with auditable qualification_ref and canonical qualification_scope;
+10. the reviewer identity is auditable;
+11. a sanctioned professional review/approval evidence seam exists;
+12. approval binding supports exact artifact/package identity, version/content hash, source refs, approval scope, reviewer identity, qualification_ref, qualification_scope, reviewed_at, approval status and effective/published identity;
+13. exact Scene/package identity is available from its real owner;
+14. no duplicate Knowledge/package/reviewer/eval owner is required;
+15. no Authority drift exists in the four Docs or consumed upstream contracts;
+16. no competing Slice 18 spec/plan/feat authority exists.
 
 Any false or unprovable predicate requires immediate STOP:
 
@@ -1428,27 +1428,28 @@ Selection is PRESERVED:
 This reconciliation does not authorize retrieval execution, pgvector, sparsevec, pg_jieba, embeddings, reranking, Promptfoo setup, RAG A/B/C execution, AI Task Runtime, Context Builder, migrations, production DB work, real Gold labels, or production code.
 
 
-## 28. Frozen Spec Boundary
+## 28. Reconciled Frozen Spec Boundary
 
-This artifact authorizes only the product/architecture semantics of Slice 18.
+This artifact authorizes only the current product/architecture semantics of Slice 18 after Authority Reconciliation.
 
-Plan AI 2 may:
+The corresponding reconciliation planning branch may:
 
-- translate this Frozen Spec into Plan;
-- create Checklist;
-- create Tasks;
-- perform Audit 1;
-- remediate planning-only defects without changing this Frozen Spec;
-- freeze planning.
+- translate this Reconciled Frozen Spec into Plan;
+- maintain Checklist and Tasks;
+- perform complete Audit 1 over Spec + Plan + Checklist + Tasks;
+- amend only these reconciliation artifacts when required to remove a demonstrated current-Authority conflict;
+- freeze planning after CRITICAL/HIGH/MEDIUM = 0 and exact remote read-back.
 
-Plan AI 2 may not silently broaden this Slice into pgvector/RAG/AI runtime work.
+It may not modify the four Authority Docs, upstream Slice authority/runtime, production code, tests or migrations, and may not broaden Slice 18 into pgvector/RAG/AI runtime work.
 
-No Developer AI is authorized by this Spec.
+No Developer AI is authorized by this Spec or by Planning Freeze alone.
 
-Final handoff state after exact remote read-back must be:
+Final handoff state after Audit 1 and exact remote read-back must truthfully reflect runtime prerequisites. On the current reconciliation truth the required state is:
 
 ~~~text
-READY FOR PLAN AI 2
+Planning Freeze: PASS
+Runtime Dependency Gate: BLOCKED
+Implement Gate: BLOCKED
 Development Authorization: NOT GRANTED
 STOP
 ~~~
