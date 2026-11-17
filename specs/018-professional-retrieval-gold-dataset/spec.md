@@ -6,11 +6,11 @@
 >
 > V1 Phase: Phase 3 — Professional Knowledge & AI
 >
-> Role boundary: Plan AI 1 only
+> Role boundary: Slice 18 Authority Reconciliation only
 >
-> Status: Selection + Specify + Clarify FINAL PASS — FROZEN SPEC after exact remote commit/blob read-back
+> Status: Selection PRESERVED + Authority Reconciliation — RECONCILED FROZEN SPEC
 >
-> Scope of this artifact: Selection Gate → Specify → Clarify → Frozen Spec only
+> Scope of this artifact: minimum Authority reconciliation of the existing Frozen Spec only
 >
 > Forbidden in this artifact: Plan / Checklist / Tasks / Audit 1 / implementation / migration / production code / test implementation / PR merge
 >
@@ -39,32 +39,35 @@ Authority hierarchy:
 3. Docs/总体技术架构.md — long-lived architecture truth;
 4. Docs/V1技术设计.md — V1 implementation contract.
 
-Current remote baseline re-read during Selection:
+Current remote baseline re-read during Authority Reconciliation:
 
 ~~~text
 Repository:
 pyxm1618/xiaoshuyin
 
 Current origin/main:
+9aceaedf12b611d41fba06866dcd00e20eb5ea8d
+
+Original Slice 18 freeze baseline:
 e7bb22d1abad58a6c9df6350744f092d88370aa3
 ~~~
 
-The baseline changed during this Plan AI 1 run because PR #37 was merged after the initial read. This Spec is intentionally bound to the later exact main, not to the stale handoff SHA.
+The original freeze baseline is historical evidence only. This reconciled Spec is bound to current main and the current four Authority Docs.
 
-Authority Doc blobs on the final baseline:
+Authority Doc blobs on the reconciliation baseline:
 
 ~~~text
 Docs/总产品需求.md
-67724000cb9bb81c40489c04db28d899bd1df74c
+97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29
 
 Docs/V1产品需求.md
-1900485a407e0634643f4f0bbe5ab02476dc4bfd
+8eb660cd905d8fba4b52fe0f74bbc214b3113117
 
 Docs/总体技术架构.md
-9b08371edc976fa281469dfee8dc19962452e3b0
+6b4630803f371faf6d93f27361070223d0f661a0
 
 Docs/V1技术设计.md
-6f03d1a3c49bdc866945ae7f82df542f1292a147
+a0f09b8afda5532870150f03b713fed107359849
 ~~~
 
 Relevant formal Authority includes:
