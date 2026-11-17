@@ -195,7 +195,7 @@ CREATE TABLE professional_knowledge_approval_evidence (
   scene_binding_ref      jsonb NOT NULL,
   consumed_at            timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT professional_knowledge_approval_evidence_proof_key
-    UNIQUE (knowledge_version_id, approval_proof_ref),
+    UNIQUE (approval_proof_ref),
   CONSTRAINT professional_knowledge_approval_evidence_reviewer_fk
     FOREIGN KEY (reviewer_person_id, reviewer_account_id)
     REFERENCES persons(id, account_id)

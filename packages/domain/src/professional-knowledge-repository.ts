@@ -413,8 +413,7 @@ export async function appendConsumedProfessionalApprovalEvidence(
         staff_assignment_ref, qualification_ref, qualification_scope,
         reviewed_at, effective_from, effective_to,
         professional_content_package_ref, scene_binding_ref)
-     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15::jsonb,$16::jsonb)
-     ON CONFLICT (knowledge_version_id, approval_proof_ref) DO NOTHING`,
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15::jsonb,$16::jsonb)`,
     [
       versionId,
       proof.proofId,

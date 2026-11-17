@@ -14,9 +14,11 @@ import {
   createProfessionalKnowledgeSuccessor,
   editProfessionalKnowledgeCandidate,
   hashPayload,
+  getIdempotencyKey,
   getProfessionalKnowledgePredecessorId,
   lockProfessionalKnowledgeVersion,
   markProfessionalKnowledgeVersionSuperseded,
+  readProfessionalKnowledgeAuditHistory,
   releaseProfessionalKnowledgeVersion,
   resolveProfessionalReviewStaffAuthority,
   retireProfessionalKnowledgeVersion,
@@ -811,6 +813,51 @@ export async function propagateKnowledgeDependencyImpact(input: {
         }
       );
       return commandResult(outcome);
+    }
+  );
+}
+
+
+export type ProfessionalKnowledgeMutationCommand =
+  | 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE'
+  | 'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT'
+  | 'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD'
+  | 'PROFESSIONAL_KNOWLEDGE_RELEASE'
+  | 'PROFESSIONAL_KNOWLEDGE_RETIRE'
+  | 'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE';
+
+export async function readProfessionalKnowledgeMutationOutcome(input: {
+  pool: pg.Pool;
+  accountId: string;
+  assignmentId: string;
+  commandType: ProfessionalKnowledgeMutationCommand;
+  idempotencyKey: string;
+  versionId?: string;
+}) {
+  return withProfessionalKnowledgeAdminTransaction(
+    input.pool,
+    { accountId: input.accountId, assignmentId: input.assignmentId },
+    async (tx) => {
+      const row = await getIdempotencyKey(
+        tx,
+        input.accountId,
+        input.commandType,
+        input.idempotencyKey
+      );
+      if (!row || row.response_status == null || row.response_body == null) {
+        return { status: 'OUTCOME_UNKNOWN' as const };
+      }
+      const history =
+        input.versionId === undefined
+          ? []
+          : await readProfessionalKnowledgeAuditHistory(tx, input.versionId);
+      return {
+        status: 'SETTLED' as const,
+        responseStatus: Number(row.response_status),
+        responseBody: row.response_body,
+        requestHash: String(row.request_hash),
+        history,
+      };
     }
   );
 }

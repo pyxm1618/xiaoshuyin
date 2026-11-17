@@ -30,5 +30,13 @@ describe('Professional Knowledge audit/readback boundary', () => {
     expect(repository).toContain('readProfessionalKnowledgeAuditHistory');
     expect(repository).toContain("resource_type = 'PROFESSIONAL_KNOWLEDGE'");
     expect(repository).toContain('ORDER BY occurred_at, id');
+    const service = readFileSync(
+      new URL('../apps/server/api/src/services/professional-knowledge.ts', import.meta.url),
+      'utf8'
+    );
+    expect(service).toContain('readProfessionalKnowledgeMutationOutcome');
+    expect(service).toContain("status: 'OUTCOME_UNKNOWN'");
+    expect(service).toContain("status: 'SETTLED'");
+    expect(service).toContain('getIdempotencyKey');
   });
 });
