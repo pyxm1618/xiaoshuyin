@@ -110,7 +110,7 @@ for (const filePath of docsChanged) console.log(`    - ${filePath}`);
 const reason =
   `FAIL: ${docsChanged.length} file(s) under Docs/** changed. Labels cannot override this probe.\n` +
   "  Intended Authority revisions must use the Authority Impact Contract and downstream convergence gate,\n" +
-  "  then obtain the repository's native independent approval after the latest reviewable push.";
+  "  then satisfy exact-head automated governance and independent AI audit evidence; GitHub human approval is not required.";
 
 if (opts.mode === "audit") {
   console.log(`AUDIT ONLY (mode=audit): this run would fail in enforce mode.\n${reason}`);
