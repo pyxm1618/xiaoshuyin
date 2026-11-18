@@ -2634,9 +2634,25 @@
             "heading": "### 4. A2001 / A2002 / A2003 确定性合同"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-097",
@@ -2678,9 +2694,25 @@
             "heading": "### A. Integrated Triage precedence 与恢复合同"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-101",
