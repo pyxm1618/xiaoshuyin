@@ -17,7 +17,10 @@ This plan implements only the current Authority projected in `spec.md`. Authorit
 
 Expected production paths after the governance prerequisite is merged and latest main is re-read:
 
-- `apps/server/api/src/services/goals.ts` — Goal persistence/application owner and `ConfirmGoal` orchestration.
+- `packages/domain/src/goal-*.ts` — typed Goal schema/repository/domain primitives; use only the finite modules actually needed by the runtime implementation.
+- `packages/domain/src/index.ts` — Goal public-domain export composition only.
+- `packages/authorization/src/authorize.ts` — add the explicit `CASE_CONFIRM_GOAL` action to the existing single authorization owner; do not create a second authorization framework.
+- `apps/server/api/src/services/goals.ts` — Goal application orchestration and `ConfirmGoal` transaction composition.
 - `apps/server/api/src/routes/goals.ts` — `POST /api/v1/cases/:id/goals` boundary.
 - `apps/server/api/src/app.ts` — route composition only.
 - `apps/server/api/src/openapi-spec.ts` — existing static OpenAPI projection only if required by the current contract workflow.
@@ -43,7 +46,7 @@ The migration will project the V1 Goal minimum model with:
 
 `ConfirmGoal` executes in one database transaction:
 
-1. authorize actor against current Family/Case;
+1. authorize actor against current Family/Case through the existing single authorization owner using the explicit `CASE_CONFIRM_GOAL` action;
 2. lock Case and validate expected Case version;
 3. require `phase = GOALS`;
 4. read/lock current Problem Formulation and require confirmed/current;
