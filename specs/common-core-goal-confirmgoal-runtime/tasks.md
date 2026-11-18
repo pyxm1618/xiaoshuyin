@@ -8,44 +8,13 @@
 - Do not modify PR #70, #58, #63 or #67.
 - Do not merge any PR as part of developer execution.
 
-## T-GCR-00 — Governance Prerequisite [VERIFY: Spec Governance]
+## Tasks
 
-**Goal:** establish the feature projection and finite implementation ownership without any product/runtime path change.
-
-Expected changes:
-- `specs/common-core-goal-confirmgoal-runtime/{spec.md,plan.md,checklist.md,tasks.md}`
-- `.specify/implementation-ownership.json`
-
-Acceptance evidence:
-- no `apps/`, `packages/` or `db/` delta;
-- no Authority Doc delta;
-- no change-binding manifest;
-- Spec Governance PASS on exact Head.
-
-## T-GCR-01 — Runtime Remote-Truth Reconciliation [VERIFY: remote read-back]
-
-After T-GCR-00 is independently audited and merged, re-read latest main, PR #70 readonly, Authority Docs, ownership, Authority Unit registry, migration sequence, workflows and Case/Problem Formulation runtime. If Authority Unit topology must change, perform that as a separate governance-only prerequisite before product implementation.
-
-## T-GCR-02 — Goal Persistence [VERIFY: DB migration + DB tests]
-
-Create the current-baseline migration and persistence owner with same-Case/formulation integrity, family isolation, RLS, confirmation auditability, review state and concurrency defenses. Do not implement Plan tables/runtime.
-
-## T-GCR-03 — Goal Contract / Runtime [VERIFY: domain/service tests]
-
-Create/save only legal Goals bound to the current confirmed formulation. Reject incomplete, stale, wrong-phase and invalid-reference Goals.
-
-## T-GCR-04 — ConfirmGoal [VERIFY: service + integration tests]
-
-Implement one atomic command that revalidates Case, formulation, Goal completeness, real actor confirmation, Authorization, Consent, Safety and Compliance, then settles Goal confirmation and `GOALS -> PLANNING`. Exact replay is idempotent; stale/competing commands conflict.
-
-## T-GCR-05 — API / Composition [VERIFY: Contract + OpenAPI]
-
-Expose only the Authority-listed `POST /api/v1/cases/:id/goals` projection using the current Fastify/Zod/idempotency/version pattern. Do not invent product endpoints.
-
-## T-GCR-06 — Negative Ownership Guards [VERIFY: static tests]
-
-Prove A2010, Scene services and client/request payloads cannot directly write `cases.phase = PLANNING`, and integration tests contain no administrator SQL phase fabrication.
-
-## T-GCR-07 — Exact-Head Verification [VERIFY: full verify]
-
-Run the repository canonical Contract, Static Checks, DB Migration, Unit Tests, Integration Tests, Spec Governance and full `verify-all`; freeze the exact Head for independent audit. Merge remains a separate owner decision.
+- [x] T2001 [REQ:GCR-001,GCR-002,GCR-003,GCR-004,GCR-005,GCR-006,GCR-007,GCR-008,GCR-009,GCR-010,GCR-011,GCR-012] [VERIFY:Spec Governance] Establish only the feature projection and finite implementation ownership; no `apps/`, `packages/`, `db/`, Authority Doc, Authority Unit registry, or change-binding delta is permitted in this prerequisite.
+- [ ] T2002 [REQ:GCR-002,GCR-003,GCR-005,GCR-006] [VERIFY:Remote Truth read-back] After T2001 is independently audited and merged, re-read latest main, PR #70 read-only, Authority Docs, ownership, Authority Unit registry, migration sequence, workflows, and current Case/Problem Formulation runtime before any product code.
+- [ ] T2003 [REQ:GCR-001,GCR-002,GCR-009,GCR-010,GCR-011] [VERIFY:DB Migration + DB tests] Add the current-baseline Goal persistence owner with same-Case/formulation integrity, family isolation, forced RLS, confirmation auditability, review state, and concurrency defenses; do not create Plan runtime.
+- [ ] T2004 [REQ:GCR-001,GCR-002,GCR-003,GCR-004] [VERIFY:Domain + service tests] Implement legal Goal create/save bound to the current confirmed formulation; reject incomplete, stale, wrong-phase, invalid-actor, and invalid-reference inputs.
+- [ ] T2005 [REQ:GCR-005,GCR-006,GCR-007,GCR-008] [VERIFY:Service + integration tests] Implement one atomic `ConfirmGoal` command that revalidates Case, formulation, Goal contract, real user confirmation, Authorization, Consent, Safety, and Compliance, then performs exactly one `GOALS -> PLANNING` advancement with idempotent/concurrent convergence.
+- [ ] T2006 [REQ:GCR-003,GCR-004,GCR-005] [VERIFY:Contract + OpenAPI] Expose only the Authority-listed `POST /api/v1/cases/:id/goals` projection using the current Fastify/Zod/idempotency/version pattern; do not invent a product endpoint.
+- [ ] T2007 [REQ:GCR-006,GCR-012] [VERIFY:Static + integration negative guards] Prove A2010, Scene services, and client/request payloads cannot directly write `cases.phase = PLANNING`, and prove the canonical integration path contains no administrator SQL phase fabrication.
+- [ ] T2008 [REQ:GCR-001,GCR-002,GCR-003,GCR-004,GCR-005,GCR-006,GCR-007,GCR-008,GCR-009,GCR-010,GCR-011,GCR-012] [VERIFY:Contract + Static Checks + DB Migration + Unit Tests + Integration Tests + Spec Governance + verify-all] Run all canonical exact-head verification, freeze the candidate Head for independent audit, and stop without merge.
