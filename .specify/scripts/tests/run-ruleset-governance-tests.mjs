@@ -10,26 +10,36 @@ const validator = path.resolve(here, "..", "validate-repository-ruleset.mjs");
 const root = path.resolve(here, "..", "..", "..");
 
 const statusChecks = ["Contract","Static Checks","DB Migration","Unit Tests","Integration Tests","Spec Governance"];
-function ruleset({ approvals, lastPush }) {
+function ruleset({
+  approvals,
+  lastPush,
+  threadResolution = true,
+  checks = statusChecks,
+  bypassActors = [],
+  id = 27341100,
+  name = "main-protection",
+  target = "branch",
+  enforcement = "active",
+}) {
   return {
-    id: 27341100,
-    name: "main-protection",
-    target: "branch",
-    enforcement: "active",
-    bypass_actors: [],
+    id,
+    name,
+    target,
+    enforcement,
+    bypass_actors: bypassActors,
     rules: [
       {
         type: "pull_request",
         parameters: {
           required_approving_review_count: approvals,
           require_last_push_approval: lastPush,
-          required_review_thread_resolution: true,
+          required_review_thread_resolution: threadResolution,
         },
       },
       {
         type: "required_status_checks",
         parameters: {
-          required_status_checks: statusChecks.map((context) => ({ context })),
+          required_status_checks: checks.map((context) => ({ context })),
         },
       },
       { type: "deletion" },
@@ -52,6 +62,12 @@ function run(fixture) {
 
 const cases = [
   {
+    name: "G6 wrong Ruleset identity is rejected",
+    expected: 1,
+    actual: run(ruleset({ approvals: 1, lastPush: true, id: 99999999 })),
+    marker: "Ruleset id mismatch",
+  },
+  {
     name: "G6 required approval count 0 is rejected",
     expected: 1,
     actual: run(ruleset({ approvals: 0, lastPush: true })),
@@ -62,6 +78,32 @@ const cases = [
     expected: 1,
     actual: run(ruleset({ approvals: 1, lastPush: false })),
     marker: "require_last_push_approval",
+  },
+  {
+    name: "G6 review-thread resolution disabled is rejected",
+    expected: 1,
+    actual: run(ruleset({ approvals: 1, lastPush: true, threadResolution: false })),
+    marker: "required_review_thread_resolution",
+  },
+  {
+    name: "G6 required status check missing is rejected",
+    expected: 1,
+    actual: run(ruleset({
+      approvals: 1,
+      lastPush: true,
+      checks: statusChecks.filter((context) => context !== "Spec Governance"),
+    })),
+    marker: "Missing required status check: Spec Governance",
+  },
+  {
+    name: "G6 bypass actor introduced is rejected",
+    expected: 1,
+    actual: run(ruleset({
+      approvals: 1,
+      lastPush: true,
+      bypassActors: [{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }],
+    })),
+    marker: "Ruleset must not have bypass actors",
   },
   {
     name: "G6/G7 native review protections satisfy the contract",
