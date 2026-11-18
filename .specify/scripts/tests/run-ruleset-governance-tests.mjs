@@ -10,9 +10,10 @@ const validator = path.resolve(here, "..", "validate-repository-ruleset.mjs");
 const root = path.resolve(here, "..", "..", "..");
 
 const statusChecks = ["Contract","Static Checks","DB Migration","Unit Tests","Integration Tests","Spec Governance"];
+
 function ruleset({
-  approvals,
-  lastPush,
+  approvals = 0,
+  lastPush = false,
   threadResolution = true,
   checks = statusChecks,
   bypassActors = [],
@@ -22,7 +23,28 @@ function ruleset({
   enforcement = "active",
   includeRefs = ["~DEFAULT_BRANCH"],
   excludeRefs = [],
+  deletion = true,
+  nonFastForward = true,
 }) {
+  const rules = [
+    {
+      type: "pull_request",
+      parameters: {
+        required_approving_review_count: approvals,
+        require_last_push_approval: lastPush,
+        required_review_thread_resolution: threadResolution,
+      },
+    },
+    {
+      type: "required_status_checks",
+      parameters: {
+        required_status_checks: checks.map((context) => ({ context })),
+      },
+    },
+  ];
+  if (deletion) rules.push({ type: "deletion" });
+  if (nonFastForward) rules.push({ type: "non_fast_forward" });
+
   return {
     id,
     name,
@@ -35,24 +57,7 @@ function ruleset({
       },
     },
     bypass_actors: bypassActors,
-    rules: [
-      {
-        type: "pull_request",
-        parameters: {
-          required_approving_review_count: approvals,
-          require_last_push_approval: lastPush,
-          required_review_thread_resolution: threadResolution,
-        },
-      },
-      {
-        type: "required_status_checks",
-        parameters: {
-          required_status_checks: checks.map((context) => ({ context })),
-        },
-      },
-      { type: "deletion" },
-      { type: "non_fast_forward" },
-    ],
+    rules,
   };
 }
 
@@ -72,61 +77,65 @@ const cases = [
   {
     name: "G6 wrong Ruleset identity is rejected",
     expected: 1,
-    actual: run(ruleset({ approvals: 1, lastPush: true, id: 99999999 })),
+    actual: run(ruleset({ id: 99999999 })),
     marker: "Ruleset id mismatch",
+  },
+  {
+    name: "G6 ruleset not protecting the default branch is rejected",
+    expected: 1,
+    actual: run(ruleset({ includeRefs: ["refs/heads/not-main"] })),
+    marker: "must protect the repository default branch",
   },
   {
     name: "G6 ruleset excluding the default branch is rejected",
     expected: 1,
-    actual: run(ruleset({
-      approvals: 1,
-      lastPush: true,
-      excludeRefs: ["~DEFAULT_BRANCH"],
-    })),
+    actual: run(ruleset({ excludeRefs: ["~DEFAULT_BRANCH"] })),
     marker: "must not carry ref_name exclusions",
-  },
-  {
-    name: "G6 required approval count 0 is rejected",
-    expected: 1,
-    actual: run(ruleset({ approvals: 0, lastPush: true })),
-    marker: "required_approving_review_count",
-  },
-  {
-    name: "G7 missing latest-push approval is rejected",
-    expected: 1,
-    actual: run(ruleset({ approvals: 1, lastPush: false })),
-    marker: "require_last_push_approval",
   },
   {
     name: "G6 review-thread resolution disabled is rejected",
     expected: 1,
-    actual: run(ruleset({ approvals: 1, lastPush: true, threadResolution: false })),
+    actual: run(ruleset({ threadResolution: false })),
     marker: "required_review_thread_resolution",
   },
   {
     name: "G6 required status check missing is rejected",
     expected: 1,
     actual: run(ruleset({
-      approvals: 1,
-      lastPush: true,
       checks: statusChecks.filter((context) => context !== "Spec Governance"),
     })),
     marker: "Missing required status check: Spec Governance",
   },
   {
+    name: "G6 unexpected required status check is rejected",
+    expected: 1,
+    actual: run(ruleset({ checks: [...statusChecks, "Unapproved Check"] })),
+    marker: "Unexpected required status check: Unapproved Check",
+  },
+  {
     name: "G6 bypass actor introduced is rejected",
     expected: 1,
     actual: run(ruleset({
-      approvals: 1,
-      lastPush: true,
       bypassActors: [{ actor_id: 5, actor_type: "RepositoryRole", bypass_mode: "always" }],
     })),
     marker: "Ruleset must not have bypass actors",
   },
   {
-    name: "G6/G7 native review protections satisfy the contract",
+    name: "G6 deletion protection missing is rejected",
+    expected: 1,
+    actual: run(ruleset({ deletion: false })),
+    marker: "Missing required ruleset rule: deletion",
+  },
+  {
+    name: "G6 non-fast-forward protection missing is rejected",
+    expected: 1,
+    actual: run(ruleset({ nonFastForward: false })),
+    marker: "Missing required ruleset rule: non_fast_forward",
+  },
+  {
+    name: "G6 single-owner ruleset with zero human approvals and no last-push approval passes",
     expected: 0,
-    actual: run(ruleset({ approvals: 1, lastPush: true })),
+    actual: run(ruleset({ approvals: 0, lastPush: false })),
     marker: "Repository Ruleset validation PASS",
   },
 ];
