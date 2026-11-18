@@ -1275,20 +1275,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3011",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "SLEEP target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -1346,20 +1333,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3012",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "SLEEP feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -1417,20 +1391,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3013",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "SLEEP progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -1502,20 +1463,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "SLEEP help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -1574,20 +1522,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3021",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "EXERCISE target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -1645,20 +1580,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3022",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "EXERCISE feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -1716,20 +1638,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3033",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "EXERCISE progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -1801,20 +1710,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "EXERCISE help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -1873,20 +1769,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3041",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "HOBBIES target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -1944,20 +1827,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3042",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "HOBBIES feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2015,20 +1885,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3043",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "HOBBIES progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -2100,20 +1957,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "HOBBIES help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2172,20 +2016,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3051",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "CHORES target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2243,20 +2074,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3052",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "CHORES feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2314,20 +2132,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3053",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "CHORES progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -2399,20 +2204,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "CHORES help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2471,20 +2263,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3061",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "FAMILY_GATHERING target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2542,20 +2321,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3062",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "FAMILY_GATHERING feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2613,20 +2379,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3063",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "FAMILY_GATHERING progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -2698,20 +2451,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "FAMILY_GATHERING help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2770,20 +2510,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3071",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "OUTDOOR_ACTIVITY target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2841,20 +2568,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3072",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "OUTDOOR_ACTIVITY feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -2912,20 +2626,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3073",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "OUTDOOR_ACTIVITY progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -2997,20 +2698,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "OUTDOOR_ACTIVITY help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3069,20 +2757,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3081",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "EMOTION_REGULATION_1 target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3140,20 +2815,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3082",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "EMOTION_REGULATION_1 feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3211,20 +2873,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3083",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "EMOTION_REGULATION_1 progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -3296,20 +2945,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "EMOTION_REGULATION_1 help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3368,20 +3004,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3091",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "TIME_MANAGEMENT target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3439,20 +3062,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3092",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "TIME_MANAGEMENT feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3510,20 +3120,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3093",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "TIME_MANAGEMENT progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -3595,20 +3192,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "TIME_MANAGEMENT help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3667,20 +3251,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3101",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "FAMILY_RELATIONSHIP target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3738,20 +3309,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3102",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "FAMILY_RELATIONSHIP feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3809,20 +3367,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3103",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "FAMILY_RELATIONSHIP progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -3894,20 +3439,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "FAMILY_RELATIONSHIP help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -3966,20 +3498,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3111",
-        "conditionRef": "TARGET_DEFINITION_COMPLETE",
-        "reasonCode": "TARGET_DEFINITION_COMPLETE",
-        "reason": "EMOTION_REGULATION_2 target definition can proceed to feasibility",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -4037,20 +3556,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3112",
-        "conditionRef": "TARGET_FEASIBILITY_RECORDED",
-        "reasonCode": "TARGET_FEASIBILITY_RECORDED",
-        "reason": "EMOTION_REGULATION_2 feasibility can proceed to progress tracking",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
@@ -4108,20 +3614,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3113",
-        "conditionRef": "TARGET_PROGRESS_RECORDED",
-        "reasonCode": "TARGET_PROGRESS_RECORDED",
-        "reason": "EMOTION_REGULATION_2 progress can open its help/support entry",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED",
@@ -4193,20 +3686,7 @@ export const digitalUseNodeManifest = [
       "refs": [],
       "semantics": "canonical node output/record semantics retained by authority reference"
     },
-    "allowedNext": [
-      {
-        "kind": "NODE",
-        "targetNodeCode": "A3002",
-        "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
-        "reason": "EMOTION_REGULATION_2 help returns to target management",
-        "authorityRefs": [
-          "V1-D43",
-          "V1-D11",
-          "V1-D12"
-        ]
-      }
-    ],
+    "allowedNext": [],
     "canRunInParallelWith": [],
     "entryMode": [
       "USER_INITIATED"
