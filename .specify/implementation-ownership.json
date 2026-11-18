@@ -354,6 +354,45 @@
           "common-core-goal-confirmgoal-runtime"
         ]
       }
+    },
+    {
+      "id": "common-core-goal-domain",
+      "match": {
+        "kind": "PREFIX",
+        "path": "packages/domain/src/goal-"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "common-core-goal-domain-export",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/index.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "common-core-goal-authorization",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/authorization/src/authorize.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
     }
   ]
 }
