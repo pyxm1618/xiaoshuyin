@@ -59,4 +59,13 @@ describe('Phase 2 participant age/consent authority projection', () => {
     expect(spec).toContain('FR-035 [Phase2-D5]');
     expect(spec).toContain('MUST NOT be treated as blanket authority');
   });
+
+  it('projects the registered invitation lifecycle without an unauthorized terminal state', () => {
+    expect(spec).toContain('V1 Technical Authority owns the invitation / participation lifecycle semantics');
+    expect(spec).toContain('PENDING → ACTIVE / DECLINED / EXPIRED；ACTIVE → WITHDRAWN');
+    expect(spec).toContain('invitation remains unchanged unless an authorized invitation lifecycle event occurs');
+    expect(spec).not.toContain('越权作废');
+    expect(spec).not.toContain('REVOKED / CANCELLED / unauthorized-void / manager-cancel 终态。邀请');
+    expect(spec).not.toContain('Slice 4 继续持有 participation resource 生命周期');
+  });
 });
