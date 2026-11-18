@@ -1787,9 +1787,25 @@
             "heading": "## 2.6 Goal 合同"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "common-core-goal-confirmgoal-runtime-prerequisite",
+              "specPath": "specs/common-core-goal-confirmgoal-runtime-prerequisite",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/common-core-goal-confirmgoal-authority-contract.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-020",
@@ -4780,9 +4796,25 @@
             "heading": "### 6.7 正常 Phase 转换合同"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "common-core-goal-confirmgoal-runtime-prerequisite",
+              "specPath": "specs/common-core-goal-confirmgoal-runtime-prerequisite",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/common-core-goal-confirmgoal-authority-contract.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-024",
@@ -4876,6 +4908,22 @@
                   },
                   "requiredArtifacts": [
                     "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            },
+            {
+              "feature": "common-core-goal-confirmgoal-runtime-prerequisite",
+              "specPath": "specs/common-core-goal-confirmgoal-runtime-prerequisite",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/common-core-goal-confirmgoal-authority-contract.test.ts"
                   ]
                 }
               ]
@@ -5454,6 +5502,22 @@
                   },
                   "requiredArtifacts": [
                     "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            },
+            {
+              "feature": "common-core-goal-confirmgoal-runtime-prerequisite",
+              "specPath": "specs/common-core-goal-confirmgoal-runtime-prerequisite",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/common-core-goal-confirmgoal-authority-contract.test.ts"
                   ]
                 }
               ]
