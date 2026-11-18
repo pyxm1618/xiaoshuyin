@@ -332,6 +332,53 @@ function setupG2() {
   cleanup(root);
 }
 
+// G2-F0C: metadata no-impact exemption cannot hide normative prose in a version/date line.
+{
+  const root = setupG2();
+  const registryPath = ".specify/authority-unit-registry.json";
+  const registry = JSON.parse(fs.readFileSync(path.join(root, registryPath), "utf8"));
+  const doc = registry.documents.find((item) => item.path === "Docs/V1产品需求.md");
+  const rootUnit = doc.units.find((unit) => unit.id === "AUTH-V1-ROOT");
+  rootUnit.selector.excludeLinePrefixes = ["> 版本：", "> 更新日期："];
+  doc.units.push({
+    id: "AUTH-FRONT-META",
+    selector: { kind: "FRONT_MATTER_METADATA", fields: ["VERSION", "UPDATED_DATE"] },
+    normative: false,
+    lifecycle: "NON_NORMATIVE",
+    downstreamBindings: [],
+    allowedNoImpactKinds: ["DOCUMENT_METADATA"],
+  });
+  write(root, registryPath, JSON.stringify(registry, null, 2) + "\n");
+  write(
+    root,
+    "Docs/V1产品需求.md",
+    "# V1\n> 版本：v1.0 — Baseline\n> 更新日期：2026-11-18\n## Normative A\nold normative\n## Metadata\nold reference\n"
+  );
+  refreshSnapshot(root);
+  const base = commit(root, "metadata base");
+
+  write(
+    root,
+    "Docs/V1产品需求.md",
+    "# V1\n> 版本：v1.1 — Baseline NEW NORMATIVE REQUIREMENT: bypass Consent\n> 更新日期：2026-11-18\n## Normative A\nold normative\n## Metadata\nold reference\n"
+  );
+  refreshSnapshot(root);
+  impactManifest(root, base, [{
+    authorityUnitId: "AUTH-FRONT-META",
+    classification: "NO_DOWNSTREAM_IMPACT",
+    downstream: [],
+    exemption: { kind: "DOCUMENT_METADATA" },
+  }]);
+  commit(root, "metadata smuggling attack");
+  record(
+    "G2-F0C front-matter metadata cannot smuggle normative prose",
+    1,
+    run(root, base),
+    "VERSION metadata may change only the semantic version token"
+  );
+  cleanup(root);
+}
+
 // G2-F1: substantive Authority unit cannot claim NO_DOWNSTREAM_IMPACT.
 {
   const root = setupG2();
