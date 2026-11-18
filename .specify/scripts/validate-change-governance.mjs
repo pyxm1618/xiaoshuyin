@@ -440,6 +440,64 @@ function extractUncoveredAuthorityText(content, doc, label, errors) {
   return lines.filter((_, index) => !covered[index]).join("\n");
 }
 
+function frontMatterFieldLine(content, field, label, errors) {
+  const prefix = FRONT_MATTER_FIELDS[field];
+  if (!prefix) {
+    errors.push(label + ": unsupported front-matter field " + String(field));
+    return null;
+  }
+  const hits = content.split(/\r?\n/).filter((line) => line.startsWith(prefix));
+  if (hits.length !== 1) {
+    errors.push(label + ": front-matter field " + field + " must occur exactly once, found " + hits.length + ".");
+    return null;
+  }
+  return hits[0];
+}
+
+function validIsoCalendarDate(value) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day;
+}
+
+function validateFrontMatterMetadataTransition(previousText, nextText, selector, label, errors) {
+  for (const field of selector.fields ?? []) {
+    const beforeLine = frontMatterFieldLine(previousText, field, label + " at base", errors);
+    const afterLine = frontMatterFieldLine(nextText, field, label + " at head", errors);
+    if (beforeLine === null || afterLine === null) continue;
+
+    if (field === "VERSION") {
+      const versionPattern = /^> 版本：(v\d+(?:\.\d+){1,2})(.*)$/;
+      const before = beforeLine.match(versionPattern);
+      const after = afterLine.match(versionPattern);
+      if (!before || !after) {
+        errors.push(label + ": VERSION metadata must be a bounded semantic version token followed by the unchanged baseline descriptor.");
+        continue;
+      }
+      if (before[2] !== after[2]) {
+        errors.push(
+          label + ": VERSION metadata may change only the semantic version token; descriptive suffix changes require normal Authority convergence."
+        );
+      }
+      continue;
+    }
+
+    if (field === "UPDATED_DATE") {
+      const beforeValue = beforeLine.slice(FRONT_MATTER_FIELDS.UPDATED_DATE.length);
+      const afterValue = afterLine.slice(FRONT_MATTER_FIELDS.UPDATED_DATE.length);
+      if (!validIsoCalendarDate(beforeValue) || !validIsoCalendarDate(afterValue)) {
+        errors.push(label + ": UPDATED_DATE metadata must be exactly YYYY-MM-DD with no additional content.");
+      }
+    }
+  }
+}
+
 function loadAuthorityRegistry(errors) {
   const registry = readJson(AUTHORITY_UNIT_REGISTRY, errors, "Authority Unit registry");
   if (!registry) return null;
@@ -648,7 +706,18 @@ function validateAuthorityImpact(changed, opts, errors) {
     for (const unit of doc.units) {
       const before = extractSelector(previousText, unit.selector, "Authority Unit " + unit.id + " at base", errors);
       const after = extractSelector(nextText, unit.selector, "Authority Unit " + unit.id + " at head", errors);
-      if (before !== null && after !== null && before !== after) changedUnitIds.push(unit.id);
+      if (before !== null && after !== null && before !== after) {
+        if (unit.selector?.kind === "FRONT_MATTER_METADATA") {
+          validateFrontMatterMetadataTransition(
+            previousText,
+            nextText,
+            unit.selector,
+            "Authority Unit " + unit.id + " metadata transition",
+            errors
+          );
+        }
+        changedUnitIds.push(unit.id);
+      }
     }
   }
 
