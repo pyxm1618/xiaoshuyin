@@ -2634,9 +2634,25 @@
             "heading": "### 4. A2001 / A2002 / A2003 确定性合同"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "011-digital-use-node-manifest-routing-foundation",
+              "specPath": "specs/011-digital-use-node-manifest-routing-foundation",
+              "requirements": [
+                {
+                  "id": "12. Functional Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## 12. Functional Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/scenes/digital-use/authority-regression.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-097",
@@ -2645,9 +2661,25 @@
             "heading": "### 5. Unknown / Conflict 与 fail-closed"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "011-digital-use-node-manifest-routing-foundation",
+              "specPath": "specs/011-digital-use-node-manifest-routing-foundation",
+              "requirements": [
+                {
+                  "id": "12. Functional Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## 12. Functional Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/scenes/digital-use/authority-regression.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-098",
@@ -2678,9 +2710,25 @@
             "heading": "### A. Integrated Triage precedence 与恢复合同"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "011-digital-use-node-manifest-routing-foundation",
+              "specPath": "specs/011-digital-use-node-manifest-routing-foundation",
+              "requirements": [
+                {
+                  "id": "12. Functional Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## 12. Functional Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/scenes/digital-use/authority-regression.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-101",
@@ -5058,6 +5106,22 @@
                   },
                   "requiredArtifacts": [
                     "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            },
+            {
+              "feature": "004-case-participant-core",
+              "specPath": "specs/004-case-participant-core",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/integration/participations-authorization.test.ts"
                   ]
                 }
               ]
