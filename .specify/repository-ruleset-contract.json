@@ -1,13 +1,11 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "repository": "pyxm1618/xiaoshuyin",
   "rulesetId": 27341100,
   "rulesetName": "main-protection",
   "target": "branch",
   "enforcement": "active",
   "requiredPullRequestPolicy": {
-    "minimumApprovingReviews": 1,
-    "requireLastPushApproval": true,
     "requiredReviewThreadResolution": true
   },
   "requiredStatusChecks": [
@@ -17,5 +15,18 @@
     "Unit Tests",
     "Integration Tests",
     "Spec Governance"
+  ],
+  "governanceModel": {
+    "model": "Single Owner + AI Development + Independent AI Audit + Automated CI / Governance Gates",
+    "humanGitHubApprovalRequired": false,
+    "lastPushHumanApprovalRequired": false,
+    "independentAiAuditRequired": true,
+    "independentAiAuditEnforcement": "development-process-verification-evidence"
+  },
+  "requiredRuleTypes": [
+    "pull_request",
+    "required_status_checks",
+    "deletion",
+    "non_fast_forward"
   ]
 }
