@@ -1,6 +1,6 @@
 # Slice 8 — Implementation Tasks
 
-> Planning artifact only. None of these tasks has been executed. Stable task IDs are reserved for the future Development AI and independent audits.
+> Historical implementation record. Slice 8 implementation is merged and independently audited; checkbox state is reconciled against `.specify/task-evidence/008-problem-formulation-core.json`. Stable task IDs, task wording, REQ and VERIFY contracts remain unchanged.
 
 ## Task rules
 

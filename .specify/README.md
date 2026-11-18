@@ -33,20 +33,53 @@ requirement to have *later* artifacts; nothing about traceability is relaxed.
 
 `specs/` directories starting with `.` or `_` are reserved and not treated as features.
 
+## Machine-verifiable change provenance
+
+Production implementation ownership is repository-controlled by
+`.specify/implementation-ownership.json`. A change-binding manifest may select only a
+feature that the registry already authorizes for each production path. Shared ownership is
+finite and explicit, longest-match resolution is deterministic, and an unknown production
+path fails closed. Ownership-registry changes are governance-sensitive and must not be
+combined with product implementation/change-binding changes.
+
+Authority convergence is repository-controlled by
+`.specify/authority-unit-registry.json`. The registry defines stable Authority Unit
+identities and, where an Authority unit is allowed to affect an existing feature, the exact
+feature/spec, downstream requirement selector, and required artifact set. A PR cannot
+create these bindings while changing the Authority text. `NO_DOWNSTREAM_IMPACT` is
+available only for a registry-declared non-normative unit and a finite allowed exemption
+kind; substantive units fail closed until their downstream convergence binding exists.
+
+Completed task evidence uses feature-bound provenance: task feature identity → merged
+implementation PR/head → actual PR changed-file set → concrete implementation and
+verification artifacts. Evidence artifacts must be present in the referenced PR delta, and
+the checked task `[VERIFY:...]` contracts are digest-bound. A successful unrelated PR or
+generic successful CI run cannot be reused as universal task evidence.
+
 ## Docs/** change control
 
-`Docs/**` holds the approved product and technical sources. They are protected by a
-gate in `Spec Governance`, not by a pinned commit SHA:
+`Docs/**` contains the approved product and technical sources. The old
+`approved-docs-change` label is retained only as historical repository metadata; it has
+**zero authority** in the governance gate and cannot authorize an Authority change.
 
-- any change under `Docs/**` fails the gate by default;
-- a human may apply the `approved-docs-change` pull request label after reviewing the
-  document change itself. The gate then reports the changed files and admits the change
-  to normal review;
-- the label never disables the validator or the self-test, and it is never an approval
-  of document content.
+For any revision to one of the four Authority Docs, Spec Governance requires:
+- the refreshed machine-derived `.specify/authority-inputs.json`;
+- exactly one changed `.specify/authority-impacts/*.json` contract binding previous/new
+  Authority blob identities;
+- an explicit impact classification;
+- exact affected authoritative specs and required downstream artifacts when impact exists;
+- proof that every declared downstream item exists and changed in the same convergence PR;
+- a finite controlled exemption contract for legitimate metadata-only/no-downstream-impact
+  corrections.
 
-Because a pinned SHA would eventually block a legitimate requirement revision, the
-protected invariant is "no unapproved Docs drift reaches `main`", not "Docs never change".
+The repository uses a **Single Owner + AI Development + Independent AI Audit + Automated
+CI / Governance Gates** model. GitHub human approval is not a repository gate:
+`required_approving_review_count = 0` and `require_last_push_approval = false` are valid.
+The Ruleset must still protect the default branch, require review-thread resolution, require
+exactly the six approved status checks, forbid unauthorized bypass actors, and retain
+deletion / non-fast-forward protections. Independent AI audit remains required as
+development-process verification evidence against the exact candidate Head; it is not a
+GitHub `APPROVED` review and must not be encoded as one.
 
 ## Verifying this layer
 
