@@ -77,9 +77,10 @@ apps/miniprogram/ 与 apps/operations/
 - `design-system/`：视觉与组件 Design System；
 - `screens/`：冻结后的关键页面与屏幕级设计 Authority。
 
-首个正式体验正文为：
+当前正式文档：
 
-`experience/V1前端体验原则.md`
+- `experience/V1前端体验原则.md`：**Step 1 / Frozen**，定义 V1 前端体验原则；
+- `information-architecture/V1信息架构.md`：**Step 2 / In Progress**，先冻结前后端同一流程 Traceability、体验吸引力北极星与前端投影边界，再进入页面/导航 IA。
 
 ## 6. Freeze / Change Rules
 
