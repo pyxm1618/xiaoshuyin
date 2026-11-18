@@ -172,9 +172,11 @@ describe('problem formulation schema (Slice 8)', () => {
 
   it('rejects at-rest DRAFT and lifecycle NEEDS_REVIEW', async () => {
     await admin.query('DELETE FROM problem_formulations WHERE family_id = $1', [familyId]);
+    // DRAFT violates both the explicit not-DRAFT invariant and the lifecycle
+    // confirmation-status CHECK. PostgreSQL may report either first; SQLSTATE
+    // is the stable correctness identity here, not CHECK evaluation order.
     await expect(insert({ status: 'DRAFT' })).rejects.toMatchObject({
       code: '23514',
-      constraint: 'problem_formulations_not_draft_check',
     });
     await expect(insert({ status: 'NEEDS_REVIEW' })).rejects.toMatchObject({ code: '22P02' });
   });
