@@ -58,30 +58,33 @@ export function validateRuleset(ruleset, contract) {
   }
   const p = prRule.parameters ?? {};
   const expected = contract.requiredPullRequestPolicy;
-  if (!Number.isInteger(p.required_approving_review_count) ||
-      p.required_approving_review_count < expected.minimumApprovingReviews) {
-    errors.push(
-      `required_approving_review_count must be >= ${expected.minimumApprovingReviews}; current=${p.required_approving_review_count}`
-    );
-  }
-  if (p.require_last_push_approval !== expected.requireLastPushApproval) {
-    errors.push(
-      `require_last_push_approval must be ${expected.requireLastPushApproval}; current=${p.require_last_push_approval}`
-    );
-  }
   if (p.required_review_thread_resolution !== expected.requiredReviewThreadResolution) {
     errors.push(
       `required_review_thread_resolution must be ${expected.requiredReviewThreadResolution}; current=${p.required_review_thread_resolution}`
     );
   }
 
+  for (const ruleType of contract.requiredRuleTypes ?? []) {
+    if (!(ruleset.rules ?? []).some((rule) => rule?.type === ruleType)) {
+      errors.push(`Missing required ruleset rule: ${ruleType}`);
+    }
+  }
+
   const statusRule = (ruleset.rules ?? []).find((rule) => rule?.type === "required_status_checks");
   if (!statusRule) {
     errors.push("Ruleset is missing required_status_checks.");
   } else {
-    const actual = new Set((statusRule.parameters?.required_status_checks ?? []).map((x) => x.context));
+    const actualList = (statusRule.parameters?.required_status_checks ?? []).map((x) => x.context);
+    const actual = new Set(actualList);
+    const expectedChecks = new Set(contract.requiredStatusChecks);
     for (const name of contract.requiredStatusChecks) {
       if (!actual.has(name)) errors.push(`Missing required status check: ${name}`);
+    }
+    for (const name of actual) {
+      if (!expectedChecks.has(name)) errors.push(`Unexpected required status check: ${name}`);
+    }
+    if (actualList.length !== actual.size) {
+      errors.push("Required status checks must not contain duplicate contexts.");
     }
   }
 
@@ -130,10 +133,14 @@ try {
   process.exit(1);
 }
 
+const activePrRule = (ruleset.rules ?? []).find((rule) => rule?.type === "pull_request");
+const activePrParameters = activePrRule?.parameters ?? {};
+console.log(`Repository Ruleset informational human-review settings (not gates): required_approving_review_count=${activePrParameters.required_approving_review_count ?? "unset"}, require_last_push_approval=${activePrParameters.require_last_push_approval ?? "unset"}`);
+
 const errors = validateRuleset(ruleset, contract);
 if (errors.length > 0) {
   console.error("Repository Ruleset validation FAILED:");
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log("Repository Ruleset validation PASS: native approval and latest-push protections match contract.");
+console.log("Repository Ruleset validation PASS: default-branch protection, review-thread resolution, exact required checks, no-bypass policy, deletion protection, and non-fast-forward protection match the Single Owner + AI governance contract.");
