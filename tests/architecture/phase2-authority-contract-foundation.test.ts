@@ -7,7 +7,8 @@ describe('Phase 2 Authority Contract Foundation convergence', () => {
   const text = readFileSync(SPEC, 'utf8');
 
   it('is converged but remains downstream-only', () => {
-    expect(text).toContain('Status: **CONVERGED**');
+    expect(text).toContain('Status: **PARTIAL_AUTHORITY_CONVERGENCE**');
+    expect(text).toContain('D3 status: **GOVERNANCE_BLOCKED**');
     expect(text).toContain('downstream projection only');
     expect(text).toContain('P2-AUTH-011');
   });
@@ -26,6 +27,7 @@ describe('Phase 2 Authority Contract Foundation convergence', () => {
     expect(text).toContain('ConfirmGoal');
     expect(text).toContain('A1001/01002/01003');
     expect(text).toContain('SAFETY_RESOLVE');
-    expect(text).toContain('STAFF_ACCESS_ADMIN');
+    expect(text).toContain('SERVICE_CONTROL');
+    expect(text).not.toContain('STAFF_ACCESS_ADMIN');
   });
 });

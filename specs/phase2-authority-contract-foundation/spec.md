@@ -6,7 +6,10 @@ This feature is a **downstream projection only** of the four formal Authority Do
 
 Phase 2 Authority convergence is now reflected here for the registry-bound D3/D7/D8 units. D4/D5 units continue to converge through their already-registered Compliance / Participant downstream owners.
 
-Status: **CONVERGED**
+Status: **PARTIAL_AUTHORITY_CONVERGENCE**
+
+- D3 status: **GOVERNANCE_BLOCKED** for source cleanup. The mechanical dimension-local rule is frozen by the registered Phase 2 projection, but the original Product Integrated Triage Authority still physically contains legacy “can overturn / 推翻 positive” wording. Those source units are `FUTURE_UNIMPLEMENTED` with no pre-registered downstream binding on the current registry, so this PR MUST NOT self-authorize by editing the registry. D3 cannot be declared CLOSED until that topology lands separately and the source wording is removed.
+- D5 status: **EXTERNAL_DEPENDENCY** for the exact Legal / Compliance coverage, final notice text, and any required consent-expiry / renewal rule for subsequent child-data processing.
 
 ## Scope
 
@@ -35,7 +38,7 @@ Out of scope:
 - **P2-AUTH-007 — Invitation lifecycle:** the formal V1 Technical Authority owns `PENDING / ACTIVE / DECLINED / EXPIRED / WITHDRAWN`; downstream Slice specs may project but never define or expand that lifecycle.
 - **P2-AUTH-008 — INSUFFICIENT recovery:** recovery returns real missing requirements and a reachable A1001/01002/01003 collection/correction target; it never uses A2001/A2002 outcome pages as a substitute collection route.
 - **P2-AUTH-009 — U19 Safety/Referral:** Safety entry is internal `EnterSafetyHold` from an approved Safety decision; resolution is Staff-only with `SAFETY_RESOLVE` + valid assignment/evidence; Referral uses the existing six-state lifecycle and explicit transition commands/APIs.
-- **P2-AUTH-010 — Staff:** login resolves a server-owned StaffPrincipal; capability/assignment authorization is explicit, scoped, revocable and audited; `STAFF_ACCESS_ADMIN` manages grants only and cannot self-grant or imply business capabilities.
+- **P2-AUTH-010 — Staff:** existing Account/session authentication resolves a server-owned StaffPrincipal; capability/assignment authorization is explicit, scoped, revocable and audited; existing `SERVICE_CONTROL` governs staff capability/scope administration with no-self-escalation and without implying business capabilities.
 - **P2-AUTH-011 — No runtime claim:** these contracts close Authority ambiguity only. Production/runtime drift is intentionally deferred to Phase 3 and MUST NOT be represented here as already remediated.
 
 ## Acceptance Scenarios
