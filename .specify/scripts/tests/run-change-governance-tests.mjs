@@ -311,6 +311,27 @@ function setupG2() {
   cleanup(root);
 }
 
+// G2-F0B: text outside all registered Authority selectors cannot bypass impact convergence.
+{
+  const root = setupG2();
+  const base = commit(root, "base");
+  write(
+    root,
+    "Docs/V1产品需求.md",
+    "NEW NORMATIVE PREAMBLE REQUIREMENT\n# V1\n## Normative A\nold normative\n## Metadata\nold reference\n"
+  );
+  refreshSnapshot(root);
+  impactManifest(root, base, []);
+  commit(root, "uncovered authority preamble attack");
+  record(
+    "G2-F0B Authority text outside registered selector coverage fails closed",
+    1,
+    run(root, base),
+    "Authority document changed outside registered Authority Unit selector coverage"
+  );
+  cleanup(root);
+}
+
 // G2-F1: substantive Authority unit cannot claim NO_DOWNSTREAM_IMPACT.
 {
   const root = setupG2();
