@@ -675,8 +675,8 @@ function setupG2() {
   const base = commit(root, "base");
   write(root, "Docs/V1产品需求.md", "# V1\n## Normative A\nnew normative\n## Metadata\nold reference\n");
   refreshSnapshot(root);
-  commit(root, "label cannot approve");
-  record("G8 approved-docs-change label cannot manufacture Human Gate evidence", 1, run(root, base, { PR_LABELS: "approved-docs-change" }), "exactly one changed .specify/authority-impacts");
+  commit(root, "label cannot authorize");
+  record("G8 approved-docs-change label cannot manufacture Authority change evidence", 1, run(root, base, { PR_LABELS: "approved-docs-change" }), "exactly one changed .specify/authority-impacts");
   cleanup(root);
 }
 
