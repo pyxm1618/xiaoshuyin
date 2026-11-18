@@ -375,6 +375,71 @@ function extractSelector(content, selector, label, errors) {
   return selected.join("\n");
 }
 
+function extractUncoveredAuthorityText(content, doc, label, errors) {
+  const lines = content.split(/\r?\n/);
+  const covered = new Array(lines.length).fill(false);
+
+  for (const unit of doc.units ?? []) {
+    const selector = unit?.selector;
+    const selectorLabel = label + " / " + String(unit?.id ?? "<unknown-unit>");
+    if (selector?.kind === "FRONT_MATTER_METADATA") {
+      if (!Array.isArray(selector.fields) || selector.fields.length === 0) {
+        errors.push(selectorLabel + ": FRONT_MATTER_METADATA requires finite fields[].");
+        continue;
+      }
+      for (const field of selector.fields) {
+        const prefix = FRONT_MATTER_FIELDS[field];
+        if (!prefix) {
+          errors.push(selectorLabel + ": unsupported front-matter field " + String(field));
+          continue;
+        }
+        const hits = [];
+        for (let i = 0; i < lines.length; i += 1) if (lines[i].startsWith(prefix)) hits.push(i);
+        if (hits.length !== 1) {
+          errors.push(selectorLabel + ": front-matter field " + field + " must occur exactly once, found " + hits.length + ".");
+          continue;
+        }
+        covered[hits[0]] = true;
+      }
+      continue;
+    }
+
+    if (!["MARKDOWN_SECTION", "MARKDOWN_SECTION_SHALLOW"].includes(selector?.kind) ||
+        typeof selector.heading !== "string" || !/^#{1,6}\s+\S/.test(selector.heading)) {
+      errors.push(selectorLabel + ": unsupported Authority coverage selector.");
+      continue;
+    }
+
+    const hits = [];
+    for (let i = 0; i < lines.length; i += 1) if (lines[i] === selector.heading) hits.push(i);
+    if (hits.length !== 1) {
+      errors.push(selectorLabel + ": exact heading must occur once for coverage, found " + hits.length + ": " + selector.heading);
+      continue;
+    }
+
+    const start = hits[0];
+    const level = headingLevel(lines[start]);
+    let end = lines.length;
+    for (let i = start + 1; i < lines.length; i += 1) {
+      const candidate = headingLevel(lines[i]);
+      if (candidate !== null && (selector.kind === "MARKDOWN_SECTION_SHALLOW" || candidate <= level)) {
+        end = i;
+        break;
+      }
+    }
+
+    for (let i = start; i < end; i += 1) {
+      if (Array.isArray(selector.excludeLinePrefixes) &&
+          selector.excludeLinePrefixes.some((prefix) => lines[i].startsWith(prefix))) {
+        continue;
+      }
+      covered[i] = true;
+    }
+  }
+
+  return lines.filter((_, index) => !covered[index]).join("\n");
+}
+
 function loadAuthorityRegistry(errors) {
   const registry = readJson(AUTHORITY_UNIT_REGISTRY, errors, "Authority Unit registry");
   if (!registry) return null;
@@ -561,6 +626,25 @@ function validateAuthorityImpact(changed, opts, errors) {
       errors.push("No Authority Unit registry entry for changed document: " + item.path);
       continue;
     }
+
+    const uncoveredBefore = extractUncoveredAuthorityText(
+      previousText,
+      doc,
+      "Authority selector coverage at base for " + item.path,
+      errors
+    );
+    const uncoveredAfter = extractUncoveredAuthorityText(
+      nextText,
+      doc,
+      "Authority selector coverage at head for " + item.path,
+      errors
+    );
+    if (uncoveredBefore !== uncoveredAfter) {
+      errors.push(
+        "Authority document changed outside registered Authority Unit selector coverage: " + item.path + "."
+      );
+    }
+
     for (const unit of doc.units) {
       const before = extractSelector(previousText, unit.selector, "Authority Unit " + unit.id + " at base", errors);
       const after = extractSelector(nextText, unit.selector, "Authority Unit " + unit.id + " at head", errors);
