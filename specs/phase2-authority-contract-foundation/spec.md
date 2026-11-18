@@ -4,12 +4,15 @@
 
 This feature is a **downstream projection only** of the four formal Authority Docs. It never creates product, technical, professional, legal, or runtime authority.
 
-Phase 2 Authority convergence is reflected here for the registry-bound D7/D8 units. The registered Technical D3 projection converges through `011-digital-use-node-manifest-routing-foundation`; the Product D3 source cleanup remains governance-blocked. D4/D5 units converge through their already-registered Compliance / Participant downstream owners.
+Phase 2 Authority convergence is reflected here for the registered D3/D7/D8 units. Product and Technical D3 now converge through the registered `011-digital-use-node-manifest-routing-foundation` downstream; D4/D5 continue through their registered Compliance / Participant downstream owners.
 
 Status: **PARTIAL_AUTHORITY_CONVERGENCE**
 
-- D3 status: **GOVERNANCE_BLOCKED** for source cleanup. The mechanical dimension-local rule is frozen by the registered Phase 2 projection, but the original Product Integrated Triage Authority still physically contains legacy “can overturn / 推翻 positive” wording. Those source units are `FUTURE_UNIMPLEMENTED` with no pre-registered downstream binding on the current registry, so this PR MUST NOT self-authorize by editing the registry. D3 cannot be declared CLOSED until that topology lands separately and the source wording is removed.
+- D3 status: **CLOSED**. Product Authority and Technical Authority use the same mechanical rule: conflict is dimension-local; same-dimension credible true + false makes only that dimension `CONFLICT` and neutral; an independent valid direct-impact true still establishes aggregate positive; without any positive, route-driving direct-impact conflict → BLOCKED; Missing / Unknown without positive → INSUFFICIENT; 01002 / 01003 priority conflict always → BLOCKED.
+- D4 status: **CLOSED**.
 - D5 status: **EXTERNAL_DEPENDENCY** for the exact Legal / Compliance coverage, final notice text, and any required consent-expiry / renewal rule for subsequent child-data processing.
+- D7 status: **CLOSED**.
+- D8 status: **CLOSED** at Authority-contract level; the formal V1 Technical Authority owns invitation / participation lifecycle semantics and Slice 4 is downstream projection only.
 
 ## Scope
 
@@ -29,7 +32,7 @@ Out of scope:
 
 ## Requirements
 
-- **P2-AUTH-001 — D3 governance boundary:** this feature MUST NOT manufacture an alternative Product Authority for D3. The registered Technical D3 projection may freeze the mechanical evaluator interpretation, but D3 remains open until the original Product Integrated Triage source units receive a separately landed downstream topology and their legacy ambiguous wording is directly reconciled.
+- **P2-AUTH-001 — D3 source convergence:** this feature MUST NOT manufacture an alternative Product Authority for D3. The registered Product and Technical D3 units converge on the same dimension-local evaluator semantics through `011-digital-use-node-manifest-routing-foundation`; cross-dimension cancellation of an established positive is forbidden, while 01002 / 01003 priority conflict remains fail-closed BLOCKED.
 - **P2-AUTH-002 — D7 frontend governance:** `Docs/frontend/*` is a downstream projection of the four Authority Docs, never a fifth Authority and never able to override them.
 - **P2-AUTH-003 — GOALS→PLANNING:** `ConfirmGoal` is the one formal advancement command; A2010 completion is only a server-side eligibility prerequisite and never a second phase writer.
 - **P2-AUTH-004 — Closure:** `CloseCase` carries closure reason, independent outcome, basis references, actor/source, server closure time, previous phase, version guard and conditional referral reference; it atomically closes status+phase and preserves immutable history.
@@ -50,5 +53,5 @@ Out of scope:
 
 ## Acceptance Evidence
 
-- `tests/architecture/phase2-authority-contract-foundation.test.ts` verifies the partial downstream status, D3 governance boundary, and D7/D8 contracts.
+- `tests/architecture/phase2-authority-contract-foundation.test.ts` verifies D3 source convergence, the continuing D5 external dependency, and the D7/D8 contracts.
 - Repository Spec Governance and all required CI checks must pass on the exact PR head.
