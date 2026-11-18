@@ -18,6 +18,25 @@ Authority is domain-specific:
 
 Spec Kit artifacts under `specs/` are downstream implementation projections. They are NEVER a second product or architecture source of truth.
 
+### 1A. Frontend-specific required reading
+
+当任务涉及以下任一范围时：
+
+- `apps/miniprogram/**`；
+- `apps/operations/**` 的用户界面部分；
+- 前端 IA / Interaction / Visual / Design System；
+- 用户可见状态、文案、反馈、动效、声音、触觉、Growth World；
+- 将后端业务能力投影为前端页面、导航、Current Focus、Journey Trace 或其他用户体验结构；
+
+除上述四份正式 Product / Technical Authority 外，AI / 开发者 **MUST** 额外读取：
+
+1. `Docs/frontend/README.md`；
+2. 与当前任务相关的所有已冻结 `Docs/frontend/**` 文档。
+
+`Docs/frontend/**` 是 subordinate frontend design baseline，不是第五套产品或技术事实源；如与上位 Authority 冲突，以上位 Authority 为准。
+
+前端实现不得只读取 API 字段、DTO、Case Phase 或 Scene Node 后机械生成 UI。对应 Slice 的 spec / plan / tasks 必须引用适用的冻结前端设计文档，并证明业务能力没有因 UI 合并、隐藏或重命名而丢失。
+
 ## 2. Non-negotiable boundaries
 
 Agents and developers MUST NOT:
