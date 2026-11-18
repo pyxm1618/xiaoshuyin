@@ -22,6 +22,7 @@ import {
 } from '../../packages/domain/src/safety/index.js';
 import * as safetySurface from '../../packages/domain/src/safety/index.js';
 import { createAdminPool } from '../setup/db.js';
+import { capturePostgresError } from '../setup/postgres-error.js';
 import { createSafetyFixture, type SafetyFixture } from '../setup/safety.js';
 
 const PREFIX = 't905_';
@@ -269,9 +270,8 @@ describe('T905 Safety persistence responsibilities', () => {
   });
 
   it('lets the database reject extra Case Event metadata keys', async () => {
-    let caught: unknown;
-    try {
-      await withDrizzleRlsTransaction(fixture.pool, rls(), async (tx) => {
+    const error = await capturePostgresError(
+      withDrizzleRlsTransaction(fixture.pool, rls(), async (tx) => {
         await tx.insert(caseEvents).values({
           familyId,
           caseId,
@@ -286,15 +286,11 @@ describe('T905 Safety persistence responsibilities', () => {
             reviewNotes: 'raw review text',
           },
         });
-      });
-    } catch (error) {
-      caught = error;
-    }
-    // Drizzle wraps the server error; the CHECK name lives on the cause.
-    const text = `${(caught as { message?: string } | undefined)?.message ?? ''} ${
-      (caught as { cause?: { message?: string } } | undefined)?.cause?.message ?? ''
-    }`;
-    expect(caught).toBeTruthy();
-    expect(text).toMatch(/case_events_metadata_shape_check|violates check constraint/i);
+      })
+    );
+    expect(error).toMatchObject({
+      code: '23514',
+      constraint: 'case_events_metadata_shape_check',
+    });
   });
 });

@@ -15,7 +15,22 @@ import {
   loginWithLabel,
   type LoginResult,
 } from '../setup/api.js';
-import { createCase } from '../setup/participation.js';
+import {
+  acceptInvite,
+  createCase,
+  invite,
+} from '../setup/participation.js';
+import {
+  candidateSession,
+  confirmerDecision,
+  startBinding,
+} from '../setup/identity-binding.js';
+import {
+  TEST_A5001_PACKAGE,
+  TEST_A5002_PACKAGE,
+  TestProfessionalReviewContentProvider,
+  normalizedReviewResponse,
+} from '../support/digital-use-review-professional-content.js';
 
 interface Fixture {
   manager: LoginResult;
@@ -162,6 +177,7 @@ describe('Digital Use vertical convergence', () => {
   let appPool: pg.Pool;
   let migrator: pg.Client;
   let adapterAvailable = false;
+  const professionalReviewProvider = new TestProfessionalReviewContentProvider();
 
   const roleplayAdapter: RoleplayAdapter = {
     adapterRef: 'test:vertical-roleplay-v1',
@@ -199,6 +215,9 @@ describe('Digital Use vertical convergence', () => {
             authorityRef: 'test-authority:prompt:vertical-v1',
           },
         }),
+      },
+      digitalUseReview: {
+        professionalContent: professionalReviewProvider,
       },
     });
     await app.ready();
@@ -424,6 +443,223 @@ describe('Digital Use vertical convergence', () => {
     return scene;
   }
 
+
+  async function bindAndAcceptCanonicalParticipant(
+    f: Fixture,
+    label: string
+  ): Promise<{ personId: string; participationId: string; token: string }> {
+    const member = await createMember(
+      app,
+      f.manager.token,
+      f.familyId,
+      `phase3-${label}-member`,
+      {
+        ageBand: 'MINOR_14_17',
+        ageBandSource: 'GUARDIAN_RELAY',
+      }
+    );
+    expect(member.statusCode, member.body).toBe(201);
+    const personId = member.json().personId as string;
+
+    const created = await invite(
+      app,
+      f.manager.token,
+      f.caseId,
+      personId,
+      `phase3-${label}-invite-${crypto.randomUUID()}`
+    );
+    expect(created.statusCode, created.body).toBe(201);
+    expect(created.json().state).toBe('PENDING');
+
+    const target = {
+      guardian: f.manager,
+      familyId: f.familyId,
+      targetPersonId: personId,
+      invitationToken: created.json().inviteToken as string,
+      participationId: created.json().participationId as string,
+    };
+    const runtime = { app, admin };
+    const { contextToken, attemptId } = await startBinding(
+      runtime,
+      target,
+      `phase3_${label}_binding_${crypto.randomUUID()}`
+    );
+    const confirmed = await confirmerDecision(
+      runtime,
+      f.manager.token,
+      attemptId,
+      { personId, decision: 'AFFIRM' }
+    );
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json().state).toBe('COMMITTED');
+
+    const session = await candidateSession(runtime, contextToken);
+    expect(session.statusCode, session.body).toBe(200);
+    expect(session.json().binding).toBe('COMMITTED');
+    const token = session.json().sessionToken as string;
+
+    const accepted = await acceptInvite(
+      app,
+      token,
+      target.invitationToken,
+      `phase3-${label}-accept-${crypto.randomUUID()}`
+    );
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(accepted.json()).toMatchObject({
+      id: target.participationId,
+      personId,
+      state: 'ACTIVE',
+    });
+    return { personId, participationId: target.participationId, token };
+  }
+
+  async function completeCanonicalSleepRuntime(f: Fixture): Promise<any> {
+    let scene = await respondNode(f, 'A3000', familySelfAssessment());
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A3002')?.status)
+      .toBe('AVAILABLE');
+
+    scene = await respondNode(
+      f,
+      'A3002',
+      {
+        kind: 'TARGET_SELECTION',
+        confirmed: true,
+        selectedTargets: ['SLEEP'],
+      },
+      { expectedSelectionRevision: scene.targetSelectionRevision ?? 0 }
+    );
+    let sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
+    expect(sleep?.selected).toBe(true);
+
+    scene = await respondNode(
+      f,
+      'A3010',
+      {
+        kind: 'TARGET_DEFINITION',
+        concreteTargetText: 'Keep a consistent sleep schedule this week.',
+      },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
+
+    scene = await respondNode(
+      f,
+      'A3011',
+      {
+        kind: 'FEASIBILITY',
+        feasibility: {
+          problemBehavior: {
+            concreteBehavior: { state: 'KNOWN', text: 'Bedtime is currently inconsistent.' },
+            need: { state: 'KNOWN', text: 'Evening decompression.' },
+            motivationBenefit: { state: 'KNOWN', text: 'More rest the next day.' },
+            abilityConditions: { state: 'KNOWN', text: 'Family can prepare earlier.' },
+            challengeResistance: { state: 'UNKNOWN' },
+          },
+          replacementBehavior: {
+            concreteQuantified: {
+              state: 'KNOWN',
+              concreteTargetText: 'Keep a consistent sleep schedule this week.',
+            },
+            need: { state: 'KNOWN', rating: 8 },
+            motivationBenefit: { state: 'KNOWN', rating: 8 },
+            abilityPossibility: { state: 'KNOWN', rating: 7 },
+            challengeResistance: { state: 'UNKNOWN' },
+          },
+        },
+      },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    sleep = scene.targets.find((target: any) => target.targetCode === 'SLEEP');
+
+    scene = await respondNode(
+      f,
+      'A3012',
+      {
+        kind: 'PROGRESS',
+        progress: {
+          kind: 'GENERAL_MATRIX',
+          taskPlan: { state: 'KNOWN', text: 'Start the bedtime routine earlier.' },
+          communication: {
+            needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+            motivationMatch: { state: 'KNOWN', text: 'Benefit discussed.' },
+            abilityMatch: { state: 'KNOWN', text: 'Ability discussed.' },
+            challengeResistance: { state: 'KNOWN', text: 'One barrier discussed.' },
+          },
+          childFeedback: {
+            needMatch: { state: 'NOT_COLLECTED' },
+            motivationMatch: { state: 'NOT_COLLECTED' },
+            abilityMatch: { state: 'NOT_COLLECTED' },
+            challengeResistance: { state: 'NOT_COLLECTED' },
+          },
+          userObservation: {
+            needMatch: { state: 'KNOWN', text: 'Routine started earlier.' },
+            motivationMatch: { state: 'KNOWN', text: 'Less bedtime resistance.' },
+            abilityMatch: { state: 'KNOWN', text: 'Schedule was feasible.' },
+            challengeResistance: { state: 'KNOWN', text: 'Late homework remains a barrier.' },
+          },
+          otherFamilyFeedback: {
+            needMatch: { state: 'NOT_COLLECTED' },
+            motivationMatch: { state: 'NOT_COLLECTED' },
+            abilityMatch: { state: 'NOT_COLLECTED' },
+            challengeResistance: { state: 'NOT_COLLECTED' },
+          },
+          modifyTarget: 'NO',
+        },
+        note: 'Phase 3 canonical A5001 E2E observation.',
+      },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    return scene;
+  }
+
+  async function submitCanonicalA5001(f: Fixture, scene: any) {
+    const selectedTargets = scene.targets
+      .filter((target: any) => target.selected)
+      .map((target: any) => ({
+        targetId: target.id,
+        targetCode: target.targetCode,
+        targetRevision: target.revision,
+      }));
+    const node = scene.nodes.find((item: any) => item.nodeCode === 'A5001');
+    return app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A5001/responses`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phase3-a5001-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: scene.caseVersion,
+        expectedNodeRevision: node?.revision ?? 0,
+        expectedScenePackageVersion: 'v1',
+        expectedSelectionRevision: scene.targetSelectionRevision,
+        response: {
+          kind: 'FAMILY_ALLIANCE_REVIEW',
+          subject: {
+            selectionRevision: scene.targetSelectionRevision,
+            selectedTargets,
+          },
+          professionalPackage: TEST_A5001_PACKAGE,
+          packageResponse: normalizedReviewResponse,
+          evidenceRefs: [],
+          provenance: [{
+            kind: 'PARENT_AUTHORED_OBSERVATION',
+            sourcePersonId: f.manager.personId,
+          }],
+        },
+      },
+    });
+  }
+
   it('Golden E2E reaches real authority boundary without business-state fabrication', async () => {
     const f = await fixture('golden-e2e', productionBoundaryApp);
     let scene = await advanceToParallelLanes(f, productionBoundaryApp);
@@ -487,6 +723,7 @@ describe('Digital Use vertical convergence', () => {
       contentVersion: 'phone-use-contract-v1',
       approved: true,
     });
+    expect(template.json().meta).not.toHaveProperty('professionalApproval');
 
     const examples = await productionBoundaryApp.inject({
       method: 'GET',
@@ -1103,4 +1340,233 @@ describe('Digital Use vertical convergence', () => {
     expect(scene.nodes.find((node: any) => node.nodeCode === 'A3001')?.status)
       .toBe('AVAILABLE');
   });
+
+  it('T1 Scene-path proof runs A1001 through Family Alliance runtime to A5001 without admin SQL state fabrication while ConfirmGoal remains unimplemented', async () => {
+    professionalReviewProvider.restore('FAMILY_ALLIANCE_REVIEW');
+    const f = await fixture('phase3-a5001-canonical');
+    await advanceToParallelLanes(f);
+    const scene = await completeCanonicalSleepRuntime(f);
+    const review = await submitCanonicalA5001(f, scene);
+    expect(review.statusCode, review.body).toBe(200);
+    expect(review.json().nodes.find((node: any) => node.nodeCode === 'A5001'))
+      .toMatchObject({ status: 'COMPLETED' });
+    const artifact = review.json().artifacts.find(
+      (item: any) => item.type === 'DIGITAL_USE_A5001_EFFECT_EVALUATION'
+    );
+    expect(artifact?.data).toMatchObject({
+      stream: 'FAMILY_ALLIANCE_REVIEW',
+      completion: 'REVIEW_COMPLETE',
+      professionalPackage: TEST_A5001_PACKAGE,
+    });
+    const casePhase = await admin.query<{ phase: string }>(
+      'SELECT phase FROM cases WHERE id=$1',
+      [f.caseId]
+    );
+    expect(casePhase.rows[0]?.phase).toBe('GOALS');
+  });
+
+  it('T1 Scene-path proof runs A1001 through roleplay, formal Contract activation and A5002 without admin SQL state fabrication while ConfirmGoal remains unimplemented', async () => {
+    professionalReviewProvider.restore('PHONE_USE_CONTRACT_REVIEW');
+    adapterAvailable = true;
+    const f = await fixture('phase3-a5002-canonical');
+    let scene = await advanceToParallelLanes(f);
+
+    scene = await respondNode(f, 'A4001', {
+      contentVersion: 'phone-use-contract-v1',
+      answers: [true, false, false, false, false],
+    });
+    scene = await respondNode(f, 'A4002', {
+      contentVersion: 'phone-use-contract-v1',
+      action: 'ACKNOWLEDGE_TEMPLATE',
+    });
+
+    const beforeRoleplay = await getScene(f);
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/roleplays`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phase3-roleplay-create-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: beforeRoleplay.caseVersion,
+        professionalContentVersion: 'test-professional-roleplay-v1',
+      },
+    });
+    expect(created.statusCode, created.body).toBe(201);
+
+    const turn = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/turns`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phase3-roleplay-turn-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: beforeRoleplay.caseVersion,
+        expectedSessionRevision: created.json().revision,
+        simulatedChildInput: 'I want to keep using my phone later tonight.',
+      },
+    });
+    expect(turn.statusCode, turn.body).toBe(201);
+    expect(turn.json().provenance).toBe('SIMULATION');
+
+    const beforeSelect = await getScene(f);
+    const a4003 = beforeSelect.nodes.find(
+      (node: any) => node.nodeCode === 'A4003'
+    );
+    const selected = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${created.json().id}/select`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phase3-roleplay-select-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: beforeSelect.caseVersion,
+        expectedSessionRevision: created.json().revision,
+        turnId: turn.json().id,
+        expectedNodeRevision: a4003.revision,
+      },
+    });
+    expect(selected.statusCode, selected.body).toBe(200);
+    expect(selected.json().selectedTurn.provenance).toBe('SIMULATION');
+
+    scene = await respondNode(f, 'A4004', { tool: 'DURATION' });
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A4005')?.status)
+      .toBe('AVAILABLE');
+
+    const participant = await bindAndAcceptCanonicalParticipant(
+      f,
+      'a5002-contract-party'
+    );
+    const beforeDraft = await getScene(f);
+    const term = (value: string) => ({ state: 'VALUE' as const, value });
+    const terms = {
+      purpose: term('Reduce conflict while preserving agreed access.'),
+      phoneUseRules: term('No phone after the agreed bedtime.'),
+      executionPeriod: term('Two weeks.'),
+      parentSupportMeasures: term('Parent gives one calm reminder.'),
+      supervisionMeasures: term('Check the shared charging location.'),
+      incentives: term('Extra family activity after consistent execution.'),
+      breachResponsibilities: term('Discuss breach and reset the next day.'),
+    };
+    const draft = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phase3-contract-draft-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: beforeDraft.caseVersion,
+        adultPartyPersonId: f.manager.personId,
+        childPartyPersonId: participant.personId,
+        childParticipationId: participant.participationId,
+        sourceTemplateVersion: 'phone-use-contract-v1',
+        dependencyRefs: [],
+        terms,
+      },
+    });
+    expect(draft.statusCode, draft.body).toBe(201);
+    expect(draft.json()).toMatchObject({
+      version: 1,
+      draftRevision: 1,
+      status: 'DRAFT',
+    });
+
+    const beforeAdultConfirm = await getScene(f);
+    const adultConfirm = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phase3-contract-adult-confirm-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: beforeAdultConfirm.caseVersion,
+        expectedDraftRevision: 1,
+      },
+    });
+    expect(adultConfirm.statusCode, adultConfirm.body).toBe(200);
+    expect(adultConfirm.json().status).toBe('PENDING_CONFIRMATION');
+
+    const beforeChildConfirm = await getScene(f);
+    const childConfirm = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers: commandHeaders(
+        participant.token,
+        `phase3-contract-child-confirm-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: beforeChildConfirm.caseVersion,
+        expectedDraftRevision: 1,
+      },
+    });
+    expect(childConfirm.statusCode, childConfirm.body).toBe(200);
+    expect(childConfirm.json()).toMatchObject({
+      version: 1,
+      draftRevision: 1,
+      status: 'ACTIVE',
+      childParticipationId: participant.participationId,
+    });
+
+    scene = await getScene(f);
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A4011')?.status)
+      .toBe('AVAILABLE');
+    const a5002 = scene.nodes.find((node: any) => node.nodeCode === 'A5002');
+    const review = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A5002/responses`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phase3-a5002-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: scene.caseVersion,
+        expectedNodeRevision: a5002?.revision ?? 0,
+        expectedScenePackageVersion: 'v1',
+        response: {
+          kind: 'PHONE_USE_CONTRACT_REVIEW',
+          subject: {
+            contractId: childConfirm.json().id,
+            contractVersion: childConfirm.json().version,
+            contractRevision: childConfirm.json().draftRevision,
+            contractStatus: childConfirm.json().status,
+          },
+          professionalPackage: TEST_A5002_PACKAGE,
+          packageResponse: normalizedReviewResponse,
+          evidenceRefs: [],
+          provenance: [{
+            kind: 'PARENT_AUTHORED_OBSERVATION',
+            sourcePersonId: f.manager.personId,
+          }],
+        },
+      },
+    });
+    expect(review.statusCode, review.body).toBe(200);
+    expect(review.json().nodes.find((node: any) => node.nodeCode === 'A5002'))
+      .toMatchObject({ status: 'COMPLETED' });
+    const artifact = review.json().artifacts.find(
+      (item: any) => item.type === 'DIGITAL_USE_A5002_EFFECT_EVALUATION'
+    );
+    expect(artifact?.data).toMatchObject({
+      stream: 'PHONE_USE_CONTRACT_REVIEW',
+      completion: 'REVIEW_COMPLETE',
+      professionalPackage: TEST_A5002_PACKAGE,
+      subject: {
+        contractId: childConfirm.json().id,
+        contractVersion: 1,
+        contractRevision: 1,
+        contractStatus: 'ACTIVE',
+      },
+    });
+    const casePhase = await admin.query<{ phase: string }>(
+      'SELECT phase FROM cases WHERE id=$1',
+      [f.caseId]
+    );
+    expect(casePhase.rows[0]?.phase).toBe('GOALS');
+  });
+
 });

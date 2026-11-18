@@ -77,9 +77,9 @@ describe('FACT hard guard (T016)', () => {
         'FAMILY_MANAGEMENT',
       ]);
       const fact = insertSql('FACT');
-      await expect(client.query(fact.sql, fact.params)).rejects.toThrow(
-        /row-level security|42501/i
-      );
+      await expect(client.query(fact.sql, fact.params)).rejects.toMatchObject({
+        code: '42501',
+      });
     } finally {
       await client.query('ROLLBACK').catch(() => {});
       client.release();

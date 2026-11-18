@@ -20,7 +20,24 @@
         "LEGAL_DIGITAL_USE_SCENE_ENTRY"
       ],
       "inputSchemaRefs": [
-        "DIGITAL_USE_BEHAVIOR_EVIDENCE_V1"
+        "DIGITAL_USE_BEHAVIOR_EVIDENCE_V1",
+        "DEVICE_PHONE",
+        "DEVICE_TABLET",
+        "DEVICE_COMPUTER",
+        "DEVICE_GAME_CONSOLE_OR_DEVICE",
+        "DEVICE_RELATED_DIGITAL_DEVICE",
+        "PURPOSE_LEARNING_RESEARCH_HOMEWORK",
+        "PURPOSE_NECESSARY_CONTACT",
+        "PURPOSE_ENTERTAINMENT_GAMING_VIDEO_SOCIAL_NON_LEARNING",
+        "DURATION_PER_PURPOSE",
+        "TOTAL_DURATION_AUXILIARY_ONLY",
+        "HISTORICAL_DURATION_BAND_AUXILIARY_ONLY",
+        "FUNCTIONAL_IMPACT",
+        "SLEEP",
+        "REAL_WORLD_ACTIVITY_DISPLACEMENT",
+        "EMOTION_EVIDENCE_01002",
+        "FAMILY_RELATIONSHIP_OR_CONFLICT_EVIDENCE_01003",
+        "OTHER_APPROVED_EVIDENCE"
       ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
@@ -54,7 +71,9 @@
       ],
       "helpOrReentryRefs": [],
       "policyRefs": [
-        "AUTHORIZATION_CONSENT_SAFETY_COMPLIANCE_INDEPENDENT"
+        "AUTHORIZATION_CONSENT_SAFETY_COMPLIANCE_INDEPENDENT",
+        "NO_UNIVERSAL_AGE_SIX_SCENE_GATE",
+        "DURATION_ONLY_ROUTING_FORBIDDEN"
       ],
       "authorityRefs": [
         "V1-D43",
@@ -66,8 +85,12 @@
       "sourceNodeCode": "01002",
       "phase": "ASSESSMENT",
       "role": "EMOTION_ASSESSMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A1001_ASSESSMENT_COMPLETE"
+      ],
+      "inputSchemaRefs": [
+        "Response01002"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -123,8 +146,12 @@
       "sourceNodeCode": "01003",
       "phase": "ASSESSMENT",
       "role": "FAMILY_RELATIONSHIP_ASSESSMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "EMOTION_ASSESSMENT_NON_SEVERE"
+      ],
+      "inputSchemaRefs": [
+        "Response01003"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -202,8 +229,12 @@
       "sourceNodeCode": "A2001",
       "phase": "ASSESSMENT",
       "role": "NO_INTERVENTION_TRIAGE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "TRIAGE_NO_INTERVENTION_INTEGRATED"
+      ],
+      "inputSchemaRefs": [
+        "A2001ChoiceResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -270,8 +301,12 @@
       "sourceNodeCode": "A1000",
       "phase": "ASSESSMENT",
       "role": "GENERAL_DIGITAL_USE_ADVICE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "USER_WANTS_GENERAL_ADVICE"
+      ],
+      "inputSchemaRefs": [
+        "ReturnMainResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -314,8 +349,12 @@
       "sourceNodeCode": "A2002",
       "phase": "ASSESSMENT",
       "role": "FURTHER_ASSESSMENT_TRIAGE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "TRIAGE_FURTHER_ASSESSMENT_INTEGRATED"
+      ],
+      "inputSchemaRefs": [
+        "A2002ChoiceResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -382,8 +421,12 @@
       "sourceNodeCode": "01005",
       "phase": "ASSESSMENT",
       "role": "SEVERE_EMOTION_EXIT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "EMOTION_SEVERE_F"
+      ],
+      "inputSchemaRefs": [
+        "ExplicitExitResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -428,8 +471,12 @@
       "sourceNodeCode": "01006",
       "phase": "ASSESSMENT",
       "role": "SEVERE_CONFLICT_EXIT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "FAMILY_CONFLICT_SEVERE_F"
+      ],
+      "inputSchemaRefs": [
+        "ExplicitExitResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -474,8 +521,12 @@
       "sourceNodeCode": "01004",
       "phase": "ASSESSMENT",
       "role": "SUPPLEMENTAL_ASSESSMENT_CONSENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "SUPPLEMENTAL_ASSESSMENT_CONSENT_ELIGIBLE"
+      ],
+      "inputSchemaRefs": [
+        "Response01004"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -531,8 +582,12 @@
       "sourceNodeCode": "01000",
       "phase": "ASSESSMENT",
       "role": "SUPPLEMENTAL_ASSESSMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "CONSENT_ACCEPTED"
+      ],
+      "inputSchemaRefs": [
+        "Response01000"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -577,8 +632,12 @@
       "sourceNodeCode": "A2003",
       "phase": "PROBLEM_FORMULATION",
       "role": "PARENT_EXPECTATION_EVIDENCE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "TRIAGE_CONTINUE_DIGITAL_USE_INTEGRATED"
+      ],
+      "inputSchemaRefs": [
+        "A2003Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -625,8 +684,12 @@
       "sourceNodeCode": "A2004",
       "phase": "PROBLEM_FORMULATION",
       "role": "COLLABORATIVE_DURATION_DECISION",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "PARENT_EXPECTATION_CAPTURED"
+      ],
+      "inputSchemaRefs": [
+        "A2004Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -682,8 +745,12 @@
       "sourceNodeCode": "A2005",
       "phase": "PROBLEM_FORMULATION",
       "role": "SOLUTION_WILLINGNESS",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "SOLUTION_WILLINGNESS_DECISION_REQUIRED"
+      ],
+      "inputSchemaRefs": [
+        "A2005Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -739,8 +806,12 @@
       "sourceNodeCode": "A2006",
       "phase": "PROBLEM_FORMULATION",
       "role": "INTRINSIC_MOTIVATION",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "COLLABORATIVE_DURATION_NO"
+      ],
+      "inputSchemaRefs": [
+        "WillingnessResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -798,8 +869,12 @@
       "sourceNodeCode": "A2007",
       "phase": "PLANNING",
       "role": "TIMELINE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "SOLUTION_APPROACH_WILLING_OR_FAMILY_ALLIANCE_AGREED"
+      ],
+      "inputSchemaRefs": [
+        "A2007Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -844,8 +919,12 @@
       "sourceNodeCode": "A2008",
       "phase": "PROBLEM_FORMULATION",
       "role": "FAMILY_ALLIANCE_EXPLANATION",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "SOLUTION_APPROACH_UNWILLING"
+      ],
+      "inputSchemaRefs": [
+        "AgreementResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -903,8 +982,12 @@
       "sourceNodeCode": "A2009",
       "phase": "PROBLEM_FORMULATION",
       "role": "RELATIONSHIP_REASSESSMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "MOTIVATION_RECONSIDER_UNWILLING"
+      ],
+      "inputSchemaRefs": [
+        "AgreementResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -960,8 +1043,13 @@
       "sourceNodeCode": "A 2010",
       "phase": "PLANNING",
       "role": "SOLUTION_SUMMARY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "CURRENT_PROBLEM_FORMULATION_CONFIRMED",
+        "A2007_TIMELINE_AVAILABLE"
+      ],
+      "inputSchemaRefs": [
+        "A2010Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -984,7 +1072,8 @@
           "reason": "solution summary complete; family-alliance stream entry",
           "authorityRefs": [
             "V1-D43",
-            "V1-D07"
+            "V1-D07",
+            "V1-D08"
           ]
         }
       ],
@@ -1007,8 +1096,13 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FAMILY_ALLIANCE_PRINCIPLES_SELF_ASSESSMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A2010_COMPLETED",
+        "CURRENT_PROBLEM_FORMULATION_CONFIRMED"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceSelfAssessmentResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1060,8 +1154,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FAMILY_ALLIANCE_COMMUNICATION_PREP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3000_COMPLETED"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceCommunicationPrepResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1113,8 +1211,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_LIST_MANAGEMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3000_COMPLETED"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetSelectionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1128,7 +1230,128 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3010",
+          "conditionRef": "TARGET_SELECTED_SLEEP",
+          "reasonCode": "TARGET_SELECTED_SLEEP",
+          "reason": "SLEEP target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3020",
+          "conditionRef": "TARGET_SELECTED_EXERCISE",
+          "reasonCode": "TARGET_SELECTED_EXERCISE",
+          "reason": "EXERCISE target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3040",
+          "conditionRef": "TARGET_SELECTED_HOBBIES",
+          "reasonCode": "TARGET_SELECTED_HOBBIES",
+          "reason": "HOBBIES target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3050",
+          "conditionRef": "TARGET_SELECTED_CHORES",
+          "reasonCode": "TARGET_SELECTED_CHORES",
+          "reason": "CHORES target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3060",
+          "conditionRef": "TARGET_SELECTED_FAMILY_GATHERING",
+          "reasonCode": "TARGET_SELECTED_FAMILY_GATHERING",
+          "reason": "FAMILY_GATHERING target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3070",
+          "conditionRef": "TARGET_SELECTED_OUTDOOR_ACTIVITY",
+          "reasonCode": "TARGET_SELECTED_OUTDOOR_ACTIVITY",
+          "reason": "OUTDOOR_ACTIVITY target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3080",
+          "conditionRef": "TARGET_SELECTED_EMOTION_REGULATION_1",
+          "reasonCode": "TARGET_SELECTED_EMOTION_REGULATION_1",
+          "reason": "EMOTION_REGULATION_1 target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3090",
+          "conditionRef": "TARGET_SELECTED_TIME_MANAGEMENT",
+          "reasonCode": "TARGET_SELECTED_TIME_MANAGEMENT",
+          "reason": "TIME_MANAGEMENT target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3100",
+          "conditionRef": "TARGET_SELECTED_FAMILY_RELATIONSHIP",
+          "reasonCode": "TARGET_SELECTED_FAMILY_RELATIONSHIP",
+          "reason": "FAMILY_RELATIONSHIP target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        },
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3110",
+          "conditionRef": "TARGET_SELECTED_EMOTION_REGULATION_2",
+          "reasonCode": "TARGET_SELECTED_EMOTION_REGULATION_2",
+          "reason": "EMOTION_REGULATION_2 target selected for Family Alliance work",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [
         "A3001"
       ],
@@ -1157,8 +1380,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_SLEEP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_SLEEP"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1172,7 +1399,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3011",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "SLEEP target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1188,6 +1428,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_SLEEP_SELECTED",
+          "reasonCode": "TARGET_SLEEP_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1196,8 +1451,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_SLEEP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_SLEEP"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1211,7 +1470,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3012",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "SLEEP feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1227,6 +1499,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_SLEEP_SELECTED",
+          "reasonCode": "TARGET_SLEEP_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1235,8 +1522,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_SLEEP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_SLEEP"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1250,7 +1541,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3013",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "SLEEP progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -1267,6 +1571,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_SLEEP_SELECTED",
+          "reasonCode": "TARGET_SLEEP_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_SLEEP_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_SLEEP_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1275,8 +1607,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_SLEEP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_SLEEP"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1290,7 +1626,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "SLEEP help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1307,6 +1656,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_SLEEP_SELECTED",
+          "reasonCode": "TARGET_SLEEP_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1315,8 +1679,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_EXERCISE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EXERCISE"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1330,7 +1698,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3021",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "EXERCISE target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1346,6 +1727,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EXERCISE_SELECTED",
+          "reasonCode": "TARGET_EXERCISE_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1354,8 +1750,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_EXERCISE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EXERCISE"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1369,7 +1769,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3022",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "EXERCISE feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1385,6 +1798,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EXERCISE_SELECTED",
+          "reasonCode": "TARGET_EXERCISE_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1393,8 +1821,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_EXERCISE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EXERCISE"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1408,7 +1840,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3033",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "EXERCISE progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -1425,6 +1870,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EXERCISE_SELECTED",
+          "reasonCode": "TARGET_EXERCISE_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_EXERCISE_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_EXERCISE_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1433,8 +1906,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_EXERCISE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EXERCISE"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1448,7 +1925,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "EXERCISE help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1465,6 +1955,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EXERCISE_SELECTED",
+          "reasonCode": "TARGET_EXERCISE_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1473,8 +1978,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_HOBBY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_HOBBIES"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1488,7 +1997,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3041",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "HOBBIES target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1504,6 +2026,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_HOBBY_SELECTED",
+          "reasonCode": "TARGET_HOBBY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1512,8 +2049,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_HOBBY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_HOBBIES"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1527,7 +2068,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3042",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "HOBBIES feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1543,6 +2097,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_HOBBY_SELECTED",
+          "reasonCode": "TARGET_HOBBY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1551,8 +2120,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_HOBBY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_HOBBIES"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1566,7 +2139,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3043",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "HOBBIES progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -1583,6 +2169,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_HOBBY_SELECTED",
+          "reasonCode": "TARGET_HOBBY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_HOBBY_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_HOBBY_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1591,8 +2205,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_HOBBY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_HOBBIES"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1606,7 +2224,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "HOBBIES help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1623,6 +2254,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_HOBBY_SELECTED",
+          "reasonCode": "TARGET_HOBBY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1631,8 +2277,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_HOUSEWORK",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_CHORES"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1646,7 +2296,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3051",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "CHORES target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1662,6 +2325,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_HOUSEWORK_SELECTED",
+          "reasonCode": "TARGET_HOUSEWORK_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1670,8 +2348,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_HOUSEWORK",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_CHORES"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1685,7 +2367,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3052",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "CHORES feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1701,6 +2396,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_HOUSEWORK_SELECTED",
+          "reasonCode": "TARGET_HOUSEWORK_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1709,8 +2419,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_HOUSEWORK",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_CHORES"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1724,7 +2438,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3053",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "CHORES progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -1741,6 +2468,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_HOUSEWORK_SELECTED",
+          "reasonCode": "TARGET_HOUSEWORK_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_HOUSEWORK_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_HOUSEWORK_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1749,8 +2504,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_HOUSEWORK",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_CHORES"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1764,7 +2523,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "CHORES help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1781,6 +2553,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_HOUSEWORK_SELECTED",
+          "reasonCode": "TARGET_HOUSEWORK_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1789,8 +2576,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_FAMILY_GATHERING",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_FAMILY_GATHERING"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1804,7 +2595,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3061",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "FAMILY_GATHERING target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1820,6 +2624,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_FAMILY_GATHERING_SELECTED",
+          "reasonCode": "TARGET_FAMILY_GATHERING_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1828,8 +2647,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_FAMILY_GATHERING",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_FAMILY_GATHERING"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1843,7 +2666,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3062",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "FAMILY_GATHERING feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1859,6 +2695,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_FAMILY_GATHERING_SELECTED",
+          "reasonCode": "TARGET_FAMILY_GATHERING_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1867,8 +2718,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_FAMILY_GATHERING",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_FAMILY_GATHERING"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1882,7 +2737,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3063",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "FAMILY_GATHERING progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -1899,6 +2767,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_FAMILY_GATHERING_SELECTED",
+          "reasonCode": "TARGET_FAMILY_GATHERING_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_FAMILY_GATHERING_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_FAMILY_GATHERING_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1907,8 +2803,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_FAMILY_GATHERING",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_FAMILY_GATHERING"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1922,7 +2822,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "FAMILY_GATHERING help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1939,6 +2852,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_FAMILY_GATHERING_SELECTED",
+          "reasonCode": "TARGET_FAMILY_GATHERING_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1947,8 +2875,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_OUTDOOR_ACTIVITY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_OUTDOOR_ACTIVITY"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -1962,7 +2894,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3071",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "OUTDOOR_ACTIVITY target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -1978,6 +2923,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_OUTDOOR_ACTIVITY_SELECTED",
+          "reasonCode": "TARGET_OUTDOOR_ACTIVITY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -1986,8 +2946,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_OUTDOOR_ACTIVITY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_OUTDOOR_ACTIVITY"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2001,7 +2965,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3072",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "OUTDOOR_ACTIVITY feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2017,6 +2994,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_OUTDOOR_ACTIVITY_SELECTED",
+          "reasonCode": "TARGET_OUTDOOR_ACTIVITY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2025,8 +3017,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_OUTDOOR_ACTIVITY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_OUTDOOR_ACTIVITY"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2040,7 +3036,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3073",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "OUTDOOR_ACTIVITY progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -2057,6 +3066,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_OUTDOOR_ACTIVITY_SELECTED",
+          "reasonCode": "TARGET_OUTDOOR_ACTIVITY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_OUTDOOR_ACTIVITY_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_OUTDOOR_ACTIVITY_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2065,8 +3102,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_OUTDOOR_ACTIVITY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_OUTDOOR_ACTIVITY"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2080,7 +3121,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "OUTDOOR_ACTIVITY help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2097,6 +3151,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_OUTDOOR_ACTIVITY_SELECTED",
+          "reasonCode": "TARGET_OUTDOOR_ACTIVITY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2105,8 +3174,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_EMOTION_REGULATION_1",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EMOTION_REGULATION_1"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2120,7 +3193,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3081",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "EMOTION_REGULATION_1 target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2136,6 +3222,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_1_SELECTED",
+          "reasonCode": "TARGET_EMOTION_REGULATION_1_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2144,8 +3245,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_EMOTION_REGULATION_1",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EMOTION_REGULATION_1"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2159,7 +3264,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3082",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "EMOTION_REGULATION_1 feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2175,6 +3293,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_1_SELECTED",
+          "reasonCode": "TARGET_EMOTION_REGULATION_1_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2183,8 +3316,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_EMOTION_REGULATION_1",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EMOTION_REGULATION_1"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2198,7 +3335,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3083",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "EMOTION_REGULATION_1 progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -2215,6 +3365,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_1_SELECTED",
+          "reasonCode": "TARGET_EMOTION_REGULATION_1_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_1_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_EMOTION_REGULATION_1_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2223,8 +3401,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_EMOTION_REGULATION_1",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EMOTION_REGULATION_1"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2238,7 +3420,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "EMOTION_REGULATION_1 help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2255,6 +3450,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_1_SELECTED",
+          "reasonCode": "TARGET_EMOTION_REGULATION_1_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2263,8 +3473,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_TIME_MANAGEMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_TIME_MANAGEMENT"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2278,7 +3492,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3091",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "TIME_MANAGEMENT target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2294,6 +3521,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_TIME_MANAGEMENT_SELECTED",
+          "reasonCode": "TARGET_TIME_MANAGEMENT_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2302,8 +3544,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_TIME_MANAGEMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_TIME_MANAGEMENT"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2317,7 +3563,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3092",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "TIME_MANAGEMENT feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2333,6 +3592,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_TIME_MANAGEMENT_SELECTED",
+          "reasonCode": "TARGET_TIME_MANAGEMENT_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2341,8 +3615,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_TIME_MANAGEMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_TIME_MANAGEMENT"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2356,7 +3634,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3093",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "TIME_MANAGEMENT progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -2373,6 +3664,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_TIME_MANAGEMENT_SELECTED",
+          "reasonCode": "TARGET_TIME_MANAGEMENT_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_TIME_MANAGEMENT_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_TIME_MANAGEMENT_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2381,8 +3700,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_TIME_MANAGEMENT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_TIME_MANAGEMENT"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2396,7 +3719,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "TIME_MANAGEMENT help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2413,6 +3749,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_TIME_MANAGEMENT_SELECTED",
+          "reasonCode": "TARGET_TIME_MANAGEMENT_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2421,8 +3772,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_FAMILY_RELATIONSHIP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_FAMILY_RELATIONSHIP"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2436,7 +3791,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3101",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "FAMILY_RELATIONSHIP target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2452,6 +3820,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_FAMILY_RELATIONSHIP_SELECTED",
+          "reasonCode": "TARGET_FAMILY_RELATIONSHIP_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2460,8 +3843,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_FAMILY_RELATIONSHIP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_FAMILY_RELATIONSHIP"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2475,7 +3862,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3102",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "FAMILY_RELATIONSHIP feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2491,6 +3891,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_FAMILY_RELATIONSHIP_SELECTED",
+          "reasonCode": "TARGET_FAMILY_RELATIONSHIP_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2499,8 +3914,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_FAMILY_RELATIONSHIP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_FAMILY_RELATIONSHIP"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2514,7 +3933,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3103",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "FAMILY_RELATIONSHIP progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -2531,6 +3963,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_FAMILY_RELATIONSHIP_SELECTED",
+          "reasonCode": "TARGET_FAMILY_RELATIONSHIP_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_FAMILY_RELATIONSHIP_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_FAMILY_RELATIONSHIP_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2539,8 +3999,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_FAMILY_RELATIONSHIP",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_FAMILY_RELATIONSHIP"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2554,7 +4018,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "FAMILY_RELATIONSHIP help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2571,6 +4048,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_FAMILY_RELATIONSHIP_SELECTED",
+          "reasonCode": "TARGET_FAMILY_RELATIONSHIP_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2579,8 +4071,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "TARGET_EMOTION_REGULATION_2",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EMOTION_REGULATION_2"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceTargetDefinitionResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2594,7 +4090,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3111",
+          "conditionRef": "TARGET_DEFINITION_COMPLETE",
+          "reasonCode": "TARGET_DEFINITION_COMPLETE",
+          "reason": "EMOTION_REGULATION_2 target definition can proceed to feasibility",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2610,6 +4119,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_2_SELECTED",
+          "reasonCode": "TARGET_EMOTION_REGULATION_2_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2618,8 +4142,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "FEASIBILITY_EMOTION_REGULATION_2",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EMOTION_REGULATION_2"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceFeasibilityResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2633,7 +4161,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3112",
+          "conditionRef": "TARGET_FEASIBILITY_RECORDED",
+          "reasonCode": "TARGET_FEASIBILITY_RECORDED",
+          "reason": "EMOTION_REGULATION_2 feasibility can proceed to progress tracking",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2649,6 +4190,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_2_SELECTED",
+          "reasonCode": "TARGET_EMOTION_REGULATION_2_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2657,8 +4213,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "PROGRESS_EMOTION_REGULATION_2",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EMOTION_REGULATION_2"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceProgressResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2672,7 +4232,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3113",
+          "conditionRef": "TARGET_PROGRESS_RECORDED",
+          "reasonCode": "TARGET_PROGRESS_RECORDED",
+          "reason": "EMOTION_REGULATION_2 progress can open its help/support entry",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED",
@@ -2689,6 +4262,34 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_2_SELECTED",
+          "reasonCode": "TARGET_EMOTION_REGULATION_2_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_2_FOLLOWUP_DUE",
+          "reasonCode": "TARGET_EMOTION_REGULATION_2_PROGRESS_DUE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2697,8 +4298,12 @@
       "phase": "EXECUTION",
       "stream": "FAMILY_ALLIANCE",
       "role": "HELP_EMOTION_REGULATION_2",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3002_SELECTED_TARGET_EMOTION_REGULATION_2"
+      ],
+      "inputSchemaRefs": [
+        "FamilyAllianceHelpResponse"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2712,7 +4317,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A3002",
+          "conditionRef": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reasonCode": "TARGET_HELP_RETURN_TO_MANAGEMENT",
+          "reason": "EMOTION_REGULATION_2 help returns to target management",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D11",
+            "V1-D12"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "USER_INITIATED"
@@ -2729,6 +4347,21 @@
         "V1-D08",
         "V1-D11",
         "V1-D12"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "TARGET_EMOTION_REGULATION_2_SELECTED",
+          "reasonCode": "TARGET_EMOTION_REGULATION_2_AVAILABLE",
+          "authorityRefs": [
+            "V1-D12",
+            "V1-D13",
+            "V1-D14",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2737,8 +4370,13 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "CONTRACT_PREPARATION_QUIZ",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A2010_COMPLETED",
+        "CURRENT_PROBLEM_FORMULATION_CONFIRMED"
+      ],
+      "inputSchemaRefs": [
+        "A4001Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2780,6 +4418,19 @@
         "V1-D43",
         "V1-D15",
         "V1-D26"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A2010",
+          "mode": "PARALLEL",
+          "conditionRef": "SOLUTION_STAGE_READY",
+          "reasonCode": "PHONE_USE_CONTRACT_PARALLEL_STREAM_AVAILABLE",
+          "authorityRefs": [
+            "V1-D08",
+            "V1-D15",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -2788,8 +4439,12 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "CONTRACT_TEMPLATE_EXAMPLES",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A4001_QUIZ_ALL_CORRECT"
+      ],
+      "inputSchemaRefs": [
+        "A4002Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2837,8 +4492,14 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "ADULT_GUARDIAN_SIMULATION",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A4002_TEMPLATE_ACKNOWLEDGED"
+      ],
+      "inputSchemaRefs": [
+        "CreatePhoneUseRoleplayRequest",
+        "CreatePhoneUseRoleplayTurnRequest",
+        "SelectPhoneUseRoleplayRequest"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2887,8 +4548,12 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "CONTRACT_TOOL_CATALOG",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A4003_ROLEPLAY_SELECTION_COMPLETED"
+      ],
+      "inputSchemaRefs": [
+        "A4004Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -2987,8 +4652,12 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "COLLABORATIVE_USE_DURATION",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A4004_TOOL_CATALOG_COMPLETED"
+      ],
+      "inputSchemaRefs": [
+        "A4005Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3025,8 +4694,12 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "SUPERVISION_MEASURES",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A4004_TOOL_CATALOG_COMPLETED"
+      ],
+      "inputSchemaRefs": [
+        "A4006Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3063,8 +4736,12 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "INCENTIVE_PLAN",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A4004_TOOL_CATALOG_COMPLETED"
+      ],
+      "inputSchemaRefs": [
+        "A4007Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3101,8 +4778,12 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "BREACH_RESPONSIBILITY",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A4004_TOOL_CATALOG_COMPLETED"
+      ],
+      "inputSchemaRefs": [
+        "A4008Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3139,8 +4820,12 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "PARENT_SELF_REGULATION",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A4004_TOOL_CATALOG_COMPLETED"
+      ],
+      "inputSchemaRefs": [
+        "A4009Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3177,8 +4862,13 @@
       "phase": "PLANNING",
       "stream": "PHONE_USE_CONTRACT",
       "role": "FORMAL_CONTRACT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "PHONE_USE_CONTRACT_PREPARATION_COMPLETE"
+      ],
+      "inputSchemaRefs": [
+        "SavePhoneUseContractDraftRequest",
+        "ConfirmPhoneUseContractRequest"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3220,6 +4910,19 @@
         "V1-D43",
         "V1-D15",
         "V1-D26"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A4004",
+          "mode": "USER_INITIATED",
+          "conditionRef": "FORMAL_CONTRACT_ENTRY_SELECTED",
+          "reasonCode": "FORMAL_CONTRACT_ENTRY_AVAILABLE",
+          "authorityRefs": [
+            "V1-D18",
+            "V1-D24",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -3228,8 +4931,12 @@
       "phase": "EXECUTION",
       "stream": "PHONE_USE_CONTRACT",
       "role": "CONTRACT_EXECUTION_SUPPORT",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "ACTIVE_PHONE_USE_CONTRACT_VERSION"
+      ],
+      "inputSchemaRefs": [
+        "A4011Response"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3292,8 +4999,12 @@
       "phase": "EXECUTION",
       "stream": "PHONE_USE_CONTRACT",
       "role": "CONTRACT_UPDATE",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "ACTIVE_PHONE_USE_CONTRACT_VERSION"
+      ],
+      "inputSchemaRefs": [
+        "RevisePhoneUseContractRequest"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3307,7 +5018,20 @@
         "refs": [],
         "semantics": "canonical node output/record semantics retained by authority reference"
       },
-      "allowedNext": [],
+      "allowedNext": [
+        {
+          "kind": "NODE",
+          "targetNodeCode": "A4011",
+          "conditionRef": "UPDATED_CONTRACT_ACTIVE",
+          "reasonCode": "UPDATED_CONTRACT_ACTIVE",
+          "reason": "newly confirmed superseding Contract version returns to execution support",
+          "authorityRefs": [
+            "V1-D43",
+            "V1-D26",
+            "V1-D41"
+          ]
+        }
+      ],
       "canRunInParallelWith": [],
       "entryMode": [
         "ROUTED",
@@ -3332,8 +5056,15 @@
       "phase": "REVIEW",
       "stream": "FAMILY_ALLIANCE_REVIEW",
       "role": "FAMILY_ALLIANCE_REVIEW",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "A3000_COMPLETED",
+        "A3002_COMPLETED",
+        "CURRENT_SELECTED_TARGET_PRESENT",
+        "PROFESSIONAL_REVIEW_PACKAGE_APPROVED_PUBLISHED"
+      ],
+      "inputSchemaRefs": [
+        "A5001FamilyAllianceReviewSubmission"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3374,6 +5105,30 @@
       "authorityRefs": [
         "V1-D43",
         "V1-D27"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "USER_INITIATED",
+          "conditionRef": "FAMILY_ALLIANCE_REVIEW_SUBJECT_READY",
+          "reasonCode": "FAMILY_ALLIANCE_REVIEW_AVAILABLE",
+          "authorityRefs": [
+            "V1-D27",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A3002",
+          "mode": "SCHEDULED",
+          "conditionRef": "USER_TIMELINE_REVIEW_DUE",
+          "reasonCode": "FAMILY_ALLIANCE_REVIEW_DUE",
+          "authorityRefs": [
+            "V1-D27",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     },
     {
@@ -3382,8 +5137,13 @@
       "phase": "REVIEW",
       "stream": "PHONE_USE_CONTRACT_REVIEW",
       "role": "PHONE_USE_CONTRACT_REVIEW",
-      "prerequisites": [],
-      "inputSchemaRefs": [],
+      "prerequisites": [
+        "ACTIVE_PHONE_USE_CONTRACT_VERSION",
+        "PROFESSIONAL_REVIEW_PACKAGE_APPROVED_PUBLISHED"
+      ],
+      "inputSchemaRefs": [
+        "A5002PhoneUseContractReviewSubmission"
+      ],
       "decisionSchemaRefs": [
         "DIGITAL_USE_ROUTING_CONDITION_V1"
       ],
@@ -3424,6 +5184,30 @@
       "authorityRefs": [
         "V1-D43",
         "V1-D28"
+      ],
+      "activationFrom": [
+        {
+          "sourceNodeCode": "A4011",
+          "mode": "USER_INITIATED",
+          "conditionRef": "PHONE_USE_CONTRACT_REVIEW_SUBJECT_READY",
+          "reasonCode": "PHONE_USE_CONTRACT_REVIEW_AVAILABLE",
+          "authorityRefs": [
+            "V1-D28",
+            "V1-D30",
+            "V1-D43"
+          ]
+        },
+        {
+          "sourceNodeCode": "A4011",
+          "mode": "SCHEDULED",
+          "conditionRef": "USER_TIMELINE_REVIEW_DUE",
+          "reasonCode": "PHONE_USE_CONTRACT_REVIEW_DUE",
+          "authorityRefs": [
+            "V1-D28",
+            "V1-D30",
+            "V1-D43"
+          ]
+        }
       ]
     }
   ],

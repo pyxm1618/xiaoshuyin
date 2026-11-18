@@ -74,19 +74,19 @@ describe('Evidence composite FKs / supersedes (T014)', () => {
   it('rejects a subject Person that is only a member of another Family', async () => {
     await expect(
       insertAssertion({ subject_person_id: fx.managerB })
-    ).rejects.toThrow(/foreign key|violates/i);
+    ).rejects.toMatchObject({ code: '23503', constraint: 'assertions_subject_person_fk' });
   });
 
   it('rejects a source Person that is only a member of another Family', async () => {
     await expect(
       insertAssertion({ source_person_id: fx.managerB })
-    ).rejects.toThrow(/foreign key|violates/i);
+    ).rejects.toMatchObject({ code: '23503', constraint: 'assertions_source_person_fk' });
   });
 
   it('rejects a source message that belongs to another Family/Case', async () => {
     await expect(
       insertAssertion({ source_message_id: fx.messageB })
-    ).rejects.toThrow(/foreign key|violates/i);
+    ).rejects.toMatchObject({ code: '23503', constraint: 'assertions_source_message_fk' });
   });
 
   it('accepts a source message in the same Family/Case with a source person', async () => {
@@ -101,7 +101,7 @@ describe('Evidence composite FKs / supersedes (T014)', () => {
         source_message_id: fx.messageA,
         source_person_id: null,
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514', constraint: 'assertions_source_message_requires_person_check' });
   });
 
   it('rejects a self-supersede reference', async () => {
@@ -109,14 +109,14 @@ describe('Evidence composite FKs / supersedes (T014)', () => {
     const id = created.rows[0].id;
     await expect(
       admin.query(`UPDATE assertions SET supersedes_id = id WHERE id = $1`, [id])
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514', constraint: 'assertions_no_self_supersede_check' });
   });
 
   it('rejects supersedes across Cases and across Families', async () => {
     const oldA = (await insertAssertion()).rows[0].id;
     await expect(
       insertAssertion({ case_id: fx.caseB, supersedes_id: oldA })
-    ).rejects.toThrow(/foreign key|violates/i);
+    ).rejects.toMatchObject({ code: '23503' });
 
     const oldB = (
       await admin.query(
@@ -129,9 +129,7 @@ describe('Evidence composite FKs / supersedes (T014)', () => {
         [fx.familyB, fx.caseB, fx.managerB]
       )
     ).rows[0].id;
-    await expect(insertAssertion({ supersedes_id: oldB })).rejects.toThrow(
-      /foreign key|violates/i
-    );
+    await expect(insertAssertion({ supersedes_id: oldB })).rejects.toMatchObject({ code: '23503', constraint: 'assertions_supersedes_fk' });
   });
 
   it('an Assertion cannot supersede an Observation id', async () => {
@@ -147,7 +145,7 @@ describe('Evidence composite FKs / supersedes (T014)', () => {
     );
     await expect(
       insertAssertion({ supersedes_id: obs.rows[0].id })
-    ).rejects.toThrow(/foreign key|violates/i);
+    ).rejects.toMatchObject({ code: '23503', constraint: 'assertions_supersedes_fk' });
   });
 
   it('keeps the old row intact and links the new row to it', async () => {
@@ -187,7 +185,7 @@ describe('Evidence composite FKs / supersedes (T014)', () => {
           fx.managerA,
           'FAMILY_MANAGEMENT',
         ]);
-        await expect(client.query(statement)).rejects.toThrow();
+        await expect(client.query(statement)).rejects.toMatchObject({ code: '42501' });
       } finally {
         await client.query('ROLLBACK').catch(() => {});
         client.release();

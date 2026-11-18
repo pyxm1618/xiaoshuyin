@@ -149,7 +149,7 @@ describe('Audit / idempotency extension (T017)', () => {
          VALUES ($1, $2, 'MESSAGE_VIEWED', 'DIALOGUE_MESSAGE', uuidv7())`,
         [fx.familyId, fx.accountId]
       )
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('idempotency_keys accepts a text-representation CASE_MESSAGE_CREATE row', async () => {

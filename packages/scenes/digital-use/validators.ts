@@ -70,6 +70,27 @@ export function validateDigitalUseManifest(
       issues.push(issue('MISSING_REQUIRED_FIELD', 'known canonical metadata field/reference is missing', node.nodeCode));
     }
 
+    for (const activation of node.activationFrom ?? []) {
+      if (!nodeSet.has(activation.sourceNodeCode)) {
+        issues.push(issue('INVALID_ACTIVATION_SOURCE', `activation source ${activation.sourceNodeCode} is not a manifest node`, node.nodeCode));
+      }
+      if (activation.sourceNodeCode === node.nodeCode) {
+        issues.push(issue('SELF_ACTIVATION_EDGE', 'activation source cannot be the node itself', node.nodeCode));
+      }
+      if (activation.conditionRef.trim() === '' || activation.reasonCode.trim() === '') {
+        issues.push(issue('MISSING_ACTIVATION_REASON', 'activation edge requires explicit condition and reason', node.nodeCode));
+      }
+      if (isDefaultMarker(activation.conditionRef) || isDefaultMarker(activation.reasonCode)) {
+        issues.push(issue('HIDDEN_DEFAULT_ACTIVATION', 'DEFAULT/fallthrough activation markers are forbidden', node.nodeCode));
+      }
+      if (activation.mode === 'USER_INITIATED' && !node.entryMode.includes('USER_INITIATED')) {
+        issues.push(issue('ACTIVATION_MODE_MISMATCH', 'USER_INITIATED activation requires matching entryMode', node.nodeCode));
+      }
+      if (activation.mode === 'SCHEDULED' && !node.entryMode.includes('SCHEDULED')) {
+        issues.push(issue('ACTIVATION_MODE_MISMATCH', 'SCHEDULED activation requires matching entryMode', node.nodeCode));
+      }
+    }
+
     for (const route of node.allowedNext) {
       if (route.reasonCode.trim() === '' || route.reason.trim() === '') {
         issues.push(issue('MISSING_BRANCH_REASON', 'allowedNext branch requires explicit reason semantics', node.nodeCode));
@@ -107,6 +128,27 @@ export function validateDigitalUseManifest(
     }
   }
 
+  const explicitIncoming = new Map<string, number>(
+    manifest.map((node) => [node.nodeCode, 0])
+  );
+  for (const source of manifest) {
+    for (const route of source.allowedNext) {
+      if (route.kind === 'NODE' && explicitIncoming.has(route.targetNodeCode)) {
+        explicitIncoming.set(route.targetNodeCode, (explicitIncoming.get(route.targetNodeCode) ?? 0) + 1);
+      }
+    }
+    for (const activation of source.activationFrom ?? []) {
+      if (nodeSet.has(activation.sourceNodeCode)) {
+        explicitIncoming.set(source.nodeCode, (explicitIncoming.get(source.nodeCode) ?? 0) + 1);
+      }
+    }
+  }
+  for (const node of manifest) {
+    if (node.nodeCode !== 'A1001' && (explicitIncoming.get(node.nodeCode) ?? 0) === 0) {
+      issues.push(issue('MISSING_EXPLICIT_INCOMING', 'non-root canonical node requires an explicit routed or activation incoming edge', node.nodeCode));
+    }
+  }
+
   if (expectedNodeCodes !== undefined) {
     const expected = new Set(expectedNodeCodes);
     for (const expectedCode of expected) {
@@ -127,23 +169,11 @@ export interface DigitalUseGraphValidationResult extends DigitalUseValidationRes
   readonly deadEndNodeCodes: readonly string[];
 }
 
-function nonLinearAnchorIsReachable(
-  ref: string,
-  reachable: ReadonlySet<string>
-): boolean {
-  const nodePrefix = /^(A\d+)/.exec(ref)?.[1];
-  if (nodePrefix !== undefined) return reachable.has(nodePrefix);
-  if (ref === 'TARGET_HELP_REENTRY') return reachable.has('A3002');
-  if (ref === 'USER_TIMELINE' || ref === 'USER_TIMELINE_REVIEW') return reachable.has('A2007');
-  if (ref === 'CONTRACT_PREPARATION_COMPLETE') return reachable.has('A4004');
-  if (ref === 'CONTRACT_EXECUTION_SUPPORT') return reachable.has('A4010');
-  return false;
-}
-
 /**
- * Typed reachability: routed edges + explicit parallel activation + traceable
- * USER_INITIATED/SCHEDULED/help/re-entry anchors. It never infers numeric
- * adjacency or fabricates an edge to make the graph pass.
+ * Typed reachability: routed edges + explicit activationFrom edges.
+ * Parallel/help/re-entry metadata describes behavior but is not allowed to
+ * manufacture reachability. Every non-root incoming path is therefore
+ * independently auditable from the manifest itself.
  */
 export function validateDigitalUseGraph(
   manifest: readonly DigitalUseNodeManifestEntry[],
@@ -167,19 +197,13 @@ export function validateDigitalUseGraph(
             changed = true;
           }
         }
-        for (const peer of node.canRunInParallelWith) {
-          if (nodeSet.has(peer) && !reachable.has(peer)) {
-            reachable.add(peer);
-            changed = true;
-          }
-        }
       }
 
       if (!reachable.has(node.nodeCode)) {
-        const hasNonLinearMode =
-          node.entryMode.includes('USER_INITIATED') || node.entryMode.includes('SCHEDULED');
-        const anchored = node.helpOrReentryRefs.some((ref) => nonLinearAnchorIsReachable(ref, reachable));
-        if (hasNonLinearMode && anchored) {
+        const activated = (node.activationFrom ?? []).some((edge) =>
+          reachable.has(edge.sourceNodeCode)
+        );
+        if (activated) {
           reachable.add(node.nodeCode);
           changed = true;
         }
@@ -280,6 +304,13 @@ export interface DigitalUseSnapshotNodeProjection {
   readonly outputRefs: readonly string[];
   readonly recordContract: { readonly refs: readonly string[]; readonly semantics: string };
   readonly allowedNext: readonly DigitalUseSnapshotRouteProjection[];
+  readonly activationFrom?: readonly {
+    readonly sourceNodeCode: string;
+    readonly mode: string;
+    readonly conditionRef: string;
+    readonly reasonCode: string;
+    readonly authorityRefs: readonly string[];
+  }[];
   readonly canRunInParallelWith: readonly string[];
   readonly entryMode: readonly string[];
   readonly helpOrReentryRefs: readonly string[];
@@ -330,7 +361,13 @@ function a1001ExpectedInputSchemaRefs(
       ? ['DURATION_PER_PURPOSE', 'TOTAL_DURATION_AUXILIARY_ONLY', 'HISTORICAL_DURATION_BAND_AUXILIARY_ONLY']
       : [];
 
-  return [...expected.inputSchemaRefs, ...deviceRefs, ...purposeRefs, ...durationRefs, ...integratedRefs];
+  return [...new Set([
+    ...expected.inputSchemaRefs,
+    ...deviceRefs,
+    ...purposeRefs,
+    ...durationRefs,
+    ...integratedRefs,
+  ])];
 }
 
 function a1001ExpectedPolicyRefs(
@@ -340,11 +377,11 @@ function a1001ExpectedPolicyRefs(
   const authority = snapshot.authorityRegression;
   if (authority === undefined) return expected.policyRefs;
 
-  return [
+  return [...new Set([
     ...expected.policyRefs,
     ...(authority.universalAgeSixEligibilityGate ? [] : ['NO_UNIVERSAL_AGE_SIX_SCENE_GATE']),
     ...(authority.durationOnlyRoutingForbidden ? ['DURATION_ONLY_ROUTING_FORBIDDEN'] : []),
-  ];
+  ])];
 }
 
 function expectedRefsForField(
@@ -429,6 +466,9 @@ export function validateDigitalUseSnapshotFidelity(
       issues.push(issue('SNAPSHOT_RECORD_DRIFT', 'record-contract semantics drifted', expected.nodeCode));
     }
 
+    if (JSON.stringify(actual.activationFrom ?? []) !== JSON.stringify(expected.activationFrom ?? [])) {
+      issues.push(issue('SNAPSHOT_ACTIVATION_DRIFT', 'activation edge projection drifted', expected.nodeCode));
+    }
     if (!sameStringSet(actual.canRunInParallelWith, expected.canRunInParallelWith)) {
       issues.push(issue('SNAPSHOT_PARALLEL_DRIFT', 'parallel relation projection drifted', expected.nodeCode));
     }

@@ -7,14 +7,20 @@
 export const PHONE_USE_CONTRACT_CONTENT_VERSION='phone-use-contract-v1' as const;
 export const PHONE_USE_CONTRACT_SOURCE_BLOB='97a8db200013746faff64230ab7cbf5f15b41615' as const;
 export const PHONE_USE_CONTRACT_CONTENT_META=Object.freeze({
- contentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,sourceBlob:PHONE_USE_CONTRACT_SOURCE_BLOB,approved:true as const,
+ contentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,
+ sourceBlob:PHONE_USE_CONTRACT_SOURCE_BLOB,
+ // Compatibility alias for the existing transport contract. Authority scope:
+ // product-baseline freeze only; never Professional Reviewer approval.
+ approved:true as const,
+ productBaselineStatus:'FROZEN' as const,
+ professionalReviewStatus:'NOT_APPROVED' as const,
 });
 export const PHONE_USE_CONTRACT_QUIZ=Object.freeze([
- {id:'Q1',statement:'手机使用合约的每一个项目都要由家长和孩子一起来制订；',answer:true,explanation:'合约条款应由家长邀请孩子共同制订并共同确认。'},
- {id:'Q2',statement:'制订手机使用合约以后，孩子必须做到合约里的要求，否则这份合约就失败了；',answer:false,explanation:'合约强调共同制订、可行性与持续调整，不把一次未做到等同于整个合约失败。'},
- {id:'Q3',statement:'家长不应该和孩子讨价还价，否则孩子就会不断提出不合理的要求；',answer:false,explanation:'原规格明确双方需要沟通与相互妥协，而不是禁止协商。'},
- {id:'Q4',statement:'手机使用合约应该用来约束孩子，对家长不具有约束力；',answer:false,explanation:'正式结构包含家长配合措施及家长未配合时的责任，合约对双方都有约束。'},
- {id:'Q5',statement:'手机使用合约的期限越长越好',answer:false,explanation:'期限应结合改变难度与可行性确定，原规格并不支持越长越好。'},
+ {id:'Q1',statement:'手机使用合约的每一个项目都要由家长和孩子一起来制订',answer:true,explanation:'合约条款由家长邀请孩子共同制订，并由双方确认、同意；不是家长单方面制定。'},
+ {id:'Q2',statement:'制订手机使用合约以后，孩子必须做到合约里的要求，否则这份合约就失败了',answer:false,explanation:'合约强调可行性、执行后的持续沟通与必要调整；一次未做到不等于整个合约失败。'},
+ {id:'Q3',statement:'家长不应该和孩子讨价还价，否则孩子就会不断提出不合理的要求',answer:false,explanation:'原合约原则明确协商与妥协是双方的，禁止协商与当前产品原则相反。'},
+ {id:'Q4',statement:'手机使用合约应该用来约束孩子，对家长不具有约束力',answer:false,explanation:'合约包含家长配合措施及家长未配合时的责任，对双方都有约束。'},
+ {id:'Q5',statement:'手机使用合约的期限越长越好',answer:false,explanation:'合约期限取决于改变难度与可行性；原 FAQ 明确不支持“越长越好”。'},
 ] as const);
 export const PHONE_USE_CONTRACT_TEMPLATE=Object.freeze({
  sections:['CONTRACT_PARTIES','PURPOSE','PHONE_USE_RULES','EXECUTION_PERIOD','PARENT_SUPPORT_MEASURES','SUPERVISION_MEASURES','INCENTIVES','BREACH_RESPONSIBILITIES'] as const,

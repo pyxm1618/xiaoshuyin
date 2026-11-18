@@ -5,6 +5,16 @@ export const DIGITAL_USE_PACKAGE_VERSION = 'v1' as const;
 
 export type DigitalUseEntryMode = 'ROUTED' | 'USER_INITIATED' | 'SCHEDULED';
 
+export type DigitalUseActivationMode = 'PARALLEL' | 'USER_INITIATED' | 'SCHEDULED';
+
+export interface DigitalUseActivationEdge {
+  readonly sourceNodeCode: string;
+  readonly mode: DigitalUseActivationMode;
+  readonly conditionRef: string;
+  readonly reasonCode: string;
+  readonly authorityRefs: readonly string[];
+}
+
 export type DigitalUseStream =
   | 'FAMILY_ALLIANCE'
   | 'PHONE_USE_CONTRACT'
@@ -49,6 +59,7 @@ export interface DigitalUseNodeManifestEntry {
   readonly outputRefs: readonly string[];
   readonly recordContract: DigitalUseRecordContract;
   readonly allowedNext: readonly DigitalUseAllowedNext[];
+  readonly activationFrom?: readonly DigitalUseActivationEdge[];
   readonly canRunInParallelWith: readonly string[];
   readonly entryMode: readonly DigitalUseEntryMode[];
   readonly helpOrReentryRefs: readonly string[];
