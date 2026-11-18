@@ -201,6 +201,18 @@ const cases = [];
   });
 }
 
+// G5-R9: malformed provenance cannot masquerade as valid historical evidence.
+{
+  const attack = structuredClone(canonical);
+  attack.provenanceKind = "MALFORMED";
+  cases.push({
+    name: "G5-R9 malformed provenance kind is rejected",
+    expected: 1,
+    marker: "provenanceKind must be FEATURE_IMPLEMENTATION or SHARED_REMEDIATION.",
+    actual: runCase({ "010-compliance-feature-policy-foundation.json": attack }),
+  });
+}
+
 // G5-R8: fully task-specific provenance remains valid.
 {
   cases.push({
