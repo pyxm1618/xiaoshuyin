@@ -295,6 +295,22 @@ function setupG2() {
   return root;
 }
 
+// G2-F0: Authority Doc change without an impact declaration fails closed.
+{
+  const root = setupG2();
+  const base = commit(root, "base");
+  write(root, "Docs/V1产品需求.md", "# V1\n## Normative A\nnew normative\n## Metadata\nold reference\n");
+  refreshSnapshot(root);
+  commit(root, "missing impact declaration");
+  record(
+    "G2-F0 Authority Doc change without impact declaration fails",
+    1,
+    run(root, base),
+    "exactly one changed .specify/authority-impacts/*.json declaration is required; found 0"
+  );
+  cleanup(root);
+}
+
 // G2-F1: substantive Authority unit cannot claim NO_DOWNSTREAM_IMPACT.
 {
   const root = setupG2();
