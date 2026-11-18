@@ -8,14 +8,14 @@
  *
  * Any change to a `Docs/**` path fails this legacy immutability probe in
  * enforce mode. Labels are deliberately ignored: an agent or connector can
- * apply labels, so a label is not evidence of independent human approval.
+ * apply labels, so a label cannot authorize an Authority change or replace convergence evidence.
  *
  * Intended Authority revisions are governed by validate-change-governance.mjs:
  * the PR must carry an Authority Impact Contract and downstream convergence,
- * while merge provenance is enforced by GitHub's native required review rules.
+ * while merge readiness is established by exact-head automated governance plus independent AI audit evidence.
  *
  * No document SHA is pinned here. The protected invariant is that Authority
- * changes must travel through the explicit convergence + native review path.
+ * changes must travel through the explicit convergence + exact-head verification path.
  */
 
 import { execFileSync } from "node:child_process";
