@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   acceptInvite,
   addBoundAdultNonManagerToFamily,
@@ -45,5 +46,26 @@ describe('Slice 4 participation authorization', () => {
     const otherRead=await getParticipation(h.app,other.token,created.json().participationId);
     expect(otherRead.statusCode).toBe(404);
     expect(otherRead.json().code).toBe('PARTICIPATION_NOT_FOUND');
+  });
+});
+
+describe('Phase 2 participant age/consent authority projection', () => {
+  const spec = readFileSync(new URL('../../specs/004-case-participant-core/spec.md', import.meta.url), 'utf8');
+
+  it('keeps caller age input non-authoritative and consent purpose scoped', () => {
+    expect(spec).toContain('FR-032 [Phase2-D4/D5]');
+    expect(spec).toContain('FR-033 [Phase2-D5]');
+    expect(spec).toContain('FR-034 [Phase2-D5]');
+    expect(spec).toContain('FR-035 [Phase2-D5]');
+    expect(spec).toContain('MUST NOT be treated as blanket authority');
+  });
+
+  it('projects the registered invitation lifecycle without an unauthorized terminal state', () => {
+    expect(spec).toContain('V1 Technical Authority owns the invitation / participation lifecycle semantics');
+    expect(spec).toContain('PENDING → ACTIVE / DECLINED / EXPIRED；ACTIVE → WITHDRAWN');
+    expect(spec).toContain('invitation remains unchanged unless an authorized invitation lifecycle event occurs');
+    expect(spec).not.toContain('越权作废');
+    expect(spec).toContain('不得创造 REVOKED / CANCELLED / unauthorized-void / manager-cancel 终态');
+    expect(spec).not.toContain('Slice 4 继续持有 participation resource 生命周期');
   });
 });

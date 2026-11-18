@@ -710,6 +710,13 @@ Implementation-time technical dependency:
 
 ---
 
+
+- **FR-031 [Phase2-D4]** Age-dependent evaluation MUST consume the server-owned current `person_compliance_profiles.age_band` plus authoritative provenance/`verified_source`; caller/page/model supplied `ageBand` MUST NOT be accepted as gate truth or override the persisted profile.
+- **FR-032 [Phase2-D4]** Age boundaries are `UNDER_14 <14`, `MINOR_14_17 >=14 && <18`, `ADULT >=18`, otherwise/unsafe classification `UNKNOWN`; missing/invalid provenance or `UNKNOWN` MUST fail closed. This contract MUST NOT require KYC, government ID, face/video verification, or a third-party age provider.
+- **FR-033 [Phase2-D5]** The centralized V1 consent-purpose vocabulary is exactly the currently approved `UNDER_14_GUARDIAN_CONSENT` and `DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT`; feature callers MUST NOT create free-form purpose authority, and the two purposes MUST NOT satisfy each other.
+- **FR-034 [Phase2-D5]** Consent validity MUST bind exact purpose, subject/guardian or decision actor, approved notice/disclosure version+hash, policy/scope version, decision, version chain and current validity. A previous GRANTED version MUST NOT silently authorize materially expanded processing scope.
+- **FR-035 [Phase2-D5]** The current guardian-consent v1 notice/acceptance text only states minimal consent-onboarding processing. Until a Legal/Compliance-approved notice/scope explicitly covers a later child-data processing category, that category MUST fail closed rather than treating the existing record as a blanket authorization.
+- **FR-036 [Phase2-D5]** REVOKED/invalid current consent MUST immediately stop affected downstream processing; historical evidence remains. Consent-request expiry and established-consent validity are separate. A numeric consent expiry/renewal interval MUST NOT be invented without approved Legal/Compliance authority.
 ## 24. Acceptance Scenarios
 
 1. **Given** 一个 server-owned feature identity 存在唯一有效 policy，applicability=NOT_APPLICABLE 且有 decision basis/evidence，**When** evaluateCompliance 执行，**Then** 返回该 exact policy_version/provenance，不产生 anthropomorphic REQUIRED obligations，不调用 AI/network。

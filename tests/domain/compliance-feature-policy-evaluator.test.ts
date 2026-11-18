@@ -349,3 +349,22 @@ describe('pure compliance feature-policy evaluator', () => {
     }
   });
 });
+describe('Phase 2 age/consent authority downstream projection', () => {
+  const spec = readFileSync(join(process.cwd(), 'specs', '010-compliance-feature-policy-foundation', 'spec.md'), 'utf8');
+
+  it('rejects caller-authored age truth and freezes the four age bands', () => {
+    expect(spec).toContain('FR-031 [Phase2-D4]');
+    expect(spec).toContain('FR-032 [Phase2-D4]');
+    expect(spec).toContain('caller/page/model supplied `ageBand` MUST NOT be accepted as gate truth');
+    expect(spec).toContain('UNKNOWN` MUST fail closed');
+  });
+
+  it('projects purpose/scope/version/revoke semantics and the external legal dependency', () => {
+    for (const id of ['FR-033 [Phase2-D5]','FR-034 [Phase2-D5]','FR-035 [Phase2-D5]','FR-036 [Phase2-D5]']) {
+      expect(spec).toContain(id);
+    }
+    expect(spec).toContain('UNDER_14_GUARDIAN_CONSENT');
+    expect(spec).toContain('DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT');
+    expect(spec).toContain('blanket authorization');
+  });
+});
