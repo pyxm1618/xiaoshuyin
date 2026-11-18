@@ -8,15 +8,17 @@ describe('Phase 2 Authority Contract Foundation convergence', () => {
 
   it('is converged but remains downstream-only', () => {
     expect(text).toContain('Status: **PARTIAL_AUTHORITY_CONVERGENCE**');
-    expect(text).toContain('D3 status: **GOVERNANCE_BLOCKED**');
+    expect(text).toContain('D3 status: **CLOSED**');
     expect(text).toContain('downstream projection only');
     expect(text).toContain('P2-AUTH-011');
   });
 
-  it('records the D3 governance boundary and freezes D7 without authority laundering', () => {
+  it('records D3 source convergence and freezes D7 without authority laundering', () => {
     expect(text).toContain('P2-AUTH-001');
-    expect(text).toContain('MUST NOT manufacture an alternative Product Authority for D3');
-    expect(text).toContain('Product D3 source cleanup remains governance-blocked');
+    expect(text).toContain('D3 source convergence');
+    expect(text).toContain('cross-dimension cancellation of an established positive is forbidden');
+    expect(text).toContain('D5 status: **EXTERNAL_DEPENDENCY**');
+    expect(text).not.toContain('Product D3 source cleanup remains governance-blocked');
     expect(text).toContain('P2-AUTH-002');
     expect(text).toContain('never a fifth Authority');
   });
