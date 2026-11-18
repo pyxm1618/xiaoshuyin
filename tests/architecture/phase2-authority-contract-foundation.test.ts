@@ -13,9 +13,10 @@ describe('Phase 2 Authority Contract Foundation convergence', () => {
     expect(text).toContain('P2-AUTH-011');
   });
 
-  it('freezes the registered D3 and D7 semantics', () => {
+  it('records the D3 governance boundary and freezes D7 without authority laundering', () => {
     expect(text).toContain('P2-AUTH-001');
-    expect(text).toContain('same-dimension credible true/false');
+    expect(text).toContain('MUST NOT manufacture an alternative Product Authority for D3');
+    expect(text).toContain('Product D3 source cleanup remains governance-blocked');
     expect(text).toContain('P2-AUTH-002');
     expect(text).toContain('never a fifth Authority');
   });

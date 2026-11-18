@@ -4,7 +4,7 @@
 
 This feature is a **downstream projection only** of the four formal Authority Docs. It never creates product, technical, professional, legal, or runtime authority.
 
-Phase 2 Authority convergence is now reflected here for the registry-bound D3/D7/D8 units. D4/D5 units continue to converge through their already-registered Compliance / Participant downstream owners.
+Phase 2 Authority convergence is reflected here for the registry-bound D7/D8 units. The registered Technical D3 projection converges through `011-digital-use-node-manifest-routing-foundation`; the Product D3 source cleanup remains governance-blocked. D4/D5 units converge through their already-registered Compliance / Participant downstream owners.
 
 Status: **PARTIAL_AUTHORITY_CONVERGENCE**
 
@@ -29,7 +29,7 @@ Out of scope:
 
 ## Requirements
 
-- **P2-AUTH-001 — D3 product projection:** Integrated Triage conflict semantics are dimension-local: same-dimension credible true/false = `CONFLICT`; a `CONFLICT` dimension is neither positive nor negative; an independent valid direct-impact `true` still establishes aggregate positive; 01002/01003 priority conflict always blocks.
+- **P2-AUTH-001 — D3 governance boundary:** this feature MUST NOT manufacture an alternative Product Authority for D3. The registered Technical D3 projection may freeze the mechanical evaluator interpretation, but D3 remains open until the original Product Integrated Triage source units receive a separately landed downstream topology and their legacy ambiguous wording is directly reconciled.
 - **P2-AUTH-002 — D7 frontend governance:** `Docs/frontend/*` is a downstream projection of the four Authority Docs, never a fifth Authority and never able to override them.
 - **P2-AUTH-003 — GOALS→PLANNING:** `ConfirmGoal` is the one formal advancement command; A2010 completion is only a server-side eligibility prerequisite and never a second phase writer.
 - **P2-AUTH-004 — Closure:** `CloseCase` carries closure reason, independent outcome, basis references, actor/source, server closure time, previous phase, version guard and conditional referral reference; it atomically closes status+phase and preserves immutable history.
@@ -50,5 +50,5 @@ Out of scope:
 
 ## Acceptance Evidence
 
-- `tests/architecture/phase2-authority-contract-foundation.test.ts` verifies the converged downstream status and core D3/D7/D8 contracts.
+- `tests/architecture/phase2-authority-contract-foundation.test.ts` verifies the partial downstream status, D3 governance boundary, and D7/D8 contracts.
 - Repository Spec Governance and all required CI checks must pass on the exact PR head.
