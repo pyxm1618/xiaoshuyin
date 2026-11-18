@@ -93,3 +93,20 @@ describe('Slice 11 current Digital Use authority regression', () => {
     })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: '01006' });
   });
 });
+
+describe('Phase 2 D3/D8 authority downstream projection', () => {
+  const spec = readFileSync(new URL('../../../specs/011-digital-use-node-manifest-routing-foundation/spec.md', import.meta.url), 'utf8');
+
+  it('freezes dimension-local conflict semantics and priority blocking', () => {
+    expect(spec).toContain('FR-036 [Phase2-D3]');
+    expect(spec).toContain('credible current true+false = `CONFLICT`');
+    expect(spec).toContain('independent direct-impact dimension with valid true still establishes aggregate positive');
+    expect(spec).toContain('FR-037 [Phase2-D3]');
+  });
+
+  it('routes INSUFFICIENT back to real evidence collection, not outcome pages', () => {
+    expect(spec).toContain('FR-038 [Phase2-D8]');
+    expect(spec).toContain('A1001/01002/01003');
+    expect(spec).toContain('A2001/A2002 outcome pages MUST NOT be used');
+  });
+});

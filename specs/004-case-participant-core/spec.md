@@ -235,6 +235,11 @@
 
 No requirement may be invented to make implementation easier.
 
+
+- **FR-032 [Phase2-D4/D5]** Participation authorization MUST consume server-owned current age/compliance truth; invite/accept callers MUST NOT supply an `ageBand` that can override `person_compliance_profiles` or bypass an UNDER_14 consent gate.
+- **FR-033 [Phase2-D5]** Participation MUST consume the centralized Consent purpose vocabulary and exact current purpose/scope/version; `UNDER_14_GUARDIAN_CONSENT` and `DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT` are distinct and MUST NOT satisfy each other.
+- **FR-034 [Phase2-D5]** A guardian-consent record MUST NOT be treated as blanket authority for participation or later child-data processing when its approved notice/scope does not cover that processing. Uncovered/ambiguous scope MUST fail closed until Legal/Compliance-approved authority exists.
+- **FR-035 [Phase2-D5]** Revocation/current-version changes MUST be re-evaluated at the operation boundary. Request expiry and established-consent validity MUST remain distinct; no caller may infer permanent validity or invent a renewal interval.
 ## Key Entities
 
 本 Slice 的实体以 `Docs/V1技术设计.md` §7.1 已批准的表为准；列级 DDL、enum、约束、索引与迁移顺序属 Plan，不在本文决定。
