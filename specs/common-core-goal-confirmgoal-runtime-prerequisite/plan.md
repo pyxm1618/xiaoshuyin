@@ -94,7 +94,7 @@ The migration must provide:
 - concurrency-safe uniqueness/conditional constraints;
 - no Plan/Intervention/Review tables.
 
-## Test Strategy
+## Verification Plan
 
 ### Domain/service
 
