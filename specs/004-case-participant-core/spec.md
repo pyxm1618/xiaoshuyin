@@ -75,7 +75,7 @@
 6. **拒绝（Decline）**：被邀请人 MUST 可以拒绝参与；拒绝是合法业务结果，不是失败或不合作，不自动关闭 Case，也不阻断家长可独立完成的工作（§1.2、U11、V1-X04、V1-C03）。
 7. **退出（Withdraw）**：已接受的 Participant MUST 可以中途退出；退出后后续 Participant 权限停止，系统不得继续假装其仍在参与；已形成的合法历史不得被伪造删除（§1.2、U11）。
 8. **拒绝 / 退出的历史保留**：拒绝与退出 MUST 留下真实历史，不得被静默丢弃（V1-C23 精神、§5 不变量 5）。
-9. **邀请失效 / 不可再接受状态**：邀请 MUST 能进入不再可接受的合法终态（拒绝 / 过期 / 越权作废）；V1 采用**有限、服务端强制、caller 不可自定义**的邀请有效期（见 Clarifications OQ-4）（U11 明确包含「过期」）。
+9. **邀请失效 / 不可再接受状态**：邀请在 PENDING 时只能因目标 Person 明确拒绝进入 DECLINED，或因正式 expiry event 进入 EXPIRED；错误 / 未授权 candidate 的 request / binding attempt 只能被拒绝，**invitation remains unchanged unless an authorized invitation lifecycle event occurs**。V1 采用**有限、服务端强制、caller 不可自定义**的邀请有效期（见 Clarifications OQ-4）（U11 明确包含「过期」）。
 10. **最小授权地基**：参与行只建立「当前 Case 的、明确批准的有限权限」身份基础；业务对象访问仍需独立 Visibility / Purpose / feature-specific authorization（§9、§10、V1-C20、V1-C21）。
 11. **Account / Person 绑定不变量**：接受邀请 MUST NOT 为已存在的 Person 生成第二个 Person，MUST NOT 重复 Account ↔ Person 绑定，MUST NOT 依据昵称猜 Person，MUST NOT 依据 Family membership 自动绑定账号（§1.5、§7.1）。
 12. **UNDER_14 consent-first 继承**：参与邀请与接受 MUST NOT 绕过 Slice 1 已冻结的 guardian relationship、有效监护人同意与 Compliance Profile 前置条件，MUST NOT「先建 child Person 再补同意」（V1-C39、§7.7A、§10）。
@@ -168,7 +168,7 @@
 8. **Non-manager cannot invite** — **Given** 一个目标 Family 中不是该 Family V1 管理主体、且不是合法 Case 管理 actor 的成员，**When** 尝试为该 Case 创建参与邀请，**Then** 服务端拒绝且不创建邀请；该限制由服务端判定，不依赖前端隐藏。**Upstream**: §9、§10、V1-C21
 9. **Invite create anti-enumeration** — **Given** 三类情形：Case 不存在 / Case 属于其它 Family / actor 无 Case 管理权限，**When** 调用创建邀请，**Then** 三者对外表现一致且不泄露 Case 是否存在，也不返回 Family / Person / Case 私密字段。**Upstream**: §37.2、V1-C21、§9
 10. **Unauthorized token lookup leaks nothing** — **Given** 一个不属于邀请目标、也无合法查看资格 caller，**When** 查询邀请 token，**Then** 不返回 target Person / Family / Case / guardian / age / consent / compliance 任何私密细节，也不得成为 Person / Case 枚举 oracle。**Upstream**: V1-C21、§37.2、U11
-11. **Terminal invite cannot reactivate** — **Given** 一个待接受参与资源已进入终态（declined / expired / 越权作废），**When** 尝试再次接受或重新激活，**Then** 请求失败；已终止的待接受参与资源不可重复激活；已 withdraw 的 active participation 亦不得复活为 active。**Upstream**: U11、§5 不变量 17
+11. **Terminal invite cannot reactivate** — **Given** 一个待接受参与资源已进入合法终态（declined / expired），**When** 尝试再次接受或重新激活，**Then** 请求失败；已终止的待接受参与资源不可重复激活；已 withdraw 的 active participation 亦不得复活为 active。错误 / 未授权 candidate 尝试属于 request / binding attempt rejected，不是 invitation terminal event，且不得改变原 invitation。**Upstream**: U11、§5 不变量 17
 12. **No Case-wide access on accept** — **Given** 一个刚接受邀请的活跃 Participant，**When** 其尝试访问 Case 级业务资源（例如 Case 全量详情、家长私人原话、其他成员私人内容、Evidence、全部 Formulation / Plan），**Then** 这些访问在本 Slice MUST NOT 因存在参与行而被允许；Participant MUST NOT 自动继承 Case manager 能力。**Upstream**: §10、V1-C20、V1-C21、§9
 13. **No Evidence side effect** — **Given** 一次 accept、一次 decline、一次 withdraw，**When** 检查证据层，**Then** `Assertions + 0`、`Observations + 0`；accept ≠ Fact、decline ≠ Statement、withdraw ≠ Evidence。**Upstream**: §5 不变量 3、§7.2、Slice 3 边界
 14. **No duplicate Person / binding** — **Given** 一个已存在的 Person P1，**When** 其处理邀请，**Then** Account ↔ Person 仍为 1:1：情形 B 仅复用匹配的既有 binding，Account 不匹配则拒绝且不 rebind；情形 C 必须先完成 invitation-aware identity bootstrap，MUST NOT 先走普通 `/api/v1/auth/wechat` 创建 P2。binding PENDING / blocked / terminal 时 `active participation = 0`；binding success 只建立 Account↔P1，仍须显式 accept 才能产生 active participation。不得产生第二个 Person、不得仅凭 token / nickname / Family membership 推断或绑定 Person。**Upstream**: §1.5、§7.1、V1-C44、Clarifications OQ-6、005 contract
@@ -215,7 +215,7 @@
 - **FR-012** [UPSTREAM: U11 / V1-C03 / §5 不变量 5] 拒绝 MUST 留下可保留的真实历史；系统 MUST NOT 静默丢弃拒绝事实，也 MUST NOT 把拒绝补成确定性的「已参与」或「无问题」。领域语义已冻结（见 Clarifications OQ-2）：decline 使该 Case 的参与资源从**待接受状态**进入 declined 终态；被邀请人从未获得 active participant capability，因此不产生 active participation。拒绝事实保留在该参与资源的终态与审计历史中。
 - **FR-013** [UPSTREAM: §1.2 / U11] 已接受的 Participant MUST 可以中途退出。退出后后续 Participant 权限 MUST 停止；系统 MUST NOT 继续假装其仍在参与。
 - **FR-014** [UPSTREAM: §1.2 / §5 不变量 5] 退出 MUST 保留已形成的合法历史，MUST NOT 伪造删除历史，MUST NOT 恢复为「从未参与」。完整数据删除 / 权利工作流不在本 Slice；退出只保证权限停止与历史保留。领域语义已冻结（见 Clarifications OQ-3）：withdraw 只作用于已 accept 的 active participation，并使其进入 withdrawn 终态（historical inactive participation）。
-- **FR-015** [UPSTREAM: U11 / §34.1] 邀请 MUST 能进入**不再可接受的合法终态**（declined / expired / 越权作废），以支持 U11 的「拒绝、撤回、过期、越权」验收；已终止邀请 MUST NOT 被重复接受或重新激活。邀请有效期 MUST 为有限、服务端强制、caller 不可自定义：invite MUST NOT 默认永久有效，caller MUST NOT 自行指定或延长有效期，Implement MUST NOT 在缺省时 fallback 为永久有效，也 MUST NOT 硬编码未经批准的数值。**具体 TTL 数值属 RELEASE / POLICY GATE**（依据 `Docs/V1技术设计.md` §34.1：具体 TTL 在上线前根据真实服务目的、法规与供应商条款锁定；没有依据时不能默认永久保存），不是 Slice 4 可自行决定的产品数字；expired 语义见 Clarifications OQ-4（具体 DB `expires_at` / clock / cleanup 属 Plan）。
+- **FR-015** [UPSTREAM: U11 / §34.1] 邀请在 PENDING 时只允许进入已注册的合法后续：目标 Person 显式 accept → ACTIVE、目标 Person 显式 decline → DECLINED、正式 expiry event → EXPIRED；ACTIVE 只允许由 Participant 本人 withdraw → WITHDRAWN。错误 / 未授权 candidate 的 request / binding attempt MUST 被拒绝，且 **invitation remains unchanged unless an authorized invitation lifecycle event occurs**；不得创造 REVOKED / CANCELLED / unauthorized-void / manager-cancel 终态。邀请有效期 MUST 为有限、服务端强制、caller 不可自定义：invite MUST NOT 默认永久有效，caller MUST NOT 自行指定或延长有效期，Implement MUST NOT 在缺省时 fallback 为永久有效，也 MUST NOT 硬编码未经批准的数值。**具体 TTL 数值属 RELEASE / POLICY GATE**（依据 `Docs/V1技术设计.md` §34.1：具体 TTL 在上线前根据真实服务目的、法规与供应商条款锁定；没有依据时不能默认永久保存），不是 Slice 4 可自行决定的产品数字；expired 语义见 Clarifications OQ-4（具体 DB `expires_at` / clock / cleanup 属 Plan）。
 - **FR-016** [UPSTREAM: §8.5 / §5 不变量 17 / V1-C28] 重复 / 并发接受同一有效邀请 MUST 只产生恰好一个活跃参与结果；重复 decline / withdraw MUST NOT 产生互相矛盾的业务结果。所有命令 MUST 继承 §8.5 的 `actor_id + command_type + idempotency_key` 合同：相同请求返回原结果，同 key 不同 canonical payload 返回 409。具体 advisory lock / hash payload / DB constraint 名称留 Plan。
 - **FR-017** [UPSTREAM: §9 / §10 / V1-C20 / V1-C21] 参与行 MUST NOT 构成「全 Case 可见」的授权，也 MUST NOT 默认允许读取 Case 全量数据、家长原始消息、Evidence、家庭历史、全部 Formulation 或全部 Plan。Participant 只获得**当前 Case 的、明确批准的有限权限**。
 - **FR-018** [UPSTREAM: §10 / §9] 在本 Slice 中，活跃 Participant MUST NOT 自动获得 Case 读取；MUST NOT 自动继承 Case manager 能力，也 MUST NOT 调用 manager-only Case 命令。该答案为**明确 NO**，不得模糊。
@@ -552,7 +552,7 @@ participation acceptance
 
 **Invitation lifecycle 与 identity-binding lifecycle 分离**：
 
-- Slice 4 继续持有 participation resource 生命周期：pending → accepted(active) / declined / expired；active → withdrawn；
+- **V1 Technical Authority owns the invitation / participation lifecycle semantics. Slice 4 only projects and implements the registered lifecycle and may not redefine or extend it**：PENDING → ACTIVE / DECLINED / EXPIRED；ACTIVE → WITHDRAWN；
 - binding attempt lifecycle 属 005 contract，MUST NOT 与 participation lifecycle 混合；
 - binding success 不会因为 participation decline / withdraw / Case close 而自动 unlink；
 - decline / withdraw 的既有冻结语义完全不变，本 OQ-6 closeout 不新增 manager cancel / creator cancel 或其它 invitation authorization。
