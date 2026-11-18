@@ -65,7 +65,7 @@ Use only the Authority-listed `POST /api/v1/cases/:id/goals` capability. The exa
 
 Before runtime coding, re-read the actual latest migration sequence. Current planning baseline ends at `025_slice16_post_merge_forensic_remediation.sql`; therefore `026_common_core_goal_confirm_goal_runtime.sql` is only reserved by this topology prerequisite. If main changes first, stop and reconcile governance rather than reusing an occupied number.
 
-## Test Strategy
+## Verification Plan
 
 - Contract completeness and pure validation.
 - Authorization / Consent / Safety / Compliance gate matrix.
@@ -75,6 +75,7 @@ Before runtime coding, re-read the actual latest migration sequence. Current pla
 - Atomic rollback.
 - Real integration path from confirmed Problem Formulation to PLANNING with no admin SQL phase fabrication.
 - Static guards for forbidden A2010/Scene phase writes.
+- Exact-head repository Contract, Static Checks, DB Migration, Unit Tests, Integration Tests, Spec Governance and `verify-all` in the runtime PR.
 
 ## Stop Conditions
 
