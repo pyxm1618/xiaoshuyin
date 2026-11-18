@@ -41,6 +41,16 @@ export function validateRuleset(ruleset, contract) {
     errors.push(`Ruleset enforcement mismatch: expected ${contract.enforcement}, got ${ruleset.enforcement}`);
   }
 
+  const refName = ruleset.conditions?.ref_name;
+  const includedRefs = Array.isArray(refName?.include) ? refName.include : [];
+  const excludedRefs = Array.isArray(refName?.exclude) ? refName.exclude : [];
+  if (!includedRefs.includes("~DEFAULT_BRANCH")) {
+    errors.push("Ruleset must protect the repository default branch via conditions.ref_name.include=~DEFAULT_BRANCH.");
+  }
+  if (excludedRefs.length > 0) {
+    errors.push("Ruleset protecting main must not carry ref_name exclusions; current exclusions=" + excludedRefs.join(","));
+  }
+
   const prRule = (ruleset.rules ?? []).find((rule) => rule?.type === "pull_request");
   if (!prRule) {
     errors.push("Ruleset is missing the pull_request rule.");
