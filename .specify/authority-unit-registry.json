@@ -3163,9 +3163,25 @@
             "heading": "## 22.1 家庭用户端"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1P-132",
@@ -4667,9 +4683,25 @@
             "heading": "### 6.4 Closure Reason"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-021",
@@ -4711,9 +4743,25 @@
             "heading": "### 6.8 Review next_action Authority"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-025",
@@ -4766,9 +4814,25 @@
             "heading": "### 7.3 Goal、Intervention、Plan 与执行"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-030",
@@ -4980,9 +5044,25 @@
             "heading": "## 10. V1 的孩子参与"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-048",
@@ -5296,9 +5376,25 @@
             "heading": "#### 12.3B.6 Single Case Phase Authority / parallel lanes"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-068",
@@ -5356,9 +5452,25 @@
             "heading": "### 12.5 Digital Use 原流程到技术对象映射"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-072",
@@ -5862,9 +5974,25 @@
             "heading": "## 23. Domain Commands"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-118",
@@ -6275,9 +6403,25 @@
             "heading": "### 28.4 Plan / Execution / Review"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-141",
@@ -6297,9 +6441,25 @@
             "heading": "### 28.6 Digital Use：手机合约与角色扮演"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-143",
@@ -6319,9 +6479,25 @@
             "heading": "### 28.8 孩子参与"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-145",
@@ -6352,9 +6528,25 @@
             "heading": "### 28.10 Staff"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-148",
@@ -6363,9 +6555,25 @@
             "heading": "### 28.11 U01—U20 页面 / 任务验收合同"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-149",
@@ -6429,9 +6637,25 @@
             "heading": "### 29.2 激活 Plan"
           },
           "normative": true,
-          "lifecycle": "FUTURE_UNIMPLEMENTED",
-          "downstreamBindings": [],
-          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
+          "lifecycle": "IMPLEMENTED",
+          "downstreamBindings": [
+            {
+              "feature": "phase2-authority-contract-foundation",
+              "specPath": "specs/phase2-authority-contract-foundation",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            }
+          ]
         },
         {
           "id": "AUTH-V1T-155",
