@@ -2794,6 +2794,22 @@
                   ]
                 }
               ]
+            },
+            {
+              "feature": "012-digital-use-assessment-runtime",
+              "specPath": "specs/012-digital-use-assessment-runtime",
+              "requirements": [
+                {
+                  "id": "21. Functional Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## 21. Functional Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/scenes/digital-use/integrated-triage.test.ts"
+                  ]
+                }
+              ]
             }
           ]
         },
@@ -5044,25 +5060,9 @@
             "heading": "## 10. V1 的孩子参与"
           },
           "normative": true,
-          "lifecycle": "IMPLEMENTED",
-          "downstreamBindings": [
-            {
-              "feature": "phase2-authority-contract-foundation",
-              "specPath": "specs/phase2-authority-contract-foundation",
-              "requirements": [
-                {
-                  "id": "Requirements",
-                  "selector": {
-                    "kind": "MARKDOWN_SECTION",
-                    "heading": "## Requirements"
-                  },
-                  "requiredArtifacts": [
-                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
-                  ]
-                }
-              ]
-            }
-          ]
+          "lifecycle": "FUTURE_UNIMPLEMENTED",
+          "downstreamBindings": [],
+          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
         },
         {
           "id": "AUTH-V1T-048",
@@ -5231,6 +5231,22 @@
                   },
                   "requiredArtifacts": [
                     "tests/scenes/digital-use/authority-regression.test.ts"
+                  ]
+                }
+              ]
+            },
+            {
+              "feature": "012-digital-use-assessment-runtime",
+              "specPath": "specs/012-digital-use-assessment-runtime",
+              "requirements": [
+                {
+                  "id": "21. Functional Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## 21. Functional Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "tests/scenes/digital-use/integrated-triage.test.ts"
                   ]
                 }
               ]
@@ -6441,25 +6457,9 @@
             "heading": "### 28.6 Digital Use：手机合约与角色扮演"
           },
           "normative": true,
-          "lifecycle": "IMPLEMENTED",
-          "downstreamBindings": [
-            {
-              "feature": "phase2-authority-contract-foundation",
-              "specPath": "specs/phase2-authority-contract-foundation",
-              "requirements": [
-                {
-                  "id": "Requirements",
-                  "selector": {
-                    "kind": "MARKDOWN_SECTION",
-                    "heading": "## Requirements"
-                  },
-                  "requiredArtifacts": [
-                    "tests/architecture/phase2-authority-contract-foundation.test.ts"
-                  ]
-                }
-              ]
-            }
-          ]
+          "lifecycle": "FUTURE_UNIMPLEMENTED",
+          "downstreamBindings": [],
+          "futureReason": "No repository-implemented downstream contract is registered for this authority unit yet."
         },
         {
           "id": "AUTH-V1T-143",
