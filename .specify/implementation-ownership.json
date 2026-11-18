@@ -295,7 +295,8 @@
           "011-digital-use-node-manifest-routing-foundation",
           "012-digital-use-assessment-runtime",
           "013-digital-use-family-alliance-runtime",
-          "foundation-remaining-remediation"
+          "foundation-remaining-remediation",
+          "common-core-goal-confirmgoal-runtime-prerequisite"
         ]
       }
     },
@@ -310,7 +311,99 @@
         "features": [
           "004-case-participant-core",
           "008-problem-formulation-core",
-          "foundation-remaining-remediation"
+          "foundation-remaining-remediation",
+          "common-core-goal-confirmgoal-runtime-prerequisite"
+        ]
+      }
+    },
+    {
+      "id": "goal-domain-runtime",
+      "match": {
+        "kind": "PREFIX",
+        "path": "packages/domain/src/goal-"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime-prerequisite"
+        ]
+      }
+    },
+    {
+      "id": "goal-domain-public-export",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/index.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime-prerequisite"
+        ]
+      }
+    },
+    {
+      "id": "goal-application-service",
+      "match": {
+        "kind": "PREFIX",
+        "path": "apps/server/api/src/services/goal-"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime-prerequisite"
+        ]
+      }
+    },
+    {
+      "id": "goal-api-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/goals.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime-prerequisite"
+        ]
+      }
+    },
+    {
+      "id": "goal-authorization-action",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/authorization/src/authorize.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime-prerequisite"
+        ]
+      }
+    },
+    {
+      "id": "goal-authorization-adapter",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/authz.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime-prerequisite"
+        ]
+      }
+    },
+    {
+      "id": "goal-runtime-migration-026",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/026_common_core_goal_confirmgoal_runtime.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime-prerequisite"
         ]
       }
     }
