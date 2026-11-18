@@ -20,12 +20,20 @@ function ruleset({
   name = "main-protection",
   target = "branch",
   enforcement = "active",
+  includeRefs = ["~DEFAULT_BRANCH"],
+  excludeRefs = [],
 }) {
   return {
     id,
     name,
     target,
     enforcement,
+    conditions: {
+      ref_name: {
+        include: includeRefs,
+        exclude: excludeRefs,
+      },
+    },
     bypass_actors: bypassActors,
     rules: [
       {
@@ -66,6 +74,16 @@ const cases = [
     expected: 1,
     actual: run(ruleset({ approvals: 1, lastPush: true, id: 99999999 })),
     marker: "Ruleset id mismatch",
+  },
+  {
+    name: "G6 ruleset excluding the default branch is rejected",
+    expected: 1,
+    actual: run(ruleset({
+      approvals: 1,
+      lastPush: true,
+      excludeRefs: ["~DEFAULT_BRANCH"],
+    })),
+    marker: "must not carry ref_name exclusions",
   },
   {
     name: "G6 required approval count 0 is rejected",
