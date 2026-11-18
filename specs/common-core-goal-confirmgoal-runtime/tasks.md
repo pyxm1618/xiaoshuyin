@@ -10,7 +10,7 @@
 
 ## Tasks
 
-- [x] T2001 [REQ:GCR-001,GCR-002,GCR-003,GCR-004,GCR-005,GCR-006,GCR-007,GCR-008,GCR-009,GCR-010,GCR-011,GCR-012] [VERIFY:Spec Governance] Establish only the feature projection and finite implementation ownership; no `apps/`, `packages/`, `db/`, Authority Doc, Authority Unit registry, or change-binding delta is permitted in this prerequisite.
+- [ ] T2001 [REQ:GCR-001,GCR-002,GCR-003,GCR-004,GCR-005,GCR-006,GCR-007,GCR-008,GCR-009,GCR-010,GCR-011,GCR-012] [VERIFY:Spec Governance] Establish only the feature projection and finite implementation ownership; no `apps/`, `packages/`, `db/`, Authority Doc, Authority Unit registry, or change-binding delta is permitted in this prerequisite.
 - [ ] T2002 [REQ:GCR-002,GCR-003,GCR-005,GCR-006] [VERIFY:Remote Truth read-back] After T2001 is independently audited and merged, re-read latest main, PR #70 read-only, Authority Docs, ownership, Authority Unit registry, migration sequence, workflows, and current Case/Problem Formulation runtime before any product code.
 - [ ] T2003 [REQ:GCR-001,GCR-002,GCR-009,GCR-010,GCR-011] [VERIFY:DB Migration + DB tests] Add the current-baseline Goal persistence owner with same-Case/formulation integrity, family isolation, forced RLS, confirmation auditability, review state, and concurrency defenses; do not create Plan runtime.
 - [ ] T2004 [REQ:GCR-001,GCR-002,GCR-003,GCR-004] [VERIFY:Domain + service tests] Implement legal Goal create/save bound to the current confirmed formulation; reject incomplete, stale, wrong-phase, invalid-actor, and invalid-reference inputs.
