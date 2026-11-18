@@ -6,7 +6,7 @@
     {
       "path": "Docs/V1产品需求.md",
       "previousBlobSha": "8eb660cd905d8fba4b52fe0f74bbc214b3113117",
-      "newBlobSha": "6d040985c4e3f336b9c252745f8992f87b7b2aaf"
+      "newBlobSha": "379cb8cfb377924cd21ccfe55baa5aecdf207f5e"
     },
     {
       "path": "Docs/V1技术设计.md",
@@ -15,6 +15,48 @@
     }
   ],
   "unitImpacts": [
+    {
+      "authorityUnitId": "AUTH-V1P-096",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "011-digital-use-node-manifest-routing-foundation",
+          "specPath": "specs/011-digital-use-node-manifest-routing-foundation",
+          "requirementId": "12. Functional Requirements",
+          "requiredArtifacts": [
+            "tests/scenes/digital-use/authority-regression.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "authorityUnitId": "AUTH-V1P-097",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "011-digital-use-node-manifest-routing-foundation",
+          "specPath": "specs/011-digital-use-node-manifest-routing-foundation",
+          "requirementId": "12. Functional Requirements",
+          "requiredArtifacts": [
+            "tests/scenes/digital-use/authority-regression.test.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "authorityUnitId": "AUTH-V1P-100",
+      "classification": "AFFECTS_EXISTING_FEATURES",
+      "downstream": [
+        {
+          "feature": "011-digital-use-node-manifest-routing-foundation",
+          "specPath": "specs/011-digital-use-node-manifest-routing-foundation",
+          "requirementId": "12. Functional Requirements",
+          "requiredArtifacts": [
+            "tests/scenes/digital-use/authority-regression.test.ts"
+          ]
+        }
+      ]
+    },
     {
       "authorityUnitId": "AUTH-V1P-123",
       "classification": "AFFECTS_EXISTING_FEATURES",
@@ -109,6 +151,14 @@
           "requirementId": "Requirements",
           "requiredArtifacts": [
             "tests/architecture/phase2-authority-contract-foundation.test.ts"
+          ]
+        },
+        {
+          "feature": "004-case-participant-core",
+          "specPath": "specs/004-case-participant-core",
+          "requirementId": "Requirements",
+          "requiredArtifacts": [
+            "tests/integration/participations-authorization.test.ts"
           ]
         }
       ]
