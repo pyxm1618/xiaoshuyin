@@ -374,6 +374,34 @@ function setupG2() {
   cleanup(root);
 }
 
+// G2-F3B: CREATES_FUTURE_REQUIREMENT cannot disable the downstream requirement delta check.
+{
+  const root = setupG2();
+  const base = commit(root, "base");
+  write(root, "Docs/V1产品需求.md", "# V1\n## Normative A\nnew normative\n## Metadata\nold reference\n");
+  refreshSnapshot(root);
+  write(root, "specs/001-feature-a/spec.md", "# Feature A\n## FR-001 Contract\nold requirement\n## Other\nchanged token only\n");
+  write(root, "tests/a.test.ts", "export const proof = 2;\n");
+  impactManifest(root, base, [{
+    authorityUnitId: "AUTH-A",
+    classification: "CREATES_FUTURE_REQUIREMENT",
+    downstream: [{
+      feature: "001-feature-a",
+      specPath: "specs/001-feature-a",
+      requirementId: "FR-001",
+      requiredArtifacts: ["tests/a.test.ts"],
+    }],
+  }]);
+  commit(root, "future classification bypass");
+  record(
+    "G2-F3B future classification cannot bypass requirement delta",
+    1,
+    run(root, base),
+    "future requirement did not change or become newly introduced"
+  );
+  cleanup(root);
+}
+
 // G2-F4: registered Authority unit -> registered requirement -> registered artifact converges.
 {
   const root = setupG2();
@@ -481,6 +509,56 @@ function setupG2() {
   write(root, "specs/001-fixture/tasks.md", "# Tasks\n\n- [x] T001 implement [REQ:U01] [VERIFY:tests/proof.test.ts]\n");
   commit(root, "fake completion");
   record("G5-A fake task completion without evidence fails", 1, run(root, base), "completed tasks require");
+  cleanup(root);
+}
+
+// G5-R0: an established legacy baseline cannot be edited in the consuming change.
+{
+  const root = project();
+  addTaskProvenanceRegistry(root);
+  const pending = "# Tasks\n\n- [ ] T001 implement [REQ:U01] [VERIFY:tests/proof.test.ts]\n";
+  const completed = "# Tasks\n\n- [x] T001 implement [REQ:U01] [VERIFY:tests/proof.test.ts]\n";
+  write(root, "specs/001-fixture/tasks.md", pending);
+  write(root, ".specify/legacy-task-completion-baseline.json", JSON.stringify({
+    schemaVersion: 1,
+    files: [],
+  }, null, 2) + "\n");
+  const base = commit(root, "task base with trusted baseline");
+  write(root, "specs/001-fixture/tasks.md", completed);
+  write(root, ".specify/legacy-task-completion-baseline.json", JSON.stringify({
+    schemaVersion: 1,
+    files: [{ path: "specs/001-fixture/tasks.md", blobSha: blobSha(completed) }],
+  }, null, 2) + "\n");
+  commit(root, "same-change baseline authorization attack");
+  record(
+    "G5-R0 established legacy baseline is immutable",
+    1,
+    run(root, base),
+    "Legacy task completion baseline is immutable once established"
+  );
+  cleanup(root);
+}
+
+// G5-R0B: initial baseline bootstrap may only record exact task blobs already present at trusted base.
+{
+  const root = project();
+  addTaskProvenanceRegistry(root);
+  const pending = "# Tasks\n\n- [ ] T001 implement [REQ:U01] [VERIFY:tests/proof.test.ts]\n";
+  const completed = "# Tasks\n\n- [x] T001 implement [REQ:U01] [VERIFY:tests/proof.test.ts]\n";
+  write(root, "specs/001-fixture/tasks.md", pending);
+  const base = commit(root, "task base without baseline");
+  write(root, "specs/001-fixture/tasks.md", completed);
+  write(root, ".specify/legacy-task-completion-baseline.json", JSON.stringify({
+    schemaVersion: 1,
+    files: [{ path: "specs/001-fixture/tasks.md", blobSha: blobSha(completed) }],
+  }, null, 2) + "\n");
+  commit(root, "forged baseline bootstrap");
+  record(
+    "G5-R0B baseline bootstrap cannot grandfather same-change completion",
+    1,
+    run(root, base),
+    "bootstrap entry must match the exact trusted-base task blob"
+  );
   cleanup(root);
 }
 
