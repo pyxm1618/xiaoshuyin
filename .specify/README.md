@@ -60,7 +60,7 @@ generic successful CI run cannot be reused as universal task evidence.
 
 `Docs/**` contains the approved product and technical sources. The old
 `approved-docs-change` label is retained only as historical repository metadata; it has
-**zero authority** in the governance gate and cannot prove human review.
+**zero authority** in the governance gate and cannot authorize an Authority change.
 
 For any revision to one of the four Authority Docs, Spec Governance requires:
 - the refreshed machine-derived `.specify/authority-inputs.json`;
@@ -72,10 +72,14 @@ For any revision to one of the four Authority Docs, Spec Governance requires:
 - a finite controlled exemption contract for legitimate metadata-only/no-downstream-impact
   corrections.
 
-The repository's GitHub Ruleset is the Human Gate: an independent approving review must
-be required, and the latest reviewable push must require a fresh valid approval. Labels,
-agent comments, connector events, or the Authority Impact Contract itself are not human
-approval.
+The repository uses a **Single Owner + AI Development + Independent AI Audit + Automated
+CI / Governance Gates** model. GitHub human approval is not a repository gate:
+`required_approving_review_count = 0` and `require_last_push_approval = false` are valid.
+The Ruleset must still protect the default branch, require review-thread resolution, require
+exactly the six approved status checks, forbid unauthorized bypass actors, and retain
+deletion / non-fast-forward protections. Independent AI audit remains required as
+development-process verification evidence against the exact candidate Head; it is not a
+GitHub `APPROVED` review and must not be encoded as one.
 
 ## Verifying this layer
 
