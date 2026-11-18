@@ -94,7 +94,7 @@ If implementation reveals that an approved requirement or architecture decision 
 - update affected spec/plan/tasks/tests afterward;
 - never back-propagate an implementation convenience into the requirements silently.
 
-`Docs/**` is enforced, not merely requested. The historical `approved-docs-change` label is **not** approval evidence and has no governance authority: agents, connectors, or humans adding that label cannot satisfy the Human Gate.
+`Docs/**` is enforced, not merely requested. The historical `approved-docs-change` label has **zero governance authority**: agents, connectors, or humans adding that label cannot authorize an Authority change or satisfy any required convergence evidence.
 
 Any intended change to one of the four Authority Docs MUST:
 - refresh `.specify/authority-inputs.json`;
@@ -102,7 +102,7 @@ Any intended change to one of the four Authority Docs MUST:
 - declare the old/new Authority blob identities, impact classification, affected authoritative specs, required downstream artifacts, and `CONVERGED` completion state;
 - change every declared downstream spec/artifact in the same reviewed change when downstream impact exists;
 - use only the validator's finite exemption classes for a genuine metadata-only/no-downstream-impact correction;
-- obtain GitHub-native independent approval, with approval required after the latest reviewable push. PR authors cannot self-approve through repository prose, labels, or agent/connector actions.
+- complete exact-head automated CI / governance verification and an independent AI read-only/adversarial audit as development-process verification evidence. The independent AI audit is not a GitHub `APPROVED` review and MUST NOT be translated into `required_approving_review_count` or `require_last_push_approval`.
 
 Repository governance additionally enforces three machine-verifiable provenance boundaries:
 
@@ -119,5 +119,7 @@ Repository governance additionally enforces three machine-verifiable provenance 
 
 These registries are governance authority, not per-PR self-declarations. Do not modify a
 registry in the same change to authorize the product/Authority change that needs it.
+
+Repository merge governance follows the **Single Owner + AI Development + Independent AI Audit + Automated CI / Governance Gates** model. GitHub human approval, a second human reviewer/account, and latest-push human approval are not merge gates. The protected automated controls remain required: exact required CI checks, default-branch Ruleset protection, review-thread resolution, no unauthorized bypass, implementation ownership, Authority impact convergence, task evidence/provenance, and adversarial governance tests. Independent AI audit remains mandatory process evidence and must be performed against the exact candidate Head by an AI independent from the development execution.
 
 Feature work never edits `Docs/**` as a side effect. If a slice appears to need a requirement change, report the conflict and stop.
