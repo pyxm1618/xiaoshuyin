@@ -653,8 +653,12 @@ function validateAuthorityImpact(changed, opts, errors) {
       if (impact.classification === "AFFECTS_EXISTING_FEATURES" && beforeReq === afterReq) {
         errors.push(label + ": linked downstream requirement did not change: " + requirement.id);
       }
-      if (impact.classification === "CREATES_FUTURE_REQUIREMENT" && afterReq === null) {
-        errors.push(label + ": future requirement selector is absent at head: " + requirement.id);
+      if (impact.classification === "CREATES_FUTURE_REQUIREMENT") {
+        if (afterReq === null) {
+          errors.push(label + ": future requirement selector is absent at head: " + requirement.id);
+        } else if (beforeSpec !== null && beforeReq === afterReq) {
+          errors.push(label + ": future requirement did not change or become newly introduced: " + requirement.id);
+        }
       }
 
       const declaredArtifacts = Array.isArray(target?.requiredArtifacts) ? target.requiredArtifacts : [];
@@ -797,7 +801,20 @@ function validateTaskCompletionEvidence(changed, opts, errors) {
 
   const baselinePath = ".specify/legacy-task-completion-baseline.json";
   let baseline = { schemaVersion: 1, files: [] };
-  if (fs.existsSync(path.join(root, baselinePath))) baseline = readJson(baselinePath, errors, "Legacy task completion baseline") || baseline;
+  const baselineExistsAtBase = gitOk(["cat-file", "-e", opts.base + ":" + baselinePath]);
+  if (baselineExistsAtBase) {
+    try {
+      baseline = JSON.parse(textAt(opts.base, baselinePath));
+    } catch (error) {
+      errors.push("Legacy task completion baseline at trusted base is invalid or unreadable: " +
+        (error instanceof Error ? error.message : String(error)));
+    }
+    if (changed.includes(baselinePath)) {
+      errors.push("Legacy task completion baseline is immutable once established; same-change additions or hash replacements cannot authorize task completion.");
+    }
+  } else if (fs.existsSync(path.join(root, baselinePath))) {
+    baseline = readJson(baselinePath, errors, "Legacy task completion baseline") || baseline;
+  }
   if (baseline.schemaVersion !== 1 || !Array.isArray(baseline.files)) {
     errors.push("Legacy task completion baseline must have schemaVersion=1 and files[].");
     baseline = { schemaVersion: 1, files: [] };
@@ -807,6 +824,17 @@ function validateTaskCompletionEvidence(changed, opts, errors) {
     if (!entry || typeof entry.path !== "string" || !/^[0-9a-f]{40}$/.test(entry.blobSha || "")) {
       errors.push("Legacy task completion baseline contains an invalid entry.");
       continue;
+    }
+    if (!baselineExistsAtBase) {
+      if (!gitOk(["cat-file", "-e", opts.base + ":" + entry.path])) {
+        errors.push("Legacy task completion baseline bootstrap entry must reference a task file that already exists at trusted base: " + entry.path);
+        continue;
+      }
+      const trustedBaseBlobSha = gitBlobSha(blobAt(opts.base, entry.path));
+      if (entry.blobSha !== trustedBaseBlobSha) {
+        errors.push("Legacy task completion baseline bootstrap entry must match the exact trusted-base task blob: " + entry.path);
+        continue;
+      }
     }
     if (baselineByPath.has(entry.path)) errors.push("Duplicate legacy task baseline entry: " + entry.path);
     baselineByPath.set(entry.path, entry.blobSha);
