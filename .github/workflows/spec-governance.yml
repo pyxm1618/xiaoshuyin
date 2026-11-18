@@ -54,9 +54,9 @@ jobs:
           node .specify/scripts/tests/run-change-governance-tests.mjs
           node .specify/scripts/tests/run-ruleset-governance-tests.mjs
 
-      # This does not emulate GitHub review semantics. It fails closed unless the
-      # repository's native main Ruleset actually carries the required settings.
-      - name: Validate native main review protections
+      # Human GitHub approval settings are informational, not merge gates. This
+      # fails closed on the repository protections that remain authoritative.
+      - name: Validate native main repository protections
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node .specify/scripts/validate-repository-ruleset.mjs
