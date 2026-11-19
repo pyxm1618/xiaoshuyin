@@ -1,3 +1,4 @@
+import pg from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createAdminPool } from './setup/db.js';
 import { withTransactionClient } from '../apps/server/api/src/db/tx.js';
