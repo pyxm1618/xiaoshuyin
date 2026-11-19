@@ -2,7 +2,10 @@ import { readFileSync } from 'node:fs';
 import pg from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createAdminPool } from './setup/db.js';
-import { withProfessionalKnowledgeAdminTransaction } from '../apps/server/api/src/db/tx.js';
+import {
+  withProfessionalKnowledgeAdminTransaction,
+  withProfessionalKnowledgeAuthorityTransaction,
+} from '../apps/server/api/src/db/tx.js';
 import {
   editKnowledgeCandidate,
   propagateKnowledgeDependencyImpact,
@@ -287,6 +290,40 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       });
     }
 
+    // DB defense-in-depth: bypassing the service and inserting creator-authored
+    // review evidence through the controlled executor must still fail on the
+    // persisted Account/Person identity, regardless of reviewerIdentity text.
+    await expect(
+      withProfessionalKnowledgeAuthorityTransaction(
+        authority,
+        { accountId: creator.accountId },
+        async (tx) => {
+          await tx.query('SELECT app.set_professional_review_context($1)', [
+            creator.assignmentId,
+          ]);
+          await tx.query(
+            `INSERT INTO professional_knowledge_review_evidence
+               (knowledge_version_id, reviewed_revision, content_hash,
+                source_set_hash, reviewer_identity, reviewer_account_id,
+                reviewer_person_id, staff_assignment_ref, qualification_ref,
+                review_outcome, reviewed_at)
+             VALUES ($1,1,$2,$3,$4,$5,$6,$7,$8,'REVIEWED',$9)`,
+            [
+              knowledge.versionId,
+              knowledge.contentHash,
+              knowledge.sourceSetHash,
+              `spoofed-reviewer:${crypto.randomUUID()}`,
+              creator.accountId,
+              creator.personId,
+              creator.assignmentId,
+              `qualification:${creator.personId}`,
+              reviewedAt,
+            ]
+          );
+        }
+      )
+    ).rejects.toMatchObject({ code: '42501' });
+
     const afterDenied = await admin.query<{
       revision: number;
       review_state: string;
@@ -405,6 +442,38 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       )
     ).rejects.toMatchObject({ code: '42501' });
 
+    const twoStage = await seedKnowledge(creator, {
+      reviewState: 'PENDING',
+      validityState: 'UNKNOWN',
+    });
+    await expect(
+      withProfessionalKnowledgeAdminTransaction(
+        app,
+        { accountId: reviewer.accountId, assignmentId: reviewer.assignmentId },
+        async (tx) => {
+          await tx.query(
+            `UPDATE professional_knowledge_versions
+                SET review_state='CURRENT',
+                    validity_state='VALID',
+                    revision=revision+1
+              WHERE id=$1`,
+            [twoStage.versionId]
+          );
+          await tx.query(
+            'SELECT app.lock_professional_review_assignment_target($1,$2,$3)',
+            [reviewer.assignmentId, reviewer.accountId, reviewer.personId]
+          );
+          await tx.query(
+            `UPDATE professional_knowledge_versions
+                SET lifecycle_status='PUBLISHED',
+                    revision=revision+1
+              WHERE id=$1`,
+            [twoStage.versionId]
+          );
+        }
+      )
+    ).rejects.toMatchObject({ code: '42501' });
+
     const publishableShape = await seedKnowledge(creator, {
       reviewState: 'CURRENT',
       validityState: 'VALID',
@@ -441,10 +510,16 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       `SELECT id, lifecycle_status, review_state, validity_state, revision
          FROM professional_knowledge_versions
         WHERE id=ANY($1::uuid[])`,
-      [[pending.versionId, publishableShape.versionId]]
+      [[pending.versionId, twoStage.versionId, publishableShape.versionId]]
     );
     const byId = new Map(final.rows.map((row) => [row.id, row]));
     expect(byId.get(pending.versionId)).toMatchObject({
+      lifecycle_status: 'CANDIDATE',
+      review_state: 'PENDING',
+      validity_state: 'UNKNOWN',
+      revision: 1,
+    });
+    expect(byId.get(twoStage.versionId)).toMatchObject({
       lifecycle_status: 'CANDIDATE',
       review_state: 'PENDING',
       validity_state: 'UNKNOWN',
