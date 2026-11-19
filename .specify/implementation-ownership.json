@@ -317,6 +317,38 @@
       }
     },
     {
+      "id": "shared-generated-openapi-types",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/generated/openapi.d.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "004-case-participant-core",
+          "008-problem-formulation-core",
+          "foundation-remaining-remediation",
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "shared-generated-openapi-json",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/generated/openapi.json"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "004-case-participant-core",
+          "008-problem-formulation-core",
+          "foundation-remaining-remediation",
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
       "id": "common-core-goal-service",
       "match": {
         "kind": "EXACT",
@@ -375,7 +407,7 @@
         "path": "packages/domain/src/index.ts"
       },
       "ownership": {
-        "kind": "FEATURE",
+        "kind": "SHARED",
         "features": [
           "common-core-goal-confirmgoal-runtime"
         ]
@@ -388,7 +420,7 @@
         "path": "packages/authorization/src/authorize.ts"
       },
       "ownership": {
-        "kind": "FEATURE",
+        "kind": "SHARED",
         "features": [
           "common-core-goal-confirmgoal-runtime"
         ]
