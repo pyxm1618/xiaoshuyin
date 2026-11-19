@@ -1103,7 +1103,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
                   'actorPersonId',$2::text,
                   'respondedAt',now()::text
                 ),
-                $2,now(),dependency_refs,version
+                $2::uuid,now(),dependency_refs,version
            FROM problem_formulations
           WHERE id=$1`,
         [formulation.id, f.manager.personId]
