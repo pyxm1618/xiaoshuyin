@@ -6,12 +6,16 @@
  */
 export const PHONE_USE_CONTRACT_CONTENT_VERSION='phone-use-contract-v1' as const;
 export const PHONE_USE_CONTRACT_SOURCE_BLOB='97a8db200013746faff64230ab7cbf5f15b41615' as const;
-export const PHONE_USE_CONTRACT_CONTENT_META=Object.freeze({
+const PHONE_USE_CONTRACT_TRANSPORT_META=Object.freeze({
  contentVersion:PHONE_USE_CONTRACT_CONTENT_VERSION,
  sourceBlob:PHONE_USE_CONTRACT_SOURCE_BLOB,
- // Compatibility alias for the existing transport contract. Authority scope:
- // product-baseline freeze only; never Professional Reviewer approval.
  approved:true as const,
+});
+export const PHONE_USE_CONTRACT_CONTENT_META=Object.freeze({
+ ...PHONE_USE_CONTRACT_TRANSPORT_META,
+ // Product-baseline authority is intentionally distinct from Professional
+ // Reviewer approval. These fields are internal authority metadata, not part
+ // of the frozen public transport contract.
  productBaselineStatus:'FROZEN' as const,
  professionalReviewStatus:'NOT_APPROVED' as const,
 });
@@ -38,5 +42,5 @@ export const PHONE_USE_CONTRACT_FAQ=Object.freeze({
 });
 export function resolvePhoneUseContractContent(version:string){
  if(version!==PHONE_USE_CONTRACT_CONTENT_VERSION) throw Object.assign(new Error('PHONE_USE_CONTRACT_CONTENT_STALE'),{code:'PHONE_USE_CONTRACT_CONTENT_STALE'});
- return {meta:PHONE_USE_CONTRACT_CONTENT_META,quiz:PHONE_USE_CONTRACT_QUIZ,template:PHONE_USE_CONTRACT_TEMPLATE,examples:PHONE_USE_CONTRACT_EXAMPLES,faq:PHONE_USE_CONTRACT_FAQ};
+ return {meta:PHONE_USE_CONTRACT_TRANSPORT_META,authorityMeta:PHONE_USE_CONTRACT_CONTENT_META,quiz:PHONE_USE_CONTRACT_QUIZ,template:PHONE_USE_CONTRACT_TEMPLATE,examples:PHONE_USE_CONTRACT_EXAMPLES,faq:PHONE_USE_CONTRACT_FAQ};
 }
