@@ -46,6 +46,9 @@ const SLICE8_ADDED_OPERATION_IDS = [
   'correctProblemFormulation',
 ] as const;
 
+/** Common Core Goal runtime adds one reviewed Case business operation. */
+const GOAL_RUNTIME_ADDED_OPERATION_IDS = ['mutateGoal'] as const;
+
 /** The four reviewed Slice 12 Case business operations. */
 const SLICE12_ADDED_OPERATION_IDS = [
   'startDigitalUseAssessment',
@@ -62,6 +65,7 @@ const KNOWN_CASE_PATHS = [
   '/api/v1/cases',
   '/api/v1/cases/{id}',
   '/api/v1/cases/{id}/messages',
+  '/api/v1/cases/{id}/goals',
   '/api/v1/cases/{id}/participation-invites',
   '/api/v1/cases/{id}/switch-primary',
   '/api/v1/cases/{id}/problem-formulations/current',
@@ -126,6 +130,7 @@ describe('case primary switch scope (T730)', () => {
         'GET /api/v1/cases',
         'GET /api/v1/cases/{id}',
         'POST /api/v1/cases',
+        'POST /api/v1/cases/{id}/goals',
         'POST /api/v1/cases/{id}/messages',
         'POST /api/v1/cases/{id}/participation-invites',
         'POST /api/v1/cases/{id}/switch-primary',
@@ -160,23 +165,25 @@ describe('case primary switch scope (T730)', () => {
     }
     expect(BASE_CASE_OPERATION_IDS).toHaveLength(4);
 
-    // Final = 13, exact equality (contains/>= would hide an extra operation).
+    // Final = 14, exact equality (contains/>= would hide an extra operation).
     expect(businessOperationIds).toEqual(
       [
         ...BASE_CASE_OPERATION_IDS,
         ...SLICE7_ADDED_OPERATION_IDS,
         ...SLICE8_ADDED_OPERATION_IDS,
         ...SLICE12_ADDED_OPERATION_IDS,
+        ...GOAL_RUNTIME_ADDED_OPERATION_IDS,
       ].sort()
     );
-    expect(businessOperationIds).toHaveLength(13);
+    expect(businessOperationIds).toHaveLength(14);
 
     // Slice 7 delta = exactly 1.
     const slice7Delta = businessOperationIds.filter(
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice7Delta).toEqual(['switchPrimaryCase']);
     expect(slice7Delta).toHaveLength(1);
@@ -185,7 +192,8 @@ describe('case primary switch scope (T730)', () => {
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice8Delta.sort()).toEqual([...SLICE8_ADDED_OPERATION_IDS].sort());
     expect(slice8Delta).toHaveLength(4);
@@ -194,10 +202,17 @@ describe('case primary switch scope (T730)', () => {
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice12Delta.sort()).toEqual([...SLICE12_ADDED_OPERATION_IDS].sort());
     expect(slice12Delta).toHaveLength(4);
+
+    const goalDelta = businessOperationIds.filter((id) =>
+      (GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+    );
+    expect(goalDelta).toEqual(['mutateGoal']);
+    expect(goalDelta).toHaveLength(1);
 
     // Unexpected Case business operations = 0.
     const unexpected = businessOperationIds.filter(
@@ -205,7 +220,8 @@ describe('case primary switch scope (T730)', () => {
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(unexpected).toEqual([]);
   });

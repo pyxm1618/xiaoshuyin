@@ -8,9 +8,16 @@ import {
   commandHeaders,
   createFamily,
   loginWithLabel,
+  revokeConsent,
   type LoginResult,
 } from '../setup/api.js';
 import { createCase } from '../setup/participation.js';
+import { getCurrentNoticeHash } from '@xiaoshuyin/compliance';
+import {
+  runSafetyPrecheck,
+  type ApprovedPolicyIdentity,
+} from '@xiaoshuyin/domain';
+import { enterSafetyHold } from '../../apps/server/api/src/safety/enter-safety-hold.js';
 
 interface Fixture {
   manager: LoginResult;
@@ -50,6 +57,7 @@ function a2003Response() {
 describe('Slice 12 canonical no-model production orchestration', () => {
   let app: FastifyInstance;
   let admin: pg.Pool;
+  let appPool: pg.Pool;
   let migrator: pg.Client;
   let fetchSpy: ReturnType<typeof vi.spyOn>;
   let networkRouteTruthCalls = 0;
@@ -79,6 +87,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     app = await buildApp({ env: noModelEnv });
     await app.ready();
     admin = createAdminPool();
+    appPool = new pg.Pool({ connectionString: process.env['DATABASE_URL'] });
     migrator = new pg.Client({ connectionString: process.env['MIGRATION_DATABASE_URL'] });
     await migrator.connect();
 
@@ -105,6 +114,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
           AND feature_contract_revision='v1'`
     ).catch(() => undefined);
     await migrator.end().catch(() => undefined);
+    await appPool.end().catch(() => undefined);
     await admin.end();
     await app.close();
     fetchSpy.mockRestore();
@@ -225,6 +235,97 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     });
     expect(refreshed.statusCode, refreshed.body).toBe(200);
     return track(refreshed.json());
+  }
+
+  function supportedGoalDependencies(formulation: any) {
+    const supported = (formulation.dependencyRefs ?? []).filter(
+      (dependency: any) =>
+        dependency.type === 'EVIDENCE' || dependency.type === 'CONSENT'
+    );
+    expect(supported.length).toBeGreaterThan(0);
+    return supported;
+  }
+
+  async function confirmGoalCompatibleFormulation(f: Fixture, scene: any) {
+    const current = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/problem-formulations/current`,
+      headers: auth(f.manager.token),
+    });
+    expect(current.statusCode, current.body).toBe(200);
+    const formulation = current.json().current;
+    expect(formulation?.status).toBe('PRESENTED');
+    expect(
+      formulation.dependencyRefs.some(
+        (dependency: any) => dependency.type === 'PACKAGE'
+      )
+    ).toBe(true);
+
+    const corrected = await app.inject({
+      method: 'POST',
+      url:
+        `/api/v1/cases/${f.caseId}/problem-formulations/` +
+        formulation.version +
+        '/corrections',
+      headers: {
+        ...commandHeaders(
+          f.manager.token,
+          `goal-v1-pf-correction-${crypto.randomUUID()}`
+        ),
+        'if-match': `"case-v${scene.caseVersion}"`,
+      },
+      payload: {
+        changes: {
+          dependencyRefs: supportedGoalDependencies(formulation),
+        },
+        note: 'Use only dependencies that Goal V1 can authoritatively revalidate.',
+      },
+    });
+    expect(corrected.statusCode, corrected.body).toBe(201);
+    const correctedBody = corrected.json();
+    expect(correctedBody.current?.status).toBe('PRESENTED');
+    expect(
+      correctedBody.current?.dependencyRefs.every(
+        (dependency: any) =>
+          dependency.type === 'EVIDENCE' || dependency.type === 'CONSENT'
+      )
+    ).toBe(true);
+
+    const confirmed = await app.inject({
+      method: 'POST',
+      url:
+        `/api/v1/cases/${f.caseId}/problem-formulations/` +
+        correctedBody.current.version +
+        '/confirm',
+      headers: {
+        ...commandHeaders(
+          f.manager.token,
+          `goal-v1-pf-confirm-${crypto.randomUUID()}`
+        ),
+        'if-match': `"case-v${correctedBody.caseVersion}"`,
+      },
+      payload: {},
+    });
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json().current?.status).toBe('CONFIRMED');
+
+    const refreshed = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/scene`,
+      headers: auth(f.manager.token),
+    });
+    expect(refreshed.statusCode, refreshed.body).toBe(200);
+    return track(refreshed.json());
+  }
+
+  async function enterA2004ForGoal(f: Fixture) {
+    let scene = await triage(f, true, 'A', 'A');
+    expectCurrent(scene, 'A2003');
+    scene = await confirmGoalCompatibleFormulation(f, scene);
+    expectCurrent(scene, 'A2003');
+    scene = await respond(f, scene, 'A2003', a2003Response(), 'goal-a2003');
+    expectCurrent(scene, 'A2004');
+    return scene;
   }
 
   async function enterA2004(f: Fixture) {
@@ -452,4 +553,1046 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     expect(persistedNode.rows[0].n).toBe(0);
     expect(networkRouteTruthCalls).toBe(0);
   });
+
+  async function finishA2010ForGoal(f: Fixture) {
+    let scene = await enterA2004ForGoal(f);
+    scene = await respond(f, scene, 'A2004', { decision: 'YES' }, 'goal-a2004');
+    scene = await respond(f, scene, 'A2005', { decision: 'WILLING' }, 'goal-a2005');
+    scene = await respond(
+      f,
+      scene,
+      'A2007',
+      { timeline: { reviewDate: '2026-12-01', cadence: 'weekly' } },
+      'goal-a2007'
+    );
+    scene = await respond(
+      f,
+      scene,
+      'A2010',
+      { action: 'GENERATE_SUMMARY' },
+      'goal-a2010'
+    );
+    expect(scene.nodes.find((n: any) => n.nodeCode === 'A2010')?.status).toBe('COMPLETED');
+    return scene;
+  }
+
+  async function currentGoalFormulation(f: Fixture) {
+    const current = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId + '/problem-formulations/current',
+      headers: auth(f.manager.token),
+    });
+    expect(current.statusCode, current.body).toBe(200);
+    expect(current.json().current?.status).toBe('CONFIRMED');
+    return current.json().current;
+  }
+
+  function goalSavePayload(formulation: any) {
+    const baseline =
+      formulation.evidenceRefs?.[0] ??
+      formulation.primaryProblem?.evidenceRefs?.[0];
+    expect(baseline).toBeTruthy();
+    expect(formulation.dependencyRefs?.length).toBeGreaterThan(0);
+    return {
+      operation: 'SAVE',
+      problemFormulationId: formulation.id,
+      problemFormulationVersion: formulation.version,
+      baselineRefs: [baseline],
+      targetDescription:
+        'Reduce disruptive evening device use while preserving required study contact.',
+      observationMethod:
+        'Track bedtime, conflict intensity, and required-study access.',
+      observationWindow: '14 days',
+      protectiveConditions: [
+        'Preserve schoolwork and necessary family contact.',
+      ],
+      parentActions: [
+        'Use one agreed transition prompt and avoid escalating conflict.',
+      ],
+      reviewPoint: 'Review after 14 days.',
+      dependencyRefs: formulation.dependencyRefs,
+      participantResponsibilities: [],
+    };
+  }
+
+  async function saveGoalFor(
+    f: Fixture,
+    caseVersion: number,
+    formulation: any,
+    key: string,
+    extra: Record<string, unknown> = {}
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/v1/cases/' + f.caseId + '/goals',
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': key,
+        'if-match': '"case-v' + caseVersion + '"',
+      },
+      payload: {
+        ...goalSavePayload(formulation),
+        ...extra,
+      },
+    });
+  }
+
+  async function confirmGoalFor(
+    f: Fixture,
+    caseVersion: number,
+    goalId: string,
+    goalVersion: number,
+    key: string,
+    extra: Record<string, unknown> = {}
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/v1/cases/' + f.caseId + '/goals',
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': key,
+        'if-match': '"case-v' + caseVersion + '"',
+      },
+      payload: {
+        operation: 'CONFIRM',
+        goalId,
+        goalVersion,
+        ...extra,
+      },
+    });
+  }
+
+  it.each([
+    ['POLICY', { type: 'POLICY', key: 'policy', version: 'v1' }],
+    ['PACKAGE', { type: 'PACKAGE', key: 'package', version: 'v1' }],
+    ['CONTENT_VERSION', { type: 'CONTENT_VERSION', key: 'content', version: 'v1' }],
+  ] as const)(
+    'rejects Goal SAVE with unsupported %s dependency at the transport boundary',
+    async (type, dependency) => {
+      const f = await fixture('goal-unsupported-' + type.toLowerCase());
+      let scene = await triage(f, true, 'A', 'A');
+      scene = await confirmCurrentFormulation(f, scene);
+      const formulation = await currentGoalFormulation(f);
+      const rejected = await saveGoalFor(
+        f,
+        scene.caseVersion,
+        formulation,
+        'goal-save-unsupported-' + type.toLowerCase() + '-' + crypto.randomUUID(),
+        { dependencyRefs: [...formulation.dependencyRefs, dependency] }
+      );
+      expect(rejected.statusCode, rejected.body).toBe(422);
+    }
+  );
+
+  it('fails closed when the current Problem Formulation contains an unsupported dependency', async () => {
+    const f = await fixture('goal-pf-unsupported');
+    let scene = await triage(f, true, 'A', 'A');
+    scene = await confirmCurrentFormulation(f, scene);
+    const formulation = await currentGoalFormulation(f);
+    expect(
+      formulation.dependencyRefs.some(
+        (dependency: any) => dependency.type === 'PACKAGE'
+      )
+    ).toBe(true);
+
+    const rejected = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-pf-unsupported-' + crypto.randomUUID(),
+      { dependencyRefs: supportedGoalDependencies(formulation) }
+    );
+    expect(rejected.statusCode, rejected.body).toBe(422);
+    expect(rejected.json().code).toBe('VALIDATION_ERROR');
+
+    const persisted = await admin.query(
+      'SELECT count(*)::int AS n FROM goals WHERE case_id=$1',
+      [f.caseId]
+    );
+    expect(persisted.rows[0].n).toBe(0);
+
+    const kase = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(kase.json().phase).toBe('GOALS');
+  });
+
+  it('continues the canonical flow through SAVE and atomic ConfirmGoal to PLANNING', async () => {
+    const f = await fixture('goal-happy');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+
+    const strictSave = goalSavePayload(formulation);
+    const { participantResponsibilities: _omitted, ...missingParticipantField } =
+      strictSave;
+    const strictRejected = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cases/' + f.caseId + '/goals',
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': 'goal-save-missing-participant-field-' + crypto.randomUUID(),
+        'if-match': '"case-v' + scene.caseVersion + '"',
+      },
+      payload: missingParticipantField,
+    });
+    expect(strictRejected.statusCode, strictRejected.body).toBe(422);
+
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-happy-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+    expect(saved.json()).toMatchObject({
+      operation: 'SAVE',
+      phase: 'GOALS',
+      confirmationState: 'UNCONFIRMED',
+    });
+    const saveBody = saved.json();
+
+    const savedRow = await admin.query(
+      `SELECT saved_by_person_id,confirmation_state,
+              confirmed_by_person_id,confirmed_at
+         FROM goals
+        WHERE case_id=$1 AND goal_id=$2 AND version=$3`,
+      [f.caseId, saveBody.goalId, saveBody.goalVersion]
+    );
+    expect(savedRow.rows[0]).toMatchObject({
+      saved_by_person_id: f.manager.personId,
+      confirmation_state: 'UNCONFIRMED',
+      confirmed_by_person_id: null,
+      confirmed_at: null,
+    });
+
+    const afterSave = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(afterSave.json().phase).toBe('GOALS');
+
+    const missingOperation = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cases/' + f.caseId + '/goals',
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': 'goal-missing-operation-' + crypto.randomUUID(),
+        'if-match': '"case-v' + saveBody.caseVersion + '"',
+      },
+      payload: {
+        goalId: saveBody.goalId,
+        goalVersion: saveBody.goalVersion,
+      },
+    });
+    expect(missingOperation.statusCode).toBe(422);
+
+    const missingGoal = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      crypto.randomUUID(),
+      1,
+      'goal-confirm-missing-' + crypto.randomUUID()
+    );
+    expect(missingGoal.statusCode).toBe(409);
+    expect(missingGoal.json().code).toBe('CASE_PHASE_CONFLICT');
+
+    const wrongGoalVersion = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion + 1,
+      'goal-confirm-wrong-version-' + crypto.randomUUID()
+    );
+    expect(wrongGoalVersion.statusCode).toBe(409);
+    expect(wrongGoalVersion.json().code).toBe('CASE_PHASE_CONFLICT');
+
+    const mutation = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      'goal-confirm-mutation-' + crypto.randomUUID(),
+      { targetDescription: 'client mutation forbidden' }
+    );
+    expect(mutation.statusCode).toBe(422);
+
+    const stale = await confirmGoalFor(
+      f,
+      scene.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      'goal-confirm-stale-' + crypto.randomUUID()
+    );
+    expect(stale.statusCode, stale.body).toBe(409);
+    expect(stale.json().code).toBe('STALE_CASE_VERSION');
+
+    const confirmKey = 'goal-confirm-happy-' + crypto.randomUUID();
+    const confirmed = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      confirmKey
+    );
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json()).toMatchObject({
+      operation: 'CONFIRM',
+      phase: 'PLANNING',
+      confirmationState: 'CONFIRMED',
+      confirmedBy: f.manager.personId,
+    });
+
+    const replay = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      confirmKey
+    );
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual(confirmed.json());
+
+    const mismatch = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion + 1,
+      confirmKey
+    );
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+
+    const duplicateNewKey = await confirmGoalFor(
+      f,
+      confirmed.json().caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      'goal-confirm-duplicate-new-key-' + crypto.randomUUID()
+    );
+    expect(duplicateNewKey.statusCode).toBe(409);
+    expect(duplicateNewKey.json().code).toBe('CASE_PHASE_CONFLICT');
+
+    const duplicateTraces = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM case_events
+           WHERE case_id=$1 AND event_type='CASE_GOAL_CONFIRMED') AS events,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE family_id=$2
+             AND resource_type='GOAL'
+             AND resource_id=$3
+             AND event_type='GOAL_CONFIRMED') AS audits`,
+      [f.caseId, f.familyId, saveBody.goalId]
+    );
+    expect(duplicateTraces.rows[0]).toEqual({ events: 1, audits: 1 });
+
+    const afterConfirm = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(afterConfirm.json().phase).toBe('PLANNING');
+
+    const secondEndpoint = await app.inject({
+      method: 'POST',
+      url:
+        '/api/v1/cases/' +
+        f.caseId +
+        '/goals/' +
+        saveBody.goalId +
+        '/confirm',
+      headers: commandHeaders(
+        f.manager.token,
+        'goal-forbidden-second-endpoint'
+      ),
+      payload: {},
+    });
+    expect(secondEndpoint.statusCode).toBe(404);
+  });
+
+  it('rejects ConfirmGoal while A2010 is incomplete and leaves the Case in GOALS', async () => {
+    const f = await fixture('goal-a2010-incomplete');
+    let scene = await triage(f, true, 'A', 'A');
+    scene = await confirmGoalCompatibleFormulation(f, scene);
+    expect(scene.currentNode?.nodeCode).toBe('A2003');
+    const formulation = await currentGoalFormulation(f);
+
+    const saveKey = 'goal-save-incomplete-' + crypto.randomUUID();
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      saveKey
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    const replay = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      saveKey
+    );
+    expect(replay.statusCode, replay.body).toBe(201);
+    expect(replay.json()).toEqual(saved.json());
+
+    const mismatch = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      saveKey,
+      { reviewPoint: 'Different replay payload.' }
+    );
+    expect(mismatch.statusCode, mismatch.body).toBe(409);
+    expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+
+    const result = await confirmGoalFor(
+      f,
+      saved.json().caseVersion,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-incomplete-' + crypto.randomUUID()
+    );
+    expect(result.statusCode, result.body).toBe(409);
+    expect(result.json().code).toBe('CASE_PHASE_CONFLICT');
+
+    const kase = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(kase.json().phase).toBe('GOALS');
+  });
+
+  it('re-checks primary authority after SAVE', async () => {
+    const f = await fixture('goal-primary-change');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-primary-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode).toBe(201);
+
+    const other = await createCase(
+      app,
+      f.manager.token,
+      'goal-primary-other'
+    );
+    expect(other.statusCode, other.body).toBe(201);
+
+    const switched = await app.inject({
+      method: 'POST',
+      url:
+        '/api/v1/cases/' +
+        other.json().id +
+        '/switch-primary',
+      headers: commandHeaders(f.manager.token, 'goal-switch-primary'),
+      payload: {
+        reason: 'verify current advancement authority',
+        expectedPrimaryCaseId: f.caseId,
+        expectedPrimaryVersion: saved.json().caseVersion,
+      },
+    });
+    expect(switched.statusCode, switched.body).toBe(200);
+
+    const rejected = await confirmGoalFor(
+      f,
+      switched.json().previousPrimary.version,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-old-primary-' + crypto.randomUUID()
+    );
+    expect(rejected.statusCode, rejected.body).toBe(409);
+    expect(rejected.json().code).toBe('CASE_NOT_PRIMARY');
+
+    const kase = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(kase.json().phase).toBe('GOALS');
+  });
+
+  it('converges concurrent ConfirmGoal attempts to one authoritative confirmation', async () => {
+    const f = await fixture('goal-concurrent');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-concurrent-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode).toBe(201);
+
+    const [a, b] = await Promise.all([
+      confirmGoalFor(
+        f,
+        saved.json().caseVersion,
+        saved.json().goalId,
+        saved.json().goalVersion,
+        'goal-confirm-concurrent-a-' + crypto.randomUUID()
+      ),
+      confirmGoalFor(
+        f,
+        saved.json().caseVersion,
+        saved.json().goalId,
+        saved.json().goalVersion,
+        'goal-confirm-concurrent-b-' + crypto.randomUUID()
+      ),
+    ]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+
+    const rows = await admin.query(
+      'SELECT confirmation_state, count(*)::int AS n ' +
+        'FROM goals WHERE case_id=$1 GROUP BY confirmation_state',
+      [f.caseId]
+    );
+    expect(rows.rows).toEqual([
+      expect.objectContaining({
+        confirmation_state: 'CONFIRMED',
+        n: 1,
+      }),
+    ]);
+
+    const state = await admin.query(
+      `SELECT phase,version FROM cases WHERE id=$1`,
+      [f.caseId]
+    );
+    expect(state.rows[0]).toEqual({
+      phase: 'PLANNING',
+      version: saved.json().caseVersion + 1,
+    });
+
+    const traces = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM case_events
+           WHERE case_id=$1 AND event_type='CASE_GOAL_CONFIRMED') AS events,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE family_id=$2
+             AND resource_type='GOAL'
+             AND resource_id=$3
+             AND event_type='GOAL_CONFIRMED') AS audits`,
+      [f.caseId, f.familyId, saved.json().goalId]
+    );
+    expect(traces.rows[0]).toEqual({ events: 1, audits: 1 });
+  });
+
+  it('fails closed on Safety and Compliance at confirmation time', async () => {
+    const safety = await fixture('goal-safety');
+    let scene = await finishA2010ForGoal(safety);
+    let formulation = await currentGoalFormulation(safety);
+    let saved = await saveGoalFor(
+      safety,
+      scene.caseVersion,
+      formulation,
+      'goal-save-safety-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode).toBe(201);
+    const safetyIdentity: ApprovedPolicyIdentity = {
+      policyRef: 'policy.goal-confirm-test',
+      policyVersion: '1',
+      ruleRef: 'rule.goal-confirm-test',
+      ruleVersion: '1',
+    };
+    const safetyDecision = runSafetyPrecheck({
+      case: {
+        caseId: safety.caseId,
+        status: 'OPEN',
+        version: saved.json().caseVersion,
+      },
+      trustedPolicyIdentity: safetyIdentity,
+      approvedEvaluation: {
+        outcome: 'HOLD_REQUIRED',
+        ...safetyIdentity,
+        riskCategoryRef: 'GOAL_CONFIRM_TEST',
+        evidenceRefs: [{ kind: 'EVIDENCE', ref: 'goal-confirm-test' }],
+      },
+    });
+    const held = await enterSafetyHold(appPool, {
+      accountId: safety.manager.accountId,
+      personId: safety.manager.personId,
+      caseId: safety.caseId,
+      idempotencyKey: 'goal-safety-hold-' + crypto.randomUUID(),
+      expectedCaseVersion: saved.json().caseVersion,
+      decision: safetyDecision,
+      trustedPolicyIdentity: safetyIdentity,
+    });
+    expect(held.status).toBe(200);
+    let result = await confirmGoalFor(
+      safety,
+      (held.body as { version: number }).version,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-safety-' + crypto.randomUUID()
+    );
+    expect(result.statusCode).toBe(409);
+    expect(result.json().code).toBe('SAFETY_HOLD_BLOCKED');
+
+    const compliance = await fixture('goal-compliance');
+    scene = await finishA2010ForGoal(compliance);
+    formulation = await currentGoalFormulation(compliance);
+    saved = await saveGoalFor(
+      compliance,
+      scene.caseVersion,
+      formulation,
+      'goal-save-compliance-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode).toBe(201);
+    await admin.query(
+      "UPDATE person_compliance_profiles " +
+        "SET age_band='UNKNOWN',minor_mode=false," +
+        "guardian_person_id=NULL,guardian_consent_record_id=NULL," +
+        "guardian_consent_version=NULL,verified_source='SELF_STATEMENT' " +
+        'WHERE person_id=$1',
+      [compliance.manager.personId]
+    );
+    result = await confirmGoalFor(
+      compliance,
+      saved.json().caseVersion,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-compliance-' + crypto.randomUUID()
+    );
+    expect(result.statusCode).toBe(409);
+    expect(result.json().code).toBe('COMPLIANCE_BLOCKED');
+  });
+
+
+  it.each([
+    ['NEEDS_REVIEW', 'CONFIRMED'],
+    ['CURRENT', 'PRESENTED'],
+  ] as const)(
+    'rejects ConfirmGoal when the persisted formulation gate is %s / %s',
+    async (reviewState, status) => {
+      const f = await fixture(
+        'goal-pf-gate-' + reviewState.toLowerCase() + '-' + status.toLowerCase()
+      );
+      const scene = await finishA2010ForGoal(f);
+      const formulation = await currentGoalFormulation(f);
+      const saved = await saveGoalFor(
+        f,
+        scene.caseVersion,
+        formulation,
+        'goal-save-pf-gate-' + crypto.randomUUID()
+      );
+      expect(saved.statusCode, saved.body).toBe(201);
+
+      if (status === 'PRESENTED') {
+        await admin.query(
+          "UPDATE problem_formulations " +
+            "SET status='PRESENTED',review_state=$2," +
+            "confirmed_by_person_id=NULL,confirmed_at=NULL,updated_at=now() " +
+            "WHERE id=$1",
+          [formulation.id, reviewState]
+        );
+      } else {
+        await admin.query(
+          'UPDATE problem_formulations SET review_state=$2,updated_at=now() WHERE id=$1',
+          [formulation.id, reviewState]
+        );
+      }
+
+      const blocked = await confirmGoalFor(
+        f,
+        saved.json().caseVersion,
+        saved.json().goalId,
+        saved.json().goalVersion,
+        'goal-confirm-pf-gate-' + crypto.randomUUID()
+      );
+      expect(blocked.statusCode, blocked.body).toBe(409);
+      expect(blocked.json().code).toBe('CASE_PHASE_CONFLICT');
+
+      const goal = await admin.query(
+        "SELECT confirmation_state FROM goals " +
+          "WHERE case_id=$1 AND lifecycle_status='ACTIVE'",
+        [f.caseId]
+      );
+      expect(goal.rows[0].confirmation_state).toBe('UNCONFIRMED');
+    }
+  );
+
+  it('rejects a saved Goal after a newer current formulation supersedes its exact binding', async () => {
+    const f = await fixture('goal-stale-formulation');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-stale-formulation-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    await admin.query('BEGIN');
+    try {
+      await admin.query(
+        "UPDATE problem_formulations SET status='SUPERSEDED',updated_at=now() WHERE id=$1",
+        [formulation.id]
+      );
+      await admin.query(
+        `INSERT INTO problem_formulations (
+           family_id,case_id,version,status,review_state,
+           primary_problem,key_factors,evidence_refs,unknowns,conflicts,
+           scene_fit,alternative_explanations,reassessment_conditions,
+           exit_conditions,user_response,confirmed_by_person_id,confirmed_at,
+           dependency_refs,supersedes_version
+         )
+         SELECT family_id,case_id,version+1,'CONFIRMED','CURRENT',
+                primary_problem,key_factors,evidence_refs,unknowns,conflicts,
+                scene_fit,alternative_explanations,reassessment_conditions,
+                exit_conditions,
+                jsonb_build_object(
+                  'kind','CONFIRM',
+                  'actorPersonId',$2::text,
+                  'respondedAt',now()::text
+                ),
+                $2::uuid,now(),dependency_refs,version
+           FROM problem_formulations
+          WHERE id=$1`,
+        [formulation.id, f.manager.personId]
+      );
+      await admin.query('COMMIT');
+    } catch (error) {
+      await admin.query('ROLLBACK');
+      throw error;
+    }
+
+    const blocked = await confirmGoalFor(
+      f,
+      saved.json().caseVersion,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-stale-formulation-' + crypto.randomUUID()
+    );
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json().code).toBe('CASE_PHASE_CONFLICT');
+  });
+
+  it('supersedes an unconfirmed Goal version and rejects confirmation of the stale predecessor', async () => {
+    const f = await fixture('goal-successor');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+
+    const first = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-successor-v1-' + crypto.randomUUID()
+    );
+    expect(first.statusCode, first.body).toBe(201);
+
+    const second = await saveGoalFor(
+      f,
+      first.json().caseVersion,
+      formulation,
+      'goal-save-successor-v2-' + crypto.randomUUID(),
+      { reviewPoint: 'Review after 10 days.' }
+    );
+    expect(second.statusCode, second.body).toBe(201);
+    expect(second.json().goalId).toBe(first.json().goalId);
+    expect(second.json().goalVersion).toBe(first.json().goalVersion + 1);
+
+    const stale = await confirmGoalFor(
+      f,
+      second.json().caseVersion,
+      first.json().goalId,
+      first.json().goalVersion,
+      'goal-confirm-stale-version-' + crypto.randomUUID()
+    );
+    expect(stale.statusCode, stale.body).toBe(409);
+    expect(stale.json().code).toBe('CASE_PHASE_CONFLICT');
+
+    const versions = await admin.query(
+      'SELECT version,lifecycle_status,confirmation_state ' +
+        'FROM goals WHERE case_id=$1 AND goal_id=$2 ORDER BY version',
+      [f.caseId, first.json().goalId]
+    );
+    expect(versions.rows).toEqual([
+      {
+        version: first.json().goalVersion,
+        lifecycle_status: 'SUPERSEDED',
+        confirmation_state: 'UNCONFIRMED',
+      },
+      {
+        version: second.json().goalVersion,
+        lifecycle_status: 'ACTIVE',
+        confirmation_state: 'UNCONFIRMED',
+      },
+    ]);
+  });
+
+  it('rolls back Goal confirmation and Case advancement when confirmation audit fails', async () => {
+    const f = await fixture('goal-atomic-rollback');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-atomic-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    await admin.query(`
+      CREATE OR REPLACE FUNCTION goal_runtime_fail_confirm_audit()
+      RETURNS trigger LANGUAGE plpgsql AS $goal$
+      BEGIN
+        IF NEW.event_type = 'GOAL_CONFIRMED'
+           AND NEW.family_id = '${f.familyId}'::uuid THEN
+          RAISE EXCEPTION 'GOAL_RUNTIME_CONFIRM_AUDIT_FAILURE';
+        END IF;
+        RETURN NEW;
+      END $goal$;
+      DROP TRIGGER IF EXISTS goal_runtime_fail_confirm_audit_trigger
+        ON business_audit_events;
+      CREATE TRIGGER goal_runtime_fail_confirm_audit_trigger
+        BEFORE INSERT ON business_audit_events
+        FOR EACH ROW EXECUTE FUNCTION goal_runtime_fail_confirm_audit();
+    `);
+
+    try {
+      const failed = await confirmGoalFor(
+        f,
+        saved.json().caseVersion,
+        saved.json().goalId,
+        saved.json().goalVersion,
+        'goal-confirm-atomic-failure-' + crypto.randomUUID()
+      );
+      expect(failed.statusCode, failed.body).toBe(500);
+      expect(failed.json().code).toBe('INTERNAL_ERROR');
+
+      const kase = await app.inject({
+        method: 'GET',
+        url: '/api/v1/cases/' + f.caseId,
+        headers: auth(f.manager.token),
+      });
+      expect(kase.statusCode).toBe(200);
+      expect(kase.json()).toMatchObject({
+        phase: 'GOALS',
+        version: saved.json().caseVersion,
+      });
+
+      const goal = await admin.query(
+        'SELECT confirmation_state,confirmed_by_person_id,confirmed_at ' +
+          'FROM goals WHERE case_id=$1 AND lifecycle_status=\'ACTIVE\'',
+        [f.caseId]
+      );
+      expect(goal.rows[0]).toMatchObject({
+        confirmation_state: 'UNCONFIRMED',
+        confirmed_by_person_id: null,
+        confirmed_at: null,
+      });
+
+      const traces = await admin.query(
+        `SELECT
+           (SELECT count(*)::int FROM case_events
+             WHERE case_id=$1 AND event_type='CASE_GOAL_CONFIRMED') AS events,
+           (SELECT count(*)::int FROM business_audit_events
+             WHERE family_id=$2 AND event_type='GOAL_CONFIRMED') AS audits`,
+        [f.caseId, f.familyId]
+      );
+      expect(traces.rows[0]).toEqual({ events: 0, audits: 0 });
+    } finally {
+      await admin.query(
+        `DROP TRIGGER IF EXISTS goal_runtime_fail_confirm_audit_trigger
+           ON business_audit_events;
+         DROP FUNCTION IF EXISTS goal_runtime_fail_confirm_audit()`
+      );
+    }
+  });
+
+  it.each([false, true])('revalidates a pinned Goal Consent dependency after SAVE (revoked=%s)', async (revoked) => {
+    const f = await fixture(revoked ? 'goal-consent-revoked-dependency' : 'goal-consent-current-dependency');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const noticeHash = getCurrentNoticeHash();
+    // An unbound grant affects neither the actor's Compliance profile nor the formulation.
+    const { rows: [grant] } = await admin.query(
+      `WITH request AS (
+         INSERT INTO guardian_consent_requests
+           (family_id,guardian_person_id,declared_age_band,notice_version,notice_hash,status,expires_at,completed_at)
+         VALUES ($1,$2,'UNDER_14','v1',$4,'GRANTED',now()+interval '1 hour',now())
+         RETURNING id
+       )
+       INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,
+          version,onboarding_request_id,notice_version,notice_hash,policy_version,evidence)
+       SELECT $1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,id,'v1',$4,'v1',$5::jsonb
+         FROM request RETURNING id`,
+      [f.familyId, f.manager.personId, f.manager.accountId, noticeHash, JSON.stringify({
+        channel: 'TEST',
+        accepted_text_hash: 'b'.repeat(64),
+        declared_age_band: 'UNDER_14',
+        client_ip_hash: 'c'.repeat(64),
+        user_agent_hash: 'd'.repeat(64),
+      })]
+    );
+    const dependencyRefs = [
+      ...formulation.dependencyRefs,
+      { type: 'CONSENT', id: grant.id, version: 1 },
+    ];
+    const saved = await saveGoalFor(f, scene.caseVersion, formulation, crypto.randomUUID(), { dependencyRefs });
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    if (revoked) {
+      const revocation = await revokeConsent(app, f.manager.token, crypto.randomUUID(), grant.id);
+      expect(revocation.statusCode, revocation.body).toBe(200);
+      const { rows } = await admin.query(
+        "SELECT decision,version FROM consent_records WHERE id=$1 OR supersedes_id=$1 ORDER BY version",
+        [grant.id]
+      );
+      expect(rows).toEqual([
+        { decision: 'GRANTED', version: 1 },
+        { decision: 'REVOKED', version: 2 },
+      ]);
+    }
+
+    const { caseVersion, goalId, goalVersion } = saved.json();
+    const confirmation = await confirmGoalFor(f, caseVersion, goalId, goalVersion, crypto.randomUUID());
+    expect(confirmation.statusCode, confirmation.body).toBe(revoked ? 409 : 200);
+    if (revoked) {
+      expect(confirmation.json().code).toBe('CONSENT_BLOCKED');
+      const resave = await saveGoalFor(f, caseVersion, formulation, crypto.randomUUID(), { dependencyRefs });
+      expect(resave.statusCode, resave.body).toBe(409);
+      expect(resave.json().code).toBe('CONSENT_BLOCKED');
+
+      const { rows } = await admin.query(
+        `SELECT c.phase,c.version,g.confirmation_state
+           FROM cases c JOIN goals g ON g.case_id=c.id
+          WHERE c.id=$1 AND g.goal_id=$2`,
+        [f.caseId, goalId]
+      );
+      expect(rows).toEqual([{ phase: 'GOALS', version: caseVersion, confirmation_state: 'UNCONFIRMED' }]);
+    }
+  });
+
+  it('re-checks Authorization and Consent at confirmation time', async () => {
+    const f = await fixture('goal-auth-consent');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-auth-consent-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    const nonManager = await loginWithLabel(
+      app,
+      'goal-non-manager-' + crypto.randomUUID()
+    );
+    await admin.query(
+      'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2)',
+      [f.familyId, nonManager.personId]
+    );
+    const denied = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cases/' + f.caseId + '/goals',
+      headers: {
+        ...auth(nonManager.token),
+        'idempotency-key': 'goal-auth-denied-' + crypto.randomUUID(),
+        'if-match': '"case-v' + saved.json().caseVersion + '"',
+      },
+      payload: {
+        operation: 'CONFIRM',
+        goalId: saved.json().goalId,
+        goalVersion: saved.json().goalVersion,
+      },
+    });
+    expect(denied.statusCode).toBe(404);
+    expect(denied.json().code).toBe('CASE_NOT_FOUND');
+
+    const guardian = await loginWithLabel(
+      app,
+      'goal-guardian-' + crypto.randomUUID()
+    );
+    await admin.query(
+      'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2)',
+      [f.familyId, guardian.personId]
+    );
+
+    const noticeHash = getCurrentNoticeHash();
+    const request = await admin.query(
+      `INSERT INTO guardian_consent_requests
+         (family_id,guardian_person_id,subject_person_id,declared_age_band,
+          notice_version,notice_hash,status,expires_at,completed_at)
+       VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',
+               now()+interval '1 hour',now())
+       RETURNING id`,
+      [f.familyId, guardian.personId, f.manager.personId, noticeHash]
+    );
+    const consent = await admin.query(
+      `INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,
+          version,onboarding_request_id,bound_person_id,bound_at,
+          notice_version,notice_hash,policy_version,evidence)
+       VALUES ($1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,$4,$5,now(),
+               'v1',$6,'v1',$7::jsonb)
+       RETURNING id`,
+      [
+        f.familyId,
+        guardian.personId,
+        guardian.accountId,
+        request.rows[0].id,
+        f.manager.personId,
+        noticeHash,
+        JSON.stringify({
+          channel: 'TEST',
+          accepted_text_hash: 'b'.repeat(64),
+          declared_age_band: 'UNDER_14',
+          client_ip_hash: 'c'.repeat(64),
+          user_agent_hash: 'd'.repeat(64),
+        }),
+      ]
+    );
+    await admin.query(
+      `UPDATE person_compliance_profiles
+          SET age_band='UNDER_14',
+              minor_mode=true,
+              guardian_person_id=$2,
+              guardian_consent_record_id=$3,
+              guardian_consent_version=1,
+              verified_source='GUARDIAN_RELAY',
+              updated_at=now()
+        WHERE person_id=$1`,
+      [f.manager.personId, guardian.personId, consent.rows[0].id]
+    );
+
+    const revoked = await revokeConsent(
+      app,
+      guardian.token,
+      'goal-consent-revoke-' + crypto.randomUUID(),
+      consent.rows[0].id
+    );
+    expect(revoked.statusCode, revoked.body).toBe(200);
+
+    const blocked = await confirmGoalFor(
+      f,
+      saved.json().caseVersion,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-consent-blocked-' + crypto.randomUUID()
+    );
+    expect(blocked.statusCode, blocked.body).toBe(409);
+    expect(blocked.json().code).toBe('CONSENT_BLOCKED');
+
+    const kase = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(kase.json().phase).toBe('GOALS');
+    const goal = await admin.query(
+      'SELECT confirmation_state FROM goals WHERE case_id=$1 AND lifecycle_status=\'ACTIVE\'',
+      [f.caseId]
+    );
+    expect(goal.rows[0].confirmation_state).toBe('UNCONFIRMED');
+  });
+
 });

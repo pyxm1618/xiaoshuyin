@@ -135,7 +135,6 @@ describe('T918 executable scope negatives', () => {
         'referrals',
         'staff_queue',
         'risk_reviews',
-        'goals',
         'intervention_instances',
         'plan_versions',
         'tasks',

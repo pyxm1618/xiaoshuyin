@@ -105,7 +105,7 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
       join(mainOnlyRoot, 'scripts', 'db-migrate.mjs')
     );
     for (const name of readdirSync(join(ROOT, 'db', 'migrations')).sort()) {
-      if (!name.endsWith('.sql') || name === REMEDIATION) continue;
+      if (!name.endsWith('.sql') || name === REMEDIATION || name.startsWith('026_')) continue;
       copyFileSync(
         join(ROOT, 'db', 'migrations', name),
         join(mainOnlyRoot, 'db', 'migrations', name)
@@ -115,6 +115,13 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
     const mainOutput = runMigrator(mainOnlyRoot, databaseUrl);
     expect(mainOutput).toContain('APPLY 024_psychological_behavioral_intervention_contract.sql');
     expect(mainOutput).not.toContain(REMEDIATION);
+
+    // Preserve this historical regression as exactly 024 -> 025 even after
+    // later migrations exist in the repository.
+    copyFileSync(
+      join(ROOT, 'db', 'migrations', REMEDIATION),
+      join(mainOnlyRoot, 'db', 'migrations', REMEDIATION)
+    );
 
     const db = new Client({
       connectionString: urlForDatabase(ADMIN_URL, database),
@@ -188,7 +195,7 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
   }, 120_000);
 
   it('applies only 025 over exact current-main migrations and preserves rows, policies, constraints and historical checksums', async () => {
-    const output = runMigrator(ROOT, databaseUrl);
+    const output = runMigrator(mainOnlyRoot, databaseUrl);
     expect(output).toContain('SKIP 024_psychological_behavioral_intervention_contract.sql');
     expect(output).toContain('APPLY ' + REMEDIATION);
     expect(output).toMatch(/Migration complete: 1 new, 25 previously applied\./);
@@ -267,7 +274,7 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
         policies: await policyFingerprint(db),
         constraints: await constraintFingerprint(db),
       };
-      const output = runMigrator(ROOT, databaseUrl);
+      const output = runMigrator(mainOnlyRoot, databaseUrl);
       expect(output).toMatch(/Migration complete: 0 new, 26 previously applied\./);
       expect(output).not.toContain('APPLY ' + REMEDIATION);
       expect({

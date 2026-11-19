@@ -28,6 +28,12 @@ describe('Phase 2 Authority Contract Foundation convergence', () => {
       expect(text).toContain(id);
     }
     expect(text).toContain('ConfirmGoal');
+    expect(text).toContain('POST /api/v1/cases/:id/goals');
+    expect(text).toContain('operation = SAVE | CONFIRM');
+    expect(text).toContain('SAVE` persists an unconfirmed Goal/version and never advances phase');
+    expect(text).toContain('only `CONFIRM` maps to the formal `ConfirmGoal`');
+    expect(text).toContain('ConfirmGoal` remains the unique `GOALS -> PLANNING` phase writer');
+    expect(text).toContain('No implicit auto-confirm or second public Goal confirm endpoint is permitted');
     expect(text).toContain('A1001/01002/01003');
     expect(text).toContain('SAFETY_RESOLVE');
     expect(text).toContain('SERVICE_CONTROL');
