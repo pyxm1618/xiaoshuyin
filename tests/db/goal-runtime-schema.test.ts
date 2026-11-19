@@ -205,6 +205,76 @@ describe('Common Core Goal DB guards', () => {
       expect(visible.rows[0].n).toBe(1);
     } finally {
       await app.query('ROLLBACK');
+      await admin.query('DELETE FROM goals WHERE id=$1', [goalRowId]);
     }
+  });
+
+  it('binds saved_by_person_id to the authenticated production actor', async () => {
+    await app.query('BEGIN');
+    try {
+      await app.query('SELECT app.set_identity_context($1,$2)', [
+        accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await app.query('SELECT app.set_family_context($1,$2,$3)', [
+        familyId,
+        personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await expect(
+        app.query(savedInsertSql(), [
+          familyId,
+          caseId,
+          formulationId,
+          crypto.randomUUID(),
+        ])
+      ).rejects.toThrow(/GOAL_SAVER_MUST_BE_AUTHENTICATED_ACTOR/);
+    } finally {
+      await app.query('ROLLBACK');
+    }
+  });
+
+  it('cannot directly confirm a Goal while the Case remains GOALS', async () => {
+    const inserted = await admin.query(savedInsertSql(), [
+      familyId,
+      caseId,
+      formulationId,
+      personId,
+    ]);
+    const goalRowId = inserted.rows[0].id as string;
+
+    await app.query('BEGIN');
+    try {
+      await app.query('SELECT app.set_identity_context($1,$2)', [
+        accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await app.query('SELECT app.set_family_context($1,$2,$3)', [
+        familyId,
+        personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await expect(
+        app.query(
+          "UPDATE goals SET confirmation_state='CONFIRMED'," +
+            "confirmed_by_person_id=$2,confirmed_at=now(),updated_at=now() " +
+            "WHERE id=$1",
+          [goalRowId, personId]
+        )
+      ).rejects.toThrow(/GOAL_CONFIRMATION_REQUIRES_PLANNING_TRANSITION/);
+    } finally {
+      await app.query('ROLLBACK');
+    }
+
+    const row = await admin.query(
+      'SELECT confirmation_state,confirmed_by_person_id,confirmed_at FROM goals WHERE id=$1',
+      [goalRowId]
+    );
+    expect(row.rows[0]).toMatchObject({
+      confirmation_state: 'UNCONFIRMED',
+      confirmed_by_person_id: null,
+      confirmed_at: null,
+    });
+    await admin.query('DELETE FROM goals WHERE id=$1', [goalRowId]);
   });
 });

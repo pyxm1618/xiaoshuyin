@@ -132,6 +132,12 @@ BEGIN
     RAISE EXCEPTION 'GOAL_INSERT_MUST_BE_UNCONFIRMED' USING ERRCODE='23514';
   END IF;
 
+  IF current_user = 'xiaoshuyin_app'
+     AND NEW.saved_by_person_id <> app_person_id()
+  THEN
+    RAISE EXCEPTION 'GOAL_SAVER_MUST_BE_AUTHENTICATED_ACTOR' USING ERRCODE='23514';
+  END IF;
+
   SELECT phase, status, is_primary
     INTO v_case_phase, v_case_status, v_is_primary
     FROM cases
