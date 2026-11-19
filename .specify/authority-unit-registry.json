@@ -6099,7 +6099,7 @@
                     "heading": "## Requirements"
                   },
                   "requiredArtifacts": [
-                    "specs/common-core-goal-confirmgoal-runtime/plan.md"
+                    "tests/architecture/common-core-goal-confirmgoal-authority.test.ts"
                   ]
                 }
               ]
