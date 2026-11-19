@@ -34,8 +34,15 @@ describe('Slice 14 phone-use Contract content authority boundary', () => {
     expect(PHONE_USE_CONTRACT_CONTENT_META.productBaselineStatus).toBe('FROZEN');
     expect(PHONE_USE_CONTRACT_CONTENT_META.professionalReviewStatus).toBe('NOT_APPROVED');
     expect(PHONE_USE_CONTRACT_CONTENT_META).not.toHaveProperty('professionalApproval');
-    expect(resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION).meta)
-      .toEqual(PHONE_USE_CONTRACT_CONTENT_META);
+    const resolved = resolvePhoneUseContractContent(
+      PHONE_USE_CONTRACT_CONTENT_VERSION
+    );
+    expect(resolved.meta).toEqual({
+      contentVersion: PHONE_USE_CONTRACT_CONTENT_VERSION,
+      sourceBlob: PHONE_USE_CONTRACT_SOURCE_BLOB,
+      approved: true,
+    });
+    expect(resolved.authorityMeta).toEqual(PHONE_USE_CONTRACT_CONTENT_META);
     expect(() => resolvePhoneUseContractContent('stale-version')).toThrow(
       'PHONE_USE_CONTRACT_CONTENT_STALE'
     );
