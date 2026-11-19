@@ -16,7 +16,6 @@
       "feature": "foundation-remaining-remediation",
       "specPath": "specs/foundation-remaining-remediation",
       "implementationPaths": [
-        "apps/server/api/src/services/digital-use-phone-contract.ts",
         "packages/scenes/digital-use/phone-use-contract-content.ts"
       ]
     }
