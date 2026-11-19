@@ -121,6 +121,33 @@ async function seedCandidate(input: {
   };
 }
 
+async function seedIndependentReviewer() {
+  const tag = crypto.randomUUID();
+  const account = await admin.query<{ id: string }>(
+    'INSERT INTO accounts (wechat_openid) VALUES ($1) RETURNING id',
+    [`slice17-independent-reviewer-${tag}`]
+  );
+  const accountId = account.rows[0]!.id;
+  const person = await admin.query<{ id: string }>(
+    `INSERT INTO persons (account_id, created_by_account_id)
+     VALUES ($1,$1) RETURNING id`,
+    [accountId]
+  );
+  const personId = person.rows[0]!.id;
+  const staff = await admin.query<{ id: string }>(
+    `INSERT INTO staff_assignments
+       (account_id, person_id, capability, scope_type, granted_by_account_id)
+     VALUES ($1,$2,'PROFESSIONAL_REVIEW','GLOBAL',$1)
+     RETURNING id`,
+    [accountId, personId]
+  );
+  return {
+    accountId,
+    personId,
+    staffAssignmentId: staff.rows[0]!.id,
+  };
+}
+
 async function seedExactApprovalCandidate() {
   const tag = crypto.randomUUID();
   const account = await admin.query<{ id: string }>(
@@ -353,6 +380,7 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
 
   it('review vs edit cannot leave stale review evidence committed', async () => {
     const seeded = await seedCandidate();
+    const independentReviewer = await seedIndependentReviewer();
     const snapshot = await lockProfessionalKnowledgeVersion(admin as any, seeded.versionId);
     expect(snapshot).not.toBeNull();
 
@@ -368,9 +396,9 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
       const reviewAttempt = appendProfessionalKnowledgeReviewEvidence(reviewer, {
         version: snapshot!,
         reviewerIdentity: 'reviewer:test',
-        reviewerAccountId: seeded.accountId,
-        reviewerPersonId: seeded.personId,
-        staffAssignmentRef: seeded.staffAssignmentId,
+        reviewerAccountId: independentReviewer.accountId,
+        reviewerPersonId: independentReviewer.personId,
+        staffAssignmentRef: independentReviewer.staffAssignmentId,
         qualificationRef: 'qualification:test',
         reviewOutcome: 'REVIEWED',
         reviewedAt: new Date('2026-11-17T00:00:00Z'),

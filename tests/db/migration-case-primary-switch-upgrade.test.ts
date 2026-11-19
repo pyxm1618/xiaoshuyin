@@ -412,6 +412,20 @@ const SLICE17_NEW_OBJECTS = [
   'trigger:professional_knowledge_versions_update_guard',
   'trigger:yy_professional_knowledge_insert_lifecycle_guard',
   'trigger:zz_professional_knowledge_release_authority_guard',
+  'policy:audit_professional_knowledge_authority_executor_insert',
+  'policy:idempotency_professional_knowledge_authority_executor_insert',
+  'policy:idempotency_professional_knowledge_authority_executor_select',
+  'policy:intervention_definitions_professional_knowledge_authority_executor_read',
+  'policy:professional_knowledge_approval_evidence_authority_executor_insert',
+  'policy:professional_knowledge_items_authority_executor_select',
+  'policy:professional_knowledge_review_evidence_authority_executor_insert',
+  'policy:professional_knowledge_sources_authority_executor_select',
+  'policy:professional_knowledge_versions_authority_executor_select',
+  'policy:professional_knowledge_versions_authority_executor_update',
+  'policy:staff_assignments_professional_knowledge_authority_executor_read',
+  'trigger:professional_knowledge_review_evidence_self_review_guard',
+  'trigger:zz_professional_knowledge_runtime_authority_elevation_guard',
+  'trigger:zzz_professional_knowledge_authority_executor_release_guard',
 ].sort();
 
 /** Exact Slice 8 constraint delta over the pre-Slice-8 schema. */

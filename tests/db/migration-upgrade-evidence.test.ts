@@ -276,7 +276,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(96); // + Phase 2 bounded Professional Knowledge authority-denial insert policy
+    expect(policyRows[0].count).toBe(107); // + migration 028 controlled authority-executor policies
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
