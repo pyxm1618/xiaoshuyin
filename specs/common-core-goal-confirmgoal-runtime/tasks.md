@@ -1,0 +1,22 @@
+# Common Core Goal / ConfirmGoal Runtime — Tasks
+
+## Execution Rules
+
+- This feature is a direct projection of current V1 Authority.
+- Authority Phase is `Phase 4 — Execution Closure / 执行闭环`; the governance prerequisite is registered early only because current Phase 3 T1 deterministic E2E needs the real ConfirmGoal advancement path.
+- Do not implement production code until the repository-controlled ownership topology is merged into main.
+- Do not modify Authority Docs.
+- Do not modify PR #70, #58, #63 or #67.
+- Do not merge any PR as part of developer execution.
+- Prefer existing formal public error contracts. If they cannot express an Authority-required Goal/ConfirmGoal failure, stop and create a separate minimal governance/ownership prerequisite; do not modify shared error-handler/contracts under this prerequisite.
+
+## Tasks
+
+- [ ] T2001 [REQ:GCR-001,GCR-002,GCR-003,GCR-004,GCR-005,GCR-006,GCR-007,GCR-008,GCR-009,GCR-010,GCR-011,GCR-012] [VERIFY:Spec Governance] Establish only the feature projection and finite implementation ownership, including SHARED composition ownership for `authorize.ts` / domain index and SHARED generated OpenAPI outputs; no `apps/`, `packages/`, `db/`, Authority Doc, Authority Unit registry, or change-binding implementation delta is permitted in this prerequisite.
+- [ ] T2002 [REQ:GCR-002,GCR-003,GCR-005,GCR-006] [VERIFY:Remote Truth read-back] After T2001 is independently audited and merged, re-read latest main, PR #70 read-only, Authority Docs, ownership, Authority Unit registry, migration sequence, workflows, OpenAPI generation, and current Case/Problem Formulation runtime before any product code.
+- [ ] T2003 [REQ:GCR-001,GCR-002,GCR-009,GCR-010,GCR-011] [VERIFY:DB Migration + DB tests] Add the current-baseline Goal persistence owner with same-Case/formulation integrity, family isolation, forced RLS, confirmation auditability, review state, and concurrency defenses; do not create Plan runtime.
+- [ ] T2004 [REQ:GCR-001,GCR-002,GCR-003,GCR-004] [VERIFY:Domain + service tests] Implement legal Goal create/save bound to the current confirmed formulation; reject incomplete, stale, wrong-phase, invalid-actor, invalid-reference, and non-primary/non-advancement-eligible inputs.
+- [ ] T2005 [REQ:GCR-005,GCR-006,GCR-007,GCR-008] [VERIFY:Service + integration tests] Implement one atomic `ConfirmGoal` command that lock/re-reads and revalidates current Case phase, current primary / advancement authority, current confirmed/current formulation, exact Goal/formulation binding, Goal contract completeness, A2010 solution-stage prerequisite = COMPLETED, traceable real user confirmation, Authorization, Consent, Safety, Compliance, and stale/concurrency conditions before performing exactly one `GOALS -> PLANNING` advancement with idempotent/concurrent convergence. Prove A2010-incomplete and post-Goal primary-change negatives leave Case in GOALS.
+- [ ] T2006 [REQ:GCR-003,GCR-004,GCR-005] [VERIFY:Contract + OpenAPI] Expose only the Authority-listed `POST /api/v1/cases/:id/goals` projection using the current Fastify/Zod/idempotency/version pattern; regenerate and commit `packages/generated/openapi.json` plus `packages/generated/openapi.d.ts` when the OpenAPI source changes. Reuse existing public error contracts; if they are insufficient, stop for a separate minimal governance prerequisite instead of modifying unregistered shared error infrastructure.
+- [ ] T2007 [REQ:GCR-006,GCR-012] [VERIFY:Static + integration negative guards] Prove both invariants: (a) A2010, Scene services and client/request payloads cannot directly write `cases.phase = PLANNING`; and (b) A2010 solution-stage prerequisite completion is required before `ConfirmGoal`. Prove the canonical integration path is `confirmed/current Problem Formulation -> GOALS -> A2003 ... A2010 -> A2010 COMPLETED -> valid Goal -> ConfirmGoal -> PLANNING` and contains no administrator SQL phase fabrication.
+- [ ] T2008 [REQ:GCR-001,GCR-002,GCR-003,GCR-004,GCR-005,GCR-006,GCR-007,GCR-008,GCR-009,GCR-010,GCR-011,GCR-012] [VERIFY:Contract + Static Checks + DB Migration + Unit Tests + Integration Tests + Spec Governance + verify-all] Run all canonical exact-head verification, freeze the candidate Head for independent audit, and stop without merge.

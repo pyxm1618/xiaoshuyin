@@ -295,7 +295,8 @@
           "011-digital-use-node-manifest-routing-foundation",
           "012-digital-use-assessment-runtime",
           "013-digital-use-family-alliance-runtime",
-          "foundation-remaining-remediation"
+          "foundation-remaining-remediation",
+          "common-core-goal-confirmgoal-runtime"
         ]
       }
     },
@@ -310,7 +311,118 @@
         "features": [
           "004-case-participant-core",
           "008-problem-formulation-core",
-          "foundation-remaining-remediation"
+          "foundation-remaining-remediation",
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "shared-generated-openapi-types",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/generated/openapi.d.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "004-case-participant-core",
+          "008-problem-formulation-core",
+          "foundation-remaining-remediation",
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "shared-generated-openapi-json",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/generated/openapi.json"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "004-case-participant-core",
+          "008-problem-formulation-core",
+          "foundation-remaining-remediation",
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "common-core-goal-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/goals.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "common-core-goal-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/goals.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "common-core-goal-migration-026",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/026_common_core_goal_confirm_goal_runtime.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "common-core-goal-domain",
+      "match": {
+        "kind": "PREFIX",
+        "path": "packages/domain/src/goal-"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "common-core-goal-domain-export",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/index.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "common-core-goal-authorization",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/authorization/src/authorize.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
         ]
       }
     }
