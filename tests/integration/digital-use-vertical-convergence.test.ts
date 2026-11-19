@@ -403,6 +403,221 @@ describe('Digital Use vertical convergence', () => {
     return refreshed;
   }
 
+  function supportedGoalDependencies(formulation: any) {
+    const supported = (formulation.dependencyRefs ?? []).filter(
+      (dependency: any) =>
+        dependency.type === 'EVIDENCE' || dependency.type === 'CONSENT'
+    );
+    expect(supported.length).toBeGreaterThan(0);
+    return supported;
+  }
+
+  async function confirmGoalCompatibleFormulation(
+    f: Fixture,
+    scene: any
+  ): Promise<any> {
+    const current = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/problem-formulations/current`,
+      headers: auth(f.manager.token),
+    });
+    expect(current.statusCode, current.body).toBe(200);
+    const formulation = current.json().current;
+    expect(formulation?.status).toBe('PRESENTED');
+
+    const supportedDependencies = supportedGoalDependencies(formulation);
+    let confirmVersion = formulation.version as number;
+    let confirmCaseVersion = scene.caseVersion as number;
+
+    if (supportedDependencies.length !== formulation.dependencyRefs.length) {
+      const corrected = await app.inject({
+        method: 'POST',
+        url:
+          `/api/v1/cases/${f.caseId}/problem-formulations/` +
+          formulation.version +
+          '/corrections',
+        headers: {
+          ...commandHeaders(
+            f.manager.token,
+            `phase2-t1-pf-correction-${crypto.randomUUID()}`
+          ),
+          'if-match': `"case-v${scene.caseVersion}"`,
+        },
+        payload: {
+          changes: {
+            dependencyRefs: supportedDependencies,
+          },
+          note: 'Use only dependencies that Goal V1 can authoritatively revalidate.',
+        },
+      });
+      expect(corrected.statusCode, corrected.body).toBe(201);
+      expect(corrected.json().current?.status).toBe('PRESENTED');
+      expect(
+        corrected.json().current?.dependencyRefs.every(
+          (dependency: any) =>
+            dependency.type === 'EVIDENCE' || dependency.type === 'CONSENT'
+        )
+      ).toBe(true);
+      confirmVersion = corrected.json().current.version;
+      confirmCaseVersion = corrected.json().caseVersion;
+    }
+
+    const confirmed = await app.inject({
+      method: 'POST',
+      url:
+        `/api/v1/cases/${f.caseId}/problem-formulations/` +
+        confirmVersion +
+        '/confirm',
+      headers: {
+        ...commandHeaders(
+          f.manager.token,
+          `phase2-t1-pf-confirm-${crypto.randomUUID()}`
+        ),
+        'if-match': `"case-v${confirmCaseVersion}"`,
+      },
+      payload: {},
+    });
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json().current?.status).toBe('CONFIRMED');
+
+    const refreshed = await getScene(f);
+    const caseRow = await admin.query(
+      'SELECT phase::text AS phase FROM cases WHERE id=$1',
+      [f.caseId]
+    );
+    expect(caseRow.rows[0].phase).toBe('GOALS');
+    return refreshed;
+  }
+
+  async function advanceToGoalReady(f: Fixture): Promise<any> {
+    await respondNode(f, 'A1001', a1001(true));
+    await respondNode(f, '01002', {
+      state: 'KNOWN',
+      selections: ['A'],
+    });
+    let scene = await respondNode(f, '01003', {
+      state: 'KNOWN',
+      selection: 'A',
+    });
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A2003')?.status)
+      .toBe('AVAILABLE');
+
+    scene = await confirmGoalCompatibleFormulation(f, scene);
+    await respondNode(f, 'A2003', a2003Response());
+    await respondNode(f, 'A2004', { decision: 'YES' });
+    await respondNode(f, 'A2005', { decision: 'WILLING' });
+    await respondNode(f, 'A2007', {
+      timeline: {
+        reviewDate: '2026-12-01',
+        cadence: 'weekly',
+      },
+    });
+    scene = await respondNode(f, 'A2010', {
+      action: 'GENERATE_SUMMARY',
+    });
+    expect(scene.nodes.find((node: any) => node.nodeCode === 'A2010')?.status)
+      .toBe('COMPLETED');
+    return scene;
+  }
+
+  async function currentConfirmedGoalFormulation(f: Fixture): Promise<any> {
+    const current = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/problem-formulations/current`,
+      headers: auth(f.manager.token),
+    });
+    expect(current.statusCode, current.body).toBe(200);
+    const formulation = current.json().current;
+    expect(formulation?.status).toBe('CONFIRMED');
+
+    const persisted = await admin.query<{
+      case_id: string;
+      version: number;
+      status: string;
+      review_state: string;
+    }>(
+      `SELECT case_id,version,status::text AS status,review_state::text AS review_state
+         FROM problem_formulations
+        WHERE case_id=$1 AND version=$2`,
+      [f.caseId, formulation.version]
+    );
+    expect(persisted.rows).toHaveLength(1);
+    expect(persisted.rows[0]).toEqual({
+      case_id: f.caseId,
+      version: formulation.version,
+      status: 'CONFIRMED',
+      review_state: 'CURRENT',
+    });
+    return formulation;
+  }
+
+  function phase2T1GoalSavePayload(formulation: any) {
+    const baseline =
+      formulation.evidenceRefs?.[0] ??
+      formulation.primaryProblem?.evidenceRefs?.[0];
+    expect(baseline).toBeTruthy();
+    expect(formulation.dependencyRefs?.length).toBeGreaterThan(0);
+    return {
+      operation: 'SAVE',
+      problemFormulationId: formulation.id,
+      problemFormulationVersion: formulation.version,
+      baselineRefs: [baseline],
+      targetDescription:
+        'Reduce disruptive evening device use while preserving required study contact.',
+      observationMethod:
+        'Track bedtime, conflict intensity, and required-study access.',
+      observationWindow: '14 days',
+      protectiveConditions: [
+        'Preserve schoolwork and necessary family contact.',
+      ],
+      parentActions: [
+        'Use one agreed transition prompt and avoid escalating conflict.',
+      ],
+      reviewPoint: 'Review after 14 days.',
+      dependencyRefs: formulation.dependencyRefs,
+      participantResponsibilities: [],
+    };
+  }
+
+  async function savePhase2T1Goal(
+    f: Fixture,
+    caseVersion: number,
+    formulation: any
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/goals`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': `phase2-t1-goal-save-${crypto.randomUUID()}`,
+        'if-match': `"case-v${caseVersion}"`,
+      },
+      payload: phase2T1GoalSavePayload(formulation),
+    });
+  }
+
+  async function confirmPhase2T1Goal(
+    f: Fixture,
+    caseVersion: number,
+    goalId: string,
+    goalVersion: number
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/goals`,
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': `phase2-t1-goal-confirm-${crypto.randomUUID()}`,
+        'if-match': `"case-v${caseVersion}"`,
+      },
+      payload: {
+        operation: 'CONFIRM',
+        goalId,
+        goalVersion,
+      },
+    });
+  }
+
   async function advanceToParallelLanes(
     f: Fixture,
     targetApp: FastifyInstance = app
@@ -1341,7 +1556,126 @@ describe('Digital Use vertical convergence', () => {
       .toBe('AVAILABLE');
   });
 
-  it('T1 Scene-path proof runs A1001 through Family Alliance runtime to A5001 without admin SQL state fabrication while ConfirmGoal remains unimplemented', async () => {
+  it('T1 canonical deterministic E2E reaches PLANNING only through formal ConfirmGoal', async () => {
+    const f = await fixture('phase2-t1-final-closeout');
+    const scene = await advanceToGoalReady(f);
+    const formulation = await currentConfirmedGoalFormulation(f);
+
+    const afterA2010 = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}`,
+      headers: auth(f.manager.token),
+    });
+    expect(afterA2010.statusCode, afterA2010.body).toBe(200);
+    expect(afterA2010.json().phase).toBe('GOALS');
+
+    const saved = await savePhase2T1Goal(
+      f,
+      scene.caseVersion,
+      formulation
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+    expect(saved.json()).toMatchObject({
+      operation: 'SAVE',
+      phase: 'GOALS',
+      confirmationState: 'UNCONFIRMED',
+    });
+    const saveBody = saved.json();
+    expect(saveBody.goalId).toEqual(expect.any(String));
+    expect(saveBody.goalVersion).toEqual(expect.any(Number));
+
+    const savedGoal = await admin.query<{
+      goal_id: string;
+      version: number;
+      confirmation_state: string;
+      saved_by_person_id: string;
+      confirmed_by_person_id: string | null;
+      confirmed_at: Date | null;
+    }>(
+      `SELECT goal_id,version,confirmation_state::text AS confirmation_state,
+              saved_by_person_id,confirmed_by_person_id,confirmed_at
+         FROM goals
+        WHERE case_id=$1 AND goal_id=$2 AND version=$3`,
+      [f.caseId, saveBody.goalId, saveBody.goalVersion]
+    );
+    expect(savedGoal.rows).toHaveLength(1);
+    expect(savedGoal.rows[0]).toMatchObject({
+      goal_id: saveBody.goalId,
+      version: saveBody.goalVersion,
+      confirmation_state: 'UNCONFIRMED',
+      saved_by_person_id: f.manager.personId,
+      confirmed_by_person_id: null,
+      confirmed_at: null,
+    });
+
+    const afterSave = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}`,
+      headers: auth(f.manager.token),
+    });
+    expect(afterSave.statusCode, afterSave.body).toBe(200);
+    expect(afterSave.json().phase).toBe('GOALS');
+
+    const confirmed = await confirmPhase2T1Goal(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion
+    );
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json()).toMatchObject({
+      operation: 'CONFIRM',
+      goalId: saveBody.goalId,
+      goalVersion: saveBody.goalVersion,
+      phase: 'PLANNING',
+      confirmationState: 'CONFIRMED',
+      confirmedBy: f.manager.personId,
+    });
+
+    const confirmedGoal = await admin.query<{
+      confirmation_state: string;
+      confirmed_by_person_id: string | null;
+      confirmed_at: Date | null;
+    }>(
+      `SELECT confirmation_state::text AS confirmation_state,
+              confirmed_by_person_id,confirmed_at
+         FROM goals
+        WHERE case_id=$1 AND goal_id=$2 AND version=$3`,
+      [f.caseId, saveBody.goalId, saveBody.goalVersion]
+    );
+    expect(confirmedGoal.rows).toHaveLength(1);
+    expect(confirmedGoal.rows[0]?.confirmation_state).toBe('CONFIRMED');
+    expect(confirmedGoal.rows[0]?.confirmed_by_person_id).toBe(
+      f.manager.personId
+    );
+    expect(confirmedGoal.rows[0]?.confirmed_at).toBeTruthy();
+
+    const traces = await admin.query<{
+      events: number;
+      audits: number;
+    }>(
+      `SELECT
+         (SELECT count(*)::int FROM case_events
+           WHERE case_id=$1 AND event_type='CASE_GOAL_CONFIRMED') AS events,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE family_id=$2
+             AND resource_type='GOAL'
+             AND resource_id=$3
+             AND event_type='GOAL_CONFIRMED') AS audits`,
+      [f.caseId, f.familyId, saveBody.goalId]
+    );
+    expect(traces.rows[0]).toEqual({ events: 1, audits: 1 });
+
+    const afterConfirm = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}`,
+      headers: auth(f.manager.token),
+    });
+    expect(afterConfirm.statusCode, afterConfirm.body).toBe(200);
+    expect(afterConfirm.json().phase).toBe('PLANNING');
+  });
+
+  it('preserves the canonical Family Alliance path through A5001 without admin SQL business-state fabrication', async () => {
     professionalReviewProvider.restore('FAMILY_ALLIANCE_REVIEW');
     const f = await fixture('phase3-a5001-canonical');
     await advanceToParallelLanes(f);
@@ -1365,7 +1699,7 @@ describe('Digital Use vertical convergence', () => {
     expect(casePhase.rows[0]?.phase).toBe('GOALS');
   });
 
-  it('T1 Scene-path proof runs A1001 through roleplay, formal Contract activation and A5002 without admin SQL state fabrication while ConfirmGoal remains unimplemented', async () => {
+  it('preserves the canonical roleplay and formal Contract path through A5002 without admin SQL business-state fabrication', async () => {
     professionalReviewProvider.restore('PHONE_USE_CONTRACT_REVIEW');
     adapterAvailable = true;
     const f = await fixture('phase3-a5002-canonical');
