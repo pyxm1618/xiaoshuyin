@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { getCurrentNoticeHash } from '@xiaoshuyin/compliance';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const COMMAND_OWNER = 'apps/server/api/src/services/goals.ts';
@@ -49,6 +50,31 @@ describe('Common Core Goal authority boundaries', () => {
     expect(formalFunction).toBeGreaterThan(-1);
     expect(dbGate).toBeGreaterThan(formalFunction);
     expect(dbTransition).toBeGreaterThan(dbGate);
+  });
+
+  it('keeps the privileged transition behind the formal authoritative gates', () => {
+    const dbSource = readFileSync(join(ROOT, TRANSITION_OWNER), 'utf8');
+    const formalFunction = dbSource.indexOf(
+      'CREATE FUNCTION app.confirm_goal_transition'
+    );
+    const authoritativeWrite = dbSource.indexOf('UPDATE cases', formalFunction);
+    expect(formalFunction).toBeGreaterThan(-1);
+    expect(authoritativeWrite).toBeGreaterThan(formalFunction);
+
+    for (const marker of [
+      'p.account_id=app_account_id()',
+      'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID',
+      'GOAL_CONFIRM_TRANSITION_CONSENT_INVALID',
+      'GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID',
+    ]) {
+      const gate = dbSource.indexOf(marker, formalFunction);
+      expect(gate, marker).toBeGreaterThan(formalFunction);
+      expect(gate, marker).toBeLessThan(authoritativeWrite);
+    }
+
+    expect(
+      dbSource.slice(formalFunction, authoritativeWrite)
+    ).toContain(getCurrentNoticeHash());
   });
 
   it('registers only the single public Goal mutation endpoint', () => {
