@@ -99,6 +99,17 @@ function requireStaticProfessionalContentAuthority(
   }
   return authority;
 }
+function phoneUseContentMetaForTransport(meta:{
+  readonly contentVersion:string;
+  readonly sourceBlob:string;
+  readonly approved:true;
+}){
+  return {
+    contentVersion:meta.contentVersion,
+    sourceBlob:meta.sourceBlob,
+    approved:meta.approved,
+  };
+}
 function toStoredRefs(refs:readonly unknown[]):readonly StoredSceneRef[]{
   return refs as readonly StoredSceneRef[];
 }
@@ -703,7 +714,7 @@ export async function getPhoneUseContractTemplate(
 ) {
   await readProfessionalAssetGate(pool, { ...input, nodeCode: 'A4002' });
   const content = resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
-  return { meta: content.meta, ...content.template };
+  return { meta: phoneUseContentMetaForTransport(content.meta), ...content.template };
 }
 
 export async function getPhoneUseContractExamples(
@@ -717,7 +728,7 @@ export async function getPhoneUseContractExamples(
   );
   const content = resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION);
   void professionalAuthority;
-  return { meta: content.meta, examples: content.examples };
+  return { meta: phoneUseContentMetaForTransport(content.meta), examples: content.examples };
 }
 
 export async function getPhoneUseContractFaq(
@@ -730,7 +741,7 @@ export async function getPhoneUseContractFaq(
   requireStaticProfessionalContentAuthority(professionalContentAuthority);
   const content = resolvePhoneUseContractContent(active.source_template_version);
   return {
-    meta: content.meta,
+    meta: phoneUseContentMetaForTransport(content.meta),
     contract: { id: active.id, version: active.version, status: 'ACTIVE' as const },
     ...content.faq,
   };
