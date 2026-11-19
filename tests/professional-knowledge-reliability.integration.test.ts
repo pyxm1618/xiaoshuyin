@@ -26,8 +26,13 @@ import {
 } from '../packages/scenes/digital-use/professional-knowledge-binding.js';
 
 const admin = createAdminPool();
+const authority = new pg.Pool({
+  connectionString: process.env['MIGRATION_DATABASE_URL'],
+  max: 5,
+});
 
 afterAll(async () => {
+  await authority.end();
   await admin.end();
 });
 
@@ -431,6 +436,7 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
 
     const release = releaseKnowledgeVersion({
       pool: admin,
+      authorityPool: authority,
       accountId: seeded.accountId,
       personId: seeded.personId,
       assignmentId: seeded.assignmentId,
