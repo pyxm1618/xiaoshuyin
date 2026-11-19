@@ -73,9 +73,27 @@ CREATE TRIGGER zz_professional_knowledge_runtime_authority_elevation_guard
   FOR EACH ROW
   EXECUTE FUNCTION app.guard_professional_knowledge_runtime_authority_elevation();
 
--- xiaoshuyin_migrator is already a distinct NOBYPASSRLS identity. These
--- policies expose only the review/release transaction surface needed by the
--- formal service while FORCE RLS remains enabled.
+-- xiaoshuyin_migrator is already a distinct NOBYPASSRLS identity. The
+-- Professional Review helpers in 025/026 intentionally revoked PUBLIC execute,
+-- so the controlled executor receives only the exact context/Staff seams used
+-- by formal review/release. Ordinary xiaoshuyin_app grants are unchanged.
+GRANT EXECUTE ON FUNCTION app.set_account_context(uuid, text)
+  TO xiaoshuyin_migrator;
+GRANT EXECUTE ON FUNCTION app.set_identity_context(uuid, text)
+  TO xiaoshuyin_migrator;
+GRANT EXECUTE ON FUNCTION app.validate_professional_review_assignment(uuid, uuid, uuid)
+  TO xiaoshuyin_migrator;
+GRANT EXECUTE ON FUNCTION app.professional_review_authorized()
+  TO xiaoshuyin_migrator;
+GRANT EXECUTE ON FUNCTION app.validate_professional_review_assignment_target(uuid, uuid, uuid)
+  TO xiaoshuyin_migrator;
+GRANT EXECUTE ON FUNCTION app.set_professional_review_context(uuid)
+  TO xiaoshuyin_migrator;
+GRANT EXECUTE ON FUNCTION app.lock_professional_review_assignment_target(uuid, uuid, uuid)
+  TO xiaoshuyin_migrator;
+
+-- These policies expose only the review/release transaction surface needed by
+-- the formal service while FORCE RLS remains enabled.
 CREATE POLICY staff_assignments_professional_knowledge_authority_executor_read
   ON staff_assignments
   FOR SELECT TO xiaoshuyin_migrator

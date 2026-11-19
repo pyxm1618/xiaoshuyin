@@ -62,11 +62,11 @@ describe('RLS', () => {
     expect(rows.some((row) => row.relname === 'intervention_definitions')).toBe(true);
   });
 
-  it('96 policies exist after current-main + Slice 17 authority composition', async () => {
+  it('107 policies exist after migration 028 authority boundary composition', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(96);
+    expect(rows.length).toBe(107);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
