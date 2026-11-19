@@ -1642,6 +1642,49 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       [seeded.knowledgeId]
     );
     expect(rows[0]!.n).toBe('0');
+
+    const legal = await withProfessionalKnowledgeAdminTransaction(
+      app,
+      { accountId: actor.accountId, assignmentId: actor.assignmentId },
+      async (tx) => tx.query<{
+        lifecycle_status: string;
+        review_state: string;
+        validity_state: string;
+        revision: number;
+        released_at: Date | null;
+        effective_from: Date | null;
+        effective_to: Date | null;
+      }>(
+        `INSERT INTO professional_knowledge_versions
+           (knowledge_id, semantic_version, revision, lifecycle_status,
+            review_state, validity_state, content, content_hash,
+            source_set_hash, scope_metadata, locale, released_at,
+            effective_from, effective_to, created_by_account_id, created_by_person_id)
+         VALUES ($1,'2.0.3',1,'CANDIDATE','PENDING','UNKNOWN',$2::jsonb,$3,$4,$5::jsonb,
+                 'zh-CN',NULL,NULL,NULL,$6,$7)
+         RETURNING lifecycle_status, review_state, validity_state, revision,
+                   released_at, effective_from, effective_to`,
+        [
+          seeded.knowledgeId,
+          JSON.stringify(seeded.content),
+          seeded.contentHash,
+          seeded.sourceSetHash,
+          JSON.stringify(seeded.scope),
+          actor.accountId,
+          actor.personId,
+        ]
+      )
+    );
+
+    expect(legal.rows[0]).toEqual({
+      lifecycle_status: 'CANDIDATE',
+      review_state: 'PENDING',
+      validity_state: 'UNKNOWN',
+      revision: 1,
+      released_at: null,
+      effective_from: null,
+      effective_to: null,
+    });
   });
 
 });
