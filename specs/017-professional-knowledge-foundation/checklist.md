@@ -2,6 +2,11 @@
 
 Status vocabulary: PASS / OPEN / N/A.
 
+Implementation evidence provenance:
+- Implementation-level `PASS` entries below are historical implementation / DB / integration evidence bound to PR #58 exact Head `189f692f769389777b32fb024c61bb9ddede6fa8`; PR #80 does not contain or re-prove those implementation artifacts.
+- PR #80 is governance-only; its scope is the candidate repository-level implementation-ownership registration plus the authoritative Slice 17 spec prerequisite. Until #80 is merged, this checklist does not claim that ownership is authoritative on `main`.
+- After #80 is merged into `main`, PR #58 must itself rerun/revalidate its final exact-head CI, Spec Governance, final head-drift read-back, and merge-readiness gates.
+
 | Gate | Status | Evidence contract |
 |---|---|---|
 | Current-main reconciliation | PASS | latest Phase 2 main is merge base; behind=0 |
