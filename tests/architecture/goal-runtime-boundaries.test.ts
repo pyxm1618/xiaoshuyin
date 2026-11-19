@@ -3,7 +3,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
-const OWNER = 'apps/server/api/src/services/goals.ts';
+const COMMAND_OWNER = 'apps/server/api/src/services/goals.ts';
+const TRANSITION_OWNER =
+  'db/migrations/026_common_core_goal_confirm_goal_runtime.sql';
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -12,7 +14,7 @@ function walk(dir: string): string[] {
     const full = join(dir, entry);
     const stat = statSync(full);
     if (stat.isDirectory()) out.push(...walk(full));
-    else if (/\.(ts|tsx|js|mjs|cjs)$/.test(entry)) out.push(full);
+    else if (/\.(ts|tsx|js|mjs|cjs|sql)$/.test(entry)) out.push(full);
   }
   return out;
 }
@@ -20,7 +22,7 @@ function walk(dir: string): string[] {
 describe('Common Core Goal authority boundaries', () => {
   it('has exactly one production GOALS -> PLANNING writer', () => {
     const writers: string[] = [];
-    for (const root of ['apps', 'packages']) {
+    for (const root of ['apps', 'packages', 'db/migrations']) {
       for (const full of walk(join(ROOT, root))) {
         const rel = relative(ROOT, full);
         const source = readFileSync(full, 'utf8');
@@ -30,15 +32,23 @@ describe('Common Core Goal authority boundaries', () => {
         ) writers.push(rel);
       }
     }
-    expect(writers).toEqual([OWNER]);
+    expect(writers).toEqual([TRANSITION_OWNER]);
   });
 
   it('places the A2010 COMPLETED gate before the owned transition', () => {
-    const source = readFileSync(join(ROOT, OWNER), 'utf8');
-    const gate = source.indexOf("a2010.status !== 'COMPLETED'");
-    const transition = source.indexOf("toPhase: 'PLANNING'");
-    expect(gate).toBeGreaterThan(-1);
-    expect(transition).toBeGreaterThan(gate);
+    const serviceSource = readFileSync(join(ROOT, COMMAND_OWNER), 'utf8');
+    const serviceGate = serviceSource.indexOf("a2010.status !== 'COMPLETED'");
+    const serviceTransition = serviceSource.indexOf('confirmGoalTransition(tx');
+    expect(serviceGate).toBeGreaterThan(-1);
+    expect(serviceTransition).toBeGreaterThan(serviceGate);
+
+    const dbSource = readFileSync(join(ROOT, TRANSITION_OWNER), 'utf8');
+    const formalFunction = dbSource.indexOf('CREATE FUNCTION app.confirm_goal_transition');
+    const dbGate = dbSource.indexOf("a2010.status='COMPLETED'", formalFunction);
+    const dbTransition = dbSource.indexOf('UPDATE cases', formalFunction);
+    expect(formalFunction).toBeGreaterThan(-1);
+    expect(dbGate).toBeGreaterThan(formalFunction);
+    expect(dbTransition).toBeGreaterThan(dbGate);
   });
 
   it('registers only the single public Goal mutation endpoint', () => {

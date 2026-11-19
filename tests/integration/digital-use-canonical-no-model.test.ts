@@ -237,6 +237,97 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     return track(refreshed.json());
   }
 
+  function supportedGoalDependencies(formulation: any) {
+    const supported = (formulation.dependencyRefs ?? []).filter(
+      (dependency: any) =>
+        dependency.type === 'EVIDENCE' || dependency.type === 'CONSENT'
+    );
+    expect(supported.length).toBeGreaterThan(0);
+    return supported;
+  }
+
+  async function confirmGoalCompatibleFormulation(f: Fixture, scene: any) {
+    const current = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/problem-formulations/current`,
+      headers: auth(f.manager.token),
+    });
+    expect(current.statusCode, current.body).toBe(200);
+    const formulation = current.json().current;
+    expect(formulation?.status).toBe('PRESENTED');
+    expect(
+      formulation.dependencyRefs.some(
+        (dependency: any) => dependency.type === 'PACKAGE'
+      )
+    ).toBe(true);
+
+    const corrected = await app.inject({
+      method: 'POST',
+      url:
+        `/api/v1/cases/${f.caseId}/problem-formulations/` +
+        formulation.version +
+        '/corrections',
+      headers: {
+        ...commandHeaders(
+          f.manager.token,
+          `goal-v1-pf-correction-${crypto.randomUUID()}`
+        ),
+        'if-match': `"case-v${scene.caseVersion}"`,
+      },
+      payload: {
+        changes: {
+          dependencyRefs: supportedGoalDependencies(formulation),
+        },
+        note: 'Use only dependencies that Goal V1 can authoritatively revalidate.',
+      },
+    });
+    expect(corrected.statusCode, corrected.body).toBe(201);
+    const correctedBody = corrected.json();
+    expect(correctedBody.current?.status).toBe('PRESENTED');
+    expect(
+      correctedBody.current?.dependencyRefs.every(
+        (dependency: any) =>
+          dependency.type === 'EVIDENCE' || dependency.type === 'CONSENT'
+      )
+    ).toBe(true);
+
+    const confirmed = await app.inject({
+      method: 'POST',
+      url:
+        `/api/v1/cases/${f.caseId}/problem-formulations/` +
+        correctedBody.current.version +
+        '/confirm',
+      headers: {
+        ...commandHeaders(
+          f.manager.token,
+          `goal-v1-pf-confirm-${crypto.randomUUID()}`
+        ),
+        'if-match': `"case-v${correctedBody.caseVersion}"`,
+      },
+      payload: {},
+    });
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json().current?.status).toBe('CONFIRMED');
+
+    const refreshed = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/scene`,
+      headers: auth(f.manager.token),
+    });
+    expect(refreshed.statusCode, refreshed.body).toBe(200);
+    return track(refreshed.json());
+  }
+
+  async function enterA2004ForGoal(f: Fixture) {
+    let scene = await triage(f, true, 'A', 'A');
+    expectCurrent(scene, 'A2003');
+    scene = await confirmGoalCompatibleFormulation(f, scene);
+    expectCurrent(scene, 'A2003');
+    scene = await respond(f, scene, 'A2003', a2003Response(), 'goal-a2003');
+    expectCurrent(scene, 'A2004');
+    return scene;
+  }
+
   async function enterA2004(f: Fixture) {
     let scene = await triage(f, true, 'A', 'A');
     expectCurrent(scene, 'A2003');
@@ -464,7 +555,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
   });
 
   async function finishA2010ForGoal(f: Fixture) {
-    let scene = await enterA2004(f);
+    let scene = await enterA2004ForGoal(f);
     scene = await respond(f, scene, 'A2004', { decision: 'YES' }, 'goal-a2004');
     scene = await respond(f, scene, 'A2005', { decision: 'WILLING' }, 'goal-a2005');
     scene = await respond(
@@ -592,6 +683,41 @@ describe('Slice 12 canonical no-model production orchestration', () => {
       expect(rejected.statusCode, rejected.body).toBe(422);
     }
   );
+
+  it('fails closed when the current Problem Formulation contains an unsupported dependency', async () => {
+    const f = await fixture('goal-pf-unsupported');
+    let scene = await triage(f, true, 'A', 'A');
+    scene = await confirmCurrentFormulation(f, scene);
+    const formulation = await currentGoalFormulation(f);
+    expect(
+      formulation.dependencyRefs.some(
+        (dependency: any) => dependency.type === 'PACKAGE'
+      )
+    ).toBe(true);
+
+    const rejected = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-pf-unsupported-' + crypto.randomUUID(),
+      { dependencyRefs: supportedGoalDependencies(formulation) }
+    );
+    expect(rejected.statusCode, rejected.body).toBe(422);
+    expect(rejected.json().code).toBe('VALIDATION_ERROR');
+
+    const persisted = await admin.query(
+      'SELECT count(*)::int AS n FROM goals WHERE case_id=$1',
+      [f.caseId]
+    );
+    expect(persisted.rows[0].n).toBe(0);
+
+    const kase = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(kase.json().phase).toBe('GOALS');
+  });
 
   it('continues the canonical flow through SAVE and atomic ConfirmGoal to PLANNING', async () => {
     const f = await fixture('goal-happy');
@@ -789,7 +915,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
   it('rejects ConfirmGoal while A2010 is incomplete and leaves the Case in GOALS', async () => {
     const f = await fixture('goal-a2010-incomplete');
     let scene = await triage(f, true, 'A', 'A');
-    scene = await confirmCurrentFormulation(f, scene);
+    scene = await confirmGoalCompatibleFormulation(f, scene);
     expect(scene.currentNode?.nodeCode).toBe('A2003');
     const formulation = await currentGoalFormulation(f);
 

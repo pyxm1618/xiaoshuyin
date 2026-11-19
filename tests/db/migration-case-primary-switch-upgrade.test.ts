@@ -690,6 +690,7 @@ const GOAL_RUNTIME_NEW_OBJECTS = [
   'enum:goal_review_state',
   'table:goals',
   'policy:goals_family_scope',
+  'trigger:cases_goal_planning_transition_guard',
   'trigger:goals_insert_guard',
   'trigger:goals_update_guard',
 ] as const;
