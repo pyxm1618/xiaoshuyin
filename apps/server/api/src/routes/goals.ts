@@ -219,11 +219,16 @@ export function registerGoalRoutes(
               protectiveConditions: body.protectiveConditions,
               parentActions: body.parentActions,
               reviewPoint: body.reviewPoint,
-              dependencyRefs: body.dependencyRefs.map((ref) =>
-                ref.type === 'CONSENT' && ref.version === undefined
+              dependencyRefs: body.dependencyRefs.map((ref) => {
+                if (ref.type !== 'CONSENT') return ref;
+                return ref.version === undefined
                   ? { type: 'CONSENT' as const, id: ref.id }
-                  : ref
-              ),
+                  : {
+                      type: 'CONSENT' as const,
+                      id: ref.id,
+                      version: ref.version,
+                    };
+              }),
               participantResponsibilities:
                 body.participantResponsibilities,
             },
