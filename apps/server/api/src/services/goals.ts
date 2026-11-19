@@ -19,7 +19,6 @@ import {
   goalContractFromRow,
   hashPayload,
   insertGoalAudit,
-  insertGoalCaseEvent,
   insertGoalVersion,
   isProblemFormulationAuthoritativeExecutionBasis,
   lockActiveGoal,
@@ -42,6 +41,7 @@ import {
   getComplianceProfileForUpdate,
   getConsentRecordForGate,
   getCurrentNoticeHash,
+  lockGuardianConsentChainHead,
   type AgeBand,
 } from '@xiaoshuyin/compliance';
 import { withRlsTransaction } from '../db/tx.js';
@@ -203,7 +203,11 @@ async function assertGoalDependencyConsents(
 ): Promise<void> {
   for (const ref of refs) {
     if (ref.type !== 'CONSENT') continue;
-    const consent = await getConsentRecordForGate(tx, ref.id);
+    const chain = await lockGuardianConsentChainHead(tx, ref.id);
+    const consent =
+      chain && chain.target.id === chain.head.id
+        ? await getConsentRecordForGate(tx, ref.id)
+        : null;
     if (
       !consent ||
       consent.decision !== 'GRANTED' ||
@@ -599,34 +603,6 @@ export async function confirmGoal(
             });
             const updatedCase = { version: transition.caseVersion };
             const confirmed = transition.goal;
-
-            await insertGoalCaseEvent(tx, {
-              familyId: input.familyId,
-              caseId: input.caseId,
-              actorAccountId: input.actor.accountId,
-              goalId: confirmed.goal_id,
-              goalVersion: confirmed.version,
-              fromVersion: input.expectedCaseVersion,
-              toVersion: updatedCase.version,
-            });
-
-            await insertGoalAudit(tx, {
-              familyId: input.familyId,
-              actorAccountId: input.actor.accountId,
-              eventType: 'GOAL_CONFIRMED',
-              goalId: confirmed.goal_id,
-              metadata: {
-                goalVersion: confirmed.version,
-                caseId: input.caseId,
-                fromCaseVersion: input.expectedCaseVersion,
-                toCaseVersion: updatedCase.version,
-                confirmedByPersonId: input.actor.personId,
-                problemFormulationId:
-                  confirmed.problem_formulation_id,
-                problemFormulationVersion:
-                  confirmed.problem_formulation_version,
-              },
-            });
 
             return {
               status: 200,

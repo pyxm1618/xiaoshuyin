@@ -1406,6 +1406,71 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     }
   });
 
+  it.each([false, true])('revalidates a pinned Goal Consent dependency after SAVE (revoked=%s)', async (revoked) => {
+    const f = await fixture(revoked ? 'goal-consent-revoked-dependency' : 'goal-consent-current-dependency');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const noticeHash = getCurrentNoticeHash();
+    // An unbound grant affects neither the actor's Compliance profile nor the formulation.
+    const { rows: [grant] } = await admin.query(
+      `WITH request AS (
+         INSERT INTO guardian_consent_requests
+           (family_id,guardian_person_id,declared_age_band,notice_version,notice_hash,status,expires_at,completed_at)
+         VALUES ($1,$2,'UNDER_14','v1',$4,'GRANTED',now()+interval '1 hour',now())
+         RETURNING id
+       )
+       INSERT INTO consent_records
+         (family_id,guardian_person_id,guardian_account_id,purpose,decision,
+          version,onboarding_request_id,notice_version,notice_hash,policy_version,evidence)
+       SELECT $1,$2,$3,'UNDER_14_GUARDIAN_CONSENT','GRANTED',1,id,'v1',$4,'v1',$5::jsonb
+         FROM request RETURNING id`,
+      [f.familyId, f.manager.personId, f.manager.accountId, noticeHash, JSON.stringify({
+        channel: 'TEST',
+        accepted_text_hash: 'b'.repeat(64),
+        declared_age_band: 'UNDER_14',
+        client_ip_hash: 'c'.repeat(64),
+        user_agent_hash: 'd'.repeat(64),
+      })]
+    );
+    const dependencyRefs = [
+      ...formulation.dependencyRefs,
+      { type: 'CONSENT', id: grant.id, version: 1 },
+    ];
+    const saved = await saveGoalFor(f, scene.caseVersion, formulation, crypto.randomUUID(), { dependencyRefs });
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    if (revoked) {
+      const revocation = await revokeConsent(app, f.manager.token, crypto.randomUUID(), grant.id);
+      expect(revocation.statusCode, revocation.body).toBe(200);
+      const { rows } = await admin.query(
+        "SELECT decision,version FROM consent_records WHERE id=$1 OR supersedes_id=$1 ORDER BY version",
+        [grant.id]
+      );
+      expect(rows).toEqual([
+        { decision: 'GRANTED', version: 1 },
+        { decision: 'REVOKED', version: 2 },
+      ]);
+    }
+
+    const { caseVersion, goalId, goalVersion } = saved.json();
+    const confirmation = await confirmGoalFor(f, caseVersion, goalId, goalVersion, crypto.randomUUID());
+    expect(confirmation.statusCode, confirmation.body).toBe(revoked ? 409 : 200);
+    if (revoked) {
+      expect(confirmation.json().code).toBe('CONSENT_BLOCKED');
+      const resave = await saveGoalFor(f, caseVersion, formulation, crypto.randomUUID(), { dependencyRefs });
+      expect(resave.statusCode, resave.body).toBe(409);
+      expect(resave.json().code).toBe('CONSENT_BLOCKED');
+
+      const { rows } = await admin.query(
+        `SELECT c.phase,c.version,g.confirmation_state
+           FROM cases c JOIN goals g ON g.case_id=c.id
+          WHERE c.id=$1 AND g.goal_id=$2`,
+        [f.caseId, goalId]
+      );
+      expect(rows).toEqual([{ phase: 'GOALS', version: caseVersion, confirmation_state: 'UNCONFIRMED' }]);
+    }
+  });
+
   it('re-checks Authorization and Consent at confirmation time', async () => {
     const f = await fixture('goal-auth-consent');
     const scene = await finishA2010ForGoal(f);

@@ -264,8 +264,8 @@ CREATE TRIGGER goals_update_guard
   FOR EACH ROW EXECUTE FUNCTION goals_update_guard();
 
 -- HIGH-001: preserve the historical app-role cases.phase privilege for every
--- other Case transition, while making GOALS -> PLANNING a formal ConfirmGoal-
--- only transition. Direct xiaoshuyin_app DML cannot manufacture PLANNING.
+-- other Case transition, while reserving entry into PLANNING for the formal
+-- ConfirmGoal persistence primitive.
 CREATE FUNCTION app.guard_goal_planning_transition() RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -273,7 +273,7 @@ SET search_path = pg_catalog, public
 AS $function$
 BEGIN
   IF current_user = 'xiaoshuyin_app'
-     AND OLD.phase = 'GOALS'
+     AND OLD.phase IS DISTINCT FROM NEW.phase
      AND NEW.phase = 'PLANNING'
   THEN
     RAISE EXCEPTION 'GOAL_PLANNING_TRANSITION_REQUIRES_FORMAL_COMMAND'
@@ -508,476 +508,7 @@ BEGIN
       IF v_ref IS NULL
          OR jsonb_typeof(v_ref)<>'object'
          OR COALESCE(v_ref->>'type','') NOT IN ('DIALOGUE_MESSAGE','ASSERTION','OBSERVATION')
-         OR COALESCE(v_ref->>'id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
-  FOR v_responsibility IN
-    SELECT value FROM jsonb_array_elements(v_participant_responsibilities)
-  LOOP
-    IF jsonb_typeof(v_responsibility)<>'object'
-       OR COALESCE(v_responsibility->>'personId','') !~*
-          '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-       OR btrim(COALESCE(v_responsibility->>'responsibility',''))=''
-       OR jsonb_typeof(v_responsibility->'evidenceRefs')<>'array'
-       OR jsonb_array_length(v_responsibility->'evidenceRefs')=0
-    THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CONTRACT_INVALID' USING ERRCODE='23514';
-    END IF;
-
-    FOR v_ref IN
-      SELECT value FROM jsonb_array_elements(v_responsibility->'evidenceRefs')
-    LOOP
-      IF jsonb_typeof(v_ref)<>'object'
-         OR COALESCE(v_ref->>'type','') NOT IN ('DIALOGUE_MESSAGE','ASSERTION','OBSERVATION')
          OR COALESCE(v_ref->>'id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CONTRACT_INVALID' USING ERRCODE='23514';
-      END IF;
-    END LOOP;
-  END LOOP;
-
-  -- Preserve the existing A2010 gate before the deeper revalidation work.
-  IF NOT EXISTS (
-    SELECT 1
-      FROM scene_node_states a2010
-      JOIN scene_node_states binding
-        ON binding.case_id=a2010.case_id
-       AND binding.family_id=a2010.family_id
-       AND binding.node_code='A1001'
-       AND binding.scene_package_version=a2010.scene_package_version
-     WHERE a2010.case_id=p_case_id
-       AND a2010.family_id=v_family_id
-       AND a2010.node_code='A2010'
-       AND a2010.status='COMPLETED'
-  ) THEN
-    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_A2010_REQUIRED' USING ERRCODE='23514';
-  END IF;
-
-  -- Revalidate every stored Goal Evidence dependency against current truth.
-  FOR v_dependency IN SELECT value FROM jsonb_array_elements(v_goal_dependencies)
-  LOOP
-    IF v_dependency->>'type'<>'EVIDENCE' THEN CONTINUE; END IF;
-    v_ref:=v_dependency->'evidence';
-    v_ref_type:=v_ref->>'type';
-    v_ref_id:=(v_ref->>'id')::uuid;
-
-    IF v_ref_type='DIALOGUE_MESSAGE' THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM dialogue_messages d
-         WHERE d.id=v_ref_id AND d.case_id=p_case_id
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    ELSIF v_ref_type='ASSERTION' THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM assertions a
-         WHERE a.id=v_ref_id
-           AND a.case_id=p_case_id
-           AND (a.valid_from IS NULL OR a.valid_from<=now())
-           AND (a.valid_until IS NULL OR a.valid_until>now())
-           AND NOT EXISTS (
-             SELECT 1 FROM assertions successor
-              WHERE successor.supersedes_id=a.id
-           )
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    ELSE
-      IF NOT EXISTS (
-        SELECT 1 FROM observations o
-         WHERE o.id=v_ref_id
-           AND o.case_id=p_case_id
-           AND (o.valid_from IS NULL OR o.valid_from<=now())
-           AND (o.valid_until IS NULL OR o.valid_until>now())
-           AND NOT EXISTS (
-             SELECT 1 FROM observations successor
-              WHERE successor.supersedes_id=o.id
-           )
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    END IF;
-  END LOOP;
-
-  -- Baseline and participant-responsibility Evidence are also authoritative
-  -- inputs to formal confirmGoal(), even when not duplicated in dependency_refs.
-  FOR v_ref IN
-    SELECT value FROM jsonb_array_elements(v_baseline_refs)
-    UNION ALL
-    SELECT evidence_ref
-      FROM jsonb_array_elements(v_participant_responsibilities) responsibility,
-           LATERAL jsonb_array_elements(responsibility->'evidenceRefs') evidence_ref
-  LOOP
-    v_ref_type:=v_ref->>'type';
-    v_ref_id:=(v_ref->>'id')::uuid;
-
-    IF v_ref_type='DIALOGUE_MESSAGE' THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM dialogue_messages d
-         WHERE d.id=v_ref_id AND d.case_id=p_case_id
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    ELSIF v_ref_type='ASSERTION' THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM assertions a
-         WHERE a.id=v_ref_id
-           AND a.case_id=p_case_id
-           AND (a.valid_from IS NULL OR a.valid_from<=now())
-           AND (a.valid_until IS NULL OR a.valid_until>now())
-           AND NOT EXISTS (
-             SELECT 1 FROM assertions successor
-              WHERE successor.supersedes_id=a.id
-           )
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    ELSE
-      IF NOT EXISTS (
-        SELECT 1 FROM observations o
-         WHERE o.id=v_ref_id
-           AND o.case_id=p_case_id
-           AND (o.valid_from IS NULL OR o.valid_from<=now())
-           AND (o.valid_until IS NULL OR o.valid_until>now())
-           AND NOT EXISTS (
-             SELECT 1 FROM observations successor
-              WHERE successor.supersedes_id=o.id
-           )
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    END IF;
-  END LOOP;
-
-  -- Participant responsibilities require current ACTIVE participation and at
-  -- least one current Evidence member attributable to that Person.
-  FOR v_responsibility IN
-    SELECT value FROM jsonb_array_elements(v_participant_responsibilities)
-  LOOP
-    v_responsibility_person_id:=(v_responsibility->>'personId')::uuid;
-    IF NOT EXISTS (
-      SELECT 1 FROM case_participants cp
-       WHERE cp.case_id=p_case_id
-         AND cp.person_id=v_responsibility_person_id
-         AND cp.state='ACTIVE'
-    ) THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_PARTICIPANT_INVALID' USING ERRCODE='23514';
-    END IF;
-
-    IF NOT EXISTS (
-      SELECT 1
-        FROM jsonb_array_elements(v_responsibility->'evidenceRefs') ref(value)
-       WHERE (
-         (ref.value->>'type'='DIALOGUE_MESSAGE' AND EXISTS (
-           SELECT 1 FROM dialogue_messages d
-            WHERE d.id=(ref.value->>'id')::uuid
-              AND d.case_id=p_case_id
-              AND d.source_person_id=v_responsibility_person_id
-         ))
-         OR
-         (ref.value->>'type'='ASSERTION' AND EXISTS (
-           SELECT 1 FROM assertions a
-            WHERE a.id=(ref.value->>'id')::uuid
-              AND a.case_id=p_case_id
-              AND (
-                a.subject_person_id=v_responsibility_person_id
-                OR a.source_person_id=v_responsibility_person_id
-              )
-         ))
-         OR
-         (ref.value->>'type'='OBSERVATION' AND EXISTS (
-           SELECT 1 FROM observations o
-            WHERE o.id=(ref.value->>'id')::uuid
-              AND o.case_id=p_case_id
-              AND (
-                o.subject_person_id=v_responsibility_person_id
-                OR o.source_person_id=v_responsibility_person_id
-              )
-         ))
-       )
-    ) THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_PARTICIPANT_EVIDENCE_INVALID' USING ERRCODE='23514';
-    END IF;
-  END LOOP;
-
-  -- Revalidate Goal Consent dependencies with the same guardian-consent
-  -- read gate as the application service: exact record, usable evidence,
-  -- GRANTED decision, and exact version when the Goal pins one.
-  FOR v_dependency IN SELECT value FROM jsonb_array_elements(v_goal_dependencies)
-  LOOP
-    IF v_dependency->>'type'<>'CONSENT' THEN CONTINUE; END IF;
-    v_consent_id:=(v_dependency->>'id')::uuid;
-
-    SELECT c.version INTO v_consent_version
-      FROM consent_records c
-     WHERE c.id=v_consent_id
-       AND c.purpose='UNDER_14_GUARDIAN_CONSENT'
-       AND c.decision='GRANTED'
-       AND jsonb_typeof(c.evidence)='object'
-       AND c.evidence ?& ARRAY[
-         'channel','accepted_text_hash','declared_age_band',
-         'client_ip_hash','user_agent_hash'
-       ]
-       AND (
-         c.evidence - ARRAY[
-           'channel','accepted_text_hash','declared_age_band',
-           'client_ip_hash','user_agent_hash'
-         ]::text[]
-       )='{}'::jsonb
-       AND jsonb_typeof(c.evidence->'channel')='string'
-       AND c.evidence->>'channel' IN ('MINIPROGRAM','TEST')
-       AND jsonb_typeof(c.evidence->'accepted_text_hash')='string'
-       AND c.evidence->>'accepted_text_hash' ~ '^[0-9a-f]{64}$'
-       AND jsonb_typeof(c.evidence->'declared_age_band')='string'
-       AND c.evidence->>'declared_age_band'='UNDER_14'
-       AND jsonb_typeof(c.evidence->'client_ip_hash')='string'
-       AND c.evidence->>'client_ip_hash' ~ '^[0-9a-f]{64}$'
-       AND jsonb_typeof(c.evidence->'user_agent_hash')='string'
-       AND c.evidence->>'user_agent_hash' ~ '^[0-9a-f]{64}$';
-    IF NOT FOUND
-       OR (
-         v_dependency ? 'version'
-         AND v_consent_version<>(v_dependency->>'version')::integer
-       )
-    THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CONSENT_INVALID' USING ERRCODE='23514';
-    END IF;
-  END LOOP;
-
-  -- Formal confirmGoal() re-runs the minor-processing Compliance gate for the
-  -- actor, Case creator and every ACTIVE participant. The privileged primitive
-  -- must fail closed on the same authoritative state.
-  FOR v_person_id IN
-    SELECT DISTINCT subject_person_id
-      FROM (
-        SELECT app_person_id() AS subject_person_id
-        UNION ALL SELECT v_case_created_by_person_id
-        UNION ALL
-        SELECT cp.person_id
-          FROM case_participants cp
-         WHERE cp.case_id=p_case_id
-           AND cp.state='ACTIVE'
-      ) subjects
-     WHERE subject_person_id IS NOT NULL
-  LOOP
-    SELECT pcp.age_band,pcp.guardian_person_id,pcp.guardian_consent_record_id
-      INTO v_age_band,v_guardian_person_id,v_guardian_consent_record_id
-      FROM person_compliance_profiles pcp
-     WHERE pcp.person_id=v_person_id
-     FOR UPDATE;
-
-    IF NOT FOUND OR v_age_band='UNKNOWN' THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID' USING ERRCODE='23514';
-    END IF;
-
-    IF v_age_band='UNDER_14' THEN
-      IF v_guardian_person_id IS NULL OR v_guardian_consent_record_id IS NULL THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID' USING ERRCODE='23514';
-      END IF;
-
-      SELECT c.bound_person_id,c.notice_hash,c.guardian_person_id
-        INTO v_consent_bound_person_id,v_consent_notice_hash,
-             v_consent_guardian_person_id
-        FROM consent_records c
-       WHERE c.id=v_guardian_consent_record_id
-         AND c.purpose='UNDER_14_GUARDIAN_CONSENT'
-         AND c.decision='GRANTED'
-         AND jsonb_typeof(c.evidence)='object'
-         AND c.evidence ?& ARRAY[
-           'channel','accepted_text_hash','declared_age_band',
-           'client_ip_hash','user_agent_hash'
-         ]
-         AND (
-           c.evidence - ARRAY[
-             'channel','accepted_text_hash','declared_age_band',
-             'client_ip_hash','user_agent_hash'
-           ]::text[]
-         )='{}'::jsonb
-         AND jsonb_typeof(c.evidence->'channel')='string'
-         AND c.evidence->>'channel' IN ('MINIPROGRAM','TEST')
-         AND jsonb_typeof(c.evidence->'accepted_text_hash')='string'
-         AND c.evidence->>'accepted_text_hash' ~ '^[0-9a-f]{64}$'
-         AND jsonb_typeof(c.evidence->'declared_age_band')='string'
-         AND c.evidence->>'declared_age_band'='UNDER_14'
-         AND jsonb_typeof(c.evidence->'client_ip_hash')='string'
-         AND c.evidence->>'client_ip_hash' ~ '^[0-9a-f]{64}$'
-         AND jsonb_typeof(c.evidence->'user_agent_hash')='string'
-         AND c.evidence->>'user_agent_hash' ~ '^[0-9a-f]{64}$';
-
-      IF NOT FOUND
-         OR v_consent_bound_person_id IS DISTINCT FROM v_person_id
-         OR v_consent_notice_hash IS DISTINCT FROM v_current_notice_hash
-         OR v_consent_guardian_person_id IS DISTINCT FROM v_guardian_person_id
-      THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    END IF;
-  END LOOP;
-
-  UPDATE cases
-     SET phase='PLANNING',version=version+1,updated_at=now()
-   WHERE id=p_case_id
-     AND family_id=v_family_id
-     AND version=p_expected_case_version
-     AND phase='GOALS'
-   RETURNING version INTO v_case_version;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CASE_WRITE_CONFLICT' USING ERRCODE='23514';
-  END IF;
-
-  UPDATE goals
-     SET confirmation_state='CONFIRMED',
-         confirmed_by_person_id=p_actor_person_id,
-         confirmed_at=now(),
-         updated_at=now()
-   WHERE case_id=p_case_id
-     AND goal_id=p_goal_id
-     AND version=p_goal_version
-     AND lifecycle_status='ACTIVE'
-     AND confirmation_state='UNCONFIRMED'
-     AND review_state='CURRENT'
-   RETURNING goal_id INTO v_confirmed_goal_id;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_GOAL_WRITE_CONFLICT' USING ERRCODE='23514';
-  END IF;
-  RETURN v_case_version;
-END
-$function$;
-
-REVOKE ALL ON FUNCTION app.confirm_goal_transition(uuid, integer, uuid, integer, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app.confirm_goal_transition(uuid, integer, uuid, integer, uuid) TO xiaoshuyin_app;
-
-ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE goals FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY goals_family_scope ON goals
-  USING (family_id = app_family_id())
-  WITH CHECK (family_id = app_family_id());
-
-REVOKE ALL ON goals FROM xiaoshuyin_app;
-GRANT SELECT, INSERT ON goals TO xiaoshuyin_app;
-GRANT UPDATE (
-  lifecycle_status,
-  confirmation_state,
-  confirmed_by_person_id,
-  confirmed_at,
-  updated_at
-) ON goals TO xiaoshuyin_app;
-
-GRANT USAGE ON TYPE goal_lifecycle_status TO xiaoshuyin_app;
-GRANT USAGE ON TYPE goal_confirmation_state TO xiaoshuyin_app;
-GRANT USAGE ON TYPE goal_review_state TO xiaoshuyin_app;
-
-DO $$
-DECLARE current_def text; current_expr text;
-BEGIN
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='idempotency_keys'::regclass
-     AND conname='idempotency_keys_command_type_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'idempotency command authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE idempotency_keys DROP CONSTRAINT idempotency_keys_command_type_check;
-  EXECUTE format(
-    'ALTER TABLE idempotency_keys ADD CONSTRAINT idempotency_keys_command_type_check CHECK ((%s) OR command_type IN (%L,%L))',
-    current_expr, 'GOAL_SAVE', 'GOAL_CONFIRM'
-  );
-END $$;
-
-DO $$
-DECLARE current_def text; current_expr text;
-BEGIN
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='business_audit_events'::regclass
-     AND conname='business_audit_events_resource_type_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'business audit resource authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE business_audit_events DROP CONSTRAINT business_audit_events_resource_type_check;
-  EXECUTE format(
-    'ALTER TABLE business_audit_events ADD CONSTRAINT business_audit_events_resource_type_check CHECK ((%s) OR resource_type=%L)',
-    current_expr, 'GOAL'
-  );
-
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='business_audit_events'::regclass
-     AND conname='business_audit_events_event_type_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'business audit event authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE business_audit_events DROP CONSTRAINT business_audit_events_event_type_check;
-  EXECUTE format(
-    'ALTER TABLE business_audit_events ADD CONSTRAINT business_audit_events_event_type_check CHECK ((%s) OR event_type IN (%L,%L))',
-    current_expr, 'GOAL_SAVED', 'GOAL_CONFIRMED'
-  );
-END $$;
-
-DO $$
-DECLARE current_def text; current_expr text;
-BEGIN
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='case_events'::regclass
-     AND conname='case_events_event_type_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'case event type authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE case_events DROP CONSTRAINT case_events_event_type_check;
-  EXECUTE format(
-    'ALTER TABLE case_events ADD CONSTRAINT case_events_event_type_check CHECK ((%s) OR event_type=%L)',
-    current_expr, 'CASE_GOAL_CONFIRMED'
-  );
-
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='case_events'::regclass
-     AND conname='case_events_metadata_shape_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'case event metadata authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE case_events DROP CONSTRAINT case_events_metadata_shape_check;
-  EXECUTE format($ddl$
-    ALTER TABLE case_events
-      ADD CONSTRAINT case_events_metadata_shape_check CHECK (
-        (%s)
-        OR (
-          event_type = %L
-          AND jsonb_typeof(metadata) = 'object'
-          AND metadata ? 'goalId'
-          AND metadata ? 'goalVersion'
-          AND metadata ? 'fromPhase'
-          AND metadata ? 'toPhase'
-          AND metadata ? 'fromVersion'
-          AND metadata ? 'toVersion'
-          AND metadata - 'goalId' - 'goalVersion' - 'fromPhase' - 'toPhase'
-                       - 'fromVersion' - 'toVersion' = '{}'::jsonb
-          AND jsonb_typeof(metadata -> 'goalId') = 'string'
-          AND jsonb_typeof(metadata -> 'goalVersion') = 'number'
-          AND metadata ->> 'fromPhase' = 'GOALS'
-          AND metadata ->> 'toPhase' = 'PLANNING'
-          AND CASE
-                WHEN jsonb_typeof(metadata -> 'fromVersion') = 'number'
-                 AND jsonb_typeof(metadata -> 'toVersion') = 'number'
-                 AND jsonb_typeof(metadata -> 'goalVersion') = 'number'
-                THEN (metadata ->> 'goalVersion')::numeric = trunc((metadata ->> 'goalVersion')::numeric)
-                 AND (metadata ->> 'fromVersion')::numeric = trunc((metadata ->> 'fromVersion')::numeric)
-                 AND (metadata ->> 'toVersion')::numeric = trunc((metadata ->> 'toVersion')::numeric)
-                 AND (metadata ->> 'goalVersion')::numeric >= 1
-                 AND (metadata ->> 'fromVersion')::numeric >= 1
-                 AND (metadata ->> 'toVersion')::numeric = (metadata ->> 'fromVersion')::numeric + 1
-                ELSE false
-              END
-        )
-      )
-  $ddl$, current_expr, 'CASE_GOAL_CONFIRMED');
-END $$;
-
       THEN
         RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_FORMULATION_DEPENDENCY_UNSUPPORTED' USING ERRCODE='23514';
       END IF;
@@ -992,476 +523,7 @@ END $$;
         RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_DEPENDENCY_COVERAGE_INVALID' USING ERRCODE='23514';
       END IF;
     ELSE
-      IF COALESCE(v_dependency->>'id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
-  FOR v_responsibility IN
-    SELECT value FROM jsonb_array_elements(v_participant_responsibilities)
-  LOOP
-    IF jsonb_typeof(v_responsibility)<>'object'
-       OR COALESCE(v_responsibility->>'personId','') !~*
-          '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-       OR btrim(COALESCE(v_responsibility->>'responsibility',''))=''
-       OR jsonb_typeof(v_responsibility->'evidenceRefs')<>'array'
-       OR jsonb_array_length(v_responsibility->'evidenceRefs')=0
-    THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CONTRACT_INVALID' USING ERRCODE='23514';
-    END IF;
-
-    FOR v_ref IN
-      SELECT value FROM jsonb_array_elements(v_responsibility->'evidenceRefs')
-    LOOP
-      IF jsonb_typeof(v_ref)<>'object'
-         OR COALESCE(v_ref->>'type','') NOT IN ('DIALOGUE_MESSAGE','ASSERTION','OBSERVATION')
-         OR COALESCE(v_ref->>'id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CONTRACT_INVALID' USING ERRCODE='23514';
-      END IF;
-    END LOOP;
-  END LOOP;
-
-  -- Preserve the existing A2010 gate before the deeper revalidation work.
-  IF NOT EXISTS (
-    SELECT 1
-      FROM scene_node_states a2010
-      JOIN scene_node_states binding
-        ON binding.case_id=a2010.case_id
-       AND binding.family_id=a2010.family_id
-       AND binding.node_code='A1001'
-       AND binding.scene_package_version=a2010.scene_package_version
-     WHERE a2010.case_id=p_case_id
-       AND a2010.family_id=v_family_id
-       AND a2010.node_code='A2010'
-       AND a2010.status='COMPLETED'
-  ) THEN
-    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_A2010_REQUIRED' USING ERRCODE='23514';
-  END IF;
-
-  -- Revalidate every stored Goal Evidence dependency against current truth.
-  FOR v_dependency IN SELECT value FROM jsonb_array_elements(v_goal_dependencies)
-  LOOP
-    IF v_dependency->>'type'<>'EVIDENCE' THEN CONTINUE; END IF;
-    v_ref:=v_dependency->'evidence';
-    v_ref_type:=v_ref->>'type';
-    v_ref_id:=(v_ref->>'id')::uuid;
-
-    IF v_ref_type='DIALOGUE_MESSAGE' THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM dialogue_messages d
-         WHERE d.id=v_ref_id AND d.case_id=p_case_id
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    ELSIF v_ref_type='ASSERTION' THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM assertions a
-         WHERE a.id=v_ref_id
-           AND a.case_id=p_case_id
-           AND (a.valid_from IS NULL OR a.valid_from<=now())
-           AND (a.valid_until IS NULL OR a.valid_until>now())
-           AND NOT EXISTS (
-             SELECT 1 FROM assertions successor
-              WHERE successor.supersedes_id=a.id
-           )
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    ELSE
-      IF NOT EXISTS (
-        SELECT 1 FROM observations o
-         WHERE o.id=v_ref_id
-           AND o.case_id=p_case_id
-           AND (o.valid_from IS NULL OR o.valid_from<=now())
-           AND (o.valid_until IS NULL OR o.valid_until>now())
-           AND NOT EXISTS (
-             SELECT 1 FROM observations successor
-              WHERE successor.supersedes_id=o.id
-           )
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    END IF;
-  END LOOP;
-
-  -- Baseline and participant-responsibility Evidence are also authoritative
-  -- inputs to formal confirmGoal(), even when not duplicated in dependency_refs.
-  FOR v_ref IN
-    SELECT value FROM jsonb_array_elements(v_baseline_refs)
-    UNION ALL
-    SELECT evidence_ref
-      FROM jsonb_array_elements(v_participant_responsibilities) responsibility,
-           LATERAL jsonb_array_elements(responsibility->'evidenceRefs') evidence_ref
-  LOOP
-    v_ref_type:=v_ref->>'type';
-    v_ref_id:=(v_ref->>'id')::uuid;
-
-    IF v_ref_type='DIALOGUE_MESSAGE' THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM dialogue_messages d
-         WHERE d.id=v_ref_id AND d.case_id=p_case_id
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    ELSIF v_ref_type='ASSERTION' THEN
-      IF NOT EXISTS (
-        SELECT 1 FROM assertions a
-         WHERE a.id=v_ref_id
-           AND a.case_id=p_case_id
-           AND (a.valid_from IS NULL OR a.valid_from<=now())
-           AND (a.valid_until IS NULL OR a.valid_until>now())
-           AND NOT EXISTS (
-             SELECT 1 FROM assertions successor
-              WHERE successor.supersedes_id=a.id
-           )
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    ELSE
-      IF NOT EXISTS (
-        SELECT 1 FROM observations o
-         WHERE o.id=v_ref_id
-           AND o.case_id=p_case_id
-           AND (o.valid_from IS NULL OR o.valid_from<=now())
-           AND (o.valid_until IS NULL OR o.valid_until>now())
-           AND NOT EXISTS (
-             SELECT 1 FROM observations successor
-              WHERE successor.supersedes_id=o.id
-           )
-      ) THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    END IF;
-  END LOOP;
-
-  -- Participant responsibilities require current ACTIVE participation and at
-  -- least one current Evidence member attributable to that Person.
-  FOR v_responsibility IN
-    SELECT value FROM jsonb_array_elements(v_participant_responsibilities)
-  LOOP
-    v_responsibility_person_id:=(v_responsibility->>'personId')::uuid;
-    IF NOT EXISTS (
-      SELECT 1 FROM case_participants cp
-       WHERE cp.case_id=p_case_id
-         AND cp.person_id=v_responsibility_person_id
-         AND cp.state='ACTIVE'
-    ) THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_PARTICIPANT_INVALID' USING ERRCODE='23514';
-    END IF;
-
-    IF NOT EXISTS (
-      SELECT 1
-        FROM jsonb_array_elements(v_responsibility->'evidenceRefs') ref(value)
-       WHERE (
-         (ref.value->>'type'='DIALOGUE_MESSAGE' AND EXISTS (
-           SELECT 1 FROM dialogue_messages d
-            WHERE d.id=(ref.value->>'id')::uuid
-              AND d.case_id=p_case_id
-              AND d.source_person_id=v_responsibility_person_id
-         ))
-         OR
-         (ref.value->>'type'='ASSERTION' AND EXISTS (
-           SELECT 1 FROM assertions a
-            WHERE a.id=(ref.value->>'id')::uuid
-              AND a.case_id=p_case_id
-              AND (
-                a.subject_person_id=v_responsibility_person_id
-                OR a.source_person_id=v_responsibility_person_id
-              )
-         ))
-         OR
-         (ref.value->>'type'='OBSERVATION' AND EXISTS (
-           SELECT 1 FROM observations o
-            WHERE o.id=(ref.value->>'id')::uuid
-              AND o.case_id=p_case_id
-              AND (
-                o.subject_person_id=v_responsibility_person_id
-                OR o.source_person_id=v_responsibility_person_id
-              )
-         ))
-       )
-    ) THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_PARTICIPANT_EVIDENCE_INVALID' USING ERRCODE='23514';
-    END IF;
-  END LOOP;
-
-  -- Revalidate Goal Consent dependencies with the same guardian-consent
-  -- read gate as the application service: exact record, usable evidence,
-  -- GRANTED decision, and exact version when the Goal pins one.
-  FOR v_dependency IN SELECT value FROM jsonb_array_elements(v_goal_dependencies)
-  LOOP
-    IF v_dependency->>'type'<>'CONSENT' THEN CONTINUE; END IF;
-    v_consent_id:=(v_dependency->>'id')::uuid;
-
-    SELECT c.version INTO v_consent_version
-      FROM consent_records c
-     WHERE c.id=v_consent_id
-       AND c.purpose='UNDER_14_GUARDIAN_CONSENT'
-       AND c.decision='GRANTED'
-       AND jsonb_typeof(c.evidence)='object'
-       AND c.evidence ?& ARRAY[
-         'channel','accepted_text_hash','declared_age_band',
-         'client_ip_hash','user_agent_hash'
-       ]
-       AND (
-         c.evidence - ARRAY[
-           'channel','accepted_text_hash','declared_age_band',
-           'client_ip_hash','user_agent_hash'
-         ]::text[]
-       )='{}'::jsonb
-       AND jsonb_typeof(c.evidence->'channel')='string'
-       AND c.evidence->>'channel' IN ('MINIPROGRAM','TEST')
-       AND jsonb_typeof(c.evidence->'accepted_text_hash')='string'
-       AND c.evidence->>'accepted_text_hash' ~ '^[0-9a-f]{64}$'
-       AND jsonb_typeof(c.evidence->'declared_age_band')='string'
-       AND c.evidence->>'declared_age_band'='UNDER_14'
-       AND jsonb_typeof(c.evidence->'client_ip_hash')='string'
-       AND c.evidence->>'client_ip_hash' ~ '^[0-9a-f]{64}$'
-       AND jsonb_typeof(c.evidence->'user_agent_hash')='string'
-       AND c.evidence->>'user_agent_hash' ~ '^[0-9a-f]{64}$';
-    IF NOT FOUND
-       OR (
-         v_dependency ? 'version'
-         AND v_consent_version<>(v_dependency->>'version')::integer
-       )
-    THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CONSENT_INVALID' USING ERRCODE='23514';
-    END IF;
-  END LOOP;
-
-  -- Formal confirmGoal() re-runs the minor-processing Compliance gate for the
-  -- actor, Case creator and every ACTIVE participant. The privileged primitive
-  -- must fail closed on the same authoritative state.
-  FOR v_person_id IN
-    SELECT DISTINCT subject_person_id
-      FROM (
-        SELECT app_person_id() AS subject_person_id
-        UNION ALL SELECT v_case_created_by_person_id
-        UNION ALL
-        SELECT cp.person_id
-          FROM case_participants cp
-         WHERE cp.case_id=p_case_id
-           AND cp.state='ACTIVE'
-      ) subjects
-     WHERE subject_person_id IS NOT NULL
-  LOOP
-    SELECT pcp.age_band,pcp.guardian_person_id,pcp.guardian_consent_record_id
-      INTO v_age_band,v_guardian_person_id,v_guardian_consent_record_id
-      FROM person_compliance_profiles pcp
-     WHERE pcp.person_id=v_person_id
-     FOR UPDATE;
-
-    IF NOT FOUND OR v_age_band='UNKNOWN' THEN
-      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID' USING ERRCODE='23514';
-    END IF;
-
-    IF v_age_band='UNDER_14' THEN
-      IF v_guardian_person_id IS NULL OR v_guardian_consent_record_id IS NULL THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID' USING ERRCODE='23514';
-      END IF;
-
-      SELECT c.bound_person_id,c.notice_hash,c.guardian_person_id
-        INTO v_consent_bound_person_id,v_consent_notice_hash,
-             v_consent_guardian_person_id
-        FROM consent_records c
-       WHERE c.id=v_guardian_consent_record_id
-         AND c.purpose='UNDER_14_GUARDIAN_CONSENT'
-         AND c.decision='GRANTED'
-         AND jsonb_typeof(c.evidence)='object'
-         AND c.evidence ?& ARRAY[
-           'channel','accepted_text_hash','declared_age_band',
-           'client_ip_hash','user_agent_hash'
-         ]
-         AND (
-           c.evidence - ARRAY[
-             'channel','accepted_text_hash','declared_age_band',
-             'client_ip_hash','user_agent_hash'
-           ]::text[]
-         )='{}'::jsonb
-         AND jsonb_typeof(c.evidence->'channel')='string'
-         AND c.evidence->>'channel' IN ('MINIPROGRAM','TEST')
-         AND jsonb_typeof(c.evidence->'accepted_text_hash')='string'
-         AND c.evidence->>'accepted_text_hash' ~ '^[0-9a-f]{64}$'
-         AND jsonb_typeof(c.evidence->'declared_age_band')='string'
-         AND c.evidence->>'declared_age_band'='UNDER_14'
-         AND jsonb_typeof(c.evidence->'client_ip_hash')='string'
-         AND c.evidence->>'client_ip_hash' ~ '^[0-9a-f]{64}$'
-         AND jsonb_typeof(c.evidence->'user_agent_hash')='string'
-         AND c.evidence->>'user_agent_hash' ~ '^[0-9a-f]{64}$';
-
-      IF NOT FOUND
-         OR v_consent_bound_person_id IS DISTINCT FROM v_person_id
-         OR v_consent_notice_hash IS DISTINCT FROM v_current_notice_hash
-         OR v_consent_guardian_person_id IS DISTINCT FROM v_guardian_person_id
-      THEN
-        RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID' USING ERRCODE='23514';
-      END IF;
-    END IF;
-  END LOOP;
-
-  UPDATE cases
-     SET phase='PLANNING',version=version+1,updated_at=now()
-   WHERE id=p_case_id
-     AND family_id=v_family_id
-     AND version=p_expected_case_version
-     AND phase='GOALS'
-   RETURNING version INTO v_case_version;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CASE_WRITE_CONFLICT' USING ERRCODE='23514';
-  END IF;
-
-  UPDATE goals
-     SET confirmation_state='CONFIRMED',
-         confirmed_by_person_id=p_actor_person_id,
-         confirmed_at=now(),
-         updated_at=now()
-   WHERE case_id=p_case_id
-     AND goal_id=p_goal_id
-     AND version=p_goal_version
-     AND lifecycle_status='ACTIVE'
-     AND confirmation_state='UNCONFIRMED'
-     AND review_state='CURRENT'
-   RETURNING goal_id INTO v_confirmed_goal_id;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_GOAL_WRITE_CONFLICT' USING ERRCODE='23514';
-  END IF;
-  RETURN v_case_version;
-END
-$function$;
-
-REVOKE ALL ON FUNCTION app.confirm_goal_transition(uuid, integer, uuid, integer, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app.confirm_goal_transition(uuid, integer, uuid, integer, uuid) TO xiaoshuyin_app;
-
-ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE goals FORCE ROW LEVEL SECURITY;
-
-CREATE POLICY goals_family_scope ON goals
-  USING (family_id = app_family_id())
-  WITH CHECK (family_id = app_family_id());
-
-REVOKE ALL ON goals FROM xiaoshuyin_app;
-GRANT SELECT, INSERT ON goals TO xiaoshuyin_app;
-GRANT UPDATE (
-  lifecycle_status,
-  confirmation_state,
-  confirmed_by_person_id,
-  confirmed_at,
-  updated_at
-) ON goals TO xiaoshuyin_app;
-
-GRANT USAGE ON TYPE goal_lifecycle_status TO xiaoshuyin_app;
-GRANT USAGE ON TYPE goal_confirmation_state TO xiaoshuyin_app;
-GRANT USAGE ON TYPE goal_review_state TO xiaoshuyin_app;
-
-DO $$
-DECLARE current_def text; current_expr text;
-BEGIN
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='idempotency_keys'::regclass
-     AND conname='idempotency_keys_command_type_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'idempotency command authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE idempotency_keys DROP CONSTRAINT idempotency_keys_command_type_check;
-  EXECUTE format(
-    'ALTER TABLE idempotency_keys ADD CONSTRAINT idempotency_keys_command_type_check CHECK ((%s) OR command_type IN (%L,%L))',
-    current_expr, 'GOAL_SAVE', 'GOAL_CONFIRM'
-  );
-END $$;
-
-DO $$
-DECLARE current_def text; current_expr text;
-BEGIN
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='business_audit_events'::regclass
-     AND conname='business_audit_events_resource_type_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'business audit resource authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE business_audit_events DROP CONSTRAINT business_audit_events_resource_type_check;
-  EXECUTE format(
-    'ALTER TABLE business_audit_events ADD CONSTRAINT business_audit_events_resource_type_check CHECK ((%s) OR resource_type=%L)',
-    current_expr, 'GOAL'
-  );
-
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='business_audit_events'::regclass
-     AND conname='business_audit_events_event_type_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'business audit event authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE business_audit_events DROP CONSTRAINT business_audit_events_event_type_check;
-  EXECUTE format(
-    'ALTER TABLE business_audit_events ADD CONSTRAINT business_audit_events_event_type_check CHECK ((%s) OR event_type IN (%L,%L))',
-    current_expr, 'GOAL_SAVED', 'GOAL_CONFIRMED'
-  );
-END $$;
-
-DO $$
-DECLARE current_def text; current_expr text;
-BEGIN
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='case_events'::regclass
-     AND conname='case_events_event_type_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'case event type authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE case_events DROP CONSTRAINT case_events_event_type_check;
-  EXECUTE format(
-    'ALTER TABLE case_events ADD CONSTRAINT case_events_event_type_check CHECK ((%s) OR event_type=%L)',
-    current_expr, 'CASE_GOAL_CONFIRMED'
-  );
-
-  SELECT pg_get_constraintdef(oid, true) INTO current_def
-    FROM pg_constraint
-   WHERE conrelid='case_events'::regclass
-     AND conname='case_events_metadata_shape_check';
-  IF current_def IS NULL OR current_def NOT LIKE 'CHECK (%' THEN
-    RAISE EXCEPTION 'case event metadata authority missing';
-  END IF;
-  current_expr := substring(current_def FROM 8 FOR char_length(current_def)-8);
-  ALTER TABLE case_events DROP CONSTRAINT case_events_metadata_shape_check;
-  EXECUTE format($ddl$
-    ALTER TABLE case_events
-      ADD CONSTRAINT case_events_metadata_shape_check CHECK (
-        (%s)
-        OR (
-          event_type = %L
-          AND jsonb_typeof(metadata) = 'object'
-          AND metadata ? 'goalId'
-          AND metadata ? 'goalVersion'
-          AND metadata ? 'fromPhase'
-          AND metadata ? 'toPhase'
-          AND metadata ? 'fromVersion'
-          AND metadata ? 'toVersion'
-          AND metadata - 'goalId' - 'goalVersion' - 'fromPhase' - 'toPhase'
-                       - 'fromVersion' - 'toVersion' = '{}'::jsonb
-          AND jsonb_typeof(metadata -> 'goalId') = 'string'
-          AND jsonb_typeof(metadata -> 'goalVersion') = 'number'
-          AND metadata ->> 'fromPhase' = 'GOALS'
-          AND metadata ->> 'toPhase' = 'PLANNING'
-          AND CASE
-                WHEN jsonb_typeof(metadata -> 'fromVersion') = 'number'
-                 AND jsonb_typeof(metadata -> 'toVersion') = 'number'
-                 AND jsonb_typeof(metadata -> 'goalVersion') = 'number'
-                THEN (metadata ->> 'goalVersion')::numeric = trunc((metadata ->> 'goalVersion')::numeric)
-                 AND (metadata ->> 'fromVersion')::numeric = trunc((metadata ->> 'fromVersion')::numeric)
-                 AND (metadata ->> 'toVersion')::numeric = trunc((metadata ->> 'toVersion')::numeric)
-                 AND (metadata ->> 'goalVersion')::numeric >= 1
-                 AND (metadata ->> 'fromVersion')::numeric >= 1
-                 AND (metadata ->> 'toVersion')::numeric = (metadata ->> 'fromVersion')::numeric + 1
-                ELSE false
-              END
-        )
-      )
-  $ddl$, current_expr, 'CASE_GOAL_CONFIRMED');
-END $$;
-
+      IF COALESCE(v_dependency->>'id','') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       THEN
         RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_FORMULATION_DEPENDENCY_UNSUPPORTED' USING ERRCODE='23514';
       END IF;
@@ -1690,17 +752,31 @@ END $$;
 
   -- Revalidate Goal Consent dependencies with the same guardian-consent
   -- read gate as the application service: exact record, usable evidence,
-  -- GRANTED decision, and exact version when the Goal pins one.
+  -- current GRANTED chain head and exact version when the Goal pins one.
   FOR v_dependency IN SELECT value FROM jsonb_array_elements(v_goal_dependencies)
   LOOP
     IF v_dependency->>'type'<>'CONSENT' THEN CONTINUE; END IF;
     v_consent_id:=(v_dependency->>'id')::uuid;
+
+    -- Guardian revocation locks the predecessor before appending a successor.
+    -- Check for a successor in a separate statement after acquiring that lock.
+    PERFORM 1 FROM consent_records c
+     WHERE c.id=v_consent_id AND c.purpose='UNDER_14_GUARDIAN_CONSENT'
+     FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CONSENT_INVALID' USING ERRCODE='23514';
+    END IF;
 
     SELECT c.version INTO v_consent_version
       FROM consent_records c
      WHERE c.id=v_consent_id
        AND c.purpose='UNDER_14_GUARDIAN_CONSENT'
        AND c.decision='GRANTED'
+       AND NOT EXISTS (
+         SELECT 1 FROM consent_records successor
+          WHERE successor.supersedes_id=c.id
+            AND successor.purpose=c.purpose
+       )
        AND jsonb_typeof(c.evidence)='object'
        AND c.evidence ?& ARRAY[
          'channel','accepted_text_hash','declared_age_band',
@@ -1828,6 +904,35 @@ END $$;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_GOAL_WRITE_CONFLICT' USING ERRCODE='23514';
   END IF;
+  INSERT INTO case_events (family_id, case_id, actor_account_id, event_type, metadata)
+  VALUES (
+    v_family_id, p_case_id, app_account_id(), 'CASE_GOAL_CONFIRMED',
+    jsonb_build_object(
+      'goalId', p_goal_id, 'goalVersion', p_goal_version,
+      'fromPhase', 'GOALS', 'toPhase', 'PLANNING',
+      'fromVersion', p_expected_case_version, 'toVersion', v_case_version
+    )
+  );
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_EVENT_WRITE_FAILED' USING ERRCODE='23514';
+  END IF;
+
+  INSERT INTO business_audit_events (
+    family_id, actor_account_id, event_type, resource_type, resource_id, metadata
+  ) VALUES (
+    v_family_id, app_account_id(), 'GOAL_CONFIRMED', 'GOAL', p_goal_id,
+    jsonb_build_object(
+      'goalVersion', p_goal_version, 'caseId', p_case_id,
+      'fromCaseVersion', p_expected_case_version, 'toCaseVersion', v_case_version,
+      'confirmedByPersonId', p_actor_person_id,
+      'problemFormulationId', v_problem_formulation_id,
+      'problemFormulationVersion', v_problem_formulation_version
+    )
+  );
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_AUDIT_WRITE_FAILED' USING ERRCODE='23514';
+  END IF;
+
   RETURN v_case_version;
 END
 $function$;
@@ -1844,13 +949,7 @@ CREATE POLICY goals_family_scope ON goals
 
 REVOKE ALL ON goals FROM xiaoshuyin_app;
 GRANT SELECT, INSERT ON goals TO xiaoshuyin_app;
-GRANT UPDATE (
-  lifecycle_status,
-  confirmation_state,
-  confirmed_by_person_id,
-  confirmed_at,
-  updated_at
-) ON goals TO xiaoshuyin_app;
+GRANT UPDATE (lifecycle_status, updated_at) ON goals TO xiaoshuyin_app;
 
 GRANT USAGE ON TYPE goal_lifecycle_status TO xiaoshuyin_app;
 GRANT USAGE ON TYPE goal_confirmation_state TO xiaoshuyin_app;

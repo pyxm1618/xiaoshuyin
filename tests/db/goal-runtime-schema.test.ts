@@ -291,7 +291,7 @@ describe('Common Core Goal DB guards', () => {
     }
   });
 
-  it('cannot directly confirm a Goal while the Case remains GOALS', async () => {
+  it('denies direct Goal confirmation writes to the runtime role', async () => {
     const inserted = await admin.query(savedInsertSql(), [
       familyId,
       caseId,
@@ -318,7 +318,7 @@ describe('Common Core Goal DB guards', () => {
             "WHERE id=$1",
           [goalRowId, personId]
         )
-      ).rejects.toThrow(/GOAL_CONFIRMATION_REQUIRES_PLANNING_TRANSITION/);
+      ).rejects.toMatchObject({ code: '42501' });
     } finally {
       await app.query('ROLLBACK');
     }
@@ -561,6 +561,48 @@ describe('Common Core Goal DB guards', () => {
       });
     } finally {
       await admin.query('DELETE FROM goals WHERE id=$1', [inserted.rows[0].id]);
+      await cleanupPrivilegedTransitionPrerequisites();
+    }
+  });
+
+  it('writes the Case, Goal, Case Event and Business Audit in the persistence primitive', async () => {
+    await seedPrivilegedTransitionPrerequisites();
+    const inserted = await admin.query(savedInsertSql(), [familyId, caseId, formulationId, personId]);
+    const goalRowId = inserted.rows[0].id;
+    const { rows: [goal] } = await admin.query(
+      'SELECT goal_id,version FROM goals WHERE id=$1',
+      [goalRowId]
+    );
+
+    await app.query('BEGIN');
+    try {
+      await app.query('SELECT app.set_identity_context($1,$2)', [accountId, 'FAMILY_MANAGEMENT']);
+      await app.query('SELECT app.set_family_context($1,$2,$3)', [familyId, personId, 'FAMILY_MANAGEMENT']);
+
+      const transition = await app.query(
+        'SELECT app.confirm_goal_transition($1,$2,$3,$4,$5) AS case_version',
+        [caseId, 7, goal.goal_id, goal.version, personId]
+      );
+      expect(transition.rows).toEqual([{ case_version: 8 }]);
+
+      const { rows } = await app.query(
+        `SELECT c.phase,c.version,g.confirmation_state,
+                (SELECT count(*)::int FROM case_events
+                  WHERE case_id=c.id AND event_type='CASE_GOAL_CONFIRMED') AS events,
+                (SELECT count(*)::int FROM business_audit_events
+                  WHERE family_id=c.family_id AND resource_id=g.goal_id
+                    AND event_type='GOAL_CONFIRMED') AS audits
+           FROM cases c JOIN goals g ON g.case_id=c.id
+          WHERE c.id=$1 AND g.id=$2`,
+        [caseId, goalRowId]
+      );
+      expect(rows).toEqual([{
+        phase: 'PLANNING', version: 8, confirmation_state: 'CONFIRMED',
+        events: 1, audits: 1,
+      }]);
+    } finally {
+      await app.query('ROLLBACK');
+      await admin.query('DELETE FROM goals WHERE id=$1', [goalRowId]);
       await cleanupPrivilegedTransitionPrerequisites();
     }
   });

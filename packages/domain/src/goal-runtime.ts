@@ -386,44 +386,12 @@ export async function confirmGoalTransition(
   return {caseVersion,goal};
 }
 
-export async function insertGoalCaseEvent(
-  tx: PoolClient,
-  input: {
-    familyId: string;
-    caseId: string;
-    actorAccountId: string;
-    goalId: string;
-    goalVersion: number;
-    fromVersion: number;
-    toVersion: number;
-  }
-): Promise<void> {
-  await tx.query(
-    "INSERT INTO case_events " +
-      "(family_id, case_id, actor_account_id, event_type, metadata) " +
-      "VALUES ($1,$2,$3,'CASE_GOAL_CONFIRMED',$4::jsonb)",
-    [
-      input.familyId,
-      input.caseId,
-      input.actorAccountId,
-      JSON.stringify({
-        goalId: input.goalId,
-        goalVersion: input.goalVersion,
-        fromPhase: 'GOALS',
-        toPhase: 'PLANNING',
-        fromVersion: input.fromVersion,
-        toVersion: input.toVersion,
-      }),
-    ]
-  );
-}
-
 export async function insertGoalAudit(
   tx: PoolClient,
   input: {
     familyId: string;
     actorAccountId: string;
-    eventType: 'GOAL_SAVED' | 'GOAL_CONFIRMED';
+    eventType: 'GOAL_SAVED';
     goalId: string;
     metadata: Record<string, unknown>;
   }
