@@ -452,4 +452,397 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     expect(persistedNode.rows[0].n).toBe(0);
     expect(networkRouteTruthCalls).toBe(0);
   });
+
+  async function finishA2010ForGoal(f: Fixture) {
+    let scene = await enterA2004(f);
+    scene = await respond(f, scene, 'A2004', { decision: 'YES' }, 'goal-a2004');
+    scene = await respond(f, scene, 'A2005', { decision: 'WILLING' }, 'goal-a2005');
+    scene = await respond(
+      f,
+      scene,
+      'A2007',
+      { timeline: { reviewDate: '2026-12-01', cadence: 'weekly' } },
+      'goal-a2007'
+    );
+    scene = await respond(
+      f,
+      scene,
+      'A2010',
+      { action: 'GENERATE_SUMMARY' },
+      'goal-a2010'
+    );
+    expect(scene.nodes.find((n: any) => n.nodeCode === 'A2010')?.status).toBe('COMPLETED');
+    return scene;
+  }
+
+  async function currentGoalFormulation(f: Fixture) {
+    const current = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId + '/problem-formulations/current',
+      headers: auth(f.manager.token),
+    });
+    expect(current.statusCode, current.body).toBe(200);
+    expect(current.json().current?.status).toBe('CONFIRMED');
+    return current.json().current;
+  }
+
+  function goalSavePayload(formulation: any) {
+    const baseline =
+      formulation.evidenceRefs?.[0] ??
+      formulation.primaryProblem?.evidenceRefs?.[0];
+    expect(baseline).toBeTruthy();
+    expect(formulation.dependencyRefs?.length).toBeGreaterThan(0);
+    return {
+      operation: 'SAVE',
+      problemFormulationId: formulation.id,
+      problemFormulationVersion: formulation.version,
+      baselineRefs: [baseline],
+      targetDescription:
+        'Reduce disruptive evening device use while preserving required study contact.',
+      observationMethod:
+        'Track bedtime, conflict intensity, and required-study access.',
+      observationWindow: '14 days',
+      protectiveConditions: [
+        'Preserve schoolwork and necessary family contact.',
+      ],
+      parentActions: [
+        'Use one agreed transition prompt and avoid escalating conflict.',
+      ],
+      reviewPoint: 'Review after 14 days.',
+      dependencyRefs: formulation.dependencyRefs,
+      participantResponsibilities: [],
+    };
+  }
+
+  async function saveGoalFor(
+    f: Fixture,
+    caseVersion: number,
+    formulation: any,
+    key: string
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/v1/cases/' + f.caseId + '/goals',
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': key,
+        'if-match': '"case-v' + caseVersion + '"',
+      },
+      payload: goalSavePayload(formulation),
+    });
+  }
+
+  async function confirmGoalFor(
+    f: Fixture,
+    caseVersion: number,
+    goalId: string,
+    goalVersion: number,
+    key: string,
+    extra: Record<string, unknown> = {}
+  ) {
+    return app.inject({
+      method: 'POST',
+      url: '/api/v1/cases/' + f.caseId + '/goals',
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': key,
+        'if-match': '"case-v' + caseVersion + '"',
+      },
+      payload: {
+        operation: 'CONFIRM',
+        goalId,
+        goalVersion,
+        ...extra,
+      },
+    });
+  }
+
+  it('continues the canonical flow through SAVE and atomic ConfirmGoal to PLANNING', async () => {
+    const f = await fixture('goal-happy');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-happy-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+    expect(saved.json()).toMatchObject({
+      operation: 'SAVE',
+      phase: 'GOALS',
+      confirmationState: 'UNCONFIRMED',
+    });
+    const saveBody = saved.json();
+
+    const afterSave = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(afterSave.json().phase).toBe('GOALS');
+
+    const mutation = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      'goal-confirm-mutation-' + crypto.randomUUID(),
+      { targetDescription: 'client mutation forbidden' }
+    );
+    expect(mutation.statusCode).toBe(422);
+
+    const stale = await confirmGoalFor(
+      f,
+      scene.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      'goal-confirm-stale-' + crypto.randomUUID()
+    );
+    expect(stale.statusCode, stale.body).toBe(409);
+    expect(stale.json().code).toBe('STALE_CASE_VERSION');
+
+    const confirmKey = 'goal-confirm-happy-' + crypto.randomUUID();
+    const confirmed = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      confirmKey
+    );
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json()).toMatchObject({
+      operation: 'CONFIRM',
+      phase: 'PLANNING',
+      confirmationState: 'CONFIRMED',
+      confirmedBy: f.manager.personId,
+    });
+
+    const replay = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion,
+      confirmKey
+    );
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toEqual(confirmed.json());
+
+    const mismatch = await confirmGoalFor(
+      f,
+      saveBody.caseVersion,
+      saveBody.goalId,
+      saveBody.goalVersion + 1,
+      confirmKey
+    );
+    expect(mismatch.statusCode).toBe(409);
+    expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+
+    const afterConfirm = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(afterConfirm.json().phase).toBe('PLANNING');
+
+    const secondEndpoint = await app.inject({
+      method: 'POST',
+      url:
+        '/api/v1/cases/' +
+        f.caseId +
+        '/goals/' +
+        saveBody.goalId +
+        '/confirm',
+      headers: commandHeaders(
+        f.manager.token,
+        'goal-forbidden-second-endpoint'
+      ),
+      payload: {},
+    });
+    expect(secondEndpoint.statusCode).toBe(404);
+  });
+
+  it('rejects ConfirmGoal while A2010 is incomplete and leaves the Case in GOALS', async () => {
+    const f = await fixture('goal-a2010-incomplete');
+    let scene = await triage(f, true, 'A', 'A');
+    scene = await confirmCurrentFormulation(f, scene);
+    expect(scene.currentNode?.nodeCode).toBe('A2003');
+    const formulation = await currentGoalFormulation(f);
+
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-incomplete-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    const result = await confirmGoalFor(
+      f,
+      saved.json().caseVersion,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-incomplete-' + crypto.randomUUID()
+    );
+    expect(result.statusCode, result.body).toBe(409);
+    expect(result.json().code).toBe('CASE_PHASE_CONFLICT');
+
+    const kase = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(kase.json().phase).toBe('GOALS');
+  });
+
+  it('re-checks primary authority after SAVE', async () => {
+    const f = await fixture('goal-primary-change');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-primary-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode).toBe(201);
+
+    const other = await createCase(
+      app,
+      f.manager.token,
+      'goal-primary-other'
+    );
+    expect(other.statusCode, other.body).toBe(201);
+
+    const switched = await app.inject({
+      method: 'POST',
+      url:
+        '/api/v1/cases/' +
+        other.json().id +
+        '/switch-primary',
+      headers: commandHeaders(f.manager.token, 'goal-switch-primary'),
+      payload: {
+        reason: 'verify current advancement authority',
+        expectedPrimaryCaseId: f.caseId,
+        expectedPrimaryVersion: saved.json().caseVersion,
+      },
+    });
+    expect(switched.statusCode, switched.body).toBe(200);
+
+    const rejected = await confirmGoalFor(
+      f,
+      saved.json().caseVersion,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-old-primary-' + crypto.randomUUID()
+    );
+    expect(rejected.statusCode, rejected.body).toBe(409);
+    expect(rejected.json().code).toBe('CASE_NOT_PRIMARY');
+
+    const kase = await app.inject({
+      method: 'GET',
+      url: '/api/v1/cases/' + f.caseId,
+      headers: auth(f.manager.token),
+    });
+    expect(kase.json().phase).toBe('GOALS');
+  });
+
+  it('converges concurrent ConfirmGoal attempts to one authoritative confirmation', async () => {
+    const f = await fixture('goal-concurrent');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-concurrent-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode).toBe(201);
+
+    const [a, b] = await Promise.all([
+      confirmGoalFor(
+        f,
+        saved.json().caseVersion,
+        saved.json().goalId,
+        saved.json().goalVersion,
+        'goal-confirm-concurrent-a-' + crypto.randomUUID()
+      ),
+      confirmGoalFor(
+        f,
+        saved.json().caseVersion,
+        saved.json().goalId,
+        saved.json().goalVersion,
+        'goal-confirm-concurrent-b-' + crypto.randomUUID()
+      ),
+    ]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+
+    const rows = await admin.query(
+      'SELECT confirmation_state, count(*)::int AS n ' +
+        'FROM goals WHERE case_id=$1 GROUP BY confirmation_state',
+      [f.caseId]
+    );
+    expect(rows.rows).toEqual([
+      expect.objectContaining({
+        confirmation_state: 'CONFIRMED',
+        n: 1,
+      }),
+    ]);
+  });
+
+  it('fails closed on Safety and Compliance at confirmation time', async () => {
+    const safety = await fixture('goal-safety');
+    let scene = await finishA2010ForGoal(safety);
+    let formulation = await currentGoalFormulation(safety);
+    let saved = await saveGoalFor(
+      safety,
+      scene.caseVersion,
+      formulation,
+      'goal-save-safety-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode).toBe(201);
+    await admin.query(
+      "UPDATE cases SET status='SAFETY_HOLD' WHERE id=$1",
+      [safety.caseId]
+    );
+    let result = await confirmGoalFor(
+      safety,
+      saved.json().caseVersion,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-safety-' + crypto.randomUUID()
+    );
+    expect(result.statusCode).toBe(409);
+    expect(result.json().code).toBe('SAFETY_HOLD_BLOCKED');
+
+    const compliance = await fixture('goal-compliance');
+    scene = await finishA2010ForGoal(compliance);
+    formulation = await currentGoalFormulation(compliance);
+    saved = await saveGoalFor(
+      compliance,
+      scene.caseVersion,
+      formulation,
+      'goal-save-compliance-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode).toBe(201);
+    await admin.query(
+      "UPDATE person_compliance_profiles " +
+        "SET age_band='UNKNOWN',minor_mode=false," +
+        "guardian_person_id=NULL,guardian_consent_record_id=NULL," +
+        "guardian_consent_version=NULL,verified_source='SELF_STATEMENT' " +
+        'WHERE person_id=$1',
+      [compliance.manager.personId]
+    );
+    result = await confirmGoalFor(
+      compliance,
+      saved.json().caseVersion,
+      saved.json().goalId,
+      saved.json().goalVersion,
+      'goal-confirm-compliance-' + crypto.randomUUID()
+    );
+    expect(result.statusCode).toBe(409);
+    expect(result.json().code).toBe('COMPLIANCE_BLOCKED');
+  });
+
 });
