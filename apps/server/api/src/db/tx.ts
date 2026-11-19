@@ -507,15 +507,23 @@ export async function withProfessionalKnowledgeAdminTransaction<T>(
 }
 
 /**
- * Slice 17 authority-sensitive review/release execution boundary.
+ * HIGH-001 closed boundary: arbitrary privileged callbacks are forbidden.
  *
- * The ordinary xiaoshuyin_app credential is never accepted here. Staff context
- * deliberately remains inside the idempotent command callback so an exact
- * committed replay is still resolved before current Staff authority.
+ * Professional Knowledge review/release now run in the ordinary app
+ * transaction and cross privilege only through the narrow DB command
+ * primitives. Keep this symbol fail-closed for adversarial regression tests;
+ * it must never expose a xiaoshuyin_migrator transaction to runtime callers.
  */
 export async function withProfessionalKnowledgeAuthorityTransaction<T>(
-  pool: pg.Pool,
-  opts: { accountId: string },
+  _pool: pg.Pool,
+  _opts: { accountId: string },
+  _fn: (tx: TxClient) => Promise<T>
+): Promise<T> {
+  throw Object.assign(
+    new Error('PROFESSIONAL_KNOWLEDGE_ARBITRARY_AUTHORITY_TRANSACTION_FORBIDDEN'),
+    { code: '42501' }
+  );
+},
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
   return withTransactionClient(pool, async (client) => {
