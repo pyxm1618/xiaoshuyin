@@ -27,7 +27,7 @@
           "specPath": "specs/common-core-goal-confirmgoal-runtime",
           "requirementId": "Requirements",
           "requiredArtifacts": [
-            "specs/common-core-goal-confirmgoal-runtime/plan.md"
+            "tests/architecture/common-core-goal-confirmgoal-authority.test.ts"
           ]
         }
       ]
