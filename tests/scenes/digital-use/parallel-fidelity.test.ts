@@ -47,7 +47,16 @@ describe('Slice 11 parallel fidelity', () => {
     expect(parallel.issues.map((item) => item.code)).toContain('MISSING_PARALLEL_RELATION');
 
     const graph = validateDigitalUseGraph(mutated, expectedCodes);
-    expect(graph.orphanNodeCodes).toEqual(expect.arrayContaining(['A4001', 'A4002', 'A4003', 'A4004']));
+    expect(graph.orphanNodeCodes).toEqual([]);
+    expect(mutated.find((node) => node.nodeCode === 'A4001')?.activationFrom).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceNodeCode: 'A2010',
+          mode: 'PARALLEL',
+          conditionRef: 'SOLUTION_STAGE_READY',
+        }),
+      ])
+    );
   });
 
   it('fails if an approved parallel relation is silently serialised by an additive completion prerequisite', () => {

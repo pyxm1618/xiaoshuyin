@@ -90,7 +90,7 @@ describe('cases RLS (T022)', () => {
         `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
          VALUES ($1, $2, 'OPEN', 'INTAKE', false, 1)`,
         [familyA, personA]
-      )).rejects.toThrow(/row-level security|42501/i);
+      )).rejects.toMatchObject({ code: '42501' });
       await client.query('ROLLBACK');
     } finally {
       client.release();
@@ -110,7 +110,7 @@ describe('cases RLS (T022)', () => {
         `INSERT INTO case_events (family_id, case_id, actor_account_id, event_type, metadata)
          VALUES ($1, $2, $3, 'CASE_CREATED', '{"primary": true, "version": 1}'::jsonb)`,
         [familyA, caseA, accountA]
-      )).rejects.toThrow(/row-level security|42501/i);
+      )).rejects.toMatchObject({ code: '42501' });
 
       await client.query('ROLLBACK');
     } finally {
@@ -131,7 +131,7 @@ describe('cases RLS (T022)', () => {
         `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
          VALUES ($1, $2, 'OPEN', 'INTAKE', false, 1)`,
         [familyA, personA]
-      )).rejects.toThrow(/row-level security|42501/i);
+      )).rejects.toMatchObject({ code: '42501' });
 
       await client.query('ROLLBACK');
     } finally {
@@ -169,7 +169,7 @@ describe('cases RLS (T022)', () => {
         `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
          VALUES ($1, $2, 'OPEN', 'INTAKE', false, 1)`,
         [familyB, personA]
-      )).rejects.toThrow(/row-level security|42501/i);
+      )).rejects.toMatchObject({ code: '42501' });
       await client.query('ROLLBACK');
     } finally {
       client.release();
@@ -236,7 +236,7 @@ describe('cases RLS (T022)', () => {
         await client.query('BEGIN');
         await client.query('SELECT app.set_identity_context($1, $2)', [accountA, 'FAMILY_MANAGEMENT']);
         await client.query('SELECT app.set_family_context($1, $2, $3)', [familyA, personA, 'FAMILY_MANAGEMENT']);
-        await expect(client.query(statement)).rejects.toThrow();
+        await expect(client.query(statement)).rejects.toMatchObject({ code: '42501' });
       } finally {
         await client.query('ROLLBACK').catch(() => {});
         client.release();

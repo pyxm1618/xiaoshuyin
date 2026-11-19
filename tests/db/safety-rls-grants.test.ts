@@ -188,7 +188,7 @@ describe('T912 Safety RLS and privilege matrix', () => {
            VALUES ($1,$2,$3,'HOLD_ENTERED',1,'p','1','r','1','c','[]'::jsonb)`,
           [familyId, caseId, owner.accountId]
         )
-      ).rejects.toThrow(/row-level security/i);
+      ).rejects.toMatchObject({ code: '42501' });
       await client.query('ROLLBACK');
     } finally {
       client.release();

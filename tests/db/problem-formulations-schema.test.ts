@@ -172,16 +172,19 @@ describe('problem formulation schema (Slice 8)', () => {
 
   it('rejects at-rest DRAFT and lifecycle NEEDS_REVIEW', async () => {
     await admin.query('DELETE FROM problem_formulations WHERE family_id = $1', [familyId]);
-    await expect(insert({ status: 'DRAFT' })).rejects.toThrow();
-    await expect(insert({ status: 'NEEDS_REVIEW' })).rejects.toThrow(
-      /invalid input value for enum problem_formulation_status/
-    );
+    // DRAFT violates both the explicit not-DRAFT invariant and the lifecycle
+    // confirmation-status CHECK. PostgreSQL may report either first; SQLSTATE
+    // is the stable correctness identity here, not CHECK evaluation order.
+    await expect(insert({ status: 'DRAFT' })).rejects.toMatchObject({
+      code: '23514',
+    });
+    await expect(insert({ status: 'NEEDS_REVIEW' })).rejects.toMatchObject({ code: '22P02' });
   });
 
   it('rejects a non-contiguous version chain', async () => {
     await admin.query('DELETE FROM problem_formulations WHERE family_id = $1', [familyId]);
-    await expect(insert({ version: 2, supersedes: null })).rejects.toThrow();
-    await expect(insert({ version: 3, supersedes: 1 })).rejects.toThrow();
+    await expect(insert({ version: 2, supersedes: null })).rejects.toMatchObject({ code: '23514', constraint: 'problem_formulations_version_chain_check' });
+    await expect(insert({ version: 3, supersedes: 1 })).rejects.toMatchObject({ code: '23514', constraint: 'problem_formulations_version_chain_check' });
   });
 
   it('rejects a second current row for the same Case', async () => {
@@ -189,7 +192,7 @@ describe('problem formulation schema (Slice 8)', () => {
     await insert({ status: 'PRESENTED', version: 1 });
     await expect(
       insert({ status: 'DISPUTED', version: 2, supersedes: 1 })
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: '23505', constraint: 'problem_formulations_one_current_per_case' });
   });
 
   it('accepts a contiguous supersedes chain', async () => {
@@ -209,6 +212,6 @@ describe('problem formulation schema (Slice 8)', () => {
     await admin.query('DELETE FROM problem_formulations WHERE family_id = $1', [familyId]);
     await expect(
       insert({ status: 'CONFIRMED', version: 1, confirmedBy: null, confirmedAt: null })
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ code: '23514', constraint: 'problem_formulations_confirmation_status_check' });
   });
 });

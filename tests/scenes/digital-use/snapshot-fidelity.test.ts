@@ -39,6 +39,7 @@ describe('Slice 11 independent snapshot fidelity gate', () => {
     ['route target', (copy: any[]) => copy.map((node) => node.nodeCode === 'A2004' ? { ...node, allowedNext: [{ ...node.allowedNext[0], targetNodeCode: 'A2006' }, node.allowedNext[1]] } : node), 'SNAPSHOT_ROUTE_DRIFT'],
     ['entry mode', (copy: any[]) => copy.map((node) => node.nodeCode === 'A5001' ? { ...node, entryMode: ['ROUTED'] } : node), 'SNAPSHOT_ENTRY_MODE_DRIFT'],
     ['parallel relation', (copy: any[]) => copy.map((node) => node.nodeCode === 'A3001' ? { ...node, canRunInParallelWith: [] } : node), 'SNAPSHOT_PARALLEL_DRIFT'],
+    ['activation edge', (copy: any[]) => copy.map((node) => node.nodeCode === 'A4001' ? { ...node, activationFrom: [] } : node), 'SNAPSHOT_ACTIVATION_DRIFT'],
     ['record semantics', (copy: any[]) => copy.map((node) => node.nodeCode === 'A2003' ? { ...node, recordContract: { refs: [], semantics: node.recordContract.semantics } } : node), 'SNAPSHOT_RECORD_DRIFT'],
   ])('blocks %s drift instead of changing the snapshot', (_name, mutate, expectedIssue) => {
     const mutated = mutate(digitalUseNodeManifest.map((node) => ({ ...node })) as any[]);

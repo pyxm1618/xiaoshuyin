@@ -95,12 +95,13 @@ describe('idempotency key representation (003)', () => {
     expect(rows[0].idempotency_key_bytes).toBeNull();
 
     // text missing / bytes present are both rejected for non-CASE_CREATE.
-    await expect(insert({ commandType: 'FAMILY_CREATE', text: null })).rejects.toThrow(
-      /check|not-null/i
-    );
+    await expect(insert({ commandType: 'FAMILY_CREATE', text: null })).rejects.toMatchObject({
+      code: '23514',
+      constraint: 'idempotency_keys_key_representation_check',
+    });
     await expect(
       insert({ commandType: 'FAMILY_CREATE', text: `${PREFIX}family-2`, bytes: Buffer.from('x') })
-    ).rejects.toThrow(/check/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('accepts legacy and exact CASE_CREATE representations, rejects the others', async () => {
@@ -110,16 +111,17 @@ describe('idempotency key representation (003)', () => {
       bytes: Buffer.from(`${PREFIX}new-1`, 'utf16le'),
     });
 
-    await expect(insert({ commandType: 'CASE_CREATE', text: null, bytes: null })).rejects.toThrow(
-      /check/i
-    );
+    await expect(insert({ commandType: 'CASE_CREATE', text: null, bytes: null })).rejects.toMatchObject({
+      code: '23514',
+      constraint: 'idempotency_keys_key_representation_check',
+    });
     await expect(
       insert({
         commandType: 'CASE_CREATE',
         text: `${PREFIX}both`,
         bytes: Buffer.from('both', 'utf16le'),
       })
-    ).rejects.toThrow(/check/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('enforces exact byte uniqueness inside one scope', async () => {
