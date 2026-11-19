@@ -18,6 +18,7 @@ import {
   hashProfessionalKnowledgeApprovalBinding,
   getIdempotencyKey,
   getProfessionalKnowledgePredecessorId,
+  getProfessionalKnowledgeCreatorIdentity,
   lockProfessionalKnowledgeVersion,
   markProfessionalKnowledgeVersionSuperseded,
   readProfessionalKnowledgeAuditHistory,
@@ -46,7 +47,11 @@ import {
   runIdempotentCommandInTransaction,
   type CommandOutcome,
 } from '../idempotency.js';
-import { withIdentityTransaction, withProfessionalKnowledgeAdminTransaction } from '../db/tx.js';
+import {
+  withIdentityTransaction,
+  withProfessionalKnowledgeAdminTransaction,
+  withProfessionalKnowledgeAuthorityTransaction,
+} from '../db/tx.js';
 import { getExactInterventionDefinition } from '../../../../../packages/domain/src/intervention-definition-repository.js';
 
 export const unavailableProductionProfessionalApprovalProvider:
@@ -289,6 +294,7 @@ async function requireQualification(input: {
 
 export async function recordKnowledgeReview(input: {
   pool: pg.Pool;
+  authorityPool: pg.Pool;
   accountId: string;
   personId: string;
   assignmentId: string;
@@ -307,9 +313,9 @@ export async function recordKnowledgeReview(input: {
   const qualificationProvider =
     input.qualificationProvider ?? unavailableProductionProfessionalQualificationProvider;
 
-  return withIdentityTransaction(
-    input.pool,
-    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
+  return withProfessionalKnowledgeAuthorityTransaction(
+    input.authorityPool,
+    { accountId: input.accountId },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
@@ -339,6 +345,17 @@ export async function recordKnowledgeReview(input: {
           const version = await lockProfessionalKnowledgeVersion(tx, input.versionId);
           if (!version || version.revision !== input.expectedRevision) {
             conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
+          }
+
+          const creator = await getProfessionalKnowledgeCreatorIdentity(tx, version.id);
+          if (creator === null) {
+            conflict('PROFESSIONAL_KNOWLEDGE_STALE_REVISION');
+          }
+          if (
+            creator.accountId === input.accountId ||
+            creator.personId === input.personId
+          ) {
+            invalidAuthority('PROFESSIONAL_KNOWLEDGE_SELF_REVIEW_FORBIDDEN');
           }
 
           const staff = await resolveProfessionalReviewStaffAuthority(tx, {
@@ -811,6 +828,7 @@ function classifyReleaseAuthorityDenial(error: unknown): Omit<ReleaseAuthorityDe
 
 export async function releaseKnowledgeVersion(input: {
   pool: pg.Pool;
+  authorityPool: pg.Pool;
   accountId: string;
   personId: string;
   assignmentId: string;
@@ -844,9 +862,9 @@ export async function releaseKnowledgeVersion(input: {
   });
 
   try {
-    return await withIdentityTransaction(
-      input.pool,
-      { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
+    return await withProfessionalKnowledgeAuthorityTransaction(
+      input.authorityPool,
+      { accountId: input.accountId },
       async (tx) => {
         const outcome = await runIdempotentCommandInTransaction(
           tx,
