@@ -822,9 +822,9 @@ function checkGoalSinglePhaseWriter(relPath, content, report) {
   if (relPath === GOAL_PHASE_WRITER) return;
 
   const patterns = [
-    /toPhase\s*:\s*['"]PLANNING['"]/,
-    /\bSET\s+phase\s*=\s*['"]?PLANNING['"]?/i,
-    /\.set\(\s*\{[^}]*phase\s*:\s*['"]PLANNING['"]/s,
+    /advanceCasePhaseAndVersion\s*\([\s\S]{0,600}?toPhase\s*:\s*['"]PLANNING['"]/,
+    /\bUPDATE\s+cases\b[\s\S]{0,300}?\bSET\s+phase\s*=\s*['"]?PLANNING['"]?/i,
+    /\.update\(\s*cases\s*\)[\s\S]{0,300}?\.set\(\s*\{[^}]*phase\s*:\s*['"]PLANNING['"]/s,
   ];
   for (const pattern of patterns) {
     const match = pattern.exec(content);

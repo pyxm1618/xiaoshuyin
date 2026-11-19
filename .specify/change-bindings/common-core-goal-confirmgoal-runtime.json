@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "changeId": "common-core-goal-confirmgoal-runtime",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "common-core-goal-confirmgoal-runtime",
+      "specPath": "specs/common-core-goal-confirmgoal-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/app.ts",
+        "apps/server/api/src/openapi-spec.ts",
+        "apps/server/api/src/routes/goals.ts",
+        "apps/server/api/src/services/goals.ts",
+        "db/migrations/026_common_core_goal_confirm_goal_runtime.sql",
+        "packages/authorization/src/authorize.ts",
+        "packages/domain/src/goal-runtime.ts",
+        "packages/domain/src/idempotency.ts",
+        "packages/domain/src/index.ts",
+        "packages/generated/openapi.d.ts",
+        "packages/generated/openapi.json"
+      ]
+    }
+  ]
+}
