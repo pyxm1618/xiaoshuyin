@@ -727,6 +727,19 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     expect(duplicateNewKey.statusCode).toBe(409);
     expect(duplicateNewKey.json().code).toBe('CASE_PHASE_CONFLICT');
 
+    const duplicateTraces = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM case_events
+           WHERE case_id=$1 AND event_type='CASE_GOAL_CONFIRMED') AS events,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE family_id=$2
+             AND resource_type='GOAL'
+             AND resource_id=$3
+             AND event_type='GOAL_CONFIRMED') AS audits`,
+      [f.caseId, f.familyId, saveBody.goalId]
+    );
+    expect(duplicateTraces.rows[0]).toEqual({ events: 1, audits: 1 });
+
     const afterConfirm = await app.inject({
       method: 'GET',
       url: '/api/v1/cases/' + f.caseId,
@@ -897,6 +910,28 @@ describe('Slice 12 canonical no-model production orchestration', () => {
         n: 1,
       }),
     ]);
+
+    const state = await admin.query(
+      `SELECT phase,version FROM cases WHERE id=$1`,
+      [f.caseId]
+    );
+    expect(state.rows[0]).toEqual({
+      phase: 'PLANNING',
+      version: saved.json().caseVersion + 1,
+    });
+
+    const traces = await admin.query(
+      `SELECT
+         (SELECT count(*)::int FROM case_events
+           WHERE case_id=$1 AND event_type='CASE_GOAL_CONFIRMED') AS events,
+         (SELECT count(*)::int FROM business_audit_events
+           WHERE family_id=$2
+             AND resource_type='GOAL'
+             AND resource_id=$3
+             AND event_type='GOAL_CONFIRMED') AS audits`,
+      [f.caseId, f.familyId, saved.json().goalId]
+    );
+    expect(traces.rows[0]).toEqual({ events: 1, audits: 1 });
   });
 
   it('fails closed on Safety and Compliance at confirmation time', async () => {
