@@ -636,6 +636,47 @@ interface SeedIds {
  * clause is re-imposed by `consent_purpose_field_binding`, so no guardian
  * invariant is dropped or widened.
  */
+const GOAL_RUNTIME_NEW_CONSTRAINTS = [
+  'problem_formulations_goal_binding_key',
+  'goals_case_family_fk',
+  'goals_formulation_exact_fk',
+  'goals_saved_by_family_fk',
+  'goals_confirmed_by_family_fk',
+  'goals_goal_version_key',
+  'goals_version_range_check',
+  'goals_version_chain_check',
+  'goals_version_chain_fk',
+  'goals_baseline_refs_check',
+  'goals_target_description_check',
+  'goals_observation_method_check',
+  'goals_observation_window_check',
+  'goals_protective_conditions_check',
+  'goals_parent_actions_check',
+  'goals_review_point_check',
+  'goals_dependency_refs_check',
+  'goals_participant_responsibilities_check',
+  'goals_confirmation_pair_check',
+  'goals_confirmation_state_check',
+] as const;
+
+const GOAL_RUNTIME_NEW_OBJECTS = [
+  'enum:goal_confirmation_state',
+  'enum:goal_lifecycle_status',
+  'enum:goal_review_state',
+  'table:goals',
+  'policy:goals_family_scope',
+  'trigger:goals_insert_guard',
+  'trigger:goals_update_guard',
+] as const;
+
+const GOAL_RUNTIME_CHANGED_CONSTRAINTS = [
+  'idempotency_keys_command_type_check',
+  'business_audit_events_resource_type_check',
+  'business_audit_events_event_type_check',
+  'case_events_event_type_check',
+  'case_events_metadata_shape_check',
+] as const;
+
 const SLICE16_REPLACED_CONSTRAINTS = [
   'business_audit_events_family_id_not_null',
 ];
@@ -869,6 +910,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...AUTH006_NEW_CONSTRAINTS,
         ...AUTH008_NEW_CONSTRAINTS,
         ...SLICE16_NEW_CONSTRAINTS,
+        ...GOAL_RUNTIME_NEW_CONSTRAINTS,
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -883,6 +925,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
           ...SLICE7_CONSTRAINT_CHANGES,
           'business_audit_events_resource_type_check',
           ...CONSENT_OWNER_CHANGED_CONSTRAINTS,
+          ...GOAL_RUNTIME_CHANGED_CONSTRAINTS,
         ]),
       ].sort()
     );
@@ -906,6 +949,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...FOUNDATION_REM1_NEW_OBJECTS,
       ...AUTH008_NEW_OBJECTS,
       ...SLICE16_NEW_OBJECTS,
+      ...GOAL_RUNTIME_NEW_OBJECTS,
       'trigger:accounts_status_invalidates_sessions',
     ].sort());
 
