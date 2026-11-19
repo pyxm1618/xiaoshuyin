@@ -49,6 +49,19 @@
       }
     },
     {
+      "id": "shared-domain-idempotency-command-registry",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/idempotency.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
       "id": "problem-formulation-route",
       "match": {
         "kind": "EXACT",
