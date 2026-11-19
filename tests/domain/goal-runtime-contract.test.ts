@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  assertGoalDependenciesCoverProblemFormulation,
   normalizedGoalContract,
   validateGoalContract,
+  type DependencyRef,
   type GoalContractInput,
 } from '@xiaoshuyin/domain';
 
@@ -46,6 +48,29 @@ describe('Common Core Goal contract', () => {
     mutate(input);
     expect(() => validateGoalContract(input)).toThrow();
   });
+
+  it.each([
+    ['POLICY', { type: 'POLICY', key: 'policy', version: 'v1' }],
+    ['PACKAGE', { type: 'PACKAGE', key: 'package', version: 'v1' }],
+    ['CONTENT_VERSION', { type: 'CONTENT_VERSION', key: 'content', version: 'v1' }],
+  ] as const)('rejects unsupported Goal %s dependency in the domain', (_type, dependency) => {
+    const input = valid();
+    (input.dependencyRefs as DependencyRef[]).push(dependency);
+    expect(() => validateGoalContract(input)).toThrow(/only support EVIDENCE or CONSENT/);
+  });
+
+  it.each([
+    ['POLICY', { type: 'POLICY', key: 'policy', version: 'v1' }],
+    ['PACKAGE', { type: 'PACKAGE', key: 'package', version: 'v1' }],
+    ['CONTENT_VERSION', { type: 'CONTENT_VERSION', key: 'content', version: 'v1' }],
+  ] as const)(
+    'fails closed when the current Problem Formulation requires unsupported %s',
+    (_type, dependency) => {
+      expect(() =>
+        assertGoalDependenciesCoverProblemFormulation([dependency], valid().dependencyRefs)
+      ).toThrow(/unsupported by Goal V1/);
+    }
+  );
 
   it('requires traceable Evidence for represented participant responsibility', () => {
     const input = valid();

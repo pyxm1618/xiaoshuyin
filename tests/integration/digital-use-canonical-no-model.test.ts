@@ -571,6 +571,28 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     });
   }
 
+  it.each([
+    ['POLICY', { type: 'POLICY', key: 'policy', version: 'v1' }],
+    ['PACKAGE', { type: 'PACKAGE', key: 'package', version: 'v1' }],
+    ['CONTENT_VERSION', { type: 'CONTENT_VERSION', key: 'content', version: 'v1' }],
+  ] as const)(
+    'rejects Goal SAVE with unsupported %s dependency at the transport boundary',
+    async (type, dependency) => {
+      const f = await fixture('goal-unsupported-' + type.toLowerCase());
+      let scene = await triage(f, true, 'A', 'A');
+      scene = await confirmCurrentFormulation(f, scene);
+      const formulation = await currentGoalFormulation(f);
+      const rejected = await saveGoalFor(
+        f,
+        scene.caseVersion,
+        formulation,
+        'goal-save-unsupported-' + type.toLowerCase() + '-' + crypto.randomUUID(),
+        { dependencyRefs: [...formulation.dependencyRefs, dependency] }
+      );
+      expect(rejected.statusCode, rejected.body).toBe(422);
+    }
+  );
+
   it('continues the canonical flow through SAVE and atomic ConfirmGoal to PLANNING', async () => {
     const f = await fixture('goal-happy');
     const scene = await finishA2010ForGoal(f);

@@ -278,6 +278,61 @@ describe('Common Core Goal DB guards', () => {
     await admin.query('DELETE FROM goals WHERE id=$1', [goalRowId]);
   });
 
+  it('does not expose an unguarded formal transition function to the app role', async () => {
+    const inserted = await admin.query(savedInsertSql(), [
+      familyId,
+      caseId,
+      formulationId,
+      personId,
+    ]);
+    const goalRow = await admin.query(
+      'SELECT goal_id,version FROM goals WHERE id=$1',
+      [inserted.rows[0].id]
+    );
+
+    await app.query('BEGIN');
+    try {
+      await app.query('SELECT app.set_identity_context($1,$2)', [
+        accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await app.query('SELECT app.set_family_context($1,$2,$3)', [
+        familyId,
+        personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await expect(
+        app.query(
+          'SELECT app.confirm_goal_transition($1,$2,$3,$4,$5)',
+          [
+            caseId,
+            7,
+            goalRow.rows[0].goal_id,
+            goalRow.rows[0].version,
+            personId,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: '23514',
+        message: expect.stringMatching(/GOAL_CONFIRM_TRANSITION_A2010_REQUIRED/),
+      });
+    } finally {
+      await app.query('ROLLBACK');
+    }
+
+    const finalState = await admin.query(
+      'SELECT c.phase,g.confirmation_state ' +
+        'FROM cases c JOIN goals g ON g.case_id=c.id ' +
+        'WHERE c.id=$1 AND g.id=$2',
+      [caseId, inserted.rows[0].id]
+    );
+    expect(finalState.rows[0]).toEqual({
+      phase: 'GOALS',
+      confirmation_state: 'UNCONFIRMED',
+    });
+    await admin.query('DELETE FROM goals WHERE id=$1', [inserted.rows[0].id]);
+  });
+
   it('blocks direct app-role GOALS -> PLANNING plus Goal confirmation bypass', async () => {
     const inserted = await admin.query(savedInsertSql(), [
       familyId,
