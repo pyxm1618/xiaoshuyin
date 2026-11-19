@@ -310,13 +310,14 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
         content: { body: 'loser' },
         contentHash: '1'.repeat(64),
       });
+      const loserExpectation = expect(loser).rejects.toMatchObject({
+        code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+      });
       await sleep(30);
       await first.query('COMMIT');
       first.release();
 
-      await expect(loser).rejects.toMatchObject({
-        code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
-      });
+      await loserExpectation;
       await second.query('ROLLBACK');
       second.release();
 
@@ -370,14 +371,15 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
         nextReviewState: 'CURRENT',
         nextValidityState: 'VALID',
       });
+      const reviewExpectation = expect(reviewAttempt).rejects.toMatchObject({
+        code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+      });
 
       await sleep(30);
       await editor.query('COMMIT');
       editor.release();
 
-      await expect(reviewAttempt).rejects.toMatchObject({
-        code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
-      });
+      await reviewExpectation;
       await reviewer.query('ROLLBACK');
       reviewer.release();
 
@@ -523,12 +525,13 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
         expectedRevision: 1,
         ...editPayload,
       });
+      const editExpectation = expect(editAttempt).rejects.toMatchObject({
+        code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+      });
       await sleep(30);
       await releaser.query('COMMIT');
       releaser.release();
-      await expect(editAttempt).rejects.toMatchObject({
-        code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
-      });
+      await editExpectation;
       await editor.query('ROLLBACK');
       editor.release();
 
@@ -599,12 +602,13 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
         accountId: seeded.accountId,
         personId: seeded.personId,
       });
+      const successorExpectation = expect(successorAttempt).rejects.toMatchObject({
+        code: 'PROFESSIONAL_KNOWLEDGE_STATE_CONFLICT',
+      });
       await sleep(30);
       await retirer.query('COMMIT');
       retirer.release();
-      await expect(successorAttempt).rejects.toMatchObject({
-        code: 'PROFESSIONAL_KNOWLEDGE_STATE_CONFLICT',
-      });
+      await successorExpectation;
       await successor.query('ROLLBACK');
       successor.release();
 
@@ -682,12 +686,13 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
         expectedRevision: 1,
         effectiveFrom: new Date('2026-11-17T00:00:00Z'),
       });
+      const releaseExpectation = expect(releaseAttempt).rejects.toMatchObject({
+        code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+      });
       await sleep(30);
       await invalidator.query('COMMIT');
       invalidator.release();
-      await expect(releaseAttempt).rejects.toMatchObject({
-        code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
-      });
+      await releaseExpectation;
       await releaser.query('ROLLBACK');
       releaser.release();
 
