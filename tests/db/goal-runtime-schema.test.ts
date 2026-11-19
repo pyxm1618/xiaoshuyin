@@ -93,6 +93,19 @@ describe('Common Core Goal DB guards', () => {
       "'[]'::jsonb,$4,'CONFIRMED',$4,now())";
   }
 
+  function savedInsertSql() {
+    return "INSERT INTO goals " +
+      "(family_id,case_id,version,problem_formulation_id,problem_formulation_version," +
+      "baseline_refs,target_description,observation_method,observation_window," +
+      "protective_conditions,parent_actions,review_point,dependency_refs," +
+      "participant_responsibilities,saved_by_person_id) " +
+      "VALUES ($1,$2,1,$3,1," +
+      "'[{\"type\":\"ASSERTION\",\"id\":\"11111111-1111-4111-8111-111111111111\"}]'::jsonb," +
+      "'target','observe','14 days','[\"protect\"]'::jsonb,'[\"parent action\"]'::jsonb," +
+      "'review','[{\"type\":\"EVIDENCE\",\"evidence\":{\"type\":\"ASSERTION\",\"id\":\"11111111-1111-4111-8111-111111111111\"}}]'::jsonb," +
+      "'[]'::jsonb,$4) RETURNING id";
+  }
+
   it('forces RLS and denies content mutation / delete to runtime', async () => {
     const rel = await admin.query(
       "SELECT relrowsecurity,relforcerowsecurity FROM pg_class WHERE relname='goals'"
@@ -115,6 +128,23 @@ describe('Common Core Goal DB guards', () => {
       del: false,
       content: false,
     });
+
+    const role = await admin.query(
+      "SELECT rolbypassrls FROM pg_roles WHERE rolname='xiaoshuyin_app'"
+    );
+    expect(role.rows[0].rolbypassrls).toBe(false);
+
+    const constraints = await admin.query(
+      "SELECT conname,pg_get_constraintdef(oid,true) AS def " +
+      "FROM pg_constraint WHERE conrelid='goals'::regclass " +
+      "AND conname IN ('goals_case_family_fk','goals_formulation_exact_fk') " +
+      "ORDER BY conname"
+    );
+    expect(constraints.rows).toHaveLength(2);
+    expect(constraints.rows.find((r: any) => r.conname === 'goals_case_family_fk')?.def)
+      .toContain('FOREIGN KEY (case_id, family_id)');
+    expect(constraints.rows.find((r: any) => r.conname === 'goals_formulation_exact_fk')?.def)
+      .toContain('FOREIGN KEY (problem_formulation_id, case_id, family_id, problem_formulation_version)');
   });
 
   it('rejects constructing a pre-confirmed Goal through the runtime role', async () => {
@@ -137,6 +167,42 @@ describe('Common Core Goal DB guards', () => {
           personId,
         ])
       ).rejects.toThrow(/GOAL_INSERT_MUST_BE_UNCONFIRMED/);
+    } finally {
+      await app.query('ROLLBACK');
+    }
+  });
+
+  it('enforces Family RLS on a legal unconfirmed Goal', async () => {
+    const inserted = await admin.query(savedInsertSql(), [
+      familyId,
+      caseId,
+      formulationId,
+      personId,
+    ]);
+    const goalRowId = inserted.rows[0].id;
+
+    await app.query('BEGIN');
+    try {
+      await app.query('SELECT app.set_identity_context($1,$2)', [
+        accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      const hidden = await app.query(
+        'SELECT count(*)::int AS n FROM goals WHERE id=$1',
+        [goalRowId]
+      );
+      expect(hidden.rows[0].n).toBe(0);
+
+      await app.query('SELECT app.set_family_context($1,$2,$3)', [
+        familyId,
+        personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      const visible = await app.query(
+        'SELECT count(*)::int AS n FROM goals WHERE id=$1',
+        [goalRowId]
+      );
+      expect(visible.rows[0].n).toBe(1);
     } finally {
       await app.query('ROLLBACK');
     }
