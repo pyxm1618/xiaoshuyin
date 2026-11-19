@@ -389,48 +389,33 @@ export async function appendProfessionalKnowledgeReviewEvidence(
     nextValidityState: ProfessionalKnowledgeVersionSnapshot['validityState'];
   }
 ): Promise<number> {
-  await tx.query(
-    `INSERT INTO professional_knowledge_review_evidence
-       (knowledge_version_id, reviewed_revision, content_hash, source_set_hash,
-        reviewer_identity, reviewer_account_id, reviewer_person_id,
-        staff_assignment_ref, qualification_ref, review_outcome,
-        review_reason_code, reviewed_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+  // HIGH-001: authority elevation is DB-bound. The formal service validates
+  // qualification before this call; the narrow primitive derives persisted
+  // reviewer Account/Person/Staff identity from the transaction context and
+  // atomically writes evidence + state + success audit.
+  const committed = await tx.query<{ revision: number | null }>(
+    `SELECT app.commit_professional_knowledge_review(
+       $1,$2,$3,$4,$5,$6,$7,$8,$9
+     ) AS revision`,
     [
       input.version.id,
       input.version.revision,
-      input.version.contentHash,
-      input.version.sourceSetHash,
       input.reviewerIdentity,
-      input.reviewerAccountId,
-      input.reviewerPersonId,
-      input.staffAssignmentRef,
       input.qualificationRef,
       input.reviewOutcome,
       input.reviewReasonCode ?? null,
       input.reviewedAt,
-    ]
-  );
-  const updated = await tx.query<{ revision: number }>(
-    `UPDATE professional_knowledge_versions
-        SET review_state = $2,
-            validity_state = $3,
-            revision = revision + 1
-      WHERE id = $1 AND revision = $4
-      RETURNING revision`,
-    [
-      input.version.id,
       input.nextReviewState,
       input.nextValidityState,
-      input.version.revision,
     ]
   );
-  if (updated.rowCount !== 1) {
+  const revision = committed.rows[0]?.revision ?? null;
+  if (revision === null) {
     throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_STALE_REVISION'), {
       code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
     });
   }
-  return updated.rows[0]!.revision;
+  return revision;
 }
 
 export async function appendConsumedProfessionalApprovalEvidence(
@@ -591,6 +576,63 @@ export async function releaseProfessionalKnowledgeVersion(
     });
   }
   return updated.rows[0]!.revision;
+}
+
+
+export async function releaseProfessionalKnowledgeVersionWithApprovalEvidence(
+  tx: Tx,
+  input: {
+    versionId: string;
+    expectedRevision: number;
+    effectiveFrom: Date;
+    proof: ProfessionalApprovalProof;
+    sceneBindingRef: {
+      readonly sceneCode: string;
+      readonly scenePackageVersion: string;
+      readonly knowledgeId: string;
+      readonly semanticVersion: string;
+      readonly contentHash: string;
+      readonly sourceSetHash: string;
+    };
+  }
+): Promise<number> {
+  const evidence = {
+    approvalProofRef: input.proof.proofId,
+    contentHash: input.proof.contentHash,
+    sourceSetHash: input.proof.sourceSetHash,
+    semanticBindingHash: input.proof.semanticBindingHash ?? null,
+    approvalScope: input.proof.scope,
+    reviewerIdentity: input.proof.reviewerIdentity,
+    reviewerAccountId: input.proof.reviewerAccountId,
+    reviewerPersonId: input.proof.reviewerPersonId,
+    staffAssignmentRef: input.proof.staffAssignmentRef,
+    qualificationRef: input.proof.qualificationRef,
+    qualificationScope: input.proof.qualificationScope,
+    reviewedAt: input.proof.reviewedAt,
+    effectiveFrom: input.proof.effectiveFrom,
+    effectiveTo: input.proof.effectiveTo ?? null,
+    professionalContentPackageRef:
+      input.proof.professionalContentPackageRef ?? null,
+    sceneBindingRef: input.sceneBindingRef,
+  };
+  const committed = await tx.query<{ revision: number | null }>(
+    `SELECT app.commit_professional_knowledge_release(
+       $1,$2,$3,$4::jsonb
+     ) AS revision`,
+    [
+      input.versionId,
+      input.expectedRevision,
+      input.effectiveFrom,
+      JSON.stringify(evidence),
+    ]
+  );
+  const revision = committed.rows[0]?.revision ?? null;
+  if (revision === null) {
+    throw Object.assign(new Error('PROFESSIONAL_KNOWLEDGE_RELEASE_CONFLICT'), {
+      code: 'PROFESSIONAL_KNOWLEDGE_CONFLICT',
+    });
+  }
+  return revision;
 }
 
 export async function getProfessionalKnowledgePredecessorId(
