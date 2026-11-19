@@ -197,6 +197,26 @@ async function assertGoalCompliance(
   }
 }
 
+async function assertGoalDependencyConsents(
+  tx: pg.PoolClient,
+  refs: GoalContractInput['dependencyRefs']
+): Promise<void> {
+  for (const ref of refs) {
+    if (ref.type !== 'CONSENT') continue;
+    const consent = await getConsentRecordForGate(tx, ref.id);
+    if (
+      !consent ||
+      consent.decision !== 'GRANTED' ||
+      (ref.version !== undefined && consent.version !== ref.version)
+    ) {
+      throw httpError(
+        'CONSENT_BLOCKED',
+        'Goal Consent dependency is no longer current'
+      );
+    }
+  }
+}
+
 async function lockGoalBasis(
   tx: pg.PoolClient,
   input: {
@@ -330,6 +350,7 @@ async function assertStoredGoalCurrent(
   validateGoalContract(contract);
   assertExactFormulation(input.formulation, contract);
   await assertGoalEvidence(tx, input.caseId, contract);
+  await assertGoalDependencyConsents(tx, contract.dependencyRefs);
   return contract;
 }
 
@@ -412,6 +433,10 @@ export async function saveGoal(
             const { caseRow, formulation } = await lockGoalBasis(tx, input);
             assertExactFormulation(formulation, input.contract);
             await assertGoalEvidence(tx, input.caseId, input.contract);
+            await assertGoalDependencyConsents(
+              tx,
+              input.contract.dependencyRefs
+            );
 
             const activeParticipants =
               await resolveActiveCaseParticipantPersonIds(tx, input.caseId);

@@ -113,6 +113,60 @@ CREATE UNIQUE INDEX goals_one_authoritative_confirmed_per_case
 CREATE INDEX goals_family_case_version_idx
   ON goals (family_id, case_id, version DESC);
 
+CREATE FUNCTION goals_insert_guard() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE
+  v_case_phase case_phase;
+  v_case_status case_status;
+  v_is_primary boolean;
+BEGIN
+  IF NEW.lifecycle_status <> 'ACTIVE'
+     OR NEW.confirmation_state <> 'UNCONFIRMED'
+     OR NEW.review_state <> 'CURRENT'
+     OR NEW.confirmed_by_person_id IS NOT NULL
+     OR NEW.confirmed_at IS NOT NULL
+  THEN
+    RAISE EXCEPTION 'GOAL_INSERT_MUST_BE_UNCONFIRMED' USING ERRCODE='23514';
+  END IF;
+
+  SELECT phase, status, is_primary
+    INTO v_case_phase, v_case_status, v_is_primary
+    FROM cases
+   WHERE id = NEW.case_id
+     AND family_id = NEW.family_id;
+
+  IF NOT FOUND
+     OR v_case_phase <> 'GOALS'
+     OR v_case_status <> 'OPEN'
+     OR v_is_primary IS NOT TRUE
+  THEN
+    RAISE EXCEPTION 'GOAL_SAVE_CASE_PREREQUISITE_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM problem_formulations pf
+     WHERE pf.id = NEW.problem_formulation_id
+       AND pf.case_id = NEW.case_id
+       AND pf.family_id = NEW.family_id
+       AND pf.version = NEW.problem_formulation_version
+       AND pf.status = 'CONFIRMED'
+       AND pf.review_state = 'CURRENT'
+  ) THEN
+    RAISE EXCEPTION 'GOAL_SAVE_FORMULATION_PREREQUISITE_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  RETURN NEW;
+END
+$function$;
+
+CREATE TRIGGER goals_insert_guard
+  BEFORE INSERT ON goals
+  FOR EACH ROW EXECUTE FUNCTION goals_insert_guard();
+
 CREATE FUNCTION goals_update_guard() RETURNS trigger
 LANGUAGE plpgsql
 SECURITY INVOKER
@@ -154,6 +208,16 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'GOAL_LIFECYCLE_TRANSITION_INVALID' USING ERRCODE='23514';
     END IF;
+  END IF;
+
+  IF OLD.confirmation_state = 'CONFIRMED'
+     AND (
+       NEW.confirmation_state IS DISTINCT FROM OLD.confirmation_state
+       OR NEW.confirmed_by_person_id IS DISTINCT FROM OLD.confirmed_by_person_id
+       OR NEW.confirmed_at IS DISTINCT FROM OLD.confirmed_at
+     )
+  THEN
+    RAISE EXCEPTION 'GOAL_CONFIRMATION_IMMUTABLE' USING ERRCODE='23514';
   END IF;
 
   IF NEW.confirmation_state IS DISTINCT FROM OLD.confirmation_state THEN
