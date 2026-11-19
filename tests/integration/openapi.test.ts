@@ -155,7 +155,8 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-it('contains exactly the 39 frozen business operations including Common Core Goal runtime'), () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+it('contains exactly the 39 frozen business operations including Common Core Goal runtime', () => {
+    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
