@@ -55,7 +55,7 @@ describe('Common Core Goal DB guards', () => {
       "jsonb_build_object('text','goal basis','evidenceRefs',$3::jsonb)," +
       "'[]'::jsonb,$3::jsonb,'[]'::jsonb,'[]'::jsonb,'digital-use'," +
       "'[]'::jsonb,'[]'::jsonb,'[]'::jsonb," +
-      "jsonb_build_object('kind','CONFIRM','actorPersonId',$4::text,'respondedAt',now()::text)," +
+      "jsonb_build_object('kind','CONFIRM','actorPersonId',$4::uuid::text,'respondedAt',now()::text)," +
       "$4::uuid,now(),$5::jsonb,NULL) RETURNING id",
       [
         familyId,
