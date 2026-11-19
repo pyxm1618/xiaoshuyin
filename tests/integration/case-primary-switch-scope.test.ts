@@ -192,7 +192,8 @@ describe('case primary switch scope (T730)', () => {
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice8Delta.sort()).toEqual([...SLICE8_ADDED_OPERATION_IDS].sort());
     expect(slice8Delta).toHaveLength(4);
@@ -201,10 +202,17 @@ describe('case primary switch scope (T730)', () => {
       (id) =>
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice12Delta.sort()).toEqual([...SLICE12_ADDED_OPERATION_IDS].sort());
     expect(slice12Delta).toHaveLength(4);
+
+    const goalDelta = businessOperationIds.filter((id) =>
+      (GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+    );
+    expect(goalDelta).toEqual(['mutateGoal']);
+    expect(goalDelta).toHaveLength(1);
 
     // Unexpected Case business operations = 0.
     const unexpected = businessOperationIds.filter(
@@ -212,7 +220,8 @@ describe('case primary switch scope (T730)', () => {
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
-        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+        !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(unexpected).toEqual([]);
   });
