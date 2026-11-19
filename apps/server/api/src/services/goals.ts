@@ -594,6 +594,8 @@ export async function confirmGoal(
               goalId: input.goalId,
               goalVersion: input.goalVersion,
               actorPersonId: input.actor.personId,
+              fromPhase: 'GOALS',
+              toPhase: 'PLANNING',
             });
             const updatedCase = { version: transition.caseVersion };
             const confirmed = transition.goal;

@@ -365,6 +365,8 @@ export async function confirmGoalTransition(
     goalId: string;
     goalVersion: number;
     actorPersonId: string;
+    fromPhase: 'GOALS';
+    toPhase: 'PLANNING';
   }
 ): Promise<{ caseVersion: number; goal: GoalRow }> {
   const { rows } = await tx.query<{ case_version: number }>(
@@ -372,7 +374,7 @@ export async function confirmGoalTransition(
     [input.caseId,input.expectedCaseVersion,input.goalId,input.goalVersion,input.actorPersonId]
   );
   const caseVersion=rows[0]?.case_version;
-  if (!Number.isInteger(caseVersion)) {
+  if (typeof caseVersion !== 'number' || !Number.isInteger(caseVersion)) {
     throw goalError('CASE_PHASE_CONFLICT', 'Goal transition did not return a Case version');
   }
   const goal=await lockGoalVersion(tx,{caseId:input.caseId,goalId:input.goalId,goalVersion:input.goalVersion});
