@@ -148,7 +148,7 @@ jobs:
           PARTICIPATION_INVITE_TOKEN_SECRET: ci-participation-invite-secret-32chars
           COVERAGE_EXECUTION_EVIDENCE: ${{ runner.temp }}/vitest-results.json
       - name: Slice 17 semantic evidence gate
-        run: bun run test:professional-knowledge-semantic-evidence -- --execution-evidence "${{ runner.temp }}/vitest-results.json"
+        run: node scripts/professional-knowledge-semantic-evidence.mjs --execution-evidence "${{ runner.temp }}/vitest-results.json"
       - name: Upload verify-all provenance
         if: always()
         uses: actions/upload-artifact@v4
