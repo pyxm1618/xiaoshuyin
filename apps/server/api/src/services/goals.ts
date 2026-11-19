@@ -8,13 +8,12 @@
 import type pg from 'pg';
 import {
   GoalRuntimeError,
-  advanceCasePhaseAndVersion,
   assertCaseGuards,
+  assertGoalDependenciesCoverProblemFormulation,
   bumpCaseVersionWithoutPhaseChange,
   canonicalEvidenceKey,
-  isDependencySubset,
   caseVersionEtag,
-  confirmGoalVersion,
+  confirmGoalTransition,
   getSceneNodeState,
   getScenePackageBinding,
   goalContractFromRow,
@@ -34,6 +33,7 @@ import {
   revalidateStoredEvidenceDependencies,
   supersedeGoalVersion,
   validateGoalContract,
+  type DependencyRef,
   type GoalContractInput,
   type GoalRow,
 } from '@xiaoshuyin/domain';
@@ -250,7 +250,7 @@ function assertExactFormulation(
   formulation: {
     id: string;
     version: number;
-    dependency_refs: GoalContractInput['dependencyRefs'];
+    dependency_refs: DependencyRef[];
   },
   contract: GoalContractInput
 ): void {
@@ -265,17 +265,10 @@ function assertExactFormulation(
     );
   }
 
-  if (
-    !isDependencySubset(
-      formulation.dependency_refs,
-      contract.dependencyRefs
-    )
-  ) {
-    throw httpError(
-      'VALIDATION_ERROR',
-      'Goal dependencyRefs must include the current Problem Formulation dependencies'
-    );
-  }
+  assertGoalDependenciesCoverProblemFormulation(
+    formulation.dependency_refs,
+    contract.dependencyRefs
+  );
 }
 
 async function assertGoalEvidence(
@@ -339,7 +332,7 @@ async function assertStoredGoalCurrent(
     formulation: {
       id: string;
       version: number;
-      dependency_refs: GoalContractInput['dependencyRefs'];
+      dependency_refs: DependencyRef[];
     };
   }
 ): Promise<GoalContractInput> {
@@ -595,19 +588,15 @@ export async function confirmGoal(
             ]);
             await assertA2010Completed(tx, input.caseId);
 
-            const updatedCase = await advanceCasePhaseAndVersion(tx, {
+            const transition = await confirmGoalTransition(tx, {
               caseId: input.caseId,
-              expectedVersion: input.expectedCaseVersion,
-              fromPhase: 'GOALS',
-              toPhase: 'PLANNING',
-            });
-
-            const confirmed = await confirmGoalVersion(tx, {
-              caseId: input.caseId,
+              expectedCaseVersion: input.expectedCaseVersion,
               goalId: input.goalId,
               goalVersion: input.goalVersion,
               actorPersonId: input.actor.personId,
             });
+            const updatedCase = { version: transition.caseVersion };
+            const confirmed = transition.goal;
 
             await insertGoalCaseEvent(tx, {
               familyId: input.familyId,

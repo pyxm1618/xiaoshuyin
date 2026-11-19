@@ -263,6 +263,195 @@ CREATE TRIGGER goals_update_guard
   BEFORE UPDATE ON goals
   FOR EACH ROW EXECUTE FUNCTION goals_update_guard();
 
+-- HIGH-001: preserve the historical app-role cases.phase privilege for every
+-- other Case transition, while making GOALS -> PLANNING a formal ConfirmGoal-
+-- only transition. Direct xiaoshuyin_app DML cannot manufacture PLANNING.
+CREATE FUNCTION app.guard_goal_planning_transition() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  IF current_user = 'xiaoshuyin_app'
+     AND OLD.phase = 'GOALS'
+     AND NEW.phase = 'PLANNING'
+  THEN
+    RAISE EXCEPTION 'GOAL_PLANNING_TRANSITION_REQUIRES_FORMAL_COMMAND'
+      USING ERRCODE='23514';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+CREATE TRIGGER cases_goal_planning_transition_guard
+  BEFORE UPDATE OF phase ON cases
+  FOR EACH ROW EXECUTE FUNCTION app.guard_goal_planning_transition();
+
+-- Persistence primitive for the single application ConfirmGoal command.
+-- It is intentionally not a two-UPDATE wrapper: exact RLS context, Family
+-- manager authority, Case/Goal/PF state, Goal/PF dependency boundary and A2010
+-- completion are rechecked before either authoritative write.
+CREATE FUNCTION app.confirm_goal_transition(
+  p_case_id uuid,
+  p_expected_case_version integer,
+  p_goal_id uuid,
+  p_goal_version integer,
+  p_actor_person_id uuid
+) RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+SET row_security = on
+AS $function$
+DECLARE
+  v_family_id uuid;
+  v_goal_family_id uuid;
+  v_problem_formulation_id uuid;
+  v_problem_formulation_version integer;
+  v_goal_dependencies jsonb;
+  v_formulation_dependencies jsonb;
+  v_dependency jsonb;
+  v_case_version integer;
+  v_confirmed_goal_id uuid;
+BEGIN
+  IF app_current_purpose() IS DISTINCT FROM 'FAMILY_MANAGEMENT'
+     OR app_family_id() IS NULL
+     OR app_person_id() IS NULL
+     OR p_actor_person_id IS DISTINCT FROM app_person_id()
+  THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CONTEXT_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  SELECT c.family_id INTO v_family_id
+    FROM cases c
+   WHERE c.id=p_case_id
+     AND c.family_id=app_family_id()
+     AND c.status='OPEN'
+     AND c.phase='GOALS'
+     AND c.is_primary IS TRUE
+     AND c.version=p_expected_case_version
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CASE_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM families f
+     WHERE f.id=v_family_id AND f.created_by_person_id=app_person_id()
+  ) OR NOT EXISTS (
+    SELECT 1 FROM family_members fm
+     WHERE fm.family_id=v_family_id AND fm.person_id=app_person_id()
+  ) THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_AUTHORITY_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  SELECT g.family_id,g.problem_formulation_id,
+         g.problem_formulation_version,g.dependency_refs
+    INTO v_goal_family_id,v_problem_formulation_id,
+         v_problem_formulation_version,v_goal_dependencies
+    FROM goals g
+   WHERE g.case_id=p_case_id
+     AND g.goal_id=p_goal_id
+     AND g.version=p_goal_version
+     AND g.lifecycle_status='ACTIVE'
+     AND g.confirmation_state='UNCONFIRMED'
+     AND g.review_state='CURRENT'
+   FOR UPDATE;
+  IF NOT FOUND OR v_goal_family_id IS DISTINCT FROM v_family_id THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_GOAL_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  SELECT pf.dependency_refs INTO v_formulation_dependencies
+    FROM problem_formulations pf
+   WHERE pf.id=v_problem_formulation_id
+     AND pf.case_id=p_case_id
+     AND pf.family_id=v_family_id
+     AND pf.version=v_problem_formulation_version
+     AND pf.status='CONFIRMED'
+     AND pf.review_state='CURRENT'
+     AND NOT EXISTS (
+       SELECT 1 FROM problem_formulations newer
+        WHERE newer.case_id=p_case_id
+          AND newer.status<>'SUPERSEDED'
+          AND newer.version>v_problem_formulation_version
+     );
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_FORMULATION_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  IF jsonb_typeof(v_goal_dependencies)<>'array'
+     OR jsonb_array_length(v_goal_dependencies)=0
+  THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_DEPENDENCIES_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  FOR v_dependency IN SELECT value FROM jsonb_array_elements(v_goal_dependencies)
+  LOOP
+    IF COALESCE(v_dependency->>'type','') NOT IN ('EVIDENCE','CONSENT') THEN
+      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_DEPENDENCY_UNSUPPORTED' USING ERRCODE='23514';
+    END IF;
+  END LOOP;
+
+  FOR v_dependency IN SELECT value FROM jsonb_array_elements(v_formulation_dependencies)
+  LOOP
+    IF COALESCE(v_dependency->>'type','') NOT IN ('EVIDENCE','CONSENT') THEN
+      RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_FORMULATION_DEPENDENCY_UNSUPPORTED' USING ERRCODE='23514';
+    END IF;
+  END LOOP;
+
+  IF NOT (v_goal_dependencies @> v_formulation_dependencies) THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_DEPENDENCY_COVERAGE_INVALID' USING ERRCODE='23514';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM scene_node_states a2010
+      JOIN scene_node_states binding
+        ON binding.case_id=a2010.case_id
+       AND binding.family_id=a2010.family_id
+       AND binding.node_code='A1001'
+       AND binding.scene_package_version=a2010.scene_package_version
+     WHERE a2010.case_id=p_case_id
+       AND a2010.family_id=v_family_id
+       AND a2010.node_code='A2010'
+       AND a2010.status='COMPLETED'
+  ) THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_A2010_REQUIRED' USING ERRCODE='23514';
+  END IF;
+
+  UPDATE cases
+     SET phase='PLANNING',version=version+1,updated_at=now()
+   WHERE id=p_case_id
+     AND family_id=v_family_id
+     AND version=p_expected_case_version
+     AND phase='GOALS'
+   RETURNING version INTO v_case_version;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_CASE_WRITE_CONFLICT' USING ERRCODE='23514';
+  END IF;
+
+  UPDATE goals
+     SET confirmation_state='CONFIRMED',
+         confirmed_by_person_id=p_actor_person_id,
+         confirmed_at=now(),
+         updated_at=now()
+   WHERE case_id=p_case_id
+     AND goal_id=p_goal_id
+     AND version=p_goal_version
+     AND lifecycle_status='ACTIVE'
+     AND confirmation_state='UNCONFIRMED'
+     AND review_state='CURRENT'
+   RETURNING goal_id INTO v_confirmed_goal_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'GOAL_CONFIRM_TRANSITION_GOAL_WRITE_CONFLICT' USING ERRCODE='23514';
+  END IF;
+  RETURN v_case_version;
+END
+$function$;
+
+REVOKE ALL ON FUNCTION app.confirm_goal_transition(uuid, integer, uuid, integer, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.confirm_goal_transition(uuid, integer, uuid, integer, uuid) TO xiaoshuyin_app;
+
 ALTER TABLE goals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goals FORCE ROW LEVEL SECURITY;
 

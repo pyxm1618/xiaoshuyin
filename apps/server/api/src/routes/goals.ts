@@ -27,27 +27,12 @@ const EvidenceRef = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('OBSERVATION'), id: UUID }),
 ]);
 
-const DependencyRef = z.discriminatedUnion('type', [
+const GoalDependencyRef = z.discriminatedUnion('type', [
   z.strictObject({ type: z.literal('EVIDENCE'), evidence: EvidenceRef }),
   z.strictObject({
     type: z.literal('CONSENT'),
     id: UUID,
     version: z.number().int().min(1).max(MAX_INT).optional(),
-  }),
-  z.strictObject({
-    type: z.literal('POLICY'),
-    key: z.string().min(1).max(200),
-    version: z.string().min(1).max(100),
-  }),
-  z.strictObject({
-    type: z.literal('PACKAGE'),
-    key: z.string().min(1).max(200),
-    version: z.string().min(1).max(100),
-  }),
-  z.strictObject({
-    type: z.literal('CONTENT_VERSION'),
-    key: z.string().min(1).max(200),
-    version: z.string().min(1).max(100),
   }),
 ]);
 
@@ -68,7 +53,7 @@ export const SaveGoalRequest = z.strictObject({
   protectiveConditions: z.array(z.string().min(1).max(2000)).min(1),
   parentActions: z.array(z.string().min(1).max(2000)).min(1),
   reviewPoint: z.string().min(1).max(2000),
-  dependencyRefs: z.array(DependencyRef).min(1),
+  dependencyRefs: z.array(GoalDependencyRef).min(1),
   participantResponsibilities: z.array(ParticipantResponsibility),
 });
 

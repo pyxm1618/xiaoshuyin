@@ -8,6 +8,7 @@ import type { PoolClient } from 'pg';
 import {
   canonicalDependencies,
   canonicalEvidenceRefs,
+  isDependencySubset,
   type DependencyRef,
   type EvidenceRef,
 } from './problem-formulations.js';
@@ -19,6 +20,11 @@ export const GOAL_REVIEW_STATES = ['CURRENT', 'NEEDS_REVIEW'] as const;
 export type GoalLifecycleStatus = (typeof GOAL_LIFECYCLE_STATUSES)[number];
 export type GoalConfirmationState = (typeof GOAL_CONFIRMATION_STATES)[number];
 export type GoalReviewState = (typeof GOAL_REVIEW_STATES)[number];
+
+export type GoalDependencyRef = Extract<
+  DependencyRef,
+  { type: 'EVIDENCE' | 'CONSENT' }
+>;
 
 export interface GoalParticipantResponsibility {
   personId: string;
@@ -36,7 +42,7 @@ export interface GoalContractInput {
   protectiveConditions: string[];
   parentActions: string[];
   reviewPoint: string;
-  dependencyRefs: DependencyRef[];
+  dependencyRefs: GoalDependencyRef[];
   participantResponsibilities: GoalParticipantResponsibility[];
 }
 
@@ -58,7 +64,7 @@ export interface GoalRow {
   protective_conditions: string[];
   parent_actions: string[];
   review_point: string;
-  dependency_refs: DependencyRef[];
+  dependency_refs: GoalDependencyRef[];
   participant_responsibilities: GoalParticipantResponsibility[];
   saved_by_person_id: string;
   confirmed_by_person_id: string | null;
@@ -120,6 +126,51 @@ function assertEvidenceRefs(refs: readonly EvidenceRef[], name: string): void {
   }
 }
 
+function assertGoalDependencyRefs(
+  refs: readonly DependencyRef[]
+): asserts refs is readonly GoalDependencyRef[] {
+  for (const ref of refs) {
+    if (ref.type === 'EVIDENCE') {
+      assertEvidenceRefs([ref.evidence], 'dependencyRefs');
+      continue;
+    }
+    if (ref.type === 'CONSENT') {
+      if (
+        !UUID.test(ref.id) ||
+        (ref.version !== undefined &&
+          (!Number.isInteger(ref.version) ||
+            ref.version < 1 ||
+            ref.version > 2147483647))
+      ) {
+        throw goalError('VALIDATION_ERROR', 'dependencyRefs contains an invalid Consent reference');
+      }
+      continue;
+    }
+    throw goalError('VALIDATION_ERROR', 'Goal dependencyRefs only support EVIDENCE or CONSENT');
+  }
+}
+
+export function assertGoalDependenciesCoverProblemFormulation(
+  required: readonly DependencyRef[],
+  candidate: readonly GoalDependencyRef[]
+): void {
+  assertGoalDependencyRefs(candidate);
+  for (const dependency of required) {
+    if (dependency.type !== 'EVIDENCE' && dependency.type !== 'CONSENT') {
+      throw goalError(
+        'VALIDATION_ERROR',
+        'Current Problem Formulation contains a dependency unsupported by Goal V1'
+      );
+    }
+  }
+  if (!isDependencySubset(required, candidate)) {
+    throw goalError(
+      'VALIDATION_ERROR',
+      'Goal dependencyRefs must include the current Problem Formulation dependencies'
+    );
+  }
+}
+
 export function validateGoalContract(input: GoalContractInput): void {
   if (!UUID.test(input.problemFormulationId)) {
     throw goalError('VALIDATION_ERROR', 'problemFormulationId is invalid');
@@ -150,6 +201,7 @@ export function validateGoalContract(input: GoalContractInput): void {
   if (input.dependencyRefs.length === 0) {
     throw goalError('VALIDATION_ERROR', 'dependencyRefs must not be empty');
   }
+  assertGoalDependencyRefs(input.dependencyRefs);
 
   for (const responsibility of input.participantResponsibilities) {
     if (
@@ -172,7 +224,7 @@ export function normalizedGoalContract(
     ...input,
     problemFormulationId: input.problemFormulationId.toLowerCase(),
     baselineRefs: canonicalEvidenceRefs(input.baselineRefs),
-    dependencyRefs: canonicalDependencies(input.dependencyRefs),
+    dependencyRefs: canonicalDependencies(input.dependencyRefs) as GoalDependencyRef[],
     participantResponsibilities: [...input.participantResponsibilities]
       .map((item) => ({
         ...item,
@@ -305,33 +357,31 @@ export async function supersedeGoalVersion(
   }
 }
 
-export async function confirmGoalVersion(
+export async function confirmGoalTransition(
   tx: PoolClient,
   input: {
     caseId: string;
+    expectedCaseVersion: number;
     goalId: string;
     goalVersion: number;
     actorPersonId: string;
   }
-): Promise<GoalRow> {
-  const sql =
-    "UPDATE goals SET confirmation_state='CONFIRMED', " +
-    'confirmed_by_person_id=$4, confirmed_at=now(), updated_at=now() ' +
-    'WHERE case_id=$1 AND goal_id=$2 AND version=$3 ' +
-    "AND lifecycle_status='ACTIVE' AND confirmation_state='UNCONFIRMED' " +
-    "AND review_state='CURRENT' RETURNING " +
-    GOAL_COLUMNS;
-  const { rows } = await tx.query<GoalRow>(sql, [
-    input.caseId,
-    input.goalId,
-    input.goalVersion,
-    input.actorPersonId,
-  ]);
-  const row = rows[0];
-  if (!row) {
-    throw goalError('CASE_PHASE_CONFLICT', 'Goal version is not confirmable');
+): Promise<{ caseVersion: number; goal: GoalRow }> {
+  const { rows } = await tx.query<{ case_version: number }>(
+    'SELECT app.confirm_goal_transition($1,$2,$3,$4,$5) AS case_version',
+    [input.caseId,input.expectedCaseVersion,input.goalId,input.goalVersion,input.actorPersonId]
+  );
+  const caseVersion=rows[0]?.case_version;
+  if (!Number.isInteger(caseVersion)) {
+    throw goalError('CASE_PHASE_CONFLICT', 'Goal transition did not return a Case version');
   }
-  return row;
+  const goal=await lockGoalVersion(tx,{caseId:input.caseId,goalId:input.goalId,goalVersion:input.goalVersion});
+  if (!goal || goal.lifecycle_status!=='ACTIVE' || goal.review_state!=='CURRENT' ||
+      goal.confirmation_state!=='CONFIRMED' ||
+      goal.confirmed_by_person_id!==input.actorPersonId || goal.confirmed_at===null) {
+    throw goalError('CASE_PHASE_CONFLICT', 'Goal transition did not confirm the target Goal');
+  }
+  return {caseVersion,goal};
 }
 
 export async function insertGoalCaseEvent(

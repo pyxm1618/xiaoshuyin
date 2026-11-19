@@ -908,7 +908,7 @@ export function buildOpenApiDocument() {
                 dependencyRefs: {
                   type: 'array',
                   minItems: 1,
-                  items: ref('DependencyRef'),
+                  items: ref('GoalDependencyRef'),
                 },
                 participantResponsibilities: {
                   type: 'array',
@@ -1391,6 +1391,9 @@ export function buildOpenApiDocument() {
             version: { type: 'integer', minimum: 1, maximum: 2147483647 },
           },
           required: ['type', 'id'],
+        },
+        GoalDependencyRef: {
+          oneOf: [ref('EvidenceDependencyRef'), ref('ConsentDependencyRef')],
         },
         VersionedKeyDependencyRef: {
           type: 'object',
