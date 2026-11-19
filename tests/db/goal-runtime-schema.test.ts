@@ -277,4 +277,65 @@ describe('Common Core Goal DB guards', () => {
     });
     await admin.query('DELETE FROM goals WHERE id=$1', [goalRowId]);
   });
+
+  it('blocks direct app-role GOALS -> PLANNING plus Goal confirmation bypass', async () => {
+    const inserted = await admin.query(savedInsertSql(), [
+      familyId,
+      caseId,
+      formulationId,
+      personId,
+    ]);
+    const goalRowId = inserted.rows[0].id as string;
+
+    let attackError: unknown = null;
+    await app.query('BEGIN');
+    try {
+      await app.query('SELECT app.set_identity_context($1,$2)', [
+        accountId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await app.query('SELECT app.set_family_context($1,$2,$3)', [
+        familyId,
+        personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+
+      await app.query(
+        "UPDATE cases SET phase='PLANNING', version=version+1, updated_at=now() WHERE id=$1",
+        [caseId]
+      );
+      await app.query(
+        "UPDATE goals SET confirmation_state='CONFIRMED'," +
+          "confirmed_by_person_id=$2,confirmed_at=now(),updated_at=now() " +
+          "WHERE id=$1",
+        [goalRowId, personId]
+      );
+    } catch (error) {
+      attackError = error;
+    } finally {
+      await app.query('ROLLBACK');
+    }
+
+    if (attackError === null) {
+      throw new Error('HIGH_001_BYPASS_SUCCEEDED');
+    }
+
+    const pgError = attackError as { code?: string; message?: string };
+    expect(pgError.code).toBe('23514');
+
+    const finalState = await admin.query(
+      "SELECT c.phase, g.confirmation_state, g.confirmed_by_person_id, g.confirmed_at " +
+        "FROM cases c JOIN goals g ON g.case_id=c.id WHERE c.id=$1 AND g.id=$2",
+      [caseId, goalRowId]
+    );
+    expect(finalState.rows[0]).toMatchObject({
+      phase: 'GOALS',
+      confirmation_state: 'UNCONFIRMED',
+      confirmed_by_person_id: null,
+      confirmed_at: null,
+    });
+
+    await admin.query('DELETE FROM goals WHERE id=$1', [goalRowId]);
+  });
+
 });
