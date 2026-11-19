@@ -30,7 +30,8 @@
           "011-digital-use-node-manifest-routing-foundation",
           "012-digital-use-assessment-runtime",
           "013-digital-use-family-alliance-runtime",
-          "foundation-remaining-remediation"
+          "foundation-remaining-remediation",
+          "017-professional-knowledge-foundation"
         ]
       }
     },
@@ -57,7 +58,8 @@
       "ownership": {
         "kind": "SHARED",
         "features": [
-          "common-core-goal-confirmgoal-runtime"
+          "common-core-goal-confirmgoal-runtime",
+          "017-professional-knowledge-foundation"
         ]
       }
     },
@@ -422,7 +424,8 @@
       "ownership": {
         "kind": "SHARED",
         "features": [
-          "common-core-goal-confirmgoal-runtime"
+          "common-core-goal-confirmgoal-runtime",
+          "017-professional-knowledge-foundation"
         ]
       }
     },
@@ -435,7 +438,86 @@
       "ownership": {
         "kind": "SHARED",
         "features": [
-          "common-core-goal-confirmgoal-runtime"
+          "common-core-goal-confirmgoal-runtime",
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "shared-api-transaction-context",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/db/tx.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "professional-knowledge-services",
+      "match": {
+        "kind": "PREFIX",
+        "path": "apps/server/api/src/services/professional-knowledge"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "professional-knowledge-migration-025",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/025_professional_knowledge_foundation.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "professional-knowledge-migration-026",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/026_professional_authority_release_remediation.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "professional-knowledge-migration-027",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/027_professional_knowledge_insert_lifecycle_guard.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "professional-knowledge-domain",
+      "match": {
+        "kind": "PREFIX",
+        "path": "packages/domain/src/professional-knowledge"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
         ]
       }
     }
