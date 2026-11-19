@@ -410,6 +410,7 @@ const SLICE17_NEW_OBJECTS = [
   'trigger:professional_knowledge_review_evidence_append_only',
   'trigger:professional_knowledge_sources_append_only',
   'trigger:professional_knowledge_versions_update_guard',
+  'trigger:yy_professional_knowledge_insert_lifecycle_guard',
   'trigger:zz_professional_knowledge_release_authority_guard',
 ].sort();
 

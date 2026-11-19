@@ -105,7 +105,13 @@ describe('Slice 16 current-main 024 -> forensic remediation 025 upgrade', () => 
       join(mainOnlyRoot, 'scripts', 'db-migrate.mjs')
     );
     for (const name of readdirSync(join(ROOT, 'db', 'migrations')).sort()) {
-      if (!name.endsWith('.sql') || name === REMEDIATION || name.startsWith('026_')) continue;
+      const numericPrefix = Number(name.slice(0, 3));
+      if (
+        !name.endsWith('.sql') ||
+        name === REMEDIATION ||
+        !Number.isInteger(numericPrefix) ||
+        numericPrefix > 24
+      ) continue;
       copyFileSync(
         join(ROOT, 'db', 'migrations', name),
         join(mainOnlyRoot, 'db', 'migrations', name)

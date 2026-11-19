@@ -136,7 +136,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(tableNames).toEqual(EXPECTED_TABLE_NAMES);
   });
 
-  it('preserves all 33 current-main tables as the exact pre-Slice17 owner subset', async () => {
+  it('preserves all 33 tables from current-main as the exact pre-Slice17 owner subset', async () => {
     const { rows } = await client.query<{ tablename: string }>(`
       SELECT tablename
       FROM pg_tables
