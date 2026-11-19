@@ -132,7 +132,8 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 014_consent_01004_cross_purpose_supersede_guard.sql');
     expect(output).toContain('APPLY 026_professional_authority_release_remediation.sql');
     expect(output).toContain('APPLY 027_professional_knowledge_insert_lifecycle_guard.sql');
-    expect(output).toMatch(/Migration complete: 27 new, 3 previously applied\./);
+    expect(output).toContain('APPLY 028_professional_knowledge_authority_boundary_remediation.sql');
+    expect(output).toMatch(/Migration complete: 28 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -221,6 +222,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '026_common_core_goal_confirm_goal_runtime.sql',
       '026_professional_authority_release_remediation.sql',
       '027_professional_knowledge_insert_lifecycle_guard.sql',
+      '028_professional_knowledge_authority_boundary_remediation.sql',
     ]);
 
     // New Evidence schema exists.
@@ -330,7 +332,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 30 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 31 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
     expect(output).not.toContain('APPLY 005_case_participant_core.sql');
@@ -338,6 +340,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 026_professional_authority_release_remediation.sql');
     expect(output).not.toContain('APPLY 027_professional_knowledge_insert_lifecycle_guard.sql');
+    expect(output).not.toContain('APPLY 028_professional_knowledge_authority_boundary_remediation.sql');
     expect(await fingerprint(migrator)).toEqual(before);
   }, 120_000);
 });
