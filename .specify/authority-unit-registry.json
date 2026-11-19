@@ -4879,6 +4879,22 @@
                   ]
                 }
               ]
+            },
+            {
+              "feature": "common-core-goal-confirmgoal-runtime",
+              "specPath": "specs/common-core-goal-confirmgoal-runtime",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "specs/common-core-goal-confirmgoal-runtime/plan.md"
+                  ]
+                }
+              ]
             }
           ]
         },
@@ -5454,6 +5470,22 @@
                   },
                   "requiredArtifacts": [
                     "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            },
+            {
+              "feature": "common-core-goal-confirmgoal-runtime",
+              "specPath": "specs/common-core-goal-confirmgoal-runtime",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "specs/common-core-goal-confirmgoal-runtime/plan.md"
                   ]
                 }
               ]
@@ -6052,6 +6084,22 @@
                   },
                   "requiredArtifacts": [
                     "tests/architecture/phase2-authority-contract-foundation.test.ts"
+                  ]
+                }
+              ]
+            },
+            {
+              "feature": "common-core-goal-confirmgoal-runtime",
+              "specPath": "specs/common-core-goal-confirmgoal-runtime",
+              "requirements": [
+                {
+                  "id": "Requirements",
+                  "selector": {
+                    "kind": "MARKDOWN_SECTION",
+                    "heading": "## Requirements"
+                  },
+                  "requiredArtifacts": [
+                    "specs/common-core-goal-confirmgoal-runtime/plan.md"
                   ]
                 }
               ]
