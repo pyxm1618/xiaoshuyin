@@ -201,9 +201,7 @@ describe('Evidence RLS / grants (T015)', () => {
         expect(sel.rows[0].c, table).toBe(0);
       }
       const insert = assertionInsertSql(fx.familyA, fx.caseA, fx.managerA, 'STATEMENT');
-      await expect(client.query(insert.sql, insert.params)).rejects.toThrow(
-        /row-level security|42501/i
-      );
+      await expect(client.query(insert.sql, insert.params)).rejects.toMatchObject({ code: '42501' });
     } finally {
       await client.query('ROLLBACK').catch(() => {});
       client.release();
@@ -268,9 +266,7 @@ describe('Evidence RLS / grants (T015)', () => {
           expect(byId.rows[0].c, `${table} wrong family by id`).toBe(0);
         }
         const insert = assertionInsertSql(fx.familyB, fx.caseB, fx.managerB, 'STATEMENT');
-        await expect(client.query(insert.sql, insert.params)).rejects.toThrow(
-          /row-level security|42501/i
-        );
+        await expect(client.query(insert.sql, insert.params)).rejects.toMatchObject({ code: '42501' });
       });
     } finally {
       client.release();
@@ -313,7 +309,7 @@ describe('Evidence RLS / grants (T015)', () => {
       const client = await app.connect();
       try {
         await inAppFamily(client, fx.familyA, fx.managerA, async () => {
-          await expect(client.query(`DELETE FROM ${table}`)).rejects.toThrow();
+          await expect(client.query(`DELETE FROM ${table}`)).rejects.toMatchObject({ code: '42501' });
         });
       } finally {
         client.release();

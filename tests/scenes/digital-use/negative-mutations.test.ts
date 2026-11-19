@@ -76,14 +76,34 @@ describe('Slice 11 required negative mutation fixtures', () => {
 
   it('fails orphan and accidental dead end', () => {
     const orphan = clone();
-    const a3033 = orphan.find((node) => node.nodeCode === 'A3033');
-    a3033.entryMode = ['ROUTED']; a3033.helpOrReentryRefs = [];
-    expect(issueCodes(validateDigitalUseGraph(orphan, expectedCodes))).toContain('ORPHAN_NODE');
+    orphan.find((node) => node.nodeCode === 'A3033').activationFrom = [];
+    for (const node of orphan) {
+      node.allowedNext = node.allowedNext.filter(
+        (route: any) => route.kind !== 'NODE' || route.targetNodeCode !== 'A3033'
+      );
+    }
+    expect(issueCodes(validateDigitalUseGraph(orphan, expectedCodes))).toEqual(
+      expect.arrayContaining(['MISSING_EXPLICIT_INCOMING', 'ORPHAN_NODE'])
+    );
 
     const dead = clone();
     const a3002 = dead.find((node) => node.nodeCode === 'A3002');
+    a3002.allowedNext = [];
     a3002.entryMode = ['ROUTED']; a3002.helpOrReentryRefs = []; a3002.canRunInParallelWith = [];
     expect(issueCodes(validateDigitalUseGraph(dead, expectedCodes))).toContain('ACCIDENTAL_DEAD_END');
+  });
+
+  it.each(['A4001','A5001','A5002'])('fails missing canonical incoming set for %s', (nodeCode) => {
+    const mutated = clone();
+    mutated.find((node) => node.nodeCode === nodeCode).activationFrom = [];
+    for (const node of mutated) {
+      node.allowedNext = node.allowedNext.filter(
+        (route: any) => route.kind !== 'NODE' || route.targetNodeCode !== nodeCode
+      );
+    }
+    expect(issueCodes(validateDigitalUseGraph(mutated, expectedCodes))).toEqual(
+      expect.arrayContaining(['MISSING_EXPLICIT_INCOMING', 'ORPHAN_NODE'])
+    );
   });
 
   it('fails missing parallel relation', () => {

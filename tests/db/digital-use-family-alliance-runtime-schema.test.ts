@@ -242,7 +242,7 @@ describe('T1303/T1305 Digital Use Family Alliance target persistence', () => {
         WHERE relnamespace='public'::regnamespace
           AND relkind='r'
           AND relname = ANY($1::text[])`,
-      [['family_alliance_answers','goals','tasks','checkins','outcomes','plan_versions']]
+      [['family_alliance_answers','tasks','checkins','outcomes','plan_versions']]
     );
     expect(rows).toEqual([]);
   });

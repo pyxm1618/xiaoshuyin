@@ -262,7 +262,7 @@ describe('006 case_status PAUSED removal', () => {
       const output = runMigrator(upgradeUrl);
       expect(output).toContain('APPLY 006_case_status_paused_removal.sql');
       expect(output).toContain('APPLY 007_case_primary_switch.sql');
-      expect(output).toMatch(/Migration complete: 22 new, 6 previously applied\./);
+      expect(output).toMatch(/Migration complete: 23 new, 6 previously applied\./);
 
       expect(await enumLabels(seed)).toEqual(FIVE_LABELS);
 
@@ -270,16 +270,16 @@ describe('006 case_status PAUSED removal', () => {
       expect(await caseStatusOf(seed, caseIds)).toEqual(beforeRows);
 
       // T2 — PAUSED is no longer a legal value of the final type.
-      await expect(seed.query("SELECT 'PAUSED'::case_status")).rejects.toThrow(
-        /invalid input value for enum case_status/
-      );
+      await expect(seed.query("SELECT 'PAUSED'::case_status")).rejects.toMatchObject({
+        code: '22P02',
+      });
       await expect(
         seed.query(
           `INSERT INTO cases (family_id, created_by_person_id, status, phase, is_primary, version)
            SELECT $1, created_by_person_id, 'PAUSED', 'INTAKE', false, 2 FROM cases WHERE id = $2`,
           [familyId, caseIds[0]]
         )
-      ).rejects.toThrow(/invalid input value for enum case_status/);
+      ).rejects.toMatchObject({ code: '22P02' });
 
       // Dependency restoration is definition-equivalent, not merely present.
       const indexes = await casesIndexes(seed);
@@ -330,7 +330,7 @@ describe('006 case_status PAUSED removal', () => {
       const beforeIndexes = await casesIndexes(seed);
 
       const output = runMigrator(upgradeUrl);
-      expect(output).toMatch(/Migration complete: 0 new, 28 previously applied\./);
+      expect(output).toMatch(/Migration complete: 0 new, 29 previously applied\./);
       expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
       expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
       expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');

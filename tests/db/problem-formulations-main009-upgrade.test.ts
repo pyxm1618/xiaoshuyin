@@ -315,7 +315,7 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     expect(output).toContain('APPLY 008_problem_formulation_core.sql');
     expect(output).toContain('APPLY 010_problem_formulation_safety_vocabulary_reconcile.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 19 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 20 new, 9 previously applied\./);
 
     const client = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await client.connect();
@@ -386,7 +386,8 @@ async function assertUnionConstraints(
   includeSlice14 = includeSlice12,
   includeAuth006 = includeSlice14,
   includeSlice16 = includeAuth006,
-  includeSlice17 = includeSlice16
+  includeGoalRuntime = includeSlice16,
+  includeSlice17 = includeGoalRuntime
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -423,6 +424,7 @@ async function assertUnionConstraints(
     ...SLICE8_CASE_EVENT_TYPES,
     ...SLICE9_CASE_EVENT_TYPES,
     ...(includeSlice12 ? ['CASE_DIGITAL_USE_NODE_COMPLETED'] : []),
+    ...(includeGoalRuntime ? ['CASE_GOAL_CONFIRMED'] : []),
   ]);
   const caseEventLiterals = literalsOf(definitions.get('case_events_event_type_check')!);
   expect(new Set(caseEventLiterals)).toEqual(caseEventSet);
@@ -431,6 +433,7 @@ async function assertUnionConstraints(
     ...SLICE8_CASE_EVENT_TYPES,
     ...SLICE9_CASE_EVENT_TYPES,
     ...(includeSlice12 ? ['CASE_DIGITAL_USE_NODE_COMPLETED'] : []),
+    ...(includeGoalRuntime ? ['CASE_GOAL_CONFIRMED'] : []),
   ]);
   const metadataShape = definitions.get('case_events_metadata_shape_check')!;
   for (const marker of ['riskEventId', 'fromVersion', 'toVersion', 'fromStatus', 'toStatus']) {
@@ -489,6 +492,7 @@ async function assertUnionConstraints(
           'INTERVENTION_ELIGIBILITY_BLOCKED',
         ]
       : []),
+    ...(includeGoalRuntime ? ['GOAL_SAVED', 'GOAL_CONFIRMED'] : []),
     ...(includeSlice17
       ? [
           'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED',
@@ -516,6 +520,7 @@ async function assertUnionConstraints(
     'CASE_PARTICIPANT',
     'PROBLEM_FORMULATION',
     ...(includeSlice16 ? ['INTERVENTION_DEFINITION'] : []),
+    ...(includeGoalRuntime ? ['GOAL'] : []),
     ...(includeSlice17 ? ['PROFESSIONAL_KNOWLEDGE'] : []),
   ]);
   const resourceLiterals = literalsOf(
@@ -562,6 +567,7 @@ async function assertUnionConstraints(
           'INTERVENTION_DEFINITION_SUPERSEDE',
         ]
       : []),
+    ...(includeGoalRuntime ? ['GOAL_SAVE', 'GOAL_CONFIRM'] : []),
     ...(includeSlice17
       ? [
           'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',

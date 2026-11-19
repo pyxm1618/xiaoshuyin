@@ -6,20 +6,21 @@
  * `Docs/**` are the authority Spec Kit artifacts project from. They must not drift
  * as a side effect of feature, fix, or chore work.
  *
- * Default behaviour: a change to any `Docs/**` path fails this gate.
- * Explicit, auditable exception: the pull request carries the
- * `approved-docs-change` label, which a human applies after reviewing the
- * document change itself. The label admits the change to normal review; it is
- * never an automatic approval and it does not skip any other governance check.
+ * Any change to a `Docs/**` path fails this legacy immutability probe in
+ * enforce mode. Labels are deliberately ignored: an agent or connector can
+ * apply labels, so a label cannot authorize an Authority change or replace convergence evidence.
  *
- * No document SHA is pinned here. The gate protects "unapproved drift", not
- * "permanent immutability".
+ * Intended Authority revisions are governed by validate-change-governance.mjs:
+ * the PR must carry an Authority Impact Contract and downstream convergence,
+ * while merge readiness is established by exact-head automated governance plus independent AI audit evidence.
+ *
+ * No document SHA is pinned here. The protected invariant is that Authority
+ * changes must travel through the explicit convergence + exact-head verification path.
  */
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 
-const DEFAULT_LABEL = "approved-docs-change";
 const DOCS_PREFIX = "Docs/";
 
 function parseArgs(argv) {
@@ -27,9 +28,7 @@ function parseArgs(argv) {
     base: "origin/main",
     head: "HEAD",
     changedFiles: null,
-    labels: process.env.PR_LABELS ?? "",
     mode: "enforce",
-    labelName: DEFAULT_LABEL,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -45,13 +44,10 @@ function parseArgs(argv) {
     if (arg === "--base") opts.base = next();
     else if (arg === "--head") opts.head = next();
     else if (arg === "--changed-files") opts.changedFiles = next();
-    else if (arg === "--labels") opts.labels = next();
     else if (arg === "--mode") opts.mode = next();
-    else if (arg === "--label-name") opts.labelName = next();
     else if (arg === "--help" || arg === "-h") {
       console.log(
-        "Usage: check-docs-guard.mjs [--base <ref>] [--head <ref>] [--changed-files <file>]\n" +
-          "                            [--labels <csv>] [--mode enforce|audit] [--label-name <name>]"
+        "Usage: check-docs-guard.mjs [--base <ref>] [--head <ref>] [--changed-files <file>] [--mode enforce|audit]"
       );
       process.exit(0);
     } else {
@@ -95,20 +91,9 @@ function isDocsPath(filePath) {
   return filePath === "Docs" || filePath.startsWith(DOCS_PREFIX);
 }
 
-function parseLabels(raw) {
-  return new Set(
-    String(raw)
-      .split(",")
-      .map((label) => label.trim())
-      .filter(Boolean)
-  );
-}
-
 const opts = parseArgs(process.argv.slice(2));
 const changed = opts.changedFiles ? changedFilesFromFile(opts.changedFiles) : changedFilesFromGit(opts.base, opts.head);
 const docsChanged = changed.filter(isDocsPath).sort();
-const labels = parseLabels(opts.labels);
-const approved = labels.has(opts.labelName);
 
 console.log("Docs immutability gate");
 console.log(`  revision range: ${opts.changedFiles ? `file:${opts.changedFiles}` : `${opts.base}...${opts.head}`}`);
@@ -116,29 +101,16 @@ console.log(`  changed files: ${changed.length}`);
 console.log(`  Docs changed: ${docsChanged.length > 0 ? "YES" : "NO"}`);
 
 if (docsChanged.length === 0) {
-  console.log(`  override label "${opts.labelName}": NOT REQUIRED`);
   console.log("PASS: no Docs/** path was modified.");
   process.exit(0);
 }
 
 console.log(`  Docs files (${docsChanged.length}):`);
 for (const filePath of docsChanged) console.log(`    - ${filePath}`);
-console.log(`  override label "${opts.labelName}": ${approved ? "PRESENT" : "ABSENT"}`);
-
-if (approved) {
-  console.log("PASS (override): Docs changes are admitted to normal review.");
-  console.log(
-    `  Audit note: "${opts.labelName}" was applied on the pull request. This is not an approval ` +
-      "of the content and does not bypass any other governance check."
-  );
-  process.exit(0);
-}
-
 const reason =
-  `FAIL: ${docsChanged.length} file(s) under Docs/** changed without the "${opts.labelName}" label.\n` +
-  "  Docs/** holds the approved product and technical sources. Change them deliberately:\n" +
-  `  1. review the document diff itself; 2. apply the "${opts.labelName}" label if the change is intended;\n` +
-  "  3. keep feature work in specs/, never as a side effect of Docs edits.";
+  `FAIL: ${docsChanged.length} file(s) under Docs/** changed. Labels cannot override this probe.\n` +
+  "  Intended Authority revisions must use the Authority Impact Contract and downstream convergence gate,\n" +
+  "  then satisfy exact-head automated governance and independent AI audit evidence; GitHub human approval is not required.";
 
 if (opts.mode === "audit") {
   console.log(`AUDIT ONLY (mode=audit): this run would fail in enforce mode.\n${reason}`);

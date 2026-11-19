@@ -99,29 +99,29 @@ describe('case_events metadata shape check (T023)', () => {
   });
 
   it('rejects extra keys (title / description / PII)', async () => {
-    await expect(insertEvent('{"primary": true, "version": 1, "title": "x"}')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{"primary": true, "version": 1, "description": "x"}')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{"primary": true, "version": 1, "note": "child name"}')).rejects.toThrow(/check/i);
+    await expect(insertEvent('{"primary": true, "version": 1, "title": "x"}')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{"primary": true, "version": 1, "description": "x"}')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{"primary": true, "version": 1, "note": "child name"}')).rejects.toMatchObject({ code: '23514' });
   });
 
   it('rejects non-object, empty object and missing keys', async () => {
-    await expect(insertEvent('"text"')).rejects.toThrow(/check/i);
-    await expect(insertEvent('[]')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{}')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{"primary": true}')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{"version": 1}')).rejects.toThrow(/check/i);
+    await expect(insertEvent('"text"')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('[]')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{}')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{"primary": true}')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{"version": 1}')).rejects.toMatchObject({ code: '23514' });
   });
 
   it('rejects non-boolean primary', async () => {
-    await expect(insertEvent('{"primary": "true", "version": 1}')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{"primary": 1, "version": 1}')).rejects.toThrow(/check/i);
+    await expect(insertEvent('{"primary": "true", "version": 1}')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{"primary": 1, "version": 1}')).rejects.toMatchObject({ code: '23514' });
   });
 
   it('rejects non-integer-compatible or out-of-range version', async () => {
-    await expect(insertEvent('{"primary": true, "version": 1.5}')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{"primary": true, "version": 0}')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{"primary": true, "version": -1}')).rejects.toThrow(/check/i);
-    await expect(insertEvent('{"primary": true, "version": "1"}')).rejects.toThrow(/check/i);
+    await expect(insertEvent('{"primary": true, "version": 1.5}')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{"primary": true, "version": 0}')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{"primary": true, "version": -1}')).rejects.toMatchObject({ code: '23514' });
+    await expect(insertEvent('{"primary": true, "version": "1"}')).rejects.toMatchObject({ code: '23514' });
   });
 
   it('has no default: metadata must be written explicitly', async () => {
@@ -136,6 +136,6 @@ describe('case_events metadata shape check (T023)', () => {
   it('event_type vocabulary is closed to CASE_CREATED', async () => {
     await expect(
       insertEvent('{"primary": true, "version": 1}', 'CASE_VIEWED')
-    ).rejects.toThrow(/check/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 });

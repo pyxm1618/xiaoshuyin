@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('all 37 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
+  it('all 38 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -33,7 +33,7 @@ describe('RLS', () => {
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
     // Prior reviewed owners plus Slice 16 InterventionDefinition and Slice 17 Professional Knowledge tables.
-    expect(rlsTables.length).toBe(37);
+    expect(rlsTables.length).toBe(38);
     expect(noRlsTables).toEqual([]);
 
     for (const t of rlsTables) {
@@ -41,7 +41,7 @@ describe('RLS', () => {
     }
   });
 
-  it('Slice 16 owner subset still covers all 32 tables before the five Slice 17 owner tables', async () => {
+  it('current-main owner subset still covers all 33 tables before the five Slice 17 owner tables', async () => {
     const { rows } = await client.query<{ relname: string }>(`
       SELECT relname
       FROM pg_class
@@ -58,15 +58,15 @@ describe('RLS', () => {
       'professional_knowledge_review_evidence',
       'professional_knowledge_approval_evidence',
     ]);
-    expect(rows.filter((row) => !slice17Owners.has(row.relname)).length).toBe(32);
+    expect(rows.filter((row) => !slice17Owners.has(row.relname)).length).toBe(33);
     expect(rows.some((row) => row.relname === 'intervention_definitions')).toBe(true);
   });
 
-  it('95 policies exist after Slice 17 Phase 2 authority composition', async () => {
+  it('96 policies exist after current-main + Slice 17 authority composition', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(95);
+    expect(rows.length).toBe(96);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {

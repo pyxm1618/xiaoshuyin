@@ -39,22 +39,44 @@ describe('Slice 11 typed graph reachability', () => {
     expect(report.deadEndNodeCodes).toEqual([]);
   });
 
-  it('detects a true orphan when non-linear entry semantics are removed', () => {
-    const mutated = digitalUseNodeManifest.map((node) =>
-      node.nodeCode === 'A3033'
-        ? { ...node, entryMode: ['ROUTED'] as const, helpOrReentryRefs: [] as const }
-        : { ...node }
-    ) as any[];
-    const report = validateDigitalUseGraph(mutated, expectedCodes);
+  function removeAllIncoming(nodeCode: string) {
+    return digitalUseNodeManifest.map((node) => ({
+      ...node,
+      ...(node.nodeCode === nodeCode ? { activationFrom: [] as const } : {}),
+      allowedNext: node.allowedNext.filter(
+        (route) => route.kind !== 'NODE' || route.targetNodeCode !== nodeCode
+      ),
+    })) as any[];
+  }
+
+  it('detects a true orphan when all canonical incoming edges are removed', () => {
+    const report = validateDigitalUseGraph(removeAllIncoming('A3033'), expectedCodes);
     expect(report.valid).toBe(false);
     expect(report.orphanNodeCodes).toContain('A3033');
-    expect(report.issues.map((item) => item.code)).toContain('ORPHAN_NODE');
+    expect(report.issues.map((item) => item.code)).toEqual(
+      expect.arrayContaining(['MISSING_EXPLICIT_INCOMING', 'ORPHAN_NODE'])
+    );
+  });
+
+  it.each(['A4001', 'A5001', 'A5002'])('fails if %s loses all canonical incoming edges', (nodeCode) => {
+    const report = validateDigitalUseGraph(removeAllIncoming(nodeCode), expectedCodes);
+    expect(report.valid).toBe(false);
+    expect(report.orphanNodeCodes).toContain(nodeCode);
+    expect(report.issues.map((item) => item.code)).toEqual(
+      expect.arrayContaining(['MISSING_EXPLICIT_INCOMING', 'ORPHAN_NODE'])
+    );
   });
 
   it('detects an accidental dead end instead of inventing a next-number edge', () => {
     const mutated = digitalUseNodeManifest.map((node) =>
       node.nodeCode === 'A3002'
-        ? { ...node, helpOrReentryRefs: [] as const, entryMode: ['ROUTED'] as const, canRunInParallelWith: [] as const }
+        ? {
+            ...node,
+            allowedNext: [] as const,
+            helpOrReentryRefs: [] as const,
+            entryMode: ['ROUTED'] as const,
+            canRunInParallelWith: [] as const,
+          }
         : { ...node }
     ) as any[];
     const report = validateDigitalUseGraph(mutated, expectedCodes);

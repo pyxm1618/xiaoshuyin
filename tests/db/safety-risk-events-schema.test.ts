@@ -265,7 +265,7 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
           const statement = insertHoldEntered(overrides);
           await client.query(statement.text, statement.values);
         })
-      ).rejects.toThrow(/risk_events_shape_check/);
+      ).rejects.toMatchObject({ code: '23514', constraint: 'risk_events_shape_check' });
     }
   });
 
@@ -277,7 +277,7 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
         });
         await client.query(statement.text, statement.values);
       })
-    ).rejects.toThrow(/risk_events_shape_check/);
+    ).rejects.toMatchObject({ code: '23514', constraint: 'risk_events_shape_check' });
   });
 
   it('rejects an unknown event kind and a non-positive decision revision', async () => {
@@ -286,14 +286,14 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
         const statement = insertHoldEntered({ eventKind: 'SOMETHING_ELSE' });
         await client.query(statement.text, statement.values);
       })
-    ).rejects.toThrow(/risk_events_event_kind_check/);
+    ).rejects.toMatchObject({ code: '23514', constraint: 'risk_events_event_kind_check' });
 
     await expect(
       asAppFamily(async (client) => {
         const statement = insertHoldEntered({ decisionCaseVersion: 0 });
         await client.query(statement.text, statement.values);
       })
-    ).rejects.toThrow(/risk_events_decision_version_check/);
+    ).rejects.toMatchObject({ code: '23514', constraint: 'risk_events_decision_version_check' });
   });
 
   it('rejects a resolution without link, evidence or verified authority', async () => {
@@ -328,7 +328,7 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
         s.values[5] = null;
         await client.query(s.text, s.values);
       })
-    ).rejects.toThrow(/risk_events_shape_check/);
+    ).rejects.toMatchObject({ code: '23514', constraint: 'risk_events_shape_check' });
 
     // empty evidence
     await expect(
@@ -337,7 +337,7 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
         s.values[4] = JSON.stringify([]);
         await client.query(s.text, s.values);
       })
-    ).rejects.toThrow(/risk_events_shape_check/);
+    ).rejects.toMatchObject({ code: '23514', constraint: 'risk_events_shape_check' });
 
     // missing authority
     await expect(
@@ -346,7 +346,7 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
         s.values[6] = null;
         await client.query(s.text, s.values);
       })
-    ).rejects.toThrow(/risk_events_shape_check/);
+    ).rejects.toMatchObject({ code: '23514', constraint: 'risk_events_shape_check' });
 
     // a well-formed resolution is accepted
     const resolvedId = await asAppFamily(async (client) => {
@@ -362,7 +362,7 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
         const s = resolutionStatement({});
         await client.query(s.text, s.values);
       })
-    ).rejects.toThrow(/risk_events_one_resolution_per_hold/);
+    ).rejects.toMatchObject({ code: '23505', constraint: 'risk_events_one_resolution_per_hold' });
   });
 
   it('structurally rejects a cross-Family Case link', async () => {
@@ -401,7 +401,10 @@ describe('T903 Risk Event schema, RLS and least privilege', () => {
         const statement = insertHoldEntered({ caseId: otherCaseId });
         await client.query(statement.text, statement.values);
       })
-    ).rejects.toThrow(/risk_events_case_family_fk|row-level security/i);
+    ).rejects.toMatchObject({
+      code: '23503',
+      constraint: 'risk_events_case_family_fk',
+    });
 
     // Cross-Family resolution self-link is impossible too.
     await expect(

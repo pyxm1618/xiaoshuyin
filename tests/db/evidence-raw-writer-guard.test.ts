@@ -402,7 +402,7 @@ describe('ULT-001 raw Evidence writer fail-closed', () => {
           client,
           assertionRow('SELF_STATEMENT', { kind: 'FACT' }) as any
         )
-      ).rejects.toThrow(/row-level security|42501/i);
+      ).rejects.toMatchObject({ code: '42501' });
     });
     expectNoRowsAdded(before, await rowCounts());
   });

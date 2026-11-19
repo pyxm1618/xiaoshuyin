@@ -114,7 +114,7 @@ describe('Observation storage CHECKs (T013)', () => {
   it('rejects KNOWN with no typed value', async () => {
     await expect(
       insertObservation({ value_state: 'KNOWN', value_type: 'TEXT' })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('rejects two typed values at once', async () => {
@@ -125,7 +125,7 @@ describe('Observation storage CHECKs (T013)', () => {
         value_text: 'x',
         value_number: 1,
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('rejects TEXT carrying a numeric value and BOOLEAN carrying text', async () => {
@@ -135,7 +135,7 @@ describe('Observation storage CHECKs (T013)', () => {
         value_type: 'TEXT',
         value_number: 1,
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     await expect(
       insertObservation({
         value_state: 'KNOWN',
@@ -143,7 +143,7 @@ describe('Observation storage CHECKs (T013)', () => {
         value_text: 'true',
         value_boolean: true,
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('rejects unit on TEXT / BOOLEAN but allows unit on KNOWN NUMBER', async () => {
@@ -154,7 +154,7 @@ describe('Observation storage CHECKs (T013)', () => {
         value_text: 'x',
         unit: 'hours',
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     await expect(
       insertObservation({
         value_state: 'KNOWN',
@@ -162,31 +162,31 @@ describe('Observation storage CHECKs (T013)', () => {
         value_boolean: true,
         unit: 'hours',
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('rejects unknown-like states that smuggle a type / value / unit', async () => {
     await expect(
       insertObservation({ value_state: 'UNKNOWN', value_type: 'TEXT' })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     await expect(
       insertObservation({ value_state: 'DECLINED', value_text: 'no' })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     await expect(
       insertObservation({ value_state: 'NOT_APPLICABLE', unit: 'hours' })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 
   it('enforces occurred_time_state KNOWN <=> occurred_at non-null', async () => {
     await expect(
       insertObservation({ occurred_time_state: 'KNOWN', occurred_at: null })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     await expect(
       insertObservation({
         occurred_time_state: 'UNKNOWN',
         occurred_at: new Date('2026-01-01T00:00:00Z'),
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     const shown = await insertObservation({
       occurred_time_state: 'KNOWN',
       occurred_at: new Date('2026-01-01T00:00:00Z'),
@@ -200,13 +200,13 @@ describe('Observation storage CHECKs (T013)', () => {
         valid_from: new Date('2026-02-01T00:00:00Z'),
         valid_until: new Date('2026-01-01T00:00:00Z'),
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     await expect(
       insertObservation({
         valid_from: new Date('2026-01-01T00:00:00Z'),
         valid_until: new Date('2026-01-01T00:00:00Z'),
       })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     const ok = await insertObservation({
       valid_from: new Date('2026-01-01T00:00:00Z'),
       valid_until: new Date('2026-02-01T00:00:00Z'),
@@ -217,10 +217,10 @@ describe('Observation storage CHECKs (T013)', () => {
   it('enforces the observation_code pattern', async () => {
     await expect(
       insertObservation({ observation_code: 'Sleep Hours' })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
     await expect(
       insertObservation({ observation_code: '1sleep' })
-    ).rejects.toThrow(/check constraint/i);
+    ).rejects.toMatchObject({ code: '23514' });
   });
 });
 

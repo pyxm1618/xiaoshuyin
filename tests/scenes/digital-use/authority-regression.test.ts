@@ -93,3 +93,24 @@ describe('Slice 11 current Digital Use authority regression', () => {
     })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: '01006' });
   });
 });
+
+describe('Phase 2 D3/D8 authority downstream projection', () => {
+  const spec = readFileSync(new URL('../../../specs/011-digital-use-node-manifest-routing-foundation/spec.md', import.meta.url), 'utf8');
+  const productAuthority = readFileSync(new URL('../../../Docs/V1产品需求.md', import.meta.url), 'utf8');
+
+  it('freezes dimension-local conflict semantics and priority blocking', () => {
+    expect(spec).toContain('FR-036 [Phase2-D3]');
+    expect(spec).toContain('credible current true+false = `CONFLICT`');
+    expect(spec).toContain('independent direct-impact dimension with valid true still establishes aggregate positive');
+    expect(spec).toContain('FR-037 [Phase2-D3]');
+    expect(productAuthority).toContain('不得跨 dimension 抵消已经成立的 positive');
+    expect(productAuthority).toContain('没有任何独立 positive、且 route-driving direct-impact Conflict 存在时');
+    expect(productAuthority).not.toMatch(/can overturn|推翻\s*(?:该\s*)?positive|能否定\/推翻/i);
+  });
+
+  it('routes INSUFFICIENT back to real evidence collection, not outcome pages', () => {
+    expect(spec).toContain('FR-038 [Phase2-D8]');
+    expect(spec).toContain('A1001/01002/01003');
+    expect(spec).toContain('A2001/A2002 outcome pages MUST NOT be used');
+  });
+});

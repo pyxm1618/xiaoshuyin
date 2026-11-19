@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "changeId": "phase3-phase2-product-closeout-c4-c5-c6-t1-t2",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "011-digital-use-node-manifest-routing-foundation",
+      "specPath": "specs/011-digital-use-node-manifest-routing-foundation",
+      "implementationPaths": [
+        "packages/scenes/digital-use/node-manifest.ts",
+        "packages/scenes/digital-use/types.ts",
+        "packages/scenes/digital-use/validators.ts"
+      ]
+    },
+    {
+      "feature": "foundation-remaining-remediation",
+      "specPath": "specs/foundation-remaining-remediation",
+      "implementationPaths": [
+        "packages/scenes/digital-use/phone-use-contract-content.ts"
+      ]
+    }
+  ]
+}

@@ -555,8 +555,10 @@ describe('AUTH-006 Problem Formulation review-state migration', () => {
       } catch (caught) {
         error = caught;
       }
-      expect(error).toBeDefined();
-      expect(String((error as any)?.message ?? error)).toContain(
+      expect(error).toMatchObject({ code: 'P0001' });
+      // The migration-owned detail remains supplemental diagnostics only;
+      // correctness is bound to PostgreSQL SQLSTATE rather than locale text.
+      expect(String((error as any)?.message ?? '')).toContain(
         'AUTH006_AMBIGUOUS_LEGACY_NEEDS_REVIEW rows=1'
       );
       await migrator.query('ROLLBACK');
@@ -615,7 +617,7 @@ describe('AUTH-006 Problem Formulation review-state migration', () => {
 
       await expect(
         seed.query("SELECT 'NEEDS_REVIEW'::problem_formulation_status")
-      ).rejects.toThrow(/invalid input value for enum problem_formulation_status/);
+      ).rejects.toMatchObject({ code: '22P02' });
     } finally {
       await migrator.end();
       await seed.end();

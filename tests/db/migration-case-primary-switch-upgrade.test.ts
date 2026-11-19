@@ -85,6 +85,7 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_RISK_RESOLVED',
     'CASE_SAFETY_HOLD_ENTERED',
     'CASE_DIGITAL_USE_NODE_COMPLETED',
+    'CASE_GOAL_CONFIRMED',
   ],
   business_audit_events_event_type_check: [
     'CASE_PRIMARY_SWITCHED',
@@ -113,6 +114,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'INTERVENTION_DEFINITION_RETIRED',
     'INTERVENTION_ELIGIBILITY_EVALUATED',
     'INTERVENTION_ELIGIBILITY_BLOCKED',
+    'GOAL_SAVED',
+    'GOAL_CONFIRMED',
     'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED',
     'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATED',
     'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDITED',
@@ -146,6 +149,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'INTERVENTION_DEFINITION_SUCCESSOR_CREATE',
     'INTERVENTION_DEFINITION_RETIRE',
     'INTERVENTION_DEFINITION_SUPERSEDE',
+    'GOAL_SAVE',
+    'GOAL_CONFIRM',
     'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',
     'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
     'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT',
@@ -794,6 +799,73 @@ interface SeedIds {
  * clause is re-imposed by `consent_purpose_field_binding`, so no guardian
  * invariant is dropped or widened.
  */
+const GOAL_RUNTIME_NEW_CONSTRAINTS = [
+  'problem_formulations_goal_binding_key',
+  // PostgreSQL 18 exposes NOT NULL / PK constraints through pg_constraint;
+  // freeze the complete Goal table delta rather than only named business checks.
+  'goals_baseline_refs_not_null',
+  'goals_case_id_not_null',
+  'goals_confirmation_state_not_null',
+  'goals_created_at_not_null',
+  'goals_dependency_refs_not_null',
+  'goals_family_id_not_null',
+  'goals_goal_id_not_null',
+  'goals_id_not_null',
+  'goals_lifecycle_status_not_null',
+  'goals_observation_method_not_null',
+  'goals_observation_window_not_null',
+  'goals_parent_actions_not_null',
+  'goals_participant_responsibilities_not_null',
+  'goals_pkey',
+  'goals_problem_formulation_id_not_null',
+  'goals_problem_formulation_version_not_null',
+  'goals_protective_conditions_not_null',
+  'goals_review_point_not_null',
+  'goals_review_state_not_null',
+  'goals_saved_by_person_id_not_null',
+  'goals_target_description_not_null',
+  'goals_updated_at_not_null',
+  'goals_version_not_null',
+  'goals_case_family_fk',
+  'goals_formulation_exact_fk',
+  'goals_saved_by_family_fk',
+  'goals_confirmed_by_family_fk',
+  'goals_goal_version_key',
+  'goals_version_range_check',
+  'goals_version_chain_check',
+  'goals_version_chain_fk',
+  'goals_baseline_refs_check',
+  'goals_target_description_check',
+  'goals_observation_method_check',
+  'goals_observation_window_check',
+  'goals_protective_conditions_check',
+  'goals_parent_actions_check',
+  'goals_review_point_check',
+  'goals_dependency_refs_check',
+  'goals_participant_responsibilities_check',
+  'goals_confirmation_pair_check',
+  'goals_confirmation_state_check',
+] as const;
+
+const GOAL_RUNTIME_NEW_OBJECTS = [
+  'enum:goal_confirmation_state',
+  'enum:goal_lifecycle_status',
+  'enum:goal_review_state',
+  'table:goals',
+  'policy:goals_family_scope',
+  'trigger:cases_goal_planning_transition_guard',
+  'trigger:goals_insert_guard',
+  'trigger:goals_update_guard',
+] as const;
+
+const GOAL_RUNTIME_CHANGED_CONSTRAINTS = [
+  'idempotency_keys_command_type_check',
+  'business_audit_events_resource_type_check',
+  'business_audit_events_event_type_check',
+  'case_events_event_type_check',
+  'case_events_metadata_shape_check',
+] as const;
+
 const CONSENT_OWNER_REPLACED_CONSTRAINTS = [
   'consent_records_guardian_person_id_not_null',
   'consent_records_guardian_account_id_not_null',
@@ -915,7 +987,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 21 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 22 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -1023,6 +1095,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...AUTH006_NEW_CONSTRAINTS,
         ...AUTH008_NEW_CONSTRAINTS,
         ...SLICE16_NEW_CONSTRAINTS,
+        ...GOAL_RUNTIME_NEW_CONSTRAINTS,
         ...SLICE17_NEW_CONSTRAINTS,
       ].sort()
     );
@@ -1038,6 +1111,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
           ...SLICE7_CONSTRAINT_CHANGES,
           'business_audit_events_resource_type_check',
           ...CONSENT_OWNER_CHANGED_CONSTRAINTS,
+          ...GOAL_RUNTIME_CHANGED_CONSTRAINTS,
         ]),
       ].sort()
     );
@@ -1061,6 +1135,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       ...FOUNDATION_REM1_NEW_OBJECTS,
       ...AUTH008_NEW_OBJECTS,
       ...SLICE16_NEW_OBJECTS,
+      ...GOAL_RUNTIME_NEW_OBJECTS,
       ...SLICE17_NEW_OBJECTS,
       'trigger:accounts_status_invalidates_sessions',
     ].sort());
@@ -1090,7 +1165,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 28 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 29 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -1123,6 +1198,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '024_psychological_behavioral_intervention_contract.sql',
       '025_professional_knowledge_foundation.sql',
       '025_slice16_post_merge_forensic_remediation.sql',
+      '026_common_core_goal_confirm_goal_runtime.sql',
       '026_professional_authority_release_remediation.sql',
     ]);
   }, 180_000);

@@ -20,30 +20,67 @@ import {
 } from '../../apps/server/api/src/services/digital-use-roleplay-adapter.js';
 
 describe('Slice 14 phone-use Contract content authority boundary', () => {
-  it('binds the exact approved source blob and exposes one immutable V1 content identity', () => {
+  it('separates the frozen product baseline from Professional approval authority', () => {
     expect(PHONE_USE_CONTRACT_CONTENT_VERSION).toBe('phone-use-contract-v1');
     expect(PHONE_USE_CONTRACT_SOURCE_BLOB).toBe('97a8db200013746faff64230ab7cbf5f15b41615');
     expect(PHONE_USE_CONTRACT_CONTENT_META).toEqual({
       contentVersion: PHONE_USE_CONTRACT_CONTENT_VERSION,
       sourceBlob: PHONE_USE_CONTRACT_SOURCE_BLOB,
       approved: true,
+      productBaselineStatus: 'FROZEN',
+      professionalReviewStatus: 'NOT_APPROVED',
     });
-    expect(resolvePhoneUseContractContent(PHONE_USE_CONTRACT_CONTENT_VERSION).meta)
-      .toEqual(PHONE_USE_CONTRACT_CONTENT_META);
+    expect(PHONE_USE_CONTRACT_CONTENT_META.approved).toBe(true);
+    expect(PHONE_USE_CONTRACT_CONTENT_META.productBaselineStatus).toBe('FROZEN');
+    expect(PHONE_USE_CONTRACT_CONTENT_META.professionalReviewStatus).toBe('NOT_APPROVED');
+    expect(PHONE_USE_CONTRACT_CONTENT_META).not.toHaveProperty('professionalApproval');
+    const resolved = resolvePhoneUseContractContent(
+      PHONE_USE_CONTRACT_CONTENT_VERSION
+    );
+    expect(resolved.meta).toEqual({
+      contentVersion: PHONE_USE_CONTRACT_CONTENT_VERSION,
+      sourceBlob: PHONE_USE_CONTRACT_SOURCE_BLOB,
+      approved: true,
+    });
+    expect(resolved.authorityMeta).toEqual(PHONE_USE_CONTRACT_CONTENT_META);
     expect(() => resolvePhoneUseContractContent('stale-version')).toThrow(
       'PHONE_USE_CONTRACT_CONTENT_STALE'
     );
   });
 
-  it('contains exactly five preparation questions with the frozen answer key', () => {
-    expect(PHONE_USE_CONTRACT_QUIZ).toHaveLength(5);
-    expect(PHONE_USE_CONTRACT_QUIZ.map((q) => q.answer)).toEqual([
-      true, false, false, false, false,
+  it('projects the five A4001 canonical questions, answers and explanations exactly', () => {
+    expect(PHONE_USE_CONTRACT_QUIZ).toEqual([
+      {
+        id: 'Q1',
+        statement: '手机使用合约的每一个项目都要由家长和孩子一起来制订',
+        answer: true,
+        explanation: '合约条款由家长邀请孩子共同制订，并由双方确认、同意；不是家长单方面制定。',
+      },
+      {
+        id: 'Q2',
+        statement: '制订手机使用合约以后，孩子必须做到合约里的要求，否则这份合约就失败了',
+        answer: false,
+        explanation: '合约强调可行性、执行后的持续沟通与必要调整；一次未做到不等于整个合约失败。',
+      },
+      {
+        id: 'Q3',
+        statement: '家长不应该和孩子讨价还价，否则孩子就会不断提出不合理的要求',
+        answer: false,
+        explanation: '原合约原则明确协商与妥协是双方的，禁止协商与当前产品原则相反。',
+      },
+      {
+        id: 'Q4',
+        statement: '手机使用合约应该用来约束孩子，对家长不具有约束力',
+        answer: false,
+        explanation: '合约包含家长配合措施及家长未配合时的责任，对双方都有约束。',
+      },
+      {
+        id: 'Q5',
+        statement: '手机使用合约的期限越长越好',
+        answer: false,
+        explanation: '合约期限取决于改变难度与可行性；原 FAQ 明确不支持“越长越好”。',
+      },
     ]);
-    for (const question of PHONE_USE_CONTRACT_QUIZ) {
-      expect(question.statement.length).toBeGreaterThan(0);
-      expect(question.explanation.length).toBeGreaterThan(0);
-    }
   });
 
   it('keeps the template, four professional examples and FAQ as assets rather than family facts', () => {

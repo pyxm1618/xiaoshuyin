@@ -21,7 +21,7 @@ describe('Schema Structure', () => {
     await client.end();
   });
 
-  it('24 enums exist with exact values including AUTH-006 review state', async () => {
+  it('27 enums exist with exact values including Goal review state', async () => {
     const { rows } = await client.query(`
       SELECT t.typname, e.enumlabel
       FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid
@@ -44,10 +44,14 @@ describe('Schema Structure', () => {
       'case_participation_state', 'case_phase', 'case_status',
       'consent_decision', 'consent_purpose', 'consent_request_status',
       'evidence_confirmation_status', 'evidence_time_state',
+      'goal_confirmation_state', 'goal_lifecycle_status', 'goal_review_state',
       'observation_value_state', 'observation_value_type', 'problem_formulation_review_state', 'problem_formulation_status',
       'profile_attribute', 'profile_value_status', 'provenance_source', 'scene_node_status',
     ]);
     expect(enumMap['problem_formulation_review_state']).toEqual(['CURRENT', 'NEEDS_REVIEW']);
+    expect(enumMap['goal_confirmation_state']).toEqual(['UNCONFIRMED', 'CONFIRMED']);
+    expect(enumMap['goal_lifecycle_status']).toEqual(['ACTIVE', 'SUPERSEDED']);
+    expect(enumMap['goal_review_state']).toEqual(['CURRENT', 'NEEDS_REVIEW']);
     expect(enumMap['problem_formulation_status']).toEqual([
       'DRAFT', 'PRESENTED', 'CONFIRMED', 'DISPUTED', 'SUPERSEDED',
     ]);

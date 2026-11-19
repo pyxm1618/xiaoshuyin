@@ -28,7 +28,6 @@ const FORBIDDEN_TABLES = [
   'participation_invites',
   'assessments',
   'safety_states',
-  'goals',
   'intervention_instances',
   'plan_versions',
   'plans',
