@@ -1218,6 +1218,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       const idempotencyKey = `phase2-scene-${label}-${crypto.randomUUID()}`;
       const request = {
         pool: app,
+        authorityPool: authority,
         accountId: actor.accountId,
         personId: actor.personId,
         assignmentId: actor.assignmentId,
