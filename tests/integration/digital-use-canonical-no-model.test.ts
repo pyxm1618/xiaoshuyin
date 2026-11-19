@@ -576,6 +576,21 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     const scene = await finishA2010ForGoal(f);
     const formulation = await currentGoalFormulation(f);
 
+    const strictSave = goalSavePayload(formulation);
+    const { participantResponsibilities: _omitted, ...missingParticipantField } =
+      strictSave;
+    const strictRejected = await app.inject({
+      method: 'POST',
+      url: '/api/v1/cases/' + f.caseId + '/goals',
+      headers: {
+        ...auth(f.manager.token),
+        'idempotency-key': 'goal-save-missing-participant-field-' + crypto.randomUUID(),
+        'if-match': '"case-v' + scene.caseVersion + '"',
+      },
+      payload: missingParticipantField,
+    });
+    expect(strictRejected.statusCode, strictRejected.body).toBe(422);
+
     const saved = await saveGoalFor(
       f,
       scene.caseVersion,

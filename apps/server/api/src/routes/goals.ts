@@ -69,7 +69,7 @@ export const SaveGoalRequest = z.strictObject({
   parentActions: z.array(z.string().min(1).max(2000)).min(1),
   reviewPoint: z.string().min(1).max(2000),
   dependencyRefs: z.array(DependencyRef).min(1),
-  participantResponsibilities: z.array(ParticipantResponsibility).default([]),
+  participantResponsibilities: z.array(ParticipantResponsibility),
 });
 
 export const ConfirmGoalRequest = z.strictObject({
