@@ -354,6 +354,25 @@ export async function lockProfessionalKnowledgeVersion(
   };
 }
 
+export async function getProfessionalKnowledgeCreatorIdentity(
+  tx: Tx,
+  versionId: string
+): Promise<{ accountId: string; personId: string } | null> {
+  const { rows } = await tx.query<{
+    created_by_account_id: string;
+    created_by_person_id: string;
+  }>(
+    `SELECT created_by_account_id, created_by_person_id
+       FROM professional_knowledge_versions
+      WHERE id = $1`,
+    [versionId]
+  );
+  const row = rows[0];
+  return row
+    ? { accountId: row.created_by_account_id, personId: row.created_by_person_id }
+    : null;
+}
+
 export async function appendProfessionalKnowledgeReviewEvidence(
   tx: Tx,
   input: {
