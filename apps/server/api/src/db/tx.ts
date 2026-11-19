@@ -505,3 +505,33 @@ export async function withProfessionalKnowledgeAdminTransaction<T>(
     return fn(client);
   });
 }
+
+/**
+ * Slice 17 authority-sensitive review/release execution boundary.
+ *
+ * The ordinary xiaoshuyin_app credential is never accepted here. Staff context
+ * deliberately remains inside the idempotent command callback so an exact
+ * committed replay is still resolved before current Staff authority.
+ */
+export async function withProfessionalKnowledgeAuthorityTransaction<T>(
+  pool: pg.Pool,
+  opts: { accountId: string },
+  fn: (tx: TxClient) => Promise<T>
+): Promise<T> {
+  return withTransactionClient(pool, async (client) => {
+    const role = await client.query<{ current_user: string }>(
+      'SELECT current_user::text AS current_user'
+    );
+    if (role.rows[0]?.current_user !== 'xiaoshuyin_migrator') {
+      throw Object.assign(
+        new Error('PROFESSIONAL_KNOWLEDGE_AUTHORITY_EXECUTOR_REQUIRED'),
+        { code: '42501' }
+      );
+    }
+    await client.query(
+      'SELECT app.set_identity_context($1, $2)',
+      [opts.accountId, 'PROFESSIONAL_KNOWLEDGE_ADMIN']
+    );
+    return fn(client);
+  });
+}
