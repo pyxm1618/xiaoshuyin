@@ -34,8 +34,13 @@ const app = new pg.Pool({
   connectionString: process.env['DATABASE_URL'],
   max: 5,
 });
+const authority = new pg.Pool({
+  connectionString: process.env['MIGRATION_DATABASE_URL'],
+  max: 5,
+});
 
 afterAll(async () => {
+  await authority.end();
   await app.end();
   await admin.end();
 });
@@ -247,9 +252,221 @@ function sceneBinding(knowledge: SeededKnowledge) {
 }
 
 describe('Slice 17 Audit 2 targeted remediation — real service semantics', () => {
+  it('FINAL HIGH-002: creator Account/Person cannot self-review; identity-string spoof fails and a different reviewer succeeds', async () => {
+    const creator = await seedActor('final-self-review-creator');
+    const knowledge = await seedKnowledge(creator, {
+      reviewState: 'PENDING',
+      validityState: 'UNKNOWN',
+    });
+    const reviewedAt = new Date('2026-11-17T00:30:00Z');
+
+    for (const reviewerIdentity of [
+      `reviewer:${creator.personId}`,
+      `spoofed-reviewer:${crypto.randomUUID()}`,
+    ]) {
+      await expect(
+        recordKnowledgeReview({
+          pool: app,
+          authorityPool: authority,
+          accountId: creator.accountId,
+          personId: creator.personId,
+          assignmentId: creator.assignmentId,
+          idempotencyKey: `self-review-${crypto.randomUUID()}`,
+          versionId: knowledge.versionId,
+          expectedRevision: 1,
+          reviewerIdentity,
+          qualificationRef: `qualification:${creator.personId}`,
+          qualificationProvider: qualificationProvider(),
+          outcome: 'REVIEWED',
+          reviewedAt,
+          now: reviewedAt,
+        })
+      ).rejects.toMatchObject({
+        code: 'PROFESSIONAL_AUTHORITY_INVALID',
+        reason: 'PROFESSIONAL_KNOWLEDGE_SELF_REVIEW_FORBIDDEN',
+      });
+    }
+
+    const afterDenied = await admin.query<{
+      revision: number;
+      review_state: string;
+      validity_state: string;
+      evidence_count: string;
+      success_audit_count: string;
+    }>(
+      `SELECT v.revision, v.review_state, v.validity_state,
+              (SELECT count(*)::text FROM professional_knowledge_review_evidence e
+                WHERE e.knowledge_version_id=v.id) AS evidence_count,
+              (SELECT count(*)::text FROM business_audit_events a
+                WHERE a.resource_id=v.id
+                  AND a.event_type='PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED')
+                AS success_audit_count
+         FROM professional_knowledge_versions v
+        WHERE v.id=$1`,
+      [knowledge.versionId]
+    );
+    expect(afterDenied.rows[0]).toEqual({
+      revision: 1,
+      review_state: 'PENDING',
+      validity_state: 'UNKNOWN',
+      evidence_count: '0',
+      success_audit_count: '0',
+    });
+
+    const reviewer = await seedActor('final-different-reviewer');
+    await expect(
+      recordKnowledgeReview({
+        pool: app,
+        authorityPool: authority,
+        accountId: reviewer.accountId,
+        personId: reviewer.personId,
+        assignmentId: reviewer.assignmentId,
+        idempotencyKey: `different-reviewer-${crypto.randomUUID()}`,
+        versionId: knowledge.versionId,
+        expectedRevision: 1,
+        reviewerIdentity: `reviewer:${reviewer.personId}`,
+        qualificationRef: `qualification:${reviewer.personId}`,
+        qualificationProvider: qualificationProvider(),
+        outcome: 'REVIEWED',
+        reviewedAt,
+        now: reviewedAt,
+      })
+    ).resolves.toMatchObject({
+      versionId: knowledge.versionId,
+      revision: 2,
+      reviewState: 'CURRENT',
+      validityState: 'VALID',
+    });
+
+    const evidence = await admin.query<{
+      reviewer_account_id: string;
+      reviewer_person_id: string;
+    }>(
+      `SELECT reviewer_account_id, reviewer_person_id
+         FROM professional_knowledge_review_evidence
+        WHERE knowledge_version_id=$1`,
+      [knowledge.versionId]
+    );
+    expect(evidence.rows).toEqual([{
+      reviewer_account_id: reviewer.accountId,
+      reviewer_person_id: reviewer.personId,
+    }]);
+  });
+
+  it('FINAL HIGH-001: xiaoshuyin_app cannot directly mint review authority/evidence or publish with valid Staff context', async () => {
+    const creator = await seedActor('final-db-bypass-creator');
+    const reviewer = await seedActor('final-db-bypass-reviewer');
+    const pending = await seedKnowledge(creator, {
+      reviewState: 'PENDING',
+      validityState: 'UNKNOWN',
+    });
+
+    await expect(
+      withProfessionalKnowledgeAdminTransaction(
+        app,
+        { accountId: reviewer.accountId, assignmentId: reviewer.assignmentId },
+        async (tx) => {
+          await tx.query(
+            `UPDATE professional_knowledge_versions
+                SET review_state='CURRENT',
+                    validity_state='VALID',
+                    revision=revision+1
+              WHERE id=$1`,
+            [pending.versionId]
+          );
+        }
+      )
+    ).rejects.toMatchObject({ code: '42501' });
+
+    await expect(
+      withProfessionalKnowledgeAdminTransaction(
+        app,
+        { accountId: reviewer.accountId, assignmentId: reviewer.assignmentId },
+        async (tx) => {
+          await tx.query(
+            `INSERT INTO professional_knowledge_review_evidence
+               (knowledge_version_id, reviewed_revision, content_hash,
+                source_set_hash, reviewer_identity, reviewer_account_id,
+                reviewer_person_id, staff_assignment_ref, qualification_ref,
+                review_outcome, reviewed_at)
+             VALUES ($1,1,$2,$3,$4,$5,$6,$7,$8,'REVIEWED',clock_timestamp())`,
+            [
+              pending.versionId,
+              pending.contentHash,
+              pending.sourceSetHash,
+              `reviewer:${reviewer.personId}`,
+              reviewer.accountId,
+              reviewer.personId,
+              reviewer.assignmentId,
+              `qualification:${reviewer.personId}`,
+            ]
+          );
+        }
+      )
+    ).rejects.toMatchObject({ code: '42501' });
+
+    const publishableShape = await seedKnowledge(creator, {
+      reviewState: 'CURRENT',
+      validityState: 'VALID',
+    });
+    await expect(
+      withProfessionalKnowledgeAdminTransaction(
+        app,
+        { accountId: reviewer.accountId, assignmentId: reviewer.assignmentId },
+        async (tx) => {
+          await tx.query(
+            'SELECT app.lock_professional_review_assignment_target($1,$2,$3)',
+            [reviewer.assignmentId, reviewer.accountId, reviewer.personId]
+          );
+          await tx.query(
+            `UPDATE professional_knowledge_versions
+                SET lifecycle_status='PUBLISHED',
+                    released_at=clock_timestamp(),
+                    effective_from=clock_timestamp(),
+                    revision=revision+1
+              WHERE id=$1`,
+            [publishableShape.versionId]
+          );
+        }
+      )
+    ).rejects.toMatchObject({ code: '42501' });
+
+    const final = await admin.query<{
+      id: string;
+      lifecycle_status: string;
+      review_state: string;
+      validity_state: string;
+      revision: number;
+    }>(
+      `SELECT id, lifecycle_status, review_state, validity_state, revision
+         FROM professional_knowledge_versions
+        WHERE id=ANY($1::uuid[])`,
+      [[pending.versionId, publishableShape.versionId]]
+    );
+    const byId = new Map(final.rows.map((row) => [row.id, row]));
+    expect(byId.get(pending.versionId)).toMatchObject({
+      lifecycle_status: 'CANDIDATE',
+      review_state: 'PENDING',
+      validity_state: 'UNKNOWN',
+      revision: 1,
+    });
+    expect(byId.get(publishableShape.versionId)).toMatchObject({
+      lifecycle_status: 'CANDIDATE',
+      review_state: 'CURRENT',
+      validity_state: 'VALID',
+      revision: 1,
+    });
+    expect(final.rows.some((row) =>
+      row.lifecycle_status === 'PUBLISHED' &&
+      row.review_state === 'CURRENT' &&
+      row.validity_state === 'VALID'
+    )).toBe(false);
+  });
+
   it('FR-028 / FR-031: review commit then lost-response retry exact-replays before stale revision; semantic mismatches conflict', async () => {
     const actor = await seedActor('review-replay');
-    const knowledge = await seedKnowledge(actor, {
+    const creator = await seedActor('review-replay-creator');
+    const knowledge = await seedKnowledge(creator, {
       reviewState: 'PENDING',
       validityState: 'UNKNOWN',
     });
@@ -257,6 +474,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     const reviewedAt = new Date('2026-11-17T01:00:00Z');
     const request = {
       pool: app,
+      authorityPool: authority,
       accountId: actor.accountId,
       personId: actor.personId,
       assignmentId: actor.assignmentId,
@@ -447,6 +665,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
 
     const request = {
       pool: app,
+      authorityPool: authority,
       accountId: releaseActor.accountId,
       personId: releaseActor.personId,
       assignmentId: releaseActor.assignmentId,
@@ -564,6 +783,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       releaseKnowledgeVersion({
         pool: app,
+        authorityPool: authority,
         accountId: releaseActor.accountId,
         personId: releaseActor.personId,
         assignmentId: releaseActor.assignmentId,
@@ -719,7 +939,8 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
   it('PHASE2 HIGH-001: real edit -> review rejects stale semantic proof and releases only with fresh exact proof', async () => {
     const reviewer = await seedActor('phase2-semantic-reviewer');
     const releaseActor = await seedActor('phase2-semantic-release');
-    const knowledge = await seedKnowledge(releaseActor, {
+    const creator = await seedActor('phase2-semantic-creator');
+    const knowledge = await seedKnowledge(creator, {
       reviewState: 'CURRENT',
       validityState: 'VALID',
     });
@@ -756,6 +977,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       recordKnowledgeReview({
         pool: app,
+        authorityPool: authority,
         accountId: releaseActor.accountId,
         personId: releaseActor.personId,
         assignmentId: releaseActor.assignmentId,
@@ -780,6 +1002,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       releaseKnowledgeVersion({
         pool: app,
+        authorityPool: authority,
         accountId: releaseActor.accountId,
         personId: releaseActor.personId,
         assignmentId: releaseActor.assignmentId,
@@ -825,6 +1048,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       releaseKnowledgeVersion({
         pool: app,
+        authorityPool: authority,
         accountId: releaseActor.accountId,
         personId: releaseActor.personId,
         assignmentId: releaseActor.assignmentId,
@@ -856,7 +1080,8 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
 
     for (const [label, mutate] of mutations) {
       const actor = await seedActor(`phase2-review-q-${label}`);
-      const knowledge = await seedKnowledge(actor, {
+      const creator = await seedActor(`phase2-review-q-creator-${label}`);
+      const knowledge = await seedKnowledge(creator, {
         reviewState: 'PENDING',
         validityState: 'UNKNOWN',
       });
@@ -886,6 +1111,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       await expect(
         recordKnowledgeReview({
           pool: app,
+          authorityPool: authority,
           accountId: actor.accountId,
           personId: actor.personId,
           assignmentId: actor.assignmentId,
@@ -1076,6 +1302,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       const idempotencyKey = `phase2-denial-${label}-${crypto.randomUUID()}`;
       const promise = releaseKnowledgeVersion({
         pool: app,
+        authorityPool: authority,
         accountId: actor.accountId,
         personId: actor.personId,
         assignmentId: actor.assignmentId,
@@ -1181,6 +1408,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       releaseKnowledgeVersion({
         pool: app,
+        authorityPool: authority,
         accountId: actor.accountId,
         personId: actor.personId,
         assignmentId: actor.assignmentId,
@@ -1237,6 +1465,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       await expect(
         releaseKnowledgeVersion({
           pool: app,
+          authorityPool: authority,
           accountId: actor.accountId,
           personId: actor.personId,
           assignmentId: actor.assignmentId,
@@ -1290,6 +1519,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
 
     const release = releaseKnowledgeVersion({
       pool: app,
+      authorityPool: authority,
       accountId: actor.accountId,
       personId: actor.personId,
       assignmentId: actor.assignmentId,
@@ -1366,6 +1596,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     };
     const release = releaseKnowledgeVersion({
       pool: app,
+      authorityPool: authority,
       accountId: actor.accountId,
       personId: actor.personId,
       assignmentId: actor.assignmentId,
@@ -1445,6 +1676,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
 
     const release = releaseKnowledgeVersion({
       pool: app,
+      authorityPool: authority,
       accountId: actor.accountId,
       personId: actor.personId,
       assignmentId: actor.assignmentId,
@@ -1509,6 +1741,11 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       max: 2,
       options: '-c statement_timeout=150',
     });
+    const timedAuthority = new pg.Pool({
+      connectionString: process.env['MIGRATION_DATABASE_URL'],
+      max: 2,
+      options: '-c statement_timeout=150',
+    });
     try {
       await blocker.query('BEGIN');
       await blocker.query(
@@ -1521,6 +1758,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       await expect(
         releaseKnowledgeVersion({
           pool: timedApp,
+          authorityPool: timedAuthority,
           accountId: actor.accountId,
           personId: actor.personId,
           assignmentId: actor.assignmentId,
@@ -1557,6 +1795,7 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     } finally {
       await blocker.query('ROLLBACK').catch(() => undefined);
       blocker.release();
+      await timedAuthority.end();
       await timedApp.end();
     }
   });
