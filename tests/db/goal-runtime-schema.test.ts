@@ -56,7 +56,7 @@ describe('Common Core Goal DB guards', () => {
       "'[]'::jsonb,$3::jsonb,'[]'::jsonb,'[]'::jsonb,'digital-use'," +
       "'[]'::jsonb,'[]'::jsonb,'[]'::jsonb," +
       "jsonb_build_object('kind','CONFIRM','actorPersonId',$4::text,'respondedAt',now()::text)," +
-      "$4,now(),$5::jsonb,NULL) RETURNING id",
+      "$4::uuid,now(),$5::jsonb,NULL) RETURNING id",
       [
         familyId,
         caseId,

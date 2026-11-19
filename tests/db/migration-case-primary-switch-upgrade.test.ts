@@ -85,6 +85,7 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'CASE_RISK_RESOLVED',
     'CASE_SAFETY_HOLD_ENTERED',
     'CASE_DIGITAL_USE_NODE_COMPLETED',
+    'CASE_GOAL_CONFIRMED',
   ],
   business_audit_events_event_type_check: [
     'CASE_PRIMARY_SWITCHED',
@@ -113,6 +114,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'INTERVENTION_DEFINITION_RETIRED',
     'INTERVENTION_ELIGIBILITY_EVALUATED',
     'INTERVENTION_ELIGIBILITY_BLOCKED',
+    'GOAL_SAVED',
+    'GOAL_CONFIRMED',
   ],
   idempotency_keys_command_type_check: [
     'CASE_SWITCH_PRIMARY',
@@ -138,6 +141,8 @@ const SLICE7_AND_SLICE8_APPROVED_LITERALS = {
     'INTERVENTION_DEFINITION_SUCCESSOR_CREATE',
     'INTERVENTION_DEFINITION_RETIRE',
     'INTERVENTION_DEFINITION_SUPERSEDE',
+    'GOAL_SAVE',
+    'GOAL_CONFIRM',
   ],
 };
 
@@ -756,7 +761,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 19 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 20 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -929,7 +934,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 26 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 27 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -961,6 +966,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '023_digital_use_review_runtime_authority_reconciled.sql',
       '024_psychological_behavioral_intervention_contract.sql',
       '025_slice16_post_merge_forensic_remediation.sql',
+      '026_common_core_goal_confirm_goal_runtime.sql',
     ]);
   }, 180_000);
 });
