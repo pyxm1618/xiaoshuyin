@@ -22,7 +22,7 @@ import {
   lockProfessionalKnowledgeVersion,
   markProfessionalKnowledgeVersionSuperseded,
   readProfessionalKnowledgeAuditHistory,
-  releaseProfessionalKnowledgeVersion,
+  releaseProfessionalKnowledgeVersionWithApprovalEvidence,
   resolveProfessionalReviewStaffAuthority,
   retireProfessionalKnowledgeVersion,
   setProfessionalKnowledgeAdminContext,
@@ -50,7 +50,6 @@ import {
 import {
   withIdentityTransaction,
   withProfessionalKnowledgeAdminTransaction,
-  withProfessionalKnowledgeAuthorityTransaction,
 } from '../db/tx.js';
 import { getExactInterventionDefinition } from '../../../../../packages/domain/src/intervention-definition-repository.js';
 
@@ -313,9 +312,9 @@ export async function recordKnowledgeReview(input: {
   const qualificationProvider =
     input.qualificationProvider ?? unavailableProductionProfessionalQualificationProvider;
 
-  return withProfessionalKnowledgeAuthorityTransaction(
-    input.authorityPool,
-    { accountId: input.accountId },
+  return withIdentityTransaction(
+    input.pool,
+    { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
     async (tx) => {
       const requestHash = hashPayload({
         command: 'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
@@ -411,19 +410,6 @@ export async function recordKnowledgeReview(input: {
             reviewedAt,
             nextReviewState: next.reviewState,
             nextValidityState: next.validityState,
-          });
-          await appendProfessionalKnowledgeAudit(tx, {
-            actorAccountId: input.accountId,
-            eventType: 'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED',
-            versionId: version.id,
-            metadata: {
-              revision,
-              contentHash: version.contentHash,
-              sourceSetHash: version.sourceSetHash,
-              reviewState: next.reviewState,
-              validityState: next.validityState,
-              reasonCode: input.reasonCode ?? null,
-            },
           });
           return {
             status: 200,
@@ -862,9 +848,9 @@ export async function releaseKnowledgeVersion(input: {
   });
 
   try {
-    return await withProfessionalKnowledgeAuthorityTransaction(
-      input.authorityPool,
-      { accountId: input.accountId },
+    return await withIdentityTransaction(
+      input.pool,
+      { accountId: input.accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
       async (tx) => {
         const outcome = await runIdempotentCommandInTransaction(
           tx,
@@ -933,14 +919,6 @@ export async function releaseKnowledgeVersion(input: {
             if (approval.status === 'UNAVAILABLE') unavailable(approval.dependency);
             if (approval.status !== 'VALID') invalidAuthority(approval.reason);
 
-            // The DB transition trigger revalidates the exact locked Reviewer
-            // Staff authority at physical CANDIDATE -> PUBLISHED time.
-            const revision = await releaseProfessionalKnowledgeVersion(tx, {
-              versionId: version.id,
-              expectedRevision: version.revision,
-              effectiveFrom: input.effectiveFrom ?? input.now ?? new Date(),
-            });
-
             const sceneBindingRef = {
               sceneCode: sceneBinding.sceneCode,
               scenePackageVersion: sceneBinding.scenePackageVersion,
@@ -949,12 +927,19 @@ export async function releaseKnowledgeVersion(input: {
               contentHash: version.contentHash,
               sourceSetHash: version.sourceSetHash,
             };
-            await persistValidatedApprovalEvidence(
-              tx,
-              version.id,
-              approval,
-              sceneBindingRef
-            );
+
+            // HIGH-001: the app session cannot UPDATE/INSERT authority state
+            // directly. The narrow DB primitive revalidates the exact target
+            // Staff tuple and atomically persists approval evidence, publication
+            // state and the release success audit.
+            const revision =
+              await releaseProfessionalKnowledgeVersionWithApprovalEvidence(tx, {
+                versionId: version.id,
+                expectedRevision: version.revision,
+                effectiveFrom: input.effectiveFrom ?? input.now ?? new Date(),
+                proof: approval.proof,
+                sceneBindingRef,
+              });
 
             const predecessorId = await getProfessionalKnowledgePredecessorId(
               tx,
@@ -971,23 +956,6 @@ export async function releaseKnowledgeVersion(input: {
                 metadata: { successorVersionId: version.id },
               });
             }
-
-            await appendProfessionalKnowledgeAudit(tx, {
-              actorAccountId: input.accountId,
-              eventType: 'PROFESSIONAL_KNOWLEDGE_RELEASED',
-              versionId: version.id,
-              metadata: {
-                knowledgeId: version.knowledgeId,
-                semanticVersion: version.semanticVersion,
-                contentHash: version.contentHash,
-                sourceSetHash: version.sourceSetHash,
-                semanticBindingHash:
-                  hashProfessionalKnowledgeApprovalBinding(version),
-                approvalProofRef: approval.proof.proofId,
-                sceneBindingRef,
-                revision,
-              },
-            });
 
             return {
               status: 200,
