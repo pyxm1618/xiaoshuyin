@@ -457,10 +457,23 @@
       }
     },
     {
-      "id": "professional-knowledge-services",
+      "id": "professional-knowledge-service",
       "match": {
-        "kind": "PREFIX",
-        "path": "apps/server/api/src/services/professional-knowledge"
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/professional-knowledge.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "professional-knowledge-consumption-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/professional-knowledge-consumption.ts"
       },
       "ownership": {
         "kind": "FEATURE",
@@ -511,8 +524,21 @@
     {
       "id": "professional-knowledge-domain",
       "match": {
-        "kind": "PREFIX",
-        "path": "packages/domain/src/professional-knowledge"
+        "kind": "EXACT",
+        "path": "packages/domain/src/professional-knowledge.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "professional-knowledge-repository",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/professional-knowledge-repository.ts"
       },
       "ownership": {
         "kind": "FEATURE",
