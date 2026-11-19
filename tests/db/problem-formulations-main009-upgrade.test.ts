@@ -385,7 +385,8 @@ async function assertUnionConstraints(
   includeSlice12 = includeSupplementalConsentAudit,
   includeSlice14 = includeSlice12,
   includeAuth006 = includeSlice14,
-  includeSlice16 = includeAuth006
+  includeSlice16 = includeAuth006,
+  includeGoalRuntime = includeSlice16
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -422,6 +423,7 @@ async function assertUnionConstraints(
     ...SLICE8_CASE_EVENT_TYPES,
     ...SLICE9_CASE_EVENT_TYPES,
     ...(includeSlice12 ? ['CASE_DIGITAL_USE_NODE_COMPLETED'] : []),
+    ...(includeGoalRuntime ? ['CASE_GOAL_CONFIRMED'] : []),
   ]);
   const caseEventLiterals = literalsOf(definitions.get('case_events_event_type_check')!);
   expect(new Set(caseEventLiterals)).toEqual(caseEventSet);
@@ -430,6 +432,7 @@ async function assertUnionConstraints(
     ...SLICE8_CASE_EVENT_TYPES,
     ...SLICE9_CASE_EVENT_TYPES,
     ...(includeSlice12 ? ['CASE_DIGITAL_USE_NODE_COMPLETED'] : []),
+    ...(includeGoalRuntime ? ['CASE_GOAL_CONFIRMED'] : []),
   ]);
   const metadataShape = definitions.get('case_events_metadata_shape_check')!;
   for (const marker of ['riskEventId', 'fromVersion', 'toVersion', 'fromStatus', 'toStatus']) {
@@ -488,6 +491,7 @@ async function assertUnionConstraints(
           'INTERVENTION_ELIGIBILITY_BLOCKED',
         ]
       : []),
+    ...(includeGoalRuntime ? ['GOAL_SAVED', 'GOAL_CONFIRMED'] : []),
   ]);
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
@@ -503,6 +507,7 @@ async function assertUnionConstraints(
     'CASE_PARTICIPANT',
     'PROBLEM_FORMULATION',
     ...(includeSlice16 ? ['INTERVENTION_DEFINITION'] : []),
+    ...(includeGoalRuntime ? ['GOAL'] : []),
   ]);
   const resourceLiterals = literalsOf(
     definitions.get('business_audit_events_resource_type_check')!
@@ -548,6 +553,7 @@ async function assertUnionConstraints(
           'INTERVENTION_DEFINITION_SUPERSEDE',
         ]
       : []),
+    ...(includeGoalRuntime ? ['GOAL_SAVE', 'GOAL_CONFIRM'] : []),
   ]);
   const commandLiterals = literalsOf(definitions.get('idempotency_keys_command_type_check')!);
   expect(new Set(commandLiterals)).toEqual(commandSet);
