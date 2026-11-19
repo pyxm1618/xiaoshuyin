@@ -69,6 +69,10 @@ describe('Common Core Goal DB guards', () => {
 
   afterAll(async () => {
     await app.end().catch(() => undefined);
+    await admin.query("DELETE FROM scene_node_states WHERE case_id=$1", [caseId]).catch(() => undefined);
+    await admin.query("DELETE FROM assertions WHERE case_id=$1 AND supersedes_id='11111111-1111-4111-8111-111111111111'::uuid", [caseId]).catch(() => undefined);
+    await admin.query("DELETE FROM assertions WHERE case_id=$1 AND id='11111111-1111-4111-8111-111111111111'::uuid", [caseId]).catch(() => undefined);
+    await admin.query('DELETE FROM person_compliance_profiles WHERE person_id=$1', [personId]).catch(() => undefined);
     await admin.query('DELETE FROM goals WHERE family_id=$1', [familyId]).catch(() => undefined);
     await admin.query('DELETE FROM problem_formulations WHERE family_id=$1', [familyId]).catch(() => undefined);
     await admin.query('DELETE FROM cases WHERE family_id=$1', [familyId]).catch(() => undefined);
@@ -104,6 +108,59 @@ describe('Common Core Goal DB guards', () => {
       "'target','observe','14 days','[\"protect\"]'::jsonb,'[\"parent action\"]'::jsonb," +
       "'review','[{\"type\":\"EVIDENCE\",\"evidence\":{\"type\":\"ASSERTION\",\"id\":\"11111111-1111-4111-8111-111111111111\"}}]'::jsonb," +
       "'[]'::jsonb,$4) RETURNING id";
+  }
+
+  async function seedPrivilegedTransitionPrerequisites(
+    ageBand: 'ADULT' | 'UNKNOWN' = 'ADULT'
+  ) {
+    await admin.query(
+      `INSERT INTO assertions (
+         id,family_id,case_id,subject_person_id,source_kind,source_person_id,
+         occurred_time_state,occurred_at,valid_from,confirmation_status,kind,content
+       ) VALUES (
+         '11111111-1111-4111-8111-111111111111'::uuid,$1,$2,$3,
+         'SELF_STATEMENT',$3,'KNOWN',now(),now()-interval '1 day',
+         'SOURCE_CONFIRMED','STATEMENT','goal db authoritative evidence'
+       )`,
+      [familyId, caseId, personId]
+    );
+    await admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id,age_band,minor_mode,verified_source)
+       VALUES ($1,$2::age_band,false,'SELF_STATEMENT')`,
+      [personId, ageBand]
+    );
+    await admin.query(
+      `INSERT INTO scene_node_states
+         (family_id,case_id,scene_package_version,node_code,source_node_code,status,completed_at)
+       VALUES ($1,$2,'goal-db-v1','A1001','A1001','COMPLETED',now())`,
+      [familyId, caseId]
+    );
+    await admin.query(
+      `INSERT INTO scene_node_states
+         (family_id,case_id,scene_package_version,node_code,source_node_code,status,completed_at)
+       VALUES ($1,$2,'goal-db-v1','A2010','A2007','COMPLETED',now())`,
+      [familyId, caseId]
+    );
+  }
+
+  async function cleanupPrivilegedTransitionPrerequisites() {
+    await admin.query(
+      "DELETE FROM scene_node_states WHERE case_id=$1 AND node_code IN ('A2010','A1001')",
+      [caseId]
+    );
+    await admin.query(
+      "DELETE FROM assertions WHERE case_id=$1 AND supersedes_id='11111111-1111-4111-8111-111111111111'::uuid",
+      [caseId]
+    );
+    await admin.query(
+      "DELETE FROM assertions WHERE case_id=$1 AND id='11111111-1111-4111-8111-111111111111'::uuid",
+      [caseId]
+    );
+    await admin.query(
+      'DELETE FROM person_compliance_profiles WHERE person_id=$1',
+      [personId]
+    );
   }
 
   it('forces RLS and denies content mutation / delete to runtime', async () => {
@@ -331,6 +388,181 @@ describe('Common Core Goal DB guards', () => {
       confirmation_state: 'UNCONFIRMED',
     });
     await admin.query('DELETE FROM goals WHERE id=$1', [inserted.rows[0].id]);
+  });
+
+
+  it('binds privileged ConfirmGoal to the authenticated Account Person', async () => {
+    const inserted = await admin.query(savedInsertSql(), [
+      familyId,
+      caseId,
+      formulationId,
+      personId,
+    ]);
+    const goalRow = await admin.query(
+      'SELECT goal_id,version FROM goals WHERE id=$1',
+      [inserted.rows[0].id]
+    );
+
+    await app.query('BEGIN');
+    try {
+      await app.query('SELECT app.set_identity_context($1,$2)', [
+        crypto.randomUUID(),
+        'FAMILY_MANAGEMENT',
+      ]);
+      await app.query('SELECT app.set_family_context($1,$2,$3)', [
+        familyId,
+        personId,
+        'FAMILY_MANAGEMENT',
+      ]);
+      await expect(
+        app.query(
+          'SELECT app.confirm_goal_transition($1,$2,$3,$4,$5)',
+          [
+            caseId,
+            7,
+            goalRow.rows[0].goal_id,
+            goalRow.rows[0].version,
+            personId,
+          ]
+        )
+      ).rejects.toMatchObject({
+        code: '23514',
+        message: expect.stringMatching(/GOAL_CONFIRM_TRANSITION_CONTEXT_INVALID/),
+      });
+    } finally {
+      await app.query('ROLLBACK');
+    }
+
+    await admin.query('DELETE FROM goals WHERE id=$1', [inserted.rows[0].id]);
+  });
+
+  it('cannot use the privileged transition to bypass authoritative Evidence revalidation', async () => {
+    await seedPrivilegedTransitionPrerequisites('ADULT');
+    const inserted = await admin.query(savedInsertSql(), [
+      familyId,
+      caseId,
+      formulationId,
+      personId,
+    ]);
+    const goalRow = await admin.query(
+      'SELECT goal_id,version FROM goals WHERE id=$1',
+      [inserted.rows[0].id]
+    );
+    const successorId = crypto.randomUUID();
+    await admin.query(
+      `INSERT INTO assertions (
+         id,family_id,case_id,subject_person_id,source_kind,source_person_id,
+         occurred_time_state,occurred_at,valid_from,confirmation_status,
+         supersedes_id,kind,content
+       ) VALUES (
+         $1,$2,$3,$4,'SELF_STATEMENT',$4,'KNOWN',now(),now(),
+         'SOURCE_CONFIRMED','11111111-1111-4111-8111-111111111111'::uuid,
+         'STATEMENT','superseding goal db evidence'
+       )`,
+      [successorId, familyId, caseId, personId]
+    );
+
+    try {
+      await app.query('BEGIN');
+      try {
+        await app.query('SELECT app.set_identity_context($1,$2)', [
+          accountId,
+          'FAMILY_MANAGEMENT',
+        ]);
+        await app.query('SELECT app.set_family_context($1,$2,$3)', [
+          familyId,
+          personId,
+          'FAMILY_MANAGEMENT',
+        ]);
+        await expect(
+          app.query(
+            'SELECT app.confirm_goal_transition($1,$2,$3,$4,$5)',
+            [
+              caseId,
+              7,
+              goalRow.rows[0].goal_id,
+              goalRow.rows[0].version,
+              personId,
+            ]
+          )
+        ).rejects.toMatchObject({
+          code: '23514',
+          message: expect.stringMatching(/GOAL_CONFIRM_TRANSITION_EVIDENCE_INVALID/),
+        });
+      } finally {
+        await app.query('ROLLBACK');
+      }
+
+      const finalState = await admin.query(
+        'SELECT c.phase,g.confirmation_state FROM cases c JOIN goals g ON g.case_id=c.id WHERE c.id=$1 AND g.id=$2',
+        [caseId, inserted.rows[0].id]
+      );
+      expect(finalState.rows[0]).toEqual({
+        phase: 'GOALS',
+        confirmation_state: 'UNCONFIRMED',
+      });
+    } finally {
+      await admin.query('DELETE FROM goals WHERE id=$1', [inserted.rows[0].id]);
+      await cleanupPrivilegedTransitionPrerequisites();
+    }
+  });
+
+  it('cannot use the privileged transition to bypass the formal Compliance gate', async () => {
+    await seedPrivilegedTransitionPrerequisites('UNKNOWN');
+    const inserted = await admin.query(savedInsertSql(), [
+      familyId,
+      caseId,
+      formulationId,
+      personId,
+    ]);
+    const goalRow = await admin.query(
+      'SELECT goal_id,version FROM goals WHERE id=$1',
+      [inserted.rows[0].id]
+    );
+
+    try {
+      await app.query('BEGIN');
+      try {
+        await app.query('SELECT app.set_identity_context($1,$2)', [
+          accountId,
+          'FAMILY_MANAGEMENT',
+        ]);
+        await app.query('SELECT app.set_family_context($1,$2,$3)', [
+          familyId,
+          personId,
+          'FAMILY_MANAGEMENT',
+        ]);
+        await expect(
+          app.query(
+            'SELECT app.confirm_goal_transition($1,$2,$3,$4,$5)',
+            [
+              caseId,
+              7,
+              goalRow.rows[0].goal_id,
+              goalRow.rows[0].version,
+              personId,
+            ]
+          )
+        ).rejects.toMatchObject({
+          code: '23514',
+          message: expect.stringMatching(/GOAL_CONFIRM_TRANSITION_COMPLIANCE_INVALID/),
+        });
+      } finally {
+        await app.query('ROLLBACK');
+      }
+
+      const finalState = await admin.query(
+        'SELECT c.phase,g.confirmation_state FROM cases c JOIN goals g ON g.case_id=c.id WHERE c.id=$1 AND g.id=$2',
+        [caseId, inserted.rows[0].id]
+      );
+      expect(finalState.rows[0]).toEqual({
+        phase: 'GOALS',
+        confirmation_state: 'UNCONFIRMED',
+      });
+    } finally {
+      await admin.query('DELETE FROM goals WHERE id=$1', [inserted.rows[0].id]);
+      await cleanupPrivilegedTransitionPrerequisites();
+    }
   });
 
   it('blocks direct app-role GOALS -> PLANNING plus Goal confirmation bypass', async () => {
