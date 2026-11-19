@@ -80,7 +80,36 @@ A2010 completion is only an eligibility prerequisite. A2010, Scene services and 
 
 ## API Boundary
 
-Use only the Authority-listed `POST /api/v1/cases/:id/goals` capability. The exact create/confirm request shape must follow the current repository Fastify/Zod/idempotency/If-Match pattern after re-reading latest main; no new product endpoint is invented.
+Use only the Authority-listed `POST /api/v1/cases/:id/goals` capability. Its request body is a strict discriminated union with required `operation = SAVE | CONFIRM`; missing or unknown operations are rejected and branch selection MUST NOT be inferred from field presence, `goalId` presence, repeated calls, Goal completeness, or a `confirm: true/false` flag. No second Goal confirmation endpoint is permitted.
+
+### SAVE branch
+
+`operation = SAVE`:
+
+```text
+validate current GOALS / primary-advancement eligibility / exact current confirmed formulation
+→ persist unconfirmed Goal/version bound to that formulation
+→ return exact persisted goalId + goalVersion
+→ do not write confirmation actor/time
+→ do not execute ConfirmGoal
+→ Case remains GOALS
+```
+
+### CONFIRM branch
+
+`operation = CONFIRM`:
+
+```text
+read explicit exact persisted goalId + goalVersion
+→ reject if missing/nonexistent/stale or not bound to the exact current formulation
+→ reject any attempt to create, save, or mutate Goal contract content in the CONFIRM payload
+→ execute the formal ConfirmGoal gates and one atomic transaction
+→ success => persist server-derived confirmation actor/time and GOALS → PLANNING
+```
+
+SAVE and CONFIRM are intentionally time-separable. A Goal saved while primary does not retain advancement authority: if primary/advancement eligibility changes before CONFIRM of that same exact saved Goal/version, CONFIRM rejects and Case remains GOALS.
+
+The `operation` discriminator only expresses SAVE vs CONFIRM intent. Authentication, `If-Match`, `Idempotency-Key`, ETag and Case-version/concurrency semantics continue to follow the repository's canonical patterns and are not replaced by `operation`. `SAVE` is a persistence operation, not a new formal `SaveGoal` Domain Command.
 
 The current OpenAPI workflow generates `packages/generated/openapi.json` and `packages/generated/openapi.d.ts` from `apps/server/api/src/openapi-spec.ts`, and CI requires the committed generated artifacts to remain synchronized.
 

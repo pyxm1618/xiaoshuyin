@@ -65,6 +65,7 @@ This prerequisite PR itself contains no production/runtime implementation.
 - **GCR-010 — Review state:** a Goal usable as downstream execution basis MUST expose `CURRENT / NEEDS_REVIEW` separately from lifecycle/confirmation state.
 - **GCR-011 — No empty confirmed Goal:** DB/application invariants MUST prevent construction of a confirmed/current Goal that bypasses the formal command where the existing lifecycle defense pattern requires database enforcement.
 - **GCR-012 — Integration proof:** a real canonical path MUST prove `confirmed/current Problem Formulation -> Case GOALS -> A2003 ... A2010 normal solution-stage flow -> A2010 solution-stage prerequisite COMPLETED -> valid Goal -> ConfirmGoal -> Case PLANNING` without administrator SQL phase writes. A2010 completion MUST NOT itself write `PLANNING`.
+- **GCR-013 — Single-endpoint Goal transport:** the only public Goal mutation endpoint is `POST /api/v1/cases/:id/goals`, and its request body MUST be a strict discriminated union with required `operation = SAVE | CONFIRM`. `SAVE` persists an unconfirmed Goal/version bound to the exact current Problem Formulation, returns its exact persisted identity/version, never executes `ConfirmGoal`, never writes confirmation actor/time, and never advances Case phase. `CONFIRM` MUST explicitly target an already-persisted exact `goalId`/`goalVersion`, MUST NOT create a missing Goal or mutate/save Goal contract content, and is the only operation that maps to the formal `ConfirmGoal` command. Missing/unknown `operation`, implicit field-presence inference, `goalId`-presence inference, second-call inference, `confirm: true/false`, automatic confirmation of a complete Goal, and any second public Goal confirmation endpoint are forbidden. Existing Authentication, `If-Match`, `Idempotency-Key`, ETag and Case-version concurrency conventions remain independent of this discriminator.
 
 ## Acceptance Scenarios
 
@@ -79,7 +80,7 @@ This prerequisite PR itself contains no production/runtime implementation.
 9. Cross-family/cross-case Goal or formulation references fail at application and/or DB defense.
 10. Tests never fabricate PLANNING with administrator SQL.
 11. **A2010 incomplete negative:** with Case phase = GOALS, Problem Formulation = CONFIRMED/CURRENT and a complete Goal, if A2010 solution-stage prerequisite != COMPLETED, `ConfirmGoal` is rejected, Case remains GOALS, and the Goal is not promoted to the authoritative confirmed Goal.
-12. **Primary changed negative:** after a Goal is created, if the Case no longer satisfies current primary / advancement authority before confirmation, `ConfirmGoal` is rejected and Case remains GOALS.
+12. **Primary changed negative:** after `operation = SAVE` persists a Goal while the Case is primary, if primary / advancement authority changes before `operation = CONFIRM` targets that same exact saved Goal/version, `ConfirmGoal` is rejected and Case remains GOALS.
 
 ## Acceptance Evidence
 
