@@ -15,6 +15,7 @@ import { registerIdentityBindingRoutes } from './routes/identity-bindings.js';
 import { registerMessageRoutes } from './routes/messages.js';
 import { registerParticipationRoutes } from './routes/participations.js';
 import { registerProblemFormulationRoutes } from './routes/problem-formulations.js';
+import { registerGoalRoutes } from './routes/goals.js';
 import { registerDigitalUseAssessmentRoutes } from './routes/digital-use-assessment.js';
 import { registerDigitalUsePhoneContractRoutes } from './routes/digital-use-phone-contract.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
@@ -181,6 +182,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);
+  registerGoalRoutes(app, pool);
   registerDigitalUseAssessmentRoutes(app, pool, {
     evidencePepper: runtime.evidencePepper,
     ...(options.digitalUseReview?.professionalContent === undefined

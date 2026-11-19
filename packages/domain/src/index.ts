@@ -47,6 +47,7 @@ export type {
 export * from './cases.js';
 export * from './case-primary-switch.js';
 export * from './problem-formulations.js';
+export * from './goal-runtime.js';
 export * from './evidence.js';
 export * from './identity-binding.js';
 export * from './identity-binding-gate.js';

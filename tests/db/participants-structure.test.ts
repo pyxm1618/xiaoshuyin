@@ -17,7 +17,7 @@ describe('Slice 4 structural scope boundary', () => {
     expect(names).toContain('case_participants');
     for(const forbidden of [
       'participant_responses','participation_responses','participant_roles',
-      'intervention_instances','interventions','goals','plans','plan_items',
+      'intervention_instances','interventions','plans','plan_items',
       'task_assignments','notifications','notification_deliveries',
       'assessments','scenes','ai_outputs',
     ]){

@@ -532,6 +532,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{id}/goals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["mutateGoal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{id}/problem-formulations/current": {
         parameters: {
             query?: never;
@@ -1360,6 +1376,7 @@ export interface components {
             id: string;
             version?: number;
         };
+        GoalDependencyRef: components["schemas"]["EvidenceDependencyRef"] | components["schemas"]["ConsentDependencyRef"];
         VersionedKeyDependencyRef: {
             /** @enum {string} */
             type: "POLICY" | "PACKAGE" | "CONTENT_VERSION";
@@ -7211,6 +7228,144 @@ export interface operations {
                         code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
+                };
+            };
+        };
+    };
+    mutateGoal: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+                /** @description Transport representation of the existing cases.version optimistic-concurrency token. It is not a second business version. Runtime must parse the decimal payload and reject values outside 1..2147483647 before repository/SQL access; the regex is only a lexical gate. */
+                "If-Match": components["parameters"]["IfMatchCaseVersionHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    operation: "SAVE";
+                    /** Format: uuid */
+                    problemFormulationId: string;
+                    problemFormulationVersion: number;
+                    baselineRefs: components["schemas"]["EvidenceRef"][];
+                    targetDescription: string;
+                    observationMethod: string;
+                    observationWindow: string;
+                    protectiveConditions: string[];
+                    parentActions: string[];
+                    reviewPoint: string;
+                    dependencyRefs: components["schemas"]["GoalDependencyRef"][];
+                    /** @default [] */
+                    participantResponsibilities: {
+                        /** Format: uuid */
+                        personId: string;
+                        responsibility: string;
+                        evidenceRefs: components["schemas"]["EvidenceRef"][];
+                    }[];
+                } | {
+                    /** @constant */
+                    operation: "CONFIRM";
+                    /** Format: uuid */
+                    goalId: string;
+                    goalVersion: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Exact persisted Goal version confirmed; Case advanced to PLANNING */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        operation: "CONFIRM";
+                        /** Format: uuid */
+                        goalId: string;
+                        goalVersion: number;
+                        caseVersion: number;
+                        /** @constant */
+                        phase: "PLANNING";
+                        /** @constant */
+                        confirmationState: "CONFIRMED";
+                        /** Format: uuid */
+                        confirmedBy: string;
+                        /** Format: date-time */
+                        confirmedAt: string;
+                    };
+                };
+            };
+            /** @description Goal version saved; Case remains GOALS */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        operation: "SAVE";
+                        /** Format: uuid */
+                        goalId: string;
+                        goalVersion: number;
+                        caseVersion: number;
+                        /** @constant */
+                        phase: "GOALS";
+                        /** @constant */
+                        confirmationState: "UNCONFIRMED";
+                    };
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description Current Family or Case unavailable */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description State, authority, dependency, Safety, Consent, Compliance, version or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Strict Goal request validation failure */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
                 };
             };
         };

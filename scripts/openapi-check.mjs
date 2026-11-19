@@ -98,6 +98,16 @@ const FROZEN_DOCS = [
       'digital-use-assessment-api.openapi.yaml'
     ),
   },
+  {
+    label: 'common-core-goal-confirmgoal-runtime',
+    path: join(
+      ROOT,
+      'specs',
+      'common-core-goal-confirmgoal-runtime',
+      'contracts',
+      'goal-api.openapi.yaml'
+    ),
+  },
 ];
 
 // Normalization lives in `scripts/lib/openapi-normalize.mjs` so the semantic

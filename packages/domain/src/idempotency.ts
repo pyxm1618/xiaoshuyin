@@ -33,6 +33,9 @@ export const IDEMPOTENCY_COMMAND_TYPES = [
   'CASE_REASSESS_FROM_FORMULATION',
   // AUTH-006 — the single authoritative Problem Formulation review resolution.
   'PROBLEM_FORMULATION_REVIEW_RESOLVE',
+  // Common Core Goal / ConfirmGoal runtime.
+  'GOAL_SAVE',
+  'GOAL_CONFIRM',
   // Slice 9 — Safety control foundation. Same store, same canonical hashing and
   // the modern bytea exact-key representation; no second idempotency system.
   'CASE_ENTER_SAFETY_HOLD',

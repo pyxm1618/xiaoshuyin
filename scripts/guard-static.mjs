@@ -113,7 +113,7 @@ scanDir(ROOT, (file) => {
 const FAMILY_TABLES = [
   'families', 'family_members', 'guardian_consent_requests', 'consent_records',
   'person_compliance_profiles', 'person_profile_values', 'business_audit_events',
-  'cases', 'case_events', 'staff_assignments',
+  'cases', 'case_events', 'staff_assignments', 'goals',
 ];
 
 scanDir(ROOT, (file) => {
@@ -181,7 +181,6 @@ const FORBIDDEN_TABLE_PATTERNS = [
   'assessments',
   'assessment_answers',
   'safety_states',
-  'goals',
   'intervention_instances',
   'plan_versions',
   'tasks',
@@ -814,6 +813,64 @@ function runAssessmentRuntimeRules() {
 }
 
 runAssessmentRuntimeRules();
+
+// ─── Rule 12: Common Core Goal — single GOALS -> PLANNING writer ───
+const GOAL_PHASE_WRITER = 'apps/server/api/src/services/goals.ts';
+
+function checkGoalSinglePhaseWriter(relPath, content, report) {
+  if (!(relPath.startsWith('apps/') || relPath.startsWith('packages/'))) return;
+  if (relPath === GOAL_PHASE_WRITER) return;
+
+  const patterns = [
+    /advanceCasePhaseAndVersion\s*\([\s\S]{0,600}?toPhase\s*:\s*['"]PLANNING['"]/,
+    /\bUPDATE\s+cases\b[\s\S]{0,300}?\bSET\s+phase\s*=\s*['"]?PLANNING['"]?/i,
+    /\.update\(\s*cases\s*\)[\s\S]{0,300}?\.set\(\s*\{[^}]*phase\s*:\s*['"]PLANNING['"]/s,
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(content);
+    if (match) {
+      report(
+        'R12-goal-single-phase-writer',
+        relPath,
+        lineOf(content, match.index ?? 0),
+        'GOALS -> PLANNING may only be written by Common Core ConfirmGoal'
+      );
+      return;
+    }
+  }
+}
+
+function runGoalRules() {
+  scanDir(ROOT, (file) => {
+    const relPath = getRelPath(file);
+    if (!CODE_EXTENSIONS.has(relPath.slice(relPath.lastIndexOf('.')))) return;
+    checkGoalSinglePhaseWriter(
+      relPath,
+      readFileSync(file, 'utf-8'),
+      (rule, f, line, message) => addViolation(rule, f, line, message)
+    );
+  }, CODE_EXTENSIONS);
+
+  const goalServicePath = join(ROOT, GOAL_PHASE_WRITER);
+  if (existsSync(goalServicePath)) {
+    const content = readFileSync(goalServicePath, 'utf-8');
+    if (
+      !content.includes("'A2010'") ||
+      !content.includes("a2010.status !== 'COMPLETED'") ||
+      !/fromPhase\s*:\s*['"]GOALS['"]/.test(content) ||
+      !/toPhase\s*:\s*['"]PLANNING['"]/.test(content)
+    ) {
+      addViolation(
+        'R12-goal-a2010-gate',
+        GOAL_PHASE_WRITER,
+        1,
+        'ConfirmGoal must require A2010 COMPLETED before the sole GOALS -> PLANNING transition'
+      );
+    }
+  }
+}
+
+runGoalRules();
 
 // ─── Self-test: synthetic forbidden bypass fixtures ───
 // `node scripts/guard-static.mjs --self-test` proves the Safety rules detect a
