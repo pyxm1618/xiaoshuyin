@@ -29,7 +29,6 @@ const FORBIDDEN_ROUTE_FRAGMENTS = [
 const FORBIDDEN_TABLES = [
   'participation_invites',
   'safety_states',
-  'goals',
   'intervention_instances',
   'plan_versions',
   'tasks',

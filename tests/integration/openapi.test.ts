@@ -155,7 +155,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-it('contains exactly the 38 frozen business operations including Slice 12 four Scene surfaces)', () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
+it('contains exactly the 39 frozen business operations including Common Core Goal runtime'), () => {    const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
       for (const method of Object.keys(methods)) {
@@ -180,6 +180,7 @@ it('contains exactly the 38 frozen business operations including Slice 12 four S
       'POST /api/v1/auth/logout',
       'POST /api/v1/auth/wechat',
       'POST /api/v1/cases',
+      'POST /api/v1/cases/{id}/goals',
       'POST /api/v1/cases/{id}/messages',
       'POST /api/v1/cases/{id}/participation-invites',
       'POST /api/v1/cases/{id}/switch-primary',
@@ -217,6 +218,7 @@ it('contains exactly the 38 frozen business operations including Slice 12 four S
       ['post', '/api/v1/consents/{id}/revoke'],
       ['post', '/api/v1/cases'],
       ['post', '/api/v1/cases/{id}/messages'],
+      ['post', '/api/v1/cases/{id}/goals'],
       ['post', '/api/v1/cases/{id}/switch-primary'],
       ['post', '/api/v1/cases/{id}/assessments'],
       ['post', '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses'],
@@ -260,6 +262,8 @@ it('contains exactly the 38 frozen business operations including Slice 12 four S
       '/api/v1/identity-bindings/pairing-decision',
       // Slice 3 (003-evidence-core) — the single approved message POST.
       '/api/v1/cases/{id}/messages',
+      // Common Core Goal runtime — single SAVE / CONFIRM surface.
+      '/api/v1/cases/{id}/goals',
       // Slice 4 — exactly six participation surfaces.
       '/api/v1/cases/{id}/participation-invites',
       '/api/v1/participation-invites/{token}',

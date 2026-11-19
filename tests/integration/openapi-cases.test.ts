@@ -7,7 +7,7 @@
  * Slice 7 delta = exactly 1: switchPrimaryCase
  * Slice 8 delta = exactly 4 Problem Formulation operations.
  * Slice 12 delta = exactly 4 Digital Use Assessment / Scene operations.
- * Current total = 13 Case-scoped business operations.
+ * Current total = 14 Case-scoped business operations including Common Core Goal runtime.
  * `createParticipationInvite` stays a real Case path operation and is excluded
  * from the business-operation count by operationId (approved Slice 4 Scope).
  */
@@ -61,7 +61,7 @@ function literalCodes(schema: any): string[] {
 }
 
 describe('Generated OpenAPI — Case operations (T078)', () => {
-  it('contains the real Case paths and exactly thirteen Case business operations through Slice 12', () => {
+  it('contains the real Case paths and exactly fourteen Case business operations including Goal runtime', () => {
     const casePaths = Object.keys(spec.paths).filter(
       (p) => p === CASE_PATH_PREFIX || p.startsWith(`${CASE_PATH_PREFIX}/`)
     );
@@ -98,6 +98,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'GET /api/v1/cases',
       'GET /api/v1/cases/{id}',
       'POST /api/v1/cases',
+      'POST /api/v1/cases/{id}/goals',
       'POST /api/v1/cases/{id}/messages',
       'POST /api/v1/cases/{id}/assessments',
       'GET /api/v1/cases/{id}/scene',
@@ -109,7 +110,7 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/corrections',
     ].sort());
-    expect(operations).toHaveLength(13);
+    expect(operations).toHaveLength(14);
   });
 
   it('每个 operation 声明 frozen operationId 与 bearerAuth', () => {

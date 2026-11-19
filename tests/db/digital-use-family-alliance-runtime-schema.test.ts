@@ -236,13 +236,13 @@ describe('T1303/T1305 Digital Use Family Alliance target persistence', () => {
     }
   });
 
-  it('does not create forbidden Family Alliance or Phase-4 persistence', async () => {
+  it('does not create forbidden Family Alliance or post-Goal Phase-4 persistence', async () => {
     const { rows } = await admin.query<{ relname: string }>(
       `SELECT relname FROM pg_class
         WHERE relnamespace='public'::regnamespace
           AND relkind='r'
           AND relname = ANY($1::text[])`,
-      [['family_alliance_answers','goals','tasks','checkins','outcomes','plan_versions']]
+      [['family_alliance_answers','tasks','checkins','outcomes','plan_versions']]
     );
     expect(rows).toEqual([]);
   });

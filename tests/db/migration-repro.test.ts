@@ -18,11 +18,11 @@ import { Client } from 'pg';
 const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATABASE_URL']!;
 
 // Expected final object counts (Slice 1/2 + Case Core + Slice 3 Evidence + Slice 6 binding)
-const EXPECTED_ENUMS = 24; // + independent problem_formulation_review_state (AUTH-006)
-const EXPECTED_TABLES = 32; // + minimal staff authority source // + Slice 13 target items + Slice 14 Contract/roleplay tables
+const EXPECTED_ENUMS = 27; // + independent problem_formulation_review_state (AUTH-006)
+const EXPECTED_TABLES = 33; // + minimal staff authority source // + Slice 13 target items + Slice 14 Contract/roleplay tables
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
-const EXPECTED_POLICIES = 80; // + 9 exact-Case Staff Safety policies
+const EXPECTED_POLICIES = 81; // + 9 exact-Case Staff Safety policies
 const EXPECTED_TRIGGERS = 9; // + Staff mutation serialization + Account serialization + final transition guard
 
 const EXPECTED_ENUM_NAMES = [
@@ -42,6 +42,9 @@ const EXPECTED_ENUM_NAMES = [
   'consent_request_status',
   'evidence_confirmation_status',
   'evidence_time_state',
+  'goal_confirmation_state',
+  'goal_lifecycle_status',
+  'goal_review_state',
   'observation_value_state',
   'observation_value_type',
   'profile_attribute',
@@ -73,6 +76,7 @@ const EXPECTED_TABLE_NAMES = [
   'families',
   'family_members',
   'guardian_consent_requests',
+  'goals',
   'idempotency_keys',
   'intervention_definitions',
   'identity_binding_audit_events',
@@ -99,7 +103,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     await client.end();
   });
 
-  it('should have all 23 enums with correct values', async () => {
+  it('should have all 27 enums with correct values', async () => {
     const { rows } = await client.query(`
       SELECT t.typname, array_agg(e.enumlabel ORDER BY e.enumsortorder) as values
       FROM pg_type t
@@ -115,7 +119,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(enumNames.length).toBe(EXPECTED_ENUMS);
   });
 
-  it('should have all 32 tables', async () => {
+  it('should have all 33 tables', async () => {
     const { rows } = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -157,7 +161,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 80 RLS policies', async () => {
+  it('should have 81 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'
