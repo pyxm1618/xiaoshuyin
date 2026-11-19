@@ -87,7 +87,48 @@ describe('Slice 17 Professional Knowledge persistence', () => {
           'xiaoshuyin_app','professional_knowledge_versions','UPDATE'
         ) AS allowed`
     );
-    expect(versionUpdate.rows[0]!.allowed).toBe(true);
+    expect(versionUpdate.rows[0]!.allowed).toBe(false);
+
+    for (const column of [
+      'content',
+      'content_hash',
+      'source_set_hash',
+      'scope_metadata',
+      'locale',
+      'lifecycle_status',
+      'review_state',
+      'validity_state',
+      'revision',
+    ]) {
+      const allowed = await admin.query<{ allowed: boolean }>(
+        `SELECT has_column_privilege(
+            'xiaoshuyin_app','professional_knowledge_versions',$1,'UPDATE'
+          ) AS allowed`,
+        [column]
+      );
+      expect(allowed.rows[0]!.allowed).toBe(true);
+    }
+
+    for (const column of ['released_at', 'effective_from', 'effective_to']) {
+      const allowed = await admin.query<{ allowed: boolean }>(
+        `SELECT has_column_privilege(
+            'xiaoshuyin_app','professional_knowledge_versions',$1,'UPDATE'
+          ) AS allowed`,
+        [column]
+      );
+      expect(allowed.rows[0]!.allowed).toBe(false);
+    }
+
+    for (const evidenceTable of [
+      'professional_knowledge_review_evidence',
+      'professional_knowledge_approval_evidence',
+    ]) {
+      const insert = await admin.query<{ allowed: boolean }>(
+        `SELECT has_table_privilege('xiaoshuyin_app', $1, 'INSERT') AS allowed`,
+        [evidenceTable]
+      );
+      expect(insert.rows[0]!.allowed).toBe(false);
+    }
 
     for (const appendOnly of [
       'professional_knowledge_sources',
