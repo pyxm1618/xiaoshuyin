@@ -1376,6 +1376,7 @@ export interface components {
             id: string;
             version?: number;
         };
+        GoalDependencyRef: components["schemas"]["EvidenceDependencyRef"] | components["schemas"]["ConsentDependencyRef"];
         VersionedKeyDependencyRef: {
             /** @enum {string} */
             type: "POLICY" | "PACKAGE" | "CONTENT_VERSION";
@@ -7260,7 +7261,7 @@ export interface operations {
                     protectiveConditions: string[];
                     parentActions: string[];
                     reviewPoint: string;
-                    dependencyRefs: components["schemas"]["DependencyRef"][];
+                    dependencyRefs: components["schemas"]["GoalDependencyRef"][];
                     /** @default [] */
                     participantResponsibilities: {
                         /** Format: uuid */

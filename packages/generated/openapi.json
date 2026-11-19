@@ -21336,7 +21336,7 @@
                         "type": "array",
                         "minItems": 1,
                         "items": {
-                          "$ref": "#/components/schemas/DependencyRef"
+                          "$ref": "#/components/schemas/GoalDependencyRef"
                         }
                       },
                       "participantResponsibilities": {
@@ -25442,6 +25442,16 @@
         "required": [
           "type",
           "id"
+        ]
+      },
+      "GoalDependencyRef": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/EvidenceDependencyRef"
+          },
+          {
+            "$ref": "#/components/schemas/ConsentDependencyRef"
+          }
         ]
       },
       "VersionedKeyDependencyRef": {
