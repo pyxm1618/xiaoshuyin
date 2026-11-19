@@ -165,7 +165,19 @@ CREATE POLICY intervention_definitions_professional_knowledge_authority_executor
   );
 
 -- Existing self-review evidence is ambiguous authority and must be reconciled
--- rather than silently blessed during upgrade.
+-- rather than silently blessed during upgrade. FORCE RLS is retained: two
+-- migration-only SELECT policies are created solely for this preflight and
+-- dropped immediately afterwards.
+CREATE POLICY professional_knowledge_versions_migration_self_review_preflight
+  ON professional_knowledge_versions
+  FOR SELECT TO xiaoshuyin_migrator
+  USING (true);
+
+CREATE POLICY professional_knowledge_review_evidence_migration_self_review_preflight
+  ON professional_knowledge_review_evidence
+  FOR SELECT TO xiaoshuyin_migrator
+  USING (true);
+
 DO $preflight$
 BEGIN
   IF EXISTS (
@@ -181,6 +193,11 @@ BEGIN
   END IF;
 END
 $preflight$;
+
+DROP POLICY professional_knowledge_review_evidence_migration_self_review_preflight
+  ON professional_knowledge_review_evidence;
+DROP POLICY professional_knowledge_versions_migration_self_review_preflight
+  ON professional_knowledge_versions;
 
 CREATE FUNCTION app.guard_professional_knowledge_self_review()
 RETURNS trigger
