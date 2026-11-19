@@ -927,6 +927,86 @@ describe('Slice 12 canonical no-model production orchestration', () => {
   });
 
 
+  it('rolls back Goal confirmation and Case advancement when confirmation audit fails', async () => {
+    const f = await fixture('goal-atomic-rollback');
+    const scene = await finishA2010ForGoal(f);
+    const formulation = await currentGoalFormulation(f);
+    const saved = await saveGoalFor(
+      f,
+      scene.caseVersion,
+      formulation,
+      'goal-save-atomic-' + crypto.randomUUID()
+    );
+    expect(saved.statusCode, saved.body).toBe(201);
+
+    await admin.query(`
+      CREATE OR REPLACE FUNCTION goal_runtime_fail_confirm_audit()
+      RETURNS trigger LANGUAGE plpgsql AS $goal$
+      BEGIN
+        IF NEW.event_type = 'GOAL_CONFIRMED'
+           AND NEW.family_id = '${f.familyId}'::uuid THEN
+          RAISE EXCEPTION 'GOAL_RUNTIME_CONFIRM_AUDIT_FAILURE';
+        END IF;
+        RETURN NEW;
+      END $goal$;
+      DROP TRIGGER IF EXISTS goal_runtime_fail_confirm_audit_trigger
+        ON business_audit_events;
+      CREATE TRIGGER goal_runtime_fail_confirm_audit_trigger
+        BEFORE INSERT ON business_audit_events
+        FOR EACH ROW EXECUTE FUNCTION goal_runtime_fail_confirm_audit();
+    `);
+
+    try {
+      const failed = await confirmGoalFor(
+        f,
+        saved.json().caseVersion,
+        saved.json().goalId,
+        saved.json().goalVersion,
+        'goal-confirm-atomic-failure-' + crypto.randomUUID()
+      );
+      expect(failed.statusCode, failed.body).toBe(500);
+      expect(failed.json().code).toBe('INTERNAL_ERROR');
+
+      const kase = await app.inject({
+        method: 'GET',
+        url: '/api/v1/cases/' + f.caseId,
+        headers: auth(f.manager.token),
+      });
+      expect(kase.statusCode).toBe(200);
+      expect(kase.json()).toMatchObject({
+        phase: 'GOALS',
+        version: saved.json().caseVersion,
+      });
+
+      const goal = await admin.query(
+        'SELECT confirmation_state,confirmed_by_person_id,confirmed_at ' +
+          'FROM goals WHERE case_id=$1 AND lifecycle_status=\'ACTIVE\'',
+        [f.caseId]
+      );
+      expect(goal.rows[0]).toMatchObject({
+        confirmation_state: 'UNCONFIRMED',
+        confirmed_by_person_id: null,
+        confirmed_at: null,
+      });
+
+      const traces = await admin.query(
+        `SELECT
+           (SELECT count(*)::int FROM case_events
+             WHERE case_id=$1 AND event_type='CASE_GOAL_CONFIRMED') AS events,
+           (SELECT count(*)::int FROM business_audit_events
+             WHERE family_id=$2 AND event_type='GOAL_CONFIRMED') AS audits`,
+        [f.caseId, f.familyId]
+      );
+      expect(traces.rows[0]).toEqual({ events: 0, audits: 0 });
+    } finally {
+      await admin.query(
+        `DROP TRIGGER IF EXISTS goal_runtime_fail_confirm_audit_trigger
+           ON business_audit_events;
+         DROP FUNCTION IF EXISTS goal_runtime_fail_confirm_audit()`
+      );
+    }
+  });
+
   it('re-checks Authorization and Consent at confirmation time', async () => {
     const f = await fixture('goal-auth-consent');
     const scene = await finishA2010ForGoal(f);
