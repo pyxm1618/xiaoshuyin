@@ -23,7 +23,7 @@ const EXPECTED_TABLES = 38; // + Slice 16 InterventionDefinition + Slice 17 Prof
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
 const EXPECTED_POLICIES = 96; // + Phase 2 bounded Professional Knowledge authority-denial insert policy
-const EXPECTED_TRIGGERS = 10; // + Phase 2 Professional Knowledge release-authority transition guard
+const EXPECTED_TRIGGERS = 11; // + Professional Knowledge release guard + direct-insert lifecycle guard
 
 const EXPECTED_ENUM_NAMES = [
   'account_status',

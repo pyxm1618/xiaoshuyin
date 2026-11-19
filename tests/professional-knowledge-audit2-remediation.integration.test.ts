@@ -1561,4 +1561,87 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     }
   });
 
+
+  it('PHASE3 P1: runtime SQL cannot INSERT a pre-reviewed or directly consumable Professional Knowledge version', async () => {
+    const actor = await seedActor('phase3-direct-insert');
+    const seeded = await seedKnowledge(actor, {
+      reviewState: 'PENDING',
+      validityState: 'UNKNOWN',
+    });
+
+    const attempts = [
+      {
+        semanticVersion: '2.0.0',
+        lifecycleStatus: 'PUBLISHED',
+        reviewState: 'CURRENT',
+        validityState: 'VALID',
+        revision: 1,
+        releasedAt: new Date('2026-11-19T00:00:00Z'),
+        effectiveFrom: new Date('2026-11-19T00:00:00Z'),
+      },
+      {
+        semanticVersion: '2.0.1',
+        lifecycleStatus: 'CANDIDATE',
+        reviewState: 'CURRENT',
+        validityState: 'VALID',
+        revision: 1,
+        releasedAt: null,
+        effectiveFrom: null,
+      },
+      {
+        semanticVersion: '2.0.2',
+        lifecycleStatus: 'CANDIDATE',
+        reviewState: 'PENDING',
+        validityState: 'UNKNOWN',
+        revision: 2,
+        releasedAt: null,
+        effectiveFrom: null,
+      },
+    ] as const;
+
+    for (const attempt of attempts) {
+      await expect(
+        withProfessionalKnowledgeAdminTransaction(
+          app,
+          { accountId: actor.accountId, assignmentId: actor.assignmentId },
+          async (tx) => {
+            await tx.query(
+              `INSERT INTO professional_knowledge_versions
+                 (knowledge_id, semantic_version, revision, lifecycle_status,
+                  review_state, validity_state, content, content_hash,
+                  source_set_hash, scope_metadata, locale, released_at,
+                  effective_from, created_by_account_id, created_by_person_id)
+               VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10::jsonb,'zh-CN',
+                       $11,$12,$13,$14)`,
+              [
+                seeded.knowledgeId,
+                attempt.semanticVersion,
+                attempt.revision,
+                attempt.lifecycleStatus,
+                attempt.reviewState,
+                attempt.validityState,
+                JSON.stringify(seeded.content),
+                seeded.contentHash,
+                seeded.sourceSetHash,
+                JSON.stringify(seeded.scope),
+                attempt.releasedAt,
+                attempt.effectiveFrom,
+                actor.accountId,
+                actor.personId,
+              ]
+            );
+          }
+        )
+      ).rejects.toMatchObject({ code: '42501' });
+    }
+
+    const { rows } = await admin.query<{ n: string }>(
+      `SELECT count(*)::text AS n
+         FROM professional_knowledge_versions
+        WHERE knowledge_id=$1 AND semantic_version LIKE '2.%'`,
+      [seeded.knowledgeId]
+    );
+    expect(rows[0]!.n).toBe('0');
+  });
+
 });
