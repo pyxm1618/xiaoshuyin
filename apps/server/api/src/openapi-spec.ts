@@ -847,6 +847,186 @@ export function buildOpenApiDocument() {
         },
       },
     },
+    '/api/v1/cases/{id}/goals': {
+      post: {
+        tags: ['case'],
+        operationId: 'mutateGoal',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          paramRef('IdempotencyKeyHeader'),
+          paramRef('IfMatchCaseVersionHeader'),
+        ],
+        requestBody: jsonBody({
+          oneOf: [
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                operation: { type: 'string', const: 'SAVE' },
+                problemFormulationId: { type: 'string', format: 'uuid' },
+                problemFormulationVersion: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: 2147483647,
+                },
+                baselineRefs: {
+                  type: 'array',
+                  minItems: 1,
+                  items: ref('EvidenceRef'),
+                },
+                targetDescription: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 4000,
+                },
+                observationMethod: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 4000,
+                },
+                observationWindow: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 2000,
+                },
+                protectiveConditions: {
+                  type: 'array',
+                  minItems: 1,
+                  items: { type: 'string', minLength: 1, maxLength: 2000 },
+                },
+                parentActions: {
+                  type: 'array',
+                  minItems: 1,
+                  items: { type: 'string', minLength: 1, maxLength: 2000 },
+                },
+                reviewPoint: {
+                  type: 'string',
+                  minLength: 1,
+                  maxLength: 2000,
+                },
+                dependencyRefs: {
+                  type: 'array',
+                  minItems: 1,
+                  items: ref('DependencyRef'),
+                },
+                participantResponsibilities: {
+                  type: 'array',
+                  default: [],
+                  items: {
+                    type: 'object',
+                    additionalProperties: false,
+                    properties: {
+                      personId: { type: 'string', format: 'uuid' },
+                      responsibility: {
+                        type: 'string',
+                        minLength: 1,
+                        maxLength: 2000,
+                      },
+                      evidenceRefs: {
+                        type: 'array',
+                        minItems: 1,
+                        items: ref('EvidenceRef'),
+                      },
+                    },
+                    required: ['personId', 'responsibility', 'evidenceRefs'],
+                  },
+                },
+              },
+              required: [
+                'operation',
+                'problemFormulationId',
+                'problemFormulationVersion',
+                'baselineRefs',
+                'targetDescription',
+                'observationMethod',
+                'observationWindow',
+                'protectiveConditions',
+                'parentActions',
+                'reviewPoint',
+                'dependencyRefs',
+                'participantResponsibilities',
+              ],
+            },
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                operation: { type: 'string', const: 'CONFIRM' },
+                goalId: { type: 'string', format: 'uuid' },
+                goalVersion: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: 2147483647,
+                },
+              },
+              required: ['operation', 'goalId', 'goalVersion'],
+            },
+          ],
+          discriminator: { propertyName: 'operation' },
+        }),
+        responses: {
+          '200': jsonResponse(
+            'Exact persisted Goal version confirmed; Case advanced to PLANNING',
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                operation: { type: 'string', const: 'CONFIRM' },
+                goalId: { type: 'string', format: 'uuid' },
+                goalVersion: { type: 'integer', minimum: 1, maximum: 2147483647 },
+                caseVersion: { type: 'integer', minimum: 1, maximum: 2147483647 },
+                phase: { type: 'string', const: 'PLANNING' },
+                confirmationState: { type: 'string', const: 'CONFIRMED' },
+                confirmedBy: { type: 'string', format: 'uuid' },
+                confirmedAt: { type: 'string', format: 'date-time' },
+              },
+              required: [
+                'operation',
+                'goalId',
+                'goalVersion',
+                'caseVersion',
+                'phase',
+                'confirmationState',
+                'confirmedBy',
+                'confirmedAt',
+              ],
+            }
+          ),
+          '201': jsonResponse(
+            'Goal version saved; Case remains GOALS',
+            {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                operation: { type: 'string', const: 'SAVE' },
+                goalId: { type: 'string', format: 'uuid' },
+                goalVersion: { type: 'integer', minimum: 1, maximum: 2147483647 },
+                caseVersion: { type: 'integer', minimum: 1, maximum: 2147483647 },
+                phase: { type: 'string', const: 'GOALS' },
+                confirmationState: { type: 'string', const: 'UNCONFIRMED' },
+              },
+              required: [
+                'operation',
+                'goalId',
+                'goalVersion',
+                'caseVersion',
+                'phase',
+                'confirmationState',
+              ],
+            }
+          ),
+          '401': refResponse('`UNAUTHENTICATED`', 'UnauthenticatedError'),
+          '404': refResponse('Current Family or Case unavailable', 'Error'),
+          '409': refResponse(
+            'State, authority, dependency, Safety, Consent, Compliance, version or idempotency conflict',
+            'Error'
+          ),
+          '422': refResponse('Strict Goal request validation failure', 'Error'),
+          '500': refResponse('`INTERNAL_ERROR`', 'InternalError'),
+        },
+      },
+    },
     '/api/v1/cases/{id}/problem-formulations/current': {
       get: {
         tags: ['case'],
