@@ -11,9 +11,8 @@ import {
   advanceCasePhaseAndVersion,
   assertCaseGuards,
   bumpCaseVersionWithoutPhaseChange,
-  canonicalDependencies,
   canonicalEvidenceKey,
-  canonicalJson,
+  isDependencySubset,
   caseVersionEtag,
   confirmGoalVersion,
   getSceneNodeState,
@@ -32,6 +31,7 @@ import {
   normalizedGoalContract,
   resolveActiveCaseParticipantPersonIds,
   resolveEvidenceRefs,
+  revalidateStoredEvidenceDependencies,
   supersedeGoalVersion,
   validateGoalContract,
   type GoalContractInput,
@@ -265,16 +265,15 @@ function assertExactFormulation(
     );
   }
 
-  const expected = canonicalJson(
-    canonicalDependencies(formulation.dependency_refs)
-  );
-  const actual = canonicalJson(
-    canonicalDependencies(contract.dependencyRefs)
-  );
-  if (expected !== actual) {
+  if (
+    !isDependencySubset(
+      formulation.dependency_refs,
+      contract.dependencyRefs
+    )
+  ) {
     throw httpError(
       'VALIDATION_ERROR',
-      'Goal dependencyRefs must match the current Problem Formulation'
+      'Goal dependencyRefs must include the current Problem Formulation dependencies'
     );
   }
 }
@@ -290,6 +289,12 @@ async function assertGoalEvidence(
       (item) => item.evidenceRefs
     ),
   ];
+  await revalidateStoredEvidenceDependencies(
+    tx,
+    caseId,
+    contract.dependencyRefs
+  );
+
   const resolved = await resolveEvidenceRefs(tx, caseId, allRefs);
   if (resolved.missing.length > 0) {
     throw httpError(
