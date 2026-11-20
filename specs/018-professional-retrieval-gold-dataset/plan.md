@@ -712,11 +712,12 @@ STOP
 
 No schema, validator, fixture, test, migration, real Gold label, production artifact or production-code edit may follow in that run.
 
-Current planning-time result:
+Current-main refresh planning-time result — 2026-11-20:
 
-- Slice 16 is merged, but post-merge forensic blocking findings exist and unmerged remediation does not prove a clean/usable prerequisite;
-- Slice 17 implementation exists but PR #58 is not merged to main;
-- APPROVED PROFESSIONAL REVIEWER — UNASSIGNED;
+- Slice 16 PR #57 and remediation PR #59 are merged; current-main runtime seams are present and current CI / Spec Governance are green; T1801 still independently re-reads audit provenance and runtime usability rather than inferring them from merge status;
+- Slice 17 PR #58 is merged as current main and the Professional Knowledge runtime is present; T1801 still re-reads independent Audit 2 provenance and runtime usability;
+- the current Digital Use v1 production-approved Professional Knowledge set is exactly EMPTY;
+- APPROVED PROFESSIONAL REVIEWER remains UNASSIGNED and production approval / qualification providers remain UNAVAILABLE;
 - therefore T1801 currently returns BLOCKED.
 
 This is an expected correct result, not a planning defect.
@@ -1097,6 +1098,7 @@ Any future semantic Authority drift requires a new reconciliation; volatile PR/C
 - MEDIUM-R02 — Checklist canonical Spec identity stale. CLOSED by canonical identity sync.
 - MEDIUM-R03 — Plan status still said DRAFT after prior freeze. CLOSED.
 - MEDIUM-R04 — T1801 planning-time known result still named retired unmerged blockers. CLOSED.
+- MEDIUM-R05 — Plan §20 still retained a stale “Current planning-time result” asserting unmerged Slice 16 remediation / Slice 17 PR #58. CLOSED by replacing that current-state assertion with the 2026-11-20 merged runtime truth while preserving T1801 as the authoritative runtime read-back.
 
 ### 29.3 Full Audit 1 Refresh
 
