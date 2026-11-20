@@ -78,6 +78,20 @@
       }
     },
     {
+      "id": "safety-api",
+      "match": {
+        "kind": "PREFIX",
+        "path": "apps/server/api/src/safety/"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "009-safety-hold-control-foundation",
+          "foundation-remaining-remediation"
+        ]
+      }
+    },
+    {
       "id": "safety-domain",
       "match": {
         "kind": "PREFIX",
