@@ -270,7 +270,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       await expect(
         recordKnowledgeReview({
           pool: app,
-          authorityPool: authority,
           accountId: creator.accountId,
           personId: creator.personId,
           assignmentId: creator.assignmentId,
@@ -354,7 +353,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       recordKnowledgeReview({
         pool: app,
-        authorityPool: authority,
         accountId: reviewer.accountId,
         personId: reviewer.personId,
         assignmentId: reviewer.assignmentId,
@@ -673,7 +671,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     const reviewedAt = new Date('2026-11-17T01:00:00Z');
     const request = {
       pool: app,
-      authorityPool: authority,
       accountId: actor.accountId,
       personId: actor.personId,
       assignmentId: actor.assignmentId,
@@ -864,7 +861,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
 
     const request = {
       pool: app,
-      authorityPool: authority,
       accountId: releaseActor.accountId,
       personId: releaseActor.personId,
       assignmentId: releaseActor.assignmentId,
@@ -982,7 +978,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       releaseKnowledgeVersion({
         pool: app,
-        authorityPool: authority,
         accountId: releaseActor.accountId,
         personId: releaseActor.personId,
         assignmentId: releaseActor.assignmentId,
@@ -1176,7 +1171,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       recordKnowledgeReview({
         pool: app,
-        authorityPool: authority,
         accountId: releaseActor.accountId,
         personId: releaseActor.personId,
         assignmentId: releaseActor.assignmentId,
@@ -1201,7 +1195,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       releaseKnowledgeVersion({
         pool: app,
-        authorityPool: authority,
         accountId: releaseActor.accountId,
         personId: releaseActor.personId,
         assignmentId: releaseActor.assignmentId,
@@ -1247,7 +1240,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       releaseKnowledgeVersion({
         pool: app,
-        authorityPool: authority,
         accountId: releaseActor.accountId,
         personId: releaseActor.personId,
         assignmentId: releaseActor.assignmentId,
@@ -1310,7 +1302,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       await expect(
         recordKnowledgeReview({
           pool: app,
-          authorityPool: authority,
           accountId: actor.accountId,
           personId: actor.personId,
           assignmentId: actor.assignmentId,
@@ -1417,7 +1408,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       const idempotencyKey = `phase2-scene-${label}-${crypto.randomUUID()}`;
       const request = {
         pool: app,
-        authorityPool: authority,
         accountId: actor.accountId,
         personId: actor.personId,
         assignmentId: actor.assignmentId,
@@ -1502,7 +1492,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       const idempotencyKey = `phase2-denial-${label}-${crypto.randomUUID()}`;
       const promise = releaseKnowledgeVersion({
         pool: app,
-        authorityPool: authority,
         accountId: actor.accountId,
         personId: actor.personId,
         assignmentId: actor.assignmentId,
@@ -1608,7 +1597,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     await expect(
       releaseKnowledgeVersion({
         pool: app,
-        authorityPool: authority,
         accountId: actor.accountId,
         personId: actor.personId,
         assignmentId: actor.assignmentId,
@@ -1665,7 +1653,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       await expect(
         releaseKnowledgeVersion({
           pool: app,
-          authorityPool: authority,
           accountId: actor.accountId,
           personId: actor.personId,
           assignmentId: actor.assignmentId,
@@ -1719,7 +1706,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
 
     const release = releaseKnowledgeVersion({
       pool: app,
-      authorityPool: authority,
       accountId: actor.accountId,
       personId: actor.personId,
       assignmentId: actor.assignmentId,
@@ -1796,7 +1782,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     };
     const release = releaseKnowledgeVersion({
       pool: app,
-      authorityPool: authority,
       accountId: actor.accountId,
       personId: actor.personId,
       assignmentId: actor.assignmentId,
@@ -1876,7 +1861,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
 
     const release = releaseKnowledgeVersion({
       pool: app,
-      authorityPool: authority,
       accountId: actor.accountId,
       personId: actor.personId,
       assignmentId: actor.assignmentId,
@@ -1941,11 +1925,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       max: 2,
       options: '-c statement_timeout=150',
     });
-    const timedAuthority = new pg.Pool({
-      connectionString: process.env['MIGRATION_DATABASE_URL'],
-      max: 2,
-      options: '-c statement_timeout=150',
-    });
     try {
       await blocker.query('BEGIN');
       await blocker.query(
@@ -1958,7 +1937,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
       await expect(
         releaseKnowledgeVersion({
           pool: timedApp,
-          authorityPool: timedAuthority,
           accountId: actor.accountId,
           personId: actor.personId,
           assignmentId: actor.assignmentId,
@@ -1995,7 +1973,6 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     } finally {
       await blocker.query('ROLLBACK').catch(() => undefined);
       blocker.release();
-      await timedAuthority.end();
       await timedApp.end();
     }
   });

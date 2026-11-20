@@ -293,7 +293,6 @@ async function requireQualification(input: {
 
 export async function recordKnowledgeReview(input: {
   pool: pg.Pool;
-  authorityPool: pg.Pool;
   accountId: string;
   personId: string;
   assignmentId: string;
@@ -814,7 +813,6 @@ function classifyReleaseAuthorityDenial(error: unknown): Omit<ReleaseAuthorityDe
 
 export async function releaseKnowledgeVersion(input: {
   pool: pg.Pool;
-  authorityPool: pg.Pool;
   accountId: string;
   personId: string;
   assignmentId: string;
