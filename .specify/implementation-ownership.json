@@ -559,6 +559,32 @@
           "017-professional-knowledge-foundation"
         ]
       }
+    },
+  {
+    "id": "phase5-c3-staff-authority-application",
+    "match": {
+      "kind": "PREFIX",
+      "path": "apps/server/api/src/staff-authority/"
+    },
+    "ownership": {
+      "kind": "FEATURE",
+      "features": [
+        "phase5-c3-staff-assignment-control-plane"
+      ]
     }
+  },
+  {
+    "id": "phase5-c3-staff-authority-migration",
+    "match": {
+      "kind": "EXACT",
+      "path": "db/migrations/029_staff_assignment_control_plane.sql"
+    },
+    "ownership": {
+      "kind": "FEATURE",
+      "features": [
+        "phase5-c3-staff-assignment-control-plane"
+      ]
+    }
+  }
   ]
 }
