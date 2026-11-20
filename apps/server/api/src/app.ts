@@ -35,7 +35,9 @@ import type {
 } from './services/digital-use-roleplay-adapter.js';
 import type { ProfessionalReviewContentProvider } from './services/digital-use-review-professional-content.js';
 import {
+  caseIdempotencyKeyBytes,
   getCaseById,
+  getReservedIdempotency,
   runSafetyPrecheck,
   SafetyError,
   type ApprovedPolicyIdentity,
@@ -45,7 +47,11 @@ import {
 } from '@xiaoshuyin/domain';
 import { withIdentityTransaction, withRlsTransaction } from './db/tx.js';
 import { requireCurrentFamily } from './family-context.js';
-import { enterSafetyHold } from './safety/enter-safety-hold.js';
+import { requireFamilyAction } from './authz.js';
+import {
+  ENTER_SAFETY_HOLD_COMMAND,
+  enterSafetyHold,
+} from './safety/enter-safety-hold.js';
 import { resolveRisk } from './safety/resolve-risk.js';
 
 
@@ -151,6 +157,107 @@ async function currentTrustedSafetyIdentity(
   return requireApprovedPolicyIdentity(identity);
 }
 
+function sameSafetyIdentity(
+  left: ApprovedPolicyIdentity,
+  right: ApprovedPolicyIdentity
+): boolean {
+  return SAFETY_POLICY_IDENTITY_KEYS.every((key) => left[key] === right[key]);
+}
+
+function internalSafetyError(message: string): never {
+  const mapped = toHttpError('INTERNAL_ERROR', message);
+  throw Object.assign(new Error(mapped.message), mapped);
+}
+
+/**
+ * C2 retry bridge over the existing command idempotency store.
+ *
+ * A completed CASE_ENTER_SAFETY_HOLD operation must replay even when the Case
+ * is now held or has subsequently been resolved. We read only the existing
+ * command reservation; no second idempotency record or persistence owner is
+ * introduced. Current Family visibility and the command's authorization action
+ * are rechecked before the stored response is returned.
+ */
+async function readCompletedEnterSafetyHoldReplay(
+  pool: pg.Pool,
+  input: {
+    actor: SafetyProductionActor;
+    caseId: string;
+    operationKey: string;
+  }
+): Promise<Extract<SafetyProductionEntryResult, { kind: 'ENTER_HOLD' }> | null> {
+  const lookup = await withIdentityTransaction(
+    pool,
+    { accountId: input.actor.accountId, purpose: 'FAMILY_MANAGEMENT' },
+    async (tx) => {
+      const row = await getReservedIdempotency(tx, {
+        actorAccountId: input.actor.accountId,
+        commandType: ENTER_SAFETY_HOLD_COMMAND,
+        keyBytes: caseIdempotencyKeyBytes(input.operationKey),
+        legacyKeyText: null,
+      });
+      if (row === null) return null;
+      const familyId = await requireCurrentFamily(tx, input.actor.personId);
+      return { row, familyId };
+    }
+  );
+  if (lookup === null) return null;
+
+  if (lookup.row.response_status === 0) {
+    internalSafetyError('Safety idempotency slot incomplete');
+  }
+
+  return withRlsTransaction(
+    pool,
+    {
+      familyId: lookup.familyId,
+      accountId: input.actor.accountId,
+      personId: input.actor.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    },
+    async (tx) => {
+      const caseRow = await getCaseById(tx, input.caseId);
+      if (!caseRow || caseRow.family_id !== lookup.familyId) safetyCaseNotFound();
+
+      await requireFamilyAction(tx, {
+        accountId: input.actor.accountId,
+        personId: input.actor.personId,
+        familyId: lookup.familyId,
+        action: 'CASE_ENTER_SAFETY_HOLD',
+        purpose: 'FAMILY_MANAGEMENT',
+        resource: {
+          type: 'CASE',
+          familyId: lookup.familyId,
+          caseId: input.caseId,
+        },
+        caseId: input.caseId,
+      });
+
+      const body = lookup.row.response_body;
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        internalSafetyError('Safety idempotency replay body invalid');
+      }
+      const replayCaseId = (body as Record<string, unknown>)['caseId'];
+      if (typeof replayCaseId !== 'string') {
+        internalSafetyError('Safety idempotency replay Case identity missing');
+      }
+      if (replayCaseId.toLowerCase() !== input.caseId) {
+        const mapped = toHttpError(
+          'IDEMPOTENCY_PAYLOAD_MISMATCH',
+          'Idempotency payload mismatch'
+        );
+        throw Object.assign(new Error(mapped.message), mapped);
+      }
+
+      return {
+        kind: 'ENTER_HOLD',
+        status: lookup.row.response_status,
+        body,
+      };
+    }
+  );
+}
+
 async function readSafetyCaseSnapshot(
   pool: pg.Pool,
   actor: SafetyProductionActor,
@@ -204,8 +311,22 @@ export async function runSafetyProductionEntry(
     unavailableProductionSafetyAuthorityProvider
 ): Promise<SafetyProductionEntryResult> {
   const operationKey = safetyOperationKey(input.operationKey);
-  const snapshot = await readSafetyCaseSnapshot(pool, input.actor, input.caseId);
-  const trustedPolicyIdentity = await currentTrustedSafetyIdentity(
+  const caseId = input.caseId.toLowerCase();
+  if (!SAFETY_CASE_ID_PATTERN.test(caseId)) safetyCaseNotFound();
+
+  // A retry of a completed command is decided before current-state evaluation,
+  // because the Case may already be held or may have been resolved since the
+  // original response was persisted. The existing idempotency reservation is
+  // still the only operation record.
+  const replay = await readCompletedEnterSafetyHoldReplay(pool, {
+    actor: input.actor,
+    caseId,
+    operationKey,
+  });
+  if (replay !== null) return replay;
+
+  const snapshot = await readSafetyCaseSnapshot(pool, input.actor, caseId);
+  const identityAtEvaluation = await currentTrustedSafetyIdentity(
     authority,
     snapshot.caseId
   );
@@ -215,32 +336,49 @@ export async function runSafetyProductionEntry(
     try {
       approvedEvaluation = await authority.evaluate({
         case: snapshot,
-        trustedPolicyIdentity,
+        trustedPolicyIdentity: identityAtEvaluation,
       });
     } catch {
       throw new SafetyError('SAFETY_PRECHECK_INVALID', 'approved Safety evaluation unavailable');
     }
   }
 
+  // Re-read the server-owned identity after the evaluator returns. A policy or
+  // rule swap during evaluation invalidates BOTH HOLD_REQUIRED and NO_HOLD;
+  // ALLOW can never be granted from a superseded evaluation.
+  const currentIdentity = await currentTrustedSafetyIdentity(
+    authority,
+    snapshot.caseId
+  );
+  if (!sameSafetyIdentity(identityAtEvaluation, currentIdentity)) {
+    throw new SafetyError('SAFETY_PRECHECK_STALE');
+  }
+
   const decision = runSafetyPrecheck({
     case: snapshot,
-    trustedPolicyIdentity,
+    trustedPolicyIdentity: currentIdentity,
     ...(snapshot.status === 'SAFETY_HOLD'
       ? {}
       : { approvedEvaluation: approvedEvaluation ?? null }),
   });
 
+  // runSafetyPrecheck validates the strict evaluation shape. Its NO_HOLD path
+  // intentionally does not itself compare identity, so the production entry
+  // performs that current-identity check before an ALLOW is returned.
+  if (
+    approvedEvaluation !== undefined &&
+    approvedEvaluation !== null &&
+    !sameSafetyIdentity(approvedEvaluation, currentIdentity)
+  ) {
+    throw new SafetyError('SAFETY_PRECHECK_STALE');
+  }
+
   if (decision.kind === 'ALLOW' || decision.kind === 'ALREADY_HELD') {
     return decision;
   }
 
-  // Re-read the server-owned current identity immediately before the command.
-  // EnterSafetyHold then revalidates decision Case revision + identity after
-  // taking the Case lock. C2 does not create a second transition primitive.
-  const currentIdentity = await currentTrustedSafetyIdentity(
-    authority,
-    snapshot.caseId
-  );
+  // EnterSafetyHold revalidates decision Case revision + identity after taking
+  // the Case lock. C2 owns no second transition or persistence primitive.
   const result = await enterSafetyHold(pool, {
     accountId: input.actor.accountId,
     personId: input.actor.personId,
