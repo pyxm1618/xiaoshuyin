@@ -153,18 +153,23 @@ function normalizePolicy(raw) {
   // C1 only provisions reviewed bundles. Slice 10's storage can represent an
   // unresolved UNKNOWN row with nullable review fields, but the production
   // provisioning path itself must carry explicit review provenance.
-  const decisionBasis = boundedTrimmedString(
-    raw.decisionBasis,
-    'policy.decisionBasis',
-    1,
-    1000
-  );
-  const reviewEvidenceRef = boundedTrimmedString(
-    raw.reviewEvidenceRef,
-    'policy.reviewEvidenceRef',
-    1,
-    200
-  );
+  if (
+    typeof raw.decisionBasis !== 'string' ||
+    raw.decisionBasis !== raw.decisionBasis.trim() ||
+    raw.decisionBasis.length < 1 ||
+    raw.decisionBasis.length > 1000 ||
+    typeof raw.reviewEvidenceRef !== 'string' ||
+    raw.reviewEvidenceRef !== raw.reviewEvidenceRef.trim() ||
+    raw.reviewEvidenceRef.length < 1 ||
+    raw.reviewEvidenceRef.length > 200
+  ) {
+    fail(
+      'COMPLIANCE_POLICY_BUNDLE_UNREVIEWED',
+      'reviewed provisioning requires decisionBasis and reviewEvidenceRef'
+    );
+  }
+  const decisionBasis = raw.decisionBasis;
+  const reviewEvidenceRef = raw.reviewEvidenceRef;
   const publicationSourceRef = boundedTrimmedString(
     raw.publicationSourceRef,
     'policy.publicationSourceRef',
@@ -514,9 +519,23 @@ async function provision(client, bundle) {
       );
     }
     if (byOperation.length === 1) {
-      const receipt = await verifyReadBack(client, bundle, byOperation[0], {
-        requireCurrentOpen: false,
-      });
+      let receipt;
+      try {
+        receipt = await verifyReadBack(client, bundle, byOperation[0], {
+          requireCurrentOpen: false,
+        });
+      } catch (error) {
+        if (
+          error instanceof ProvisioningError &&
+          error.code === 'COMPLIANCE_POLICY_READBACK_MISMATCH'
+        ) {
+          fail(
+            'COMPLIANCE_POLICY_IDEMPOTENCY_PAYLOAD_MISMATCH',
+            'operation key was already used for a different effective payload'
+          );
+        }
+        throw error;
+      }
       await client.query('COMMIT');
       return {
         status: 'PASS',
