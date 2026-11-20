@@ -72,7 +72,7 @@ export interface SafetyProductionAuthorityProvider {
   }): Promise<ApprovedRuleEvaluation | null>;
 }
 
-export const unavailableProductionSafetyAuthorityProvider:
+const unavailableProductionSafetyAuthorityProvider:
   SafetyProductionAuthorityProvider = Object.freeze({
     async currentPolicyIdentity() {
       return null;
@@ -90,6 +90,25 @@ export type SafetyProductionEntryResult =
 export interface SafetyProductionActor {
   readonly accountId: string;
   readonly personId: string;
+}
+
+export interface SafetyProductionEntryInput {
+  readonly actor: SafetyProductionActor;
+  readonly caseId: string;
+  readonly operationKey: string;
+}
+
+export interface SafetyProductionResolveInput {
+  readonly actor: SafetyProductionActor;
+  readonly caseId: string;
+  readonly operationKey: string;
+  readonly expectedCaseVersion: number;
+  readonly reviewEvidenceRefs: OpaqueEvidenceReference[];
+}
+
+export interface SafetyProductionService {
+  enter(input: SafetyProductionEntryInput): Promise<SafetyProductionEntryResult>;
+  resolve(input: SafetyProductionResolveInput): Promise<{ status: number; body: unknown }>;
 }
 
 const SAFETY_CASE_ID_PATTERN =
@@ -362,15 +381,10 @@ async function readSafetyCaseSnapshot(
  * The operation key is forwarded unchanged so retries reuse the command's
  * existing idempotency contract. This function never writes Safety state.
  */
-export async function runSafetyProductionEntry(
+async function runSafetyProductionEntryWithAuthority(
   pool: pg.Pool,
-  input: {
-    readonly actor: SafetyProductionActor;
-    readonly caseId: string;
-    readonly operationKey: string;
-  },
-  authority: SafetyProductionAuthorityProvider =
-    unavailableProductionSafetyAuthorityProvider
+  input: SafetyProductionEntryInput,
+  authority: SafetyProductionAuthorityProvider
 ): Promise<SafetyProductionEntryResult> {
   const parsed = requireSafetyInputRecord(input, SAFETY_ENTRY_INPUT_KEYS);
   const actor = requireSafetyActor(parsed['actor']);
@@ -462,17 +476,10 @@ export async function runSafetyProductionEntry(
  * the existing ResolveRisk command. C2 only obtains the current server-owned
  * policy identity and forwards a stable operation key.
  */
-export async function runSafetyProductionResolve(
+async function runSafetyProductionResolveWithAuthority(
   pool: pg.Pool,
-  input: {
-    readonly actor: SafetyProductionActor;
-    readonly caseId: string;
-    readonly operationKey: string;
-    readonly expectedCaseVersion: number;
-    readonly reviewEvidenceRefs: OpaqueEvidenceReference[];
-  },
-  authority: SafetyProductionAuthorityProvider =
-    unavailableProductionSafetyAuthorityProvider
+  input: SafetyProductionResolveInput,
+  authority: SafetyProductionAuthorityProvider
 ): Promise<{ status: number; body: unknown }> {
   const parsed = requireSafetyInputRecord(input, SAFETY_RESOLVE_INPUT_KEYS);
   const actor = requireSafetyActor(parsed['actor']);
@@ -497,6 +504,31 @@ export async function runSafetyProductionResolve(
     expectedCaseVersion,
     reviewEvidenceRefs: parsed['reviewEvidenceRefs'] as OpaqueEvidenceReference[],
     trustedPolicyIdentity,
+  });
+}
+
+/**
+ * C2 internal production service composition.
+ *
+ * The approved evaluator/trusted identity provider is bound once at server
+ * composition time. Per-operation callers can supply only actor/Case/evidence
+ * inputs; they cannot replace the Safety authority source.
+ *
+ * Until D6 installs a reviewed deterministic provider, omitting `authority`
+ * preserves the formal production entry but fails closed before mutation.
+ */
+export function createSafetyProductionService(
+  pool: pg.Pool,
+  authority: SafetyProductionAuthorityProvider =
+    unavailableProductionSafetyAuthorityProvider
+): SafetyProductionService {
+  return Object.freeze({
+    enter(input: SafetyProductionEntryInput) {
+      return runSafetyProductionEntryWithAuthority(pool, input, authority);
+    },
+    resolve(input: SafetyProductionResolveInput) {
+      return runSafetyProductionResolveWithAuthority(pool, input, authority);
+    },
   });
 }
 
