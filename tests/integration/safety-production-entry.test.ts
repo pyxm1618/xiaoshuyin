@@ -507,6 +507,34 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
     expect((await fixture.getCase(created.id)).status).toBe('OPEN');
   });
 
+  it('rejects caller-supplied isHighRisk authority before evaluation', async () => {
+    const created = await newCase();
+    let evaluatorCalled = false;
+    const provider = authority({
+      evaluation: async ({ trustedPolicyIdentity }) => {
+        evaluatorCalled = true;
+        return holdEvaluation(trustedPolicyIdentity);
+      },
+    });
+
+    await expect(
+      runSafetyProductionEntry(
+        fixture.pool,
+        {
+          actor: owner,
+          caseId: created.id,
+          operationKey: operationKey('caller-high-risk'),
+          isHighRisk: true,
+        } as never,
+        provider
+      )
+    ).rejects.toMatchObject({ code: 'SAFETY_PRECHECK_INVALID' });
+
+    expect(evaluatorCalled).toBe(false);
+    expect((await fixture.getCase(created.id)).status).toBe('OPEN');
+    expect(await fixture.countRiskEvents(created.id)).toBe(0);
+  });
+
   it('caller-forged boolean or malformed approved evaluation fails closed', async () => {
     const created = await newCase();
     const forged = {
@@ -682,6 +710,28 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
     await expect(
       resolveHeld(staff, held.id, held.version, [])
     ).rejects.toMatchObject({ code: 'SAFETY_REVIEW_EVIDENCE_INVALID' });
+    expect((await fixture.getCase(held.id)).status).toBe('SAFETY_HOLD');
+  });
+
+  it('rejects caller-supplied canResolve authority before ResolveRisk', async () => {
+    const held = await enterHeldCase();
+    const evidenceId = await createReviewEvidence(held.id);
+
+    await expect(
+      runSafetyProductionResolve(
+        fixture.pool,
+        {
+          actor: ordinary,
+          caseId: held.id,
+          operationKey: operationKey('caller-can-resolve'),
+          expectedCaseVersion: held.version,
+          reviewEvidenceRefs: [{ kind: 'MESSAGE', ref: evidenceId }],
+          canResolve: true,
+        } as never,
+        authority()
+      )
+    ).rejects.toMatchObject({ code: 'SAFETY_PRECHECK_INVALID' });
+
     expect((await fixture.getCase(held.id)).status).toBe('SAFETY_HOLD');
   });
 
