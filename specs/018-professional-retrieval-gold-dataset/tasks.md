@@ -2,7 +2,7 @@
 
 **Repository**: pyxm1618/xiaoshuyin  
 **Planning branch**: plan/018-professional-retrieval-gold-dataset-authority-reconciliation  
-**Reconciled Frozen Spec**: 222ed94ad2036d7d86c2e79340b8a6f7f3e6a7e4 / 4133742701c33597bed9bfe11702862263cc5f0f  
+**Reconciled Frozen Spec**: 1f7f6804e99dd688a91accc73a18519c8cd69a2a / 1d18fa97a29b3a26d3ff9b0da8dbaf4007649af3  
 **Previous Frozen Spec**: 4624b3df6d59c6055421e175b95051782615de9a / bf7540ff3097ef14ca1c62a395b155abd4fde66a  
 **Execution rule**: T1801 is mandatory and READ-ONLY. If T1801 is NO/BLOCKED, STOP. T1802–T1822 are not authorized in that run.
 
@@ -82,8 +82,8 @@ Reconciled Spec §26/§27A; FR-022/023/032/036/040; AS-018/019/026/029..032; STO
 **STOP condition**  
 Any required predicate is false or unprovable. If STOP: Runtime Dependency Gate=BLOCKED, Implement Gate=BLOCKED, Development Authorization=NOT GRANTED. Execute nothing after T1801.
 
-**Planning-time known result**  
-BLOCKED: Slice 16 is merged but clean/runtime usability is not yet proven after post-merge forensic findings and unmerged remediation; Slice 17 PR #58 is not merged; APPROVED PROFESSIONAL REVIEWER — UNASSIGNED.
+**Current-main refresh known result — 2026-11-20**  
+BLOCKED: the old Slice 16 PR #59 unmerged blocker and Slice 17 PR #58 unmerged blocker are retired. Current merged main contains the Slice 16 remediation and Slice 17 Knowledge runtime, but the current Digital Use v1 production-approved Professional Knowledge set is exactly EMPTY and the production Professional Reviewer remains UNASSIGNED / approval+qualification providers remain UNAVAILABLE. T1801 still re-reads independent audit provenance and all runtime predicates rather than inferring them from merge status.
 
 ---
 ## T1802 — Discover / Reuse Canonical Eval Artifact Format
@@ -1091,18 +1091,21 @@ T1801 GATE
 
 # Planning-Time Gate Result
 
-As of the Authority Reconciliation planning baseline:
+As of the 2026-11-20 Current-Main Reconciliation refresh:
 
 ~~~text
-Slice 16 merged: YES
-Slice 16 clean/runtime prerequisite proven: NO
-Slice 16 remediation: EXISTS ON UNMERGED BRANCH
+Slice 16 PR #57 merged: YES
+Slice 16 remediation PR #59 merged: YES
+Slice 16 current-main runtime seams present: YES
 
-Slice 17 implementation exists: YES
-Slice 17 runtime merged to main: NO
+Slice 17 PR #58 merged: YES
+Slice 17 Knowledge runtime on current main: YES
+Exact Knowledge identity/version/hash/lifecycle/package resolver seams: YES
 
+Representative real PUBLISHED production-approved Professional Knowledge corpus: NO — EMPTY
 APPROVED PROFESSIONAL REVIEWER assigned: NO
-PROFESSIONAL_REVIEW + matching qualification/scope approval path proven usable: NO
+Production professional approval provider: UNAVAILABLE
+Production professional qualification provider: UNAVAILABLE
 
 Runtime Dependency Gate: BLOCKED
 Implement Gate: BLOCKED
