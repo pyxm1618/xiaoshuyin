@@ -523,23 +523,4 @@ export async function withProfessionalKnowledgeAuthorityTransaction<T>(
     new Error('PROFESSIONAL_KNOWLEDGE_ARBITRARY_AUTHORITY_TRANSACTION_FORBIDDEN'),
     { code: '42501' }
   );
-},
-  fn: (tx: TxClient) => Promise<T>
-): Promise<T> {
-  return withTransactionClient(pool, async (client) => {
-    const role = await client.query<{ current_user: string }>(
-      'SELECT current_user::text AS current_user'
-    );
-    if (role.rows[0]?.current_user !== 'xiaoshuyin_migrator') {
-      throw Object.assign(
-        new Error('PROFESSIONAL_KNOWLEDGE_AUTHORITY_EXECUTOR_REQUIRED'),
-        { code: '42501' }
-      );
-    }
-    await client.query(
-      'SELECT app.set_identity_context($1, $2)',
-      [opts.accountId, 'PROFESSIONAL_KNOWLEDGE_ADMIN']
-    );
-    return fn(client);
-  });
 }
