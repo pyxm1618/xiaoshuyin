@@ -9,12 +9,12 @@
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
-import { buildApp } from '../../apps/server/api/src/app.js';
 import {
+  buildApp,
   createProductionSafetyService,
   createSafetyProductionService,
   type ApprovedSafetyPolicyRuntime,
-} from '../../apps/server/api/src/safety/production-entry.js';
+} from '../../apps/server/api/src/app.js';
 import type {
   ApprovedPolicyIdentity,
   ApprovedRuleEvaluation,
