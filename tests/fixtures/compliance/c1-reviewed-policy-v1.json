@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "operationKey": "bundle://tests/c1/reviewed-policy-v1@fixture-20261120",
+  "expectedPreviousVersion": null,
+  "bundleDigest": "f15181d471162cbb6d22007940e043d00385e537776bc30a86721933b486f14e",
+  "policy": {
+    "featureCode": "C1_CI_REVIEWED_POLICY",
+    "featureContractRevision": "v1",
+    "policyVersion": 1,
+    "anthropomorphicApplicability": "NOT_APPLICABLE",
+    "minorAccessRule": "BASELINE",
+    "aiDisclosureRule": "BASELINE",
+    "generatedContentLabelRule": "BASELINE",
+    "usageReminderRule": "BASELINE",
+    "decisionBasis": "CI reviewed fixture only; not a production compliance decision.",
+    "reviewEvidenceRef": "test://c1/reviewed-policy/v1",
+    "effectiveFrom": "2026-01-01T00:00:00.000Z",
+    "publicationSourceRef": "bundle://tests/c1/reviewed-policy-v1@fixture-20261120"
+  }
+}

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xiaoshuyin.local/schemas/compliance-policy-reviewed-bundle-v1.json",
+  "title": "Xiaoshuyin Reviewed Compliance Feature Policy Bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "operationKey",
+    "expectedPreviousVersion",
+    "bundleDigest",
+    "policy"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "operationKey": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200
+    },
+    "expectedPreviousVersion": {
+      "oneOf": [
+        { "type": "null" },
+        { "type": "integer", "minimum": 1, "maximum": 2147483647 }
+      ]
+    },
+    "bundleDigest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "featureCode",
+        "featureContractRevision",
+        "policyVersion",
+        "anthropomorphicApplicability",
+        "minorAccessRule",
+        "aiDisclosureRule",
+        "generatedContentLabelRule",
+        "usageReminderRule",
+        "decisionBasis",
+        "reviewEvidenceRef",
+        "effectiveFrom",
+        "publicationSourceRef"
+      ],
+      "properties": {
+        "featureCode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "featureContractRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "policyVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "anthropomorphicApplicability": {
+          "enum": ["REQUIRED", "NOT_APPLICABLE", "UNKNOWN"]
+        },
+        "minorAccessRule": {
+          "enum": ["BASELINE", "MINORS_BLOCKED"]
+        },
+        "aiDisclosureRule": {
+          "enum": ["BASELINE", "REQUIRED"]
+        },
+        "generatedContentLabelRule": {
+          "enum": ["BASELINE", "REQUIRED"]
+        },
+        "usageReminderRule": {
+          "enum": ["BASELINE", "REQUIRED"]
+        },
+        "decisionBasis": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "reviewEvidenceRef": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "effectiveFrom": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "publicationSourceRef": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 200
+        }
+      }
+    }
+  }
+}
