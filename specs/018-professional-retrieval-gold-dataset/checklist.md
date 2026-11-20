@@ -3,7 +3,7 @@
 **Purpose**: Audit whether Plan/Tasks faithfully and completely translate the Frozen Spec without authority drift, scope expansion or fake dependency satisfaction.  
 **Status**: COMPLETE — Audit 1 FINAL PASS / Planning Freeze PASS.  
 **Interpretation**: A checked item means the planning package explicitly covers and requires that condition. It does not claim a future runtime/development action has already occurred. Runtime Dependency Gate remains BLOCKED.  
-**Reconciled Frozen Spec**: f4ea6d8acfb175f15c6198e6b5e4354daf1102e6 / 16bed255125677de0dcc4ec71d740f1b0efaeccf  
+**Reconciled Frozen Spec**: 1f7f6804e99dd688a91accc73a18519c8cd69a2a / 1d18fa97a29b3a26d3ff9b0da8dbaf4007649af3  
 **Previous Frozen Spec**: 4624b3df6d59c6055421e175b95051782615de9a / bf7540ff3097ef14ca1c62a395b155abd4fde66a  
 **Planning branch**: plan/018-professional-retrieval-gold-dataset-authority-reconciliation  
 **Checklist role**: planning-quality and future implementation verification criteria. This file is not a task list.
@@ -11,16 +11,16 @@
 ## A. Authority Integrity
 
 - [x] A01 Reconciled Frozen Spec commit exists remotely.
-- [x] A02 Reconciled Frozen Spec blob equals 16bed255125677de0dcc4ec71d740f1b0efaeccf.
+- [x] A02 Reconciled Frozen Spec blob equals 1d18fa97a29b3a26d3ff9b0da8dbaf4007649af3.
 - [x] A03 spec/018-professional-retrieval-gold-dataset-authority-reconciliation differs from current main only by spec.md.
 - [x] A04 plan/018-professional-retrieval-gold-dataset-authority-reconciliation is the unique current reconciled planning authority; original spec/plan branches remain historical.
 - [x] A05 Exhaustive 018 branch search found no competing authority-reconciliation spec/plan/feat branch.
 - [x] A06 Docs/总产品需求.md current blob is 97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29.
-- [x] A07 Docs/V1产品需求.md current blob is 8eb660cd905d8fba4b52fe0f74bbc214b3113117.
+- [x] A07 Docs/V1产品需求.md current blob is 379cb8cfb377924cd21ccfe55baa5aecdf207f5e.
 - [x] A08 Docs/总体技术架构.md current blob is 6b4630803f371faf6d93f27361070223d0f661a0.
-- [x] A09 Docs/V1技术设计.md current blob is a0f09b8afda5532870150f03b713fed107359849.
-- [x] A10 Slice 16 merge state, post-merge audit/remediation state and runtime usability are treated as separate facts.
-- [x] A11 Slice 17 implementation/audit evidence is not treated as current-main runtime until merged and revalidated.
+- [x] A09 Docs/V1技术设计.md current blob is afef9fcc4af41b6137e5020717135972a3d515fc.
+- [x] A10 Slice 16 PR #59 is merged; merge/check/audit provenance/runtime usability remain separate facts and T1801 re-reads volatile evidence.
+- [x] A11 Slice 17 PR #58 is merged and its Knowledge runtime is current-main truth; T1801 still revalidates independent Audit 2 provenance and runtime usability.
 - [x] A12 APPROVED PROFESSIONAL REVIEWER — UNASSIGNED is treated as a real blocking dependency.
 - [x] A13 Current Authority drift is reconciled explicitly; any unresolved Authority conflict triggers STOP.
 - [x] A14 Reconciliation does not modify the four Authority Docs, upstream Slice artifacts, production code, tests or migrations.
