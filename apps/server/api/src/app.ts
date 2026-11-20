@@ -100,6 +100,58 @@ const SAFETY_POLICY_IDENTITY_KEYS = [
   'ruleRef',
   'ruleVersion',
 ] as const;
+const SAFETY_ENTRY_INPUT_KEYS = new Set(['actor', 'caseId', 'operationKey']);
+const SAFETY_RESOLVE_INPUT_KEYS = new Set([
+  'actor',
+  'caseId',
+  'operationKey',
+  'expectedCaseVersion',
+  'reviewEvidenceRefs',
+]);
+
+function requireSafetyInputRecord(
+  value: unknown,
+  expectedKeys: ReadonlySet<string>
+): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'invalid Safety production input');
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (
+    keys.length !== expectedKeys.size ||
+    keys.some((key) => !expectedKeys.has(key))
+  ) {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'invalid Safety production input');
+  }
+  return record;
+}
+
+function requireSafetyActor(value: unknown): SafetyProductionActor {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'invalid Safety actor');
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record['accountId'] !== 'string' ||
+    record['accountId'].trim() === '' ||
+    typeof record['personId'] !== 'string' ||
+    record['personId'].trim() === ''
+  ) {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'invalid Safety actor');
+  }
+  return {
+    accountId: record['accountId'],
+    personId: record['personId'],
+  };
+}
+
+function requireSafetyCaseId(value: unknown): string {
+  if (typeof value !== 'string') safetyCaseNotFound();
+  const caseId = value.toLowerCase();
+  if (!SAFETY_CASE_ID_PATTERN.test(caseId)) safetyCaseNotFound();
+  return caseId;
+}
 
 function safetyCaseNotFound(): never {
   const mapped = toHttpError('CASE_NOT_FOUND', 'Case not found');
@@ -281,6 +333,16 @@ async function readSafetyCaseSnapshot(
       purpose: 'FAMILY_MANAGEMENT',
     },
     async (tx) => {
+      await requireFamilyAction(tx, {
+        accountId: actor.accountId,
+        personId: actor.personId,
+        familyId,
+        action: 'CASE_ENTER_SAFETY_HOLD',
+        purpose: 'FAMILY_MANAGEMENT',
+        resource: { type: 'CASE', familyId, caseId },
+        caseId,
+      });
+
       const row = await getCaseById(tx, caseId);
       if (!row || row.family_id !== familyId) safetyCaseNotFound();
       return {
@@ -310,22 +372,23 @@ export async function runSafetyProductionEntry(
   authority: SafetyProductionAuthorityProvider =
     unavailableProductionSafetyAuthorityProvider
 ): Promise<SafetyProductionEntryResult> {
-  const operationKey = safetyOperationKey(input.operationKey);
-  const caseId = input.caseId.toLowerCase();
-  if (!SAFETY_CASE_ID_PATTERN.test(caseId)) safetyCaseNotFound();
+  const parsed = requireSafetyInputRecord(input, SAFETY_ENTRY_INPUT_KEYS);
+  const actor = requireSafetyActor(parsed['actor']);
+  const operationKey = safetyOperationKey(parsed['operationKey']);
+  const caseId = requireSafetyCaseId(parsed['caseId']);
 
   // A retry of a completed command is decided before current-state evaluation,
   // because the Case may already be held or may have been resolved since the
   // original response was persisted. The existing idempotency reservation is
   // still the only operation record.
   const replay = await readCompletedEnterSafetyHoldReplay(pool, {
-    actor: input.actor,
+    actor,
     caseId,
     operationKey,
   });
   if (replay !== null) return replay;
 
-  const snapshot = await readSafetyCaseSnapshot(pool, input.actor, caseId);
+  const snapshot = await readSafetyCaseSnapshot(pool, actor, caseId);
   const identityAtEvaluation = await currentTrustedSafetyIdentity(
     authority,
     snapshot.caseId
@@ -380,8 +443,8 @@ export async function runSafetyProductionEntry(
   // EnterSafetyHold revalidates decision Case revision + identity after taking
   // the Case lock. C2 owns no second transition or persistence primitive.
   const result = await enterSafetyHold(pool, {
-    accountId: input.actor.accountId,
-    personId: input.actor.personId,
+    accountId: actor.accountId,
+    personId: actor.personId,
     caseId: snapshot.caseId,
     idempotencyKey: operationKey,
     expectedCaseVersion: decision.caseVersion,
@@ -411,18 +474,28 @@ export async function runSafetyProductionResolve(
   authority: SafetyProductionAuthorityProvider =
     unavailableProductionSafetyAuthorityProvider
 ): Promise<{ status: number; body: unknown }> {
-  const operationKey = safetyOperationKey(input.operationKey);
-  const caseId = input.caseId.toLowerCase();
-  if (!SAFETY_CASE_ID_PATTERN.test(caseId)) safetyCaseNotFound();
+  const parsed = requireSafetyInputRecord(input, SAFETY_RESOLVE_INPUT_KEYS);
+  const actor = requireSafetyActor(parsed['actor']);
+  const operationKey = safetyOperationKey(parsed['operationKey']);
+  const caseId = requireSafetyCaseId(parsed['caseId']);
+  const expectedCaseVersion = parsed['expectedCaseVersion'];
+  if (
+    typeof expectedCaseVersion !== 'number' ||
+    !Number.isInteger(expectedCaseVersion) ||
+    expectedCaseVersion < 1 ||
+    !Array.isArray(parsed['reviewEvidenceRefs'])
+  ) {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'invalid Safety resolution input');
+  }
 
   const trustedPolicyIdentity = await currentTrustedSafetyIdentity(authority, caseId);
   return resolveRisk(pool, {
-    accountId: input.actor.accountId,
-    personId: input.actor.personId,
+    accountId: actor.accountId,
+    personId: actor.personId,
     caseId,
     idempotencyKey: operationKey,
-    expectedCaseVersion: input.expectedCaseVersion,
-    reviewEvidenceRefs: input.reviewEvidenceRefs,
+    expectedCaseVersion,
+    reviewEvidenceRefs: parsed['reviewEvidenceRefs'] as OpaqueEvidenceReference[],
     trustedPolicyIdentity,
   });
 }
