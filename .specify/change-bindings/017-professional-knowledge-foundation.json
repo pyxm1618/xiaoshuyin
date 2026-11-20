@@ -14,7 +14,6 @@
         "db/migrations/026_professional_authority_release_remediation.sql",
         "db/migrations/027_professional_knowledge_insert_lifecycle_guard.sql",
         "db/migrations/028_professional_knowledge_authority_boundary_remediation.sql",
-        "db/migrations/029_professional_knowledge_authority_command_boundary.sql",
         "packages/authorization/src/authorize.ts",
         "packages/domain/src/idempotency.ts",
         "packages/domain/src/index.ts",
