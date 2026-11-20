@@ -1,3 +1,4 @@
+import pg from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 import { createAdminPool } from './setup/db.js';
 import { withTransactionClient } from '../apps/server/api/src/db/tx.js';
@@ -26,8 +27,13 @@ import {
 } from '../packages/scenes/digital-use/professional-knowledge-binding.js';
 
 const admin = createAdminPool();
+const app = new pg.Pool({
+  connectionString: process.env['DATABASE_URL'],
+  max: 5,
+});
 
 afterAll(async () => {
+  await app.end();
   await admin.end();
 });
 
@@ -379,8 +385,17 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
     expect(snapshot).not.toBeNull();
 
     const editor = await beginClient();
-    const reviewer = await beginClient();
+    const reviewer = await app.connect();
+    await reviewer.query('BEGIN');
     try {
+      await reviewer.query('SELECT app.set_identity_context($1,$2)', [
+        independentReviewer.accountId,
+        'PROFESSIONAL_KNOWLEDGE_ADMIN',
+      ]);
+      await reviewer.query('SELECT app.set_professional_review_context($1)', [
+        independentReviewer.staffAssignmentId,
+      ]);
+
       await editProfessionalKnowledgeCandidate(editor, {
         versionId: seeded.versionId,
         expectedRevision: 1,
@@ -458,7 +473,7 @@ describe('Professional Knowledge adversarial reliability matrix', () => {
     };
 
     const release = releaseKnowledgeVersion({
-      pool: admin,
+      pool: app,
       accountId: seeded.accountId,
       personId: seeded.personId,
       assignmentId: seeded.assignmentId,
