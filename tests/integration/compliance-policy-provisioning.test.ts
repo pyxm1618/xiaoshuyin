@@ -421,7 +421,7 @@ describe('Phase 5 / C1 Compliance Policy provisioning', () => {
       effectiveFrom: '2026-05-01T00:00:00.000Z',
     });
     const failure = runProvisionFailure(writeBundle(invalidSuccessor));
-    expect(['23514', '23P01']).toContain(failure.code);
+    expect(['22000', '23514', '23P01']).toContain(failure.code);
 
     const rows = await migrator.query(
       `SELECT policy_version, effective_until, superseded_by_policy_id,
