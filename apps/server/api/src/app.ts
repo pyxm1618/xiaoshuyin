@@ -3,7 +3,7 @@ import helmet from '@fastify/helmet';
 import pg from 'pg';
 import { configPlugin } from './plugins/config.js';
 import { registerAuthPlugin } from './plugins/auth.js';
-import { errorHandler } from './plugins/error-handler.js';
+import { errorHandler, toHttpError } from './plugins/error-handler.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerMeRoutes } from './routes/me.js';
 import { registerFamilyRoutes } from './routes/families.js';
@@ -34,6 +34,260 @@ import type {
   RoleplayProfessionalContentAuthority,
 } from './services/digital-use-roleplay-adapter.js';
 import type { ProfessionalReviewContentProvider } from './services/digital-use-review-professional-content.js';
+import {
+  getCaseById,
+  runSafetyPrecheck,
+  SafetyError,
+  type ApprovedPolicyIdentity,
+  type ApprovedRuleEvaluation,
+  type OpaqueEvidenceReference,
+  type SafetyCaseSnapshot,
+} from '@xiaoshuyin/domain';
+import { withIdentityTransaction, withRlsTransaction } from './db/tx.js';
+import { requireCurrentFamily } from './family-context.js';
+import { enterSafetyHold } from './safety/enter-safety-hold.js';
+import { resolveRisk } from './safety/resolve-risk.js';
+
+
+/**
+ * Phase 5 / C2 — narrow internal Safety production-entry authority seam.
+ *
+ * Production deliberately defaults to UNAVAILABLE until D6 supplies a real,
+ * approved deterministic Safety rule asset. No HTTP route can inject a
+ * decision, trusted identity, risk boolean, or resolver capability.
+ */
+export interface SafetyProductionAuthorityProvider {
+  currentPolicyIdentity(input: {
+    readonly caseId: string;
+  }): Promise<ApprovedPolicyIdentity | null>;
+  evaluate(input: {
+    readonly case: SafetyCaseSnapshot;
+    readonly trustedPolicyIdentity: ApprovedPolicyIdentity;
+  }): Promise<ApprovedRuleEvaluation | null>;
+}
+
+export const unavailableProductionSafetyAuthorityProvider:
+  SafetyProductionAuthorityProvider = Object.freeze({
+    async currentPolicyIdentity() {
+      return null;
+    },
+    async evaluate() {
+      return null;
+    },
+  });
+
+export type SafetyProductionEntryResult =
+  | { kind: 'ALLOW'; caseId: string; caseVersion: number }
+  | { kind: 'ALREADY_HELD'; caseId: string; caseVersion: number }
+  | { kind: 'ENTER_HOLD'; status: number; body: unknown };
+
+export interface SafetyProductionActor {
+  readonly accountId: string;
+  readonly personId: string;
+}
+
+const SAFETY_CASE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SAFETY_POLICY_IDENTITY_KEYS = [
+  'policyRef',
+  'policyVersion',
+  'ruleRef',
+  'ruleVersion',
+] as const;
+
+function safetyCaseNotFound(): never {
+  const mapped = toHttpError('CASE_NOT_FOUND', 'Case not found');
+  throw Object.assign(new Error(mapped.message), mapped);
+}
+
+function safetyOperationKey(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    value !== value.trim() ||
+    value.length < 8 ||
+    value.length > 200
+  ) {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'invalid Safety operation key');
+  }
+  return value;
+}
+
+function requireApprovedPolicyIdentity(value: unknown): ApprovedPolicyIdentity {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'trusted Safety policy identity unavailable');
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  const expected = [...SAFETY_POLICY_IDENTITY_KEYS].sort();
+  if (
+    keys.length !== expected.length ||
+    keys.some((key, index) => key !== expected[index])
+  ) {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'trusted Safety policy identity malformed');
+  }
+  for (const key of SAFETY_POLICY_IDENTITY_KEYS) {
+    if (typeof record[key] !== 'string' || (record[key] as string).trim() === '') {
+      throw new SafetyError('SAFETY_PRECHECK_INVALID', 'trusted Safety policy identity malformed');
+    }
+  }
+  return {
+    policyRef: record['policyRef'] as string,
+    policyVersion: record['policyVersion'] as string,
+    ruleRef: record['ruleRef'] as string,
+    ruleVersion: record['ruleVersion'] as string,
+  };
+}
+
+async function currentTrustedSafetyIdentity(
+  authority: SafetyProductionAuthorityProvider,
+  caseId: string
+): Promise<ApprovedPolicyIdentity> {
+  let identity: ApprovedPolicyIdentity | null;
+  try {
+    identity = await authority.currentPolicyIdentity({ caseId });
+  } catch {
+    throw new SafetyError('SAFETY_PRECHECK_INVALID', 'trusted Safety policy identity unavailable');
+  }
+  return requireApprovedPolicyIdentity(identity);
+}
+
+async function readSafetyCaseSnapshot(
+  pool: pg.Pool,
+  actor: SafetyProductionActor,
+  rawCaseId: string
+): Promise<SafetyCaseSnapshot> {
+  const caseId = rawCaseId.toLowerCase();
+  if (!SAFETY_CASE_ID_PATTERN.test(caseId)) safetyCaseNotFound();
+
+  const familyId = await withIdentityTransaction(
+    pool,
+    { accountId: actor.accountId, purpose: 'FAMILY_MANAGEMENT' },
+    (tx) => requireCurrentFamily(tx, actor.personId)
+  );
+
+  return withRlsTransaction(
+    pool,
+    {
+      familyId,
+      accountId: actor.accountId,
+      personId: actor.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    },
+    async (tx) => {
+      const row = await getCaseById(tx, caseId);
+      if (!row || row.family_id !== familyId) safetyCaseNotFound();
+      return {
+        caseId: row.id,
+        status: row.status,
+        version: row.version,
+      };
+    }
+  );
+}
+
+/**
+ * Internal-only production entry:
+ * server-owned Case snapshot + current trusted identity + approved evaluator
+ * output -> runSafetyPrecheck() -> existing EnterSafetyHold command.
+ *
+ * The operation key is forwarded unchanged so retries reuse the command's
+ * existing idempotency contract. This function never writes Safety state.
+ */
+export async function runSafetyProductionEntry(
+  pool: pg.Pool,
+  input: {
+    readonly actor: SafetyProductionActor;
+    readonly caseId: string;
+    readonly operationKey: string;
+  },
+  authority: SafetyProductionAuthorityProvider =
+    unavailableProductionSafetyAuthorityProvider
+): Promise<SafetyProductionEntryResult> {
+  const operationKey = safetyOperationKey(input.operationKey);
+  const snapshot = await readSafetyCaseSnapshot(pool, input.actor, input.caseId);
+  const trustedPolicyIdentity = await currentTrustedSafetyIdentity(
+    authority,
+    snapshot.caseId
+  );
+
+  let approvedEvaluation: ApprovedRuleEvaluation | null | undefined;
+  if (snapshot.status !== 'SAFETY_HOLD') {
+    try {
+      approvedEvaluation = await authority.evaluate({
+        case: snapshot,
+        trustedPolicyIdentity,
+      });
+    } catch {
+      throw new SafetyError('SAFETY_PRECHECK_INVALID', 'approved Safety evaluation unavailable');
+    }
+  }
+
+  const decision = runSafetyPrecheck({
+    case: snapshot,
+    trustedPolicyIdentity,
+    ...(snapshot.status === 'SAFETY_HOLD'
+      ? {}
+      : { approvedEvaluation: approvedEvaluation ?? null }),
+  });
+
+  if (decision.kind === 'ALLOW' || decision.kind === 'ALREADY_HELD') {
+    return decision;
+  }
+
+  // Re-read the server-owned current identity immediately before the command.
+  // EnterSafetyHold then revalidates decision Case revision + identity after
+  // taking the Case lock. C2 does not create a second transition primitive.
+  const currentIdentity = await currentTrustedSafetyIdentity(
+    authority,
+    snapshot.caseId
+  );
+  const result = await enterSafetyHold(pool, {
+    accountId: input.actor.accountId,
+    personId: input.actor.personId,
+    caseId: snapshot.caseId,
+    idempotencyKey: operationKey,
+    expectedCaseVersion: decision.caseVersion,
+    decision,
+    trustedPolicyIdentity: currentIdentity,
+  });
+  return { kind: 'ENTER_HOLD', ...result };
+}
+
+/**
+ * Internal-only controlled production resolution entry.
+ *
+ * Staff authority, exact Case assignment, evidence validation, hold trace,
+ * policy-context matching, locking, persistence and idempotency remain owned by
+ * the existing ResolveRisk command. C2 only obtains the current server-owned
+ * policy identity and forwards a stable operation key.
+ */
+export async function runSafetyProductionResolve(
+  pool: pg.Pool,
+  input: {
+    readonly actor: SafetyProductionActor;
+    readonly caseId: string;
+    readonly operationKey: string;
+    readonly expectedCaseVersion: number;
+    readonly reviewEvidenceRefs: OpaqueEvidenceReference[];
+  },
+  authority: SafetyProductionAuthorityProvider =
+    unavailableProductionSafetyAuthorityProvider
+): Promise<{ status: number; body: unknown }> {
+  const operationKey = safetyOperationKey(input.operationKey);
+  const caseId = input.caseId.toLowerCase();
+  if (!SAFETY_CASE_ID_PATTERN.test(caseId)) safetyCaseNotFound();
+
+  const trustedPolicyIdentity = await currentTrustedSafetyIdentity(authority, caseId);
+  return resolveRisk(pool, {
+    accountId: input.actor.accountId,
+    personId: input.actor.personId,
+    caseId,
+    idempotencyKey: operationKey,
+    expectedCaseVersion: input.expectedCaseVersion,
+    reviewEvidenceRefs: input.reviewEvidenceRefs,
+    trustedPolicyIdentity,
+  });
+}
 
 export interface BuildAppOptions {
   env?: NodeJS.ProcessEnv;
