@@ -431,6 +431,35 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
     expect(await fixture.countRiskEvents(created.id)).toBe(0);
   });
 
+  it('NO_HOLD fails closed when the Case enters SAFETY_HOLD while evaluation is running', async () => {
+    const created = await newCase();
+    const before = await fixture.getCase(created.id);
+
+    await expect(
+      runSafetyProductionEntry(
+        fixture.pool,
+        {
+          actor: owner,
+          caseId: created.id,
+          operationKey: operationKey('allow-case-race'),
+        },
+        authority({
+          evaluation: async ({ trustedPolicyIdentity }) => {
+            // TEST-ONLY concurrent state construction: production state
+            // transitions still belong exclusively to the Safety commands.
+            await fixture.setCaseStatus(created.id, 'SAFETY_HOLD');
+            return noHoldEvaluation(trustedPolicyIdentity);
+          },
+        })
+      )
+    ).rejects.toMatchObject({ code: 'SAFETY_PRECHECK_STALE' });
+
+    const after = await fixture.getCase(created.id);
+    expect(after.status).toBe('SAFETY_HOLD');
+    expect(after.version).toBe(before.version + 1);
+    expect(await fixture.countRiskEvents(created.id)).toBe(0);
+  });
+
   it('already held returns ALREADY_HELD without evaluating or duplicating trace', async () => {
     const held = await enterHeldCase();
     const riskBefore = await fixture.countRiskEvents(held.id);
