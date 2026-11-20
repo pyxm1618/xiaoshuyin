@@ -171,7 +171,9 @@ BEGIN
        'revision', v_revision,
        'contentHash', v_version.content_hash,
        'sourceSetHash', v_version.source_set_hash,
-       'reviewOutcome', p_review_outcome
+       'reviewState', p_next_review_state,
+       'validityState', p_next_validity_state,
+       'reasonCode', p_review_reason_code
      ));
 
   RETURN v_revision;
