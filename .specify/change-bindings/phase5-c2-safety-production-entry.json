@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "changeId": "phase5-c2-safety-production-entry",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "009-safety-hold-control-foundation",
+      "specPath": "specs/009-safety-hold-control-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/app.ts"
+      ]
+    }
+  ]
+}
