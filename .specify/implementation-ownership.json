@@ -535,19 +535,6 @@
       }
     },
     {
-      "id": "professional-knowledge-migration-029",
-      "match": {
-        "kind": "EXACT",
-        "path": "db/migrations/029_professional_knowledge_authority_command_boundary.sql"
-      },
-      "ownership": {
-        "kind": "FEATURE",
-        "features": [
-          "017-professional-knowledge-foundation"
-        ]
-      }
-    },
-    {
       "id": "professional-knowledge-domain",
       "match": {
         "kind": "EXACT",
