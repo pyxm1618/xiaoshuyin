@@ -538,6 +538,130 @@ describe('Slice 17 Audit 2 targeted remediation — real service semantics', () 
     )).toBe(false);
   });
 
+  it('FINAL HIGH-001: direct xiaoshuyin_migrator raw review/publication SQL cannot manufacture authority state', async () => {
+    const creator = await seedActor('final-migrator-bypass-creator');
+    const reviewer = await seedActor('final-migrator-bypass-reviewer');
+
+    const pending = await seedKnowledge(creator, {
+      reviewState: 'PENDING',
+      validityState: 'UNKNOWN',
+    });
+
+    const reviewClient = await authority.connect();
+    try {
+      await reviewClient.query('BEGIN');
+      await reviewClient.query('SELECT app.set_identity_context($1,$2)', [
+        reviewer.accountId,
+        'PROFESSIONAL_KNOWLEDGE_ADMIN',
+      ]);
+      await reviewClient.query('SELECT app.set_professional_review_context($1)', [
+        reviewer.assignmentId,
+      ]);
+      await expect(
+        reviewClient.query(
+          `UPDATE professional_knowledge_versions
+              SET review_state='CURRENT',
+                  validity_state='VALID',
+                  revision=revision+1
+            WHERE id=$1`,
+          [pending.versionId]
+        )
+      ).rejects.toMatchObject({ code: '42501' });
+    } finally {
+      await reviewClient.query('ROLLBACK').catch(() => undefined);
+      reviewClient.release();
+    }
+
+    const afterRawReview = await admin.query<{
+      revision: number;
+      review_state: string;
+      validity_state: string;
+      evidence_count: string;
+      success_audit_count: string;
+    }>(
+      `SELECT v.revision, v.review_state, v.validity_state,
+              (SELECT count(*)::text
+                 FROM professional_knowledge_review_evidence e
+                WHERE e.knowledge_version_id=v.id) AS evidence_count,
+              (SELECT count(*)::text
+                 FROM business_audit_events a
+                WHERE a.resource_id=v.id
+                  AND a.event_type='PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED')
+                AS success_audit_count
+         FROM professional_knowledge_versions v
+        WHERE v.id=$1`,
+      [pending.versionId]
+    );
+    expect(afterRawReview.rows[0]).toEqual({
+      revision: 1,
+      review_state: 'PENDING',
+      validity_state: 'UNKNOWN',
+      evidence_count: '0',
+      success_audit_count: '0',
+    });
+
+    const publishable = await seedKnowledge(creator, {
+      reviewState: 'CURRENT',
+      validityState: 'VALID',
+    });
+
+    const releaseClient = await authority.connect();
+    try {
+      await releaseClient.query('BEGIN');
+      await releaseClient.query('SELECT app.set_identity_context($1,$2)', [
+        reviewer.accountId,
+        'PROFESSIONAL_KNOWLEDGE_ADMIN',
+      ]);
+      await releaseClient.query('SELECT app.set_professional_review_context($1)', [
+        reviewer.assignmentId,
+      ]);
+      await releaseClient.query(
+        'SELECT app.lock_professional_review_assignment_target($1,$2,$3)',
+        [reviewer.assignmentId, reviewer.accountId, reviewer.personId]
+      );
+      await expect(
+        releaseClient.query(
+          `UPDATE professional_knowledge_versions
+              SET lifecycle_status='PUBLISHED',
+                  released_at=clock_timestamp(),
+                  effective_from=clock_timestamp(),
+                  revision=revision+1
+            WHERE id=$1`,
+          [publishable.versionId]
+        )
+      ).rejects.toMatchObject({ code: '42501' });
+    } finally {
+      await releaseClient.query('ROLLBACK').catch(() => undefined);
+      releaseClient.release();
+    }
+
+    const afterRawRelease = await admin.query<{
+      lifecycle_status: string;
+      revision: number;
+      approval_evidence_count: string;
+      release_audit_count: string;
+    }>(
+      `SELECT v.lifecycle_status, v.revision,
+              (SELECT count(*)::text
+                 FROM professional_knowledge_approval_evidence e
+                WHERE e.knowledge_version_id=v.id) AS approval_evidence_count,
+              (SELECT count(*)::text
+                 FROM business_audit_events a
+                WHERE a.resource_id=v.id
+                  AND a.event_type='PROFESSIONAL_KNOWLEDGE_RELEASED')
+                AS release_audit_count
+         FROM professional_knowledge_versions v
+        WHERE v.id=$1`,
+      [publishable.versionId]
+    );
+    expect(afterRawRelease.rows[0]).toEqual({
+      lifecycle_status: 'CANDIDATE',
+      revision: 1,
+      approval_evidence_count: '0',
+      release_audit_count: '0',
+    });
+  });
+
   it('FR-028 / FR-031: review commit then lost-response retry exact-replays before stale revision; semantic mismatches conflict', async () => {
     const actor = await seedActor('review-replay');
     const creator = await seedActor('review-replay-creator');
