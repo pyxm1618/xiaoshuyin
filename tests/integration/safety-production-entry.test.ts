@@ -666,6 +666,118 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
     );
   });
 
+  it('replays a completed ResolveRisk operation across policy change without consulting the new provider', async () => {
+    const held = await enterHeldCase();
+    const evidenceId = await createReviewEvidence(held.id);
+    await seedResolver(held.id);
+    const key = operationKey('resolve-replay');
+    const input = {
+      actor: staff,
+      caseId: held.id,
+      operationKey: key,
+      expectedCaseVersion: held.version,
+      reviewEvidenceRefs: [{ kind: 'MESSAGE', ref: evidenceId }],
+    } as const;
+
+    const first = await runSafetyProductionResolve(
+      fixture.pool,
+      input,
+      authority()
+    );
+    expect(first.status).toBe(200);
+    const riskAfterFirst = await fixture.countRiskEvents(held.id);
+    const eventsAfterFirst = await fixture.countCaseEvents(held.id);
+
+    let changedProviderRead = false;
+    const changedProvider: SafetyProductionAuthorityProvider = {
+      async currentPolicyIdentity() {
+        changedProviderRead = true;
+        return { ...IDENTITY, policyVersion: '99' };
+      },
+      async evaluate() {
+        throw new Error('Resolve replay must not evaluate');
+      },
+    };
+
+    const replay = await runSafetyProductionResolve(
+      fixture.pool,
+      input,
+      changedProvider
+    );
+
+    expect(replay).toEqual(first);
+    expect(changedProviderRead).toBe(false);
+    expect(await fixture.countRiskEvents(held.id)).toBe(riskAfterFirst);
+    expect(await fixture.countCaseEvents(held.id)).toBe(eventsAfterFirst);
+  });
+
+  it('rejects ResolveRisk replay when the caller reuses the operation key with different evidence', async () => {
+    const held = await enterHeldCase();
+    const evidenceId = await createReviewEvidence(held.id);
+    const secondEvidenceId = await createReviewEvidence(held.id);
+    await seedResolver(held.id);
+    const key = operationKey('resolve-replay-evidence');
+
+    await runSafetyProductionResolve(
+      fixture.pool,
+      {
+        actor: staff,
+        caseId: held.id,
+        operationKey: key,
+        expectedCaseVersion: held.version,
+        reviewEvidenceRefs: [{ kind: 'MESSAGE', ref: evidenceId }],
+      },
+      authority()
+    );
+
+    await expect(
+      runSafetyProductionResolve(fixture.pool, {
+        actor: staff,
+        caseId: held.id,
+        operationKey: key,
+        expectedCaseVersion: held.version,
+        reviewEvidenceRefs: [{ kind: 'MESSAGE', ref: secondEvidenceId }],
+      })
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
+
+    expect(await fixture.countRiskEvents(held.id)).toBe(2);
+  });
+
+  it('does not replay a completed ResolveRisk after current Staff authority is revoked', async () => {
+    const held = await enterHeldCase();
+    const evidenceId = await createReviewEvidence(held.id);
+    const assignmentId = await seedResolver(held.id);
+    const key = operationKey('resolve-replay-revoked');
+    const input = {
+      actor: staff,
+      caseId: held.id,
+      operationKey: key,
+      expectedCaseVersion: held.version,
+      reviewEvidenceRefs: [{ kind: 'MESSAGE', ref: evidenceId }],
+    } as const;
+
+    const first = await runSafetyProductionResolve(
+      fixture.pool,
+      input,
+      authority()
+    );
+    expect(first.status).toBe(200);
+
+    await admin.query(
+      `UPDATE staff_assignments
+          SET revoked_by_account_id = $2,
+              revoked_at = clock_timestamp()
+        WHERE id = $1`,
+      [assignmentId, owner.accountId]
+    );
+
+    await expect(
+      runSafetyProductionResolve(fixture.pool, input)
+    ).rejects.toMatchObject({ code: 'SAFETY_RESOLUTION_AUTHORITY_DENIED' });
+
+    expect(await fixture.countRiskEvents(held.id)).toBe(2);
+  });
+
   it('Family Manager without Staff Safety authority is denied', async () => {
     const held = await enterHeldCase();
     const evidenceId = await createReviewEvidence(held.id);
