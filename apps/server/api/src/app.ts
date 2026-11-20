@@ -450,7 +450,23 @@ async function runSafetyProductionEntryWithAuthority(
     throw new SafetyError('SAFETY_PRECHECK_STALE');
   }
 
-  if (decision.kind === 'ALLOW' || decision.kind === 'ALREADY_HELD') {
+  if (decision.kind === 'ALLOW') {
+    // ALLOW is itself an authority-bearing result for ordinary progression.
+    // Re-read the authorized Case after evaluation so a concurrent status or
+    // revision change (especially SAFETY_HOLD) cannot be approved from the
+    // stale pre-evaluation snapshot.
+    const currentCase = await readSafetyCaseSnapshot(pool, actor, snapshot.caseId);
+    if (
+      currentCase.caseId !== decision.caseId ||
+      currentCase.version !== decision.caseVersion ||
+      currentCase.status !== snapshot.status
+    ) {
+      throw new SafetyError('SAFETY_PRECHECK_STALE');
+    }
+    return decision;
+  }
+
+  if (decision.kind === 'ALREADY_HELD') {
     return decision;
   }
 
