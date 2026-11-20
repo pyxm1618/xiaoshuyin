@@ -36,8 +36,10 @@ import type {
 import type { ProfessionalReviewContentProvider } from './services/digital-use-review-professional-content.js';
 import {
   caseIdempotencyKeyBytes,
+  createProductionSafetyResolutionAuthoritySource,
   getCaseById,
   getReservedIdempotency,
+  hashPayload,
   runSafetyPrecheck,
   SafetyError,
   type ApprovedPolicyIdentity,
@@ -46,13 +48,17 @@ import {
   type SafetyCaseSnapshot,
 } from '@xiaoshuyin/domain';
 import { withIdentityTransaction, withRlsTransaction } from './db/tx.js';
+import { withDrizzleIdentityTransaction } from './db/drizzle-tx.js';
 import { requireCurrentFamily } from './family-context.js';
 import { requireFamilyAction } from './authz.js';
 import {
   ENTER_SAFETY_HOLD_COMMAND,
   enterSafetyHold,
 } from './safety/enter-safety-hold.js';
-import { resolveRisk } from './safety/resolve-risk.js';
+import {
+  RESOLVE_RISK_COMMAND,
+  resolveRisk,
+} from './safety/resolve-risk.js';
 
 
 /**
@@ -329,6 +335,264 @@ async function readCompletedEnterSafetyHoldReplay(
   );
 }
 
+
+const SAFETY_REVIEW_EVIDENCE_KINDS = new Set([
+  'ASSERTION',
+  'OBSERVATION',
+  'MESSAGE',
+]);
+
+function normalizeSafetyReviewEvidenceRefs(
+  value: unknown,
+  failure: 'CALLER' | 'TRACE'
+): OpaqueEvidenceReference[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    if (failure === 'CALLER') {
+      const mapped = toHttpError('SAFETY_REVIEW_EVIDENCE_INVALID');
+      throw Object.assign(new Error(mapped.message), mapped);
+    }
+    internalSafetyError('Safety resolution replay evidence trace invalid');
+  }
+
+  return value.map((entry) => {
+    if (
+      typeof entry !== 'object' ||
+      entry === null ||
+      Array.isArray(entry) ||
+      typeof (entry as Record<string, unknown>)['kind'] !== 'string' ||
+      typeof (entry as Record<string, unknown>)['ref'] !== 'string'
+    ) {
+      if (failure === 'CALLER') {
+        const mapped = toHttpError('SAFETY_REVIEW_EVIDENCE_INVALID');
+        throw Object.assign(new Error(mapped.message), mapped);
+      }
+      internalSafetyError('Safety resolution replay evidence trace invalid');
+    }
+
+    const kind = (entry as Record<string, unknown>)['kind'] as string;
+    const ref = ((entry as Record<string, unknown>)['ref'] as string).toLowerCase();
+    if (!SAFETY_REVIEW_EVIDENCE_KINDS.has(kind) || !SAFETY_CASE_ID_PATTERN.test(ref)) {
+      if (failure === 'CALLER') {
+        const mapped = toHttpError('SAFETY_REVIEW_EVIDENCE_INVALID');
+        throw Object.assign(new Error(mapped.message), mapped);
+      }
+      internalSafetyError('Safety resolution replay evidence trace invalid');
+    }
+    return { kind, ref };
+  });
+}
+
+function sortedSafetyReviewEvidenceRefs(refs: OpaqueEvidenceReference[]) {
+  return [...refs]
+    .map((reference) => ({ kind: reference.kind, ref: reference.ref }))
+    .sort((a, b) => `${a.kind}:${a.ref}`.localeCompare(`${b.kind}:${b.ref}`));
+}
+
+interface ResolveReplayTraceRow {
+  id: string;
+  decision_case_version: number;
+  evidence_refs: unknown;
+  resolution_authority_ref: string | null;
+  policy_ref: string | null;
+  policy_version: string | null;
+  rule_ref: string | null;
+  rule_version: string | null;
+}
+
+/**
+ * C2 retry bridge for the existing ResolveRisk command.
+ *
+ * The existing idempotency row remains the sole operation record. A completed
+ * resolution can be replayed even if the approved Safety policy has since
+ * changed or D6 authority is temporarily unavailable, but only after the
+ * actor's CURRENT Staff SAFETY_RESOLVE + exact-Case assignment is verified.
+ *
+ * Original caller inputs are validated against the immutable RISK_RESOLVED
+ * trace plus its linked HOLD_ENTERED identity, which reconstructs the exact
+ * request hash written by ResolveRisk without trusting a newly fetched policy.
+ */
+async function readCompletedResolveRiskReplay(
+  pool: pg.Pool,
+  input: {
+    actor: SafetyProductionActor;
+    caseId: string;
+    operationKey: string;
+    expectedCaseVersion: number;
+    reviewEvidenceRefs: OpaqueEvidenceReference[];
+  }
+): Promise<{ status: number; body: unknown } | null> {
+  return withDrizzleIdentityTransaction(
+    pool,
+    {
+      accountId: input.actor.accountId,
+      personId: input.actor.personId,
+      purpose: 'SAFETY_RESOLUTION',
+    },
+    async (_tx, client) => {
+      const reservation = await getReservedIdempotency(client, {
+        actorAccountId: input.actor.accountId,
+        commandType: RESOLVE_RISK_COMMAND,
+        keyBytes: caseIdempotencyKeyBytes(input.operationKey),
+        legacyKeyText: null,
+      });
+      if (reservation === null) return null;
+      if (reservation.response_status === 0) {
+        internalSafetyError('Safety resolution idempotency slot incomplete');
+      }
+
+      // A replay never trusts historical Staff authority. The current
+      // production source must still verify active Account + GLOBAL grant +
+      // exact current CASE assignment before any stored result is returned.
+      const authoritySource = createProductionSafetyResolutionAuthoritySource({
+        async query(text, values) {
+          const result = await client.query(text, values);
+          return { rows: result.rows };
+        },
+      });
+      const authority = await authoritySource.resolve({
+        caseId: input.caseId,
+        accountId: input.actor.accountId,
+        personId: input.actor.personId,
+      });
+      if (authority.status === 'UNAVAILABLE') {
+        const mapped = toHttpError('SAFETY_RESOLUTION_AUTHORITY_UNAVAILABLE');
+        throw Object.assign(new Error(mapped.message), mapped);
+      }
+      if (authority.status === 'DENIED') {
+        const mapped = toHttpError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
+        throw Object.assign(new Error(mapped.message), mapped);
+      }
+
+      await requireFamilyAction(client, {
+        accountId: input.actor.accountId,
+        personId: input.actor.personId,
+        familyId: authority.familyId,
+        action: 'CASE_RESOLVE_RISK',
+        purpose: 'SAFETY_RESOLUTION',
+        resource: {
+          type: 'CASE',
+          familyId: authority.familyId,
+          caseId: input.caseId,
+        },
+        caseId: input.caseId,
+        safetyResolution: {
+          verified: true,
+          authorityRef: authority.authorityRef,
+          capability: authority.capability,
+          capabilityGrantId: authority.capabilityGrantId,
+          assignmentId: authority.assignmentId,
+          familyId: authority.familyId,
+          caseId: authority.caseId,
+          accountId: authority.accountId,
+          personId: authority.personId,
+        },
+      });
+
+      const body = reservation.response_body;
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        internalSafetyError('Safety resolution replay body invalid');
+      }
+      const bodyRecord = body as Record<string, unknown>;
+      const replayCaseId = bodyRecord['caseId'];
+      const riskEventId = bodyRecord['riskEventId'];
+      if (
+        typeof replayCaseId !== 'string' ||
+        replayCaseId.toLowerCase() !== input.caseId ||
+        typeof riskEventId !== 'string' ||
+        !SAFETY_CASE_ID_PATTERN.test(riskEventId)
+      ) {
+        const mapped = toHttpError(
+          'IDEMPOTENCY_PAYLOAD_MISMATCH',
+          'Idempotency payload mismatch'
+        );
+        throw Object.assign(new Error(mapped.message), mapped);
+      }
+
+      const { rows } = await client.query<ResolveReplayTraceRow>(
+        `SELECT
+           resolved.id::text AS id,
+           resolved.decision_case_version,
+           resolved.evidence_refs,
+           resolved.resolution_authority_ref,
+           hold.policy_ref,
+           hold.policy_version,
+           hold.rule_ref,
+           hold.rule_version
+         FROM risk_events resolved
+         JOIN risk_events hold
+           ON hold.id = resolved.resolution_of_risk_event_id
+          AND hold.case_id = resolved.case_id
+          AND hold.family_id = resolved.family_id
+        WHERE resolved.id = $1
+          AND resolved.case_id = $2
+          AND resolved.family_id = $3
+          AND resolved.actor_account_id = $4
+          AND resolved.event_kind = 'RISK_RESOLVED'
+          AND hold.event_kind = 'HOLD_ENTERED'`,
+        [riskEventId, input.caseId, authority.familyId, input.actor.accountId]
+      );
+      const trace = rows[0];
+      if (
+        rows.length !== 1 ||
+        !trace ||
+        !Number.isInteger(trace.decision_case_version) ||
+        trace.decision_case_version < 1 ||
+        typeof trace.resolution_authority_ref !== 'string' ||
+        trace.resolution_authority_ref.trim() === '' ||
+        typeof trace.policy_ref !== 'string' ||
+        trace.policy_ref.trim() === '' ||
+        typeof trace.policy_version !== 'string' ||
+        trace.policy_version.trim() === '' ||
+        typeof trace.rule_ref !== 'string' ||
+        trace.rule_ref.trim() === '' ||
+        typeof trace.rule_version !== 'string' ||
+        trace.rule_version.trim() === ''
+      ) {
+        internalSafetyError('Safety resolution replay trace invalid');
+      }
+
+      const persistedEvidence = normalizeSafetyReviewEvidenceRefs(
+        trace.evidence_refs,
+        'TRACE'
+      );
+      const replayHash = hashPayload({
+        familyId: authority.familyId,
+        caseId: input.caseId,
+        expectedCaseVersion: input.expectedCaseVersion,
+        reviewEvidenceRefs: sortedSafetyReviewEvidenceRefs(input.reviewEvidenceRefs),
+        authorityRef: trace.resolution_authority_ref,
+        trustedPolicyIdentity: {
+          policyRef: trace.policy_ref,
+          policyVersion: trace.policy_version,
+          ruleRef: trace.rule_ref,
+          ruleVersion: trace.rule_version,
+        },
+      });
+
+      // The trace is also checked independently so a corrupted reservation
+      // cannot make different caller inputs appear equal by accident.
+      const callerEvidence = sortedSafetyReviewEvidenceRefs(input.reviewEvidenceRefs);
+      const storedEvidence = sortedSafetyReviewEvidenceRefs(persistedEvidence);
+      if (
+        trace.decision_case_version !== input.expectedCaseVersion ||
+        JSON.stringify(callerEvidence) !== JSON.stringify(storedEvidence) ||
+        reservation.request_hash !== replayHash
+      ) {
+        const mapped = toHttpError(
+          'IDEMPOTENCY_PAYLOAD_MISMATCH',
+          'Idempotency payload mismatch'
+        );
+        throw Object.assign(new Error(mapped.message), mapped);
+      }
+
+      return {
+        status: reservation.response_status,
+        body,
+      };
+    }
+  );
+}
+
 async function readSafetyCaseSnapshot(
   pool: pg.Pool,
   actor: SafetyProductionActor,
@@ -511,6 +775,20 @@ async function runSafetyProductionResolveWithAuthority(
     throw new SafetyError('SAFETY_PRECHECK_INVALID', 'invalid Safety resolution input');
   }
 
+  const reviewEvidenceRefs = normalizeSafetyReviewEvidenceRefs(
+    parsed['reviewEvidenceRefs'],
+    'CALLER'
+  );
+
+  const replay = await readCompletedResolveRiskReplay(pool, {
+    actor,
+    caseId,
+    operationKey,
+    expectedCaseVersion,
+    reviewEvidenceRefs,
+  });
+  if (replay !== null) return replay;
+
   const trustedPolicyIdentity = await currentTrustedSafetyIdentity(authority, caseId);
   return resolveRisk(pool, {
     accountId: actor.accountId,
@@ -518,7 +796,7 @@ async function runSafetyProductionResolveWithAuthority(
     caseId,
     idempotencyKey: operationKey,
     expectedCaseVersion,
-    reviewEvidenceRefs: parsed['reviewEvidenceRefs'] as OpaqueEvidenceReference[],
+    reviewEvidenceRefs,
     trustedPolicyIdentity,
   });
 }
