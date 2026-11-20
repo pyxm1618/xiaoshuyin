@@ -17,7 +17,7 @@
 > Selected capability: Professional Retrieval Gold Dataset Foundation
 >
 > Spec branch: spec/018-professional-retrieval-gold-dataset-authority-reconciliation
-> Authority reconciliation base: origin/main @ 9aceaedf12b611d41fba06866dcd00e20eb5ea8d
+> Authority reconciliation historical base: origin/main @ 9aceaedf12b611d41fba06866dcd00e20eb5ea8d
 > Previous Frozen Spec: 4624b3df6d59c6055421e175b95051782615de9a / bf7540ff3097ef14ca1c62a395b155abd4fde66a
 
 This specification freezes the minimum evaluation truth required before Xiaoshuyin builds or selects a Professional RAG retrieval implementation. It does not implement retrieval, pgvector, sparsevec, pg_jieba, embedding, reranking, Promptfoo, AI Task Runtime, model execution, or any user-facing AI feature.
@@ -39,22 +39,22 @@ Authority hierarchy:
 3. Docs/总体技术架构.md — long-lived architecture truth;
 4. Docs/V1技术设计.md — V1 implementation contract.
 
-Current remote baseline re-read during Authority Reconciliation:
+Authority Reconciliation remote baseline (historical snapshot — 2026-11-17):
 
 ~~~text
 Repository:
 pyxm1618/xiaoshuyin
 
-Current origin/main:
+Snapshot origin/main:
 9aceaedf12b611d41fba06866dcd00e20eb5ea8d
 
 Original Slice 18 freeze baseline:
 e7bb22d1abad58a6c9df6350744f092d88370aa3
 ~~~
 
-The original freeze baseline is historical evidence only. This reconciled Spec is bound to current main and the current four Authority Docs.
+The original freeze baseline and the 2026-11-17 runtime snapshot are historical evidence only. Moving runtime truth is never permanent Spec truth and must be re-read by T1801.
 
-Authority Doc blobs on the reconciliation baseline:
+Authority Doc blobs on the 2026-11-17 reconciliation baseline (historical):
 
 ~~~text
 Docs/总产品需求.md
@@ -69,6 +69,27 @@ Docs/总体技术架构.md
 Docs/V1技术设计.md
 a0f09b8afda5532870150f03b713fed107359849
 ~~~
+
+Current-Main Reconciliation authority/runtime snapshot (2026-11-20):
+
+~~~text
+Current origin/main:
+1b7a9d817713692cc1b895a7f601f07e8123f8fa
+
+Docs/总产品需求.md
+97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29
+
+Docs/V1产品需求.md
+379cb8cfb377924cd21ccfe55baa5aecdf207f5e
+
+Docs/总体技术架构.md
+6b4630803f371faf6d93f27361070223d0f661a0
+
+Docs/V1技术设计.md
+afef9fcc4af41b6137e5020717135972a3d515fc
+~~~
+
+The 2026-11-20 Authority evolution is NON-CONFLICTING for Slice 18: it further constrains Staff/Professional review authority, qualification/scope, service control and review-state handling without changing the Gold Dataset selection or core contract.
 
 Relevant formal Authority includes:
 
@@ -87,19 +108,19 @@ This Spec does not amend any Authority Doc.
 
 ## 2. Repository Reality Check
 
-### 2.1 Current main
+### 2.1 Current-main reconciliation snapshot
 
-At this reconciliation freeze, current main is:
+At the 2026-11-20 refresh, current main is:
 
 ~~~text
-9aceaedf12b611d41fba06866dcd00e20eb5ea8d
-Merge pull request #57
-feat(slice16): authority-reconciled psychological behavioral intervention contract foundation
+1b7a9d817713692cc1b895a7f601f07e8123f8fa
+Merge pull request #58
+feat(slice17): authority-reconciled professional knowledge foundation
 ~~~
 
-The original Slice 18 freeze-time statement that main contained only Slice 1–12 plus PR #37 is historical and is **retired as current truth**.
+The original Slice 18 freeze-time statement that main contained only Slice 1–12 plus PR #37, and the 2026-11-17 statement that main stopped at PR #57, are historical and **retired as current truth**.
 
-Current main includes the merged Slice 16 runtime from PR #57. This does **not** mean Slice 16 is a clean prerequisite: §2.3 separately records the post-merge forensic blockers and unmerged remediation state. Slice 17 remains unmerged and therefore is not current-main runtime truth.
+Current main includes Slice 16 plus its PR #59 remediation and the merged Slice 17 runtime from PR #58. Merge status alone does not satisfy T1801: T1801 still re-reads current audit/check state, runtime seams, production corpus and reviewer authority.
 ### 2.2 Current PostgreSQL baseline
 
 Current CI already uses PostgreSQL 18 for database migration/integration jobs.
@@ -112,14 +133,15 @@ Current package/runtime dependency inventory does not establish a production Pro
 
 The original Slice 18 freeze-time runtime table is retired as current execution truth. It remains historical evidence only.
 
-Current reconciliation snapshot:
+Current-main reconciliation snapshot (2026-11-20):
 
 | Upstream | Current remote truth | Slice 18 interpretation |
 |---|---|---|
-| origin/main | 9aceaedf12b611d41fba06866dcd00e20eb5ea8d | current reconciliation base |
-| Slice 16 | PR #57 MERGED at 9aceaedf12b611d41fba06866dcd00e20eb5ea8d; post-merge forensic audit found 12 blocking findings; remediation PR #59 is OPEN / NOT MERGED and its PR contract requires independent targeted re-audit before merge; its moving exact Head/CI/audit state is deliberately re-read by T1801 rather than frozen here | merged = YES; remediation exists, but clean prerequisite / runtime usability = NOT YET PROVEN |
-| Slice 17 | PR #58 was NOT MERGED at the reconciliation snapshot; its moving exact Head / draft / mergeability / CI / audit / merge state is deliberately re-read by T1801 rather than frozen here | implementation exists, but it is not current-main runtime truth and cannot satisfy T1801 until T1801 proves the current merged / audited / runtime-usable state |
-| Professional Reviewer | APPROVED PROFESSIONAL REVIEWER — UNASSIGNED | production Gold-label approval prerequisite = BLOCKED |
+| origin/main | 1b7a9d817713692cc1b895a7f601f07e8123f8fa | dated reconciliation snapshot; T1801 re-reads at execution |
+| Slice 16 | PR #57 MERGED; remediation PR #59 MERGED as ae161c4680cd3e744d7337291922b487d6e03970; exact-head PR #59 CI and Spec Governance PASS; post-merge main CI/Spec Governance PASS | old “remediation unmerged” blocker retired; T1801 still re-reads audit/runtime usability |
+| Slice 17 | PR #58 MERGED as current main 1b7a9d817713692cc1b895a7f601f07e8123f8fa; exact-head PR CI and Spec Governance PASS; post-merge main CI/Spec Governance PASS | old “not merged” blocker retired; merged Knowledge runtime is current-main truth, while T1801 still verifies Audit 2 provenance and runtime usability |
+| Professional Knowledge production corpus | Digital Use Scene package v1 resolves an exact empty professionalKnowledgeRefs set | representative real PUBLISHED production-approved corpus prerequisite = BLOCKED |
+| Professional Reviewer | production approval/qualification composition remains unavailable; APPROVED PROFESSIONAL REVIEWER — UNASSIGNED | production Gold-label approval prerequisite = BLOCKED |
 
 Older Slice 13–15 freeze-time runtime statements are not T1801 predicates and are retired from this Spec as current-gate evidence.
 
@@ -153,7 +175,7 @@ plan/017-professional-knowledge-foundation-authority-reconciliation
 
 The older `spec/017-professional-knowledge-foundation` and `plan/017-professional-knowledge-foundation` snapshots remain historical evidence only; they are not the current authority consumed by this reconciliation.
 
-Runtime truth is separate from planning authority: PR #58 was not merged at the reconciliation snapshot. Its current Head, draft/mergeability/CI state, merge state, independent audit result and runtime usability are volatile execution truth and are re-read by T1801; the planning package alone cannot satisfy that gate.
+Runtime truth is separate from planning authority. PR #58 is merged in the 2026-11-20 current-main snapshot, but its exact current audit/check evidence and runtime usability remain volatile execution truth and are re-read by T1801; the planning package alone cannot satisfy that gate.
 ### 2.5 Existing Slice 18 authority before reconciliation
 
 Immediately before this Authority Reconciliation created new branches, exhaustive `018` branch search found exactly:
@@ -1216,11 +1238,12 @@ Development Authorization:
 NOT GRANTED
 ~~~
 
-Current reconciliation-time truth:
+Current-main reconciliation truth (2026-11-20 snapshot; T1801 remains authoritative at execution):
 
-- Slice 16: MERGED through PR #57 at main 9aceaedf12b611d41fba06866dcd00e20eb5ea8d, but post-merge forensic blocking findings exist and remediation is only on an unmerged branch; clean prerequisite/runtime usability is NOT YET PROVEN.
-- Slice 17: PR #58 is OPEN / DRAFT / NOT MERGED; current implementation exists but is not current-main runtime truth.
-- Professional Reviewer: APPROVED PROFESSIONAL REVIEWER — UNASSIGNED.
+- Slice 16: PR #57 and remediation PR #59 are MERGED; current-main code contains the remediated runtime seams and current CI/Spec Governance are green.
+- Slice 17: PR #58 is MERGED as current main; exact Knowledge identity/version/hash/lifecycle/package and consumption seams exist on merged main.
+- Representative production-approved Professional Knowledge corpus: EMPTY for current Digital Use Scene package v1.
+- Professional Reviewer: APPROVED PROFESSIONAL REVIEWER — UNASSIGNED; production approval/qualification providers fail closed as UNAVAILABLE.
 - Therefore Runtime Dependency Gate = BLOCKED, Implement Gate = BLOCKED, Development Authorization = NOT GRANTED.
 
 These blocks are correct planning outcomes and MUST NOT be bypassed with fake Knowledge, synthetic “real” corpus, string reviewer ids, fixture/developer/admin/AI approval, or a new duplicate authority system.
@@ -1272,7 +1295,7 @@ Not for production retrieval evidence. Positive production corpus members must b
 NO. Corrections create a successor dataset version. Old route/model evidence remains bound to its old exact dataset.
 
 ### C18-15 — Does this Slice unblock Phase 3 development?
-NO. It only defines the next minimal authority. Current Implement Gate remains BLOCKED by upstream runtime/reviewer reality.
+NO. It only defines the next minimal authority. Current Implement Gate remains BLOCKED by the empty production-approved corpus and unassigned Professional Reviewer (plus any other predicate T1801 cannot prove at execution).
 
 Clarification status:
 
@@ -1318,6 +1341,23 @@ Docs/V1技术设计.md      a0f09b8afda5532870150f03b713fed107359849
 ~~~
 
 All four differ from the original Slice 18 planning baseline; Authority Drift = DETECTED.
+
+### 27B. Current-Main Reconciliation Record — 2026-11-20
+
+This refresh does **not** reopen Selection or core Slice 18 semantics.
+
+| Area | 2026-11-17 frozen planning truth | 2026-11-20 current-main truth | Drift | Action |
+|---|---|---|---|---|
+| main | 9aceaedf12b611d41fba06866dcd00e20eb5ea8d | 1b7a9d817713692cc1b895a7f601f07e8123f8fa | YES | REFRESH |
+| Authority Docs | V1 product/tech blobs 8eb660cd… / a0f09b8a… | 379cb8cf… / afef9fcc…; non-conflicting governance tightening | YES | CLARIFY |
+| Slice 16 | PR #59 unmerged | PR #59 merged; current-main CI/Spec Governance green | YES | REFRESH |
+| Slice 17 | PR #58 unmerged | PR #58 merged; current-main CI/Spec Governance green | YES | REFRESH |
+| Knowledge runtime | planning-only / unmerged | merged id/version/hash/lifecycle/package/eligibility seams exist | YES | REFRESH |
+| production corpus | not proven | Digital Use v1 exact production-approved Knowledge set is empty | YES | CLARIFY |
+| reviewer authority | unassigned | still unassigned; production providers fail closed | NO | PRESERVE |
+| Selection | Gold Dataset | Gold Dataset | NO | PRESERVE |
+
+Selection, Gold Dataset contract, Professional Authority contract, lifecycle/review-state separation, strict T1801 semantics and scope are PRESERVED.
 
 ### 27A.3 Requirement-by-requirement reconciliation
 
