@@ -1,0 +1,2901 @@
+{
+  "schemaVersion": 2,
+  "slice": "017-professional-knowledge-foundation",
+  "semanticBinding": "requirement contract -> frozen task traceability -> stable evidenceId -> exact Vitest test identity -> runner PASS",
+  "executableProofPolicy": "Executable proof is accepted only from the Vitest JSON runner result for the exact registered file/test identity; source-string presence is never executable proof.",
+  "staticProofPolicy": "Static evidence is an actually executed Vitest guard with a stable Evidence ID and must report runner PASS.",
+  "evidence": [
+    {
+      "evidenceId": "S17-EVID-T1701-01",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-architecture-guard.test.ts",
+      "test": "creates exactly one normalized Professional Knowledge owner and no forbidden owner tables",
+      "contract": "creates exactly one normalized Professional Knowledge owner and no forbidden owner tables",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1701-04",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-architecture-guard.test.ts",
+      "test": "contains no deprecated planning package identity or candidate Slice 16 imports",
+      "contract": "contains no deprecated planning package identity or candidate Slice 16 imports",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-01",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "separates lifecycle, review state, and validity state",
+      "contract": "separates lifecycle, review state, and validity state",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-02",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "hashes content and source sets deterministically",
+      "contract": "hashes content and source sets deterministically",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-03",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "validates stable identity, semantic version, hashes and scope",
+      "contract": "validates stable identity, semantic version, hashes and scope",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-04",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "keeps candidate content non-production even with otherwise valid proof",
+      "contract": "keeps candidate content non-production even with otherwise valid proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1702-05",
+      "task": "T1702",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-domain.test.ts",
+      "test": "fails closed on missing or UNKNOWN applicability inputs",
+      "contract": "fails closed on missing or UNKNOWN applicability inputs",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-01",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "creates only the minimal normalized Professional Knowledge tables",
+      "contract": "creates only the minimal normalized Professional Knowledge tables",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1703-02",
+      "task": "T1703",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-foundation-db.integration.test.ts",
+      "test": "separates lifecycle, review and validity constraints mechanically",
+      "contract": "separates lifecycle, review and validity constraints mechanically",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-01",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "rejects Staff-valid / qualification-missing without laundering Staff into qualification",
+      "contract": "rejects Staff-valid / qualification-missing without laundering Staff into qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-02",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "rejects qualification-valid / Staff-missing without laundering qualification into Staff authority",
+      "contract": "rejects qualification-valid / Staff-missing without laundering qualification into Staff authority",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-03",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "accepts only exact current bounded Staff + qualification + approval facts",
+      "contract": "accepts only exact current bounded Staff + qualification + approval facts",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-04",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "fails closed for revoked Staff authority",
+      "contract": "fails closed for revoked Staff authority",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-05",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "fails closed for expired Staff authority",
+      "contract": "fails closed for expired Staff authority",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-06",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "fails closed for revoked qualification",
+      "contract": "fails closed for revoked qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1704-07",
+      "task": "T1704",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-authority-boundary.test.ts",
+      "test": "fails closed for expired qualification",
+      "contract": "fails closed for expired qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1705-01",
+      "task": "T1705",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-provenance.test.ts",
+      "test": "hashes the exact source set independently of input order",
+      "contract": "hashes the exact source set independently of input order",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1705-02",
+      "task": "T1705",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-provenance.test.ts",
+      "test": "requires opaque refs, exact versions and hashes in the domain contract",
+      "contract": "requires opaque refs, exact versions and hashes in the domain contract",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1705-03",
+      "task": "T1705",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-provenance.test.ts",
+      "test": "contains no source ingestion/archive/OCR/crawler behavior",
+      "contract": "contains no source ingestion/archive/OCR/crawler behavior",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1706-01",
+      "task": "T1706",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-mutations.integration.test.ts",
+      "test": "registers every Knowledge mutation in the shared idempotency owner",
+      "contract": "registers every Knowledge mutation in the shared idempotency owner",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1706-02",
+      "task": "T1706",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-mutations.integration.test.ts",
+      "test": "creates a successor exactly once, replays exactly, rejects mismatch, and reserves predecessor revision",
+      "contract": "creates a successor exactly once, replays exactly, rejects mismatch, and reserves predecessor revision",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1706-03",
+      "task": "T1706",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-mutations.integration.test.ts",
+      "test": "candidate edit increments revision, exact-replays, rejects stale revision, and resets review/validity",
+      "contract": "candidate edit increments revision, exact-replays, rejects stale revision, and resets review/validity",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1706-04",
+      "task": "T1706",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-mutations.integration.test.ts",
+      "test": "released semantic columns are immutable and must use a successor version",
+      "contract": "released semantic columns are immutable and must use a successor version",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1707-01",
+      "task": "T1707",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-review-validity.integration.test.ts",
+      "test": "keeps NEEDS_REVIEW outside lifecycle and independently invalidates use",
+      "contract": "keeps NEEDS_REVIEW outside lifecycle and independently invalidates use",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1707-02",
+      "task": "T1707",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-review-validity.integration.test.ts",
+      "test": "restores CURRENT/VALID without a lifecycle mutation when review finds no material impact",
+      "contract": "restores CURRENT/VALID without a lifecycle mutation when review finds no material impact",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1707-03",
+      "task": "T1707",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-review-validity.integration.test.ts",
+      "test": "does not promote review activity into Professional Approval",
+      "contract": "does not promote review activity into Professional Approval",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-01",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "keeps production approval and qualification providers unavailable/fail-closed",
+      "contract": "keeps production approval and qualification providers unavailable/fail-closed",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-02",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "distinguishes provider timeout/unavailability from invalid proof",
+      "contract": "distinguishes provider timeout/unavailability from invalid proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-03",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "accepts only an exact synthetic protocol proof",
+      "contract": "accepts only an exact synthetic protocol proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-04",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: content hash",
+      "contract": "rejects exact-proof mismatch: content hash",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-05",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: source set hash",
+      "contract": "rejects exact-proof mismatch: source set hash",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-06",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: source refs",
+      "contract": "rejects exact-proof mismatch: source refs",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-07",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: Staff assignment",
+      "contract": "rejects exact-proof mismatch: Staff assignment",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-08",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: qualification",
+      "contract": "rejects exact-proof mismatch: qualification",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-09",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: scope",
+      "contract": "rejects exact-proof mismatch: scope",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-10",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: approval status",
+      "contract": "Rejects an approval proof whose approval status is not APPROVED.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-01",
+      "task": "T1709",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "keeps production v1 history as an exact immutable empty set",
+      "contract": "keeps production v1 history as an exact immutable empty set",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-02",
+      "task": "T1709",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "allows a successor package version to own an independent exact set",
+      "contract": "allows a successor package version to own an independent exact set",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-03",
+      "task": "T1709",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "fails closed on wrong version and never floats to latest",
+      "contract": "fails closed on wrong version and never floats to latest",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-04",
+      "task": "T1709",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "does not mark Knowledge NEEDS_REVIEW for Scene package supersession alone",
+      "contract": "does not mark Knowledge NEEDS_REVIEW for Scene package supersession alone",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1709-05",
+      "task": "T1709",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-scene-binding.test.ts",
+      "test": "has one Scene binding owner and no knowledge_package_inclusions table",
+      "contract": "has one Scene binding owner and no knowledge_package_inclusions table",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-01",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "accepts only the exact fully eligible version",
+      "contract": "accepts only the exact fully eligible version",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-02",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects lifecycle mismatch",
+      "contract": "rejects lifecycle mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-03",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects review mismatch",
+      "contract": "rejects review mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-04",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects validity mismatch",
+      "contract": "rejects validity mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-05",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects scene version mismatch",
+      "contract": "rejects scene version mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-06",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects stage mismatch",
+      "contract": "rejects stage mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-07",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects age mismatch",
+      "contract": "rejects age mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-08",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects locale mismatch",
+      "contract": "rejects locale mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-09",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects risk mismatch",
+      "contract": "rejects risk mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-10",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects applicability mismatch",
+      "contract": "rejects applicability mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-11",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "rejects exclusion mismatch",
+      "contract": "rejects exclusion mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-12",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "treats empty approved Scene set as ineligible and never nearest-matches",
+      "contract": "treats empty approved Scene set as ineligible and never nearest-matches",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-13",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "fails closed on missing/UNKNOWN metadata and dependency outage",
+      "contract": "fails closed on missing/UNKNOWN metadata and dependency outage",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1710-14",
+      "task": "T1710",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-eligibility.integration.test.ts",
+      "test": "fails closed when the merged authoritative InterventionDefinition dependency is unavailable",
+      "contract": "fails closed when the merged authoritative InterventionDefinition dependency is unavailable",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1711-01",
+      "task": "T1711",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-release.integration.test.ts",
+      "test": "production-default approval remains unavailable",
+      "contract": "production-default approval remains unavailable",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1711-02",
+      "task": "T1711",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-release.integration.test.ts",
+      "test": "rolls back lifecycle and audit together on transaction failure",
+      "contract": "rolls back lifecycle and audit together on transaction failure",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1711-03",
+      "task": "T1711",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-release.integration.test.ts",
+      "test": "serializes two releases with revision CAS; there is no last-write-wins",
+      "contract": "serializes two releases with revision CAS; there is no last-write-wins",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1711-04",
+      "task": "T1711",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-release.integration.test.ts",
+      "test": "serializes release vs retire on the same revision",
+      "contract": "serializes release vs retire on the same revision",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-01",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "SOURCE_WITHDRAWAL affects only its exact dependent with expected projection",
+      "contract": "SOURCE_WITHDRAWAL affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-02",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "SOURCE_CORRECTION affects only its exact dependent with expected projection",
+      "contract": "SOURCE_CORRECTION affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-03",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "SCENE_APPLICABILITY_MATERIAL_CHANGE affects only its exact dependent with expected projection",
+      "contract": "SCENE_APPLICABILITY_MATERIAL_CHANGE affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-04",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "APPROVAL_EXPIRED affects only its exact dependent with expected projection",
+      "contract": "APPROVAL_EXPIRED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-05",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "APPROVAL_REVOKED affects only its exact dependent with expected projection",
+      "contract": "APPROVAL_REVOKED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-06",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "STAFF_AUTHORITY_REVOKED affects only its exact dependent with expected projection",
+      "contract": "STAFF_AUTHORITY_REVOKED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-07",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "QUALIFICATION_REVOKED affects only its exact dependent with expected projection",
+      "contract": "QUALIFICATION_REVOKED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-08",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "SCENE_PACKAGE_SUPERSEDED affects only its exact dependent with expected projection",
+      "contract": "SCENE_PACKAGE_SUPERSEDED affects only its exact dependent with expected projection",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-09",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "does not require a new content version for approval expiry/revocation",
+      "contract": "does not require a new content version for approval expiry/revocation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1712-10",
+      "task": "T1712",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-dependency-propagation.integration.test.ts",
+      "test": "same exact Knowledge version becomes approval-valid again when a fresh proof replaces an expired proof",
+      "contract": "same exact Knowledge version becomes approval-valid again when a fresh proof replaces an expired proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-01",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "allows only exact Family/Case manager consumption context",
+      "contract": "allows only exact Family/Case manager consumption context",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-02",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "fails closed for wrong purpose",
+      "contract": "fails closed for wrong purpose",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-03",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "fails closed for wrong family",
+      "contract": "fails closed for wrong family",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-04",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "fails closed for wrong case",
+      "contract": "fails closed for wrong case",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-06",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "does not grant any Professional Knowledge administration action",
+      "contract": "does not grant any Professional Knowledge administration action",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-07",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "delivers only an authorized exact eligible version with Consent Compliance and Safety passing",
+      "contract": "delivers only an authorized exact eligible version with Consent Compliance and Safety passing",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-08",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "collapses wrong Family Case and protected asset state into one non-enumerating denial",
+      "contract": "collapses wrong Family Case and protected asset state into one non-enumerating denial",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-09",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "Compliance restriction blocks delivery even when Knowledge metadata claims an age match",
+      "contract": "Compliance restriction blocks delivery even when Knowledge metadata claims an age match",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-10",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "Safety Hold blocks delivery without Knowledge changing Safety truth",
+      "contract": "Safety Hold blocks delivery without Knowledge changing Safety truth",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1713-11",
+      "task": "T1713",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-consumption.integration.test.ts",
+      "test": "Consent withdrawal blocks downstream processing without mutating generic Knowledge history",
+      "contract": "Consent withdrawal blocks downstream processing without mutating generic Knowledge history",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1714-01",
+      "task": "T1714",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit-readback.integration.test.ts",
+      "test": "reuses business_audit_events and never creates a second audit ledger",
+      "contract": "reuses business_audit_events and never creates a second audit ledger",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1714-02",
+      "task": "T1714",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit-readback.integration.test.ts",
+      "test": "keeps audit metadata bounded away from narratives, credentials and raw sources",
+      "contract": "keeps audit metadata bounded away from narratives, credentials and raw sources",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1714-03",
+      "task": "T1714",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit-readback.integration.test.ts",
+      "test": "provides exact version history readback ordered by authoritative audit time/id",
+      "contract": "provides exact version history readback ordered by authoritative audit time/id",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-01",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "has no real production approval/qualification provider while reviewer is unassigned",
+      "contract": "has no real production approval/qualification provider while reviewer is unassigned",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-03",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "has an exact empty production-approved Knowledge set for current Scene v1",
+      "contract": "has an exact empty production-approved Knowledge set for current Scene v1",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-04",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "cannot import test fixtures or enable synthetic authority through env/config",
+      "contract": "cannot import test fixtures or enable synthetic authority through env/config",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1715-05",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-production-composition.guard.test.ts",
+      "test": "adds no Slice 18/19 RAG or AI runtime implementation",
+      "contract": "adds no Slice 18/19 RAG or AI runtime implementation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-01",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "two candidate editors serialize; one exact revision wins and one stale editor fails",
+      "contract": "two candidate editors serialize; one exact revision wins and one stale editor fails",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-04",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "release vs edit serializes on the same revision; release wins without last-write-wins",
+      "contract": "release vs edit serializes on the same revision; release wins without last-write-wins",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-05",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "release vs retire and two releases converge through the same CAS",
+      "contract": "release vs retire and two releases converge through the same CAS",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-08",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "validity propagation vs release cannot publish a stale CURRENT/VALID snapshot",
+      "contract": "validity propagation vs release cannot publish a stale CURRENT/VALID snapshot",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-09",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "stale approval proof is invalid after an exact content/source mutation",
+      "contract": "stale approval proof is invalid after an exact content/source mutation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-10",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "provider timeout remains UNAVAILABLE rather than an invalid business proof",
+      "contract": "provider timeout remains UNAVAILABLE rather than an invalid business proof",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-11",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "DB statement timeout under an aggregate lock rolls back without half mutation",
+      "contract": "DB statement timeout under an aggregate lock rolls back without half mutation",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-12",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "lost response converges through shared idempotency replay and mismatched payload is rejected",
+      "contract": "lost response converges through shared idempotency replay and mismatched payload is rejected",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1716-13",
+      "task": "T1716",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-reliability.integration.test.ts",
+      "test": "Scene package binding is immutable exact-version truth, so no floating currentness race exists",
+      "contract": "Scene package binding is immutable exact-version truth, so no floating currentness race exists",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-01",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "FR-028 / FR-031: review commit then lost-response retry exact-replays before stale revision; semantic mismatches conflict",
+      "contract": "FR-028 / FR-031: review commit then lost-response retry exact-replays before stale revision; semantic mismatches conflict",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-02",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "FR-028 / FR-031: dependency propagation exact-replays after mutation and changed semantics mismatch without duplicate audit",
+      "contract": "FR-028 / FR-031: dependency propagation exact-replays after mutation and changed semantics mismatch without duplicate audit",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-03",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "FR-046 / FR-052: release actor B may consume exact reviewer A Staff authority; replay precedes CAS and effectiveFrom changes mismatch",
+      "contract": "FR-046 / FR-052: release actor B may consume exact reviewer A Staff authority; replay precedes CAS and effectiveFrom changes mismatch",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-04",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "FR-046: requested approval proof identity is exact-bound; provider proof substitution rolls back release/evidence/audit/idempotency",
+      "contract": "FR-046: requested approval proof identity is exact-bound; provider proof substitution rolls back release/evidence/audit/idempotency",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-AUDIT2-05",
+      "task": "AUDIT2",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-audit2-remediation.integration.test.ts",
+      "test": "HIGH-001: exact Slice 16 InterventionDefinition owner is consumed read-only; wrong/missing/terminal/outage refs fail closed",
+      "contract": "HIGH-001: exact Slice 16 InterventionDefinition owner is consumed read-only; wrong/missing/terminal/outage refs fail closed",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-11",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: knowledge id",
+      "contract": "Rejects a proof bound to a different Knowledge identity.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-12",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: semantic version",
+      "contract": "Rejects a proof bound to a different Knowledge semantic version.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-13",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: reviewer identity",
+      "contract": "Rejects a proof bound to a different professional reviewer identity.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-14",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: reviewer account",
+      "contract": "Rejects a proof whose reviewer Account does not match Staff authority.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-15",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: reviewer person",
+      "contract": "Rejects a proof whose reviewer Person does not match Staff authority.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-16",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: qualification scope",
+      "contract": "Rejects a proof whose professional qualification scope mismatches the Knowledge scope.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-17",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: publication status",
+      "contract": "Rejects a proof that is not EFFECTIVE for publication.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-18",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: reviewed time",
+      "contract": "Rejects a proof with a reviewed-at time that is not currently valid.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-19",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: effective from",
+      "contract": "Rejects a proof whose effective-from time is in the future.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-20",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "rejects exact-proof mismatch: effective to",
+      "contract": "Rejects a proof whose effective-to time has expired.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-EVID-T1708-21",
+      "task": "T1708",
+      "type": "EXECUTABLE",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-approval-authority.test.ts",
+      "test": "accepts only an exact Professional Content Package member binding when one is required",
+      "contract": "Accepts an exact Professional Content Package member binding and rejects a mismatched package content hash.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-001",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-001: adds no embeddings, vector storage, sparse vectors, or embedding generation",
+      "contract": "No knowledge_embeddings, embedding generation, pgvector/sparsevec work.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-002",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-002: adds no retrieval, ranking, fusion, RRF, reranker, or RAG runtime",
+      "contract": "No retrieval/search/ranking/fusion/RRF/reranker/RAG implementation.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-003",
+      "task": "T1705",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-003: adds no chunking, OCR, crawler, parser, or generic ingestion platform",
+      "contract": "No chunking/parser/OCR/crawler/generic ingestion platform.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-004",
+      "task": "T1703",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-004: adds no generic CMS owner",
+      "contract": "No generic CMS.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-005",
+      "task": "T1703",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-005: adds no reviewer marketplace owner",
+      "contract": "No reviewer marketplace.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-006",
+      "task": "T1704",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-006: adds no credentialing or qualification-management platform",
+      "contract": "No credentialing/qualification-management platform.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-007",
+      "task": "T1708",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-007: adds no generic approval workflow engine",
+      "contract": "No generic approval workflow engine.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-008",
+      "task": "T1704",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-008: adds no generic RBAC or ADMIN=true bypass",
+      "contract": "No generic RBAC or ADMIN=true.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-009",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-009: adds no second Staff Authority owner",
+      "contract": "No second Staff Authority.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-010",
+      "task": "T1709",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-010: adds no second Professional Content Package registry",
+      "contract": "No second Professional Content Package registry.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-011",
+      "task": "T1709",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-011: adds no second Scene Package registry, Manifest, or router",
+      "contract": "No second Scene Package registry, node Manifest, or router.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-012",
+      "task": "T1710",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-012: adds no duplicate InterventionDefinition lifecycle, eligibility gate, or InterventionInstance owner",
+      "contract": "No new/duplicate InterventionDefinition lifecycle, eligibility gate, or InterventionInstance owner.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-013",
+      "task": "T1713",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-013: adds no new Safety, Authorization, Consent, or Compliance owner",
+      "contract": "No new Safety/Authorization/Consent/Compliance owner.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-014",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-014: adds no second Case, Evidence, Problem Formulation, or Family Memory truth store",
+      "contract": "No second Case/Evidence/Problem Formulation/Family Memory truth.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-015",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-015: adds no AI Task Runtime, Context Builder, TaskModelRegistry, model gateway, or agent framework",
+      "contract": "No AI Task Runtime, Context Builder, TaskModelRegistry, model gateway, or agent framework.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-016",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-016: adds no Jev or Promptfoo production runtime",
+      "contract": "No Jev production runtime or Promptfoo runtime.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-017",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-017: adds no A4003 roleplay, Problem Formulation AI, or execution-support AI runtime",
+      "contract": "No A4003 roleplay, Problem Formulation AI, or execution-support AI.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-018",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-018: adds no Phase 4 Goal, Plan, Task, Checkin, Review, Outcome, Schedule, or Notification runtime",
+      "contract": "No Phase 4 Goal/Plan/Task/Checkin/Review/Outcome/Schedule/Notification runtime.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-019",
+      "task": "T1705",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-019: adds no raw professional-document archive or source redistribution store",
+      "contract": "No raw professional-document archive or copyrighted-source redistribution.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-020",
+      "task": "T1705",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-020: adds no automatic Family-private-record promotion into Professional Knowledge",
+      "contract": "No automatic promotion of Family private records into Professional Knowledge.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-021",
+      "task": "T1715",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-021: adds no fake reviewer, qualification, developer, AI, fixture, or approved=true authority path",
+      "contract": "No fake reviewer/qualification/developer approval/AI approval/fixture promotion/approved=true laundering.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-022",
+      "task": "T1709",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-022: adds no floating latest binding or historical Scene binding rewrite",
+      "contract": "No floating latest binding or historical rewrite.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-023",
+      "task": "T1708",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-023: creates no local Professional Approval authority owner",
+      "contract": "No Professional Approval authority created locally; only consume/validate external proof.",
+      "enabled": true
+    },
+    {
+      "evidenceId": "S17-STATIC-NS-024",
+      "task": "T1701",
+      "type": "STATIC",
+      "proofMode": "RUNNER_RESULT",
+      "file": "tests/professional-knowledge-negative-scope.guard.test.ts",
+      "test": "NS-024: mutates no Docs, frozen Slice 17 spec/planning, Slice 16, or later authority artifacts",
+      "contract": "No amendments to Docs, frozen spec, old planning package, Slice 16, or later authority artifacts.",
+      "enabled": true
+    }
+  ],
+  "requirements": [
+    {
+      "requirementId": "FR-001",
+      "contract": "Exactly one Professional Knowledge owner exists; Slice 17 does not duplicate InterventionDefinition or another professional truth.",
+      "taskIds": [
+        "T1701",
+        "T1703"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1703-01"
+      ]
+    },
+    {
+      "requirementId": "FR-002",
+      "contract": "Every Knowledge Item has a stable identity and every substantive semantic version has an exact immutable version identity.",
+      "taskIds": [
+        "T1702",
+        "T1703",
+        "T1706"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-02",
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1706-04"
+      ]
+    },
+    {
+      "requirementId": "FR-003",
+      "contract": "Every publishable version carries content, language/locale, scene/purpose, stage, age/development scope, applicability, exclusions, risk and attributable source provenance required by its scope.",
+      "taskIds": [
+        "T1702",
+        "T1703"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-03",
+        "S17-EVID-T1703-01"
+      ]
+    },
+    {
+      "requirementId": "FR-004",
+      "contract": "Missing required applicability/exclusion/risk metadata never means universal applicability.",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1710-13"
+      ]
+    },
+    {
+      "requirementId": "FR-005",
+      "contract": "Required professional source identity/provenance must be reviewable; unresolved/unverifiable required provenance prevents production release.",
+      "taskIds": [
+        "T1705",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1710-13"
+      ]
+    },
+    {
+      "requirementId": "FR-006",
+      "contract": "Professional Knowledge content/source metadata does not become a store for identifiable Family/child Case data.",
+      "taskIds": [
+        "T1702",
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-03"
+      ]
+    },
+    {
+      "requirementId": "FR-007",
+      "contract": "A pre-release candidate/draft is never production selectable.",
+      "taskIds": [
+        "T1702",
+        "T1706"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-04"
+      ]
+    },
+    {
+      "requirementId": "FR-008",
+      "contract": "A review activity/result is auditable but cannot by itself produce Professional Approval.",
+      "taskIds": [
+        "T1707"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-03"
+      ]
+    },
+    {
+      "requirementId": "FR-009",
+      "contract": "APPROVED production status requires a current external Professional Approval proof exactly bound to the Knowledge artifact/version/hash/source/scope and reviewer authority/qualification facts.",
+      "taskIds": [
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1708-11",
+        "S17-EVID-T1708-12",
+        "S17-EVID-T1708-13",
+        "S17-EVID-T1708-14",
+        "S17-EVID-T1708-15",
+        "S17-EVID-T1708-16",
+        "S17-EVID-T1708-17",
+        "S17-EVID-T1708-18",
+        "S17-EVID-T1708-19",
+        "S17-EVID-T1708-20",
+        "S17-EVID-T1708-21"
+      ]
+    },
+    {
+      "requirementId": "FR-010",
+      "contract": "A substantive content/source/applicability/exclusion/risk/scope change invalidates the old approval match for new production use and requires successor/fresh review/approval as applicable.",
+      "taskIds": [
+        "T1705",
+        "T1706",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02"
+      ]
+    },
+    {
+      "requirementId": "FR-011",
+      "contract": "PUBLISHED/released Knowledge requires complete metadata, exact current Professional Approval proof and all applicable release gates.",
+      "taskIds": [
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1711-01"
+      ]
+    },
+    {
+      "requirementId": "FR-012",
+      "contract": "New production use requires exact Scene Package version → Knowledge version binding through the authoritative Scene Package owner; no floating latest.",
+      "taskIds": [
+        "T1709"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-03"
+      ]
+    },
+    {
+      "requirementId": "FR-013",
+      "contract": "Only exact PUBLISHED/released + CURRENT/VALID + currently approved + scope-matching Knowledge may be production eligible.",
+      "taskIds": [
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-01"
+      ]
+    },
+    {
+      "requirementId": "FR-014",
+      "contract": "Wrong scene/stage/age/applicability/exclusion/risk/locale/required scope fails closed.",
+      "taskIds": [
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06",
+        "S17-EVID-T1710-07",
+        "S17-EVID-T1710-08",
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-10",
+        "S17-EVID-T1710-11"
+      ]
+    },
+    {
+      "requirementId": "FR-015",
+      "contract": "Superseded/retired/expired/unusable versions cannot be selected for new production use while historical identity remains.",
+      "taskIds": [
+        "T1712",
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "FR-016",
+      "contract": "A terminal/superseded released version is not reactivated by in-place semantic mutation; substantive correction uses a successor.",
+      "taskIds": [
+        "T1706",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-04",
+        "S17-EVID-T1712-09"
+      ]
+    },
+    {
+      "requirementId": "FR-017",
+      "contract": "Released content and the semantic metadata covered by its approval hash are immutable.",
+      "taskIds": [
+        "T1703",
+        "T1706"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-04"
+      ]
+    },
+    {
+      "requirementId": "FR-018",
+      "contract": "Scene Package Knowledge-set history remains exact, inspectable and owned by the Scene Package authority.",
+      "taskIds": [
+        "T1709",
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "FR-019",
+      "contract": "Knowledge and InterventionDefinition lifecycle/approval remain independent; optional cross-reference is exact and explanatory only.",
+      "taskIds": [
+        "T1701",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-14",
+        "S17-EVID-AUDIT2-05"
+      ]
+    },
+    {
+      "requirementId": "FR-020",
+      "contract": "Knowledge never decides Intervention eligibility, Plan activation, Safety outcome, Case truth or Formulation truth.",
+      "taskIds": [
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-14",
+        "S17-EVID-AUDIT2-05"
+      ]
+    },
+    {
+      "requirementId": "FR-021",
+      "contract": "Professional asset administration uses current Staff Authority capability/assignment/scope and cannot be granted by Family roles.",
+      "taskIds": [
+        "T1704",
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1713-06"
+      ]
+    },
+    {
+      "requirementId": "FR-022",
+      "contract": "Family-facing downstream consumption composes current actor/family/case/purpose Authorization before content use.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-01",
+        "S17-EVID-T1713-07"
+      ]
+    },
+    {
+      "requirementId": "FR-023",
+      "contract": "Unauthorized callers cannot infer protected Knowledge/package/reviewer/approval/unpublished existence through externally distinguishable errors.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-08"
+      ]
+    },
+    {
+      "requirementId": "FR-024",
+      "contract": "Knowledge lifecycle/administration cannot create, modify or infer Consent truth.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-11"
+      ]
+    },
+    {
+      "requirementId": "FR-025",
+      "contract": "Compliance/age/purpose authority remains external and cannot be overridden by Knowledge labels.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-09"
+      ]
+    },
+    {
+      "requirementId": "FR-026",
+      "contract": "Safety authority remains external; Knowledge cannot clear or downgrade Safety controls.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-10"
+      ]
+    },
+    {
+      "requirementId": "FR-027",
+      "contract": "AI-assisted content remains candidate until real authority proof exists; AI cannot approve/publish by self-certification.",
+      "taskIds": [
+        "T1706",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1715-04"
+      ]
+    },
+    {
+      "requirementId": "FR-028",
+      "contract": "Mutating Knowledge commands reuse the repository's shared exact-replay / mismatch-conflict idempotency semantics.",
+      "taskIds": [
+        "T1706",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-01",
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1716-12",
+        "S17-EVID-AUDIT2-01",
+        "S17-EVID-AUDIT2-02"
+      ]
+    },
+    {
+      "requirementId": "FR-029",
+      "contract": "Stale revisions and concurrent transitions cannot last-write-win over newer Knowledge state/proof/binding.",
+      "taskIds": [
+        "T1706",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1716-01",
+        "S17-EVID-T1716-04",
+        "S17-EVID-T1716-05"
+      ]
+    },
+    {
+      "requirementId": "FR-030",
+      "contract": "Successful release/lifecycle mutation atomically binds the required exact Knowledge state plus proof/binding/audit/idempotency evidence owned by that transaction; partial authority truth is forbidden.",
+      "taskIds": [
+        "T1711",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1716-11",
+        "S17-EVID-AUDIT2-04"
+      ]
+    },
+    {
+      "requirementId": "FR-031",
+      "contract": "Partial failure rolls back business effects; timeout/unknown outcome requires authoritative readback.",
+      "taskIds": [
+        "T1714",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1714-03",
+        "S17-EVID-T1716-11",
+        "S17-EVID-T1716-12",
+        "S17-EVID-AUDIT2-01",
+        "S17-EVID-AUDIT2-02"
+      ]
+    },
+    {
+      "requirementId": "FR-032",
+      "contract": "Professional Knowledge lifecycle, proof consumption, source impact and release decisions are auditable without sensitive/private/full-source leakage.",
+      "taskIds": [
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1714-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "FR-033",
+      "contract": "Source/approval/package/upstream change propagates NEEDS_REVIEW or invalidation only to genuinely affected Knowledge/dependents while preserving history.",
+      "taskIds": [
+        "T1705",
+        "T1712",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02",
+        "S17-EVID-T1712-03",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-06",
+        "S17-EVID-T1712-07",
+        "S17-EVID-T1712-08",
+        "S17-EVID-T1716-08"
+      ]
+    },
+    {
+      "requirementId": "FR-034",
+      "contract": "Slice 17 creates no embedding, chunk, vector/lexical retrieval, RAG, model runtime, Context Builder or Phase 4 truth.",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-05"
+      ]
+    },
+    {
+      "requirementId": "FR-035",
+      "contract": "Tests prove the protocol without promoting synthetic reviewer/qualification/approval fixtures into production.",
+      "taskIds": [
+        "T1708",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1715-04"
+      ]
+    },
+    {
+      "requirementId": "FR-036",
+      "contract": "Wrong/unknown package/version/hash/proof never falls back to a different package, version or nearest content.",
+      "taskIds": [
+        "T1708",
+        "T1709",
+        "T1710",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-21",
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1716-13"
+      ]
+    },
+    {
+      "requirementId": "FR-037",
+      "contract": "An empty genuinely approved/published Knowledge set remains truthful unavailable/empty rather than synthetic content.",
+      "taskIds": [
+        "T1710",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1715-03"
+      ]
+    },
+    {
+      "requirementId": "FR-038",
+      "contract": "Professional Knowledge does not create another Evidence, Problem Formulation, Family Memory or source-of-family-truth store.",
+      "taskIds": [
+        "T1701"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01"
+      ]
+    },
+    {
+      "requirementId": "FR-039",
+      "contract": "Stale cached/downstream references cannot make unapproved, NEEDS_REVIEW, invalid, retired, superseded or expired Knowledge production eligible.",
+      "taskIds": [
+        "T1710",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-03",
+        "S17-EVID-T1710-04",
+        "S17-EVID-T1710-13",
+        "S17-EVID-T1716-08",
+        "S17-EVID-T1716-09"
+      ]
+    },
+    {
+      "requirementId": "FR-040",
+      "contract": "Development Implement Gate and Professional Production Release Gate are independent; development may proceed fail-closed while professional release remains blocked.",
+      "taskIds": [
+        "T1701",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-03"
+      ]
+    },
+    {
+      "requirementId": "FR-041",
+      "contract": "Knowledge lifecycle_status is independent from review_state / validity_state; NEEDS_REVIEW is never a lifecycle value.",
+      "taskIds": [
+        "T1702",
+        "T1703",
+        "T1707"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-01",
+        "S17-EVID-T1703-02",
+        "S17-EVID-T1707-01"
+      ]
+    },
+    {
+      "requirementId": "FR-042",
+      "contract": "NEEDS_REVIEW suppresses use as an unaffected authoritative production basis without mechanically changing lifecycle.",
+      "taskIds": [
+        "T1707",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-01"
+      ]
+    },
+    {
+      "requirementId": "FR-043",
+      "contract": "Review resolution follows: no material impact → CURRENT/VALID; material impact → successor + fresh approval; cannot legally/professionally continue → invalid/unusable.",
+      "taskIds": [
+        "T1707",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-02",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02"
+      ]
+    },
+    {
+      "requirementId": "FR-044",
+      "contract": "PROFESSIONAL_REVIEW capability + valid Staff assignment are necessary operation-authority facts but never substitute for matching professional qualification or approval proof.",
+      "taskIds": [
+        "T1704",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08"
+      ]
+    },
+    {
+      "requirementId": "FR-045",
+      "contract": "Professional qualification is consumed as an independent scoped fact and is not manufactured by Slice 17.",
+      "taskIds": [
+        "T1704",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1704-03",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-16"
+      ]
+    },
+    {
+      "requirementId": "FR-046",
+      "contract": "Exact approval proof binds Knowledge identity/version/hash, source refs, approval scope, proof identity, reviewer identity, Staff authority reference, qualification reference/scope and effective/reviewed/publication timing.",
+      "taskIds": [
+        "T1708",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-03",
+        "S17-EVID-T1708-04",
+        "S17-EVID-T1708-05",
+        "S17-EVID-T1708-06",
+        "S17-EVID-T1708-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-09",
+        "S17-EVID-T1708-11",
+        "S17-EVID-T1708-12",
+        "S17-EVID-T1708-13",
+        "S17-EVID-T1708-14",
+        "S17-EVID-T1708-15",
+        "S17-EVID-T1708-16",
+        "S17-EVID-T1708-17",
+        "S17-EVID-T1708-18",
+        "S17-EVID-T1708-19",
+        "S17-EVID-T1708-20",
+        "S17-EVID-T1708-21",
+        "S17-EVID-AUDIT2-03",
+        "S17-EVID-AUDIT2-04"
+      ]
+    },
+    {
+      "requirementId": "FR-047",
+      "contract": "Professional Authority unavailable and Professional Authority invalid/mismatched remain distinct internal fail-closed outcomes; neither becomes approval.",
+      "taskIds": [
+        "T1708",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1716-10"
+      ]
+    },
+    {
+      "requirementId": "FR-048",
+      "contract": "Slice 17 is an approval-proof consumer and may retain bounded immutable proof evidence, but local persistence never becomes the authority that creates approval.",
+      "taskIds": [
+        "T1703",
+        "T1708",
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1703-01",
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1714-02",
+        "S17-EVID-AUDIT2-04"
+      ]
+    },
+    {
+      "requirementId": "FR-049",
+      "contract": "Professional Content Package and Scene Package are distinct; Slice 17 creates neither a generic Professional Content Package registry nor a second Scene Package registry.",
+      "taskIds": [
+        "T1701",
+        "T1709",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-01",
+        "S17-EVID-T1709-05"
+      ]
+    },
+    {
+      "requirementId": "FR-050",
+      "contract": "Current APPROVED PROFESSIONAL REVIEWER — UNASSIGNED state forbids production professional approval/release but does not forbid development of candidate/version/proof-consumer foundation.",
+      "taskIds": [
+        "T1701",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-03"
+      ]
+    },
+    {
+      "requirementId": "FR-051",
+      "contract": "Canonical professional source identity is reused when available; Slice 17 stores only the immutable Knowledge-review provenance snapshot/reference needed for its own truth.",
+      "taskIds": [
+        "T1701",
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1705-02",
+        "S17-EVID-T1705-03"
+      ]
+    },
+    {
+      "requirementId": "FR-052",
+      "contract": "Current Authority does not impose a separate publisher capability or reviewer/publisher separation of duties; publication still requires authorized Staff operation plus a valid exact Professional Approval proof, and no reviewer==publisher shortcut is assumed.",
+      "taskIds": [
+        "T1704",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-03",
+        "S17-EVID-AUDIT2-03"
+      ]
+    },
+    {
+      "requirementId": "AS-001",
+      "contract": "Authorized candidate-authoring path creates a complete Knowledge candidate; it remains nonproduction.",
+      "taskIds": [
+        "T1702",
+        "T1706"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-04",
+        "S17-EVID-T1706-03"
+      ]
+    },
+    {
+      "requirementId": "AS-002",
+      "contract": "Candidate content with no Professional Approval proof cannot be released.",
+      "taskIds": [
+        "T1708",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1711-01"
+      ]
+    },
+    {
+      "requirementId": "AS-003",
+      "contract": "A Staff actor with PROFESSIONAL_REVIEW capability but no matching qualification cannot create valid Professional Approval.",
+      "taskIds": [
+        "T1704",
+        "T1707"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1707-03"
+      ]
+    },
+    {
+      "requirementId": "AS-004",
+      "contract": "A matching qualification without valid Staff assignment/capability cannot create valid Professional Approval.",
+      "taskIds": [
+        "T1704",
+        "T1707"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-02",
+        "S17-EVID-T1707-03"
+      ]
+    },
+    {
+      "requirementId": "AS-005",
+      "contract": "Family Manager/Guardian/Case owner cannot administer professional Knowledge merely because Family authorization is valid.",
+      "taskIds": [
+        "T1704",
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-06"
+      ]
+    },
+    {
+      "requirementId": "AS-006",
+      "contract": "An AI identity, developer flag, approved=true field or production configuration cannot manufacture approval.",
+      "taskIds": [
+        "T1708",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1715-04"
+      ]
+    },
+    {
+      "requirementId": "AS-007",
+      "contract": "A test-only synthetic provider can prove protocol behavior but is structurally unreachable as production authority.",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1715-04"
+      ]
+    },
+    {
+      "requirementId": "AS-008",
+      "contract": "Exact real approval proof matching Knowledge id/version/hash/source/scope/reviewer/qualification is accepted as external authority evidence.",
+      "taskIds": [
+        "T1708",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-03"
+      ]
+    },
+    {
+      "requirementId": "AS-009",
+      "contract": "Same proof with wrong Knowledge version fails closed.",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-11",
+        "S17-EVID-T1708-12"
+      ]
+    },
+    {
+      "requirementId": "AS-010",
+      "contract": "Same proof with wrong content hash fails closed.",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-04"
+      ]
+    },
+    {
+      "requirementId": "AS-011",
+      "contract": "Same proof with changed source refs fails closed.",
+      "taskIds": [
+        "T1705",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1708-06"
+      ]
+    },
+    {
+      "requirementId": "AS-012",
+      "contract": "Same proof with wrong approval scope fails closed.",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-09"
+      ]
+    },
+    {
+      "requirementId": "AS-013",
+      "contract": "Revoked/expired/unverifiable Staff authority proof fails closed.",
+      "taskIds": [
+        "T1704",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-04",
+        "S17-EVID-T1704-05",
+        "S17-EVID-T1708-07"
+      ]
+    },
+    {
+      "requirementId": "AS-014",
+      "contract": "Missing/revoked/expired/mismatched professional qualification fails closed.",
+      "taskIds": [
+        "T1704",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1704-01",
+        "S17-EVID-T1704-06",
+        "S17-EVID-T1704-07",
+        "S17-EVID-T1708-08",
+        "S17-EVID-T1708-16"
+      ]
+    },
+    {
+      "requirementId": "AS-015",
+      "contract": "Expired/revoked Professional Approval proof prevents new production use without rewriting Knowledge lifecycle.",
+      "taskIds": [
+        "T1708",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-09"
+      ]
+    },
+    {
+      "requirementId": "AS-016",
+      "contract": "Professional Authority provider unavailable yields truthful dependency-unavailable behavior, not approved=false fabricated authority.",
+      "taskIds": [
+        "T1708",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-02",
+        "S17-EVID-T1716-10"
+      ]
+    },
+    {
+      "requirementId": "AS-017",
+      "contract": "Reviewed activity without APPROVED external proof remains nonproduction.",
+      "taskIds": [
+        "T1707",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-03",
+        "S17-EVID-T1708-01"
+      ]
+    },
+    {
+      "requirementId": "AS-018",
+      "contract": "APPROVED external proof without publication/release does not make Knowledge family-facing production content.",
+      "taskIds": [
+        "T1710",
+        "T1711"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-02",
+        "S17-EVID-T1711-01"
+      ]
+    },
+    {
+      "requirementId": "AS-019",
+      "contract": "PUBLISHED/released Knowledge with review_state NEEDS_REVIEW is excluded from new authoritative production use.",
+      "taskIds": [
+        "T1702",
+        "T1707",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-01",
+        "S17-EVID-T1710-03"
+      ]
+    },
+    {
+      "requirementId": "AS-020",
+      "contract": "No-material-impact re-review restores CURRENT/VALID without changing lifecycle.",
+      "taskIds": [
+        "T1707",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1707-02"
+      ]
+    },
+    {
+      "requirementId": "AS-021",
+      "contract": "Material source/content/scope change creates a successor version and requires fresh approval.",
+      "taskIds": [
+        "T1705",
+        "T1706",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1712-01",
+        "S17-EVID-T1712-02"
+      ]
+    },
+    {
+      "requirementId": "AS-022",
+      "contract": "Source withdrawal that makes current use invalid immediately suppresses new use and preserves historical citations.",
+      "taskIds": [
+        "T1705",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1705-01",
+        "S17-EVID-T1712-01"
+      ]
+    },
+    {
+      "requirementId": "AS-023",
+      "contract": "Approval expires while content/hash/source/scope is unchanged; production use stops, and a later new valid proof for that same exact version restores eligibility without forced Knowledge content-version churn.",
+      "taskIds": [
+        "T1708",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-10",
+        "S17-EVID-T1712-04",
+        "S17-EVID-T1712-05",
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1712-10"
+      ]
+    },
+    {
+      "requirementId": "AS-024",
+      "contract": "Scene Package v1 historical binding remains unchanged when Scene Package v2 binds another Knowledge version.",
+      "taskIds": [
+        "T1709",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-01",
+        "S17-EVID-T1709-02"
+      ]
+    },
+    {
+      "requirementId": "AS-025",
+      "contract": "Scene Package supersession alone does not mark unrelated Knowledge NEEDS_REVIEW.",
+      "taskIds": [
+        "T1709",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-04",
+        "S17-EVID-T1712-08"
+      ]
+    },
+    {
+      "requirementId": "AS-026",
+      "contract": "Scene Package change that materially changes Knowledge applicability marks only affected Knowledge NEEDS_REVIEW.",
+      "taskIds": [
+        "T1709",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1712-03"
+      ]
+    },
+    {
+      "requirementId": "AS-027",
+      "contract": "Knowledge exact InterventionDefinition reference becomes superseded; affected explanatory content enters NEEDS_REVIEW when material, but no Intervention eligibility is changed by Knowledge.",
+      "taskIds": [
+        "T1710",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-14",
+        "S17-EVID-AUDIT2-05"
+      ]
+    },
+    {
+      "requirementId": "AS-028",
+      "contract": "Knowledge explaining an unapproved InterventionDefinition cannot make the Intervention eligible.",
+      "taskIds": [
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-14",
+        "S17-EVID-AUDIT2-05"
+      ]
+    },
+    {
+      "requirementId": "AS-029",
+      "contract": "Wrong scene/stage returns no eligible content and never approximate fallback.",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-05",
+        "S17-EVID-T1710-06"
+      ]
+    },
+    {
+      "requirementId": "AS-030",
+      "contract": "Wrong age/development scope fails closed.",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-07"
+      ]
+    },
+    {
+      "requirementId": "AS-031",
+      "contract": "Missing/UNKNOWN required applicability data fails closed rather than being interpreted as ALL.",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1702-05",
+        "S17-EVID-T1710-13"
+      ]
+    },
+    {
+      "requirementId": "AS-032",
+      "contract": "Applicable exclusion or incompatible risk scope blocks content eligibility.",
+      "taskIds": [
+        "T1702",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-09",
+        "S17-EVID-T1710-11"
+      ]
+    },
+    {
+      "requirementId": "AS-033",
+      "contract": "Wrong Scene Package version cannot resolve floating latest Knowledge.",
+      "taskIds": [
+        "T1709",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1709-03",
+        "S17-EVID-T1710-05"
+      ]
+    },
+    {
+      "requirementId": "AS-034",
+      "contract": "Wrong Professional Content Package identity/version/hash cannot authorize a Knowledge version.",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-21"
+      ]
+    },
+    {
+      "requirementId": "AS-035",
+      "contract": "A Professional Content Package exists but has no valid approval proof; existence does not create approval.",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-01",
+        "S17-EVID-T1710-13"
+      ]
+    },
+    {
+      "requirementId": "AS-036",
+      "contract": "An approved Professional Content Package exact version may cover an exact Knowledge version only when the proof/content binding actually matches.",
+      "taskIds": [
+        "T1708",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1708-21",
+        "S17-EVID-T1710-01"
+      ]
+    },
+    {
+      "requirementId": "AS-037",
+      "contract": "Retired/superseded/expired Knowledge remains historically readable under proper authorization but unavailable for new production use.",
+      "taskIds": [
+        "T1712",
+        "T1714"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1712-09",
+        "S17-EVID-T1714-03"
+      ]
+    },
+    {
+      "requirementId": "AS-038",
+      "contract": "Published content correction never overwrites the released version in place.",
+      "taskIds": [
+        "T1702",
+        "T1706",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-04"
+      ]
+    },
+    {
+      "requirementId": "AS-039",
+      "contract": "Same idempotency key + same semantic command replays one authoritative result.",
+      "taskIds": [
+        "T1706",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1716-12"
+      ]
+    },
+    {
+      "requirementId": "AS-040",
+      "contract": "Same idempotency key + materially different command conflicts with no duplicate business effect.",
+      "taskIds": [
+        "T1706",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-02",
+        "S17-EVID-T1716-12"
+      ]
+    },
+    {
+      "requirementId": "AS-041",
+      "contract": "Two concurrent release/supersede/retire transitions cannot produce contradictory current truth.",
+      "taskIds": [
+        "T1711",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1711-03",
+        "S17-EVID-T1711-04",
+        "S17-EVID-T1716-05"
+      ]
+    },
+    {
+      "requirementId": "AS-042",
+      "contract": "Stale expected revision/proof cannot overwrite newer authoritative state.",
+      "taskIds": [
+        "T1706",
+        "T1708",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1706-03",
+        "S17-EVID-T1716-09"
+      ]
+    },
+    {
+      "requirementId": "AS-043",
+      "contract": "Partial transaction failure leaves no half-released Knowledge/proof/binding/audit state.",
+      "taskIds": [
+        "T1711",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1711-02",
+        "S17-EVID-T1716-11",
+        "S17-EVID-AUDIT2-04"
+      ]
+    },
+    {
+      "requirementId": "AS-044",
+      "contract": "Commit-succeeded/response-lost outcome is resolved by authoritative readback rather than guessed.",
+      "taskIds": [
+        "T1714",
+        "T1716"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1714-03",
+        "S17-EVID-T1716-12",
+        "S17-EVID-AUDIT2-01",
+        "S17-EVID-AUDIT2-02"
+      ]
+    },
+    {
+      "requirementId": "AS-045",
+      "contract": "Wrong Family/Case/purpose is denied at family-facing consumption without exposing unpublished professional asset existence.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-02",
+        "S17-EVID-T1713-03",
+        "S17-EVID-T1713-04",
+        "S17-EVID-T1713-08"
+      ]
+    },
+    {
+      "requirementId": "AS-046",
+      "contract": "Consent withdrawal blocks affected downstream family processing while leaving generic immutable Knowledge history intact.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-11"
+      ]
+    },
+    {
+      "requirementId": "AS-047",
+      "contract": "Compliance restriction blocks delivery even when Knowledge metadata claims an age match.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-09"
+      ]
+    },
+    {
+      "requirementId": "AS-048",
+      "contract": "Safety Hold/control blocks affected downstream use even if Knowledge text appears reassuring.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1713-10"
+      ]
+    },
+    {
+      "requirementId": "AS-049",
+      "contract": "Empty approved/published Knowledge set returns truthful empty/unavailable and no model-generated filler.",
+      "taskIds": [
+        "T1710",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1710-12",
+        "S17-EVID-T1715-03"
+      ]
+    },
+    {
+      "requirementId": "AS-050",
+      "contract": "With APPROVED PROFESSIONAL REVIEWER — UNASSIGNED, development/test foundation can be complete while Professional Production Release Gate remains BLOCKED and production exposes no fake approved Knowledge.",
+      "taskIds": [
+        "T1701",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-EVID-T1701-04",
+        "S17-EVID-T1715-01",
+        "S17-EVID-T1715-03"
+      ]
+    },
+    {
+      "requirementId": "NS-001",
+      "contract": "No knowledge_embeddings, embedding generation, pgvector/sparsevec work.",
+      "taskIds": [
+        "T1703",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-001"
+      ]
+    },
+    {
+      "requirementId": "NS-002",
+      "contract": "No retrieval/search/ranking/fusion/RRF/reranker/RAG implementation.",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-002"
+      ]
+    },
+    {
+      "requirementId": "NS-003",
+      "contract": "No chunking/parser/OCR/crawler/generic ingestion platform.",
+      "taskIds": [
+        "T1703",
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-003"
+      ]
+    },
+    {
+      "requirementId": "NS-004",
+      "contract": "No generic CMS.",
+      "taskIds": [
+        "T1703"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-004"
+      ]
+    },
+    {
+      "requirementId": "NS-005",
+      "contract": "No reviewer marketplace.",
+      "taskIds": [
+        "T1703"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-005"
+      ]
+    },
+    {
+      "requirementId": "NS-006",
+      "contract": "No credentialing/qualification-management platform.",
+      "taskIds": [
+        "T1703",
+        "T1704"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-006"
+      ]
+    },
+    {
+      "requirementId": "NS-007",
+      "contract": "No generic approval workflow engine.",
+      "taskIds": [
+        "T1703",
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-007"
+      ]
+    },
+    {
+      "requirementId": "NS-008",
+      "contract": "No generic RBAC or ADMIN=true.",
+      "taskIds": [
+        "T1703",
+        "T1704"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-008"
+      ]
+    },
+    {
+      "requirementId": "NS-009",
+      "contract": "No second Staff Authority.",
+      "taskIds": [
+        "T1701",
+        "T1704"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-009"
+      ]
+    },
+    {
+      "requirementId": "NS-010",
+      "contract": "No second Professional Content Package registry.",
+      "taskIds": [
+        "T1701",
+        "T1709"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-010"
+      ]
+    },
+    {
+      "requirementId": "NS-011",
+      "contract": "No second Scene Package registry, node Manifest, or router.",
+      "taskIds": [
+        "T1701",
+        "T1709"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-011"
+      ]
+    },
+    {
+      "requirementId": "NS-012",
+      "contract": "No new/duplicate InterventionDefinition lifecycle, eligibility gate, or InterventionInstance owner.",
+      "taskIds": [
+        "T1701",
+        "T1710"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-012"
+      ]
+    },
+    {
+      "requirementId": "NS-013",
+      "contract": "No new Safety/Authorization/Consent/Compliance owner.",
+      "taskIds": [
+        "T1713"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-013"
+      ]
+    },
+    {
+      "requirementId": "NS-014",
+      "contract": "No second Case/Evidence/Problem Formulation/Family Memory truth.",
+      "taskIds": [
+        "T1701"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-014"
+      ]
+    },
+    {
+      "requirementId": "NS-015",
+      "contract": "No AI Task Runtime, Context Builder, TaskModelRegistry, model gateway, or agent framework.",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-015"
+      ]
+    },
+    {
+      "requirementId": "NS-016",
+      "contract": "No Jev production runtime or Promptfoo runtime.",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-016"
+      ]
+    },
+    {
+      "requirementId": "NS-017",
+      "contract": "No A4003 roleplay, Problem Formulation AI, or execution-support AI.",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-017"
+      ]
+    },
+    {
+      "requirementId": "NS-018",
+      "contract": "No Phase 4 Goal/Plan/Task/Checkin/Review/Outcome/Schedule/Notification runtime.",
+      "taskIds": [
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-018"
+      ]
+    },
+    {
+      "requirementId": "NS-019",
+      "contract": "No raw professional-document archive or copyrighted-source redistribution.",
+      "taskIds": [
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-019"
+      ]
+    },
+    {
+      "requirementId": "NS-020",
+      "contract": "No automatic promotion of Family private records into Professional Knowledge.",
+      "taskIds": [
+        "T1705"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-020"
+      ]
+    },
+    {
+      "requirementId": "NS-021",
+      "contract": "No fake reviewer/qualification/developer approval/AI approval/fixture promotion/approved=true laundering.",
+      "taskIds": [
+        "T1708",
+        "T1715"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-021"
+      ]
+    },
+    {
+      "requirementId": "NS-022",
+      "contract": "No floating latest binding or historical rewrite.",
+      "taskIds": [
+        "T1709",
+        "T1712"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-022"
+      ]
+    },
+    {
+      "requirementId": "NS-023",
+      "contract": "No Professional Approval authority created locally; only consume/validate external proof.",
+      "taskIds": [
+        "T1708"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-023"
+      ]
+    },
+    {
+      "requirementId": "NS-024",
+      "contract": "No amendments to Docs, frozen spec, old planning package, Slice 16, or later authority artifacts.",
+      "taskIds": [
+        "T1701"
+      ],
+      "evidenceIds": [
+        "S17-STATIC-NS-024"
+      ]
+    }
+  ]
+}

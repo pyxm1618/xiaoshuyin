@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "changeId": "017-professional-knowledge-foundation-current-main",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "017-professional-knowledge-foundation",
+      "specPath": "specs/017-professional-knowledge-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/db/tx.ts",
+        "apps/server/api/src/services/professional-knowledge-consumption.ts",
+        "apps/server/api/src/services/professional-knowledge.ts",
+        "db/migrations/025_professional_knowledge_foundation.sql",
+        "db/migrations/026_professional_authority_release_remediation.sql",
+        "db/migrations/027_professional_knowledge_insert_lifecycle_guard.sql",
+        "db/migrations/028_professional_knowledge_authority_boundary_remediation.sql",
+        "packages/authorization/src/authorize.ts",
+        "packages/domain/src/idempotency.ts",
+        "packages/domain/src/index.ts",
+        "packages/domain/src/professional-knowledge-repository.ts",
+        "packages/domain/src/professional-knowledge.ts",
+        "packages/scenes/digital-use/index.ts",
+        "packages/scenes/digital-use/professional-knowledge-binding.ts"
+      ]
+    }
+  ]
+}

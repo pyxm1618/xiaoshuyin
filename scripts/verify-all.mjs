@@ -265,6 +265,11 @@ const gates = [
     ],
     env: { COVERAGE_EXECUTION_EVIDENCE: EXECUTION_EVIDENCE },
   },
+  {
+    label: 'G1b Slice 17 Semantic Evidence Gate',
+    exec: 'node',
+    args: ['scripts/professional-knowledge-semantic-evidence.mjs', '--execution-evidence', EXECUTION_EVIDENCE],
+  },
   { label: 'G2 静态守卫', exec: 'bun', args: ['run', 'guard:static'] },
   { label: 'G3 typecheck（base 工程）', exec: 'bunx', args: ['tsc', '-p', 'tsconfig.base.json', '--noEmit'] },
   { label: 'G4 typecheck（api 工程）', exec: 'bunx', args: ['tsc', '--noEmit'], cwd: join(ROOT, 'apps', 'server', 'api') },

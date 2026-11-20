@@ -58,6 +58,14 @@ const EXPECTED_AUDIT_EVENTS = [
   'INTERVENTION_ELIGIBILITY_BLOCKED',
   'GOAL_SAVED',
   'GOAL_CONFIRMED',
+  'PROFESSIONAL_KNOWLEDGE_AUTHORITY_DENIED',
+  'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATED',
+  'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDITED',
+  'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORDED',
+  'PROFESSIONAL_KNOWLEDGE_RELEASED',
+  'PROFESSIONAL_KNOWLEDGE_SUPERSEDED',
+  'PROFESSIONAL_KNOWLEDGE_RETIRED',
+  'PROFESSIONAL_KNOWLEDGE_VALIDITY_CHANGED',
 ];
 
 const EXPECTED_COMMANDS = [
@@ -101,6 +109,13 @@ const EXPECTED_COMMANDS = [
   'INTERVENTION_DEFINITION_SUPERSEDE',
   'GOAL_SAVE',
   'GOAL_CONFIRM',
+  'PROFESSIONAL_KNOWLEDGE_CANDIDATE_CREATE',
+  'PROFESSIONAL_KNOWLEDGE_SUCCESSOR_CREATE',
+  'PROFESSIONAL_KNOWLEDGE_CANDIDATE_EDIT',
+  'PROFESSIONAL_KNOWLEDGE_REVIEW_RECORD',
+  'PROFESSIONAL_KNOWLEDGE_RELEASE',
+  'PROFESSIONAL_KNOWLEDGE_RETIRE',
+  'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE',
 ];
 
 const EXPECTED_RESOURCE_TYPES = [
@@ -115,6 +130,7 @@ const EXPECTED_RESOURCE_TYPES = [
   'PROBLEM_FORMULATION',
   'INTERVENTION_DEFINITION',
   'GOAL',
+  'PROFESSIONAL_KNOWLEDGE',
 ];
 
 function literalsOf(definition: string): string[] {
@@ -143,17 +159,17 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
     return rows[0].definition as string;
   }
 
-  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Slice 16', async () => {
+  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Slice 17', async () => {
     const values = literalsOf(await definition('business_audit_events_event_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_AUDIT_EVENTS));
   });
 
-  it('business_audit_events.resource_type includes the reviewed Slice 16 global InterventionDefinition resource', async () => {
+  it('business_audit_events.resource_type preserves the exact reviewed vocabulary through Slice 17', async () => {
     const values = literalsOf(await definition('business_audit_events_resource_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_RESOURCE_TYPES));
   });
 
-  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Slice 16', async () => {
+  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Slice 17', async () => {
     const values = literalsOf(await definition('idempotency_keys_command_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_COMMANDS));
   });

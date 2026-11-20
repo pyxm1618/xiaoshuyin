@@ -21,7 +21,7 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('all 33 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
+  it('all 38 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -32,8 +32,8 @@ describe('RLS', () => {
     const rlsTables = rows.filter((r: any) => r.relrowsecurity);
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
-    // Prior reviewed owners plus Slice 12 Scene, Slice 13 target items, and Slice 14 Contract/roleplay tables.
-    expect(rlsTables.length).toBe(33);
+    // Prior reviewed owners plus Slice 16 InterventionDefinition and Slice 17 Professional Knowledge tables.
+    expect(rlsTables.length).toBe(38);
     expect(noRlsTables).toEqual([]);
 
     for (const t of rlsTables) {
@@ -41,11 +41,32 @@ describe('RLS', () => {
     }
   });
 
-  it('81 policies exist after Common Core Goal runtime', async () => {
+  it('current-main owner subset still covers all 33 tables before the five Slice 17 owner tables', async () => {
+    const { rows } = await client.query<{ relname: string }>(`
+      SELECT relname
+      FROM pg_class
+      WHERE relkind = 'r'
+        AND relnamespace = 'public'::regnamespace
+        AND relname != 'schema_migrations'
+        AND relrowsecurity
+      ORDER BY relname
+    `);
+    const slice17Owners = new Set([
+      'professional_knowledge_items',
+      'professional_knowledge_versions',
+      'professional_knowledge_sources',
+      'professional_knowledge_review_evidence',
+      'professional_knowledge_approval_evidence',
+    ]);
+    expect(rows.filter((row) => !slice17Owners.has(row.relname)).length).toBe(33);
+    expect(rows.some((row) => row.relname === 'intervention_definitions')).toBe(true);
+  });
+
+  it('107 policies exist after migration 028 authority boundary composition', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(81);
+    expect(rows.length).toBe(107);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {

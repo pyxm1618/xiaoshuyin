@@ -19,11 +19,11 @@ const MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'] ?? process.env['DATA
 
 // Expected final object counts (Slice 1/2 + Case Core + Slice 3 Evidence + Slice 6 binding)
 const EXPECTED_ENUMS = 27; // + independent problem_formulation_review_state (AUTH-006)
-const EXPECTED_TABLES = 33; // + minimal staff authority source // + Slice 13 target items + Slice 14 Contract/roleplay tables
+const EXPECTED_TABLES = 38; // + Slice 16 InterventionDefinition + Slice 17 Professional Knowledge owner tables
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
-const EXPECTED_POLICIES = 81; // + 9 exact-Case Staff Safety policies
-const EXPECTED_TRIGGERS = 9; // + Staff mutation serialization + Account serialization + final transition guard
+const EXPECTED_POLICIES = 107; // + 11 persistent authority-executor policies from migration 028
+const EXPECTED_TRIGGERS = 14; // + runtime elevation, self-review, and authority-executor release guards
 
 const EXPECTED_ENUM_NAMES = [
   'account_status',
@@ -85,6 +85,11 @@ const EXPECTED_TABLE_NAMES = [
   'person_profile_values',
   'persons',
   'problem_formulations',
+  'professional_knowledge_approval_evidence',
+  'professional_knowledge_items',
+  'professional_knowledge_review_evidence',
+  'professional_knowledge_sources',
+  'professional_knowledge_versions',
   'risk_events',
   'scene_artifacts',
   'scene_node_states',
@@ -119,7 +124,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(enumNames.length).toBe(EXPECTED_ENUMS);
   });
 
-  it('should have all 33 tables', async () => {
+  it('should have all 38 tables', async () => {
     const { rows } = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -129,6 +134,29 @@ describe('Migration Reproducibility (T011 RED)', () => {
 
     const tableNames = rows.map((r: any) => r.tablename).sort();
     expect(tableNames).toEqual(EXPECTED_TABLE_NAMES);
+  });
+
+  it('preserves all 33 tables from current-main as the exact pre-Slice17 owner subset', async () => {
+    const { rows } = await client.query<{ tablename: string }>(`
+      SELECT tablename
+      FROM pg_tables
+      WHERE schemaname = 'public'
+        AND tablename != 'schema_migrations'
+      ORDER BY tablename
+    `);
+    const slice17Owners = new Set([
+      'professional_knowledge_items',
+      'professional_knowledge_versions',
+      'professional_knowledge_sources',
+      'professional_knowledge_review_evidence',
+      'professional_knowledge_approval_evidence',
+    ]);
+    const slice16Tables = rows
+      .map((row) => row.tablename)
+      .filter((table) => !slice17Owners.has(table));
+
+    expect(slice16Tables).toHaveLength(33);
+    expect(slice16Tables).toContain('intervention_definitions');
   });
 
   it('should have RLS context getter functions', async () => {
@@ -161,7 +189,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 81 RLS policies', async () => {
+  it('should have 107 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'

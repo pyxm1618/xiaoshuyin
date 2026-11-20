@@ -482,3 +482,45 @@ export async function withInviteTokenTransaction<T>(
     return fn(tx);
   });
 }
+
+
+/**
+ * Slice 17 — global Professional Knowledge administration transaction.
+ * Reuses identity context and the existing Staff Authority owner; there is no
+ * Family role or credential/qualification fact created here.
+ */
+export async function withProfessionalKnowledgeAdminTransaction<T>(
+  pool: pg.Pool,
+  opts: { accountId: string; assignmentId: string },
+  fn: (tx: TxClient) => Promise<T>
+): Promise<T> {
+  return withTransactionClient(pool, async (client) => {
+    await client.query(
+      'SELECT app.set_identity_context($1, $2)',
+      [opts.accountId, 'PROFESSIONAL_KNOWLEDGE_ADMIN']
+    );
+    await client.query('SELECT app.set_professional_review_context($1)', [
+      opts.assignmentId,
+    ]);
+    return fn(client);
+  });
+}
+
+/**
+ * HIGH-001 closed boundary: arbitrary privileged callbacks are forbidden.
+ *
+ * Professional Knowledge review/release now run in the ordinary app
+ * transaction and cross privilege only through the narrow DB command
+ * primitives. Keep this symbol fail-closed for adversarial regression tests;
+ * it must never expose a xiaoshuyin_migrator transaction to runtime callers.
+ */
+export async function withProfessionalKnowledgeAuthorityTransaction<T>(
+  _pool: pg.Pool,
+  _opts: { accountId: string },
+  _fn: (tx: TxClient) => Promise<T>
+): Promise<T> {
+  throw Object.assign(
+    new Error('PROFESSIONAL_KNOWLEDGE_ARBITRARY_AUTHORITY_TRANSACTION_FORBIDDEN'),
+    { code: '42501' }
+  );
+}
