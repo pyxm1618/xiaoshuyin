@@ -3,11 +3,11 @@
 **Role**: Slice 18 Plan AI 2 — Plan + Checklist + Tasks + Audit 1 only  
 **Repository**: pyxm1618/xiaoshuyin  
 **Planning branch**: plan/018-professional-retrieval-gold-dataset-authority-reconciliation  
-**Reconciled Frozen Spec**: commit 222ed94ad2036d7d86c2e79340b8a6f7f3e6a7e4 / blob 4133742701c33597bed9bfe11702862263cc5f0f  
+**Reconciled Frozen Spec**: commit 1f7f6804e99dd688a91accc73a18519c8cd69a2a / blob 1d18fa97a29b3a26d3ff9b0da8dbaf4007649af3  
 **Previous Frozen Spec**: commit 4624b3df6d59c6055421e175b95051782615de9a / blob bf7540ff3097ef14ca1c62a395b155abd4fde66a  
-**Planning base**: exact Reconciled Frozen Spec commit 222ed94ad2036d7d86c2e79340b8a6f7f3e6a7e4  
+**Planning base**: exact Reconciled Frozen Spec commit 1f7f6804e99dd688a91accc73a18519c8cd69a2a  
 **Execution context**: REMOTE-ONLY. GitHub remote truth is authoritative. No local checkout, local HEAD, local working tree, or local git state is claimed.  
-**Planning status**: AUTHORITY RECONCILIATION DRAFT subject to complete Audit 1 and final remote read-back.  
+**Planning status**: CURRENT-MAIN RECONCILED — Audit 1 FINAL PASS / Planning Freeze PASS (2026-11-20 refresh).  
 **Runtime status**: BLOCKED. T1801 is the only task allowed while the development-start gate is blocked.
 
 ## 1. Authority Gate
@@ -16,25 +16,29 @@ This reconciliation is derived from the exact current four Authority Docs plus c
 
 | Authority | Exact remote truth | Reconciliation result |
 |---|---|---|
-| origin/main | 9aceaedf12b611d41fba06866dcd00e20eb5ea8d | PASS as current base |
+| origin/main | 1b7a9d817713692cc1b895a7f601f07e8123f8fa | PASS as 2026-11-20 reconciliation snapshot; T1801 re-reads at execution |
 | Reconciled Spec branch | spec/018-professional-retrieval-gold-dataset-authority-reconciliation | PASS |
-| Reconciled Spec head | 222ed94ad2036d7d86c2e79340b8a6f7f3e6a7e4 | PASS |
-| Reconciled Spec blob | 4133742701c33597bed9bfe11702862263cc5f0f | PASS |
+| Reconciled Spec head | 1f7f6804e99dd688a91accc73a18519c8cd69a2a | PASS |
+| Reconciled Spec blob | 1d18fa97a29b3a26d3ff9b0da8dbaf4007649af3 | PASS |
 | Previous Frozen Spec | 4624b3df6d59c6055421e175b95051782615de9a / bf7540ff3097ef14ca1c62a395b155abd4fde66a | historical / preserved |
 | Docs/总产品需求.md | 97c69bb8d9c7c42070f5763fe81a3ab1ae2ecf29 | current |
-| Docs/V1产品需求.md | 8eb660cd905d8fba4b52fe0f74bbc214b3113117 | current |
+| Docs/V1产品需求.md | 379cb8cfb377924cd21ccfe55baa5aecdf207f5e | current |
 | Docs/总体技术架构.md | 6b4630803f371faf6d93f27361070223d0f661a0 | current |
-| Docs/V1技术设计.md | a0f09b8afda5532870150f03b713fed107359849 | current |
-| Slice 16 | PR #57 merged to main; remediation PR #59 is OPEN / NOT MERGED and independent targeted re-audit is required before merge; T1801 re-reads its moving exact Head/CI/audit state | merged YES; remediation exists; clean/runtime usability NOT YET PROVEN |
-| Slice 17 | PR #58 was not merged at the planning snapshot; T1801 re-reads its moving exact Head / draft / mergeability / CI / audit / merge state | implementation exists; planning state is NOT current-main runtime truth and cannot satisfy the runtime gate |
-| Professional Reviewer | APPROVED PROFESSIONAL REVIEWER — UNASSIGNED | BLOCKED |
+| Docs/V1技术设计.md | afef9fcc4af41b6137e5020717135972a3d515fc | current |
+| Slice 16 | PR #57 MERGED; remediation PR #59 MERGED as ae161c4680cd3e744d7337291922b487d6e03970; exact-head PR #59 CI/Spec Governance PASS and post-merge main CI/Spec Governance PASS | old unmerged-remediation blocker RETIRED; T1801 still re-reads audit provenance/runtime usability |
+| Slice 17 | PR #58 MERGED as current main 1b7a9d817713692cc1b895a7f601f07e8123f8fa; exact-head PR CI/Spec Governance PASS and post-merge main CI/Spec Governance PASS | old not-merged blocker RETIRED; merged Knowledge runtime is current-main truth; T1801 still re-reads Audit 2 provenance/runtime usability |
+| Production-approved Professional Knowledge corpus | Digital Use Scene package v1 exact binding is empty | BLOCKED |
+| Professional Reviewer | APPROVED PROFESSIONAL REVIEWER — UNASSIGNED; production approval/qualification providers are UNAVAILABLE | BLOCKED |
 | Competing Slice 18 reconciliation authority | none found after exhaustive 018 branch search | PASS |
 
 ### 1.1 Authority drift
 
 ~~~text
 Authority Drift:
-DETECTED
+NON-CONFLICTING — 2026-11-20 current-main Authority evolution
+
+Historical 2026-11-17 Authority Reconciliation Drift:
+RESOLVED
 
 Selection Drift:
 NONE
@@ -1067,3 +1071,62 @@ READY FOR DEVELOPMENT: NO
 ~~~
 
 Any future semantic Authority drift requires a new reconciliation; volatile PR/CI/remediation state remains T1801 runtime truth.
+
+## 29. Current-Main Reconciliation + Audit 1 Refresh — 2026-11-20
+
+### 29.1 Reconciliation Matrix
+
+| Area | Frozen Planning Truth | Current Main Truth | Drift | Action |
+|---|---|---|---|---|
+| main | 9aceaedf12b611d41fba06866dcd00e20eb5ea8d | 1b7a9d817713692cc1b895a7f601f07e8123f8fa | YES | REFRESH |
+| Authority Docs | 97c69… / 8eb660… / 6b4630… / a0f09b… | 97c69… / 379cb8… / 6b4630… / afef9f… | YES | CLARIFY |
+| Slice 16 | PR #59 unmerged | PR #59 merged; current-main CI/Spec Governance green | YES | REFRESH |
+| Slice 17 | PR #58 unmerged | PR #58 merged; current-main CI/Spec Governance green | YES | REFRESH |
+| Knowledge runtime | not current-main truth | merged exact identity/version/hash/lifecycle/package/eligibility seams exist | YES | REFRESH |
+| production corpus | unproven | Digital Use v1 exact production-approved Knowledge set is empty | YES | CLARIFY |
+| reviewer authority | unassigned | unassigned; production providers fail closed | NO | PRESERVE |
+| Spec identity | 222ed94a… / 41337427… | 1f7f6804e99dd688a91accc73a18519c8cd69a2a / 1d18fa97a29b3a26d3ff9b0da8dbaf4007649af3 | YES | REFRESH |
+| Plan state | DRAFT wording | Audit 1 FINAL PASS / Planning Freeze PASS | YES | REFRESH |
+| Checklist identity | stale f4ea6d8a… / 16bed255… | canonical refreshed Spec identity | YES | REFRESH |
+| Tasks T1801 result | Slice 16/17 unmerged blockers | those blockers retired; corpus/reviewer remain blocked | YES | REFRESH |
+| Selection | Gold Dataset | Gold Dataset | NO | PRESERVE |
+
+### 29.2 Refresh Findings Closed
+
+- MEDIUM-R01 — stale current main / PR #59 / PR #58 assertions. CLOSED by dated current-main refresh.
+- MEDIUM-R02 — Checklist canonical Spec identity stale. CLOSED by canonical identity sync.
+- MEDIUM-R03 — Plan status still said DRAFT after prior freeze. CLOSED.
+- MEDIUM-R04 — T1801 planning-time known result still named retired unmerged blockers. CLOSED.
+
+### 29.3 Full Audit 1 Refresh
+
+~~~text
+Q1 Current Main Fidelity: PASS
+Q2 Authority Fidelity: PASS
+Q3 Selection Preservation: PASS
+Q4 Professional Authority: PASS
+Q5 Reviewer Authority: PASS
+Q6 Lifecycle / Review State: PASS
+Q7 Knowledge Runtime Alignment: PASS
+Q8 Production Corpus Truth: PASS — truthfully EMPTY/BLOCKED
+Q9 Reviewer Runtime Truth: PASS — truthfully UNASSIGNED/BLOCKED
+Q10 T1801 Correctness: PASS
+Q11 Artifact Consistency: PASS
+Q12 Traceability: PASS
+
+FR traceability: 42/42
+AS traceability: 37/37
+NS traceability: 18/18
+
+CRITICAL: 0
+HIGH: 0
+MEDIUM: 0
+LOW: 0
+
+Audit 1: FINAL PASS
+Planning Freeze: PASS
+Scope Drift: 0
+~~~
+
+Planning Freeze is planning-quality authority only. It does not grant implementation authorization. T1801 must now be executed READ-ONLY against then-current remote truth.
+
