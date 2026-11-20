@@ -9,9 +9,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
 import {
   buildApp,
-  runSafetyProductionEntry,
-  runSafetyProductionResolve,
+  createSafetyProductionService,
   type SafetyProductionAuthorityProvider,
+  type SafetyProductionEntryInput,
+  type SafetyProductionResolveInput,
 } from '../../apps/server/api/src/app.js';
 import type {
   ApprovedPolicyIdentity,
@@ -89,6 +90,30 @@ function authority(options: {
         : options.evaluation;
     },
   };
+}
+
+function runSafetyProductionEntry(
+  pool: pg.Pool,
+  input: SafetyProductionEntryInput,
+  provider?: SafetyProductionAuthorityProvider
+) {
+  const service =
+    provider === undefined
+      ? createSafetyProductionService(pool)
+      : createSafetyProductionService(pool, provider);
+  return service.enter(input);
+}
+
+function runSafetyProductionResolve(
+  pool: pg.Pool,
+  input: SafetyProductionResolveInput,
+  provider?: SafetyProductionAuthorityProvider
+) {
+  const service =
+    provider === undefined
+      ? createSafetyProductionService(pool)
+      : createSafetyProductionService(pool, provider);
+  return service.resolve(input);
 }
 
 describe('Phase 5 / C2 Safety production entry / resolve', () => {
