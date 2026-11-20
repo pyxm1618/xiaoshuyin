@@ -215,9 +215,10 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
       `INSERT INTO staff_assignments
          (account_id, person_id, capability, scope_type,
           family_id, case_id, capability_grant_id,
-          granted_by_account_id, valid_from, valid_until, revoked_at)
+          granted_by_account_id, valid_from, valid_until,
+          revoked_by_account_id, revoked_at)
        VALUES ($1, $2, 'SAFETY_RESOLVE', 'CASE',
-               $3, $4, $5, $6, $7, $8, $9)
+               $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         staff.accountId,
@@ -232,6 +233,7 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
         options.expired
           ? new Date(now - 60_000)
           : new Date(now + 60 * 60_000),
+        options.revoked ? owner.accountId : null,
         options.revoked ? new Date(now - 1_000) : null,
       ]
     );
