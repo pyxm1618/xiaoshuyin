@@ -255,6 +255,83 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
     expect(await fixture.countRiskEvents(created.id)).toBe(1);
   });
 
+  it('replays a completed production-entry operation with the exact original response', async () => {
+    const created = await newCase();
+    const key = operationKey('entry-replay');
+
+    const first = await runSafetyProductionEntry(
+      fixture.pool,
+      { actor: owner, caseId: created.id, operationKey: key },
+      authority()
+    );
+    expect(first.kind).toBe('ENTER_HOLD');
+    const riskAfterFirst = await fixture.countRiskEvents(created.id);
+    const eventsAfterFirst = await fixture.countCaseEvents(created.id);
+
+    // A real production retry must not downgrade the completed command into
+    // ALREADY_HELD just because the current Case now reflects the first write.
+    const second = await runSafetyProductionEntry(
+      fixture.pool,
+      { actor: owner, caseId: created.id, operationKey: key }
+    );
+
+    expect(second).toEqual(first);
+    expect(await fixture.countRiskEvents(created.id)).toBe(riskAfterFirst);
+    expect(await fixture.countCaseEvents(created.id)).toBe(eventsAfterFirst);
+  });
+
+  it('replays the original entry even after that hold has subsequently been resolved', async () => {
+    const created = await newCase();
+    const key = operationKey('entry-replay-after-resolve');
+    const first = await runSafetyProductionEntry(
+      fixture.pool,
+      { actor: owner, caseId: created.id, operationKey: key },
+      authority()
+    );
+    expect(first.kind).toBe('ENTER_HOLD');
+
+    const held = await fixture.getCase(created.id);
+    const evidenceId = await createReviewEvidence(created.id);
+    await seedResolver(created.id);
+    await resolveHeld(
+      staff,
+      created.id,
+      held.version,
+      [{ kind: 'MESSAGE', ref: evidenceId }]
+    );
+    expect((await fixture.getCase(created.id)).status).toBe('WAITING');
+
+    // No D6 provider is supplied on retry. The completed existing command
+    // reservation is sufficient to replay the original response.
+    const replay = await runSafetyProductionEntry(
+      fixture.pool,
+      { actor: owner, caseId: created.id, operationKey: key }
+    );
+    expect(replay).toEqual(first);
+  });
+
+  it('rejects reuse of a completed entry operation key for a different visible Case', async () => {
+    const firstCase = await newCase();
+    const key = operationKey('entry-replay-mismatch');
+    await runSafetyProductionEntry(
+      fixture.pool,
+      { actor: owner, caseId: firstCase.id, operationKey: key },
+      authority()
+    );
+
+    const secondCase = await newCase();
+    await expect(
+      runSafetyProductionEntry(
+        fixture.pool,
+        { actor: owner, caseId: secondCase.id, operationKey: key },
+        authority()
+      )
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_PAYLOAD_MISMATCH' });
+
+    expect((await fixture.getCase(secondCase.id)).status).toBe('OPEN');
+    expect(await fixture.countRiskEvents(secondCase.id)).toBe(0);
+  });
+
   it('NO_HOLD returns ALLOW with zero Safety mutation', async () => {
     const created = await newCase();
     const before = await fixture.getCase(created.id);
@@ -277,6 +354,55 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
     const after = await fixture.getCase(created.id);
     expect(after.status).toBe(before.status);
     expect(after.version).toBe(before.version);
+    expect(await fixture.countRiskEvents(created.id)).toBe(0);
+  });
+
+  it('NO_HOLD fails closed when its evaluation identity is not the current trusted identity', async () => {
+    const created = await newCase();
+    const staleEvaluationIdentity: ApprovedPolicyIdentity = {
+      ...IDENTITY,
+      ruleVersion: '0',
+    };
+
+    await expect(
+      runSafetyProductionEntry(
+        fixture.pool,
+        {
+          actor: owner,
+          caseId: created.id,
+          operationKey: operationKey('allow-stale-evaluation'),
+        },
+        authority({ evaluation: noHoldEvaluation(staleEvaluationIdentity) })
+      )
+    ).rejects.toMatchObject({ code: 'SAFETY_PRECHECK_STALE' });
+
+    expect((await fixture.getCase(created.id)).status).toBe('OPEN');
+    expect(await fixture.countRiskEvents(created.id)).toBe(0);
+  });
+
+  it('NO_HOLD fails closed when policy/rule identity changes while the evaluator is running', async () => {
+    const created = await newCase();
+    const successor: ApprovedPolicyIdentity = {
+      ...IDENTITY,
+      policyVersion: '2',
+    };
+
+    await expect(
+      runSafetyProductionEntry(
+        fixture.pool,
+        {
+          actor: owner,
+          caseId: created.id,
+          operationKey: operationKey('allow-policy-race'),
+        },
+        authority({
+          identities: [IDENTITY, successor],
+          evaluation: noHoldEvaluation(IDENTITY),
+        })
+      )
+    ).rejects.toMatchObject({ code: 'SAFETY_PRECHECK_STALE' });
+
+    expect((await fixture.getCase(created.id)).status).toBe('OPEN');
     expect(await fixture.countRiskEvents(created.id)).toBe(0);
   });
 
