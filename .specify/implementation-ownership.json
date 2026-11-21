@@ -59,7 +59,8 @@
         "kind": "SHARED",
         "features": [
           "common-core-goal-confirmgoal-runtime",
-          "017-professional-knowledge-foundation"
+          "017-professional-knowledge-foundation",
+          "phase5-c3-staff-assignment-control-plane"
         ]
       }
     },
