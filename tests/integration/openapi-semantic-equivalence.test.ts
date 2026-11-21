@@ -170,7 +170,7 @@ describe('007 timestamp pattern integrity (S7-II-M02)', () => {
     .filter((pattern) => pattern.includes('T(?:'));
   const generated = JSON.parse(
     readFileSync(join(ROOT, 'packages/generated/openapi.json'), 'utf-8')
-  ) as unknown;
+  ) as { paths: Record<string, unknown> };
 
   function collectPatterns(node: unknown, acc = new Set<string>()): Set<string> {
     if (!node || typeof node !== 'object') return acc;
@@ -181,9 +181,12 @@ describe('007 timestamp pattern integrity (S7-II-M02)', () => {
     return acc;
   }
 
-  const generatedPatterns = [...collectPatterns(generated)].filter((pattern) =>
-    pattern.includes('T(?:')
+  // C3 request timestamps are checked against their own frozen contract.
+  const historicalPaths = Object.fromEntries(
+    Object.entries(generated.paths).filter(([path]) => !path.startsWith('/api/v1/staff/'))
   );
+  const generatedPatterns = [...collectPatterns({ ...generated, paths: historicalPaths })]
+    .filter((pattern) => pattern.includes('T(?:'));
 
   it('frozen YAML declares exactly five timestamp patterns', () => {
     expect(frozenPatterns).toHaveLength(5);

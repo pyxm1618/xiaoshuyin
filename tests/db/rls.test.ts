@@ -62,11 +62,11 @@ describe('RLS', () => {
     expect(rows.some((row) => row.relname === 'intervention_definitions')).toBe(true);
   });
 
-  it('107 policies exist after migration 028 authority boundary composition', async () => {
+  it('112 policies exist after migration 029 Staff Assignment Control Plane', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(107);
+    expect(rows.length).toBe(112);
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {

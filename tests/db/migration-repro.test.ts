@@ -22,7 +22,7 @@ const EXPECTED_ENUMS = 27; // + independent problem_formulation_review_state (AU
 const EXPECTED_TABLES = 38; // + Slice 16 InterventionDefinition + Slice 17 Professional Knowledge owner tables
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
-const EXPECTED_POLICIES = 107; // + 11 persistent authority-executor policies from migration 028
+const EXPECTED_POLICIES = 112; // Includes five Staff Assignment Control Plane policies
 const EXPECTED_TRIGGERS = 14; // + runtime elevation, self-review, and authority-executor release guards
 
 const EXPECTED_ENUM_NAMES = [
@@ -189,7 +189,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 107 RLS policies', async () => {
+  it('should have 112 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'
