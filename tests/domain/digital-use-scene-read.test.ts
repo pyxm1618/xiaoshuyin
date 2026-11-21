@@ -11,6 +11,7 @@ describe('T1208 authorized Scene/node read contracts', () => {
   it('requires server-owned package/case/node state in node response', () => {
     const parsed = DigitalUseNodeResponse.safeParse({
       caseId: '00000000-0000-7000-8000-000000000001',
+      targetPersonId: '00000000-0000-7000-8000-000000000005',
       caseVersion: 2,
       sceneCode: 'DIGITAL_USE',
       scenePackageVersion: 'v1',

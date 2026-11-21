@@ -14,6 +14,10 @@ vi.mock('@xiaoshuyin/domain', async (importOriginal) => {
     ...actual,
     canonicalJson: (value: unknown) => JSON.stringify(value),
     listCurrentSceneEvidenceStatements,
+    readDigitalUseAssessmentTarget: async () => context('A1001', {}).targetPersonId,
+    listCurrentDigitalUseTargetStatements: async (tx: unknown, caseId: string, target: string) =>
+      (await listCurrentSceneEvidenceStatements(tx, caseId, 'DUA:v1:'))
+        .filter((row: { subject_person_id: string }) => row.subject_person_id === target),
     recordStatement,
   };
 });
@@ -22,7 +26,8 @@ import { applyDigitalUseNodeSemantics } from '../../apps/server/api/src/services
 
 function context(nodeCode: string, response: Record<string, unknown>) {
   return {
-    tx: {} as never,
+    tx: { query: async () => ({ rows: [{ guardian_person_id: null }] }) } as never,
+    targetPersonId: '00000000-0000-7000-8000-000000000005',
     actor: {
       accountId: '00000000-0000-7000-8000-000000000001',
       personId: '00000000-0000-7000-8000-000000000002',
@@ -103,8 +108,9 @@ describe('T1210 A1001 / 01002 / 01003 Evidence semantics', () => {
       expect.stringContaining('DUA:v1:a1001.impact.sleep:'),
     ]));
     expect(recordStatement.mock.calls.every((call) =>
-      call[2].subjectPersonId === context('A1001', {}).actor.personId &&
-      call[2].sourcePersonId === context('A1001', {}).actor.personId
+      call[2].subjectPersonId === context('A1001', {}).targetPersonId &&
+      call[2].sourcePersonId === context('A1001', {}).actor.personId &&
+      call[2].sourceKind === 'OTHER_MEMBER_RELAY'
     )).toBe(true);
   });
 
@@ -243,12 +249,12 @@ describe('T1210 A1001 / 01002 / 01003 Evidence semantics', () => {
     expect(unresolved.outputRefs.length).toBeGreaterThan(0);
   });
 
-  it('supersedes one actor-owned current response but never guesses among multiple current rows', async () => {
+  it('supersedes one current response for the same target and reporter but rejects multiple current rows', async () => {
     listCurrentSceneEvidenceStatements.mockResolvedValueOnce([{
       id: '00000000-0000-7000-8000-000000000099',
       family_id: context('01002', {}).familyId,
       case_id: context('01002', {}).caseId,
-      subject_person_id: context('01002', {}).actor.personId,
+      subject_person_id: context('01002', {}).targetPersonId,
       source_person_id: context('01002', {}).actor.personId,
       content: 'DUA:v1:01002.emotion:{}',
       confirmation_status: 'UNCONFIRMED',
@@ -266,12 +272,12 @@ describe('T1210 A1001 / 01002 / 01003 Evidence semantics', () => {
     listCurrentSceneEvidenceStatements.mockResolvedValueOnce([
       {
         id: '00000000-0000-7000-8000-000000000101',
-        subject_person_id: context('01002', {}).actor.personId,
+        subject_person_id: context('01002', {}).targetPersonId,
         source_person_id: context('01002', {}).actor.personId,
       },
       {
         id: '00000000-0000-7000-8000-000000000102',
-        subject_person_id: context('01002', {}).actor.personId,
+        subject_person_id: context('01002', {}).targetPersonId,
         source_person_id: context('01002', {}).actor.personId,
       },
     ]);
