@@ -27,8 +27,8 @@ COPY scripts scripts
 RUN bun build apps/server/api/src/server.ts --target=node --outfile=dist/server.js
 RUN bun build scripts/db-migrate.mjs --target=node --outfile=dist/migrate.js
 
-# Stage 2: Minimal production container runtime with Node 26.13.1
-FROM node:26.13.1-alpine AS runner
+# Stage 2: Minimal production container runtime with Node 26.13.0
+FROM node:26.13.0-alpine AS runner
 
 WORKDIR /app
 

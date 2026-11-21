@@ -7,7 +7,8 @@
       "feature": "phase5-production-readiness-e",
       "specPath": "specs/phase5-production-readiness-e",
       "implementationPaths": [
-        "apps/server/api/Dockerfile"
+        "apps/server/api/Dockerfile",
+        "apps/server/api/src/app.ts"
       ]
     }
   ]
