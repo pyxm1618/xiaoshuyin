@@ -57,6 +57,22 @@ const SLICE12_ADDED_OPERATION_IDS = [
   'completeDigitalUseSceneNode',
 ] as const;
 
+/** Phase 5 R2 — the twelve reviewed Phone Contract / Roleplay operations. */
+const PHONE_CONTRACT_ADDED_OPERATION_IDS = [
+  'getPhoneUseContractTemplate',
+  'getPhoneUseContractExamples',
+  'getCurrentPhoneUseContract',
+  'createPhoneUseContractDraft',
+  'updatePhoneUseContractDraft',
+  'confirmPhoneUseContractVersion',
+  'revisePhoneUseContractVersion',
+  'getPhoneUseContractFaq',
+  'createPhoneUseRoleplay',
+  'addPhoneUseRoleplayTurn',
+  'ratePhoneUseRoleplayTurn',
+  'selectPhoneUseRoleplayTurn',
+] as const;
+
 /** Real Case path operations that are not Case business operations. */
 const NON_BUSINESS_OPERATION_IDS = ['createParticipationInvite'] as const;
 
@@ -76,6 +92,18 @@ const KNOWN_CASE_PATHS = [
   '/api/v1/cases/{id}/scene',
   '/api/v1/cases/{id}/scene/nodes/{nodeCode}',
   '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
+  '/api/v1/cases/{id}/digital-use/contract/template',
+  '/api/v1/cases/{id}/digital-use/contract/examples',
+  '/api/v1/cases/{id}/digital-use/contract/current',
+  '/api/v1/cases/{id}/digital-use/contract/drafts',
+  '/api/v1/cases/{id}/digital-use/contract/drafts/{version}',
+  '/api/v1/cases/{id}/digital-use/contract/{version}/confirm',
+  '/api/v1/cases/{id}/digital-use/contract/{version}/revise',
+  '/api/v1/cases/{id}/digital-use/contract/faq',
+  '/api/v1/cases/{id}/digital-use/roleplays',
+  '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
+  '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate',
+  '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select',
 ] as const;
 
 interface OperationRef {
@@ -115,7 +143,7 @@ describe('case primary switch scope (T730)', () => {
     await admin.end();
   });
 
-  it('keeps Base=4, Slice7=1, Slice8=4 and Slice12=4 as an exact 13-operation set', () => {
+  it('keeps Base=4, Slice7=1, Slice8=4, Slice12=4 and Phone Contract=12 as an exact 26-operation set', () => {
     // Path layer: every real Case path is present, and nothing unexpected was added.
     const paths = casePathKeys();
     expect(paths.sort()).toEqual([...KNOWN_CASE_PATHS].sort());
@@ -142,6 +170,18 @@ describe('case primary switch scope (T730)', () => {
         'GET /api/v1/cases/{id}/scene',
         'GET /api/v1/cases/{id}/scene/nodes/{nodeCode}',
         'POST /api/v1/cases/{id}/scene/nodes/{nodeCode}/responses',
+        'GET /api/v1/cases/{id}/digital-use/contract/template',
+        'GET /api/v1/cases/{id}/digital-use/contract/examples',
+        'GET /api/v1/cases/{id}/digital-use/contract/current',
+        'POST /api/v1/cases/{id}/digital-use/contract/drafts',
+        'PATCH /api/v1/cases/{id}/digital-use/contract/drafts/{version}',
+        'POST /api/v1/cases/{id}/digital-use/contract/{version}/confirm',
+        'POST /api/v1/cases/{id}/digital-use/contract/{version}/revise',
+        'GET /api/v1/cases/{id}/digital-use/contract/faq',
+        'POST /api/v1/cases/{id}/digital-use/roleplays',
+        'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
+        'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate',
+        'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select',
       ].sort()
     );
 
@@ -165,17 +205,18 @@ describe('case primary switch scope (T730)', () => {
     }
     expect(BASE_CASE_OPERATION_IDS).toHaveLength(4);
 
-    // Final = 14, exact equality (contains/>= would hide an extra operation).
+    // Final = 26, exact equality (contains/>= would hide an extra operation).
     expect(businessOperationIds).toEqual(
       [
         ...BASE_CASE_OPERATION_IDS,
         ...SLICE7_ADDED_OPERATION_IDS,
         ...SLICE8_ADDED_OPERATION_IDS,
         ...SLICE12_ADDED_OPERATION_IDS,
+        ...PHONE_CONTRACT_ADDED_OPERATION_IDS,
         ...GOAL_RUNTIME_ADDED_OPERATION_IDS,
       ].sort()
     );
-    expect(businessOperationIds).toHaveLength(14);
+    expect(businessOperationIds).toHaveLength(26);
 
     // Slice 7 delta = exactly 1.
     const slice7Delta = businessOperationIds.filter(
@@ -183,6 +224,7 @@ describe('case primary switch scope (T730)', () => {
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(PHONE_CONTRACT_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice7Delta).toEqual(['switchPrimaryCase']);
@@ -193,6 +235,7 @@ describe('case primary switch scope (T730)', () => {
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(PHONE_CONTRACT_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice8Delta.sort()).toEqual([...SLICE8_ADDED_OPERATION_IDS].sort());
@@ -203,10 +246,19 @@ describe('case primary switch scope (T730)', () => {
         !(BASE_CASE_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(PHONE_CONTRACT_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(slice12Delta.sort()).toEqual([...SLICE12_ADDED_OPERATION_IDS].sort());
     expect(slice12Delta).toHaveLength(4);
+
+    const phoneContractDelta = businessOperationIds.filter((id) =>
+      (PHONE_CONTRACT_ADDED_OPERATION_IDS as readonly string[]).includes(id)
+    );
+    expect(phoneContractDelta.sort()).toEqual(
+      [...PHONE_CONTRACT_ADDED_OPERATION_IDS].sort()
+    );
+    expect(phoneContractDelta).toHaveLength(12);
 
     const goalDelta = businessOperationIds.filter((id) =>
       (GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
@@ -221,6 +273,7 @@ describe('case primary switch scope (T730)', () => {
         !(SLICE7_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE8_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(SLICE12_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
+        !(PHONE_CONTRACT_ADDED_OPERATION_IDS as readonly string[]).includes(id) &&
         !(GOAL_RUNTIME_ADDED_OPERATION_IDS as readonly string[]).includes(id)
     );
     expect(unexpected).toEqual([]);

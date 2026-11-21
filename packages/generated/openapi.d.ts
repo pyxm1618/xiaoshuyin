@@ -580,6 +580,198 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/{id}/digital-use/contract/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPhoneUseContractTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/contract/examples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPhoneUseContractExamples"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/contract/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getCurrentPhoneUseContract"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/contract/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createPhoneUseContractDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/contract/drafts/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updatePhoneUseContractDraft"];
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/contract/{version}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirmPhoneUseContractVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/contract/{version}/revise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revisePhoneUseContractVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/contract/faq": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getPhoneUseContractFaq"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/roleplays": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createPhoneUseRoleplay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addPhoneUseRoleplayTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ratePhoneUseRoleplayTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["selectPhoneUseRoleplayTurn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/{id}/goals": {
         parameters: {
             query?: never;
@@ -1353,6 +1545,662 @@ export interface components {
         ParticipationNotFoundError: {
             /** @enum {string} */
             code: "PARTICIPATION_NOT_FOUND";
+            message: string;
+        };
+        PhoneUseContractDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            familyId: string;
+            /** Format: uuid */
+            caseId: string;
+            version: number;
+            draftRevision: number;
+            /** @enum {string} */
+            status: "DRAFT" | "PENDING_CONFIRMATION" | "ACTIVE" | "SUPERSEDED" | "PAUSED";
+            /** Format: uuid */
+            adultPartyPersonId: string;
+            /** Format: uuid */
+            childPartyPersonId: string;
+            /** Format: uuid */
+            childParticipationId: string;
+            terms: {
+                purpose: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                phoneUseRules: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                executionPeriod: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                parentSupportMeasures: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                supervisionMeasures: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                incentives: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                breachResponsibilities: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+            };
+            sourceTemplateVersion: string;
+            dependencyRefs: ({
+                /** @constant */
+                type: "DIALOGUE_MESSAGE";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "ASSERTION";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "OBSERVATION";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "CONSENT";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "SCENE_ARTIFACT";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "TARGET_ITEM";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "RECORD_MARKER";
+                /** @constant */
+                markerCode: "A200401";
+                evidenceRefs: ({
+                    /** @constant */
+                    type: "DIALOGUE_MESSAGE";
+                    /** Format: uuid */
+                    id: string;
+                } | {
+                    /** @constant */
+                    type: "ASSERTION";
+                    /** Format: uuid */
+                    id: string;
+                } | {
+                    /** @constant */
+                    type: "OBSERVATION";
+                    /** Format: uuid */
+                    id: string;
+                })[];
+            })[];
+            parentConfirmation: {
+                /** @enum {string} */
+                kind: "ADULT" | "CHILD";
+                /** Format: uuid */
+                accountId: string;
+                /** Format: uuid */
+                personId: string;
+                draftRevision: number;
+                /** Format: date-time */
+                confirmedAt: string;
+                authorizationAction: string;
+                /** Format: uuid */
+                participationId?: string;
+            } | null;
+            childConfirmation: {
+                /** @enum {string} */
+                kind: "ADULT" | "CHILD";
+                /** Format: uuid */
+                accountId: string;
+                /** Format: uuid */
+                personId: string;
+                draftRevision: number;
+                /** Format: date-time */
+                confirmedAt: string;
+                authorizationAction: string;
+                /** Format: uuid */
+                participationId?: string;
+            } | null;
+            supersedesId: string | null;
+            updateReason: string | null;
+            updateTrigger: ("PERIOD_COMPLETE" | "NEW_PROBLEM") | null;
+            /** Format: uuid */
+            createdByPersonId: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            activatedAt: string | null;
+            supersededAt: string | null;
+            pausedAt: string | null;
+        };
+        SavePhoneUseContractDraftRequest: {
+            expectedCaseVersion: number;
+            /** Format: uuid */
+            adultPartyPersonId: string;
+            /** Format: uuid */
+            childPartyPersonId: string;
+            /** Format: uuid */
+            childParticipationId: string;
+            sourceTemplateVersion: string;
+            dependencyRefs: ({
+                /** @constant */
+                type: "DIALOGUE_MESSAGE";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "ASSERTION";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "OBSERVATION";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "CONSENT";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "SCENE_ARTIFACT";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "TARGET_ITEM";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "RECORD_MARKER";
+                /** @constant */
+                markerCode: "A200401";
+                evidenceRefs: ({
+                    /** @constant */
+                    type: "DIALOGUE_MESSAGE";
+                    /** Format: uuid */
+                    id: string;
+                } | {
+                    /** @constant */
+                    type: "ASSERTION";
+                    /** Format: uuid */
+                    id: string;
+                } | {
+                    /** @constant */
+                    type: "OBSERVATION";
+                    /** Format: uuid */
+                    id: string;
+                })[];
+            })[];
+            terms: {
+                purpose: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                phoneUseRules: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                executionPeriod: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                parentSupportMeasures: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                supervisionMeasures: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                incentives: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                breachResponsibilities: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+            };
+        };
+        UpdatePhoneUseContractDraftRequest: {
+            expectedCaseVersion: number;
+            expectedDraftRevision: number;
+            dependencyRefs: ({
+                /** @constant */
+                type: "DIALOGUE_MESSAGE";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "ASSERTION";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "OBSERVATION";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "CONSENT";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "SCENE_ARTIFACT";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "TARGET_ITEM";
+                /** Format: uuid */
+                id: string;
+            } | {
+                /** @constant */
+                type: "RECORD_MARKER";
+                /** @constant */
+                markerCode: "A200401";
+                evidenceRefs: ({
+                    /** @constant */
+                    type: "DIALOGUE_MESSAGE";
+                    /** Format: uuid */
+                    id: string;
+                } | {
+                    /** @constant */
+                    type: "ASSERTION";
+                    /** Format: uuid */
+                    id: string;
+                } | {
+                    /** @constant */
+                    type: "OBSERVATION";
+                    /** Format: uuid */
+                    id: string;
+                })[];
+            })[];
+            terms: {
+                purpose: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                phoneUseRules: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                executionPeriod: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                parentSupportMeasures: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                supervisionMeasures: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                incentives: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+                breachResponsibilities: {
+                    /** @constant */
+                    state: "VALUE";
+                    value: string;
+                } | {
+                    /** @constant */
+                    state: "NOT_APPLICABLE";
+                    reason: string;
+                } | {
+                    /** @constant */
+                    state: "PENDING";
+                };
+            };
+        };
+        ConfirmPhoneUseContractRequest: {
+            expectedCaseVersion: number;
+            expectedDraftRevision: number;
+        };
+        RevisePhoneUseContractRequest: {
+            expectedCaseVersion: number;
+            expectedActiveDraftRevision: number;
+            /** @enum {string} */
+            updateTrigger: "PERIOD_COMPLETE" | "NEW_PROBLEM";
+            updateReason: string;
+        };
+        PhoneUseContractTemplateResponse: {
+            meta: {
+                contentVersion: string;
+                sourceBlob: string;
+                /** @constant */
+                approved: true;
+            };
+            sections: string[];
+            sourceText: string;
+        };
+        PhoneUseContractExamplesResponse: {
+            meta: {
+                contentVersion: string;
+                sourceBlob: string;
+                /** @constant */
+                approved: true;
+            };
+            examples: {
+                id: string;
+                title: string;
+                sourceText: string;
+            }[];
+        };
+        PhoneUseContractFaqResponse: {
+            meta: {
+                contentVersion: string;
+                sourceBlob: string;
+                /** @constant */
+                approved: true;
+            };
+            contract: {
+                /** Format: uuid */
+                id: string;
+                version: number;
+                /** @constant */
+                status: "ACTIVE";
+            };
+            topics: string[];
+            sourceText: string;
+        };
+        CreatePhoneUseRoleplayRequest: {
+            expectedCaseVersion: number;
+            professionalContentVersion: string;
+        };
+        CreatePhoneUseRoleplayTurnRequest: {
+            expectedCaseVersion: number;
+            expectedSessionRevision: number;
+            simulatedChildInput: string;
+        };
+        RatePhoneUseRoleplayRequest: {
+            expectedCaseVersion: number;
+            /** Format: uuid */
+            turnId: string;
+            rating: number;
+        };
+        SelectPhoneUseRoleplayRequest: {
+            expectedCaseVersion: number;
+            expectedSessionRevision: number;
+            /** Format: uuid */
+            turnId: string;
+            expectedNodeRevision: number;
+        };
+        PhoneUseRoleplaySessionDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            familyId: string;
+            /** Format: uuid */
+            caseId: string;
+            /** Format: uuid */
+            actorPersonId: string;
+            /** @constant */
+            simulationRole: "ADULT_PLAYS_CHILD_AI_SIMULATES_PARENT";
+            /** @enum {string} */
+            status: "OPEN" | "COMPLETED";
+            scenePackageVersion: string;
+            professionalContentVersion: string;
+            compliancePolicyRef: string;
+            adapterRef: string;
+            selectedTurnId: string | null;
+            revision: number;
+            /** Format: date-time */
+            createdAt: string;
+            completedAt: string | null;
+        };
+        PhoneUseRoleplayTurnDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            sessionId: string;
+            roundNumber: number;
+            simulatedChildInput: string;
+            simulatedParentOutput: string;
+            /** @constant */
+            provenance: "SIMULATION";
+            modelRef: string | null;
+            promptVersionRef: string | null;
+            userRating: number | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        PhoneUseRoleplaySelectionResponse: {
+            session: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                familyId: string;
+                /** Format: uuid */
+                caseId: string;
+                /** Format: uuid */
+                actorPersonId: string;
+                /** @constant */
+                simulationRole: "ADULT_PLAYS_CHILD_AI_SIMULATES_PARENT";
+                /** @enum {string} */
+                status: "OPEN" | "COMPLETED";
+                scenePackageVersion: string;
+                professionalContentVersion: string;
+                compliancePolicyRef: string;
+                adapterRef: string;
+                selectedTurnId: string | null;
+                revision: number;
+                /** Format: date-time */
+                createdAt: string;
+                completedAt: string | null;
+            };
+            selectedTurn: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                sessionId: string;
+                roundNumber: number;
+                simulatedChildInput: string;
+                simulatedParentOutput: string;
+                /** @constant */
+                provenance: "SIMULATION";
+                modelRef: string | null;
+                promptVersionRef: string | null;
+                userRating: number | null;
+                /** Format: date-time */
+                createdAt: string;
+            };
+        };
+        PhoneUseRoleplayHoldResponse: {
+            /** @constant */
+            kind: "HOLD";
+            /** @constant */
+            nodeCode: "A4003";
+            /** @constant */
+            status: "IN_PROGRESS";
+            nodeRevision: number;
+            /** @enum {string} */
+            reasonCode: "PROFESSIONAL_CONTENT_UNAVAILABLE" | "DOWNSTREAM_AI_UNAVAILABLE";
+        };
+        PhoneUseContractRuntimeError: {
+            /** @enum {string} */
+            code: "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FAMILY_MEMBER" | "NOT_FAMILY_MANAGER" | "AGE_BAND_UNKNOWN" | "CURRENT_FAMILY_NOT_FOUND" | "CURRENT_FAMILY_AMBIGUOUS" | "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "CASE_CLOSED" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "COMPLIANCE_BLOCKED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_UNAUTHORIZED" | "PHONE_USE_CONTRACT_INVALID_PAYLOAD" | "PHONE_USE_CONTRACT_QUIZ_NOT_PASSED" | "PHONE_USE_CONTRACT_MISSING_CONFIRMATION" | "PHONE_USE_CONTRACT_INVALID_CONFIRMATION_SOURCE" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONTENT_STALE" | "PHONE_USE_CONTRACT_ILLEGAL_ENTRY" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "PHONE_USE_CONTRACT_COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_SAFETY_BLOCKED" | "PHONE_USE_CONTRACT_PACKAGE_DRIFT" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_ROLEPLAY_DOWNSTREAM_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
             message: string;
         };
         /** @enum {string} */
@@ -4360,6 +5208,21 @@ export interface operations {
                             createdAt: string;
                         }[];
                         routeReasonCode: string | null;
+                        recovery: {
+                            reasonCode: string;
+                            missingRequirements: {
+                                /** @enum {string} */
+                                nodeCode: "A1001" | "01002" | "01003";
+                                evidenceCode: string;
+                                /** @enum {string} */
+                                evidenceFamily: "EMOTION" | "FAMILY_RELATIONSHIP" | "SLEEP" | "STUDY_OR_NECESSARY_AFFAIRS" | "REAL_WORLD_ACTIVITY_DISPLACEMENT" | "OTHER_APPROVED";
+                                /** @enum {string} */
+                                missingState: "NO_RECORD" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "NOT_APPLICABLE";
+                                reasonCode: string;
+                            }[];
+                            /** @enum {string} */
+                            correctionTargetNodeCode: "A1001" | "01002" | "01003";
+                        } | null;
                         downstream: {
                             routeIntent: string | null;
                             available: boolean;
@@ -5385,6 +6248,21 @@ export interface operations {
                             createdAt: string;
                         }[];
                         routeReasonCode: string | null;
+                        recovery: {
+                            reasonCode: string;
+                            missingRequirements: {
+                                /** @enum {string} */
+                                nodeCode: "A1001" | "01002" | "01003";
+                                evidenceCode: string;
+                                /** @enum {string} */
+                                evidenceFamily: "EMOTION" | "FAMILY_RELATIONSHIP" | "SLEEP" | "STUDY_OR_NECESSARY_AFFAIRS" | "REAL_WORLD_ACTIVITY_DISPLACEMENT" | "OTHER_APPROVED";
+                                /** @enum {string} */
+                                missingState: "NO_RECORD" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "NOT_APPLICABLE";
+                                reasonCode: string;
+                            }[];
+                            /** @enum {string} */
+                            correctionTargetNodeCode: "A1001" | "01002" | "01003";
+                        } | null;
                         downstream: {
                             routeIntent: string | null;
                             available: boolean;
@@ -6296,6 +7174,21 @@ export interface operations {
                             createdAt: string;
                         }[];
                         routeReasonCode: string | null;
+                        recovery: {
+                            reasonCode: string;
+                            missingRequirements: {
+                                /** @enum {string} */
+                                nodeCode: "A1001" | "01002" | "01003";
+                                evidenceCode: string;
+                                /** @enum {string} */
+                                evidenceFamily: "EMOTION" | "FAMILY_RELATIONSHIP" | "SLEEP" | "STUDY_OR_NECESSARY_AFFAIRS" | "REAL_WORLD_ACTIVITY_DISPLACEMENT" | "OTHER_APPROVED";
+                                /** @enum {string} */
+                                missingState: "NO_RECORD" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "NOT_APPLICABLE";
+                                reasonCode: string;
+                            }[];
+                            /** @enum {string} */
+                            correctionTargetNodeCode: "A1001" | "01002" | "01003";
+                        } | null;
                         downstream: {
                             routeIntent: string | null;
                             available: boolean;
@@ -7335,6 +8228,21 @@ export interface operations {
                             createdAt: string;
                         }[];
                         routeReasonCode: string | null;
+                        recovery: {
+                            reasonCode: string;
+                            missingRequirements: {
+                                /** @enum {string} */
+                                nodeCode: "A1001" | "01002" | "01003";
+                                evidenceCode: string;
+                                /** @enum {string} */
+                                evidenceFamily: "EMOTION" | "FAMILY_RELATIONSHIP" | "SLEEP" | "STUDY_OR_NECESSARY_AFFAIRS" | "REAL_WORLD_ACTIVITY_DISPLACEMENT" | "OTHER_APPROVED";
+                                /** @enum {string} */
+                                missingState: "NO_RECORD" | "UNKNOWN" | "NOT_COLLECTED" | "DECLINED" | "NOT_APPLICABLE";
+                                reasonCode: string;
+                            }[];
+                            /** @enum {string} */
+                            correctionTargetNodeCode: "A1001" | "01002" | "01003";
+                        } | null;
                         downstream: {
                             routeIntent: string | null;
                             available: boolean;
@@ -7557,6 +8465,998 @@ export interface operations {
                         code: "CASE_NOT_FOUND" | "CASE_NOT_PRIMARY" | "CASE_PHASE_CONFLICT" | "CASE_NOT_OPEN" | "STALE_CASE_VERSION" | "SAFETY_HOLD_BLOCKED" | "SCENE_NODE_NOT_FOUND" | "SCENE_NODE_UNREACHABLE" | "SCENE_PACKAGE_MISMATCH" | "STALE_SCENE_PACKAGE" | "STALE_NODE_REVISION" | "STALE_SELECTION_REVISION" | "STALE_TARGET_REVISION" | "TARGET_SELECTION_INVALID" | "TARGET_CODE_INVALID" | "TARGET_NOT_SELECTED" | "TARGET_SCOPE_INVALID" | "TARGET_SELECTION_STATE_INVALID" | "FAMILY_ALLIANCE_ENTRY_BLOCKED" | "PROBLEM_FORMULATION_REQUIRED" | "CONSENT_BLOCKED" | "DEPENDENCY_UNAVAILABLE" | "SCENE_RESPONSE_INVALID" | "SCENE_ROUTE_BLOCKED" | "SCENE_ROUTE_UNRESOLVED" | "IDEMPOTENCY_PAYLOAD_MISMATCH" | "INTEGRATED_TRIAGE_INSUFFICIENT" | "INTEGRATED_TRIAGE_BLOCKED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_REQUIRED" | "SUPPLEMENTAL_ASSESSMENT_CONSENT_DECLINED" | "APPROVED_INSTRUMENT_UNAVAILABLE" | "DOWNSTREAM_RUNTIME_UNAVAILABLE" | "COMPLIANCE_BLOCKED" | "PHONE_USE_CONTRACT_NOT_FOUND" | "PHONE_USE_CONTRACT_STALE_REVISION" | "PHONE_USE_CONTRACT_CONSENT_BLOCKED" | "DOWNSTREAM_AI_UNAVAILABLE" | "PHONE_USE_FOLLOWUP_DOWNSTREAM_UNAVAILABLE" | "VALIDATION_ERROR" | "INTERNAL_ERROR";
                         message: string;
                     };
+                };
+            };
+        };
+    };
+    getPhoneUseContractTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approved versioned phone-use Contract template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractTemplateResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    getPhoneUseContractExamples: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Four approved professional Contract examples */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractExamplesResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    getCurrentPhoneUseContract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized current phone-use Contract version */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    createPhoneUseContractDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePhoneUseContractDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Initial formal Contract draft */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    updatePhoneUseContractDraft: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePhoneUseContractDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Corrected mutable Contract draft revision */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    confirmPhoneUseContractVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPhoneUseContractRequest"];
+            };
+        };
+        responses: {
+            /** @description Current Contract party confirmation recorded */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    revisePhoneUseContractVersion: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevisePhoneUseContractRequest"];
+            };
+        };
+        responses: {
+            /** @description New superseding A4012 Contract draft */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    getPhoneUseContractFaq: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Approved static Contract execution FAQ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractFaqResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    createPhoneUseRoleplay: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePhoneUseRoleplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Recoverable adult-only A4003 roleplay HOLD */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseRoleplayHoldResponse"];
+                };
+            };
+            /** @description Created simulated-parent roleplay session */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseRoleplaySessionDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    addPhoneUseRoleplayTurn: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePhoneUseRoleplayTurnRequest"];
+            };
+        };
+        responses: {
+            /** @description Recoverable roleplay HOLD */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseRoleplayHoldResponse"];
+                };
+            };
+            /** @description Generated simulated-parent roleplay turn */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseRoleplayTurnDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    ratePhoneUseRoleplayTurn: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RatePhoneUseRoleplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Rated roleplay turn */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseRoleplayTurnDto"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+        };
+    };
+    selectPhoneUseRoleplayTurn: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyHeader"];
+            };
+            path: {
+                id: components["parameters"]["CaseId"];
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectPhoneUseRoleplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Selected SIMULATION result or recoverable roleplay HOLD */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseRoleplaySelectionResponse"] | components["schemas"]["PhoneUseRoleplayHoldResponse"];
+                };
+            };
+            /** @description `UNAUTHENTICATED` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description Concurrency, contract state or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `VALIDATION_ERROR` / contract payload invalid */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
+                };
+            };
+            /** @description `INTERNAL_ERROR` */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneUseContractRuntimeError"];
                 };
             };
         };
