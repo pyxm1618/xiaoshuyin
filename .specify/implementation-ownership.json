@@ -314,7 +314,8 @@
           "foundation-remaining-remediation",
           "common-core-goal-confirmgoal-runtime",
           "phase5-c3-staff-assignment-control-plane",
-          "phase5-d6-real-external-authority-content"
+          "phase5-d6-real-external-authority-content",
+          "phase5-production-readiness-e"
         ]
       }
     },
@@ -685,6 +686,71 @@
         "features": [
           "017-professional-knowledge-foundation",
           "phase5-d6-real-external-authority-content"
+        ]
+      }
+    },
+    {
+      "id": "phase5-e-dockerfile",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/Dockerfile"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "phase5-e-api-package-json",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/package.json"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "phase5-e-api-error-handler",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/plugins/error-handler.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "phase5-e-api-auth-routes",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/auth.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "phase5-e-api-runtime-env",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/runtime-env.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
         ]
       }
     }
