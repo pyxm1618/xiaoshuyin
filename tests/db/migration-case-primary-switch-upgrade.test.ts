@@ -1002,7 +1002,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 25 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 26 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -1121,6 +1121,15 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...GOAL_RUNTIME_NEW_CONSTRAINTS,
         ...SLICE17_NEW_CONSTRAINTS,
         'business_audit_staff_event_pair_check',
+        'digital_use_assessment_contex_family_id_created_by_person__fkey',
+        'digital_use_assessment_context_case_id_family_id_fkey',
+        'digital_use_assessment_context_case_id_not_null',
+        'digital_use_assessment_context_created_at_not_null',
+        'digital_use_assessment_context_created_by_person_id_not_null',
+        'digital_use_assessment_context_family_id_not_null',
+        'digital_use_assessment_context_family_id_target_person_id_fkey',
+        'digital_use_assessment_context_pkey',
+        'digital_use_assessment_context_target_person_id_not_null',
       ].sort()
     );
     const changedConstraints = beforeConstraintNames.filter(
@@ -1166,6 +1175,8 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       'policy:staff_control_no_runtime_audit',
       'policy:staff_control_read',
       'policy:staff_control_revoke',
+      'policy:digital_use_assessment_context_family_scope',
+      'table:digital_use_assessment_context',
       'trigger:accounts_status_invalidates_sessions',
     ].sort());
 
@@ -1194,7 +1205,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 32 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 33 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -1232,6 +1243,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '027_professional_knowledge_insert_lifecycle_guard.sql',
       '028_professional_knowledge_authority_boundary_remediation.sql',
       '029_staff_assignment_control_plane.sql',
+      '030_digital_use_assessment_context.sql',
     ]);
   }, 180_000);
 });

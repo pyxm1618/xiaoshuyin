@@ -21,7 +21,8 @@ describe('RLS', () => {
     await client.end();
   });
 
-  it('all 38 business tables have ENABLE + FORCE RLS, including accounts', async () => {    const { rows } = await client.query(`
+  it('all 39 business tables have ENABLE + FORCE RLS, including accounts', async () => {
+    const { rows } = await client.query(`
       SELECT relname, relrowsecurity, relforcerowsecurity
       FROM pg_class
       WHERE relkind = 'r' AND relnamespace = 'public'::regnamespace
@@ -33,7 +34,8 @@ describe('RLS', () => {
     const noRlsTables = rows.filter((r: any) => !r.relrowsecurity);
 
     // Prior reviewed owners plus Slice 16 InterventionDefinition and Slice 17 Professional Knowledge tables.
-    expect(rlsTables.length).toBe(38);
+    expect(rlsTables.length).toBe(39);
+    expect(rlsTables.some((row) => row.relname === 'digital_use_assessment_context')).toBe(true);
     expect(noRlsTables).toEqual([]);
 
     for (const t of rlsTables) {
@@ -41,7 +43,7 @@ describe('RLS', () => {
     }
   });
 
-  it('current-main owner subset still covers all 33 tables before the five Slice 17 owner tables', async () => {
+  it('preserves RLS on all 33 baseline owner tables outside Slice 17 and R3', async () => {
     const { rows } = await client.query<{ relname: string }>(`
       SELECT relname
       FROM pg_class
@@ -51,22 +53,27 @@ describe('RLS', () => {
         AND relrowsecurity
       ORDER BY relname
     `);
-    const slice17Owners = new Set([
+    const additionalOwners = new Set([
+      'digital_use_assessment_context',
       'professional_knowledge_items',
       'professional_knowledge_versions',
       'professional_knowledge_sources',
       'professional_knowledge_review_evidence',
       'professional_knowledge_approval_evidence',
     ]);
-    expect(rows.filter((row) => !slice17Owners.has(row.relname)).length).toBe(33);
+    expect(rows.filter((row) => !additionalOwners.has(row.relname)).length).toBe(33);
     expect(rows.some((row) => row.relname === 'intervention_definitions')).toBe(true);
   });
 
-  it('112 policies exist after migration 029 Staff Assignment Control Plane', async () => {
+  it('113 policies exist after migration 030, including the R3 Family-scope policy', async () => {
     const { rows } = await client.query(
       `SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(rows.length).toBe(112);
+    expect(rows.length).toBe(113);
+    expect(rows).toContainEqual({
+      tablename: 'digital_use_assessment_context',
+      policyname: 'digital_use_assessment_context_family_scope',
+    });
   });
 
   it('Slice 2: case policies are Family-scope only', async () => {
