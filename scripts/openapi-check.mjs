@@ -118,6 +118,10 @@ const FROZEN_DOCS = [
       'goal-api.openapi.yaml'
     ),
   },
+  {
+    label: 'phase5-c3-staff-assignment-control-plane',
+    path: join(ROOT, 'specs', 'phase5-c3-staff-assignment-control-plane', 'contracts', 'staff-authority-api.openapi.yaml'),
+  },
 ];
 
 // Normalization lives in `scripts/lib/openapi-normalize.mjs` so the semantic
@@ -304,6 +308,7 @@ function compareSubset(frozen, generated, label, collidingSchemaNames, options =
         label === '004-case-participant-core' ||
         label === '007-case-primary-switch' ||
         label === '008-problem-formulation-core' ||
+        label === 'phase5-c3-staff-assignment-control-plane' ||
         referencesAnySchemaName(frozenSchema, collidingSchemaNames);
 
       if (!mustCompareBody) continue;
@@ -379,7 +384,9 @@ function main() {
       generated,
       doc.label,
       collidingSchemaNames,
-      doc.label === '007-case-primary-switch' ? { keepPatterns: true } : {}
+      doc.label === '007-case-primary-switch' || doc.label === 'phase5-c3-staff-assignment-control-plane'
+        ? { keepPatterns: true }
+        : {}
     );
     for (const op of result.operations) unionOps.add(op);
     for (const name of result.schemas) unionSchemas.add(name);

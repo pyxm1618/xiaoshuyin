@@ -52,6 +52,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/staff/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getStaffMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/capability-grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["grantStaffCapability"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/staff/capability-grants/{grantId}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["revokeStaffCapability"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/families": {
         parameters: {
             query?: never;
@@ -2434,6 +2482,287 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getStaffMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current effective Staff assignments */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        staffPrincipal: {
+                            /** Format: uuid */
+                            accountId: string;
+                            /** Format: uuid */
+                            personId: string;
+                        } | null;
+                        assignments: {
+                            /** Format: uuid */
+                            id: string;
+                            /** @enum {string} */
+                            capability: "PROFESSIONAL_REVIEW" | "SAFETY_REVIEW" | "SAFETY_RESOLVE" | "DATA_RIGHTS" | "QUALITY_REVIEW" | "EXCEPTION_SUPPORT" | "SERVICE_CONTROL";
+                            /** @enum {string} */
+                            scope: "GLOBAL" | "CASE";
+                            familyId: string | null;
+                            caseId: string | null;
+                            parentGrantId: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    grantStaffCapability: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: uuid */
+                    accountId: string;
+                    /** Format: uuid */
+                    personId: string;
+                    /** @enum {string} */
+                    capability: "PROFESSIONAL_REVIEW" | "SAFETY_REVIEW" | "SAFETY_RESOLVE" | "DATA_RIGHTS" | "QUALITY_REVIEW" | "EXCEPTION_SUPPORT" | "SERVICE_CONTROL";
+                    /** Format: date-time */
+                    validFrom: string;
+                    validUntil: string | null;
+                    /** @constant */
+                    scope: "GLOBAL";
+                } | {
+                    /** Format: uuid */
+                    accountId: string;
+                    /** Format: uuid */
+                    personId: string;
+                    /** @enum {string} */
+                    capability: "PROFESSIONAL_REVIEW" | "SAFETY_REVIEW" | "SAFETY_RESOLVE" | "DATA_RIGHTS" | "QUALITY_REVIEW" | "EXCEPTION_SUPPORT" | "SERVICE_CONTROL";
+                    /** Format: date-time */
+                    validFrom: string;
+                    validUntil: string | null;
+                    /** @constant */
+                    scope: "CASE";
+                    /** Format: uuid */
+                    familyId: string;
+                    /** Format: uuid */
+                    caseId: string;
+                    /** Format: uuid */
+                    parentGrantId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Staff authority granted or replayed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        account_id: string;
+                        /** Format: uuid */
+                        person_id: string;
+                        /** @enum {string} */
+                        capability: "PROFESSIONAL_REVIEW" | "SAFETY_REVIEW" | "SAFETY_RESOLVE" | "DATA_RIGHTS" | "QUALITY_REVIEW" | "EXCEPTION_SUPPORT" | "SERVICE_CONTROL";
+                        /** @enum {string} */
+                        scope_type: "GLOBAL" | "CASE";
+                        family_id: string | null;
+                        case_id: string | null;
+                        capability_grant_id: string | null;
+                        /** Format: uuid */
+                        granted_by_account_id: string;
+                        granted_at: string;
+                        valid_from: string;
+                        valid_until: string | null;
+                        revoked_by_account_id: string | null;
+                        revoked_at: string | null;
+                        created_at: string;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description Staff authority denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Overlapping grant or idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid grant or idempotency key */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
+                };
+            };
+        };
+    };
+    revokeStaffCapability: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description 关键命令幂等键（§8.5）。同 key 不同 payload → 409。 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                grantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Staff authority revoked or replayed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        account_id: string;
+                        /** Format: uuid */
+                        person_id: string;
+                        /** @enum {string} */
+                        capability: "PROFESSIONAL_REVIEW" | "SAFETY_REVIEW" | "SAFETY_RESOLVE" | "DATA_RIGHTS" | "QUALITY_REVIEW" | "EXCEPTION_SUPPORT" | "SERVICE_CONTROL";
+                        /** @enum {string} */
+                        scope_type: "GLOBAL" | "CASE";
+                        family_id: string | null;
+                        case_id: string | null;
+                        capability_grant_id: string | null;
+                        /** Format: uuid */
+                        granted_by_account_id: string;
+                        granted_at: string;
+                        valid_from: string;
+                        valid_until: string | null;
+                        revoked_by_account_id: string | null;
+                        revoked_at: string | null;
+                        created_at: string;
+                    };
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnauthenticatedError"];
+                };
+            };
+            /** @description Staff authority denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Staff assignment not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Idempotency conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Invalid assignment, request body or idempotency key */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Internal error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalError"];
                 };
             };
         };
