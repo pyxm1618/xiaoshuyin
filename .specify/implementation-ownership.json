@@ -826,6 +826,19 @@
           "phase5-production-readiness-e"
         ]
       }
+    },
+    {
+      "id": "professional-retrieval-pgvector-bootstrap-019",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/init/02-pgvector.sh"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "019-professional-retrieval-pgvector-readiness"
+        ]
+      }
     }
   ]
 }
