@@ -608,6 +608,19 @@
       }
     },
     {
+      "id": "digital-use-node-response-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-node-response.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
       "id": "digital-use-phone-contract-service",
       "match": {
         "kind": "EXACT",
