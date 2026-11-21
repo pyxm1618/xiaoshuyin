@@ -143,6 +143,7 @@ export function toHttpError(code: string, message?: string, details?: Record<str
  * plus a strictly validated SQLSTATE are recorded.
  */
 function logUnexpected(req: FastifyRequest, err: Error) {
+
   const rawCode = (err as { code?: unknown }).code;
   const sqlstate =
     typeof rawCode === 'string' && /^[0-9A-Z]{5}$/.test(rawCode) ? rawCode : undefined;

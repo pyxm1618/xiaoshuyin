@@ -61,7 +61,7 @@ function literalCodes(schema: any): string[] {
 }
 
 describe('Generated OpenAPI — Case operations (T078)', () => {
-  it('contains the real Case paths and exactly fourteen Case business operations including Goal runtime', () => {
+  it('contains the real Case paths and exactly twenty-six Case business operations including Goal runtime and Phone Contract / Roleplay', () => {
     const casePaths = Object.keys(spec.paths).filter(
       (p) => p === CASE_PATH_PREFIX || p.startsWith(`${CASE_PATH_PREFIX}/`)
     );
@@ -80,6 +80,18 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       '/api/v1/cases/{id}/problem-formulations/{version}/confirm',
       '/api/v1/cases/{id}/problem-formulations/{version}/dispute',
       '/api/v1/cases/{id}/problem-formulations/{version}/corrections',
+      '/api/v1/cases/{id}/digital-use/contract/template',
+      '/api/v1/cases/{id}/digital-use/contract/examples',
+      '/api/v1/cases/{id}/digital-use/contract/current',
+      '/api/v1/cases/{id}/digital-use/contract/drafts',
+      '/api/v1/cases/{id}/digital-use/contract/drafts/{version}',
+      '/api/v1/cases/{id}/digital-use/contract/{version}/confirm',
+      '/api/v1/cases/{id}/digital-use/contract/{version}/revise',
+      '/api/v1/cases/{id}/digital-use/contract/faq',
+      '/api/v1/cases/{id}/digital-use/roleplays',
+      '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
+      '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate',
+      '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select',
     ].sort());
 
     const operations: string[] = [];
@@ -110,8 +122,20 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'POST /api/v1/cases/{id}/problem-formulations/{version}/confirm',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/corrections',
+      'GET /api/v1/cases/{id}/digital-use/contract/template',
+      'GET /api/v1/cases/{id}/digital-use/contract/examples',
+      'GET /api/v1/cases/{id}/digital-use/contract/current',
+      'POST /api/v1/cases/{id}/digital-use/contract/drafts',
+      'PATCH /api/v1/cases/{id}/digital-use/contract/drafts/{version}',
+      'POST /api/v1/cases/{id}/digital-use/contract/{version}/confirm',
+      'POST /api/v1/cases/{id}/digital-use/contract/{version}/revise',
+      'GET /api/v1/cases/{id}/digital-use/contract/faq',
+      'POST /api/v1/cases/{id}/digital-use/roleplays',
+      'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
+      'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate',
+      'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select',
     ].sort());
-    expect(operations).toHaveLength(14);
+    expect(operations).toHaveLength(26);
   });
 
   it('每个 operation 声明 frozen operationId 与 bearerAuth', () => {
@@ -130,6 +154,18 @@ describe('Generated OpenAPI — Case operations (T078)', () => {
       'post /api/v1/cases/{id}/problem-formulations/{version}/confirm': { op: 'confirmProblemFormulation' },
       'post /api/v1/cases/{id}/problem-formulations/{version}/dispute': { op: 'disputeProblemFormulation' },
       'post /api/v1/cases/{id}/problem-formulations/{version}/corrections': { op: 'correctProblemFormulation' },
+      'get /api/v1/cases/{id}/digital-use/contract/template': { op: 'getPhoneUseContractTemplate', tag: 'digital-use-phone-contract' },
+      'get /api/v1/cases/{id}/digital-use/contract/examples': { op: 'getPhoneUseContractExamples', tag: 'digital-use-phone-contract' },
+      'get /api/v1/cases/{id}/digital-use/contract/current': { op: 'getCurrentPhoneUseContract', tag: 'digital-use-phone-contract' },
+      'post /api/v1/cases/{id}/digital-use/contract/drafts': { op: 'createPhoneUseContractDraft', tag: 'digital-use-phone-contract' },
+      'patch /api/v1/cases/{id}/digital-use/contract/drafts/{version}': { op: 'updatePhoneUseContractDraft', tag: 'digital-use-phone-contract' },
+      'post /api/v1/cases/{id}/digital-use/contract/{version}/confirm': { op: 'confirmPhoneUseContractVersion', tag: 'digital-use-phone-contract' },
+      'post /api/v1/cases/{id}/digital-use/contract/{version}/revise': { op: 'revisePhoneUseContractVersion', tag: 'digital-use-phone-contract' },
+      'get /api/v1/cases/{id}/digital-use/contract/faq': { op: 'getPhoneUseContractFaq', tag: 'digital-use-phone-contract' },
+      'post /api/v1/cases/{id}/digital-use/roleplays': { op: 'createPhoneUseRoleplay', tag: 'digital-use-phone-contract' },
+      'post /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns': { op: 'addPhoneUseRoleplayTurn', tag: 'digital-use-phone-contract' },
+      'post /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate': { op: 'ratePhoneUseRoleplayTurn', tag: 'digital-use-phone-contract' },
+      'post /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select': { op: 'selectPhoneUseRoleplayTurn', tag: 'digital-use-phone-contract' },
     };
     for (const [key, { op, tag }] of Object.entries(expected)) {
       const [method, path] = key.split(' ');

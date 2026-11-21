@@ -50,6 +50,35 @@ export type IntegratedTriageOutcome =
   | 'INSUFFICIENT'
   | 'BLOCKED';
 
+export type IntegratedTriageEvidenceFamily =
+  | 'EMOTION'
+  | 'FAMILY_RELATIONSHIP'
+  | 'SLEEP'
+  | 'STUDY_OR_NECESSARY_AFFAIRS'
+  | 'REAL_WORLD_ACTIVITY_DISPLACEMENT'
+  | 'OTHER_APPROVED';
+
+export type IntegratedTriageCorrectionNodeCode = 'A1001' | '01002' | '01003';
+
+/**
+ * Server-computed missing requirement for INSUFFICIENT recovery.
+ *
+ * This is a projection of the canonical Evidence snapshot used by the
+ * evaluator, not a second triage model.
+ */
+export interface IntegratedTriageMissingRequirement {
+  readonly nodeCode: IntegratedTriageCorrectionNodeCode;
+  readonly evidenceCode: string;
+  readonly evidenceFamily: IntegratedTriageEvidenceFamily;
+  readonly missingState:
+    | 'NO_RECORD'
+    | 'UNKNOWN'
+    | 'NOT_COLLECTED'
+    | 'DECLINED'
+    | 'NOT_APPLICABLE';
+  readonly reasonCode: string;
+}
+
 export interface IntegratedTriagePredicates {
   readonly EMOTION_F: boolean | null;
   readonly FAMILY_CONFLICT_F: boolean | null;
@@ -66,6 +95,8 @@ export interface IntegratedTriageResult {
   readonly predicates: IntegratedTriagePredicates;
   readonly conditions: Readonly<Record<string, boolean>>;
   readonly reasonCode: string;
+  readonly missingRequirements: readonly IntegratedTriageMissingRequirement[];
+  readonly correctionTargetNodeCode: IntegratedTriageCorrectionNodeCode | null;
 }
 
 function basePredicates(): IntegratedTriagePredicates {
@@ -85,9 +116,83 @@ function result(
   outcome: IntegratedTriageOutcome,
   predicates: IntegratedTriagePredicates,
   reasonCode: string,
-  conditions: Readonly<Record<string, boolean>> = {}
+  conditions: Readonly<Record<string, boolean>> = {},
+  recovery: {
+    readonly missingRequirements: readonly IntegratedTriageMissingRequirement[];
+    readonly correctionTargetNodeCode: IntegratedTriageCorrectionNodeCode | null;
+  } = { missingRequirements: [], correctionTargetNodeCode: null }
 ): IntegratedTriageResult {
-  return Object.freeze({ outcome, predicates: Object.freeze(predicates), conditions, reasonCode });
+  return Object.freeze({
+    outcome,
+    predicates: Object.freeze(predicates),
+    conditions,
+    reasonCode,
+    missingRequirements: Object.freeze([...recovery.missingRequirements]),
+    correctionTargetNodeCode: recovery.correctionTargetNodeCode,
+  });
+}
+
+function missingRequirement(
+  nodeCode: IntegratedTriageCorrectionNodeCode,
+  evidenceCode: string,
+  evidenceFamily: IntegratedTriageEvidenceFamily,
+  state: Extract<TriageEvidenceState<unknown>, { kind: 'MISSING' }>,
+  reasonCode: string
+): IntegratedTriageMissingRequirement {
+  return {
+    nodeCode,
+    evidenceCode,
+    evidenceFamily,
+    missingState: state.reason,
+    reasonCode,
+  };
+}
+
+function requiredDirectImpactRequirements(
+  evidence: IntegratedTriageEvidence,
+  reasonCode: string
+): IntegratedTriageMissingRequirement[] {
+  const requirements: IntegratedTriageMissingRequirement[] = [];
+  const specs: ReadonlyArray<{
+    readonly state: TriageEvidenceState<boolean>;
+    readonly evidenceCode: string;
+    readonly evidenceFamily: IntegratedTriageEvidenceFamily;
+  }> = [
+    {
+      state: evidence.directImpact.sleep,
+      evidenceCode: 'a1001.impact.sleep',
+      evidenceFamily: 'SLEEP',
+    },
+    {
+      state: evidence.directImpact.studyOrNecessaryAffairs,
+      evidenceCode: 'a1001.impact.study_or_necessary_affairs',
+      evidenceFamily: 'STUDY_OR_NECESSARY_AFFAIRS',
+    },
+    {
+      state: evidence.directImpact.realWorldActivityDisplacement,
+      evidenceCode: 'a1001.impact.real_world_activity_displacement',
+      evidenceFamily: 'REAL_WORLD_ACTIVITY_DISPLACEMENT',
+    },
+    ...(evidence.directImpact.otherApproved ?? []).map((state, index) => ({
+      state,
+      evidenceCode: `a1001.impact.other_approved.${index}`,
+      evidenceFamily: 'OTHER_APPROVED' as const,
+    })),
+  ];
+
+  for (const spec of specs) {
+    if (spec.state.kind !== 'MISSING') continue;
+    requirements.push(
+      missingRequirement(
+        'A1001',
+        spec.evidenceCode,
+        spec.evidenceFamily,
+        spec.state,
+        reasonCode
+      )
+    );
+  }
+  return requirements;
 }
 
 function stateClass<T>(state: TriageEvidenceState<T>): 'VALUE' | 'MISSING' | 'CONFLICT' {
@@ -130,7 +235,28 @@ export function evaluateIntegratedTriage(
 
   // 1. 01002 priority family.
   if (stateClass(evidence.emotion01002) === 'MISSING') {
-    return result('INSUFFICIENT', { ...p, MATERIAL_UNRESOLVED: true }, '01002_MISSING_FAMILY');
+    const missingState = evidence.emotion01002 as Extract<
+      TriageEvidenceState<unknown>,
+      { kind: 'MISSING' }
+    >;
+    return result(
+      'INSUFFICIENT',
+      { ...p, MATERIAL_UNRESOLVED: true },
+      '01002_MISSING_FAMILY',
+      {},
+      {
+        missingRequirements: [
+          missingRequirement(
+            '01002',
+            '01002.emotion',
+            'EMOTION',
+            missingState,
+            '01002_MISSING_FAMILY'
+          ),
+        ],
+        correctionTargetNodeCode: '01002',
+      }
+    );
   }
   if (stateClass(evidence.emotion01002) === 'CONFLICT') {
     return result('BLOCKED', { ...p, MATERIAL_UNRESOLVED: true }, '01002_CONFLICT_FAMILY');
@@ -155,7 +281,28 @@ export function evaluateIntegratedTriage(
 
   // 2. Only after valid 01002 non-F, classify 01003.
   if (stateClass(evidence.family01003) === 'MISSING') {
-    return result('INSUFFICIENT', { ...p, MATERIAL_UNRESOLVED: true }, '01003_MISSING_FAMILY');
+    const missingState = evidence.family01003 as Extract<
+      TriageEvidenceState<unknown>,
+      { kind: 'MISSING' }
+    >;
+    return result(
+      'INSUFFICIENT',
+      { ...p, MATERIAL_UNRESOLVED: true },
+      '01003_MISSING_FAMILY',
+      {},
+      {
+        missingRequirements: [
+          missingRequirement(
+            '01003',
+            '01003.family_relationship',
+            'FAMILY_RELATIONSHIP',
+            missingState,
+            '01003_MISSING_FAMILY'
+          ),
+        ],
+        correctionTargetNodeCode: '01003',
+      }
+    );
   }
   if (stateClass(evidence.family01003) === 'CONFLICT') {
     return result('BLOCKED', { ...p, MATERIAL_UNRESOLVED: true }, '01003_CONFLICT_FAMILY');
@@ -223,7 +370,15 @@ export function evaluateIntegratedTriage(
     return result(
       'INSUFFICIENT',
       { ...p, DIRECT_DIGITAL_USE_IMPACT_POSITIVE: false, MATERIAL_UNRESOLVED: true },
-      'DIRECT_IMPACT_MISSING_FAMILY'
+      'DIRECT_IMPACT_MISSING_FAMILY',
+      {},
+      {
+        missingRequirements: requiredDirectImpactRequirements(
+          evidence,
+          'DIRECT_IMPACT_MISSING_FAMILY'
+        ),
+        correctionTargetNodeCode: 'A1001',
+      }
     );
   }
   if (impactStates.some((state) => state.kind === 'CONFLICT')) {

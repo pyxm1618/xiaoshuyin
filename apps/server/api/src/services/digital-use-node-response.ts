@@ -33,6 +33,7 @@ import {
 import {
   DIGITAL_USE_PACKAGE_VERSION,
   DIGITAL_USE_SCENE_CODE,
+  evaluateIntegratedTriage,
   resolveDigitalUseRuntimeNode,
   routeDigitalUseTopology,
   type DigitalUseNodeManifestEntry,
@@ -59,6 +60,7 @@ import {
   applyDigitalUseNodeSemantics,
   shouldPrepareProblemFormulationHandoff,
 } from './digital-use-node-semantics.js';
+import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 import { presentDigitalUseProblemFormulationInTransaction } from './digital-use-problem-formulation.js';
 import { executeFamilyAllianceNodeInTransaction } from './digital-use-family-alliance.js';
 import {
@@ -133,6 +135,146 @@ function isRecoverableTriageProjection(
 ): boolean {
   return isRecoverableTriageNode(nodeCode)
     && (status === 'BLOCKED' || status === 'COMPLETED');
+}
+
+const INTEGRATED_TRIAGE_INSUFFICIENT_REASON = 'INTEGRATED_TRIAGE_INSUFFICIENT';
+const NORMAL_TRIAGE_OUTCOMES = new Set<string>([
+  '01005',
+  '01006',
+  'A2001',
+  'A2002',
+  'A2003',
+]);
+
+function isHeldIntegratedTriageNode(node: SceneNodeStateRow): boolean {
+  return (
+    (node.node_code === '01002' || node.node_code === '01003') &&
+    node.status === 'IN_PROGRESS' &&
+    node.branch_reason_codes.includes(INTEGRATED_TRIAGE_INSUFFICIENT_REASON)
+  );
+}
+
+/**
+ * R1 — the only authorized post-completion A1001 re-entry.
+ *
+ * A1001 is ROUTED-only and has no manifest re-entry refs. It may be re-answered
+ * after completion only while the server simultaneously proves:
+ *   1. an Integrated Triage node is canonically held as INSUFFICIENT, and
+ *   2. the deterministic evaluator's correction target is A1001.
+ *
+ * No client assertion or generic EXPANDED re-entry semantics can authorize it.
+ */
+async function isA1001CorrectionAuthorizedByInsufficientRecovery(
+  tx: pg.PoolClient,
+  caseId: string
+): Promise<boolean> {
+  const states = await listSceneNodeStates(tx, caseId);
+  if (!states.some(isHeldIntegratedTriageNode)) return false;
+  const triage = evaluateIntegratedTriage(
+    await loadIntegratedTriageEvidence(tx, caseId)
+  );
+  return (
+    triage.outcome === 'INSUFFICIENT' &&
+    triage.correctionTargetNodeCode === 'A1001'
+  );
+}
+
+/**
+ * Recompute the same deterministic Integrated Triage after an authorized
+ * A1001 correction and leave the INSUFFICIENT HOLD only when the new
+ * authoritative Evidence snapshot proves a normal outcome.
+ */
+async function advanceHeldIntegratedTriageAfterCorrection(
+  tx: pg.PoolClient,
+  input: CompleteDigitalUseNodeInput
+): Promise<void> {
+  const states = await listSceneNodeStates(tx, input.caseId);
+  const held = states
+    .filter(isHeldIntegratedTriageNode)
+    .sort((left, right) => left.node_code.localeCompare(right.node_code))[0];
+  if (!held) return;
+
+  const triage = evaluateIntegratedTriage(
+    await loadIntegratedTriageEvidence(tx, input.caseId)
+  );
+  if (!NORMAL_TRIAGE_OUTCOMES.has(triage.outcome)) return;
+
+  const route = requireResolvedRoute(
+    routeDigitalUseTopology({
+      sceneCode: DIGITAL_USE_SCENE_CODE,
+      packageVersion: DIGITAL_USE_PACKAGE_VERSION,
+      currentNodeCode: held.node_code,
+      conditions: triage.conditions,
+      evidenceBasis: [
+        'FUNCTIONAL_IMPACT',
+        'SLEEP',
+        'REAL_WORLD_ACTIVITY_DISPLACEMENT',
+        'EMOTION',
+        'FAMILY_RELATIONSHIP_OR_CONFLICT',
+      ],
+    })
+  );
+
+  const completed = await casCompleteSceneNodeState(tx, {
+    caseId: input.caseId,
+    nodeCode: held.node_code,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    expectedRevision: held.revision,
+    status: 'COMPLETED',
+    branchReasonCodes: [triage.reasonCode],
+    inputRefs: held.input_refs,
+    outputRefs: held.output_refs,
+  });
+  if (!completed) throw nodeError('STALE_NODE_REVISION');
+
+  const nextNodeCode = route.kind === 'NODE' ? route.nextNodeCode : null;
+  const terminalCode = route.kind === 'TERMINAL' ? route.terminalCode : null;
+
+  await convergeSupersededTriageRoute(tx, {
+    caseId: input.caseId,
+    sourceNodeCode: held.node_code,
+    newNextNodeCode: nextNodeCode,
+    branchReasonCode: triage.reasonCode,
+    nextInputRefs: held.output_refs,
+  });
+
+  if (route.kind === 'NODE') {
+    await ensureSceneNodeAvailable(tx, {
+      familyId: input.familyId,
+      caseId: input.caseId,
+      scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+      nodeCode: route.nextNodeCode,
+      sourceNodeCode: resolveDigitalUseRuntimeNode(route.nextNodeCode)
+        .sourceNodeCode,
+      branchReasonCodes: [triage.reasonCode],
+      inputRefs: held.output_refs,
+    });
+  }
+
+  await insertDigitalUseNodeCompletedEvent(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: held.node_code,
+    nodeRevision: completed.revision,
+    routeReasonCode: triage.reasonCode,
+    inputRefs: held.input_refs,
+    outputRefs: held.output_refs,
+    nextNodeCode,
+    terminalCode,
+  });
+  await insertDigitalUseNodeCompletedAudit(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: held.node_code,
+    nodeRevision: completed.revision,
+    routeReasonCode: triage.reasonCode,
+    nextNodeCode,
+    terminalCode,
+  });
 }
 
 function manifestDescendants(nodeCode: string): ReadonlySet<string> {
@@ -781,6 +923,7 @@ export async function completeDigitalUseNodeResponse(
           let current = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
           let recompleting = false;
           let reevaluatingTriage = false;
+          let a1001RecoveryCorrection = false;
           if (
             current?.status === 'COMPLETED' &&
             (node.entryMode as readonly string[]).includes('USER_INITIATED') &&
@@ -790,6 +933,19 @@ export async function completeDigitalUseNodeResponse(
               throw nodeError('STALE_NODE_REVISION');
             }
             recompleting = true;
+          }
+          if (current?.status === 'COMPLETED' && node.nodeCode === 'A1001') {
+            a1001RecoveryCorrection =
+              await isA1001CorrectionAuthorizedByInsufficientRecovery(
+                tx,
+                input.caseId
+              );
+            if (a1001RecoveryCorrection) {
+              if (current.revision !== input.expectedNodeRevision) {
+                throw nodeError('STALE_NODE_REVISION');
+              }
+              recompleting = true;
+            }
           }
           if (
             current !== null &&
@@ -1125,6 +1281,10 @@ export async function completeDigitalUseNodeResponse(
             nextNodeCode,
             terminalCode,
           });
+
+          if (a1001RecoveryCorrection) {
+            await advanceHeldIntegratedTriageAfterCorrection(tx, input);
+          }
 
           return {
             status: 200,

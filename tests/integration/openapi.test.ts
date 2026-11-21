@@ -121,6 +121,23 @@ const FROZEN_SCHEMAS = [
   'DeclineParticipationRequest',
   'AcceptParticipationRequest',
   'WritableSource',
+  'PhoneUseContractDto',
+  'SavePhoneUseContractDraftRequest',
+  'UpdatePhoneUseContractDraftRequest',
+  'ConfirmPhoneUseContractRequest',
+  'RevisePhoneUseContractRequest',
+  'PhoneUseContractTemplateResponse',
+  'PhoneUseContractExamplesResponse',
+  'PhoneUseContractFaqResponse',
+  'CreatePhoneUseRoleplayRequest',
+  'CreatePhoneUseRoleplayTurnRequest',
+  'RatePhoneUseRoleplayRequest',
+  'SelectPhoneUseRoleplayRequest',
+  'PhoneUseRoleplaySessionDto',
+  'PhoneUseRoleplayTurnDto',
+  'PhoneUseRoleplaySelectionResponse',
+  'PhoneUseRoleplayHoldResponse',
+  'PhoneUseContractRuntimeError',
 ];
 
 describe('OpenAPI Contract (T066 / F5)', () => {
@@ -156,7 +173,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-it('contains exactly the 39 frozen business operations including Common Core Goal runtime', () => {
+it('contains exactly the 51 frozen business operations including Common Core Goal runtime', () => {
     const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
@@ -194,6 +211,18 @@ it('contains exactly the 39 frozen business operations including Common Core Goa
       'POST /api/v1/cases/{id}/problem-formulations/{version}/confirm',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/dispute',
       'POST /api/v1/cases/{id}/problem-formulations/{version}/corrections',
+      'GET /api/v1/cases/{id}/digital-use/contract/template',
+      'GET /api/v1/cases/{id}/digital-use/contract/examples',
+      'GET /api/v1/cases/{id}/digital-use/contract/current',
+      'POST /api/v1/cases/{id}/digital-use/contract/drafts',
+      'PATCH /api/v1/cases/{id}/digital-use/contract/drafts/{version}',
+      'POST /api/v1/cases/{id}/digital-use/contract/{version}/confirm',
+      'POST /api/v1/cases/{id}/digital-use/contract/{version}/revise',
+      'GET /api/v1/cases/{id}/digital-use/contract/faq',
+      'POST /api/v1/cases/{id}/digital-use/roleplays',
+      'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
+      'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate',
+      'POST /api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select',
       'POST /api/v1/compliance/guardian-consents',
       'POST /api/v1/compliance/guardian-consents/requests',
       'POST /api/v1/consents/{id}/revoke',
@@ -224,6 +253,14 @@ it('contains exactly the 39 frozen business operations including Common Core Goa
       ['post', '/api/v1/cases/{id}/switch-primary'],
       ['post', '/api/v1/cases/{id}/assessments'],
       ['post', '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses'],
+      ['post', '/api/v1/cases/{id}/digital-use/contract/drafts'],
+      ['patch', '/api/v1/cases/{id}/digital-use/contract/drafts/{version}'],
+      ['post', '/api/v1/cases/{id}/digital-use/contract/{version}/confirm'],
+      ['post', '/api/v1/cases/{id}/digital-use/contract/{version}/revise'],
+      ['post', '/api/v1/cases/{id}/digital-use/roleplays'],
+      ['post', '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns'],
+      ['post', '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate'],
+      ['post', '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select'],
     ] as const;
     for (const [method, path] of commands) {
       const params = spec.paths[path][method].parameters ?? [];
@@ -285,6 +322,19 @@ it('contains exactly the 39 frozen business operations including Common Core Goa
       '/api/v1/cases/{id}/problem-formulations/{version}/confirm',
       '/api/v1/cases/{id}/problem-formulations/{version}/dispute',
       '/api/v1/cases/{id}/problem-formulations/{version}/corrections',
+      // Phase 5 R2 — formal Phone Contract / Roleplay runtime surfaces.
+      '/api/v1/cases/{id}/digital-use/contract/template',
+      '/api/v1/cases/{id}/digital-use/contract/examples',
+      '/api/v1/cases/{id}/digital-use/contract/current',
+      '/api/v1/cases/{id}/digital-use/contract/drafts',
+      '/api/v1/cases/{id}/digital-use/contract/drafts/{version}',
+      '/api/v1/cases/{id}/digital-use/contract/{version}/confirm',
+      '/api/v1/cases/{id}/digital-use/contract/{version}/revise',
+      '/api/v1/cases/{id}/digital-use/contract/faq',
+      '/api/v1/cases/{id}/digital-use/roleplays',
+      '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns',
+      '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate',
+      '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select',
     ]);
     for (const path of Object.keys(spec.paths)) {
       expect(allowedPaths, `Unplanned endpoint: ${path}`).toContain(path);
