@@ -2,7 +2,7 @@
 
 ## Upstream Traceability
 
-Trace to V1-C10, V1-C11, V1-C24, V1-C25, V1-X14, and Technical Design §6.6 and §40 through requirements E-01 to E-06 in [spec.md](spec.md). Preserve all existing domain, safety, compliance, consent, and role authorization contracts.
+Trace to Technical Design §40 (Infrastructure / Security and Platform production consistency principles) as the authoritative upstream basis, with V1-C24, V1-C25, and V1-X14 preserving existing AI/Safety boundaries and forbidding unverified runtime capability claims. Specific implementation mechanisms (Bun build tooling, Node.js 26.13.1 pinning, multi-stage Docker, non-root user, explicit IP/CIDR proxy trust, Fastify rate limiting, and 429 payload envelope) are designated as engineering controls rather than product authority, implemented across requirements E-01 to E-06 in [spec.md](spec.md). Preserve all existing domain, safety, compliance, consent, and role authorization contracts.
 
 ## Constitution Check
 

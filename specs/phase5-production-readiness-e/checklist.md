@@ -7,8 +7,8 @@
 
 ## Traceability
 
-- [x] CHK001 Every requirement maps to an approved upstream ID (V1-C10, V1-C11, V1-C24, V1-C25, V1-X14) or frozen technical-design section (§6.6, §40).
-- [x] CHK002 Engineering deployment choices (e.g. Node 26.13.1, PostgreSQL 18.7, specific rate limit numbers) are not fabricated as V1 Product Authority.
+- [x] CHK001 Product/technical Authority references are limited to requirements actually stated upstream (Technical Design §40 Infrastructure / Security and Platform production consistency, with V1-C24, V1-C25, V1-X14 preserving existing safety and verification boundaries).
+- [x] CHK002 Engineering-only Production Readiness controls (Bun tooling, Node.js 26.13.1 pinning, multi-stage Docker, non-root user, explicit IP/CIDR trustProxy allowlists, Fastify rate limiting, and 429 response structure) are explicitly distinguished from Product Authority.
 - [x] CHK003 Every acceptance scenario names the relevant requirement.
 
 ## Scope
@@ -31,5 +31,5 @@
 
 ## Review Decision
 
-- [x] CHK013 No unresolved `NEEDS UPSTREAM DECISION` blocker remains.
+- [x] CHK013 No unresolved upstream product decision is required for the currently selected E engineering controls.
 - [x] CHK014 The governance boundary between prerequisite registration and implementation delivery is strictly maintained.
