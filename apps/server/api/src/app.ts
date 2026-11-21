@@ -904,6 +904,26 @@ function buildLoggerOptions(
   };
 }
 
+/**
+ * Fail-closed WeChat provider for production when real code2session is not verified.
+ * Allows production process startup and operational /healthz probe while keeping
+ * unverified WeChat login strictly fail-closed (throwing WECHAT_PROVIDER_NOT_VERIFIED
+ * on code2session execution, preventing account creation or fake openid leakage).
+ */
+export const unavailableProductionWechatProvider: WechatAuthProvider = Object.freeze({
+  async code2session(_code: string): Promise<{ openid: string }> {
+    throw Object.assign(
+      new Error(
+        'WECHAT_PROVIDER_NOT_VERIFIED: real code2session is NOT VERIFIED in this slice; the fake provider is not allowed in production'
+      ),
+      {
+        statusCode: 500,
+        code: 'INTERNAL_ERROR',
+      }
+    );
+  },
+});
+
 export async function buildApp(options: BuildAppOptions = {}) {
   const env = options.env ?? process.env;
 
@@ -952,9 +972,16 @@ export async function buildApp(options: BuildAppOptions = {}) {
     );
   });
 
-  // Production never selects the fake provider (see createWechatProvider).
+  // Resolve WeChat provider:
+  // In test/development, fallback to createWechatProvider (FakeWechatProvider).
+  // In production, real code2session is NOT VERIFIED in this slice (§40 Platform gate).
+  // Instead of failing the entire process startup (which blocks operational /healthz),
+  // use the unavailable provider adapter which fails closed on code2session execution.
   const wechatProvider =
-    options.identityBinding?.wechatProvider ?? createWechatProvider(runtime);
+    options.identityBinding?.wechatProvider ??
+    (runtime.mode === 'test' || runtime.mode === 'development'
+      ? createWechatProvider(runtime)
+      : unavailableProductionWechatProvider);
 
   // Auth plugin
   registerAuthPlugin(app, pool, runtime.sessionSecret);
