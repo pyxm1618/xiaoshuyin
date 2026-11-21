@@ -308,13 +308,20 @@ export async function assertPhoneUseContractDependencies(
 
  return refs;
 }
+async function assertPhoneUseContractChildMatchesAssessmentTarget(
+ tx:pg.PoolClient,caseId:string,childPersonId:string,
+ errorCode:'PHONE_USE_CONTRACT_INVALID_PAYLOAD'|'TARGET_SCOPE_INVALID'|'PHONE_USE_CONTRACT_NOT_FOUND'
+){
+ if(await readDigitalUseAssessmentTarget(tx,caseId)!==childPersonId){
+   throw contractError(errorCode,errorCode==='PHONE_USE_CONTRACT_NOT_FOUND'
+     ? undefined : 'Contract child must match the assessment target');
+ }
+}
 export async function assertPhoneUseContractChildParticipation(
  tx:pg.PoolClient,input:{familyId:string;caseId:string;childPersonId:string;participationId:string},
  targetMismatchCode:'PHONE_USE_CONTRACT_INVALID_PAYLOAD'|'TARGET_SCOPE_INVALID'='PHONE_USE_CONTRACT_INVALID_PAYLOAD'
 ){
- if(await readDigitalUseAssessmentTarget(tx,input.caseId)!==input.childPersonId){
-   throw contractError(targetMismatchCode,'Contract child must match the assessment target');
- }
+ await assertPhoneUseContractChildMatchesAssessmentTarget(tx,input.caseId,input.childPersonId,targetMismatchCode);
  const p=await lockParticipationById(tx,input.participationId);
  if(!p||p.family_id!==input.familyId||p.case_id!==input.caseId||p.person_id!==input.childPersonId||p.state!=='ACTIVE'){
    throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Child participation is not current');
@@ -348,6 +355,9 @@ export async function getPhoneUseContractCurrent(
     await authorizeManager(tx,input,'CASE_READ_ASSESSMENT_SCENE');
     const row=await getCurrentPhoneUseContract(tx,input.caseId);
     if(!row) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
+    await assertPhoneUseContractChildMatchesAssessmentTarget(
+      tx,input.caseId,row.child_party_person_id,'PHONE_USE_CONTRACT_NOT_FOUND'
+    );
     return dto(row);
   });
  }

@@ -849,6 +849,39 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     }
   }
 
+  it.each([false, true])('R3 manager current Contract GET enforces target identity (legacy mismatch: %s)', async (legacyMismatch) => {
+    const { f } = await prepareA5002(app, `r3-manager-current-${legacyMismatch}`, legacyMismatch);
+    const snapshot = async () => (await admin.query(
+      `SELECT
+        (SELECT jsonb_agg(to_jsonb(contract) ORDER BY contract.version)
+          FROM digital_use_contract_versions contract WHERE case_id=$1) AS contracts,
+        (SELECT jsonb_agg(to_jsonb(node) ORDER BY node.node_code)
+          FROM scene_node_states node WHERE case_id=$1) AS scene,
+        (SELECT jsonb_agg(to_jsonb(artifact) ORDER BY artifact.id)
+          FROM scene_artifacts artifact WHERE case_id=$1) AS artifacts,
+        (SELECT jsonb_build_array(phase, version) FROM cases WHERE id=$1) AS case_state,
+        (SELECT count(*) FROM case_events WHERE case_id=$1) AS events,
+        (SELECT count(*) FROM business_audit_events WHERE resource_id::text=$1::text) AS audits`,
+      [f.caseId]
+    )).rows;
+    const before = await snapshot();
+    const response = await app.inject({
+      method: 'GET', url: `/api/v1/cases/${f.caseId}/digital-use/contract/current`,
+      headers: auth(f.manager.token),
+    });
+    if (legacyMismatch) {
+      expect(f.child.personId).not.toBe(f.targetPersonId);
+      expect(response.statusCode, response.body).toBe(404);
+      expect(response.json().code).toBe('PHONE_USE_CONTRACT_NOT_FOUND');
+      expect(response.body).not.toContain(f.child.personId);
+      expect(response.body).not.toContain(f.targetPersonId);
+    } else {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ childPartyPersonId: f.targetPersonId, status: 'ACTIVE' });
+    }
+    expect(await snapshot()).toEqual(before);
+  });
+
   it('R3 rejects A5002 review of a legacy ACTIVE Contract for a different child', async () => {
     const { f, scene, payload } = await prepareA5002(app, 'r3-legacy-mismatch', true);
     expect(f.child.personId).not.toBe(f.targetPersonId);
