@@ -1,0 +1,545 @@
+---
+openapi: 3.1.0
+info:
+  title: Staff Authority Control Plane
+  version: 1.0.0
+  description: Bounded V1 Staff surface from Technical Design §28.10 D8 and P2-AUTH-010.
+paths:
+  "/api/v1/staff/me":
+    get:
+      tags:
+      - staff
+      operationId: getStaffMe
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: Current effective Staff assignments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  staffPrincipal:
+                    anyOf:
+                    - type: object
+                      properties:
+                        accountId:
+                          type: string
+                          format: uuid
+                          pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        personId:
+                          type: string
+                          format: uuid
+                          pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                      required:
+                      - accountId
+                      - personId
+                      additionalProperties: false
+                    - type: 'null'
+                  assignments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                          pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                        capability:
+                          type: string
+                          enum:
+                          - PROFESSIONAL_REVIEW
+                          - SAFETY_REVIEW
+                          - SAFETY_RESOLVE
+                          - DATA_RIGHTS
+                          - QUALITY_REVIEW
+                          - EXCEPTION_SUPPORT
+                          - SERVICE_CONTROL
+                        scope:
+                          type: string
+                          enum:
+                          - GLOBAL
+                          - CASE
+                        familyId:
+                          anyOf:
+                          - type: string
+                            format: uuid
+                            pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          - type: 'null'
+                        caseId:
+                          anyOf:
+                          - type: string
+                            format: uuid
+                            pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          - type: 'null'
+                        parentGrantId:
+                          anyOf:
+                          - type: string
+                            format: uuid
+                            pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          - type: 'null'
+                      required:
+                      - id
+                      - capability
+                      - scope
+                      - familyId
+                      - caseId
+                      - parentGrantId
+                      additionalProperties: false
+                required:
+                - staffPrincipal
+                - assignments
+                additionalProperties: false
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/UnauthenticatedError"
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/InternalError"
+  "/api/v1/staff/capability-grants":
+    post:
+      tags:
+      - staff
+      operationId: grantStaffCapability
+      security:
+      - bearerAuth: []
+      parameters:
+      - "$ref": "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - type: object
+                properties:
+                  accountId:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  personId:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  capability:
+                    type: string
+                    enum:
+                    - PROFESSIONAL_REVIEW
+                    - SAFETY_REVIEW
+                    - SAFETY_RESOLVE
+                    - DATA_RIGHTS
+                    - QUALITY_REVIEW
+                    - EXCEPTION_SUPPORT
+                    - SERVICE_CONTROL
+                  validFrom:
+                    type: string
+                    format: date-time
+                    pattern: "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  validUntil:
+                    anyOf:
+                    - type: string
+                      format: date-time
+                      pattern: "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    - type: 'null'
+                  scope:
+                    type: string
+                    const: GLOBAL
+                required:
+                - accountId
+                - personId
+                - capability
+                - validFrom
+                - validUntil
+                - scope
+                additionalProperties: false
+              - type: object
+                properties:
+                  accountId:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  personId:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  capability:
+                    type: string
+                    enum:
+                    - PROFESSIONAL_REVIEW
+                    - SAFETY_REVIEW
+                    - SAFETY_RESOLVE
+                    - DATA_RIGHTS
+                    - QUALITY_REVIEW
+                    - EXCEPTION_SUPPORT
+                    - SERVICE_CONTROL
+                  validFrom:
+                    type: string
+                    format: date-time
+                    pattern: "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                  validUntil:
+                    anyOf:
+                    - type: string
+                      format: date-time
+                      pattern: "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    - type: 'null'
+                  scope:
+                    type: string
+                    const: CASE
+                  familyId:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  caseId:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  parentGrantId:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                required:
+                - accountId
+                - personId
+                - capability
+                - validFrom
+                - validUntil
+                - scope
+                - familyId
+                - caseId
+                - parentGrantId
+                additionalProperties: false
+      responses:
+        '200':
+          description: Staff authority granted or replayed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  account_id:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  person_id:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  capability:
+                    type: string
+                    enum:
+                    - PROFESSIONAL_REVIEW
+                    - SAFETY_REVIEW
+                    - SAFETY_RESOLVE
+                    - DATA_RIGHTS
+                    - QUALITY_REVIEW
+                    - EXCEPTION_SUPPORT
+                    - SERVICE_CONTROL
+                  scope_type:
+                    type: string
+                    enum:
+                    - GLOBAL
+                    - CASE
+                  family_id:
+                    anyOf:
+                    - type: string
+                      format: uuid
+                      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    - type: 'null'
+                  case_id:
+                    anyOf:
+                    - type: string
+                      format: uuid
+                      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    - type: 'null'
+                  capability_grant_id:
+                    anyOf:
+                    - type: string
+                      format: uuid
+                      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    - type: 'null'
+                  granted_by_account_id:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  granted_at:
+                    type: string
+                  valid_from:
+                    type: string
+                  valid_until:
+                    type:
+                    - string
+                    - 'null'
+                  revoked_by_account_id:
+                    anyOf:
+                    - type: string
+                      format: uuid
+                      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    - type: 'null'
+                  revoked_at:
+                    type:
+                    - string
+                    - 'null'
+                  created_at:
+                    type: string
+                required:
+                - id
+                - account_id
+                - person_id
+                - capability
+                - scope_type
+                - family_id
+                - case_id
+                - capability_grant_id
+                - granted_by_account_id
+                - granted_at
+                - valid_from
+                - valid_until
+                - revoked_by_account_id
+                - revoked_at
+                - created_at
+                additionalProperties: false
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/UnauthenticatedError"
+        '403':
+          description: Staff authority denied
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '409':
+          description: Overlapping grant or idempotency conflict
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '422':
+          description: Invalid grant or idempotency key
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/InternalError"
+  "/api/v1/staff/capability-grants/{grantId}/revoke":
+    post:
+      tags:
+      - staff
+      operationId: revokeStaffCapability
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: grantId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - "$ref": "#/components/parameters/IdempotencyKey"
+      responses:
+        '200':
+          description: Staff authority revoked or replayed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  account_id:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  person_id:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  capability:
+                    type: string
+                    enum:
+                    - PROFESSIONAL_REVIEW
+                    - SAFETY_REVIEW
+                    - SAFETY_RESOLVE
+                    - DATA_RIGHTS
+                    - QUALITY_REVIEW
+                    - EXCEPTION_SUPPORT
+                    - SERVICE_CONTROL
+                  scope_type:
+                    type: string
+                    enum:
+                    - GLOBAL
+                    - CASE
+                  family_id:
+                    anyOf:
+                    - type: string
+                      format: uuid
+                      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    - type: 'null'
+                  case_id:
+                    anyOf:
+                    - type: string
+                      format: uuid
+                      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    - type: 'null'
+                  capability_grant_id:
+                    anyOf:
+                    - type: string
+                      format: uuid
+                      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    - type: 'null'
+                  granted_by_account_id:
+                    type: string
+                    format: uuid
+                    pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  granted_at:
+                    type: string
+                  valid_from:
+                    type: string
+                  valid_until:
+                    type:
+                    - string
+                    - 'null'
+                  revoked_by_account_id:
+                    anyOf:
+                    - type: string
+                      format: uuid
+                      pattern: "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    - type: 'null'
+                  revoked_at:
+                    type:
+                    - string
+                    - 'null'
+                  created_at:
+                    type: string
+                required:
+                - id
+                - account_id
+                - person_id
+                - capability
+                - scope_type
+                - family_id
+                - case_id
+                - capability_grant_id
+                - granted_by_account_id
+                - granted_at
+                - valid_from
+                - valid_until
+                - revoked_by_account_id
+                - revoked_at
+                - created_at
+                additionalProperties: false
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/UnauthenticatedError"
+        '403':
+          description: Staff authority denied
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '404':
+          description: Staff assignment not found
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '409':
+          description: Idempotency conflict
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '422':
+          description: Invalid assignment, request body or idempotency key
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/Error"
+        '500':
+          description: Internal error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/InternalError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-session-token
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 关键命令幂等键（§8.5）。同 key 不同 payload → 409。
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties: {}
+      required:
+      - code
+      - message
+      additionalProperties: false
+    UnauthenticatedError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+          - UNAUTHENTICATED
+        message:
+          type: string
+      required:
+      - code
+      - message
+      additionalProperties: false
+    InternalError:
+      type: object
+      properties:
+        code:
+          type: string
+          enum:
+          - INTERNAL_ERROR
+        message:
+          type: string
+      required:
+      - code
+      - message
+      additionalProperties: false

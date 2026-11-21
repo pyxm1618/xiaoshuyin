@@ -200,19 +200,22 @@ BEGIN
   RETURN to_jsonb(assignment) - 'capability_grant_scope_type';
 END $$;
 
-CREATE FUNCTION app.read_staff_authority(p_epoch integer, p_account uuid, p_person uuid, p_case uuid)
-RETURNS SETOF jsonb LANGUAGE plpgsql SECURITY DEFINER
+-- The shared projection runs with the caller's RLS. Ordinary runtime access
+-- is limited to the authenticated self context and cannot query the inventory.
+CREATE FUNCTION app.staff_authority_projection(p_account uuid, p_person uuid, p_case uuid)
+RETURNS SETOF jsonb LANGUAGE plpgsql SECURITY INVOKER
 SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
-  checked_at timestamptz;
+  checked_at timestamptz := clock_timestamp();
 BEGIN
-  PERFORM app.require_staff_authority_control(p_epoch, false);
-  IF (p_case IS NULL AND (p_account IS NULL OR p_person IS NULL))
-     OR (p_case IS NOT NULL AND (p_account IS NOT NULL OR p_person IS NOT NULL)) THEN
-    RAISE EXCEPTION 'STAFF_AUTHORITY_READ_FILTER_INVALID' USING ERRCODE = '22023';
+  IF current_user <> 'xiaoshuyin_migrator' AND (
+    app_current_purpose() IS DISTINCT FROM 'SELF_IDENTITY'
+    OR p_account IS NULL OR p_person IS NULL OR p_case IS NOT NULL
+    OR p_account IS DISTINCT FROM app_account_id() OR p_person IS DISTINCT FROM app_person_id()
+  ) THEN
+    RAISE EXCEPTION 'STAFF_AUTHORITY_CONTROL_DENIED' USING ERRCODE = '42501';
   END IF;
-  checked_at := clock_timestamp();
   RETURN QUERY
     SELECT (to_jsonb(sa) - 'capability_grant_scope_type') || jsonb_build_object('status', CASE
       WHEN sa.revoked_at IS NOT NULL THEN 'REVOKED'
@@ -233,6 +236,22 @@ BEGIN
        OR (p_case IS NULL AND sa.account_id = p_account AND sa.person_id = p_person)
     ORDER BY sa.granted_at, sa.id;
 END $$;
+
+CREATE FUNCTION app.read_staff_authority(p_epoch integer, p_account uuid, p_person uuid, p_case uuid)
+RETURNS SETOF jsonb LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public, pg_temp
+AS $$
+BEGIN
+  PERFORM app.require_staff_authority_control(p_epoch, false);
+  IF (p_case IS NULL AND (p_account IS NULL OR p_person IS NULL))
+     OR (p_case IS NOT NULL AND (p_account IS NOT NULL OR p_person IS NOT NULL)) THEN
+    RAISE EXCEPTION 'STAFF_AUTHORITY_READ_FILTER_INVALID' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY SELECT app.staff_authority_projection(p_account, p_person, p_case);
+END $$;
+
+REVOKE ALL ON FUNCTION app.staff_authority_projection(uuid, uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app.staff_authority_projection(uuid, uuid, uuid) TO xiaoshuyin_app;
 
 REVOKE ALL ON FUNCTION app.audit_staff_authority(staff_assignments, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.require_staff_authority_control(integer, boolean),
