@@ -97,9 +97,19 @@ describe('C3 Staff Assignment Control Plane', () => {
     })).rejects.toThrow('STAFF_AUTHORITY_SELF_GRANT_DENIED');
     await expect(commands.read('invalid-session', identity(staff))).rejects.toThrow('STAFF_AUTHORITY_SESSION_INVALID');
     const { rows } = await fixture.pool.query(
-      `SELECT has_table_privilege(current_user,'staff_assignments','INSERT,UPDATE,DELETE') AS allowed`,
+      `SELECT has_table_privilege(current_user,'staff_assignments','INSERT') AS can_insert,
+              has_table_privilege(current_user,'staff_assignments','UPDATE') AS can_update,
+              has_table_privilege(current_user,'staff_assignments','DELETE') AS can_delete`,
     );
-    expect(rows).toEqual([{ allowed: false }]);
+    expect(rows).toEqual([{ can_insert: false, can_update: false, can_delete: false }]);
+    const functions = await fixture.admin.query<{ proconfig: string[] }>(
+      `SELECT proconfig FROM pg_proc WHERE pronamespace = 'app'::regnamespace
+       AND proname IN ('require_staff_authority_control', 'grant_staff_authority', 'revoke_staff_authority', 'read_staff_authority')
+       AND prosecdef`,
+    );
+    expect(functions.rows).toEqual(Array.from({ length: 4 }, () => ({
+      proconfig: ['search_path=pg_catalog, public, pg_temp'],
+    })));
   });
 
   it('validates graph, identity, vocabulary, scope and window; replays exact operations and audits only actual mutations', async () => {

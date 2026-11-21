@@ -60,7 +60,7 @@ CREATE POLICY staff_control_no_runtime_audit ON business_audit_events
 
 CREATE FUNCTION app.require_staff_authority_control(p_epoch integer, p_mutation boolean)
 RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   actor_id uuid := app_account_id();
@@ -96,7 +96,7 @@ END $$;
 
 CREATE FUNCTION app.audit_staff_authority(p_assignment staff_assignments, p_event text)
 RETURNS void LANGUAGE sql
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
   INSERT INTO business_audit_events
     (family_id, actor_account_id, event_type, resource_type, resource_id, occurred_at, metadata)
@@ -114,7 +114,7 @@ CREATE FUNCTION app.grant_staff_authority(
   p_epoch integer, p_account uuid, p_person uuid, p_capability text, p_scope text,
   p_family uuid, p_case uuid, p_parent uuid, p_from timestamptz, p_until timestamptz
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   actor_person uuid;
@@ -176,7 +176,7 @@ END $$;
 
 CREATE FUNCTION app.revoke_staff_authority(p_epoch integer, p_id uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   assignment staff_assignments;
@@ -202,7 +202,7 @@ END $$;
 
 CREATE FUNCTION app.read_staff_authority(p_epoch integer, p_account uuid, p_person uuid, p_case uuid)
 RETURNS SETOF jsonb LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   checked_at timestamptz;
