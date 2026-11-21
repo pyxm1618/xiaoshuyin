@@ -701,58 +701,6 @@
           "phase5-production-readiness-e"
         ]
       }
-    },
-    {
-      "id": "phase5-e-api-package-json",
-      "match": {
-        "kind": "EXACT",
-        "path": "apps/server/api/package.json"
-      },
-      "ownership": {
-        "kind": "FEATURE",
-        "features": [
-          "phase5-production-readiness-e"
-        ]
-      }
-    },
-    {
-      "id": "phase5-e-api-error-handler",
-      "match": {
-        "kind": "EXACT",
-        "path": "apps/server/api/src/plugins/error-handler.ts"
-      },
-      "ownership": {
-        "kind": "FEATURE",
-        "features": [
-          "phase5-production-readiness-e"
-        ]
-      }
-    },
-    {
-      "id": "phase5-e-api-auth-routes",
-      "match": {
-        "kind": "EXACT",
-        "path": "apps/server/api/src/routes/auth.ts"
-      },
-      "ownership": {
-        "kind": "FEATURE",
-        "features": [
-          "phase5-production-readiness-e"
-        ]
-      }
-    },
-    {
-      "id": "phase5-e-api-runtime-env",
-      "match": {
-        "kind": "EXACT",
-        "path": "apps/server/api/src/runtime-env.ts"
-      },
-      "ownership": {
-        "kind": "FEATURE",
-        "features": [
-          "phase5-production-readiness-e"
-        ]
-      }
     }
   ]
 }

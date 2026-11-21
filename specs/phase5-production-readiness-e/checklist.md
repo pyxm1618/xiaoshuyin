@@ -7,29 +7,29 @@
 
 ## Traceability
 
-- [x] CHK001 Product/technical Authority references are limited to requirements actually stated upstream (Technical Design §40 Infrastructure / Security and Platform production consistency, with V1-C24, V1-C25, V1-X14 preserving existing safety and verification boundaries).
-- [x] CHK002 Engineering-only Production Readiness controls (Bun tooling, Node.js 26.13.1 pinning, multi-stage Docker, non-root user, explicit IP/CIDR trustProxy allowlists, Fastify rate limiting, and 429 response structure) are explicitly distinguished from Product Authority.
-- [x] CHK003 Every acceptance scenario names the relevant requirement.
+- [x] CHK001 Every requirement maps to verified upstream technical architecture and design sections (Docs/总体技术架构.md §8.3, §18A; Docs/V1技术设计.md §4, §4.0A, §4.1, §4.3, Phase 5, §31A, §40). Erroneous mappings to V1-C10/C11/C24/C25/X14 and §6.6 are removed.
+- [x] CHK002 Frozen Authority / Required Outcomes are clearly distinguished from Current Engineering Choices / Candidate Remediations (e.g. Bun workspace tooling, multi-stage structure, non-root execution choices are not fabricated as normative upstream authority).
+- [x] CHK003 Every acceptance scenario traces to a specific requirement (E-01 to E-06).
 
 ## Scope
 
-- [x] CHK004 In Scope (E1 tooling/runtime decoupling, E2 non-root containerization and /healthz, E3 proxy trust and tiered rate limiting, E4 fail-fast config and audit-first typed data / time boundaries) and Out of Scope (domain rewrites, speculative DB migrations, external gateway platforms) are explicitly bounded.
-- [x] CHK005 E1 clearly distinguishes Bun (build/package tooling) from Node.js (production server runtime).
-- [x] CHK006 E4 preserves the full frozen scope (Runtime / Typed Data / Time Boundary Reconciliation) with an audit-first principle: no modification without confirmed bug evidence.
+- [x] CHK004 In Scope (E1 runtime/tooling boundary, E2 controlled container delivery and /healthz, E3 topology-first ingress & abuse protection reconciliation, E4 audit-first config/types/time) and Out of Scope (domain rewrites, speculative migrations, unowned historical paths) are explicitly bounded.
+- [x] CHK005 E1 clearly distinguishes repository tooling (Bun build) from frozen production runtime (Node.js 26 LTS ESM).
+- [x] CHK006 E4 preserves full frozen scope with an audit-first principle: no schema or domain type modification permitted without fresh proof of a concrete defect.
 
 ## Product & Architectural Fidelity
 
-- [x] CHK007 Fail-closed and fail-fast behaviors are strictly preserved across ingress, runtime boot, and configuration validation.
+- [x] CHK007 Deterministic fail-fast configuration validation and ingress IP spoofing boundaries are preserved without compromising availability.
 - [x] CHK008 Zero weakening of authorization, consent, safety prechecks, or role verification.
-- [x] CHK009 No unclassified repository path or broad prefix ownership is claimed.
+- [x] CHK009 No unclassified path, broad prefix, or unowned historical shared path (`package.json`, `error-handler.ts`, `auth.ts`, `runtime-env.ts`) is claimed; ownership is strictly confined to `Dockerfile` (FEATURE) and `app.ts` (SHARED participant).
 
 ## Verification
 
 - [x] CHK010 Every task in `tasks.md` has explicit `[REQ:...]` and `[VERIFY:...]` contracts.
-- [x] CHK011 Concrete verification plans are established for container execution, rate limiting, proxy trust spoofing prevention, and smoke boot testing.
-- [x] CHK012 Full repository regression gates (Static Checks, Tests, Verify-All, Spec Governance) are enforced.
+- [x] CHK011 Tasks are audit-first, explicitly permitting `ALREADY SUFFICIENT`, `NO CHANGE REQUIRED`, and `DEPLOYMENT TOPOLOGY DECISION REQUIRED` without forcing speculative implementation.
+- [x] CHK012 Full repository regression gates (Static Checks, Tests, Verify-All, Spec Governance) are enforced on exact candidate HEAD.
 
 ## Review Decision
 
-- [x] CHK013 No unresolved upstream product decision is required for the currently selected E engineering controls.
-- [x] CHK014 The governance boundary between prerequisite registration and implementation delivery is strictly maintained.
+- [x] CHK013 No unresolved blockers remain; prior rate-limiting deferral decision is respected and deferred to topology verification.
+- [x] CHK014 The governance boundary between prerequisite registration and implementation delivery is strictly maintained (zero product implementation code in PR #100).
