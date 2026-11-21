@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
@@ -1221,6 +1222,165 @@ describe('Digital Use vertical convergence', () => {
     expect(history.rows.some((row) => row.supersedes_id !== null)).toBe(true);
   });
 
+  it('recovers an A1001 direct-impact INSUFFICIENT through the authorized correction path', async () => {
+    const f = await fixture('a1001-insufficient-recovery');
+    const unknownSleepA1001 = {
+      ...a1001(false),
+      functionalImpact: {
+        sleep: { state: 'UNKNOWN' },
+        studyOrNecessaryAffairs: { state: 'KNOWN', impacted: false },
+        realWorldActivityDisplacement: { state: 'KNOWN', impacted: false },
+      },
+    };
+
+    await respondNode(f, 'A1001', unknownSleepA1001);
+    await respondNode(f, '01002', { state: 'KNOWN', selections: ['A'] });
+    let scene = await respondNode(f, '01003', { state: 'KNOWN', selection: 'A' });
+
+    const held = scene.nodes.find((node: any) => node.nodeCode === '01003');
+    expect(held).toMatchObject({ status: 'IN_PROGRESS' });
+    expect(held.branchReasonCodes).toContain('INTEGRATED_TRIAGE_INSUFFICIENT');
+    expect(scene.recovery).toEqual({
+      reasonCode: 'DIRECT_IMPACT_MISSING_FAMILY',
+      correctionTargetNodeCode: 'A1001',
+      missingRequirements: [
+        {
+          nodeCode: 'A1001',
+          evidenceCode: 'a1001.impact.sleep',
+          evidenceFamily: 'SLEEP',
+          missingState: 'UNKNOWN',
+          reasonCode: 'DIRECT_IMPACT_MISSING_FAMILY',
+        },
+      ],
+    });
+
+    const beforeCorrection = await getScene(f);
+    const a1001Node = beforeCorrection.nodes.find(
+      (node: any) => node.nodeCode === 'A1001'
+    );
+    const stale = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A1001/responses`,
+      headers: commandHeaders(
+        f.manager.token,
+        `du-vertical-a1001-stale-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: beforeCorrection.caseVersion,
+        expectedNodeRevision: a1001Node.revision + 1,
+        expectedScenePackageVersion: beforeCorrection.scenePackageVersion,
+        response: a1001(false),
+      },
+    });
+    expect(stale.statusCode, stale.body).toBe(409);
+    expect(stale.json().code).toBe('STALE_NODE_REVISION');
+
+    const corrected = await respondNode(f, 'A1001', a1001(false));
+    expect(corrected.recovery).toBeNull();
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === 'A1001')?.status
+    ).toBe('COMPLETED');
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === '01003')?.status
+    ).toBe('COMPLETED');
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === 'A2001')?.status
+    ).toBe('AVAILABLE');
+
+    const history = await admin.query(
+      `SELECT id,supersedes_id
+         FROM assertions
+        WHERE case_id=$1
+          AND content LIKE 'DUA:v1:a1001.impact.sleep:%'
+        ORDER BY recorded_at,id`,
+      [f.caseId]
+    );
+    expect(history.rows.length).toBeGreaterThanOrEqual(2);
+    expect(history.rows.some((row) => row.supersedes_id !== null)).toBe(true);
+
+    const events = await admin.query(
+      `SELECT metadata
+         FROM case_events
+        WHERE case_id=$1
+          AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED'
+          AND metadata->>'nodeCode'='A1001'`,
+      [f.caseId]
+    );
+    expect(events.rows.length).toBeGreaterThanOrEqual(2);
+
+    const afterNormal = await getScene(f);
+    const afterNode = afterNormal.nodes.find(
+      (node: any) => node.nodeCode === 'A1001'
+    );
+    const rejected = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/scene/nodes/A1001/responses`,
+      headers: commandHeaders(
+        f.manager.token,
+        `du-vertical-a1001-unauthorized-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: afterNormal.caseVersion,
+        expectedNodeRevision: afterNode.revision,
+        expectedScenePackageVersion: afterNormal.scenePackageVersion,
+        response: a1001(false),
+      },
+    });
+    expect(rejected.statusCode, rejected.body).toBe(409);
+    expect(rejected.json().code).toBe('SCENE_NODE_UNREACHABLE');
+  });
+
+  it('routes an A1001 correction that re-evaluates to A2003 through the canonical Problem Formulation handoff', async () => {
+    const f = await fixture('a1001-a2003-handoff');
+    const unknownSleepA1001 = {
+      ...a1001(false),
+      functionalImpact: {
+        sleep: { state: 'UNKNOWN' },
+        studyOrNecessaryAffairs: { state: 'KNOWN', impacted: false },
+        realWorldActivityDisplacement: { state: 'KNOWN', impacted: false },
+      },
+    };
+
+    await respondNode(f, 'A1001', unknownSleepA1001);
+    await respondNode(f, '01002', { state: 'KNOWN', selections: ['A'] });
+    let scene = await respondNode(f, '01003', { state: 'KNOWN', selection: 'A' });
+    expect(scene.recovery).toMatchObject({
+      reasonCode: 'DIRECT_IMPACT_MISSING_FAMILY',
+      correctionTargetNodeCode: 'A1001',
+    });
+
+    const corrected = await respondNode(f, 'A1001', a1001(true));
+    expect(corrected.recovery).toBeNull();
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === 'A1001')?.status
+    ).toBe('COMPLETED');
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === '01003')?.status
+    ).toBe('COMPLETED');
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === 'A2003')?.status
+    ).toBe('AVAILABLE');
+
+    const casePhase = await admin.query<{ phase: string }>(
+      'SELECT phase::text AS phase FROM cases WHERE id=$1',
+      [f.caseId]
+    );
+    expect(casePhase.rows[0]?.phase).toBe('PROBLEM_FORMULATION');
+
+    const currentFormulation = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/problem-formulations/current`,
+      headers: auth(f.manager.token),
+    });
+    expect(currentFormulation.statusCode, currentFormulation.body).toBe(200);
+    expect(currentFormulation.json().current?.status).toBe('PRESENTED');
+
+    const a2003 = await respondNode(f, 'A2003', a2003Response());
+    expect(
+      a2003.nodes.find((node: any) => node.nodeCode === 'A2003')?.status
+    ).toBe('COMPLETED');
+  });
+
   it('recovers a real Evidence conflict and rewinds only route-dependent Scene projections', async () => {
     const f = await fixture('conflict-recovery');
     const member = await createMember(
@@ -1901,6 +2061,103 @@ describe('Digital Use vertical convergence', () => {
       [f.caseId]
     );
     expect(casePhase.rows[0]?.phase).toBe('GOALS');
+  });
+
+  it('exposes every formal Phone Contract / Roleplay runtime route in canonical OpenAPI and keeps malformed requests at 422', async () => {
+    const generated = JSON.parse(
+      readFileSync('packages/generated/openapi.json', 'utf-8')
+    ) as {
+      paths: Record<string, Record<string, any>>;
+      components: { schemas: Record<string, any> };
+    };
+
+    const phoneOperations = Object.entries(generated.paths).filter(
+      ([path]) =>
+        path.includes('/digital-use/contract/') ||
+        path.includes('/digital-use/roleplays')
+    );
+    expect(phoneOperations).toHaveLength(12);
+
+    for (const [path, methods] of phoneOperations) {
+      const runtimeUrl = path
+        .replace('{id}', ':id')
+        .replace('{version}', ':version')
+        .replace('{sessionId}', ':sessionId');
+      for (const method of Object.keys(methods)) {
+        expect(
+          app.hasRoute({
+            method: method.toUpperCase() as any,
+            url: runtimeUrl,
+          }),
+          `${method} ${runtimeUrl}`
+        ).toBe(true);
+      }
+      for (const method of Object.keys(methods)) {
+        const operation = methods[method];
+        expect(operation.security).toEqual([{ bearerAuth: [] }]);
+        const bodyRef =
+          operation.requestBody?.content?.['application/json']?.schema?.$ref;
+        if (bodyRef !== undefined) {
+          const schemaName = bodyRef.replace('#/components/schemas/', '');
+          expect(
+            generated.components.schemas[schemaName],
+            `${operation.operationId} request schema`
+          ).toBeTruthy();
+        }
+        expect(Object.keys(operation.responses).sort()).toEqual(
+          expect.arrayContaining(['401', '403', '404', '409', '422', '500'])
+        );
+      }
+    }
+
+    const f = await fixture('phone-contract-openapi');
+    const malformedDraft = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phone-openapi-draft-${crypto.randomUUID()}`
+      ),
+      payload: {},
+    });
+    expect(malformedDraft.statusCode, malformedDraft.body).toBe(422);
+    expect(malformedDraft.json().code).toBe('VALIDATION_ERROR');
+
+    const malformedVersion = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts/not-a-number`,
+      headers: commandHeaders(
+        f.manager.token,
+        `phone-openapi-version-${crypto.randomUUID()}`
+      ),
+      payload: {},
+    });
+    expect(malformedVersion.statusCode, malformedVersion.body).toBe(422);
+    expect(malformedVersion.json().code).toBe('VALIDATION_ERROR');
+
+    const malformedTurn = await app.inject({
+      method: 'POST',
+      url:
+        `/api/v1/cases/${f.caseId}/digital-use/roleplays/` +
+        '00000000-0000-7000-8000-000000000001/turns',
+      headers: commandHeaders(
+        f.manager.token,
+        `phone-openapi-turn-${crypto.randomUUID()}`
+      ),
+      payload: {},
+    });
+    expect(malformedTurn.statusCode, malformedTurn.body).toBe(422);
+    expect(malformedTurn.json().code).toBe('VALIDATION_ERROR');
+
+    const unknownCase = await app.inject({
+      method: 'GET',
+      url:
+        '/api/v1/cases/00000000-0000-7000-8000-000000000099/' +
+        'digital-use/contract/template',
+      headers: auth(f.manager.token),
+    });
+    expect(unknownCase.statusCode, unknownCase.body).toBe(404);
+    expect(unknownCase.json().code).toBe('CASE_NOT_FOUND');
   });
 
 });

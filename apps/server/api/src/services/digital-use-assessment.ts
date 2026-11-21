@@ -35,18 +35,24 @@ import {
 import {
   DIGITAL_USE_PACKAGE_VERSION,
   DIGITAL_USE_SCENE_CODE,
+  evaluateIntegratedTriage,
   initialA1001Projection,
   resolveDigitalUseRuntimeNode,
   digitalUseNodeManifest,
   type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
-import type { DigitalUseNodeResponseType, DigitalUseSceneResponseType } from '@xiaoshuyin/contracts';
+import type {
+  DigitalUseNodeResponseType,
+  DigitalUseRecoveryType,
+  DigitalUseSceneResponseType,
+} from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
 import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { startAssessmentInTransaction } from './problem-formulations.js';
 import { familyAllianceTargetIdentity } from './family-alliance-semantics.js';
+import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 
 export interface DigitalUseActor {
   readonly accountId: string;
@@ -229,8 +235,10 @@ export function buildSceneEnvelope(input: {
   nodes: SceneNodeStateRow[];
   artifacts: SceneArtifactRow[];
   targets?: DigitalUseTargetItemRow[];
+  recovery?: DigitalUseRecoveryType | null;
 }): DigitalUseSceneResponseType {
   const targets = input.targets ?? [];
+  const recovery = input.recovery ?? null;
   const projected = input.nodes.map(nodeDto);
   const selectedTargets = new Set(
     targets.filter((target) => target.selected).map((target) => target.target_code)
@@ -283,6 +291,7 @@ export function buildSceneEnvelope(input: {
     targetSelectionRevision,
     targets: targets.map(targetDto),
     routeReasonCode: latestReason,
+    recovery,
     downstream:
       a3000 !== undefined && a4001 !== undefined
         ? {
@@ -310,6 +319,36 @@ export function buildSceneEnvelope(input: {
   };
 }
 
+async function recoveryProjection(
+  tx: pg.PoolClient,
+  caseId: string,
+  nodes: readonly SceneNodeStateRow[]
+): Promise<DigitalUseRecoveryType | null> {
+  const heldTriageNode = nodes.some(
+    (node) =>
+      (node.node_code === '01002' || node.node_code === '01003') &&
+      node.status === 'IN_PROGRESS' &&
+      node.branch_reason_codes.includes('INTEGRATED_TRIAGE_INSUFFICIENT')
+  );
+  if (!heldTriageNode) return null;
+
+  const evidence = await loadIntegratedTriageEvidence(tx, caseId);
+  const triage = evaluateIntegratedTriage(evidence);
+  if (
+    triage.outcome !== 'INSUFFICIENT' ||
+    triage.correctionTargetNodeCode === null ||
+    triage.missingRequirements.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    reasonCode: triage.reasonCode,
+    missingRequirements: [...triage.missingRequirements],
+    correctionTargetNodeCode: triage.correctionTargetNodeCode,
+  };
+}
+
 export async function currentSceneEnvelope(
   tx: pg.PoolClient,
   caseId: string
@@ -321,7 +360,13 @@ export async function currentSceneEnvelope(
     listSceneArtifacts(tx, caseId),
     listCurrentDigitalUseTargetItems(tx, caseId),
   ]);
-  return buildSceneEnvelope({ caseRow, nodes, artifacts, targets });
+  return buildSceneEnvelope({
+    caseRow,
+    nodes,
+    artifacts,
+    targets,
+    recovery: await recoveryProjection(tx, caseId, nodes),
+  });
 }
 
 async function ensureA1001(
@@ -388,6 +433,7 @@ function stableInitialSceneEnvelope(
     targetSelectionRevision: 0,
     targets: [],
     routeReasonCode: null,
+    recovery: null,
     downstream: { routeIntent: null, available: true, reasonCode: null },
   };
 }
@@ -618,6 +664,7 @@ export async function getDigitalUseNode(
         targetSelectionRevision: envelope.targetSelectionRevision,
         targets: envelope.targets,
         routeReasonCode: stored.branch_reason_codes.at(-1) ?? null,
+        recovery: envelope.recovery,
         downstream: envelope.downstream,
       };
     }

@@ -99,6 +99,16 @@ const FROZEN_DOCS = [
     ),
   },
   {
+    label: '012-digital-use-phone-contract-runtime',
+    path: join(
+      ROOT,
+      'specs',
+      '012-digital-use-assessment-runtime',
+      'contracts',
+      'digital-use-phone-contract-api.openapi.yaml'
+    ),
+  },
+  {
     label: 'common-core-goal-confirmgoal-runtime',
     path: join(
       ROOT,

@@ -76,6 +76,36 @@ export const DownstreamAvailability = z.strictObject({
   reasonCode: z.string().nullable(),
 });
 
+export const DigitalUseRecoveryMissingRequirement = z.strictObject({
+  nodeCode: z.enum(['A1001', '01002', '01003']),
+  evidenceCode: z.string().min(1).max(128),
+  evidenceFamily: z.enum([
+    'EMOTION',
+    'FAMILY_RELATIONSHIP',
+    'SLEEP',
+    'STUDY_OR_NECESSARY_AFFAIRS',
+    'REAL_WORLD_ACTIVITY_DISPLACEMENT',
+    'OTHER_APPROVED',
+  ]),
+  missingState: z.enum([
+    'NO_RECORD',
+    'UNKNOWN',
+    'NOT_COLLECTED',
+    'DECLINED',
+    'NOT_APPLICABLE',
+  ]),
+  reasonCode: z.string().min(1),
+});
+export type DigitalUseRecoveryMissingRequirementType =
+  z.infer<typeof DigitalUseRecoveryMissingRequirement>;
+
+export const DigitalUseRecovery = z.strictObject({
+  reasonCode: z.string().min(1),
+  missingRequirements: z.array(DigitalUseRecoveryMissingRequirement).min(1),
+  correctionTargetNodeCode: z.enum(['A1001', '01002', '01003']),
+});
+export type DigitalUseRecoveryType = z.infer<typeof DigitalUseRecovery>;
+
 export const DigitalUseSceneResponse = z.strictObject({
   caseId: z.string().uuid(),
   caseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
@@ -89,6 +119,7 @@ export const DigitalUseSceneResponse = z.strictObject({
   targetSelectionRevision: z.number().int().min(0).max(PG_INTEGER_MAX),
   targets: z.array(FamilyAllianceTargetItemProjection),
   routeReasonCode: z.string().nullable(),
+  recovery: DigitalUseRecovery.nullable(),
   downstream: DownstreamAvailability,
 });
 export type DigitalUseSceneResponseType = z.infer<typeof DigitalUseSceneResponse>;
@@ -105,6 +136,7 @@ export const DigitalUseNodeResponse = z.strictObject({
   targetSelectionRevision: z.number().int().min(0).max(PG_INTEGER_MAX),
   targets: z.array(FamilyAllianceTargetItemProjection),
   routeReasonCode: z.string().nullable(),
+  recovery: DigitalUseRecovery.nullable(),
   downstream: DownstreamAvailability,
 });
 export type DigitalUseNodeResponseType = z.infer<typeof DigitalUseNodeResponse>;
