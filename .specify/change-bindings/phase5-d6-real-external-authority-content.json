@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "changeId": "phase5-d6-real-external-authority-content",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "phase5-d6-real-external-authority-content",
+      "specPath": "specs/phase5-d6-real-external-authority-content",
+      "implementationPaths": [
+        "apps/server/api/src/services/digital-use-roleplay-adapter.ts"
+      ]
+    }
+  ]
+}
