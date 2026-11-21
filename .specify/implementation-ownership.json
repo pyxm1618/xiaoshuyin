@@ -434,6 +434,7 @@
       "ownership": {
         "kind": "SHARED",
         "features": [
+          "012-digital-use-assessment-runtime",
           "common-core-goal-confirmgoal-runtime",
           "017-professional-knowledge-foundation"
         ]
@@ -594,6 +595,102 @@
         "kind": "FEATURE",
         "features": [
           "phase5-c3-staff-assignment-control-plane"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-assessment-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/digital-use-assessment.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-node-semantics",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-node-semantics.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract-review",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-phone-contract-review.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "016-psychological-behavioral-intervention-contract-authority-reconciliation"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-triage-evidence",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-triage-evidence.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "problem-formulation-command-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/problem-formulations.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "008-problem-formulation-core",
+          "012-digital-use-assessment-runtime",
+          "foundation-remaining-remediation"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-assessment-context-migration",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/030_digital_use_assessment_context.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-scene-runtime-repository",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/scene-runtime-repository.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "013-digital-use-family-alliance-runtime",
+          "016-psychological-behavioral-intervention-contract-authority-reconciliation"
         ]
       }
     },
