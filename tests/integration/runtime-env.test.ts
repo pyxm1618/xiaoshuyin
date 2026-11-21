@@ -75,10 +75,23 @@ describe('Production runtime env boundary (F1)', () => {
     }
   });
 
-  it('production + full env → fake provider is NOT selected (startup fails)', async () => {
-    await expect(
-      buildApp({ env: { ...FULL_ENV, NODE_ENV: 'production' } })
-    ).rejects.toThrow(/WECHAT_PROVIDER_NOT_VERIFIED/);
+  it('production + full env → fake provider is NOT selected (fails closed on auth execution)', async () => {
+    const app = await buildApp({
+      env: { ...FULL_ENV, NODE_ENV: 'production' },
+    });
+    try {
+      await app.ready();
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/wechat',
+        payload: { code: `f1_fake_${Date.now()}` },
+      });
+      expect(res.statusCode).toBe(500);
+      expect(res.json().code).toBe('INTERNAL_ERROR');
+      expect(res.json().sessionToken).toBeUndefined();
+    } finally {
+      await app.close();
+    }
   });
 
   it('test environment may explicitly use the fake provider', async () => {
