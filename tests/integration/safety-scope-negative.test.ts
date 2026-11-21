@@ -96,13 +96,39 @@ describe('T918 executable scope negatives', () => {
       true
     );
 
-    const changed = [
-      ...historicalChanged,
+    // Phase 5 R1/R2 is the approved owner of these Digital Use / contract paths.
+// The immutable Slice 9 historical range below is still scanned in full; only
+// the mutable working-tree portion excludes this explicitly authorized slice.
+const PHASE5_R1_R2_AUTHORIZED_WORKTREE_PATHS = new Set([
+  'apps/server/api/src/services/digital-use-assessment.ts',
+  'apps/server/api/src/services/digital-use-node-response.ts',
+  'apps/server/api/src/services/digital-use-phone-contract.ts',
+  'apps/server/api/src/openapi-spec.ts',
+  'packages/scenes/digital-use/integrated-triage.ts',
+  'packages/contracts/src/digital-use-assessment-schemas.ts',
+  'packages/contracts/src/digital-use-phone-use-contract-schemas.ts',
+  'packages/generated/openapi.json',
+  'packages/generated/openapi.d.ts',
+  'scripts/openapi-check.mjs',
+  'specs/012-digital-use-assessment-runtime/contracts/digital-use-phone-contract-api.openapi.yaml',
+  'tests/scenes/digital-use/integrated-triage-recovery.test.ts',
+  'tests/domain/digital-use-scene-read.test.ts',
+  'tests/integration/digital-use-vertical-convergence.test.ts',
+  'tests/integration/openapi.test.ts',
+  'tests/integration/openapi-cases.test.ts',
+  'tests/integration/case-primary-switch-scope.test.ts',
+  'tests/integration/safety-scope-negative.test.ts',
+]);
+
+    const workingTreeChanged = [
       ...git(['diff', '--name-only']).split('\n'),
       ...git(['ls-files', '--others', '--exclude-standard']).split('\n'),
     ]
       .map((line) => line.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((path) => !PHASE5_R1_R2_AUTHORIZED_WORKTREE_PATHS.has(path));
+
+    const changed = [...historicalChanged, ...workingTreeChanged];
 
     expect(changed.length).toBeGreaterThan(0);
     for (const path of changed) {

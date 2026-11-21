@@ -13,6 +13,7 @@ import {
   casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
   canonicalEvidenceKey,
+  getCaseById,
   getCurrentActivePhoneUseContract,
   getCurrentPhoneUseContract,
   getLatestSceneArtifact,
@@ -57,6 +58,7 @@ import type { PhoneUseContractTermsType } from '@xiaoshuyin/contracts';
 import { withRlsTransaction } from '../db/tx.js';
 import {
   decideFamilyAction,
+  isKnownAuthorizationDenial,
   requireFamilyAction,
   requirePhoneUseContractChildConfirmation,
 } from '../authz.js';
@@ -74,8 +76,16 @@ import { assertNodeCasePreconditions, requireResolvedRoute } from './digital-use
 import { assertCurrentDigitalUseProblemFormulation } from './digital-use-case-lifecycle.js';
 
 function contractError(code:string,message?:string):Error & {statusCode:number;code:string}{
-  const mapped=toHttpError(code,message);
-  return Object.assign(new Error(mapped.message),{statusCode:mapped.statusCode,code:mapped.code});
+ const mapped=toHttpError(code,message);
+ return Object.assign(new Error(mapped.message),{statusCode:mapped.statusCode,code:mapped.code});
+}
+function rethrowKnownPhoneContractBusinessError(error:unknown):never{
+ const code=typeof error==='object'&&error!==null?(error as {code?:unknown}).code:undefined;
+ if(typeof code==='string'){
+  const mapped=toHttpError(code);
+  if(mapped.statusCode<500) throw contractError(code);
+ }
+ throw error;
 }
 
 export interface PhoneUseStaticProfessionalContentAuthority {
@@ -126,10 +136,15 @@ function dto(row:PhoneUseContractVersionRow){
 async function authorizeManager(
  tx:pg.PoolClient,input:{actor:DigitalUseActor;familyId:string;caseId:string},action:'CASE_READ_ASSESSMENT_SCENE'|'CASE_RESPOND_ASSESSMENT_SCENE'
 ){
- await requireFamilyAction(tx,{
-  accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,
-  action,purpose:'FAMILY_MANAGEMENT',resource:{type:'CASE',familyId:input.familyId,caseId:input.caseId},
- });
+ try{
+  await requireFamilyAction(tx,{
+   accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,
+   action,purpose:'FAMILY_MANAGEMENT',resource:{type:'CASE',familyId:input.familyId,caseId:input.caseId},
+  });
+ }catch(error){
+  if(!isKnownAuthorizationDenial(error)) throw error;
+  throw contractError('CASE_NOT_FOUND');
+ }
 }
 async function lockManagerContractCase(
  tx:pg.PoolClient,
@@ -664,9 +679,15 @@ async function readProfessionalAssetGate(
     purpose: 'FAMILY_MANAGEMENT',
   }, async (tx) => {
     await authorizeManager(tx, input, 'CASE_READ_ASSESSMENT_SCENE');
-    await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-    await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
-    await assertAssessmentCompliance(tx, input.actor.personId);
+    const caseRow = await getCaseById(tx, input.caseId);
+    if (!caseRow) throw contractError('CASE_NOT_FOUND');
+    try {
+      await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+      await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
+      await assertAssessmentCompliance(tx, input.actor.personId);
+    } catch (error) {
+      rethrowKnownPhoneContractBusinessError(error);
+    }
     const binding = await getScenePackageBinding(tx, input.caseId);
     if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
       throw contractError(binding === null ? 'SCENE_NODE_UNREACHABLE' : 'STALE_SCENE_PACKAGE');

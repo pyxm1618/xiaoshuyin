@@ -81,6 +81,23 @@ import {
   DigitalUseSceneResponse,
   DigitalUseNodeResponse,
   DigitalUseApiError,
+  PhoneUseContractDto,
+  SavePhoneUseContractDraftRequest,
+  UpdatePhoneUseContractDraftRequest,
+  ConfirmPhoneUseContractRequest,
+  RevisePhoneUseContractRequest,
+  PhoneUseContractTemplateResponse,
+  PhoneUseContractExamplesResponse,
+  PhoneUseContractFaqResponse,
+  CreatePhoneUseRoleplayRequest,
+  CreatePhoneUseRoleplayTurnRequest,
+  RatePhoneUseRoleplayRequest,
+  SelectPhoneUseRoleplayRequest,
+  PhoneUseRoleplaySessionDto,
+  PhoneUseRoleplayTurnDto,
+  PhoneUseRoleplaySelectionResponse,
+  PhoneUseRoleplayHoldResponse,
+  PhoneUseContractRuntimeError,
 } from '@xiaoshuyin/contracts';
 
 type JsonSchema = Record<string, unknown>;
@@ -220,6 +237,56 @@ export function buildOpenApiDocument() {
     ParticipationTargetIneligibleError: toJsonSchema(ParticipationTargetIneligibleError),
     InvitationNotAvailableError: toJsonSchema(InvitationNotAvailableError),
     ParticipationNotFoundError: toJsonSchema(ParticipationNotFoundError),
+    PhoneUseContractDto: toJsonSchema(PhoneUseContractDto),
+    SavePhoneUseContractDraftRequest: toJsonSchema(SavePhoneUseContractDraftRequest),
+    UpdatePhoneUseContractDraftRequest: toJsonSchema(UpdatePhoneUseContractDraftRequest),
+    ConfirmPhoneUseContractRequest: toJsonSchema(ConfirmPhoneUseContractRequest),
+    RevisePhoneUseContractRequest: toJsonSchema(RevisePhoneUseContractRequest),
+    PhoneUseContractTemplateResponse: toJsonSchema(PhoneUseContractTemplateResponse),
+    PhoneUseContractExamplesResponse: toJsonSchema(PhoneUseContractExamplesResponse),
+    PhoneUseContractFaqResponse: toJsonSchema(PhoneUseContractFaqResponse),
+    CreatePhoneUseRoleplayRequest: toJsonSchema(CreatePhoneUseRoleplayRequest),
+    CreatePhoneUseRoleplayTurnRequest: toJsonSchema(CreatePhoneUseRoleplayTurnRequest),
+    RatePhoneUseRoleplayRequest: toJsonSchema(RatePhoneUseRoleplayRequest),
+    SelectPhoneUseRoleplayRequest: toJsonSchema(SelectPhoneUseRoleplayRequest),
+    PhoneUseRoleplaySessionDto: toJsonSchema(PhoneUseRoleplaySessionDto),
+    PhoneUseRoleplayTurnDto: toJsonSchema(PhoneUseRoleplayTurnDto),
+    PhoneUseRoleplaySelectionResponse: toJsonSchema(PhoneUseRoleplaySelectionResponse),
+    PhoneUseRoleplayHoldResponse: toJsonSchema(PhoneUseRoleplayHoldResponse),
+    PhoneUseContractRuntimeError: toJsonSchema(PhoneUseContractRuntimeError),
+  };
+
+  const phoneContractVersionParam = {
+    name: 'version',
+    in: 'path',
+    required: true,
+    schema: { type: 'integer', format: 'int32' },
+  };
+  const phoneRoleplaySessionParam = {
+    name: 'sessionId',
+    in: 'path',
+    required: true,
+    schema: { type: 'string', format: 'uuid' },
+  };
+  const phoneContractErrors = {
+    '401': refResponse('`UNAUTHENTICATED`', 'PhoneUseContractRuntimeError'),
+    '403': refResponse(
+      '`FORBIDDEN` / `NOT_FAMILY_MEMBER` / `NOT_FAMILY_MANAGER`',
+      'PhoneUseContractRuntimeError'
+    ),
+    '404': refResponse(
+      '`CASE_NOT_FOUND` / `PHONE_USE_CONTRACT_NOT_FOUND`',
+      'PhoneUseContractRuntimeError'
+    ),
+    '409': refResponse(
+      'Concurrency, contract state or idempotency conflict',
+      'PhoneUseContractRuntimeError'
+    ),
+    '422': refResponse(
+      '`VALIDATION_ERROR` / contract payload invalid',
+      'PhoneUseContractRuntimeError'
+    ),
+    '500': refResponse('`INTERNAL_ERROR`', 'PhoneUseContractRuntimeError'),
   };
 
   const paths: Record<string, unknown> = {
@@ -896,6 +963,228 @@ export function buildOpenApiDocument() {
           '422': jsonResponse('Strict node response validation failure', toJsonSchema(DigitalUseApiError)),
           '500': jsonResponse('`INTERNAL_ERROR`', toJsonSchema(DigitalUseApiError)),
           '503': jsonResponse('`DEPENDENCY_UNAVAILABLE`', toJsonSchema(DigitalUseApiError)),
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/template': {
+      get: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'getPhoneUseContractTemplate',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseId')],
+        responses: {
+          '200': refResponse(
+            'Approved versioned phone-use Contract template',
+            'PhoneUseContractTemplateResponse'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/examples': {
+      get: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'getPhoneUseContractExamples',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseId')],
+        responses: {
+          '200': refResponse(
+            'Four approved professional Contract examples',
+            'PhoneUseContractExamplesResponse'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/current': {
+      get: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'getCurrentPhoneUseContract',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseId')],
+        responses: {
+          '200': refResponse(
+            'Authorized current phone-use Contract version',
+            'PhoneUseContractDto'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/drafts': {
+      post: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'createPhoneUseContractDraft',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseId'), paramRef('IdempotencyKeyHeader')],
+        requestBody: refBody('SavePhoneUseContractDraftRequest'),
+        responses: {
+          '201': refResponse(
+            'Initial formal Contract draft',
+            'PhoneUseContractDto'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/drafts/{version}': {
+      patch: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'updatePhoneUseContractDraft',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          phoneContractVersionParam,
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('UpdatePhoneUseContractDraftRequest'),
+        responses: {
+          '200': refResponse(
+            'Corrected mutable Contract draft revision',
+            'PhoneUseContractDto'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/{version}/confirm': {
+      post: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'confirmPhoneUseContractVersion',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          phoneContractVersionParam,
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('ConfirmPhoneUseContractRequest'),
+        responses: {
+          '200': refResponse(
+            'Current Contract party confirmation recorded',
+            'PhoneUseContractDto'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/{version}/revise': {
+      post: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'revisePhoneUseContractVersion',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          phoneContractVersionParam,
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('RevisePhoneUseContractRequest'),
+        responses: {
+          '201': refResponse(
+            'New superseding A4012 Contract draft',
+            'PhoneUseContractDto'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/contract/faq': {
+      get: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'getPhoneUseContractFaq',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseId')],
+        responses: {
+          '200': refResponse(
+            'Approved static Contract execution FAQ',
+            'PhoneUseContractFaqResponse'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/roleplays': {
+      post: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'createPhoneUseRoleplay',
+        security: [{ bearerAuth: [] }],
+        parameters: [paramRef('CaseId'), paramRef('IdempotencyKeyHeader')],
+        requestBody: refBody('CreatePhoneUseRoleplayRequest'),
+        responses: {
+          '200': refResponse(
+            'Recoverable adult-only A4003 roleplay HOLD',
+            'PhoneUseRoleplayHoldResponse'
+          ),
+          '201': refResponse(
+            'Created simulated-parent roleplay session',
+            'PhoneUseRoleplaySessionDto'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/turns': {
+      post: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'addPhoneUseRoleplayTurn',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          phoneRoleplaySessionParam,
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('CreatePhoneUseRoleplayTurnRequest'),
+        responses: {
+          '200': refResponse(
+            'Recoverable roleplay HOLD',
+            'PhoneUseRoleplayHoldResponse'
+          ),
+          '201': refResponse(
+            'Generated simulated-parent roleplay turn',
+            'PhoneUseRoleplayTurnDto'
+          ),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/rate': {
+      post: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'ratePhoneUseRoleplayTurn',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          phoneRoleplaySessionParam,
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('RatePhoneUseRoleplayRequest'),
+        responses: {
+          '200': refResponse('Rated roleplay turn', 'PhoneUseRoleplayTurnDto'),
+          ...phoneContractErrors,
+        },
+      },
+    },
+    '/api/v1/cases/{id}/digital-use/roleplays/{sessionId}/select': {
+      post: {
+        tags: ['digital-use-phone-contract'],
+        operationId: 'selectPhoneUseRoleplayTurn',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          paramRef('CaseId'),
+          phoneRoleplaySessionParam,
+          paramRef('IdempotencyKeyHeader'),
+        ],
+        requestBody: refBody('SelectPhoneUseRoleplayRequest'),
+        responses: {
+          '200': jsonResponse(
+            'Selected SIMULATION result or recoverable roleplay HOLD',
+            {
+              anyOf: [
+                ref('PhoneUseRoleplaySelectionResponse'),
+                ref('PhoneUseRoleplayHoldResponse'),
+              ],
+            }
+          ),
+          ...phoneContractErrors,
         },
       },
     },

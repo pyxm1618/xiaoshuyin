@@ -41,6 +41,7 @@ describe('T1208 authorized Scene/node read contracts', () => {
       targetSelectionRevision: 0,
       targets: [],
       routeReasonCode: null,
+      recovery: null,
       downstream: { routeIntent: null, available: true, reasonCode: null },
     });
     expect(parsed.success).toBe(true);
