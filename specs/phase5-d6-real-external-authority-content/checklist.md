@@ -13,7 +13,7 @@
 
 ## Scope
 
-- [x] CHK004 In Scope (Safety production authority seam, professional qualification/approval external verification, Scene package binding, narrow A4003 roleplay adapter) and Out of Scope (generic CMS, expert marketplace, AI task runtime, TaskModelRegistry, RAG, E1–E4) are explicit.
+- [x] CHK004 In Scope (Safety production authority seam, professional qualification/approval external verification, exact Scene package knowledge binding, narrow A4003 roleplay adapter) and Out of Scope (generic CMS, expert marketplace, AI task runtime, TaskModelRegistry, RAG, E1–E4, takeover of existing roleplay runtime, broad Scene package prefix) are explicit.
 - [x] CHK005 No V2–V5 capability has been pulled into V1 without approval.
 - [x] CHK006 No unrelated refactor or “future-proofing” is required for acceptance.
 
