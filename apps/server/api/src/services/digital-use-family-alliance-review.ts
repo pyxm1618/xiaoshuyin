@@ -36,7 +36,7 @@ import {
   type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
 import { toHttpError } from '../plugins/error-handler.js';
-import { currentSceneEnvelope, type DigitalUseActor } from './digital-use-assessment.js';
+import { assertBoundAssessmentCompliance, currentSceneEnvelope, type DigitalUseActor } from './digital-use-assessment.js';
 import {
   assertDigitalUseCaseLifecycle,
   assertCurrentDigitalUseProblemFormulation,
@@ -455,6 +455,7 @@ export async function executeA5001ReviewInTransaction(
     }
 
     await pinAndAssertFamilyAllianceGates(tx, input.caseId, input.actor.personId);
+    await assertBoundAssessmentCompliance(tx, input);
     await assertProfessionalReviewProvenance(tx, {
       familyId: input.familyId,
       caseId: input.caseId,
@@ -654,6 +655,7 @@ export async function executeA5001ReviewInTransaction(
     assertDigitalUseCaseLifecycle(finalCase, node, input.expectedCaseVersion);
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
     await revalidateFamilyAllianceGates(tx, input.caseId, input.actor.personId);
+    await assertBoundAssessmentCompliance(tx, input);
 
     const finalSubject = await resolveA5001SubjectSnapshot(tx, {
       familyId: input.familyId,

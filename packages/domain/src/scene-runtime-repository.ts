@@ -100,6 +100,24 @@ const ARTIFACT_COLUMNS = `
   supersedes_id, created_at
 `;
 
+export async function insertDigitalUseAssessmentTarget(
+  tx: Tx, caseId: string, familyId: string, targetPersonId: string, createdByPersonId: string
+): Promise<void> {
+  await tx.query(
+    `INSERT INTO digital_use_assessment_context (case_id, family_id, target_person_id, created_by_person_id)
+     VALUES ($1, $2, $3, $4) ON CONFLICT (case_id) DO NOTHING`,
+    [caseId, familyId, targetPersonId, createdByPersonId]
+  );
+}
+
+export async function readDigitalUseAssessmentTarget(tx: Tx, caseId: string): Promise<string | null> {
+  const { rows } = await tx.query<{ target_person_id: string }>(
+    'SELECT target_person_id FROM digital_use_assessment_context WHERE case_id = $1',
+    [caseId]
+  );
+  return rows[0]?.target_person_id ?? null;
+}
+
 export async function lockSceneCase(tx: Tx, caseId: string): Promise<SceneCaseRow | null> {
   const { rows } = await tx.query<SceneCaseRow>(
     `SELECT id, family_id, status, phase, is_primary, version
@@ -828,6 +846,13 @@ export async function listCurrentSceneEvidenceStatements(
     [caseId, `${contentPrefix}%`]
   );
   return rows;
+}
+
+export async function listCurrentDigitalUseTargetStatements(
+  tx: Tx, caseId: string, targetPersonId: string
+): Promise<SceneEvidenceStatementRow[]> {
+  const rows = await listCurrentSceneEvidenceStatements(tx, caseId, 'DUA:v1:');
+  return rows.filter((row) => row.subject_person_id === targetPersonId);
 }
 
 

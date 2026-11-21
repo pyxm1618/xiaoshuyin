@@ -41,7 +41,8 @@ function ctx(
   currentInputRefs: readonly any[] = []
 ) {
   return {
-    tx: {} as never,
+    tx: { query: async () => ({ rows: [{ guardian_person_id: null }] }) } as never,
+    targetPersonId: '00000000-0000-7000-8000-000000000005',
     actor,
     familyId,
     caseId,

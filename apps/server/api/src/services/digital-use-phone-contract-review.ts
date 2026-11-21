@@ -39,7 +39,7 @@ import {
 } from '@xiaoshuyin/scenes/digital-use';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
-  assertAssessmentCompliance,
+  assertBoundAssessmentCompliance,
   currentSceneEnvelope,
   type DigitalUseActor,
 } from './digital-use-assessment.js';
@@ -389,7 +389,7 @@ export async function prepareA5002ReviewFingerprintInTransaction(
   assertDigitalUseCaseLifecycle(caseRow, node, input.expectedCaseVersion);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
   await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
-  await assertAssessmentCompliance(tx, input.actor.personId);
+  await assertBoundAssessmentCompliance(tx, input);
 
   const binding = await getScenePackageBinding(tx, input.caseId);
   if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
@@ -420,7 +420,7 @@ export async function prepareA5002ReviewFingerprintInTransaction(
     caseId: input.caseId,
     childPersonId: contract.child_party_person_id,
     participationId: contract.child_participation_id,
-  });
+  }, 'TARGET_SCOPE_INVALID');
   await assertProfessionalReviewProvenance(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
@@ -510,7 +510,7 @@ export async function executeA5002ReviewInTransaction(
     assertDigitalUseCaseLifecycle(caseRow, node, input.expectedCaseVersion);
     await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
-    await assertAssessmentCompliance(tx, input.actor.personId);
+    await assertBoundAssessmentCompliance(tx, input);
 
     const binding = await getScenePackageBinding(tx, input.caseId);
     if (binding !== DIGITAL_USE_PACKAGE_VERSION) {
@@ -539,7 +539,7 @@ export async function executeA5002ReviewInTransaction(
       caseId: input.caseId,
       childPersonId: contract.child_party_person_id,
       participationId: contract.child_participation_id,
-    });
+    }, 'TARGET_SCOPE_INVALID');
     await assertProfessionalReviewProvenance(tx, {
       familyId: input.familyId,
       caseId: input.caseId,
@@ -735,7 +735,7 @@ export async function executeA5002ReviewInTransaction(
     assertDigitalUseCaseLifecycle(finalCase, node, input.expectedCaseVersion);
     await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
-    await assertAssessmentCompliance(tx, input.actor.personId);
+    await assertBoundAssessmentCompliance(tx, input);
 
     const { row: finalContract, snapshot: finalSubject } =
       await resolveA5002SubjectSnapshot(tx, {
@@ -760,7 +760,7 @@ export async function executeA5002ReviewInTransaction(
       caseId: input.caseId,
       childPersonId: finalContract.child_party_person_id,
       participationId: finalContract.child_participation_id,
-    });
+    }, 'TARGET_SCOPE_INVALID');
 
     const finalPackage = await requireProfessionalReviewPackage(
       provider,

@@ -871,13 +871,14 @@ export function buildOpenApiDocument() {
           type: 'object',
           additionalProperties: false,
           properties: {
+            targetPersonId: { type: 'string', format: 'uuid' },
             expectedCaseVersion: {
               type: 'integer',
               minimum: 1,
               maximum: 2147483647,
             },
           },
-          required: ['expectedCaseVersion'],
+          required: ['targetPersonId', 'expectedCaseVersion'],
         }),
         responses: {
           '200': jsonResponse('Digital Use Assessment started or resumed', toJsonSchema(DigitalUseSceneResponse)),
@@ -938,6 +939,7 @@ export function buildOpenApiDocument() {
           type: 'object',
           additionalProperties: false,
           properties: {
+            targetPersonId: { type: 'string', format: 'uuid' },
             expectedCaseVersion: {
               type: 'integer',
               minimum: 1,
@@ -953,7 +955,7 @@ export function buildOpenApiDocument() {
               additionalProperties: {},
             },
           },
-          required: ['expectedCaseVersion', 'expectedNodeRevision', 'response'],
+          required: ['targetPersonId', 'expectedCaseVersion', 'expectedNodeRevision', 'response'],
         }),
         responses: {
           '200': jsonResponse('Node response committed or idempotently replayed', toJsonSchema(DigitalUseSceneResponse)),

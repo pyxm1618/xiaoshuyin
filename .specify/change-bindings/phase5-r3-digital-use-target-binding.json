@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "changeId": "phase5-r3-digital-use-target-binding",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "012-digital-use-assessment-runtime",
+      "specPath": "specs/012-digital-use-assessment-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/openapi-spec.ts",
+        "apps/server/api/src/routes/digital-use-assessment.ts",
+        "apps/server/api/src/services/digital-use-assessment.ts",
+        "apps/server/api/src/services/digital-use-family-alliance-review.ts",
+        "apps/server/api/src/services/digital-use-family-alliance.ts",
+        "apps/server/api/src/services/digital-use-node-response.ts",
+        "apps/server/api/src/services/digital-use-node-semantics.ts",
+        "apps/server/api/src/services/digital-use-phone-contract-review.ts",
+        "apps/server/api/src/services/digital-use-phone-contract.ts",
+        "apps/server/api/src/services/digital-use-triage-evidence.ts",
+        "apps/server/api/src/services/problem-formulations.ts",
+        "db/migrations/030_digital_use_assessment_context.sql",
+        "packages/contracts/src/digital-use-assessment-schemas.ts",
+        "packages/domain/src/index.ts",
+        "packages/domain/src/scene-runtime-repository.ts",
+        "packages/generated/openapi.d.ts",
+        "packages/generated/openapi.json"
+      ]
+    }
+  ]
+}

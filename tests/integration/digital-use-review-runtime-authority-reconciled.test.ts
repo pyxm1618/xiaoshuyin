@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { insertDigitalUseAssessmentTarget } from '@xiaoshuyin/domain';
 import { recordStatement } from '@xiaoshuyin/domain';
 import {
   buildConsentEvidence,
@@ -19,6 +20,7 @@ import {
   auth,
   commandHeaders,
   createFamily,
+  createMember,
   loginWithLabel,
   type LoginResult,
 } from '../setup/api.js';
@@ -37,6 +39,7 @@ interface BaseFixture {
   familyId: string;
   caseId: string;
   caseVersion: number;
+  targetPersonId: string;
 }
 
 interface A5002Fixture extends BaseFixture {
@@ -217,16 +220,35 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
   async function createBase(
     targetApp: FastifyInstance,
     label: string,
-    phase: 'GOALS' | 'REVIEW'
+    phase: 'GOALS' | 'REVIEW',
+    boundChild?: LoginResult
   ): Promise<BaseFixture> {
     const manager = await loginWithLabel(targetApp, `slice15-${label}`);
     const family = await createFamily(targetApp, manager.token, `slice15-${label}`);
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
+    let targetPersonId: string;
+    if (boundChild) {
+      targetPersonId = boundChild.personId;
+      await admin.query('INSERT INTO family_members (family_id, person_id) VALUES ($1,$2)', [familyId, targetPersonId]);
+      await admin.query(
+        "UPDATE person_compliance_profiles SET age_band='MINOR_14_17', minor_mode=true, verified_source='OTHER_MEMBER_RELAY' WHERE person_id=$1",
+        [targetPersonId]
+      );
+    } else {
+      const child = await createMember(targetApp, manager.token, familyId, `r3-target-${label}`, {
+        ageBand: 'MINOR_14_17', ageBandSource: 'OTHER_MEMBER_RELAY',
+      });
+      expect(child.statusCode, child.body).toBe(201);
+      targetPersonId = child.json().personId as string;
+    }
     const kase = await createCase(targetApp, manager.token, `slice15-${label}`);
     expect(kase.statusCode, kase.body).toBe(201);
     const caseId = kase.json().id as string;
     const caseVersion = kase.json().version as number;
+    await withRlsTransaction(appDb, {
+      familyId, accountId: manager.accountId, personId: manager.personId, purpose: 'FAMILY_MANAGEMENT',
+    }, tx => insertDigitalUseAssessmentTarget(tx, caseId, familyId, targetPersonId, manager.personId));
     const message = await targetApp.inject({
       method: 'POST',
       url: `/api/v1/cases/${caseId}/messages`,
@@ -234,7 +256,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       payload: { content: 'Current Digital Use review subject.' },
     });
     expect(message.statusCode, message.body).toBe(201);
-    const f = { manager, familyId, caseId, caseVersion };
+    const f = { manager, familyId, caseId, caseVersion, targetPersonId };
     await seedConfirmedFormulation(f, message.json().id as string, phase);
     return f;
   }
@@ -346,8 +368,8 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
           purpose: 'FAMILY_MANAGEMENT' as const,
         };
         await recordStatement(tx, context, {
-          subjectPersonId: f.manager.personId,
-          sourceKind: 'SELF_STATEMENT',
+          subjectPersonId: f.targetPersonId,
+          sourceKind: 'OTHER_MEMBER_RELAY',
           sourcePersonId: f.manager.personId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
@@ -357,8 +379,8 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
           })}`,
         });
         await recordStatement(tx, context, {
-          subjectPersonId: f.manager.personId,
-          sourceKind: 'SELF_STATEMENT',
+          subjectPersonId: f.targetPersonId,
+          sourceKind: 'OTHER_MEMBER_RELAY',
           sourcePersonId: f.manager.personId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
@@ -398,6 +420,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         `slice15-${nodeCode.toLowerCase()}-${crypto.randomUUID()}`
       ),
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -492,6 +515,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A5001/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': key },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -503,9 +527,9 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
 
   async function prepareA5002(
     targetApp: FastifyInstance,
-    label: string
+    label: string,
+    legacyMismatch = false
   ): Promise<{ f: A5002Fixture; scene: any; payload: Record<string, unknown> }> {
-    const base = await createBase(targetApp, label, 'REVIEW');
     const child = await loginWithLabel(targetApp, `slice15-child-${label}`);
     const childOwn = await createFamily(
       targetApp,
@@ -513,10 +537,17 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       `slice15-child-own-${label}`
     );
     expect(childOwn.statusCode, childOwn.body).toBe(201);
+    const base = await createBase(targetApp, label, 'REVIEW', legacyMismatch ? undefined : child);
     await admin.query(
       'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [base.familyId, child.personId]
     );
+    if (legacyMismatch) {
+      await admin.query(
+        "UPDATE person_compliance_profiles SET age_band='MINOR_14_17', minor_mode=true, verified_source='OTHER_MEMBER_RELAY' WHERE person_id=$1",
+        [child.personId]
+      );
+    }
 
     await admin.query(
       `INSERT INTO scene_node_states
@@ -674,6 +705,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A5002/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': key },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -816,6 +848,66 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       client.release();
     }
   }
+
+  it.each([false, true])('R3 manager current Contract GET enforces target identity (legacy mismatch: %s)', async (legacyMismatch) => {
+    const { f } = await prepareA5002(app, `r3-manager-current-${legacyMismatch}`, legacyMismatch);
+    const snapshot = async () => (await admin.query(
+      `SELECT
+        (SELECT jsonb_agg(to_jsonb(contract) ORDER BY contract.version)
+          FROM digital_use_contract_versions contract WHERE case_id=$1) AS contracts,
+        (SELECT jsonb_agg(to_jsonb(node) ORDER BY node.node_code)
+          FROM scene_node_states node WHERE case_id=$1) AS scene,
+        (SELECT jsonb_agg(to_jsonb(artifact) ORDER BY artifact.id)
+          FROM scene_artifacts artifact WHERE case_id=$1) AS artifacts,
+        (SELECT jsonb_build_array(phase, version) FROM cases WHERE id=$1) AS case_state,
+        (SELECT count(*) FROM case_events WHERE case_id=$1) AS events,
+        (SELECT count(*) FROM business_audit_events WHERE resource_id::text=$1::text) AS audits`,
+      [f.caseId]
+    )).rows;
+    const before = await snapshot();
+    const response = await app.inject({
+      method: 'GET', url: `/api/v1/cases/${f.caseId}/digital-use/contract/current`,
+      headers: auth(f.manager.token),
+    });
+    if (legacyMismatch) {
+      expect(f.child.personId).not.toBe(f.targetPersonId);
+      expect(response.statusCode, response.body).toBe(404);
+      expect(response.json().code).toBe('PHONE_USE_CONTRACT_NOT_FOUND');
+      expect(response.body).not.toContain(f.child.personId);
+      expect(response.body).not.toContain(f.targetPersonId);
+    } else {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({ childPartyPersonId: f.targetPersonId, status: 'ACTIVE' });
+    }
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('R3 rejects A5002 review of a legacy ACTIVE Contract for a different child', async () => {
+    const { f, scene, payload } = await prepareA5002(app, 'r3-legacy-mismatch', true);
+    expect(f.child.personId).not.toBe(f.targetPersonId);
+    const snapshot = async () => ({
+      ...(await reviewCounts(f, 'A5002')),
+      caseState: (await admin.query('SELECT phase, version FROM cases WHERE id=$1', [f.caseId])).rows,
+      audits: (await admin.query('SELECT count(*) FROM business_audit_events WHERE resource_id::text=$1::text', [f.caseId])).rows,
+    });
+    const before = await snapshot();
+    const rejected = await submitA5002(app, f, scene, payload, 'a5002-r3-legacy-mismatch');
+    expect(rejected.json().code, rejected.body).toBe('TARGET_SCOPE_INVALID');
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('R3 blocks new A5001 execution when the bound child is no longer eligible', async () => {
+    const { f, scene, payload } = await prepareA5001(app, 'r3-a5001-target-compliance');
+    await admin.query(
+      "UPDATE person_compliance_profiles SET age_band='ADULT', minor_mode=false, verified_source='SELF_STATEMENT' WHERE person_id=$1",
+      [f.targetPersonId]
+    );
+    const before = await reviewCounts(f, 'A5001');
+    const rejected = await submitA5001(app, f, scene, payload, 'a5001-r3-child-blocked');
+    expect(rejected.json().code, rejected.body).toBe('COMPLIANCE_BLOCKED');
+    expect(await reviewCounts(f, 'A5001')).toEqual(before);
+    expect((await getScene(app, f)).caseVersion).toBe(scene.caseVersion);
+  });
 
   it('T1503/T1506 production A5001 fails closed while the test-only exact package completes only A5001', async () => {
     provider.restore('FAMILY_ALLIANCE_REVIEW');
@@ -1470,23 +1562,33 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     const outsiderFamily = await createFamily(app, outsider.token, 'slice15-outsider');
     expect(outsiderFamily.statusCode, outsiderFamily.body).toBe(201);
 
-    const result = await app.inject({
-      method: 'POST',
-      url: `/api/v1/cases/${target.f.caseId}/scene/nodes/A5001/responses`,
-      headers: {
-        ...auth(outsider.token),
-        'idempotency-key': `a5001-wrong-family-${crypto.randomUUID()}`,
-      },
-      payload: {
-        expectedCaseVersion: target.f.caseVersion,
-        expectedNodeRevision: 0,
-        expectedScenePackageVersion: 'v1',
-        expectedSelectionRevision: target.scene.targetSelectionRevision,
-        response: target.payload,
-      },
-    });
-    expect(result.statusCode).toBe(404);
-    expect(result.json()).toMatchObject({ code: 'CASE_NOT_FOUND' });
+    for (const candidate of [target.f.targetPersonId, outsider.personId, crypto.randomUUID()]) {
+      const result = await app.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${target.f.caseId}/scene/nodes/A5001/responses`,
+        headers: {
+          ...auth(outsider.token),
+          'idempotency-key': `a5001-wrong-family-${crypto.randomUUID()}`,
+        },
+        payload: {
+          targetPersonId: candidate,
+          expectedCaseVersion: target.f.caseVersion,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          expectedSelectionRevision: target.scene.targetSelectionRevision,
+          response: target.payload,
+        },
+      });
+      expect(result.statusCode).toBe(404);
+      expect(result.json()).toMatchObject({ code: 'CASE_NOT_FOUND' });
+    }
+    const deniedCommands = await admin.query(
+      `SELECT 1 FROM idempotency_keys
+        WHERE actor_account_id = $1 AND command_type = 'DIGITAL_USE_NODE_RESPONSE'
+          AND idempotency_key LIKE 'a5001-wrong-family-%'`,
+      [outsider.accountId]
+    );
+    expect(deniedCommands.rows).toEqual([]);
     expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
       artifacts: 0,
       completed: 0,
@@ -1511,6 +1613,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         'idempotency-key': `a5001-no-privilege-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: target.f.targetPersonId,
         expectedCaseVersion: target.f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',
@@ -1564,6 +1667,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         'idempotency-key': `a5001-participant-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: target.f.targetPersonId,
         expectedCaseVersion: target.f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',

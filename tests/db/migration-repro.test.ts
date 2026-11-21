@@ -22,7 +22,7 @@ const EXPECTED_ENUMS = 27; // + independent problem_formulation_review_state (AU
 const EXPECTED_TABLES = 38; // + Slice 16 InterventionDefinition + Slice 17 Professional Knowledge owner tables
 const EXPECTED_RLS_FUNCTIONS = 4; // app_family_id, app_person_id, app_account_id, app_current_purpose
 const EXPECTED_CONTEXT_FUNCTIONS = 5; // + set_staff_case_context
-const EXPECTED_POLICIES = 112; // Includes five Staff Assignment Control Plane policies
+const EXPECTED_POLICIES = 113;
 const EXPECTED_TRIGGERS = 14; // + runtime elevation, self-review, and authority-executor release guards
 
 const EXPECTED_ENUM_NAMES = [
@@ -70,6 +70,7 @@ const EXPECTED_TABLE_NAMES = [
   'consent_records',
   'dialogue_messages',
   'digital_use_target_items',
+  'digital_use_assessment_context',
   'digital_use_contract_versions',
   'roleplay_sessions',
   'roleplay_turns',
@@ -124,7 +125,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(enumNames.length).toBe(EXPECTED_ENUMS);
   });
 
-  it('should have all 38 tables', async () => {
+  it('should have all 39 tables', async () => {
     const { rows } = await client.query(`
       SELECT tablename FROM pg_tables
       WHERE schemaname = 'public'
@@ -136,7 +137,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(tableNames).toEqual(EXPECTED_TABLE_NAMES);
   });
 
-  it('preserves all 33 tables from current-main as the exact pre-Slice17 owner subset', async () => {
+  it('preserves all 33 tables in the baseline owner subset outside Slice 17 and R3', async () => {
     const { rows } = await client.query<{ tablename: string }>(`
       SELECT tablename
       FROM pg_tables
@@ -144,7 +145,8 @@ describe('Migration Reproducibility (T011 RED)', () => {
         AND tablename != 'schema_migrations'
       ORDER BY tablename
     `);
-    const slice17Owners = new Set([
+    const additionalOwners = new Set([
+      'digital_use_assessment_context',
       'professional_knowledge_items',
       'professional_knowledge_versions',
       'professional_knowledge_sources',
@@ -153,7 +155,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     ]);
     const slice16Tables = rows
       .map((row) => row.tablename)
-      .filter((table) => !slice17Owners.has(table));
+      .filter((table) => !additionalOwners.has(table));
 
     expect(slice16Tables).toHaveLength(33);
     expect(slice16Tables).toContain('intervention_definitions');
@@ -189,7 +191,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(rows.length).toBe(EXPECTED_CONTEXT_FUNCTIONS);
   });
 
-  it('should have 112 RLS policies', async () => {
+  it('should have 113 RLS policies', async () => {
     const { rows } = await client.query(`
       SELECT policyname, tablename FROM pg_policies
       WHERE schemaname = 'public'

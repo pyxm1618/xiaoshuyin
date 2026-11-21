@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { insertDigitalUseAssessmentTarget } from '@xiaoshuyin/domain';
 import { recordStatement } from '@xiaoshuyin/domain';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import {
@@ -16,6 +17,7 @@ import {
   auth,
   commandHeaders,
   createFamily,
+  createMember,
   revokeConsent,
   loginWithLabel,
   type LoginResult,
@@ -27,6 +29,7 @@ interface Fixture {
   familyId: string;
   caseId: string;
   caseVersion: number;
+  targetPersonId: string;
 }
 
 const TARGET_PATHS = [
@@ -59,6 +62,14 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     await migrator.connect();
     await migrator.query(
       `SELECT app.publish_compliance_feature_policy(
+         'DIGITAL_USE_ASSESSMENT_RUNTIME','v1',NULL,1,
+         'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+         'Slice 13 assessment target basis','evidence://slice13/assessment-target',
+         now() - interval '1 minute','migration:slice13-assessment-target'
+       )`
+    );
+    await migrator.query(
+      `SELECT app.publish_compliance_feature_policy(
          'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','v1',NULL,1,
          'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
          'Slice 13 integration reviewed basis','evidence://slice13/integration',
@@ -71,12 +82,12 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     await admin.query(
       `UPDATE compliance_feature_policies
           SET superseded_by_policy_id = NULL
-        WHERE feature_code='DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME'
+        WHERE feature_code IN ('DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','DIGITAL_USE_ASSESSMENT_RUNTIME')
           AND feature_contract_revision='v1'`
     ).catch(() => undefined);
     await admin.query(
       `DELETE FROM compliance_feature_policies
-        WHERE feature_code='DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME'
+        WHERE feature_code IN ('DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','DIGITAL_USE_ASSESSMENT_RUNTIME')
           AND feature_contract_revision='v1'`
     ).catch(() => undefined);
     await appDb.end().catch(() => undefined);
@@ -107,8 +118,8 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
           purpose: 'FAMILY_MANAGEMENT' as const,
         };
         await recordStatement(tx, context, {
-          subjectPersonId: f.manager.personId,
-          sourceKind: 'SELF_STATEMENT',
+          subjectPersonId: f.targetPersonId,
+          sourceKind: 'OTHER_MEMBER_RELAY',
           sourcePersonId: f.manager.personId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
@@ -118,8 +129,8 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
           })}`,
         });
         await recordStatement(tx, context, {
-          subjectPersonId: f.manager.personId,
-          sourceKind: 'SELF_STATEMENT',
+          subjectPersonId: f.targetPersonId,
+          sourceKind: 'OTHER_MEMBER_RELAY',
           sourcePersonId: f.manager.personId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
@@ -137,11 +148,19 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     const family = await createFamily(app, manager.token, `fa-${label}`);
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
+    const child = await createMember(app, manager.token, familyId, `r3-target-${label}`, {
+      ageBand: 'MINOR_14_17', ageBandSource: 'OTHER_MEMBER_RELAY',
+    });
+    expect(child.statusCode, child.body).toBe(201);
+    const targetPersonId = child.json().personId as string;
 
     const kase = await createCase(app, manager.token, `fa-${label}`);
     expect(kase.statusCode, kase.body).toBe(201);
     const caseId = kase.json().id as string;
     const caseVersion = kase.json().version as number;
+    await withRlsTransaction(appDb, {
+      familyId, accountId: manager.accountId, personId: manager.personId, purpose: 'FAMILY_MANAGEMENT',
+    }, tx => insertDigitalUseAssessmentTarget(tx, caseId, familyId, targetPersonId, manager.personId));
 
     const message = await app.inject({
       method: 'POST',
@@ -199,7 +218,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       throw error;
     }
 
-    const f = { manager, familyId, caseId, caseVersion };
+    const f = { manager, familyId, caseId, caseVersion, targetPersonId };
     await seedAssessmentEvidence(f);
     return f;
   }
@@ -232,6 +251,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': key,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision,
         expectedScenePackageVersion: 'v1',
@@ -736,6 +756,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-fabricated-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 1,
         expectedScenePackageVersion: 'v1',
@@ -752,6 +773,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     const a3002 = scene.nodes.find((node: any) => node.nodeCode === 'A3002');
     const key = `fa-idem-${crypto.randomUUID()}`;
     const payload = {
+      targetPersonId: f.targetPersonId,
       expectedCaseVersion: f.caseVersion,
       expectedNodeRevision: a3002.revision,
       expectedScenePackageVersion: 'v1',
@@ -762,10 +784,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         selectedTargets: ['SLEEP'],
       },
     };
-    const request = () => app.inject({
+    const request = (commandKey = key) => app.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A3002/responses`,
-      headers: { ...auth(f.manager.token), 'idempotency-key': key },
+      headers: { ...auth(f.manager.token), 'idempotency-key': commandKey },
       payload,
     });
     const first = await request();
@@ -790,6 +812,26 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect(mismatch.statusCode, mismatch.body).toBe(409);
     expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
 
+    const effects = async () => (await admin.query(
+      `SELECT
+        (SELECT count(*) FROM assertions WHERE case_id=$1) AS evidence,
+        (SELECT count(*) FROM scene_artifacts WHERE case_id=$1) AS artifacts,
+        (SELECT count(*) FROM case_events WHERE case_id=$1) AS events,
+        (SELECT count(*) FROM business_audit_events WHERE resource_id::text=$1::text) AS audits`,
+      [f.caseId]
+    )).rows;
+    const beforeComplianceChange = await effects();
+    await admin.query(
+      "UPDATE person_compliance_profiles SET age_band='ADULT', minor_mode=false, verified_source='SELF_STATEMENT' WHERE person_id=$1",
+      [f.targetPersonId]
+    );
+    const historical = await request();
+    expect(historical.statusCode, historical.body).toBe(200);
+    expect(historical.json()).toEqual(first.json());
+    const blocked = await request(`${key}-new`);
+    expect(blocked.json().code, blocked.body).toBe('COMPLIANCE_BLOCKED');
+    expect(await effects()).toEqual(beforeComplianceChange);
+
     const currents = await admin.query<{ n: number; revisions: number }>(
       `SELECT count(*)::int AS n,
               count(DISTINCT selection_revision)::int AS revisions
@@ -813,6 +855,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-race-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: a3002.revision,
         expectedScenePackageVersion: 'v1',
@@ -872,6 +915,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-package-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v0',
@@ -909,6 +953,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-target-race-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node.revision,
         expectedScenePackageVersion: 'v1',
@@ -974,6 +1019,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
           'idempotency-key': `fa-safety-race-${crypto.randomUUID()}`,
         },
         payload: {
+          targetPersonId: f.targetPersonId,
           expectedCaseVersion: f.caseVersion,
           expectedNodeRevision: 0,
           expectedScenePackageVersion: 'v1',
@@ -1019,6 +1065,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
           'idempotency-key': `fa-primary-race-${crypto.randomUUID()}`,
         },
         payload: {
+          targetPersonId: f.targetPersonId,
           expectedCaseVersion: f.caseVersion,
           expectedNodeRevision: 0,
           expectedScenePackageVersion: 'v1',
@@ -1068,6 +1115,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
           'idempotency-key': `fa-compliance-race-${crypto.randomUUID()}`,
         },
         payload: {
+          targetPersonId: f.targetPersonId,
           expectedCaseVersion: f.caseVersion,
           expectedNodeRevision: 0,
           expectedScenePackageVersion: 'v1',
@@ -1248,6 +1296,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
           url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
           headers: { ...auth(f.manager.token), 'idempotency-key': key },
           payload: {
+            targetPersonId: f.targetPersonId,
             expectedCaseVersion: f.caseVersion,
             expectedNodeRevision: 0,
             expectedScenePackageVersion: 'v1',
@@ -1284,6 +1333,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         url: `/api/v1/cases/${f.caseId}/scene/nodes/A3002/responses`,
         headers: { ...auth(f.manager.token), 'idempotency-key': key },
         payload: {
+          targetPersonId: f.targetPersonId,
           expectedCaseVersion: f.caseVersion,
           expectedNodeRevision: a3002.revision,
           expectedScenePackageVersion: 'v1',
@@ -1319,6 +1369,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A3000/responses`,
       headers: { 'idempotency-key': `fa-unauth-${crypto.randomUUID()}` },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',
@@ -1342,6 +1393,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-cross-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',
@@ -1379,6 +1431,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-participant-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',
@@ -1401,6 +1454,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-forged-ref-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',
@@ -1418,6 +1472,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-forged-subject-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',
@@ -1453,6 +1508,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-parallel-a3001-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: a3001.revision,
         expectedScenePackageVersion: 'v1',
@@ -1467,6 +1523,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-parallel-a3002-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: a3002.revision,
         expectedScenePackageVersion: 'v1',
@@ -1510,6 +1567,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-reselect-race-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: a3002.revision,
         expectedScenePackageVersion: 'v1',
@@ -1529,6 +1587,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-progress-race-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: a3012.revision,
         expectedScenePackageVersion: 'v1',
@@ -1619,6 +1678,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-reassess-race-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: a3000.revision,
         expectedScenePackageVersion: 'v1',
@@ -1633,6 +1693,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-downstream-race-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: a3001.revision,
         expectedScenePackageVersion: 'v1',
@@ -1682,6 +1743,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
           'idempotency-key': `fa-package-race-${crypto.randomUUID()}`,
         },
         payload: {
+          targetPersonId: f.targetPersonId,
           expectedCaseVersion: f.caseVersion,
           expectedNodeRevision: 0,
           expectedScenePackageVersion: 'v1',
@@ -1800,6 +1862,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         'idempotency-key': `fa-consent-family-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',

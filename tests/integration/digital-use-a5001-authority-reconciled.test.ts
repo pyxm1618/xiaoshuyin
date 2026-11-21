@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { insertDigitalUseAssessmentTarget } from '@xiaoshuyin/domain';
 import { recordObservation, recordStatement, reviseDigitalUseTargetItem } from '@xiaoshuyin/domain';
 import { recordDialogueMessage } from '../../packages/domain/src/internal/message-writer.js';
 import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
@@ -11,6 +12,7 @@ import {
   auth,
   commandHeaders,
   createFamily,
+  createMember,
   loginWithLabel,
   type LoginResult,
 } from '../setup/api.js';
@@ -26,6 +28,7 @@ interface Fixture {
   familyId: string;
   caseId: string;
   caseVersion: number;
+  targetPersonId: string;
   scene: any;
 }
 
@@ -39,7 +42,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
   let migrator: pg.Client;
   const professional = new TestProfessionalReviewContentProvider();
 
-  async function ensurePolicy(): Promise<void> {
+  async function ensurePolicy(featureCode: string): Promise<void> {
     await migrator.query(
       `SELECT pg_advisory_lock(hashtextextended($1,0))`,
       ['slice15-authority-reconciled-a5001-policy']
@@ -51,7 +54,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
           WHERE feature_code=$1
             AND feature_contract_revision='v1'
             AND superseded_by_policy_id IS NULL`,
-        [FAMILY_FEATURE]
+        [featureCode]
       );
       if ((current.rows[0]?.n ?? 0) === 0) {
         await migrator.query(
@@ -63,7 +66,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
              now() - interval '1 minute',
              'migration:slice15-authority-reconciled-a5001'
            )`,
-          [FAMILY_FEATURE]
+          [featureCode]
         );
       }
     } finally {
@@ -87,10 +90,16 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       connectionString: process.env['MIGRATION_DATABASE_URL'],
     });
     await migrator.connect();
-    await ensurePolicy();
+    await ensurePolicy(FAMILY_FEATURE);
+    await ensurePolicy('DIGITAL_USE_ASSESSMENT_RUNTIME');
   });
 
   afterAll(async () => {
+    await admin.query(
+      `DELETE FROM compliance_feature_policies
+        WHERE feature_code = 'DIGITAL_USE_ASSESSMENT_RUNTIME'
+          AND review_evidence_ref = 'evidence://slice15/authority-reconciled/a5001'`
+    );
     await appDb.end().catch(() => undefined);
     await migrator.end().catch(() => undefined);
     await admin.end().catch(() => undefined);
@@ -116,8 +125,8 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
           purpose: 'FAMILY_MANAGEMENT' as const,
         };
         await recordStatement(tx, context, {
-          subjectPersonId: f.manager.personId,
-          sourceKind: 'SELF_STATEMENT',
+          subjectPersonId: f.targetPersonId,
+          sourceKind: 'OTHER_MEMBER_RELAY',
           sourcePersonId: f.manager.personId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
@@ -127,8 +136,8 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
           })}`,
         });
         await recordStatement(tx, context, {
-          subjectPersonId: f.manager.personId,
-          sourceKind: 'SELF_STATEMENT',
+          subjectPersonId: f.targetPersonId,
+          sourceKind: 'OTHER_MEMBER_RELAY',
           sourcePersonId: f.manager.personId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
@@ -170,6 +179,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
         'idempotency-key': `slice15-a5001-${nodeCode}-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -185,11 +195,19 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
     const family = await createFamily(app, manager.token, `slice15-a5001-${label}`);
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
+    const child = await createMember(app, manager.token, familyId, `r3-target-${label}`, {
+      ageBand: 'MINOR_14_17', ageBandSource: 'OTHER_MEMBER_RELAY',
+    });
+    expect(child.statusCode, child.body).toBe(201);
+    const targetPersonId = child.json().personId as string;
 
     const kase = await createCase(app, manager.token, `slice15-a5001-${label}`);
     expect(kase.statusCode, kase.body).toBe(201);
     const caseId = kase.json().id as string;
     const caseVersion = kase.json().version as number;
+    await withRlsTransaction(appDb, {
+      familyId, accountId: manager.accountId, personId: manager.personId, purpose: 'FAMILY_MANAGEMENT',
+    }, tx => insertDigitalUseAssessmentTarget(tx, caseId, familyId, targetPersonId, manager.personId));
 
     const message = await app.inject({
       method: 'POST',
@@ -244,7 +262,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       throw error;
     }
 
-    const base = { manager, familyId, caseId, caseVersion };
+    const base = { manager, familyId, caseId, caseVersion, targetPersonId };
     await seedAssessmentEvidence(base);
 
     const a3000 = await respond(base, 'A3000', {
@@ -317,6 +335,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A5001/responses`,
       headers: { ...auth(token), 'idempotency-key': key },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -505,6 +524,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
         url: `/api/v1/cases/${f.caseId}/scene/nodes/A5001/responses`,
         headers: { ...auth(f.manager.token), 'idempotency-key': key },
         payload: {
+          targetPersonId: f.targetPersonId,
           expectedCaseVersion: f.caseVersion,
           expectedNodeRevision: 0,
           expectedScenePackageVersion: 'v1',

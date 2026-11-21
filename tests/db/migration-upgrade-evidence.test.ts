@@ -134,7 +134,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     expect(output).toContain('APPLY 027_professional_knowledge_insert_lifecycle_guard.sql');
     expect(output).toContain('APPLY 028_professional_knowledge_authority_boundary_remediation.sql');
     expect(output).toContain('APPLY 029_staff_assignment_control_plane.sql');
-    expect(output).toMatch(/Migration complete: 29 new, 3 previously applied\./);
+    expect(output).toMatch(/Migration complete: 30 new, 3 previously applied\./);
 
     // Data survival.
     expect(await counts(seedAdmin)).toEqual(beforeCounts);
@@ -225,6 +225,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '027_professional_knowledge_insert_lifecycle_guard.sql',
       '028_professional_knowledge_authority_boundary_remediation.sql',
       '029_staff_assignment_control_plane.sql',
+      '030_digital_use_assessment_context.sql',
     ]);
 
     // New Evidence schema exists.
@@ -278,7 +279,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
     const { rows: policyRows } = await migrator.query(
       `SELECT count(*)::int AS count FROM pg_policies WHERE schemaname = 'public'`
     );
-    expect(policyRows[0].count).toBe(112); // Includes five Staff Assignment Control Plane policies
+    expect(policyRows[0].count).toBe(113);
 
     // Runtime grants: SELECT/INSERT on all three, column UPDATE only, no DELETE.
     const { rows: grants } = await migrator.query(
@@ -334,7 +335,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
   it('second application is a 0-new no-op with an unchanged object set', async () => {
     const before = await fingerprint(migrator);
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 32 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 33 previously applied\./);
     expect(output).not.toContain('APPLY 004_evidence_core.sql');
     expect(output).not.toContain('APPLY 004_identity_binding_runtime.sql');
     expect(output).not.toContain('APPLY 005_case_participant_core.sql');
