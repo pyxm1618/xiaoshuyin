@@ -31,7 +31,8 @@
           "012-digital-use-assessment-runtime",
           "013-digital-use-family-alliance-runtime",
           "foundation-remaining-remediation",
-          "017-professional-knowledge-foundation"
+          "017-professional-knowledge-foundation",
+          "phase5-d6-real-external-authority-content"
         ]
       }
     },
@@ -313,7 +314,8 @@
           "013-digital-use-family-alliance-runtime",
           "foundation-remaining-remediation",
           "common-core-goal-confirmgoal-runtime",
-          "phase5-c3-staff-assignment-control-plane"
+          "phase5-c3-staff-assignment-control-plane",
+          "phase5-d6-real-external-authority-content"
         ]
       }
     },
@@ -471,9 +473,10 @@
         "path": "apps/server/api/src/services/professional-knowledge.ts"
       },
       "ownership": {
-        "kind": "FEATURE",
+        "kind": "SHARED",
         "features": [
-          "017-professional-knowledge-foundation"
+          "017-professional-knowledge-foundation",
+          "phase5-d6-real-external-authority-content"
         ]
       }
     },
@@ -568,32 +571,32 @@
         ]
       }
     },
-  {
-    "id": "phase5-c3-staff-authority-application",
-    "match": {
-      "kind": "PREFIX",
-      "path": "apps/server/api/src/staff-authority/"
+    {
+      "id": "phase5-c3-staff-authority-application",
+      "match": {
+        "kind": "PREFIX",
+        "path": "apps/server/api/src/staff-authority/"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-c3-staff-assignment-control-plane"
+        ]
+      }
     },
-    "ownership": {
-      "kind": "FEATURE",
-      "features": [
-        "phase5-c3-staff-assignment-control-plane"
-      ]
-    }
-  },
-  {
-    "id": "phase5-c3-staff-authority-migration",
-    "match": {
-      "kind": "EXACT",
-      "path": "db/migrations/029_staff_assignment_control_plane.sql"
+    {
+      "id": "phase5-c3-staff-authority-migration",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/029_staff_assignment_control_plane.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-c3-staff-assignment-control-plane"
+        ]
+      }
     },
-    "ownership": {
-      "kind": "FEATURE",
-      "features": [
-        "phase5-c3-staff-assignment-control-plane"
-      ]
-    }
-  },
     {
       "id": "digital-use-assessment-service",
       "match": {
@@ -656,6 +659,32 @@
         "kind": "FEATURE",
         "features": [
           "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-roleplay-adapter",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-roleplay-adapter.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-d6-real-external-authority-content"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-roleplay-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-roleplay.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-d6-real-external-authority-content"
         ]
       }
     }
