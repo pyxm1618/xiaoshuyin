@@ -107,6 +107,7 @@ export const DigitalUseRecovery = z.strictObject({
 export type DigitalUseRecoveryType = z.infer<typeof DigitalUseRecovery>;
 
 export const DigitalUseSceneResponse = z.strictObject({
+  targetPersonId: z.string().uuid(),
   caseId: z.string().uuid(),
   caseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
   sceneCode: z.literal('DIGITAL_USE'),
@@ -125,6 +126,7 @@ export const DigitalUseSceneResponse = z.strictObject({
 export type DigitalUseSceneResponseType = z.infer<typeof DigitalUseSceneResponse>;
 
 export const DigitalUseNodeResponse = z.strictObject({
+  targetPersonId: z.string().uuid(),
   caseId: z.string().uuid(),
   caseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
   sceneCode: z.literal('DIGITAL_USE'),
@@ -142,6 +144,7 @@ export const DigitalUseNodeResponse = z.strictObject({
 export type DigitalUseNodeResponseType = z.infer<typeof DigitalUseNodeResponse>;
 
 export const StartDigitalUseAssessmentRequest = z.strictObject({
+  targetPersonId: z.string().uuid(),
   expectedCaseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
 });
 export type StartDigitalUseAssessmentRequestType =
@@ -152,6 +155,7 @@ export type StartDigitalUseAssessmentResponseType =
   z.infer<typeof StartDigitalUseAssessmentResponse>;
 
 export const CompleteDigitalUseNodeRequest = z.strictObject({
+  targetPersonId: z.string().uuid(),
   expectedCaseVersion: z.number().int().min(1).max(PG_INTEGER_MAX),
   expectedNodeRevision: z.number().int().min(0).max(PG_INTEGER_MAX),
   expectedScenePackageVersion: z.literal('v1').optional(),

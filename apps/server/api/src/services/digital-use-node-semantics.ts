@@ -12,6 +12,8 @@ import {
   getLatestSceneArtifact,
   insertSceneArtifact,
   listCurrentSceneEvidenceStatements,
+  getGuardianPersonId,
+  listCurrentDigitalUseTargetStatements,
   recordStatement,
   type StoredSceneRef,
 } from '@xiaoshuyin/domain';
@@ -42,6 +44,7 @@ export interface DigitalUseNodeSemanticsContext {
   readonly actor: { readonly accountId: string; readonly personId: string };
   readonly familyId: string;
   readonly caseId: string;
+  readonly targetPersonId: string;
   readonly nodeCode: string;
   readonly response: Readonly<Record<string, unknown>>;
   readonly currentInputRefs: readonly StoredSceneRef[];
@@ -255,22 +258,27 @@ function statementPrefix(code: string): string {
 async function recordAssessmentStatement(
   context: DigitalUseNodeSemanticsContext,
   code: string,
-  value: unknown
+  value: unknown,
+  subjectPolicy: 'ACTOR' | 'TARGET' = 'ACTOR'
 ): Promise<StoredSceneRef> {
+  const subjectPersonId = subjectPolicy === 'TARGET' ? context.targetPersonId : context.actor.personId;
+  const sourceKind = subjectPolicy === 'ACTOR' ? 'SELF_STATEMENT' :
+    await getGuardianPersonId(context.tx, subjectPersonId) === context.actor.personId
+      ? 'GUARDIAN_RELAY' : 'OTHER_MEMBER_RELAY';
   const prefix = statementPrefix(code);
   const existing = await listCurrentSceneEvidenceStatements(
     context.tx,
     context.caseId,
     prefix
   );
-  const actorOwned = existing.filter(
+  const predecessors = existing.filter(
     (row) =>
-      row.subject_person_id === context.actor.personId &&
+      row.subject_person_id === subjectPersonId &&
       row.source_person_id === context.actor.personId
   );
   // Multiple current actor-owned rows are already a conflict. Do not silently
   // choose one predecessor and erase that fact.
-  if (actorOwned.length > 1) semanticError('INTEGRATED_TRIAGE_BLOCKED');
+  if (predecessors.length > 1) semanticError('INTEGRATED_TRIAGE_BLOCKED');
 
   const result = await recordStatement(
     context.tx,
@@ -282,16 +290,24 @@ async function recordAssessmentStatement(
       purpose: 'FAMILY_MANAGEMENT',
     },
     {
-      subjectPersonId: context.actor.personId,
-      sourceKind: 'SELF_STATEMENT',
+      subjectPersonId,
+      sourceKind,
       sourcePersonId: context.actor.personId,
       occurredTimeState: 'UNKNOWN',
       confirmationStatus: 'UNCONFIRMED',
-      ...(actorOwned[0] ? { supersedesId: actorOwned[0].id } : {}),
+      ...(predecessors[0] ? { supersedesId: predecessors[0].id } : {}),
       content: `${prefix}${canonicalJson(value)}`,
     }
   );
   return { type: 'ASSERTION', id: result.id };
+}
+
+function recordTargetStatement(
+  context: DigitalUseNodeSemanticsContext,
+  code: string,
+  value: unknown
+): Promise<StoredSceneRef> {
+  return recordAssessmentStatement(context, code, value, 'TARGET');
 }
 
 async function handleA1001(
@@ -302,57 +318,57 @@ async function handleA1001(
   const value = parsed.data;
 
   const refs: StoredSceneRef[] = [];
-  refs.push(await recordAssessmentStatement(context, 'a1001.devices', value.devices));
+  refs.push(await recordTargetStatement(context, 'a1001.devices', value.devices));
   if (value.reportedAgeYears !== undefined) {
-    refs.push(await recordAssessmentStatement(
+    refs.push(await recordTargetStatement(
       context,
       'a1001.reported_age_years',
       { value: value.reportedAgeYears, authority: 'USER_REPORTED_EVIDENCE_ONLY' }
     ));
   }
   refs.push(
-    await recordAssessmentStatement(
+    await recordTargetStatement(
       context,
       'a1001.duration.learning_research_homework',
       value.purposeDurations.learningResearchHomework
     ),
-    await recordAssessmentStatement(
+    await recordTargetStatement(
       context,
       'a1001.duration.necessary_contact',
       value.purposeDurations.necessaryContact
     ),
-    await recordAssessmentStatement(
+    await recordTargetStatement(
       context,
       'a1001.duration.entertainment_gaming_video_social_non_learning',
       value.purposeDurations.entertainmentGamingVideoSocialNonLearning
     )
   );
   if (value.totalDuration !== undefined) {
-    refs.push(await recordAssessmentStatement(
+    refs.push(await recordTargetStatement(
       context,
       'a1001.duration.total_auxiliary',
       value.totalDuration
     ));
   }
   if (value.historicalDurationBand !== undefined) {
-    refs.push(await recordAssessmentStatement(
+    refs.push(await recordTargetStatement(
       context,
       'a1001.duration.historical_band_auxiliary',
       { state: 'KNOWN', band: value.historicalDurationBand }
     ));
   }
   refs.push(
-    await recordAssessmentStatement(
+    await recordTargetStatement(
       context,
       'a1001.impact.sleep',
       value.functionalImpact.sleep
     ),
-    await recordAssessmentStatement(
+    await recordTargetStatement(
       context,
       'a1001.impact.study_or_necessary_affairs',
       value.functionalImpact.studyOrNecessaryAffairs
     ),
-    await recordAssessmentStatement(
+    await recordTargetStatement(
       context,
       'a1001.impact.real_world_activity_displacement',
       value.functionalImpact.realWorldActivityDisplacement
@@ -383,7 +399,7 @@ async function handle01002(
 ): Promise<DigitalUseNodeSemanticResult> {
   const parsed = Response01002.safeParse(context.response);
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
-  await recordAssessmentStatement(context, '01002.emotion', parsed.data);
+  await recordTargetStatement(context, '01002.emotion', parsed.data);
 
   // Re-read the authoritative current Evidence family after the write. The
   // submitted payload alone is never allowed to erase another current source,
@@ -391,12 +407,13 @@ async function handle01002(
   const evidence = await loadIntegratedTriageEvidence(context.tx, context.caseId);
   const emotion = evidence.emotion01002;
   const refs: StoredSceneRef[] = (
-    await listCurrentSceneEvidenceStatements(
+    await listCurrentDigitalUseTargetStatements(
       context.tx,
       context.caseId,
-      'DUA:v1:01002.emotion:'
+      context.targetPersonId
     )
-  ).map((row) => ({ type: 'ASSERTION' as const, id: row.id }));
+  ).filter((row) => row.content.startsWith(statementPrefix('01002.emotion')))
+    .map((row) => ({ type: 'ASSERTION' as const, id: row.id }));
 
   if (emotion.kind === 'MISSING') {
     const conditionState =
@@ -453,7 +470,7 @@ async function handle01003(
 ): Promise<DigitalUseNodeSemanticResult> {
   const parsed = Response01003.safeParse(context.response);
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
-  await recordAssessmentStatement(
+  await recordTargetStatement(
     context,
     '01003.family_relationship',
     parsed.data
@@ -466,7 +483,7 @@ async function handle01003(
   const evidence = await loadIntegratedTriageEvidence(context.tx, context.caseId);
   const triage = evaluateIntegratedTriage(evidence);
   const currentEvidenceRefs: StoredSceneRef[] = (
-    await listCurrentSceneEvidenceStatements(context.tx, context.caseId, 'DUA:v1:')
+    await listCurrentDigitalUseTargetStatements(context.tx, context.caseId, context.targetPersonId)
   ).map((row) => ({ type: 'ASSERTION' as const, id: row.id }));
 
   const integratedBasis: DigitalUseEvidenceBasisCategory[] = [
@@ -629,12 +646,12 @@ async function handleA2003(
     await recordAssessmentStatement(context, 'a2003.expected_duration', parsed.data.expectedDuration),
     await recordAssessmentStatement(context, 'a2003.reason', parsed.data.reason),
     await recordAssessmentStatement(context, 'a2003.prior_methods', parsed.data.priorMethods),
-    await recordAssessmentStatement(context, 'a2003.observed_effect', parsed.data.observedEffect),
+    await recordTargetStatement(context, 'a2003.observed_effect', parsed.data.observedEffect),
     await recordAssessmentStatement(context, 'a2003.difficulties', parsed.data.difficulties),
   ];
   const onlyEvidence = evidenceRefs.map((ref) => {
-    if (ref.type !== 'ASSERTION') semanticError('INTERNAL_ERROR');
-    return { type: 'ASSERTION' as const, id: ref.id };
+    if (ref.type !== 'ASSERTION' && ref.type !== 'OBSERVATION') semanticError('INTERNAL_ERROR');
+    return { type: ref.type, id: ref.id };
   });
   const marker = buildA200401RecordMarker(onlyEvidence);
   if (marker.type !== 'RECORD_MARKER') semanticError('INTERNAL_ERROR');

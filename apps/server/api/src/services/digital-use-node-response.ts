@@ -51,7 +51,8 @@ import {
 } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
-  assertAssessmentCompliance,
+  assertBoundAssessmentCompliance,
+  requireDigitalUseAssessmentTarget,
   currentSceneEnvelope,
   resolveRequestedDigitalUseNode,
   type DigitalUseActor,
@@ -404,7 +405,7 @@ async function readUnlockedHandoffPreconditions(
   if (!caseRow) throw nodeError('CASE_NOT_FOUND', 'Case not found');
   assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-  await assertAssessmentCompliance(tx, input.actor.personId);
+  await assertBoundAssessmentCompliance(tx, input);
 
   const binding = await getScenePackageBinding(tx, input.caseId);
   if (binding === null) throw nodeError('SCENE_NODE_UNREACHABLE');
@@ -440,6 +441,7 @@ async function applySemanticForCurrentNode(
       actor: input.actor,
       familyId: input.familyId,
       caseId: input.caseId,
+      targetPersonId: await requireDigitalUseAssessmentTarget(tx, input.caseId, input.targetPersonId),
       nodeCode: node.nodeCode,
       response: input.response,
       currentInputRefs: current.input_refs,
@@ -502,7 +504,7 @@ async function recordBlockedHandoffCandidate(
   if (!caseRow) throw nodeError('CASE_NOT_FOUND', 'Case not found');
   assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-  await assertAssessmentCompliance(tx, input.actor.personId);
+  await assertBoundAssessmentCompliance(tx, input);
 
   const current = await getSceneNodeState(tx, input.caseId, node.nodeCode, true);
   if (
@@ -633,7 +635,7 @@ async function executeProblemFormulationHandoffPath(
   // Family/Case lock. A Safety or Compliance change racing the unlocked preview
   // must roll back formulation + Scene + Evidence as one transaction.
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-  await assertAssessmentCompliance(tx, input.actor.personId);
+  await assertBoundAssessmentCompliance(tx, input);
 
   const binding = await getScenePackageBinding(tx, input.caseId);
   if (binding !== DIGITAL_USE_PACKAGE_VERSION) throw nodeError('STALE_SCENE_PACKAGE');
@@ -785,7 +787,7 @@ async function executeA1001CorrectionProblemFormulationHandoffPath(
   if (!caseRow) throw nodeError('CASE_NOT_FOUND', 'Case not found');
   assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-  await assertAssessmentCompliance(tx, input.actor.personId);
+  await assertBoundAssessmentCompliance(tx, input);
 
   const binding = await getScenePackageBinding(tx, input.caseId);
   if (binding === null) throw nodeError('SCENE_NODE_UNREACHABLE');
@@ -840,7 +842,7 @@ async function executeA1001CorrectionProblemFormulationHandoffPath(
     throw nodeError('STALE_CASE_VERSION');
   }
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-  await assertAssessmentCompliance(tx, input.actor.personId);
+  await assertBoundAssessmentCompliance(tx, input);
   if ((await getScenePackageBinding(tx, input.caseId)) !== DIGITAL_USE_PACKAGE_VERSION) {
     throw nodeError('STALE_SCENE_PACKAGE');
   }
@@ -996,10 +998,17 @@ export async function completeDigitalUseNodeResponse(
         throw nodeError('CASE_NOT_FOUND', 'Case not found');
       }
 
+      const visibleCase = await getCaseById(tx, input.caseId);
+      if (!visibleCase || visibleCase.family_id !== input.familyId) {
+        throw nodeError('CASE_NOT_FOUND', 'Case not found');
+      }
       // Manifest identity is resolved only after authorization, so fabricated
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
+      assertNodeCasePreconditions(visibleCase, node, input.expectedCaseVersion);
+      if (!input.targetPersonId) throw nodeError('TARGET_SCOPE_INVALID');
+      const targetPersonId = await requireDigitalUseAssessmentTarget(tx, input.caseId, input.targetPersonId);
       const professionalReviewContent =
         options.professionalReviewContent ??
         unavailableProductionProfessionalReviewContentProvider;
@@ -1144,6 +1153,7 @@ export async function completeDigitalUseNodeResponse(
             !a1001CorrectionHandoff &&
             await shouldPrepareProblemFormulationHandoff({
               tx,
+              targetPersonId,
               actor: input.actor,
               familyId: input.familyId,
               caseId: input.caseId,
@@ -1177,7 +1187,7 @@ export async function completeDigitalUseNodeResponse(
 
           assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
           await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-          await assertAssessmentCompliance(tx, input.actor.personId);
+          await assertBoundAssessmentCompliance(tx, input);
           if (
             node.nodeCode === 'A2010' ||
             node.stream === 'PHONE_USE_CONTRACT'

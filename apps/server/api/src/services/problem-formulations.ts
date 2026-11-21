@@ -23,6 +23,7 @@ import {
   getCaseById,
   deriveMandatoryDependencyRefs,
   deriveProcessingPersonIds,
+  readDigitalUseAssessmentTarget,
   getCurrentProblemFormulation,
   getProblemFormulationByVersion,
   hasTraceableProblemStatement,
@@ -227,10 +228,11 @@ async function processingPersonIds(
   }
 ): Promise<string[]> {
   const participants = await resolveActiveCaseParticipantPersonIds(tx, input.caseRow.id);
+  const target = await readDigitalUseAssessmentTarget(tx, input.caseRow.id);
   return deriveProcessingPersonIds({
     actorPersonId: input.actor.personId,
     caseCreatorPersonId: input.caseRow.created_by_person_id,
-    activeParticipantPersonIds: participants,
+    activeParticipantPersonIds: target ? [...participants, target] : participants,
     authoritativeMembers: input.authoritative.members,
   });
 }
@@ -572,7 +574,7 @@ export async function getCurrentProblemFormulationView(
  */
 async function startAssessmentAuthoritativeCommand(
   tx: pg.PoolClient,
-  input: MutationInput
+  input: AssessmentStartInput
 ): Promise<CommandResult> {
   await authorize(tx, {
     actor: input.actor,
@@ -585,6 +587,7 @@ async function startAssessmentAuthoritativeCommand(
     familyId: input.familyId,
     caseId: input.caseId,
     expectedCaseVersion: input.expectedCaseVersion,
+    ...(input.digitalUse ? { targetPersonId: input.digitalUse.targetPersonId } : {}),
   });
   const keyBytes = caseIdempotencyKeyBytes(input.idempotencyKey);
   const slot = await acquireSlot(
@@ -606,6 +609,7 @@ async function startAssessmentAuthoritativeCommand(
       await lockFamily(tx, input.familyId);
       const caseRow = await lockCase(tx, input.caseId);
       assertCaseGuards(caseRow, input.expectedCaseVersion, 'INTAKE');
+      await input.digitalUse?.bindTarget(tx);
 
       const carrier = await resolveTraceableStatement(tx, input.caseId);
       if (!carrier) throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
@@ -621,10 +625,12 @@ async function startAssessmentAuthoritativeCommand(
         throw pfError('TRACEABLE_PROBLEM_STATEMENT_REQUIRED');
       }
       const carrierMembers = [carrierMember];
+      const participants = await resolveActiveCaseParticipantPersonIds(tx, input.caseId);
+      const target = await readDigitalUseAssessmentTarget(tx, input.caseId);
       const personIds = deriveProcessingPersonIds({
         actorPersonId: input.actor.personId,
         caseCreatorPersonId: caseRow.created_by_person_id,
-        activeParticipantPersonIds: await resolveActiveCaseParticipantPersonIds(tx, input.caseId),
+        activeParticipantPersonIds: target ? [...participants, target] : participants,
         authoritativeMembers: carrierMembers,
       });
       await runComplianceGate(tx, personIds);
@@ -690,9 +696,16 @@ export async function startAssessment(
  * ROLLBACK and has already established the RLS context; see the contract on
  * `startAssessmentAuthoritativeCommand` for the full precondition list.
  */
+type AssessmentStartInput = MutationInput & {
+  readonly digitalUse?: {
+    readonly targetPersonId: string;
+    readonly bindTarget: (tx: pg.PoolClient) => Promise<void>;
+  };
+};
+
 export async function startAssessmentInTransaction(
   tx: pg.PoolClient,
-  input: MutationInput
+  input: AssessmentStartInput
 ): Promise<CommandResult> {
   try {
     return await startAssessmentAuthoritativeCommand(tx, input);

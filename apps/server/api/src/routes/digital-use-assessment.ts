@@ -5,7 +5,7 @@
  * authority is resolved server-side; request bodies contain only the frozen
  * optimistic-concurrency tokens and structured user response.
  */
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type pg from 'pg';
 import { z } from 'zod';
 import {
@@ -126,9 +126,11 @@ export function registerDigitalUseAssessmentRoutes(
         actor,
         familyId,
         caseId,
+        targetPersonId: body.targetPersonId,
         expectedCaseVersion: body.expectedCaseVersion,
         idempotencyKey,
       });
+      if ('status' in result) return (reply as FastifyReply).status(result.status).send(result.body);
       return reply.status(200).send(result);
     }
   );
@@ -227,6 +229,7 @@ export function registerDigitalUseAssessmentRoutes(
         familyId,
         caseId,
         nodeCode: params.nodeCode,
+        targetPersonId: body.targetPersonId,
         expectedCaseVersion: body.expectedCaseVersion,
         expectedNodeRevision: body.expectedNodeRevision,
         expectedScenePackageVersion: body.expectedScenePackageVersion,

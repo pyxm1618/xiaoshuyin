@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { insertDigitalUseAssessmentTarget } from '@xiaoshuyin/domain';
 import { recordStatement } from '@xiaoshuyin/domain';
 import {
   buildConsentEvidence,
@@ -19,6 +20,7 @@ import {
   auth,
   commandHeaders,
   createFamily,
+  createMember,
   loginWithLabel,
   type LoginResult,
 } from '../setup/api.js';
@@ -37,6 +39,7 @@ interface BaseFixture {
   familyId: string;
   caseId: string;
   caseVersion: number;
+  targetPersonId: string;
 }
 
 interface A5002Fixture extends BaseFixture {
@@ -223,10 +226,18 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     const family = await createFamily(targetApp, manager.token, `slice15-${label}`);
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
+    const child = await createMember(targetApp, manager.token, familyId, `r3-target-${label}`, {
+      ageBand: 'MINOR_14_17', ageBandSource: 'OTHER_MEMBER_RELAY',
+    });
+    expect(child.statusCode, child.body).toBe(201);
+    const targetPersonId = child.json().personId as string;
     const kase = await createCase(targetApp, manager.token, `slice15-${label}`);
     expect(kase.statusCode, kase.body).toBe(201);
     const caseId = kase.json().id as string;
     const caseVersion = kase.json().version as number;
+    await withRlsTransaction(appDb, {
+      familyId, accountId: manager.accountId, personId: manager.personId, purpose: 'FAMILY_MANAGEMENT',
+    }, tx => insertDigitalUseAssessmentTarget(tx, caseId, familyId, targetPersonId, manager.personId));
     const message = await targetApp.inject({
       method: 'POST',
       url: `/api/v1/cases/${caseId}/messages`,
@@ -234,7 +245,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       payload: { content: 'Current Digital Use review subject.' },
     });
     expect(message.statusCode, message.body).toBe(201);
-    const f = { manager, familyId, caseId, caseVersion };
+    const f = { manager, familyId, caseId, caseVersion, targetPersonId };
     await seedConfirmedFormulation(f, message.json().id as string, phase);
     return f;
   }
@@ -346,8 +357,8 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
           purpose: 'FAMILY_MANAGEMENT' as const,
         };
         await recordStatement(tx, context, {
-          subjectPersonId: f.manager.personId,
-          sourceKind: 'SELF_STATEMENT',
+          subjectPersonId: f.targetPersonId,
+          sourceKind: 'OTHER_MEMBER_RELAY',
           sourcePersonId: f.manager.personId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
@@ -357,8 +368,8 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
           })}`,
         });
         await recordStatement(tx, context, {
-          subjectPersonId: f.manager.personId,
-          sourceKind: 'SELF_STATEMENT',
+          subjectPersonId: f.targetPersonId,
+          sourceKind: 'OTHER_MEMBER_RELAY',
           sourcePersonId: f.manager.personId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
@@ -398,6 +409,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         `slice15-${nodeCode.toLowerCase()}-${crypto.randomUUID()}`
       ),
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -492,6 +504,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A5001/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': key },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -674,6 +687,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A5002/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': key },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -1470,23 +1484,33 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     const outsiderFamily = await createFamily(app, outsider.token, 'slice15-outsider');
     expect(outsiderFamily.statusCode, outsiderFamily.body).toBe(201);
 
-    const result = await app.inject({
-      method: 'POST',
-      url: `/api/v1/cases/${target.f.caseId}/scene/nodes/A5001/responses`,
-      headers: {
-        ...auth(outsider.token),
-        'idempotency-key': `a5001-wrong-family-${crypto.randomUUID()}`,
-      },
-      payload: {
-        expectedCaseVersion: target.f.caseVersion,
-        expectedNodeRevision: 0,
-        expectedScenePackageVersion: 'v1',
-        expectedSelectionRevision: target.scene.targetSelectionRevision,
-        response: target.payload,
-      },
-    });
-    expect(result.statusCode).toBe(404);
-    expect(result.json()).toMatchObject({ code: 'CASE_NOT_FOUND' });
+    for (const candidate of [target.f.targetPersonId, outsider.personId, crypto.randomUUID()]) {
+      const result = await app.inject({
+        method: 'POST',
+        url: `/api/v1/cases/${target.f.caseId}/scene/nodes/A5001/responses`,
+        headers: {
+          ...auth(outsider.token),
+          'idempotency-key': `a5001-wrong-family-${crypto.randomUUID()}`,
+        },
+        payload: {
+          targetPersonId: candidate,
+          expectedCaseVersion: target.f.caseVersion,
+          expectedNodeRevision: 0,
+          expectedScenePackageVersion: 'v1',
+          expectedSelectionRevision: target.scene.targetSelectionRevision,
+          response: target.payload,
+        },
+      });
+      expect(result.statusCode).toBe(404);
+      expect(result.json()).toMatchObject({ code: 'CASE_NOT_FOUND' });
+    }
+    const deniedCommands = await admin.query(
+      `SELECT 1 FROM idempotency_keys
+        WHERE actor_account_id = $1 AND command_type = 'DIGITAL_USE_NODE_RESPONSE'
+          AND idempotency_key LIKE 'a5001-wrong-family-%'`,
+      [outsider.accountId]
+    );
+    expect(deniedCommands.rows).toEqual([]);
     expect(await reviewCounts(target.f, 'A5001')).toMatchObject({
       artifacts: 0,
       completed: 0,
@@ -1511,6 +1535,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         'idempotency-key': `a5001-no-privilege-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: target.f.targetPersonId,
         expectedCaseVersion: target.f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',
@@ -1564,6 +1589,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         'idempotency-key': `a5001-participant-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: target.f.targetPersonId,
         expectedCaseVersion: target.f.caseVersion,
         expectedNodeRevision: 0,
         expectedScenePackageVersion: 'v1',

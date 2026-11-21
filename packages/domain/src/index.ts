@@ -36,6 +36,7 @@ export {
   getIdempotencyKey,
   insertIdempotencyKey,
   getPersonWithProfile,
+  getGuardianPersonId,
 } from './repository.js';
 export type {
   Tx,

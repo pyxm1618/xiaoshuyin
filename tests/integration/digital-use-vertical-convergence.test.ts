@@ -37,6 +37,7 @@ interface Fixture {
   manager: LoginResult;
   familyId: string;
   caseId: string;
+  targetPersonId: string;
   scene: any;
 }
 
@@ -293,6 +294,13 @@ describe('Digital Use vertical convergence', () => {
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
 
+    const child = await createMember(targetApp, manager.token, familyId, `du-vertical-target-${label}`, {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'OTHER_MEMBER_RELAY',
+    });
+    expect(child.statusCode, child.body).toBe(201);
+    const targetPersonId = child.json().personId as string;
+
     const kase = await createCase(targetApp, manager.token, `du-vertical-${label}`);
     expect(kase.statusCode, kase.body).toBe(201);
     const caseId = kase.json().id as string;
@@ -311,15 +319,17 @@ describe('Digital Use vertical convergence', () => {
       method: 'POST',
       url: `/api/v1/cases/${caseId}/assessments`,
       headers: commandHeaders(manager.token, `du-vertical-start-${label}`),
-      payload: { expectedCaseVersion: kase.json().version },
+      payload: { expectedCaseVersion: kase.json().version, targetPersonId },
     });
     expect(start.statusCode, start.body).toBe(200);
+    expect(start.json().targetPersonId).toBe(targetPersonId);
     expect(start.json().currentNode?.nodeCode).toBe('A1001');
 
     return {
       manager,
       familyId,
       caseId,
+      targetPersonId,
       scene: start.json(),
     };
   }
@@ -334,6 +344,7 @@ describe('Digital Use vertical convergence', () => {
       headers: auth(f.manager.token),
     });
     expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().targetPersonId).toBe(f.targetPersonId);
     return response.json();
   }
 
@@ -356,6 +367,7 @@ describe('Digital Use vertical convergence', () => {
         `du-vertical-${nodeCode.toLowerCase()}-${crypto.randomUUID()}`
       ),
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: node.revision,
         expectedScenePackageVersion: scene.scenePackageVersion,
@@ -854,6 +866,7 @@ describe('Digital Use vertical convergence', () => {
         `phase3-a5001-${crypto.randomUUID()}`
       ),
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: node?.revision ?? 0,
         expectedScenePackageVersion: 'v1',
@@ -1266,6 +1279,7 @@ describe('Digital Use vertical convergence', () => {
         `du-vertical-a1001-stale-${crypto.randomUUID()}`
       ),
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: beforeCorrection.caseVersion,
         expectedNodeRevision: a1001Node.revision + 1,
         expectedScenePackageVersion: beforeCorrection.scenePackageVersion,
@@ -1320,6 +1334,7 @@ describe('Digital Use vertical convergence', () => {
         `du-vertical-a1001-unauthorized-${crypto.randomUUID()}`
       ),
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: afterNormal.caseVersion,
         expectedNodeRevision: afterNode.revision,
         expectedScenePackageVersion: afterNormal.scenePackageVersion,
@@ -1390,11 +1405,11 @@ describe('Digital Use vertical convergence', () => {
       'du-vertical-conflict-member',
       {
         ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
+        ageBandSource: 'OTHER_MEMBER_RELAY',
       }
     );
     expect(member.statusCode, member.body).toBe(201);
-    const childPersonId = member.json().personId as string;
+    const reporterPersonId = member.json().personId as string;
 
     await respondNode(f, 'A1001', a1001(true));
     await respondNode(f, '01002', {
@@ -1420,9 +1435,9 @@ describe('Digital Use vertical convergence', () => {
           purpose: 'FAMILY_MANAGEMENT',
         },
         {
-          subjectPersonId: childPersonId,
+          subjectPersonId: f.targetPersonId,
           sourceKind: 'OTHER_MEMBER_RELAY',
-          sourcePersonId: f.manager.personId,
+          sourcePersonId: reporterPersonId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
           content:
@@ -1459,9 +1474,9 @@ describe('Digital Use vertical convergence', () => {
           purpose: 'FAMILY_MANAGEMENT',
         },
         {
-          subjectPersonId: childPersonId,
+          subjectPersonId: f.targetPersonId,
           sourceKind: 'OTHER_MEMBER_RELAY',
-          sourcePersonId: f.manager.personId,
+          sourcePersonId: reporterPersonId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
           supersedesId: relayF.id,
@@ -1513,9 +1528,9 @@ describe('Digital Use vertical convergence', () => {
           purpose: 'FAMILY_MANAGEMENT',
         },
         {
-          subjectPersonId: childPersonId,
+          subjectPersonId: f.targetPersonId,
           sourceKind: 'OTHER_MEMBER_RELAY',
-          sourcePersonId: f.manager.personId,
+          sourcePersonId: reporterPersonId,
           occurredTimeState: 'UNKNOWN',
           confirmationStatus: 'UNCONFIRMED',
           supersedesId: relayA.id,
@@ -2018,6 +2033,7 @@ describe('Digital Use vertical convergence', () => {
         `phase3-a5002-${crypto.randomUUID()}`
       ),
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: a5002?.revision ?? 0,
         expectedScenePackageVersion: 'v1',

@@ -69,7 +69,7 @@ import {
   getCurrentPurposeScopedConsentDecision,
 } from '@xiaoshuyin/compliance';
 import {
-  assertAssessmentCompliance,
+  assertBoundAssessmentCompliance,
   type DigitalUseActor,
 } from './digital-use-assessment.js';
 import { assertNodeCasePreconditions, requireResolvedRoute } from './digital-use-node-response.js';
@@ -159,7 +159,7 @@ async function lockManagerContractCase(
  assertNodeCasePreconditions(caseRow,node,input.expectedCaseVersion);
  await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
  await assertCurrentDigitalUseProblemFormulation(tx,input.caseId);
- await assertAssessmentCompliance(tx,input.actor.personId);
+ await assertBoundAssessmentCompliance(tx, input);
  const binding=await getScenePackageBinding(tx,input.caseId);
  if(binding!==DIGITAL_USE_PACKAGE_VERSION) throw contractError(binding===null?'SCENE_NODE_UNREACHABLE':'STALE_SCENE_PACKAGE');
  return {caseRow,node};
@@ -357,7 +357,7 @@ export async function getPhoneUseContractCurrent(
    await requirePhoneUseContractChildConfirmation(tx,{
      accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,contract:row,participation:p,
    });
-   await assertAssessmentCompliance(tx,input.actor.personId);
+   await assertBoundAssessmentCompliance(tx, input);
    return dto(row);
  });
 }
@@ -572,7 +572,7 @@ async function childConfirm(
   if(!row) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
   await assertCurrentDigitalUseProblemFormulation(tx,input.caseId);
-  await assertAssessmentCompliance(tx,input.actor.personId);
+  await assertBoundAssessmentCompliance(tx, input);
   const participation=await assertPhoneUseContractChildParticipation(tx,{familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id});
   await requirePhoneUseContractChildConfirmation(tx,{accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,contract:row,participation});
   const requestHash=hashPayload({caseId:input.caseId,version:input.version,expectedCaseVersion:input.expectedCaseVersion,expectedDraftRevision:input.expectedDraftRevision,party:'CHILD'});
@@ -684,7 +684,7 @@ async function readProfessionalAssetGate(
     try {
       await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
       await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
-      await assertAssessmentCompliance(tx, input.actor.personId);
+      await assertBoundAssessmentCompliance(tx, input);
     } catch (error) {
       rethrowKnownPhoneContractBusinessError(error);
     }

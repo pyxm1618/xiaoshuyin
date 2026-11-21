@@ -8,6 +8,7 @@ import {
   auth,
   commandHeaders,
   createFamily,
+  createMember,
   loginWithLabel,
   type LoginResult,
 } from '../setup/api.js';
@@ -16,6 +17,7 @@ import {
   insertSceneArtifact,
   lockFamilyForPrimaryDecision,
   lockSceneCase,
+  recordStatement,
   resolveSceneArtifactRefCurrentness,
   validateSceneRefs,
 } from '@xiaoshuyin/domain';
@@ -31,6 +33,7 @@ import {
 
 interface Fixture {
   manager: LoginResult;
+  targetPersonId: string;
   familyId: string;
   caseId: string;
   caseVersion: number;
@@ -112,7 +115,11 @@ describe('T1218 Digital Use runtime hardening', () => {
     const family = await createFamily(targetApp, manager.token, `du-hard-${label}`);
     expect(family.statusCode).toBe(201);
     const familyId = family.json().id as string;
-
+    const target = await createMember(targetApp, manager.token, familyId, `du-hard-${label}`, {
+      ageBand: 'MINOR_14_17', ageBandSource: 'GUARDIAN_RELAY',
+    });
+    expect(target.statusCode, target.body).toBe(201);
+    const targetPersonId = target.json().personId as string;
     const kase = await createCase(targetApp, manager.token, `du-hard-${label}`);
     expect(kase.statusCode).toBe(201);
     const caseId = kase.json().id as string;
@@ -130,13 +137,15 @@ describe('T1218 Digital Use runtime hardening', () => {
       method: 'POST',
       url: `/api/v1/cases/${caseId}/assessments`,
       headers: commandHeaders(manager.token, `du-start-${label}`),
-      payload: { expectedCaseVersion: initialVersion },
+      payload: { expectedCaseVersion: initialVersion, targetPersonId },
     });
     expect(start.statusCode, start.body).toBe(200);
     const body = start.json();
     expect(body.currentNode?.nodeCode).toBe('A1001');
+    expect(body.targetPersonId).toBe(targetPersonId);
     return {
       manager,
+      targetPersonId,
       familyId,
       caseId,
       caseVersion: body.caseVersion,
@@ -159,6 +168,7 @@ describe('T1218 Digital Use runtime hardening', () => {
         'idempotency-key': key,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: f.caseVersion,
         expectedNodeRevision: f.nodeRevision,
         response,
@@ -167,6 +177,151 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
   }
 
+  it.each(['OTHER_MEMBER_RELAY', 'GUARDIAN_RELAY'] as const)('R3 binds a minor and records %s provenance', async (sourceKind) => {
+    const fixtureState = await fixture('r3-target');
+    const { caseId, caseVersion, manager, familyId, targetPersonId } = fixtureState;
+    const start = (key: string, candidate?: string) => app.inject({
+      method: 'POST', url: `/api/v1/cases/${caseId}/assessments`,
+      headers: commandHeaders(manager.token, key),
+      payload: { expectedCaseVersion: caseVersion, targetPersonId: candidate },
+    });
+    expect((await start('r3-missing')).statusCode).toBe(422);
+    const resumed = await start('r3-resume', targetPersonId);
+    expect(resumed.statusCode, resumed.body).toBe(200);
+    expect(resumed.json().targetPersonId).toBe(targetPersonId);
+    const sibling = await createMember(app, manager.token, familyId, 'r3-sibling', {
+      ageBand: 'MINOR_14_17', ageBandSource: 'GUARDIAN_RELAY',
+    });
+    expect(sibling.statusCode, sibling.body).toBe(201);
+    const switched = await start('r3-switch', sibling.json().personId);
+    expect(switched.json().code).toBe('TARGET_SCOPE_INVALID');
+    const context = await admin.query(
+      'SELECT target_person_id FROM digital_use_assessment_context WHERE case_id = $1', [caseId]
+    );
+    expect(context.rows).toEqual([{ target_person_id: targetPersonId }]);
+    const node = await app.inject({
+      method: 'GET', url: `/api/v1/cases/${caseId}/scene/nodes/A1001`, headers: auth(manager.token),
+    });
+    expect(node.statusCode, node.body).toBe(200);
+    expect(node.json().targetPersonId).toBe(targetPersonId);
+    expect((await respondA1001(fixtureState, 'r3-node-switch', a1001(), {
+      targetPersonId: sibling.json().personId,
+    })).json().code).toBe('TARGET_SCOPE_INVALID');
+    if (sourceKind === 'GUARDIAN_RELAY') {
+      await admin.query(
+        'UPDATE person_compliance_profiles SET guardian_person_id = $1 WHERE person_id = $2',
+        [manager.personId, targetPersonId]
+      );
+    }
+    const siblingStatement = await withRlsTransaction(appPool, {
+      familyId, accountId: manager.accountId, personId: manager.personId, purpose: 'FAMILY_MANAGEMENT',
+    }, tx => recordStatement(tx, {
+      familyId, caseId, actorAccountId: manager.accountId,
+      actorPersonId: manager.personId, purpose: 'FAMILY_MANAGEMENT',
+    }, {
+      subjectPersonId: sibling.json().personId, sourcePersonId: manager.personId,
+      sourceKind: 'OTHER_MEMBER_RELAY', occurredTimeState: 'UNKNOWN',
+      confirmationStatus: 'UNCONFIRMED', content: 'DUA:v1:a1001.devices:["PHONE"]',
+    }));
+    const completed = await respondA1001(fixtureState, 'r3-node-complete');
+    expect(completed.statusCode, completed.body).toBe(200);
+    expect(completed.json().targetPersonId).toBe(targetPersonId);
+    const statements = await admin.query(
+      `SELECT subject_person_id, source_person_id, source_kind FROM assertions
+         WHERE case_id = $1 AND subject_person_id = $2 AND content LIKE 'DUA:v1:a1001.devices:%'`,
+      [caseId, targetPersonId]
+    );
+    expect(statements.rows).toEqual([{
+      subject_person_id: targetPersonId, source_person_id: manager.personId, source_kind: sourceKind,
+    }]);
+    const siblingSuccessors = await admin.query(
+      'SELECT id FROM assertions WHERE supersedes_id = $1', [siblingStatement.id]
+    );
+    expect(siblingSuccessors.rows).toEqual([]);
+  });
+
+
+  it('R3 enforces target scope, uniqueness, immutability, and Family RLS in PostgreSQL', async () => {
+    const local = await fixture('r3-db-local');
+    const foreign = await fixture('r3-db-foreign');
+    const freshCase = await createCase(app, local.manager.token, 'r3-db-unbound');
+    expect(freshCase.statusCode, freshCase.body).toBe(201);
+    const freshCaseId = freshCase.json().id as string;
+    const runScoped = <Result>(operation: (tx: pg.PoolClient) => Promise<Result>) =>
+      withRlsTransaction(appPool, {
+        familyId: local.familyId, accountId: local.manager.accountId,
+        personId: local.manager.personId, purpose: 'FAMILY_MANAGEMENT',
+      }, operation);
+    const insert = (caseId: string, targetPersonId: string) => runScoped(tx => tx.query(
+      `INSERT INTO digital_use_assessment_context
+         (case_id, family_id, target_person_id, created_by_person_id) VALUES ($1,$2,$3,$4)`,
+      [caseId, local.familyId, targetPersonId, local.manager.personId]
+    ));
+    await expect(insert(freshCaseId, foreign.targetPersonId)).rejects.toMatchObject({ code: '23503' });
+    await expect(insert(local.caseId, local.targetPersonId)).rejects.toMatchObject({ code: '23505' });
+    await expect(runScoped(tx => tx.query(
+      'UPDATE digital_use_assessment_context SET target_person_id = $1 WHERE case_id = $2',
+      [local.manager.personId, local.caseId]
+    ))).rejects.toMatchObject({ code: '42501' });
+    const hidden = await runScoped(tx => tx.query(
+      'SELECT case_id FROM digital_use_assessment_context WHERE case_id = $1', [foreign.caseId]
+    ));
+    expect(hidden.rows).toEqual([]);
+    const switched = await app.inject({
+      method: 'POST', url: `/api/v1/cases/${freshCaseId}/switch-primary`,
+      headers: commandHeaders(local.manager.token, 'r3-db-switch-primary'),
+      payload: {
+        reason: 'Exercise Start on a new primary Case',
+        expectedPrimaryCaseId: local.caseId, expectedPrimaryVersion: local.caseVersion,
+      },
+    });
+    expect(switched.statusCode, switched.body).toBe(200);
+    const beforeStart = await admin.query('SELECT phase, version FROM cases WHERE id = $1', [freshCaseId]);
+    const message = await app.inject({
+      method: 'POST', url: `/api/v1/cases/${freshCaseId}/messages`,
+      headers: commandHeaders(local.manager.token, 'r3-db-message'),
+      payload: { content: 'Digital use is affecting daily routines.' },
+    });
+    expect(message.statusCode, message.body).toBe(201);
+    const start = (targetPersonId: string, key: string) => app.inject({
+      method: 'POST', url: `/api/v1/cases/${freshCaseId}/assessments`,
+      headers: commandHeaders(local.manager.token, key),
+      payload: { targetPersonId, expectedCaseVersion: beforeStart.rows[0].version },
+    });
+    const rejected = await start(foreign.targetPersonId, 'r3-db-foreign-start');
+    expect(rejected.json().code).toBe('TARGET_SCOPE_INVALID');
+    const removeFault = await installFaultTrigger({
+      table: 'scene_node_states', timing: 'BEFORE', event: 'INSERT', label: 'r3_start',
+      condition: `NEW.case_id = '${freshCaseId}' AND EXISTS (
+        SELECT 1 FROM digital_use_assessment_context WHERE case_id = NEW.case_id
+      )`,
+    });
+    try {
+      const failed = await start(local.targetPersonId, 'r3-db-failed-start');
+      expect(failed.statusCode, failed.body).toBe(500);
+      const orphan = await admin.query(
+        'SELECT case_id FROM digital_use_assessment_context WHERE case_id = $1', [freshCaseId]
+      );
+      expect(orphan.rows).toEqual([]);
+      const caseAfterFailure = await admin.query('SELECT phase FROM cases WHERE id = $1', [freshCaseId]);
+      expect(caseAfterFailure.rows[0].phase).toBe(beforeStart.rows[0].phase);
+    } finally {
+      await removeFault();
+    }
+    const unbound = await admin.query(
+      "UPDATE cases SET phase = 'ASSESSMENT' WHERE id = $1 RETURNING version",
+      [freshCaseId]
+    );
+    const missingBinding = await app.inject({
+      method: 'POST', url: `/api/v1/cases/${freshCaseId}/scene/nodes/A1001/responses`,
+      headers: commandHeaders(local.manager.token, 'r3-db-unbound-node'),
+      payload: {
+        targetPersonId: local.targetPersonId, expectedCaseVersion: unbound.rows[0].version,
+        expectedNodeRevision: 1, response: a1001(),
+      },
+    });
+    expect(missingBinding.json().code).toBe('TARGET_SCOPE_INVALID');
+  });
 
   async function forceSceneNode(
     f: Fixture,
@@ -245,6 +400,7 @@ describe('T1218 Digital Use runtime hardening', () => {
         'idempotency-key': key,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion,
         expectedNodeRevision: nodeRevision,
         response,
@@ -1005,6 +1161,7 @@ describe('T1218 Digital Use runtime hardening', () => {
         'idempotency-key': `du-pf-01002-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: scene.currentNode.revision,
         response: { state: 'KNOWN', selections: ['A'] },
@@ -1051,6 +1208,7 @@ describe('T1218 Digital Use runtime hardening', () => {
           'idempotency-key': `du-pf-01003-${crypto.randomUUID()}`,
         },
         payload: {
+          targetPersonId: f.targetPersonId,
           expectedCaseVersion: scene.caseVersion,
           expectedNodeRevision: scene.currentNode.revision,
           response: { state: 'KNOWN', selection: 'A' },
@@ -1110,7 +1268,7 @@ describe('T1218 Digital Use runtime hardening', () => {
         method:'POST',
         url:`/api/v1/cases/${f.caseId}/scene/nodes/${nodeCode}/responses`,
         headers:commandHeaders(f.manager.token,`s14-illegal-${nodeCode.toLowerCase()}`),
-        payload:{expectedCaseVersion:f.caseVersion,expectedNodeRevision:1,response},
+        payload:{targetPersonId:f.targetPersonId,expectedCaseVersion:f.caseVersion,expectedNodeRevision:1,response},
       });
       expect(attempted.statusCode,attempted.body).toBe(409);
       expect(attempted.json().code).toBe('CASE_PHASE_CONFLICT');
@@ -1471,6 +1629,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/01002/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-01002-${crypto.randomUUID()}` },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: scene.currentNode.revision,
         response: { state: 'KNOWN', selections: ['A'] },
@@ -1485,6 +1644,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/01003/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-01003-${crypto.randomUUID()}` },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: scene.currentNode.revision,
         response: { state: 'KNOWN', selection: 'B' },
@@ -1499,12 +1659,23 @@ describe('T1218 Digital Use runtime hardening', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A2002/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-a2002-${crypto.randomUUID()}` },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: scene.currentNode.revision,
         response: { choice: 'FURTHER_ASSESSMENT' },
       },
     });
     expect(a2002.statusCode, a2002.body).toBe(200);
+    const parentChoice = await admin.query(
+      `SELECT subject_person_id, source_person_id, source_kind FROM assertions
+         WHERE case_id = $1 AND content LIKE 'DUA:v1:a2002.%'`,
+      [f.caseId]
+    );
+    expect(parentChoice.rows).toEqual([{
+      subject_person_id: f.manager.personId,
+      source_person_id: f.manager.personId,
+      source_kind: 'SELF_STATEMENT',
+    }]);
     scene = a2002.json();
     expect(scene.currentNode?.nodeCode).toBe('01004');
 
@@ -1513,6 +1684,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/01004/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-01004-${crypto.randomUUID()}` },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: scene.currentNode.revision,
         response: {
@@ -1587,6 +1759,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       url: `/api/v1/cases/${f.caseId}/scene/nodes/01000/responses`,
       headers: { ...auth(f.manager.token), 'idempotency-key': `du-consent-01000-${crypto.randomUUID()}` },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: scene.currentNode.revision,
         response: { category: 'EMOTION' },

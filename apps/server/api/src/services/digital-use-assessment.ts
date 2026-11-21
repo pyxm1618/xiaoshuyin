@@ -9,13 +9,18 @@ import type pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import {
   createServerFeatureDescriptor,
-  evaluateComplianceAtTransactionTime,
+  loadComplianceEvaluationSnapshot,
+  evaluateCompliance,
+  assertComplianceObligationsSupported,
   type ComplianceObligation,
 } from '@xiaoshuyin/compliance';
 import {
   assertOrdinaryProgressionAllowedRaw,
   caseIdempotencyKeyBytes,
   getCaseById,
+  isFamilyMember,
+  readDigitalUseAssessmentTarget,
+  insertDigitalUseAssessmentTarget,
   getScenePackageBinding,
   coherentCurrentSelectionRevision,
   listCurrentDigitalUseTargetItems,
@@ -50,7 +55,7 @@ import { withRlsTransaction } from '../db/tx.js';
 import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
-import { startAssessmentInTransaction } from './problem-formulations.js';
+import { startAssessmentInTransaction, type CommandResult } from './problem-formulations.js';
 import { familyAllianceTargetIdentity } from './family-alliance-semantics.js';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
 
@@ -60,6 +65,7 @@ export interface DigitalUseActor {
 }
 
 export interface StartDigitalUseAssessmentInput {
+  readonly targetPersonId: string;
   readonly actor: DigitalUseActor;
   readonly familyId: string;
   readonly caseId: string;
@@ -74,7 +80,6 @@ const DIGITAL_USE_ASSESSMENT_FEATURE = createServerFeatureDescriptor({
 });
 
 const SUPPORTED_ASSESSMENT_OBLIGATIONS = [
-  'REQUIRE_GUARDIAN_CONSENT',
   'REQUIRE_MINOR_MODE',
 ] as const satisfies readonly ComplianceObligation[];
 
@@ -124,18 +129,41 @@ export function decideAssessmentEntry(
 
 export async function assertAssessmentCompliance(
   tx: pg.PoolClient,
-  actorPersonId: string
+  actorPersonId: string,
+  targetPersonId: string
 ): Promise<void> {
-  const db = drizzle(tx);
-  const result = await evaluateComplianceAtTransactionTime(db, tx, {
+  const snapshot = await loadComplianceEvaluationSnapshot(drizzle(tx), tx, {
     descriptor: DIGITAL_USE_ASSESSMENT_FEATURE,
     actorPersonId,
-    targetPersonId: actorPersonId,
+    targetPersonId,
     supportedObligations: SUPPORTED_ASSESSMENT_OBLIGATIONS,
   });
+  const result = assertComplianceObligationsSupported(
+    evaluateCompliance(snapshot), SUPPORTED_ASSESSMENT_OBLIGATIONS
+  );
+  if (snapshot.person?.ageBand !== 'MINOR_14_17') {
+    throw sceneError('COMPLIANCE_BLOCKED');
+  }
   if (result.gate !== 'ALLOW') {
     throw sceneError('COMPLIANCE_BLOCKED', result.reasonCode ?? 'COMPLIANCE_BLOCKED');
   }
+}
+
+export async function requireDigitalUseAssessmentTarget(
+  tx: pg.PoolClient, caseId: string, requestedTarget?: string
+): Promise<string> {
+  const target = await readDigitalUseAssessmentTarget(tx, caseId);
+  if (!target || (requestedTarget !== undefined && requestedTarget !== target)) {
+    throw sceneError('TARGET_SCOPE_INVALID');
+  }
+  return target;
+}
+
+export async function assertBoundAssessmentCompliance(
+  tx: pg.PoolClient, input: { actor: DigitalUseActor; caseId: string; targetPersonId?: string }
+): Promise<void> {
+  const target = await requireDigitalUseAssessmentTarget(tx, input.caseId, input.targetPersonId);
+  await assertAssessmentCompliance(tx, input.actor.personId, target);
 }
 
 function nodeDto(row: SceneNodeStateRow) {
@@ -231,6 +259,7 @@ function sceneNodeReachable(
 }
 
 export function buildSceneEnvelope(input: {
+  targetPersonId: string;
   caseRow: SceneCaseRow;
   nodes: SceneNodeStateRow[];
   artifacts: SceneArtifactRow[];
@@ -265,6 +294,7 @@ export function buildSceneEnvelope(input: {
 
   return {
     caseId: input.caseRow.id,
+    targetPersonId: input.targetPersonId,
     caseVersion: input.caseRow.version,
     sceneCode: DIGITAL_USE_SCENE_CODE,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
@@ -360,11 +390,13 @@ export async function currentSceneEnvelope(
     listSceneArtifacts(tx, caseId),
     listCurrentDigitalUseTargetItems(tx, caseId),
   ]);
+  const targetPersonId = await requireDigitalUseAssessmentTarget(tx, caseId);
   return buildSceneEnvelope({
     caseRow,
     nodes,
     artifacts,
     targets,
+    targetPersonId,
     recovery: await recoveryProjection(tx, caseId, nodes),
   });
 }
@@ -400,7 +432,8 @@ function ownerCaseVersion(result: { status: number; body: unknown }): number {
 
 function stableInitialSceneEnvelope(
   a1001: SceneNodeStateRow,
-  caseVersion: number
+  caseVersion: number,
+  targetPersonId: string
 ): DigitalUseSceneResponseType {
   const initialRow: SceneNodeStateRow = {
     ...a1001,
@@ -414,6 +447,7 @@ function stableInitialSceneEnvelope(
   const projected = nodeDto(initialRow);
   return {
     caseId: a1001.case_id,
+    targetPersonId,
     caseVersion,
     sceneCode: DIGITAL_USE_SCENE_CODE,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
@@ -459,7 +493,7 @@ async function requireExistingA1001(
 export async function startOrResumeDigitalUseAssessment(
   pool: pg.Pool,
   input: StartDigitalUseAssessmentInput
-): Promise<DigitalUseSceneResponseType> {
+): Promise<DigitalUseSceneResponseType | CommandResult> {
   return withRlsTransaction(
     pool,
     {
@@ -481,6 +515,23 @@ export async function startOrResumeDigitalUseAssessment(
 
       const visibleCase = await getCaseById(tx, input.caseId);
       if (!visibleCase) throw sceneError('CASE_NOT_FOUND', 'Case not found');
+      const existingTarget = await readDigitalUseAssessmentTarget(tx, input.caseId);
+      if (existingTarget && existingTarget !== input.targetPersonId) throw sceneError('TARGET_SCOPE_INVALID');
+
+      const digitalUse = {
+        targetPersonId: input.targetPersonId,
+        bindTarget: async (client: pg.PoolClient) => {
+          if (
+            !(await isFamilyMember(client, input.familyId, input.targetPersonId)) ||
+            input.targetPersonId === input.actor.personId
+          ) throw sceneError('TARGET_SCOPE_INVALID');
+          await assertAssessmentCompliance(client, input.actor.personId, input.targetPersonId);
+          await insertDigitalUseAssessmentTarget(
+            client, input.caseId, input.familyId, input.targetPersonId, input.actor.personId
+          );
+          await requireDigitalUseAssessmentTarget(client, input.caseId, input.targetPersonId);
+        },
+      };
 
       // Idempotent owner replay is a read-only business result. It is decided
       // before current Safety/Compliance state so same key + same payload stays
@@ -502,15 +553,16 @@ export async function startOrResumeDigitalUseAssessment(
           caseId: input.caseId,
           expectedCaseVersion: input.expectedCaseVersion,
           idempotencyKey: input.idempotencyKey,
+          digitalUse,
         });
-        if (ownerResult.status !== 200) return ownerResult as never;
+        if (ownerResult.status !== 200) return ownerResult;
         const a1001 = await requireExistingA1001(tx, input.caseId);
-        return stableInitialSceneEnvelope(a1001, ownerCaseVersion(ownerResult));
+        return stableInitialSceneEnvelope(a1001, ownerCaseVersion(ownerResult),
+          await requireDigitalUseAssessmentTarget(tx, input.caseId, input.targetPersonId));
       }
 
       if (visibleCase.phase === 'INTAKE') {
         await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
-        await assertAssessmentCompliance(tx, input.actor.personId);
 
         const ownerResult = await startAssessmentInTransaction(tx, {
           actor: input.actor,
@@ -518,17 +570,24 @@ export async function startOrResumeDigitalUseAssessment(
           caseId: input.caseId,
           expectedCaseVersion: input.expectedCaseVersion,
           idempotencyKey: input.idempotencyKey,
+          digitalUse,
         });
         if (ownerResult.status !== 200) {
+          const concurrentTarget = await readDigitalUseAssessmentTarget(tx, input.caseId);
+          if (concurrentTarget && concurrentTarget !== input.targetPersonId) {
+            throw sceneError('TARGET_SCOPE_INVALID');
+          }
           // Preserve the Slice 8 owner's original idempotent 4xx result and do
           // not create A1001 for a failed StartAssessment.
-          return ownerResult as never;
+          return ownerResult;
         }
 
         const a1001 = await ensureA1001(tx, input);
-        return stableInitialSceneEnvelope(a1001, ownerCaseVersion(ownerResult));
+        return stableInitialSceneEnvelope(a1001, ownerCaseVersion(ownerResult),
+          await requireDigitalUseAssessmentTarget(tx, input.caseId, input.targetPersonId));
       }
 
+      await assertBoundAssessmentCompliance(tx, input);
       const decision = decideAssessmentEntry(visibleCase, input.expectedCaseVersion);
       if (decision !== 'RESUME') {
         throw sceneError('CASE_PHASE_CONFLICT');
@@ -546,6 +605,7 @@ export async function startOrResumeDigitalUseAssessment(
         familyId: input.familyId,
         caseId: input.caseId,
         expectedCaseVersion: input.expectedCaseVersion,
+        targetPersonId: input.targetPersonId,
       });
       const outcome = await runIdempotentCommandInTransaction(
         tx,
@@ -652,6 +712,7 @@ export async function getDigitalUseNode(
       const envelope = await currentSceneEnvelope(tx, input.caseId);
       return {
         caseId: caseRow.id,
+        targetPersonId: envelope.targetPersonId,
         caseVersion: caseRow.version,
         sceneCode: DIGITAL_USE_SCENE_CODE,
         scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,

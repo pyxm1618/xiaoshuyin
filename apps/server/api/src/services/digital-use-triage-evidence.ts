@@ -7,7 +7,8 @@
 import type pg from 'pg';
 import {
   canonicalJson,
-  listCurrentSceneEvidenceStatements,
+  listCurrentDigitalUseTargetStatements,
+  readDigitalUseAssessmentTarget,
   type SceneEvidenceStatementRow,
 } from '@xiaoshuyin/domain';
 import type {
@@ -157,17 +158,16 @@ function optionalOtherNeed(
 }
 
 function durationEvidencePresent(rows: readonly SceneEvidenceStatementRow[]): boolean {
-  return rows.some((row) =>
-    row.content.startsWith(prefix('a1001.duration.')) ||
-    row.content.startsWith(prefix('a1001.duration.historical_band_auxiliary'))
-  );
+  return rows.some((row) => row.content.startsWith(`${ROOT_PREFIX}a1001.duration.`));
 }
 
 export async function loadIntegratedTriageEvidence(
   tx: pg.PoolClient,
   caseId: string
 ): Promise<IntegratedTriageEvidence> {
-  const rows = await listCurrentSceneEvidenceStatements(tx, caseId, ROOT_PREFIX);
+  const target = await readDigitalUseAssessmentTarget(tx, caseId);
+  if (!target) throw Object.assign(new Error('TARGET_SCOPE_INVALID'), { code: 'TARGET_SCOPE_INVALID' });
+  const rows = await listCurrentDigitalUseTargetStatements(tx, caseId, target);
   return {
     emotion01002: classifyRows(rows, '01002.emotion', parseEmotion),
     family01003: classifyRows(rows, '01003.family_relationship', parseFamily),

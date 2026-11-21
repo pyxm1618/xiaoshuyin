@@ -7,6 +7,7 @@ import {
   auth,
   commandHeaders,
   createFamily,
+  createMember,
   loginWithLabel,
   revokeConsent,
   type LoginResult,
@@ -23,6 +24,7 @@ interface Fixture {
   manager: LoginResult;
   familyId: string;
   caseId: string;
+  targetPersonId: string;
   scene: any;
 }
 
@@ -126,6 +128,12 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
 
+    const child = await createMember(app, manager.token, familyId, `du-canonical-target-${label}`, {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'OTHER_MEMBER_RELAY',
+    });
+    expect(child.statusCode, child.body).toBe(201);
+    const targetPersonId = child.json().personId as string;
     const kase = await createCase(app, manager.token, `du-canonical-${label}`);
     expect(kase.statusCode, kase.body).toBe(201);
     const caseId = kase.json().id as string;
@@ -143,12 +151,12 @@ describe('Slice 12 canonical no-model production orchestration', () => {
       method: 'POST',
       url: `/api/v1/cases/${caseId}/assessments`,
       headers: commandHeaders(manager.token, `du-canonical-start-${label}`),
-      payload: { expectedCaseVersion: initialVersion },
+      payload: { expectedCaseVersion: initialVersion, targetPersonId },
     });
     expect(start.statusCode, start.body).toBe(200);
     const scene = track(start.json());
     expectCurrent(scene, 'A1001');
-    return { manager, familyId, caseId, scene };
+    return { manager, familyId, caseId, targetPersonId, scene };
   }
 
   async function respond(
@@ -167,6 +175,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
         'idempotency-key': `du-canonical-${label}-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: scene.currentNode.revision,
         response,
@@ -524,6 +533,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
         'idempotency-key': `du-canonical-a200401-post-${crypto.randomUUID()}`,
       },
       payload: {
+        targetPersonId: f.targetPersonId,
         expectedCaseVersion: scene.caseVersion,
         expectedNodeRevision: scene.currentNode.revision,
         response: { decision: 'WILLING' },

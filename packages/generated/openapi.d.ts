@@ -4379,6 +4379,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** Format: uuid */
+                    targetPersonId: string;
                     expectedCaseVersion: number;
                 };
             };
@@ -4391,6 +4393,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** Format: uuid */
+                        targetPersonId: string;
                         /** Format: uuid */
                         caseId: string;
                         caseVersion: number;
@@ -5431,6 +5435,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** Format: uuid */
+                        targetPersonId: string;
                         /** Format: uuid */
                         caseId: string;
                         caseVersion: number;
@@ -6473,6 +6479,8 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** Format: uuid */
+                        targetPersonId: string;
+                        /** Format: uuid */
                         caseId: string;
                         caseVersion: number;
                         /** @constant */
@@ -7395,6 +7403,8 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
+                    /** Format: uuid */
+                    targetPersonId: string;
                     expectedCaseVersion: number;
                     expectedNodeRevision: number;
                     response: {
@@ -7411,6 +7421,8 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
+                        /** Format: uuid */
+                        targetPersonId: string;
                         /** Format: uuid */
                         caseId: string;
                         caseVersion: number;

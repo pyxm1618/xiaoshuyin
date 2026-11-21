@@ -16,11 +16,15 @@ paths:
             schema:
               type: object
               properties:
+                targetPersonId:
+                  type: string
+                  format: uuid
                 expectedCaseVersion:
                   type: integer
                   minimum: 1
                   maximum: 2147483647
               required:
+                - targetPersonId
                 - expectedCaseVersion
               additionalProperties: false
       responses:
@@ -72,6 +76,9 @@ paths:
             schema:
               type: object
               properties:
+                targetPersonId:
+                  type: string
+                  format: uuid
                 expectedCaseVersion:
                   type: integer
                   minimum: 1
@@ -84,6 +91,7 @@ paths:
                   type: object
                   additionalProperties: {}
               required:
+                - targetPersonId
                 - expectedCaseVersion
                 - expectedNodeRevision
                 - response
