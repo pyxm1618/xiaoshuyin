@@ -137,7 +137,7 @@ describe('Migration Reproducibility (T011 RED)', () => {
     expect(tableNames).toEqual(EXPECTED_TABLE_NAMES);
   });
 
-  it('preserves all 33 baseline owner tables outside Slice 17 and R3', async () => {
+  it('preserves all 33 tables in the baseline owner subset outside Slice 17 and R3', async () => {
     const { rows } = await client.query<{ tablename: string }>(`
       SELECT tablename
       FROM pg_tables
