@@ -1330,6 +1330,57 @@ describe('Digital Use vertical convergence', () => {
     expect(rejected.json().code).toBe('SCENE_NODE_UNREACHABLE');
   });
 
+  it('routes an A1001 correction that re-evaluates to A2003 through the canonical Problem Formulation handoff', async () => {
+    const f = await fixture('a1001-a2003-handoff');
+    const unknownSleepA1001 = {
+      ...a1001(false),
+      functionalImpact: {
+        sleep: { state: 'UNKNOWN' },
+        studyOrNecessaryAffairs: { state: 'KNOWN', impacted: false },
+        realWorldActivityDisplacement: { state: 'KNOWN', impacted: false },
+      },
+    };
+
+    await respondNode(f, 'A1001', unknownSleepA1001);
+    await respondNode(f, '01002', { state: 'KNOWN', selections: ['A'] });
+    let scene = await respondNode(f, '01003', { state: 'KNOWN', selection: 'A' });
+    expect(scene.recovery).toMatchObject({
+      reasonCode: 'DIRECT_IMPACT_MISSING_FAMILY',
+      correctionTargetNodeCode: 'A1001',
+    });
+
+    const corrected = await respondNode(f, 'A1001', a1001(true));
+    expect(corrected.recovery).toBeNull();
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === 'A1001')?.status
+    ).toBe('COMPLETED');
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === '01003')?.status
+    ).toBe('COMPLETED');
+    expect(
+      corrected.nodes.find((node: any) => node.nodeCode === 'A2003')?.status
+    ).toBe('AVAILABLE');
+
+    const casePhase = await admin.query<{ phase: string }>(
+      'SELECT phase::text AS phase FROM cases WHERE id=$1',
+      [f.caseId]
+    );
+    expect(casePhase.rows[0]?.phase).toBe('PROBLEM_FORMULATION');
+
+    const currentFormulation = await app.inject({
+      method: 'GET',
+      url: `/api/v1/cases/${f.caseId}/problem-formulations/current`,
+      headers: auth(f.manager.token),
+    });
+    expect(currentFormulation.statusCode, currentFormulation.body).toBe(200);
+    expect(currentFormulation.json().current?.status).toBe('PRESENTED');
+
+    const a2003 = await respondNode(f, 'A2003', a2003Response());
+    expect(
+      a2003.nodes.find((node: any) => node.nodeCode === 'A2003')?.status
+    ).toBe('COMPLETED');
+  });
+
   it('recovers a real Evidence conflict and rewinds only route-dependent Scene projections', async () => {
     const f = await fixture('conflict-recovery');
     const member = await createMember(

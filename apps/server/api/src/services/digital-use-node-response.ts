@@ -58,6 +58,7 @@ import {
 } from './digital-use-assessment.js';
 import {
   applyDigitalUseNodeSemantics,
+
   shouldPrepareProblemFormulationHandoff,
 } from './digital-use-node-semantics.js';
 import { loadIntegratedTriageEvidence } from './digital-use-triage-evidence.js';
@@ -179,6 +180,19 @@ async function isA1001CorrectionAuthorizedByInsufficientRecovery(
   );
 }
 
+async function heldIntegratedTriageNode(
+  tx: pg.PoolClient,
+  caseId: string
+): Promise<SceneNodeStateRow | null> {
+  const states = await listSceneNodeStates(tx, caseId);
+  return (
+    states
+      .filter(isHeldIntegratedTriageNode)
+      .sort((left, right) => left.node_code.localeCompare(right.node_code))[0] ??
+    null
+  );
+}
+
 /**
  * Recompute the same deterministic Integrated Triage after an authorized
  * A1001 correction and leave the INSUFFICIENT HOLD only when the new
@@ -188,16 +202,19 @@ async function advanceHeldIntegratedTriageAfterCorrection(
   tx: pg.PoolClient,
   input: CompleteDigitalUseNodeInput
 ): Promise<void> {
-  const states = await listSceneNodeStates(tx, input.caseId);
-  const held = states
-    .filter(isHeldIntegratedTriageNode)
-    .sort((left, right) => left.node_code.localeCompare(right.node_code))[0];
+  const held = await heldIntegratedTriageNode(tx, input.caseId);
   if (!held) return;
 
   const triage = evaluateIntegratedTriage(
     await loadIntegratedTriageEvidence(tx, input.caseId)
   );
   if (!NORMAL_TRIAGE_OUTCOMES.has(triage.outcome)) return;
+  if (triage.outcome === 'A2003') {
+    throw nodeError(
+      'SCENE_ROUTE_BLOCKED',
+      'A2003_REQUIRES_PROBLEM_FORMULATION_HANDOFF'
+    );
+  }
 
   const route = requireResolvedRoute(
     routeDigitalUseTopology({
@@ -703,6 +720,243 @@ async function executeProblemFormulationHandoffPath(
 }
 
 /**
+ * Conservative, schema-agnostic pre-lock filter for an authorized A1001
+ * correction that may re-route Integrated Triage to A2003.
+ *
+ * This is NOT a second triage decision: after the A1001 Evidence write, the
+ * single deterministic evaluator re-decides the outcome and any mismatch rolls
+ * the whole transaction back.
+ */
+function hasPositiveDirectImpactPreview(response: unknown): boolean {
+  if (typeof response !== 'object' || response === null) return false;
+  const functionalImpact = (response as { functionalImpact?: unknown })
+    .functionalImpact;
+  if (typeof functionalImpact !== 'object' || functionalImpact === null) {
+    return false;
+  }
+  return [
+    'sleep',
+    'studyOrNecessaryAffairs',
+    'realWorldActivityDisplacement',
+  ].some((key) => {
+    const answer = (functionalImpact as Record<string, unknown>)[key];
+    return (
+      typeof answer === 'object' &&
+      answer !== null &&
+      (answer as { state?: unknown }).state === 'KNOWN' &&
+      (answer as { impacted?: unknown }).impacted === true
+    );
+  });
+}
+
+/**
+ * Lock-free preview: does this authorized A1001 correction deterministically
+ * re-route Integrated Triage to A2003?
+ *
+ * A2003 lives in PROBLEM_FORMULATION, so it must never be exposed by a plain
+ * Scene update; it requires the existing owner-controlled formulation handoff.
+ */
+async function shouldPrepareA1001CorrectionHandoff(
+  tx: pg.PoolClient,
+  input: CompleteDigitalUseNodeInput,
+  node: DigitalUseNodeManifestEntry
+): Promise<boolean> {
+  if (node.nodeCode !== 'A1001') return false;
+  const current = await getSceneNodeState(tx, input.caseId, 'A1001');
+  if (!current || current.status !== 'COMPLETED') return false;
+  if (!hasPositiveDirectImpactPreview(input.response)) return false;
+  return isA1001CorrectionAuthorizedByInsufficientRecovery(tx, input.caseId);
+}
+
+/**
+ * A1001 correction that re-routes to A2003.
+ *
+ * This reuses the one canonical handoff seam
+ * (`presentDigitalUseProblemFormulationInTransaction`, Slice 8 owner locks and
+ * idempotency) and then completes the previously held triage node before
+ * exposing A2003. No second formulation writer or direct phase update exists.
+ */
+async function executeA1001CorrectionProblemFormulationHandoffPath(
+  tx: pg.PoolClient,
+  input: CompleteDigitalUseNodeInput,
+  node: DigitalUseNodeManifestEntry
+): Promise<DigitalUseSceneResponseType> {
+  const caseRow = await getCaseById(tx, input.caseId);
+  if (!caseRow) throw nodeError('CASE_NOT_FOUND', 'Case not found');
+  assertNodeCasePreconditions(caseRow, node, input.expectedCaseVersion);
+  await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+  await assertAssessmentCompliance(tx, input.actor.personId);
+
+  const binding = await getScenePackageBinding(tx, input.caseId);
+  if (binding === null) throw nodeError('SCENE_NODE_UNREACHABLE');
+  if (binding !== DIGITAL_USE_PACKAGE_VERSION) throw nodeError('STALE_SCENE_PACKAGE');
+
+  const a1001 = await getSceneNodeState(tx, input.caseId, 'A1001');
+  if (!a1001 || a1001.status !== 'COMPLETED') throw nodeError('SCENE_NODE_UNREACHABLE');
+  if (a1001.revision !== input.expectedNodeRevision) throw nodeError('STALE_NODE_REVISION');
+  if (!(await heldIntegratedTriageNode(tx, input.caseId))) {
+    throw nodeError('SCENE_NODE_UNREACHABLE');
+  }
+
+  const semantic = await applySemanticForCurrentNode(tx, input, node, a1001);
+  await assertSemanticRefs(tx, input, semantic);
+  if (semantic.progression !== undefined && semantic.progression !== 'ROUTE') {
+    throw nodeError('STALE_NODE_REVISION');
+  }
+  const a1001Route = routeSemantic(node, semantic);
+  if (a1001Route.kind !== 'NODE' || a1001Route.nextNodeCode !== '01002') {
+    throw nodeError('SCENE_ROUTE_UNRESOLVED');
+  }
+
+  const triageAfterWrite = evaluateIntegratedTriage(
+    await loadIntegratedTriageEvidence(tx, input.caseId)
+  );
+  if (triageAfterWrite.outcome !== 'A2003') throw nodeError('STALE_NODE_REVISION');
+  const held = await heldIntegratedTriageNode(tx, input.caseId);
+  if (!held) throw nodeError('STALE_NODE_REVISION');
+
+  // Slice 8 owns Family -> Case -> Problem Formulation lock ordering, so this
+  // must run before this transaction takes any Scene/Case write lock.
+  const handoff = await presentDigitalUseProblemFormulationInTransaction(tx, {
+    actor: input.actor,
+    familyId: input.familyId,
+    caseId: input.caseId,
+    nodeCode: held.node_code,
+    expectedCaseVersion: input.expectedCaseVersion,
+    outerIdempotencyKey: input.idempotencyKey,
+  });
+  if (handoff.kind === 'UNAVAILABLE') {
+    throw nodeError('SCENE_ROUTE_BLOCKED', handoff.reasonCode);
+  }
+
+  const postCase = await lockSceneCase(tx, input.caseId);
+  if (
+    !postCase ||
+    postCase.status !== 'OPEN' ||
+    !postCase.is_primary ||
+    postCase.phase !== 'PROBLEM_FORMULATION' ||
+    postCase.version !== handoff.caseVersion
+  ) {
+    throw nodeError('STALE_CASE_VERSION');
+  }
+  await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
+  await assertAssessmentCompliance(tx, input.actor.personId);
+  if ((await getScenePackageBinding(tx, input.caseId)) !== DIGITAL_USE_PACKAGE_VERSION) {
+    throw nodeError('STALE_SCENE_PACKAGE');
+  }
+
+  const lockedA1001 = await getSceneNodeState(tx, input.caseId, 'A1001', true);
+  if (
+    !lockedA1001 ||
+    lockedA1001.status !== 'COMPLETED' ||
+    lockedA1001.revision !== input.expectedNodeRevision
+  ) {
+    throw nodeError('STALE_NODE_REVISION');
+  }
+  const lockedHeld = await getSceneNodeState(tx, input.caseId, held.node_code, true);
+  if (!lockedHeld || !isHeldIntegratedTriageNode(lockedHeld)) {
+    throw nodeError('STALE_NODE_REVISION');
+  }
+  const triageLocked = evaluateIntegratedTriage(
+    await loadIntegratedTriageEvidence(tx, input.caseId)
+  );
+  if (triageLocked.outcome !== 'A2003') throw nodeError('STALE_NODE_REVISION');
+
+  const completedA1001 = await casRecompleteSceneNodeState(tx, {
+    caseId: input.caseId,
+    nodeCode: 'A1001',
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    expectedRevision: input.expectedNodeRevision,
+    branchReasonCodes: [a1001Route.reasonCode],
+    inputRefs: semantic.inputRefs,
+    outputRefs: semantic.outputRefs,
+  });
+  if (!completedA1001) throw nodeError('STALE_NODE_REVISION');
+
+  const completedHeld = await casCompleteSceneNodeState(tx, {
+    caseId: input.caseId,
+    nodeCode: lockedHeld.node_code,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    expectedRevision: lockedHeld.revision,
+    status: 'COMPLETED',
+    branchReasonCodes: [triageLocked.reasonCode],
+    inputRefs: lockedHeld.input_refs,
+    outputRefs: lockedHeld.output_refs,
+  });
+  if (!completedHeld) throw nodeError('STALE_NODE_REVISION');
+
+  await convergeSupersededTriageRoute(tx, {
+    caseId: input.caseId,
+    sourceNodeCode: lockedHeld.node_code,
+    newNextNodeCode: 'A2003',
+    branchReasonCode: triageLocked.reasonCode,
+    nextInputRefs: lockedHeld.output_refs,
+  });
+
+  const a2003 = resolveDigitalUseRuntimeNode('A2003');
+  await ensureSceneNodeAvailable(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: 'A2003',
+    sourceNodeCode: a2003.sourceNodeCode,
+    branchReasonCodes: [triageLocked.reasonCode],
+    inputRefs: lockedHeld.output_refs,
+  });
+
+  await insertDigitalUseNodeCompletedEvent(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: 'A1001',
+    nodeRevision: completedA1001.revision,
+    routeReasonCode: a1001Route.reasonCode,
+    inputRefs: semantic.inputRefs,
+    outputRefs: semantic.outputRefs,
+    nextNodeCode: '01002',
+    terminalCode: null,
+  });
+  await insertDigitalUseNodeCompletedAudit(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: 'A1001',
+    nodeRevision: completedA1001.revision,
+    routeReasonCode: a1001Route.reasonCode,
+    nextNodeCode: '01002',
+    terminalCode: null,
+  });
+  await insertDigitalUseNodeCompletedEvent(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: completedHeld.node_code,
+    nodeRevision: completedHeld.revision,
+    routeReasonCode: triageLocked.reasonCode,
+    inputRefs: lockedHeld.input_refs,
+    outputRefs: lockedHeld.output_refs,
+    nextNodeCode: 'A2003',
+    terminalCode: null,
+  });
+  await insertDigitalUseNodeCompletedAudit(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    actorAccountId: input.actor.accountId,
+    scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+    nodeCode: completedHeld.node_code,
+    nodeRevision: completedHeld.revision,
+    routeReasonCode: triageLocked.reasonCode,
+    nextNodeCode: 'A2003',
+    terminalCode: null,
+  });
+
+  return currentSceneEnvelope(tx, input.caseId);
+}
+
+/**
  * Complete one currently reachable node.
  *
  * Authorization is re-established before idempotency replay. Ordinary nodes
@@ -882,8 +1136,12 @@ export async function completeDigitalUseNodeResponse(
             previewCase.phase !== 'ASSESSMENT' &&
             previewNode !== null &&
             isRecoverableTriageProjection(node.nodeCode, previewNode.status);
+          const a1001CorrectionHandoff =
+            !recoveringAfterFormulation &&
+            (await shouldPrepareA1001CorrectionHandoff(tx, input, node));
           const handoffCandidate =
             !recoveringAfterFormulation &&
+            !a1001CorrectionHandoff &&
             await shouldPrepareProblemFormulationHandoff({
               tx,
               actor: input.actor,
@@ -892,6 +1150,17 @@ export async function completeDigitalUseNodeResponse(
               nodeCode: node.nodeCode,
               response: input.response,
             });
+          if (a1001CorrectionHandoff) {
+            return {
+              status: 200,
+              body:
+                await executeA1001CorrectionProblemFormulationHandoffPath(
+                  tx,
+                  input,
+                  node
+                ),
+            };
+          }
           if (handoffCandidate) {
             return {
               status: 200,
