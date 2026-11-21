@@ -66,6 +66,8 @@ const EXPECTED_AUDIT_EVENTS = [
   'PROFESSIONAL_KNOWLEDGE_SUPERSEDED',
   'PROFESSIONAL_KNOWLEDGE_RETIRED',
   'PROFESSIONAL_KNOWLEDGE_VALIDITY_CHANGED',
+  'STAFF_AUTHORITY_GRANTED',
+  'STAFF_AUTHORITY_REVOKED',
 ];
 
 const EXPECTED_COMMANDS = [
@@ -116,6 +118,8 @@ const EXPECTED_COMMANDS = [
   'PROFESSIONAL_KNOWLEDGE_RELEASE',
   'PROFESSIONAL_KNOWLEDGE_RETIRE',
   'PROFESSIONAL_KNOWLEDGE_DEPENDENCY_PROPAGATE',
+  'STAFF_AUTHORITY_GRANT',
+  'STAFF_AUTHORITY_REVOKE',
 ];
 
 const EXPECTED_RESOURCE_TYPES = [
@@ -131,6 +135,7 @@ const EXPECTED_RESOURCE_TYPES = [
   'INTERVENTION_DEFINITION',
   'GOAL',
   'PROFESSIONAL_KNOWLEDGE',
+  'STAFF_ASSIGNMENT',
 ];
 
 function literalsOf(definition: string): string[] {
@@ -159,17 +164,17 @@ describe('shared CHECK vocabulary (S7-II-H01)', () => {
     return rows[0].definition as string;
   }
 
-  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Slice 17', async () => {
+  it('business_audit_events.event_type preserves the exact reviewed vocabulary through Phase 5 C3', async () => {
     const values = literalsOf(await definition('business_audit_events_event_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_AUDIT_EVENTS));
   });
 
-  it('business_audit_events.resource_type preserves the exact reviewed vocabulary through Slice 17', async () => {
+  it('business_audit_events.resource_type preserves the exact reviewed vocabulary through Phase 5 C3', async () => {
     const values = literalsOf(await definition('business_audit_events_resource_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_RESOURCE_TYPES));
   });
 
-  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Slice 17', async () => {
+  it('idempotency_keys.command_type preserves the exact reviewed vocabulary through Phase 5 C3', async () => {
     const values = literalsOf(await definition('idempotency_keys_command_type_check'));
     expect(new Set(values)).toEqual(new Set(EXPECTED_COMMANDS));
   });

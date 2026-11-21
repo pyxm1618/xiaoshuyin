@@ -315,7 +315,7 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     expect(output).toContain('APPLY 008_problem_formulation_core.sql');
     expect(output).toContain('APPLY 010_problem_formulation_safety_vocabulary_reconcile.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 22 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 23 new, 9 previously applied\./);
 
     const client = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await client.connect();
@@ -387,7 +387,8 @@ async function assertUnionConstraints(
   includeAuth006 = includeSlice14,
   includeSlice16 = includeAuth006,
   includeGoalRuntime = includeSlice16,
-  includeSlice17 = includeGoalRuntime
+  includeSlice17 = includeGoalRuntime,
+  includeC3 = includeSlice17
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -506,6 +507,10 @@ async function assertUnionConstraints(
         ]
       : []),
   ]);
+  if (includeC3) {
+    auditEventSet.add('STAFF_AUTHORITY_GRANTED');
+    auditEventSet.add('STAFF_AUTHORITY_REVOKED');
+  }
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
 
@@ -522,6 +527,7 @@ async function assertUnionConstraints(
     ...(includeSlice16 ? ['INTERVENTION_DEFINITION'] : []),
     ...(includeGoalRuntime ? ['GOAL'] : []),
     ...(includeSlice17 ? ['PROFESSIONAL_KNOWLEDGE'] : []),
+    ...(includeC3 ? ['STAFF_ASSIGNMENT'] : []),
   ]);
   const resourceLiterals = literalsOf(
     definitions.get('business_audit_events_resource_type_check')!
@@ -580,6 +586,10 @@ async function assertUnionConstraints(
         ]
       : []),
   ]);
+  if (includeC3) {
+    commandSet.add('STAFF_AUTHORITY_GRANT');
+    commandSet.add('STAFF_AUTHORITY_REVOKE');
+  }
   const commandLiterals = literalsOf(definitions.get('idempotency_keys_command_type_check')!);
   expect(new Set(commandLiterals)).toEqual(commandSet);
 
