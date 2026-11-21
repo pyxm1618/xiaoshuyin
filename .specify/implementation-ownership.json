@@ -314,7 +314,8 @@
           "foundation-remaining-remediation",
           "common-core-goal-confirmgoal-runtime",
           "phase5-c3-staff-assignment-control-plane",
-          "phase5-d6-real-external-authority-content"
+          "phase5-d6-real-external-authority-content",
+          "phase5-production-readiness-e"
         ]
       }
     },
@@ -782,6 +783,19 @@
         "features": [
           "017-professional-knowledge-foundation",
           "phase5-d6-real-external-authority-content"
+        ]
+      }
+    },
+    {
+      "id": "phase5-e-dockerfile",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/Dockerfile"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
         ]
       }
     }
