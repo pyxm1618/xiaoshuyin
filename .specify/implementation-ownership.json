@@ -330,7 +330,8 @@
           "008-problem-formulation-core",
           "foundation-remaining-remediation",
           "common-core-goal-confirmgoal-runtime",
-          "phase5-c3-staff-assignment-control-plane"
+          "phase5-c3-staff-assignment-control-plane",
+          "012-digital-use-assessment-runtime"
         ]
       }
     },
@@ -347,7 +348,8 @@
           "008-problem-formulation-core",
           "foundation-remaining-remediation",
           "common-core-goal-confirmgoal-runtime",
-          "phase5-c3-staff-assignment-control-plane"
+          "phase5-c3-staff-assignment-control-plane",
+          "012-digital-use-assessment-runtime"
         ]
       }
     },
@@ -364,7 +366,8 @@
           "008-problem-formulation-core",
           "foundation-remaining-remediation",
           "common-core-goal-confirmgoal-runtime",
-          "phase5-c3-staff-assignment-control-plane"
+          "phase5-c3-staff-assignment-control-plane",
+          "012-digital-use-assessment-runtime"
         ]
       }
     },
@@ -565,31 +568,83 @@
         ]
       }
     },
-  {
-    "id": "phase5-c3-staff-authority-application",
-    "match": {
-      "kind": "PREFIX",
-      "path": "apps/server/api/src/staff-authority/"
+    {
+      "id": "phase5-c3-staff-authority-application",
+      "match": {
+        "kind": "PREFIX",
+        "path": "apps/server/api/src/staff-authority/"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-c3-staff-assignment-control-plane"
+        ]
+      }
     },
-    "ownership": {
-      "kind": "FEATURE",
-      "features": [
-        "phase5-c3-staff-assignment-control-plane"
-      ]
-    }
-  },
-  {
-    "id": "phase5-c3-staff-authority-migration",
-    "match": {
-      "kind": "EXACT",
-      "path": "db/migrations/029_staff_assignment_control_plane.sql"
+    {
+      "id": "phase5-c3-staff-authority-migration",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/029_staff_assignment_control_plane.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-c3-staff-assignment-control-plane"
+        ]
+      }
     },
-    "ownership": {
-      "kind": "FEATURE",
-      "features": [
-        "phase5-c3-staff-assignment-control-plane"
-      ]
+    {
+      "id": "digital-use-assessment-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-assessment.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-phone-contract.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-assessment-contract",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/contracts/src/digital-use-assessment.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/contracts/src/digital-use-phone-contract.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
     }
-  }
   ]
 }
