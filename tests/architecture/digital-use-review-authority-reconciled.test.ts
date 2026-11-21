@@ -18,6 +18,7 @@ function productionFiles(dir: string): string[] {
   const absolute = join(root, dir);
   const out: string[] = [];
   for (const entry of readdirSync(absolute)) {
+    if (entry === 'node_modules' || entry === 'dist') continue;
     const path = join(absolute, entry);
     const relative = path.slice(root.length + 1);
     if (statSync(path).isDirectory()) out.push(...productionFiles(relative));
