@@ -10,6 +10,9 @@
 
 import { z } from 'zod';
 import {
+  staffGrantRequest, staffMeResponse, staffMutationResponse,
+} from './staff-authority/schemas.js';
+import {
   AgeBand,
   WritableSource,
   ProfileAttribute,
@@ -253,6 +256,55 @@ export function buildOpenApiDocument() {
         responses: {
           '200': refResponse('当前身份', 'MeResponse'),
           '401': errorResponse('`UNAUTHENTICATED`'),
+        },
+      },
+    },
+    '/api/v1/staff/me': {
+      get: {
+        tags: ['staff'],
+        operationId: 'getStaffMe',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          '200': jsonResponse('Current effective Staff assignments', toJsonSchema(staffMeResponse)),
+          '401': refResponse('Authentication required', 'UnauthenticatedError'),
+          '500': refResponse('Internal error', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/staff/capability-grants': {
+      post: {
+        tags: ['staff'],
+        operationId: 'grantStaffCapability',
+        security: [{ bearerAuth: [] }],
+        parameters: [idempotencyKeyParam],
+        requestBody: jsonBody(toJsonSchema(staffGrantRequest)),
+        responses: {
+          '200': jsonResponse('Staff authority granted or replayed', toJsonSchema(staffMutationResponse)),
+          '401': refResponse('Authentication required', 'UnauthenticatedError'),
+          '403': errorResponse('Staff authority denied'),
+          '409': errorResponse('Overlapping grant or idempotency conflict'),
+          '422': errorResponse('Invalid grant or idempotency key'),
+          '500': refResponse('Internal error', 'InternalError'),
+        },
+      },
+    },
+    '/api/v1/staff/capability-grants/{grantId}/revoke': {
+      post: {
+        tags: ['staff'],
+        operationId: 'revokeStaffCapability',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: 'grantId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+          idempotencyKeyParam,
+        ],
+        responses: {
+          '200': jsonResponse('Staff authority revoked or replayed', toJsonSchema(staffMutationResponse)),
+          '401': refResponse('Authentication required', 'UnauthenticatedError'),
+          '403': errorResponse('Staff authority denied'),
+          '404': errorResponse('Staff assignment not found'),
+          '409': errorResponse('Idempotency conflict'),
+          '422': errorResponse('Invalid assignment, request body or idempotency key'),
+          '500': refResponse('Internal error', 'InternalError'),
         },
       },
     },
@@ -1154,6 +1206,7 @@ export function buildOpenApiDocument() {
     tags: [
       { name: 'auth' },
       { name: 'identity' },
+      { name: 'staff' },
       { name: 'family' },
       { name: 'consent' },
       { name: 'compliance' },

@@ -6,6 +6,7 @@ import { registerAuthPlugin } from './plugins/auth.js';
 import { errorHandler, toHttpError } from './plugins/error-handler.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerMeRoutes } from './routes/me.js';
+import { registerStaffAuthorityRoutes } from './staff-authority/routes.js';
 import { registerFamilyRoutes } from './routes/families.js';
 import { registerMemberRoutes } from './routes/members.js';
 import { registerComplianceRoutes } from './routes/compliance.js';
@@ -966,6 +967,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   // Routes
   registerAuthRoutes(app, pool, wechatProvider, runtime.sessionSecret);
   registerMeRoutes(app, pool);
+  registerStaffAuthorityRoutes(app, pool, runtime.sessionSecret);
   registerFamilyRoutes(app, pool);
   registerMemberRoutes(app, pool);
   registerComplianceRoutes(app, pool);

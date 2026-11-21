@@ -156,7 +156,7 @@ describe('OpenAPI Contract (T066 / F5)', () => {
     }
   });
 
-it('contains exactly the 39 frozen business operations including Common Core Goal runtime', () => {
+it('contains exactly the 42 frozen business operations including C3 Staff authority', () => {
     const spec = JSON.parse(readFileSync(SPEC_PATH, 'utf-8'));
     const operations: string[] = [];
     for (const [path, methods] of Object.entries<any>(spec.paths)) {
@@ -176,6 +176,7 @@ it('contains exactly the 39 frozen business operations including Common Core Goa
       'GET /api/v1/identity-bindings/pending',
       'GET /api/v1/identity-bindings/status',
       'GET /api/v1/me',
+      'GET /api/v1/staff/me',
       'GET /api/v1/participation-invites/{token}',
       'GET /api/v1/participations/{id}',
       'PATCH /api/v1/families/{id}/members/{personId}',
@@ -206,6 +207,8 @@ it('contains exactly the 39 frozen business operations including Common Core Goa
       'POST /api/v1/participation-invites/{token}/accept',
       'POST /api/v1/participations/{id}/decline',
       'POST /api/v1/participations/{id}/withdraw',
+      'POST /api/v1/staff/capability-grants',
+      'POST /api/v1/staff/capability-grants/{grantId}/revoke',
     ].sort());
   });
 
@@ -221,6 +224,8 @@ it('contains exactly the 39 frozen business operations including Common Core Goa
       ['post', '/api/v1/cases'],
       ['post', '/api/v1/cases/{id}/messages'],
       ['post', '/api/v1/cases/{id}/goals'],
+      ['post', '/api/v1/staff/capability-grants'],
+      ['post', '/api/v1/staff/capability-grants/{grantId}/revoke'],
       ['post', '/api/v1/cases/{id}/switch-primary'],
       ['post', '/api/v1/cases/{id}/assessments'],
       ['post', '/api/v1/cases/{id}/scene/nodes/{nodeCode}/responses'],
@@ -242,6 +247,9 @@ it('contains exactly the 39 frozen business operations including Common Core Goa
       '/api/v1/auth/wechat',
       '/api/v1/auth/logout',
       '/api/v1/me',
+      '/api/v1/staff/me',
+      '/api/v1/staff/capability-grants',
+      '/api/v1/staff/capability-grants/{grantId}/revoke',
       '/api/v1/families',
       '/api/v1/families/current',
       '/api/v1/families/{id}/members',
