@@ -223,7 +223,7 @@ describe('Slice 17 negative-scope semantic static evidence', () => {
     expect(service).not.toMatch(/productionProfessionalApprovalProvider\s*=\s*\{[^}]*status:\s*['"]RESOLVED/i);
   });
 
-  it('NS-024: historical exact Slice 17 delta mutates no Docs, frozen Slice 17 spec/planning, Slice 16, or later authority artifacts', () => {
+  it('NS-024: mutates no Docs, frozen Slice 17 spec/planning, Slice 16, or later authority artifacts', () => {
     // PR #58 historical identity: merge commit parents must remain exact Base + Head.
     expect(commitParents(SLICE_17_HISTORICAL_MERGE)).toEqual([
       SLICE_17_HISTORICAL_BASE,
