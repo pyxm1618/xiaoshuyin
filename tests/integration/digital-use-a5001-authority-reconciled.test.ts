@@ -42,7 +42,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
   let migrator: pg.Client;
   const professional = new TestProfessionalReviewContentProvider();
 
-  async function ensurePolicy(): Promise<void> {
+  async function ensurePolicy(featureCode: string): Promise<void> {
     await migrator.query(
       `SELECT pg_advisory_lock(hashtextextended($1,0))`,
       ['slice15-authority-reconciled-a5001-policy']
@@ -54,7 +54,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
           WHERE feature_code=$1
             AND feature_contract_revision='v1'
             AND superseded_by_policy_id IS NULL`,
-        [FAMILY_FEATURE]
+        [featureCode]
       );
       if ((current.rows[0]?.n ?? 0) === 0) {
         await migrator.query(
@@ -66,7 +66,7 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
              now() - interval '1 minute',
              'migration:slice15-authority-reconciled-a5001'
            )`,
-          [FAMILY_FEATURE]
+          [featureCode]
         );
       }
     } finally {
@@ -90,10 +90,16 @@ describe('Slice 15 authority-reconciled A5001 runtime', () => {
       connectionString: process.env['MIGRATION_DATABASE_URL'],
     });
     await migrator.connect();
-    await ensurePolicy();
+    await ensurePolicy(FAMILY_FEATURE);
+    await ensurePolicy('DIGITAL_USE_ASSESSMENT_RUNTIME');
   });
 
   afterAll(async () => {
+    await admin.query(
+      `DELETE FROM compliance_feature_policies
+        WHERE feature_code = 'DIGITAL_USE_ASSESSMENT_RUNTIME'
+          AND review_evidence_ref = 'evidence://slice15/authority-reconciled/a5001'`
+    );
     await appDb.end().catch(() => undefined);
     await migrator.end().catch(() => undefined);
     await admin.end().catch(() => undefined);

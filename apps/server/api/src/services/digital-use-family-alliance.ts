@@ -48,6 +48,7 @@ import {
 import { toHttpError } from '../plugins/error-handler.js';
 import {
   currentSceneEnvelope,
+  assertBoundAssessmentCompliance,
   type DigitalUseActor,
 } from './digital-use-assessment.js';
 import {
@@ -447,6 +448,7 @@ export async function executeFamilyAllianceNodeInTransaction(
       input.actor.personId
     );
 
+    await assertBoundAssessmentCompliance(tx, input);
     const { current, initialA3000 } = await currentNodeBasis(tx, input, node);
     const semanticInputRefs = await targetInputBasis(
       tx,
@@ -595,6 +597,7 @@ export async function executeFamilyAllianceNodeInTransaction(
       throw familyHttpError('PROBLEM_FORMULATION_REQUIRED');
     }
     await revalidateFamilyAllianceGates(tx, input.caseId, input.actor.personId);
+    await assertBoundAssessmentCompliance(tx, input);
 
     void compliance;
     return await currentSceneEnvelope(tx, input.caseId);

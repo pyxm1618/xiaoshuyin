@@ -220,17 +220,28 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
   async function createBase(
     targetApp: FastifyInstance,
     label: string,
-    phase: 'GOALS' | 'REVIEW'
+    phase: 'GOALS' | 'REVIEW',
+    boundChild?: LoginResult
   ): Promise<BaseFixture> {
     const manager = await loginWithLabel(targetApp, `slice15-${label}`);
     const family = await createFamily(targetApp, manager.token, `slice15-${label}`);
     expect(family.statusCode, family.body).toBe(201);
     const familyId = family.json().id as string;
-    const child = await createMember(targetApp, manager.token, familyId, `r3-target-${label}`, {
-      ageBand: 'MINOR_14_17', ageBandSource: 'OTHER_MEMBER_RELAY',
-    });
-    expect(child.statusCode, child.body).toBe(201);
-    const targetPersonId = child.json().personId as string;
+    let targetPersonId: string;
+    if (boundChild) {
+      targetPersonId = boundChild.personId;
+      await admin.query('INSERT INTO family_members (family_id, person_id) VALUES ($1,$2)', [familyId, targetPersonId]);
+      await admin.query(
+        "UPDATE person_compliance_profiles SET age_band='MINOR_14_17', minor_mode=true, verified_source='OTHER_MEMBER_RELAY' WHERE person_id=$1",
+        [targetPersonId]
+      );
+    } else {
+      const child = await createMember(targetApp, manager.token, familyId, `r3-target-${label}`, {
+        ageBand: 'MINOR_14_17', ageBandSource: 'OTHER_MEMBER_RELAY',
+      });
+      expect(child.statusCode, child.body).toBe(201);
+      targetPersonId = child.json().personId as string;
+    }
     const kase = await createCase(targetApp, manager.token, `slice15-${label}`);
     expect(kase.statusCode, kase.body).toBe(201);
     const caseId = kase.json().id as string;
@@ -516,9 +527,9 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
 
   async function prepareA5002(
     targetApp: FastifyInstance,
-    label: string
+    label: string,
+    legacyMismatch = false
   ): Promise<{ f: A5002Fixture; scene: any; payload: Record<string, unknown> }> {
-    const base = await createBase(targetApp, label, 'REVIEW');
     const child = await loginWithLabel(targetApp, `slice15-child-${label}`);
     const childOwn = await createFamily(
       targetApp,
@@ -526,10 +537,17 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       `slice15-child-own-${label}`
     );
     expect(childOwn.statusCode, childOwn.body).toBe(201);
+    const base = await createBase(targetApp, label, 'REVIEW', legacyMismatch ? undefined : child);
     await admin.query(
       'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [base.familyId, child.personId]
     );
+    if (legacyMismatch) {
+      await admin.query(
+        "UPDATE person_compliance_profiles SET age_band='MINOR_14_17', minor_mode=true, verified_source='OTHER_MEMBER_RELAY' WHERE person_id=$1",
+        [child.personId]
+      );
+    }
 
     await admin.query(
       `INSERT INTO scene_node_states
@@ -830,6 +848,33 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
       client.release();
     }
   }
+
+  it('R3 rejects A5002 review of a legacy ACTIVE Contract for a different child', async () => {
+    const { f, scene, payload } = await prepareA5002(app, 'r3-legacy-mismatch', true);
+    expect(f.child.personId).not.toBe(f.targetPersonId);
+    const snapshot = async () => ({
+      ...(await reviewCounts(f, 'A5002')),
+      caseState: (await admin.query('SELECT phase, version FROM cases WHERE id=$1', [f.caseId])).rows,
+      audits: (await admin.query('SELECT count(*) FROM business_audit_events WHERE resource_id::text=$1::text', [f.caseId])).rows,
+    });
+    const before = await snapshot();
+    const rejected = await submitA5002(app, f, scene, payload, 'a5002-r3-legacy-mismatch');
+    expect(rejected.json().code, rejected.body).toBe('TARGET_SCOPE_INVALID');
+    expect(await snapshot()).toEqual(before);
+  });
+
+  it('R3 blocks new A5001 execution when the bound child is no longer eligible', async () => {
+    const { f, scene, payload } = await prepareA5001(app, 'r3-a5001-target-compliance');
+    await admin.query(
+      "UPDATE person_compliance_profiles SET age_band='ADULT', minor_mode=false, verified_source='SELF_STATEMENT' WHERE person_id=$1",
+      [f.targetPersonId]
+    );
+    const before = await reviewCounts(f, 'A5001');
+    const rejected = await submitA5001(app, f, scene, payload, 'a5001-r3-child-blocked');
+    expect(rejected.json().code, rejected.body).toBe('COMPLIANCE_BLOCKED');
+    expect(await reviewCounts(f, 'A5001')).toEqual(before);
+    expect((await getScene(app, f)).caseVersion).toBe(scene.caseVersion);
+  });
 
   it('T1503/T1506 production A5001 fails closed while the test-only exact package completes only A5001', async () => {
     provider.restore('FAMILY_ALLIANCE_REVIEW');

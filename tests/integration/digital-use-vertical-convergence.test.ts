@@ -674,21 +674,9 @@ describe('Digital Use vertical convergence', () => {
 
   async function bindAndAcceptCanonicalParticipant(
     f: Fixture,
-    label: string
+    label: string,
+    personId = f.targetPersonId
   ): Promise<{ personId: string; participationId: string; token: string }> {
-    const member = await createMember(
-      app,
-      f.manager.token,
-      f.familyId,
-      `phase3-${label}-member`,
-      {
-        ageBand: 'MINOR_14_17',
-        ageBandSource: 'GUARDIAN_RELAY',
-      }
-    );
-    expect(member.statusCode, member.body).toBe(201);
-    const personId = member.json().personId as string;
-
     const created = await invite(
       app,
       f.manager.token,
@@ -1960,6 +1948,37 @@ describe('Digital Use vertical convergence', () => {
       incentives: term('Extra family activity after consistent execution.'),
       breachResponsibilities: term('Discuss breach and reset the next day.'),
     };
+    const sibling = await createMember(app, f.manager.token, f.familyId, 'contract-sibling', {
+      ageBand: 'MINOR_14_17', ageBandSource: 'OTHER_MEMBER_RELAY',
+    });
+    expect(sibling.statusCode, sibling.body).toBe(201);
+    const otherParticipant = await bindAndAcceptCanonicalParticipant(f, 'contract-sibling', sibling.json().personId);
+    const contractEffects = async () => (await admin.query(
+      `SELECT
+        (SELECT count(*) FROM digital_use_contract_versions WHERE case_id=$1) AS contracts,
+        (SELECT count(*) FROM case_events WHERE case_id=$1) AS events,
+        (SELECT count(*) FROM business_audit_events WHERE resource_id::text=$1::text) AS audits`,
+      [f.caseId]
+    )).rows;
+    const beforeRejectedDraft = await contractEffects();
+    expect(beforeRejectedDraft[0].contracts).toBe('0');
+    const rejectedDraft = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers: commandHeaders(f.manager.token, 'wrong-contract-child'),
+      payload: {
+        expectedCaseVersion: beforeDraft.caseVersion,
+        adultPartyPersonId: f.manager.personId,
+        childPartyPersonId: otherParticipant.personId,
+        childParticipationId: otherParticipant.participationId,
+        sourceTemplateVersion: 'phone-use-contract-v1',
+        dependencyRefs: [],
+        terms,
+      },
+    });
+    expect(rejectedDraft.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+    expect(await contractEffects()).toEqual(beforeRejectedDraft);
+    expect(await getScene(f)).toEqual(beforeDraft);
     const draft = await app.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,

@@ -110,16 +110,32 @@ describe('T1218 Digital Use runtime hardening', () => {
     await app.close();
   });
 
-  async function fixture(label: string, targetApp: FastifyInstance = app): Promise<Fixture> {
+  async function fixture(label: string, targetApp: FastifyInstance = app, boundChild?: LoginResult): Promise<Fixture> {
     const manager = await loginWithLabel(targetApp, `du-hard-${label}`);
     const family = await createFamily(targetApp, manager.token, `du-hard-${label}`);
     expect(family.statusCode).toBe(201);
     const familyId = family.json().id as string;
-    const target = await createMember(targetApp, manager.token, familyId, `du-hard-${label}`, {
-      ageBand: 'MINOR_14_17', ageBandSource: 'GUARDIAN_RELAY',
-    });
-    expect(target.statusCode, target.body).toBe(201);
-    const targetPersonId = target.json().personId as string;
+    let targetPersonId: string;
+    if (boundChild) {
+      targetPersonId = boundChild.personId;
+      await admin.query(
+        'INSERT INTO family_members (family_id,person_id) VALUES ($1,$2)',
+        [familyId, targetPersonId]
+      );
+      await admin.query(
+        `INSERT INTO person_compliance_profiles (person_id,age_band,minor_mode,verified_source)
+           VALUES ($1,'MINOR_14_17',true,'OTHER_MEMBER_RELAY')
+           ON CONFLICT (person_id) DO UPDATE SET age_band='MINOR_14_17',minor_mode=true,
+             verified_source='OTHER_MEMBER_RELAY'`,
+        [targetPersonId]
+      );
+    } else {
+      const target = await createMember(targetApp, manager.token, familyId, `du-hard-${label}`, {
+        ageBand: 'MINOR_14_17', ageBandSource: 'GUARDIAN_RELAY',
+      });
+      expect(target.statusCode, target.body).toBe(201);
+      targetPersonId = target.json().personId as string;
+    }
     const kase = await createCase(targetApp, manager.token, `du-hard-${label}`);
     expect(kase.statusCode).toBe(201);
     const caseId = kase.json().id as string;
@@ -3347,16 +3363,8 @@ describe('T1218 Digital Use runtime hardening', () => {
   });
 
   it('Slice 14 formal Contract requires independent party confirmations and activates atomically', async () => {
-    const f = await fixture('s14-contract');
     const child = await loginWithLabel(app, `s14-contract-child-${crypto.randomUUID()}`);
-    await admin.query(
-      `INSERT INTO person_compliance_profiles
-         (person_id,age_band,minor_mode,verified_source)
-       VALUES ($1,'ADULT',false,'SELF_STATEMENT')
-       ON CONFLICT (person_id) DO UPDATE
-         SET age_band='ADULT',minor_mode=false,verified_source='SELF_STATEMENT',updated_at=now()`,
-      [child.personId]
-    );
+    const f = await fixture('s14-contract', app, child);
     await admin.query(
       `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId,child.personId]
@@ -3584,15 +3592,8 @@ describe('T1218 Digital Use runtime hardening', () => {
   });
 
   it('Slice 14 Contract idempotency, draft CAS and activation races converge without duplicate truth', async () => {
-    const f=await fixture('s14-contract-races');
     const child=await loginWithLabel(app,`s14-races-child-${crypto.randomUUID()}`);
-    await admin.query(
-      `INSERT INTO person_compliance_profiles(person_id,age_band,minor_mode,verified_source)
-       VALUES($1,'ADULT',false,'SELF_STATEMENT')
-       ON CONFLICT(person_id) DO UPDATE
-         SET age_band='ADULT',minor_mode=false,verified_source='SELF_STATEMENT',updated_at=now()`,
-      [child.personId]
-    );
+    const f = await fixture('s14-contract-races', app, child);
     await admin.query(
       `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId,child.personId]
@@ -3718,25 +3719,14 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(truth.rows[0]).toEqual({active:1,documents:1,adult_confirms:1,child_confirms:1});
   });
 
-  it('Slice 14 blocks UNDER_14 Contract processing when guardian Consent is missing', async () => {
-    const f=await fixture('s14-consent-missing');
+  it('R3 blocks UNDER_14 Contract processing even with onboarding guardian consent', async () => {
     const child=await loginWithLabel(app,`s14-consent-missing-child-${crypto.randomUUID()}`);
+    const f = await fixture('s14-consent-missing', app, child);
     await admin.query(
       `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId,child.personId]
     );
-    await admin.query(
-      `UPDATE person_compliance_profiles
-          SET age_band='UNDER_14',
-              minor_mode=true,
-              guardian_person_id=$2,
-              guardian_consent_record_id=NULL,
-              guardian_consent_version=NULL,
-              verified_source='GUARDIAN_RELAY',
-              updated_at=now()
-        WHERE person_id=$1`,
-      [child.personId,f.manager.personId]
-    );
+    await makeUnder14Consent(f,child);
     const p=await admin.query<{id:string}>(
       `INSERT INTO case_participants
         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
@@ -3771,7 +3761,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       },
     });
     expect(blocked.statusCode,blocked.body).toBe(409);
-    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_CONSENT_BLOCKED');
+    expect(blocked.json().code).toBe('COMPLIANCE_BLOCKED');
     const rows=await admin.query(
       `SELECT count(*)::int AS n FROM digital_use_contract_versions WHERE case_id=$1`,
       [f.caseId]
@@ -3780,13 +3770,12 @@ describe('T1218 Digital Use runtime hardening', () => {
   });
 
   it('Slice 14 Consent revoked before Contract commit blocks confirmation with zero success write', async () => {
-    const f=await fixture('s14-consent-revoked-before-commit');
     const child=await loginWithLabel(app,`s14-consent-revoked-before-commit-child-${crypto.randomUUID()}`);
+    const f = await fixture('s14-consent-revoked-before-commit', app, child);
     await admin.query(
       `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId,child.personId]
     );
-    const consent=await makeUnder14Consent(f,child);
     const p=await admin.query<{id:string}>(
       `INSERT INTO case_participants
         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
@@ -3817,6 +3806,7 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
     expect(draft.statusCode,draft.body).toBe(201);
 
+    const consent=await makeUnder14Consent(f,child);
     await revokeUnder14Consent(f,child,consent.consentId,consent.noticeHash);
 
     const blocked=await app.inject({
@@ -3825,7 +3815,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
     });
     expect(blocked.statusCode,blocked.body).toBe(409);
-    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_CONSENT_BLOCKED');
+    expect(blocked.json().code).toBe('COMPLIANCE_BLOCKED');
 
     const truth=await admin.query(
       `SELECT status,parent_confirmation,child_confirmation
@@ -3844,13 +3834,12 @@ describe('T1218 Digital Use runtime hardening', () => {
   });
 
   it('Slice 14 Consent revocation blocks future support but preserves historical ACTIVE Contract truth', async () => {
-    const f=await fixture('s14-consent-revoked');
     const child=await loginWithLabel(app,`s14-consent-revoked-child-${crypto.randomUUID()}`);
+    const f = await fixture('s14-consent-revoked', app, child);
     await admin.query(
       `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId,child.personId]
     );
-    const consent=await makeUnder14Consent(f,child);
     const p=await admin.query<{id:string}>(
       `INSERT INTO case_participants
         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
@@ -3894,6 +3883,7 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(childConfirm.statusCode,childConfirm.body).toBe(200);
     expect(childConfirm.json().status).toBe('ACTIVE');
 
+    const consent=await makeUnder14Consent(f,child);
     await revokeUnder14Consent(f,child,consent.consentId,consent.noticeHash);
 
     const blocked=await app.inject({
@@ -3902,7 +3892,7 @@ describe('T1218 Digital Use runtime hardening', () => {
       headers:auth(f.manager.token),
     });
     expect(blocked.statusCode,blocked.body).toBe(409);
-    expect(blocked.json().code).toBe('PHONE_USE_CONTRACT_CONSENT_BLOCKED');
+    expect(blocked.json().code).toBe('COMPLIANCE_BLOCKED');
 
     const history=await admin.query(
       `SELECT status,activated_at,superseded_at
@@ -3922,14 +3912,8 @@ describe('T1218 Digital Use runtime hardening', () => {
   });
 
   it('Slice 14 activation fault rolls child confirmation back with Scene/Contract truth', async () => {
-    const f = await fixture('s14-contract-fault');
     const child = await loginWithLabel(app, `s14-fault-child-${crypto.randomUUID()}`);
-    await admin.query(
-      `INSERT INTO person_compliance_profiles(person_id,age_band,minor_mode,verified_source)
-       VALUES($1,'ADULT',false,'SELF_STATEMENT')
-       ON CONFLICT(person_id) DO UPDATE SET age_band='ADULT',minor_mode=false,verified_source='SELF_STATEMENT'`,
-      [child.personId]
-    );
+    const f = await fixture('s14-contract-fault', app, child);
     await admin.query(`INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,[f.familyId,child.personId]);
     const p=await admin.query<{id:string}>(
       `INSERT INTO case_participants(family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
@@ -3977,14 +3961,8 @@ describe('T1218 Digital Use runtime hardening', () => {
   });
 
   it('Slice 14 A4012 keeps old ACTIVE truth until the replacement is independently reconfirmed', async () => {
-    const f = await fixture('s14-revision');
     const child = await loginWithLabel(app, `s14-revision-child-${crypto.randomUUID()}`);
-    await admin.query(
-      `INSERT INTO person_compliance_profiles(person_id,age_band,minor_mode,verified_source)
-       VALUES($1,'ADULT',false,'SELF_STATEMENT')
-       ON CONFLICT(person_id) DO UPDATE SET age_band='ADULT',minor_mode=false,verified_source='SELF_STATEMENT'`,
-      [child.personId]
-    );
+    const f = await fixture('s14-revision', app, child);
     await admin.query(`INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,[f.familyId,child.personId]);
     const p=await admin.query<{id:string}>(
       `INSERT INTO case_participants(family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
@@ -4139,15 +4117,8 @@ describe('T1218 Digital Use runtime hardening', () => {
 
 
   async function preparePhoneContractCase(label:string) {
-    const f=await fixture(label);
     const child=await loginWithLabel(app,`${label}-child-${crypto.randomUUID()}`);
-    await admin.query(
-      `INSERT INTO person_compliance_profiles(person_id,age_band,minor_mode,verified_source)
-       VALUES($1,'ADULT',false,'SELF_STATEMENT')
-       ON CONFLICT(person_id) DO UPDATE
-         SET age_band='ADULT',minor_mode=false,verified_source='SELF_STATEMENT'`,
-      [child.personId]
-    );
+    const f = await fixture(label, app, child);
     await admin.query(
       `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId,child.personId]

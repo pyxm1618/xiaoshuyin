@@ -420,7 +420,7 @@ export async function prepareA5002ReviewFingerprintInTransaction(
     caseId: input.caseId,
     childPersonId: contract.child_party_person_id,
     participationId: contract.child_participation_id,
-  });
+  }, 'TARGET_SCOPE_INVALID');
   await assertProfessionalReviewProvenance(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
@@ -539,7 +539,7 @@ export async function executeA5002ReviewInTransaction(
       caseId: input.caseId,
       childPersonId: contract.child_party_person_id,
       participationId: contract.child_participation_id,
-    });
+    }, 'TARGET_SCOPE_INVALID');
     await assertProfessionalReviewProvenance(tx, {
       familyId: input.familyId,
       caseId: input.caseId,
@@ -760,7 +760,7 @@ export async function executeA5002ReviewInTransaction(
       caseId: input.caseId,
       childPersonId: finalContract.child_party_person_id,
       participationId: finalContract.child_participation_id,
-    });
+    }, 'TARGET_SCOPE_INVALID');
 
     const finalPackage = await requireProfessionalReviewPackage(
       provider,

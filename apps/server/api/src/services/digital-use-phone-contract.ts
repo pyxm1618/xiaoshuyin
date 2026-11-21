@@ -45,6 +45,7 @@ import {
   type PhoneUseContractConfirmation,
   type PhoneUseContractVersionRow,
   type StoredSceneRef,
+  readDigitalUseAssessmentTarget,
 } from '@xiaoshuyin/domain';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
@@ -308,8 +309,12 @@ export async function assertPhoneUseContractDependencies(
  return refs;
 }
 export async function assertPhoneUseContractChildParticipation(
- tx:pg.PoolClient,input:{familyId:string;caseId:string;childPersonId:string;participationId:string}
+ tx:pg.PoolClient,input:{familyId:string;caseId:string;childPersonId:string;participationId:string},
+ targetMismatchCode:'PHONE_USE_CONTRACT_INVALID_PAYLOAD'|'TARGET_SCOPE_INVALID'='PHONE_USE_CONTRACT_INVALID_PAYLOAD'
 ){
+ if(await readDigitalUseAssessmentTarget(tx,input.caseId)!==input.childPersonId){
+   throw contractError(targetMismatchCode,'Contract child must match the assessment target');
+ }
  const p=await lockParticipationById(tx,input.participationId);
  if(!p||p.family_id!==input.familyId||p.case_id!==input.caseId||p.person_id!==input.childPersonId||p.state!=='ACTIVE'){
    throw contractError('PHONE_USE_CONTRACT_INVALID_PAYLOAD','Child participation is not current');

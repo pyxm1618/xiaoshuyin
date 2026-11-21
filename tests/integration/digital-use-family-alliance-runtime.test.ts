@@ -62,6 +62,14 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     await migrator.connect();
     await migrator.query(
       `SELECT app.publish_compliance_feature_policy(
+         'DIGITAL_USE_ASSESSMENT_RUNTIME','v1',NULL,1,
+         'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
+         'Slice 13 assessment target basis','evidence://slice13/assessment-target',
+         now() - interval '1 minute','migration:slice13-assessment-target'
+       )`
+    );
+    await migrator.query(
+      `SELECT app.publish_compliance_feature_policy(
          'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','v1',NULL,1,
          'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
          'Slice 13 integration reviewed basis','evidence://slice13/integration',
@@ -74,12 +82,12 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     await admin.query(
       `UPDATE compliance_feature_policies
           SET superseded_by_policy_id = NULL
-        WHERE feature_code='DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME'
+        WHERE feature_code IN ('DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','DIGITAL_USE_ASSESSMENT_RUNTIME')
           AND feature_contract_revision='v1'`
     ).catch(() => undefined);
     await admin.query(
       `DELETE FROM compliance_feature_policies
-        WHERE feature_code='DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME'
+        WHERE feature_code IN ('DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME','DIGITAL_USE_ASSESSMENT_RUNTIME')
           AND feature_contract_revision='v1'`
     ).catch(() => undefined);
     await appDb.end().catch(() => undefined);
@@ -776,10 +784,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         selectedTargets: ['SLEEP'],
       },
     };
-    const request = () => app.inject({
+    const request = (commandKey = key) => app.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/scene/nodes/A3002/responses`,
-      headers: { ...auth(f.manager.token), 'idempotency-key': key },
+      headers: { ...auth(f.manager.token), 'idempotency-key': commandKey },
       payload,
     });
     const first = await request();
@@ -803,6 +811,26 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     });
     expect(mismatch.statusCode, mismatch.body).toBe(409);
     expect(mismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+
+    const effects = async () => (await admin.query(
+      `SELECT
+        (SELECT count(*) FROM assertions WHERE case_id=$1) AS evidence,
+        (SELECT count(*) FROM scene_artifacts WHERE case_id=$1) AS artifacts,
+        (SELECT count(*) FROM case_events WHERE case_id=$1) AS events,
+        (SELECT count(*) FROM business_audit_events WHERE resource_id::text=$1::text) AS audits`,
+      [f.caseId]
+    )).rows;
+    const beforeComplianceChange = await effects();
+    await admin.query(
+      "UPDATE person_compliance_profiles SET age_band='ADULT', minor_mode=false, verified_source='SELF_STATEMENT' WHERE person_id=$1",
+      [f.targetPersonId]
+    );
+    const historical = await request();
+    expect(historical.statusCode, historical.body).toBe(200);
+    expect(historical.json()).toEqual(first.json());
+    const blocked = await request(`${key}-new`);
+    expect(blocked.json().code, blocked.body).toBe('COMPLIANCE_BLOCKED');
+    expect(await effects()).toEqual(beforeComplianceChange);
 
     const currents = await admin.query<{ n: number; revisions: number }>(
       `SELECT count(*)::int AS n,

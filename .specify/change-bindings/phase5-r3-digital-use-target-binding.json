@@ -10,6 +10,8 @@
         "apps/server/api/src/openapi-spec.ts",
         "apps/server/api/src/routes/digital-use-assessment.ts",
         "apps/server/api/src/services/digital-use-assessment.ts",
+        "apps/server/api/src/services/digital-use-family-alliance-review.ts",
+        "apps/server/api/src/services/digital-use-family-alliance.ts",
         "apps/server/api/src/services/digital-use-node-response.ts",
         "apps/server/api/src/services/digital-use-node-semantics.ts",
         "apps/server/api/src/services/digital-use-phone-contract-review.ts",
