@@ -1142,6 +1142,65 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
   });
 
+  it('R3 replays a version-advancing 01003 after lifecycle changes without repeating writes', async () => {
+    const f = await fixture('r3-handoff-replay');
+    const baseline = await respondA1001(f, 'r3-replay-a1001', a1001(true));
+    expect(baseline.statusCode, baseline.body).toBe(200);
+    const emotion = await respondSceneNode(
+      f, '01002', baseline.json().currentNode.revision,
+      { state: 'KNOWN', selections: ['A'] }, 'r3-replay-01002',
+      baseline.json().caseVersion
+    );
+    expect(emotion.statusCode, emotion.body).toBe(200);
+    const prepared = emotion.json();
+    expect(prepared.currentNode.nodeCode).toBe('01003');
+    const payload = {
+      targetPersonId: f.targetPersonId,
+      expectedCaseVersion: prepared.caseVersion,
+      expectedNodeRevision: prepared.currentNode.revision,
+      response: { state: 'KNOWN', selection: 'A' },
+    };
+    const submit = (body = payload, key = 'r3-replay-01003', token = f.manager.token) =>
+      app.inject({
+        method: 'POST', url: `/api/v1/cases/${f.caseId}/scene/nodes/01003/responses`,
+        headers: { ...auth(token), 'idempotency-key': key }, payload: body,
+      });
+    const first = await submit();
+    expect(first.statusCode, first.body).toBe(200);
+    expect(first.json().caseVersion).toBeGreaterThan(payload.expectedCaseVersion);
+    const snapshot = async () => (await admin.query(
+      `SELECT
+        (SELECT count(*) FROM assertions WHERE case_id = $1) AS evidence,
+        (SELECT jsonb_agg(to_jsonb(node) ORDER BY node.node_code)
+           FROM scene_node_states node WHERE case_id = $1) AS nodes,
+        (SELECT count(*) FROM problem_formulations WHERE case_id = $1) AS formulations,
+        (SELECT count(*) FROM case_events WHERE case_id = $1) AS events,
+        (SELECT count(*) FROM business_audit_events WHERE resource_id::text = $1::text) AS audits`,
+      [f.caseId]
+    )).rows[0];
+    const stored = await snapshot();
+    const replay = await submit();
+    expect(replay.statusCode, replay.body).toBe(200);
+    expect(replay.json()).toEqual(first.json());
+    expect((await submit({ ...payload, targetPersonId: crypto.randomUUID() })).json().code)
+      .toBe('TARGET_SCOPE_INVALID');
+    expect((await submit({ ...payload, response: { state: 'KNOWN', selection: 'B' } })).json().code)
+      .toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+    expect((await submit(payload, 'r3-replay-new-stale')).json().code).toBe('STALE_CASE_VERSION');
+    const outsider = await fixture('r3-handoff-outsider');
+    const denied = await submit(payload, 'r3-replay-01003', outsider.manager.token);
+    expect(denied.statusCode, denied.body).toBe(404);
+    expect(denied.json().code).toBe('CASE_NOT_FOUND');
+    expect(await snapshot()).toEqual(stored);
+
+    await admin.query("UPDATE cases SET status = 'SAFETY_HOLD' WHERE id = $1", [f.caseId]);
+    const held = await snapshot();
+    const heldReplay = await submit();
+    expect(heldReplay.statusCode, heldReplay.body).toBe(200);
+    expect(heldReplay.json()).toEqual(first.json());
+    expect(await snapshot()).toEqual(held);
+  });
+
   it('rolls back 01003 Evidence and Scene state when the Problem Formulation owner insert fails', async () => {
     const f = await fixture('fault-pf');
     const a1001Result = await respondA1001(

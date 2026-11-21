@@ -1006,7 +1006,6 @@ export async function completeDigitalUseNodeResponse(
       // node codes do not become a cross-Family existence oracle.
       const node: DigitalUseNodeManifestEntry =
         resolveRequestedDigitalUseNode(input.nodeCode);
-      assertNodeCasePreconditions(visibleCase, node, input.expectedCaseVersion);
       if (!input.targetPersonId) throw nodeError('TARGET_SCOPE_INVALID');
       const targetPersonId = await requireDigitalUseAssessmentTarget(tx, input.caseId, input.targetPersonId);
       const professionalReviewContent =
@@ -1139,9 +1138,10 @@ export async function completeDigitalUseNodeResponse(
           }
 
           const previewCase = await getCaseById(tx, input.caseId);
+          if (!previewCase) throw nodeError('CASE_NOT_FOUND', 'Case not found');
+          assertNodeCasePreconditions(previewCase, node, input.expectedCaseVersion);
           const previewNode = await getSceneNodeState(tx, input.caseId, node.nodeCode);
           const recoveringAfterFormulation =
-            previewCase !== null &&
             previewCase.phase !== 'ASSESSMENT' &&
             previewNode !== null &&
             isRecoverableTriageProjection(node.nodeCode, previewNode.status);
