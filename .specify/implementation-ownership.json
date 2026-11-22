@@ -874,10 +874,9 @@
         "path": "apps/server/api/src/routes/compliance.ts"
       },
       "ownership": {
-        "kind": "SHARED",
+        "kind": "FEATURE",
         "features": [
-          "001-family-identity-core",
-          "010-compliance-feature-policy-foundation"
+          "001-family-identity-core"
         ]
       }
     },
@@ -891,8 +890,7 @@
         "kind": "SHARED",
         "features": [
           "001-family-identity-core",
-          "001-consent-01004-narrow-post-merge-remediation",
-          "010-compliance-feature-policy-foundation"
+          "001-consent-01004-narrow-post-merge-remediation"
         ]
       }
     },
@@ -903,10 +901,9 @@
         "path": "apps/server/api/src/routes/members.ts"
       },
       "ownership": {
-        "kind": "SHARED",
+        "kind": "FEATURE",
         "features": [
-          "001-family-identity-core",
-          "010-compliance-feature-policy-foundation"
+          "001-family-identity-core"
         ]
       }
     },
@@ -921,8 +918,7 @@
         "features": [
           "001-family-identity-core",
           "003-evidence-core",
-          "006-identity-binding-runtime",
-          "010-compliance-feature-policy-foundation"
+          "006-identity-binding-runtime"
         ]
       }
     }
