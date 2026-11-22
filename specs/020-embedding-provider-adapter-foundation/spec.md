@@ -1394,4 +1394,4 @@ Revision 2 的变更范围（只做定向修正，不扩大 Scope）：
 4. 把 sparse 升序明确为 Adapter canonical normalization rule，而非 provider guarantee；
 5. 全文 contradiction sweep：FR / AS / NS / C20 / EVC / §8 / §15 同步修订，不留两套相互矛盾的规则。
 
-Selection、Scope、route-neutral、治理边界与证据分层均未改变；本轮不创建 Plan / Checklist / Tasks，不授予开发授权。Revision 2 的 `SPEC: FROZEN` 必须等待 Remote Re-Freeze 的 remote read-back 成功后才能成立。
+Selection、Scope、route-neutral、治理边界与证据分层均未改变；本轮不创建 Plan / Checklist / Tasks，不授予开发授权。Revision 2 的 `SPEC: FROZEN` 已在 Remote Re-Freeze 的 remote read-back 成功后成立；authoritative frozen artifact 为 branch head 的 spec.md。
