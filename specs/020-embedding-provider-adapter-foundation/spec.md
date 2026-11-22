@@ -10,7 +10,9 @@
 >
 > Role boundary: Plan AI 1 — Selection / Specify / Clarify only
 >
-> Status: SLICE 20 SPEC — FROZEN (REMOTE READ-BACK VERIFIED)
+> Status: SLICE 20 SPEC — REVISION 2 TARGETED CORRECTION / REMOTE RE-FREEZE PENDING
+>
+> 历史状态：Revision 1（commit `c9b681ec` / spec blob `c4bea6c2`）已 `SUPERSEDED`，原因见第 27 节 Revision History。
 >
 > Forbidden in this artifact: Plan / Checklist / Tasks / Audit 1 / production implementation / migration / embedding generation / Gold labels / professional truth / retrieval pipeline / Context Builder / AI Task Runtime / Audit 2 / merge
 >
@@ -39,7 +41,7 @@
 | 上游 Authority 标识 | `Docs/V1技术设计.md` §4.2 / §13.2 / §13.3 / §20；`Docs/总体技术架构.md` §11.2 / §11.3；`V1-C34`、`V1-X14`（真实能力边界） |
 | 下游消费者（未来） | Sparsevec Spike、pg_jieba lexical 对照、RAG A/B/C Gold Dataset Eval、retrieval pipeline、Context Builder、AI Task Runtime |
 
-本 Slice 的 Spec 已通过 formal remote freeze（见第 26 节 Remote Freeze Record），状态为 `SPEC: FROZEN`；它不是 Planning Freeze，不是实现授权。
+本 Slice 的 Revision 1 曾通过 formal remote freeze（见第 26 节 Remote Freeze Record），但已因**已证实的外部 Provider contract 冲突**被标记为 `SUPERSEDED`（见第 27 节 Revision History）。本文件为 Revision 2（targeted correction）；其 `SPEC: FROZEN` 仅在本轮 Remote Re-Freeze 的 remote read-back 成功后成立。无论哪个 Revision，它都不是 Planning Freeze，不是实现授权。
 
 ---
 
@@ -125,6 +127,74 @@ blob db1db60eaa3617c0549dd4a6a39826666b8bdddf
 - 它不声称任何 embedding 质量优势，不做 route 选择，不注册生产路线。
 
 **Authority Gate: PASS。**
+
+### 2.3 Provider Contract Baseline（可修订技术事实）
+
+本节记录本轮核验的**外部 Provider contract 技术基线**，用于消除 Revision 1 中关于 sparse index、model/version 回显与 usage 粒度的错误假设。
+
+**Authority 定位**：本节是 provider 技术合同基线，**不是产品 Authority**，也不取代 `Docs/**`。它只约束 Adapter 如何理解 provider 请求 / 响应；当官方 Provider contract 变化时，必须重新核验并定向修订本 Spec（新的 Revision），不得静默沿用旧假设。本节不授权任何 provider 能力声明，也不产生 `PROVIDER_VERIFIED`。
+
+#### 官方来源
+
+- 文档：Alibaba Cloud Model Studio — 文本嵌入（同步）API
+- URL：`https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api`
+- 核验日期：2026-11-22（本轮由主流程直接读取官方文档核验，下列事实清单与其一致；不以博客、SDK 示例仓库或第三方文章覆盖官方合同）
+- 适用能力：DashScope **原生** text-embedding 接口（稀疏输出仅通过原生接口提供；OpenAI 兼容接口不支持 sparse）
+
+#### 请求契约
+
+```text
+POST https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api/v1/services/embeddings/text-embedding/text-embedding
+
+{
+  "model": "<configured model id>",
+  "input": { "texts": ["<text>", "..."] },
+  "parameters": {
+    "dimension": <dense dimension>,
+    "output_type": "<provider output_type 字面量>",
+    "text_type": "<query | document>",
+    "instruct": "<optional instruction>"
+  }
+}
+```
+
+本 Spec 的逻辑取值 `dense` / `dense+sparse` 与 provider 字面量之间的映射由 Adapter 负责，Plan AI 2 必须在 Provider contract 复核后确定，不得把内部逻辑名当作 provider 字面量事实。
+
+#### 成功响应契约
+
+```text
+{
+  "request_id": "<provider request id>",
+  "embeddings": [
+    {
+      "index": <input item index>,
+      "embedding": [<number>, ...],
+      "sparse_embedding": [ { "index": <int>, "value": <number>, "token": "<optional>" } ]
+    }
+  ],
+  "usage": { "total_tokens": <int>, "prompt_tokens": <int|absent> }
+}
+```
+
+#### 错误响应契约
+
+```text
+{ "code": "<provider error code>", "message": "<message>", "request_id": "<provider request id>" }
+```
+
+#### 冻结的技术事实
+
+1. **sparse index 语义**：官方定义为"词汇或字符在词汇表中的位置索引"（vocabulary position index），**不是** dense vector 的坐标维度。sparse index 与 `dense_dimension` 属于不同坐标空间；**禁止**用 dense dimension 作为 sparse index 的上界或合法性判据。
+2. **官方示例索引**：官方示例中的 sparse index 包含 `7149`、`111290`、`246351`、`2490`、`3759`、`1130`、`562`、`1589`，而同例 dense dimension 示例为 `1024`；即真实 sparse index 可以远大于 dense dimension。
+3. **sparse index 约束**（可由官方语义机械验证者）：integer、`>= 0`、在单个 sparse payload 经 canonical validation 后唯一。
+4. **sparse value**：finite number；非有限值必须拒绝。
+5. **sparse token**：provider 提供的可选元数据（`token`），不构成业务权威字段。
+6. **sparse 排序**：官方合同**不保证** `sparse_embedding` 数组升序（官方示例中同一 item 先出现 `3759`、后出现 `1130`）。排序是 Adapter normalization 规则，不是 provider guarantee。
+7. **model / version 回显**：原生成功响应的顶层字段只有 `request_id`、`embeddings`、`usage`，**不含** `model` 或 `model_version`。Adapter 不得要求 provider 回显其合同未承诺返回的 version。
+8. **usage 粒度**：`usage` 是 **request-level aggregate**（`total_tokens`，可选 `prompt_tokens`）；provider 不提供 per-item token 或 per-item cost 分解。
+9. **能力不一致**：官方文档自身存在"`sparse_embedding` 仅适用于 v3/v4"与"`qwen3.7` 示例包含 sparse"的不一致。Adapter 必须按**运行时实际响应**判定 sparse 能力；缺失时 `UNSUPPORTED`，不得硬编码模型能力矩阵。
+
+任何与本基线冲突的旧语义（包括 Revision 1 的 `0..dense_dimension-1` 约束、provider version 回显要求、per-item exact cost 要求）均以本节为准被废止。
 
 ---
 
@@ -414,9 +484,9 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 
 1. **Embedding Provider Port 契约**：请求、响应、错误、状态、成本、遥测的统一逻辑契约。
 2. **Dense embedding 输出契约**：有限数值向量、声明维度、维度校验、确定性拒绝。
-3. **Sparse payload 解析与校验**：把 DashScope sparse 输出归一化为 `{index, value}`，校验 index 范围、重复、非有限值、非零元素上限。
+3. **Sparse payload 解析与校验**：把 DashScope sparse 输出归一化为 `{index, value}`（`token` 仅作可选、非权威 metadata）；校验 index 为非负整数、同一 payload 内唯一、value 有限、非零元素上限；**禁止**把 sparse index 与 `dense_dimension` 比较。
 4. **output_type 语义**：至少支持 `dense` 与 `dense+sparse`，并显式拒绝不支持组合。
-5. **Model / version 配置绑定**：`model_id`、`model_version`、`dense_dimension` 必须来自显式配置，并可回显校验。
+5. **Model / version 配置绑定**：`configured_model_id`、`configured_model_version_or_revision`、`dense_dimension` 必须来自显式配置；provider 若返回 `model` 则校验一致，未返回时记录 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE` 且不得因此失败。
 6. **timeout / retry budget**：每次调用有显式上限，重试受分类与预算约束。
 7. **Provider error normalization**：稳定错误分类，区分 RETRYABLE / TERMINAL / UNSUPPORTED / BLOCKED。
 8. **Cost record**：每次真实 provider 调用产生可关联的成本记录。
@@ -509,8 +579,8 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 
 - **FR-001 — SHALL**：提供 route-neutral 的 Embedding Provider Port，业务调用方只能依赖该 Port，不得直接依赖 provider 专有客户端。（验收：调用方模块的 import 图中不存在 provider SDK 或 DashScope 专有模块。）
 - **FR-002 — SHALL**：Port 请求不得接受调用方传入的 provider endpoint、API key、region 凭据；这些只能来自受控运行时配置。（验收：请求类型定义中不存在 endpoint/secret 字段；代码扫描无调用方传入 secret 的路径。）
-- **FR-003 — SHALL**：请求必须显式携带 `model_id`、`model_version`、`output_type`、`dense_dimension`、输入文本集合与 `request_id`。（验收：缺失任一必填字段时返回 `BLOCKED`/`INVALID_REQUEST`，且不发起 provider 调用。）
-- **FR-004 — SHALL**：响应必须包含 dense 向量、可选 sparse payload、provider/model/version 回显、usage、provider_request_id 与归一化状态。（验收：契约测试对每个字段做存在性与类型断言。）
+- **FR-003 — SHALL**：请求必须显式携带 `configured_model_id`、`configured_model_version_or_revision`、`output_type`、`dense_dimension`、输入文本集合与 `request_id`；其中 model identity 属于**配置 provenance**，不是 provider 回显字段。（验收：缺失任一必填字段时返回 `BLOCKED`/`INVALID_REQUEST`，且不发起 provider 调用；请求类型定义中不把配置版本标注为 provider-returned。）
+- **FR-004 — SHALL**：响应必须包含 dense 向量、可选 sparse payload、`provider_request_id`、provider `usage`（request-level aggregate）、configured model provenance、provider model echo 状态（`PROVIDER_MODEL_ECHO_VERIFIED` / `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`）与归一化状态；不得把 configured version 描述为 provider 回显事实。（验收：契约测试对每个字段做存在性与类型断言；echo 状态枚举断言。）
 - **FR-005 — SHALL**：单条与批量输入使用同一契约，批量输出与输入顺序一一对应且长度相等。（验收：批量 N 条输入得到 N 条输出，顺序可机械比对。）
 - **FR-006 — SHALL**：批量请求采用 all-or-nothing；任一条失败时整体失败，禁止返回部分成功集合。（验收：注入第 k 条失败，断言整体状态为失败且输出集合为空/null。）
 - **FR-007 — SHALL**：Port 必须允许注入确定性 fake provider，用于离线契约测试。（验收：不配置真实凭据时，全部 Port 契约测试可运行并产生稳定结果。）
@@ -528,20 +598,20 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 
 ### 12.3 Sparse 输出
 
-- **FR-016 — SHALL**：sparse payload 必须归一化为 `{index, value}` 列表，`value` 为有限数。（验收：非有限 value 被拒绝。）
-- **FR-017 — SHALL**：`index` 必须是 `0..dense_dimension-1` 的整数且不得重复。（验收：越界、负值、小数、重复 index 分别被拒绝。）
-- **FR-018 — SHALL**：非零元素数量超过声明上限时必须拒绝，不得截断保留前 N 个。（验收：注入 N+1 个元素，返回 TERMINAL 失败。）
-- **FR-019 — SHALL**：当 `output_type` 要求 sparse 而 provider 未返回 sparse payload 时，必须返回 `UNSUPPORTED` 或 TERMINAL 失败，禁止伪造空 sparse 或推测生成。（验收：注入缺失 sparse 的响应，断言失败分类正确且无伪造 payload。）
+- **FR-016 — SHALL**：sparse payload 必须归一化为 `{index, value}` 列表；`token` 可作为可选、非权威 metadata 保留或丢弃，不得参与权威校验；`value` 必须为有限数；normalized output 必须按 `index` 升序 canonical sort。（验收：非有限 value 被拒绝；输出 index 严格递增且无重复；provider 输入顺序不影响归一化结果。）
+- **FR-017 — SHALL**：`index` 必须是非负整数，且在**同一 sparse payload 内唯一**；`index` 是 provider vocabulary namespace 中的位置，**禁止**与 `dense_dimension` 比较（既不得以其为上界，也不得因超过 `dense_dimension-1` 而失败）；若存在权威配置 `sparse_vocabulary_max`，则 `index` 必须小于该 bound。（验收：负值、小数、重复 index 分别被拒绝；`index >= dense_dimension` 的合法样例必须成功。）
+- **FR-018 — SHALL**：非零元素数量上限必须可配置；超过该上限时必须拒绝，不得截断保留前 N 个；证据必须记录 `observed_max_sparse_index`，但 observed 值仅是观测结果，**不是**新的 Authority upper bound。（验收：注入 N+1 个元素返回 TERMINAL 失败；证据文件含 observed 值，且不存在将其声明为 bound 的字段。）
+- **FR-019 — SHALL**：当 `output_type` 要求 sparse 而 provider 未返回 sparse payload 时，必须返回 `UNSUPPORTED` 或 TERMINAL 失败，禁止伪造空 sparse 或推测生成；当官方文档对 sparse 支持的模型范围存在不一致时，必须以**运行时实际响应**为准，不得硬编码模型能力矩阵。（验收：注入缺失 sparse 的响应，断言失败分类正确且无伪造 payload；实现中不存在 hardcoded sparse 模型白名单。）
 - **FR-020 — SHALL**：当 `output_type=dense` 时不得额外产出 sparse payload。（验收：dense-only 请求的响应中 sparse 字段为空且无额外解析副作用。）
 - **FR-021 — SHALL**：sparse 语义验证只证明 payload 可解析与可校验，不构成 sparsevec 编码或 pgvector 验证。（验收：证据报告中不出现 sparsevec/pgvector 断言；代码不 import pgvector。）
 
 ### 12.4 配置与版本
 
-- **FR-022 — SHALL**：`model_id`、`model_version`、`dense_dimension` 必须来自显式配置，不得由代码常量默认隐式决定。（验收：移除配置时调用返回 `BLOCKED`，而非使用硬编码默认值。）
+- **FR-022 — SHALL**：`configured_model_id`、`configured_model_version_or_revision`、`dense_dimension` 必须来自显式配置，不得由代码常量默认隐式决定。（验收：移除配置时调用返回 `BLOCKED`，而非使用硬编码默认值。）
 - **FR-023 — SHALL**：配置缺失、不完整或类型非法时必须 fail closed 为 `BLOCKED`。（验收：逐字段缺失测试全部为 `BLOCKED`。）
 - **FR-024 — SHALL**：本 Slice 不得设置生产 pinned model；只支持"由配置给定 model/version"的绑定能力。（验收：代码/配置中不存在标记为生产锁定的 model 常量。）
 - **FR-025 — SHALL**：不得在任何代码、配置或文档中声明 `qwen3.7-text-embedding` 已被生产锁定。（验收：全仓库检索 `pinned`/`production` 与 model 名的组合，无生产锁定声明。）
-- **FR-026 — SHALL**：每次响应必须回显实际 provider/model/version；与请求配置不一致时必须 TERMINAL 失败。（验收：注入不一致版本回显，断言失败。）
+- **FR-026 — SHALL**：provider 若返回 `model`，必须与 `configured_model_id` 一致，否则 TERMINAL 失败；provider 未返回 `model` 或 `model_version` 时**不得失败**，必须记录 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`；`configured_model_version_or_revision` 只作为配置 provenance，禁止描述为 provider 回显事实。（验收：model echo 不一致 → TERMINAL；echo 缺失 → 成功且记录 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`；报告字段不得把 configured version 标为 provider-returned。）
 - **FR-027 — SHALL**：配置变更必须留下可审计记录，不得静默生效。（验收：配置变更路径产生审计事件或结构化日志；无变更时无事件。）
 
 ### 12.5 可靠性、超时与重试
@@ -558,8 +628,8 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 
 ### 12.6 成本与遥测
 
-- **FR-037 — SHALL**：每次真实 provider 调用必须产生 cost record，包含 model、version、usage、单位成本、总成本与 `request_id`。（验收：契约测试断言字段完整。）
-- **FR-038 — SHALL**：cost record 必须能关联到逻辑 `request_id`，批量调用必须可分解到具体条目。（验收：按 request_id 聚合的条目数与输入数一致。）
+- **FR-037 — SHALL**：每次真实 provider 调用必须产生 cost record，至少包含逻辑 `request_id`、provider `request_id`、provider `usage.total_tokens`、适用的其它 provider usage 字段、configured model provenance 与 pricing/config provenance，以及（若计算）总成本；`per_item_usage` 允许为 `NOT_PROVIDED`。（验收：契约测试断言 request-level 字段完整；provider 未提供数据时字段值为 `NOT_PROVIDED`，不得伪造数值。）
+- **FR-038 — SHALL**：禁止伪造 per-item 分解；provider 未提供 per-item usage 时，`per_item_usage` 与 `per_item_exact_cost` 必须为 `UNKNOWN` / `NOT_PROVIDED`；禁止平均分摊后称为 exact、禁止按字符数推算、禁止填 0；若未来提供估算，必须显式标记 `ESTIMATED`，且不得等同于 provider-measured cost；cost record 必须能关联到逻辑 `request_id` 与 provider `request_id`。（验收：注入仅含 aggregate usage 的响应，per-item 字段为 `NOT_PROVIDED`；报告中不存在 exact/derived 伪造数值；ESTIMATED 字段不得标记为 exact。）
 - **FR-039 — SHALL**：telemetry 必须包含延迟、重试次数、结果状态与错误分类，且不得包含输入明文或 secret。（验收：telemetry 快照字段白名单断言。）
 - **FR-040 — SHALL**：telemetry 上报失败不得把调用结果改为成功，也不得吞掉原始失败。（验收：注入 telemetry 故障，调用状态不变。）
 - **FR-041 — SHALL**：能力证据状态只能由第 14 节状态模型与第 15 节 provenance 规则推导，并通过受控只读证据产物或诊断面呈现；不得提供调用方写入能力证据状态的入口，不得把 `CONTRACT_VERIFIED` 推导为 `PROVIDER_VERIFIED` 或 `READY`。（验收：代码中无外部可写证据状态的接口；状态与证据产物逐项对应。）
@@ -586,15 +656,21 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 - **FR-053 — SHALL**：必须把能力证据状态机械区分为 `CONTRACT_VERIFIED`（仅离线契约通过：mock / fixture / synthetic provider response / schema validation）、`PROVIDER_NOT_VERIFIED`（尚无真实 Alibaba DashScope provider evidence，必须 fail closed、禁止表述为 READY）与 `PROVIDER_VERIFIED`（真实 provider evidence 覆盖第 14.3 节全部 10 项适用项）。（验收：证据报告必须逐项标注三态之一，且三态互不替代。）
 - **FR-054 — SHALL**：mock / fixture / synthetic provider response / schema validation 永远不能产生 `PROVIDER_VERIFIED`；缺少真实 provider 调用证据时，对外可用性状态只能是 `PROVIDER_NOT_VERIFIED`，capability evidence 最高只能是 `CONTRACT_VERIFIED`。（验收：仅运行 fake provider 时，对外可用性状态为 `PROVIDER_NOT_VERIFIED`，capability evidence 不高于 `CONTRACT_VERIFIED`，且报告中不出现 `PROVIDER_VERIFIED`。）
 - **FR-055 — SHALL**：任何对外可用声明（含 `READY` 及等价表述）必须同时满足 `CONTRACT_VERIFIED`、`PROVIDER_VERIFIED` 与配置完整；不得仅由契约证据推出 `READY`。（验收：缺少任一条件时不得出现 `READY` 或等价可用声明。）
-- **FR-056 — SHALL**：`PROVIDER_VERIFIED` 证据必须覆盖第 14.3 节 External Provider Verification Coverage 的 10 项适用项（configured model/version、output_type、dense output、dense dimension、sparse payload shape、sparse indices/values、duplicate/malformed/non-finite handling、provider error normalization、timeout behavior、secret non-disclosure）；缺少任一适用项时状态回退为 `PROVIDER_NOT_VERIFIED`。（验收：证据文件逐项列出 10 项对应的真实 provider 观测，缺项即判定不满足。）
-- **FR-057 — SHALL**：`PROVIDER_VERIFIED` 证据必须可复现，至少记录命令、输入摘要、输出摘要、时间、model/version、环境标识、对应覆盖项编号。（验收：证据文件字段完整性断言。）
+- **FR-056 — SHALL**：`PROVIDER_VERIFIED` 证据必须覆盖第 14.3 节 External Provider Verification Coverage 的 10 项适用项（configured model provenance / provider model echo、output_type、dense output、dense dimension、sparse payload shape、sparse vocabulary indices/values、duplicate/malformed/non-finite handling、provider error normalization、timeout behavior、secret non-disclosure）；缺少任一适用项时状态回退为 `PROVIDER_NOT_VERIFIED`。（验收：证据文件逐项列出 10 项对应的真实 provider 观测，缺项即判定不满足。）
+- **FR-057 — SHALL**：`PROVIDER_VERIFIED` 证据必须可复现，至少记录命令、输入摘要、输出摘要、时间、configured model identity、provider `request_id`、provider model echo 状态、环境标识、对应覆盖项编号。（验收：证据文件字段完整性断言。）
 - **FR-058 — SHALL**：`PROVIDER_VERIFIED` 证据不得使用 production professional content、真实家庭数据或 Gold labels 作为输入，也不得把测试 fixture 提升为 professional authority。（验收：输入摘要为合成/脱敏样本；无 Gold Dataset 引用；证据与 fixture 中无可被业务读取的 approval/reviewer 语义。）
 - **FR-059 — SHALL**：在未执行真实 Alibaba DashScope provider 调用时，不得宣称 `READY`、可用、就绪或任何等价结论；对外状态必须为 `PROVIDER_NOT_VERIFIED`。（验收：状态报告字段断言 + 全文检索无 `READY` 类声明。）
 - **FR-060 — SHALL**：`PROVIDER_VERIFIED` 只能由真实 Alibaba DashScope provider evidence 产生；任何 mock、fixture、synthetic provider response、schema validation 或离线契约结果都不得被记录、映射或解释为 provider evidence。（验收：证据来源字段必须指向真实 provider 调用记录；伪造来源被拒绝。）
 - **FR-061 — SHALL**：不得把 `CONTRACT_VERIFIED` 证据升级、推断、聚合或等价声明为 provider evidence；两级证据必须分别记录、分别引用、不可相互替代。（验收：证据清单中两级条目各自独立，且无跨级引用。）
 - **FR-062 — SHALL**：真实 provider evidence 缺少第 14.3 节任一适用覆盖项时，能力证据状态必须保持 `PROVIDER_NOT_VERIFIED`，禁止部分覆盖即宣称 `PROVIDER_VERIFIED`。（验收：逐项删除覆盖证据，状态均回退为 `PROVIDER_NOT_VERIFIED`。）
 
-**Functional Requirements 合计：62 条（FR-001 — FR-062）。**
+- **FR-063 — SHALL**：`sparse index` 必须被解释为 provider vocabulary namespace 中的位置索引，**不是** dense vector 坐标；同一 payload 内必须为非负整数且唯一。（验收：实现与契约测试中不存在以 `dense_dimension` 约束 sparse index 的代码或断言。）
+- **FR-064 — SHALL**：`sparse_vocabulary_max` 只能来自权威 provider capability 或明确 pinned model capability 配置；`observed_max_sparse_index` 仅作证据记录，**不得**升级为 Authority upper bound；未配置时只验证非负整数、唯一性、有限 value 等 provider-contract-safe 约束。（验收：无配置时，超出现有观测范围的合法 index 必须成功；证据字段语义断言。）
+- **FR-065 — SHALL**：Adapter 必须把已验证 sparse payload canonicalize 为按 `index` 升序的确定性顺序后再暴露 normalized response；**不得**假设 provider 返回有序。（验收：无序输入必须得到升序输出；证据中不存在 provider ordering guarantee 声明。）
+- **FR-066 — SHALL**：configured model provenance（`configured_model_id`、`configured_model_version_or_revision`）与 provider model echo 必须分离记录；provider 未回显 `model` / `model_version` 时不得失败，必须记录 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`；provider 回显 `model` 不一致时必须 TERMINAL。（验收：三段 provenance 字段独立断言；echo 缺失成功、echo 冲突失败。）
+- **FR-067 — SHALL**：usage 与成本必须以 request-level provider aggregate 为准；provider 未提供 per-item 数据时，`per_item_usage` 与 `per_item_exact_cost` 必须为 `UNKNOWN` / `NOT_PROVIDED`；禁止平均分摊、字符数推算、填 0，或把估算标记为 exact。（验收：仅 aggregate 响应下字段值断言；`ESTIMATED` 标记不得与 exact 共存。）
+
+**Functional Requirements 合计：67 条（FR-001 — FR-067）。**
 
 ---
 
@@ -681,12 +757,12 @@ TERMINAL        确定性失败，禁止重试
 
 | 编号 | 覆盖项 | 必须由真实 provider 证据证明的内容 | mock 是否可替代 |
 | --- | --- | --- | --- |
-| EVC-01 | configured model/version | 请求配置的 model/version 被 provider 接受并回显一致 | 否 |
+| EVC-01 | configured model identity / provider model echo | `configured_model_id` 被 provider 接受；若响应含 `model` 则 echo 必须一致；configured model version 由配置 provenance 记录，不要求 provider 回显 | 否 |
 | EVC-02 | output_type | 声明的 `dense` / `dense+sparse` 被 provider 实际支持并返回对应结构 | 否 |
 | EVC-03 | dense output | 真实返回可解析的 dense 数值数组 | 否 |
 | EVC-04 | dense dimension | 真实返回长度等于声明 `dense_dimension` | 否 |
-| EVC-05 | sparse payload shape | 真实 sparse payload 结构可被解析为 `{index, value}` | 否 |
-| EVC-06 | sparse indices / values | 真实 index 范围/整数性/唯一性与 value 有限性可被观测 | 否 |
+| EVC-05 | sparse payload shape | 真实 sparse payload 结构可被解析为 `{index, value, token?}`（`token` 为可选、非权威 metadata） | 否 |
+| EVC-06 | sparse vocabulary indices / values | 真实 sparse vocabulary index 的非负整数性、同一 payload 内唯一性与 value 有限性可被观测；记录 `observed_max_sparse_index`，**不得**与 `dense_dimension` 比较 | 否 |
 | EVC-07 | duplicate / malformed / non-finite handling | 真实或受控构造的重复 index、malformed payload、非有限值触发稳定失败 | 否 |
 | EVC-08 | provider error normalization | 真实 provider 错误码被归一化为稳定错误分类且不泄露原始 body | 否 |
 | EVC-09 | timeout behavior | 真实调用在 timeout 预算内终止并给出稳定失败状态 | 否 |
@@ -698,13 +774,25 @@ TERMINAL        确定性失败，禁止重试
 
 ## 15. Version / Provenance Contract
 
-### 15.1 版本绑定
+### 15.1 版本绑定与 provenance
 
-1. 每个请求必须显式携带 `model_id` 与 `model_version`；
-2. 每个响应必须回显 provider、model、version 与 `provider_request_id`；
-3. 请求与回显不一致必须 TERMINAL 失败；
-4. 本 Slice 不定义、不注册 production `embedding_route_version`；
-5. 生产 route 未来必须由独立责任绑定 Gold Dataset 证据与 pinned model version，本 Spec 不授权。
+版本语义拆为三个互相独立的事实层，禁止混用：
+
+1. **Configured identity（配置 provenance）**
+   1. 每个请求必须显式携带 `configured_model_id` 与 `configured_model_version_or_revision`；
+   2. 二者来自 Adapter configuration / deployment configuration，属于**配置事实**，不是 provider 返回事实；
+   3. 本 Slice 不定义、不注册 production `embedding_route_version`。
+2. **Provider echo（provider 返回事实）**
+   1. 若 provider 响应包含 `model`，必须与 `configured_model_id` 一致，否则 TERMINAL；
+   2. 若 provider 响应不包含 `model` 或 `model_version`（原生成功的 DashScope dense/sparse 响应即不含该字段），**不得**因此失败，必须记录 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`；
+   3. 禁止要求 provider 回显其合同未承诺返回的 `model_version`。
+3. **Runtime provenance（执行 provenance）**
+   1. 必须记录本次调用实际使用的 configured model identity、provider 返回的 `request_id`，以及所用 provider endpoint / capability configuration 标识；
+   2. runtime provenance 只证明"使用了哪个配置身份、拿到了哪个 provider 请求 id、走了哪个端点配置"，**不得伪造** provider-returned version。
+
+核心原则：**configured provenance ≠ provider echo。** 任何把内部配置字段描述为 provider 回显事实的表述、字段名或文档声明均不合法。
+
+4. 生产 route 未来必须由独立责任绑定 Gold Dataset 证据与 pinned model version，本 Spec 不授权。
 
 ### 15.2 Provenance 边界
 
@@ -715,7 +803,7 @@ TERMINAL        确定性失败，禁止重试
 
 ### 15.3 证据 provenance
 
-1. 每条 `PROVIDER_VERIFIED` 证据必须绑定 model/version、环境、时间、输入摘要与 EVC 覆盖项编号；
+1. 每条 `PROVIDER_VERIFIED` 证据必须绑定 configured model identity、provider `request_id`、provider model echo 状态、环境、时间、输入摘要与 EVC 覆盖项编号；
 2. 证据不得复用其他 Slice 的 provider 调用记录；
 3. 证据不得由测试 fixture、mock、synthetic response 或 schema validation 伪造为真实调用；
 4. 证据不得包含真实家庭数据或专业内容原文；
@@ -749,17 +837,17 @@ TERMINAL        确定性失败，禁止重试
 - Then 返回 TERMINAL 失败
 - 机械验收：逐类注入 3 种非法值，均失败
 
-### AS-005 — Sparse 正常解析
-- Given `output_type=dense+sparse` 且 payload 含合法 `{index,value}`
+### AS-005 — Provider 无序 sparse 被 Adapter 归一化
+- Given `output_type=dense+sparse`，provider 返回无序 sparse（示例 `7149`、`111290`；且同一 item 中 `3759` 出现在 `1130` 之前）
 - When 执行请求
-- Then 返回归一化 sparse 列表与 dense 向量
-- 机械验收：index 升序/去重断言 + value 有限断言
+- Then Adapter 接受该 payload，返回 dense 向量与按 `index` 升序的 normalized sparse 列表；不因 index 超过 `1023` 而失败
+- 机械验收：归一化输出 index 严格递增断言 + value 有限断言 + 无序输入样例必须成功
 
-### AS-006 — Sparse index 越界
+### AS-006 — Sparse index 不受 dense dimension 约束
 - Given `dense_dimension=1024`
-- When payload 出现 `index=1024`
-- Then 返回 TERMINAL 失败
-- 机械验收：错误码断言
+- When payload 出现 `index=7149` 与 `111290`（满足 sparse contract）
+- Then 请求成功，返回归一化 sparse；**禁止**因为 index 超过 `1023` 而失败
+- 机械验收：成功状态断言 + 输出包含上述两个 index 断言 + 无 dimension-bound 错误码断言
 
 ### AS-007 — Sparse 重复 index
 - Given payload 出现重复 index
@@ -785,11 +873,12 @@ TERMINAL        确定性失败，禁止重试
 - Then 响应中 sparse 为空，且不产生解析副作用
 - 机械验收：字段断言
 
-### AS-011 — Model/version 不一致
-- Given 请求 `model_version=X`
-- When 响应回显 `model_version=Y`
-- Then 返回 TERMINAL 失败
-- 机械验收：错误码断言
+### AS-011 — Model echo 缺失与不一致
+- Given 请求 `configured_model_id=X`
+- When 响应不包含 `model` 字段
+- Then 请求成功，并记录 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`；configured version 仍作为配置 provenance 保留
+- 机械验收：成功状态断言 + echo 状态枚举断言 + 报告中 configured version 不含 provider-returned 标记
+- 补充：给定响应包含 `model=Y`（Y≠X）时，必须返回 TERMINAL 失败；机械验收：错误码断言
 
 ### AS-012 — 配置缺失
 - Given 缺少 `dense_dimension`
@@ -827,11 +916,11 @@ TERMINAL        确定性失败，禁止重试
 - Then 整体失败，无部分结果
 - 机械验收：输出集合为空断言
 
-### AS-018 — 成本记录
-- Given 一次真实调用返回 usage
+### AS-018 — Aggregate usage 与 per-item 缺省
+- Given 一次真实调用只返回 request-level aggregate `usage.total_tokens`
 - When 调用完成
-- Then cost record 含 model/version/usage/单价/总价/request_id
-- 机械验收：字段完整性断言 + 金额计算断言
+- Then request-level cost record 成功记录 `request_id`、`usage.total_tokens`、适用 usage 字段与 pricing/config provenance；`per_item_usage` / `per_item_exact_cost` 为 `NOT_PROVIDED`
+- 机械验收：request-level 字段完整性断言 + per-item 字段必须为 `NOT_PROVIDED` + 无平均分摊/字符推算/填 0 断言
 
 ### AS-019 — 遥测脱敏
 - Given 输入文本包含敏感串
@@ -893,7 +982,44 @@ TERMINAL        确定性失败，禁止重试
 - Then 输出中不出现 `READY` 或"可用/就绪/基本可用"等价结论
 - 机械验收：状态输出全文检索断言 + 禁用词表匹配为 0
 
-**Acceptance Scenarios 合计：28 条（AS-001 — AS-028）。**
+### AS-029 — 非法 sparse index 拒绝
+- Given sparse payload 出现负数或非整数 index（如 `-1`、`3.5`）
+- When Adapter 执行 canonical validation
+- Then 返回 TERMINAL 失败，且不产出 normalized sparse
+- 机械验收：逐类注入断言 + 输出为空断言
+
+### AS-030 — Duplicate index 不得被排序或去重掩盖
+- Given 无序 payload 中含重复 index（含不同 `token` 的重复 index）
+- When Adapter 执行 canonical validation
+- Then 返回 TERMINAL 失败；禁止通过排序、去重或"后者覆盖前者"掩盖重复
+- 机械验收：错误码断言 + 输出为空断言
+
+### AS-031 — 仅权威 vocabulary bound 可拒绝
+- Given 未配置 `sparse_vocabulary_max`，payload index 为 `111290`
+- When 校验
+- Then 请求通过；仅记录 `observed_max_sparse_index=111290`
+- 补充：给定明确配置权威 `sparse_vocabulary_max=N` 且 `index >= N`，必须拒绝
+- 机械验收：无配置时成功断言 + 有配置时失败断言 + observed 值不构成 bound 的字段断言
+
+### AS-032 — 无序 sparse 的 canonical ordering
+- Given provider 返回 index 顺序为 `7149, 111290, 3759, 1130`
+- When Adapter 归一化
+- Then 输出顺序必须为 `1130, 3759, 7149, 111290`；该排序是 Adapter normalization rule，不是 provider guarantee
+- 机械验收：数组逐项相等断言 + 证据中无 "provider guarantees ordering" 声明
+
+### AS-033 — Model echo 缺失不失败
+- Given provider 原生响应仅含 `request_id` / `embeddings` / `usage`
+- When 生成 runtime provenance
+- Then 请求成功，echo 状态为 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`，configured model identity 由配置 provenance 记录
+- 机械验收：成功断言 + provenance 三段字段分离断言
+
+### AS-034 — Aggregate usage 的 per-item 不得伪造
+- Given provider 只提供 `usage.total_tokens`
+- When 生成 cost record
+- Then request-level cost 可记录，per-item usage / exact cost 必须为 `UNKNOWN` / `NOT_PROVIDED`；不得平摊、不得按字符数推算、不得填 0
+- 机械验收：per-item 字段枚举断言 + 伪造值检测为 0
+
+**Acceptance Scenarios 合计：34 条（AS-001 — AS-034）。**
 
 ---
 
@@ -905,7 +1031,7 @@ TERMINAL        确定性失败，禁止重试
 | --- | --- | --- | --- |
 | `CONTRACT_VERIFIED` | 离线契约测试：请求/响应结构、dense 校验、sparse 解析、超时/重试、错误归一化、成本、遥测脱敏、无持久化、无 route（mock / fixture / synthetic / schema validation 均只能到达此态） | 实现后可产生，无需真实 provider | 未取得（尚无实现） |
 | `PROVIDER_NOT_VERIFIED` | 尚无真实 Alibaba DashScope provider evidence 的 fail-closed 状态 | 真实 provider 证据缺失时**始终**成立 | 当前有效状态 |
-| `PROVIDER_VERIFIED` | 受控环境真实 DashScope 调用并覆盖 EVC-01 至 EVC-10：版本回显、output_type、dense 输出与维度、sparse payload shape 与 indices/values、duplicate/malformed/non-finite 处理、错误归一化、timeout 行为、secret 不泄露 | 实现后且具备运行时 secret 与出网许可，并完成受控真实调用 | 未取得（尚无实现与凭据，本轮不调用 provider） |
+| `PROVIDER_VERIFIED` | 受控环境真实 DashScope 调用并覆盖 EVC-01 至 EVC-10：configured model provenance 与 provider model echo（若返回则校验一致）、output_type、dense 输出与维度、sparse payload shape 与 vocabulary indices/values、duplicate/malformed/non-finite 处理、错误归一化、timeout 行为、secret 不泄露 | 实现后且具备运行时 secret 与出网许可，并完成受控真实调用 | 未取得（尚无实现与凭据，本轮不调用 provider） |
 
 Evidence Gate 规则：
 
@@ -954,7 +1080,12 @@ Evidence Gate 规则：
 - **NS-033 — 禁止 mock/fixture/synthetic/schema validation 冒充 PROVIDER_VERIFIED**：不得把离线证据记录、映射或解释为真实 provider evidence；机械验收：证据来源字段必须为真实 provider 调用记录，离线产物标记为 `CONTRACT_VERIFIED`。
 - **NS-034 — 禁止在真实 provider evidence 缺失时宣称 READY**：缺少真实 Alibaba DashScope provider evidence 或覆盖项不全时，不得宣称 `READY`；机械验收：状态输出断言 + 禁用词表匹配为 0。
 
-**Negative-Scope Scenarios 合计：34 条（NS-001 — NS-034）。**
+- **NS-035 — 禁止用 dense dimension 约束 sparse index**：不得把 `0..dense_dimension-1` 作为 sparse index 合法范围，也不得用 dense dimension 作为 sparse vocabulary bound；机械验收：全仓库检索无该上界断言，且 `index >= dense_dimension` 样例必须成功。
+- **NS-036 — 禁止要求 provider 回显其合同未承诺的 `model_version`**：不得把 version echo 缺失判为失败，不得把 configured version 描述为 provider-returned；机械验收：echo 缺失样例成功 + 报告字段审计。
+- **NS-037 — 禁止伪造 per-item usage / exact cost**：不得平均分摊、按字符数推算、填 0，或把估算标记为 exact；机械验收：仅 aggregate usage 场景下 per-item 字段为 `NOT_PROVIDED`。
+- **NS-038 — 禁止声明 provider 保证 sparse 排序**：不得在代码、契约、证据或文档中声明 provider 返回的 `sparse_embedding` 有序；机械验收：检索无 ordering guarantee 声明，无序输入样例必须成功。
+
+**Negative-Scope Scenarios 合计：38 条（NS-001 — NS-038）。**
 
 ---
 
@@ -965,7 +1096,7 @@ Evidence Gate 规则：
 3. **出网**：生产/预发只允许访问白名单 provider 端点；CI 默认**不**访问真实 provider。
 4. **CI**：全部 `CONTRACT_VERIFIED` 测试在 CI 离线运行；`PROVIDER_VERIFIED` 只能通过受控手动 job 或受保护环境执行；CI 默认不访问真实 provider，因此 CI 结果永远不足以产生 `PROVIDER_VERIFIED`。
 5. **成本**：单次与累计成本上限必须可配置；超限 `BLOCKED`。
-6. **区域**：provider region 由配置给定，不得硬编码；响应必须回显实际 region（若 provider 提供）。
+6. **区域**：provider region 由配置给定，不得硬编码；若 provider 响应返回实际 region，可记录该观测值，否则只记录 configured region provenance，不得把配置值描述为 provider 返回事实。
 7. **部署形态**：模块化单体；Adapter 不得成为独立服务，不得引入消息队列、缓存中间件或 worker 拓扑。
 8. **可观测性**：telemetry 仅包含第 12.6 节白名单字段；不得把 provider 原始 body 写入。
 9. **本地开发**：无真实凭据时可完整运行契约测试与 fake provider。
@@ -1040,7 +1171,7 @@ Plan AI 2 **必须**在本节冻结语义下确定以下全部事项，缺一不
 
 ## 20. Clarify Decisions
 
-以下 16 项为本轮 Clarify 的冻结结论，供 Plan AI 2 直接采用。
+以下 20 项为本轮 Clarify 的冻结结论，供 Plan AI 2 直接采用。
 
 - **C20-01 — Adapter Foundation 与 Model Selection 分离**：本 Slice 只提供"可由配置绑定 model/version"的适配能力，不做 model 选择、不做模型对比、不做质量评估。model 选择属于未来 Gold Dataset Eval 责任。
 - **C20-02 — 不提前锁 pinned production model**：`qwen3.7-text-embedding` 是首要候选，但本 Slice 不得把它写成生产锁定常量；生产 pinned version 必须由未来带 Gold Dataset 证据的责任决定。
@@ -1059,7 +1190,12 @@ Plan AI 2 **必须**在本节冻结语义下确定以下全部事项，缺一不
 - **C20-15 — 批量 all-or-nothing**：不返回部分成功集合；避免调用方在不知情时使用不完整 embedding 集合。
 - **C20-16 — 本轮不产出 Plan/Tasks**：本 Spec 之后的 Plan、Checklist、Tasks、Audit 1 属于 Plan AI 2；本 Slice 不授予开发授权。
 
-**Clarify Decisions 合计：16 条（C20-01 — C20-16）。**
+- **C20-17 — Sparse index 是 vocabulary namespace**：sparse index 表示 token / vocabulary 位置，与 dense vector dimension 不是同一坐标空间；任何以 `dense_dimension` 作为 sparse index 上界的规则一律废止。
+- **C20-18 — Configured provenance ≠ provider echo**：`configured_model_id` / `configured_model_version_or_revision` 是配置事实；provider 未回显 version 不构成失败，不得要求其合同未承诺的回显。
+- **C20-19 — Usage 为 request-level**：provider 只提供 request-level aggregate usage；per-item 无 provider 数据时必须为 `UNKNOWN` / `NOT_PROVIDED`，禁止伪造 exact 分解。
+- **C20-20 — Adapter canonical ordering 是 normalization rule**：升序输出由 Adapter 保证，不是 provider guarantee；测试必须区分"provider 输入无序允许"与"Adapter 输出升序"。
+
+**Clarify Decisions 合计：20 条（C20-01 — C20-20）。**
 
 ---
 
@@ -1160,11 +1296,12 @@ Development Authorization: NOT GRANTED
 ## 25. Final Frozen Decision
 
 ```text
-SLICE 20 PLAN AI 1: FINAL PASS
+SLICE 20 PLAN AI 1: CLOSEOUT PENDING REMOTE RE-FREEZE
+REVISION: 2 (targeted provider-contract correction)
 SELECTED RESPONSIBILITY: Embedding Provider Port / Alibaba DashScope Dense+Sparse Adapter Foundation
 SELECTION MODE: route-neutral (A/B/C winner NOT selected)
-SPEC: FROZEN
-READY FOR PLAN AI 2: YES
+SPEC: PENDING RE-READ-BACK (Revision 2)
+READY FOR PLAN AI 2: YES — EFFECTIVE ONLY AFTER REMOTE RE-READ-BACK
 PLANNING DEPENDENCY GATE: PASS
 RUNTIME DEPENDENCY GATE: PASS
 IMPLEMENT GATE: BLOCKED
@@ -1179,14 +1316,17 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 4. 本 Spec 不修改四份 Authority Docs，不修改 Slices 016–019；
 5. 本 Spec 不选 A/B/C 胜者，不注册生产 route，不锁定生产模型；
 6. 本 Spec 当前能力证据状态为 `PROVIDER_NOT_VERIFIED`（尚无实现、尚无真实 provider 证据）；该状态不得被表述成 READY；
-7. 上述 `READY FOR PLAN AI 2: YES` 已在 Remote Freeze Record 的 remote read-back 完成后生效；`SPEC: FROZEN` 已成立。
+7. 上述 `READY FOR PLAN AI 2: YES` 仅在 Revision 2 的 Remote Re-Freeze remote read-back 成功后生效；在此之前 `SPEC` 状态为 `PENDING RE-READ-BACK (Revision 2)`，不得作为 Plan AI 2 的 Spec Authority。
 8. 任何后续变更必须重新经过 Selection Gate 与 Authority 校验，不得以本 Spec 为名扩大 Scope。
+9. Revision 1（commit `c9b681ec` / spec blob `c4bea6c2`）已 `SUPERSEDED`，原因是经官方 Provider contract 证实的三类语义冲突；其历史记录保留在第 26、27 节，但不再具备 Authority。
 
 ---
 
 ## 26. Remote Freeze Record
 
-本节记录 formal remote freeze 的真实结果。freeze candidate 已 push，并由远端正向读回验证；本记录提交是同一 spec 分支上的第二个 spec-only commit，不夹带任何实现。
+本节记录 formal remote freeze 的真实结果。Revision 1 的 freeze candidate 曾被 push，并由远端正向读回验证；该记录作为历史保留，但已因外部 Provider contract 冲突被标记为 `SUPERSEDED`。Revision 2（targeted correction）的 Remote Re-Freeze 尚未执行，状态为 `PENDING`。本节不夹带任何实现。
+
+**Revision 1 freeze record（历史记录，已 `SUPERSEDED`；不得作为当前 Authority）**
 
 | 字段 | 值 |
 | --- | --- |
@@ -1202,10 +1342,55 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 
 冻结状态规则：
 
-1. `SPEC: FROZEN` 只在 remote read-back 成功后才成立；本轮 freeze candidate 已通过 remote read-back，因此 `SPEC: FROZEN` 生效；
+1. `SPEC: FROZEN` 只在对应 Revision 的 remote read-back 成功后才成立；Revision 1 曾通过（现为 `SUPERSEDED`），Revision 2 当前为 `PENDING RE-READ-BACK (Revision 2)`，尚未生效；
 2. Remote Freeze 只允许提交本次允许的 spec / governance-registration 最小文档 delta，不得夹带任何 implementation；
 3. remote read-back 必须重新从远端读取本文件，并确认远端内容与本地 FINAL candidate 一致；
 4. 只有 remote read-back 成功后才允许宣布 `SLICE 20 PLAN AI 1: FINAL PASS`、`SELECTION: PASS`、`SPEC: FROZEN`、`REMOTE FROZEN COMMIT`、`REMOTE SPEC BLOB`、`READY FOR PLAN AI 2: YES`；
 5. Remote Freeze Record 必须绑定 base、freeze candidate commit、spec.md blob、changed files、ahead/behind main，并由远端 read-back 逐项证明；
-6. 本记录固化完成后，branch head 的 spec.md 即 authoritative frozen artifact；任何后续语义变更必须重新经过 Spec/Clarify，不得在 Plan/Implement 中静默改写；
+6. 对已通过 remote read-back 的 Revision，branch head 的 spec.md 即 authoritative frozen artifact；Revision 2 尚未通过 read-back，因此当前不得被当作 frozen artifact。任何后续语义变更必须重新经过 Spec/Clarify，不得在 Plan/Implement 中静默改写；
 7. 无论 remote freeze 是否完成，`IMPLEMENT GATE: BLOCKED` 与 `DEVELOPMENT AUTHORIZATION: NO` 保持不变。
+
+#### Revision 1 status（SUPERSEDED）
+
+| 字段 | 值 |
+| --- | --- |
+| Revision | 1 |
+| Frozen Spec commit | `c9b681ecccbb00a22c4191cb906de8938cc4705b` |
+| Frozen spec.md blob | `c4bea6c2f9699011b78b968cf682eac614414b70` |
+| Status | **SUPERSEDED** |
+| Superseded reason | verified external Provider contract contradiction（sparse index 与 dense dimension 混淆；provider model/version echo 要求超出官方合同；per-item exact usage / cost 要求超出官方合同） |
+| Authority for Plan AI 2 | **NO** — 不得继续作为 Plan AI 2 的 Spec Authority |
+
+历史记录保留：上方主表 `1c8142cf` / `9d74c0b1` 为 Revision 1 的 freeze candidate 与更早 blob 记录，同样属于 Revision 1 历史，不得作为当前 Authority。
+
+#### Revision 2（PENDING，尚未 Remote Re-Freeze）
+
+| 字段 | 值 |
+| --- | --- |
+| Revision | 2（targeted provider-contract correction） |
+| Branch | `spec/020-embedding-provider-adapter-foundation` |
+| Base（origin/main SHA） | `3fecd0b94325539131e1b23885f5240b5a61c0d8` |
+| Revision 2 commit SHA | PENDING |
+| Revision 2 spec.md blob SHA | PENDING |
+| Changed files | `specs/020-embedding-provider-adapter-foundation/spec.md` |
+| Ahead / Behind main | PENDING（Remote Re-Freeze 前实测） |
+| Remote read-back status | PENDING |
+
+---
+
+## 27. Revision History
+
+| Revision | 载体 | 状态 | 依据 |
+| --- | --- | --- | --- |
+| 1 | branch `spec/020-embedding-provider-adapter-foundation`，commit `c9b681ecccbb00a22c4191cb906de8938cc4705b`，spec.md blob `c4bea6c2f9699011b78b968cf682eac614414b70` | **SUPERSEDED** | verified external Provider contract contradiction（sparse index vs dense dimension；provider model/version echo；per-item usage / exact cost） |
+| 2 | 本文件（targeted correction） | **CURRENT CANDIDATE — REMOTE RE-FREEZE PENDING** | 依据第 2.3 节 Provider Contract Baseline 的官方合同事实定向修正 |
+
+Revision 2 的变更范围（只做定向修正，不扩大 Scope）：
+
+1. 废止"sparse index 必须落在 `0..dense_dimension-1`"的错误约束，改为 provider vocabulary namespace 语义；
+2. 拆分 configured model provenance 与 provider model echo，废止"必须回显 version"的要求；
+3. 把 usage / cost 修正为 request-level aggregate 语义，废止 per-item exact 伪造要求；
+4. 把 sparse 升序明确为 Adapter canonical normalization rule，而非 provider guarantee；
+5. 全文 contradiction sweep：FR / AS / NS / C20 / EVC / §8 / §15 同步修订，不留两套相互矛盾的规则。
+
+Selection、Scope、route-neutral、治理边界与证据分层均未改变；本轮不创建 Plan / Checklist / Tasks，不授予开发授权。Revision 2 的 `SPEC: FROZEN` 必须等待 Remote Re-Freeze 的 remote read-back 成功后才能成立。
