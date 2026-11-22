@@ -63,7 +63,7 @@ function identityContextMismatch(): never {
  * from account_id. Verify that authoritative result before set_family_context()
  * is allowed to overwrite app.person_id with a caller-supplied value.
  */
-async function assertIdentityContextMatches(
+export async function assertIdentityContextMatches(
   tx: TxClient,
   opts: { accountId: string; personId: string; purpose: string }
 ): Promise<void> {

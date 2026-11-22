@@ -7,10 +7,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import crypto from 'node:crypto';
 import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
 import { auth, commandHeaders, login, loginWithLabel } from '../setup/api.js';
+import { runIdempotentCommand } from '../../apps/server/api/src/idempotency.js';
 
 let verifyPool: pg.Pool;
 
@@ -169,5 +171,37 @@ describe('Families Integration (T045)', () => {
       },
     });
     expect(res.statusCode).toBe(201);
+  });
+
+  it('Finding #25: Family creation fails closed when Account-Person identity context mismatches', async () => {
+    // 1. Login user A (creates Account A and Person A)
+    const userA = await loginWithLabel(app, 'fam_f25_a');
+    // 2. Login user B (creates Account B and Person B)
+    const userB = await loginWithLabel(app, 'fam_f25_b');
+
+    // 3. Directly invoke runIdempotentCommand with accountA + personB (mismatched person)
+    await expect(
+      runIdempotentCommand(
+        verifyPool,
+        {
+          accountId: userA.accountId,
+          personId: userB.personId, // mismatched person!
+          purpose: 'FAMILY_MANAGEMENT',
+          commandType: 'FAMILY_CREATE',
+          idempotencyKey: 'f25-mismatch-' + crypto.randomUUID(),
+          requestHash: '0000000000000000000000000000000000000000000000000000000000000000',
+        },
+        async () => {
+          return { status: 201, body: {} };
+        }
+      )
+    ).rejects.toThrow();
+
+    // Verify no family was created for person B
+    const fams = await verifyPool.query(
+      'SELECT count(*)::int AS cnt FROM families WHERE created_by_person_id = $1',
+      [userB.personId]
+    );
+    expect(fams.rows[0].cnt).toBe(0);
   });
 });
