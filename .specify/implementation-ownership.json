@@ -413,6 +413,19 @@
       }
     },
     {
+      "id": "common-core-goal-migration-032",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/032_common_core_goal_confirm_goal_package_dependency.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
       "id": "common-core-goal-domain",
       "match": {
         "kind": "PREFIX",
@@ -629,6 +642,20 @@
       "match": {
         "kind": "EXACT",
         "path": "apps/server/api/src/services/digital-use-family-alliance.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "013-digital-use-family-alliance-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-case-lifecycle-authority",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-case-lifecycle.ts"
       },
       "ownership": {
         "kind": "SHARED",
