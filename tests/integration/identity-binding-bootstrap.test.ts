@@ -253,4 +253,89 @@ describe('bootstrap orchestration (T049)', () => {
       openid_tag: null,
     });
   });
+
+  // ── Finding #11: Case B REUSED exact replay correctness ─────────────────────
+  it('Finding #11: exact same-key replay stably restores REUSED, while invalidated authority fails closed', async () => {
+    const target = await createTarget(h, 'f11_caseb', { ageBand: 'UNDER_14' });
+    const code = `f11_caseb_${randomUUID()}`;
+    const key = `f11_key_${randomUUID()}`;
+    const account = await h.admin.query(
+      'INSERT INTO accounts (wechat_openid, session_epoch, status) VALUES ($1, 0, \'ACTIVE\') RETURNING id',
+      [`fake_${code}`]
+    );
+    const accountId = account.rows[0].id as string;
+    await h.admin.query('UPDATE persons SET account_id = $1 WHERE id = $2', [
+      accountId,
+      target.targetPersonId,
+    ]);
+
+    // 1. First execution succeeds with REUSED
+    const firstRes = await bootstrap(h, target.invitationToken, code, key);
+    expect(firstRes.statusCode).toBe(200);
+    expect(firstRes.json().binding).toBe('REUSED');
+    expect(firstRes.json().account.id).toBe(accountId);
+    expect(firstRes.json().person.id).toBe(target.targetPersonId);
+    const firstToken = firstRes.json().sessionToken;
+    expect(typeof firstToken).toBe('string');
+
+    // 2. Exact same-key replay stably restores REUSED with fresh session token
+    const replayRes = await bootstrap(h, target.invitationToken, code, key);
+    expect(replayRes.statusCode).toBe(200);
+    expect(replayRes.json().binding).toBe('REUSED');
+    expect(replayRes.json().account.id).toBe(accountId);
+    expect(replayRes.json().person.id).toBe(target.targetPersonId);
+    expect(typeof replayRes.json().sessionToken).toBe('string');
+
+    // No duplicate attempt or confirmation was written
+    const attempts = await h.admin.query(
+      'SELECT count(*)::int AS n FROM binding_attempts WHERE target_person_id = $1',
+      [target.targetPersonId]
+    );
+    expect(attempts.rows[0].n).toBe(0);
+
+    // 3. Payload mismatch with same key is rejected
+    const originalHash = (
+      await h.admin.query(
+        'SELECT request_hash FROM binding_operation_keys WHERE idempotency_key = $1',
+        [key]
+      )
+    ).rows[0].request_hash;
+    await h.admin.query(
+      'UPDATE binding_operation_keys SET request_hash = $1 WHERE idempotency_key = $2',
+      ['0000000000000000000000000000000000000000000000000000000000000000', key]
+    );
+    const mismatchRes = await bootstrap(h, target.invitationToken, code, key);
+    expect(mismatchRes.statusCode).toBe(409);
+    expect(mismatchRes.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+    // Restore original request_hash for subsequent tests
+    await h.admin.query(
+      'UPDATE binding_operation_keys SET request_hash = $1 WHERE idempotency_key = $2',
+      [originalHash, key]
+    );
+
+    // 4. Invalidation: disable the account -> replay must fail closed (GENERIC / NOT_COMPLETED)
+    await h.admin.query('UPDATE accounts SET status = \'DISABLED\' WHERE id = $1', [accountId]);
+    const disabledReplay = await bootstrap(h, target.invitationToken, code, key);
+    expect(disabledReplay.statusCode).toBe(200);
+    expect(disabledReplay.json().binding).toBe('NOT_COMPLETED');
+    expect(disabledReplay.json().sessionToken).toBeUndefined();
+
+    // 5. Restore active but break person binding -> replay fails closed
+    await h.admin.query('UPDATE accounts SET status = \'ACTIVE\' WHERE id = $1', [accountId]);
+    await h.admin.query('UPDATE persons SET account_id = NULL WHERE id = $1', [target.targetPersonId]);
+    const unboundReplay = await bootstrap(h, target.invitationToken, code, key);
+    expect(unboundReplay.statusCode).toBe(200);
+    expect(unboundReplay.json().binding).toBe('NOT_COMPLETED');
+    expect(unboundReplay.json().sessionToken).toBeUndefined();
+
+    // 6. Restore person binding, set invitation to terminal -> exact replay still restores REUSED without reviving invitation
+    await h.admin.query('UPDATE persons SET account_id = $1 WHERE id = $2', [accountId, target.targetPersonId]);
+    h.port.add(target.invitationToken, { status: 'TERMINAL_UNUSABLE' });
+    const terminalReplay = await bootstrap(h, target.invitationToken, code, key);
+    expect(terminalReplay.statusCode).toBe(200);
+    expect(terminalReplay.json().binding).toBe('REUSED');
+    expect(terminalReplay.json().account.id).toBe(accountId);
+    expect(terminalReplay.json().person.id).toBe(target.targetPersonId);
+    expect(typeof terminalReplay.json().sessionToken).toBe('string');
+  });
 });
