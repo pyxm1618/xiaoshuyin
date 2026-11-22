@@ -10,7 +10,7 @@
 >
 > Role boundary: Plan AI 1 — Selection / Specify / Clarify only
 >
-> Status: SLICE 20 SPEC — TARGETED CLOSEOUT COMPLETE / REMOTE FREEZE PENDING
+> Status: SLICE 20 SPEC — FROZEN (REMOTE READ-BACK VERIFIED)
 >
 > Forbidden in this artifact: Plan / Checklist / Tasks / Audit 1 / production implementation / migration / embedding generation / Gold labels / professional truth / retrieval pipeline / Context Builder / AI Task Runtime / Audit 2 / merge
 >
@@ -39,7 +39,7 @@
 | 上游 Authority 标识 | `Docs/V1技术设计.md` §4.2 / §13.2 / §13.3 / §20；`Docs/总体技术架构.md` §11.2 / §11.3；`V1-C34`、`V1-X14`（真实能力边界） |
 | 下游消费者（未来） | Sparsevec Spike、pg_jieba lexical 对照、RAG A/B/C Gold Dataset Eval、retrieval pipeline、Context Builder、AI Task Runtime |
 
-本 Slice 当前是 **Specification Freeze Candidate**（本地工作区候选，未提交、未推送）；只有在第 26 节 Remote Freeze Record 的 remote read-back 完成后，才允许宣布 `SPEC: FROZEN`。它不是 Planning Freeze，不是实现授权。
+本 Slice 的 Spec 已通过 formal remote freeze（见第 26 节 Remote Freeze Record），状态为 `SPEC: FROZEN`；它不是 Planning Freeze，不是实现授权。
 
 ---
 
@@ -59,10 +59,10 @@ Authority hierarchy（下层不得改写上层）：
 
 ```text
 origin/main:
-0d7ea2fe359b069c798f799c2138259572048d6d
+3fecd0b94325539131e1b23885f5240b5a61c0d8
 
 origin/main tree:
-e53febe249042896b3bb2b9f0b0e1c31a66eb78d
+ad2cacd4516251db131f391539d9227ac5abfa29
 ```
 
 Authority Doc blobs（只读核验所得）：
@@ -152,28 +152,33 @@ blob db1db60eaa3617c0549dd4a6a39826666b8bdddf
 ### 3.1 当前 main
 
 ```text
-current worktree HEAD（Slice 19 分支 `feat/019-pgvector-readiness-current-main`，不是本 Slice 的基线）:
-0f069bb7bb343071266f97fa3a3772fc4d7d2969
-
 origin/main:
-0d7ea2fe359b069c798f799c2138259572048d6d
+3fecd0b94325539131e1b23885f5240b5a61c0d8
+
+origin/main tree:
+ad2cacd4516251db131f391539d9227ac5abfa29
 
 origin/main latest commit:
-Merge pull request #109 from pyxm1618/chore/019-pgvector-readiness-governance-prerequisite
+Merge pull request #110 from pyxm1618/feat/019-pgvector-readiness-current-main
 ```
 
-### 3.2 当前 open PR
+备注：本轮开始时的只读核验得到 `origin/main = 0d7ea2fe`（当时 PR #110 尚未合并）；remote freeze 前重新核验发现 PR #110 已于 2026-11-22T01:48:17Z 合并，因此以 `3fecd0b9` 为最新 Remote Truth，并把本 Spec 分支 merge 到该基线（behind = 0）。
 
-唯一 open PR：
+### 3.2 当前 open PR / 最近合并
+
+`gh pr list --state open` 返回空：当前没有 open PR。
+
+最近合并（Slice 19，与本 Slice 的实现不重叠）：
 
 ```text
-#110  Draft
+#110  MERGED（2026-11-22T01:48:17Z）
 head: feat/019-pgvector-readiness-current-main
 head SHA: 0f069bb7bb343071266f97fa3a3772fc4d7d2969
+merge commit: 3fecd0b94325539131e1b23885f5240b5a61c0d8
 title: feat(s19): implement PostgreSQL 18 pgvector dense vector readiness
 ```
 
-PR #110 属 Slice 19。本 Slice **不评价、不修改、不审计、不合并** PR #110；仅在 Runtime Dependency 中把它视为未来可选消费者。
+PR #110 属 Slice 19。本 Slice **不评价、不修改、不审计**其实现；本 Slice 与它没有实现重叠，也不把它的 runtime 作为本 Slice 的运行前置。
 
 ### 3.3 当前 specs 现状
 
@@ -204,7 +209,7 @@ Slice 18 的 Frozen Spec 只存在于远端 spec 分支 `origin/spec/018-profess
 - DashScope 依赖或 `dashscope` production 代码；
 - embedding adapter、embedding provider port；
 - `knowledge_embeddings` / `knowledge_chunks` 表或迁移；
-- sparsevec / pgvector 检索代码；
+- sparsevec 能力代码、pgvector 检索代码或 retrieval query；
 - reranker、fusion、RRF、retrieval pipeline；
 - Context Builder、AI Task Runtime、TaskModelRegistry；
 - Gold Dataset runtime 或 Gold labels；
@@ -212,12 +217,14 @@ Slice 18 的 Frozen Spec 只存在于远端 spec 分支 `origin/spec/018-profess
 
 最新 migration 为 `db/migrations/030_digital_use_assessment_context.sql`。
 
+`origin/main` 上现在存在 Slice 19 的 dense-vector readiness 资产（`db/init/02-pgvector.sh`、`scripts/lib/pgvector-readiness.mjs`、`scripts/pgvector-readiness.mjs` 及其 tests），但它们是 capability probe，不是 retrieval、不是 embedding adapter；本 Slice 不修改、不扩展它们。
+
 Slice 16 与 Slice 17 已有真实 runtime（`intervention_definitions`、`professional_knowledge_*`、`.ts` services / domain）。本 Slice 不读取、不写入这些表，也不依赖其 runtime。
 
 ### 3.5 当前实现所有权与静态守卫事实
 
 1. `.specify/implementation-ownership.json` 使用 `resolution: LONGEST_MATCH`，未知 production path **fail closed**；未注册任何 embedding / dashscope / sparsevec / `packages/ai|rag` 路径。
-2. `db/init/02-pgvector.sh` 已由 Slice 19 governance prerequisite 以 EXACT 规则预注册，但该文件仅存在于 PR #110，不在 main。
+2. `db/init/02-pgvector.sh` 已在 main（PR #110 合并后），并由 Slice 19 的 EXACT ownership 规则持有；本 Slice 不修改它。
 3. `scripts/guard-static.mjs` 的 Rule 8 `FORBIDDEN_SAFETY_IMPORTS` 包含 `dashscope`，其执行范围为全仓库被扫描的实现代码，而不只是 safety 路径。因此**任何 DashScope adapter 实现都会先被该规则拦截**。
 4. Rule 17 只作用于路径含 `professional-knowledge` 的文件，禁止其引入 RAG/AI runtime、`pgvector`、`sparsevec`、`pg_jieba` 等。本 Slice 不得触碰这些文件。
 5. `FORBIDDEN_PATHS` 仍禁止 `packages/ai`、`packages/rag`、`packages/memory`。
@@ -243,7 +250,7 @@ Phase 3 目前已经具备：
 - Slice 16：professionally reviewed intervention eligibility truth；
 - Slice 17：Professional Knowledge item / version / review / publication truth；
 - Slice 18：Professional Retrieval Gold Dataset evaluation truth（Frozen Spec）；
-- Slice 19：PostgreSQL 18 + pgvector dense `vector` readiness（治理已合并，实现待 PR #110 独立审计与合并）。
+- Slice 19：PostgreSQL 18 + pgvector dense `vector` readiness（治理 PR #109 与实现 PR #110 均已合并到 main）。
 
 目前**不存在**的是：一个能够以统一契约调用真实 embedding provider、并正确处理 DashScope dense 与 sparse payload 的最小适配层。
 
@@ -282,7 +289,7 @@ Phase 3 目前已经具备：
 
 | 编号 | 候选责任 | 独有能力 | 真实缺口 | 可独立验收 | 需要尚不存在的上游 runtime | 是否提前选 A/B/C | 是否侵犯 16/17/18/19 | 是否需伪造 professional truth | 是否当前最小 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| A | sparsevec + DashScope sparse payload readiness | sparsevec 编码/查询 | 是，但仅 A | 否（需真实 payload） | 是（Slice 19 未合并） | 是（A） | 否（但属 19 未授权扩展） | 否 | 否 |
+| A | sparsevec + DashScope sparse payload readiness | sparsevec 编码/查询 | 是，但仅 A | 否（需真实 payload） | 否（Slice 19 已合并，dense runtime 已具备） | 是（A） | 否（但属 19 未授权扩展） | 否 | 否 |
 | B | pg_jieba lexical readiness / 专业词典 | 中文 lexical 分词 | 是，但仅 B | 否（专业词典权威未定） | 是（专业词典 + 可能 17） | 是（B） | 高风险（专业词典 ≈ professional content） | 可能 | 否 |
 | C | Embedding Provider Port / DashScope dense+sparse adapter foundation | dense + sparse 共同输入、§13.3 已冻结 | 是，A/B/C 共同缺口 | 是 | 否 | 否（route-neutral） | 否 | 否 | 是 |
 | D | knowledge_embeddings persistence / lifecycle | 持久化与失效 | 是，但未来 | 否 | 是（需 17 lifecycle 消费语义 + provider 生产者） | 否 | 中（易与 17 的 version/provenance 重叠） | 否 | 否 |
@@ -302,10 +309,9 @@ Phase 3 目前已经具备：
 **A — sparsevec readiness：FAIL**
 
 - 它只能被 A 使用，本质是 candidate-specific；
-- 依赖 Slice 19 的 `vector` runtime 独立审计并合并；
-- 需要真实 DashScope sparse payload，而该 payload 正好由本 Slice 的 Candidate C 提供；
-- 若现在实施，会同时提前选择 A 并越过 Slice 19 边界；
-- 结论：应在 Candidate C 完成并 Slice 19 合并之后，作为独立 Spike 责任重新评估。
+- Slice 19 已合并，dense `vector` runtime 已具备；但 A 仍需要本 Slice 提供的真实 DashScope sparse payload；
+- 若现在实施，会提前选择 A；
+- 结论：应在 Candidate C 完成之后，作为独立 Spike 责任重新评估（不再需要等待 Slice 19 合并）。
 
 **B — pg_jieba / 专业词典：FAIL**
 
@@ -325,7 +331,7 @@ Phase 3 目前已经具备：
 - 不侵犯任何 Slice 的 Authority：不产出 professional truth、不产出 Gold labels、不做检索；
 - 可 fail-closed：配置缺失、维度不匹配、provider 不支持 sparse 都有明确失败状态；
 - 是当前最小合理 Slice；
-- 是当前唯一可独立推进的 Phase 3 上游：不等待 Slice 19 合并，也不选择任何候选；A 还需要 Slice 19 合并 + 真实 sparse payload，B 还需要专业词典 Authority；
+- 是当前唯一可独立推进的 Phase 3 上游：不依赖 Slice 19 runtime（即使其已合并也不需要它），也不选择任何候选；A 还需要真实 sparse payload，B 还需要专业词典 Authority；
 - 现在不做会具体阻塞：sparsevec Spike 无真实 payload；任何 retrieval 实现会各自定义 provider 调用；`embedding_route_version` 无可绑定的执行面。
 
 **D — knowledge_embeddings persistence：FAIL**
@@ -1154,11 +1160,11 @@ Development Authorization: NOT GRANTED
 ## 25. Final Frozen Decision
 
 ```text
-SLICE 20 PLAN AI 1: CLOSEOUT PENDING REMOTE READ-BACK
+SLICE 20 PLAN AI 1: FINAL PASS
 SELECTED RESPONSIBILITY: Embedding Provider Port / Alibaba DashScope Dense+Sparse Adapter Foundation
 SELECTION MODE: route-neutral (A/B/C winner NOT selected)
-SPEC: PENDING REMOTE READ-BACK（remote read-back 成功后才可宣布 FROZEN）
-READY FOR PLAN AI 2: YES（remote read-back 完成后才生效）
+SPEC: FROZEN
+READY FOR PLAN AI 2: YES
 PLANNING DEPENDENCY GATE: PASS
 RUNTIME DEPENDENCY GATE: PASS
 IMPLEMENT GATE: BLOCKED
@@ -1173,31 +1179,33 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 4. 本 Spec 不修改四份 Authority Docs，不修改 Slices 016–019；
 5. 本 Spec 不选 A/B/C 胜者，不注册生产 route，不锁定生产模型；
 6. 本 Spec 当前能力证据状态为 `PROVIDER_NOT_VERIFIED`（尚无实现、尚无真实 provider 证据）；该状态不得被表述成 READY；
-7. 上述 `READY FOR PLAN AI 2: YES` 仅在 Remote Freeze Record 的 remote read-back 完成后才生效；在此之前不得宣布 `SPEC: FROZEN`；
+7. 上述 `READY FOR PLAN AI 2: YES` 已在 Remote Freeze Record 的 remote read-back 完成后生效；`SPEC: FROZEN` 已成立。
 8. 任何后续变更必须重新经过 Selection Gate 与 Authority 校验，不得以本 Spec 为名扩大 Scope。
 
 ---
 
 ## 26. Remote Freeze Record
 
-本节记录 formal remote freeze 的真实结果。**当前为占位（PENDING）**，本轮未执行 commit / push / PR，未创建远端分支。
+本节记录 formal remote freeze 的真实结果。freeze candidate 已 push，并由远端正向读回验证；本记录提交是同一 spec 分支上的第二个 spec-only commit，不夹带任何实现。
 
 | 字段 | 值 |
 | --- | --- |
-| Branch | PENDING |
-| Base（origin/main SHA） | PENDING |
-| Freeze commit SHA | PENDING |
-| spec.md blob SHA | PENDING |
-| Changed files | PENDING |
-| Ahead / Behind main | PENDING |
-| Remote read-back status | PENDING |
+| Branch | `spec/020-embedding-provider-adapter-foundation` |
+| Base（origin/main SHA） | `3fecd0b94325539131e1b23885f5240b5a61c0d8` |
+| Freeze candidate commit SHA | `1c8142cfa17e07fac4ab03d04d1cabee99cf4b77` |
+| Freeze candidate spec.md blob SHA | `9d74c0b12e3ed98df3c51aae21fb32c29ed6d68c` |
+| Freeze record commit SHA | 本记录提交（branch head；SHA 由 Plan AI 1 closeout 报告给出） |
+| Frozen artifact spec.md blob SHA | branch head 的 spec.md（SHA 由 remote read-back 报告给出） |
+| Changed files | `specs/020-embedding-provider-adapter-foundation/spec.md` |
+| Ahead / Behind main | ahead 3 / behind 0（freeze candidate + merge commit + freeze record） |
+| Remote read-back status | VERIFIED（freeze candidate commit `1c8142cf` / blob `9d74c0b1` 已从远端读回并与本地一致） |
 
 冻结状态规则：
 
-1. **在 remote read-back 完成前不得宣布 `SPEC: FROZEN`**；当前状态只能是 `REMOTE FREEZE PENDING`；
+1. `SPEC: FROZEN` 只在 remote read-back 成功后才成立；本轮 freeze candidate 已通过 remote read-back，因此 `SPEC: FROZEN` 生效；
 2. Remote Freeze 只允许提交本次允许的 spec / governance-registration 最小文档 delta，不得夹带任何 implementation；
 3. remote read-back 必须重新从远端读取本文件，并确认远端内容与本地 FINAL candidate 一致；
 4. 只有 remote read-back 成功后才允许宣布 `SLICE 20 PLAN AI 1: FINAL PASS`、`SELECTION: PASS`、`SPEC: FROZEN`、`REMOTE FROZEN COMMIT`、`REMOTE SPEC BLOB`、`READY FOR PLAN AI 2: YES`；
 5. Remote Freeze Record 必须绑定 base、freeze candidate commit、spec.md blob、changed files、ahead/behind main，并由远端 read-back 逐项证明；
-6. 本记录固化完成后，branch head 的 spec.md 即 authoritative frozen artifact；任何后续语义变更必须重新经过 Spec/Clarify，不得在 Plan/Implement 中静默改写。
-5. 无论 remote freeze 是否完成，`IMPLEMENT GATE: BLOCKED` 与 `DEVELOPMENT AUTHORIZATION: NO` 保持不变。
+6. 本记录固化完成后，branch head 的 spec.md 即 authoritative frozen artifact；任何后续语义变更必须重新经过 Spec/Clarify，不得在 Plan/Implement 中静默改写；
+7. 无论 remote freeze 是否完成，`IMPLEMENT GATE: BLOCKED` 与 `DEVELOPMENT AUTHORIZATION: NO` 保持不变。
