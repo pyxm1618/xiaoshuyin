@@ -15,11 +15,15 @@
 
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import pg from 'pg';
 
 const ROOT = new URL('..', import.meta.url).pathname;
-const MIGRATIONS_DIR = join(ROOT, 'db', 'migrations');
+export const DEFAULT_MIGRATIONS_DIR = join(ROOT, 'db', 'migrations');
+const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR
+  ? resolve(process.env.MIGRATIONS_DIR)
+  : DEFAULT_MIGRATIONS_DIR;
+
 const CHECKSUM_RE = /^[0-9a-f]{64}$/;
 const MIGRATION_LOCK_KEY_1 = 20261114;
 const MIGRATION_LOCK_KEY_2 = 1;
@@ -68,16 +72,63 @@ export function sha256(bytes) {
 }
 
 /**
+ * Determine if a top-level statement text is a PostgreSQL transaction-control statement.
+ * Full coverage of PostgreSQL 18 transaction control semantics:
+ * - BEGIN (excluding SQL BEGIN ATOMIC function bodies)
+ * - START TRANSACTION
+ * - COMMIT (including COMMIT PREPARED)
+ * - END
+ * - ROLLBACK (including ROLLBACK TO, ROLLBACK PREPARED)
+ * - ABORT (BLOCKER-001)
+ * - SAVEPOINT
+ * - RELEASE [SAVEPOINT]
+ * - SET TRANSACTION
+ * - SET SESSION CHARACTERISTICS AS TRANSACTION
+ * - PREPARE TRANSACTION
+ */
+export function isTransactionControlStatement(stmtText) {
+  const normalized = stmtText.trim().replace(/\s+/g, ' ');
+  if (/^BEGIN\b/i.test(normalized)) {
+    if (/^BEGIN\s+ATOMIC\b/i.test(normalized)) {
+      return false;
+    }
+    return true;
+  }
+  if (/^START\s+TRANSACTION\b/i.test(normalized)) return true;
+  if (/^COMMIT\b/i.test(normalized)) return true;
+  if (/^END\b/i.test(normalized)) return true;
+  if (/^ROLLBACK\b/i.test(normalized)) return true;
+  if (/^ABORT\b/i.test(normalized)) return true;
+  if (/^SAVEPOINT\b/i.test(normalized)) return true;
+  if (/^RELEASE\s+(?:SAVEPOINT\s+)?[A-Za-z0-9_]+/i.test(normalized)) return true;
+  if (/^SET\s+TRANSACTION\b/i.test(normalized)) return true;
+  if (/^SET\s+SESSION\s+CHARACTERISTICS\s+AS\s+TRANSACTION\b/i.test(normalized)) return true;
+  if (/^PREPARE\s+TRANSACTION\b/i.test(normalized)) return true;
+
+  return false;
+}
+
+/**
  * Scan SQL text and extract top-level statements that match transaction control keywords.
- * Correctly skips line comments, block comments, single quotes, double quotes, and dollar quotes.
+ * Correctly handles:
+ * - Line comments (-- ...)
+ * - Nested block comments (/* ... *\/)
+ * - Standard single quotes ('...' with '' escape)
+ * - PostgreSQL escape strings (E'...' or e'...' with \', \\, and '' escapes - BLOCKER-002)
+ * - Double-quoted identifiers ("..." with "" escape)
+ * - Dollar-quoted function bodies ($$...$$ or $tag$...$tag$)
+ * - SQL-language BEGIN ATOMIC ... END blocks (MEDIUM-001)
  */
 export function scanTopLevelTransactionStatements(content) {
   let i = 0;
   let blockDepth = 0;
   let inLineComment = false;
   let inSingleQuote = false;
+  let inEscapeString = false;
   let inDoubleQuote = false;
   let dollarTag = null;
+  let atomicBlockDepth = 0;
+  let caseDepth = 0;
   let currentStmt = '';
   let stmtStart = 0;
   const statements = [];
@@ -111,38 +162,69 @@ export function scanTopLevelTransactionStatements(content) {
 
     if (dollarTag !== null) {
       if (content.startsWith(dollarTag, i)) {
+        currentStmt += content.slice(i, i + dollarTag.length);
         i += dollarTag.length;
         dollarTag = null;
         continue;
       }
+      currentStmt += ch;
+      i++;
+      continue;
+    }
+
+    if (inEscapeString) {
+      if (ch === '\\') {
+        // Escaped character in E'...' (e.g. \' or \\)
+        currentStmt += content.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (ch === "'" && next === "'") {
+        currentStmt += content.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        inEscapeString = false;
+        currentStmt += ch;
+        i++;
+        continue;
+      }
+      currentStmt += ch;
       i++;
       continue;
     }
 
     if (inSingleQuote) {
       if (ch === "'" && next === "'") {
+        currentStmt += content.slice(i, i + 2);
         i += 2;
         continue;
       }
       if (ch === "'") {
         inSingleQuote = false;
+        currentStmt += ch;
         i++;
         continue;
       }
+      currentStmt += ch;
       i++;
       continue;
     }
 
     if (inDoubleQuote) {
       if (ch === '"' && next === '"') {
+        currentStmt += content.slice(i, i + 2);
         i += 2;
         continue;
       }
       if (ch === '"') {
         inDoubleQuote = false;
+        currentStmt += ch;
         i++;
         continue;
       }
+      currentStmt += ch;
       i++;
       continue;
     }
@@ -152,21 +234,33 @@ export function scanTopLevelTransactionStatements(content) {
       i += 2;
       continue;
     }
-
     if (ch === '/' && next === '*') {
       blockDepth = 1;
       i += 2;
       continue;
     }
 
+    // Check PostgreSQL E'...' escape string prefix
+    if ((ch === 'E' || ch === 'e') && next === "'") {
+      const prevChar = i > 0 ? content[i - 1] : '';
+      if (!/[A-Za-z0-9_]/.test(prevChar)) {
+        inEscapeString = true;
+        currentStmt += content.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+    }
+
     if (ch === "'") {
       inSingleQuote = true;
+      currentStmt += ch;
       i++;
       continue;
     }
 
     if (ch === '"') {
       inDoubleQuote = true;
+      currentStmt += ch;
       i++;
       continue;
     }
@@ -175,12 +269,39 @@ export function scanTopLevelTransactionStatements(content) {
       const tagMatch = /^\$([A-Za-z0-9_]*)\$/.exec(content.slice(i));
       if (tagMatch) {
         dollarTag = tagMatch[0];
+        currentStmt += dollarTag;
         i += dollarTag.length;
         continue;
       }
     }
 
+    // Check BEGIN ATOMIC, CASE, END
+    const remaining = content.slice(i);
+    const wordMatch = /^[A-Za-z_][A-Za-z0-9_]*/.exec(remaining);
+    if (wordMatch) {
+      const word = wordMatch[0].toUpperCase();
+      if (word === 'BEGIN') {
+        const afterBegin = content.slice(i + 5);
+        if (/^\s+ATOMIC\b/i.test(afterBegin)) {
+          atomicBlockDepth++;
+        }
+      } else if (word === 'CASE' && atomicBlockDepth > 0) {
+        caseDepth++;
+      } else if (word === 'END' && atomicBlockDepth > 0) {
+        if (caseDepth > 0) {
+          caseDepth--;
+        } else {
+          atomicBlockDepth--;
+        }
+      }
+    }
+
     if (ch === ';') {
+      if (atomicBlockDepth > 0) {
+        currentStmt += ch;
+        i++;
+        continue;
+      }
       const text = currentStmt.trim();
       if (text) {
         statements.push({ text, start: stmtStart, end: i + 1 });
@@ -204,8 +325,7 @@ export function scanTopLevelTransactionStatements(content) {
     statements.push({ text, start: stmtStart, end: content.length });
   }
 
-  const txRegex = /^(BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION|END)\b/i;
-  return statements.filter((s) => txRegex.test(s.text));
+  return statements.filter((s) => isTransactionControlStatement(s.text));
 }
 
 /**

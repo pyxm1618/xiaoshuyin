@@ -6,15 +6,16 @@
  * Verifies:
  * 1. Fresh database rebuild: all 33 migrations applied in a single clean run, checksums recorded, replay is a no-op.
  * 2. Existing database upgrade: legacy 001-003 state upgrades cleanly without rewriting historical timestamps.
- * 3. Migration SQL failure rollback: when a migration statement fails, DDL is rolled back and no metadata is recorded.
- * 4. Deterministic metadata failure rollback: when DDL succeeds but schema_migrations INSERT fails deterministically,
- *    the DDL changes are 100% rolled back by the runner-owned transaction.
+ * 3. Migration SQL failure rollback through REAL PRODUCTION RUNNER: when a migration statement fails,
+ *    the runner rolls back the transaction, DDL is absent, schema_migrations row is absent, and later migrations are skipped.
+ * 4. Deterministic metadata failure rollback through REAL PRODUCTION RUNNER: when DDL succeeds but schema_migrations
+ *    INSERT fails deterministically via a trigger, the runner-owned transaction rolls back all DDL effects.
  * 5. Checksum mismatch fail-closed: any tampered checksum in schema_migrations causes fail-closed before later migrations.
  * 6. Future migration transaction guard: unauthorized top-level transaction controls and fingerprint mismatches fail closed.
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -22,7 +23,7 @@ import {
   LEGACY_TRANSACTION_WRAPPED_MIGRATIONS,
   scanTopLevelTransactionStatements,
   validateAndPrepareMigrationSql,
-} from '../../scripts/lib/migration-transactions.mjs';
+} from '../../scripts/db-migrate.mjs';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const MIGRATIONS_DIR = join(ROOT, 'db', 'migrations');
@@ -70,6 +71,7 @@ function buildDbUrl(baseUrl: string, dbName: string): string {
 describe('Migration Execution Atomicity (E1 Finding #16)', () => {
   let adminClient: Client;
   const createdDbs: string[] = [];
+  const tempDirs: string[] = [];
 
   beforeAll(async () => {
     if (!TEST_ADMIN_URL || !BASE_MIGRATION_URL) {
@@ -90,6 +92,13 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       }
       await adminClient.end();
     }
+    for (const dir of tempDirs) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
+    }
   });
 
   async function createTempDatabase(prefix: string): Promise<{ dbName: string; dbUrl: string }> {
@@ -98,6 +107,12 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
     await adminClient.query(`CREATE DATABASE ${quoteIdent(dbName)} OWNER ${quoteIdent(migratorRole)}`);
     createdDbs.push(dbName);
     return { dbName, dbUrl: buildDbUrl(BASE_MIGRATION_URL!, dbName) };
+  }
+
+  function createTempMigrationDir(): string {
+    const dir = mkdtempSync(join(ROOT, 'tests', '.tmp-atomicity-migrations-'));
+    tempDirs.push(dir);
+    return dir;
   }
 
   // ─── 1. Fresh Database Rebuild ───
@@ -201,61 +216,76 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
         await clientAfter.end();
       }
     } finally {
-      // client already ended
+      // client ended
     }
   });
 
-  // ─── 3. Migration SQL Failure Rollback ───
-  it('migration SQL failure rolls back all DDL statements in that migration and records no metadata', async () => {
-    const { dbName, dbUrl } = await createTempDatabase('xsy_atom_fail_sql');
+  // ─── 3. Migration SQL Failure Rollback Through REAL Production Runner (HIGH-001) ───
+  it('migration SQL failure through real production runner rolls back DDL and records no metadata', async () => {
+    const { dbName, dbUrl } = await createTempDatabase('xsy_atom_fail_runner_sql');
 
+    // Create an isolated temporary migration directory
+    const tempDir = createTempMigrationDir();
+
+    // Migration 001: creates a table, then fails deterministically on invalid SQL
+    writeFileSync(
+      join(tempDir, '001_succeeds_then_fails.sql'),
+      `
+        CREATE TABLE real_runner_sql_canary (id int PRIMARY KEY);
+        -- Intentional error in middle of migration
+        SELECT * FROM non_existent_table_for_real_runner_fail;
+      `
+    );
+
+    // Migration 002: should NEVER be executed
+    writeFileSync(
+      join(tempDir, '002_should_never_execute.sql'),
+      `CREATE TABLE real_runner_later_table (id int PRIMARY KEY);`
+    );
+
+    let runnerFailed = false;
+    let runnerOutput = '';
+
+    try {
+      execFileSync('node', ['scripts/db-migrate.mjs'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          MIGRATIONS_DIR: tempDir,
+          MIGRATION_DATABASE_URL: dbUrl,
+        },
+      });
+    } catch (err: any) {
+      runnerFailed = true;
+      runnerOutput = `${err.stdout ?? ''}\n${err.stderr ?? ''}`;
+    }
+
+    expect(runnerFailed).toBe(true);
+    expect(runnerOutput).toContain('FAIL 001_succeeds_then_fails.sql');
+
+    // Connect to database and verify atomicity
     const client = new Client({ connectionString: dbUrl });
     await client.connect();
 
     try {
-      await client.query(`
-        CREATE TABLE schema_migrations (
-          filename text PRIMARY KEY,
-          applied_at timestamptz NOT NULL DEFAULT now(),
-          content_checksum text,
-          checksum_origin text,
-          checksum_bound_at timestamptz
-        )
-      `);
-
-      // Execute a failing migration under runner transaction semantics
-      const failingSql = `
-        CREATE TABLE atomicity_canary_table_1 (id int PRIMARY KEY);
-        -- Intentional error in middle of migration
-        SELECT * FROM non_existent_table_for_atomicity_test;
-      `;
-
-      let errorThrown = false;
-      await client.query('BEGIN');
-      try {
-        await client.query(failingSql);
-        await client.query(
-          `INSERT INTO schema_migrations (filename, content_checksum, checksum_origin, checksum_bound_at)
-           VALUES ('999_failing_sql.sql', 'hash', 'APPLIED', now())`
-        );
-        await client.query('COMMIT');
-      } catch (err) {
-        await client.query('ROLLBACK');
-        errorThrown = true;
-      }
-
-      expect(errorThrown).toBe(true);
-
-      // Assert atomicity_canary_table_1 does NOT exist
+      // 1. Canary table must NOT exist in the database (rolled back)
       const { rows: tableRows } = await client.query(`
         SELECT tablename FROM pg_tables
-         WHERE schemaname = 'public' AND tablename = 'atomicity_canary_table_1'
+         WHERE schemaname = 'public' AND tablename = 'real_runner_sql_canary'
       `);
       expect(tableRows.length).toBe(0);
 
-      // Assert schema_migrations has no record
+      // 2. Later migration table must NOT exist
+      const { rows: laterRows } = await client.query(`
+        SELECT tablename FROM pg_tables
+         WHERE schemaname = 'public' AND tablename = 'real_runner_later_table'
+      `);
+      expect(laterRows.length).toBe(0);
+
+      // 3. schema_migrations must contain NO row for the failing migration
       const { rows: metaRows } = await client.query(`
-        SELECT filename FROM schema_migrations WHERE filename = '999_failing_sql.sql'
+        SELECT filename FROM schema_migrations WHERE filename = '001_succeeds_then_fails.sql'
       `);
       expect(metaRows.length).toBe(0);
     } finally {
@@ -263,97 +293,103 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
     }
   });
 
-  // ─── 4. Deterministic Metadata Failure Rollback ───
-  it('deterministic metadata registration failure rolls back all migration DDL within runner-owned transaction', async () => {
-    const { dbName, dbUrl } = await createTempDatabase('xsy_atom_fail_meta');
+  // ─── 4. Deterministic Metadata Failure Rollback Through REAL Production Runner (HIGH-001) ───
+  it('deterministic metadata registration failure through real production runner rolls back DDL completely', async () => {
+    const { dbName, dbUrl } = await createTempDatabase('xsy_atom_fail_runner_meta');
 
+    // Create an isolated temporary migration directory
+    const tempDir = createTempMigrationDir();
+
+    // Migration 001: Valid DDL that creates a table and a custom type
+    const targetFile = '001_valid_ddl_failing_meta.sql';
+    writeFileSync(
+      join(tempDir, targetFile),
+      `
+        CREATE TABLE real_runner_meta_canary (id serial PRIMARY KEY, note text);
+        CREATE TYPE real_runner_meta_enum AS ENUM ('ALPHA', 'BETA');
+      `
+    );
+
+    // Pre-initialize schema_migrations table and attach a deterministic trigger
     const client = new Client({ connectionString: dbUrl });
     await client.connect();
-
     try {
       await client.query(`
-        CREATE TABLE schema_migrations (
+        CREATE TABLE IF NOT EXISTS schema_migrations (
           filename text PRIMARY KEY,
           applied_at timestamptz NOT NULL DEFAULT now(),
           content_checksum text,
           checksum_origin text,
           checksum_bound_at timestamptz
-        )
-      `);
+        );
 
-      // Install a deterministic failure trigger on schema_migrations
-      await client.query(`
-        CREATE OR REPLACE FUNCTION trg_fail_deterministic_test()
+        CREATE OR REPLACE FUNCTION trg_fail_real_runner_meta()
         RETURNS trigger AS $$
         BEGIN
-          IF NEW.filename = '999_deterministic_meta_failure.sql' THEN
+          IF NEW.filename = '${targetFile}' THEN
             RAISE EXCEPTION 'MOCK_DETERMINISTIC_METADATA_INSERT_FAILURE';
           END IF;
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
 
-        CREATE TRIGGER fail_meta_insert_test
+        CREATE TRIGGER test_fail_meta_insert
           BEFORE INSERT ON schema_migrations
           FOR EACH ROW
-          EXECUTE FUNCTION trg_fail_deterministic_test();
+          EXECUTE FUNCTION trg_fail_real_runner_meta();
       `);
+    } finally {
+      await client.end();
+    }
 
-      // Prepare a migration that succeeds in DDL
-      const targetMigration = {
-        filename: '999_deterministic_meta_failure.sql',
-        checksum: '1111111111111111111111111111111111111111111111111111111111111111',
-        executableSql: `
-          CREATE TABLE deterministic_canary_table (id serial PRIMARY KEY, data text);
-          CREATE TYPE deterministic_canary_enum AS ENUM ('ALPHA', 'BETA');
-        `,
-      };
+    // Execute the real production runner
+    let runnerFailed = false;
+    let runnerOutput = '';
 
-      let runnerFailed = false;
-      let failureMessage = '';
+    try {
+      execFileSync('node', ['scripts/db-migrate.mjs'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          MIGRATIONS_DIR: tempDir,
+          MIGRATION_DATABASE_URL: dbUrl,
+        },
+      });
+    } catch (err: any) {
+      runnerFailed = true;
+      runnerOutput = `${err.stdout ?? ''}\n${err.stderr ?? ''}`;
+    }
 
-      // Run exactly as the runner executes
-      await client.query('BEGIN');
-      try {
-        await client.query(targetMigration.executableSql);
-        await client.query(
-          `INSERT INTO schema_migrations
-             (filename, content_checksum, checksum_origin, checksum_bound_at)
-           VALUES ($1, $2, 'APPLIED', now())`,
-          [targetMigration.filename, targetMigration.checksum]
-        );
-        await client.query('COMMIT');
-      } catch (err: any) {
-        await client.query('ROLLBACK');
-        runnerFailed = true;
-        failureMessage = err.message;
-      }
+    expect(runnerFailed).toBe(true);
+    expect(runnerOutput).toContain('MOCK_DETERMINISTIC_METADATA_INSERT_FAILURE');
 
-      expect(runnerFailed).toBe(true);
-      expect(failureMessage).toContain('MOCK_DETERMINISTIC_METADATA_INSERT_FAILURE');
-
-      // CRITICAL ASSERTION:
-      // Even though the DDL succeeded, the failure during schema_migrations insert
-      // must cause a complete ROLLBACK of the DDL changes.
-      const { rows: tableRows } = await client.query(`
+    // Verify DDL changes were completely rolled back by runner-owned transaction
+    const clientVerify = new Client({ connectionString: dbUrl });
+    await clientVerify.connect();
+    try {
+      // Table must NOT exist
+      const { rows: tableRows } = await clientVerify.query(`
         SELECT tablename FROM pg_tables
-         WHERE schemaname = 'public' AND tablename = 'deterministic_canary_table'
+         WHERE schemaname = 'public' AND tablename = 'real_runner_meta_canary'
       `);
       expect(tableRows.length).toBe(0);
 
-      const { rows: typeRows } = await client.query(`
+      // Enum type must NOT exist
+      const { rows: typeRows } = await clientVerify.query(`
         SELECT typname FROM pg_type t
           JOIN pg_namespace n ON n.oid = t.typnamespace
-         WHERE n.nspname = 'public' AND typname = 'deterministic_canary_enum'
+         WHERE n.nspname = 'public' AND typname = 'real_runner_meta_enum'
       `);
       expect(typeRows.length).toBe(0);
 
-      const { rows: metaRows } = await client.query(`
-        SELECT filename FROM schema_migrations WHERE filename = $1
-      `, [targetMigration.filename]);
+      // schema_migrations must have NO entry
+      const { rows: metaRows } = await clientVerify.query(`
+        SELECT filename FROM schema_migrations WHERE filename = '${targetFile}'
+      `);
       expect(metaRows.length).toBe(0);
     } finally {
-      await client.end();
+      await clientVerify.end();
     }
   });
 
@@ -401,8 +437,8 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
     }
   });
 
-  // ─── 6. Future Migration Transaction-Control Guard ───
-  it('future migration transaction guard rejects unwhitelisted top-level transaction controls and fingerprint drift', () => {
+  // ─── 6. Future Migration Transaction-Control Guard & Adversarial Verification ───
+  it('future migration transaction guard enforces fail-closed on transaction control statements', () => {
     // 6a: Normal DDL without transaction control passes
     const valid = validateAndPrepareMigrationSql('031_new_feature.sql', 'CREATE TABLE test (id int);', 'any_checksum');
     expect(valid.stripped).toBe(false);
@@ -410,53 +446,42 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
 
     // 6b: Top-level BEGIN in new migration is rejected
     expect(() => {
-      validateAndPrepareMigrationSql(
-        '031_unauthorized.sql',
-        'BEGIN;\nCREATE TABLE test (id int);\nCOMMIT;',
-        'checksum'
-      );
+      validateAndPrepareMigrationSql('031_unauthorized.sql', 'BEGIN;\nCREATE TABLE test (id int);\nCOMMIT;', 'checksum');
     }).toThrow(/MIGRATION_UNAUTHORIZED_TRANSACTION_CONTROL/);
 
-    // 6c: Top-level ROLLBACK in new migration is rejected
+    // 6c: ABORT in new migration is rejected (BLOCKER-001)
     expect(() => {
-      validateAndPrepareMigrationSql(
-        '032_unauthorized_rollback.sql',
-        'ROLLBACK;',
-        'checksum'
-      );
+      validateAndPrepareMigrationSql('031_unauthorized_abort.sql', 'CREATE TABLE canary(id int);\nABORT;', 'checksum');
     }).toThrow(/MIGRATION_UNAUTHORIZED_TRANSACTION_CONTROL/);
 
-    // 6d: Whitelisted legacy filename with drifted fingerprint is rejected
+    // 6d: Top-level COMMIT hidden behind E'...' string is rejected (BLOCKER-002)
+    expect(() => {
+      validateAndPrepareMigrationSql('031_unauthorized_estring.sql', "SELECT E'it\\'s okay';\nCOMMIT;", 'checksum');
+    }).toThrow(/MIGRATION_UNAUTHORIZED_TRANSACTION_CONTROL/);
+
+    // 6e: SQL-language BEGIN ATOMIC function body is preserved and accepted (MEDIUM-001)
+    const atomicSql = `
+      CREATE FUNCTION f()
+      RETURNS integer
+      LANGUAGE SQL
+      BEGIN ATOMIC
+        SELECT 1;
+      END;
+    `;
+    const atomicResult = validateAndPrepareMigrationSql('031_atomic.sql', atomicSql, 'checksum');
+    expect(atomicResult.stripped).toBe(false);
+    expect(atomicResult.executableSql).toBe(atomicSql);
+
+    // 6f: Whitelisted legacy filename with drifted fingerprint is rejected
     const legacyName = '023_digital_use_review_runtime_authority_reconciled.sql';
     expect(() => {
-      validateAndPrepareMigrationSql(
-        legacyName,
-        'BEGIN;\nCREATE TABLE t (id int);\nCOMMIT;',
-        'wrong_tampered_fingerprint'
-      );
+      validateAndPrepareMigrationSql(legacyName, 'BEGIN;\nCREATE TABLE t (id int);\nCOMMIT;', 'wrong_tampered_fingerprint');
     }).toThrow(/MIGRATION_LEGACY_FINGERPRINT_MISMATCH/);
 
-    // 6e: Whitelisted legacy filename with invalid structure (extra BEGIN) is rejected
+    // 6g: Whitelisted legacy filename with invalid structure is rejected
     const expectedHash = LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.get(legacyName)!;
     expect(() => {
-      validateAndPrepareMigrationSql(
-        legacyName,
-        'BEGIN;\nBEGIN;\nCREATE TABLE t (id int);\nCOMMIT;',
-        expectedHash
-      );
+      validateAndPrepareMigrationSql(legacyName, 'BEGIN;\nBEGIN;\nCREATE TABLE t (id int);\nCOMMIT;', expectedHash);
     }).toThrow(/MIGRATION_LEGACY_STRUCTURE_INVALID/);
-
-    // 6f: PL/pgSQL function containing BEGIN/END within dollar quotes is preserved intact
-    const plpgsqlSql = `
-      CREATE FUNCTION do_work() RETURNS void LANGUAGE plpgsql AS $$
-      BEGIN
-        IF true THEN
-          PERFORM 1;
-        END IF;
-      END $$;
-    `;
-    const fnResult = validateAndPrepareMigrationSql('033_plpgsql.sql', plpgsqlSql, 'hash');
-    expect(fnResult.stripped).toBe(false);
-    expect(fnResult.executableSql).toBe(plpgsqlSql);
   });
 });

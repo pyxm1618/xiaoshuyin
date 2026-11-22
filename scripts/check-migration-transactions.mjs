@@ -4,7 +4,7 @@
  *
  * Dedicated governance guard for migration transaction boundaries.
  * Enforces that no migration outside the immutable 8-file legacy whitelist
- * may contain top-level transaction control statements (BEGIN, COMMIT, ROLLBACK).
+ * may contain top-level transaction control statements.
  *
  * Usage:
  *   node scripts/check-migration-transactions.mjs
@@ -13,101 +13,131 @@
 
 import { join } from 'node:path';
 import {
+  DEFAULT_MIGRATIONS_DIR,
   LEGACY_TRANSACTION_WRAPPED_MIGRATIONS,
-  scanAndValidateMigrations,
   validateAndPrepareMigrationSql,
-} from './lib/migration-transactions.mjs';
-
-const ROOT = new URL('..', import.meta.url).pathname;
-const MIGRATIONS_DIR = join(ROOT, 'db', 'migrations');
+} from './db-migrate.mjs';
+import { scanAndValidateMigrations } from './lib/migration-transactions.mjs';
 
 function runSelfTest() {
-  console.log('Running check-migration-transactions self-test...');
+  console.log('Running check-migration-transactions self-test with adversarial fixtures...');
   let failures = 0;
 
-  // Case 1: normal migration without transaction controls passes
-  try {
-    const normal = validateAndPrepareMigrationSql('001_initial_schema.sql', 'CREATE TABLE t (id int);', 'abc');
-    if (normal.stripped !== false) throw new Error('Expected stripped=false');
-  } catch (err) {
-    console.error('Self-test Case 1 failed:', err.message);
-    failures++;
+  function expectAccept(name, filename, sql) {
+    try {
+      const res = validateAndPrepareMigrationSql(filename, sql, 'any_checksum');
+      if (res.stripped) {
+        console.error(`Self-test FAIL [${name}]: expected stripped=false`);
+        failures++;
+      }
+    } catch (err) {
+      console.error(`Self-test FAIL [${name}]: expected ACCEPT but threw: ${err.message}`);
+      failures++;
+    }
   }
 
-  // Case 2: authorized legacy migration with correct fingerprint & structure passes and strips
+  function expectReject(name, filename, sql, expectedErrCode = 'MIGRATION_UNAUTHORIZED_TRANSACTION_CONTROL') {
+    try {
+      validateAndPrepareMigrationSql(filename, sql, 'any_checksum');
+      console.error(`Self-test FAIL [${name}]: expected REJECT but passed`);
+      failures++;
+    } catch (err) {
+      if (!err.message.includes(expectedErrCode)) {
+        console.error(`Self-test FAIL [${name}]: expected error ${expectedErrCode}, got: ${err.message}`);
+        failures++;
+      }
+    }
+  }
+
+  // ─── Adversarial Test Matrix ───
+  // Case A — ABORT (BLOCKER-001)
+  expectReject('Case A — ABORT', '031_abort.sql', 'CREATE TABLE canary(id int);\nABORT;');
+
+  // Case B — PostgreSQL E string escaping (BLOCKER-002)
+  expectReject('Case B — E string hides COMMIT', '031_estring.sql', "SELECT E'it\\'s okay';\nCOMMIT;");
+
+  // Case C — Line comment
+  expectAccept('Case C — comment', '031_comment.sql', '-- COMMIT;\nSELECT 1;');
+
+  // Case D — Block comment
+  expectAccept('Case D — block comment', '031_block_comment.sql', '/* ROLLBACK; */\nSELECT 1;');
+
+  // Case E — Ordinary quoted string
+  expectAccept('Case E — ordinary string', '031_ord_str.sql', "SELECT 'COMMIT;';");
+
+  // Case F — Dollar-quoted PL/pgSQL body
+  expectAccept('Case F — dollar quoted PL/pgSQL', '031_dollar.sql', 'DO $$\nBEGIN\n  PERFORM 1;\nEND;\n$$;');
+
+  // Case G — SQL-language BEGIN ATOMIC function body (MEDIUM-001)
+  expectAccept(
+    'Case G — SQL BEGIN ATOMIC',
+    '031_atomic.sql',
+    'CREATE FUNCTION f()\nRETURNS integer\nLANGUAGE SQL\nBEGIN ATOMIC\n  SELECT 1;\nEND;'
+  );
+
+  // Case H — Unexpected future SAVEPOINT
+  expectReject('Case H — SAVEPOINT', '031_savepoint.sql', 'SAVEPOINT x;');
+
+  // Case I — RELEASE SAVEPOINT
+  expectReject('Case I — RELEASE SAVEPOINT', '031_release.sql', 'RELEASE SAVEPOINT x;');
+
+  // Case J — ROLLBACK TO SAVEPOINT
+  expectReject('Case J — ROLLBACK TO', '031_rollback_to.sql', 'ROLLBACK TO SAVEPOINT x;');
+
+  // Case K — PREPARE TRANSACTION
+  expectReject('Case K — PREPARE TRANSACTION', '031_prepare_tx.sql', "PREPARE TRANSACTION 'tx1';");
+
+  // Case L — SET TRANSACTION
+  expectReject('Case L — SET TRANSACTION', '031_set_tx.sql', 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;');
+
+  // ─── Legacy Whitelist Semantics ───
+  // Case M — Authorized legacy migration with exact fingerprint and structure strips cleanly
   try {
     const legacyName = '023_digital_use_review_runtime_authority_reconciled.sql';
     const legacyHash = LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.get(legacyName);
     const legacySql = `BEGIN;\nCREATE TABLE t (id int);\nCOMMIT;`;
     const prepared = validateAndPrepareMigrationSql(legacyName, legacySql, legacyHash);
-    if (!prepared.stripped) throw new Error('Expected stripped=true');
-    if (/BEGIN|COMMIT/i.test(prepared.executableSql.trim())) {
-      throw new Error('Expected outer BEGIN/COMMIT to be stripped');
-    }
-  } catch (err) {
-    console.error('Self-test Case 2 failed:', err.message);
-    failures++;
-  }
-
-  // Case 3: unauthorized migration with BEGIN fails closed
-  try {
-    validateAndPrepareMigrationSql('031_future_test.sql', 'BEGIN;\nCREATE TABLE t (id int);\nCOMMIT;', 'hash');
-    console.error('Self-test Case 3 failed: expected exception for unauthorized migration');
-    failures++;
-  } catch (err) {
-    if (!err.message.includes('MIGRATION_UNAUTHORIZED_TRANSACTION_CONTROL')) {
-      console.error('Self-test Case 3 failed: unexpected error message:', err.message);
+    if (!prepared.stripped) {
+      console.error('Self-test FAIL [Case M]: expected stripped=true');
       failures++;
     }
+  } catch (err) {
+    console.error('Self-test FAIL [Case M]:', err.message);
+    failures++;
   }
 
-  // Case 4: legacy migration with fingerprint mismatch fails closed
+  // Case N — Legacy migration with fingerprint mismatch fails closed
   try {
     const legacyName = '023_digital_use_review_runtime_authority_reconciled.sql';
-    validateAndPrepareMigrationSql(legacyName, 'BEGIN;\nCREATE TABLE t (id int);\nCOMMIT;', 'wrong_hash');
-    console.error('Self-test Case 4 failed: expected exception for fingerprint mismatch');
+    validateAndPrepareMigrationSql(legacyName, 'BEGIN;\nCREATE TABLE t (id int);\nCOMMIT;', 'tampered_hash');
+    console.error('Self-test FAIL [Case N]: expected exception for fingerprint mismatch');
     failures++;
   } catch (err) {
     if (!err.message.includes('MIGRATION_LEGACY_FINGERPRINT_MISMATCH')) {
-      console.error('Self-test Case 4 failed: unexpected error message:', err.message);
+      console.error('Self-test FAIL [Case N]: unexpected error:', err.message);
       failures++;
     }
   }
 
-  // Case 5: legacy migration with multiple BEGINs fails closed
+  // Case O — Legacy migration with invalid structure (extra BEGIN) fails closed
   try {
     const legacyName = '023_digital_use_review_runtime_authority_reconciled.sql';
     const legacyHash = LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.get(legacyName);
     validateAndPrepareMigrationSql(legacyName, 'BEGIN;\nBEGIN;\nCREATE TABLE t (id int);\nCOMMIT;', legacyHash);
-    console.error('Self-test Case 5 failed: expected exception for structure invalid');
+    console.error('Self-test FAIL [Case O]: expected exception for invalid structure');
     failures++;
   } catch (err) {
     if (!err.message.includes('MIGRATION_LEGACY_STRUCTURE_INVALID')) {
-      console.error('Self-test Case 5 failed: unexpected error message:', err.message);
+      console.error('Self-test FAIL [Case O]: unexpected error:', err.message);
       failures++;
     }
-  }
-
-  // Case 6: PL/pgSQL block with internal BEGIN/END is allowed
-  try {
-    const plpgsqlSql = `
-      CREATE FUNCTION f() RETURNS void LANGUAGE plpgsql AS $$
-      BEGIN
-        PERFORM 1;
-      END $$;
-    `;
-    const res = validateAndPrepareMigrationSql('099_fn.sql', plpgsqlSql, 'any');
-    if (res.stripped) throw new Error('Expected stripped=false for PL/pgSQL');
-  } catch (err) {
-    console.error('Self-test Case 6 failed:', err.message);
-    failures++;
   }
 
   if (failures > 0) {
     console.error(`check-migration-transactions self-test: FAIL (${failures} failures)`);
     process.exit(1);
   }
-  console.log('check-migration-transactions self-test: PASS (6/6 synthetic fixtures validated)');
+  console.log('check-migration-transactions self-test: PASS (15/15 adversarial and legacy fixtures validated)');
 }
 
 function main() {
@@ -117,7 +147,7 @@ function main() {
   }
 
   try {
-    const results = scanAndValidateMigrations(MIGRATIONS_DIR);
+    const results = scanAndValidateMigrations(DEFAULT_MIGRATIONS_DIR);
     const strippedCount = results.filter((r) => r.stripped).length;
     console.log(
       `check-migration-transactions: PASS (${results.length} migrations validated, ${strippedCount} legacy stripped)`
