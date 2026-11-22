@@ -109,10 +109,59 @@ export function isTransactionControlStatement(stmtText) {
 }
 
 /**
+ * Skip SQL lexical trivia (whitespace, line comments, nested block comments)
+ * starting at `start` and return the index of the first non-trivia character.
+ * Used for keyword lookahead where a comment must behave as a whitespace
+ * separator between tokens (e.g. BEGIN/*x*\/ATOMIC).
+ */
+function skipSqlTrivia(content, start) {
+  let j = start;
+
+  while (j < content.length) {
+    const ch = content[j];
+
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f' || ch === '\v') {
+      j++;
+      continue;
+    }
+
+    if (ch === '-' && content[j + 1] === '-') {
+      j += 2;
+      while (j < content.length && content[j] !== '\n') j++;
+      continue;
+    }
+
+    if (ch === '/' && content[j + 1] === '*') {
+      let depth = 1;
+      j += 2;
+      while (j < content.length && depth > 0) {
+        if (content[j] === '/' && content[j + 1] === '*') {
+          depth++;
+          j += 2;
+          continue;
+        }
+        if (content[j] === '*' && content[j + 1] === '/') {
+          depth--;
+          j += 2;
+          continue;
+        }
+        j++;
+      }
+      continue;
+    }
+
+    break;
+  }
+
+  return j;
+}
+
+/**
  * Scan SQL text and extract top-level statements that match transaction control keywords.
  * Correctly handles:
  * - Line comments (-- ...)
  * - Nested block comments (/* ... *\/)
+ * - Comments as lexical whitespace separators (COMMIT/*x*\/WORK == COMMIT WORK)
  * - Standard single quotes ('...' with '' escape)
  * - PostgreSQL escape strings (E'...' or e'...' with \', \\, and '' escapes - BLOCKER-002)
  * - Double-quoted identifiers ("..." with "" escape)
@@ -132,6 +181,22 @@ export function scanTopLevelTransactionStatements(content) {
   let currentStmt = '';
   let stmtStart = 0;
   const statements = [];
+
+  function appendLexicalSeparator() {
+    if (currentStmt.length === 0) return;
+    const last = currentStmt[currentStmt.length - 1];
+    if (
+      last === ' ' ||
+      last === '\t' ||
+      last === '\n' ||
+      last === '\r' ||
+      last === '\f' ||
+      last === '\v'
+    ) {
+      return;
+    }
+    currentStmt += ' ';
+  }
 
   while (i < content.length) {
     const ch = content[i];
@@ -230,11 +295,14 @@ export function scanTopLevelTransactionStatements(content) {
     }
 
     if (ch === '-' && next === '-') {
+      // A comment is a lexical whitespace separator, never a token joiner.
+      appendLexicalSeparator();
       inLineComment = true;
       i += 2;
       continue;
     }
     if (ch === '/' && next === '*') {
+      appendLexicalSeparator();
       blockDepth = 1;
       i += 2;
       continue;
@@ -281,8 +349,8 @@ export function scanTopLevelTransactionStatements(content) {
     if (wordMatch) {
       const word = wordMatch[0].toUpperCase();
       if (word === 'BEGIN') {
-        const afterBegin = content.slice(i + 5);
-        if (/^\s+ATOMIC\b/i.test(afterBegin)) {
+        const afterTrivia = skipSqlTrivia(content, i + 5);
+        if (/^ATOMIC\b/i.test(content.slice(afterTrivia))) {
           atomicBlockDepth++;
         }
       } else if (word === 'CASE' && atomicBlockDepth > 0) {
@@ -332,26 +400,32 @@ export function scanTopLevelTransactionStatements(content) {
  * Validate migration SQL for transaction control rules and return executable SQL.
  */
 export function validateAndPrepareMigrationSql(filename, sql, rawChecksum) {
-  const txStmts = scanTopLevelTransactionStatements(sql);
-
-  if (txStmts.length === 0) {
-    return { executableSql: sql, stripped: false };
-  }
-
   const expectedFingerprint = LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.get(filename);
+
   if (!expectedFingerprint) {
+    const txStmts = scanTopLevelTransactionStatements(sql);
+    if (txStmts.length === 0) {
+      return { executableSql: sql, stripped: false };
+    }
+
     throw new Error(
       `MIGRATION_UNAUTHORIZED_TRANSACTION_CONTROL ${filename}: ` +
         `Top-level transaction statement forbidden in migrations (${txStmts.map((s) => s.text).join(', ')}).`
     );
   }
 
+  // Protected legacy filename: the immutable raw fingerprint must be verified
+  // unconditionally before any early return or structural scan. A tampered
+  // legacy migration whose outer BEGIN/COMMIT was deleted must still fail
+  // closed here instead of being mistaken for an ordinary migration.
   if (rawChecksum !== expectedFingerprint) {
     throw new Error(
       `MIGRATION_LEGACY_FINGERPRINT_MISMATCH ${filename}: ` +
         `Expected ${expectedFingerprint}, got ${rawChecksum}.`
     );
   }
+
+  const txStmts = scanTopLevelTransactionStatements(sql);
 
   if (txStmts.length !== 2) {
     throw new Error(

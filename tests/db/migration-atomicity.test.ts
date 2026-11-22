@@ -15,13 +15,23 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { Client } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   LEGACY_TRANSACTION_WRAPPED_MIGRATIONS,
   scanTopLevelTransactionStatements,
+  sha256,
   validateAndPrepareMigrationSql,
 } from '../../scripts/db-migrate.mjs';
 
@@ -392,6 +402,126 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       await clientVerify.end();
     }
   });
+
+  // ─── 4b. Real Legacy Stripping Path Through REAL Production Runner (HIGH) ───
+  it(
+    'real legacy migration stripping path rolls back schema effects when metadata insert fails deterministically',
+    async () => {
+      const { dbUrl } = await createTempDatabase('xsy_atom_legacy_runner');
+      const targetFile = '023_digital_use_review_runtime_authority_reconciled.sql';
+      const expectedHash = LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.get(targetFile)!;
+      const targetBytes = readFileSync(join(MIGRATIONS_DIR, targetFile));
+
+      // The repository file must be byte-identical to the frozen fingerprint and
+      // must genuinely take the runtime stripping path (never a fake fixture).
+      expect(sha256(targetBytes)).toBe(expectedHash);
+      const stripped = validateAndPrepareMigrationSql(
+        targetFile,
+        targetBytes.toString('utf8'),
+        expectedHash
+      );
+      expect(stripped.stripped).toBe(true);
+
+      // Stage real prerequisite migrations byte-for-byte (all files before 023).
+      const tempDir = createTempMigrationDir();
+      const prerequisiteFiles = readdirSync(MIGRATIONS_DIR)
+        .filter((f) => f.endsWith('.sql') && f.slice(0, 3) < '023')
+        .sort();
+      expect(prerequisiteFiles.length).toBe(23);
+      for (const file of prerequisiteFiles) {
+        copyFileSync(join(MIGRATIONS_DIR, file), join(tempDir, file));
+      }
+
+      // Apply prerequisites through the real production runner.
+      const prerequisiteRun = execFileSync('node', ['scripts/db-migrate.mjs'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: { ...process.env, MIGRATIONS_DIR: tempDir, MIGRATION_DATABASE_URL: dbUrl },
+      });
+      expect(prerequisiteRun).toContain(
+        `Migration complete: ${prerequisiteFiles.length} new, 0 previously applied.`
+      );
+
+      // Install a deterministic BEFORE INSERT failure bound to the real legacy
+      // filename. No random network or timing failure injection is used.
+      const client = new Client({ connectionString: dbUrl });
+      await client.connect();
+      try {
+        await client.query(`
+          CREATE OR REPLACE FUNCTION trg_fail_legacy_meta()
+          RETURNS trigger AS $$
+          BEGIN
+            IF NEW.filename = '${targetFile}' THEN
+              RAISE EXCEPTION 'MOCK_DETERMINISTIC_LEGACY_METADATA_INSERT_FAILURE';
+            END IF;
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql;
+
+          CREATE TRIGGER test_fail_legacy_meta_insert
+            BEFORE INSERT ON schema_migrations
+            FOR EACH ROW
+            EXECUTE FUNCTION trg_fail_legacy_meta();
+        `);
+      } finally {
+        await client.end();
+      }
+
+      // Stage the real legacy migration byte-for-byte into the same directory.
+      copyFileSync(join(MIGRATIONS_DIR, targetFile), join(tempDir, targetFile));
+      expect(sha256(readFileSync(join(tempDir, targetFile)))).toBe(expectedHash);
+
+      let runnerFailed = false;
+      let runnerOutput = '';
+
+      try {
+        execFileSync('node', ['scripts/db-migrate.mjs'], {
+          cwd: ROOT,
+          encoding: 'utf8',
+          env: { ...process.env, MIGRATIONS_DIR: tempDir, MIGRATION_DATABASE_URL: dbUrl },
+        });
+      } catch (err: any) {
+        runnerFailed = true;
+        runnerOutput = `${err.stdout ?? ''}\n${err.stderr ?? ''}`;
+      }
+
+      expect(runnerFailed).toBe(true);
+      expect(runnerOutput).toContain(`APPLY ${targetFile}`);
+      expect(runnerOutput).toContain('MOCK_DETERMINISTIC_LEGACY_METADATA_INSERT_FAILURE');
+
+      const verify = new Client({ connectionString: dbUrl });
+      await verify.connect();
+      try {
+        // 023 widens these three scene_artifacts CHECK constraints with the
+        // Digital Use vocabulary; a rollback must restore the pre-023 definitions.
+        const { rows: constraintRows } = await verify.query(`
+          SELECT conname, pg_get_constraintdef(oid, true) AS def
+            FROM pg_constraint
+           WHERE conrelid = 'scene_artifacts'::regclass
+             AND conname IN (
+               'scene_artifacts_type_check',
+               'scene_artifacts_source_node_check',
+               'scene_artifacts_type_source_check'
+             )
+           ORDER BY conname
+        `);
+        expect(constraintRows.length).toBe(3);
+        for (const row of constraintRows) {
+          expect(row.def).not.toContain('DIGITAL_USE_A5001_EFFECT_EVALUATION');
+          expect(row.def).not.toContain('DIGITAL_USE_A5002_EFFECT_EVALUATION');
+        }
+
+        const { rows: metaRows } = await verify.query(
+          'SELECT filename FROM schema_migrations WHERE filename = $1',
+          [targetFile]
+        );
+        expect(metaRows.length).toBe(0);
+      } finally {
+        await verify.end();
+      }
+    },
+    120000
+  );
 
   // ─── 5. Checksum Mismatch Fail-Closed ───
   it('checksum mismatch causes runner to fail closed before applying any new migration', async () => {
