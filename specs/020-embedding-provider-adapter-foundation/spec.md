@@ -140,7 +140,7 @@ blob db1db60eaa3617c0549dd4a6a39826666b8bdddf
 - URL：`https://help.aliyun.com/zh/model-studio/text-embedding-synchronous-api`
 - 核验日期：2026-11-22（本轮由主流程直接读取官方文档核验，下列事实清单与其一致；不以博客、SDK 示例仓库或第三方文章覆盖官方合同）
 - 适用能力：DashScope **原生** text-embedding 接口（稀疏输出仅通过原生接口提供；OpenAI 兼容接口不支持 sparse）
-- 官方页面自身存在 response 展示歧义：正文明确说明 **HTTP 接口 JSON 中 `embeddings` 包裹在 `output` 内**，但同一“成功响应”示例又展示 top-level `embeddings`。因此本 Revision 不擅自忽略任一官方 documented shape，而冻结为下述 **NARROW DOCUMENTED DUAL-ENVELOPE NORMALIZATION**；真实 provider 单次观测只记录 evidence，不自动收窄 Frozen Spec。
+- 官方页面**没有为 native HTTP 定义两种成功 envelope**：页面明确说明其下方 flat `request_id / embeddings / usage` 字段与示例属于 **Python SDK 2.0 response object**，并同时明确说明 **HTTP 接口返回的 JSON 中，`embeddings` 包裹在 `output` 内**。因此 MODE A native HTTP 的唯一 documented success embedding path 是 `output.embeddings`；top-level `embeddings` 是 SDK surface，不是 native HTTP compatibility shape。
 
 #### 请求契约
 
@@ -161,11 +161,11 @@ POST https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api/v1/services/embeddin
 
 本 Spec 的逻辑取值 `dense` / `dense+sparse` 与 provider 字面量之间的映射由 Adapter 负责，Plan AI 2 必须在 Provider contract 复核后确定，不得把内部逻辑名当作 provider 字面量事实。
 
-#### 成功响应契约 — NARROW DOCUMENTED DUAL-ENVELOPE NORMALIZATION
+#### 成功响应契约 — STRICT NATIVE HTTP OUTPUT ENVELOPE
 
-官方页面同时提供两类互相不完全一致的 documented evidence。本 Slice 仅允许以下两个**精确 embedding path**，不得做 recursive/deep-search parser：
+MODE A 使用 native HTTP，因此只接受官方明确描述的 **HTTP JSON** envelope。Python SDK 2.0 的 flat response object 不属于 native HTTP raw JSON contract。
 
-**Shape A — `HTTP_OUTPUT_WRAPPED`（正文明确描述的 native HTTP JSON）：**
+**唯一允许的成功 shape — `HTTP_OUTPUT_WRAPPED`：**
 
 ```text
 {
@@ -183,43 +183,26 @@ POST https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api/v1/services/embeddin
 }
 ```
 
-**Shape B — `HTTP_FLAT_DOCUMENTED_COMPAT`（同一官方页面成功响应示例展示的 flat shape）：**
-
-```text
-{
-  "request_id": "<provider request id>",
-  "embeddings": [
-    {
-      "index": <input item index>,
-      "embedding": [<number>, ...],
-      "sparse_embedding": [ { "index": <int>, "value": <number>, "token": "<optional>" } ]
-    }
-  ],
-  "usage": { "total_tokens": <int>, "prompt_tokens": <int|absent> }
-}
-```
-
-两种 shape 必须在 Adapter 内 normalize 成统一的：
+Adapter 必须在 seam 内 normalize 成统一的：
 
 ```text
 NormalizedProviderResponse {
   provider_request_id,
   embeddings,
   usage,
-  observed_response_envelope:
-    "HTTP_OUTPUT_WRAPPED" | "HTTP_FLAT_DOCUMENTED_COMPAT"
+  observed_response_envelope: "HTTP_OUTPUT_WRAPPED"
 }
 ```
 
 严格 envelope 规则：
 
-1. 仅当存在 `output.embeddings`、且 top-level `embeddings` 不存在时，分类为 `HTTP_OUTPUT_WRAPPED`；
-2. 仅当 top-level `embeddings` 存在、且 `output.embeddings` 不存在时，分类为 `HTTP_FLAT_DOCUMENTED_COMPAT`；
-3. 若两者同时存在，必须 `TERMINAL / AMBIGUOUS_PROVIDER_RESPONSE`；禁止 precedence guess、merge、silent fallback；
-4. 若两者均不存在，或仅在 `data.embeddings` / `result.embeddings` / `payload.embeddings` / `response.embeddings` / 其它未冻结路径出现，必须 `TERMINAL / MALFORMED_PROVIDER_RESPONSE`；
+1. 仅当存在 `output.embeddings`、且 top-level `embeddings` 不存在时，分类为 `HTTP_OUTPUT_WRAPPED` 并允许继续解析；
+2. 若仅存在 top-level `embeddings`，必须 `TERMINAL / MALFORMED_PROVIDER_RESPONSE`：该 flat shape 是官方页面展示的 Python SDK 2.0 response object，不是 MODE A native HTTP raw JSON contract；
+3. 若 `output.embeddings` 与 top-level `embeddings` 同时存在，必须 `TERMINAL / AMBIGUOUS_PROVIDER_RESPONSE`；禁止 precedence guess、merge、silent fallback；
+4. 若未命中 `output.embeddings`，或仅在 `data.embeddings` / `result.embeddings` / `payload.embeddings` / `response.embeddings` / 其它未冻结路径出现，必须 `TERMINAL / MALFORMED_PROVIDER_RESPONSE`；
 5. 禁止 recursive/deep search；不得把任意嵌套 `embeddings` 当作合法 envelope；
 6. Port 下游只能看到 `NormalizedProviderResponse`，不得感知 raw provider envelope；
-7. 真实 provider verification 必须记录 `observed_response_envelope`；单次真实观测不得自动删除另一 documented compatibility shape，未来若要收窄支持范围必须另走 change control。
+7. 真实 provider verification 必须记录 `observed_response_envelope`。成功的 MODE A provider evidence 必须观测到 `HTTP_OUTPUT_WRAPPED`；若真实环境观测到 flat SDK-like 或其它未冻结 shape，应记录为失败证据并保持 `PROVIDER_NOT_VERIFIED`，不得静默扩大 Frozen Spec。未来若要改变 accepted envelope，必须另走 change control。
 
 #### 错误响应契约
 
@@ -235,7 +218,7 @@ NormalizedProviderResponse {
 4. **sparse value**：finite number；非有限值必须拒绝。
 5. **sparse token**：provider 提供的可选元数据（`token`），不构成业务权威字段。
 6. **sparse 排序**：官方合同**不保证** `sparse_embedding` 数组升序（官方示例中同一 item 先出现 `3759`、后出现 `1130`）。排序是 Adapter normalization 规则，不是 provider guarantee。
-7. **model / version 回显**：官方原生 DashScope response contract 未承诺返回 `model` 或 `model_version`。native HTTP 的 documented embedding path 存在 `output.embeddings` 与 top-level `embeddings` 两种页面内证据，但两者均不构成 model/version echo 保证；Adapter 不得要求 provider 回显其合同未承诺返回的 version。
+7. **model / version 回显与 envelope surface**：官方原生 DashScope response contract 未承诺返回 `model` 或 `model_version`。MODE A native HTTP 的 documented embedding path 是 `output.embeddings`；页面展示的 top-level `embeddings` 属于 Python SDK 2.0 response object，不是 native HTTP 第二种 envelope。Adapter 不得要求 provider 回显其合同未承诺返回的 version。
 8. **usage 粒度**：`usage` 是 **request-level aggregate**（`total_tokens`，可选 `prompt_tokens`）；provider 不提供 per-item token 或 per-item cost 分解。
 9. **能力不一致**：官方文档自身存在"`sparse_embedding` 仅适用于 v3/v4"与"`qwen3.7` 示例包含 sparse"的不一致。Adapter 必须按**运行时实际响应**判定 sparse 能力；缺失时 `UNSUPPORTED`，不得硬编码模型能力矩阵。
 
@@ -702,7 +685,7 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 - **FR-054 — SHALL**：mock / fixture / synthetic provider response / schema validation 永远不能产生 `PROVIDER_VERIFIED`；缺少真实 provider 调用证据时，对外可用性状态只能是 `PROVIDER_NOT_VERIFIED`，capability evidence 最高只能是 `CONTRACT_VERIFIED`。（验收：仅运行 fake provider 时，对外可用性状态为 `PROVIDER_NOT_VERIFIED`，capability evidence 不高于 `CONTRACT_VERIFIED`，且报告中不出现 `PROVIDER_VERIFIED`。）
 - **FR-055 — SHALL**：任何对外可用声明（含 `READY` 及等价表述）必须同时满足 `CONTRACT_VERIFIED`、`PROVIDER_VERIFIED` 与配置完整；不得仅由契约证据推出 `READY`。（验收：缺少任一条件时不得出现 `READY` 或等价可用声明。）
 - **FR-056 — SHALL**：`PROVIDER_VERIFIED` 证据必须覆盖第 14.3 节 External Provider Verification Coverage 的 10 项适用项（configured model provenance / provider model echo、output_type、dense output、dense dimension、sparse payload shape、sparse vocabulary indices/values、duplicate/malformed/non-finite handling、provider error normalization、timeout behavior、secret non-disclosure）；缺少任一适用项时状态回退为 `PROVIDER_NOT_VERIFIED`。（验收：证据文件逐项列出 10 项对应的真实 provider 观测，缺项即判定不满足。）
-- **FR-057 — SHALL**：`PROVIDER_VERIFIED` 证据必须可复现，至少记录命令、输入摘要、输出摘要、时间、configured model identity、provider `request_id`、`observed_response_envelope`、provider model echo 状态、环境标识、对应覆盖项编号。（验收：证据文件字段完整性断言；`observed_response_envelope` 只能为本 Spec 冻结的两个枚举值之一。）
+- **FR-057 — SHALL**：`PROVIDER_VERIFIED` 证据必须可复现，至少记录命令、输入摘要、输出摘要、时间、configured model identity、provider `request_id`、`observed_response_envelope`、provider model echo 状态、环境标识、对应覆盖项编号。（验收：证据文件字段完整性断言；成功的 MODE A provider evidence 中 `observed_response_envelope` 必须为 `HTTP_OUTPUT_WRAPPED`。）
 - **FR-058 — SHALL**：`PROVIDER_VERIFIED` 证据不得使用 production professional content、真实家庭数据或 Gold labels 作为输入，也不得把测试 fixture 提升为 professional authority。（验收：输入摘要为合成/脱敏样本；无 Gold Dataset 引用；证据与 fixture 中无可被业务读取的 approval/reviewer 语义。）
 - **FR-059 — SHALL**：在未执行真实 Alibaba DashScope provider 调用时，不得宣称 `READY`、可用、就绪或任何等价结论；对外状态必须为 `PROVIDER_NOT_VERIFIED`。（验收：状态报告字段断言 + 全文检索无 `READY` 类声明。）
 - **FR-060 — SHALL**：`PROVIDER_VERIFIED` 只能由真实 Alibaba DashScope provider evidence 产生；任何 mock、fixture、synthetic provider response、schema validation 或离线契约结果都不得被记录、映射或解释为 provider evidence。（验收：证据来源字段必须指向真实 provider 调用记录；伪造来源被拒绝。）
@@ -714,8 +697,8 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 - **FR-065 — SHALL**：Adapter 必须把已验证 sparse payload canonicalize 为按 `index` 升序的确定性顺序后再暴露 normalized response；**不得**假设 provider 返回有序。（验收：无序输入必须得到升序输出；证据中不存在 provider ordering guarantee 声明。）
 - **FR-066 — SHALL**：configured model provenance（`configured_model_id`、`configured_model_version_or_revision`）与 provider model echo 必须分离记录；provider 未回显 `model` / `model_version` 时不得失败，必须记录 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`；provider 回显 `model` 不一致时必须 TERMINAL。（验收：三段 provenance 字段独立断言；echo 缺失成功、echo 冲突失败。）
 - **FR-067 — SHALL**：usage 与成本必须以 request-level provider aggregate 为准；provider 未提供 per-item 数据时，`per_item_usage` 与 `per_item_exact_cost` 必须为 `UNKNOWN` / `NOT_PROVIDED`；禁止平均分摊、字符数推算、填 0，或把估算标记为 exact。（验收：仅 aggregate 响应下字段值断言；`ESTIMATED` 标记不得与 exact 共存。）
-- **FR-068 — SHALL**：MODE A native HTTP success parser 只允许 `HTTP_OUTPUT_WRAPPED`（`output.embeddings`）与 `HTTP_FLAT_DOCUMENTED_COMPAT`（top-level `embeddings`）两种官方 documented envelope，并在 Adapter seam 内 normalize 为统一 `NormalizedProviderResponse`；不得接受 `data.embeddings`、`result.embeddings`、`payload.embeddings`、`response.embeddings` 或任意 recursive/deep-search 命中。（验收：两种合法 fixture 分别成功并产生正确 `observed_response_envelope`；未授权 envelope 与任意深层嵌套均失败。）
-- **FR-069 — SHALL**：若响应同时存在 `output.embeddings` 与 top-level `embeddings`，必须 `TERMINAL / AMBIGUOUS_PROVIDER_RESPONSE`；若不存在任何冻结 embedding path，必须 `TERMINAL / MALFORMED_PROVIDER_RESPONSE`。禁止 merge、precedence guess、silent fallback；真实 provider evidence 必须记录 `observed_response_envelope`，且单次观测不得自动收窄 Frozen Spec。（验收：ambiguous fixture 与 unknown-envelope fixture 的稳定错误码断言；无 fallback；证据字段断言。）
+- **FR-068 — SHALL**：MODE A native HTTP success parser 只允许 `HTTP_OUTPUT_WRAPPED`（`output.embeddings`）这一官方 documented HTTP envelope，并在 Adapter seam 内 normalize 为统一 `NormalizedProviderResponse`；top-level `embeddings` 仅属于 SDK response surface，在 native HTTP raw JSON 中不得作为 compatibility success；同样不得接受 `data.embeddings`、`result.embeddings`、`payload.embeddings`、`response.embeddings` 或任意 recursive/deep-search 命中。（验收：`HTTP_OUTPUT_WRAPPED` fixture 成功并记录正确 `observed_response_envelope`；flat SDK-like、未授权 envelope 与任意深层嵌套均失败。）
+- **FR-069 — SHALL**：若响应同时存在 `output.embeddings` 与 top-level `embeddings`，必须 `TERMINAL / AMBIGUOUS_PROVIDER_RESPONSE`；若仅存在 top-level `embeddings`，或不存在 `output.embeddings`，必须 `TERMINAL / MALFORMED_PROVIDER_RESPONSE`。禁止 merge、precedence guess、silent fallback；真实 provider evidence 必须记录 `observed_response_envelope`，且任何未冻结 shape 的真实观测都不得自动扩大 Frozen Spec。（验收：ambiguous、flat SDK-like 与 unknown-envelope fixture 的稳定错误码断言；无 fallback；证据字段断言。）
 
 **Functional Requirements 合计：69 条（FR-001 — FR-069）。**
 
@@ -788,7 +771,7 @@ TERMINAL        确定性失败，禁止重试
 | 401 / 403 | PROVIDER_NOT_VERIFIED | TERMINAL（auth） | 否 |
 | 400 / malformed payload / 维度错误 | PROVIDER_NOT_VERIFIED | TERMINAL | 否 |
 | 同时存在 `output.embeddings` 与 top-level `embeddings` | PROVIDER_NOT_VERIFIED | TERMINAL（`AMBIGUOUS_PROVIDER_RESPONSE`） | 否 |
-| 未命中任一冻结 envelope（含仅 `data/result/payload/response.embeddings`） | PROVIDER_NOT_VERIFIED | TERMINAL（`MALFORMED_PROVIDER_RESPONSE`） | 否 |
+| 未命中唯一冻结 HTTP envelope（含仅 top-level `embeddings` 或仅 `data/result/payload/response.embeddings`） | PROVIDER_NOT_VERIFIED | TERMINAL（`MALFORMED_PROVIDER_RESPONSE`） | 否 |
 | 429 | PROVIDER_NOT_VERIFIED | RETRYABLE | 是（受预算） |
 | 网络错误 / 5xx | PROVIDER_NOT_VERIFIED | RETRYABLE | 是（受预算） |
 | output_type 不支持 | PROVIDER_NOT_VERIFIED | UNSUPPORTED / TERMINAL | 否 |
@@ -808,7 +791,7 @@ TERMINAL        确定性失败，禁止重试
 | --- | --- | --- | --- |
 | EVC-01 | configured model identity / provider model echo | `configured_model_id` 被 provider 接受；若响应含 `model` 则 echo 必须一致；configured model version 由配置 provenance 记录，不要求 provider 回显 | 否 |
 | EVC-02 | output_type | 声明的 `dense` / `dense+sparse` 被 provider 实际支持并返回对应结构 | 否 |
-| EVC-03 | response envelope / dense output | 真实 native HTTP 返回命中本 Spec 冻结的 documented envelope，记录 `observed_response_envelope`（`HTTP_OUTPUT_WRAPPED` 或 `HTTP_FLAT_DOCUMENTED_COMPAT`），并从该精确路径取得可解析的 dense 数值数组；单次观测不得自动修改 Frozen Spec | 否 |
+| EVC-03 | response envelope / dense output | 真实 native HTTP 返回必须命中本 Spec 唯一冻结的 HTTP envelope `HTTP_OUTPUT_WRAPPED`，记录 `observed_response_envelope=HTTP_OUTPUT_WRAPPED`，并从 `output.embeddings` 取得可解析的 dense 数值数组；若观测到 flat SDK-like 或其它 shape，记录失败证据并保持 `PROVIDER_NOT_VERIFIED`，不得自动修改 Frozen Spec | 否 |
 | EVC-04 | dense dimension | 真实返回长度等于声明 `dense_dimension` | 否 |
 | EVC-05 | sparse payload shape | 真实 sparse payload 结构可被解析为 `{index, value, token?}`（`token` 为可选、非权威 metadata） | 否 |
 | EVC-06 | sparse vocabulary indices / values | 真实 sparse vocabulary index 的非负整数性、同一 payload 内唯一性与 value 有限性可被观测；记录 `observed_max_sparse_index`，**不得**与 `dense_dimension` 比较 | 否 |
@@ -1057,10 +1040,10 @@ TERMINAL        确定性失败，禁止重试
 - 机械验收：数组逐项相等断言 + 证据中无 "provider guarantees ordering" 声明
 
 ### AS-033 — Model echo 缺失不失败
-- Given provider native HTTP 响应命中任一冻结 documented envelope，且不含 `model` / `model_version`
+- Given provider native HTTP 响应命中唯一冻结的 `HTTP_OUTPUT_WRAPPED` envelope，且不含 `model` / `model_version`
 - When 完成 envelope normalization 并生成 runtime provenance
-- Then 请求成功，echo 状态为 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`，configured model identity 由配置 provenance 记录，且 `observed_response_envelope` 被保留
-- 机械验收：两种 envelope 均成功 + provenance 字段分离断言 + envelope 枚举断言
+- Then 请求成功，echo 状态为 `PROVIDER_MODEL_ECHO_NOT_AVAILABLE`，configured model identity 由配置 provenance 记录，且 `observed_response_envelope=HTTP_OUTPUT_WRAPPED`
+- 机械验收：wrapped envelope 成功 + provenance 字段分离断言 + envelope 枚举断言
 
 ### AS-034 — Aggregate usage 的 per-item 不得伪造
 - Given provider 只提供 `usage.total_tokens`
@@ -1087,11 +1070,11 @@ TERMINAL        确定性失败，禁止重试
 - Then 成功归一化为 `NormalizedProviderResponse`，`observed_response_envelope=HTTP_OUTPUT_WRAPPED`
 - 机械验收：精确路径 fixture + normalized 字段逐项断言
 
-### AS-038 — HTTP_FLAT_DOCUMENTED_COMPAT 正常归一化
-- Given 官方页面 documented flat shape：top-level `embeddings` 存在，`output.embeddings` 不存在
+### AS-038 — SDK flat shape 不得冒充 native HTTP success
+- Given native HTTP raw JSON 仅存在 top-level `embeddings`，`output.embeddings` 不存在
 - When Adapter 解析
-- Then 成功归一化为同一 `NormalizedProviderResponse`，`observed_response_envelope=HTTP_FLAT_DOCUMENTED_COMPAT`
-- 机械验收：flat fixture + normalized 字段逐项断言；Port 类型不得暴露 envelope-specific raw shape
+- Then 返回 `TERMINAL / MALFORMED_PROVIDER_RESPONSE`，不得生成 `NormalizedProviderResponse`；该 flat shape 只对应官方页面的 Python SDK 2.0 response object
+- 机械验收：flat SDK-like fixture 错误码断言 + normalized output 为空 + 无 compatibility fallback
 
 ### AS-039 — Ambiguous / unknown envelope fail closed
 - Given A：同一响应同时存在 `output.embeddings` 与 top-level `embeddings`；或 Given B：只存在 `data.embeddings` / `result.embeddings` / `payload.embeddings` / `response.embeddings` / 任意其它深层 embeddings
@@ -1109,7 +1092,7 @@ TERMINAL        确定性失败，禁止重试
 
 | 能力证据状态 | 证据内容 | 何时可产生 | 当前状态 |
 | --- | --- | --- | --- |
-| `CONTRACT_VERIFIED` | 离线契约测试：请求结构、两种 frozen documented response envelope、ambiguous/unknown fail-closed、normalized response、dense 校验、sparse 解析、超时/重试、错误归一化、成本、遥测脱敏、无持久化、无 route（mock / fixture / synthetic / schema validation 均只能到达此态） | 实现后可产生，无需真实 provider | 未取得（尚无实现） |
+| `CONTRACT_VERIFIED` | 离线契约测试：请求结构、唯一 frozen native HTTP response envelope、flat SDK-like/ambiguous/unknown fail-closed、normalized response、dense 校验、sparse 解析、超时/重试、错误归一化、成本、遥测脱敏、无持久化、无 route（mock / fixture / synthetic / schema validation 均只能到达此态） | 实现后可产生，无需真实 provider | 未取得（尚无实现） |
 | `PROVIDER_NOT_VERIFIED` | 尚无真实 Alibaba DashScope provider evidence 的 fail-closed 状态 | 真实 provider 证据缺失时**始终**成立 | 当前有效状态 |
 | `PROVIDER_VERIFIED` | 受控环境真实 DashScope 调用并覆盖 EVC-01 至 EVC-10：configured model provenance 与 provider model echo（若返回则校验一致）、output_type、`observed_response_envelope`、dense 输出与维度、sparse payload shape 与 vocabulary indices/values、duplicate/malformed/non-finite 处理、错误归一化、timeout 行为、secret 不泄露 | 实现后且具备运行时 secret 与出网许可，并完成受控真实调用 | 未取得（尚无实现与凭据，本轮不调用 provider） |
 
@@ -1167,7 +1150,7 @@ Evidence Gate 规则：
 - **NS-039 — MODE A 下禁止预置 Rule 8 放宽**：当实现采用 native HTTP + `globalThis.fetch` 且不存在命中 Rule 8 forbidden token 的 provider import 时，禁止修改 `scripts/guard-static.mjs`、禁止添加 provider import fixture、禁止预置任何 SDK allowance。机械验收：`scripts/guard-static.mjs` blob 与 base 逐字节相同；无新增 provider import fixture；guard diff 为空。
 - **NS-040 — 禁止为了满足 Spec 人为引入 provider SDK**：不得为了进入 MODE B、或为了配合旧版 Spec 的治理假设，而人为引入 DashScope SDK / `@alicloud` 依赖或任何新的 provider package dependency。机械验收：`package.json` 无新增 provider 依赖；依赖图无 `dashscope` / `@alicloud` import。
 - **NS-041 — 禁止 generic / recursive provider response parser**：不得通过 deep-search、递归遍历、任意 key 探测接受未冻结的 `data.embeddings` / `result.embeddings` / `payload.embeddings` / `response.embeddings` 或其它路径。机械验收：未授权 envelope fixtures 全部 `MALFORMED_PROVIDER_RESPONSE`；静态扫描无 generic recursive embeddings finder。
-- **NS-042 — 禁止 ambiguous envelope precedence / silent fallback**：同时存在 `output.embeddings` 与 top-level `embeddings` 时不得选择其一、merge 或 fallback，必须 `AMBIGUOUS_PROVIDER_RESPONSE`；不得因单次真实 provider 观测而静默删除另一 documented compatibility shape。机械验收：ambiguous fixture 失败 + 无 precedence 分支 + Frozen Spec 支持枚举保持双 shape，除非另有 change control。
+- **NS-042 — 禁止 ambiguous envelope precedence / silent fallback / SDK-flat compatibility**：同时存在 `output.embeddings` 与 top-level `embeddings` 时不得选择其一、merge 或 fallback，必须 `AMBIGUOUS_PROVIDER_RESPONSE`；仅存在 top-level `embeddings` 时不得把 SDK response surface 当作 native HTTP success，必须 `MALFORMED_PROVIDER_RESPONSE`。机械验收：ambiguous 与 flat SDK-like fixture 均失败 + 无 precedence/fallback 分支；accepted envelope 仅为 `HTTP_OUTPUT_WRAPPED`，除非另有 change control。
 
 **Negative-Scope Scenarios 合计：42 条（NS-001 — NS-042）。**
 
@@ -1309,8 +1292,8 @@ Rule 8 只匹配被扫描实现代码中的 import specifier（`dashscope` / `@a
 - **C20-19 — Usage 为 request-level**：provider 只提供 request-level aggregate usage；per-item 无 provider 数据时必须为 `UNKNOWN` / `NOT_PROVIDED`，禁止伪造 exact 分解。
 - **C20-20 — Adapter canonical ordering 是 normalization rule**：升序输出由 Adapter 保证，不是 provider guarantee；测试必须区分"provider 输入无序允许"与"Adapter 输出升序"。
 - **C20-21 — Governance mode 由实际实现依赖决定**：ownership 注册无条件必需；Rule 8 import allowance 仅在最终实现真实包含 `dashscope` / `@alicloud` 等命中 forbidden token 的 provider import 时必需；native HTTP + `globalThis.fetch` 下不得预置 allowance、fixture 或 guard 改动。禁止为了进入 MODE B 而人为引入 SDK。
-- **C20-22 — Native HTTP response 使用 narrow documented dual-envelope normalization**：只接受 `HTTP_OUTPUT_WRAPPED`（`output.embeddings`）与 `HTTP_FLAT_DOCUMENTED_COMPAT`（top-level `embeddings`），两者 normalize 到统一 `NormalizedProviderResponse`；Port 下游不得感知 raw envelope。
-- **C20-23 — Ambiguous / unknown envelope fail closed，真实观测不自动收窄 Spec**：双路径同时存在 → `AMBIGUOUS_PROVIDER_RESPONSE`；未命中两种冻结路径 → `MALFORMED_PROVIDER_RESPONSE`；禁止 recursive parser、precedence guess、merge、silent fallback。真实 provider evidence 必须记录 `observed_response_envelope`，但单次观测不得自动改变 Frozen Spec；任何收窄必须另走 change control。
+- **C20-22 — Native HTTP response 使用 strict documented output envelope normalization**：只接受 `HTTP_OUTPUT_WRAPPED`（`output.embeddings`）这一官方明确描述的 HTTP JSON shape，并 normalize 到统一 `NormalizedProviderResponse`；官方页面的 top-level `embeddings` 是 Python SDK 2.0 response object，不得作为 MODE A native HTTP compatibility success；Port 下游不得感知 raw envelope。
+- **C20-23 — Ambiguous / flat SDK-like / unknown envelope fail closed，真实观测不自动扩大 Spec**：`output.embeddings` 与 top-level `embeddings` 同时存在 → `AMBIGUOUS_PROVIDER_RESPONSE`；仅 top-level `embeddings` 或其它未命中 `output.embeddings` 的 shape → `MALFORMED_PROVIDER_RESPONSE`；禁止 recursive parser、precedence guess、merge、silent fallback。真实 provider evidence 必须记录 `observed_response_envelope`；成功 provider verification 必须观测 `HTTP_OUTPUT_WRAPPED`，任何其它真实观测不得自动扩大 Frozen Spec，变更 accepted envelope 必须另走 change control。
 
 **Clarify Decisions 合计：23 条（C20-01 — C20-23）。**
 
@@ -1437,7 +1420,7 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 8. 任何后续变更必须重新经过 Selection Gate 与 Authority 校验，不得以本 Spec 为名扩大 Scope。
 9. Revision 1（commit `c9b681ec` / spec blob `c4bea6c2`）已 `SUPERSEDED`，原因是经官方 Provider contract 证实的三类语义冲突；其历史记录保留在第 26、27 节，但不再具备 Authority。
 10. Revision 2（commit `c469c273` / spec blob `67711ee5`）的 provider-contract corrections 继续有效；Revision 3（commit `d2159ea7beedaa4a37c0e50ed67235dab8dde21a` / blob `078982f0819954a5479086da86036ccd81d22b2c`）的 governance correction 继续有效，但其 response-envelope 假设被 Revision 4 定向取代，状态为 **SUPERSEDED ONLY BY PROVIDER RESPONSE ENVELOPE CORRECTION**。
-11. Revision 4 的唯一语义修正是 native HTTP response envelope contract：冻结 narrow documented dual-envelope normalization、ambiguous/unknown fail-closed、`observed_response_envelope` evidence；Selection、Scope、route-neutral、MODE A、`globalThis.fetch`、Rule 8、ownership、sparse vocabulary/canonical sorting、configured model provenance、provider echo、request-level usage、per-item UNKNOWN、timeout/retry、cost/telemetry、evidence states、no DB/no retrieval/no A/B/C winner 均不变。
+11. Revision 4 的唯一语义修正是 native HTTP response envelope contract：冻结 strict `HTTP_OUTPUT_WRAPPED` normalization、flat SDK-like/ambiguous/unknown fail-closed、`observed_response_envelope` evidence；Selection、Scope、route-neutral、MODE A、`globalThis.fetch`、Rule 8、ownership、sparse vocabulary/canonical sorting、configured model provenance、provider echo、request-level usage、per-item UNKNOWN、timeout/retry、cost/telemetry、evidence states、no DB/no retrieval/no A/B/C winner 均不变。
 
 ---
 
@@ -1525,7 +1508,7 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 | Changed files | `specs/020-embedding-provider-adapter-foundation/spec.md`（仅此一个） |
 | Ahead / Behind main | 由 final remote compare 报告 |
 | Remote read-back status | VERIFIED（exact commit / blob / compare 由本轮 closeout 从 GitHub Remote 重新读取并报告） |
-| Semantic delta | 仅 native HTTP provider response envelope contract：two documented shapes → narrow dual normalization；ambiguous/unknown fail closed；real provider evidence 记录 `observed_response_envelope` |
+| Semantic delta | 仅 native HTTP provider response envelope contract：strict `output.embeddings` / `HTTP_OUTPUT_WRAPPED`；flat SDK-like、ambiguous、unknown fail closed；real provider evidence 记录 `observed_response_envelope` |
 
 ---
 
@@ -1536,7 +1519,7 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 | 1 | branch `spec/020-embedding-provider-adapter-foundation`，commit `c9b681ecccbb00a22c4191cb906de8938cc4705b`，spec.md blob `c4bea6c2f9699011b78b968cf682eac614414b70` | **SUPERSEDED** | verified external Provider contract contradiction（sparse index vs dense dimension；provider model/version echo；per-item usage / exact cost） |
 | 2 | branch `spec/020-embedding-provider-adapter-foundation`，Revision 2 freeze candidate commit `b69e7726f98f9c4868238e9ea77d832e056e7475`（blob `e83af6baaf835d5855fd231a5f815c4e3f22b074`）；final frozen HEAD `c469c27333cd80cc6f22d091683a74df5ecfcdc0`（blob `67711ee5a67b34c927f8f26058fab8cf430c4a71`） | **SUPERSEDED ONLY BY NARROW GOVERNANCE CORRECTION** | 依据第 2.3 节 Provider Contract Baseline 的官方合同事实定向修正；其 provider-contract corrections remain valid，未被推翻 |
 | 3 | branch `spec/020-embedding-provider-adapter-foundation`，final frozen HEAD `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`，spec.md blob `078982f0819954a5479086da86036ccd81d22b2c` | **SUPERSEDED ONLY BY PROVIDER RESPONSE ENVELOPE CORRECTION** | Revision 3 governance correction（Rule 8 allowance implementation-conditional）继续有效；仅 response-envelope 假设被 Revision 4 定向取代 |
-| 4 | branch `spec/020-embedding-provider-adapter-foundation`，current frozen HEAD / blob 由本轮 remote read-back closeout 报告 | **FROZEN — REMOTE RE-FREEZE VERIFIED** | 单一语义修正：native HTTP response envelope contract → narrow documented dual-envelope normalization；ambiguous/unknown fail closed；`observed_response_envelope` evidence |
+| 4 | branch `spec/020-embedding-provider-adapter-foundation`，current frozen HEAD / blob 由本轮 remote read-back closeout 报告 | **FROZEN — REMOTE RE-FREEZE VERIFIED** | 单一语义修正：native HTTP response envelope contract → strict `HTTP_OUTPUT_WRAPPED` normalization；flat SDK-like/ambiguous/unknown fail closed；`observed_response_envelope` evidence |
 
 Revision 2 的变更范围（只做定向修正，不扩大 Scope；以下 provider-contract corrections 在 Revision 3 中保持有效、未被重写）：
 
@@ -1554,10 +1537,10 @@ Selection、Scope、route-neutral、Adapter seam、sparse/usage/provenance 语�
 
 Revision 4 的变更范围（唯一语义修正，不扩大 Scope）：
 
-1. 官方 Provider 页面正文明确 native HTTP JSON 将 `embeddings` 包裹在 `output`，但同页成功响应示例展示 top-level `embeddings`；因此冻结 **NARROW DOCUMENTED DUAL-ENVELOPE NORMALIZATION**，仅支持 `HTTP_OUTPUT_WRAPPED` 与 `HTTP_FLAT_DOCUMENTED_COMPAT`；
-2. 两种 shape 统一 normalize 为 `NormalizedProviderResponse`，至少包含 `provider_request_id`、`embeddings`、`usage`、`observed_response_envelope`；Port 下游不得感知 raw envelope；
-3. 双路径同时出现 → `TERMINAL / AMBIGUOUS_PROVIDER_RESPONSE`；未命中两种冻结路径 → `TERMINAL / MALFORMED_PROVIDER_RESPONSE`；禁止 generic recursive parser、merge、precedence guess、silent fallback；
-4. 真实 provider verification 必须记录 `observed_response_envelope`；单次真实观测不得自动收窄 Frozen Spec，未来收窄必须另走 change control；
+1. 官方 Provider 页面明确说明其 flat `request_id / embeddings / usage` 字段与示例属于 Python SDK 2.0 response object，并明确说明 native HTTP JSON 中 `embeddings` 包裹在 `output`；因此冻结 **STRICT NATIVE HTTP OUTPUT ENVELOPE**，成功只支持 `HTTP_OUTPUT_WRAPPED`；
+2. `HTTP_OUTPUT_WRAPPED` 在 Adapter seam 内 normalize 为 `NormalizedProviderResponse`，至少包含 `provider_request_id`、`embeddings`、`usage`、`observed_response_envelope`；Port 下游不得感知 raw envelope；
+3. `output.embeddings` 与 top-level `embeddings` 同时出现 → `TERMINAL / AMBIGUOUS_PROVIDER_RESPONSE`；仅 top-level `embeddings`（SDK flat surface）或未命中 `output.embeddings` → `TERMINAL / MALFORMED_PROVIDER_RESPONSE`；禁止 generic recursive parser、merge、precedence guess、silent fallback；
+4. 真实 provider verification 必须记录 `observed_response_envelope`；成功 evidence 必须观测 `HTTP_OUTPUT_WRAPPED`。若真实环境返回 SDK-flat-like 或其它未冻结 shape，只能形成失败证据并保持 `PROVIDER_NOT_VERIFIED`；任何扩大 accepted envelope 必须另走 change control；
 5. Revision 2 provider-contract corrections remain valid；Revision 3 governance correction remains valid；本轮不修改 plan.md / checklist.md / tasks.md，不创建 Plan，不执行实现，不调用 provider，不修改 PR #112。
 
 Revision 4 的 `SPEC: FROZEN` 仅在本次 remote re-freeze 的 remote read-back 成功后成立；authoritative frozen artifact 为 branch head 的 spec.md。
