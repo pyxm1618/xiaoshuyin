@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 2,
+  "changeId": "019-professional-retrieval-pgvector-readiness-current-main",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "019-professional-retrieval-pgvector-readiness",
+      "specPath": "specs/019-professional-retrieval-pgvector-readiness",
+      "implementationPaths": [
+        "db/init/02-pgvector.sh"
+      ]
+    }
+  ]
+}
