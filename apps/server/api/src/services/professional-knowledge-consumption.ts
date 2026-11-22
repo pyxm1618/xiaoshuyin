@@ -27,7 +27,7 @@ import {
   resolveDigitalUseProfessionalKnowledgeBinding,
 } from '@xiaoshuyin/scenes/digital-use';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { withRlsTransaction } from '../db/tx.js';
+import { withDrizzleRlsTransaction } from '../db/drizzle-tx.js';
 import {
   isKnownAuthorizationDenial,
   requireFamilyAction,
@@ -165,15 +165,16 @@ export async function consumeProfessionalKnowledge(input: {
 }> {
   const dependencies = input.dependencies ?? productionConsumptionDependencies;
   try {
-    return await withRlsTransaction(
-    input.pool,
-    {
-      familyId: input.familyId,
-      accountId: input.actor.accountId,
-      personId: input.actor.personId,
-      purpose: 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION',
-    },
-    async (tx) => {
+    return await withDrizzleRlsTransaction(
+      input.pool,
+      {
+        familyId: input.familyId,
+        accountId: input.actor.accountId,
+        personId: input.actor.personId,
+        purpose: 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION',
+        isolationLevel: 'REPEATABLE READ',
+      },
+      async (_drizzleTx, tx) => {
       try {
         await requireFamilyAction(tx, {
           accountId: input.actor.accountId,
