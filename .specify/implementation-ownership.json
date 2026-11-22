@@ -413,6 +413,19 @@
       }
     },
     {
+      "id": "common-core-goal-migration-032",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/032_common_core_goal_confirm_goal_package_dependency.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
       "id": "common-core-goal-domain",
       "match": {
         "kind": "PREFIX",
