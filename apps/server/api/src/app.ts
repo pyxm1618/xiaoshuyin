@@ -930,6 +930,17 @@ export async function buildApp(options: BuildAppOptions = {}) {
   // Fail-fast runtime contract (F1). Throws before any route is registered.
   const runtime: RuntimeConfig = loadRuntimeConfig(env);
 
+  // Finding #40: Ensure validated runtime evidence pepper is injected from
+  // the unified runtime config seam into the execution environment so that
+  // downstream route consumers (such as compliance and consent routes)
+  // use the exact same validated truth without un-injected process.env drift.
+  if (runtime.evidencePepper) {
+    process.env['EVIDENCE_HASH_PEPPER'] = runtime.evidencePepper;
+  }
+  if (runtime.consentChannel) {
+    process.env['CONSENT_CHANNEL'] = runtime.consentChannel;
+  }
+
   const app = Fastify({ logger: buildLoggerOptions(env, options.loggerStream) });
 
   // Test-only: capture real route schemas before any route is registered.
@@ -997,14 +1008,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerStaffAuthorityRoutes(app, pool, runtime.sessionSecret);
   registerFamilyRoutes(app, pool);
   registerMemberRoutes(app, pool);
-  registerComplianceRoutes(app, pool, {
-    evidencePepper: runtime.evidencePepper,
-    consentChannel: runtime.consentChannel,
-  });
-  registerConsentRoutes(app, pool, {
-    evidencePepper: runtime.evidencePepper,
-    consentChannel: runtime.consentChannel,
-  });
+  registerComplianceRoutes(app, pool);
+  registerConsentRoutes(app, pool);
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);

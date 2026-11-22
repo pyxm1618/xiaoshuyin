@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "changeId": "remed-v2-a-compliance-consent",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "010-compliance-feature-policy-foundation",
+      "specPath": "specs/010-compliance-feature-policy-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/app.ts",
+        "packages/compliance/src/age-gate.ts",
+        "packages/compliance/src/feature-policy-repository.ts",
+        "packages/compliance/src/feature-policy.ts"
+      ]
+    },
+    {
+      "feature": "012-digital-use-assessment-runtime",
+      "specPath": "specs/012-digital-use-assessment-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/digital-use-assessment.ts",
+        "apps/server/api/src/services/digital-use-family-alliance.ts",
+        "apps/server/api/src/services/digital-use-node-semantics.ts"
+      ]
+    },
+    {
+      "feature": "017-professional-knowledge-foundation",
+      "specPath": "specs/017-professional-knowledge-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/services/professional-knowledge-consumption.ts"
+      ]
+    }
+  ]
+}

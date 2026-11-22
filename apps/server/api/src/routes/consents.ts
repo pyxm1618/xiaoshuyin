@@ -36,18 +36,7 @@ import {
 } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
 
-export interface ConsentRouteOptions {
-  readonly evidencePepper?: string;
-  readonly consentChannel?: ReturnType<typeof runtimeConsentChannel>;
-}
-
-export function registerConsentRoutes(
-  app: FastifyInstance,
-  pool: pg.Pool,
-  options?: ConsentRouteOptions
-) {
-  const getPepper = () => options?.evidencePepper ?? requireEvidencePepper();
-  const getChannel = () => options?.consentChannel ?? runtimeConsentChannel();
+export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
   // POST /api/v1/consents/:id/revoke
   app.post('/api/v1/consents/:id/revoke', async (req, reply) => {
     const actor = req.actor;
@@ -142,11 +131,11 @@ export function registerConsentRoutes(
             throw Object.assign(new Error(err.message), err);
           }
           const evidence = buildConsentEvidence({
-            channel: getChannel(),
+            channel: runtimeConsentChannel(),
             acceptedTextHash: revocationTextHash,
             clientIp: req.ip,
             userAgent: req.headers['user-agent'] ?? null,
-            pepper: getPepper(),
+            pepper: requireEvidencePepper(),
           });
           const newVersion = consent.version + 1;
           const newConsent = await insertConsentRecord(
