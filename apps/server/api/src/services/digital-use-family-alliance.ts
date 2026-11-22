@@ -32,6 +32,7 @@ import {
   lockCurrentProblemFormulation,
   lockFamilyForPrimaryDecision,
   lockSceneCase,
+  readDigitalUseAssessmentTarget,
   validateSceneRefs,
   type FamilyAllianceTargetCode,
   type SceneNodeStateRow,
@@ -95,13 +96,14 @@ function rethrowFamilyBusinessError(error: unknown): never {
 
 async function evaluateFamilyAllianceCompliance(
   tx: pg.PoolClient,
-  actorPersonId: string
+  actorPersonId: string,
+  targetPersonId: string
 ): Promise<{ policyId: string | null; policyVersion: number | null }> {
   const db = drizzle(tx);
   const result = await evaluateComplianceAtTransactionTime(db, tx, {
     descriptor: FAMILY_ALLIANCE_FEATURE,
     actorPersonId,
-    targetPersonId: actorPersonId,
+    targetPersonId,
     supportedObligations: SUPPORTED_FAMILY_ALLIANCE_OBLIGATIONS,
   });
   if (result.gate !== 'ALLOW') {
@@ -118,9 +120,9 @@ async function evaluateFamilyAllianceCompliance(
 
 async function assertFamilyAllianceConsentOwnerGate(
   tx: pg.PoolClient,
-  actorPersonId: string
+  targetPersonId: string
 ): Promise<void> {
-  const profile = await getComplianceProfileForUpdate(tx, actorPersonId);
+  const profile = await getComplianceProfileForUpdate(tx, targetPersonId);
   if (!profile || profile.age_band !== 'UNDER_14') return;
 
   if (
@@ -139,7 +141,7 @@ async function assertFamilyAllianceConsentOwnerGate(
     !consent ||
     consent.decision !== 'GRANTED' ||
     consent.version !== profile.guardian_consent_version ||
-    consent.bound_person_id !== actorPersonId ||
+    consent.bound_person_id !== targetPersonId ||
     consent.guardian_person_id !== profile.guardian_person_id ||
     consent.notice_hash !== getCurrentNoticeHash()
   ) {
@@ -150,14 +152,20 @@ async function assertFamilyAllianceConsentOwnerGate(
 export async function pinAndAssertFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
-  actorPersonId: string
+  actorPersonId: string,
+  explicitTargetPersonId?: string
 ): Promise<{ policyId: string | null; policyVersion: number | null }> {
+  const targetPersonId =
+    explicitTargetPersonId ?? (await readDigitalUseAssessmentTarget(tx, caseId));
+  if (!targetPersonId) {
+    throw familyHttpError('TARGET_SCOPE_INVALID');
+  }
   // Consent remains an independent owner: validate the authoritative guardian
-  // purpose/version/revocation gate before evaluating feature policy.
-  await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
+  // purpose/version/revocation gate against target child before evaluating feature policy.
+  await assertFamilyAllianceConsentOwnerGate(tx, targetPersonId);
   // Exact same advisory key as Slice 10 publisher/overlap guard.
   await lockComplianceFeatureEvaluationBasis(tx, FAMILY_ALLIANCE_FEATURE);
-  const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId);
+  const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId, targetPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
   return compliance;
 }
@@ -165,12 +173,18 @@ export async function pinAndAssertFamilyAllianceGates(
 export async function revalidateFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
-  actorPersonId: string
+  actorPersonId: string,
+  explicitTargetPersonId?: string
 ): Promise<void> {
+  const targetPersonId =
+    explicitTargetPersonId ?? (await readDigitalUseAssessmentTarget(tx, caseId));
+  if (!targetPersonId) {
+    throw familyHttpError('TARGET_SCOPE_INVALID');
+  }
   // Profile/policy locks are still held. Revalidate Consent independently,
   // then Compliance, immediately before idempotency success/commit.
-  await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
-  await evaluateFamilyAllianceCompliance(tx, actorPersonId);
+  await assertFamilyAllianceConsentOwnerGate(tx, targetPersonId);
+  await evaluateFamilyAllianceCompliance(tx, actorPersonId, targetPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
 }
 
@@ -442,10 +456,16 @@ export async function executeFamilyAllianceNodeInTransaction(
       throw familyHttpError('PROBLEM_FORMULATION_REQUIRED');
     }
 
+    const targetPersonId = await readDigitalUseAssessmentTarget(tx, input.caseId);
+    if (!targetPersonId) {
+      throw familyHttpError('TARGET_SCOPE_INVALID');
+    }
+
     const compliance = await pinAndAssertFamilyAllianceGates(
       tx,
       input.caseId,
-      input.actor.personId
+      input.actor.personId,
+      targetPersonId
     );
 
     await assertBoundAssessmentCompliance(tx, input);
@@ -596,7 +616,7 @@ export async function executeFamilyAllianceNodeInTransaction(
     ) {
       throw familyHttpError('PROBLEM_FORMULATION_REQUIRED');
     }
-    await revalidateFamilyAllianceGates(tx, input.caseId, input.actor.personId);
+    await revalidateFamilyAllianceGates(tx, input.caseId, input.actor.personId, targetPersonId);
     await assertBoundAssessmentCompliance(tx, input);
 
     void compliance;
