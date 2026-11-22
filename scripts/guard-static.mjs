@@ -1000,46 +1000,70 @@ runProfessionalKnowledgeRules();
 // ban pgvector itself; it bans route-specific retrieval/RAG work, permanent
 // readiness stores and privilege escalation. The one sanctioned CREATE
 // EXTENSION owner is db/init/02-pgvector.sh.
+// Scope-specific prohibitions are strictly bound to Slice 19's own implementation
+// surface and must not permanently freeze future independent slices.
 const PGVECTOR_BOOTSTRAP_FILE = 'db/init/02-pgvector.sh';
+const SLICE19_IMPLEMENTATION_FILES = new Set([
+  'db/init/02-pgvector.sh',
+  'scripts/pgvector-readiness.mjs',
+  'scripts/lib/pgvector-readiness.mjs',
+]);
+
+function isSlice19ImplementationSurface(relPath) {
+  if (SLICE19_IMPLEMENTATION_FILES.has(relPath)) {
+    return true;
+  }
+  if (
+    (relPath.startsWith('scripts/') || relPath.startsWith('db/init/')) &&
+    /(?:^|\/)pgvector[-_]readiness\.[a-z0-9]+$/i.test(relPath)
+  ) {
+    return true;
+  }
+  return false;
+}
 
 function checkPgvectorReadinessScope(relPath, content, report) {
   if (relPath.startsWith('tests/') || relPath.startsWith('specs/') || relPath.startsWith('Docs/')) {
     return;
   }
 
-  const lower = content.toLowerCase();
-  const forbiddenTokens = [
-    ['knowledge_embeddings', 'production Knowledge embedding persistence'],
-    ['sparsevec', 'sparse-vector retrieval'],
-    ['pg_jieba', 'pg_jieba lexical retrieval'],
-    ['pg_textsearch', 'pg_textsearch lexical retrieval'],
-    ['hnsw', 'HNSW index/tuning'],
-    ['ivfflat', 'IVFFlat index/tuning'],
-  ];
-  for (const [token, label] of forbiddenTokens) {
-    const index = lower.indexOf(token);
-    if (index >= 0) {
+  // Slice-specific negative boundary: only applies to Slice 19 implementation surface
+  if (isSlice19ImplementationSurface(relPath)) {
+    const lower = content.toLowerCase();
+    const forbiddenTokens = [
+      ['knowledge_embeddings', 'production Knowledge embedding persistence'],
+      ['sparsevec', 'sparse-vector retrieval'],
+      ['pg_jieba', 'pg_jieba lexical retrieval'],
+      ['pg_textsearch', 'pg_textsearch lexical retrieval'],
+      ['hnsw', 'HNSW index/tuning'],
+      ['ivfflat', 'IVFFlat index/tuning'],
+    ];
+    for (const [token, label] of forbiddenTokens) {
+      const index = lower.indexOf(token);
+      if (index >= 0) {
+        report(
+          'R19-pgvector-scope',
+          relPath,
+          lineOf(content, index),
+          `Slice 19 forbids ${label}: ${token}`
+        );
+      }
+    }
+
+    const adapter =
+      /(?:^|\/)(?:embedding|reranker)[-_]?adapter\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath) ||
+      /\b(?:EmbeddingAdapter|RerankerAdapter)\b/.test(content);
+    if (adapter) {
       report(
         'R19-pgvector-scope',
         relPath,
-        lineOf(content, index),
-        `Slice 19 forbids ${label}: ${token}`
+        1,
+        'EmbeddingAdapter and RerankerAdapter are out of scope for Slice 19'
       );
     }
   }
 
-  const adapter =
-    /(?:^|\/)(?:embedding|reranker)[-_]?adapter\.(?:ts|tsx|js|mjs|cjs)$/i.test(relPath) ||
-    /\b(?:EmbeddingAdapter|RerankerAdapter)\b/.test(content);
-  if (adapter) {
-    report(
-      'R19-pgvector-scope',
-      relPath,
-      1,
-      'EmbeddingAdapter and RerankerAdapter are out of scope for Slice 19'
-    );
-  }
-
+  // Global architectural invariant: no persistent pgvector_readiness tables in db/
   if (relPath.startsWith('db/')) {
     const normalized = normalizeSql(content);
     const permanentTable =
@@ -1056,6 +1080,7 @@ function checkPgvectorReadinessScope(relPath, content, report) {
     }
   }
 
+  // Global security invariant: CREATE EXTENSION vector is reserved exclusively for bootstrap
   if (relPath !== PGVECTOR_BOOTSTRAP_FILE) {
     const createExtension = /\bCREATE\s+EXTENSION\b[^\n;]*\bvector\b/i.exec(content);
     if (createExtension) {
@@ -1068,6 +1093,7 @@ function checkPgvectorReadinessScope(relPath, content, report) {
     }
   }
 
+  // Global security invariant: runtime role privilege escalation
   const bypassRls = /\bALTER\s+ROLE\b[^\n;]*\bxiaoshuyin_app\b[^\n;]*\bBYPASSRLS\b/i.exec(content);
   if (bypassRls) {
     report(
@@ -1236,22 +1262,94 @@ if (process.argv.includes('--self-test')) {
       rule: 'R11-assessment-no-scheduler',
     },
     {
-      name: 'Slice 19 Knowledge embeddings persistence',
-      path: 'db/migrations/evil-pgvector.sql',
+      name: 'Slice 19 surface Knowledge embeddings persistence',
+      path: 'db/init/02-pgvector.sh',
       content: 'CREATE TABLE knowledge_embeddings (id uuid PRIMARY KEY);',
       rule: 'R19-pgvector-scope',
     },
     {
-      name: 'Slice 19 sparsevec retrieval',
-      path: 'packages/domain/src/evil-pgvector.ts',
+      name: 'Slice 19 surface sparsevec retrieval',
+      path: 'scripts/lib/pgvector-readiness.mjs',
       content: "const sql = 'embedding sparsevec(1000)';",
       rule: 'R19-pgvector-scope',
     },
     {
-      name: 'Slice 19 embedding adapter',
+      name: 'Slice 19 surface pg_jieba lexical retrieval',
+      path: 'scripts/pgvector-readiness.mjs',
+      content: "const ext = 'pg_jieba';",
+      rule: 'R19-pgvector-scope',
+    },
+    {
+      name: 'Slice 19 surface pg_textsearch lexical retrieval',
+      path: 'scripts/pgvector-readiness.mjs',
+      content: "const ext = 'pg_textsearch';",
+      rule: 'R19-pgvector-scope',
+    },
+    {
+      name: 'Slice 19 surface hnsw index',
+      path: 'db/init/02-pgvector.sh',
+      content: 'CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);',
+      rule: 'R19-pgvector-scope',
+    },
+    {
+      name: 'Slice 19 surface ivfflat index',
+      path: 'db/init/02-pgvector.sh',
+      content: 'CREATE INDEX ON chunks USING ivfflat (embedding vector_l2_ops);',
+      rule: 'R19-pgvector-scope',
+    },
+    {
+      name: 'Slice 19 surface embedding adapter',
+      path: 'scripts/lib/pgvector-readiness.mjs',
+      content: 'export class EmbeddingAdapter {}',
+      rule: 'R19-pgvector-scope',
+    },
+    {
+      name: 'Slice 19 surface reranker adapter',
+      path: 'scripts/lib/pgvector-readiness.mjs',
+      content: 'export class RerankerAdapter {}',
+      rule: 'R19-pgvector-scope',
+    },
+    {
+      name: 'Future independent path embedding adapter passes R19',
       path: 'packages/domain/src/embedding-adapter.ts',
       content: 'export class EmbeddingAdapter {}',
       rule: 'R19-pgvector-scope',
+      expectViolation: false,
+    },
+    {
+      name: 'Future independent path reranker adapter passes R19',
+      path: 'packages/domain/src/reranker-adapter.ts',
+      content: 'export class RerankerAdapter {}',
+      rule: 'R19-pgvector-scope',
+      expectViolation: false,
+    },
+    {
+      name: 'Future independent path sparsevec passes R19',
+      path: 'packages/domain/src/future-search.ts',
+      content: "const sql = 'embedding sparsevec(1000)';",
+      rule: 'R19-pgvector-scope',
+      expectViolation: false,
+    },
+    {
+      name: 'Future independent path pg_jieba passes R19',
+      path: 'packages/domain/src/future-search.ts',
+      content: "const ext = 'pg_jieba';",
+      rule: 'R19-pgvector-scope',
+      expectViolation: false,
+    },
+    {
+      name: 'Future independent path hnsw passes R19',
+      path: 'db/migrations/040_future_hnsw.sql',
+      content: 'CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);',
+      rule: 'R19-pgvector-scope',
+      expectViolation: false,
+    },
+    {
+      name: 'Future independent path knowledge_embeddings passes R19',
+      path: 'db/migrations/041_knowledge_embeddings.sql',
+      content: 'CREATE TABLE knowledge_embeddings (id uuid PRIMARY KEY);',
+      rule: 'R19-pgvector-scope',
+      expectViolation: false,
     },
     {
       name: 'runtime CREATE EXTENSION vector',
