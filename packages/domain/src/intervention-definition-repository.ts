@@ -185,12 +185,14 @@ export async function getCurrentProfessionalReviewStaffAssignment(
     ['AUTH_ACCOUNT:' + input.accountId]
   );
   const result = await tx.query<{ id: string }>(
-    "SELECT id FROM staff_assignments " +
-      "WHERE account_id=$1 AND person_id=$2 AND capability='PROFESSIONAL_REVIEW' " +
-      "AND scope_type='GLOBAL' AND revoked_at IS NULL " +
-      "AND valid_from <= clock_timestamp() " +
-      "AND (valid_until IS NULL OR valid_until > clock_timestamp()) " +
-      "ORDER BY granted_at DESC, id LIMIT 2",
+    "SELECT sa.id FROM staff_assignments sa " +
+      "JOIN accounts a ON a.id = sa.account_id " +
+      "WHERE sa.account_id=$1 AND sa.person_id=$2 AND a.status='ACTIVE' " +
+      "AND sa.capability='PROFESSIONAL_REVIEW' " +
+      "AND sa.scope_type='GLOBAL' AND sa.revoked_at IS NULL " +
+      "AND sa.valid_from <= clock_timestamp() " +
+      "AND (sa.valid_until IS NULL OR sa.valid_until > clock_timestamp()) " +
+      "ORDER BY sa.granted_at DESC, sa.id LIMIT 2",
     [input.accountId, input.personId]
   );
   return result.rows.length === 1 && result.rows[0]
