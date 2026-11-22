@@ -650,11 +650,26 @@ function decideParticipationAction(
   }
   if (participation === null) return deny('PARTICIPATION_CONTEXT_REQUIRED');
 
+  // Finding #26: Resource fact binding: resource.participationId must match verified participation fact
+  if (
+    participation.participationId !== undefined &&
+    input.resource.participationId !== participation.participationId
+  ) {
+    return deny('PARTICIPATION_CONTEXT_REQUIRED');
+  }
+
   if (input.action === 'PARTICIPATION_READ_MANAGER') {
     if (input.purpose !== 'FAMILY_MANAGEMENT') return deny('UNSUPPORTED_PURPOSE');
     if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
     if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
     if (facts.familyCreatedByPersonId !== actorPersonId) return deny('NOT_FAMILY_MANAGER');
+    // Finding #26: Cross-family isolation: visible participation family must match requested family
+    if (
+      participation.familyId !== undefined &&
+      participation.familyId !== input.family.familyId
+    ) {
+      return deny('NOT_FAMILY_MEMBER');
+    }
     return allow(true, input.purpose);
   }
 
