@@ -36,6 +36,39 @@ function expectNo(source: string, patterns: RegExp[]) {
   for (const pattern of patterns) expect(source).not.toMatch(pattern);
 }
 
+const SLICE_17_HISTORICAL_BASE = '8ac4b22373aa46bc5f86d0f042fa994997ee66d5';
+const SLICE_17_HISTORICAL_HEAD = '8a54ad2000e2d15d7d129035b485708c655a2e83';
+const SLICE_17_HISTORICAL_MERGE = '1b7a9d817713692cc1b895a7f601f07e8123f8fa';
+
+function changedPathsBetween(base: string, head: string) {
+  return execFileSync(
+    'git',
+    ['diff', '--name-only', `${base}...${head}`],
+    { encoding: 'utf8' }
+  ).trim().split('\n').filter(Boolean);
+}
+
+function commitParents(commit: string) {
+  return execFileSync(
+    'git',
+    ['show', '-s', '--format=%P', commit],
+    { encoding: 'utf8' }
+  ).trim().split(/\s+/).filter(Boolean);
+}
+
+function forbiddenSlice17ScopeChanges(changed: string[]) {
+  return changed.filter((path) =>
+    path.startsWith('Docs/') ||
+    path === '.specify/authority-inputs.json' ||
+    path === 'specs/017-professional-knowledge-foundation/spec.md' ||
+    path === 'specs/017-professional-knowledge-foundation/plan.md' ||
+    path === 'specs/017-professional-knowledge-foundation/checklist.md' ||
+    path === 'specs/017-professional-knowledge-foundation/tasks.md' ||
+    path.includes('/016-') ||
+    /(?:slice18|slice19|018-|019-)/i.test(path)
+  );
+}
+
 describe('Slice 17 negative-scope semantic static evidence', () => {
   it('NS-001: adds no embeddings, vector storage, sparse vectors, or embedding generation', () => {
     expectNo(migration + imports, [
@@ -191,21 +224,36 @@ describe('Slice 17 negative-scope semantic static evidence', () => {
   });
 
   it('NS-024: mutates no Docs, frozen Slice 17 spec/planning, Slice 16, or later authority artifacts', () => {
-    const changed = execFileSync(
-      'git',
-      ['diff', '--name-only', 'origin/main...HEAD'],
-      { encoding: 'utf8' }
-    ).trim().split('\n').filter(Boolean);
-    const forbidden = changed.filter((path) =>
-      path.startsWith('Docs/') ||
-      path === '.specify/authority-inputs.json' ||
-      path === 'specs/017-professional-knowledge-foundation/spec.md' ||
-      path === 'specs/017-professional-knowledge-foundation/plan.md' ||
-      path === 'specs/017-professional-knowledge-foundation/checklist.md' ||
-      path === 'specs/017-professional-knowledge-foundation/tasks.md' ||
-      path.includes('/016-') ||
-      /(?:slice18|slice19|018-|019-)/i.test(path)
+    // PR #58 historical identity: merge commit parents must remain exact Base + Head.
+    expect(commitParents(SLICE_17_HISTORICAL_MERGE)).toEqual([
+      SLICE_17_HISTORICAL_BASE,
+      SLICE_17_HISTORICAL_HEAD,
+    ]);
+
+    // This is deliberately the Slice 17 historical delta, not the current PR delta.
+    // Legal later Slice 18/19 work therefore cannot trip this historical contract.
+    const changed = changedPathsBetween(
+      SLICE_17_HISTORICAL_BASE,
+      SLICE_17_HISTORICAL_HEAD
     );
-    expect(forbidden).toEqual([]);
+    expect(forbiddenSlice17ScopeChanges(changed)).toEqual([]);
+  });
+
+  it('NS-025: historical Slice 17 scope classifier still rejects protected-path counterfactuals', () => {
+    const counterfactualForbidden = [
+      'Docs/V1产品需求.md',
+      '.specify/authority-inputs.json',
+      'specs/017-professional-knowledge-foundation/spec.md',
+      'specs/017-professional-knowledge-foundation/plan.md',
+      'specs/017-professional-knowledge-foundation/checklist.md',
+      'specs/017-professional-knowledge-foundation/tasks.md',
+      'specs/016-counterfactual-authority/spec.md',
+      'specs/018-counterfactual-authority/spec.md',
+      'specs/019-counterfactual-authority/plan.md',
+    ];
+
+    expect(forbiddenSlice17ScopeChanges(counterfactualForbidden)).toEqual(
+      counterfactualForbidden
+    );
   });
 });

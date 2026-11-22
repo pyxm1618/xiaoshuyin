@@ -748,6 +748,70 @@ function setupG2() {
   cleanup(root);
 }
 
+
+// G1-S19: registration-only PR is separate from consuming implementation.
+// The fixture uses the *same exact path/feature identity* as the Slice 19 prerequisite.
+const S19_FEATURE = "019-professional-retrieval-pgvector-readiness";
+const S19_PATH = "db/init/02-pgvector.sh";
+const S19_RULE = ownershipRule("professional-retrieval-pgvector-bootstrap-019", "EXACT", S19_PATH, "FEATURE", [S19_FEATURE]);
+function makeS19Fixture() {
+  const root = project();
+  addFeature(root, S19_FEATURE);
+  addOwnership(root, [S19_RULE]);
+  return root;
+}
+function s19Binding(root, rel, changeId) {
+  write(root, ".specify/change-bindings/s19.json", JSON.stringify({
+    schemaVersion: 2,
+    changeId,
+    classification: "FEATURE_IMPLEMENTATION",
+    featureBindings: [{ feature: S19_FEATURE, specPath: "specs/" + S19_FEATURE, implementationPaths: [rel] }],
+  }, null, 2) + "\n");
+}
+{
+  const root = project();
+  addFeature(root, "001-family-identity-core");
+  const existing = ownershipRule("fixture-existing-role", "EXACT", "db/init/01-roles.sh", "FEATURE", ["001-family-identity-core"]);
+  addOwnership(root, [existing]);
+  const base = commit(root, "base");
+  addFeature(root, S19_FEATURE);
+  addOwnership(root, [existing, S19_RULE]);
+  commit(root, "register exact ownership and spec, no product or binding");
+  record("G1-S19-01 registry plus canonical spec prerequisite passes alone", 0, run(root, base), "Change governance PASS");
+  cleanup(root);
+}
+{
+  const root = makeS19Fixture();
+  const base = commit(root, "base after registry");
+  write(root, S19_PATH, "#!/bin/bash\nexit 0\n");
+  s19Binding(root, S19_PATH, "s19-exact-valid");
+  commit(root, "later separately bound implementation");
+  record("G1-S19-02 exact pgvector bootstrap ownership permits later bound implementation", 0, run(root, base), "Change governance PASS");
+  cleanup(root);
+}
+for (const rel of ["db/init/unknown.sh", "db/migrations/999_slice19_forbidden.sql", "packages/rag/forbidden.ts"]) {
+  const root = makeS19Fixture();
+  const base = commit(root, "base after registry");
+  write(root, rel, "fixture\n");
+  s19Binding(root, rel, "s19-unauthorized");
+  commit(root, "unknown production path");
+  record("G1-S19-03 Slice 19 fails closed outside exact scope: " + rel, 1, run(root, base), "No registered implementation ownership");
+  cleanup(root);
+}
+{
+  const root = project();
+  addFeature(root, "001-family-identity-core");
+  addOwnership(root, [ownershipRule("fixture-existing-role", "EXACT", "db/init/01-roles.sh", "FEATURE", ["001-family-identity-core"])]);
+  const base = commit(root, "base");
+  addFeature(root, S19_FEATURE);
+  addOwnership(root, [S19_RULE]);
+  write(root, S19_PATH, "#!/bin/bash\nexit 0\n");
+  s19Binding(root, S19_PATH, "s19-self-authorization");
+  commit(root, "forbidden registry plus implementation and binding");
+  record("G1-S19-04 registry cannot self-authorize same-PR consuming implementation", 1, run(root, base), "Implementation ownership registry changes cannot coexist");
+  cleanup(root);
+}
+
 let failed = 0;
 for (const item of results) {
   if (!item.pass) failed += 1;
