@@ -25,6 +25,7 @@ import {
   insertAuditEvent,
   isFamilyMember,
   generateUuidv7,
+  getPersonById,
 } from '@xiaoshuyin/domain';
 import { requireFamilyAction } from '../authz.js';
 import {
@@ -155,11 +156,13 @@ async function buildMemberResponse(
       code: 'INTERNAL_ERROR',
     });
   }
+  const person = await getPersonById(tx, personId);
+  const accountBound = person !== null && person.account_id !== null;
   const values = await getProfileValuesFull(tx, personId);
   return {
     personId,
     familyId,
-    accountBound: false,
+    accountBound,
     profile: {
       ageBand: profile.age_band,
       minorMode: profile.minor_mode,
