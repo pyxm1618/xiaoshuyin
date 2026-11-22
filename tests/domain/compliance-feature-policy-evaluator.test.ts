@@ -331,6 +331,33 @@ describe('pure compliance feature-policy evaluator', () => {
     );
   });
 
+  it('Finding #2: UNDER_14 requiring guardian consent fails closed when consumer does not support it (e.g. Assessment)', () => {
+    // When target is UNDER_14, evaluateCompliance yields REQUIRE_GUARDIAN_CONSENT
+    const under14Result = {
+      gate: 'ALLOW' as const,
+      policyId: '00000000-0000-7000-8000-000000000001',
+      featureCode: FEATURE.featureCode,
+      policyVersion: 1,
+      reasonCode: null,
+      obligations: ['REQUIRE_MINOR_MODE', 'REQUIRE_GUARDIAN_CONSENT'] as const,
+      evaluatedAt: NOW,
+    };
+
+    // Assessment only declares ['REQUIRE_MINOR_MODE']
+    const guarded = assertComplianceObligationsSupported(under14Result, ['REQUIRE_MINOR_MODE']);
+    expect(guarded.gate).toBe('BLOCK');
+    expect(guarded.reasonCode).toBe('COMPLIANCE_CAPABILITY_UNAVAILABLE');
+    expect(guarded.obligations).toContain('REQUIRE_GUARDIAN_CONSENT');
+
+    // MINOR_14_17 only yields ['REQUIRE_MINOR_MODE'], which IS supported
+    const minorResult = {
+      ...under14Result,
+      obligations: ['REQUIRE_MINOR_MODE'] as const,
+    };
+    const minorGuarded = assertComplianceObligationsSupported(minorResult, ['REQUIRE_MINOR_MODE']);
+    expect(minorGuarded.gate).toBe('ALLOW');
+  });
+
   it('evaluator source contains no clock / network / model import', () => {
     const source = readFileSync(
       join(process.cwd(), 'packages', 'compliance', 'src', 'feature-policy.ts'),

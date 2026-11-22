@@ -141,9 +141,6 @@ export async function assertAssessmentCompliance(
   const result = assertComplianceObligationsSupported(
     evaluateCompliance(snapshot), SUPPORTED_ASSESSMENT_OBLIGATIONS
   );
-  if (snapshot.person?.ageBand !== 'MINOR_14_17') {
-    throw sceneError('COMPLIANCE_BLOCKED');
-  }
   if (result.gate !== 'ALLOW') {
     throw sceneError('COMPLIANCE_BLOCKED', result.reasonCode ?? 'COMPLIANCE_BLOCKED');
   }
