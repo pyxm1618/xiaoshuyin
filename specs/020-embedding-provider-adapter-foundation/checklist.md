@@ -2,7 +2,7 @@
 
 > Feature: `020-embedding-provider-adapter-foundation`
 >
-> Authority: `specs/020-embedding-provider-adapter-foundation/spec.md`（Frozen **Revision 3**，commit `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`，blob `078982f0819954a5479086da86036ccd81d22b2c`）
+> Authority: `specs/020-embedding-provider-adapter-foundation/spec.md`（Frozen **Revision 4**，commit `95c37f45fade2dde9c90d2f16ba0e8430beadb1e`，blob `76c10f4fc81907cb1dcb37f5d522ec7086efef5b`）
 >
 > **Governance Mode: MODE A — NATIVE HTTP**（native HTTP + `globalThis.fetch`；零 provider 依赖；
 > `scripts/guard-static.mjs` 与 base 字节级一致；无 allowance、无 provider import fixture）
@@ -32,7 +32,7 @@ Legend
 
 | ID | 检查项 | PASS 判据 | FAIL 判据 |
 | --- | --- | --- | --- |
-| CHK-A01 | Frozen Spec blob 未变 | `git hash-object specs/020-*/spec.md` == `078982f0819954a5479086da86036ccd81d22b2c`（Revision 3） | 任何字节差异 |
+| CHK-A01 | Frozen Spec blob 未变 | `git hash-object specs/020-*/spec.md` == `76c10f4fc81907cb1dcb37f5d522ec7086efef5b`（Revision 4） | 任何字节差异 |
 | CHK-A02 | Authority Docs 未变 | `git diff --name-only <base>...HEAD` 不含 `Docs/` | 含任一 `Docs/` 文件 |
 | CHK-A03 | Slice 16–19 Authority 未变 | diff 不含 `specs/016-*`..`specs/019-*` | 含任一 |
 | CHK-A04 | Spec 语义未被改写 | diff 不含 `specs/020-*/spec.md` | 含 `spec.md` |
@@ -69,7 +69,7 @@ Legend
 | CHK-C11 | 治理模式声明为 MODE A | `plan.md` 明示 `GOVERNANCE MODE: MODE A — NATIVE HTTP`；且实现确实为 native HTTP + `globalThis.fetch`、无 provider SDK import | 声明 MODE B，或声明与实际依赖不符 |
 | CHK-C12 | guard blob 字节级等于 base（V15） | `git rev-parse <base>:scripts/guard-static.mjs` == `git rev-parse HEAD:scripts/guard-static.mjs` | 任一字节差异 |
 | CHK-C13 | 不存在 allowance 定义 | `scripts/guard-static.mjs` 中无 `R8_PATH_SCOPED_ALLOWANCES`、无 `isR8PathAllowed`（MODE A） | 出现任一 |
-| CHK-C14 | 不存在 provider import fixture | `--self-test` 输出 `PASS (28 synthetic fixtures validated)`；源码无 `slice20 …` fixture | 数量变化或存在新增 fixture |
+| CHK-C14 | 不存在 provider import fixture | `--self-test` 输出 `PASS (39 synthetic fixtures validated)`；源码无 `slice20 …` fixture | 数量变化或存在新增 fixture |
 | CHK-C15 | G1b diff 恰好 1 个文件 | `git diff --name-only <main>...HEAD` == `.specify/implementation-ownership.json` | 多出任何文件（尤其 `scripts/**`） |
 | CHK-C16 | 依赖边界：无 provider SDK | `package.json` / lockfile / seam import 扫描 `dashscope`、`@alicloud`、provider SDK 命中 = 0（V16） | 命中 > 0 |
 | CHK-C17 | provider egress 只在 seam | architecture test：seam 外无 `fetch(` 出网构造；seam 内仅 `transport.ts` | 存在 seam 外 direct provider integration |
@@ -79,7 +79,7 @@ Legend
 | CHK-C21 | AS-036：MODE B NOT TRIGGERED | import 扫描命中 0 → allow set 与 fixtures 均不存在；无"为进入 MODE B"而加的 SDK | 出现 MODE B 形态但无真实 import 依据 |
 | CHK-C22 | AS-035：MODE A governance evidence 完整 | C12 + C15 + C16 + C17 + C18 + C19 + C20 全部 PASS（六项缺一即 FAIL） | 任一缺失 |
 | CHK-C23 | Rule 19 未被修改 | diff 不含 `scripts/guard-static.mjs`（因此必然不含 `checkPgvectorReadinessScope` 改动） | 有改动 |
-| CHK-C24 | 治理 PR 自身通过校验 | `guard-static`、`--self-test`（28）、`validate-governance`、`run-change-governance-tests`、`validate-change-governance --base origin/main` 全部 PASS | 任一 FAIL |
+| CHK-C24 | 治理 PR 自身通过校验 | `guard-static`、`--self-test`（39）、`validate-governance`、`run-change-governance-tests`、`validate-change-governance --base origin/main` 全部 PASS | 任一 FAIL |
 | CHK-C25 | NS-039（MODE A 禁止预置放宽） | guard blob 相等 + 无新 fixture + diff 无 `scripts/**` + 无 allow set（C12/C13/C14/C15） | 任一违反 |
 | CHK-C26 | NS-040（禁止为满足 Spec 引入 SDK） | `package.json` / lockfile 无新增 provider 依赖；依赖图无 `dashscope` / `@alicloud` import（C16） | 存在任一 |
 | CHK-C27 | C20-21：治理模式由实际依赖决定 | native HTTP + 无 forbidden provider import → MODE A；ownership 无条件存在；无 allowance/fixture；若真实出现 provider import，必须先改 Spec 进入 MODE B | 声明与依赖不符，或未改 Spec 就切换 MODE B |
@@ -100,6 +100,12 @@ Legend
 | CHK-D10 | 调用方不可见 provider 字段 | `index.ts` 导出类型不含 `sparse_embedding` / `embeddings` / `usage.total_tokens` 等 provider 字段名 | 存在 |
 | CHK-D11 | 输入校验覆盖 | 空数组 / 空白项 / 超 `MAX_INPUT_CHARS` / 超 `MAX_BATCH_SIZE` 各自稳定码且出网 0 | 静默截断或补默认值 |
 | CHK-D12 | 输入零泄漏 | telemetry / 错误 / 日志抓取不含输入原文 | 存在原文 |
+| CHK-D13 | Envelope valid：`output.embeddings` 接受 | 原生 HTTP 成功响应仅含 `output.embeddings`（无 top-level `embeddings`）→ 成功，`observedResponseEnvelope==='HTTP_OUTPUT_WRAPPED'` | 拒绝合法 `output.embeddings`，或 envelope 标记缺失/错误 |
+| CHK-D14 | Envelope invalid flat：仅 top-level `embeddings` 拒绝 | 仅 top-level `embeddings` → `TERMINAL` / `MALFORMED_PROVIDER_RESPONSE`；不当作 native HTTP success | 接受 SDK-flat shape 为成功 |
+| CHK-D15 | Envelope ambiguous：dual 拒绝 | `output.embeddings` + top-level `embeddings` 同时存在 → `TERMINAL` / `AMBIGUOUS_PROVIDER_RESPONSE`；无 precedence / merge / fallback | 选择其一、合并或静默回退 |
+| CHK-D16 | Envelope unknown nesting 拒绝 | `data.embeddings` / `result.embeddings` / `payload.embeddings` / `response.embeddings` 或任意深层 → `TERMINAL` / `MALFORMED_PROVIDER_RESPONSE`；无 recursive/deep search | 任一被当作合法 envelope |
+| CHK-D17 | Normalization：下游只见 canonical | wrapped 响应 normalize 后 consumer 仅见 `NormalizedProviderResponse`；raw provider envelope 不出 seam，且 `index.ts` 不导出 raw envelope | consumer 可见 raw envelope 或 provider 字段 |
+| CHK-D18 | Evidence：真实观测 envelope | 真实 provider verification artifact 记录 `observed_response_envelope`；成功的 MODE A 证据必须为 `HTTP_OUTPUT_WRAPPED`；其它真实观测不得自动扩大 Spec | 缺失该字段，或把其它 shape 记为成功 |
 
 ## E. Dense Contract
 
@@ -219,7 +225,7 @@ Legend
 | CHK-L06 | READY 三条件 | 仅 contract+provider+config 同时满足才可 READY | 任一缺失即 READY |
 | CHK-L07 | 来源真实性 | `source==='REAL_ALIBABA_DASHSCOPE_CALL'`；伪造被拒 | 接受伪造 |
 | CHK-L08 | 无 READY 类声明 | 全文检索无 `READY`/`可用`/`就绪`/`基本可用` 等对外声明 | 存在 |
-| CHK-L09 | 证据 artifact 完整性 | 命令/时间/环境/model/request_id/echo/inputDigest/resultSummary/EVC 覆盖 | 缺失任一 |
+| CHK-L09 | 证据 artifact 完整性 | 命令/时间/环境/model/request_id/observed_response_envelope/echo/inputDigest/resultSummary/EVC 覆盖 | 缺失任一 |
 | CHK-L10 | artifact 零敏感 | 无 secret / 原始 body / 输入原文 / 家庭数据 / Gold label | 存在任一 |
 | CHK-L11 | 证据不跨 Slice 复用 | artifact 只引用本 Slice 调用记录 | 引用其它 Slice |
 | CHK-L12 | 当前离线状态 | Slice 当前为 `PROVIDER_NOT_VERIFIED` | 声称其它 |
@@ -267,7 +273,7 @@ Legend
 | ID | 检查项 | PASS 判据 | FAIL 判据 |
 | --- | --- | --- | --- |
 | CHK-O01 | 静态守卫 | `node scripts/guard-static.mjs` → `PASS (0 violations)` | FAIL |
-| CHK-O02 | self-test（MODE A baseline） | `node scripts/guard-static.mjs --self-test` → `PASS (28 synthetic fixtures validated)`，数量与 base 相同 | FAIL、数量变化或新增 fixture |
+| CHK-O02 | self-test（MODE A baseline） | `node scripts/guard-static.mjs --self-test` → `PASS (39 synthetic fixtures validated)`，数量与 base 相同 | FAIL、数量变化或新增 fixture |
 | CHK-O03 | typecheck（base） | `bunx tsc -p tsconfig.base.json --noEmit` → exit 0 | 非 0 |
 | CHK-O04 | typecheck（api） | `cd apps/server/api && bunx tsc --noEmit` → exit 0 | 非 0 |
 | CHK-O05 | governance | `validate-governance` + `run-governance-tests` + `validate-change-governance --base origin/main` 全 PASS | 任一 FAIL |
@@ -313,7 +319,7 @@ Legend
 | A Authority & Frozen Identity | 8 | | | | |
 | B Scope | 6 | | | | |
 | C Governance Prerequisite | 27 | | | | |
-| D Port Contract | 12 | | | | |
+| D Port Contract | 18 | | | | |
 | E Dense Contract | 9 | | | | |
 | F Sparse Payload Contract | 14 | | | | |
 | G Error Model | 14 | | | | |
@@ -327,15 +333,15 @@ Legend
 | O Regression | 9 | | | | |
 | P Provider Verification | 10 | | | | |
 | Q Development Handoff | 8 | | | | |
-| **合计** | **191** | | | | |
+| **合计** | **197** | | | | |
 
 ```text
-COVERAGE DECLARATION（Revision 3）
-  FR  67 / 67
-  AS  36 / 36（含 AS-035 MODE A evidence、AS-036 MODE B NOT TRIGGERED）
-  NS  40 / 40（含 NS-039 MODE A 无预置放宽、NS-040 禁止引入 SDK）
-  C20 21 / 21
-  EVC 10 / 10
+COVERAGE DECLARATION（Revision 4）
+  FR  69 / 69（含 FR-068 strict HTTP_OUTPUT_WRAPPED、FR-069 ambiguous/malformed fail closed）
+  AS  39 / 39（含 AS-035 MODE A evidence、AS-036 MODE B NOT TRIGGERED、AS-037..AS-039 envelope）
+  NS  42 / 42（含 NS-039 MODE A 无预置放宽、NS-040 禁止引入 SDK、NS-041 禁止 recursive parser、NS-042 禁止 ambiguous precedence）
+  C20 23 / 23（含 C20-22 strict envelope normalization、C20-23 envelope fail closed）
+  EVC 10 / 10（EVC-03 含 observed_response_envelope=HTTP_OUTPUT_WRAPPED）
 GOVERNANCE MODE: MODE A — NATIVE HTTP
 ```
 

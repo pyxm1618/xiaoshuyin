@@ -2,7 +2,7 @@
 
 > Feature: `020-embedding-provider-adapter-foundation`
 >
-> Frozen Spec: `spec.md` Revision 3，commit `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`，blob `078982f0819954a5479086da86036ccd81d22b2c`
+> Frozen Spec: `spec.md` Revision 4，commit `95c37f45fade2dde9c90d2f16ba0e8430beadb1e`，blob `76c10f4fc81907cb1dcb37f5d522ec7086efef5b`
 >
 > **Governance Mode: MODE A — NATIVE HTTP**（零 provider 依赖；`scripts/guard-static.mjs` 字节级不变；
 > 唯一治理 delta = `.specify/implementation-ownership.json` +1 条 PREFIX 规则）
@@ -31,11 +31,11 @@
 | T003 | G2 Independent governance audit + merge（MODE A） | Frozen Spec §19.2 流程约束、AS-035、AS-036；`plan.md` §5.3、§5.6 |
 | T004 | I0 Rebind implementation branch | Frozen Spec §3；`plan.md` §4.1 |
 | T005 | I1 Port / types | FR-001..FR-010、FR-052；`plan.md` §6.2–6.3 |
-| T006 | I2 Adapter（config / transport / protocol） | FR-002、FR-022..FR-027、FR-042；`plan.md` §6.12–6.13 |
-| T007 | I3 Validation / error / retry | FR-011..FR-021、FR-028..FR-036、FR-063..FR-067；`plan.md` §6.4–6.7 |
+| T006 | I2 Adapter（config / transport / protocol） | FR-002、FR-022..FR-027、FR-042、FR-068、FR-069；`plan.md` §6.12–6.13 |
+| T007 | I3 Validation / error / retry | FR-011..FR-021、FR-028..FR-036、FR-063..FR-069；`plan.md` §6.4–6.7、§6.13.1 |
 | T008 | I4 Telemetry / cost / secrets | FR-037..FR-040、FR-042、FR-043；`plan.md` §6.8–6.10 |
-| T009 | I5 Contract tests | FR-001..FR-040、FR-053..FR-055；`plan.md` §7.3–7.4 |
-| T010 | I6 Architecture / static guards | FR-041、FR-044..FR-052、FR-056..FR-062；NS-001..NS-040；`plan.md` §7.2–7.5 |
+| T009 | I5 Contract tests | FR-001..FR-040、FR-053..FR-055、FR-068、FR-069、AS-037..AS-039；`plan.md` §7.3–7.4 |
+| T010 | I6 Architecture / static guards | FR-041、FR-044..FR-052、FR-056..FR-062；NS-001..NS-042；`plan.md` §7.2–7.5 |
 | T011 | I7 Optional real-provider verification | FR-056..FR-062、EVC-01..EVC-10；`plan.md` §8 |
 | T012 | I8 Canonical regression + STOP | Frozen Spec §19.3/§19.4；`plan.md` §7.1（含 V15 guard blob equality、V16 依赖扫描） |
 
@@ -54,12 +54,12 @@
 - [ ] T003 G2 independent governance audit + merge（MODE A：ownership narrow / guard unchanged / no SDK / unknown path fail closed）— [REQ:FR-051; NS-027,NS-029,NS-030,NS-039,NS-040] [VERIFY: .specify/scripts/tests/run-change-governance-tests.mjs scripts/guard-static.mjs]
 - [ ] T004 I0 rebind implementation branch to current main — [REQ:FR-048,FR-051; NS-003,NS-017] [VERIFY: .specify/scripts/validate-change-governance.mjs]
 - [ ] T005 I1 Port contract and types — [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-052] [VERIFY: tests/ai/embedding-provider-contract.test.ts]
-- [ ] T006 I2 DashScope protocol adapter (config / transport / mapping) — [REQ:FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-042,FR-044,FR-045] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts]
-- [ ] T007 I3 validation / error normalization / timeout / retry / cancellation — [REQ:FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,FR-036,FR-063,FR-064,FR-065,FR-066,FR-067] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts tests/ai/embedding-provider-contract.test.ts]
+- [ ] T006 I2 DashScope protocol adapter (config / transport / mapping) — [REQ:FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-042,FR-044,FR-045,FR-068,FR-069] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts]
+- [ ] T007 I3 validation / error normalization / timeout / retry / cancellation — [REQ:FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,FR-036,FR-063,FR-064,FR-065,FR-066,FR-067,FR-068,FR-069] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts tests/ai/embedding-provider-contract.test.ts]
 - [ ] T008 I4 telemetry / cost record / secret boundaries / evidence derivation — [REQ:FR-010,FR-037,FR-038,FR-039,FR-040,FR-041,FR-042,FR-043,FR-053,FR-054,FR-055] [VERIFY: tests/ai/embedding-provider-contract.test.ts]
-- [ ] T009 I5 contract test suite completion — [REQ:FR-001,FR-006,FR-009,FR-010,FR-039,FR-040,FR-053,FR-054,FR-055] [VERIFY: tests/ai/embedding-provider-contract.test.ts tests/ai/embedding-dashscope-adapter.test.ts tests/integration/embedding-provider-no-persistence.test.ts]
-- [ ] T010 I6 architecture / negative-scope static guards（含 egress-only-seam / Port-only consumer / endpoint policy / dependency boundary）— [REQ:FR-041,FR-044,FR-045,FR-046,FR-049,FR-050,FR-051,FR-052,FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062] [VERIFY: tests/architecture/embedding-provider-boundary.test.ts scripts/guard-static.mjs]
-- [ ] T011 I7 optional real-provider verification (explicit opt-in) — [REQ:FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062] [VERIFY: tests/ai/embedding-provider-verification.test.ts tests/evidence/embedding-provider-verification.json]
+- [ ] T009 I5 contract test suite completion — [REQ:FR-001,FR-006,FR-009,FR-010,FR-039,FR-040,FR-053,FR-054,FR-055,FR-068,FR-069] [VERIFY: tests/ai/embedding-provider-contract.test.ts tests/ai/embedding-dashscope-adapter.test.ts tests/integration/embedding-provider-no-persistence.test.ts]
+- [ ] T010 I6 architecture / negative-scope static guards（含 egress-only-seam / Port-only consumer / endpoint policy / dependency boundary）— [REQ:FR-041,FR-044,FR-045,FR-046,FR-049,FR-050,FR-051,FR-052,FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062;NS-041,NS-042] [VERIFY: tests/architecture/embedding-provider-boundary.test.ts scripts/guard-static.mjs]
+- [ ] T011 I7 optional real-provider verification (explicit opt-in) — [REQ:FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062,FR-069] [VERIFY: tests/ai/embedding-provider-verification.test.ts tests/evidence/embedding-provider-verification.json]
 - [ ] T012 I8 canonical regression + STOP at READY FOR AUDIT 2（含 V15 guard blob equality）— [REQ:FR-051,FR-053,FR-055,FR-059; NS-003,NS-018,NS-039] [VERIFY: scripts/verify-all.mjs scripts/guard-static.mjs]
 
 ---
@@ -77,13 +77,13 @@
 
 **Forbidden paths**：`apps/**`、`packages/**`、`db/**`、`Docs/**`、`specs/016-*`..`specs/019-*`、`.specify/**`、`scripts/**`。
 
-**Prerequisites**：Frozen Spec 已可读取（blob `078982f0`）。
+**Prerequisites**：Frozen Spec 已可读取（blob `76c10f4f`）。
 
 **Implementation action**：
 
 1. `git fetch origin` 后记录 `origin/main` SHA；确认当前分支 base 与 Frozen Spec §3.1 记录的关系；
 2. 若 `origin/main` 前进：普通 merge（**禁止** rebase frozen history、禁止 force-push）；
-3. 核验 `git hash-object specs/020-*/spec.md` == `078982f0819954a5479086da86036ccd81d22b2c`；
+3. 核验 `git hash-object specs/020-*/spec.md` == `76c10f4fc81907cb1dcb37f5d522ec7086efef5b`；
 4. 核验 `Docs/**` 与 `specs/016-*`..`specs/019-*` 未被本分支修改；
 5. 核验 main 上无 `apps/server/api/src/ai/`、无 `packages/ai|rag|memory`；
 6. 重新核验 open PR 列表，确认无第二个 Slice 20 实现；若 PR #111 状态变化，记录其是否已合并；
@@ -108,7 +108,7 @@ node scripts/guard-static.mjs
 
 - `origin/main` 与 `plan.md` §4.1 记录一致；
 - behind = 0（或已普通 merge 并重记）；
-- spec blob == `078982f0…`；
+- spec blob == `76c10f4f…`；
 - diff 中无 `Docs/`、无 `specs/016-*`..`specs/019-*`；
 - 无竞争 Slice 20 实现；
 - `validate-change-governance` 与 `guard-static` 在当前 HEAD 上 PASS（或在治理 PR 合并前，记录其唯一预期失败点为未注册 seam —— 若出现其它失败 → STOP）。
@@ -191,7 +191,7 @@ package.json   bun.lock      .env*      docker-compose*.yml
 
 ```bash
 node scripts/guard-static.mjs                 # 期望: PASS (0 violations)
-node scripts/guard-static.mjs --self-test     # 期望: PASS (28 synthetic fixtures validated) —— 数量不变
+node scripts/guard-static.mjs --self-test     # 期望: PASS (39 synthetic fixtures validated) —— 数量不变
 node .specify/scripts/validate-governance.mjs # 期望: Spec governance validation PASS
 node .specify/scripts/tests/run-change-governance-tests.mjs   # 期望: 全部 PASS
 node .specify/scripts/validate-change-governance.mjs --base origin/main
@@ -207,7 +207,7 @@ grep -rn "dashscope\|@alicloud" apps/server/api/src/ai/embedding package.json bu
   （若 G1a 另起 PR，则 G1a 的 diff 恰好是 4 个 specs 文件；G1a/G1b 都不含 `scripts/**`）；
 - 上述命令全部 PASS；
 - V15 两行 blob **逐字节相同**；
-- self-test 为 `PASS (28 synthetic fixtures validated)`，无 `slice20 …` 新增 fixture；
+- self-test 为 `PASS (39 synthetic fixtures validated)`，无 `slice20 …` 新增 fixture；
 - V16 依赖 / import 扫描命中 = 0；
 - 无任何 `apps/**`、`packages/**`、`db/**`、`tests/**` 改动；
 - 未修改 Rule 8 / Rule 19 / Rule 17 / `FORBIDDEN_PATHS` / `PRODUCT_PREFIXES`（guard 完全未改）。
@@ -235,7 +235,7 @@ grep -rn "dashscope\|@alicloud" apps/server/api/src/ai/embedding package.json bu
 1. 复核 MODE A 被正确选择：实现为 native HTTP + `globalThis.fetch`，import 扫描无 forbidden provider token；
 2. 复核 ownership：只新增 1 条、path 精确 `apps/server/api/src/ai/embedding/`、无通配、FEATURE 单 feature；
 3. 复核 guard：`git rev-parse <base>:scripts/guard-static.mjs` == `git rev-parse HEAD:scripts/guard-static.mjs`；
-   无 `R8_PATH_SCOPED_ALLOWANCES`、无新增 fixture、self-test 数量 == 28；
+   无 `R8_PATH_SCOPED_ALLOWANCES`、无新增 fixture、self-test 数量 == 39；
 4. 复核依赖边界：`package.json` / lockfile / seam 无 `dashscope` / `@alicloud` / provider SDK；
 5. 对抗尝试：构造未注册 production path、相邻/相似目录、更宽 matcher，确认仍 fail closed；
    尝试指出「是否应新增 allowance/fixture」→ 结论必须是**不应**（MODE B NOT TRIGGERED）；
@@ -258,7 +258,7 @@ git rev-parse HEAD:scripts/guard-static.mjs
 
 - 独立审计结论明确为 PASS（列出对抗尝试与结果，并明确 MODE A / MODE B NOT TRIGGERED）；
 - 治理 PR 已由独立决定合并到 main；
-- main 上 `validate-governance` + `guard-static` + `--self-test`（28）全 PASS；
+- main 上 `validate-governance` + `guard-static` + `--self-test`（39）全 PASS；
 - main 上 guard blob == base blob；
 - `.specify/implementation-ownership.json` 在 main 上已含 seam 规则；
 - 未产生任何实现代码、SDK 依赖、allowance 或 fixture。
@@ -284,9 +284,9 @@ git rev-parse HEAD:scripts/guard-static.mjs
 
 1. 记录 rebind 时的 main SHA（写入实现 PR 描述与证据）；
 2. 从该 main 建立实现分支；
-3. 确认 `specs/020-*/spec.md`（blob `078982f0`）、`plan.md`、`checklist.md`、`tasks.md` 已在该 main 上；
+3. 确认 `specs/020-*/spec.md`（blob `76c10f4f`）、`plan.md`、`checklist.md`、`tasks.md` 已在该 main 上；
 4. 确认 `.specify/implementation-ownership.json` 已含 `apps/server/api/src/ai/embedding/` 规则；
-5. 确认 `scripts/guard-static.mjs` 与 `origin/main` blob **逐字节相等**（MODE A：无 allowance、无新增 fixture，self-test 数量 28）；
+5. 确认 `scripts/guard-static.mjs` 与 `origin/main` blob **逐字节相等**（MODE A：无 allowance、无新增 fixture，self-test 数量 39）；
 6. 运行基线命令，记录「实现前全绿」状态。
 
 **Acceptance / Evidence Ownership**：rebind 记录（main SHA + 基线命令输出）。
@@ -297,7 +297,7 @@ git rev-parse HEAD:scripts/guard-static.mjs
 git rev-parse HEAD
 git rev-list --left-right --count origin/main...HEAD   # behind = 0
 node scripts/guard-static.mjs
-node scripts/guard-static.mjs --self-test               # 期望 28
+node scripts/guard-static.mjs --self-test               # 期望 39
 node .specify/scripts/validate-governance.mjs
 node .specify/scripts/validate-change-governance.mjs --base origin/main
 git rev-parse origin/main:scripts/guard-static.mjs      # V15
@@ -404,7 +404,11 @@ app.ts / runtime-env.ts / plugins/config.ts
 3. `dashscope-protocol.ts`：
    - 请求体映射：`{ model, input: { texts }, parameters: { dimension, output_type, text_type, instruct? } }`；
      `output_type` 取自 `EMBEDDING_OUTPUT_TYPE_*_PARAM`（缺失 → `OUTPUT_TYPE_UNSUPPORTED`，**不猜**）；
-   - 成功解析：`request_id`、`embeddings[].index`、`embeddings[].embedding`、`embeddings[].sparse_embedding`、`usage`；
+   - 成功解析（严格 `HTTP_OUTPUT_WRAPPED`）：仅从 `output.embeddings` 读取 `index` / `embedding` / `sparse_embedding`；`request_id` 与 `usage` 从顶层读取；
+   - envelope 分类：仅当存在 `output.embeddings` 且 top-level `embeddings` 不存在时接受；仅 top-level `embeddings` → `TERMINAL` / `MALFORMED_PROVIDER_RESPONSE`；
+   - dual envelope（`output.embeddings` + top-level `embeddings`）→ `TERMINAL` / `AMBIGUOUS_PROVIDER_RESPONSE`；禁止 precedence / merge / fallback；
+   - `data.embeddings` / `result.embeddings` / `payload.embeddings` / `response.embeddings` 或任意深层 → `TERMINAL` / `MALFORMED_PROVIDER_RESPONSE`；禁止 recursive/deep search；
+   - normalize 为 `NormalizedProviderResponse { provider_request_id, embeddings, usage, observed_response_envelope: 'HTTP_OUTPUT_WRAPPED' }`；raw envelope 不出 seam；
    - 错误解析：`{code,message,request_id}` → 内部错误码映射；**不**保留原始 body；
    - provider `model` 存在时校验一致，不一致 → `MODEL_ECHO_MISMATCH`；缺失 → `PROVIDER_MODEL_ECHO_NOT_AVAILABLE` 且**成功**。
 4. `index.ts` 工厂：`createEmbeddingProvider(config, deps?)`，`deps` 可注入 `HttpTransport` 与 telemetry sink（FR-007）；
@@ -423,10 +427,11 @@ node scripts/guard-static.mjs
 
 **Done criteria**：
 
-- AS-011/AS-012/AS-020/AS-033 通过；
+- AS-011/AS-012/AS-020/AS-033/AS-037/AS-038/AS-039 通过；
 - `config.ts` 是 seam 内唯一 `process.env` 访问点；
 - `transport.ts` 是 seam 内唯一 `fetch` 调用点；
 - 无新依赖、无 header 记录、无 `.env*` 改动；
+- 严格只读 `output.embeddings`；flat / dual / unknown nesting 均稳定失败；
 - guard PASS。
 
 ---
@@ -435,7 +440,7 @@ node scripts/guard-static.mjs
 
 **Task ID**：`T007`
 
-**Frozen Spec Authority**：FR-011..FR-021、FR-028..FR-036、FR-063..FR-067；`plan.md` §6.4–6.7。
+**Frozen Spec Authority**：FR-011..FR-021、FR-028..FR-036、FR-063..FR-069；`plan.md` §6.4–6.7、§6.13.1。
 
 **Purpose**：把「provider 返回什么」变成「确定的 OK 或确定的失败」，并保证重试/超时/取消**有界、确定、可测**。
 
@@ -459,10 +464,10 @@ tests/ai/embedding-provider-contract.test.ts
 1. `contracts.ts` 实现 dense 校验（类型/有限/维度/卡片性/index 完整性）、sparse 校验（结构/index 非负整数/唯一/value 有限/上限/canonical sort/observed 记录）、dense-only 不产 sparse；
    - **绝不**比较 `sparseIndex` 与 `denseDimension`；
    - `SPARSE_VOCABULARY_MAX` 仅在配置存在时作为上界；
-2. `errors.ts` 实现 provider 错误分类与稳定码映射（`plan.md` §6.6 表，逐行对应）；
+2. `errors.ts` 实现 provider 错误分类与稳定码映射（`plan.md` §6.6 表 + §6.13.1 envelope failure semantics，逐行对应）；
 3. `port.ts` 实现编排：deadline、attempt 循环、确定性退避、`Retry-After` 处理、caller abort、耗尽语义；
 4. 失败一律 `kind='FAILED'`，**不**返回向量或上次结果；
-5. 先写失败测试：每类错误至少一条注入用例；维度-1；NaN/Infinity；重复 index；`index=111290`（dim=1024）成功；N+1 元素；无序 → 升序；429 × 3；401 × 1；超时；abort。
+5. 先写失败测试：每类错误至少一条注入用例；维度-1；NaN/Infinity；重复 index；`index=111290`（dim=1024）成功；N+1 元素；无序 → 升序；429 × 3；401 × 1；超时；abort；ambiguous / flat / unknown envelope 各自稳定错误码。
 
 **Acceptance / Evidence Ownership**：Dense/Sparse/Error/Retry 的完整机械验收（AS-002..AS-017、AS-029..AS-032、AS-034 中与校验相关的部分）。
 
@@ -547,7 +552,7 @@ git diff --name-only | grep -E '^\.env' ; test $? -ne 0
 
 **Task ID**：`T009`
 
-**Frozen Spec Authority**：FR-001..FR-040、FR-053..FR-055；AS-021；`plan.md` §7.3–7.5。
+**Frozen Spec Authority**：FR-001..FR-040、FR-053..FR-055、FR-068、FR-069；AS-021、AS-037..AS-039；`plan.md` §7.3–7.5。
 
 **Purpose**：补齐契约层验收 + AS-021 持久化否定快照，使 `CONTRACT_VERIFIED` 与 AS-021 均可被完整机械证明（不依赖真实 provider）。
 
@@ -566,13 +571,14 @@ tests/fixtures/embedding/**            （新增；仅 Sanitized synthetic fixtu
 
 **Implementation action**：
 
-1. 覆盖 AS-001..AS-025、AS-028..AS-034 的全部离线条目；
+1. 覆盖 AS-001..AS-025、AS-028..AS-034 与 AS-037..AS-039 的全部离线条目；
 2. 加入证据推导测试：仅 fake → `CONTRACT_VERIFIED` + `PROVIDER_NOT_VERIFIED`；逐项删除覆盖 → 回退；
 3. 加入「无 READY 类声明」断言（对状态输出做禁用词表匹配）；
 4. 加入并发隔离测试（两个不同 modelId 并发，telemetry/cost 不串扰）；
 5. 加入「相同输入两次调用 → 两次出网」缓存否定测试；
 6. 全部 fixture 必须 sanitized（合成文本，无真实家庭数据、无专业内容原文、无 Gold label）；
 7. AS-021：新增 `tests/integration/embedding-provider-no-persistence.test.ts`，用只读 `pg` 快照记录调用前后 DB 表清单/行数，断言逐项相同；不得写任何表；DB 不可达时报告 `NOT VERIFIED`，不得用静态证明替代。
+8. Envelope 契约：wrapped success（仅 `output.embeddings`）→ 成功且 `observedResponseEnvelope==='HTTP_OUTPUT_WRAPPED'`；flat（仅 top-level `embeddings`）→ `MALFORMED_PROVIDER_RESPONSE`；ambiguous（dual）→ `AMBIGUOUS_PROVIDER_RESPONSE`；`data/result/payload/response.embeddings` → `MALFORMED_PROVIDER_RESPONSE`；normalized response 与 raw envelope 分离（raw 不出 seam、不从 `index.ts` 导出）。
 
 **Acceptance / Evidence Ownership**：离线契约证据集合；`CONTRACT_VERIFIED` 的唯一来源。
 
@@ -597,7 +603,7 @@ cd apps/server/api && bunx tsc --noEmit
 
 **Task ID**：`T010`
 
-**Frozen Spec Authority**：FR-041、FR-044..FR-052、FR-056..FR-062；NS-001..NS-040；AS-035；`plan.md` §7.2–7.5。
+**Frozen Spec Authority**：FR-041、FR-044..FR-052、FR-056..FR-062；NS-001..NS-042；AS-035；`plan.md` §7.2–7.5。
 
 **Purpose**：用静态结构测试机械证明「没有越过任何负边界」，使 NS 不依赖人审。
 
@@ -631,8 +637,9 @@ tests/architecture/embedding-provider-boundary.test.ts
 14. **approved endpoint policy**：只接受 `https://{host}/api/v1/services/embeddings/text-embedding/text-embedding`，
     host 必须命中批准后缀（`.maas.aliyuncs.com`）；不得存在 endpoint override 参数 / 环境变量绕过；
 15. **dependency boundary**：seam、`package.json`、lockfile 中 `dashscope` / `@alicloud` / provider SDK 命中 = 0（V16）。
+16. **envelope parser 负边界**：静态断言不存在 generic recursive embeddings finder、deep-search、permissive fallback、envelope precedence 分支（NS-041 / NS-042）。
 
-**Acceptance / Evidence Ownership**：NS-001..NS-040 的机械门禁集合；AS-035 的 MODE A 证据（egress / Port / endpoint /
+**Acceptance / Evidence Ownership**：NS-001..NS-042 的机械门禁集合；AS-035 的 MODE A 证据（egress / Port / endpoint /
 unknown-path）；FR-041/044..052/056..062 的结构证据。
 
 ### Verification
@@ -650,7 +657,7 @@ git diff --name-only origin/main...HEAD
 **Done criteria**：
 
 - 架构测试全绿（含 egress-only-seam / Port-only consumer / endpoint policy / dependency boundary 断言）；
-- guard 与 self-test（28）PASS；
+- guard 与 self-test（39）PASS；
 - V15 两行 guard blob 逐字节相同；
 - V16 依赖扫描命中 0；
 - diff 只含 seam 10 文件 + 5 个测试文件 + change-binding（+可选 evidence json）；**不含 `scripts/**`**；
@@ -662,7 +669,7 @@ git diff --name-only origin/main...HEAD
 
 **Task ID**：`T011`
 
-**Frozen Spec Authority**：FR-056..FR-062、EVC-01..EVC-10；`plan.md` §8。
+**Frozen Spec Authority**：FR-056..FR-062、FR-069、EVC-01..EVC-10（EVC-03 含 `observed_response_envelope`）；`plan.md` §8。
 
 **Purpose**：在**受控、手动、显式 opt-in** 条件下获取真实 Alibaba DashScope 证据，使 `PROVIDER_VERIFIED` 成为可能；
 若不可执行，**必须**保持 `PROVIDER_NOT_VERIFIED`。
@@ -681,7 +688,7 @@ tests/evidence/embedding-provider-verification.json      （仅在成功 opt-in 
 **Implementation action**：
 
 1. 测试文件默认 `describe.skip`；仅当 `EMBEDDING_VERIFICATION_ENABLED==='true'` 且 `DASHSCOPE_API_KEY` 存在时 `describe`；
-2. 覆盖 EVC-01..EVC-10，每项一个 `it`，每项写 `evcDetails` 记录（sanitized）；
+2. 覆盖 EVC-01..EVC-10，每项一个 `it`，每项写 `evcDetails` 记录（sanitized）；artifact 必须记录 `observed_response_envelope`，成功 MODE A 必须为 `HTTP_OUTPUT_WRAPPED`；观测到其它 shape → 失败证据 + `PROVIDER_NOT_VERIFIED`，不得扩大 Frozen Spec；
 3. EVC-07 使用**真实 payload 受控变形**：`derivation='REAL_PROVIDER_PAYLOAD_MUTATION'`；
 4. 至少 2 次真实调用（正常 dense+sparse、超时注入）；最多 4 次（含错误注入）；
 5. 生成 sanitized artifact（`plan.md` §8.3 schema）；任一 EVC 缺失 → `evidenceState='PROVIDER_NOT_VERIFIED'` + `missingEvc`；
@@ -764,7 +771,7 @@ git status --short
 **Done criteria**：
 
 - 全部命令 PASS（或如实记录 `BLOCKED` / `NOT VERIFIED`）；
-- spec blob == `078982f0…`；
+- spec blob == `76c10f4f…`；
 - diff 与 Allowed paths 精确一致；
 - Checklist A–O + Q 全 PASS，P 为 PASS 或 NOT VERIFIED（如实）；
 - 状态为 `READY FOR AUDIT 2`，未自称 merge / READY；
