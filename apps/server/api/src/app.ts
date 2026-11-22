@@ -997,8 +997,14 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerStaffAuthorityRoutes(app, pool, runtime.sessionSecret);
   registerFamilyRoutes(app, pool);
   registerMemberRoutes(app, pool);
-  registerComplianceRoutes(app, pool);
-  registerConsentRoutes(app, pool);
+  registerComplianceRoutes(app, pool, {
+    evidencePepper: runtime.evidencePepper,
+    consentChannel: runtime.consentChannel,
+  });
+  registerConsentRoutes(app, pool, {
+    evidencePepper: runtime.evidencePepper,
+    consentChannel: runtime.consentChannel,
+  });
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);

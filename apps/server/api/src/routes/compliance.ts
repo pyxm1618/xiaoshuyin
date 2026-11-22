@@ -97,7 +97,18 @@ async function assertReConsentCandidate(
   }
 }
 
-export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
+export interface ComplianceRouteOptions {
+  readonly evidencePepper?: string;
+  readonly consentChannel?: ReturnType<typeof runtimeConsentChannel>;
+}
+
+export function registerComplianceRoutes(
+  app: FastifyInstance,
+  pool: pg.Pool,
+  options?: ComplianceRouteOptions
+) {
+  const getPepper = () => options?.evidencePepper ?? requireEvidencePepper();
+  const getChannel = () => options?.consentChannel ?? runtimeConsentChannel();
   // POST /api/v1/compliance/guardian-consents/requests
   app.post('/api/v1/compliance/guardian-consents/requests', async (req, reply) => {
     const actor = req.actor;
@@ -333,11 +344,11 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
             throw validationError('Invalid notice version');
           }
           const evidence = buildConsentEvidence({
-            channel: runtimeConsentChannel(),
+            channel: getChannel(),
             acceptedTextHash: acceptanceTextHash,
             clientIp: req.ip,
             userAgent: req.headers['user-agent'] ?? null,
-            pepper: requireEvidencePepper(),
+            pepper: getPepper(),
           });
 
           await updateConsentRequestGranted(tx, onboardingRequestId);
