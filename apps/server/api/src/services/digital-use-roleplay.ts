@@ -41,7 +41,7 @@ import {
   routeDigitalUseTopology,
 } from '@xiaoshuyin/scenes/digital-use';
 import { withRlsTransaction } from '../db/tx.js';
-import { requireFamilyAction } from '../authz.js';
+import { isKnownAuthorizationDenial, requireFamilyAction } from '../authz.js';
 import { runIdempotentCommandInTransaction } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { assertNodeCasePreconditions, requireResolvedRoute } from './digital-use-node-response.js';
@@ -76,11 +76,18 @@ async function authorizeRoleplay(
   input:{actor:DigitalUseActor;familyId:string;caseId:string;expectedCaseVersion:number},
   allowCompleted=false
 ){
-  await requireFamilyAction(tx,{
-    accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,
-    action:'CASE_RESPOND_ASSESSMENT_SCENE',purpose:'FAMILY_MANAGEMENT',
-    resource:{type:'CASE',familyId:input.familyId,caseId:input.caseId},
-  });
+  try {
+    await requireFamilyAction(tx,{
+      accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,
+      action:'CASE_RESPOND_ASSESSMENT_SCENE',purpose:'FAMILY_MANAGEMENT',
+      resource:{type:'CASE',familyId:input.familyId,caseId:input.caseId},
+    });
+  } catch (error) {
+    if (isKnownAuthorizationDenial(error)) {
+      throw roleplayError('CASE_NOT_FOUND');
+    }
+    throw error;
+  }
   if(!(await lockFamilyForPrimaryDecision(tx,input.familyId))) throw roleplayError('CASE_NOT_FOUND');
   const caseRow=await lockSceneCase(tx,input.caseId);
   if(!caseRow) throw roleplayError('CASE_NOT_FOUND');
