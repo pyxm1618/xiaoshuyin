@@ -446,6 +446,12 @@ function decideCaseAction(
   // a. Family context is mandatory for every Case action.
   if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
 
+  // Finding #14: CASE_ENTER_SAFETY_HOLD is a deterministic system transition authority,
+  // NOT a user-initiated household business action. Direct business authorization is denied.
+  if (input.action === 'CASE_ENTER_SAFETY_HOLD') {
+    return deny('UNSUPPORTED_ACTION');
+  }
+
   // AUTH-007: ResolveRisk is a Staff authority decision, not a household
   // management decision. It stays inside the one authorize() seam but never
   // derives authority from Family membership, manager or guardian roles.

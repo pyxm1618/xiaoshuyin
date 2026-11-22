@@ -301,7 +301,7 @@ async function readCompletedEnterSafetyHoldReplay(
         accountId: input.actor.accountId,
         personId: input.actor.personId,
         familyId: lookup.familyId,
-        action: 'CASE_ENTER_SAFETY_HOLD',
+        action: 'CASE_READ',
         purpose: 'FAMILY_MANAGEMENT',
         resource: {
           type: 'CASE',
@@ -621,7 +621,7 @@ async function readSafetyCaseSnapshot(
         accountId: actor.accountId,
         personId: actor.personId,
         familyId,
-        action: 'CASE_ENTER_SAFETY_HOLD',
+        action: 'CASE_READ',
         purpose: 'FAMILY_MANAGEMENT',
         resource: { type: 'CASE', familyId, caseId },
         caseId,
