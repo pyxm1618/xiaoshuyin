@@ -10,9 +10,9 @@
 >
 > Role boundary: Plan AI 1 — Selection / Specify / Clarify only
 >
-> Status: SLICE 20 SPEC — FROZEN — REVISION 2 (REMOTE READ-BACK VERIFIED)
+> Status: SLICE 20 SPEC — FROZEN — REVISION 3 (REMOTE READ-BACK VERIFIED)
 >
-> 历史状态：Revision 1（commit `c9b681ec` / spec blob `c4bea6c2`）已 `SUPERSEDED`，原因见第 27 节 Revision History。
+> 历史状态：Revision 1（commit `c9b681ec` / spec blob `c4bea6c2`）已 `SUPERSEDED`，原因见第 27 节 Revision History。Revision 2（commit `c469c273` / spec blob `67711ee5`）**仅因本次窄治理修正**（Rule 8 allowance 由无条件改为实现条件性）而被 `SUPERSEDED`；其 provider-contract corrections remain valid，未被推翻，其 Provider Contract Baseline 与全部 provider-contract 语义继续有效。
 >
 > Forbidden in this artifact: Plan / Checklist / Tasks / Audit 1 / production implementation / migration / embedding generation / Gold labels / professional truth / retrieval pipeline / Context Builder / AI Task Runtime / Audit 2 / merge
 >
@@ -41,7 +41,7 @@
 | 上游 Authority 标识 | `Docs/V1技术设计.md` §4.2 / §13.2 / §13.3 / §20；`Docs/总体技术架构.md` §11.2 / §11.3；`V1-C34`、`V1-X14`（真实能力边界） |
 | 下游消费者（未来） | Sparsevec Spike、pg_jieba lexical 对照、RAG A/B/C Gold Dataset Eval、retrieval pipeline、Context Builder、AI Task Runtime |
 
-本 Slice 的 Revision 1 曾通过 formal remote freeze（见第 26 节 Remote Freeze Record），但已因**已证实的外部 Provider contract 冲突**被标记为 `SUPERSEDED`（见第 27 节 Revision History）。本文件为 Revision 2（targeted correction）；其 `SPEC: FROZEN` 仅在本轮 Remote Re-Freeze 的 remote read-back 成功后成立。无论哪个 Revision，它都不是 Planning Freeze，不是实现授权。
+本 Slice 的 Revision 1 曾通过 formal remote freeze（见第 26 节 Remote Freeze Record），但已因**已证实的外部 Provider contract 冲突**被标记为 `SUPERSEDED`。Revision 2 的 provider-contract corrections 依然有效、未被推翻；它**仅因本次窄治理修正**（Rule 8 allowance 由无条件改为实现条件性）被 `SUPERSEDED`（见第 27 节 Revision History）。本文件为 Revision 3（targeted governance correction，单一语义修正）；其 `SPEC: FROZEN` 仅在本次 remote re-freeze 的 read-back 成功后成立。无论哪个 Revision，它都不是 Planning Freeze，不是实现授权。
 
 ---
 
@@ -295,7 +295,7 @@ Slice 16 与 Slice 17 已有真实 runtime（`intervention_definitions`、`profe
 
 1. `.specify/implementation-ownership.json` 使用 `resolution: LONGEST_MATCH`，未知 production path **fail closed**；未注册任何 embedding / dashscope / sparsevec / `packages/ai|rag` 路径。
 2. `db/init/02-pgvector.sh` 已在 main（PR #110 合并后），并由 Slice 19 的 EXACT ownership 规则持有；本 Slice 不修改它。
-3. `scripts/guard-static.mjs` 的 Rule 8 `FORBIDDEN_SAFETY_IMPORTS` 包含 `dashscope`，其执行范围为全仓库被扫描的实现代码，而不只是 safety 路径。因此**任何 DashScope adapter 实现都会先被该规则拦截**。
+3. `scripts/guard-static.mjs` 的 Rule 8 `FORBIDDEN_SAFETY_IMPORTS` 包含 `dashscope` / `@alicloud` 等 forbidden provider import token，其匹配对象是**被扫描实现代码中的 import specifier**（`from '...'` 形式），执行范围为全仓库被扫描的实现代码，而不只是 safety 路径。采用 native HTTP + `globalThis.fetch` 的实现不产生上述 import specifier，因此**不触发** Rule 8。是否需要在治理 PR 修改 Rule 8，取决于最终实现是否真实引入命中 forbidden token 的 provider import；不得提前假设，也不得为了「以后可能用 SDK」预先放宽。
 4. Rule 17 只作用于路径含 `professional-knowledge` 的文件，禁止其引入 RAG/AI runtime、`pgvector`、`sparsevec`、`pg_jieba` 等。本 Slice 不得触碰这些文件。
 5. `FORBIDDEN_PATHS` 仍禁止 `packages/ai`、`packages/rag`、`packages/memory`。
 
@@ -550,8 +550,8 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 | Contract | Slice 19 Frozen Spec | 否（future consumer） | pgvector readiness 由其拥有；本 Slice 不依赖其 runtime |
 | 外部 | Alibaba DashScope API | 条件性 | 仅 `PROVIDER_VERIFIED` 证据需要；`CONTRACT_VERIFIED` 不需要 |
 | 运行时 | secret injection 机制 | 条件性 | 真实调用需要；仓库内无 secret |
-| 治理 | `.specify/implementation-ownership.json` | 是（实现前） | 新 production 路径必须注册 |
-| 治理 | `scripts/guard-static.mjs` 最小豁免 | 是（实现前） | 当前全仓库禁止 `dashscope` import |
+| 治理 | `.specify/implementation-ownership.json` | 是（实现前，无条件） | 新 production 路径必须精确注册；unknown production path 继续 fail closed |
+| 治理 | `scripts/guard-static.mjs` | `CONDITIONAL` | MODE A（native HTTP / `globalThis.fetch`）：**不需要修改**，必须与 base 字节级一致；MODE B（实现真实引入命中 Rule 8 forbidden token 的 provider import）：才需要 narrow path-aware allowance。不得为未来可能性预先放宽 |
 
 ---
 
@@ -648,7 +648,7 @@ Port --> Consumer : dense vector + optional sparse + status + cost + telemetry
 - **FR-048 — SHALL**：不得创建 `knowledge_embeddings`、`knowledge_chunks`、migration、`CREATE EXTENSION` 或任何 DB schema 变更。（验收：diff 中无 `db/**` 变更；DB 表清单不变。）
 - **FR-049 — SHALL**：不得实现 sparsevec 编码/查询、pg_jieba、reranker、fusion/RRF、retrieval pipeline、hard filters、Context Builder、AI Task Runtime、TaskModelRegistry。（验收：静态扫描与依赖图不含上述能力；无新增相关模块。）
 - **FR-050 — SHALL**：不得创建 generic provider registry、generic model registry、generic plugin/workflow/evaluation platform 或通用 vector/search abstraction。（验收：模块清单与导出 API 审查通过，无通用注册机制。）
-- **FR-051 — SHALL**：仓库静态守卫必须能机械证明本 Slice 未越过边界；任何 guard 改动只能是精确路径的最小豁免，不得删除或全局放宽既有规则。（验收：运行 `scripts/guard-static.mjs` 通过；改动仅涉及精确 path 例外，且对抗性自测仍能检测越界。）
+- **FR-051 — SHALL**：仓库静态守卫必须能机械证明本 Slice 未越过边界。MODE A（native HTTP + `globalThis.fetch`，无 forbidden provider import）：`scripts/guard-static.mjs` 必须与 base 字节级一致，并以 implementation ownership + architecture/static tests + endpoint policy tests 机械证明 provider egress 只发生在唯一 Adapter seam、consumer 只经 Port、其它路径不得加入 direct provider integration、unknown production path 仍 fail closed。MODE B（实现真实引入 `dashscope` / `@alicloud` 等命中 Rule 8 forbidden token 的 import）：仅此时才允许对唯一授权 seam 做精确 path-aware 最小豁免，且不得删除或全局放宽既有规则。禁止为了满足本 Spec 而人为引入 provider SDK 以进入 MODE B。（验收：MODE A 下 `scripts/guard-static.mjs` diff 为空且 guard 自测通过、boundary/endpoint tests 通过；MODE B 下 diff 仅含精确 path 例外，且 positive/negative fixtures 与 cross-path/unknown-path 拒绝均可机械复验。）
 - **FR-052 — SHALL**：本 Slice 必须保持 A/B/C candidate-neutral；任何代码、配置、文档、注释不得声明某一候选胜出或更优。（验收：全仓库检索无 route winner 声明；Port 不包含 route 选择参数。）
 
 ### 12.9 证据分层
@@ -1019,7 +1019,20 @@ TERMINAL        确定性失败，禁止重试
 - Then request-level cost 可记录，per-item usage / exact cost 必须为 `UNKNOWN` / `NOT_PROVIDED`；不得平摊、不得按字符数推算、不得填 0
 - 机械验收：per-item 字段枚举断言 + 伪造值检测为 0
 
-**Acceptance Scenarios 合计：34 条（AS-001 — AS-034）。**
+### AS-035 — MODE A governance evidence（native HTTP）
+- Given 实现采用 native HTTP + `globalThis.fetch`，且不存在 `dashscope` / `@alicloud` provider import
+- When 校验治理前置与静态边界
+- Then implementation ownership 注册存在且指向唯一 Adapter seam；`scripts/guard-static.mjs` 与 base blob 逐字节相同；architecture/static tests 证明 provider egress 只在 seam、consumer 只经 Port；endpoint policy tests 通过；unknown production path 仍 fail closed
+- 机械验收：ownership 条目断言 + guard blob 逐字节比对 + boundary/egress 测试通过 + endpoint policy 测试通过 + unknown-path fail-closed 测试通过
+
+### AS-036 — MODE B 条件触发（provider SDK import）
+- Given 实现真实包含 `dashscope` / `@alicloud` 等命中 Rule 8 forbidden token 的 provider import
+- When 校验治理前置
+- Then 治理 PR 才包含 narrow path-aware allowance 与 positive/negative fixtures，并覆盖 cross-path 与 unknown-path 拒绝
+- 补充：若实现不包含任何 forbidden provider import，则 MODE B 不成立，guard allowance 与 provider import fixture 均不得出现
+- 机械验收：import specifier 扫描结果驱动模式判定；MODE A 不得出现 allowance/fixture；MODE B 的 allow set 仅含精确授权路径
+
+**Acceptance Scenarios 合计：36 条（AS-001 — AS-036）。**
 
 ---
 
@@ -1071,10 +1084,10 @@ Evidence Gate 规则：
 - **NS-024 — 禁止用户可见 AI 功能**：不得新增 route/页面/推送；机械验收：无 `apps/**` 用户功能变更。
 - **NS-025 — 禁止真实凭据入库**：不得提交任何可用 API key/secret；机械验收：secret 扫描通过。
 - **NS-026 — 禁止 fixture 当 authority**：测试数据不得被生产代码读取为审批/审核事实；机械验收：生产 import 不指向 fixtures。
-- **NS-027 — 禁止全局放宽 guard**：不得删除 `dashscope` 禁入规则或将其放宽到全仓库；机械验收：guard diff 仅含精确 path 例外。
+- **NS-027 — 禁止全局放宽 guard**：不得删除 `dashscope` 禁入规则或将其放宽到全仓库；机械验收：guard diff 为空（MODE A）或仅含精确 path 例外（MODE B）。
 - **NS-028 — 禁止声明 READY**：在无实现、无 `CONTRACT_VERIFIED` 或无 `PROVIDER_VERIFIED` 证据时不得输出 `READY` 或任何等价可用结论；机械验收：状态报告为 `PROVIDER_NOT_VERIFIED`。
-- **NS-029 — 禁止 repository-wide DashScope allowance**：不得把 `dashscope` / `@alicloud` 的禁止规则在全仓库范围内放宽；机械验收：guard 规则仍为默认 fail-closed，允许集合仅包含精确授权路径。
-- **NS-030 — 禁止删除 Rule 8 全局 Safety protection 而无替代约束**：不得删除 `scripts/guard-static.mjs` Rule 8 的全局 Safety 保护；任何豁免必须是带替代约束的窄路径例外；机械验收：Rule 8 全局条目仍存在，diff 中无规则删除。
+- **NS-029 — 禁止 repository-wide DashScope allowance**：不得把 `dashscope` / `@alicloud` 的禁止规则在全仓库范围内放宽。若存在 allow set，它必须只包含精确授权路径，且 guard 规则保持默认 fail-closed；MODE A（native HTTP + `globalThis.fetch`）下不存在 allow set，Rule 8 必须保持字节级不变。机械验收：无 allow set，或 allow set 仅含精确授权路径。
+- **NS-030 — 禁止删除 Rule 8 全局 Safety protection 而无替代约束**：不得删除 `scripts/guard-static.mjs` Rule 8 的全局 Safety 保护；任何豁免必须是带替代约束的窄路径例外；MODE A 下 `scripts/guard-static.mjs` 必须与 base 字节级一致。机械验收：Rule 8 全局条目仍存在，diff 中无规则删除；MODE A 下 guard diff 为空。
 - **NS-031 — 禁止 broad `packages/**` exemption**：不得以宽泛前缀（含 `packages/**`、`packages/ai/**`、`packages/rag/**`）作为豁免或所有权范围；机械验收：ownership/guard 匹配器为精确路径或最小窄前缀，无宽泛通配。
 - **NS-032 — 禁止 generic AI/provider directory ownership**：不得把所有权授予泛化的 AI/provider 目录（如 generic `ai/`、`provider/`、`providers/`、`embeddings/` 目录级所有权）；机械验收：所有权条目仅指向单一 Adapter seam，无目录级泛化授权。
 - **NS-033 — 禁止 mock/fixture/synthetic/schema validation 冒充 PROVIDER_VERIFIED**：不得把离线证据记录、映射或解释为真实 provider evidence；机械验收：证据来源字段必须为真实 provider 调用记录，离线产物标记为 `CONTRACT_VERIFIED`。
@@ -1084,8 +1097,10 @@ Evidence Gate 规则：
 - **NS-036 — 禁止要求 provider 回显其合同未承诺的 `model_version`**：不得把 version echo 缺失判为失败，不得把 configured version 描述为 provider-returned；机械验收：echo 缺失样例成功 + 报告字段审计。
 - **NS-037 — 禁止伪造 per-item usage / exact cost**：不得平均分摊、按字符数推算、填 0，或把估算标记为 exact；机械验收：仅 aggregate usage 场景下 per-item 字段为 `NOT_PROVIDED`。
 - **NS-038 — 禁止声明 provider 保证 sparse 排序**：不得在代码、契约、证据或文档中声明 provider 返回的 `sparse_embedding` 有序；机械验收：检索无 ordering guarantee 声明，无序输入样例必须成功。
+- **NS-039 — MODE A 下禁止预置 Rule 8 放宽**：当实现采用 native HTTP + `globalThis.fetch` 且不存在命中 Rule 8 forbidden token 的 provider import 时，禁止修改 `scripts/guard-static.mjs`、禁止添加 provider import fixture、禁止预置任何 SDK allowance。机械验收：`scripts/guard-static.mjs` blob 与 base 逐字节相同；无新增 provider import fixture；guard diff 为空。
+- **NS-040 — 禁止为了满足 Spec 人为引入 provider SDK**：不得为了进入 MODE B、或为了配合旧版 Spec 的治理假设，而人为引入 DashScope SDK / `@alicloud` 依赖或任何新的 provider package dependency。机械验收：`package.json` 无新增 provider 依赖；依赖图无 `dashscope` / `@alicloud` import。
 
-**Negative-Scope Scenarios 合计：38 条（NS-001 — NS-038）。**
+**Negative-Scope Scenarios 合计：40 条（NS-001 — NS-040）。**
 
 ---
 
@@ -1126,24 +1141,54 @@ specs/019-*
 
 ### 19.2 实现前的治理前置（必须独立于产品实现）
 
-**冻结语义：Alibaba DashScope dependency 只能存在于 Slice 20 将来明确授权的最小 Adapter ownership seam；其余 repository paths 必须继续 fail-closed。**
+**冻结语义：provider integration（provider egress、endpoint 构造、provider 响应解析）只能存在于 Slice 20 将来明确授权的最小 Adapter ownership seam；其余 repository paths 必须继续 fail-closed。**
 
-Plan AI 2 **必须**在本节冻结语义下确定以下全部事项，缺一不可：
+本节区分两种合法形态，其边界由**最终实现是否真实引入 forbidden provider import** 机械决定，而不是由假设或「以后可能用 SDK」决定。
+
+#### A. Ownership registration — ALWAYS REQUIRED（无条件前置）
+
+Plan AI 2 **必须**确定：
 
 1. **exact implementation path**：Adapter 的唯一生产路径（单一精确路径，不落在 `FORBIDDEN_PATHS`）；
-2. **ownership matcher**：在 `.specify/implementation-ownership.json` 中指向该精确路径的匹配器（EXACT 或最小窄 PREFIX），归属 `020-embedding-provider-adapter-foundation`；
-3. **narrow Rule 8 path-aware allowance**：`scripts/guard-static.mjs` Rule 8 只对上述精确路径做路径感知的窄豁免，其余路径继续禁止 `dashscope` / `@alicloud`；
-4. **positive fixture**：授权路径内的 import 被允许（正向用例）；
-5. **negative fixtures**：授权路径之外的同名 import 必须被拒绝（至少覆盖相邻目录、相似命名路径）；
-6. **cross-path rejection**：从其它路径引入 Adapter 或直接引入 provider SDK 必须被拒绝；
-7. **unknown-path rejection**：任何未注册路径必须保持 fail-closed 拒绝。
+2. **ownership matcher**：在 `.specify/implementation-ownership.json` 中指向该精确路径的匹配器（EXACT 或最小窄 PREFIX），归属 `020-embedding-provider-adapter-foundation`；unknown production path 继续 fail closed。
 
-禁止事项：
+#### B. Rule 8 import allowance — CONDITIONAL（条件前置）
+
+Rule 8 只匹配被扫描实现代码中的 import specifier（`dashscope` / `@alicloud` 等 forbidden provider token）。因此：
+
+**MODE A — Native HTTP（native HTTP + `globalThis.fetch`，无 forbidden provider import）：**
+
+1. Rule 8 import allowance **NOT REQUIRED**；
+2. `scripts/guard-static.mjs` **必须与 base 字节级不变**；不得添加 provider import fixture，不得预置 SDK allowance；
+3. Governance PR 只做 ownership 注册，以及当前治理体系真正要求的最小 governance evidence；不得因为格式美观而强制产生第二个文件；
+4. Native HTTP 仍必须 fail closed，并以机械证据证明：
+   a. provider egress 只能发生在唯一 Adapter seam；
+   b. endpoint 必须满足 approved DashScope endpoint policy；
+   c. consumer 不得自行出网调用 provider，不得绕过 Port；
+   d. 其它路径不得加入 direct provider integration；
+   e. implementation ownership 的 unknown-path 继续 fail closed；
+   证据形式为 implementation ownership、architecture/static tests、exact dependency graph、endpoint policy tests；不得为此发明 generic network framework。
+
+**MODE B — Provider SDK（实现真实 import `dashscope` / `@alicloud` 等命中 Rule 8 forbidden token）：**
+
+仅当最终实现确实需要该依赖时才成立，且只允许对唯一授权 Adapter seam 做精确 path-aware 最小豁免：
+
+1. **narrow Rule 8 path-aware allowance**：只对上述精确路径做路径感知窄豁免，其余路径继续禁止该 token；
+2. **positive fixture**：授权路径内的同 specifier import 被允许；
+3. **negative fixtures**：授权路径之外的同一 import 必须被拒绝（至少覆盖相邻目录、相似命名路径）；
+4. **cross-path rejection**：从其它路径引入 Adapter 或直接引入 provider SDK 必须被拒绝；
+5. **unknown-path rejection**：任何未注册路径保持 fail-closed。
+
+不得为了满足本 Spec 人为改用 SDK 以进入 MODE B。
+
+禁止事项（两种形态均适用）：
 
 - 禁止删除全局 Safety protection 而没有替代约束（Rule 8 全局条目必须保留）；
 - 禁止 repository-wide DashScope allowance；
 - 禁止 broad `packages/**` exemption（含任何 `packages/**` 通配）；
-- 禁止 generic AI/provider directory ownership（如目录级 `ai/`、`provider/` 泛化授权）。
+- 禁止 generic AI/provider directory ownership（如目录级 `ai/`、`provider/` 泛化授权）；
+- 禁止为了「以后可能用 SDK」预先放宽 Rule 8；
+- 禁止为了满足本 Spec 人为引入 DashScope SDK / `@alicloud` 依赖。
 
 流程约束：
 
@@ -1171,7 +1216,7 @@ Plan AI 2 **必须**在本节冻结语义下确定以下全部事项，缺一不
 
 ## 20. Clarify Decisions
 
-以下 20 项为本轮 Clarify 的冻结结论，供 Plan AI 2 直接采用。
+以下 21 项为本轮 Clarify 的冻结结论，供 Plan AI 2 直接采用。
 
 - **C20-01 — Adapter Foundation 与 Model Selection 分离**：本 Slice 只提供"可由配置绑定 model/version"的适配能力，不做 model 选择、不做模型对比、不做质量评估。model 选择属于未来 Gold Dataset Eval 责任。
 - **C20-02 — 不提前锁 pinned production model**：`qwen3.7-text-embedding` 是首要候选，但本 Slice 不得把它写成生产锁定常量；生产 pinned version 必须由未来带 Gold Dataset 证据的责任决定。
@@ -1182,7 +1227,7 @@ Plan AI 2 **必须**在本节冻结语义下确定以下全部事项，缺一不
 - **C20-07 — 不依赖 Slice 17 runtime**：不读取 `professional_knowledge_*`，不消费其 version/review/publication 运行时；Slice 17 只是 truth 边界与未来消费者。
 - **C20-08 — 不依赖 Slice 18 runtime**：不运行 Gold Dataset、不产生 label、不产出 eval 结论；Slice 18 是未来消费者/评测权威。
 - **C20-09 — 不依赖 Slice 19 runtime**：不要求 PostgreSQL 18 + pgvector 已就绪；Slice 19 只是未来集成点，不是本 Slice 的运行前置。
-- **C20-10 — 治理前置独立**：ownership 注册与 guard 最小豁免必须独立 PR，先于产品实现合并；不得与 Adapter 实现同车。
+- **C20-10 — 治理前置独立**：ownership 注册（无条件）与条件触发的 Rule 8 allowance（仅 MODE B）必须在独立 PR 中先于产品实现合并；不得与 Adapter 实现同车。
 - **C20-11 — 实现位置不预设**：包路径与模块名由 Plan AI 2 决定，但不得落在 `FORBIDDEN_PATHS`；新路径必须精确注册所有权。
 - **C20-12 — Secret 边界**：只允许运行时注入；仓库、日志、错误、telemetry、cost record、测试快照均不得含 secret；`.env.example` 只允许占位符。
 - **C20-13 — 重试语义**：仅 `RETRYABLE` 可重试；embedding 调用是只读外部调用，可重试但受次数与总时间预算约束；`TERMINAL` 一律不重试。
@@ -1194,8 +1239,9 @@ Plan AI 2 **必须**在本节冻结语义下确定以下全部事项，缺一不
 - **C20-18 — Configured provenance ≠ provider echo**：`configured_model_id` / `configured_model_version_or_revision` 是配置事实；provider 未回显 version 不构成失败，不得要求其合同未承诺的回显。
 - **C20-19 — Usage 为 request-level**：provider 只提供 request-level aggregate usage；per-item 无 provider 数据时必须为 `UNKNOWN` / `NOT_PROVIDED`，禁止伪造 exact 分解。
 - **C20-20 — Adapter canonical ordering 是 normalization rule**：升序输出由 Adapter 保证，不是 provider guarantee；测试必须区分"provider 输入无序允许"与"Adapter 输出升序"。
+- **C20-21 — Governance mode 由实际实现依赖决定**：ownership 注册无条件必需；Rule 8 import allowance 仅在最终实现真实包含 `dashscope` / `@alicloud` 等命中 forbidden token 的 provider import 时必需；native HTTP + `globalThis.fetch` 下不得预置 allowance、fixture 或 guard 改动。禁止为了进入 MODE B 而人为引入 SDK。
 
-**Clarify Decisions 合计：20 条（C20-01 — C20-20）。**
+**Clarify Decisions 合计：21 条（C20-01 — C20-21）。**
 
 ---
 
@@ -1273,9 +1319,9 @@ Development Authorization: NOT GRANTED
 2. **Audit 1 尚未执行**；
 3. **Planning Freeze 尚未发生**；
 4. **治理前置尚未建立**：
-   - `.specify/implementation-ownership.json` 尚未注册 Adapter 生产路径；
-   - `scripts/guard-static.mjs` 尚未提供精确路径的 `dashscope` 最小豁免；
-   - 二者的评审必须同时交付第 19.2 节要求的 exact implementation path、ownership matcher、narrow Rule 8 path-aware allowance、positive fixture、negative fixtures、cross-path rejection、unknown-path rejection；
+   - `.specify/implementation-ownership.json` 尚未注册 Adapter 生产路径（无条件必需）；
+   - `scripts/guard-static.mjs` 是否需要精确路径的 `dashscope` / `@alicloud` 最小豁免，取决于最终实现是否真实引入 forbidden provider import：MODE A（native HTTP + `globalThis.fetch`）下不需要修改；MODE B 下才需要；
+   - 治理 PR 必须交付第 19.2 节 A 项：exact implementation path、ownership matcher、unknown-path fail closed；第 19.2 节 B 项的 narrow Rule 8 path-aware allowance、positive fixture、negative fixtures、cross-path rejection 仅在 MODE B 成立时交付；MODE A 下交付 guard 字节不变 + boundary/endpoint tests 证据；
    - 治理 prerequisite 必须在独立治理 PR 中完成独立审计与合并，且不得与产品实现同车；
 5. **开发 PR 尚未创建自己的 change-binding**。
 
@@ -1284,7 +1330,7 @@ Development Authorization: NOT GRANTED
 ```text
 [ ] Plan AI 2 完成 Plan / Checklist / Tasks
 [ ] Audit 1 PASS 且 Planning Freeze 完成
-[ ] 治理前置 PR（ownership 精确注册 + Rule 8 窄路径豁免 + positive/negative fixtures + cross-path/unknown-path rejection）独立审计并合并
+[ ] 治理前置 PR 独立审计并合并：ownership 精确注册（无条件）+ 按实际实现模式条件触发的 Rule 8 allowance / fixtures（MODE B）或 MODE A 治理证据（guard 字节不变 + boundary/endpoint tests + unknown-path fail closed）
 [ ] 开发 PR 拥有自己的 change-binding
 [ ] Plan 中的实现路径已获 ownership 精确授权
 ```
@@ -1297,10 +1343,10 @@ Development Authorization: NOT GRANTED
 
 ```text
 SLICE 20 PLAN AI 1: FINAL PASS
-REVISION: 2 (targeted provider-contract correction)
+REVISION: 3 (targeted governance correction)
 SELECTED RESPONSIBILITY: Embedding Provider Port / Alibaba DashScope Dense+Sparse Adapter Foundation
 SELECTION MODE: route-neutral (A/B/C winner NOT selected)
-SPEC: FROZEN — REVISION 2
+SPEC: FROZEN — REVISION 3
 READY FOR PLAN AI 2: YES
 PLANNING DEPENDENCY GATE: PASS
 RUNTIME DEPENDENCY GATE: PASS
@@ -1316,15 +1362,16 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 4. 本 Spec 不修改四份 Authority Docs，不修改 Slices 016–019；
 5. 本 Spec 不选 A/B/C 胜者，不注册生产 route，不锁定生产模型；
 6. 本 Spec 当前能力证据状态为 `PROVIDER_NOT_VERIFIED`（尚无实现、尚无真实 provider 证据）；该状态不得被表述成 READY；
-7. 上述 `READY FOR PLAN AI 2: YES` 已在 Revision 2 的 Remote Re-Freeze remote read-back 成功后生效；`SPEC` 状态为 `FROZEN — REVISION 2`，可作为 Plan AI 2 的 Spec Authority。
+7. 上述 `READY FOR PLAN AI 2: YES` 已在本次 Revision 3 remote re-freeze 的 read-back 成功后生效；`SPEC` 状态为 `FROZEN — REVISION 3`，可作为 Plan AI 2 的 Spec Authority。
 8. 任何后续变更必须重新经过 Selection Gate 与 Authority 校验，不得以本 Spec 为名扩大 Scope。
 9. Revision 1（commit `c9b681ec` / spec blob `c4bea6c2`）已 `SUPERSEDED`，原因是经官方 Provider contract 证实的三类语义冲突；其历史记录保留在第 26、27 节，但不再具备 Authority。
+10. Revision 2（commit `c469c273` / spec blob `67711ee5`）**仅因本次窄治理修正**被 `SUPERSEDED`；其 Provider Contract Baseline 与全部 provider-contract corrections 继续有效，未被推翻、未被重写。Revision 3 的唯一语义变更是 `Rule 8 allowance from unconditional to implementation-conditional`；Selection、Scope、route-neutral、Adapter seam、sparse/usage/provenance 语义与证据分层均不变（Selection drift = 0 / Provider-contract semantic drift = 0）。
 
 ---
 
 ## 26. Remote Freeze Record
 
-本节记录 formal remote freeze 的真实结果。Revision 1 的 freeze candidate 曾被 push，并由远端正向读回验证；该记录作为历史保留，但已因外部 Provider contract 冲突被标记为 `SUPERSEDED`。Revision 2（targeted correction）已完成 Remote Re-Freeze，并通过 remote read-back。本节不夹带任何实现。
+本节记录 formal remote freeze 的真实结果。Revision 1 的 freeze candidate 曾被 push，并由远端正向读回验证；该记录作为历史保留，但已因外部 Provider contract 冲突被标记为 `SUPERSEDED`。Revision 2（targeted provider-contract correction）已完成 Remote Re-Freeze 并通过 remote read-back，现仅因窄治理修正被 `SUPERSEDED`（其 provider-contract corrections 继续有效）。Revision 3（targeted governance correction）已完成 Remote Re-Freeze，并通过 remote read-back。本节不夹带任何实现。
 
 **Revision 1 freeze record（历史记录，已 `SUPERSEDED`；不得作为当前 Authority）**
 
@@ -1342,12 +1389,12 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 
 冻结状态规则：
 
-1. `SPEC: FROZEN` 只在对应 Revision 的 remote read-back 成功后才成立；Revision 1 曾通过（现为 `SUPERSEDED`），Revision 2 已通过 remote read-back，因此 `SPEC: FROZEN — REVISION 2` 生效；
+1. `SPEC: FROZEN` 只在对应 Revision 的 remote read-back 成功后才成立；Revision 1 与 Revision 2 曾通过 remote read-back，现均为 `SUPERSEDED`；Revision 3 已通过 remote read-back，因此当前 `SPEC` 状态为 `FROZEN — REVISION 3`；
 2. Remote Freeze 只允许提交本次允许的 spec / governance-registration 最小文档 delta，不得夹带任何 implementation；
 3. remote read-back 必须重新从远端读取本文件，并确认远端内容与本地 FINAL candidate 一致；
 4. 只有 remote read-back 成功后才允许宣布 `SLICE 20 PLAN AI 1: FINAL PASS`、`SELECTION: PASS`、`SPEC: FROZEN`、`REMOTE FROZEN COMMIT`、`REMOTE SPEC BLOB`、`READY FOR PLAN AI 2: YES`；
 5. Remote Freeze Record 必须绑定 base、freeze candidate commit、spec.md blob、changed files、ahead/behind main，并由远端 read-back 逐项证明；
-6. 对已通过 remote read-back 的 Revision，branch head 的 spec.md 即 authoritative frozen artifact；Revision 2 已通过 read-back，其 branch head 的 spec.md 即当前 frozen artifact。任何后续语义变更必须重新经过 Spec/Clarify，不得在 Plan/Implement 中静默改写；
+6. 对已通过 remote read-back 的 Revision，branch head 的 spec.md 即 authoritative frozen artifact；Revision 2 曾通过 read-back，但已因窄治理修正被 `SUPERSEDED`；Revision 3 已通过 read-back，其 branch head 的 spec.md 即当前 frozen artifact。任何后续语义变更必须重新经过 Spec/Clarify，不得在 Plan/Implement 中静默改写；
 7. 无论 remote freeze 是否完成，`IMPLEMENT GATE: BLOCKED` 与 `DEVELOPMENT AUTHORIZATION: NO` 保持不变。
 
 #### Revision 1 status（SUPERSEDED）
@@ -1363,11 +1410,12 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 
 历史记录保留：上方主表 `1c8142cf` / `9d74c0b1` 为 Revision 1 的 freeze candidate 与更早 blob 记录，同样属于 Revision 1 历史，不得作为当前 Authority。
 
-#### Revision 2（FROZEN，Remote Re-Freeze VERIFIED）
+#### Revision 2（SUPERSEDED ONLY BY NARROW GOVERNANCE CORRECTION）
 
 | 字段 | 值 |
 | --- | --- |
 | Revision | 2（targeted provider-contract correction） |
+| Status | **SUPERSEDED ONLY BY NARROW GOVERNANCE CORRECTION** — 仅 Rule 8 allowance 的无条件语义被取代；provider-contract corrections remain valid |
 | Branch | `spec/020-embedding-provider-adapter-foundation` |
 | Base（origin/main SHA） | `3fecd0b94325539131e1b23885f5240b5a61c0d8` |
 | Revision 2 freeze candidate commit SHA | `b69e7726f98f9c4868238e9ea77d832e056e7475` |
@@ -1377,6 +1425,20 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 | Ahead / Behind main | freeze candidate 相对 main：ahead 4 / behind 0（commit `b69e7726` 时实测；后续 spec-only record commits 不改变语义） |
 | Remote read-back status | VERIFIED（freeze candidate commit `b69e7726` / blob `e83af6ba`；SHA-256 `ca806bfa…` 与本地一致） |
 
+#### Revision 3（FROZEN，Remote Re-Freeze VERIFIED）
+
+| 字段 | 值 |
+| --- | --- |
+| Revision | 3（targeted governance correction） |
+| Branch | `spec/020-embedding-provider-adapter-foundation` |
+| Base（origin/main SHA） | `3fecd0b94325539131e1b23885f5240b5a61c0d8` |
+| Revision 3 freeze candidate commit SHA | `a457200c2c20c725b44d4fbcd788ca025d07a504` |
+| Revision 3 freeze candidate spec.md blob SHA | `55067d5a97602305cb061076589a030994821cc1` |
+| Revision 3 record commit SHA | 本记录提交（branch head；SHA 由 Plan AI 1 closeout 报告给出） |
+| Changed files | `specs/020-embedding-provider-adapter-foundation/spec.md`（仅此一个） |
+| Ahead / Behind main | freeze candidate 相对 main：ahead 8 / behind 0（commit `a457200c` 时实测） |
+| Remote read-back status | VERIFIED（freeze candidate commit `a457200c` / blob `55067d5a`；SHA-256 `11693d84…` 与本地一致） |
+
 ---
 
 ## 27. Revision History
@@ -1384,9 +1446,10 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 | Revision | 载体 | 状态 | 依据 |
 | --- | --- | --- | --- |
 | 1 | branch `spec/020-embedding-provider-adapter-foundation`，commit `c9b681ecccbb00a22c4191cb906de8938cc4705b`，spec.md blob `c4bea6c2f9699011b78b968cf682eac614414b70` | **SUPERSEDED** | verified external Provider contract contradiction（sparse index vs dense dimension；provider model/version echo；per-item usage / exact cost） |
-| 2 | branch `spec/020-embedding-provider-adapter-foundation`，commit `b69e7726f98f9c4868238e9ea77d832e056e7475`，spec.md blob `e83af6baaf835d5855fd231a5f815c4e3f22b074` | **FROZEN — REMOTE RE-FREEZE VERIFIED** | 依据第 2.3 节 Provider Contract Baseline 的官方合同事实定向修正 |
+| 2 | branch `spec/020-embedding-provider-adapter-foundation`，Revision 2 freeze candidate commit `b69e7726f98f9c4868238e9ea77d832e056e7475`（blob `e83af6baaf835d5855fd231a5f815c4e3f22b074`）；final frozen HEAD `c469c27333cd80cc6f22d091683a74df5ecfcdc0`（blob `67711ee5a67b34c927f8f26058fab8cf430c4a71`） | **SUPERSEDED ONLY BY NARROW GOVERNANCE CORRECTION** | 依据第 2.3 节 Provider Contract Baseline 的官方合同事实定向修正；其 provider-contract corrections remain valid，未被推翻 |
+| 3 | branch `spec/020-embedding-provider-adapter-foundation`，commit `a457200c2c20c725b44d4fbcd788ca025d07a504`，spec.md blob `55067d5a97602305cb061076589a030994821cc1` | **FROZEN — REMOTE RE-FREEZE VERIFIED** | 单一语义修正：Frozen Spec §19.2 的 Rule 8 allowance 由无条件改为实现条件性（implementation-conditional） |
 
-Revision 2 的变更范围（只做定向修正，不扩大 Scope）：
+Revision 2 的变更范围（只做定向修正，不扩大 Scope；以下 provider-contract corrections 在 Revision 3 中保持有效、未被重写）：
 
 1. 废止"sparse index 必须落在 `0..dense_dimension-1`"的错误约束，改为 provider vocabulary namespace 语义；
 2. 拆分 configured model provenance 与 provider model echo，废止"必须回显 version"的要求；
@@ -1394,4 +1457,8 @@ Revision 2 的变更范围（只做定向修正，不扩大 Scope）：
 4. 把 sparse 升序明确为 Adapter canonical normalization rule，而非 provider guarantee；
 5. 全文 contradiction sweep：FR / AS / NS / C20 / EVC / §8 / §15 同步修订，不留两套相互矛盾的规则。
 
-Selection、Scope、route-neutral、治理边界与证据分层均未改变；本轮不创建 Plan / Checklist / Tasks，不授予开发授权。Revision 2 的 `SPEC: FROZEN` 已在 Remote Re-Freeze 的 remote read-back 成功后成立；authoritative frozen artifact 为 branch head 的 spec.md。
+Revision 3 的变更范围（唯一语义修正，不扩大 Scope）：
+
+1. `Rule 8 allowance from unconditional to implementation-conditional`：删除 §3.5 / §10 / FR-051 / §19.2 / NS-029 / NS-030 / §24 中把 Rule 8 narrow allowance、positive fixture、guard-static 修改、两文件 diff 写成无条件 SHALL 的表述，改为 MODE A（native HTTP，无条件 ownership、Rule 8 字节级不变）与 MODE B（真实 provider SDK import，条件触发 narrow allowance + fixtures）两种合法形态；新增 AS-035 / AS-036、NS-039 / NS-040、C20-21 以机械可判定方式固定该边界。
+
+Selection、Scope、route-neutral、Adapter seam、sparse/usage/provenance 语义与证据分层均未改变；本轮不创建 Plan / Checklist / Tasks，不授予开发授权；本轮不修改 plan.md / checklist.md / tasks.md。Revision 3 的 `SPEC: FROZEN` 已在本次 remote re-freeze 的 remote read-back 成功后成立；authoritative frozen artifact 为 branch head 的 spec.md。
