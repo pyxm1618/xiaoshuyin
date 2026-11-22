@@ -237,7 +237,7 @@ FORBIDDEN PATHS（生产代码绝不触碰）：
 | Planning base（本轮开始） | merge commit `501820e8`（普通 merge `origin/spec/020-embedding-provider-adapter-foundation`） | `git log --oneline -1` |
 | Planning HEAD（冻结） | 由本轮 closeout 报告记录（Revision 3 reconciliation commit） | `git rev-parse HEAD` |
 | 上一 Planning HEAD（Revision 2 语义） | `e967fca1ced8854d90b4cef4a4375dcead36341a` —— 治理模式部分 SUPERSEDED | `git log --oneline` |
-| ahead / behind vs `origin/main` | ahead 11 / behind 0（本轮实测 `git rev-list --left-right --count` = `0 11`） | `git rev-list --left-right --count origin/main...HEAD` |
+| ahead / behind vs `origin/main` | ahead 11 / behind 0（reconciliation 起始实测；closeout 的最终 HEAD 为 ahead 12 / behind 0） | `git rev-list --left-right --count origin/main...HEAD` |
 | Frozen Spec authority commit | `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`（Revision 3，REVISION 3 REMOTE READ-BACK VERIFIED） | `git log --oneline origin/spec/020-*` |
 | Frozen `spec.md` blob | `078982f0819954a5479086da86036ccd81d22b2c` | `git hash-object specs/020-*/spec.md` + `git ls-tree HEAD` |
 | Frozen Spec semantic drift | 0 | plan/checklist/tasks 不修改 `spec.md`（T012 复核 blob） |
@@ -1916,6 +1916,9 @@ provider 内部堆栈、完整 endpoint URL（只允许 `endpointConfigFingerpri
 | CN-19 | **（Revision 3）** 旧约束把治理 PR diff 固定为「ownership + guard」双文件形态，迫使 MODE A 产生无意义 guard 改动 | 高 | §5.6/§5.8：G1b diff **恰好 1 个文件**（ownership registry）；新增 V15 守护 guard 不变 |
 | CN-20 | **（Revision 3）** 旧审计把「Rule 8 必须放宽」与「ownership 必须注册」混为一体，导致「MODE A 是否还需要治理」结论模糊 | 中 | §11-G/D：显式拆分——Rule 8 修改 **NO**、ownership 注册 **YES**；两者互不替代 |
 | CN-21 | **（Revision 3）** `@alicloud` 行文称「Rule 8 允许它在 seam」，在 MODE A 下会造成「已有 allowance」的误读 | 中 | §6.13 行改写为「MODE A 下不存在任何 allowance」；新增治理模式推论行 |
+| CN-22 | **（Revision 3 reconciliation）** C20 覆盖只在正文引用 3 个 ID，缺少 21/21 可核对矩阵 | 中 | 新增 §7.7 `C20-01..C20-21` 覆盖矩阵；§11-A 增加 C20 行 |
+| CN-23 | **（Revision 3 reconciliation）** V16 使用 `rg`，仓库/CI 未保证该二进制存在 | 低 | V16 改为 `git grep -nE "dashscope\|@alicloud" -- ...` + import specifier 扫描 |
+| CN-24 | **（Revision 3 reconciliation）** checklist 缺 C20-21 显式项，且合计仍为 190 | 低 | 新增 `CHK-C27`；C 组 27、合计 191；plan 冻结记录同步为 191 |
 
 **修正后复检（Revision 3 全文重跑）**：
 
