@@ -10,7 +10,7 @@
 >
 > Role boundary: Plan AI 1 — Selection / Specify / Clarify only
 >
-> Status: SLICE 20 SPEC — REVISION 3 TARGETED GOVERNANCE CORRECTION / REMOTE RE-FREEZE PENDING
+> Status: SLICE 20 SPEC — FROZEN — REVISION 3 (REMOTE READ-BACK VERIFIED)
 >
 > 历史状态：Revision 1（commit `c9b681ec` / spec blob `c4bea6c2`）已 `SUPERSEDED`，原因见第 27 节 Revision History。Revision 2（commit `c469c273` / spec blob `67711ee5`）**仅因本次窄治理修正**（Rule 8 allowance 由无条件改为实现条件性）而被 `SUPERSEDED`；其 provider-contract corrections remain valid，未被推翻，其 Provider Contract Baseline 与全部 provider-contract 语义继续有效。
 >
@@ -1342,12 +1342,12 @@ Development Authorization: NOT GRANTED
 ## 25. Final Frozen Decision
 
 ```text
-SLICE 20 PLAN AI 1: CLOSEOUT PENDING REMOTE RE-FREEZE
+SLICE 20 PLAN AI 1: FINAL PASS
 REVISION: 3 (targeted governance correction)
 SELECTED RESPONSIBILITY: Embedding Provider Port / Alibaba DashScope Dense+Sparse Adapter Foundation
 SELECTION MODE: route-neutral (A/B/C winner NOT selected)
-SPEC: PENDING RE-READ-BACK (Revision 3)
-READY FOR PLAN AI 2: YES — EFFECTIVE ONLY AFTER REVISION 3 REMOTE RE-READ-BACK
+SPEC: FROZEN — REVISION 3
+READY FOR PLAN AI 2: YES
 PLANNING DEPENDENCY GATE: PASS
 RUNTIME DEPENDENCY GATE: PASS
 IMPLEMENT GATE: BLOCKED
@@ -1362,7 +1362,7 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 4. 本 Spec 不修改四份 Authority Docs，不修改 Slices 016–019；
 5. 本 Spec 不选 A/B/C 胜者，不注册生产 route，不锁定生产模型；
 6. 本 Spec 当前能力证据状态为 `PROVIDER_NOT_VERIFIED`（尚无实现、尚无真实 provider 证据）；该状态不得被表述成 READY；
-7. 上述 `READY FOR PLAN AI 2: YES` 仅在本次 Revision 3 remote re-freeze 的 read-back 成功后生效；在此之前 `SPEC` 状态为 `PENDING RE-READ-BACK (Revision 3)`，不得作为 Plan AI 2 的 Spec Authority。
+7. 上述 `READY FOR PLAN AI 2: YES` 已在本次 Revision 3 remote re-freeze 的 read-back 成功后生效；`SPEC` 状态为 `FROZEN — REVISION 3`，可作为 Plan AI 2 的 Spec Authority。
 8. 任何后续变更必须重新经过 Selection Gate 与 Authority 校验，不得以本 Spec 为名扩大 Scope。
 9. Revision 1（commit `c9b681ec` / spec blob `c4bea6c2`）已 `SUPERSEDED`，原因是经官方 Provider contract 证实的三类语义冲突；其历史记录保留在第 26、27 节，但不再具备 Authority。
 10. Revision 2（commit `c469c273` / spec blob `67711ee5`）**仅因本次窄治理修正**被 `SUPERSEDED`；其 Provider Contract Baseline 与全部 provider-contract corrections 继续有效，未被推翻、未被重写。Revision 3 的唯一语义变更是 `Rule 8 allowance from unconditional to implementation-conditional`；Selection、Scope、route-neutral、Adapter seam、sparse/usage/provenance 语义与证据分层均不变（Selection drift = 0 / Provider-contract semantic drift = 0）。
@@ -1371,7 +1371,7 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 
 ## 26. Remote Freeze Record
 
-本节记录 formal remote freeze 的真实结果。Revision 1 的 freeze candidate 曾被 push，并由远端正向读回验证；该记录作为历史保留，但已因外部 Provider contract 冲突被标记为 `SUPERSEDED`。Revision 2（targeted provider-contract correction）已完成 Remote Re-Freeze 并通过 remote read-back，现仅因窄治理修正被 `SUPERSEDED`（其 provider-contract corrections 继续有效）。Revision 3（targeted governance correction）为本轮 candidate，remote re-freeze 与 read-back **尚未执行**。本节不夹带任何实现。
+本节记录 formal remote freeze 的真实结果。Revision 1 的 freeze candidate 曾被 push，并由远端正向读回验证；该记录作为历史保留，但已因外部 Provider contract 冲突被标记为 `SUPERSEDED`。Revision 2（targeted provider-contract correction）已完成 Remote Re-Freeze 并通过 remote read-back，现仅因窄治理修正被 `SUPERSEDED`（其 provider-contract corrections 继续有效）。Revision 3（targeted governance correction）已完成 Remote Re-Freeze，并通过 remote read-back。本节不夹带任何实现。
 
 **Revision 1 freeze record（历史记录，已 `SUPERSEDED`；不得作为当前 Authority）**
 
@@ -1389,12 +1389,12 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 
 冻结状态规则：
 
-1. `SPEC: FROZEN` 只在对应 Revision 的 remote read-back 成功后才成立；Revision 1 与 Revision 2 曾通过 remote read-back，现均为 `SUPERSEDED`；Revision 3 的 remote read-back 尚未执行，因此当前 `SPEC` 状态为 `PENDING RE-READ-BACK (Revision 3)`；
+1. `SPEC: FROZEN` 只在对应 Revision 的 remote read-back 成功后才成立；Revision 1 与 Revision 2 曾通过 remote read-back，现均为 `SUPERSEDED`；Revision 3 已通过 remote read-back，因此当前 `SPEC` 状态为 `FROZEN — REVISION 3`；
 2. Remote Freeze 只允许提交本次允许的 spec / governance-registration 最小文档 delta，不得夹带任何 implementation；
 3. remote read-back 必须重新从远端读取本文件，并确认远端内容与本地 FINAL candidate 一致；
 4. 只有 remote read-back 成功后才允许宣布 `SLICE 20 PLAN AI 1: FINAL PASS`、`SELECTION: PASS`、`SPEC: FROZEN`、`REMOTE FROZEN COMMIT`、`REMOTE SPEC BLOB`、`READY FOR PLAN AI 2: YES`；
 5. Remote Freeze Record 必须绑定 base、freeze candidate commit、spec.md blob、changed files、ahead/behind main，并由远端 read-back 逐项证明；
-6. 对已通过 remote read-back 的 Revision，branch head 的 spec.md 即 authoritative frozen artifact；Revision 2 曾通过 read-back，但已因窄治理修正被 `SUPERSEDED`；Revision 3 在 remote read-back 成功前**不是** frozen artifact，也不得作为 Spec Authority。任何后续语义变更必须重新经过 Spec/Clarify，不得在 Plan/Implement 中静默改写；
+6. 对已通过 remote read-back 的 Revision，branch head 的 spec.md 即 authoritative frozen artifact；Revision 2 曾通过 read-back，但已因窄治理修正被 `SUPERSEDED`；Revision 3 已通过 read-back，其 branch head 的 spec.md 即当前 frozen artifact。任何后续语义变更必须重新经过 Spec/Clarify，不得在 Plan/Implement 中静默改写；
 7. 无论 remote freeze 是否完成，`IMPLEMENT GATE: BLOCKED` 与 `DEVELOPMENT AUTHORIZATION: NO` 保持不变。
 
 #### Revision 1 status（SUPERSEDED）
@@ -1425,18 +1425,19 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 | Ahead / Behind main | freeze candidate 相对 main：ahead 4 / behind 0（commit `b69e7726` 时实测；后续 spec-only record commits 不改变语义） |
 | Remote read-back status | VERIFIED（freeze candidate commit `b69e7726` / blob `e83af6ba`；SHA-256 `ca806bfa…` 与本地一致） |
 
-#### Revision 3（CURRENT CANDIDATE，REMOTE RE-FREEZE PENDING）
+#### Revision 3（FROZEN，Remote Re-Freeze VERIFIED）
 
 | 字段 | 值 |
 | --- | --- |
 | Revision | 3（targeted governance correction） |
 | Branch | `spec/020-embedding-provider-adapter-foundation` |
 | Base（origin/main SHA） | `3fecd0b94325539131e1b23885f5240b5a61c0d8` |
-| Revision 3 candidate commit SHA | PENDING（本轮仅保留工作区改动，未 commit / 未 push） |
-| Revision 3 candidate spec.md blob SHA | PENDING（本地候选 blob 由 closeout 报告给出；remote blob 在 re-freeze 后确定） |
+| Revision 3 freeze candidate commit SHA | `a457200c2c20c725b44d4fbcd788ca025d07a504` |
+| Revision 3 freeze candidate spec.md blob SHA | `55067d5a97602305cb061076589a030994821cc1` |
+| Revision 3 record commit SHA | 本记录提交（branch head；SHA 由 Plan AI 1 closeout 报告给出） |
 | Changed files | `specs/020-embedding-provider-adapter-foundation/spec.md`（仅此一个） |
-| Ahead / Behind main | PENDING（提交后由 git 计算） |
-| Remote read-back status | PENDING |
+| Ahead / Behind main | freeze candidate 相对 main：ahead 8 / behind 0（commit `a457200c` 时实测） |
+| Remote read-back status | VERIFIED（freeze candidate commit `a457200c` / blob `55067d5a`；SHA-256 `11693d84…` 与本地一致） |
 
 ---
 
@@ -1446,7 +1447,7 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 | --- | --- | --- | --- |
 | 1 | branch `spec/020-embedding-provider-adapter-foundation`，commit `c9b681ecccbb00a22c4191cb906de8938cc4705b`，spec.md blob `c4bea6c2f9699011b78b968cf682eac614414b70` | **SUPERSEDED** | verified external Provider contract contradiction（sparse index vs dense dimension；provider model/version echo；per-item usage / exact cost） |
 | 2 | branch `spec/020-embedding-provider-adapter-foundation`，Revision 2 freeze candidate commit `b69e7726f98f9c4868238e9ea77d832e056e7475`（blob `e83af6baaf835d5855fd231a5f815c4e3f22b074`）；final frozen HEAD `c469c27333cd80cc6f22d091683a74df5ecfcdc0`（blob `67711ee5a67b34c927f8f26058fab8cf430c4a71`） | **SUPERSEDED ONLY BY NARROW GOVERNANCE CORRECTION** | 依据第 2.3 节 Provider Contract Baseline 的官方合同事实定向修正；其 provider-contract corrections remain valid，未被推翻 |
-| 3 | branch `spec/020-embedding-provider-adapter-foundation`，working-tree candidate（未 commit / 未 push），candidate spec.md blob 由 closeout 报告给出 | **CURRENT CANDIDATE — REMOTE RE-FREEZE PENDING** | 单一语义修正：Frozen Spec §19.2 的 Rule 8 allowance 由无条件改为实现条件性（implementation-conditional） |
+| 3 | branch `spec/020-embedding-provider-adapter-foundation`，commit `a457200c2c20c725b44d4fbcd788ca025d07a504`，spec.md blob `55067d5a97602305cb061076589a030994821cc1` | **FROZEN — REMOTE RE-FREEZE VERIFIED** | 单一语义修正：Frozen Spec §19.2 的 Rule 8 allowance 由无条件改为实现条件性（implementation-conditional） |
 
 Revision 2 的变更范围（只做定向修正，不扩大 Scope；以下 provider-contract corrections 在 Revision 3 中保持有效、未被重写）：
 
@@ -1460,4 +1461,4 @@ Revision 3 的变更范围（唯一语义修正，不扩大 Scope）：
 
 1. `Rule 8 allowance from unconditional to implementation-conditional`：删除 §3.5 / §10 / FR-051 / §19.2 / NS-029 / NS-030 / §24 中把 Rule 8 narrow allowance、positive fixture、guard-static 修改、两文件 diff 写成无条件 SHALL 的表述，改为 MODE A（native HTTP，无条件 ownership、Rule 8 字节级不变）与 MODE B（真实 provider SDK import，条件触发 narrow allowance + fixtures）两种合法形态；新增 AS-035 / AS-036、NS-039 / NS-040、C20-21 以机械可判定方式固定该边界。
 
-Selection、Scope、route-neutral、Adapter seam、sparse/usage/provenance 语义与证据分层均未改变；本轮不创建 Plan / Checklist / Tasks，不授予开发授权；本轮不修改 plan.md / checklist.md / tasks.md。Revision 3 的 `SPEC: FROZEN` 仅在本次 remote re-freeze 的 remote read-back 成功后成立；在此之前其状态为 `PENDING RE-READ-BACK (Revision 3)`，不得作为 Spec Authority。
+Selection、Scope、route-neutral、Adapter seam、sparse/usage/provenance 语义与证据分层均未改变；本轮不创建 Plan / Checklist / Tasks，不授予开发授权；本轮不修改 plan.md / checklist.md / tasks.md。Revision 3 的 `SPEC: FROZEN` 已在本次 remote re-freeze 的 remote read-back 成功后成立；authoritative frozen artifact 为 branch head 的 spec.md。
