@@ -43,10 +43,25 @@ function lifecycleError(code: string): never {
   throw Object.assign(new Error(code), { code });
 }
 
+/**
+ * Streams whose business progress requires the Case to have reached GOALS.
+ *
+ * The `*_REVIEW` cohorts are the authoritative Manifest review streams
+ * (A5001 / A5002). They are real stream identities and must be recognised
+ * here directly: callers may never substitute a sibling stream identity to
+ * obtain the required minimum phase.
+ */
+const GOALS_MINIMUM_STREAMS = new Set([
+  'FAMILY_ALLIANCE',
+  'PHONE_USE_CONTRACT',
+  'FAMILY_ALLIANCE_REVIEW',
+  'PHONE_USE_CONTRACT_REVIEW',
+]);
+
 export function minimumDigitalUseCasePhase(
   node: Pick<DigitalUseNodeManifestEntry, 'nodeCode' | 'stream'>
 ): 'ASSESSMENT' | 'PROBLEM_FORMULATION' | 'GOALS' {
-  if (node.stream === 'FAMILY_ALLIANCE' || node.stream === 'PHONE_USE_CONTRACT') {
+  if (node.stream !== undefined && GOALS_MINIMUM_STREAMS.has(node.stream)) {
     return 'GOALS';
   }
   if (FORMULATION_FLOW_NODES.has(node.nodeCode)) {

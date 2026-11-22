@@ -304,14 +304,15 @@ async function targetInputBasis(
     throw familyHttpError('STALE_TARGET_REVISION');
   }
 
-  // Layer 2 invariant: TARGET -> FEASIBILITY -> PROGRESS / HELP
+  // Layer 2 invariant (Finding #13 scope): TARGET -> FEASIBILITY -> PROGRESS.
+  // HELP deliberately keeps its frozen behaviour and is not gated on
+  // FEASIBILITY: the manifest prerequisites for every HELP node remain
+  // A3002_SELECTED_TARGET_<code>, exactly as for PROGRESS, and the HELP command
+  // only records content/version/history refs.
   if (identity.role === 'FEASIBILITY' && !current.concrete_target_text) {
     throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
   }
-  if (
-    (identity.role === 'PROGRESS' || identity.role === 'HELP') &&
-    !current.feasibility_payload
-  ) {
+  if (identity.role === 'PROGRESS' && !current.feasibility_payload) {
     throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
   }
 
@@ -403,16 +404,15 @@ async function materializeSelectedTargetNodes(
     const row = selectedRowByCode.get(identity.targetCode);
     if (!row) throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
 
-    // Invariant: TARGET -> FEASIBILITY -> PROGRESS / HELP
-    // FEASIBILITY requires concrete target text defined in TARGET stage
+    // Layer 1 invariant (Finding #13 scope): TARGET -> FEASIBILITY -> PROGRESS.
+    // FEASIBILITY needs the target definition produced by its TARGET node.
     if (identity.role === 'FEASIBILITY' && !row.concrete_target_text) {
       continue;
     }
-    // PROGRESS / HELP requires feasibility evaluation completed in FEASIBILITY stage
-    if (
-      (identity.role === 'PROGRESS' || identity.role === 'HELP') &&
-      !row.feasibility_payload
-    ) {
+    // PROGRESS needs the feasibility evaluation produced by its FEASIBILITY node.
+    // HELP is not gated here: its frozen manifest prerequisite is only
+    // A3002_SELECTED_TARGET_<code>, so the remediation must not tighten it.
+    if (identity.role === 'PROGRESS' && !row.feasibility_payload) {
       continue;
     }
 

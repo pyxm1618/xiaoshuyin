@@ -446,11 +446,7 @@ export async function executeA5001ReviewInTransaction(
     }
     const caseRow = await lockSceneCase(tx, input.caseId);
     if (!caseRow) throw reviewError('CASE_NOT_FOUND', 'Case not found');
-    assertDigitalUseCaseLifecycle(
-      caseRow,
-      { ...node, stream: 'FAMILY_ALLIANCE' },
-      input.expectedCaseVersion
-    );
+    assertDigitalUseCaseLifecycle(caseRow, node, input.expectedCaseVersion);
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
 
     const binding = await getScenePackageBinding(tx, input.caseId);

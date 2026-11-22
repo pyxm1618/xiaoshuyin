@@ -275,6 +275,64 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     };
   }
 
+  function sleepFeasibility(concreteTargetText: string) {
+    return {
+      kind: 'FEASIBILITY',
+      feasibility: {
+        problemBehavior: {
+          concreteBehavior: { state: 'KNOWN', text: 'Current sleep-related phone behaviour' },
+          need: { state: 'KNOWN', text: 'Immediate entertainment need' },
+          motivationBenefit: { state: 'KNOWN', text: 'Immediate enjoyment' },
+          abilityConditions: { state: 'KNOWN', text: 'Phone remains available' },
+          challengeResistance: { state: 'UNKNOWN' },
+        },
+        replacementBehavior: {
+          concreteQuantified: { state: 'KNOWN', concreteTargetText },
+          need: { state: 'KNOWN', rating: 8 },
+          motivationBenefit: { state: 'KNOWN', rating: 7 },
+          abilityPossibility: { state: 'KNOWN', rating: 6 },
+          challengeResistance: { state: 'UNKNOWN' },
+        },
+      },
+    };
+  }
+
+  function sleepProgress(note: string) {
+    return {
+      kind: 'PROGRESS',
+      progress: {
+        kind: 'GENERAL_MATRIX',
+        taskPlan: { state: 'KNOWN', text: 'SLEEP execution plan.' },
+        communication: {
+          needMatch: { state: 'KNOWN', text: 'Need discussed.' },
+          motivationMatch: { state: 'KNOWN', text: 'Motivation discussed.' },
+          abilityMatch: { state: 'KNOWN', text: 'Ability discussed.' },
+          challengeResistance: { state: 'KNOWN', text: 'Barrier discussed.' },
+        },
+        childFeedback: {
+          needMatch: { state: 'KNOWN', text: 'Need feedback.' },
+          motivationMatch: { state: 'KNOWN', text: 'Motivation feedback.' },
+          abilityMatch: { state: 'KNOWN', text: 'Ability feedback.' },
+          challengeResistance: { state: 'KNOWN', text: 'Barrier feedback.' },
+        },
+        userObservation: {
+          needMatch: { state: 'KNOWN', text: 'Observed need.' },
+          motivationMatch: { state: 'KNOWN', text: 'Observed motivation.' },
+          abilityMatch: { state: 'KNOWN', text: 'Observed ability.' },
+          challengeResistance: { state: 'KNOWN', text: 'Observed barrier.' },
+        },
+        otherFamilyFeedback: {
+          needMatch: { state: 'NOT_COLLECTED' },
+          motivationMatch: { state: 'NOT_COLLECTED' },
+          abilityMatch: { state: 'NOT_COLLECTED' },
+          challengeResistance: { state: 'NOT_COLLECTED' },
+        },
+        modifyTarget: 'NO',
+      },
+      note,
+    };
+  }
+
   it('AUTH-006: confirmed NEEDS_REVIEW formulation blocks FAMILY_ALLIANCE without global Case pause', async () => {
     const f = await fixture('auth006-review');
 
@@ -400,6 +458,14 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
         expect.arrayContaining([expect.objectContaining({ type: 'ASSERTION' })])
       );
 
+      if (family.code === 'EXERCISE') {
+        // AS-19 (positive half): now that EXERCISE has completed its own TARGET
+        // and FEASIBILITY, its PROGRESS node A3022 becomes materially reachable.
+        expect(
+          body.nodes.find((node: any) => node.nodeCode === 'A3022')?.status
+        ).toBe('AVAILABLE');
+      }
+
       const progressResponse = await respond(
         f,
         family.nodes[2],
@@ -511,24 +577,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       if (family.code === 'SLEEP') {
         // AS-19: one target may have progress while the others remain
         // independently reachable; no false stream-global completion exists.
-        // After #13 Layer 1 fix, EXERCISE's PROGRESS node (A3022) is only
-        // materialized after EXERCISE completes its own FEASIBILITY stage.
-        // At this point in the loop EXERCISE has already completed TARGET+FEASIBILITY,
-        // so A3022 should indeed be AVAILABLE.
-        const sleepProgressBody = body;
-        // Find EXERCISE target from the latest response body
-        const exerciseTarget = sleepProgressBody.targets?.find(
-          (item: any) => item.targetCode === 'EXERCISE'
-        );
-        // A3022 is in the nodes list only if EXERCISE has completed feasibility
-        // (which it has by the time we reach SLEEP in the outer for-loop, since
-        //  SLEEP is first and EXERCISE is second in TARGET_PATHS).
-        // However, SLEEP is processed FIRST so when SLEEP's progress completes,
-        // EXERCISE hasn't started yet — A3022 is not yet materialized.
-        // We only assert A3022 AVAILABLE after EXERCISE completes its FEASIBILITY.
-        // This assertion is intentionally deferred; the test below (after EXERCISE's
-        // feasibility loop) validates it. Remove the premature assertion here.
-        void exerciseTarget; // suppress unused variable warning
+        // SLEEP is the first family in TARGET_PATHS, so EXERCISE has not
+        // completed its own TARGET + FEASIBILITY yet: a target's readiness is
+        // never shared across targets, so A3022 must not be materialized here.
+        expect(body.nodes.map((node: any) => node.nodeCode)).not.toContain('A3022');
       }
 
       const helpResponse = await respond(
@@ -1056,18 +1108,244 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect([left.statusCode, right.statusCode].sort()).toEqual([200, 409]);
 
     const current = await admin.query<{
-      n: number;
-      texts: string[];
+      total_revisions: number;
+      current_revisions: number;
+      feasibility_revisions: number;
+      latest_revision: number;
+      texts: string[] | null;
     }>(
-      `SELECT count(*)::int AS n,
+      `SELECT count(*)::int AS total_revisions,
+              count(*) FILTER (WHERE superseded_at IS NULL)::int AS current_revisions,
+              count(*) FILTER (WHERE feasibility_payload IS NOT NULL)::int
+                AS feasibility_revisions,
+              max(revision)::int AS latest_revision,
               array_agg(concrete_target_text ORDER BY revision) FILTER
                 (WHERE superseded_at IS NULL) AS texts
          FROM digital_use_target_items
         WHERE case_id=$1 AND target_code='SLEEP'`,
       [f.caseId]
     );
-    expect(current.rows[0]!.n).toBe(2);
+    // Immutable revision history for SLEEP is exactly:
+    //   revision 1 = A3002 selection base row (all ten canonical target codes)
+    //   revision 2 = A3010 TARGET_DEFINITION (proved by `node` above)
+    //   revision 3 = the single winning A3011 FEASIBILITY write
+    // The concurrent loser must not append a revision, so the total is 3 and
+    // only one of them is current. A last-write-win implementation would leave
+    // both concurrent payloads committed and superseded_at NULL for two rows.
+    expect(current.rows[0]).toMatchObject({
+      total_revisions: 3,
+      current_revisions: 1,
+      feasibility_revisions: 1,
+      latest_revision: 3,
+    });
     expect(current.rows[0]!.texts).toHaveLength(1);
+    expect([
+      'first concurrent target',
+      'second concurrent target',
+    ]).toContain(current.rows[0]!.texts![0]);
+  });
+
+  it('F13-L2: FEASIBILITY requires TARGET and PROGRESS requires FEASIBILITY, never across targets', async () => {
+    const f = await fixture('finding13-gates');
+    expect((await respond(f, 'A3000', selfAssessment('NO'))).statusCode).toBe(200);
+
+    const selection = await respond(
+      f,
+      'A3002',
+      { kind: 'TARGET_SELECTION', confirmed: true, selectedTargets: ['SLEEP'] },
+      { expectedSelectionRevision: 0 }
+    );
+    expect(selection.statusCode, selection.body).toBe(200);
+    let body = selection.json();
+    let sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+
+    // Layer 1: a bare A3002 selection may only materialize TARGET nodes.
+    expect(body.nodes.map((node: any) => node.nodeCode)).not.toContain('A3011');
+    expect(body.nodes.map((node: any) => node.nodeCode)).not.toContain('A3012');
+
+    const target = await respond(
+      f,
+      'A3010',
+      { kind: 'TARGET_DEFINITION', concreteTargetText: 'SLEEP gate target' },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(target.statusCode, target.body).toBe(200);
+    body = target.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    // Layer 1: TARGET completion unlocks FEASIBILITY only.
+    expect(body.nodes.find((node: any) => node.nodeCode === 'A3011')?.status)
+      .toBe('AVAILABLE');
+    expect(body.nodes.map((node: any) => node.nodeCode)).not.toContain('A3012');
+
+    // A reselection resets every target payload revision while the already
+    // materialized A3011 node state survives. The command invariant, not the
+    // materialization gate, must reject the stale client order.
+    const reselect = await respond(
+      f,
+      'A3002',
+      { kind: 'TARGET_SELECTION', confirmed: true, selectedTargets: ['SLEEP'] },
+      { expectedSelectionRevision: sleep.selectionRevision }
+    );
+    expect(reselect.statusCode, reselect.body).toBe(200);
+    body = reselect.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    expect(sleep.concreteTargetText).toBeNull();
+    expect(sleep.feasibility).toBeNull();
+
+    const feasibilityBeforeTarget = await respond(
+      f,
+      'A3011',
+      sleepFeasibility('SLEEP feasibility without target'),
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(feasibilityBeforeTarget.statusCode, feasibilityBeforeTarget.body).toBe(409);
+    expect(feasibilityBeforeTarget.json()).toMatchObject({
+      code: 'TARGET_SELECTION_STATE_INVALID',
+    });
+
+    // Layer 1 still keeps PROGRESS unreachable until FEASIBILITY completes.
+    const progressBeforeFeasibility = await respond(
+      f,
+      'A3012',
+      sleepProgress('SLEEP progress before feasibility'),
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(progressBeforeFeasibility.statusCode, progressBeforeFeasibility.body).toBe(409);
+    expect(progressBeforeFeasibility.json()).toMatchObject({
+      code: 'SCENE_NODE_UNREACHABLE',
+    });
+
+    // The legal chain still works end to end after the reselection.
+    const retarget = await respond(
+      f,
+      'A3010',
+      { kind: 'TARGET_DEFINITION', concreteTargetText: 'SLEEP gate target restated' },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(retarget.statusCode, retarget.body).toBe(200);
+    body = retarget.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+
+    const feasible = await respond(
+      f,
+      'A3011',
+      sleepFeasibility('SLEEP feasible target'),
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(feasible.statusCode, feasible.body).toBe(200);
+    body = feasible.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    expect(body.nodes.find((node: any) => node.nodeCode === 'A3012')?.status)
+      .toBe('AVAILABLE');
+
+    const progressed = await respond(
+      f,
+      'A3012',
+      sleepProgress('SLEEP legal progress'),
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(progressed.statusCode, progressed.body).toBe(200);
+    body = progressed.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    expect(sleep.progress).toMatchObject({ kind: 'GENERAL_MATRIX' });
+
+    // Second reselection: A3012 now exists and is reenterable, so only the
+    // command invariant can stop PROGRESS without a fresh FEASIBILITY.
+    const reselectAgain = await respond(
+      f,
+      'A3002',
+      { kind: 'TARGET_SELECTION', confirmed: true, selectedTargets: ['SLEEP'] },
+      { expectedSelectionRevision: sleep.selectionRevision }
+    );
+    expect(reselectAgain.statusCode, reselectAgain.body).toBe(200);
+    body = reselectAgain.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    expect(sleep.feasibility).toBeNull();
+
+    const progressBeforeFeasibilityAgain = await respond(
+      f,
+      'A3012',
+      sleepProgress('SLEEP progress without feasibility'),
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(progressBeforeFeasibilityAgain.statusCode, progressBeforeFeasibilityAgain.body)
+      .toBe(409);
+    expect(progressBeforeFeasibilityAgain.json()).toMatchObject({
+      code: 'TARGET_SELECTION_STATE_INVALID',
+    });
+
+    // Cross-target protection: EXERCISE never ran its own TARGET/FEASIBILITY,
+    // so its lifecycle nodes stay materially absent.
+    const nodeCodes = body.nodes.map((node: any) => node.nodeCode);
+    expect(nodeCodes).not.toContain('A3021');
+    expect(nodeCodes).not.toContain('A3022');
+    expect(body.targets.find((item: any) => item.targetCode === 'EXERCISE')?.selected)
+      .toBe(false);
+  });
+
+  it('F13-HELP: HELP keeps its frozen reach and needs no FEASIBILITY prerequisite', async () => {
+    const f = await fixture('finding13-help');
+    expect((await respond(f, 'A3000', selfAssessment('NO'))).statusCode).toBe(200);
+
+    const selection = await respond(
+      f,
+      'A3002',
+      { kind: 'TARGET_SELECTION', confirmed: true, selectedTargets: ['SLEEP'] },
+      { expectedSelectionRevision: 0 }
+    );
+    expect(selection.statusCode, selection.body).toBe(200);
+    let body = selection.json();
+    let sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+
+    // Finding #13 freezes TARGET -> FEASIBILITY -> PROGRESS only. A HELP node's
+    // manifest prerequisite is A3002_SELECTED_TARGET_<code>, so it must be
+    // reachable on a bare selection, before any TARGET or FEASIBILITY work.
+    expect(body.nodes.find((node: any) => node.nodeCode === 'A3013')?.status)
+      .toBe('AVAILABLE');
+    expect(sleep.concreteTargetText).toBeNull();
+    expect(sleep.feasibility).toBeNull();
+
+    const help = await respond(
+      f,
+      'A3013',
+      { kind: 'HELP', action: 'VIEWED', note: 'SLEEP help before feasibility' },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(help.statusCode, help.body).toBe(200);
+    body = help.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    expect(sleep.helpHistoryRefs).toHaveLength(1);
+    expect(sleep.helpHistoryRefs[0]).toMatchObject({
+      nodeCode: 'A3013',
+      scenePackageVersion: 'v1',
+    });
+    // HELP records content/history refs and must not fabricate a feasibility
+    // evaluation for the target.
+    expect(sleep.feasibility).toBeNull();
   });
 
   it('AS-26 Safety race wins before Family Alliance commit', async () => {
@@ -1623,10 +1901,67 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       { expectedSelectionRevision: 0 }
     );
     expect(selected.statusCode, selected.body).toBe(200);
-    const body = selected.json();
-    const a3002 = body.nodes.find((node: any) => node.nodeCode === 'A3002');
-    const a3012 = body.nodes.find((node: any) => node.nodeCode === 'A3012');
-    const sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+    let body = selected.json();
+    let sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+
+    // Finding #13 lifecycle: A3002 selection alone no longer materializes
+    // FEASIBILITY or PROGRESS. Complete SLEEP's own TARGET -> FEASIBILITY so
+    // that A3012 is a legally reachable node before the race begins.
+    const targetDefinition = await respond(
+      f,
+      'A3010',
+      {
+        kind: 'TARGET_DEFINITION',
+        concreteTargetText: 'SLEEP reselection race target',
+      },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(targetDefinition.statusCode, targetDefinition.body).toBe(200);
+    body = targetDefinition.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+
+    const feasibility = await respond(
+      f,
+      'A3011',
+      {
+        kind: 'FEASIBILITY',
+        feasibility: {
+          problemBehavior: {
+            concreteBehavior: { state: 'KNOWN', text: 'Current sleep-related phone behaviour' },
+            need: { state: 'KNOWN', text: 'Immediate entertainment need' },
+            motivationBenefit: { state: 'KNOWN', text: 'Immediate enjoyment' },
+            abilityConditions: { state: 'KNOWN', text: 'Phone remains available' },
+            challengeResistance: { state: 'UNKNOWN' },
+          },
+          replacementBehavior: {
+            concreteQuantified: {
+              state: 'KNOWN',
+              concreteTargetText: 'SLEEP reselection race feasibility target',
+            },
+            need: { state: 'KNOWN', rating: 8 },
+            motivationBenefit: { state: 'KNOWN', rating: 7 },
+            abilityPossibility: { state: 'KNOWN', rating: 6 },
+            challengeResistance: { state: 'UNKNOWN' },
+          },
+        },
+      },
+      {
+        expectedSelectionRevision: sleep.selectionRevision,
+        expectedTargetRevision: sleep.revision,
+      }
+    );
+    expect(feasibility.statusCode, feasibility.body).toBe(200);
+    body = feasibility.json();
+    sleep = body.targets.find((item: any) => item.targetCode === 'SLEEP');
+
+    const scene = await getScene(f);
+    const a3002 = scene.nodes.find((node: any) => node.nodeCode === 'A3002');
+    const a3012 = scene.nodes.find((node: any) => node.nodeCode === 'A3012');
+    expect(a3012, 'A3012 must be materialized after A3011').toBeDefined();
+    expect(a3012.status).toBe('AVAILABLE');
 
     const reselection = app.inject({
       method: 'POST',
