@@ -866,6 +866,65 @@
           "019-professional-retrieval-pgvector-readiness"
         ]
       }
+    },
+    {
+      "id": "compliance-guardian-consent-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/compliance.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "010-compliance-feature-policy-foundation"
+        ]
+      }
+    },
+    {
+      "id": "consent-record-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/consents.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "001-consent-01004-narrow-post-merge-remediation",
+          "010-compliance-feature-policy-foundation"
+        ]
+      }
+    },
+    {
+      "id": "family-member-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/members.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "010-compliance-feature-policy-foundation"
+        ]
+      }
+    },
+    {
+      "id": "shared-domain-repository",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/repository.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "003-evidence-core",
+          "006-identity-binding-runtime",
+          "010-compliance-feature-policy-foundation"
+        ]
+      }
     }
   ]
 }
