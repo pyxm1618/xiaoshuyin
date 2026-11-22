@@ -639,6 +639,20 @@
       }
     },
     {
+      "id": "digital-use-case-lifecycle-authority",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-case-lifecycle.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "013-digital-use-family-alliance-runtime"
+        ]
+      }
+    },
+    {
       "id": "digital-use-family-alliance-review-service",
       "match": {
         "kind": "EXACT",
