@@ -629,6 +629,7 @@ export function evaluateProfessionalKnowledgeEligibility(input: {
   readonly exclusionFacts: readonly string[] | null;
   readonly riskLevel: ProfessionalKnowledgeRiskLevel | 'UNKNOWN' | null;
   readonly intervention: OptionalInterventionResolution;
+  readonly now?: Date;
 }): ProfessionalKnowledgeEligibility {
   const v = input.version;
   if (v.lifecycleStatus !== 'PUBLISHED') {
@@ -639,6 +640,22 @@ export function evaluateProfessionalKnowledgeEligibility(input: {
   }
   if (v.validityState !== 'VALID') {
     return { status: 'INELIGIBLE', reason: 'VALIDITY_NOT_VALID' };
+  }
+
+  // Version effective window enforcement (Finding #21)
+  const currentTime = (input.now ?? new Date()).getTime();
+  if (v.effectiveFrom === null) {
+    return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_NOT_SET' };
+  }
+  const fromTime = new Date(v.effectiveFrom).getTime();
+  if (Number.isNaN(fromTime) || fromTime > currentTime) {
+    return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_FUTURE' };
+  }
+  if (v.effectiveTo !== null) {
+    const toTime = new Date(v.effectiveTo).getTime();
+    if (!Number.isNaN(toTime) && currentTime >= toTime) {
+      return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_EXPIRED' };
+    }
   }
 
   if (input.approval.status === 'UNAVAILABLE') {
