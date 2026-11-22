@@ -6,12 +6,14 @@
 --
 -- 1. Updates app.commit_professional_knowledge_release() to persist effective_to
 --    from the release evidence payload into professional_knowledge_versions.effective_to.
+--    Hardens search_path to pg_catalog, public, app, pg_temp against privilege escalation.
 -- 2. Backfills any historical published versions where effective_to was retained in evidence
 --    but omitted from the versions row.
 -- 3. Strengthens RLS family read policies on professional_knowledge_versions and
 --    professional_knowledge_sources to strictly enforce the effective window.
-
-BEGIN;
+--
+-- Note: Transaction boundaries are controlled by the migration runner; no top-level
+-- BEGIN / COMMIT statements are permitted here.
 
 -- ── 1. Re-declare app.commit_professional_knowledge_release with effective_to persistence ──
 
@@ -23,7 +25,7 @@ CREATE OR REPLACE FUNCTION app.commit_professional_knowledge_release(
 ) RETURNS integer
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public, app
+SET search_path = pg_catalog, public, app, pg_temp
 AS $function$
 DECLARE
   v_actor_account_id uuid;
@@ -241,5 +243,3 @@ CREATE POLICY professional_knowledge_sources_family_read
          )
     )
   );
-
-COMMIT;

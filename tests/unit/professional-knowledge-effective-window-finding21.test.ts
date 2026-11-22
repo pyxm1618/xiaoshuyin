@@ -129,4 +129,38 @@ describe('Finding #21: Professional Knowledge Effective Window', () => {
       reason: 'EFFECTIVE_WINDOW_EXPIRED',
     });
   });
+
+  it('6. migration 031 structure compliance (no top-level transaction control & hardened search_path)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const migrationPath = path.resolve(
+      __dirname,
+      '../../db/migrations/031_professional_knowledge_effective_window_remediation.sql'
+    );
+    const content = fs.readFileSync(migrationPath, 'utf8');
+
+    // Rule 1: No top-level BEGIN / COMMIT / ROLLBACK outside plpgsql blocks
+    const lines = content
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => !l.startsWith('--') && l.length > 0);
+
+    // Matches top-level statements that are standalone transaction controls
+    const topLevelTxControls = lines.filter((l) =>
+      /^(BEGIN|COMMIT|ROLLBACK)\s*;/i.test(l)
+    );
+    expect(topLevelTxControls).toEqual([]);
+
+    // Rule 2: Hardened search_path with pg_temp at the end (Finding #15 prevention)
+    expect(content).toContain(
+      'SET search_path = pg_catalog, public, app, pg_temp'
+    );
+
+    // Rule 3: Persistence and RLS include effective window rules
+    expect(content).toContain(
+      "effective_to = NULLIF(p_evidence ->> 'effectiveTo', '')::timestamptz"
+    );
+    expect(content).toContain('effective_from <= transaction_timestamp()');
+    expect(content).toContain('transaction_timestamp() < effective_to');
+  });
 });
