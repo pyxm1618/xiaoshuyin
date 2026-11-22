@@ -20,6 +20,11 @@ export interface ConsentRecord {
   boundPersonId: string | null;
   noticeHash: string;
   guardianPersonId: string;
+  purpose?: string | null;
+  noticeVersion?: string | null;
+  policyVersion?: string | null;
+  isChainHead?: boolean | null;
+  evidenceValid?: boolean | null;
 }
 
 export type AgeGateResult =
@@ -69,6 +74,21 @@ export function assertMinorProcessingAllowed(
     const consent = deps.getConsentRecord(profile.guardianConsentRecordId);
     if (!consent) {
       return { decision: 'BLOCK', reason: 'GUARDIAN_CONSENT_REQUIRED' };
+    }
+
+    // Finding #3: Purpose check (fail closed if not UNDER_14_GUARDIAN_CONSENT)
+    if (consent.purpose !== undefined && consent.purpose !== 'UNDER_14_GUARDIAN_CONSENT') {
+      return { decision: 'BLOCK', reason: 'GUARDIAN_CONSENT_INVALID' };
+    }
+
+    // Finding #3: Evidence validity check (fail closed if invalid evidence)
+    if (consent.evidenceValid === false) {
+      return { decision: 'BLOCK', reason: 'GUARDIAN_CONSENT_INVALID' };
+    }
+
+    // Finding #3: Supersession / chain head check (fail closed if superseded)
+    if (consent.isChainHead === false) {
+      return { decision: 'BLOCK', reason: 'GUARDIAN_CONSENT_INVALID' };
     }
 
     if (consent.decision !== 'GRANTED') {

@@ -84,6 +84,11 @@ export interface ComplianceGuardianConsentSnapshot {
   readonly noticeHash: string;
   readonly guardianPersonId: string;
   readonly version: number;
+  readonly purpose: string;
+  readonly noticeVersion: string | null;
+  readonly policyVersion: string | null;
+  readonly isChainHead: boolean;
+  readonly evidenceValid: boolean;
 }
 
 /** Existing person compliance truth consumed read-only, never duplicated. */
@@ -305,6 +310,11 @@ function toAgeGateConsent(consent: ComplianceGuardianConsentSnapshot): ConsentRe
     boundPersonId: consent.boundPersonId,
     noticeHash: consent.noticeHash,
     guardianPersonId: consent.guardianPersonId,
+    purpose: consent.purpose,
+    noticeVersion: consent.noticeVersion,
+    policyVersion: consent.policyVersion,
+    isChainHead: consent.isChainHead,
+    evidenceValid: consent.evidenceValid,
   };
 }
 

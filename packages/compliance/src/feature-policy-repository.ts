@@ -13,6 +13,7 @@
  */
 
 import { sql, type SQL } from 'drizzle-orm';
+import { ConsentEvidence } from '@xiaoshuyin/contracts';
 import type { AgeBand } from './age-gate.js';
 import type { ComplianceFeatureDescriptor } from './feature-identity.js';
 import {
@@ -163,8 +164,15 @@ export async function loadCompliancePersonSnapshot(
        cr.decision::text                  AS consent_decision,
        cr.bound_person_id::text           AS consent_bound_person_id,
        cr.notice_hash                     AS consent_notice_hash,
+       cr.notice_version                  AS consent_notice_version,
+       cr.policy_version                  AS consent_policy_version,
        cr.guardian_person_id::text        AS consent_guardian_person_id,
-       cr.version                         AS consent_version
+       cr.version                         AS consent_version,
+       cr.purpose::text                   AS consent_purpose,
+       cr.evidence                        AS consent_evidence,
+       NOT EXISTS (
+         SELECT 1 FROM consent_records s WHERE s.supersedes_id = cr.id
+       )                                  AS consent_is_chain_head
      FROM person_compliance_profiles pcp
      LEFT JOIN consent_records cr ON cr.id = pcp.guardian_consent_record_id
      WHERE pcp.person_id = $1`,
@@ -180,6 +188,7 @@ export async function loadCompliancePersonSnapshot(
     if (decision !== 'GRANTED' && decision !== 'REVOKED') {
       throw new TypeError('COMPLIANCE_CONSENT_ROW_INVALID');
     }
+    const evidenceValid = ConsentEvidence.safeParse(row['consent_evidence']).success;
     guardianConsent = {
       id: asString(row['consent_id']),
       decision,
@@ -190,6 +199,17 @@ export async function loadCompliancePersonSnapshot(
       noticeHash: asString(row['consent_notice_hash']),
       guardianPersonId: asString(row['consent_guardian_person_id']),
       version: asNumber(row['consent_version']),
+      purpose: asString(row['consent_purpose'] ?? ''),
+      noticeVersion:
+        row['consent_notice_version'] === null || row['consent_notice_version'] === undefined
+          ? null
+          : asString(row['consent_notice_version']),
+      policyVersion:
+        row['consent_policy_version'] === null || row['consent_policy_version'] === undefined
+          ? null
+          : asString(row['consent_policy_version']),
+      isChainHead: row['consent_is_chain_head'] === true,
+      evidenceValid,
     };
   }
 

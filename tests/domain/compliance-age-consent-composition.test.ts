@@ -102,6 +102,11 @@ function under14(
       noticeHash: CURRENT_NOTICE_HASH,
       guardianPersonId: GUARDIAN_ID,
       version: 1,
+      purpose: 'UNDER_14_GUARDIAN_CONSENT',
+      noticeVersion: 'v1',
+      policyVersion: 'v1',
+      isChainHead: true,
+      evidenceValid: true,
       ...overrides,
     },
     verifiedSource: 'GUARDIAN_RELAY',
@@ -210,5 +215,43 @@ describe('compliance composition with existing person/guardian/consent truth', (
     );
     expect(result.gate).toBe('BLOCK');
     expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_REQUIRED');
+  });
+
+  describe('Finding #3: guardian consent snapshot authority completeness', () => {
+    it('UNDER_14 with wrong-purpose consent fails closed as COMPLIANCE_GUARDIAN_CONSENT_INVALID', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({ purpose: 'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT' }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+      expect(result.obligations).toContain('REQUIRE_GUARDIAN_CONSENT');
+    });
+
+    it('UNDER_14 with malformed evidence (evidenceValid: false) fails closed as COMPLIANCE_GUARDIAN_CONSENT_INVALID', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({ evidenceValid: false }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+      expect(result.obligations).toContain('REQUIRE_GUARDIAN_CONSENT');
+    });
+
+    it('UNDER_14 with superseded consent (isChainHead: false) fails closed as COMPLIANCE_GUARDIAN_CONSENT_INVALID', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({ isChainHead: false }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+      expect(result.obligations).toContain('REQUIRE_GUARDIAN_CONSENT');
+    });
+
+    it('UNDER_14 with revoked consent fails closed as COMPLIANCE_GUARDIAN_CONSENT_INVALID', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({ decision: 'REVOKED' }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+      expect(result.obligations).toContain('REQUIRE_GUARDIAN_CONSENT');
+    });
   });
 });
