@@ -674,7 +674,6 @@ describe('Slice 12 canonical no-model production orchestration', () => {
 
   it.each([
     ['POLICY', { type: 'POLICY', key: 'policy', version: 'v1' }],
-    ['PACKAGE', { type: 'PACKAGE', key: 'package', version: 'v1' }],
     ['CONTENT_VERSION', { type: 'CONTENT_VERSION', key: 'content', version: 'v1' }],
   ] as const)(
     'rejects Goal SAVE with unsupported %s dependency at the transport boundary',
@@ -691,6 +690,29 @@ describe('Slice 12 canonical no-model production orchestration', () => {
         { dependencyRefs: [...formulation.dependencyRefs, dependency] }
       );
       expect(rejected.statusCode, rejected.body).toBe(422);
+    }
+  );
+
+  it(
+    'rejects Goal SAVE with invalid PACKAGE dependency key at the business boundary (#1)',
+    async () => {
+      // PACKAGE type is now valid at the transport boundary (Zod accepts it),
+      // but the package key must match the case\'s actual A1001 package binding.
+      // An unrecognised key is rejected at the service layer with 409.
+      const f = await fixture('goal-unsupported-package');
+      let scene = await triage(f, true, 'A', 'A');
+      scene = await confirmCurrentFormulation(f, scene);
+      const formulation = await currentGoalFormulation(f);
+      const dependency = { type: 'PACKAGE' as const, key: 'package', version: 'v1' };
+      const rejected = await saveGoalFor(
+        f,
+        scene.caseVersion,
+        formulation,
+        'goal-save-unsupported-package-' + crypto.randomUUID(),
+        { dependencyRefs: [...formulation.dependencyRefs, dependency] }
+      );
+      expect(rejected.statusCode, rejected.body).toBe(409);
+      expect(rejected.json().code).toBe('CASE_PHASE_CONFLICT');
     }
   );
 
