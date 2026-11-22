@@ -507,7 +507,11 @@ export async function executeA5002ReviewInTransaction(
     }
     const caseRow = await lockSceneCase(tx, input.caseId);
     if (!caseRow) throw reviewError('CASE_NOT_FOUND', 'Case not found');
-    assertDigitalUseCaseLifecycle(caseRow, node, input.expectedCaseVersion);
+    assertDigitalUseCaseLifecycle(
+      caseRow,
+      { ...node, stream: 'PHONE_USE_CONTRACT' },
+      input.expectedCaseVersion
+    );
     await assertOrdinaryProgressionAllowedRaw(tx, { caseId: input.caseId });
     await assertCurrentDigitalUseProblemFormulation(tx, input.caseId);
     await assertBoundAssessmentCompliance(tx, input);

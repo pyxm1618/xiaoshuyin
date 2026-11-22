@@ -303,6 +303,18 @@ async function targetInputBasis(
   if (current.revision !== input.expectedTargetRevision) {
     throw familyHttpError('STALE_TARGET_REVISION');
   }
+
+  // Layer 2 invariant: TARGET -> FEASIBILITY -> PROGRESS / HELP
+  if (identity.role === 'FEASIBILITY' && !current.concrete_target_text) {
+    throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
+  }
+  if (
+    (identity.role === 'PROGRESS' || identity.role === 'HELP') &&
+    !current.feasibility_payload
+  ) {
+    throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
+  }
+
   return [{ type: 'TARGET_ITEM', id: current.id }];
 }
 
@@ -390,6 +402,20 @@ async function materializeSelectedTargetNodes(
     if (identity === null || !selected.has(identity.targetCode)) continue;
     const row = selectedRowByCode.get(identity.targetCode);
     if (!row) throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
+
+    // Invariant: TARGET -> FEASIBILITY -> PROGRESS / HELP
+    // FEASIBILITY requires concrete target text defined in TARGET stage
+    if (identity.role === 'FEASIBILITY' && !row.concrete_target_text) {
+      continue;
+    }
+    // PROGRESS / HELP requires feasibility evaluation completed in FEASIBILITY stage
+    if (
+      (identity.role === 'PROGRESS' || identity.role === 'HELP') &&
+      !row.feasibility_payload
+    ) {
+      continue;
+    }
+
     await ensureSceneNodeAvailable(tx, {
       familyId: input.familyId,
       caseId: input.caseId,
@@ -534,6 +560,9 @@ export async function executeFamilyAllianceNodeInTransaction(
     }
 
     const targetIdentity = familyAllianceTargetIdentity(node);
+    if (targetIdentity !== null) {
+      await materializeSelectedTargetNodes(tx, input, [targetIdentity.targetCode]);
+    }
     const selectionRevision = await getCurrentTargetSelectionRevision(
       tx,
       input.caseId

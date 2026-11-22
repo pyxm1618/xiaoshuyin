@@ -11,6 +11,10 @@ import {
   a5002CanonicalRequestFingerprint,
 } from '../../apps/server/api/src/services/digital-use-phone-contract-review.js';
 import {
+  assertDigitalUseCaseLifecycle,
+  minimumDigitalUseCasePhase,
+} from '../../apps/server/api/src/services/digital-use-case-lifecycle.js';
+import {
   requireProfessionalReviewPackage,
   unavailableProductionProfessionalReviewContentProvider,
   type ProfessionalReviewContentProvider,
@@ -393,5 +397,44 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
     await expect(
       requireProfessionalReviewPackage(providerFor(valid), input, 'RESOLVE')
     ).resolves.toEqual(valid);
+  });
+
+  it('Finding #33: maps Review streams to GOALS minimum Case phase and rejects ASSESSMENT/PROBLEM_FORMULATION', () => {
+    // Review services enforce minimum phase GOALS by binding review nodes to stream parity
+    const a5001Entry = { nodeCode: 'A5001', stream: 'FAMILY_ALLIANCE' as const };
+    const a5002Entry = { nodeCode: 'A5002', stream: 'PHONE_USE_CONTRACT' as const };
+
+    expect(minimumDigitalUseCasePhase(a5001Entry)).toBe('GOALS');
+    expect(minimumDigitalUseCasePhase(a5002Entry)).toBe('GOALS');
+
+    const baseCase = {
+      status: 'OPEN' as const,
+      is_primary: true,
+      version: 1,
+    };
+
+    // Fails in ASSESSMENT
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'ASSESSMENT' }, a5001Entry, 1)
+    ).toThrowError(/CASE_PHASE_CONFLICT/);
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'ASSESSMENT' }, a5002Entry, 1)
+    ).toThrowError(/CASE_PHASE_CONFLICT/);
+
+    // Fails in PROBLEM_FORMULATION
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'PROBLEM_FORMULATION' }, a5001Entry, 1)
+    ).toThrowError(/CASE_PHASE_CONFLICT/);
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'PROBLEM_FORMULATION' }, a5002Entry, 1)
+    ).toThrowError(/CASE_PHASE_CONFLICT/);
+
+    // Allowed in GOALS and REVIEW
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'GOALS' }, a5001Entry, 1)
+    ).not.toThrow();
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'REVIEW' }, a5002Entry, 1)
+    ).not.toThrow();
   });
 });

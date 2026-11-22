@@ -34,6 +34,7 @@ import {
   validateGoalContract,
   type DependencyRef,
   type GoalContractInput,
+  type GoalDependencyRef,
   type GoalRow,
 } from '@xiaoshuyin/domain';
 import {
@@ -328,6 +329,34 @@ async function assertGoalEvidence(
   }
 }
 
+async function assertGoalPackageDependencies(
+  tx: pg.PoolClient,
+  caseId: string,
+  dependencyRefs: readonly GoalDependencyRef[]
+): Promise<void> {
+  const packageDeps = dependencyRefs.filter(
+    (dep): dep is Extract<GoalDependencyRef, { type: 'PACKAGE' }> =>
+      dep.type === 'PACKAGE'
+  );
+  if (packageDeps.length === 0) return;
+
+  const binding = await getScenePackageBinding(tx, caseId);
+  for (const dep of packageDeps) {
+    if (dep.key !== 'DIGITAL_USE') {
+      throw httpError(
+        'CASE_PHASE_CONFLICT',
+        `Unsupported package dependency key: ${dep.key}`
+      );
+    }
+    if (binding === null || binding !== dep.version) {
+      throw httpError(
+        'CASE_PHASE_CONFLICT',
+        `Package dependency version ${dep.version} does not match active Case binding ${binding ?? 'none'}`
+      );
+    }
+  }
+}
+
 async function assertStoredGoalCurrent(
   tx: pg.PoolClient,
   input: {
@@ -353,6 +382,7 @@ async function assertStoredGoalCurrent(
   assertExactFormulation(input.formulation, contract);
   await assertGoalEvidence(tx, input.caseId, contract);
   await assertGoalDependencyConsents(tx, contract.dependencyRefs);
+  await assertGoalPackageDependencies(tx, input.caseId, contract.dependencyRefs);
   return contract;
 }
 
@@ -437,6 +467,11 @@ export async function saveGoal(
             await assertGoalEvidence(tx, input.caseId, input.contract);
             await assertGoalDependencyConsents(
               tx,
+              input.contract.dependencyRefs
+            );
+            await assertGoalPackageDependencies(
+              tx,
+              input.caseId,
               input.contract.dependencyRefs
             );
 

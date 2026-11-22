@@ -172,4 +172,19 @@ describe('decideSwitchPrimary (T719)', () => {
       )
     ).toEqual({ kind: 'DENY', code: 'STALE_PRIMARY_VIEW' });
   });
+
+  it('Finding #6: explicitly allows switching a WAITING target Case to primary and preserves its status', () => {
+    const decision = decideSwitchPrimary(
+      input({
+        current: row('case-current', 'OPEN', 2),
+        target: row('case-target', 'WAITING', 5),
+        expected: MATCHING,
+      })
+    );
+    expect(decision).toEqual({
+      kind: 'ALLOW',
+      demote: { caseId: 'case-current' },
+      promote: { caseId: 'case-target' },
+    });
+  });
 });
