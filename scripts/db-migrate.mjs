@@ -9,6 +9,8 @@
  *   visible at that transition and marked LEGACY_BASELINE.
  * - Once checksum-bound, same-filename content drift fails closed before any
  *   later migration is applied.
+ * - Self-contained runner: holds zero external local file dependencies so that
+ *   tests copying only scripts/db-migrate.mjs can execute seamlessly.
  */
 
 import { createHash } from 'node:crypto';
@@ -22,8 +24,246 @@ const CHECKSUM_RE = /^[0-9a-f]{64}$/;
 const MIGRATION_LOCK_KEY_1 = 20261114;
 const MIGRATION_LOCK_KEY_2 = 1;
 
-function sha256(bytes) {
+/**
+ * The exact 8 legacy migrations permitted to have outer BEGIN; ... COMMIT; wrappers,
+ * bound to their immutable historical SHA-256 fingerprints.
+ */
+export const LEGACY_TRANSACTION_WRAPPED_MIGRATIONS = new Map([
+  [
+    '023_digital_use_review_runtime_authority_reconciled.sql',
+    'bb94e139cf931a0c79627b77d155e5e5fff123c8b9a60e2fc2719bbe3eb63ddf',
+  ],
+  [
+    '024_psychological_behavioral_intervention_contract.sql',
+    '18a3f9e02544e6eb9b9708ead76d116f8a12e0f66d124ccaa34da97fe4e717ed',
+  ],
+  [
+    '025_professional_knowledge_foundation.sql',
+    '1fc57759aa938908d422474df1b8c5dc1b0cca93cb31dd8fc1f2f50444ff5a5a',
+  ],
+  [
+    '025_slice16_post_merge_forensic_remediation.sql',
+    'ee047e1fabadc037588fb97537c9b0cd2fcb9266909409f9fc4084d9b3781d58',
+  ],
+  [
+    '026_professional_authority_release_remediation.sql',
+    '3186da0193feac1bd3259f4920ee707860c7d91a9ed653fd881ee848880e07c5',
+  ],
+  [
+    '027_professional_knowledge_insert_lifecycle_guard.sql',
+    'f62f683b6b5730c1085ea7c10e6a73aa441f49d9e50861760bafbbd4a1f481cf',
+  ],
+  [
+    '028_professional_knowledge_authority_boundary_remediation.sql',
+    'e713b7bd4e0b8c2b31140358415770fe7f080142b75472888566658268de7eb7',
+  ],
+  [
+    '029_staff_assignment_control_plane.sql',
+    '3bed128b4376dcf7c0c701ed53220c86835b12c7876e9d6a9ed4058416bd794d',
+  ],
+]);
+
+export function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+/**
+ * Scan SQL text and extract top-level statements that match transaction control keywords.
+ * Correctly skips line comments, block comments, single quotes, double quotes, and dollar quotes.
+ */
+export function scanTopLevelTransactionStatements(content) {
+  let i = 0;
+  let blockDepth = 0;
+  let inLineComment = false;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let dollarTag = null;
+  let currentStmt = '';
+  let stmtStart = 0;
+  const statements = [];
+
+  while (i < content.length) {
+    const ch = content[i];
+    const next = content[i + 1];
+
+    if (blockDepth > 0) {
+      if (ch === '/' && next === '*') {
+        blockDepth++;
+        i += 2;
+        continue;
+      }
+      if (ch === '*' && next === '/') {
+        blockDepth--;
+        i += 2;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (inLineComment) {
+      if (ch === '\n') {
+        inLineComment = false;
+      }
+      i++;
+      continue;
+    }
+
+    if (dollarTag !== null) {
+      if (content.startsWith(dollarTag, i)) {
+        i += dollarTag.length;
+        dollarTag = null;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (inSingleQuote) {
+      if (ch === "'" && next === "'") {
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        inSingleQuote = false;
+        i++;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      if (ch === '"' && next === '"') {
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        inDoubleQuote = false;
+        i++;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === '-' && next === '-') {
+      inLineComment = true;
+      i += 2;
+      continue;
+    }
+
+    if (ch === '/' && next === '*') {
+      blockDepth = 1;
+      i += 2;
+      continue;
+    }
+
+    if (ch === "'") {
+      inSingleQuote = true;
+      i++;
+      continue;
+    }
+
+    if (ch === '"') {
+      inDoubleQuote = true;
+      i++;
+      continue;
+    }
+
+    if (ch === '$') {
+      const tagMatch = /^\$([A-Za-z0-9_]*)\$/.exec(content.slice(i));
+      if (tagMatch) {
+        dollarTag = tagMatch[0];
+        i += dollarTag.length;
+        continue;
+      }
+    }
+
+    if (ch === ';') {
+      const text = currentStmt.trim();
+      if (text) {
+        statements.push({ text, start: stmtStart, end: i + 1 });
+      }
+      currentStmt = '';
+      stmtStart = i + 1;
+      i++;
+      continue;
+    }
+
+    if (!currentStmt && (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r')) {
+      stmtStart = i + 1;
+    } else {
+      currentStmt += ch;
+    }
+    i++;
+  }
+
+  const text = currentStmt.trim();
+  if (text) {
+    statements.push({ text, start: stmtStart, end: content.length });
+  }
+
+  const txRegex = /^(BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION|END)\b/i;
+  return statements.filter((s) => txRegex.test(s.text));
+}
+
+/**
+ * Validate migration SQL for transaction control rules and return executable SQL.
+ */
+export function validateAndPrepareMigrationSql(filename, sql, rawChecksum) {
+  const txStmts = scanTopLevelTransactionStatements(sql);
+
+  if (txStmts.length === 0) {
+    return { executableSql: sql, stripped: false };
+  }
+
+  const expectedFingerprint = LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.get(filename);
+  if (!expectedFingerprint) {
+    throw new Error(
+      `MIGRATION_UNAUTHORIZED_TRANSACTION_CONTROL ${filename}: ` +
+        `Top-level transaction statement forbidden in migrations (${txStmts.map((s) => s.text).join(', ')}).`
+    );
+  }
+
+  if (rawChecksum !== expectedFingerprint) {
+    throw new Error(
+      `MIGRATION_LEGACY_FINGERPRINT_MISMATCH ${filename}: ` +
+        `Expected ${expectedFingerprint}, got ${rawChecksum}.`
+    );
+  }
+
+  if (txStmts.length !== 2) {
+    throw new Error(
+      `MIGRATION_LEGACY_STRUCTURE_INVALID ${filename}: ` +
+        `Expected exactly 2 top-level transaction statements (BEGIN and COMMIT), found ${txStmts.length}.`
+    );
+  }
+
+  const [beginStmt, commitStmt] = txStmts;
+  if (!/^BEGIN\b/i.test(beginStmt.text) || !/^COMMIT\b/i.test(commitStmt.text)) {
+    throw new Error(
+      `MIGRATION_LEGACY_STRUCTURE_INVALID ${filename}: ` +
+        `Expected BEGIN followed by COMMIT, found '${beginStmt.text}' and '${commitStmt.text}'.`
+    );
+  }
+
+  const chars = sql.split('');
+
+  function blankOut(start, end) {
+    for (let pos = start; pos < end; pos++) {
+      if (chars[pos] !== '\n' && chars[pos] !== '\r') {
+        chars[pos] = ' ';
+      }
+    }
+  }
+
+  blankOut(beginStmt.start, beginStmt.end);
+  blankOut(commitStmt.start, commitStmt.end);
+
+  const executableSql = chars.join('');
+
+  return { executableSql, stripped: true };
 }
 
 async function checksumMetadataAvailable(client) {
@@ -37,13 +277,22 @@ async function checksumMetadataAvailable(client) {
   return rows[0]?.n === 3;
 }
 
-function migrationFiles() {
-  return readdirSync(MIGRATIONS_DIR)
+function migrationFiles(migrationsDir = MIGRATIONS_DIR) {
+  return readdirSync(migrationsDir)
     .filter((f) => f.endsWith('.sql'))
     .sort()
     .map((filename) => {
-      const bytes = readFileSync(join(MIGRATIONS_DIR, filename));
-      return { filename, sql: bytes.toString('utf8'), checksum: sha256(bytes) };
+      const bytes = readFileSync(join(migrationsDir, filename));
+      const checksum = sha256(bytes);
+      const rawSql = bytes.toString('utf8');
+      const prepared = validateAndPrepareMigrationSql(filename, rawSql, checksum);
+      return {
+        filename,
+        sql: rawSql,
+        executableSql: prepared.executableSql,
+        stripped: prepared.stripped,
+        checksum,
+      };
     });
 }
 
@@ -158,18 +407,13 @@ async function main() {
   await client.connect();
 
   try {
-    // Serialize migration runners for this database. One runner can execute
-    // multiple migration transactions, and recovery of pre-existing NULL
-    // checksum rows may use a separate transaction, so a session-level advisory
-    // lock is the minimum primitive that prevents duplicate apply / baseline
-    // races without creating a second migration framework.
+    // Serialize migration runners for this database.
     await client.query('SELECT pg_advisory_lock($1, $2)', [
       MIGRATION_LOCK_KEY_1,
       MIGRATION_LOCK_KEY_2,
     ]);
 
-    // Fresh databases start checksum-capable. Existing filename-only tables are
-    // not rewritten here: migration 018 establishes the forward transition.
+    // Fresh databases start checksum-capable.
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         filename           text PRIMARY KEY,
@@ -185,8 +429,6 @@ async function main() {
 
     let hasChecksums = await checksumMetadataAvailable(client);
     const initialRows = await readApplied(client, hasChecksums);
-    // Missing recorded files are integrity failures even on a legacy database
-    // that has not reached migration 018 yet. Fail before executing ANY new SQL.
     validateRecordedFilesPresent(initialRows, byName);
     const applied = new Set(initialRows.map((row) => row.filename));
 
@@ -207,7 +449,7 @@ async function main() {
       await client.query('BEGIN');
       let metadataAfterApply = hasChecksums;
       try {
-        await client.query(migration.sql);
+        await client.query(migration.executableSql);
         metadataAfterApply = await checksumMetadataAvailable(client);
 
         if (metadataAfterApply) {
@@ -218,10 +460,6 @@ async function main() {
             [migration.filename, migration.checksum]
           );
 
-          // The migration that first establishes checksum metadata is the exact
-          // legacy transition point. Bind every older filename-only row inside
-          // THIS SAME transaction so metadata + LEGACY_BASELINE become visible
-          // atomically, or roll back together on any failure.
           if (!hasChecksums) {
             await bindLegacyRowsInCurrentTransaction(client, [...applied], byName);
           }
@@ -280,7 +518,15 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Migration failed:', err.message);
-  process.exit(1);
-});
+// Run main if invoked directly as CLI
+const isDirectCli = process.argv[1] && (
+  process.argv[1].endsWith('db-migrate.mjs') ||
+  process.argv[1].endsWith('db-migrate.js')
+);
+
+if (isDirectCli) {
+  main().catch((err) => {
+    console.error('Migration failed:', err.message);
+    process.exit(1);
+  });
+}
