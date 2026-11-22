@@ -1374,7 +1374,7 @@ DEVELOPMENT AUTHORIZATION: NOT GRANTED
 | Revision 2 freeze candidate spec.md blob SHA | `e83af6baaf835d5855fd231a5f815c4e3f22b074` |
 | Revision 2 record commit SHA | 本记录提交（branch head；SHA 由 Plan AI 1 closeout 报告给出） |
 | Changed files | `specs/020-embedding-provider-adapter-foundation/spec.md` |
-| Ahead / Behind main | ahead 5 / behind 0（freeze candidate + merge + Revision 1 record + Revision 2 record） |
+| Ahead / Behind main | freeze candidate 相对 main：ahead 4 / behind 0（commit `b69e7726` 时实测；后续 spec-only record commits 不改变语义） |
 | Remote read-back status | VERIFIED（freeze candidate commit `b69e7726` / blob `e83af6ba`；SHA-256 `ca806bfa…` 与本地一致） |
 
 ---
