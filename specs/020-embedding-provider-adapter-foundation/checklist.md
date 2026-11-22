@@ -2,7 +2,10 @@
 
 > Feature: `020-embedding-provider-adapter-foundation`
 >
-> Authority: `specs/020-embedding-provider-adapter-foundation/spec.md`（Frozen Revision 2，blob `67711ee5a67b34c927f8f26058fab8cf430c4a71`）
+> Authority: `specs/020-embedding-provider-adapter-foundation/spec.md`（Frozen **Revision 3**，commit `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`，blob `078982f0819954a5479086da86036ccd81d22b2c`）
+>
+> **Governance Mode: MODE A — NATIVE HTTP**（native HTTP + `globalThis.fetch`；零 provider 依赖；
+> `scripts/guard-static.mjs` 与 base 字节级一致；无 allowance、无 provider import fixture）
 >
 > Plan: `specs/020-embedding-provider-adapter-foundation/plan.md`
 >
@@ -29,7 +32,7 @@ Legend
 
 | ID | 检查项 | PASS 判据 | FAIL 判据 |
 | --- | --- | --- | --- |
-| CHK-A01 | Frozen Spec blob 未变 | `git hash-object specs/020-*/spec.md` == `67711ee5a67b34c927f8f26058fab8cf430c4a71` | 任何字节差异 |
+| CHK-A01 | Frozen Spec blob 未变 | `git hash-object specs/020-*/spec.md` == `078982f0819954a5479086da86036ccd81d22b2c`（Revision 3） | 任何字节差异 |
 | CHK-A02 | Authority Docs 未变 | `git diff --name-only <base>...HEAD` 不含 `Docs/` | 含任一 `Docs/` 文件 |
 | CHK-A03 | Slice 16–19 Authority 未变 | diff 不含 `specs/016-*`..`specs/019-*` | 含任一 |
 | CHK-A04 | Spec 语义未被改写 | diff 不含 `specs/020-*/spec.md` | 含 `spec.md` |
@@ -63,20 +66,23 @@ Legend
 | CHK-C08 | 无宽泛授权 | 不存在 path 为 `apps/server/api/src/ai/`、`apps/server/api/src/providers/`、`apps/server/api/src/embeddings/` 或含通配符的规则 | 存在任一 |
 | CHK-C09 | 未放宽其它 Feature 的 ownership | diff 仅新增 1 条，无修改/删除既有规则 | 有修改/删除 |
 | CHK-C10 | Rule 8 全局条目完好 | `FORBIDDEN_SAFETY_IMPORTS` 仍含 `dashscope`、`@alicloud`、`openai`、`anthropic`、`guardrails`、`ollama`、`langchain` 等 | 删除任一 |
-| CHK-C11 | allowance 只覆盖 2 个 token | `R8_PATH_SCOPED_ALLOWANCES` 的 key 恰为 `dashscope`、`@alicloud` | 多/少 |
-| CHK-C12 | allowance 只覆盖 1 个前缀 | value 数组长度 1，值 == `apps/server/api/src/ai/embedding/` | 其它 |
-| CHK-C13 | path 归一化防绕过 | `isR8PathAllowed` 拒绝绝对路径、`\\`、含 `..` 段、normalize 后变化 | 缺失任一 |
-| CHK-C14 | positive fixture | F1（`dashscope`）与 F2（`@alicloud`）在 seam 内 `expectViolation:false` 且 self-test PASS | 报 violation 或缺失 |
-| CHK-C15 | adjacent negative | F3（`embedding-extra/`）检测到 violation | 未检测 |
-| CHK-C16 | similar-name negative | F4（`embeddings/`）检测到 violation | 未检测 |
-| CHK-C17 | outside-seam negative | F5（`services/`）检测到 violation | 未检测 |
-| CHK-C18 | cross-path rejection | F6（`packages/domain/`）检测到 violation | 未检测 |
-| CHK-C19 | unknown-path rejection | F7（`ai/unknown/`）检测到 violation | 未检测 |
-| CHK-C20 | traversal rejection | F8（含 `..`）检测到 violation | 未检测 |
-| CHK-C21 | 非授权 token 在 seam 内仍拒绝 | F9（`openai` 在 seam）检测到 violation | 未检测 |
-| CHK-C22 | 既有 Safety 保护未回归 | F10（`guardrails`）、F11（public safety route）仍检测到 violation | 未检测 |
-| CHK-C23 | Rule 19 未被修改 | diff 不含 `checkPgvectorReadinessScope` 的逻辑改动 | 有改动 |
-| CHK-C24 | 治理 PR 自身通过校验 | `guard-static`、`--self-test`、`validate-governance`、`run-change-governance-tests`、`validate-change-governance --base origin/main` 全部 PASS | 任一 FAIL |
+| CHK-C11 | 治理模式声明为 MODE A | `plan.md` 明示 `GOVERNANCE MODE: MODE A — NATIVE HTTP`；且实现确实为 native HTTP + `globalThis.fetch`、无 provider SDK import | 声明 MODE B，或声明与实际依赖不符 |
+| CHK-C12 | guard blob 字节级等于 base（V15） | `git rev-parse <base>:scripts/guard-static.mjs` == `git rev-parse HEAD:scripts/guard-static.mjs` | 任一字节差异 |
+| CHK-C13 | 不存在 allowance 定义 | `scripts/guard-static.mjs` 中无 `R8_PATH_SCOPED_ALLOWANCES`、无 `isR8PathAllowed`（MODE A） | 出现任一 |
+| CHK-C14 | 不存在 provider import fixture | `--self-test` 输出 `PASS (28 synthetic fixtures validated)`；源码无 `slice20 …` fixture | 数量变化或存在新增 fixture |
+| CHK-C15 | G1b diff 恰好 1 个文件 | `git diff --name-only <main>...HEAD` == `.specify/implementation-ownership.json` | 多出任何文件（尤其 `scripts/**`） |
+| CHK-C16 | 依赖边界：无 provider SDK | `package.json` / lockfile / seam import 扫描 `dashscope`、`@alicloud`、provider SDK 命中 = 0（V16） | 命中 > 0 |
+| CHK-C17 | provider egress 只在 seam | architecture test：seam 外无 `fetch(` 出网构造；seam 内仅 `transport.ts` | 存在 seam 外 direct provider integration |
+| CHK-C18 | consumer 只经 Port | seam 外不得 import `ai/embedding/transport`、`ai/embedding/dashscope-protocol`；只能 import `index.ts` 导出面 | 存在 provider 专有模块外部引用 |
+| CHK-C19 | approved endpoint policy | 只接受 `https://{host}/api/v1/services/embeddings/text-embedding/text-embedding`，host 落在批准后缀；无 override 参数/环境变量绕过 | 存在非批准 endpoint 或 override 通道 |
+| CHK-C20 | unknown production path fail closed | 未注册 production path 使 `validate-change-governance` 失败；registry 无更宽 matcher | 未知路径被静默接受 |
+| CHK-C21 | AS-036：MODE B NOT TRIGGERED | import 扫描命中 0 → allow set 与 fixtures 均不存在；无"为进入 MODE B"而加的 SDK | 出现 MODE B 形态但无真实 import 依据 |
+| CHK-C22 | AS-035：MODE A governance evidence 完整 | C12 + C15 + C16 + C17 + C18 + C19 + C20 全部 PASS（六项缺一即 FAIL） | 任一缺失 |
+| CHK-C23 | Rule 19 未被修改 | diff 不含 `scripts/guard-static.mjs`（因此必然不含 `checkPgvectorReadinessScope` 改动） | 有改动 |
+| CHK-C24 | 治理 PR 自身通过校验 | `guard-static`、`--self-test`（28）、`validate-governance`、`run-change-governance-tests`、`validate-change-governance --base origin/main` 全部 PASS | 任一 FAIL |
+| CHK-C25 | NS-039（MODE A 禁止预置放宽） | guard blob 相等 + 无新 fixture + diff 无 `scripts/**` + 无 allow set（C12/C13/C14/C15） | 任一违反 |
+| CHK-C26 | NS-040（禁止为满足 Spec 引入 SDK） | `package.json` / lockfile 无新增 provider 依赖；依赖图无 `dashscope` / `@alicloud` import（C16） | 存在任一 |
+| CHK-C27 | C20-21：治理模式由实际依赖决定 | native HTTP + 无 forbidden provider import → MODE A；ownership 无条件存在；无 allowance/fixture；若真实出现 provider import，必须先改 Spec 进入 MODE B | 声明与依赖不符，或未改 Spec 就切换 MODE B |
 
 ## D. Port Contract
 
@@ -173,6 +179,7 @@ Legend
 | CHK-I06 | 请求头即时拼接 | secret 只存在于出网调用栈局部变量 | 存入可序列化结构 |
 | CHK-I07 | `.env*` 未修改 | diff 不含 `.env` / `.env.example` / `.env.*` | 含任一 |
 | CHK-I08 | 仓库 secret 扫描 | 无可用凭据；测试只用 `test-*` 占位符 | 存在真实凭据 |
+| CHK-I09 | secret 出网路径唯一 | secret 只在 `transport.ts` 的出网调用栈内拼接；seam 外无 provider 出网（与 CHK-C17 联合） | 存在第二条出网路径 |
 
 ## J. Telemetry
 
@@ -216,6 +223,7 @@ Legend
 | CHK-L10 | artifact 零敏感 | 无 secret / 原始 body / 输入原文 / 家庭数据 / Gold label | 存在任一 |
 | CHK-L11 | 证据不跨 Slice 复用 | artifact 只引用本 Slice 调用记录 | 引用其它 Slice |
 | CHK-L12 | 当前离线状态 | Slice 当前为 `PROVIDER_NOT_VERIFIED` | 声称其它 |
+| CHK-L13 | MODE A governance evidence 归档 | 治理证据包含：ownership 唯一 seam 条目、guard blob 相等输出（V15）、provider egress 边界、Port-only consumer、endpoint policy、unknown-path fail-closed、依赖扫描（V16） | 任一证据缺失或被口头代替 |
 
 ## M. Tests
 
@@ -232,6 +240,8 @@ Legend
 | CHK-M09 | 失败注入类测试存在 | 每类错误至少一条注入用例 | 缺失 |
 | CHK-M10 | Test-first 纪律 | 每个 I 任务的提交序列含「先失败的测试」 | 无法证明 |
 | CHK-M11 | AS-021 前后快照 | V14 通过；调用前后表清单/行数逐项相同 | 缺失或不同 |
+| CHK-M12 | egress / Port / endpoint 静态测试存在 | architecture test 内含：egress 只在 seam、consumer 只经 Port、approved endpoint policy、seam 外无 direct provider integration 四类断言且全绿 | 缺失任一断言 |
+| CHK-M13 | 依赖边界测试存在 | 测试或 CI 脚本断言 `dashscope` / `@alicloud` / provider SDK 在 seam、`package.json`、lockfile 中命中 0（V16） | 缺失断言 |
 
 ## N. Negative Scope
 
@@ -249,19 +259,22 @@ Legend
 | CHK-N10 | 无 generic registry / platform | 无 provider/model/plugin/workflow/eval/vector 通用抽象 | 存在 |
 | CHK-N11 | 无 `packages/**` 级豁免 | ownership 无 `packages/**`；无通配 | 存在 |
 | CHK-N12 | 无 `ai/` / `providers/` / `embeddings/` 目录级所有权 | registry 检查 | 存在 |
+| CHK-N13 | NS-039：MODE A 无预置 Rule 8 放宽 | guard 与 base 字节相同；无新增 provider import fixture；无 allowance；diff 无 `scripts/**` | 任一出现 |
+| CHK-N14 | NS-040：无 provider SDK 依赖 | `package.json` / lockfile 无新增 provider 依赖；依赖图无 `dashscope` / `@alicloud` import（V16） | 存在任一 |
 
 ## O. Regression
 
 | ID | 检查项 | PASS 判据 | FAIL 判据 |
 | --- | --- | --- | --- |
 | CHK-O01 | 静态守卫 | `node scripts/guard-static.mjs` → `PASS (0 violations)` | FAIL |
-| CHK-O02 | self-test | `node scripts/guard-static.mjs --self-test` → PASS，含 F1..F11 | FAIL/缺项 |
+| CHK-O02 | self-test（MODE A baseline） | `node scripts/guard-static.mjs --self-test` → `PASS (28 synthetic fixtures validated)`，数量与 base 相同 | FAIL、数量变化或新增 fixture |
 | CHK-O03 | typecheck（base） | `bunx tsc -p tsconfig.base.json --noEmit` → exit 0 | 非 0 |
 | CHK-O04 | typecheck（api） | `cd apps/server/api && bunx tsc --noEmit` → exit 0 | 非 0 |
 | CHK-O05 | governance | `validate-governance` + `run-governance-tests` + `validate-change-governance --base origin/main` 全 PASS | 任一 FAIL |
 | CHK-O06 | canonical 回归 | `node scripts/verify-all.mjs` → `verify-all: PASS` | FAIL |
 | CHK-O07 | working tree clean | 回归结束后 tracked tree clean | dirty |
 | CHK-O08 | 无依赖变更 | `package.json` / `bun.lock` diff 为空 | 有变更 |
+| CHK-O09 | guard blob equality（V15 / MODE A） | `git rev-parse <base>:scripts/guard-static.mjs` == `git rev-parse HEAD:scripts/guard-static.mjs` | 任一字节差异 |
 
 ## P. Provider Verification（真实 DashScope）
 
@@ -299,22 +312,32 @@ Legend
 | --- | --- | --- | --- | --- | --- |
 | A Authority & Frozen Identity | 8 | | | | |
 | B Scope | 6 | | | | |
-| C Governance Prerequisite | 24 | | | | |
+| C Governance Prerequisite | 27 | | | | |
 | D Port Contract | 12 | | | | |
 | E Dense Contract | 9 | | | | |
 | F Sparse Payload Contract | 14 | | | | |
 | G Error Model | 14 | | | | |
 | H Retry / Timeout | 9 | | | | |
-| I Secret | 8 | | | | |
+| I Secret | 9 | | | | |
 | J Telemetry | 8 | | | | |
 | K Cost | 8 | | | | |
-| L Evidence | 12 | | | | |
-| M Tests | 10 | | | | |
-| N Negative Scope | 12 | | | | |
-| O Regression | 8 | | | | |
+| L Evidence | 13 | | | | |
+| M Tests | 13 | | | | |
+| N Negative Scope | 14 | | | | |
+| O Regression | 9 | | | | |
 | P Provider Verification | 10 | | | | |
 | Q Development Handoff | 8 | | | | |
-| **合计** | **180** | | | | |
+| **合计** | **191** | | | | |
+
+```text
+COVERAGE DECLARATION（Revision 3）
+  FR  67 / 67
+  AS  36 / 36（含 AS-035 MODE A evidence、AS-036 MODE B NOT TRIGGERED）
+  NS  40 / 40（含 NS-039 MODE A 无预置放宽、NS-040 禁止引入 SDK）
+  C20 21 / 21
+  EVC 10 / 10
+GOVERNANCE MODE: MODE A — NATIVE HTTP
+```
 
 ```text
 FINAL GATE RULE

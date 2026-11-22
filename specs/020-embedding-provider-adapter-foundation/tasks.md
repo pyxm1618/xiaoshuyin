@@ -2,7 +2,10 @@
 
 > Feature: `020-embedding-provider-adapter-foundation`
 >
-> Frozen Spec: `spec.md` Revision 2，blob `67711ee5a67b34c927f8f26058fab8cf430c4a71`
+> Frozen Spec: `spec.md` Revision 3，commit `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`，blob `078982f0819954a5479086da86036ccd81d22b2c`
+>
+> **Governance Mode: MODE A — NATIVE HTTP**（零 provider 依赖；`scripts/guard-static.mjs` 字节级不变；
+> 唯一治理 delta = `.specify/implementation-ownership.json` +1 条 PREFIX 规则）
 >
 > Plan: `plan.md` · Checklist: `checklist.md`
 >
@@ -24,17 +27,17 @@
 | Task | Phase | Authority |
 | --- | --- | --- |
 | T001 | G0 Remote reconciliation | Frozen Spec §3 Remote Truth；`plan.md` §4 |
-| T002 | G1 Governance prerequisite PR | Frozen Spec §19.2；`plan.md` §5.1–5.8 |
-| T003 | G2 Independent governance audit + merge | Frozen Spec §19.2 流程约束；`plan.md` §5.6 |
+| T002 | G1 Governance prerequisite PR（MODE A） | Frozen Spec §19.2、FR-051、AS-035、NS-039、NS-030；`plan.md` §5.0、§5.2、§5.3、§5.6 |
+| T003 | G2 Independent governance audit + merge（MODE A） | Frozen Spec §19.2 流程约束、AS-035、AS-036；`plan.md` §5.3、§5.6 |
 | T004 | I0 Rebind implementation branch | Frozen Spec §3；`plan.md` §4.1 |
 | T005 | I1 Port / types | FR-001..FR-010、FR-052；`plan.md` §6.2–6.3 |
 | T006 | I2 Adapter（config / transport / protocol） | FR-002、FR-022..FR-027、FR-042；`plan.md` §6.12–6.13 |
 | T007 | I3 Validation / error / retry | FR-011..FR-021、FR-028..FR-036、FR-063..FR-067；`plan.md` §6.4–6.7 |
 | T008 | I4 Telemetry / cost / secrets | FR-037..FR-040、FR-042、FR-043；`plan.md` §6.8–6.10 |
 | T009 | I5 Contract tests | FR-001..FR-040、FR-053..FR-055；`plan.md` §7.3–7.4 |
-| T010 | I6 Architecture / static guards | FR-041、FR-044..FR-052、FR-056..FR-062；NS-001..NS-038；`plan.md` §7.5 |
+| T010 | I6 Architecture / static guards | FR-041、FR-044..FR-052、FR-056..FR-062；NS-001..NS-040；`plan.md` §7.2–7.5 |
 | T011 | I7 Optional real-provider verification | FR-056..FR-062、EVC-01..EVC-10；`plan.md` §8 |
-| T012 | I8 Canonical regression + STOP | Frozen Spec §19.3/§19.4；`plan.md` §7.1 |
+| T012 | I8 Canonical regression + STOP | Frozen Spec §19.3/§19.4；`plan.md` §7.1（含 V15 guard blob equality、V16 依赖扫描） |
 
 ## Acceptance Evidence Contract
 
@@ -47,17 +50,17 @@
 > `[REQ:...]` 追踪需求身份；`[VERIFY:...]` 追踪可机器验证的仓库路径。
 
 - [ ] T001 G0 remote reconciliation / frozen identity / competing-work recheck — [REQ:FR-047,FR-051; NS-017,NS-018,NS-027,NS-029,NS-030] [VERIFY: .specify/scripts/validate-change-governance.mjs scripts/guard-static.mjs]
-- [ ] T002 G1 governance prerequisite PR (ownership + Rule 8 narrow allowance + adversarial fixtures) — [REQ:FR-051; NS-027,NS-029,NS-030,NS-031,NS-032] [VERIFY: scripts/guard-static.mjs]
-- [ ] T003 G2 independent governance audit + merge — [REQ:FR-051; NS-027,NS-029,NS-030] [VERIFY: .specify/scripts/tests/run-change-governance-tests.mjs]
+- [ ] T002 G1 governance prerequisite PR（MODE A：ownership registry only；guard-static unchanged）— [REQ:FR-051; NS-027,NS-029,NS-030,NS-031,NS-032,NS-039,NS-040] [VERIFY: .specify/implementation-ownership.json .specify/scripts/validate-change-governance.mjs]
+- [ ] T003 G2 independent governance audit + merge（MODE A：ownership narrow / guard unchanged / no SDK / unknown path fail closed）— [REQ:FR-051; NS-027,NS-029,NS-030,NS-039,NS-040] [VERIFY: .specify/scripts/tests/run-change-governance-tests.mjs scripts/guard-static.mjs]
 - [ ] T004 I0 rebind implementation branch to current main — [REQ:FR-048,FR-051; NS-003,NS-017] [VERIFY: .specify/scripts/validate-change-governance.mjs]
 - [ ] T005 I1 Port contract and types — [REQ:FR-001,FR-002,FR-003,FR-004,FR-005,FR-006,FR-007,FR-008,FR-009,FR-010,FR-052] [VERIFY: tests/ai/embedding-provider-contract.test.ts]
 - [ ] T006 I2 DashScope protocol adapter (config / transport / mapping) — [REQ:FR-022,FR-023,FR-024,FR-025,FR-026,FR-027,FR-042,FR-044,FR-045] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts]
 - [ ] T007 I3 validation / error normalization / timeout / retry / cancellation — [REQ:FR-011,FR-012,FR-013,FR-014,FR-015,FR-016,FR-017,FR-018,FR-019,FR-020,FR-021,FR-028,FR-029,FR-030,FR-031,FR-032,FR-033,FR-034,FR-035,FR-036,FR-063,FR-064,FR-065,FR-066,FR-067] [VERIFY: tests/ai/embedding-dashscope-adapter.test.ts tests/ai/embedding-provider-contract.test.ts]
 - [ ] T008 I4 telemetry / cost record / secret boundaries / evidence derivation — [REQ:FR-010,FR-037,FR-038,FR-039,FR-040,FR-041,FR-042,FR-043,FR-053,FR-054,FR-055] [VERIFY: tests/ai/embedding-provider-contract.test.ts]
 - [ ] T009 I5 contract test suite completion — [REQ:FR-001,FR-006,FR-009,FR-010,FR-039,FR-040,FR-053,FR-054,FR-055] [VERIFY: tests/ai/embedding-provider-contract.test.ts tests/ai/embedding-dashscope-adapter.test.ts tests/integration/embedding-provider-no-persistence.test.ts]
-- [ ] T010 I6 architecture / negative-scope static guards — [REQ:FR-041,FR-044,FR-045,FR-046,FR-049,FR-050,FR-051,FR-052,FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062] [VERIFY: tests/architecture/embedding-provider-boundary.test.ts scripts/guard-static.mjs]
+- [ ] T010 I6 architecture / negative-scope static guards（含 egress-only-seam / Port-only consumer / endpoint policy / dependency boundary）— [REQ:FR-041,FR-044,FR-045,FR-046,FR-049,FR-050,FR-051,FR-052,FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062] [VERIFY: tests/architecture/embedding-provider-boundary.test.ts scripts/guard-static.mjs]
 - [ ] T011 I7 optional real-provider verification (explicit opt-in) — [REQ:FR-056,FR-057,FR-058,FR-059,FR-060,FR-061,FR-062] [VERIFY: tests/ai/embedding-provider-verification.test.ts tests/evidence/embedding-provider-verification.json]
-- [ ] T012 I8 canonical regression + STOP at READY FOR AUDIT 2 — [REQ:FR-051,FR-053,FR-055,FR-059; NS-003,NS-018] [VERIFY: scripts/verify-all.mjs]
+- [ ] T012 I8 canonical regression + STOP at READY FOR AUDIT 2（含 V15 guard blob equality）— [REQ:FR-051,FR-053,FR-055,FR-059; NS-003,NS-018,NS-039] [VERIFY: scripts/verify-all.mjs scripts/guard-static.mjs]
 
 ---
 
@@ -74,13 +77,13 @@
 
 **Forbidden paths**：`apps/**`、`packages/**`、`db/**`、`Docs/**`、`specs/016-*`..`specs/019-*`、`.specify/**`、`scripts/**`。
 
-**Prerequisites**：Frozen Spec 已可读取（blob `67711ee5`）。
+**Prerequisites**：Frozen Spec 已可读取（blob `078982f0`）。
 
 **Implementation action**：
 
 1. `git fetch origin` 后记录 `origin/main` SHA；确认当前分支 base 与 Frozen Spec §3.1 记录的关系；
 2. 若 `origin/main` 前进：普通 merge（**禁止** rebase frozen history、禁止 force-push）；
-3. 核验 `git hash-object specs/020-*/spec.md` == `67711ee5a67b34c927f8f26058fab8cf430c4a71`；
+3. 核验 `git hash-object specs/020-*/spec.md` == `078982f0819954a5479086da86036ccd81d22b2c`；
 4. 核验 `Docs/**` 与 `specs/016-*`..`specs/019-*` 未被本分支修改；
 5. 核验 main 上无 `apps/server/api/src/ai/`、无 `packages/ai|rag|memory`；
 6. 重新核验 open PR 列表，确认无第二个 Slice 20 实现；若 PR #111 状态变化，记录其是否已合并；
@@ -105,7 +108,7 @@ node scripts/guard-static.mjs
 
 - `origin/main` 与 `plan.md` §4.1 记录一致；
 - behind = 0（或已普通 merge 并重记）；
-- spec blob == `67711ee5…`；
+- spec blob == `078982f0…`；
 - diff 中无 `Docs/`、无 `specs/016-*`..`specs/019-*`；
 - 无竞争 Slice 20 实现；
 - `validate-change-governance` 与 `guard-static` 在当前 HEAD 上 PASS（或在治理 PR 合并前，记录其唯一预期失败点为未注册 seam —— 若出现其它失败 → STOP）。
@@ -116,26 +119,32 @@ node scripts/guard-static.mjs
 
 **Task ID**：`T002`
 
-**Frozen Spec Authority**：`spec.md` §19.2（治理前置必须独立、必须在实现前）；`plan.md` §5.1–5.8。
+**Frozen Spec Authority**：`spec.md` §19.2（治理前置必须独立、必须在实现前）、FR-051、AS-035、NS-039、NS-030；`plan.md` §5.0、§5.2、§5.3、§5.6。
 
-**Purpose**：在不触碰任何生产实现的前提下，使「唯一 seam」可被 ownership 授权、可被 Rule 8 精确允许，
-并用对抗性 fixture 证明「只放行该 seam 的 2 个 token，其它一律 fail closed」。
+**Purpose**：在不触碰任何生产实现、**不修改 `scripts/guard-static.mjs`** 的前提下，
+用 ownership registry 使「唯一 seam」成为已知 production owner（否则 unknown production path fail closed）。
+
+```text
+GOVERNANCE MODE: MODE A — NATIVE HTTP
+G1b delta: .specify/implementation-ownership.json  only
+scripts/guard-static.mjs: NOT MODIFIED（byte-identical to base）
+```
 
 **Allowed paths**（本任务**恰好**允许，缺一不可、多一即错）：
 
 ```text
-.specify/implementation-ownership.json      （追加 1 条规则，见 plan §5.2）
-scripts/guard-static.mjs                    （新增 allowance + 归一化 + 11 个 fixtures，见 plan §5.3/5.4）
+.specify/implementation-ownership.json      （追加 1 条 PREFIX 规则，见 plan §5.2）
 ```
 
 **Forbidden paths**：
 
 ```text
+scripts/guard-static.mjs   ← MODE A 明确禁止（任何字节改动 → NS-039 FAIL）
 apps/**        packages/**        db/**        tests/**        Docs/**
-specs/016-*    specs/017-*        specs/018-*  specs/019-*
-specs/020-*/spec.md（不得改动；只能由 G1a 逐字节引入）
+specs/**（含 specs/020-*/spec.md；只能由 G1a 逐字节引入）
 .specify/change-bindings/**  .specify/authority-*  .specify/task-evidence/**
 package.json   bun.lock      .env*      docker-compose*.yml
+任何 provider import fixture / allowance 定义 / SDK 依赖
 ```
 
 **任务前的 SPLIT 要求（G1a）**：
@@ -150,7 +159,7 @@ package.json   bun.lock      .env*      docker-compose*.yml
 
 **Implementation action**：
 
-1. **delta A（ownership）**：在 `.specify/implementation-ownership.json` 的 `rules[]` **末尾追加恰好一条**：
+1. **唯一 delta（ownership registry）**：在 `.specify/implementation-ownership.json` 的 `rules[]` **末尾追加恰好一条**：
 
    ```json
    {
@@ -160,43 +169,48 @@ package.json   bun.lock      .env*      docker-compose*.yml
    }
    ```
 
-   不得修改/删除任何既有规则；不得新增其它规则；不得使用通配。
+   不得修改/删除任何既有规则；不得新增其它规则；不得使用通配；
+   不得注册更宽 matcher（`ai/`、`providers/`、`embeddings/` 一律禁止）。
 
-2. **delta B（Rule 8）**：在 `scripts/guard-static.mjs` 中
+2. **MODE A 硬约束**：**不修改** `scripts/guard-static.mjs`（任何字节差异即 FAIL）；
+   不新增 `R8_PATH_SCOPED_ALLOWANCES` / `isR8PathAllowed`；
+   不新增任何 provider import fixture（含正例）；不新增 SDK 依赖。
 
-   - 新增 `R8_PATH_SCOPED_ALLOWANCES`（`Map`：`dashscope` → `['apps/server/api/src/ai/embedding/']`，`@alicloud` → 同）；
-   - 新增 `isR8PathAllowed(relPath, allowedPrefixes)`：拒绝绝对路径、反斜杠、含 `..` 段、`posix.normalize` 后变化的路径；
-   - 在 `checkSafetyScopeNegatives` 的 forbidden import 循环中，命中 scoped token 且路径被允许时 `continue`，其余照旧 `report`；
-   - **不改变**函数签名（保持 `(relPath, content, report)`），使既有 self-test 分发无需改造；
-   - **不删除、不修改** `FORBIDDEN_SAFETY_IMPORTS` 中任何条目；
-   - **不修改** Rule 19（`checkPgvectorReadinessScope`）与其它规则。
+3. **记录 guard blob equality（V15）**：分别取 `<base>:scripts/guard-static.mjs` 与 `HEAD:scripts/guard-static.mjs`
+   的 `git rev-parse` 输出，二者必须逐字节相同。
 
-3. **delta C（self-test fixtures）**：在 `--self-test` 的 `synthetic` 数组新增 F1–F11（见 `plan.md` §5.4 表），
-   全部 `rule: 'R8-safety-scope'`；F1/F2 为 `expectViolation: false`；其余为默认 `true`。
-   保留既有 fixture 不变。
+4. **依赖 / import 扫描（V16）**：扫描 seam、`package.json`、lockfile 中的
+   `dashscope` / `@alicloud` / provider SDK，命中数必须为 0。
 
-4. 运行下方全部验证命令，并把真实输出记录为证据。
+5. 运行下方全部验证命令，并把真实输出记录为证据。
 
-**Acceptance / Evidence Ownership**：治理 delta 的可审计 diff；不涉及产品实现。
+**Acceptance / Evidence Ownership**：治理 delta 的可审计 diff（1 个文件）+ guard blob equality 输出 + 依赖扫描输出；
+不涉及产品实现。
 
 ### Verification
 
 ```bash
 node scripts/guard-static.mjs                 # 期望: PASS (0 violations)
-node scripts/guard-static.mjs --self-test     # 期望: PASS (含 F1..F11)
+node scripts/guard-static.mjs --self-test     # 期望: PASS (28 synthetic fixtures validated) —— 数量不变
 node .specify/scripts/validate-governance.mjs # 期望: Spec governance validation PASS
 node .specify/scripts/tests/run-change-governance-tests.mjs   # 期望: 全部 PASS
 node .specify/scripts/validate-change-governance.mjs --base origin/main
-git diff --name-only origin/main...HEAD       # 期望精确 = 上述 2 个文件
+git rev-parse origin/main:scripts/guard-static.mjs   # V15: 必须与下一行相同
+git rev-parse HEAD:scripts/guard-static.mjs          # V15: 必须与上一行相同
+git diff --name-only origin/main...HEAD       # 期望精确 = 1 个文件（ownership registry）
+grep -rn "dashscope\|@alicloud" apps/server/api/src/ai/embedding package.json bun.lock   # V16: 命中 0
 ```
 
 **Done criteria**：
 
-- diff **恰好**是 `.specify/implementation-ownership.json` 与 `scripts/guard-static.mjs`（若 G1a 另起 PR，则 G1a 的 diff 恰好是 4 个 specs 文件）；
-- 上述 5 条命令全部 PASS；
-- F1/F2 正例不报错，F3–F11 均报 `R8-safety-scope`；
+- diff **恰好**是**一个**文件：`.specify/implementation-ownership.json`
+  （若 G1a 另起 PR，则 G1a 的 diff 恰好是 4 个 specs 文件；G1a/G1b 都不含 `scripts/**`）；
+- 上述命令全部 PASS；
+- V15 两行 blob **逐字节相同**；
+- self-test 为 `PASS (28 synthetic fixtures validated)`，无 `slice20 …` 新增 fixture；
+- V16 依赖 / import 扫描命中 = 0；
 - 无任何 `apps/**`、`packages/**`、`db/**`、`tests/**` 改动；
-- 未修改 Rule 19、Rule 17、`FORBIDDEN_PATHS`、`PRODUCT_PREFIXES`。
+- 未修改 Rule 8 / Rule 19 / Rule 17 / `FORBIDDEN_PATHS` / `PRODUCT_PREFIXES`（guard 完全未改）。
 
 ---
 
@@ -204,26 +218,31 @@ git diff --name-only origin/main...HEAD       # 期望精确 = 上述 2 个文�
 
 **Task ID**：`T003`
 
-**Frozen Spec Authority**：`spec.md` §19.2 流程约束（治理 PR 必须独立审计与合并）；`plan.md` §5.6。
+**Frozen Spec Authority**：`spec.md` §19.2 流程约束（治理 PR 必须独立审计与合并）、AS-035、AS-036；`plan.md` §5.3、§5.6。
 
-**Purpose**：由**独立于本 Plan AI 2 与未来 Developer AI** 的 AI，对治理 delta 做对抗式审计，
-确认它没有以「开启 Slice 20」为名放宽任何既有保护；随后由独立决定合并。
+**Purpose**：由**独立于本 Plan AI 2 与未来 Developer AI** 的 AI，对 **MODE A 治理 delta** 做对抗式审计：
+确认 ownership 唯一且窄、guard **零改动**、无 SDK 依赖、无 allowance/fixture、unknown path 仍 fail closed；
+随后由独立决定合并。
 
 **Allowed paths**：无代码改动。只允许在治理 PR 上回应审计意见并修正 T002 的 delta（若审计发现缺陷）。
 
-**Forbidden paths**：同 T002，且**禁止**在审计阶段引入任何 Adapter 实现。
+**Forbidden paths**：同 T002；明确**禁止**修改 `scripts/guard-static.mjs`；**禁止**在审计阶段引入任何 Adapter 实现或 SDK。
 
 **Prerequisites**：T002 PASS；治理 PR head 已固定（exact head）。
 
 **Implementation action**：
 
-1. 审计者独立复核：ownership 只新增 1 条、path 精确、无通配、FEATURE 单 feature；
-2. 审计者独立复核：Rule 8 allowance 只有 2 个 token × 1 个前缀，且归一化防绕过；
-3. 审计者独立尝试「绕过」：构造未列入 fixtures 的相邻/相似/跨树/绝对/`..` 路径，确认仍被拒绝；
-4. 审计者确认 Rule 19、Rule 17、其它 Safety 规则、`FORBIDDEN_PATHS` 未被削弱；
-5. 审计结论与合并决定分别记录；**合并是独立决定**，不得由 T002 的「已完成」推断。
+1. 复核 MODE A 被正确选择：实现为 native HTTP + `globalThis.fetch`，import 扫描无 forbidden provider token；
+2. 复核 ownership：只新增 1 条、path 精确 `apps/server/api/src/ai/embedding/`、无通配、FEATURE 单 feature；
+3. 复核 guard：`git rev-parse <base>:scripts/guard-static.mjs` == `git rev-parse HEAD:scripts/guard-static.mjs`；
+   无 `R8_PATH_SCOPED_ALLOWANCES`、无新增 fixture、self-test 数量 == 28；
+4. 复核依赖边界：`package.json` / lockfile / seam 无 `dashscope` / `@alicloud` / provider SDK；
+5. 对抗尝试：构造未注册 production path、相邻/相似目录、更宽 matcher，确认仍 fail closed；
+   尝试指出「是否应新增 allowance/fixture」→ 结论必须是**不应**（MODE B NOT TRIGGERED）；
+6. 确认 Rule 8 / Rule 19 / Rule 17 / `FORBIDDEN_PATHS` 未被削弱（因 guard 未改，此项为结构性必然）；
+7. 审计结论与合并决定分别记录；**合并是独立决定**，不得由 T002 的「已完成」推断。
 
-**Acceptance / Evidence Ownership**：独立审计报告（含尝试绕过结果）；治理 PR 的合并记录。
+**Acceptance / Evidence Ownership**：独立审计报告（含对抗尝试结果与 MODE A 判定）；治理 PR 的合并记录。
 
 ### Verification
 
@@ -231,15 +250,18 @@ git diff --name-only origin/main...HEAD       # 期望精确 = 上述 2 个文�
 node .specify/scripts/tests/run-change-governance-tests.mjs
 node scripts/guard-static.mjs --self-test
 node .specify/scripts/validate-change-governance.mjs --base origin/main
+git rev-parse origin/main:scripts/guard-static.mjs
+git rev-parse HEAD:scripts/guard-static.mjs
 ```
 
 **Done criteria**：
 
-- 独立审计结论明确为 PASS（列出对抗尝试与结果）；
+- 独立审计结论明确为 PASS（列出对抗尝试与结果，并明确 MODE A / MODE B NOT TRIGGERED）；
 - 治理 PR 已由独立决定合并到 main；
-- main 上 `validate-governance` + `guard-static` + `--self-test` 全 PASS；
+- main 上 `validate-governance` + `guard-static` + `--self-test`（28）全 PASS；
+- main 上 guard blob == base blob；
 - `.specify/implementation-ownership.json` 在 main 上已含 seam 规则；
-- 未产生任何实现代码。
+- 未产生任何实现代码、SDK 依赖、allowance 或 fixture。
 
 ---
 
@@ -249,8 +271,8 @@ node .specify/scripts/validate-change-governance.mjs --base origin/main
 
 **Frozen Spec Authority**：`spec.md` §3；`plan.md` §4.1。
 
-**Purpose**：在治理已合并的 main 上，建立实现分支并固定 base，保证「实现 PR 的 base 已含 ownership 与 allowance」，
-避免 governance 校验因 base 缺规则而失败。
+**Purpose**：在治理已合并的 main 上，建立实现分支并固定 base，保证「实现 PR 的 base 已含 ownership 注册、
+且 guard 与 base 逐字节一致（MODE A）」，避免 governance 校验因 base 缺规则而失败。
 
 **Allowed paths**：无生产改动（仅分支与 rebind 操作）。
 
@@ -262,9 +284,9 @@ node .specify/scripts/validate-change-governance.mjs --base origin/main
 
 1. 记录 rebind 时的 main SHA（写入实现 PR 描述与证据）；
 2. 从该 main 建立实现分支；
-3. 确认 `specs/020-*/spec.md`（blob `67711ee5`）、`plan.md`、`checklist.md`、`tasks.md` 已在该 main 上；
+3. 确认 `specs/020-*/spec.md`（blob `078982f0`）、`plan.md`、`checklist.md`、`tasks.md` 已在该 main 上；
 4. 确认 `.specify/implementation-ownership.json` 已含 `apps/server/api/src/ai/embedding/` 规则；
-5. 确认 `scripts/guard-static.mjs` 已含 Rule 8 allowance 与 F1–F11；
+5. 确认 `scripts/guard-static.mjs` 与 `origin/main` blob **逐字节相等**（MODE A：无 allowance、无新增 fixture，self-test 数量 28）；
 6. 运行基线命令，记录「实现前全绿」状态。
 
 **Acceptance / Evidence Ownership**：rebind 记录（main SHA + 基线命令输出）。
@@ -275,15 +297,18 @@ node .specify/scripts/validate-change-governance.mjs --base origin/main
 git rev-parse HEAD
 git rev-list --left-right --count origin/main...HEAD   # behind = 0
 node scripts/guard-static.mjs
-node scripts/guard-static.mjs --self-test
+node scripts/guard-static.mjs --self-test               # 期望 28
 node .specify/scripts/validate-governance.mjs
 node .specify/scripts/validate-change-governance.mjs --base origin/main
+git rev-parse origin/main:scripts/guard-static.mjs      # V15
+git rev-parse HEAD:scripts/guard-static.mjs             # V15: 必须与上一行相同
 ```
 
 **Done criteria**：
 
 - behind = 0；
-- 6 条命令全 PASS；
+- 8 条命令全 PASS；
+- V15 两行 guard blob 逐字节相同；
 - 未做任何产品实现改动。
 
 ---
@@ -572,7 +597,7 @@ cd apps/server/api && bunx tsc --noEmit
 
 **Task ID**：`T010`
 
-**Frozen Spec Authority**：FR-041、FR-044..FR-052、FR-056..FR-062；NS-001..NS-038；`plan.md` §7.5。
+**Frozen Spec Authority**：FR-041、FR-044..FR-052、FR-056..FR-062；NS-001..NS-040；AS-035；`plan.md` §7.2–7.5。
 
 **Purpose**：用静态结构测试机械证明「没有越过任何负边界」，使 NS 不依赖人审。
 
@@ -598,9 +623,17 @@ tests/architecture/embedding-provider-boundary.test.ts
 8. `index.ts` 不 re-export `dashscope-protocol` / `transport`；导出名不含 provider 专有字段；
 9. `apps/server/api/src/app.ts` 不 import `ai/embedding`；
 10. registry 中恰好 1 条 seam PREFIX 且 path 精确、无宽泛路径（读取 `.specify/implementation-ownership.json`）；
-11. guard 全仓 `FORBIDDEN_PATHS` 目录不存在；`packages/ai|rag|memory` 不存在。
+11. guard 全仓 `FORBIDDEN_PATHS` 目录不存在；`packages/ai|rag|memory` 不存在；
+12. **provider egress 边界**：全仓库 `fetch(` / HTTP client 构造点只在 seam 内，且 seam 内仅 `transport.ts`；
+    任何 seam 外 direct provider integration（含注释掉的示例）即 FAIL；
+13. **consumer boundary**：seam 外不得 import `apps/server/api/src/ai/embedding/transport`、
+    `.../dashscope-protocol`；只允许经 `.../ai/embedding/index.ts` 的 Port 面；
+14. **approved endpoint policy**：只接受 `https://{host}/api/v1/services/embeddings/text-embedding/text-embedding`，
+    host 必须命中批准后缀（`.maas.aliyuncs.com`）；不得存在 endpoint override 参数 / 环境变量绕过；
+15. **dependency boundary**：seam、`package.json`、lockfile 中 `dashscope` / `@alicloud` / provider SDK 命中 = 0（V16）。
 
-**Acceptance / Evidence Ownership**：NS-001..NS-038 的机械门禁集合；FR-041/044..052/056..062 的结构证据。
+**Acceptance / Evidence Ownership**：NS-001..NS-040 的机械门禁集合；AS-035 的 MODE A 证据（egress / Port / endpoint /
+unknown-path）；FR-041/044..052/056..062 的结构证据。
 
 ### Verification
 
@@ -608,14 +641,19 @@ tests/architecture/embedding-provider-boundary.test.ts
 bunx vitest run tests/architecture/embedding-provider-boundary.test.ts
 node scripts/guard-static.mjs
 node scripts/guard-static.mjs --self-test
+git rev-parse origin/main:scripts/guard-static.mjs   # V15
+git rev-parse HEAD:scripts/guard-static.mjs          # V15: 必须与上一行相同
+grep -rn "dashscope\|@alicloud" apps/server/api/src/ai/embedding package.json bun.lock   # V16
 git diff --name-only origin/main...HEAD
 ```
 
 **Done criteria**：
 
-- 架构测试全绿；
-- guard 与 self-test PASS；
-- diff 只含 seam 10 文件 + 5 个测试文件 + change-binding（+可选 evidence json）；
+- 架构测试全绿（含 egress-only-seam / Port-only consumer / endpoint policy / dependency boundary 断言）；
+- guard 与 self-test（28）PASS；
+- V15 两行 guard blob 逐字节相同；
+- V16 依赖扫描命中 0；
+- diff 只含 seam 10 文件 + 5 个测试文件 + change-binding（+可选 evidence json）；**不含 `scripts/**`**；
 - 无 `db/**`、无 `Docs/**`、无 `specs/016-019`、无 `app.ts`、无 `package.json`、无 `.env*`。
 
 ---
@@ -715,6 +753,9 @@ node .specify/scripts/validate-governance.mjs
 node .specify/scripts/tests/run-change-governance-tests.mjs
 node .specify/scripts/validate-change-governance.mjs --base origin/main
 node scripts/verify-all.mjs
+git rev-parse origin/main:scripts/guard-static.mjs   # V15
+git rev-parse HEAD:scripts/guard-static.mjs          # V15: 必须与上一行相同
+grep -rn "dashscope\|@alicloud" apps/server/api/src/ai/embedding package.json bun.lock   # V16: 命中 0
 git hash-object specs/020-embedding-provider-adapter-foundation/spec.md
 git diff --name-only origin/main...HEAD
 git status --short
@@ -723,7 +764,7 @@ git status --short
 **Done criteria**：
 
 - 全部命令 PASS（或如实记录 `BLOCKED` / `NOT VERIFIED`）；
-- spec blob == `67711ee5…`；
+- spec blob == `078982f0…`；
 - diff 与 Allowed paths 精确一致；
 - Checklist A–O + Q 全 PASS，P 为 PASS 或 NOT VERIFIED（如实）；
 - 状态为 `READY FOR AUDIT 2`，未自称 merge / READY；
@@ -732,6 +773,9 @@ git status --short
 ---
 
 ## Dependency Graph
+
+> **MODE A**：G1b（T002）只含 `.specify/implementation-ownership.json` +1 条规则；**不含任何 `scripts/guard-static.mjs` 改动**。
+> 依赖顺序本身不变：T001 → G1a → T002 → T003 → T004…
 
 ```text
 T001 G0
@@ -761,7 +805,8 @@ T001 G0
 1. 需要修改 `Docs/**`、`spec.md`、`specs/016-*`..`specs/019-*`；
 2. 需要新增依赖或修改 `package.json` / `bun.lock`；
 3. 需要修改 `db/**`、写 migration、执行 `CREATE EXTENSION`；
-4. 需要修改 `scripts/guard-static.mjs` 或 `.specify/implementation-ownership.json`（属治理 PR，不属于实现 PR）；
+4. 需要修改 `.specify/implementation-ownership.json`（属 G1b 治理 PR，不属于实现 PR）；
+   或需要修改 `scripts/guard-static.mjs`（**MODE A 下任何 PR 都不得修改**——出现此需求说明治理模式判定或实现依赖发生了变化，必须 STOP 回 Spec Revision，不得就地改 guard）；
 5. 需要放宽 Rule 8 的全局条目，或新增 token / 前缀；
 6. 需要新增 HTTP route，或把 seam 接入 `app.ts` 启动路径；
 7. 需要修改 `.env*`；

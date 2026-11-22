@@ -8,23 +8,27 @@
 >
 > Role boundary: Plan AI 2 — Implementation Plan / Checklist / Tasks / Audit 1 only
 >
-> Status: `PLANNING CANDIDATE — AUDIT 1 PENDING`
+> Status: `FINAL PASS — REVISION 3 RECONCILED（AUDIT 1 RE-RUN PASS）`
 >
 > Frozen Spec Authority: `specs/020-embedding-provider-adapter-foundation/spec.md`
-> revision 2，blob `67711ee5a67b34c927f8f26058fab8cf430c4a71`
+> Revision 3，commit `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`，blob `078982f0819954a5479086da86036ccd81d22b2c`
+>
+> **GOVERNANCE MODE: MODE A — NATIVE HTTP**（依据 §6.13：native HTTP + `globalThis.fetch` + 零 provider 依赖；
+> 因此 `scripts/guard-static.mjs` 在 MODE A 下**必须与 base 字节级一致**，见 §5.3、§7.1 V15、NS-039）
 >
 > Forbidden in this artifact: production code / implementation tests / migration / CI change / guard change / Adapter implementation / provider call / model selection / route registration / Audit 2 / merge
 
-本 Plan 的唯一职责，是把 **Frozen Spec Revision 2** 投影为一份**可直接交给 Developer AI 执行**的实现设计：
+本 Plan 的唯一职责，是把 **Frozen Spec Revision 3** 投影为一份**可直接交给 Developer AI 执行**的实现设计：
 回答「到底要改哪些最小路径、按什么顺序、如何机械验证、哪些绝对不许做」。
 
 本 Plan **不新增、不修改、不解释、不扩展**任何产品语义。所有 `SHALL` 断言仍以 `spec.md` 为唯一 Authority；
 本 Plan 只回答 Spec 第 21 节委托给 Plan AI 2 的实现层决策，并在第 9 节逐项给出决定与依据。
 
 ```text
-SLICE 20 PLAN AI 2 STATUS: PLANNING CANDIDATE
-SPEC: FROZEN — REVISION 2
-PRODUCT IMPLEMENTATION: NOT AUTHORIZED（Phase G 未完成）
+SLICE 20 PLAN AI 2 STATUS: FINAL PASS（Revision 3 targeted reconciliation + Audit 1 re-run）
+SPEC: FROZEN — REVISION 3（commit d2159ea7 / blob 078982f0）
+GOVERNANCE MODE: MODE A — NATIVE HTTP
+PRODUCT IMPLEMENTATION: NOT AUTHORIZED（G1a + G1b + G2 未完成）
 ```
 
 ---
@@ -54,7 +58,7 @@ PRODUCT IMPLEMENTATION: NOT AUTHORIZED（Phase G 未完成）
 
 | Identifier | 本 Plan 的投影位置 |
 | --- | --- |
-| `V1-C34` / `V1-X14` | 第 6.11 节（证据三态）、第 7.7 节（EVC 映射）、第 8 节（真实 provider 验证设计） |
+| `V1-C34` / `V1-X14` | 第 6.11 节（证据三态）、第 7.6 节（EVC 映射）、第 8 节（真实 provider 验证设计） |
 | `Docs/V1技术设计.md` §13.3 | 第 6.3–6.10 节（Port / Dense / Sparse / Error / Timeout / Secret / Telemetry / Cost） |
 | `Docs/V1技术设计.md` §4.2 / §20 | 第 3.3 节（边界）、第 6.12 节（配置语义）、第 6.13 节（不做 model selection） |
 | `Docs/总体技术架构.md` §11.2 / §11.3 | 第 5.1 节（seam 选择）、第 3.2 节（不做 sparsevec） |
@@ -112,8 +116,9 @@ PRODUCT IMPLEMENTATION: NOT AUTHORIZED（Phase G 未完成）
 | 规则 | 本 Plan 的处理 |
 | --- | --- |
 | Authority 变更必须走 authority-inputs + authority-impacts + 下游收敛 | 本 Plan 不触发任何 Authority 变更（`Docs/**` diff = 0） |
-| 生产路径所有权只能由仓库受控 registry 授予 | 第 5.2 节：Slice 20 只注册**一条** FEATURE PREFIX 规则；不得在同车注册实现 |
-| registry 变更不得与 product 实现同车 | 第 5.6 节：治理 PR（registry + guard）与实现 PR 严格分离 |
+| 生产路径所有权只能由仓库受控 registry 授予 | 第 5.2 节：Slice 20 只注册**一条** FEATURE PREFIX 规则；MODE A 下 ownership 注册**无条件必需**（C20-21） |
+| registry 变更不得与 product 实现同车 | 第 5.6 节：治理 PR（仅 registry）与实现 PR 严格分离 |
+| Rule 8 是否可改由实际依赖决定 | 第 5.3 节：MODE A 下 guard **字节级不变**；Rule 8 allowance 仅 MODE B（真实 provider SDK import）才存在，当前**不成立** |
 | 完成任务的证据必须绑定真实合并实现 PR 与 `[VERIFY:...]` 契约 | `tasks.md` 每任务提供 `[REQ:...]` / `[VERIFY:...]` 契约 |
 
 ### 2.5 Verification contract
@@ -182,13 +187,15 @@ STOP 条件: 若实现需要修改 Docs/**、spec.md、Slice 16–19 或改动 V
 | Slice 18 | 无 | 不引用 Gold Dataset fixture / label |
 | Slice 19 | 无（不 import、不修改、不执行其脚本） | 不改 `db/**`；不 import `pgvector-readiness`；不做 DB 连接 |
 
-### 3.4 Negative-scope 的机械门禁归属（与 NS-001..NS-038 一一对应）
+### 3.4 Negative-scope 的机械门禁归属（与 NS-001..NS-040 一一对应）
+
+> MODE A 口径：Rule 8 不新增任何豁免、不新增任何 fixture；下面的门禁集合**不含** guard 改动。
 
 | 门禁类型 | 承载者 | 覆盖 NS |
 | --- | --- | --- |
-| `scripts/guard-static.mjs` 现有规则（不改） | R6 / R8 / R10 / R11 / R17 / R19 | NS-001..NS-007, NS-014..NS-019, NS-023, NS-027, NS-029..NS-032 |
-| `scripts/guard-static.mjs` Rule 8 新增窄豁免 | 新增 `R8-safety-scope` fixtures | NS-027, NS-029, NS-030, NS-031, NS-032 |
-| `tests/architecture/embedding-provider-boundary.test.ts`（新增） | 结构/依赖/命名/导出面 | NS-005, NS-006, NS-008..NS-013, NS-020..NS-026, NS-033..NS-038 |
+| `.specify/implementation-ownership.json`（G1b 唯一 delta） | 唯一 seam 注册 + unknown path fail closed | NS-031, NS-032, NS-039 |
+| `scripts/guard-static.mjs` 现有规则（MODE A 下**字节不变**） | R6 / R8 / R10 / R11 / R17 / R19 | NS-001..NS-007, NS-014..NS-019, NS-023, NS-027, NS-029, NS-030 |
+| `tests/architecture/embedding-provider-boundary.test.ts`（新增） | 结构/依赖/命名/导出面 + provider egress 只在 seam + consumer 只经 Port + endpoint policy + 依赖边界 | NS-005, NS-006, NS-008..NS-013, NS-020..NS-026, NS-033..NS-040 |
 | diff 断言（实现 PR 的机械检查） | `git diff --name-only` | NS-001..NS-004, NS-016..NS-019 |
 | 契约测试字段断言 | Port/Dense/Sparse/Error/Cost/Telemetry | NS-033..NS-038 |
 
@@ -208,8 +215,8 @@ FORBIDDEN PATHS（生产代码绝不触碰）：
   apps/miniprogram/**
   apps/operations/**
   packages/notifications/**
-  .specify/implementation-ownership.json   ← 只在 G1b 治理 PR 修改
-  scripts/guard-static.mjs                 ← 只在 G1b 治理 PR 修改
+  .specify/implementation-ownership.json   ← 只在 G1b 治理 PR 修改（唯一 delta）
+  scripts/guard-static.mjs                 ← MODE A：任何 PR 都不得修改（字节级不变；见 AS-035 / NS-039）
   .specify/change-bindings/**              ← 只在实现 PR 创建自己的 binding
   package.json / bun.lock                  ← 零新依赖，绝不修改
   .env / .env.example / .env.*             ← 绝不修改（理由见 6.8 节）
@@ -227,13 +234,20 @@ FORBIDDEN PATHS（生产代码绝不触碰）：
 | `origin/main` | `3fecd0b94325539131e1b23885f5240b5a61c0d8` | `git rev-parse origin/main` |
 | `origin/main` latest commit | `Merge pull request #110 from pyxm1618/feat/019-pgvector-readiness-current-main` | `git log --oneline` |
 | Planning branch | `plan/020-embedding-provider-adapter-foundation` | `git rev-parse --abbrev-ref HEAD` |
-| Planning branch base | `c469c27333cd80cc6f22d091683a74df5ecfcdc0`（Slice 20 Frozen Spec head） | `git rev-parse HEAD` |
-| ahead / behind vs `origin/main` | ahead 7 / behind 0 | `git rev-list --left-right --count origin/main...HEAD` |
-| Frozen `spec.md` blob | `67711ee5a67b34c927f8f26058fab8cf430c4a71` | `git hash-object specs/020-*/spec.md` + `git ls-tree HEAD` |
+| Planning base（本轮开始） | merge commit `501820e8`（普通 merge `origin/spec/020-embedding-provider-adapter-foundation`） | `git log --oneline -1` |
+| Planning HEAD（冻结） | 由本轮 closeout 报告记录（Revision 3 reconciliation commit） | `git rev-parse HEAD` |
+| 上一 Planning HEAD（Revision 2 语义） | `e967fca1ced8854d90b4cef4a4375dcead36341a` —— 治理模式部分 SUPERSEDED | `git log --oneline` |
+| ahead / behind vs `origin/main` | ahead 11 / behind 0（本轮实测 `git rev-list --left-right --count` = `0 11`） | `git rev-list --left-right --count origin/main...HEAD` |
+| Frozen Spec authority commit | `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`（Revision 3，REVISION 3 REMOTE READ-BACK VERIFIED） | `git log --oneline origin/spec/020-*` |
+| Frozen `spec.md` blob | `078982f0819954a5479086da86036ccd81d22b2c` | `git hash-object specs/020-*/spec.md` + `git ls-tree HEAD` |
 | Frozen Spec semantic drift | 0 | plan/checklist/tasks 不修改 `spec.md`（T012 复核 blob） |
+| `scripts/guard-static.mjs` blob | `b3d6ceb41e87759fadeadb1e945f3d1d1a189adb`（main / spec 分支 / 当前工作树三者一致） | `git rev-parse origin/main:scripts/guard-static.mjs` = `git rev-parse HEAD:scripts/guard-static.mjs` |
+| guard baseline self-test | `PASS (28 synthetic fixtures validated)`；`guard-static: PASS (0 violations)` | 本轮实跑 |
 | Authority docs drift | 0 | `Docs/**` 未修改 |
 | 竞争 Slice 20 实现 | 0 | main 上无 `apps/server/api/src/ai/`；`packages/` 无 `ai|rag|memory` |
-| Open PR | #111 `fix/019-post-merge-targeted-remediation`（open，MERGEABLE，head `04031b3d`，3 files） | `gh pr list` / `gh pr view` / `gh pr diff` |
+| main 上 Slice 20 feature 目录 | **不存在**（`git ls-tree origin/main -- specs/020-*` 为空）→ G1a 仍必需 | `git ls-tree` |
+| `package.json` provider 依赖 | 无 `dashscope` / `@alicloud` / 任何 provider SDK；`engines.node = 26.13.0` | 只读核验 |
+| Open PR | #111 `fix/019-post-merge-targeted-remediation`（open，head `d40dc972`，3 files；未合并） | `gh pr view 111` |
 | `PRODUCT_PREFIXES` | `apps/`、`packages/`、`db/` | `validate-change-governance.mjs` |
 | `FIXED_EXEMPT_PREFIXES` | `.specify/`、`.github/`、`specs/`、`tests/`、`scripts/`、`Docs/` | 同上 |
 | ownership resolution | `LONGEST_MATCH`，未知 production path fail closed | `implementation-ownership.json` |
@@ -280,9 +294,12 @@ PLAN DECISION R4-1:
 
 | 情形 | 处理 |
 | --- | --- |
-| #111 在 G1b 之前合并 | G1b 基于含 #111 的 main；guard 的 Rule 8 改动区与 #111 的 Rule 19 改动区相邻但不重叠；若 self-test 数组尾部冲突，G1b 必须 merge 并重跑 `--self-test` |
-| #111 在 G1b 之后合并 | #111 的作者负责解决与 Slice 20 Rule 8 改动的冲突；Slice 20 不因为 #111 而修改自己的实现计划 |
-| #111 长期不合并 | 不影响：Slice 20 采用保守命名，两种 guard 版本都 PASS |
+| #111 在 G1b 之前合并 | MODE A 下 G1b **不触碰** `scripts/guard-static.mjs`，与 #111 的 Rule 19 改动无冲突面；G1b 只需 merge main 并保持 guard blob 等于 base blob（V15） |
+| #111 在 G1b 之后合并 | 与 Slice 20 无关：Slice 20 的治理 delta 只有 ownership registry，guard 不参与 |
+| #111 长期不合并 | 不影响：Slice 20 采用保守命名，且 MODE A 下 guard 字节不变，两种 guard 版本都 PASS |
+
+**Revision 3 影响**：Revision 2 的治理假设（「G1b 必须改 Rule 8：allowance + F1..F11」）已被 Revision 3 **废弃（SUPERSEDED）**，
+因此旧计划才需要评估「Rule 8 改动区与 #111 Rule 19 改动区相邻」。MODE A 下该冲突面**完全消失**（见 §5.3）。
 
 ### 4.3 Duplicate / drift 结论
 
@@ -290,17 +307,41 @@ PLAN DECISION R4-1:
 Competing Slice 20 spec:        NONE
 Competing Slice 20 branch:      NONE（除本 planning branch）
 Competing Slice 20 PR:          NONE
-Existing embedding production owner: NONE
+Existing embedding production owner: NONE（registry 60 条规则中无 `ai/` 相关条目）
 Authority drift:                0
 Frozen Spec semantic drift:     0
+Frozen Spec revision:           3（d2159ea7 / blob 078982f0）
+GOVERNANCE MODE:                MODE A — NATIVE HTTP
 ```
 
 ---
 
 ## 5. Phase G — Governance Prerequisite
 
-> 本节冻结**唯一**生产实现 seam，以及使该 seam 可被 Rule 8 允许、被 ownership 授权的最小治理改动。
-> 本节**不创建任何文件**；只冻结 G1b 必须提交的精确 delta。
+> 本节冻结**唯一**生产实现 seam，以及使该 seam 被 ownership 授权所需的最小治理改动。
+> 本节**不创建任何文件**；只冻结 G1b 必须提交的精确 delta（MODE A：**恰好一行** registry 规则）。
+
+### 5.0 GOVERNANCE MODE 声明（冻结）
+
+```text
+GOVERNANCE MODE: MODE A — NATIVE HTTP
+```
+
+**选择依据（唯一依据：实际实现依赖，而非偏好）**
+
+| 事实来源 | 值 | 推论 |
+| --- | --- | --- |
+| §6.13 SDK 决定 | **不使用** DashScope SDK | 不产生 `dashscope` 命中的 import |
+| §6.13 HTTP 客户端 | `globalThis.fetch`（Node 26 原生） | 无 provider 客户端依赖 |
+| §6.13 `@alicloud` 包 | **不使用** | 不产生 `@alicloud` 命中的 import |
+| `package.json` / `bun.lock` | 零新增依赖 | 依赖图无 provider SDK |
+| 结论（C20-21） | 不存在命中 Rule 8 forbidden token 的 provider import → **MODE A** | Rule 8 allowance **不得出现** |
+
+由此冻结三条不可协商结论：
+
+1. **ownership 注册无条件必需**（MODE A 也需要；否则 seam 是 unknown production path，validator fail closed）。
+2. **`scripts/guard-static.mjs` 在 MODE A 下必须与 base 字节级一致**；不新增 allowance、不新增 fixture、不删除/不放宽任何规则。
+3. **不得为了进入 MODE B 而人为引入 SDK**（NS-040）；MODE B 只有「真实实现依赖命中 forbidden token」时才成立，当前**不成立**。
 
 ### 5.1 唯一 Adapter implementation seam
 
@@ -319,8 +360,9 @@ apps/server/api/src/ai/embedding/
    不承载 generic provider registry、不承载检索、不承载持久化。
 4. **它使 consumer 只能经 Port 访问**：`index.ts` 只导出 Port 面；provider 专有模块不出现在导出面，
    因此 business consumer 不可能直接 import provider 客户端。
-5. **它可被 Rule 8 做 path-aware 窄允许**：Rule 8 的匹配单位是 `relPath.startsWith(prefix)`，
-   一个带尾 `/` 的前缀即可精确表达「只允许这一个目录」，且 `embedding-extra/`、`embeddings/` 等相邻名不会命中。
+5. **它不需要 Rule 8 放宽**：MODE A 的 seam 内没有 `dashscope` / `@alicloud` import（§6.13），
+   因此 `scripts/guard-static.mjs` 保持字节级不变即可；使该目录合法的唯一治理动作是 ownership registry 注册。
+   这同时消除了「相邻目录 `embedding-extra/`、`embeddings/` 是否被前缀误放行」这一整类风险（NS-039）。
 6. **它满足 NS-032 的机械判据**：NS-032 禁止的是「目录级泛化授权（如 `ai/`、`provider/`、`providers/`、`embeddings/`）」；
    本 seam 的 path 是 `apps/server/api/src/ai/embedding/`，绑定**单一 feature、单一 provider、单一能力**，
    且 registry 只新增**一条**规则。`apps/server/api/src/ai/` 这个父目录**不**获得任何所有权。
@@ -336,7 +378,9 @@ apps/server/api/src/ai/embedding/
 | `packages/domain/src/embedding-*.ts` | 会让 domain 依赖外部 provider；且 R11/architecture 方向错误 |
 | `db/**` / `scripts/**` | 与 Slice 19 资产重叠，且 provider 适配不属于 DB/工具层 |
 
-### 5.2 Ownership matcher 设计（G1b delta A）
+### 5.2 Ownership matcher 设计（G1b 唯一 delta）
+
+> MODE A 下 G1b 的**唯一**改动就是下面这一条 registry 规则；`scripts/guard-static.mjs` 不在此列。
 
 `.specify/implementation-ownership.json` 只新增**一条**规则（追加到 `rules[]` 末尾）：
 
@@ -382,64 +426,77 @@ apps/server/api/src/ai/embedding/
   `apps/server/api/src/ai/embedding/` 的新增规则，且**不存在** path 为
   `apps/server/api/src/ai/`、`apps/server/api/src/providers/`、`apps/server/api/src/embeddings/` 的规则。
 
-### 5.3 Rule 8 narrow path-aware allowance 设计（G1b delta B）
+### 5.3 Rule 8：MODE A 下不做任何修改（原 delta B 降级为 MODE B-only）
 
-现状（`scripts/guard-static.mjs:447-486`）：
+**MODE A 冻结结论**
 
-- `FORBIDDEN_SAFETY_IMPORTS` 含 `dashscope`、`@alicloud`；
-- `checkSafetyScopeNegatives(relPath, content, report)` 对**所有**被扫描的实现代码做 `specifier.includes(forbidden)`；
-- `runSafetyRules()` 作用域是仓库全部 `.ts/.tsx/.js/.mjs/.cjs`（不豁免 `tests/`）；
-- self-test 通过 `checkSafetyScopeNegatives(sample.path, sample.content, report)` 直接分发。
-
-最小改动（不删除任何全局条目、不改变函数签名、不改变 self-test 分发方式）：
-
-```js
-// 新增：唯一 path-scoped allowance（与 5.1 的 seam 一一对应）
-const R8_PATH_SCOPED_ALLOWANCES = new Map([
-  ['dashscope', ['apps/server/api/src/ai/embedding/']],
-  ['@alicloud', ['apps/server/api/src/ai/embedding/']],
-]);
-
-// 新增：路径安全归一化（拒绝绝对路径与 '..' 段；拒绝 normalize 后发生变化的路径）
-function isR8PathAllowed(relPath, allowedPrefixes) {
-  if (typeof relPath !== 'string' || relPath.length === 0) return false;
-  if (relPath.startsWith('/') || relPath.includes('\\')) return false;
-  if (relPath.split('/').includes('..')) return false;
-  if (posix.normalize(relPath) !== relPath) return false;
-  return allowedPrefixes.some((prefix) => relPath.startsWith(prefix));
-}
-
-// 在 checkSafetyScopeNegatives 的 forbidden loop 内：
-if (specifier.includes(forbidden)) {
-  const scoped = R8_PATH_SCOPED_ALLOWANCES.get(forbidden);
-  if (scoped && isR8PathAllowed(relPath, scoped)) continue;   // 仅该 token × 该前缀
-  report('R8-safety-scope', relPath, i + 1, `Forbidden Safety-adjacent dependency: ${forbidden}`);
-}
+```text
+scripts/guard-static.mjs   MODE A: BYTE-IDENTICAL TO BASE — NO EDIT
+Rule 8 allowance           MODE A: MUST NOT EXIST
+provider import fixture    MODE A: MUST NOT BE ADDED
 ```
 
-允许集合的**精确边界**：
+现状（只读事实，`scripts/guard-static.mjs:447-486`）：
 
-| token | 在 seam 内 | 在 seam 外 |
+- `FORBIDDEN_SAFETY_IMPORTS` 含 `dashscope`、`@alicloud`、`openai`、`anthropic`、`guardrails`、`ollama`、`langchain` 等；
+- `checkSafetyScopeNegatives(relPath, content, report)` 对**所有**被扫描的实现代码做 `specifier.includes(forbidden)`；
+- `runSafetyRules()` 作用域是仓库全部 `.ts/.tsx/.js/.mjs/.cjs`（不豁免 `tests/`）；
+- self-test 通过 `rule: 'R8-safety-scope'` 直接分发。
+
+**为什么这在本 Plan 下不构成阻塞**
+
+1. §6.13 决定 native HTTP + `globalThis.fetch`，seam 代码**不 import** `dashscope` / `@alicloud`；
+2. `@alicloud` 包不引入；`package.json` / `bun.lock` 零新增依赖；
+3. 因此 Rule 8 的全局条目对 seam **不产生任何命中**——既不需要放宽，也没有需要「允许」的 import；
+4. 若未来实现真的需要 provider SDK，那是**依赖图语义变更**，必须先回到 Spec Revision 流程重新授权，
+   而不是在 G1b 里预先预留 allowance 或 fixture（NS-040）。
+
+**MODE A 的机械证据（替代 Rule 8 改动）**
+
+| 证据 | 机械判据 | 对应 |
 | --- | --- | --- |
-| `dashscope` | ALLOWED | FORBIDDEN（不变） |
-| `@alicloud` | ALLOWED | FORBIDDEN（不变） |
-| `openai` / `anthropic` / `guardrails` / `ollama` / `langchain` / `risk_review` / `support_resources` / `referral` / `staff_queue` | **FORBIDDEN**（narrow allowance 不放宽） | FORBIDDEN（不变） |
+| guard 字节不变 | `git rev-parse <base>:scripts/guard-static.mjs` == `git rev-parse HEAD:scripts/guard-static.mjs` | AS-035 / NS-030 / NS-039 / V15 |
+| guard 自测不退化 | `node scripts/guard-static.mjs --self-test` → `PASS (28 synthetic fixtures validated)` | V7 |
+| 全局保护仍在 | `FORBIDDEN_SAFETY_IMPORTS` 仍含全部既有 token；diff 无删除 | NS-027 / NS-029 |
+| 无新增 fixture | self-test 数量 == base 数量（28），且无 `slice20 …` fixture | NS-039 |
+| 依赖边界 | seam、`package.json`、lockfile 中 `dashscope` / `@alicloud` / provider SDK 命中 = 0 | NS-040 / V16 |
+| provider egress 边界 | architecture test：`fetch(` 调用点仅在 seam 内，且业务 egress 仅 `transport.ts` | AS-035 / T010 |
+| consumer boundary | architecture test：seam 外不得 import `ai/embedding/transport` 或 `dashscope-protocol`；只能经 `index.ts` Port 面 | AS-035 / T010 |
+| endpoint policy | 只接受 `https://{host}/api/v1/services/embeddings/text-embedding/text-embedding`，host 必须落在批准后缀；无 override 通道 | AS-035 / T010 |
+| unknown path fail closed | validator 对未注册 production path 直接失败；registry 无更宽 matcher | AS-035 / §5.2 |
 
-为什么窄到「只有这两个 token × 只有这一个前缀」：
+**MODE B 参考（条件说明；当前明确不进入）**
 
-1. Frozen Spec §19.2 第 3 项只授权 `dashscope` / `@alicloud` 的路径感知窄豁免；
-2. 如果整条 Rule 8 在 seam 内被豁免，那么 `openai` / `guardrails` 等也会被放行，构成 NS-030 的「删除全局保护」；
-3. 用 `Map<token, prefixes>` 的数据结构使「新增 token 或新增前缀」都必须是一次显式的、可审计的 diff。
+MODE B 只有在实现**真实包含**命中 Rule 8 forbidden token 的 provider import 时才成立（AS-036）。
+届时其合法形态才是「对唯一 seam 做精确 path-aware allowance + positive/negative fixtures（含 cross-path 与
+unknown-path 拒绝）」。**当前 Plan 明确不进入 MODE B**，因此：
 
-为什么本 Slice 实际上**不**需要任何 provider import：
+- 不新增 `R8_PATH_SCOPED_ALLOWANCES`；
+- 不新增 `isR8PathAllowed` 或任何 path 归一化函数；
+- 不新增任何 provider import fixture（含正例）；
+- 不修改 `scripts/guard-static.mjs` 的任何一行。
 
-- 6.13 节决定不引入 SDK、不引入 `@alicloud` 包，只用 Node 26 全局 `fetch`；
-- 因此 seam 的真实代码中没有 `dashscope` / `@alicloud` import；
-- 该 allowance 是**防御性最小授权**，其可达性由 self-test 的**合成 fixture** 证明（合成内容不落盘，不触发真实扫描）。
+**MODE B 的边界原则（仅当未来触发时适用，当前不成立）**
 
-### 5.4 Guard adversarial fixtures（G1b delta C）
+- allow set 只含 `dashscope` / `@alicloud` 两个 token × 唯一 seam 前缀；`openai` / `guardrails` 等一律不放宽；
+- 任何 token 或前缀扩张都必须是一次显式、可审计的 diff；
+- 该形态**当前不成立**，因此不得提前落地任何部分。
 
-在 `scripts/guard-static.mjs` 的 `--self-test` `synthetic` 数组中新增以下条目（全部 `rule: 'R8-safety-scope'`）：
+### 5.4 Guard adversarial fixtures — MODE B only（当前 NOT APPLICABLE）
+
+```text
+MODE A: fixtures F1..F11 MUST NOT BE ADDED（NS-039）
+MODE B: 仅当实现真实 import 命中 forbidden token 时才需要
+```
+
+MODE A 下 `scripts/guard-static.mjs` 字节级不变，因此：
+
+- self-test 的 fixture 数量必须等于 base 数量（当前 **28**）；
+- 不得出现任何 `slice20 …` fixture 名称；
+- 不得为了"证明 allowance 可用"而新增正例 fixture——因为 MODE A 中**不存在** allowance。
+
+下表只是 **MODE B 条件触发时的候选设计**（历史残留设计的归档，当前不得落地），
+用于将来若实现真的引入 provider SDK 时快速复用其对抗维度：
 
 | # | fixture 名称 | 合成 path | 合成 content | `expectViolation` | 证明什么 |
 | --- | --- | --- | --- | --- | --- |
@@ -450,15 +507,14 @@ if (specifier.includes(forbidden)) {
 | F5 | `slice20 outside seam service rejected` | `apps/server/api/src/services/embedding-call.ts` | `import { X } from 'dashscope';` | `true` | seam 外业务层不放行 |
 | F6 | `slice20 cross-path package rejected` | `packages/domain/src/embedding-port.ts` | `import { X } from 'dashscope';` | `true` | 跨树不放行 |
 | F7 | `slice20 unknown path rejected` | `apps/server/api/src/ai/unknown/x.ts` | `import { X } from 'dashscope';` | `true` | 未注册路径 fail-closed |
-| F8 | `slice20 traversal path rejected` | `apps/server/api/src/ai/embedding/../../services/x.ts` | `import { X } from 'dashscope';` | `true` | `startsWith` 不会被 `..` 绕过（path 归一化生效） |
+| F8 | `slice20 traversal path rejected` | `apps/server/api/src/ai/embedding/../../services/x.ts` | `import { X } from 'dashscope';` | `true` | 路径归一化先于前缀匹配生效 |
 | F9 | `slice20 non-authorized token inside seam rejected` | `apps/server/api/src/ai/embedding/x.ts` | `import OpenAI from 'openai';` | `true` | narrow allowance 只放宽 2 个 token |
 | F10 | `slice20 guardrails regression still rejected` | `packages/domain/src/legacy.ts` | `import { Guard } from '@alibaba/guardrails';` | `true` | 既有 Safety 保护未回归 |
 | F11 | `slice20 public safety route regression still rejected` | `apps/server/api/src/routes/evil-s20.ts` | `app.post('/api/v1/safety/resolve-risk', h);` | `true` | Rule 8 非 import 分支未受影响 |
 
-同时保留并复跑既有全部 `R8-safety-scope` fixtures（不删除、不改写），作为回归证据。
-
-**F8 的解释**：git 不追踪含 `..` 的路径，因此真实扫描不会出现该形态；该 fixture 证明的是
-`isR8PathAllowed` 的归一化防御**先于**前缀匹配生效，防止未来调用方（例如测试工具）构造绕过。
+**MODE A 的等价覆盖**：上表试图证明的「路径精确性 / 跨树拒绝 / unknown-path 拒绝 / 相邻名拒绝」
+在 MODE A 中由 **ownership matcher** 承担（§5.2 + §5.3 证据表），不需要也不能通过 guard fixture 证明。
+`unknown production path fail closed` 由 `validate-change-governance.mjs` 的 ownership resolution 机械保证。
 
 ### 5.5 不申请 Rule 19 豁免 + 命名/token 禁令（不可协商）
 
@@ -494,43 +550,51 @@ if (specifier.includes(forbidden)) {
   index.ts               Port-only 导出面
 ```
 
-### 5.6 Phase G 依赖链（本 Plan 选择三步打包）
+### 5.6 Phase G 依赖链（G1a → G1b → G2；MODE A）
 
-关键机械事实：`validate-change-governance.mjs` 的 `validateFeatureExists()` 要求
+关键机械事实（本轮核验）：`validate-change-governance.mjs` 的 `validateFeatureExists()` 要求
 `.specify/implementation-ownership.json` 中引用的 feature 在**被校验的 HEAD 工作树**中存在
-`specs/<feature>/spec.md`。而 Frozen Spec 目前只在 `spec/020-*` 分支，**未合并 main**。
+`specs/<feature>/spec.md`。而 `git ls-tree origin/main -- specs/020-*` 为空——Frozen Spec **未合并 main**。
+因此 **G1a 仍然必需**。
 
-因此在本 Plan 选择的 G1b 打包（不含 `spec.md`，见 5.7）下，G1b（注册 ownership）在基于 main 的分支上会立即失败，除非 `specs/020-*/spec.md` 已进入 main。
-
-说明：validator 允许 `specs/` 与 registry 同车（`specs/` 是 fixed-exempt）；本 Plan 仍选择 G1a 独立，用于隔离 spec admission 与 registry governance。**G1a 是打包选择，不是 validator 唯一允许的形态。**
+说明：validator 允许 `specs/` 与 registry 同车（`specs/` 是 fixed-exempt）；本 Plan 仍选择 G1a 独立，
+用于隔离 spec admission 与 registry governance。G1a 是**打包选择**，不是 validator 唯一允许的形态。
 
 ```text
-G1a  SPEC ADMISSION PR（文档 PR，无生产代码）
+G1a  SPEC / PLANNING ADMISSION PR（文档 PR，无生产代码，无治理改动）
      内容：specs/020-embedding-provider-adapter-foundation/
-             spec.md（Frozen blob 67711ee5，逐字节不变）
+             spec.md（Frozen Revision 3，blob 078982f0，逐字节不变）
              plan.md / checklist.md / tasks.md
      分类：specs/ 属 FIXED_EXEMPT → 不触发 change-binding
-     PASS 条件：validate-governance PASS；spec.md blob 与 Frozen 一致
+     PASS 条件：validate-governance PASS；spec.md blob == 078982f0；不含任何 .specify/** 或 scripts/** 改动
+     额外：G1a 不携带任何其它 artifact
 
        ↓（必须先合并到 main）
 
-G1b  GOVERNANCE PREREQUISITE PR（治理 PR，独立、不含实现）
-     内容：.specify/implementation-ownership.json   +1 条规则（5.2）
-           scripts/guard-static.mjs               +allowance +normalization +11 fixtures（5.3/5.4）
-     分类：.specify/ 与 scripts/ 均属 FIXED_EXEMPT → 不触发 change-binding
+G1b  GOVERNANCE PREREQUISITE PR（MODE A：唯一 delta = ownership registry）
+     内容：.specify/implementation-ownership.json   +1 条 PREFIX 规则（§5.2）
+     （不修改 scripts/guard-static.mjs；不新增 fixture；不新增 allowance）
+     分类：.specify/ 属 FIXED_EXEMPT → 不触发 change-binding
      PASS 条件：
            node scripts/guard-static.mjs                  → PASS（真实树 0 violation）
-           node scripts/guard-static.mjs --self-test      → PASS（含 F1..F11）
+           node scripts/guard-static.mjs --self-test      → PASS（baseline 28 fixtures，数量不变）
            node .specify/scripts/validate-governance.mjs  → PASS
            node .specify/scripts/tests/run-governance-tests.mjs → PASS
            node .specify/scripts/validate-change-governance.mjs --base <main-before> → PASS
-           git diff 不含任何 product implementation（apps/**、packages/**、db/**）
+           git rev-parse <main-before>:scripts/guard-static.mjs == git rev-parse HEAD:scripts/guard-static.mjs
+           git diff 不含任何 product implementation（apps/**、packages/**、db/**、tests/**）
 
        ↓
 
 G2  INDEPENDENT GOVERNANCE AUDIT + MERGE（独立审计 + 独立合并决定）
      审计者：不属于本 Plan AI 2、不属于未来 Developer AI 的独立 AI
-     审计内容：5.2/5.3/5.4 的精确性、未放宽其它规则、未注册宽泛路径、fixtures 有效
+     审计内容（MODE A 专属）：
+       - MODE A 被正确选择（实现确为 native HTTP，无 provider SDK import）
+       - ownership 唯一且窄（1 条 PREFIX、带尾 `/`、无宽泛 matcher）
+       - scripts/guard-static.mjs 与 base 字节相同
+       - 无 provider SDK 依赖（package.json / lockfile / import 扫描）
+       - 无 provider import allowance、无 provider import fixture
+       - unknown production path 仍 fail closed
      合并：独立决定，不由任何 AI 的「完成」声明替代
 ```
 
@@ -544,23 +608,24 @@ G2  INDEPENDENT GOVERNANCE AUDIT + MERGE（独立审计 + 独立合并决定）
 **为什么治理 PR 不能包含 Adapter 实现**：
 
 - validator 明确禁止 `implementation-ownership.json` 变更与 product implementation 或 change-binding 同车；
-- Frozen Spec §19.2 流程约束第 1 项要求治理 prerequisite 必须独立于 product implementation PR；
+- Frozen Spec §19.2 流程约束要求治理 prerequisite 必须独立于 product implementation PR；
 - 若同车，则「治理先于实现被独立审计」这一控制完全失效。
 
 ### 5.7 治理 PR 的 forbidden content（机械清单）
 
 ```text
-治理 PR 绝不包含：
+G1b（MODE A）绝不包含：
   apps/**            任何文件
   packages/**        任何文件
   db/**              任何文件
   tests/**           任何文件（含 architecture test）
+  scripts/**         任何文件 —— 尤指 scripts/guard-static.mjs（byte-identical 要求）
   .specify/change-bindings/**    任何文件
   .specify/authority-*           任何文件
   Docs/**            任何文件
-  specs/016-* .. specs/019-*
-  specs/020-*/spec.md（不得在治理 PR 中改动；只能由 G1a 逐字节引入）
-  package.json / bun.lock
+  specs/**           任何文件（spec.md / plan.md 等只能由 G1a 引入）
+  package.json / bun.lock / .env*
+  任何 provider import fixture / allowance 定义 / SDK 依赖
 ```
 
 ### 5.8 治理 PR 的验收命令（原样执行，检查真实输出）
@@ -571,17 +636,20 @@ node scripts/guard-static.mjs --self-test
 node .specify/scripts/validate-governance.mjs
 node .specify/scripts/tests/run-governance-tests.mjs
 node .specify/scripts/validate-change-governance.mjs --base origin/main
+git rev-parse origin/main:scripts/guard-static.mjs
+git rev-parse HEAD:scripts/guard-static.mjs
 git diff --name-only origin/main...HEAD
 ```
 
-`git diff --name-only` 的期望结果必须**恰好**是：
+`git rev-parse` 两行输出必须**逐字节相同**（MODE A 硬约束）。
+
+`git diff --name-only` 的期望结果必须**恰好**是**一个**文件：
 
 ```text
 .specify/implementation-ownership.json
-scripts/guard-static.mjs
 ```
 
-（若 G1a 与 G1b 分属两个 PR，则 G1a 的 diff 恰好是 `specs/020-embedding-provider-adapter-foundation/{spec.md,plan.md,checklist.md,tasks.md}`。）
+（若 G1a 与 G1b 分属两个 PR，则 G1a 的 diff 恰好是 `specs/020-embedding-provider-adapter-foundation/{spec.md,plan.md,checklist.md,tasks.md}` 四个文件；G1a、G1b 各自的 diff 都不含 `scripts/**`。）
 
 ---
 ## 6. Phase I — Product Implementation
@@ -1163,7 +1231,8 @@ end note
 | SDK | **不使用** | ① 原生接口才提供 sparse（Spec §2.3 官方事实）；② 零新依赖 = 最小供应链面；③ SDK 会把 provider 语义渗透进类型与日志，增加 secret/原始 body 泄漏面 |
 | HTTP 客户端 | Node 26 全局 `fetch`（`globalThis.fetch`） | 已存在、零依赖、可被 `HttpTransport` 包裹以便确定性测试 |
 | 新增 npm 依赖 | **0** | `package.json` / `bun.lock` 不修改 |
-| `@alicloud` 包 | **不使用** | Rule 8 允许它在 seam，但本 Plan 不引入（allowance 是防御性授权，不是使用许可） |
+| `@alicloud` 包 | **不使用** | MODE A 下不存在任何 Rule 8 allowance；本 Plan 不引入（NS-040） |
+| 治理模式推论 | **MODE A — NATIVE HTTP** | 无命中 Rule 8 forbidden token 的 provider import → 不需要 guard 改动，只注册 ownership（C20-21） |
 | provider 端点 | 常量 path + 配置 host | Spec §2.3：`POST https://{host}/api/v1/services/embeddings/text-embedding/text-embedding` |
 | 请求体 | `{ model, input: { texts }, parameters: { dimension, output_type, text_type, instruct? } }` | Spec §2.3 |
 | 成功响应解析字段 | `request_id`、`embeddings[].index`、`embeddings[].embedding`、`embeddings[].sparse_embedding[]`、`usage.total_tokens`、`usage.prompt_tokens?` | Spec §2.3 |
@@ -1186,6 +1255,10 @@ Frozen Spec 授权 Plan AI 2 在「Provider contract 复核后」确定映射；
 | 配置化 + 缺失 → `OUTPUT_TYPE_UNSUPPORTED` | 唯一不会产生错误事实的做法；I7 时由人工按官方文档填写 |
 
 结论：采用第三种。这**不**增加产品语义，只是把「不可猜的外部字面量」显式化。
+
+**MODE A 的依赖后果（与 §5.0 一致）**：本节的 native HTTP + `globalThis.fetch` + 零 provider 依赖，
+直接决定治理形态是 MODE A——`scripts/guard-static.mjs` 字节不变、无 allowance、无 provider import fixture，
+唯一治理 delta 是 ownership registry。若实现被迫引入 provider SDK，必须先改 Spec（NS-040），不得就地切换 MODE B。
 
 ### 6.14 并发与无状态
 
@@ -1325,7 +1398,7 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | V4 | `bunx tsc --noEmit`（`apps/server/api`） | 每个 I 任务后 / PR / CI | exit 0 | 否 |
 | V5 | `bunx tsc -p tsconfig.base.json --noEmit` | PR / CI | exit 0 | 否 |
 | V6 | `node scripts/guard-static.mjs` | PR / CI | `PASS (0 violations)` | 否 |
-| V7 | `node scripts/guard-static.mjs --self-test` | PR / CI | `PASS (N synthetic fixtures validated)`，N 含 F1..F11 | 否 |
+| V7 | `node scripts/guard-static.mjs --self-test` | PR / CI | `PASS (28 synthetic fixtures validated)` —— 数量必须等于 base（MODE A 不新增 fixture） | 否 |
 | V8 | `node .specify/scripts/validate-governance.mjs` | PR / CI | `Spec governance validation PASS` | 否 |
 | V9 | `node .specify/scripts/tests/run-change-governance-tests.mjs` | 治理 PR / CI | 全部 PASS | 否 |
 | V10 | `node .specify/scripts/validate-change-governance.mjs --base origin/main` | 每个 PR / CI | `Change governance PASS` | 否 |
@@ -1333,6 +1406,8 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | V12 | `EMBEDDING_VERIFICATION_ENABLED=true bunx vitest run tests/ai/embedding-provider-verification.test.ts` | **仅** I7 手动 | 10 项 EVC 全部 PASS；产出 `tests/evidence/embedding-provider-verification.json` | **是** |
 | V13 | `git diff --name-only origin/main...HEAD` | 每个 PR | 与任务 Allowed paths 精确一致 | 否 |
 | V14 | `bunx vitest run tests/integration/embedding-provider-no-persistence.test.ts` | I5 后 / PR / CI | exit 0；调用前后 DB 表清单/行数快照逐项相同 | 否 |
+| V15 | `git rev-parse <base>:scripts/guard-static.mjs` / `git rev-parse HEAD:scripts/guard-static.mjs` | G1b PR / 实现 PR / CI | 两值**逐字节相同**（MODE A 的 guard 不变证明） | 否 |
+| V16 | `git grep -nE "dashscope\|@alicloud" -- apps/server/api/src/ai/embedding package.json bun.lock`；并对全仓库 import specifier 做 SDK 扫描 | G1b PR / 实现 PR / CI | 命中数 = 0（无可执行 provider SDK 依赖 / import） | 否 |
 
 **CI 与 provider 的隔离**：V1–V11 全部离线。V12 永不进入 CI（默认 `describe.skip`，且 CI 无 `DASHSCOPE_API_KEY`）。
 因此 CI 结果**永远不足以**产生 `PROVIDER_VERIFIED`（Spec §18.4）。
@@ -1343,7 +1418,7 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | --- | --- | --- |
 | `tests/ai/embedding-provider-contract.test.ts` | Port 契约、输入校验、dense 校验、sparse 校验、all-or-nothing、错误归一化、重试/超时/取消、telemetry 白名单、cost record、证据三态推导（全部用注入 fake transport） | 不访问网络；不连 DB；不读真实 secret |
 | `tests/ai/embedding-dashscope-adapter.test.ts` | provider 协议映射：请求体形状、成功响应解析、错误响应解析、provider 错误码→内部错误码、model echo 缺失/不一致、无序 sparse、聚合 usage | 不访问网络；不硬编码真实 endpoint |
-| `tests/architecture/embedding-provider-boundary.test.ts` | seam 目录的静态结构：命名/token 禁令、禁止 import、无 DB、无 route、无 fixture 引用、导出面 | 不做运行时行为断言 |
+| `tests/architecture/embedding-provider-boundary.test.ts` | seam 目录的静态结构：命名/token 禁令、禁止 import、无 DB、无 route、无 fixture 引用、导出面；**provider HTTP egress 只发生在 seam 内（且仅 `transport.ts` 构造出网请求）**；**seam 外不得 import `transport` / `dashscope-protocol`，consumer 只经 `index.ts` Port 面**；**approved endpoint policy**（只接受批准 host 后缀与固定 path，无 override 通道）；**其它路径无 direct provider integration**；**依赖边界**（无 `dashscope` / `@alicloud` / provider SDK） | 不做运行时行为断言；不要求任何 `scripts/guard-static.mjs` import allowance 测试（MODE A 下 guard 不参与） |
 | `tests/ai/embedding-provider-verification.test.ts` | 真实 provider EVC-01..EVC-10（显式 opt-in） | 不在无凭据时"跳过即通过"地写 provider evidence |
 | `tests/integration/embedding-provider-no-persistence.test.ts` | AS-021：调用前后 DB 表清单/行数快照逐项相同；只读快照，不写业务表 | 不测 adapter 内部行为；不修改任何表；不访问 provider |
 
@@ -1401,12 +1476,12 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | FR-048 | 3.5 | diff 断言：无 `db/**`；无 `knowledge_embeddings`/`knowledge_chunks` |
 | FR-049 | 3.2, 3.4 | T-ARCH + guard：无 sparsevec/pg_jieba/rerank/fusion/retrieval/Context Builder/AI Task Runtime 模块 |
 | FR-050 | 3.2, 6.13 | T-ARCH：无注册表/动态发现；导出面为固定命名 |
-| FR-051 | 5.3, 5.4 | V6/V7：guard PASS + self-test PASS（含正反例） |
+| FR-051 | 5.3, 7.1 | **MODE A**：V15（guard blob 与 base 逐字节相同）+ V6/V7（PASS，28 fixtures 数量不变）+ V3（egress 只在 seam、consumer 只经 Port、endpoint policy、其它路径无 provider integration、unknown path fail closed）+ V16（provider SDK 依赖/import 扫描 = 0） |
 | FR-052 | 6.3, 3.2 | T-ARCH + 契约测试：Port 无 route 参数；无 winner 声明（AS-023） |
 | FR-053 | 6.11 | 契约测试：三态逐项标注、互不替代 |
 | FR-054 | 6.11 | 契约测试：仅 fake → `CONTRACT_VERIFIED` + `PROVIDER_NOT_VERIFIED`（AS-025） |
 | FR-055 | 6.11 | 契约测试：缺任一条件时 `externalAvailabilityStatus !== 'READY'` |
-| FR-056 | 6.11, 7.7 | 契约测试：逐项删除 EVC → 回退 `PROVIDER_NOT_VERIFIED`（AS-027） |
+| FR-056 | 6.11, 7.6 | 契约测试：逐项删除 EVC → 回退 `PROVIDER_NOT_VERIFIED`（AS-027） |
 | FR-057 | 8.3 | I7 artifact schema 断言：命令/摘要/时间/model/request_id/echo/环境/EVC 覆盖 |
 | FR-058 | 8.4 | I7 artifact：输入 digest 为合成样本；无 Gold/家庭数据引用 |
 | FR-059 | 6.11 | 契约测试 + checklist：全文检索无 READY 类声明（AS-028） |
@@ -1421,7 +1496,7 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 
 **FR 覆盖结论：67 / 67 COMPLETE。**
 
-### 7.4 AS-001..AS-034 覆盖矩阵
+### 7.4 AS-001..AS-036 覆盖矩阵
 
 | AS | 实施路径 | 验证 |
 | --- | --- | --- |
@@ -1459,10 +1534,12 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | AS-032 | I3 | V1：`7149,111290,3759,1130` → `1130,3759,7149,111290` |
 | AS-033 | I2+I4 | V2：仅 `request_id`/`embeddings`/`usage` → 成功 + `NOT_AVAILABLE` |
 | AS-034 | I4 | V1：aggregate-only → per-item `NOT_PROVIDED` |
+| AS-035 | G1b + I6（MODE A governance evidence） | ① ownership 注册存在且指向唯一 seam（§5.2 / CHK-C04..C09）；② `scripts/guard-static.mjs` 与 base blob 逐字节相同（**V15**）；③ architecture/static 证明 provider egress 只在 seam（V3 / T010）；④ consumer 只经 Port（V3 / T010）；⑤ endpoint policy 测试通过（V3 / T010）；⑥ unknown production path 仍 fail closed（`validate-change-governance` + registry 无更宽 matcher）；⑦ 依赖边界 V16 = 0 |
+| AS-036 | G1b 模式判定（MODE B 条件触发） | 当前 MODE A：`dashscope` / `@alicloud` import 扫描命中 0 → **MODE B NOT TRIGGERED**，因此 allow set 与 fixtures **均不存在**（V16 + V7 数量 28 不变 + V15）。若未来出现命中，则由 import 扫描结果驱动 MODE B，并额外要求 positive/negative + cross-path/unknown-path 拒绝 |
 
-**AS 覆盖结论：34 / 34 COMPLETE。**
+**AS 覆盖结论：36 / 36 COMPLETE（含 AS-035 MODE A evidence、AS-036 MODE B NOT TRIGGERED）。**
 
-### 7.5 NS-001..NS-038 覆盖矩阵
+### 7.5 NS-001..NS-040 覆盖矩阵
 
 | NS | 机械门禁 |
 | --- | --- |
@@ -1492,10 +1569,10 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | NS-024 | V13：无 `apps/**` 用户功能/route 变更；仅 seam 目录新增 |
 | NS-025 | secret 扫描 + V13 |
 | NS-026 | T-ARCH：seam 无 `tests/` import |
-| NS-027 | V7：F1..F11（含非授权 token 在 seam 内仍拒绝） |
+| NS-027 | V15 + V6：**MODE A 下 guard diff = 0**（字节级相同），全局 `dashscope` 禁入规则原样保留；无任何 allow set |
 | NS-028 | V1 + checklist：状态报告为 `PROVIDER_NOT_VERIFIED` |
-| NS-029 | V7：F3..F9 证明 allowance 仅精确前缀 |
-| NS-030 | V6/V7：Rule 8 全局条目仍在；F10/F11 回归 |
+| NS-029 | V15 + V16：**MODE A 不存在 allow set**（无 `R8_PATH_SCOPED_ALLOWANCES`，guard blob == base）；依赖扫描证明 seam 无 `dashscope` / `@alicloud` import |
+| NS-030 | V15 + V6/V7：Rule 8 全局条目仍在、guard 字节级不变、无规则删除；self-test 28 fixtures 不变 |
 | NS-031 | 5.2：一条 FEATURE PREFIX，无通配；无 `packages/**` 规则 |
 | NS-032 | 5.2 + checklist：registry 只有 1 条新增规则且 path 精确；无 `ai/`、`providers/`、`embeddings/` 规则 |
 | NS-033 | V1：证据来源字段必须为真实调用；离线只能 `CONTRACT_VERIFIED` |
@@ -1504,8 +1581,10 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 | NS-036 | V1/V2：echo 缺失成功；字段审计 |
 | NS-037 | V1：仅 aggregate 时 per-item `NOT_PROVIDED` |
 | NS-038 | V1 + checklist：无 ordering guarantee 声明 |
+| NS-039 | **MODE A**：V15（`scripts/guard-static.mjs` blob == base，逐字节）+ V7（fixture 数量 == 28，无 `slice20 …` 新增）+ diff 不含 `scripts/**`；无 allowance、无 provider import fixture、无预置 SDK 路径 |
+| NS-040 | V16：`package.json` / lockfile / seam import 扫描 `dashscope`、`@alicloud`、provider SDK 命中 = 0；MODE B 由真实 import 驱动，任何人不得为使旧治理假设成立而引入 SDK |
 
-**NS 覆盖结论：38 / 38 COMPLETE。**
+**NS 覆盖结论：40 / 40 COMPLETE（含 NS-039 MODE A 无预置放宽、NS-040 禁止人为引入 SDK）。**
 
 **AS-021 的验收强度（严格按 Spec）**：Spec 的 AS-021 要求「前后 DB 快照比对」。
 本 Plan 提供**三层**证据：(1) **必需层**——`tests/integration/embedding-provider-no-persistence.test.ts` 在调用前后记录 DB 表清单与行数快照并逐项比对（CI 已有 `DATABASE_URL`）；(2) **必需层**——T-ARCH 证明 seam 无任何 DB client / SQL / `db/**` 引用；(3) **补充层**——若目标环境 DB 不可达，必须报告 `NOT VERIFIED`，不得用静态证明替代 Spec 的机械快照。
@@ -1528,6 +1607,34 @@ I8 canonical regression → guard + typecheck + vitest + governance，STOP at RE
 **EVC-07 的解释（必须写入证据 artifact）**：真实 provider 不会主动返回 malformed / duplicate / non-finite payload。
 因此 EVC-07 的证据形式是「真实 payload 的受控派生」，并在 artifact 中显式标注 `derivation`。
 这不是用 mock 替代真实证据：基础 payload、model identity、request id、环境均来自真实调用。
+
+### 7.7 C20-01..C20-21 覆盖矩阵
+
+| C20 | 覆盖位置 | 机械验证 |
+| --- | --- | --- |
+| C20-01 Adapter 与 model selection 分离 | §3.1, §6.12 | 配置绑定 model/version；architecture test 无模型对比/选择/质量评估 |
+| C20-02 不提前锁 pinned production model | §6.12, §6.13 | 无生产锁定常量；V16 + architecture test |
+| C20-03 Contract conformance ≠ availability | §6.11, §14 | V1：mock 只能 `CONTRACT_VERIFIED` + `PROVIDER_NOT_VERIFIED` |
+| C20-04 缺真实证据只能 `PROVIDER_NOT_VERIFIED` | §6.11, §14 | V1/V12 状态断言；禁 READY 断言 |
+| C20-05 Sparse 能力存在不选择 A | §3.2, §6.5 | candidate-neutral；无 A/B/C winner 声明 |
+| C20-06 不创建 knowledge_embeddings | §3.4, §3.5 | V13 无 `db/**`；architecture test 无表/写入 |
+| C20-07 不依赖 Slice 17 runtime | §3.4 | architecture test 无 `professional_knowledge_*` |
+| C20-08 不依赖 Slice 18 runtime | §3.4 | architecture test 无 Gold Dataset/label/runner |
+| C20-09 不依赖 Slice 19 runtime | §3.4 | architecture test 无 pgvector/DB；V13 |
+| C20-10 治理前置独立 | §5.6, §5.7 | G1a/G1b/G2 独立；V10；diff 不含实现 |
+| C20-11 实现位置不预设 | §5.1, §5.2 | 唯一 seam + 精确 ownership matcher |
+| C20-12 Secret 边界 | §6.8 | V1 脱敏断言；V16 不读 secret |
+| C20-13 重试语义 | §6.7 | V1：仅 RETRYABLE 重试，受次数/预算约束 |
+| C20-14 最小状态模型 | §6.6, §6.11, §14 | V1 三态与错误分类断言；无第三态/best-effort |
+| C20-15 批量 all-or-nothing | §6.3, §6.4 | AS-017；失败无部分结果 |
+| C20-16 Spec 不产出 Plan/Tasks | §0, §12 | 本 Plan 为下游投影；无实现授权 |
+| C20-17 Sparse index = vocabulary namespace | §6.5 | AS-006/AS-029/AS-030；architecture test 无 dense-bound |
+| C20-18 Configured provenance ≠ provider echo | §6.13, §15 | AS-011/AS-033；三段 provenance 断言 |
+| C20-19 Usage 为 request-level | §6.10 | AS-018/AS-034；per-item `NOT_PROVIDED` |
+| C20-20 Adapter canonical ordering | §6.5 | AS-032；无序输入 → 升序输出，无 provider guarantee |
+| C20-21 Governance mode 由实际依赖决定 | §5.0, §5.3, §7.1 | AS-035/AS-036；V15 guard blob equality + V16 依赖扫描 |
+
+**C20 覆盖结论：21 / 21 COMPLETE。**
 
 ---
 
@@ -1667,9 +1774,12 @@ provider 内部堆栈、完整 endpoint URL（只允许 `endpointConfigFingerpri
 
 ---
 
-## 11. Audit 1 Findings（开发前计划审计）
+## 11. Audit 1 Findings（开发前计划审计 — Revision 3 全文重跑）
 
 > 本节是**对抗式自审记录**，不是总结。每个 finding 记录「发现 → 修正 → 残留风险」。
+>
+> **本轮（Revision 3 targeted reconciliation）不是 diff 审计**：A–H 全部按当前 Revision 3 authority
+> 对整份 Plan/Checklist/Tasks 重新核验；覆盖 FR 67/67、AS 36/36、NS 40/40、C20 21/21、EVC 10/10。
 
 ### A. Spec coverage
 
@@ -1678,6 +1788,7 @@ provider 内部堆栈、完整 endpoint URL（只允许 `endpointConfigFingerpri
 | FR-001..FR-067 是否全部被 Plan/Checklist/Tasks 覆盖 | 67/67（7.3 矩阵） |
 | 是否存在只被 Plan 覆盖、未被 Tasks 落地的 FR | 无（每 FR 至少一个 I 任务 + 一个验证项） |
 | 是否存在只被 Tasks 覆盖、未被 Plan 解释的 FR | 无 |
+| C20-01..C20-21 是否全部覆盖 | 21/21（§7.7 矩阵） |
 
 **A 结论：COMPLETE。**
 
@@ -1685,35 +1796,43 @@ provider 内部堆栈、完整 endpoint URL（只允许 `endpointConfigFingerpri
 
 | 检查 | 结果 |
 | --- | --- |
-| AS-001..AS-034 是否都有实施路径与验证路径 | 34/34（7.4 矩阵） |
+| AS-001..AS-036 是否都有实施路径与验证路径 | 36/36（7.4 矩阵） |
 | 是否有 AS 只能靠人工口头判断 | 无；每条都有命令或字段断言 |
 | AS-021 是否被削弱 | 否；V14 前后 DB 快照为必需层，静态无 DB 依赖为附加层（7.5 说明） |
 | AS-026（真实 provider）是否被 mock 替代 | 否；仅 I7 V12 |
+| AS-035（MODE A governance evidence）是否可机械复验 | 是：V15（guard blob 相等）+ ownership 条目断言 + V3（egress/Port/endpoint/unknown-path）+ V16 |
+| AS-036（MODE B 条件触发）是否被正确判定 | 是：当前 import 扫描命中 0 → MODE B NOT TRIGGERED；allow set 与 fixtures 均不存在（V16 + V7） |
 
-**B 结论：COMPLETE。**
+**B 结论：COMPLETE（36/36，含 AS-035 / AS-036）。**
 
 ### C. Negative scope coverage
 
 | 检查 | 结果 |
 | --- | --- |
-| NS-001..NS-038 是否都有机械门禁 | 38/38（7.5 矩阵） |
+| NS-001..NS-040 是否都有机械门禁 | 40/40（7.5 矩阵） |
 | 是否存在"只在文档声明"而无机械门禁的 NS | 无 |
-| NS-027/NS-029/NS-030/NS-031/NS-032 是否有 guard adversarial 证据 | 是（5.4 F1..F11 + 5.2 机械项） |
+| NS-027/NS-029/NS-030/NS-031/NS-032 的 MODE A 证据 | 是：V15（guard blob == base）+ registry 单条精确 PREFIX（§5.2）+ V16 依赖扫描；**不使用** guard fixture |
+| NS-039（MODE A 禁止预置 Rule 8 放宽）是否有门禁 | 是：V15 + V7（28 fixtures 不变）+ diff 不含 `scripts/**` / fixture |
+| NS-040（禁止人为引入 SDK）是否有门禁 | 是：V16（package.json / lockfile / import 扫描 = 0） |
 
-**C 结论：COMPLETE。**
+**C 结论：COMPLETE（40/40，含 NS-039 / NS-040）。**
 
 ### D. Contradiction scan（Plan / Checklist / Tasks 之间）
 
 | 潜在矛盾 | 处理 |
 | --- | --- |
-| 「不引入 SDK」vs「Rule 8 允许 dashscope」 | 不矛盾：allowance 是防御性授权，不是使用义务（5.3 明确） |
+| 「不引入 SDK」vs「MODE A 不存在任何 allow set」 | 不矛盾且自洽：无 SDK → 无 forbidden token 命中 → 不需要 Rule 8 改动（5.3 / C20-21） |
+| 「native HTTP Plan 是否需要 Rule 8 修改？」 | **NO**（§5.3 冻结结论；V15 机械证明） |
+| 「MODE A 是否仍需要 ownership 注册？」 | **YES**（否则 seam 是 unknown production path，validator fail closed；§5.2 / AS-035） |
+| 上述两条 NO/YES 是否冲突 | 不冲突：一条约束 guard，一条约束 registry，二者互不替代 |
+| 「guard 不可改」vs「治理证据必须充分」 | 不矛盾：证据改由 ownership 精确性 + egress/Port/endpoint 静态测试 + 依赖扫描承担（§5.3 证据表） |
 | 「不修改 R19」vs「seam 命名不得含 EmbeddingAdapter」 | 不矛盾：命名约束是实现选择，不是规则变更（5.5） |
 | 「不修改 `.env.example`」vs FR-043 | 不矛盾：FR-043 的语义是"示例值不得为可用凭据"；未修改即无泄漏（6.8 论证） |
 | 「provider 字面量配置化」vs「config 必需项最少」 | 不矛盾：只在对应 outputType 使用时必需（6.12） |
 | 「AS-021 快照」vs「生产 seam 不依赖 DB」 | 已显式分层：生产 seam 无 DB；专用 integration 测试只做只读快照（7.5） |
 | 「I7 可选」vs「PROVIDER_VERIFIED 需要证据」 | 不矛盾：可选指**是否执行**，不是**是否可伪造** |
 
-**D 结论：contradictions = 0。**
+**D 结论：contradictions = 0（含 MODE A：Rule 8 NO / ownership YES 共存）。**
 
 ### E. Hidden decisions 扫描
 
@@ -1741,19 +1860,25 @@ provider 内部堆栈、完整 endpoint URL（只允许 `endpointConfigFingerpri
 
 **F 结论：Overengineering = 0。**
 
-### G. Governance correctness
+### G. Governance correctness（MODE A）
 
 | 检查 | 结果 |
 | --- | --- |
 | 治理 prerequisite 是否真正独立（独立 PR、先于实现） | 是（5.6 G1a/G1b/G2） |
 | registry 变更是否与实现同车 | 否（validator 禁止；Checklist 有机械项） |
-| 是否注册宽泛路径 | 否（一条 FEATURE PREFIX，带尾 `/`） |
-| 是否删除/放宽 Rule 8 全局条目 | 否（只新增 path-scoped allowance） |
-| 是否有 cross-path / unknown-path 拒绝证据 | 是（F5/F6/F7/F8） |
+| 是否注册宽泛路径 | 否（一条 FEATURE PREFIX，带尾 `/`；无 `ai/`、`providers/`、`embeddings/`） |
+| 是否删除/放宽 Rule 8 全局条目 | 否（MODE A：guard **完全未改**，字节级相同；V15） |
+| 是否新增 allowance / provider import fixture | 否（NS-039；V7 fixture 数量 == 28） |
+| provider egress 是否被限制在唯一 seam | 是（architecture test：`transport.ts` 为唯一出网构造点；V3 / T010） |
+| consumer 是否只经 Port | 是（`index.ts` 为唯一导出面；seam 外不得 import `transport` / `dashscope-protocol`） |
+| endpoint policy 是否可机械验证 | 是（批准 host 后缀 + 固定 path；无 override 通道） |
+| unknown production path 是否 fail closed | 是（registry 无更宽 matcher；validator 未知路径失败） |
+| 是否存在 provider SDK 依赖 | 否（V16 = 0；package.json / lockfile / import） |
 | 是否修改 Rule 17 / Rule 19 | 否 |
 | 是否修改 Authority Docs / Slice 16–19 | 否 |
 
-**G 结论：Governance correctness = PASS（设计层）。**
+**G 结论：Governance correctness = PASS（MODE A）。**
+明确回答：native HTTP Plan **不需要任何 Rule 8 修改（NO）**；MODE A **仍需要 ownership 注册（YES）**。
 
 ### H. Executability
 
@@ -1786,52 +1911,93 @@ provider 内部堆栈、完整 endpoint URL（只允许 `endpointConfigFingerpri
 | CN-14 | 默认 `EMBEDDING_MAX_SPARSE_ELEMENTS=1024` 可能误拒合法 sparse payload | 中 | 6.12：默认改为 `20000`，上限 `65536`；明确不是 provider bound |
 | CN-15 | base URL 允许 legacy host，超出官方当前 workspace endpoint 面 | 中 | 6.12：只允许 `.maas.aliyuncs.com`；历史 host 需另行治理 |
 | CN-16 | G1a 被描述为「必须三步」，但 validator 允许 spec admission 与 registry 同车 | 低 | 5.6：改写为本 Plan 的打包选择，并明确 validator 允许合并 |
+| CN-17 | **（Revision 3）** 旧 G1b 无条件要求修改 `scripts/guard-static.mjs`（allowance + 归一化 + fixtures），把「可能需要的放宽」写成「必须做的改动」 | 高 | §5.0/§5.3：冻结 MODE A；guard 字节级不变；allowance 降级为 MODE B-only 且当前不成立 |
+| CN-18 | **（Revision 3）** F1–F11 被当作 MODE A 的必需证据，导致为了「证明允许」而必须人为制造 provider import 正例，与「零 SDK」自相矛盾 | 高 | §5.4：F1–F11 标记 NOT APPLICABLE（MODE B-only 归档）；MODE A 由 ownership + egress/Port/endpoint + 依赖扫描证明 |
+| CN-19 | **（Revision 3）** 旧约束把治理 PR diff 固定为「ownership + guard」双文件形态，迫使 MODE A 产生无意义 guard 改动 | 高 | §5.6/§5.8：G1b diff **恰好 1 个文件**（ownership registry）；新增 V15 守护 guard 不变 |
+| CN-20 | **（Revision 3）** 旧审计把「Rule 8 必须放宽」与「ownership 必须注册」混为一体，导致「MODE A 是否还需要治理」结论模糊 | 中 | §11-G/D：显式拆分——Rule 8 修改 **NO**、ownership 注册 **YES**；两者互不替代 |
+| CN-21 | **（Revision 3）** `@alicloud` 行文称「Rule 8 允许它在 seam」，在 MODE A 下会造成「已有 allowance」的误读 | 中 | §6.13 行改写为「MODE A 下不存在任何 allowance」；新增治理模式推论行 |
 
-**修正后复检**：A–H 全部 COMPLETE / 0 / YES；无残留 Planning defect。
+**修正后复检（Revision 3 全文重跑）**：
+
+```text
+A Spec coverage            67/67  COMPLETE
+B Acceptance coverage      36/36  COMPLETE（含 AS-035 / AS-036）
+C Negative scope           40/40  COMPLETE（含 NS-039 / NS-040）
+D Contradictions           0（含 MODE A Rule8-NO / Ownership-YES 共存）
+E Hidden product decisions 0
+F Overengineering          0
+G Governance correctness   PASS（MODE A）
+H Executability            YES（G1a → G1b → G2 后）
+CLARIFY (C20)              21/21  COVERED（§7.7）
+EVC                        10/10  COVERED
+```
+
+无残留 Planning defect。
 
 ---
 
-## 12. Planning Freeze Record（Plan AI 2 + main-flow Audit 1）
+## 12. Planning Freeze Record（Plan AI 2 + Audit 1 re-run）
+
+**历史 Freeze 记录（不删除）**
+
+```text
+Previous Planning HEAD: e967fca1ced8854d90b4cef4a4375dcead36341a
+Previous freeze semantics: REVISION 2（含「G1b 必须改 guard」的治理假设）
+Status: SUPERSEDED BY REVISION 3 GOVERNANCE RECONCILIATION
+Scope of supersession: 仅治理相关 planning 语义（G1/G1a/G1b、Rule 8、治理 PR diff 形态、治理证据）
+NOT superseded: Adapter seam、native HTTP、零依赖、dense/sparse 契约、错误/重试/超时、
+                telemetry/cost、证据模型、provider verification、AS-021、candidate-neutral 边界
+```
+
+**当前 Freeze（Revision 3）**
 
 ```text
 SLICE 20 PLAN AI 2: FINAL PASS
+AUDIT 1: FINAL PASS（全文重跑，非 diff 审计）
+SPEC AUTHORITY: REVISION 3（commit d2159ea7beedaa4a37c0e50ed67235dab8dde21a / blob 078982f0819954a5479086da86036ccd81d22b2c）
+GOVERNANCE MODE: MODE A — NATIVE HTTP
 SPEC COVERAGE: COMPLETE (67/67)
-ACCEPTANCE COVERAGE: COMPLETE (34/34)
-NEGATIVE SCOPE COVERAGE: COMPLETE (38/38)
+ACCEPTANCE COVERAGE: COMPLETE (36/36)
+NEGATIVE SCOPE COVERAGE: COMPLETE (40/40)
+CLARIFY (C20) COVERAGE: COMPLETE (21/21)
 EVC COVERAGE: COMPLETE (10/10)
-CHECKLIST ITEMS: 181（17 组，全部 PASS/FAIL）
+CHECKLIST ITEMS: 191（17 组，全部 PASS/FAIL）
 TASKS: 12（T001..T012）
 PLAN / CHECKLIST / TASKS CONTRADICTIONS: 0
+GOVERNANCE CONTRADICTIONS: 0
 HIDDEN PRODUCT DECISIONS: 0
 AUTHORITY DRIFT: 0
 SCOPE DRIFT: 0
 OVERENGINEERING: 0
-AUDIT 1 (MAIN-FLOW INDEPENDENT): FINAL PASS
-PLANNING: FROZEN
-READY FOR GOVERNANCE PREREQUISITE: YES
-PRODUCT IMPLEMENTATION AUTHORIZATION: NO — governance prerequisite must merge first
+PLANNING FROZEN — REVISION 3 RECONCILED
+READY FOR SPEC/PLANNING ADMISSION: YES（G1a）
+READY FOR GOVERNANCE PREREQUISITE: YES（G1b，仅 ownership registry）
+READY FOR PRODUCT IMPLEMENTATION: NO — governance prerequisite must merge first
 ```
 
 **本 Plan 不做的事**（冻结声明）：
 
 1. 不创建任何生产代码、测试实现、migration、脚本、CI 改动；
-2. 不修改 `spec.md`（Frozen blob `67711ee5` 必须逐字节不变）；
+2. 不修改 `spec.md`（Frozen Revision 3 blob `078982f0` 必须逐字节不变）；
 3. 不修改四份 Authority Docs、`specs/016–019`；
-4. 不修改 `.specify/implementation-ownership.json` 与 `scripts/guard-static.mjs`（属 G1b）；
+4. 不修改 `.specify/implementation-ownership.json`（属 G1b）；**MODE A 下也不修改 `scripts/guard-static.mjs`（字节级冻结要求，任何 PR 都不得改）**；
 5. 不注册生产 route、不选择 A/B/C、不锁生产 model；
-6. 不产生任何 `PROVIDER_VERIFIED` 证据。
+6. 不产生任何 `PROVIDER_VERIFIED` 证据；
+7. 不引入 provider SDK，不为进入 MODE B 而改依赖（NS-040）。
 
-**下一步**：G1a Spec Admission PR → G1b Governance PR → G2 独立治理审计 + 独立合并；在这些完成前不得进入 Phase I 实现。
+**下一步**：G1a Spec/Planning Admission PR → G1b Governance PR（仅 ownership）→ G2 独立治理审计 + 独立合并；
+在这些完成前不得进入 Phase I 实现。
 
 ---
 
 ## Appendix A — 交付给 Developer AI 的最小路径总表
 
 ```text
-PHASE G（治理，独立审计后合并）
+PHASE G（治理，独立审计后合并）— GOVERNANCE MODE: MODE A — NATIVE HTTP
   G1a  specs/020-embedding-provider-adapter-foundation/{spec.md, plan.md, checklist.md, tasks.md}
+       （spec.md = Frozen Revision 3 blob 078982f0，逐字节不变）
   G1b  .specify/implementation-ownership.json  (+1 PREFIX rule)
-       scripts/guard-static.mjs               (+allowance, +normalize, +11 fixtures)
+       scripts/guard-static.mjs                ✗ NOT MODIFIED（byte-identical to base；V15）
   G2   独立治理审计 + 独立合并
 
 PHASE I（产品实现，绑 own change-binding）
