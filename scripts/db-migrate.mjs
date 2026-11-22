@@ -9,21 +9,455 @@
  *   visible at that transition and marked LEGACY_BASELINE.
  * - Once checksum-bound, same-filename content drift fails closed before any
  *   later migration is applied.
+ * - Self-contained runner: holds zero external local file dependencies so that
+ *   tests copying only scripts/db-migrate.mjs can execute seamlessly.
  */
 
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import pg from 'pg';
 
 const ROOT = new URL('..', import.meta.url).pathname;
-const MIGRATIONS_DIR = join(ROOT, 'db', 'migrations');
+export const DEFAULT_MIGRATIONS_DIR = join(ROOT, 'db', 'migrations');
+const MIGRATIONS_DIR = process.env.MIGRATIONS_DIR
+  ? resolve(process.env.MIGRATIONS_DIR)
+  : DEFAULT_MIGRATIONS_DIR;
+
 const CHECKSUM_RE = /^[0-9a-f]{64}$/;
 const MIGRATION_LOCK_KEY_1 = 20261114;
 const MIGRATION_LOCK_KEY_2 = 1;
 
-function sha256(bytes) {
+/**
+ * The exact 8 legacy migrations permitted to have outer BEGIN; ... COMMIT; wrappers,
+ * bound to their immutable historical SHA-256 fingerprints.
+ */
+export const LEGACY_TRANSACTION_WRAPPED_MIGRATIONS = new Map([
+  [
+    '023_digital_use_review_runtime_authority_reconciled.sql',
+    'bb94e139cf931a0c79627b77d155e5e5fff123c8b9a60e2fc2719bbe3eb63ddf',
+  ],
+  [
+    '024_psychological_behavioral_intervention_contract.sql',
+    '18a3f9e02544e6eb9b9708ead76d116f8a12e0f66d124ccaa34da97fe4e717ed',
+  ],
+  [
+    '025_professional_knowledge_foundation.sql',
+    '1fc57759aa938908d422474df1b8c5dc1b0cca93cb31dd8fc1f2f50444ff5a5a',
+  ],
+  [
+    '025_slice16_post_merge_forensic_remediation.sql',
+    'ee047e1fabadc037588fb97537c9b0cd2fcb9266909409f9fc4084d9b3781d58',
+  ],
+  [
+    '026_professional_authority_release_remediation.sql',
+    '3186da0193feac1bd3259f4920ee707860c7d91a9ed653fd881ee848880e07c5',
+  ],
+  [
+    '027_professional_knowledge_insert_lifecycle_guard.sql',
+    'f62f683b6b5730c1085ea7c10e6a73aa441f49d9e50861760bafbbd4a1f481cf',
+  ],
+  [
+    '028_professional_knowledge_authority_boundary_remediation.sql',
+    'e713b7bd4e0b8c2b31140358415770fe7f080142b75472888566658268de7eb7',
+  ],
+  [
+    '029_staff_assignment_control_plane.sql',
+    '3bed128b4376dcf7c0c701ed53220c86835b12c7876e9d6a9ed4058416bd794d',
+  ],
+]);
+
+export function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
+}
+
+/**
+ * Determine if a top-level statement text is a PostgreSQL transaction-control statement.
+ * Full coverage of PostgreSQL 18 transaction control semantics:
+ * - BEGIN (excluding SQL BEGIN ATOMIC function bodies)
+ * - START TRANSACTION
+ * - COMMIT (including COMMIT PREPARED)
+ * - END
+ * - ROLLBACK (including ROLLBACK TO, ROLLBACK PREPARED)
+ * - ABORT (BLOCKER-001)
+ * - SAVEPOINT
+ * - RELEASE [SAVEPOINT]
+ * - SET TRANSACTION
+ * - SET SESSION CHARACTERISTICS AS TRANSACTION
+ * - PREPARE TRANSACTION
+ */
+export function isTransactionControlStatement(stmtText) {
+  const normalized = stmtText.trim().replace(/\s+/g, ' ');
+  if (/^BEGIN\b/i.test(normalized)) {
+    if (/^BEGIN\s+ATOMIC\b/i.test(normalized)) {
+      return false;
+    }
+    return true;
+  }
+  if (/^START\s+TRANSACTION\b/i.test(normalized)) return true;
+  if (/^COMMIT\b/i.test(normalized)) return true;
+  if (/^END\b/i.test(normalized)) return true;
+  if (/^ROLLBACK\b/i.test(normalized)) return true;
+  if (/^ABORT\b/i.test(normalized)) return true;
+  if (/^SAVEPOINT\b/i.test(normalized)) return true;
+  if (/^RELEASE\s+(?:SAVEPOINT\s+)?[A-Za-z0-9_]+/i.test(normalized)) return true;
+  if (/^SET\s+TRANSACTION\b/i.test(normalized)) return true;
+  if (/^SET\s+SESSION\s+CHARACTERISTICS\s+AS\s+TRANSACTION\b/i.test(normalized)) return true;
+  if (/^PREPARE\s+TRANSACTION\b/i.test(normalized)) return true;
+
+  return false;
+}
+
+/**
+ * Skip SQL lexical trivia (whitespace, line comments, nested block comments)
+ * starting at `start` and return the index of the first non-trivia character.
+ * Used for keyword lookahead where a comment must behave as a whitespace
+ * separator between tokens (e.g. BEGIN/*x*\/ATOMIC).
+ */
+function skipSqlTrivia(content, start) {
+  let j = start;
+
+  while (j < content.length) {
+    const ch = content[j];
+
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\f' || ch === '\v') {
+      j++;
+      continue;
+    }
+
+    if (ch === '-' && content[j + 1] === '-') {
+      j += 2;
+      while (j < content.length && content[j] !== '\n') j++;
+      continue;
+    }
+
+    if (ch === '/' && content[j + 1] === '*') {
+      let depth = 1;
+      j += 2;
+      while (j < content.length && depth > 0) {
+        if (content[j] === '/' && content[j + 1] === '*') {
+          depth++;
+          j += 2;
+          continue;
+        }
+        if (content[j] === '*' && content[j + 1] === '/') {
+          depth--;
+          j += 2;
+          continue;
+        }
+        j++;
+      }
+      continue;
+    }
+
+    break;
+  }
+
+  return j;
+}
+
+/**
+ * Scan SQL text and extract top-level statements that match transaction control keywords.
+ * Correctly handles:
+ * - Line comments (-- ...)
+ * - Nested block comments (/* ... *\/)
+ * - Comments as lexical whitespace separators (COMMIT/*x*\/WORK == COMMIT WORK)
+ * - Standard single quotes ('...' with '' escape)
+ * - PostgreSQL escape strings (E'...' or e'...' with \', \\, and '' escapes - BLOCKER-002)
+ * - Double-quoted identifiers ("..." with "" escape)
+ * - Dollar-quoted function bodies ($$...$$ or $tag$...$tag$)
+ * - SQL-language BEGIN ATOMIC ... END blocks (MEDIUM-001)
+ */
+export function scanTopLevelTransactionStatements(content) {
+  let i = 0;
+  let blockDepth = 0;
+  let inLineComment = false;
+  let inSingleQuote = false;
+  let inEscapeString = false;
+  let inDoubleQuote = false;
+  let dollarTag = null;
+  let atomicBlockDepth = 0;
+  let caseDepth = 0;
+  let currentStmt = '';
+  let stmtStart = 0;
+  const statements = [];
+
+  function appendLexicalSeparator() {
+    if (currentStmt.length === 0) return;
+    const last = currentStmt[currentStmt.length - 1];
+    if (
+      last === ' ' ||
+      last === '\t' ||
+      last === '\n' ||
+      last === '\r' ||
+      last === '\f' ||
+      last === '\v'
+    ) {
+      return;
+    }
+    currentStmt += ' ';
+  }
+
+  while (i < content.length) {
+    const ch = content[i];
+    const next = content[i + 1];
+
+    if (blockDepth > 0) {
+      if (ch === '/' && next === '*') {
+        blockDepth++;
+        i += 2;
+        continue;
+      }
+      if (ch === '*' && next === '/') {
+        blockDepth--;
+        i += 2;
+        continue;
+      }
+      i++;
+      continue;
+    }
+
+    if (inLineComment) {
+      if (ch === '\n') {
+        inLineComment = false;
+      }
+      i++;
+      continue;
+    }
+
+    if (dollarTag !== null) {
+      if (content.startsWith(dollarTag, i)) {
+        currentStmt += content.slice(i, i + dollarTag.length);
+        i += dollarTag.length;
+        dollarTag = null;
+        continue;
+      }
+      currentStmt += ch;
+      i++;
+      continue;
+    }
+
+    if (inEscapeString) {
+      if (ch === '\\') {
+        // Escaped character in E'...' (e.g. \' or \\)
+        currentStmt += content.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (ch === "'" && next === "'") {
+        currentStmt += content.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        inEscapeString = false;
+        currentStmt += ch;
+        i++;
+        continue;
+      }
+      currentStmt += ch;
+      i++;
+      continue;
+    }
+
+    if (inSingleQuote) {
+      if (ch === "'" && next === "'") {
+        currentStmt += content.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (ch === "'") {
+        inSingleQuote = false;
+        currentStmt += ch;
+        i++;
+        continue;
+      }
+      currentStmt += ch;
+      i++;
+      continue;
+    }
+
+    if (inDoubleQuote) {
+      if (ch === '"' && next === '"') {
+        currentStmt += content.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        inDoubleQuote = false;
+        currentStmt += ch;
+        i++;
+        continue;
+      }
+      currentStmt += ch;
+      i++;
+      continue;
+    }
+
+    if (ch === '-' && next === '-') {
+      // A comment is a lexical whitespace separator, never a token joiner.
+      appendLexicalSeparator();
+      inLineComment = true;
+      i += 2;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      appendLexicalSeparator();
+      blockDepth = 1;
+      i += 2;
+      continue;
+    }
+
+    // Check PostgreSQL E'...' escape string prefix
+    if ((ch === 'E' || ch === 'e') && next === "'") {
+      const prevChar = i > 0 ? content[i - 1] : '';
+      if (!/[A-Za-z0-9_]/.test(prevChar)) {
+        inEscapeString = true;
+        currentStmt += content.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+    }
+
+    if (ch === "'") {
+      inSingleQuote = true;
+      currentStmt += ch;
+      i++;
+      continue;
+    }
+
+    if (ch === '"') {
+      inDoubleQuote = true;
+      currentStmt += ch;
+      i++;
+      continue;
+    }
+
+    if (ch === '$') {
+      const tagMatch = /^\$([A-Za-z0-9_]*)\$/.exec(content.slice(i));
+      if (tagMatch) {
+        dollarTag = tagMatch[0];
+        currentStmt += dollarTag;
+        i += dollarTag.length;
+        continue;
+      }
+    }
+
+    // Check BEGIN ATOMIC, CASE, END
+    const remaining = content.slice(i);
+    const wordMatch = /^[A-Za-z_][A-Za-z0-9_]*/.exec(remaining);
+    if (wordMatch) {
+      const word = wordMatch[0].toUpperCase();
+      if (word === 'BEGIN') {
+        const afterTrivia = skipSqlTrivia(content, i + 5);
+        if (/^ATOMIC\b/i.test(content.slice(afterTrivia))) {
+          atomicBlockDepth++;
+        }
+      } else if (word === 'CASE' && atomicBlockDepth > 0) {
+        caseDepth++;
+      } else if (word === 'END' && atomicBlockDepth > 0) {
+        if (caseDepth > 0) {
+          caseDepth--;
+        } else {
+          atomicBlockDepth--;
+        }
+      }
+    }
+
+    if (ch === ';') {
+      if (atomicBlockDepth > 0) {
+        currentStmt += ch;
+        i++;
+        continue;
+      }
+      const text = currentStmt.trim();
+      if (text) {
+        statements.push({ text, start: stmtStart, end: i + 1 });
+      }
+      currentStmt = '';
+      stmtStart = i + 1;
+      i++;
+      continue;
+    }
+
+    if (!currentStmt && (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r')) {
+      stmtStart = i + 1;
+    } else {
+      currentStmt += ch;
+    }
+    i++;
+  }
+
+  const text = currentStmt.trim();
+  if (text) {
+    statements.push({ text, start: stmtStart, end: content.length });
+  }
+
+  return statements.filter((s) => isTransactionControlStatement(s.text));
+}
+
+/**
+ * Validate migration SQL for transaction control rules and return executable SQL.
+ */
+export function validateAndPrepareMigrationSql(filename, sql, rawChecksum) {
+  const expectedFingerprint = LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.get(filename);
+
+  if (!expectedFingerprint) {
+    const txStmts = scanTopLevelTransactionStatements(sql);
+    if (txStmts.length === 0) {
+      return { executableSql: sql, stripped: false };
+    }
+
+    throw new Error(
+      `MIGRATION_UNAUTHORIZED_TRANSACTION_CONTROL ${filename}: ` +
+        `Top-level transaction statement forbidden in migrations (${txStmts.map((s) => s.text).join(', ')}).`
+    );
+  }
+
+  // Protected legacy filename: the immutable raw fingerprint must be verified
+  // unconditionally before any early return or structural scan. A tampered
+  // legacy migration whose outer BEGIN/COMMIT was deleted must still fail
+  // closed here instead of being mistaken for an ordinary migration.
+  if (rawChecksum !== expectedFingerprint) {
+    throw new Error(
+      `MIGRATION_LEGACY_FINGERPRINT_MISMATCH ${filename}: ` +
+        `Expected ${expectedFingerprint}, got ${rawChecksum}.`
+    );
+  }
+
+  const txStmts = scanTopLevelTransactionStatements(sql);
+
+  if (txStmts.length !== 2) {
+    throw new Error(
+      `MIGRATION_LEGACY_STRUCTURE_INVALID ${filename}: ` +
+        `Expected exactly 2 top-level transaction statements (BEGIN and COMMIT), found ${txStmts.length}.`
+    );
+  }
+
+  const [beginStmt, commitStmt] = txStmts;
+  if (!/^BEGIN\b/i.test(beginStmt.text) || !/^COMMIT\b/i.test(commitStmt.text)) {
+    throw new Error(
+      `MIGRATION_LEGACY_STRUCTURE_INVALID ${filename}: ` +
+        `Expected BEGIN followed by COMMIT, found '${beginStmt.text}' and '${commitStmt.text}'.`
+    );
+  }
+
+  const chars = sql.split('');
+
+  function blankOut(start, end) {
+    for (let pos = start; pos < end; pos++) {
+      if (chars[pos] !== '\n' && chars[pos] !== '\r') {
+        chars[pos] = ' ';
+      }
+    }
+  }
+
+  blankOut(beginStmt.start, beginStmt.end);
+  blankOut(commitStmt.start, commitStmt.end);
+
+  const executableSql = chars.join('');
+
+  return { executableSql, stripped: true };
 }
 
 async function checksumMetadataAvailable(client) {
@@ -37,13 +471,22 @@ async function checksumMetadataAvailable(client) {
   return rows[0]?.n === 3;
 }
 
-function migrationFiles() {
-  return readdirSync(MIGRATIONS_DIR)
+function migrationFiles(migrationsDir = MIGRATIONS_DIR) {
+  return readdirSync(migrationsDir)
     .filter((f) => f.endsWith('.sql'))
     .sort()
     .map((filename) => {
-      const bytes = readFileSync(join(MIGRATIONS_DIR, filename));
-      return { filename, sql: bytes.toString('utf8'), checksum: sha256(bytes) };
+      const bytes = readFileSync(join(migrationsDir, filename));
+      const checksum = sha256(bytes);
+      const rawSql = bytes.toString('utf8');
+      const prepared = validateAndPrepareMigrationSql(filename, rawSql, checksum);
+      return {
+        filename,
+        sql: rawSql,
+        executableSql: prepared.executableSql,
+        stripped: prepared.stripped,
+        checksum,
+      };
     });
 }
 
@@ -158,18 +601,13 @@ async function main() {
   await client.connect();
 
   try {
-    // Serialize migration runners for this database. One runner can execute
-    // multiple migration transactions, and recovery of pre-existing NULL
-    // checksum rows may use a separate transaction, so a session-level advisory
-    // lock is the minimum primitive that prevents duplicate apply / baseline
-    // races without creating a second migration framework.
+    // Serialize migration runners for this database.
     await client.query('SELECT pg_advisory_lock($1, $2)', [
       MIGRATION_LOCK_KEY_1,
       MIGRATION_LOCK_KEY_2,
     ]);
 
-    // Fresh databases start checksum-capable. Existing filename-only tables are
-    // not rewritten here: migration 018 establishes the forward transition.
+    // Fresh databases start checksum-capable.
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         filename           text PRIMARY KEY,
@@ -185,8 +623,6 @@ async function main() {
 
     let hasChecksums = await checksumMetadataAvailable(client);
     const initialRows = await readApplied(client, hasChecksums);
-    // Missing recorded files are integrity failures even on a legacy database
-    // that has not reached migration 018 yet. Fail before executing ANY new SQL.
     validateRecordedFilesPresent(initialRows, byName);
     const applied = new Set(initialRows.map((row) => row.filename));
 
@@ -207,7 +643,7 @@ async function main() {
       await client.query('BEGIN');
       let metadataAfterApply = hasChecksums;
       try {
-        await client.query(migration.sql);
+        await client.query(migration.executableSql);
         metadataAfterApply = await checksumMetadataAvailable(client);
 
         if (metadataAfterApply) {
@@ -218,10 +654,6 @@ async function main() {
             [migration.filename, migration.checksum]
           );
 
-          // The migration that first establishes checksum metadata is the exact
-          // legacy transition point. Bind every older filename-only row inside
-          // THIS SAME transaction so metadata + LEGACY_BASELINE become visible
-          // atomically, or roll back together on any failure.
           if (!hasChecksums) {
             await bindLegacyRowsInCurrentTransaction(client, [...applied], byName);
           }
@@ -280,7 +712,15 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Migration failed:', err.message);
-  process.exit(1);
-});
+// Run main if invoked directly as CLI
+const isDirectCli = process.argv[1] && (
+  process.argv[1].endsWith('db-migrate.mjs') ||
+  process.argv[1].endsWith('db-migrate.js')
+);
+
+if (isDirectCli) {
+  main().catch((err) => {
+    console.error('Migration failed:', err.message);
+    process.exit(1);
+  });
+}

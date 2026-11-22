@@ -413,6 +413,19 @@
       }
     },
     {
+      "id": "common-core-goal-migration-032",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/032_common_core_goal_confirm_goal_package_dependency.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
       "id": "common-core-goal-domain",
       "match": {
         "kind": "PREFIX",
@@ -639,6 +652,20 @@
       }
     },
     {
+      "id": "digital-use-case-lifecycle-authority",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-case-lifecycle.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "013-digital-use-family-alliance-runtime"
+        ]
+      }
+    },
+    {
       "id": "digital-use-family-alliance-review-service",
       "match": {
         "kind": "EXACT",
@@ -837,6 +864,61 @@
         "kind": "FEATURE",
         "features": [
           "019-professional-retrieval-pgvector-readiness"
+        ]
+      }
+    },
+    {
+      "id": "compliance-guardian-consent-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/compliance.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "001-family-identity-core"
+        ]
+      }
+    },
+    {
+      "id": "consent-record-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/consents.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "001-consent-01004-narrow-post-merge-remediation"
+        ]
+      }
+    },
+    {
+      "id": "family-member-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/members.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "001-family-identity-core"
+        ]
+      }
+    },
+    {
+      "id": "shared-domain-repository",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/repository.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "003-evidence-core",
+          "006-identity-binding-runtime"
         ]
       }
     }
