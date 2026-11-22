@@ -237,7 +237,7 @@ FORBIDDEN PATHS（生产代码绝不触碰）：
 | Planning base（本轮开始） | merge commit `501820e8`（普通 merge `origin/spec/020-embedding-provider-adapter-foundation`） | `git log --oneline -1` |
 | Planning HEAD（冻结） | 由本轮 closeout 报告记录（Revision 3 reconciliation commit） | `git rev-parse HEAD` |
 | 上一 Planning HEAD（Revision 2 语义） | `e967fca1ced8854d90b4cef4a4375dcead36341a` —— 治理模式部分 SUPERSEDED | `git log --oneline` |
-| ahead / behind vs `origin/main` | ahead 11 / behind 0（reconciliation 起始实测；closeout 的最终 HEAD 为 ahead 12 / behind 0） | `git rev-list --left-right --count origin/main...HEAD` |
+| ahead / behind vs `origin/main` | ahead 11 / behind 0（reconciliation 起始实测）；最终 Planning HEAD 与 ahead/behind 以 closeout 报告为准，不在 Plan 内硬编码 | `git rev-list --left-right --count origin/main...HEAD` |
 | Frozen Spec authority commit | `d2159ea7beedaa4a37c0e50ed67235dab8dde21a`（Revision 3，REVISION 3 REMOTE READ-BACK VERIFIED） | `git log --oneline origin/spec/020-*` |
 | Frozen `spec.md` blob | `078982f0819954a5479086da86036ccd81d22b2c` | `git hash-object specs/020-*/spec.md` + `git ls-tree HEAD` |
 | Frozen Spec semantic drift | 0 | plan/checklist/tasks 不修改 `spec.md`（T012 复核 blob） |
