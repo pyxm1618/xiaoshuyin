@@ -141,13 +141,25 @@ async function assertKnowledgeCompliance(
 }
 
 function isExplicitFamilyMembershipDenial(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === '42501' &&
-    typeof (error as { message?: unknown }).message === 'string' &&
-    (error as { message: string }).message.includes('FAMILY_MEMBERSHIP_REQUIRED')
-  );
+  if (typeof error !== 'object' || error === null) return false;
+  const current = error as { code?: unknown; message?: unknown; cause?: unknown };
+  if (
+    current.code === '42501' &&
+    typeof current.message === 'string' &&
+    current.message.includes('FAMILY_MEMBERSHIP_REQUIRED')
+  ) {
+    return true;
+  }
+  if (
+    typeof current.message === 'string' &&
+    current.message.includes('FAMILY_MEMBERSHIP_REQUIRED')
+  ) {
+    return true;
+  }
+  if (current.cause && isExplicitFamilyMembershipDenial(current.cause)) {
+    return true;
+  }
+  return false;
 }
 
 export async function consumeProfessionalKnowledge(input: {

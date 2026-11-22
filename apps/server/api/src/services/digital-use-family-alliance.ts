@@ -163,6 +163,9 @@ export async function pinAndAssertFamilyAllianceGates(
   // Consent remains an independent owner: validate the authoritative guardian
   // purpose/version/revocation gate against target child before evaluating feature policy.
   await assertFamilyAllianceConsentOwnerGate(tx, targetPersonId);
+  if (actorPersonId !== targetPersonId) {
+    await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
+  }
   // Exact same advisory key as Slice 10 publisher/overlap guard.
   await lockComplianceFeatureEvaluationBasis(tx, FAMILY_ALLIANCE_FEATURE);
   const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId, targetPersonId);
@@ -184,6 +187,9 @@ export async function revalidateFamilyAllianceGates(
   // Profile/policy locks are still held. Revalidate Consent independently,
   // then Compliance, immediately before idempotency success/commit.
   await assertFamilyAllianceConsentOwnerGate(tx, targetPersonId);
+  if (actorPersonId !== targetPersonId) {
+    await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
+  }
   await evaluateFamilyAllianceCompliance(tx, actorPersonId, targetPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
 }

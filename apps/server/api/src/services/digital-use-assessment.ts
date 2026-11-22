@@ -138,6 +138,9 @@ export async function assertAssessmentCompliance(
     targetPersonId,
     supportedObligations: SUPPORTED_ASSESSMENT_OBLIGATIONS,
   });
+  if (snapshot.person?.ageBand === 'ADULT' || snapshot.person?.ageBand === 'UNKNOWN') {
+    throw sceneError('COMPLIANCE_BLOCKED');
+  }
   const result = assertComplianceObligationsSupported(
     evaluateCompliance(snapshot), SUPPORTED_ASSESSMENT_OBLIGATIONS
   );
