@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "changeId": "019-post-merge-targeted-remediation",
+  "classification": "REPOSITORY_INFRASTRUCTURE",
+  "exemptionClass": "BUILD_TOOLING",
+  "paths": [
+    "docker-compose.stage-a.yml"
+  ]
+}
