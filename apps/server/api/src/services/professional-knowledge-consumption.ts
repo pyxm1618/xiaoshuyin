@@ -141,25 +141,61 @@ async function assertKnowledgeCompliance(
 }
 
 function isExplicitFamilyMembershipDenial(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const current = error as { code?: unknown; message?: unknown; cause?: unknown };
-  if (
-    current.code === '42501' &&
-    typeof current.message === 'string' &&
-    current.message.includes('FAMILY_MEMBERSHIP_REQUIRED')
-  ) {
-    return true;
+  // Finding #22 — only ONE trustworthy identity may become a business denial:
+  // a structured PostgreSQL error carrying SQLSTATE 42501 AND the known
+  // `FAMILY_MEMBERSHIP_REQUIRED` RLS marker. Everything else propagates:
+  // message-only fakes, class 08 connection failures, 57P01 admin shutdown,
+  // ECONNRESET / timeouts, unknown SQLSTATEs and unknown wrapped causes.
+  //
+  // A structural wrapper (no SQLSTATE of its own) is traversed so a genuinely
+  // wrapped RLS denial is still recognized, but the *leaf* must prove the full
+  // identity. A message alone is never sufficient.
+  return classifyFamilyMembershipDenial(error) === 'DENIED';
+}
+
+export type FamilyMembershipDenialClassification = 'DENIED' | 'PROPAGATE';
+
+const MAX_CAUSE_DEPTH = 8;
+const SQLSTATE_INSUFFICIENT_PRIVILEGE = '42501';
+const FAMILY_MEMBERSHIP_REQUIRED_MARKER = 'FAMILY_MEMBERSHIP_REQUIRED';
+
+/**
+ * Classify one thrown error without converting infrastructure failures into a
+ * business denial. Exported for the regression tests only.
+ */
+export function classifyFamilyMembershipDenial(
+  error: unknown
+): FamilyMembershipDenialClassification {
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (typeof current !== 'object' || current === null) return 'PROPAGATE';
+    if (seen.has(current)) return 'PROPAGATE';
+    seen.add(current);
+
+    const candidate = current as { code?: unknown; message?: unknown; cause?: unknown };
+    if (typeof candidate.code === 'string') {
+      if (candidate.code !== SQLSTATE_INSUFFICIENT_PRIVILEGE) return 'PROPAGATE';
+      if (
+        typeof candidate.message === 'string' &&
+        candidate.message.includes(FAMILY_MEMBERSHIP_REQUIRED_MARKER)
+      ) {
+        return 'DENIED';
+      }
+      return 'PROPAGATE';
+    }
+
+    // No SQLSTATE on this node. It can only be a structural wrapper: the denial
+    // identity still has to be proven further down. A bare message-only error
+    // (no cause) is never accepted.
+    if (typeof candidate.cause !== 'object' || candidate.cause === null) {
+      return 'PROPAGATE';
+    }
+    current = candidate.cause;
   }
-  if (
-    typeof current.message === 'string' &&
-    current.message.includes('FAMILY_MEMBERSHIP_REQUIRED')
-  ) {
-    return true;
-  }
-  if (current.cause && isExplicitFamilyMembershipDenial(current.cause)) {
-    return true;
-  }
-  return false;
+
+  return 'PROPAGATE';
 }
 
 export async function consumeProfessionalKnowledge(input: {

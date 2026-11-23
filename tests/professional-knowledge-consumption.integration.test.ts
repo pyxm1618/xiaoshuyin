@@ -388,4 +388,56 @@ describe('family Professional Knowledge consumption full gate composition', () =
       dependency: 'PROVIDER_TIMEOUT',
     });
   });
+
+  it('propagates a wrapped connection failure that merely mentions FAMILY_MEMBERSHIP_REQUIRED (Finding #22)', async () => {
+    const connectionFailure = Object.assign(
+      new Error('FAMILY_MEMBERSHIP_REQUIRED in a wrapped transport error'),
+      { code: '08006' }
+    );
+    let observed: unknown;
+    try {
+      await consumeProfessionalKnowledge({
+        pool: fixture.pool,
+        actor: { accountId: owner.accountId, personId: owner.personId },
+        familyId,
+        caseId,
+        // Actor == target keeps this case independent of the consent state
+        // mutated by earlier cases in this file.
+        targetPersonId: owner.personId,
+        versionId,
+        dependencies: deps({
+          async resolveApproval() {
+            throw new Error('query failed', { cause: connectionFailure });
+          },
+        }),
+      });
+    } catch (error) {
+      observed = error;
+    }
+
+    // Not translated into the non-enumerating 404 business denial.
+    expect(observed).toBeInstanceOf(Error);
+    expect((observed as { statusCode?: unknown }).statusCode).toBeUndefined();
+    expect((observed as { code?: unknown }).code).toBeUndefined();
+  });
+
+  it('still maps a genuine SQLSTATE 42501 RLS denial to the business denial (Finding #22)', async () => {
+    await expect(
+      consumeProfessionalKnowledge({
+        pool: fixture.pool,
+        actor: { accountId: owner.accountId, personId: owner.personId },
+        familyId,
+        caseId,
+        targetPersonId: owner.personId,
+        versionId,
+        dependencies: deps({
+          async resolveApproval() {
+            throw Object.assign(new Error('FAMILY_MEMBERSHIP_REQUIRED'), {
+              code: '42501',
+            });
+          },
+        }),
+      })
+    ).rejects.toMatchObject({ statusCode: 404, code: 'RESOURCE_NOT_FOUND' });
+  });
 });

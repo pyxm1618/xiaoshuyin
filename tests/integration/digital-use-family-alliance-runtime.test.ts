@@ -1793,7 +1793,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       [f.familyId, f.manager.personId, child.personId, noticeHash]
     );
     const evidence = buildConsentEvidence({
-      channel: runtimeConsentChannel(),
+      channel: runtimeConsentChannel(process.env),
       acceptedTextHash,
       clientIp: null,
       userAgent: null,

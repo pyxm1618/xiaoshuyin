@@ -17,6 +17,7 @@ import {
 import {
   assertOrdinaryProgressionAllowedRaw,
   caseIdempotencyKeyBytes,
+  casReactivateCompletedSceneNodeForRoutedEntry,
   getCaseById,
   isFamilyMember,
   readDigitalUseAssessmentTarget,
@@ -36,10 +37,12 @@ import {
   type SceneCaseRow,
   type SceneNodeStateRow,
   type DigitalUseTargetItemRow,
+  type StoredSceneRef,
 } from '@xiaoshuyin/domain';
 import {
   DIGITAL_USE_PACKAGE_VERSION,
   DIGITAL_USE_SCENE_CODE,
+  authorizeRoutedReactivation,
   evaluateIntegratedTriage,
   initialA1001Projection,
   resolveDigitalUseRuntimeNode,
@@ -164,6 +167,69 @@ export async function assertBoundAssessmentCompliance(
 ): Promise<void> {
   const target = await requireDigitalUseAssessmentTarget(tx, input.caseId, input.targetPersonId);
   await assertAssessmentCompliance(tx, input.actor.personId, target);
+}
+
+export const ROUTED_REACTIVATION_REASON_PREFIX = 'REACTIVATED_';
+
+/**
+ * Finding #7 — routed materialization of a Scene node that may already exist.
+ *
+ * `ensureSceneNodeAvailable()` only ever inserts. When a legitimate routed
+ * transition lands on a node that already COMPLETED, the historical projection
+ * stayed COMPLETED and the node became unreachable — even though the Frozen
+ * Manifest declares the edge (A2002 → 01004 and A2009 → 01004).
+ *
+ * Exactly one narrow decision lives here: if (and only if) the incoming
+ * transition is a Manifest-declared routed edge into a ROUTED-only node, the
+ * completed projection is reactivated through a controlled CAS. No node code is
+ * special-cased, no Manifest / Authority document is modified, and a client can
+ * never trigger it directly.
+ */
+export async function materializeRoutedSceneNode(
+  tx: pg.PoolClient,
+  input: {
+    readonly familyId: string;
+    readonly caseId: string;
+    readonly scenePackageVersion: string;
+    readonly nodeCode: string;
+    readonly sourceNodeCode: string;
+    readonly reasonCode: string;
+    readonly inputRefs?: readonly StoredSceneRef[];
+  }
+): Promise<SceneNodeStateRow> {
+  const existing = await ensureSceneNodeAvailable(tx, {
+    familyId: input.familyId,
+    caseId: input.caseId,
+    scenePackageVersion: input.scenePackageVersion,
+    nodeCode: input.nodeCode,
+    sourceNodeCode: input.sourceNodeCode,
+    branchReasonCodes: [input.reasonCode],
+    inputRefs: input.inputRefs ?? [],
+  });
+
+  if (existing.status !== 'COMPLETED') return existing;
+  if (
+    !authorizeRoutedReactivation({
+      sourceNodeCode: input.sourceNodeCode,
+      targetNodeCode: input.nodeCode,
+    })
+  ) {
+    return existing;
+  }
+
+  const reactivated = await casReactivateCompletedSceneNodeForRoutedEntry(tx, {
+    caseId: input.caseId,
+    nodeCode: input.nodeCode,
+    scenePackageVersion: input.scenePackageVersion,
+    expectedRevision: existing.revision,
+    branchReasonCodes: [
+      `${ROUTED_REACTIVATION_REASON_PREFIX}${input.reasonCode}`,
+    ],
+    inputRefs: input.inputRefs ?? [],
+  });
+  // A concurrent completion/reactivation already moved the row: fail closed.
+  if (!reactivated) throw sceneError('STALE_NODE_REVISION');
+  return reactivated;
 }
 
 function nodeDto(row: SceneNodeStateRow) {

@@ -94,8 +94,14 @@ function minorGateBlocked(gate: MinorGateResult): BindingGateResult {
   if (
     reason === 'GUARDIAN_CONSENT_REQUIRED' ||
     reason === 'GUARDIAN_CONSENT_REVOKED' ||
+    reason === 'CONSENT_RECORD_MISMATCH' ||
+    reason === 'CONSENT_VERSION_MISMATCH' ||
+    reason === 'CONSENT_PURPOSE_MISMATCH' ||
+    reason === 'CONSENT_EVIDENCE_INVALID' ||
+    reason === 'CONSENT_NOT_CURRENT_CHAIN_HEAD' ||
     reason === 'CONSENT_SUBJECT_MISMATCH' ||
     reason === 'NOTICE_VERSION_MISMATCH' ||
+    reason === 'POLICY_VERSION_MISMATCH' ||
     reason === 'GUARDIAN_MISMATCH'
   ) {
     return block('GUARDIAN_CONSENT_INVALID');

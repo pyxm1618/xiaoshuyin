@@ -159,6 +159,8 @@ export async function loadCompliancePersonSnapshot(
        pcp.age_band::text                 AS age_band,
        pcp.minor_mode                     AS minor_mode,
        pcp.guardian_person_id::text       AS guardian_person_id,
+       pcp.guardian_consent_record_id::text AS profile_guardian_consent_record_id,
+       pcp.guardian_consent_version       AS profile_guardian_consent_version,
        pcp.verified_source::text          AS verified_source,
        cr.id::text                        AS consent_id,
        cr.decision::text                  AS consent_decision,
@@ -197,7 +199,14 @@ export async function loadCompliancePersonSnapshot(
           ? null
           : asString(row['consent_bound_person_id']),
       noticeHash: asString(row['consent_notice_hash']),
-      guardianPersonId: asString(row['consent_guardian_person_id']),
+      // A wrong-purpose (e.g. supplemental) row legitimately has no guardian.
+      // It is projected as an empty identity instead of throwing, so the pure
+      // gate can fail closed on the purpose mismatch it actually is.
+      guardianPersonId:
+        row['consent_guardian_person_id'] === null ||
+        row['consent_guardian_person_id'] === undefined
+          ? ''
+          : asString(row['consent_guardian_person_id']),
       version: asNumber(row['consent_version']),
       purpose: asString(row['consent_purpose'] ?? ''),
       noticeVersion:
@@ -221,6 +230,16 @@ export async function loadCompliancePersonSnapshot(
       row['guardian_person_id'] === null || row['guardian_person_id'] === undefined
         ? null
         : asString(row['guardian_person_id']),
+    guardianConsentRecordId:
+      row['profile_guardian_consent_record_id'] === null ||
+      row['profile_guardian_consent_record_id'] === undefined
+        ? null
+        : asString(row['profile_guardian_consent_record_id']),
+    guardianConsentVersion:
+      row['profile_guardian_consent_version'] === null ||
+      row['profile_guardian_consent_version'] === undefined
+        ? null
+        : asNumber(row['profile_guardian_consent_version']),
     guardianConsent,
     verifiedSource: asString(row['verified_source']),
   };

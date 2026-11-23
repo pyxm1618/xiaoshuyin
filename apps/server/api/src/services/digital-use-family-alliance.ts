@@ -50,6 +50,7 @@ import { toHttpError } from '../plugins/error-handler.js';
 import {
   currentSceneEnvelope,
   assertBoundAssessmentCompliance,
+  materializeRoutedSceneNode,
   type DigitalUseActor,
 } from './digital-use-assessment.js';
 import {
@@ -160,12 +161,12 @@ export async function pinAndAssertFamilyAllianceGates(
   if (!targetPersonId) {
     throw familyHttpError('TARGET_SCOPE_INVALID');
   }
-  // Consent remains an independent owner: validate the authoritative guardian
-  // purpose/version/revocation gate against target child before evaluating feature policy.
+  // Finding #4 — ownership split: the ACTOR owns Authorization (already decided
+  // by the caller's `requireFamilyAction`), the TARGET CHILD alone owns
+  // Compliance / Consent. The actor's own consent state is never a Family
+  // Alliance precondition: an adult family manager processing a child needs no
+  // guardian consent for themselves.
   await assertFamilyAllianceConsentOwnerGate(tx, targetPersonId);
-  if (actorPersonId !== targetPersonId) {
-    await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
-  }
   // Exact same advisory key as Slice 10 publisher/overlap guard.
   await lockComplianceFeatureEvaluationBasis(tx, FAMILY_ALLIANCE_FEATURE);
   const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId, targetPersonId);
@@ -184,12 +185,11 @@ export async function revalidateFamilyAllianceGates(
   if (!targetPersonId) {
     throw familyHttpError('TARGET_SCOPE_INVALID');
   }
-  // Profile/policy locks are still held. Revalidate Consent independently,
-  // then Compliance, immediately before idempotency success/commit.
+  // Profile/policy locks are still held. Revalidate target Consent
+  // independently, then Compliance, immediately before idempotency
+  // success/commit. Actor authorization stays with the caller; no actor-side
+  // consent gate exists (Finding #4).
   await assertFamilyAllianceConsentOwnerGate(tx, targetPersonId);
-  if (actorPersonId !== targetPersonId) {
-    await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
-  }
   await evaluateFamilyAllianceCompliance(tx, actorPersonId, targetPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
 }
@@ -361,17 +361,21 @@ function routeFamilyNode(
 async function materializeParallelNodes(
   tx: pg.PoolClient,
   input: FamilyAllianceExecutionInput,
+  sourceNodeCode: string,
   routedNode: DigitalUseNodeManifestEntry,
   inputRefs: readonly StoredSceneRef[],
   reasonCode: string
 ): Promise<void> {
-  await ensureSceneNodeAvailable(tx, {
+  // Finding #7: a Manifest-declared routed edge may land on a node that already
+  // COMPLETED (A2009 → 01004). The controlled reactivation lives in one shared
+  // helper; anything not authorized by the Manifest stays untouched.
+  await materializeRoutedSceneNode(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     nodeCode: routedNode.nodeCode,
-    sourceNodeCode: routedNode.sourceNodeCode,
-    branchReasonCodes: [reasonCode],
+    sourceNodeCode,
+    reasonCode,
     inputRefs,
   });
 
@@ -549,6 +553,7 @@ export async function executeFamilyAllianceNodeInTransaction(
       await materializeParallelNodes(
         tx,
         input,
+        node.nodeCode,
         next,
         semantic.outputRefs,
         route.reasonCode

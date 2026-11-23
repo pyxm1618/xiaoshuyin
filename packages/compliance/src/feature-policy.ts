@@ -13,7 +13,14 @@
  *   - every result carries exact policy provenance.
  */
 
-import { assertMinorProcessingAllowed, type AgeBand, type ComplianceProfile, type ConsentRecord } from './age-gate.js';
+import {
+  assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
+  type AgeBand,
+  type ComplianceProfile,
+  type ConsentRecord,
+} from './age-gate.js';
+import { getCurrentNoticeVersion } from './notices.js';
 import type { ComplianceFeatureDescriptor } from './feature-identity.js';
 
 export const ANTHROPOMORPHIC_APPLICABILITY_VALUES = [
@@ -97,6 +104,14 @@ export interface CompliancePersonSnapshot {
   readonly ageBand: AgeBand;
   readonly minorMode: boolean;
   readonly guardianPersonId: string | null;
+  /**
+   * The profile's OWN pointer to the consent record it observed. It is kept
+   * separate from `guardianConsent.id` so a repository layer can never hide a
+   * profile/record mismatch by projecting only the joined row.
+   */
+  readonly guardianConsentRecordId: string | null;
+  /** The exact consent version the profile recorded when it advanced. */
+  readonly guardianConsentVersion: number | null;
   readonly guardianConsent: ComplianceGuardianConsentSnapshot | null;
   readonly verifiedSource: string;
 }
@@ -297,8 +312,8 @@ function toAgeGateProfile(person: CompliancePersonSnapshot): ComplianceProfile {
     ageBand: person.ageBand,
     minorMode: person.minorMode,
     guardianPersonId: person.guardianPersonId,
-    guardianConsentRecordId: person.guardianConsent?.id ?? null,
-    guardianConsentVersion: person.guardianConsent?.version ?? null,
+    guardianConsentRecordId: person.guardianConsentRecordId,
+    guardianConsentVersion: person.guardianConsentVersion,
     verifiedSource: person.verifiedSource,
   };
 }
@@ -306,6 +321,7 @@ function toAgeGateProfile(person: CompliancePersonSnapshot): ComplianceProfile {
 function toAgeGateConsent(consent: ComplianceGuardianConsentSnapshot): ConsentRecord {
   return {
     id: consent.id,
+    version: consent.version,
     decision: consent.decision,
     boundPersonId: consent.boundPersonId,
     noticeHash: consent.noticeHash,
@@ -411,6 +427,8 @@ export function evaluateCompliance(
       getProfile: () => toAgeGateProfile(person),
       getConsentRecord: () => (person.guardianConsent ? toAgeGateConsent(person.guardianConsent) : null),
       getCurrentNoticeHash: () => snapshot.currentNoticeHash ?? '',
+      getCurrentNoticeVersion: () => getCurrentNoticeVersion(),
+      getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
     });
 
     if (ageGate.decision === 'BLOCK') {

@@ -1,11 +1,34 @@
 import { describe, it, expect } from 'vitest';
-import { assertMinorProcessingAllowed } from '../../packages/compliance/src/age-gate.js';
+import {
+  assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
+  GUARDIAN_CONSENT_PURPOSE,
+  type AgeGateDeps,
+} from '../../packages/compliance/src/age-gate.js';
 
 describe('Age Gate (T031/T032)', () => {
-  const makeDeps = (profile: any, consent: any = null) => ({
+  const makeDeps = (profile: any, consent: any = null): AgeGateDeps => ({
     getProfile: () => profile,
     getConsentRecord: () => consent,
     getCurrentNoticeHash: () => 'a'.repeat(64),
+    getCurrentNoticeVersion: () => 'v1',
+    getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
+  });
+
+  /** The complete authoritative consent shape the gate now evaluates. */
+  const validConsent = (overrides: Record<string, unknown> = {}) => ({
+    id: 'cr1',
+    version: 1,
+    decision: 'GRANTED',
+    boundPersonId: 'p1',
+    noticeHash: 'a'.repeat(64),
+    noticeVersion: 'v1',
+    policyVersion: CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
+    guardianPersonId: 'g1',
+    purpose: GUARDIAN_CONSENT_PURPOSE,
+    isChainHead: true,
+    evidenceValid: true,
+    ...overrides,
   });
 
   it('PROFILE_MISSING → BLOCK', () => {
@@ -36,13 +59,7 @@ describe('Age Gate (T031/T032)', () => {
         guardianConsentRecordId: 'cr1',
         guardianConsentVersion: 1,
       },
-      {
-        id: 'cr1',
-        decision: 'GRANTED',
-        boundPersonId: 'p1',
-        noticeHash: 'a'.repeat(64),
-        guardianPersonId: 'g1',
-      }
+      validConsent()
     ));
     expect(r).toEqual({ decision: 'ALLOW', minorMode: true });
   });
@@ -65,13 +82,7 @@ describe('Age Gate (T031/T032)', () => {
         guardianConsentRecordId: 'cr1',
         guardianConsentVersion: 1,
       },
-      {
-        id: 'cr1',
-        decision: 'REVOKED',
-        boundPersonId: 'p1',
-        noticeHash: 'a'.repeat(64),
-        guardianPersonId: 'g1',
-      }
+      validConsent({ decision: 'REVOKED' })
     ));
     expect(r).toEqual({ decision: 'BLOCK', reason: 'GUARDIAN_CONSENT_REVOKED' });
   });

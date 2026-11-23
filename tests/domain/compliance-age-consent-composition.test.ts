@@ -25,6 +25,7 @@ const FEATURE = createServerFeatureDescriptor({
 const NOW = '2026-06-01T12:00:00.000Z';
 const PERSON_ID = '00000000-0000-7000-8000-0000000000a1';
 const GUARDIAN_ID = '00000000-0000-7000-8000-0000000000b1';
+const CONSENT_ID = '00000000-0000-7000-8000-0000000000c1';
 const CURRENT_NOTICE_HASH = getCurrentNoticeHash();
 
 function policy(
@@ -70,6 +71,8 @@ function adult(): CompliancePersonSnapshot {
     ageBand: 'ADULT',
     minorMode: false,
     guardianPersonId: null,
+    guardianConsentRecordId: null,
+    guardianConsentVersion: null,
     guardianConsent: null,
     verifiedSource: 'SELF_STATEMENT',
   };
@@ -81,6 +84,8 @@ function minor14(): CompliancePersonSnapshot {
     ageBand: 'MINOR_14_17',
     minorMode: true,
     guardianPersonId: null,
+    guardianConsentRecordId: null,
+    guardianConsentVersion: null,
     guardianConsent: null,
     verifiedSource: 'SELF_STATEMENT',
   };
@@ -95,8 +100,10 @@ function under14(
     ageBand: 'UNDER_14',
     minorMode: true,
     guardianPersonId: GUARDIAN_ID,
+    guardianConsentRecordId: CONSENT_ID,
+    guardianConsentVersion: 1,
     guardianConsent: {
-      id: '00000000-0000-7000-8000-0000000000c1',
+      id: CONSENT_ID,
       decision: 'GRANTED',
       boundPersonId: PERSON_ID,
       noticeHash: CURRENT_NOTICE_HASH,
@@ -114,8 +121,20 @@ function under14(
   };
 }
 
-describe('compliance composition with existing person/guardian/consent truth', () => {
-  it('ADULT is never treated as minor', () => {
+/**
+ * Build the same UNDER_14 person with an intentionally malformed consent object
+ * so "field omitted" can be exercised without TypeScript filling a default.
+ */
+function personWithConsent(consent: unknown): CompliancePersonSnapshot {
+  return {
+    ...under14(),
+    guardianConsent: consent as NonNullable<
+      CompliancePersonSnapshot['guardianConsent']
+    >,
+  };
+}
+
+describe('compliance composition with existing person/guardian/consent truth', () => {  it('ADULT is never treated as minor', () => {
     const result = evaluateCompliance(snapshot(adult()));
     expect(result.gate).toBe('ALLOW');
     expect(result.obligations).not.toContain('REQUIRE_MINOR_MODE');
@@ -252,6 +271,88 @@ describe('compliance composition with existing person/guardian/consent truth', (
       expect(result.gate).toBe('BLOCK');
       expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
       expect(result.obligations).toContain('REQUIRE_GUARDIAN_CONSENT');
+    });
+
+    it('a missing purpose can never satisfy the guardian gate', () => {
+      const consent: Record<string, unknown> = { ...under14().guardianConsent! };
+      delete consent['purpose'];
+      const result = evaluateCompliance(snapshot(personWithConsent(consent)));
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+    });
+
+    it('an empty purpose string can never satisfy the guardian gate', () => {
+      const result = evaluateCompliance(snapshot(under14({ purpose: '' })));
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+    });
+
+    it('unproven evidence (missing evidenceValid) fails closed', () => {
+      const consent: Record<string, unknown> = { ...under14().guardianConsent! };
+      delete consent['evidenceValid'];
+      const result = evaluateCompliance(snapshot(personWithConsent(consent)));
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+    });
+
+    it('an unknown chain-head state (missing isChainHead) fails closed', () => {
+      const consent: Record<string, unknown> = { ...under14().guardianConsent! };
+      delete consent['isChainHead'];
+      const result = evaluateCompliance(snapshot(personWithConsent(consent)));
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+    });
+
+    it('a profile pointer to a different consent record fails closed', () => {
+      const result = evaluateCompliance(
+        snapshot(
+          under14({}, {
+            guardianConsentRecordId: '00000000-0000-7000-8000-0000000000d1',
+          })
+        )
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+    });
+
+    it('a profile consent version that is not the record version fails closed', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({ version: 2 }, { guardianConsentVersion: 1 }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+    });
+
+    it('a profile without a recorded consent version fails closed', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({}, { guardianConsentVersion: null }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_REQUIRED');
+    });
+
+    it('a stale notice version label fails closed even with the current hash', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({ noticeVersion: 'v0' }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+    });
+
+    it('a consent recorded under another policy scope fails closed', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({ policyVersion: 'v2' }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
+    });
+
+    it('an unbound consent (no subject) fails closed', () => {
+      const result = evaluateCompliance(
+        snapshot(under14({ boundPersonId: null }))
+      );
+      expect(result.gate).toBe('BLOCK');
+      expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
     });
   });
 });

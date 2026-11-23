@@ -63,8 +63,14 @@ export function buildConsentEvidence(input: ConsentEvidenceInput): ConsentEviden
   return ConsentEvidence.parse(evidence);
 }
 
-/** Server-decided consent channel (Owner ruling C1 / option d). */
-export function runtimeConsentChannel(env: NodeJS.ProcessEnv = process.env): ConsentChannelType {
+/**
+ * Server-decided consent channel (Owner ruling C1 / option d).
+ *
+ * The environment is an explicit argument: production code receives the
+ * validated channel from `loadRuntimeConfig` instead of reading ambient process
+ * state, so two runtime instances can never observe each other's channel.
+ */
+export function runtimeConsentChannel(env: NodeJS.ProcessEnv): ConsentChannelType {
   return env['NODE_ENV'] === 'test' ? 'TEST' : 'MINIPROGRAM';
 }
 export interface SupplementalAssessmentConsentEvidenceInput {

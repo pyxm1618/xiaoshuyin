@@ -22,9 +22,11 @@ import {
 } from '@xiaoshuyin/domain';
 import {
   assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   getComplianceProfileForGate,
   getConsentRecordForGate,
   getCurrentNoticeHash,
+  getCurrentNoticeVersion,
   type AgeBand,
   type ComplianceProfile,
   type ConsentRecord,
@@ -59,10 +61,16 @@ function toConsentRecord(row: any): ConsentRecord | null {
   if (!row) return null;
   return {
     id: row.id,
+    version: row.version,
     decision: row.decision,
     boundPersonId: row.bound_person_id ?? null,
     noticeHash: row.notice_hash,
     guardianPersonId: row.guardian_person_id,
+    purpose: row.purpose,
+    noticeVersion: row.notice_version ?? null,
+    policyVersion: row.policy_version ?? null,
+    isChainHead: row.is_chain_head === true,
+    evidenceValid: row.evidence_valid === true,
   };
 }
 
@@ -84,6 +92,8 @@ async function readMinorGate(
     getProfile: () => profile,
     getConsentRecord: (id) => (consent && consent.id === id ? consent : null),
     getCurrentNoticeHash: () => getCurrentNoticeHash(),
+    getCurrentNoticeVersion: () => getCurrentNoticeVersion(),
+    getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   });
 
   return {
