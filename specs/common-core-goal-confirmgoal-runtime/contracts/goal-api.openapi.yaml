@@ -203,10 +203,19 @@ components:
         id: { type: string, format: uuid }
         version: { type: integer, minimum: 1, maximum: 2147483647 }
       required: [type, id]
+    PackageDependencyRef:
+      type: object
+      additionalProperties: false
+      properties:
+        type: { type: string, enum: [PACKAGE] }
+        key: { type: string, minLength: 1 }
+        version: { type: string, minLength: 1 }
+      required: [type, key, version]
     GoalDependencyRef:
       oneOf:
         - $ref: '#/components/schemas/EvidenceDependencyRef'
         - $ref: '#/components/schemas/ConsentDependencyRef'
+        - $ref: '#/components/schemas/PackageDependencyRef'
     VersionedKeyDependencyRef:
       type: object
       additionalProperties: false

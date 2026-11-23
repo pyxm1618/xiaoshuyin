@@ -29,7 +29,7 @@ describe('binding operation keys', () => {
   });
 
   it('same key + same payload replays without a second attempt', async () => {
-    const target = await createTarget(h, 'op_same', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'op_same', { ageBand: 'MINOR_14_17' });
     const code = `op_same_${Date.now()}`;
     const key = `same-${Date.now()}`;
     const first = await bootstrap(h, target.invitationToken, code, key);
@@ -51,7 +51,7 @@ describe('binding operation keys', () => {
   });
 
   it('bootstrap scope is the frozen (invitation, identity) pair', async () => {
-    const target = await createTarget(h, 'op_diff', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'op_diff', { ageBand: 'MINOR_14_17' });
     const key = `diff-${Date.now()}`;
     const code = `op_diff_${Date.now()}`;
     expect((await bootstrap(h, target.invitationToken, code, key)).statusCode).toBe(200);
@@ -65,7 +65,7 @@ describe('binding operation keys', () => {
   });
 
   it('concurrent same-key bootstrap produces one attempt', async () => {
-    const target = await createTarget(h, 'op_conc', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'op_conc', { ageBand: 'MINOR_14_17' });
     const code = `op_conc_${Date.now()}`;
     const key = `conc-${Date.now()}`;
     const [a, b] = await Promise.all([
@@ -82,7 +82,7 @@ describe('binding operation keys', () => {
   });
 
   it('candidate decision same key vs different payload', async () => {
-    const target = await createTarget(h, 'op_dec', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'op_dec', { ageBand: 'MINOR_14_17' });
     const { contextToken } = await startBinding(h, target, `op_dec_${Date.now()}`);
     const key = `decision-${Date.now()}`;
 
@@ -103,7 +103,7 @@ describe('binding operation keys', () => {
   });
 
   it('different key + same semantic operation converges to one live attempt', async () => {
-    const target = await createTarget(h, 'op_sem', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'op_sem', { ageBand: 'MINOR_14_17' });
     const code = `op_sem_${Date.now()}`;
     await bootstrap(h, target.invitationToken, code, `k1-${Date.now()}`);
     await bootstrap(h, target.invitationToken, code, `k2-${Date.now()}`);
@@ -129,7 +129,7 @@ describe('binding operation keys', () => {
   });
 
   it('mapAttempt binds once, is idempotent, and never re-points', async () => {
-    const target = await createTarget(h, 'op_map', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'op_map', { ageBand: 'MINOR_14_17' });
     await bootstrap(h, target.invitationToken, `op_map_${Date.now()}`, `map-${Date.now()}`);
 
     const key = await h.admin.query(
@@ -142,7 +142,7 @@ describe('binding operation keys', () => {
     );
     expect(key.rows[0].attempt_id).toBeTruthy();
 
-    const other = await createTarget(h, 'op_map_other', { ageBand: 'UNDER_14' });
+    const other = await createTarget(h, 'op_map_other', { ageBand: 'MINOR_14_17' });
     await bootstrap(h, other.invitationToken, `op_map_other_${Date.now()}`, `map-other-${Date.now()}`);
     const otherAttempt = await h.admin.query(
       'SELECT id FROM binding_attempts WHERE target_person_id = $1',

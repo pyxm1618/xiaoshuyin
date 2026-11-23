@@ -466,6 +466,53 @@ export async function casInvalidateSceneNodeForRouteSupersession(
 }
 
 /**
+ * Finding #7 — controlled CAS reactivation of an already COMPLETED node that a
+ * legitimate routed predecessor enters again (A2002 → 01004, A2009 → 01004).
+ *
+ * The caller MUST have obtained the decision from the Manifest-derived
+ * `authorizeRoutedReactivation()` policy first; this primitive owns no
+ * reachability rule, never rewinds revision, and refuses any row that is not
+ * exactly COMPLETED at the expected revision. A concurrent reactivation or a
+ * stale revision therefore fails closed (null) instead of silently winning.
+ */
+export async function casReactivateCompletedSceneNodeForRoutedEntry(
+  tx: Tx,
+  input: {
+    caseId: string;
+    nodeCode: string;
+    scenePackageVersion: string;
+    expectedRevision: number;
+    branchReasonCodes: readonly string[];
+    inputRefs: readonly StoredSceneRef[];
+  }
+): Promise<SceneNodeStateRow | null> {
+  const { rows } = await tx.query<SceneNodeStateRow>(
+    `UPDATE scene_node_states
+        SET status = 'AVAILABLE',
+            branch_reason_codes = $5,
+            input_refs = $6::jsonb,
+            output_refs = '[]'::jsonb,
+            completed_at = NULL,
+            revision = revision + 1
+      WHERE case_id = $1
+        AND node_code = $2
+        AND scene_package_version = $3
+        AND revision = $4
+        AND status = 'COMPLETED'
+      RETURNING ${NODE_COLUMNS}`,
+    [
+      input.caseId,
+      input.nodeCode,
+      input.scenePackageVersion,
+      input.expectedRevision,
+      [...input.branchReasonCodes],
+      JSON.stringify(input.inputRefs),
+    ]
+  );
+  return rows[0] ?? null;
+}
+
+/**
  * Reopens only an already persisted route projection that had previously been
  * invalidated/blocked. New nodes still use ensureSceneNodeAvailable().
  */

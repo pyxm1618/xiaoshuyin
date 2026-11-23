@@ -78,6 +78,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
   let caseId = '';
   let targetPersonId = '';
   let consentId = '';
+  let under14PersonId = '';
   let knowledgeId = '';
   let versionId = '';
   let contentHash = '';
@@ -110,7 +111,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
       async resolveEligibilityFacts() {
         return {
           stage: 'ASSESSMENT',
-          ageBand: 'UNDER_14',
+          ageBand: 'MINOR_14_17',
           locale: 'zh-CN',
           applicabilityFacts: ['sleep-impact'],
           exclusionFacts: [],
@@ -154,7 +155,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
       sceneCode: 'DIGITAL_USE',
       scenePackageVersion: input.scenePackageVersion ?? 'v-test',
       stages: ['ASSESSMENT'],
-      ageBands: ['UNDER_14'],
+      ageBands: ['MINOR_14_17'],
       applicability: ['sleep-impact'],
       exclusions: ['acute-risk'],
       riskLevels: ['LOW'],
@@ -219,7 +220,14 @@ describe('family Professional Knowledge consumption full gate composition', () =
       guardianConsentId: consentId,
     });
     expect(member.statusCode).toBe(201);
-    targetPersonId = member.json().personId as string;
+    under14PersonId = member.json().personId as string;
+
+    const teen = await createMember(app, owner.token, familyId, 's17-teen', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'OTHER_MEMBER_RELAY',
+    });
+    expect(teen.statusCode, teen.body).toBe(201);
+    targetPersonId = teen.json().personId as string;
 
     await publishPolicy('NOT_APPLICABLE');
 
@@ -354,7 +362,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
         actor: { accountId: owner.accountId, personId: owner.personId },
         familyId,
         caseId,
-        targetPersonId,
+        targetPersonId: under14PersonId,
         versionId,
         dependencies: deps(),
       })
@@ -387,5 +395,57 @@ describe('family Professional Knowledge consumption full gate composition', () =
       code: 'DEPENDENCY_UNAVAILABLE',
       dependency: 'PROVIDER_TIMEOUT',
     });
+  });
+
+  it('propagates a wrapped connection failure that merely mentions FAMILY_MEMBERSHIP_REQUIRED (Finding #22)', async () => {
+    const connectionFailure = Object.assign(
+      new Error('FAMILY_MEMBERSHIP_REQUIRED in a wrapped transport error'),
+      { code: '08006' }
+    );
+    let observed: unknown;
+    try {
+      await consumeProfessionalKnowledge({
+        pool: fixture.pool,
+        actor: { accountId: owner.accountId, personId: owner.personId },
+        familyId,
+        caseId,
+        // Actor == target keeps this case independent of the consent state
+        // mutated by earlier cases in this file.
+        targetPersonId: owner.personId,
+        versionId,
+        dependencies: deps({
+          async resolveApproval() {
+            throw new Error('query failed', { cause: connectionFailure });
+          },
+        }),
+      });
+    } catch (error) {
+      observed = error;
+    }
+
+    // Not translated into the non-enumerating 404 business denial.
+    expect(observed).toBeInstanceOf(Error);
+    expect((observed as { statusCode?: unknown }).statusCode).toBeUndefined();
+    expect((observed as { code?: unknown }).code).toBeUndefined();
+  });
+
+  it('still maps a genuine SQLSTATE 42501 RLS denial to the business denial (Finding #22)', async () => {
+    await expect(
+      consumeProfessionalKnowledge({
+        pool: fixture.pool,
+        actor: { accountId: owner.accountId, personId: owner.personId },
+        familyId,
+        caseId,
+        targetPersonId: owner.personId,
+        versionId,
+        dependencies: deps({
+          async resolveApproval() {
+            throw Object.assign(new Error('FAMILY_MEMBERSHIP_REQUIRED'), {
+              code: '42501',
+            });
+          },
+        }),
+      })
+    ).rejects.toMatchObject({ statusCode: 404, code: 'RESOURCE_NOT_FOUND' });
   });
 });

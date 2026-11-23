@@ -92,8 +92,8 @@ describe('T1213 A2003 / A200401 / A2004-A2009', () => {
     ['NO', false, true],
     ['ASKED_WHY', false, true],
     ['TRIED_BEFORE_NOT_WORKED', false, true],
-    ['UNKNOWN', false, true],
-    ['DECLINED', false, true],
+    ['UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
+    ['DECLINED', 'DECLINED', 'DECLINED'],
   ] as const)(
     'A2004 preserves %s Evidence while applying the approved branch',
     async (decision, yes, no) => {
@@ -113,8 +113,8 @@ describe('T1213 A2003 / A200401 / A2004-A2009', () => {
     ['WILLING', true, false],
     ['UNWILLING', false, true],
     ['TRIED_BEFORE_NOT_WORKED', false, true],
-    ['UNKNOWN', false, true],
-    ['DECLINED', false, true],
+    ['UNKNOWN', 'UNKNOWN', 'UNKNOWN'],
+    ['DECLINED', 'DECLINED', 'DECLINED'],
   ] as const)(
     'A2005 preserves %s while routing willing/unwilling',
     async (decision, willing, unwilling) => {
@@ -135,37 +135,156 @@ describe('T1213 A2003 / A200401 / A2004-A2009', () => {
       applyDigitalUseNodeSemantics(ctx('A2006', { decision: 'UNKNOWN' }))
     ).rejects.toMatchObject({ code: 'SCENE_RESPONSE_INVALID' });
 
-    const motivation = await applyDigitalUseNodeSemantics(
+    // A2006 UNKNOWN preserves UNKNOWN and fails closed in routing
+    const motivationUnknown = await applyDigitalUseNodeSemantics(
       ctx('A2006', { decision: 'UNKNOWN' }, [marker])
     );
-    expect(motivation.conditions).toEqual({
+    expect(motivationUnknown.conditions).toEqual({
+      MOTIVATION_RECONSIDER_WILLING: 'UNKNOWN',
+      MOTIVATION_RECONSIDER_UNWILLING: 'UNKNOWN',
+    });
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2006',
+      conditions: motivationUnknown.conditions,
+    })).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
+
+    // A2006 UNWILLING produces true negative branch
+    const motivationUnwilling = await applyDigitalUseNodeSemantics(
+      ctx('A2006', { decision: 'UNWILLING' }, [marker])
+    );
+    expect(motivationUnwilling.conditions).toEqual({
       MOTIVATION_RECONSIDER_WILLING: false,
       MOTIVATION_RECONSIDER_UNWILLING: true,
     });
-    expect(recordStatement.mock.calls.at(-1)?.[2].content)
-      .toContain('"decision":"UNKNOWN"');
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2006',
+      conditions: motivationUnwilling.conditions,
+    })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: 'A2009' });
 
-    const alliance = await applyDigitalUseNodeSemantics(
+    // A2008 DECLINED preserves DECLINED and fails closed in routing (not routing to MAIN)
+    const allianceDeclined = await applyDigitalUseNodeSemantics(
       ctx('A2008', { decision: 'DECLINED' }, [marker])
     );
-    expect(alliance.conditions).toEqual({
+    expect(allianceDeclined.conditions).toEqual({
+      FAMILY_ALLIANCE_AGREED: 'DECLINED',
+      FAMILY_ALLIANCE_DECLINED: 'DECLINED',
+    });
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2008',
+      conditions: allianceDeclined.conditions,
+    })).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
+
+    // A2008 DISAGREE produces true negative branch to MAIN
+    const allianceDisagree = await applyDigitalUseNodeSemantics(
+      ctx('A2008', { decision: 'DISAGREE' }, [marker])
+    );
+    expect(allianceDisagree.conditions).toEqual({
       FAMILY_ALLIANCE_AGREED: false,
       FAMILY_ALLIANCE_DECLINED: true,
     });
-    expect(recordStatement.mock.calls.at(-1)?.[2].content)
-      .toContain('"decision":"DECLINED"');
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2008',
+      conditions: allianceDisagree.conditions,
+    })).toMatchObject({ kind: 'TERMINAL_ROUTE', terminalCode: 'MAIN' });
   });
 
   it('A2009 never converts uncertainty into agreement', async () => {
-    const result = await applyDigitalUseNodeSemantics(
+    // A2009 UNKNOWN preserves UNKNOWN and fails closed in routing
+    const a2009Unknown = await applyDigitalUseNodeSemantics(
       ctx('A2009', { decision: 'UNKNOWN' }, [marker])
     );
-    expect(result.conditions).toEqual({
+    expect(a2009Unknown.conditions).toEqual({
+      RELATIONSHIP_ASSESSMENT_AGREED: 'UNKNOWN',
+      RELATIONSHIP_ASSESSMENT_DECLINED: 'UNKNOWN',
+    });
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2009',
+      conditions: a2009Unknown.conditions,
+    })).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
+
+    const a2009Disagree = await applyDigitalUseNodeSemantics(
+      ctx('A2009', { decision: 'DISAGREE' }, [marker])
+    );
+    expect(a2009Disagree.conditions).toEqual({
       RELATIONSHIP_ASSESSMENT_AGREED: false,
       RELATIONSHIP_ASSESSMENT_DECLINED: true,
     });
-    expect(recordStatement.mock.calls.at(-1)?.[2].content)
-      .toContain('"decision":"UNKNOWN"');
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2009',
+      conditions: a2009Disagree.conditions,
+    })).toMatchObject({ kind: 'TERMINAL_ROUTE', terminalCode: 'MAIN' });
+  });
+
+  it('Finding #5: A2004, A2005 preserve UNKNOWN/DECLINED and route only on explicit negative values', async () => {
+    // A2004
+    const a2004Unknown = await applyDigitalUseNodeSemantics(
+      ctx('A2004', { decision: 'UNKNOWN' })
+    );
+    expect(a2004Unknown.conditions).toEqual({
+      COLLABORATIVE_DURATION_YES: 'UNKNOWN',
+      COLLABORATIVE_DURATION_NO: 'UNKNOWN',
+    });
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2004',
+      conditions: a2004Unknown.conditions,
+    })).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
+
+    const a2004No = await applyDigitalUseNodeSemantics(
+      ctx('A2004', { decision: 'NO' })
+    );
+    expect(a2004No.conditions).toEqual({
+      COLLABORATIVE_DURATION_YES: false,
+      COLLABORATIVE_DURATION_NO: true,
+    });
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2004',
+      conditions: a2004No.conditions,
+    })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: 'A2006' });
+
+    // A2005
+    const a2005Declined = await applyDigitalUseNodeSemantics(
+      ctx('A2005', { decision: 'DECLINED' }, [marker])
+    );
+    expect(a2005Declined.conditions).toEqual({
+      SOLUTION_APPROACH_WILLING: 'DECLINED',
+      SOLUTION_APPROACH_UNWILLING: 'DECLINED',
+    });
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2005',
+      conditions: a2005Declined.conditions,
+    })).toMatchObject({ kind: 'UNKNOWN', code: 'UNKNOWN_OR_UNSUPPORTED_CONDITION' });
+
+    const a2005Unwilling = await applyDigitalUseNodeSemantics(
+      ctx('A2005', { decision: 'UNWILLING' }, [marker])
+    );
+    expect(a2005Unwilling.conditions).toEqual({
+      SOLUTION_APPROACH_WILLING: false,
+      SOLUTION_APPROACH_UNWILLING: true,
+    });
+    expect(routeDigitalUseTopology({
+      sceneCode: 'DIGITAL_USE',
+      packageVersion: 'v1',
+      currentNodeCode: 'A2005',
+      conditions: a2005Unwilling.conditions,
+    })).toMatchObject({ kind: 'NODE_ROUTE', nextNodeCode: 'A2008' });
   });
 
   it('mechanically routes A2001 advice/continue and A2002 further-assessment through the sole Slice 11 router', async () => {

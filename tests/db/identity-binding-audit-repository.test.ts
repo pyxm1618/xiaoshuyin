@@ -30,7 +30,7 @@ describe('identity binding audit', () => {
   });
 
   it('records bootstrap / attempt / candidate / second-party / committed outcomes', async () => {
-    const target = await createTarget(h, 'audit_ok', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'audit_ok', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `audit_ok_${Date.now()}`);
     const confirm = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,

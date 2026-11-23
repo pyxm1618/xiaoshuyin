@@ -17,6 +17,7 @@ import {
   candidateDecision,
   confirmerDecision,
   createTarget,
+  stageBindingAgeCorrection,
   type BindingHarness,
 } from '../setup/identity-binding.js';
 import { revokeConsent } from '../setup/api.js';
@@ -85,7 +86,7 @@ describe('F-05 sensitive context cleanup', () => {
   });
 
   it('COMMITTED scrubs every context of the attempt', async () => {
-    const target = await createTarget(h, 'clean_commit', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'clean_commit', { ageBand: 'MINOR_14_17' });
     const code = `clean_commit_${randomUUID()}`;
     const { contextToken, attemptId } = await twoContexts(h, target, code);
     expect(await attemptSecrets(h, attemptId)).toBeGreaterThan(0);
@@ -100,7 +101,7 @@ describe('F-05 sensitive context cleanup', () => {
   });
 
   it('candidate CANCEL scrubs every context of the attempt', async () => {
-    const target = await createTarget(h, 'clean_cancel', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'clean_cancel', { ageBand: 'MINOR_14_17' });
     const code = `clean_cancel_${randomUUID()}`;
     const { contextToken, attemptId } = await twoContexts(h, target, code);
 
@@ -110,7 +111,7 @@ describe('F-05 sensitive context cleanup', () => {
   });
 
   it('confirmer REJECT scrubs every context of the attempt', async () => {
-    const target = await createTarget(h, 'clean_reject', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'clean_reject', { ageBand: 'MINOR_14_17' });
     const code = `clean_reject_${randomUUID()}`;
     const { contextToken, attemptId } = await twoContexts(h, target, code);
 
@@ -125,7 +126,7 @@ describe('F-05 sensitive context cleanup', () => {
   });
 
   it('attempt expiry scrubs every context of the attempt', async () => {
-    const target = await createTarget(h, 'clean_expiry', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'clean_expiry', { ageBand: 'MINOR_14_17' });
     const code = `clean_expiry_${randomUUID()}`;
     const { contextToken, attemptId } = await twoContexts(h, target, code);
 
@@ -148,10 +149,12 @@ describe('F-05 sensitive context cleanup', () => {
 
   it('Gate 2 block scrubs every context of the attempt', async () => {
     const target = await createTarget(h, 'clean_gate2', { ageBand: 'UNDER_14' });
+    const correctAge = await stageBindingAgeCorrection(h, target);
     const code = `clean_gate2_${randomUUID()}`;
     const { contextToken, attemptId } = await twoContexts(h, target, code);
 
     await candidateDecision(h, contextToken, 'AFFIRM', undefined, 'candidate-binding-v1');
+    await correctAge();
     await revokeConsent(h.app, target.guardian.token, 'clean_gate2', target.consentId!);
 
     const res = await confirmerDecision(h, target.guardian.token, attemptId, {

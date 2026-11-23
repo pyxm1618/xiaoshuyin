@@ -29,8 +29,12 @@ import {
 } from '@xiaoshuyin/domain';
 import { requireFamilyAction } from '../authz.js';
 import {
+  ageGatePublicReasonCode,
   assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
+  type AgeGateResult,
   getCurrentNoticeHash,
+  getCurrentNoticeVersion,
   getConsentRecordById,
   getValidConsentForBinding,
   getComplianceProfileForUpdate,
@@ -92,7 +96,7 @@ async function resolveProviderForValue(
 async function runProcessingGate(
   tx: pg.PoolClient,
   personId: string
-): Promise<{ decision: 'ALLOW'; minorMode: boolean } | { decision: 'BLOCK'; reason: string }> {
+): Promise<AgeGateResult> {
   const row = await getComplianceProfileForUpdate(tx, personId);
   const profile = row
     ? {
@@ -107,28 +111,42 @@ async function runProcessingGate(
 
   let consent: {
     id: string;
+    version: number;
     decision: 'GRANTED' | 'REVOKED';
     boundPersonId: string | null;
     noticeHash: string;
+    noticeVersion: string | null;
+    policyVersion: string | null;
     guardianPersonId: string;
+    purpose: string;
+    isChainHead: boolean;
+    evidenceValid: boolean;
   } | null = null;
   if (profile?.guardianConsentRecordId) {
     const c = await getConsentRecordForGate(tx, profile.guardianConsentRecordId);
     consent = c
       ? {
           id: c.id,
+          version: c.version,
           decision: c.decision,
           boundPersonId: c.bound_person_id,
           noticeHash: c.notice_hash,
+          noticeVersion: c.notice_version ?? null,
+          policyVersion: c.policy_version ?? null,
           guardianPersonId: c.guardian_person_id,
+          purpose: c.purpose,
+          isChainHead: c.is_chain_head === true,
+          evidenceValid: c.evidence_valid === true,
         }
       : null;
   }
 
-  return assertMinorProcessingAllowed(personId, {
+  return assertMinorProcessingAllowed(personId, 'MEMBER_PROFILE', {
     getProfile: () => profile,
     getConsentRecord: () => consent,
     getCurrentNoticeHash,
+    getCurrentNoticeVersion,
+    getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   });
 }
 
@@ -443,9 +461,10 @@ export function registerMemberRoutes(app: FastifyInstance, pool: pg.Pool) {
           // pointer is no longer GRANTED must not be processed any further.
           const gateResult = await runProcessingGate(tx, targetPersonId);
           if (gateResult.decision === 'BLOCK') {
+            const code = ageGatePublicReasonCode(gateResult.reason);
             throw Object.assign(new Error(gateResult.reason), {
-              statusCode: toHttpError(gateResult.reason).statusCode,
-              code: gateResult.reason,
+              statusCode: toHttpError(code).statusCode,
+              code,
             });
           }
 

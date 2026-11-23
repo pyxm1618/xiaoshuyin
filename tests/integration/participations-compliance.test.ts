@@ -100,7 +100,7 @@ describe('Slice 4 participation compliance gate', () => {
     return revoked;
   }
 
-  it('UNDER_14 with current valid consent may be invited and explicitly accept', async () => {
+  it('v1 guardian administration consent cannot authorize an UNDER_14 invitation', async () => {
     const f=await createParticipationFixture(h,'compliance-u14-valid',{target:'manager'});
     const target=await addBoundAdultNonManagerToFamily(h,f.familyId,'compliance-u14-valid');
     await makeUnder14Valid(f.familyId,f.manager,target.personId);
@@ -108,22 +108,24 @@ describe('Slice 4 participation compliance gate', () => {
     const created=await invite(
       h.app,f.manager.token,f.caseId,target.personId,'compliance-u14-valid-invite'
     );
-    expect(created.statusCode).toBe(201);
-    const accepted=await acceptInvite(
-      h.app,target.token,created.json().inviteToken,'compliance-u14-valid-accept'
+    expect(created.statusCode).toBe(403);
+    expect(created.json().code).toBe('PARTICIPATION_TARGET_INELIGIBLE');
+    const { rows } = await h.admin.query(
+      'SELECT id FROM case_participants WHERE case_id=$1 AND person_id=$2',
+      [f.caseId, target.personId]
     );
-    expect(accepted.statusCode).toBe(200);
-    expect(accepted.json().state).toBe('ACTIVE');
+    expect(rows).toEqual([]);
   });
 
   it('accept re-reads current UNDER_14 consent and blocks after revocation', async () => {
     const f=await createParticipationFixture(h,'compliance-u14-revoke',{target:'manager'});
     const target=await addBoundAdultNonManagerToFamily(h,f.familyId,'compliance-u14-revoke');
-    const valid=await makeUnder14Valid(f.familyId,f.manager,target.personId);
     const created=await invite(
       h.app,f.manager.token,f.caseId,target.personId,'compliance-u14-revoke-invite'
     );
     expect(created.statusCode).toBe(201);
+
+    const valid=await makeUnder14Valid(f.familyId,f.manager,target.personId);
 
     await revoke(
       f.familyId,f.manager,target.personId,valid.consent,valid.noticeHash
@@ -161,8 +163,8 @@ describe('Slice 4 participation compliance gate', () => {
     // Decline after gate becomes invalid.
     const d=await createParticipationFixture(h,'compliance-decline',{target:'manager'});
     const dt=await addBoundAdultNonManagerToFamily(h,d.familyId,'compliance-decline');
-    const dc=await makeUnder14Valid(d.familyId,d.manager,dt.personId);
     const di=await invite(h.app,d.manager.token,d.caseId,dt.personId,'compliance-decline-invite');
+    const dc=await makeUnder14Valid(d.familyId,d.manager,dt.personId);
     await revoke(d.familyId,d.manager,dt.personId,dc.consent,dc.noticeHash);
     const declined=await declineParticipation(
       h.app,dt.token,di.json().participationId,'compliance-decline-command'
@@ -173,12 +175,12 @@ describe('Slice 4 participation compliance gate', () => {
     // Withdraw after a valid accept, then consent becomes invalid.
     const w=await createParticipationFixture(h,'compliance-withdraw',{target:'manager'});
     const wt=await addBoundAdultNonManagerToFamily(h,w.familyId,'compliance-withdraw');
-    const wc=await makeUnder14Valid(w.familyId,w.manager,wt.personId);
     const wi=await invite(h.app,w.manager.token,w.caseId,wt.personId,'compliance-withdraw-invite');
     const active=await acceptInvite(
       h.app,wt.token,wi.json().inviteToken,'compliance-withdraw-accept'
     );
     expect(active.statusCode).toBe(200);
+    const wc=await makeUnder14Valid(w.familyId,w.manager,wt.personId);
     await revoke(w.familyId,w.manager,wt.personId,wc.consent,wc.noticeHash);
     const withdrawn=await withdrawParticipation(
       h.app,wt.token,wi.json().participationId,'compliance-withdraw-command'

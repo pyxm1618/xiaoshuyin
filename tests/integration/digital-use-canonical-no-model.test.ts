@@ -247,9 +247,15 @@ describe('Slice 12 canonical no-model production orchestration', () => {
   }
 
   function supportedGoalDependencies(formulation: any) {
+    // Finding #1: Goal V1 dependencyRefs support EVIDENCE, CONSENT and PACKAGE.
+    // PACKAGE must be preserved, never stripped: the Digital Use Problem
+    // Formulation authority emits PACKAGE:DIGITAL_USE:<binding version> and the
+    // Goal contract has to cover it exactly.
     const supported = (formulation.dependencyRefs ?? []).filter(
       (dependency: any) =>
-        dependency.type === 'EVIDENCE' || dependency.type === 'CONSENT'
+        dependency.type === 'EVIDENCE' ||
+        dependency.type === 'CONSENT' ||
+        dependency.type === 'PACKAGE'
     );
     expect(supported.length).toBeGreaterThan(0);
     return supported;
@@ -270,48 +276,18 @@ describe('Slice 12 canonical no-model production orchestration', () => {
       )
     ).toBe(true);
 
-    const corrected = await app.inject({
-      method: 'POST',
-      url:
-        `/api/v1/cases/${f.caseId}/problem-formulations/` +
-        formulation.version +
-        '/corrections',
-      headers: {
-        ...commandHeaders(
-          f.manager.token,
-          `goal-v1-pf-correction-${crypto.randomUUID()}`
-        ),
-        'if-match': `"case-v${scene.caseVersion}"`,
-      },
-      payload: {
-        changes: {
-          dependencyRefs: supportedGoalDependencies(formulation),
-        },
-        note: 'Use only dependencies that Goal V1 can authoritatively revalidate.',
-      },
-    });
-    expect(corrected.statusCode, corrected.body).toBe(201);
-    const correctedBody = corrected.json();
-    expect(correctedBody.current?.status).toBe('PRESENTED');
-    expect(
-      correctedBody.current?.dependencyRefs.every(
-        (dependency: any) =>
-          dependency.type === 'EVIDENCE' || dependency.type === 'CONSENT'
-      )
-    ).toBe(true);
-
     const confirmed = await app.inject({
       method: 'POST',
       url:
         `/api/v1/cases/${f.caseId}/problem-formulations/` +
-        correctedBody.current.version +
+        formulation.version +
         '/confirm',
       headers: {
         ...commandHeaders(
           f.manager.token,
           `goal-v1-pf-confirm-${crypto.randomUUID()}`
         ),
-        'if-match': `"case-v${correctedBody.caseVersion}"`,
+        'if-match': `"case-v${scene.caseVersion}"`,
       },
       payload: {},
     });
@@ -674,7 +650,6 @@ describe('Slice 12 canonical no-model production orchestration', () => {
 
   it.each([
     ['POLICY', { type: 'POLICY', key: 'policy', version: 'v1' }],
-    ['PACKAGE', { type: 'PACKAGE', key: 'package', version: 'v1' }],
     ['CONTENT_VERSION', { type: 'CONTENT_VERSION', key: 'content', version: 'v1' }],
   ] as const)(
     'rejects Goal SAVE with unsupported %s dependency at the transport boundary',
@@ -694,7 +669,30 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     }
   );
 
-  it('fails closed when the current Problem Formulation contains an unsupported dependency', async () => {
+  it(
+    'rejects Goal SAVE with invalid PACKAGE dependency key at the business boundary (#1)',
+    async () => {
+      // PACKAGE type is now valid at the transport boundary (Zod accepts it),
+      // but the package key must match the case\'s actual A1001 package binding.
+      // An unrecognised key is rejected at the service layer with 409.
+      const f = await fixture('goal-unsupported-package');
+      let scene = await triage(f, true, 'A', 'A');
+      scene = await confirmCurrentFormulation(f, scene);
+      const formulation = await currentGoalFormulation(f);
+      const dependency = { type: 'PACKAGE' as const, key: 'package', version: 'v1' };
+      const rejected = await saveGoalFor(
+        f,
+        scene.caseVersion,
+        formulation,
+        'goal-save-unsupported-package-' + crypto.randomUUID(),
+        { dependencyRefs: [...formulation.dependencyRefs, dependency] }
+      );
+      expect(rejected.statusCode, rejected.body).toBe(409);
+      expect(rejected.json().code).toBe('CASE_PHASE_CONFLICT');
+    }
+  );
+
+  it('fails closed when the Goal contract does not cover the current Problem Formulation dependency', async () => {
     const f = await fixture('goal-pf-unsupported');
     let scene = await triage(f, true, 'A', 'A');
     scene = await confirmCurrentFormulation(f, scene);
@@ -705,12 +703,20 @@ describe('Slice 12 canonical no-model production orchestration', () => {
       )
     ).toBe(true);
 
+    // Finding #1: PACKAGE is now a supported Goal dependency, so the only
+    // remaining fail-closed case is a Goal contract that does not cover the
+    // current Problem Formulation. A submission that silently drops the
+    // formulation's PACKAGE dependency must still be rejected.
     const rejected = await saveGoalFor(
       f,
       scene.caseVersion,
       formulation,
       'goal-save-pf-unsupported-' + crypto.randomUUID(),
-      { dependencyRefs: supportedGoalDependencies(formulation) }
+      {
+        dependencyRefs: formulation.dependencyRefs.filter(
+          (dependency: any) => dependency.type !== 'PACKAGE'
+        ),
+      }
     );
     expect(rejected.statusCode, rejected.body).toBe(422);
     expect(rejected.json().code).toBe('VALIDATION_ERROR');
@@ -733,6 +739,14 @@ describe('Slice 12 canonical no-model production orchestration', () => {
     const f = await fixture('goal-happy');
     const scene = await finishA2010ForGoal(f);
     const formulation = await currentGoalFormulation(f);
+
+    // Finding #1 positive basis: the current CONFIRMED Problem Formulation still
+    // carries the Digital Use package dependency, unmodified.
+    expect(formulation.dependencyRefs).toEqual(
+      expect.arrayContaining([
+        { type: 'PACKAGE', key: 'DIGITAL_USE', version: 'v1' },
+      ])
+    );
 
     const strictSave = goalSavePayload(formulation);
     const { participantResponsibilities: _omitted, ...missingParticipantField } =
@@ -765,7 +779,7 @@ describe('Slice 12 canonical no-model production orchestration', () => {
 
     const savedRow = await admin.query(
       `SELECT saved_by_person_id,confirmation_state,
-              confirmed_by_person_id,confirmed_at
+              confirmed_by_person_id,confirmed_at,dependency_refs
          FROM goals
         WHERE case_id=$1 AND goal_id=$2 AND version=$3`,
       [f.caseId, saveBody.goalId, saveBody.goalVersion]
@@ -776,6 +790,15 @@ describe('Slice 12 canonical no-model production orchestration', () => {
       confirmed_by_person_id: null,
       confirmed_at: null,
     });
+
+    // Finding #1: the PACKAGE dependency survives SAVE verbatim, so CONFIRM
+    // below exercises the real package-binding gate rather than a stripped
+    // formulation.
+    expect(savedRow.rows[0]!.dependency_refs).toEqual(
+      expect.arrayContaining([
+        { type: 'PACKAGE', key: 'DIGITAL_USE', version: 'v1' },
+      ])
+    );
 
     const afterSave = await app.inject({
       method: 'GET',
