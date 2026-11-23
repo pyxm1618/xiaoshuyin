@@ -1,7 +1,5 @@
 -- Workline D Forward Migration: Safety / Identity / Authorization / Participation
--- Findings: #11 (binding operation key REUSED replay identity), #17 (active staff account DB RLS check), #32 (participation response idempotency command type)
-
-BEGIN;
+-- Findings: #11 (binding operation key REUSED replay identity), #17 (active staff account DB RLS check)
 
 -- ── 1. Finding #11: Add REUSED account and person link to binding_operation_keys ──
 ALTER TABLE binding_operation_keys
@@ -80,22 +78,3 @@ CREATE POLICY audit_staff_intervention_insert ON business_audit_events
          AND (sa.valid_until IS NULL OR sa.valid_until > clock_timestamp())
     )
   );
-
--- ── 3. Finding #32: Extend idempotency command types for PARTICIPATION_RESPONSE ──
-DO $$
-DECLARE
-  v_con text;
-BEGIN
-  SELECT pg_get_constraintdef(oid) INTO v_con
-    FROM pg_constraint
-   WHERE conrelid='idempotency_keys'::regclass
-     AND conname='idempotency_keys_command_type_check';
-  v_con := regexp_replace(v_con, '^CHECK\s*', '');
-  ALTER TABLE idempotency_keys DROP CONSTRAINT idempotency_keys_command_type_check;
-  EXECUTE format(
-    'ALTER TABLE idempotency_keys ADD CONSTRAINT idempotency_keys_command_type_check CHECK ((%s) OR command_type IN (%L))',
-    v_con, 'PARTICIPATION_RESPONSE'
-  );
-END $$;
-
-COMMIT;

@@ -49,7 +49,7 @@ export type Action =
   | 'PARTICIPATION_INVITE_CREATE'
   | 'PARTICIPATION_READ_SELF' | 'PARTICIPATION_ACCEPT_SELF'
   | 'PARTICIPATION_DECLINE_SELF' | 'PARTICIPATION_WITHDRAW_SELF'
-  | 'PARTICIPATION_READ_MANAGER'
+  | 'PARTICIPATION_READ_MANAGER' | 'PARTICIPATION_RESPOND_SELF'
   // Slice 006 identity binding (plan D-12). Registered closed set; every entry
   // is fail-closed when its actor / facts / resource do not match.
   | 'IDENTITY_BINDING_BOOTSTRAP'
@@ -245,6 +245,7 @@ const REGISTERED_ACTIONS: Action[] = [
   'PARTICIPATION_INVITE_CREATE', 'PARTICIPATION_READ_SELF',
   'PARTICIPATION_ACCEPT_SELF', 'PARTICIPATION_DECLINE_SELF',
   'PARTICIPATION_WITHDRAW_SELF', 'PARTICIPATION_READ_MANAGER',
+  'PARTICIPATION_RESPOND_SELF',
   'IDENTITY_BINDING_BOOTSTRAP', 'IDENTITY_BINDING_CANDIDATE_DECIDE',
   'IDENTITY_BINDING_STATUS_SELF', 'IDENTITY_BINDING_SESSION_EXCHANGE',
   'IDENTITY_BINDING_CONFIRMER_LIST', 'IDENTITY_BINDING_SECOND_PARTY_DECIDE',
@@ -296,6 +297,7 @@ const PARTICIPATION_ACTIONS: Action[] = [
   'PARTICIPATION_DECLINE_SELF',
   'PARTICIPATION_WITHDRAW_SELF',
   'PARTICIPATION_READ_MANAGER',
+  'PARTICIPATION_RESPOND_SELF',
 ];
 
 const EMPTY_FACTS: AuthorizeFacts = {
@@ -671,6 +673,14 @@ function decideParticipationAction(
       return deny('NOT_FAMILY_MEMBER');
     }
     return allow(true, input.purpose);
+  }
+
+  if (input.action === 'PARTICIPATION_RESPOND_SELF') {
+    if (input.purpose !== 'PARTICIPATION') return deny('UNSUPPORTED_PURPOSE');
+    if (input.case !== null) return deny('UNSUPPORTED_DIMENSION');
+    if (participation.personId !== actorPersonId) return deny('NOT_PARTICIPANT');
+    if (participation.state !== 'ACTIVE') return deny('PARTICIPATION_NOT_ACTIVE');
+    return allow(false, input.purpose, false);
   }
 
   if (input.purpose !== 'PARTICIPATION') return deny('UNSUPPORTED_PURPOSE');
