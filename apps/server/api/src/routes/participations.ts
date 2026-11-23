@@ -956,6 +956,63 @@ export function registerParticipationRoutes(
       }
       const requestHash = hashPayload({ participationId, content });
 
+      // Finding #32: Preflight before idempotency replay fast path:
+      // Verify current participation / self / ACTIVE / processing authority
+      // so that replays cannot bypass withdrawal or consent revocation.
+      const preflight = await withIdentityTransaction(
+        pool,
+        { accountId: actorAccountId, purpose: 'PARTICIPATION' },
+        async (tx) => {
+          const visible = await getParticipationById(tx, participationId);
+          if (!visible) throw participationNotFound();
+
+          const decision = authorize({
+            actor: { accountId: actorAccountId, personId: actorPersonId },
+            product: 'V1',
+            family: null,
+            case: null,
+            participation: {
+              participationId: visible.id,
+              familyId: visible.family_id,
+              caseId: visible.case_id,
+              personId: visible.person_id,
+              state: visible.state,
+            },
+            resource: { type: 'PARTICIPATION', participationId: visible.id },
+            action: 'PARTICIPATION_RESPOND_SELF',
+            purpose: 'PARTICIPATION',
+          });
+
+          if (decision.decision === 'DENY') {
+            if (decision.reason === 'NOT_PARTICIPANT') {
+              throw participationNotFound();
+            }
+            if (decision.reason === 'PARTICIPATION_NOT_ACTIVE') {
+              return stateConflict(visible.state);
+            }
+            throw typedError('FORBIDDEN', decision.reason);
+          }
+
+          await setFamilyContext(
+            tx,
+            visible.family_id,
+            actorPersonId,
+            'PARTICIPATION'
+          );
+
+          const allowed = await isParticipationProcessingAllowed(tx, visible.person_id);
+          if (!allowed) {
+            throw typedError('FORBIDDEN', 'PARTICIPATION_PROCESSING_DISALLOWED');
+          }
+
+          return null;
+        }
+      );
+
+      if (preflight !== null) {
+        return reply.status(preflight.status as 409).send(preflight.body);
+      }
+
       const outcome = await runIdempotentCommand(
         pool,
         {

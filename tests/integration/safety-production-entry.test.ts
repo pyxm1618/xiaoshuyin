@@ -925,6 +925,29 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
     expect((await fixture.getCase(held.id)).status).toBe('SAFETY_HOLD');
   });
 
+  it('Finding #14: production composition allows non-manager family member to trigger Safety evaluation without CASE_READ authority error', async () => {
+    const member = await fixture.login('non_manager_member');
+    await admin.query(
+      'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [familyId, member.personId]
+    );
+
+    const created = await newCase();
+    const result = await runSafetyProductionEntry(
+      fixture.pool,
+      {
+        actor: member,
+        caseId: created.id,
+        operationKey: operationKey('non-manager-enter'),
+      },
+      authority()
+    );
+
+    expect(result.kind).toBe('ENTER_HOLD');
+    const held = await fixture.getCase(created.id);
+    expect(held.status).toBe('SAFETY_HOLD');
+  });
+
   it('registers no public or generic Safety mutation route', () => {
     const routes = fixture.app.printRoutes({ commonPrefix: false });
     expect(routes).not.toMatch(/\/safety(?:\/|\s|$)/i);

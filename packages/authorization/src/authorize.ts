@@ -665,9 +665,15 @@ function decideParticipationAction(
     if (input.family === null) return deny('FAMILY_CONTEXT_REQUIRED');
     if (!facts.membership) return deny('NOT_FAMILY_MEMBER');
     if (facts.familyCreatedByPersonId !== actorPersonId) return deny('NOT_FAMILY_MANAGER');
-    // Finding #26: Cross-family isolation: visible participation family must match requested family
+    // Finding #26: PARTICIPATION_READ_MANAGER requires authoritative participationId and familyId facts (fail-closed)
     if (
-      participation.familyId !== undefined &&
+      !participation.participationId ||
+      input.resource.participationId !== participation.participationId
+    ) {
+      return deny('PARTICIPATION_CONTEXT_REQUIRED');
+    }
+    if (
+      !participation.familyId ||
       participation.familyId !== input.family.familyId
     ) {
       return deny('NOT_FAMILY_MEMBER');

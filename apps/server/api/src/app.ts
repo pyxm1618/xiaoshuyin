@@ -617,16 +617,9 @@ async function readSafetyCaseSnapshot(
       purpose: 'FAMILY_MANAGEMENT',
     },
     async (tx) => {
-      await requireFamilyAction(tx, {
-        accountId: actor.accountId,
-        personId: actor.personId,
-        familyId,
-        action: 'CASE_READ',
-        purpose: 'FAMILY_MANAGEMENT',
-        resource: { type: 'CASE', familyId, caseId },
-        caseId,
-      });
-
+      // Finding #14: Server-owned Safety snapshot reading must not depend on
+      // Family Manager business authority (CASE_READ). Safety evaluation is a system
+      // authority seam scoped by verified family membership.
       const row = await getCaseById(tx, caseId);
       if (!row || row.family_id !== familyId) safetyCaseNotFound();
       return {

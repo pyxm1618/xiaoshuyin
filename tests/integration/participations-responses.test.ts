@@ -313,4 +313,151 @@ describe('Finding #32 Child-authored Participation Responses API', () => {
     )).rows[0].cnt;
     expect(finalAuditCount).toBe(1);
   });
+
+  it('Finding #32 regression: same successful key after withdraw is blocked by preflight with 409 and does not replay 201', async () => {
+    const f = await createParticipationFixture(h, 'resp-withdraw-replay', { target: 'manager' });
+    const target = await addBoundAdultTargetToFamily(h, f.familyId, 'resp-target-withdraw-replay');
+
+    const created = await invite(h.app, f.manager.token, f.caseId, target.personId, 'resp-w-rep-invite');
+    expect(created.statusCode).toBe(201);
+    const participationId = created.json().participationId;
+    const accepted = await acceptInvite(h.app, target.token, created.json().inviteToken, 'resp-w-rep-accept');
+    expect(accepted.statusCode).toBe(200);
+
+    const successfulKey = 'resp-successful-key-withdraw';
+    const payload = { content: '撤回前首次成功回复' };
+
+    // 1. Initial response succeeds -> 201
+    const res1 = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: {
+        authorization: `Bearer ${target.token}`,
+        'idempotency-key': successfulKey,
+      },
+      payload,
+    });
+    expect(res1.statusCode).toBe(201);
+
+    // 2. Exact same key replay before withdraw succeeds with cached 201
+    const replayBefore = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: {
+        authorization: `Bearer ${target.token}`,
+        'idempotency-key': successfulKey,
+      },
+      payload,
+    });
+    expect(replayBefore.statusCode).toBe(201);
+    expect(replayBefore.json().id).toBe(res1.json().id);
+
+    // 3. Withdraw participation -> state becomes WITHDRAWN
+    const withdrawn = await withdrawParticipation(
+      h.app,
+      target.token,
+      participationId,
+      'resp-w-rep-withdraw-cmd'
+    );
+    expect(withdrawn.statusCode).toBe(200);
+
+    // 4. Same successful key after withdraw MUST be blocked by preflight with 409 PARTICIPATION_STATE_CONFLICT
+    const replayAfterWithdraw = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: {
+        authorization: `Bearer ${target.token}`,
+        'idempotency-key': successfulKey,
+      },
+      payload,
+    });
+    expect(replayAfterWithdraw.statusCode).toBe(409);
+    expect(replayAfterWithdraw.json().code).toBe('PARTICIPATION_STATE_CONFLICT');
+    expect(replayAfterWithdraw.json().currentState).toBe('WITHDRAWN');
+  });
+
+  it('Finding #32 regression: same successful key after consent revoke is blocked by preflight with 403 and does not replay 201', async () => {
+    const f = await createParticipationFixture(h, 'resp-revoke-replay', { target: 'manager' });
+    const target = await loginWithLabel(h.app, 's4-target-revoke-replay');
+    await h.admin.query(
+      `INSERT INTO family_members (family_id, person_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [f.familyId, target.personId]
+    );
+
+    // Setup UNDER_14 compliance profile + consent
+    const reqRes = await createConsentRequest(h.app, f.manager.token, 'resp-rev-rep-req');
+    expect(reqRes.statusCode).toBe(201);
+    const grantRes = await grantConsent(h.app, f.manager.token, 'resp-rev-rep-grant', reqRes.json().requestId);
+    expect(grantRes.statusCode).toBe(201);
+    const consent = grantRes.json();
+
+    await h.admin.query(
+      `UPDATE consent_records SET bound_person_id = $1, bound_at = now() WHERE id = $2`,
+      [target.personId, consent.id]
+    );
+
+    await h.admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id, age_band, minor_mode, guardian_person_id, guardian_consent_record_id, guardian_consent_version, verified_source)
+       VALUES ($1, 'UNDER_14', true, $2, $3, 1, 'GUARDIAN_RELAY')
+       ON CONFLICT (person_id) DO UPDATE
+         SET age_band='UNDER_14', minor_mode=true, guardian_person_id=$2,
+             guardian_consent_record_id=$3, guardian_consent_version=1, verified_source='GUARDIAN_RELAY'`,
+      [target.personId, f.manager.personId, consent.id]
+    );
+
+    const created = await invite(h.app, f.manager.token, f.caseId, target.personId, 'resp-rev-rep-invite');
+    expect(created.statusCode).toBe(201);
+    const participationId = created.json().participationId;
+    const accepted = await acceptInvite(h.app, target.token, created.json().inviteToken, 'resp-rev-rep-accept');
+    expect(accepted.statusCode).toBe(200);
+
+    const successfulKey = 'resp-successful-key-consent-revoke';
+    const payload = { content: '撤销前首次成功回复' };
+
+    // 1. Initial response succeeds -> 201
+    const res1 = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: {
+        authorization: `Bearer ${target.token}`,
+        'idempotency-key': successfulKey,
+      },
+      payload,
+    });
+    expect(res1.statusCode).toBe(201);
+
+    // 2. Exact same key replay before revoke succeeds with cached 201
+    const replayBefore = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: {
+        authorization: `Bearer ${target.token}`,
+        'idempotency-key': successfulKey,
+      },
+      payload,
+    });
+    expect(replayBefore.statusCode).toBe(201);
+    expect(replayBefore.json().id).toBe(res1.json().id);
+
+    // 3. Revoke consent
+    const revokeRes = await revokeConsent(h.app, f.manager.token, 'resp-rev-rep-revoke-cmd', consent.id, {
+      reason: 'testing revocation replay',
+    });
+    expect(revokeRes.statusCode).toBe(200);
+
+    // 4. Same successful key after consent revoke MUST be blocked by preflight with 403 PARTICIPATION_PROCESSING_DISALLOWED
+    const replayAfterRevoke = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: {
+        authorization: `Bearer ${target.token}`,
+        'idempotency-key': successfulKey,
+      },
+      payload,
+    });
+    expect(replayAfterRevoke.statusCode).toBe(403);
+    expect(replayAfterRevoke.json().code).toBe('FORBIDDEN');
+    expect(replayAfterRevoke.json().message).toBe('PARTICIPATION_PROCESSING_DISALLOWED');
+  });
 });
