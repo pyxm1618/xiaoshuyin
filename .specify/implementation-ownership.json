@@ -1007,10 +1007,9 @@
         "path": "apps/server/api/src/services/digital-use-roleplay.ts"
       },
       "ownership": {
-        "kind": "SHARED",
+        "kind": "FEATURE",
         "features": [
-          "012-digital-use-assessment-runtime",
-          "phase5-d6-real-external-authority-content"
+          "012-digital-use-assessment-runtime"
         ]
       }
     },
