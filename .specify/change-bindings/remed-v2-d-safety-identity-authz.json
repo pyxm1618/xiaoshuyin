@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "changeId": "remed-v2-d-safety-identity-authz",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "001-family-identity-core",
+      "specPath": "specs/001-family-identity-core",
+      "implementationPaths": [
+        "apps/server/api/src/auth/session-token.ts",
+        "apps/server/api/src/db/tx.ts",
+        "apps/server/api/src/routes/families.ts"
+      ]
+    },
+    {
+      "feature": "004-case-participant-core",
+      "specPath": "specs/004-case-participant-core",
+      "implementationPaths": [
+        "apps/server/api/src/authz.ts",
+        "apps/server/api/src/idempotency.ts",
+        "apps/server/api/src/routes/participations.ts",
+        "packages/authorization/src/authorize.ts",
+        "packages/contracts/src/schemas.ts"
+      ]
+    },
+    {
+      "feature": "006-identity-binding-runtime",
+      "specPath": "specs/006-identity-binding-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/identity-binding/bootstrap.ts",
+        "apps/server/api/src/identity-binding/operation-key-repository.ts",
+        "db/migrations/032_workline_d_safety_identity_authz.sql"
+      ]
+    },
+    {
+      "feature": "009-safety-hold-control-foundation",
+      "specPath": "specs/009-safety-hold-control-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/app.ts",
+        "apps/server/api/src/safety/enter-safety-hold.ts"
+      ]
+    },
+    {
+      "feature": "012-digital-use-assessment-runtime",
+      "specPath": "specs/012-digital-use-assessment-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/digital-use-roleplay.ts"
+      ]
+    },
+    {
+      "feature": "016-psychological-behavioral-intervention-contract-authority-reconciliation",
+      "specPath": "specs/016-psychological-behavioral-intervention-contract-authority-reconciliation",
+      "implementationPaths": [
+        "packages/domain/src/intervention-definition-repository.ts"
+      ]
+    }
+  ]
+}

@@ -954,7 +954,7 @@ export function registerParticipationRoutes(
       if (!idempotencyKey || idempotencyKey.length < 8 || idempotencyKey.length > 128) {
         throw typedError('VALIDATION_ERROR', 'Valid idempotencyKey is required');
       }
-      const requestHash = hashPayload({ content });
+      const requestHash = hashPayload({ participationId, content });
 
       const outcome = await runIdempotentCommand(
         pool,
@@ -1003,6 +1003,11 @@ export function registerParticipationRoutes(
             actorPersonId,
             'PARTICIPATION'
           );
+
+          const allowed = await isParticipationProcessingAllowed(tx, visible.person_id);
+          if (!allowed) {
+            throw typedError('FORBIDDEN', 'PARTICIPATION_PROCESSING_DISALLOWED');
+          }
 
           const message = await recordDialogueMessage(
             tx,
