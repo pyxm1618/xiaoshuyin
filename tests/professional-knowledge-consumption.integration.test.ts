@@ -161,7 +161,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
       locale: 'zh-CN',
     };
     const version = await admin.query<{ id: string }>(
-      'INSERT INTO professional_knowledge_versions (knowledge_id, semantic_version, lifecycle_status, review_state, validity_state, content, content_hash, source_set_hash, scope_metadata, locale, released_at, created_by_account_id, created_by_person_id) VALUES ($1,\'1.0.0\',$2,$3,$4,$5::jsonb,$6,$7,$8::jsonb,\'zh-CN\',$9,$10,$11) RETURNING id',
+      'INSERT INTO professional_knowledge_versions (knowledge_id, semantic_version, lifecycle_status, review_state, validity_state, content, content_hash, source_set_hash, scope_metadata, locale, released_at, effective_from, created_by_account_id, created_by_person_id) VALUES ($1,\'1.0.0\',$2,$3,$4,$5::jsonb,$6,$7,$8::jsonb,\'zh-CN\',$9,$9,$10,$11) RETURNING id',
       [
         item.rows[0]!.id,
         lifecycle,

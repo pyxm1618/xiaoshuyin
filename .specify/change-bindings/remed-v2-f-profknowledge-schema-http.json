@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "changeId": "remed-v2-f-profknowledge-schema-http",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "017-professional-knowledge-foundation",
+      "specPath": "specs/017-professional-knowledge-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/services/professional-knowledge.ts",
+        "db/migrations/031_professional_knowledge_effective_window_remediation.sql",
+        "packages/domain/src/professional-knowledge-repository.ts",
+        "packages/domain/src/professional-knowledge.ts"
+      ]
+    },
+    {
+      "feature": "012-digital-use-assessment-runtime",
+      "specPath": "specs/012-digital-use-assessment-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/plugins/error-handler.ts"
+      ]
+    },
+    {
+      "feature": "001-family-identity-core",
+      "specPath": "specs/001-family-identity-core",
+      "implementationPaths": [
+        "apps/server/api/src/routes/members.ts",
+        "apps/server/api/src/idempotency.ts"
+      ]
+    },
+    {
+      "feature": "002-case-core",
+      "specPath": "specs/002-case-core",
+      "implementationPaths": [
+        "apps/server/api/src/routes/cases.ts"
+      ]
+    }
+  ],
+  "findingVerificationPaths": {
+    "21": [
+      "tests/unit/professional-knowledge-effective-window-finding21.test.ts",
+      "tests/db/finding21-effective-window-db.test.ts",
+      "tests/professional-knowledge-consumption.integration.test.ts"
+    ],
+    "23": [
+      "tests/unit/intervention-resolver-finding23.test.ts",
+      "tests/professional-knowledge-audit2-remediation.integration.test.ts"
+    ],
+    "34": [
+      "tests/unit/members-account-bound-finding34.test.ts"
+    ],
+    "36": [
+      "tests/unit/phone-contract-patch-malformed-json-finding36.test.ts"
+    ],
+    "37": [
+      "tests/unit/idempotency-mismatch-response-finding37.test.ts"
+    ],
+    "38": [
+      "tests/unit/members-uuid-validation-finding38.test.ts"
+    ]
+  }
+}

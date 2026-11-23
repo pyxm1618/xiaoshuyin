@@ -130,6 +130,19 @@ describe('Finding #21: Professional Knowledge Effective Window', () => {
     });
   });
 
+  it.each([
+    { effectiveFrom: null },
+    { effectiveFrom: '2026' },
+    { effectiveFrom: '2026-02-30T00:00:00Z' },
+    { effectiveTo: 'invalid' },
+  ])('fails closed for invalid effective bounds %j', (bounds) => {
+    expect(evaluateProfessionalKnowledgeEligibility({
+      ...baseInput,
+      version: { ...baseVersion, ...bounds },
+      now: new Date('2026-06-01T00:00:00Z'),
+    })).toEqual({ status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_INVALID' });
+  });
+
   it('6. migration 031 structure compliance (no top-level transaction control & hardened search_path)', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');

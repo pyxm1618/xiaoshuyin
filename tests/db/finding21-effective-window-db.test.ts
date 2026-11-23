@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from 'pg';
@@ -12,28 +12,9 @@ function sha256Hex(str: string): string {
   return createHash('sha256').update(str).digest('hex');
 }
 
-function loadEnvFallback() {
-  const envPath = join(ROOT, '.env');
-  if (existsSync(envPath)) {
-    const content = readFileSync(envPath, 'utf8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eq = trimmed.indexOf('=');
-      if (eq > 0) {
-        const k = trimmed.slice(0, eq).trim();
-        const v = trimmed.slice(eq + 1).trim();
-        if (!process.env[k]) {
-          process.env[k] = v;
-        }
-      }
-    }
-  }
-}
-loadEnvFallback();
-
 const TEST_ADMIN_URL = process.env['TEST_ADMIN_DATABASE_URL'];
 const BASE_MIGRATION_URL = process.env['MIGRATION_DATABASE_URL'];
+const APP_DATABASE_URL = process.env['DATABASE_URL'];
 
 function quoteIdent(name: string): string {
   return '"' + String(name).replace(/"/g, '""') + '"';
@@ -50,21 +31,13 @@ function buildDbUrl(baseUrl: string, dbName: string): string {
   return u.toString();
 }
 
-function buildAppDbUrl(baseMigUrl: string, dbName: string): string {
-  const u = new URL(baseMigUrl);
-  u.username = 'xiaoshuyin_app';
-  u.password = 'test_app_pass_2024';
-  u.pathname = `/${dbName}`;
-  return u.toString();
-}
-
 describe('Finding #21: Real DB Verification for Professional Knowledge Effective Window', () => {
   let adminClient: Client;
   const createdDbs: string[] = [];
 
   beforeAll(async () => {
-    if (!TEST_ADMIN_URL || !BASE_MIGRATION_URL) {
-      throw new Error('TEST_ADMIN_DATABASE_URL and MIGRATION_DATABASE_URL are required for this test');
+    if (!TEST_ADMIN_URL || !BASE_MIGRATION_URL || !APP_DATABASE_URL) {
+      throw new Error('TEST_ADMIN_DATABASE_URL, MIGRATION_DATABASE_URL, and DATABASE_URL are required for this test');
     }
     adminClient = new Client({ connectionString: TEST_ADMIN_URL });
     await adminClient.connect();
@@ -96,7 +69,7 @@ describe('Finding #21: Real DB Verification for Professional Knowledge Effective
       dbName,
       dbUrl: buildDbUrl(BASE_MIGRATION_URL!, dbName),
       adminDbUrl: buildDbUrl(TEST_ADMIN_URL!, dbName),
-      appDbUrl: buildAppDbUrl(BASE_MIGRATION_URL!, dbName),
+      appDbUrl: buildDbUrl(APP_DATABASE_URL!, dbName),
     };
   }
 
@@ -354,26 +327,25 @@ describe('Finding #21: Real DB Verification for Professional Knowledge Effective
       const futureId = await insertVersion('2099-01-01T00:00:00Z', '2100-01-01T00:00:00Z', '2.0.0');
       const expiredId = await insertVersion('2020-01-01T00:00:00Z', '2021-01-01T00:00:00Z', '3.0.0');
 
-      // Boundary tests:
-      // boundaryEligible: effective_from is 1 second in the past, effective_to in future -> eligible
-      // boundaryBlocked: effective_from in the past, effective_to is 1 second in the past -> blocked
-      const boundaryEligibleId = await insertVersion(
-        new Date(Date.now() - 1000).toISOString(),
-        '2099-01-01T00:00:00Z',
-        '4.0.0'
-      );
-      const boundaryBlockedId = await insertVersion(
-        '2020-01-01T00:00:00Z',
-        new Date(Date.now() - 1000).toISOString(),
-        '5.0.0'
-      );
-
       // Now query as app user with RLS under PROFESSIONAL_KNOWLEDGE_CONSUMPTION purpose
       const appClient = new Client({ connectionString: appDbUrl });
       await appClient.connect();
 
       try {
         await appClient.query('BEGIN');
+        const { rows: [session] } = await appClient.query<{
+          role: string;
+          transaction_time: string;
+        }>('SELECT current_user AS role, transaction_timestamp()::text AS transaction_time');
+        expect(session!.role).toBe('xiaoshuyin_app');
+
+        // Keep PostgreSQL's full timestamp precision to test exact equality.
+        const boundaryEligibleId = await insertVersion(
+          session!.transaction_time, '2099-01-01T00:00:00Z', '4.0.0'
+        );
+        const boundaryBlockedId = await insertVersion(
+          '2020-01-01T00:00:00Z', session!.transaction_time, '5.0.0'
+        );
         await appClient.query("SELECT app.set_family_context($1, $2, 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION')", [
           familyId,
           personId,
@@ -398,10 +370,10 @@ describe('Finding #21: Real DB Verification for Professional Knowledge Effective
         // 4. Expired version is BLOCKED by RLS
         expect(visibleIds.has(expiredId)).toBe(false);
 
-        // 5. Boundary eligible (effective_from in past) is visible
+        // 5. Boundary eligible (effective_from equals transaction time) is visible
         expect(visibleIds.has(boundaryEligibleId)).toBe(true);
 
-        // 6. Boundary blocked (effective_to in past) is BLOCKED
+        // 6. Boundary blocked (effective_to equals transaction time) is BLOCKED
         expect(visibleIds.has(boundaryBlockedId)).toBe(false);
 
         await appClient.query('ROLLBACK');
