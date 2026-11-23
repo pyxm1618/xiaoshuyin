@@ -13,7 +13,7 @@
         "packages/domain/src/goal-runtime.ts",
         "packages/generated/openapi.d.ts",
         "packages/generated/openapi.json",
-        "db/migrations/032_common_core_goal_confirm_goal_package_dependency.sql"
+        "db/migrations/031_common_core_goal_confirm_goal_package_dependency.sql"
       ]
     },
     {
