@@ -1080,6 +1080,32 @@
           "phase5-production-readiness-e"
         ]
       }
+    },
+    {
+      "id": "professional-knowledge-migration-031",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/031_professional_knowledge_effective_window_remediation.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "phone-contract-json-error-handler",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/plugins/error-handler.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
     }
   ]
 }
