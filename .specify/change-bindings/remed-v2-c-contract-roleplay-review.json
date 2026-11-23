@@ -20,6 +20,13 @@
       "implementationPaths": [
         "packages/domain/src/problem-formulations.ts"
       ]
+    },
+    {
+      "feature": "common-core-goal-confirmgoal-runtime",
+      "specPath": "specs/common-core-goal-confirmgoal-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/goals.ts"
+      ]
     }
   ]
 }
