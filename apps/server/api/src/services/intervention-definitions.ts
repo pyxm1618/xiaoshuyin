@@ -46,7 +46,8 @@ async function assertMutationAuthority(
   approvalScope: string
 ): Promise<{ assignmentRef: string; qualificationRef: string }> {
   // Finding #17: Acquire row-level lock on authoritative Account row and revalidate status === 'ACTIVE'.
-  // FOR SHARE blocks non-key UPDATEs to accounts.status until this mutation commits.\n  // FOR KEY SHARE would permit a concurrent status change and leave a TOCTOU gap.
+  // FOR SHARE blocks non-key UPDATEs to accounts.status until this mutation commits.
+  // FOR KEY SHARE would permit a concurrent status change and leave a TOCTOU gap.
   const accountRes = await tx.query<{ status: string }>(
     'SELECT status FROM accounts WHERE id = $1 FOR SHARE',
     [actor.accountId]
