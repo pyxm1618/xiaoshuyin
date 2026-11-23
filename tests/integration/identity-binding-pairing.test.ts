@@ -38,7 +38,7 @@ describe('F-04 confirmer pairing ceremony', () => {
   });
 
   it('|D| = 1 selects exactly one attempt and completes the binding', async () => {
-    const target = await createTarget(h, 'pair_one', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'pair_one', { ageBand: 'MINOR_14_17' });
 
     const s0 = await pendingIds(h, target.guardian.token, target.targetPersonId);
     expect(s0).toHaveLength(0);
@@ -88,7 +88,7 @@ describe('F-04 confirmer pairing ceremony', () => {
   });
 
   it('|D| = 0 fails closed (a replay converges onto the existing attempt)', async () => {
-    const target = await createTarget(h, 'pair_zero', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'pair_zero', { ageBand: 'MINOR_14_17' });
     const code = `pair_zero_${randomUUID()}`;
 
     const first = await bootstrap(h, target.invitationToken, code);
@@ -116,7 +116,7 @@ describe('F-04 confirmer pairing ceremony', () => {
   });
 
   it('|D| > 1 fails closed (two distinct candidate identities create two attempts)', async () => {
-    const target = await createTarget(h, 'pair_many', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'pair_many', { ageBand: 'MINOR_14_17' });
 
     const s0 = await pendingIds(h, target.guardian.token, target.targetPersonId);
     expect(s0).toHaveLength(0);

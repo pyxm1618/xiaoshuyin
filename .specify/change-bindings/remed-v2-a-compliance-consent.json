@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "changeId": "remed-v2-a-compliance-consent",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "010-compliance-feature-policy-foundation",
+      "specPath": "specs/010-compliance-feature-policy-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/app.ts",
+        "packages/compliance/src/age-gate.ts",
+        "packages/compliance/src/consent-runtime.ts",
+        "packages/compliance/src/evidence.ts",
+        "packages/compliance/src/feature-policy-repository.ts",
+        "packages/compliance/src/feature-policy-service.ts",
+        "packages/compliance/src/feature-policy.ts",
+        "packages/compliance/src/index.ts",
+        "packages/compliance/src/repository.ts"
+      ]
+    },
+    {
+      "feature": "001-consent-01004-narrow-post-merge-remediation",
+      "specPath": "specs/001-consent-01004-narrow-post-merge-remediation",
+      "implementationPaths": [
+        "apps/server/api/src/routes/consents.ts"
+      ]
+    },
+    {
+      "feature": "001-family-identity-core",
+      "specPath": "specs/001-family-identity-core",
+      "implementationPaths": [
+        "apps/server/api/src/routes/compliance.ts",
+        "apps/server/api/src/routes/members.ts",
+        "packages/domain/src/repository.ts"
+      ]
+    },
+    {
+      "feature": "012-digital-use-assessment-runtime",
+      "specPath": "specs/012-digital-use-assessment-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/digital-use-assessment.ts",
+        "apps/server/api/src/services/digital-use-family-alliance.ts",
+        "apps/server/api/src/services/digital-use-node-response.ts",
+        "apps/server/api/src/services/digital-use-node-semantics.ts",
+        "packages/domain/src/scene-runtime-repository.ts",
+        "packages/scenes/digital-use/index.ts",
+        "packages/scenes/digital-use/routed-reactivation.ts"
+      ]
+    },
+    {
+      "feature": "017-professional-knowledge-foundation",
+      "specPath": "specs/017-professional-knowledge-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/services/professional-knowledge-consumption.ts"
+      ]
+    },
+    {
+      "feature": "common-core-goal-confirmgoal-runtime",
+      "specPath": "specs/common-core-goal-confirmgoal-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/goals.ts"
+      ]
+    },
+    {
+      "feature": "008-problem-formulation-core",
+      "specPath": "specs/008-problem-formulation-core",
+      "implementationPaths": [
+        "apps/server/api/src/services/problem-formulations.ts"
+      ]
+    },
+    {
+      "feature": "006-identity-binding-runtime",
+      "specPath": "specs/006-identity-binding-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/identity-binding/gate.ts",
+        "packages/domain/src/identity-binding-gate.ts"
+      ]
+    },
+    {
+      "feature": "004-case-participant-core",
+      "specPath": "specs/004-case-participant-core",
+      "implementationPaths": [
+        "packages/domain/src/participants.ts"
+      ]
+    }
+  ]
+}

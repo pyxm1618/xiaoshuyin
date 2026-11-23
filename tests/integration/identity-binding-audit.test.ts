@@ -58,7 +58,7 @@ describe('identity binding audit (T099)', () => {
   }
 
   it('RETRYABLE uses BINDING_OPERATION_RETRYABLE, keeps the attempt PENDING, then converges', async () => {
-    const target = await createTarget(h, 'audit_retry', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'audit_retry', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `audit_retry_${randomUUID()}`);
 
     injection.failPhaseC = true;
@@ -124,7 +124,7 @@ describe('identity binding audit (T099)', () => {
   });
 
   it('PENDING / TERMINAL / COMMITTED outcomes are traceable without secrets', async () => {
-    const target = await createTarget(h, 'audit_outcomes', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'audit_outcomes', { ageBand: 'MINOR_14_17' });
     const code = `audit_outcomes_${randomUUID()}`;
     const { attemptId, contextToken } = await startBinding(h, target, code);
 
@@ -143,7 +143,7 @@ describe('identity binding audit (T099)', () => {
     expect(allText).not.toContain('consent');
 
     // A committed flow is also traceable exactly once.
-    const target2 = await createTarget(h, 'audit_committed', { ageBand: 'UNDER_14' });
+    const target2 = await createTarget(h, 'audit_committed', { ageBand: 'MINOR_14_17' });
     const second = await startBinding(h, target2, `audit_committed_${randomUUID()}`);
     const commit = await confirmerDecision(h, target2.guardian.token, second.attemptId, {
       personId: target2.targetPersonId,

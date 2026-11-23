@@ -32,6 +32,7 @@ import {
   lockCurrentProblemFormulation,
   lockFamilyForPrimaryDecision,
   lockSceneCase,
+  readDigitalUseAssessmentTarget,
   validateSceneRefs,
   type FamilyAllianceTargetCode,
   type SceneNodeStateRow,
@@ -49,6 +50,7 @@ import { toHttpError } from '../plugins/error-handler.js';
 import {
   currentSceneEnvelope,
   assertBoundAssessmentCompliance,
+  materializeRoutedSceneNode,
   type DigitalUseActor,
 } from './digital-use-assessment.js';
 import {
@@ -95,13 +97,15 @@ function rethrowFamilyBusinessError(error: unknown): never {
 
 async function evaluateFamilyAllianceCompliance(
   tx: pg.PoolClient,
-  actorPersonId: string
+  actorPersonId: string,
+  targetPersonId: string
 ): Promise<{ policyId: string | null; policyVersion: number | null }> {
   const db = drizzle(tx);
   const result = await evaluateComplianceAtTransactionTime(db, tx, {
     descriptor: FAMILY_ALLIANCE_FEATURE,
+    processingCategory: 'FAMILY_ALLIANCE',
     actorPersonId,
-    targetPersonId: actorPersonId,
+    targetPersonId,
     supportedObligations: SUPPORTED_FAMILY_ALLIANCE_OBLIGATIONS,
   });
   if (result.gate !== 'ALLOW') {
@@ -118,9 +122,9 @@ async function evaluateFamilyAllianceCompliance(
 
 async function assertFamilyAllianceConsentOwnerGate(
   tx: pg.PoolClient,
-  actorPersonId: string
+  targetPersonId: string
 ): Promise<void> {
-  const profile = await getComplianceProfileForUpdate(tx, actorPersonId);
+  const profile = await getComplianceProfileForUpdate(tx, targetPersonId);
   if (!profile || profile.age_band !== 'UNDER_14') return;
 
   if (
@@ -139,7 +143,7 @@ async function assertFamilyAllianceConsentOwnerGate(
     !consent ||
     consent.decision !== 'GRANTED' ||
     consent.version !== profile.guardian_consent_version ||
-    consent.bound_person_id !== actorPersonId ||
+    consent.bound_person_id !== targetPersonId ||
     consent.guardian_person_id !== profile.guardian_person_id ||
     consent.notice_hash !== getCurrentNoticeHash()
   ) {
@@ -150,14 +154,23 @@ async function assertFamilyAllianceConsentOwnerGate(
 export async function pinAndAssertFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
-  actorPersonId: string
+  actorPersonId: string,
+  explicitTargetPersonId?: string
 ): Promise<{ policyId: string | null; policyVersion: number | null }> {
-  // Consent remains an independent owner: validate the authoritative guardian
-  // purpose/version/revocation gate before evaluating feature policy.
-  await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
+  const targetPersonId =
+    explicitTargetPersonId ?? (await readDigitalUseAssessmentTarget(tx, caseId));
+  if (!targetPersonId) {
+    throw familyHttpError('TARGET_SCOPE_INVALID');
+  }
+  // Finding #4 — ownership split: the ACTOR owns Authorization (already decided
+  // by the caller's `requireFamilyAction`), the TARGET CHILD alone owns
+  // Compliance / Consent. The actor's own consent state is never a Family
+  // Alliance precondition: an adult family manager processing a child needs no
+  // guardian consent for themselves.
+  await assertFamilyAllianceConsentOwnerGate(tx, targetPersonId);
   // Exact same advisory key as Slice 10 publisher/overlap guard.
   await lockComplianceFeatureEvaluationBasis(tx, FAMILY_ALLIANCE_FEATURE);
-  const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId);
+  const compliance = await evaluateFamilyAllianceCompliance(tx, actorPersonId, targetPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
   return compliance;
 }
@@ -165,12 +178,20 @@ export async function pinAndAssertFamilyAllianceGates(
 export async function revalidateFamilyAllianceGates(
   tx: pg.PoolClient,
   caseId: string,
-  actorPersonId: string
+  actorPersonId: string,
+  explicitTargetPersonId?: string
 ): Promise<void> {
-  // Profile/policy locks are still held. Revalidate Consent independently,
-  // then Compliance, immediately before idempotency success/commit.
-  await assertFamilyAllianceConsentOwnerGate(tx, actorPersonId);
-  await evaluateFamilyAllianceCompliance(tx, actorPersonId);
+  const targetPersonId =
+    explicitTargetPersonId ?? (await readDigitalUseAssessmentTarget(tx, caseId));
+  if (!targetPersonId) {
+    throw familyHttpError('TARGET_SCOPE_INVALID');
+  }
+  // Profile/policy locks are still held. Revalidate target Consent
+  // independently, then Compliance, immediately before idempotency
+  // success/commit. Actor authorization stays with the caller; no actor-side
+  // consent gate exists (Finding #4).
+  await assertFamilyAllianceConsentOwnerGate(tx, targetPersonId);
+  await evaluateFamilyAllianceCompliance(tx, actorPersonId, targetPersonId);
   await assertOrdinaryProgressionAllowedRaw(tx, { caseId });
 }
 
@@ -341,17 +362,21 @@ function routeFamilyNode(
 async function materializeParallelNodes(
   tx: pg.PoolClient,
   input: FamilyAllianceExecutionInput,
+  sourceNodeCode: string,
   routedNode: DigitalUseNodeManifestEntry,
   inputRefs: readonly StoredSceneRef[],
   reasonCode: string
 ): Promise<void> {
-  await ensureSceneNodeAvailable(tx, {
+  // Finding #7: a Manifest-declared routed edge may land on a node that already
+  // COMPLETED (A2009 → 01004). The controlled reactivation lives in one shared
+  // helper; anything not authorized by the Manifest stays untouched.
+  await materializeRoutedSceneNode(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     nodeCode: routedNode.nodeCode,
-    sourceNodeCode: routedNode.sourceNodeCode,
-    branchReasonCodes: [reasonCode],
+    sourceNodeCode,
+    reasonCode,
     inputRefs,
   });
 
@@ -442,10 +467,16 @@ export async function executeFamilyAllianceNodeInTransaction(
       throw familyHttpError('PROBLEM_FORMULATION_REQUIRED');
     }
 
+    const targetPersonId = await readDigitalUseAssessmentTarget(tx, input.caseId);
+    if (!targetPersonId) {
+      throw familyHttpError('TARGET_SCOPE_INVALID');
+    }
+
     const compliance = await pinAndAssertFamilyAllianceGates(
       tx,
       input.caseId,
-      input.actor.personId
+      input.actor.personId,
+      targetPersonId
     );
 
     await assertBoundAssessmentCompliance(tx, input);
@@ -523,6 +554,7 @@ export async function executeFamilyAllianceNodeInTransaction(
       await materializeParallelNodes(
         tx,
         input,
+        node.nodeCode,
         next,
         semantic.outputRefs,
         route.reasonCode
@@ -596,7 +628,7 @@ export async function executeFamilyAllianceNodeInTransaction(
     ) {
       throw familyHttpError('PROBLEM_FORMULATION_REQUIRED');
     }
-    await revalidateFamilyAllianceGates(tx, input.caseId, input.actor.personId);
+    await revalidateFamilyAllianceGates(tx, input.caseId, input.actor.personId, targetPersonId);
     await assertBoundAssessmentCompliance(tx, input);
 
     void compliance;

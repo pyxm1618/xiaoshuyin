@@ -36,7 +36,7 @@ describe('pending context repository', () => {
   });
 
   it('stores hashed token + encrypted openid + expiry; never plaintext', async () => {
-    const target = await createTarget(h, 'ctx_store', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'ctx_store', { ageBand: 'MINOR_14_17' });
     const res = await bootstrap(h, target.invitationToken, `ctx_${Date.now()}`);
     expect(res.statusCode).toBe(200);
     const token = res.json().pendingContextToken as string;

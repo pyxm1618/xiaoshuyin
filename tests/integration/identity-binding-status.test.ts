@@ -28,14 +28,14 @@ describe('candidate status (T061)', () => {
   });
 
   it('PENDING / no attempt / terminal are all indistinguishable generic', async () => {
-    const pending = await createTarget(h, 'status_pending', { ageBand: 'UNDER_14' });
+    const pending = await createTarget(h, 'status_pending', { ageBand: 'MINOR_14_17' });
     const { contextToken } = await startBinding(h, pending, `status_pending_${randomUUID()}`);
 
     const noAttempt = await createTarget(h, 'status_none', { ageBand: 'ADULT' });
     const boot = await bootstrap(h, noAttempt.invitationToken, `status_none_${randomUUID()}`);
     const noAttemptToken = boot.json().pendingContextToken as string;
 
-    const terminal = await createTarget(h, 'status_terminal', { ageBand: 'UNDER_14' });
+    const terminal = await createTarget(h, 'status_terminal', { ageBand: 'MINOR_14_17' });
     const bootT = await bootstrap(h, terminal.invitationToken, `status_term_${randomUUID()}`);
     const terminalToken = bootT.json().pendingContextToken as string;
 
@@ -48,7 +48,7 @@ describe('candidate status (T061)', () => {
   });
 
   it('COMMITTED is the only distinguishable success', async () => {
-    const target = await createTarget(h, 'status_committed', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'status_committed', { ageBand: 'MINOR_14_17' });
     const { contextToken, attemptId } = await startBinding(
       h,
       target,
@@ -68,7 +68,7 @@ describe('candidate status (T061)', () => {
   });
 
   it('expired attempt materializes TERMINAL and stays generic', async () => {
-    const target = await createTarget(h, 'status_expired', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'status_expired', { ageBand: 'MINOR_14_17' });
     const { contextToken, attemptId } = await startBinding(
       h,
       target,
@@ -104,7 +104,7 @@ describe('candidate status (T061)', () => {
   });
 
   it('M-03: status expiry settles once and scrubs every attempt context', async () => {
-    const target = await createTarget(h, 'status_m03', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'status_m03', { ageBand: 'MINOR_14_17' });
     const code = `status_m03_${randomUUID()}`;
     const first = await bootstrap(h, target.invitationToken, code, `m03-a-${randomUUID()}`);
     const contextToken = first.json().pendingContextToken as string;

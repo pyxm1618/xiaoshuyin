@@ -853,6 +853,17 @@ async function handle01004(
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
   if (context.requestEvidence === undefined) semanticError('INTERNAL_ERROR');
 
+  const currentConsent = await getCurrentPurposeScopedConsentDecision(
+    context.tx,
+    {
+      familyId: context.familyId,
+      caseId: context.caseId,
+      actor: context.actor,
+      purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
+    }
+  );
+  const expectedVersion = currentConsent?.version ?? null;
+
   let decisionRef: Awaited<ReturnType<typeof recordPurposeScopedConsentDecision>>;
   try {
     decisionRef = await recordPurposeScopedConsentDecision(
@@ -863,7 +874,7 @@ async function handle01004(
         actor: context.actor,
         purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
         decision: parsed.data.decision,
-        expectedVersion: null,
+        expectedVersion,
         disclosure: {
           reference: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.reference,
           version: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.version,
