@@ -169,8 +169,8 @@ describeOrSkip('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQ
   });
 
   it('safely handles passwords with quotes, backslashes, dollars, and shell characters', async () => {
-    const complexAppPass = "test'pass\\word$with\"quotes;--and spaces";
-    const complexMigratorPass = "migrator'pass\\$spec!al;--";
+    const complexAppPass = "test$$'pass\\word$with\"quotes;--and spaces & | <> * !";
+    const complexMigratorPass = "migrator$$'pass\\$spec!al;--";
 
     const result = runBootstrapScript({
       POSTGRES_APP_PASSWORD: complexAppPass,
@@ -204,4 +204,3 @@ describeOrSkip('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQ
     await testMigratorClient.end();
   });
 });
-

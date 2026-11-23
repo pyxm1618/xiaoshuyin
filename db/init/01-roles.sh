@@ -17,59 +17,19 @@ psql -v ON_ERROR_STOP=1 \
   -v migrator_pass="$POSTGRES_MIGRATOR_PASSWORD" \
   -v app_pass="$POSTGRES_APP_PASSWORD" \
   -v target_db="$POSTGRES_DB" <<'EOSQL'
+BEGIN;
 SELECT format(
-  $do$
-  DO $$
-  BEGIN
-    -- xiaoshuyin_migrator: idempotent bootstrap and repair to authority invariants
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'xiaoshuyin_migrator') THEN
-      CREATE ROLE xiaoshuyin_migrator WITH
-        LOGIN
-        NOBYPASSRLS
-        NOSUPERUSER
-        NOCREATEDB
-        NOCREATEROLE
-        NOREPLICATION
-        PASSWORD %L;
-    ELSE
-      ALTER ROLE xiaoshuyin_migrator WITH
-        LOGIN
-        NOBYPASSRLS
-        NOSUPERUSER
-        NOCREATEDB
-        NOCREATEROLE
-        NOREPLICATION
-        PASSWORD %L;
-    END IF;
-
-    -- xiaoshuyin_app: idempotent bootstrap and repair to authority invariants
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'xiaoshuyin_app') THEN
-      CREATE ROLE xiaoshuyin_app WITH
-        LOGIN
-        NOBYPASSRLS
-        NOSUPERUSER
-        NOCREATEDB
-        NOCREATEROLE
-        NOREPLICATION
-        PASSWORD %L;
-    ELSE
-      ALTER ROLE xiaoshuyin_app WITH
-        LOGIN
-        NOBYPASSRLS
-        NOSUPERUSER
-        NOCREATEDB
-        NOCREATEROLE
-        NOREPLICATION
-        PASSWORD %L;
-    END IF;
-  END
-  $$;
-  $do$,
-  :'migrator_pass',
-  :'migrator_pass',
-  :'app_pass',
-  :'app_pass'
-) \gexec
+  '%s ROLE %I WITH LOGIN NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD %L',
+  CASE WHEN EXISTS (SELECT FROM pg_roles WHERE rolname = role_name)
+    THEN 'ALTER' ELSE 'CREATE' END,
+  role_name,
+  role_password
+)
+FROM (VALUES
+  ('xiaoshuyin_migrator', :'migrator_pass'),
+  ('xiaoshuyin_app', :'app_pass')
+) AS managed_roles(role_name, role_password) \gexec
+COMMIT;
 
 SELECT format('GRANT CONNECT ON DATABASE %I TO xiaoshuyin_migrator;', :'target_db') \gexec
 SELECT format('GRANT CONNECT ON DATABASE %I TO xiaoshuyin_app;', :'target_db') \gexec
