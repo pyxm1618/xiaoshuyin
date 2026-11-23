@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isBrokenClientError } from '../../apps/server/api/src/db/broken-client.js';
+import { isBrokenClientError } from '../../apps/server/api/src/db/tx.js';
 
 describe('Finding #31: Broken DB Client Classifier', () => {
   it('classifies Node transport errors as broken client connection', () => {

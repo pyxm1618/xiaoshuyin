@@ -93,6 +93,13 @@ jobs:
         run: bun run db:migrate
         env:
           MIGRATION_DATABASE_URL: postgres://xiaoshuyin_migrator:ci_migrator_pw@localhost:5432/xiaoshuyin_test
+      - name: Verify roles bootstrap and repair (Finding #29)
+        run: bunx vitest run tests/db/roles-bootstrap-repair.test.ts
+        env:
+          E2_ROLE_BOOTSTRAP_REPAIR_TEST: '1'
+          TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/xiaoshuyin_test
+          POSTGRES_MIGRATOR_PASSWORD: ci_migrator_pw
+          POSTGRES_APP_PASSWORD: ci_app_pw
 
   integration:
     name: Integration Tests

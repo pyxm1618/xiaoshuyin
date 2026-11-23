@@ -3,24 +3,53 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { Client } from 'pg';
 
-const PG_HOST = process.env['PGHOST'] || '127.0.0.1';
-const PG_PORT = parseInt(process.env['PGPORT'] || '54329', 10);
-const PG_USER = process.env['PGUSER'] || 'postgres';
-const PG_DATABASE = process.env['PGDATABASE'] || 'postgres';
+const IS_DEDICATED_EXECUTION = process.env['E2_ROLE_BOOTSTRAP_REPAIR_TEST'] === '1';
+const describeOrSkip = IS_DEDICATED_EXECUTION ? describe : describe.skip;
 
-const SUPERUSER_URL = `postgres://${PG_USER}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}`;
+function getAdminConnectionInfo() {
+  const rawUrl = process.env['TEST_ADMIN_DATABASE_URL'];
+  if (rawUrl) {
+    const u = new URL(rawUrl);
+    return {
+      connectionString: rawUrl,
+      host: u.hostname,
+      port: parseInt(u.port || '5432', 10),
+      user: u.username || 'postgres',
+      password: u.password ? decodeURIComponent(u.password) : undefined,
+      database: u.pathname.slice(1) || 'postgres',
+    };
+  }
+  const host = process.env['PGHOST'] || '127.0.0.1';
+  const port = parseInt(process.env['PGPORT'] || '54329', 10);
+  const user = process.env['PGUSER'] || 'postgres';
+  const password = process.env['PGPASSWORD'];
+  const database = process.env['PGDATABASE'] || 'postgres';
+  const connectionString = password
+    ? `postgres://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`
+    : `postgres://${encodeURIComponent(user)}@${host}:${port}/${database}`;
+  return { connectionString, host, port, user, password, database };
+}
 
-describe('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQL 18)', () => {
+describeOrSkip('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQL 18)', () => {
   let adminClient: Client;
   const scriptPath = path.resolve(__dirname, '../../db/init/01-roles.sh');
+  const conn = getAdminConnectionInfo();
 
   beforeAll(async () => {
-    adminClient = new Client({ connectionString: SUPERUSER_URL });
+    adminClient = new Client({ connectionString: conn.connectionString });
     await adminClient.connect();
   });
 
   afterAll(async () => {
-    await adminClient.end().catch(() => undefined);
+    try {
+      // Restore standard passwords and managed invariants on tear down
+      runBootstrapScript({
+        POSTGRES_APP_PASSWORD: process.env['POSTGRES_APP_PASSWORD'] || 'safe_app_pass_1',
+        POSTGRES_MIGRATOR_PASSWORD: process.env['POSTGRES_MIGRATOR_PASSWORD'] || 'safe_migrator_pass_1',
+      });
+    } finally {
+      await adminClient.end().catch(() => undefined);
+    }
   });
 
   function runBootstrapScript(envOverrides: Record<string, string> = {}) {
@@ -28,10 +57,12 @@ describe('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQL 18)'
       env: {
         ...process.env,
         PATH: process.env.PATH,
-        POSTGRES_USER: PG_USER,
-        POSTGRES_DB: PG_DATABASE,
-        PGHOST: PG_HOST,
-        PGPORT: String(PG_PORT),
+        POSTGRES_USER: conn.user,
+        POSTGRES_DB: conn.database,
+        PGHOST: conn.host,
+        PGPORT: String(conn.port),
+        PGUSER: conn.user,
+        ...(conn.password ? { PGPASSWORD: conn.password } : {}),
         POSTGRES_MIGRATOR_PASSWORD: 'safe_migrator_pass_1',
         POSTGRES_APP_PASSWORD: 'safe_app_pass_1',
         ...envOverrides,
@@ -149,11 +180,11 @@ describe('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQL 18)'
 
     // Verify that client can authenticate using the complex password with special characters
     const testAppClient = new Client({
-      host: PG_HOST,
-      port: PG_PORT,
+      host: conn.host,
+      port: conn.port,
       user: 'xiaoshuyin_app',
       password: complexAppPass,
-      database: PG_DATABASE,
+      database: conn.database,
     });
     await testAppClient.connect();
     const appQueryRes = await testAppClient.query('SELECT current_user;');
@@ -161,11 +192,11 @@ describe('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQL 18)'
     await testAppClient.end();
 
     const testMigratorClient = new Client({
-      host: PG_HOST,
-      port: PG_PORT,
+      host: conn.host,
+      port: conn.port,
       user: 'xiaoshuyin_migrator',
       password: complexMigratorPass,
-      database: PG_DATABASE,
+      database: conn.database,
     });
     await testMigratorClient.connect();
     const migratorQueryRes = await testMigratorClient.query('SELECT current_user;');
@@ -173,3 +204,4 @@ describe('Finding #29: Roles Bootstrap and Existing Role Repair (PostgreSQL 18)'
     await testMigratorClient.end();
   });
 });
+
