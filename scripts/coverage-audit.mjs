@@ -512,7 +512,8 @@ export const PROOF_ASSERTIONS = {
         helper: 'runBindingFirst',
         assertions: [
           'expect(blocked.blocked).toBe(true);',
-          "expect(outcome.outcome).toBe('COMMITTED');",
+          "expect(outcome.outcome).toBe('TERMINAL');",
+          "expect(outcome.reason).toBe('GUARDIAN_CONSENT_INVALID');",
         ],
       },
     ],

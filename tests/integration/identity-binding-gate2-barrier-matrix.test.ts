@@ -301,8 +301,12 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
       release();
       released = true;
       const outcome = await commit;
-      expect(outcome.outcome).toBe(input.expectedOutcome ?? 'COMMITTED');
-      if (input.expectedOutcome) expect(outcome.reason).toBe('GUARDIAN_CONSENT_INVALID');
+      if (input.expectedOutcome === 'TERMINAL') {
+        expect(outcome.outcome).toBe('TERMINAL');
+        expect(outcome.reason).toBe('GUARDIAN_CONSENT_INVALID');
+      } else {
+        expect(outcome.outcome).toBe('COMMITTED');
+      }
     } finally {
       if (!released) release();
       if (commit) await commit.catch(() => {});
