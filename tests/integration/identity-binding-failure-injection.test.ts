@@ -49,7 +49,7 @@ async function prepare(
   h: BindingHarness,
   label: string
 ): Promise<{ target: TargetFixture; code: string; attemptId: string }> {
-  const target = await createTarget(h, label, { ageBand: 'UNDER_14' });
+  const target = await createTarget(h, label, { ageBand: 'MINOR_14_17' });
   const code = `${label}_${randomUUID()}`;
   const { attemptId } = await startBinding(h, target, code);
   await h.admin.query(

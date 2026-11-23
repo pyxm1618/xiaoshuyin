@@ -23,12 +23,12 @@ import {
   getNoticeHash,
   buildConsentEvidence,
   getAcceptanceTextHash,
-  runtimeConsentChannel,
+  requireConsentRuntimeDependencies,
+  type ConsentRuntimeDependencies,
 } from '@xiaoshuyin/compliance';
 import { hashPayload, isFamilyMember } from '@xiaoshuyin/domain';
 import { requireCurrentFamily } from '../family-context.js';
 import { requireFamilyAction } from '../authz.js';
-import { requireEvidencePepper } from '../evidence-pepper.js';
 import { consentRecordDto } from '../consent-dto.js';
 import {
   insertConsentRequest,
@@ -97,7 +97,13 @@ async function assertReConsentCandidate(
   }
 }
 
-export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
+export function registerComplianceRoutes(
+  app: FastifyInstance,
+  pool: pg.Pool,
+  dependencies: ConsentRuntimeDependencies
+) {
+  const runtime = requireConsentRuntimeDependencies(dependencies);
+
   // POST /api/v1/compliance/guardian-consents/requests
   app.post('/api/v1/compliance/guardian-consents/requests', async (req, reply) => {
     const actor = req.actor;
@@ -118,7 +124,7 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
 
     // C1 / option d: channel is server-decided. The request may only declare
     // the channel implied by this runtime; it never drives stored evidence.
-    if (channel !== runtimeConsentChannel()) {
+    if (channel !== runtime.consentChannel) {
       const err = toHttpError('VALIDATION_ERROR', 'channel does not match runtime');
       return reply.status(err.statusCode).send(err);
     }
@@ -333,11 +339,11 @@ export function registerComplianceRoutes(app: FastifyInstance, pool: pg.Pool) {
             throw validationError('Invalid notice version');
           }
           const evidence = buildConsentEvidence({
-            channel: runtimeConsentChannel(),
+            channel: runtime.consentChannel,
             acceptedTextHash: acceptanceTextHash,
             clientIp: req.ip,
             userAgent: req.headers['user-agent'] ?? null,
-            pepper: requireEvidencePepper(),
+            pepper: runtime.evidencePepper,
           });
 
           await updateConsentRequestGranted(tx, onboardingRequestId);

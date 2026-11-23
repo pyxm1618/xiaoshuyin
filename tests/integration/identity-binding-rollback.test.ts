@@ -44,7 +44,7 @@ describe('Phase C concurrency loser leaves no orphan Account (H4)', () => {
   });
 
   it('rolls back the newly created Account when the P1 binding update loses', async () => {
-    const target = await createTarget(h, 'rollback_p1', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'rollback_p1', { ageBand: 'MINOR_14_17' });
     const code = `rollback_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const { attemptId } = await startBinding(h, target, code);
 

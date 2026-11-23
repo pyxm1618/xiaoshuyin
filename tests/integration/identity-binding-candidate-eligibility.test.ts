@@ -16,6 +16,7 @@ import {
   buildBindingApp,
   candidateDecision,
   createTarget,
+  stageBindingAgeCorrection,
   type BindingHarness,
   type TargetFixture,
 } from '../setup/identity-binding.js';
@@ -129,12 +130,14 @@ describe('M-01 candidate AFFIRM current eligibility (MEDIUM-03)', () => {
 
   it('M-01: consent invalidation blocks AFFIRM', async () => {
     const target = await createTarget(h, 'm01_consent', { ageBand: 'UNDER_14' });
+    const correctAge = await stageBindingAgeCorrection(h, target);
     await runHiddenFailure({
       label: 'consent',
       target,
       code: `m01_consent_${randomUUID()}`,
       reason: 'GUARDIAN_CONSENT_INVALID',
       mutate: async () => {
+        await correctAge();
         const revoke = await revokeConsent(
           h.app,
           target.guardian.token,
@@ -179,17 +182,15 @@ describe('M-01 candidate AFFIRM current eligibility (MEDIUM-03)', () => {
 
   it('M-01: guardian relationship invalidation blocks AFFIRM', async () => {
     const target = await createTarget(h, 'm01_guardian', { ageBand: 'UNDER_14' });
-    const alt = await createTarget(h, 'm01_guardian_alt', { ageBand: 'UNDER_14' });
+    const correctAge = await stageBindingAgeCorrection(h, target);
+    const alt = await createTarget(h, 'm01_guardian_alt', { ageBand: 'MINOR_14_17' });
     await runHiddenFailure({
       label: 'guardian',
       target,
       code: `m01_guardian_${randomUUID()}`,
       reason: 'GUARDIAN_CONSENT_INVALID',
       mutate: async () => {
-        await h.admin.query(
-          'UPDATE person_compliance_profiles SET guardian_person_id = $1 WHERE person_id = $2',
-          [alt.guardian.personId, target.targetPersonId]
-        );
+        await correctAge(alt.guardian.personId);
       },
     });
   });

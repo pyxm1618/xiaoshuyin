@@ -23,7 +23,7 @@ export type GoalReviewState = (typeof GOAL_REVIEW_STATES)[number];
 
 export type GoalDependencyRef = Extract<
   DependencyRef,
-  { type: 'EVIDENCE' | 'CONSENT' }
+  { type: 'EVIDENCE' | 'CONSENT' | 'PACKAGE' }
 >;
 
 export interface GoalParticipantResponsibility {
@@ -146,7 +146,18 @@ function assertGoalDependencyRefs(
       }
       continue;
     }
-    throw goalError('VALIDATION_ERROR', 'Goal dependencyRefs only support EVIDENCE or CONSENT');
+    if (ref.type === 'PACKAGE') {
+      if (
+        typeof ref.key !== 'string' ||
+        ref.key.trim().length === 0 ||
+        typeof ref.version !== 'string' ||
+        ref.version.trim().length === 0
+      ) {
+        throw goalError('VALIDATION_ERROR', 'dependencyRefs contains an invalid Package reference');
+      }
+      continue;
+    }
+    throw goalError('VALIDATION_ERROR', 'Goal dependencyRefs only support EVIDENCE, CONSENT, or PACKAGE');
   }
 }
 
@@ -156,7 +167,11 @@ export function assertGoalDependenciesCoverProblemFormulation(
 ): void {
   assertGoalDependencyRefs(candidate);
   for (const dependency of required) {
-    if (dependency.type !== 'EVIDENCE' && dependency.type !== 'CONSENT') {
+    if (
+      dependency.type !== 'EVIDENCE' &&
+      dependency.type !== 'CONSENT' &&
+      dependency.type !== 'PACKAGE'
+    ) {
       throw goalError(
         'VALIDATION_ERROR',
         'Current Problem Formulation contains a dependency unsupported by Goal V1'

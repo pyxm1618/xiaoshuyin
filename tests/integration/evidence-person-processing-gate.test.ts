@@ -165,8 +165,8 @@ describe('T070 — all processed Persons compliance gate (COLD-002)', () => {
       await expectWrite(fx.managerPersonId, fx.minorPersonId, 'source-minor');
     });
 
-    it('source = UNDER_14 + valid current guardian consent → ALLOW', async () => {
-      await expectWrite(fx.managerPersonId, fx.under14ValidPersonId, 'source-under14-valid');
+    it('source = UNDER_14 + guardian administration consent → BLOCK', async () => {
+      await expectBlocked(fx.managerPersonId, fx.under14ValidPersonId, 'source-under14-valid', 'GUARDIAN_CONSENT_REQUIRED');
     });
 
     it('source = UNDER_14 + missing consent → BLOCK', async () => {
@@ -264,8 +264,8 @@ describe('T070 — all processed Persons compliance gate (COLD-002)', () => {
       await expectWrite(fx.minorPersonId, fx.managerPersonId, 'subject-minor');
     });
 
-    it('subject = UNDER_14 + valid current guardian consent → ALLOW', async () => {
-      await expectWrite(fx.under14ValidPersonId, fx.managerPersonId, 'subject-under14-valid');
+    it('subject = UNDER_14 + guardian administration consent → BLOCK', async () => {
+      await expectBlocked(fx.under14ValidPersonId, fx.managerPersonId, 'subject-under14-valid', 'GUARDIAN_CONSENT_REQUIRED');
     });
 
     it('subject = UNDER_14 + revoked consent → BLOCK', async () => {
@@ -301,8 +301,8 @@ describe('T070 — all processed Persons compliance gate (COLD-002)', () => {
       await expectWrite(fx.adultPersonId, fx.adultPersonId, 'dedupe-adult');
     });
 
-    it('dedupe keeps ALLOW for UNDER_14 with valid consent', async () => {
-      await expectWrite(fx.under14ValidPersonId, fx.under14ValidPersonId, 'dedupe-under14-valid');
+    it('dedupe keeps BLOCK for UNDER_14 with consent limited to administration', async () => {
+      await expectBlocked(fx.under14ValidPersonId, fx.under14ValidPersonId, 'dedupe-under14-valid', 'GUARDIAN_CONSENT_REQUIRED');
     });
 
     it('dedupe keeps BLOCK for UNDER_14 with revoked consent', async () => {

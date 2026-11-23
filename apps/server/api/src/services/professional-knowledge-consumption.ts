@@ -27,7 +27,7 @@ import {
   resolveDigitalUseProfessionalKnowledgeBinding,
 } from '@xiaoshuyin/scenes/digital-use';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { withRlsTransaction } from '../db/tx.js';
+import { withDrizzleRlsTransaction } from '../db/drizzle-tx.js';
 import {
   isKnownAuthorizationDenial,
   requireFamilyAction,
@@ -132,6 +132,7 @@ async function assertKnowledgeCompliance(
     tx,
     {
       descriptor: KNOWLEDGE_CONSUMPTION_FEATURE,
+      processingCategory: 'OTHER_FEATURE',
       actorPersonId,
       targetPersonId,
       supportedObligations: KNOWLEDGE_CONSUMPTION_OBLIGATIONS,
@@ -141,13 +142,61 @@ async function assertKnowledgeCompliance(
 }
 
 function isExplicitFamilyMembershipDenial(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === '42501' &&
-    typeof (error as { message?: unknown }).message === 'string' &&
-    (error as { message: string }).message.includes('FAMILY_MEMBERSHIP_REQUIRED')
-  );
+  // Finding #22 — only ONE trustworthy identity may become a business denial:
+  // a structured PostgreSQL error carrying SQLSTATE 42501 AND the known
+  // `FAMILY_MEMBERSHIP_REQUIRED` RLS marker. Everything else propagates:
+  // message-only fakes, class 08 connection failures, 57P01 admin shutdown,
+  // ECONNRESET / timeouts, unknown SQLSTATEs and unknown wrapped causes.
+  //
+  // A structural wrapper (no SQLSTATE of its own) is traversed so a genuinely
+  // wrapped RLS denial is still recognized, but the *leaf* must prove the full
+  // identity. A message alone is never sufficient.
+  return classifyFamilyMembershipDenial(error) === 'DENIED';
+}
+
+export type FamilyMembershipDenialClassification = 'DENIED' | 'PROPAGATE';
+
+const MAX_CAUSE_DEPTH = 8;
+const SQLSTATE_INSUFFICIENT_PRIVILEGE = '42501';
+const FAMILY_MEMBERSHIP_REQUIRED_MARKER = 'FAMILY_MEMBERSHIP_REQUIRED';
+
+/**
+ * Classify one thrown error without converting infrastructure failures into a
+ * business denial. Exported for the regression tests only.
+ */
+export function classifyFamilyMembershipDenial(
+  error: unknown
+): FamilyMembershipDenialClassification {
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH; depth += 1) {
+    if (typeof current !== 'object' || current === null) return 'PROPAGATE';
+    if (seen.has(current)) return 'PROPAGATE';
+    seen.add(current);
+
+    const candidate = current as { code?: unknown; message?: unknown; cause?: unknown };
+    if (typeof candidate.code === 'string') {
+      if (candidate.code !== SQLSTATE_INSUFFICIENT_PRIVILEGE) return 'PROPAGATE';
+      if (
+        typeof candidate.message === 'string' &&
+        candidate.message.includes(FAMILY_MEMBERSHIP_REQUIRED_MARKER)
+      ) {
+        return 'DENIED';
+      }
+      return 'PROPAGATE';
+    }
+
+    // No SQLSTATE on this node. It can only be a structural wrapper: the denial
+    // identity still has to be proven further down. A bare message-only error
+    // (no cause) is never accepted.
+    if (typeof candidate.cause !== 'object' || candidate.cause === null) {
+      return 'PROPAGATE';
+    }
+    current = candidate.cause;
+  }
+
+  return 'PROPAGATE';
 }
 
 export async function consumeProfessionalKnowledge(input: {
@@ -165,15 +214,16 @@ export async function consumeProfessionalKnowledge(input: {
 }> {
   const dependencies = input.dependencies ?? productionConsumptionDependencies;
   try {
-    return await withRlsTransaction(
-    input.pool,
-    {
-      familyId: input.familyId,
-      accountId: input.actor.accountId,
-      personId: input.actor.personId,
-      purpose: 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION',
-    },
-    async (tx) => {
+    return await withDrizzleRlsTransaction(
+      input.pool,
+      {
+        familyId: input.familyId,
+        accountId: input.actor.accountId,
+        personId: input.actor.personId,
+        purpose: 'PROFESSIONAL_KNOWLEDGE_CONSUMPTION',
+        isolationLevel: 'REPEATABLE READ',
+      },
+      async (_drizzleTx, tx) => {
       try {
         await requireFamilyAction(tx, {
           accountId: input.actor.accountId,

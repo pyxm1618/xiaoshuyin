@@ -102,7 +102,7 @@ describe('P1 conditional binding', () => {
   });
 
   it('committed binding survives downstream invitation terminal state', async () => {
-    const target = await createTarget(h, 'p1_survive', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'p1_survive', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `p1_survive_${Date.now()}`);
     const confirm = await confirmerDecision(h, target.guardian.token, attemptId, {
       personId: target.targetPersonId,

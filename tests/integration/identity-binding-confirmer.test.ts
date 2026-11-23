@@ -26,29 +26,21 @@ describe('confirmer authority', () => {
     await h.close();
   });
 
-  it('guardian can confirm an UNDER_14 attempt and writes one second-party confirmation', async () => {
+  it('a valid v1 guardian grant does not create an UNDER_14 binding attempt', async () => {
     const target = await createTarget(h, 'conf_u14', { ageBand: 'UNDER_14' });
-    const { attemptId } = await startBinding(h, target, `conf_u14_${Date.now()}`);
-
-    const res = await confirmerDecision(h, target.guardian.token, attemptId, {
-      personId: target.targetPersonId,
-      decision: 'AFFIRM',
-    });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().state).toBe('COMMITTED');
-
-    const confirmations = await h.admin.query(
-      `SELECT kind, authority FROM binding_confirmations WHERE attempt_id = $1 ORDER BY kind`,
-      [attemptId]
+    expect(target.consentId).toBeTruthy();
+    const response = await bootstrap(h, target.invitationToken, `conf_u14_${randomUUID()}`);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().binding).toBe('NOT_COMPLETED');
+    const { rows } = await h.admin.query(
+      'SELECT id FROM binding_attempts WHERE target_person_id=$1',
+      [target.targetPersonId]
     );
-    expect(confirmations.rows).toEqual([
-      { kind: 'CANDIDATE', authority: null },
-      { kind: 'SECOND_PARTY', authority: 'GUARDIAN' },
-    ]);
+    expect(rows).toEqual([]);
   });
 
   it('non-guardian Account gets generic 404', async () => {
-    const target = await createTarget(h, 'conf_deny', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_deny', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `conf_deny_${Date.now()}`);
     const outsider = await loginWithLabel(h.app, 'conf_deny_outsider');
 
@@ -61,7 +53,7 @@ describe('confirmer authority', () => {
   });
 
   it('an old key bound to attempt A never operates on a later attempt B (F-02)', async () => {
-    const target = await createTarget(h, 'conf_oldkey', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_oldkey', { ageBand: 'MINOR_14_17' });
     const code = `conf_oldkey_${randomUUID()}`;
     const { attemptId: attemptA } = await startBinding(h, target, code);
     const key = `sp-old-${randomUUID()}`;
@@ -140,8 +132,8 @@ describe('confirmer authority', () => {
   });
 
   it('personId that does not match the attempt target gets generic 404', async () => {
-    const target = await createTarget(h, 'conf_mismatch', { ageBand: 'UNDER_14' });
-    const other = await createTarget(h, 'conf_mismatch_other', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_mismatch', { ageBand: 'MINOR_14_17' });
+    const other = await createTarget(h, 'conf_mismatch_other', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `conf_mismatch_${Date.now()}`);
 
     const res = await confirmerDecision(h, other.guardian.token, attemptId, {
@@ -153,8 +145,8 @@ describe('confirmer authority', () => {
   });
 
   it('H-01: wrong challenge bindings fail closed with zero mutation', async () => {
-    const targetA = await createTarget(h, 'h01_a', { ageBand: 'UNDER_14' });
-    const targetB = await createTarget(h, 'h01_b', { ageBand: 'UNDER_14' });
+    const targetA = await createTarget(h, 'h01_a', { ageBand: 'MINOR_14_17' });
+    const targetB = await createTarget(h, 'h01_b', { ageBand: 'MINOR_14_17' });
     const a = await startBinding(h, targetA, `h01_a_${randomUUID()}`);
     const b = await startBinding(h, targetB, `h01_b_${randomUUID()}`);
 

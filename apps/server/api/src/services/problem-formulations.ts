@@ -59,10 +59,13 @@ import {
   type Tx,
 } from '@xiaoshuyin/domain';
 import {
+  ageGatePublicReasonCode,
   assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   getComplianceProfileForUpdate,
   getConsentRecordForGate,
   getCurrentNoticeHash,
+  getCurrentNoticeVersion,
   type AgeBand,
 } from '@xiaoshuyin/compliance';
 import {
@@ -176,20 +179,28 @@ async function runComplianceGate(
           decision: consentRow.decision as 'GRANTED' | 'REVOKED',
           boundPersonId: consentRow.bound_person_id as string | null,
           noticeHash: consentRow.notice_hash as string,
+          noticeVersion: (consentRow.notice_version ?? null) as string | null,
+          policyVersion: (consentRow.policy_version ?? null) as string | null,
           guardianPersonId: consentRow.guardian_person_id as string,
+          purpose: consentRow.purpose as string,
+          isChainHead: consentRow.is_chain_head === true,
+          evidenceValid: consentRow.evidence_valid === true,
         }
       : null;
 
-    const result = assertMinorProcessingAllowed(personId, {
+    const result = assertMinorProcessingAllowed(personId, 'CASE', {
       getProfile: () => profile,
       getConsentRecord: (id: string) =>
         consent && id.toLowerCase() === consent.id.toLowerCase() ? consent : null,
       getCurrentNoticeHash,
+      getCurrentNoticeVersion,
+      getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
     });
 
     if (result.decision === 'BLOCK') {
+      const publicReason = ageGatePublicReasonCode(result.reason);
       throw httpError(
-        mode === 'PUBLIC' ? 'PROBLEM_FORMULATION_DEPENDENCY_INVALID' : result.reason,
+        mode === 'PUBLIC' ? 'PROBLEM_FORMULATION_DEPENDENCY_INVALID' : publicReason,
         result.reason
       );
     }

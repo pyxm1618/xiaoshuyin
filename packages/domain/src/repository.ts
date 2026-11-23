@@ -5,10 +5,13 @@
 
 import type { PoolClient } from 'pg';
 import {
+  ageGatePublicReasonCode,
   assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   getComplianceProfileForUpdate,
   getConsentRecordForGate,
   getCurrentNoticeHash,
+  getCurrentNoticeVersion,
 } from '@xiaoshuyin/compliance';
 import {
   validateEvidenceProvenance,
@@ -677,10 +680,16 @@ async function assertEvidencePersonProcessingAllowedForPerson(
 
   let consent: {
     id: string;
+    version: number;
     decision: 'GRANTED' | 'REVOKED';
     boundPersonId: string | null;
     noticeHash: string;
+    noticeVersion: string | null;
+    policyVersion: string | null;
     guardianPersonId: string;
+    purpose: string;
+    isChainHead: boolean;
+    evidenceValid: boolean;
   } | null = null;
 
   if (profile?.guardianConsentRecordId) {
@@ -688,21 +697,29 @@ async function assertEvidencePersonProcessingAllowedForPerson(
     consent = c
       ? {
           id: c.id,
+          version: c.version,
           decision: c.decision,
           boundPersonId: c.bound_person_id,
           noticeHash: c.notice_hash,
+          noticeVersion: c.notice_version ?? null,
+          policyVersion: c.policy_version ?? null,
           guardianPersonId: c.guardian_person_id,
+          purpose: c.purpose,
+          isChainHead: c.is_chain_head === true,
+          evidenceValid: c.evidence_valid === true,
         }
       : null;
   }
 
-  const result = assertMinorProcessingAllowed(personId, {
+  const result = assertMinorProcessingAllowed(personId, 'CASE', {
     getProfile: () => profile,
     getConsentRecord: () => consent,
     getCurrentNoticeHash,
+    getCurrentNoticeVersion,
+    getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   });
 
-  if (result.decision === 'BLOCK') refuseMinorProcessing(result.reason);
+  if (result.decision === 'BLOCK') refuseMinorProcessing(ageGatePublicReasonCode(result.reason));
 }
 
 /** Runs the existing compliance gate over every processed Person reference. */

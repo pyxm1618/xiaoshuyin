@@ -51,17 +51,34 @@ describe('Common Core Goal contract', () => {
 
   it.each([
     ['POLICY', { type: 'POLICY', key: 'policy', version: 'v1' }],
-    ['PACKAGE', { type: 'PACKAGE', key: 'package', version: 'v1' }],
     ['CONTENT_VERSION', { type: 'CONTENT_VERSION', key: 'content', version: 'v1' }],
   ] as const)('rejects unsupported Goal %s dependency in the domain', (_type, dependency) => {
     const input = valid();
     (input.dependencyRefs as DependencyRef[]).push(dependency);
-    expect(() => validateGoalContract(input)).toThrow(/only support EVIDENCE or CONSENT/);
+    expect(() => validateGoalContract(input)).toThrow(/only support EVIDENCE, CONSENT, or PACKAGE/);
+  });
+
+  it('accepts authorized PACKAGE dependency in Goal contract', () => {
+    const input = valid();
+    input.dependencyRefs.push({
+      type: 'PACKAGE',
+      key: 'DIGITAL_USE',
+      version: 'v1',
+    });
+    expect(() => validateGoalContract(input)).not.toThrow();
+  });
+
+  it.each([
+    ['empty key', { type: 'PACKAGE' as const, key: '', version: 'v1' }],
+    ['empty version', { type: 'PACKAGE' as const, key: 'DIGITAL_USE', version: ' ' }],
+  ])('rejects invalid PACKAGE dependency format: %s', (_name, dependency) => {
+    const input = valid();
+    input.dependencyRefs.push(dependency as any);
+    expect(() => validateGoalContract(input)).toThrow(/invalid Package reference/);
   });
 
   it.each([
     ['POLICY', { type: 'POLICY', key: 'policy', version: 'v1' }],
-    ['PACKAGE', { type: 'PACKAGE', key: 'package', version: 'v1' }],
     ['CONTENT_VERSION', { type: 'CONTENT_VERSION', key: 'content', version: 'v1' }],
   ] as const)(
     'fails closed when the current Problem Formulation requires unsupported %s',
@@ -71,6 +88,26 @@ describe('Common Core Goal contract', () => {
       ).toThrow(/unsupported by Goal V1/);
     }
   );
+
+  it('accepts Problem Formulation requiring PACKAGE:DIGITAL_USE:v1 and requires candidate to cover it', () => {
+    const packageDep: DependencyRef = {
+      type: 'PACKAGE',
+      key: 'DIGITAL_USE',
+      version: 'v1',
+    };
+    const base = valid();
+
+    // Fails when Goal candidate does not cover the required PACKAGE dependency
+    expect(() =>
+      assertGoalDependenciesCoverProblemFormulation([packageDep], base.dependencyRefs)
+    ).toThrow(/Goal dependencyRefs must include the current Problem Formulation dependencies/);
+
+    // Passes when Goal candidate includes the required PACKAGE dependency
+    const candidateWithPackage = [...base.dependencyRefs, packageDep];
+    expect(() =>
+      assertGoalDependenciesCoverProblemFormulation([packageDep], candidateWithPackage)
+    ).not.toThrow();
+  });
 
   it('requires traceable Evidence for represented participant responsibility', () => {
     const input = valid();

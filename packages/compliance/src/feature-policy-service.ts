@@ -30,6 +30,7 @@ export interface ComplianceEvaluationRequest {
   readonly actorPersonId: string;
   /** Target Person when the consuming command performs person processing. */
   readonly targetPersonId: string | null;
+  readonly processingCategory?: ComplianceEvaluationSnapshot['processingCategory'];
   /** Server-owned capability declaration; never request/client input. */
   readonly supportedObligations: readonly ComplianceObligation[];
 }
@@ -66,6 +67,7 @@ export async function loadComplianceEvaluationSnapshot(
     candidatePolicies: policySnapshot.policies,
     actor,
     personProcessingRequired: request.targetPersonId !== null,
+    processingCategory: request.processingCategory,
     person,
     currentNoticeHash: getCurrentNoticeHash(),
   };

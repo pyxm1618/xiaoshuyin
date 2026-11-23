@@ -214,7 +214,7 @@ describe('no-P2 invariants (T105)', () => {
   });
 
   it('invitation terminal retry keeps Person increment 0 and 0 commit', async () => {
-    const target = await createTarget(h, 'nop2_invite', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'nop2_invite', { ageBand: 'MINOR_14_17' });
     const code = `nop2_invite_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
     const before = await snapshot(code, target.targetPersonId);
@@ -239,7 +239,7 @@ describe('no-P2 invariants (T105)', () => {
   });
 
   it('concurrent claims on the same P1 produce at most one commit and no P2', async () => {
-    const target = await createTarget(h, 'nop2_concurrent', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'nop2_concurrent', { ageBand: 'MINOR_14_17' });
     const codeA = `nop2_ca_${randomUUID()}`;
     const codeB = `nop2_cb_${randomUUID()}`;
     const beforeA = await snapshot(codeA, target.targetPersonId);
@@ -317,7 +317,7 @@ describe('no-P2 invariants (T105)', () => {
   });
 
   it('bootstrap replay adds no Person / P2 / binding / session, and no participation row', async () => {
-    const target = await createTarget(h, 'nop2_replay', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'nop2_replay', { ageBand: 'MINOR_14_17' });
     const code = `nop2_replay_${randomUUID()}`;
     const key = `nop2-replay-${randomUUID()}`;
     const before = await snapshot(code, target.targetPersonId);
@@ -346,7 +346,7 @@ describe('no-P2 invariants (T105)', () => {
   });
 
   it('RETRYABLE infrastructure failure commits nothing, and retry converges once', async () => {
-    const target = await createTarget(h, 'nop2_retryable', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'nop2_retryable', { ageBand: 'MINOR_14_17' });
     const code = `nop2_retryable_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
     const before = await snapshot(code, target.targetPersonId);
@@ -404,7 +404,7 @@ describe('no-P2 invariants (T105)', () => {
   });
 
   it('rollback (P1 binding update loses) leaves no Account, no partial binding, no P2', async () => {
-    const target = await createTarget(h, 'nop2_rollback', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'nop2_rollback', { ageBand: 'MINOR_14_17' });
     const code = `nop2_rollback_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
     const before = await snapshot(code, target.targetPersonId);

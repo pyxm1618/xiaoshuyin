@@ -27,7 +27,7 @@ describe('Identity binding happy path (AS-01)', () => {
   });
 
   it('binds Account A ↔ existing P1 exactly once; no Person increment', async () => {
-    const target = await createTarget(h, 'hf', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'hf', { ageBand: 'MINOR_14_17' });
     // Other suites run in parallel and create their own Persons; the
     // deterministic no-P2 assertion is scoped to the Account created by THIS
     // binding flow (a P2 would be created with that account).
@@ -138,8 +138,8 @@ describe('Identity binding happy path (AS-01)', () => {
   });
 
   it('H-01: candidate-presented challenge binds the exact attempt and cannot cross candidates', async () => {
-    const targetA = await createTarget(h, 'h01_e2e_a', { ageBand: 'UNDER_14' });
-    const targetB = await createTarget(h, 'h01_e2e_b', { ageBand: 'UNDER_14' });
+    const targetA = await createTarget(h, 'h01_e2e_a', { ageBand: 'MINOR_14_17' });
+    const targetB = await createTarget(h, 'h01_e2e_b', { ageBand: 'MINOR_14_17' });
     const a = await startBinding(h, targetA, `h01_e2e_a_${Date.now()}`);
     const b = await startBinding(h, targetB, `h01_e2e_b_${Date.now()}`);
     expect(a.pairingChallenge).not.toBe(b.pairingChallenge);
