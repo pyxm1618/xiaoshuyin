@@ -37,9 +37,9 @@ describe('Finding #17: Sensitive Intervention Staff Writes Account ACTIVE Revali
       code: 'INTERVENTION_STAFF_AUTHORITY_INVALID',
     });
 
-    // Verify row lock was requested with FOR KEY SHARE
+    // FOR SHARE must block concurrent non-key UPDATEs of accounts.status.\n    // FOR KEY SHARE would not block status changes and is insufficient for this authority gate.\n    // Verify the stronger row lock is requested within the mutation transaction.
     expect(mockTx.query).toHaveBeenCalledWith(
-      'SELECT status FROM accounts WHERE id = $1 FOR KEY SHARE',
+      'SELECT status FROM accounts WHERE id = $1 FOR SHARE',
       ['acc-suspended']
     );
 
