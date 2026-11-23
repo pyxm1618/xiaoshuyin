@@ -137,6 +137,7 @@ export async function assertAssessmentCompliance(
 ): Promise<void> {
   const snapshot = await loadComplianceEvaluationSnapshot(drizzle(tx), tx, {
     descriptor: DIGITAL_USE_ASSESSMENT_FEATURE,
+    processingCategory: 'ASSESSMENT',
     actorPersonId,
     targetPersonId,
     supportedObligations: SUPPORTED_ASSESSMENT_OBLIGATIONS,

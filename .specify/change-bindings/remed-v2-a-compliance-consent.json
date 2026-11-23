@@ -12,6 +12,7 @@
         "packages/compliance/src/consent-runtime.ts",
         "packages/compliance/src/evidence.ts",
         "packages/compliance/src/feature-policy-repository.ts",
+        "packages/compliance/src/feature-policy-service.ts",
         "packages/compliance/src/feature-policy.ts",
         "packages/compliance/src/index.ts",
         "packages/compliance/src/repository.ts"

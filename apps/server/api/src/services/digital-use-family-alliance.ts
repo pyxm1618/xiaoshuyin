@@ -103,6 +103,7 @@ async function evaluateFamilyAllianceCompliance(
   const db = drizzle(tx);
   const result = await evaluateComplianceAtTransactionTime(db, tx, {
     descriptor: FAMILY_ALLIANCE_FEATURE,
+    processingCategory: 'FAMILY_ALLIANCE',
     actorPersonId,
     targetPersonId,
     supportedObligations: SUPPORTED_FAMILY_ALLIANCE_OBLIGATIONS,

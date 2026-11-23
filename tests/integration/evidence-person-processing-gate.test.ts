@@ -301,8 +301,8 @@ describe('T070 — all processed Persons compliance gate (COLD-002)', () => {
       await expectWrite(fx.adultPersonId, fx.adultPersonId, 'dedupe-adult');
     });
 
-    it('dedupe keeps ALLOW for UNDER_14 with valid consent', async () => {
-      await expectWrite(fx.under14ValidPersonId, fx.under14ValidPersonId, 'dedupe-under14-valid');
+    it('dedupe keeps BLOCK for UNDER_14 with consent limited to administration', async () => {
+      await expectBlocked(fx.under14ValidPersonId, fx.under14ValidPersonId, 'dedupe-under14-valid', 'GUARDIAN_CONSENT_REQUIRED');
     });
 
     it('dedupe keeps BLOCK for UNDER_14 with revoked consent', async () => {

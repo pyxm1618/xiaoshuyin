@@ -23,7 +23,7 @@ describe('binding confirmation repository', () => {
   });
 
   it('candidate AFFIRM appends one CANDIDATE row; replay appends none', async () => {
-    const target = await createTarget(h, 'conf_one', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_one', { ageBand: 'MINOR_14_17' });
     const { contextToken, attemptId } = await startBinding(
       h,
       target,
@@ -48,7 +48,7 @@ describe('binding confirmation repository', () => {
   });
 
   it('confirmation rows reject UPDATE and DELETE', async () => {
-    const target = await createTarget(h, 'conf_imm', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_imm', { ageBand: 'MINOR_14_17' });
     await startBinding(h, target, `conf_imm_${Date.now()}`);
     const { rows } = await h.admin.query(
       'SELECT id FROM binding_confirmations WHERE attempt_id = (SELECT id FROM binding_attempts WHERE target_person_id = $1 LIMIT 1)',
@@ -64,7 +64,7 @@ describe('binding confirmation repository', () => {
   });
 
   it('cross-attempt reuse is structurally impossible (one row per attempt/kind)', async () => {
-    const target = await createTarget(h, 'conf_cross', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_cross', { ageBand: 'MINOR_14_17' });
     await startBinding(h, target, `conf_cross_${Date.now()}`);
     const { rows } = await h.admin.query(
       'SELECT id FROM binding_attempts WHERE target_person_id = $1 LIMIT 1',

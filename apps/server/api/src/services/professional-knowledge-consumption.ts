@@ -132,6 +132,7 @@ async function assertKnowledgeCompliance(
     tx,
     {
       descriptor: KNOWLEDGE_CONSUMPTION_FEATURE,
+      processingCategory: 'OTHER_FEATURE',
       actorPersonId,
       targetPersonId,
       supportedObligations: KNOWLEDGE_CONSUMPTION_OBLIGATIONS,

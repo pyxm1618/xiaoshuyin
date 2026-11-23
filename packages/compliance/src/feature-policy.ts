@@ -19,6 +19,7 @@ import {
   type AgeBand,
   type ComplianceProfile,
   type ConsentRecord,
+  type MinorProcessingCategory,
 } from './age-gate.js';
 import { getCurrentNoticeVersion } from './notices.js';
 import type { ComplianceFeatureDescriptor } from './feature-identity.js';
@@ -128,6 +129,7 @@ export interface ComplianceEvaluationSnapshot {
    */
   readonly candidatePolicies: readonly ComplianceFeaturePolicyRecord[];
   readonly personProcessingRequired: boolean;
+  readonly processingCategory?: Exclude<MinorProcessingCategory, 'GUARDIAN_CONSENT_ADMINISTRATION'> | undefined;
   readonly person: CompliancePersonSnapshot | null;
   /** Current notice hash from the existing versioned notice catalog. */
   readonly currentNoticeHash: string | null;
@@ -423,14 +425,9 @@ export function evaluateCompliance(
     }
 
     const person = snapshot.person;
-    const processingCategory = (() => {
-      switch (snapshot.feature.featureCode) {
-        case 'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME': return 'FAMILY_ALLIANCE';
-        case 'DIGITAL_USE_ASSESSMENT_RUNTIME': return 'ASSESSMENT';
-        default: return 'OTHER_FEATURE';
-      }
-    })();
-    const ageGate = assertMinorProcessingAllowed(person.personId, processingCategory, {
+    const category: MinorProcessingCategory | undefined = snapshot.processingCategory;
+    const processingCategory = category === 'GUARDIAN_CONSENT_ADMINISTRATION' ? 'OTHER_FEATURE' : category;
+    const ageGate = assertMinorProcessingAllowed(person.personId, processingCategory ?? 'OTHER_FEATURE', {
       getProfile: () => toAgeGateProfile(person),
       getConsentRecord: () => (person.guardianConsent ? toAgeGateConsent(person.guardianConsent) : null),
       getCurrentNoticeHash: () => snapshot.currentNoticeHash ?? '',
