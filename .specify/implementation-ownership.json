@@ -416,7 +416,7 @@
       "id": "common-core-goal-migration-032",
       "match": {
         "kind": "EXACT",
-        "path": "db/migrations/032_common_core_goal_confirm_goal_package_dependency.sql"
+        "path": "db/migrations/031_common_core_goal_confirm_goal_package_dependency.sql"
       },
       "ownership": {
         "kind": "FEATURE",
