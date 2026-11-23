@@ -11,6 +11,7 @@ import {
   candidateDecision,
   candidateStatus,
   createTarget,
+  stageBindingAgeCorrection,
   startBinding,
   type BindingHarness,
 } from '../setup/identity-binding.js';
@@ -69,7 +70,7 @@ describe('candidate decision', () => {
   });
 
   it('AFFIRM same key + same issuance replays the exact original challenge bytes', async () => {
-    const target = await createTarget(h, 'cand_affirm', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'cand_affirm', { ageBand: 'MINOR_14_17' });
     const boot = await bootstrap(h, target.invitationToken, `cand_affirm_${Date.now()}`);
     const contextToken = boot.json().pendingContextToken as string;
     const key = `cand-idem-${Date.now()}`;
@@ -115,12 +116,14 @@ describe('candidate decision', () => {
 
   it('M-01: consent revoked after bootstrap blocks AFFIRM and scrubs every context', async () => {
     const target = await createTarget(h, 'cand_revoked', { ageBand: 'UNDER_14' });
+    const correctAge = await stageBindingAgeCorrection(h, target);
     const code = `cand_revoked_${Date.now()}`;
     const boot = await bootstrap(h, target.invitationToken, code);
     const contextToken = boot.json().pendingContextToken as string;
     await bootstrap(h, target.invitationToken, code, `boot2-${Date.now()}`);
     expect(target.consentId).toBeTruthy();
 
+    await correctAge();
     const revoke = await revokeConsent(
       h.app,
       target.guardian.token,
@@ -187,7 +190,7 @@ describe('candidate decision', () => {
     }> = [];
 
     {
-      const target = await createTarget(h, 'cand_inv', { ageBand: 'UNDER_14' });
+      const target = await createTarget(h, 'cand_inv', { ageBand: 'MINOR_14_17' });
       cases.push({
         label: 'invitation',
         mutate: async () => {
@@ -200,7 +203,7 @@ describe('candidate decision', () => {
     }
 
     {
-      const target = await createTarget(h, 'cand_bound', { ageBand: 'UNDER_14' });
+      const target = await createTarget(h, 'cand_bound', { ageBand: 'MINOR_14_17' });
       cases.push({
         label: 'bound',
         mutate: async () => {
@@ -220,7 +223,7 @@ describe('candidate decision', () => {
     }
 
     {
-      const target = await createTarget(h, 'cand_multi', { ageBand: 'UNDER_14' });
+      const target = await createTarget(h, 'cand_multi', { ageBand: 'MINOR_14_17' });
       cases.push({
         label: 'multi',
         mutate: async () => {
@@ -312,7 +315,7 @@ describe('candidate decision', () => {
       ['CANCEL', 'CANDIDATE_CANCELLED'],
     ] as const) {
       const target = await createTarget(h, `cand_${decision.toLowerCase()}`, {
-        ageBand: 'UNDER_14',
+        ageBand: 'MINOR_14_17',
       });
       const { contextToken, attemptId } = await startBinding(
         h,

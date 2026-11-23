@@ -24,7 +24,7 @@ describe('attempt creation and convergence', () => {
   });
 
   it('creates a PENDING attempt and converges different keys to the same live attempt', async () => {
-    const target = await createTarget(h, 'att_create', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'att_create', { ageBand: 'MINOR_14_17' });
     const code = `att_create_${Date.now()}`;
 
     const first = await bootstrap(h, target.invitationToken, code, `att-k1-${Date.now()}`);
@@ -41,7 +41,7 @@ describe('attempt creation and convergence', () => {
   });
 
   it('allows a new attempt after the old one is TERMINAL', async () => {
-    const target = await createTarget(h, 'att_new', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'att_new', { ageBand: 'MINOR_14_17' });
     const code = `att_new_${Date.now()}`;
     const boot = await bootstrap(h, target.invitationToken, code, `att-n1-${Date.now()}`);
     const token = boot.json().pendingContextToken as string;
@@ -69,7 +69,7 @@ describe('attempt creation and convergence', () => {
   });
 
   it('materializes an expired PENDING attempt before creating the new one (F-07)', async () => {
-    const target = await createTarget(h, 'att_exp', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'att_exp', { ageBand: 'MINOR_14_17' });
     const code = `att_exp_${Date.now()}`;
 
     const boot = await bootstrap(h, target.invitationToken, code, `exp-1-${Date.now()}`);

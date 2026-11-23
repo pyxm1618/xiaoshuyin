@@ -367,6 +367,33 @@ export async function startBinding(
   };
 }
 
+/**
+ * Prepare a legal teen binding operation for a test of subsequently corrected
+ * eligibility. The persisted UNDER_14 grant is retained for administration.
+ */
+export async function stageBindingAgeCorrection(h: BindingRuntime, target: TargetFixture) {
+  const prior = await h.admin.query(
+    `UPDATE person_compliance_profiles AS profile
+        SET age_band='MINOR_14_17', guardian_consent_record_id=NULL, guardian_consent_version=NULL
+       FROM consent_records AS consent
+      WHERE profile.person_id=$1 AND profile.age_band='UNDER_14'
+        AND profile.guardian_consent_record_id=consent.id AND consent.id=$2
+      RETURNING consent.version`,
+    [target.targetPersonId, target.consentId]
+  );
+  if (prior.rowCount !== 1) throw new Error('Age correction fixture requires a bound UNDER_14 grant');
+  return async (guardianPersonId = target.guardian.personId) => {
+    const restored = await h.admin.query(
+      `UPDATE person_compliance_profiles
+          SET age_band='UNDER_14', guardian_person_id=$2, guardian_consent_record_id=$3,
+              guardian_consent_version=$4
+        WHERE person_id=$1 AND age_band='MINOR_14_17' AND guardian_consent_record_id IS NULL`,
+      [target.targetPersonId, guardianPersonId, target.consentId, prior.rows[0].version]
+    );
+    if (restored.rowCount !== 1) throw new Error('Age correction fixture lost its teen profile');
+  };
+}
+
 export function invitation(
   targetPersonId: string,
   targetFamilyId: string

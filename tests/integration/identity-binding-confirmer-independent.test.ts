@@ -26,7 +26,7 @@ describe('independent confirmer authentication', () => {
   });
 
   it('candidate context cannot call confirmer routes', async () => {
-    const target = await createTarget(h, 'ind_ctx', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'ind_ctx', { ageBand: 'MINOR_14_17' });
     const { contextToken, attemptId } = await startBinding(h, target, `ind_ctx_${Date.now()}`);
 
     const decision = await h.app.inject({

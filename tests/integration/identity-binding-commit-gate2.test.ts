@@ -11,6 +11,7 @@ import {
   confirmerDecision,
   createAppPool,
   createTarget,
+  stageBindingAgeCorrection,
   startBinding,
   type BindingHarness,
 } from '../setup/identity-binding.js';
@@ -52,9 +53,11 @@ describe('Gate 2 commit-time recheck (T073)', () => {
 
   it('consent revoked between Gate 1 and Gate 2 blocks the commit', async () => {
     const target = await createTarget(h, 'g2_consent', { ageBand: 'UNDER_14' });
+    const correctAge = await stageBindingAgeCorrection(h, target);
     const { attemptId } = await startBinding(h, target, `g2_consent_${randomUUID()}`);
     expect(target.consentId).toBeTruthy();
 
+    await correctAge();
     const revoke = await revokeConsent(
       h.app,
       target.guardian.token,
@@ -81,7 +84,7 @@ describe('Gate 2 commit-time recheck (T073)', () => {
   });
 
   it('invitation terminal between gates blocks the commit', async () => {
-    const target = await createTarget(h, 'g2_invite', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'g2_invite', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `g2_invite_${randomUUID()}`);
     h.port.remove(target.invitationToken);
 
@@ -95,7 +98,7 @@ describe('Gate 2 commit-time recheck (T073)', () => {
   });
 
   it('P1 bound externally between gates yields TARGET_ALREADY_BOUND', async () => {
-    const target = await createTarget(h, 'g2_bound', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'g2_bound', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `g2_bound_${randomUUID()}`);
 
     const other = await h.admin.query(
@@ -126,7 +129,7 @@ describe('Gate 2 commit-time recheck (T073)', () => {
   });
 
   it('confirmer authority changed between confirmation and commit blocks the commit', async () => {
-    const target = await createTarget(h, 'g2_authority', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'g2_authority', { ageBand: 'MINOR_14_17' });
     const { attemptId, contextToken } = await startBinding(
       h,
       target,
@@ -187,6 +190,7 @@ describe('Gate 2 commit-time recheck (T073)', () => {
 
   it('concurrent consent revoke committed before the linearization point blocks the commit (F-01)', async () => {
     const target = await createTarget(h, 'g2_race', { ageBand: 'UNDER_14' });
+    const correctAge = await stageBindingAgeCorrection(h, target);
     const code = `g2_race_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
     expect(target.consentId).toBeTruthy();
@@ -247,6 +251,7 @@ describe('Gate 2 commit-time recheck (T073)', () => {
       await new Promise((resolve) => setTimeout(resolve, 250));
 
       // Authoritative invalidating change commits while binding is parked.
+      await correctAge();
       const revoke = await revokeConsent(
         h.app,
         target.guardian.token,

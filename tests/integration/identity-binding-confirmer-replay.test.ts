@@ -33,6 +33,7 @@ import {
   buildBindingApp,
   confirmerDecision,
   createTarget,
+  stageBindingAgeCorrection,
   personAccountId,
   startBinding,
   type BindingHarness,
@@ -85,8 +86,8 @@ describe('confirmer exact replay never re-runs current authority (MEDIUM-01)', (
   });
 
   it('Case A: a COMMITTED operation replays its historical outcome after the confirmer is revoked', async () => {
-    const target = await createTarget(h, 'replay_committed', { ageBand: 'UNDER_14' });
-    const alt = await createTarget(h, 'replay_committed_alt', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'replay_committed', { ageBand: 'MINOR_14_17' });
+    const alt = await createTarget(h, 'replay_committed_alt', { ageBand: 'MINOR_14_17' });
     const { attemptId, pairingChallenge } = await startBinding(
       h,
       target,
@@ -124,8 +125,8 @@ describe('confirmer exact replay never re-runs current authority (MEDIUM-01)', (
   });
 
   it('Case B: a TERMINAL operation replays its historical outcome after the confirmer is revoked', async () => {
-    const target = await createTarget(h, 'replay_terminal', { ageBand: 'UNDER_14' });
-    const alt = await createTarget(h, 'replay_terminal_alt', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'replay_terminal', { ageBand: 'MINOR_14_17' });
+    const alt = await createTarget(h, 'replay_terminal_alt', { ageBand: 'MINOR_14_17' });
     const { attemptId, pairingChallenge } = await startBinding(
       h,
       target,
@@ -161,6 +162,7 @@ describe('confirmer exact replay never re-runs current authority (MEDIUM-01)', (
 
   it('Case C: a PENDING operation resumes Phase C after authority / consent invalidation', async () => {
     const target = await createTarget(h, 'replay_pending', { ageBand: 'UNDER_14' });
+    const correctAge = await stageBindingAgeCorrection(h, target);
     const { attemptId, pairingChallenge } = await startBinding(
       h,
       target,
@@ -189,6 +191,7 @@ describe('confirmer exact replay never re-runs current authority (MEDIUM-01)', (
     // Current consent is invalidated after the historical affirmative. The
     // replay must NOT be cut off as 404 by stale confirmer authority; it must
     // reach Gate 2 and settle with the authoritative reason.
+    await correctAge();
     const revoke = await revokeConsent(
       h.app,
       target.guardian.token,
@@ -239,7 +242,7 @@ describe('confirmer exact replay never re-runs current authority (MEDIUM-01)', (
   });
 
   it('same operation key + different payload is still 409 IDEMPOTENCY_PAYLOAD_MISMATCH', async () => {
-    const target = await createTarget(h, 'replay_mismatch', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'replay_mismatch', { ageBand: 'MINOR_14_17' });
     const { attemptId, pairingChallenge } = await startBinding(
       h,
       target,

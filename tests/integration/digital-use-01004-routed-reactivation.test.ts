@@ -7,9 +7,8 @@
  * a controlled CAS — without touching helpOrReentryRefs, without an
  * `entryMode = USER_INITIATED` widening and without a client direct reopen.
  *
- * The first round runs through HTTP. The existing second-round regressions
- * still seed the later predecessor, so they do not prove legal progression
- * from MAIN to A2009.
+ * The first round runs through HTTP. Later-route tests establish an independent
+ * Problem Formulation prerequisite fixture and drive A2004/A2006/A2009 via HTTP.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -131,25 +130,48 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
 
     if (!seedLaterRoute) return { ...f, caseVersion: scene.caseVersion };
 
-    // Repository/runtime regression fixture for the later route. The first
-    // consent round above is always executed through the public commands.
+    // This history fixture establishes the A2004 prerequisite independently
+    // of the terminal MAIN route. Both later predecessors materialize via HTTP.
+    const evidenceRefs = nodeOf(scene, 'A1001').outputRefs.filter(
+      (ref: { type: string }) => ref.type === 'ASSERTION'
+    );
+    expect(evidenceRefs.length).toBeGreaterThan(0);
+    const marker = { type: 'RECORD_MARKER', markerCode: 'A200401', evidenceRefs };
     await admin.query(`UPDATE cases SET phase='PROBLEM_FORMULATION' WHERE id=$1`, [caseId]);
     await admin.query(
       `INSERT INTO scene_node_states
          (family_id,case_id,scene_package_version,node_code,source_node_code,
           status,branch_reason_codes,input_refs,output_refs,revision,completed_at)
-       VALUES ($1,$2,'v1','A2009','A2009','AVAILABLE',ARRAY['ROUTED'],
-               '[]'::jsonb,'[]'::jsonb,1,NULL)`,
-      [familyId, caseId]
+       VALUES ($1,$2,'v1','A2004','A2003','AVAILABLE',ARRAY['ROUTED'],
+               $3::jsonb,'[]'::jsonb,1,NULL)`,
+      [familyId, caseId, JSON.stringify([marker])]
     );
 
-    return {
-      manager,
-      familyId,
-      caseId,
-      caseVersion: await currentCaseVersion(caseId),
-      targetPersonId,
-    };
+    f.caseVersion = await currentCaseVersion(caseId);
+    const a2004 = await respond(f, 'A2004', { decision: 'NO' }, {
+      expectedNodeRevision: 1,
+      idempotencyKey: `${PREFIX}${label}-a2004`,
+    });
+    expect(a2004.statusCode, a2004.body).toBe(200);
+    const a2006 = nodeOf(a2004.json(), 'A2006');
+    expect(a2006).toMatchObject({
+      status: 'AVAILABLE',
+      sourceNodeCode: 'A2004',
+      branchReasonCodes: ['COLLABORATIVE_DURATION_NO'],
+    });
+    expect(nodeOf(a2004.json(), 'A2009')).toBeUndefined();
+    f.caseVersion = a2004.json().caseVersion;
+    const reconsidered = await respond(f, 'A2006', { decision: 'UNWILLING' }, {
+      expectedNodeRevision: a2006.revision,
+      idempotencyKey: `${PREFIX}${label}-a2006`,
+    });
+    expect(reconsidered.statusCode, reconsidered.body).toBe(200);
+    expect(nodeOf(reconsidered.json(), 'A2009')).toMatchObject({
+      status: 'AVAILABLE',
+      sourceNodeCode: 'A2006',
+      branchReasonCodes: ['MOTIVATION_RECONSIDER_UNWILLING'],
+    });
+    return { ...f, caseVersion: reconsidered.json().caseVersion };
   }
 
   async function respond(
@@ -264,11 +286,21 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     const reactivated = nodeOf(afterA2009, '01004');
     expect(reactivated.status).toBe('AVAILABLE');
     expect(reactivated.revision).toBe(3);
-    expect(
-      reactivated.branchReasonCodes.some((code: string) =>
-        code.startsWith('REACTIVATED_')
-      )
-    ).toBe(true);
+    expect(reactivated.branchReasonCodes).toEqual(['REACTIVATED_RELATIONSHIP_ASSESSMENT_AGREED']);
+    const predecessor = nodeOf(afterA2009, 'A2009');
+    expect(predecessor.status).toBe('COMPLETED');
+    expect(predecessor.outputRefs.length).toBeGreaterThan(0);
+    expect(reactivated.inputRefs).toEqual(
+      expect.arrayContaining([...predecessor.inputRefs, ...predecessor.outputRefs])
+    );
+    const routed = await admin.query(
+      `SELECT metadata->>'nextNodeCode' AS target, metadata->>'routeReasonCode' AS reason
+         FROM case_events
+        WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED'
+          AND metadata->>'nodeCode'='A2009'`,
+      [f.caseId]
+    );
+    expect(routed.rows).toEqual([{ target: '01004', reason: 'RELATIONSHIP_ASSESSMENT_AGREED' }]);
 
     // The reactivated node records the ACTUAL routed consent decision as v2.
     const granted = await respond(
@@ -285,7 +317,15 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     const after = await consentRows(f);
     expect(after).toHaveLength(2);
     expect(after[1]).toMatchObject({ decision: 'GRANTED', version: 2 });
+    expect(after[0]).toEqual(before[0]);
     expect(after[1]!.supersedes_id).toBe(after[0]!.id);
+    const current = await admin.query(
+      `SELECT c.id FROM consent_records c
+        WHERE c.case_id=$1 AND c.purpose='DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT'
+          AND NOT EXISTS (SELECT 1 FROM consent_records s WHERE s.supersedes_id=c.id)`,
+      [f.caseId]
+    );
+    expect(current.rows).toEqual([{ id: after[1]!.id }]);
   }, 120_000);
 
   it('an idempotent replay of the reactivated 01004 decision never creates consent v3', async () => {

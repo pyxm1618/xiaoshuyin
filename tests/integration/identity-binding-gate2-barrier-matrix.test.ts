@@ -26,6 +26,7 @@ import {
   buildBindingApp,
   createAppPool,
   createTarget,
+  stageBindingAgeCorrection,
   startBinding,
   type BindingHarness,
   type TargetFixture,
@@ -245,6 +246,7 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
     target: TargetFixture;
     attemptId: string;
     tag: string;
+    expectedOutcome?: 'TERMINAL';
     invalidate: () => Promise<{ blocked: boolean; code?: string }>;
   }): Promise<void> {
     const port = new BarrierPort(h.port);
@@ -299,7 +301,8 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
       release();
       released = true;
       const outcome = await commit;
-      expect(outcome.outcome).toBe('COMMITTED');
+      expect(outcome.outcome).toBe(input.expectedOutcome ?? 'COMMITTED');
+      if (input.expectedOutcome) expect(outcome.reason).toBe('GUARDIAN_CONSENT_INVALID');
     } finally {
       if (!released) release();
       if (commit) await commit.catch(() => {});
@@ -533,14 +536,16 @@ describe('H-02 Gate 2 barrier matrix (MEDIUM-02)', () => {
 
   it('consent: Gate lock blocks the concurrent runtime-role consent UPDATE', async () => {
     const target = await createTarget(h, 'h02_consent_lock', { ageBand: 'UNDER_14' });
+    const correctAge = await stageBindingAgeCorrection(h, target);
     const { attemptId } = await startBinding(h, target, `h02_consent_lock_${randomUUID()}`);
     await seedSecondPartyConfirmation(target, target.guardian.personId, attemptId);
-    await assertGate2InitialPass(target, target.guardian.personId, target.guardian.accountId);
+    await correctAge();
 
     await runBindingFirst({
       target,
       attemptId,
       tag: 'h02_consent_lock',
+      expectedOutcome: 'TERMINAL',
       invalidate: () => appConsentBlocked(target),
     });
   });

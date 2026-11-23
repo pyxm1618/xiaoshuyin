@@ -464,7 +464,8 @@ describe('Internal Evidence writers (T027)', () => {
   });
 
   it('revalidates current UNDER_14 consent before the final Evidence insert', async () => {
-    const allowed = await runWrite((tx) =>
+    let before = await counts(fx.familyId);
+    await expect(runWrite((tx) =>
       recordStatement(
         tx,
         ctx(),
@@ -475,8 +476,8 @@ describe('Internal Evidence writers (T027)', () => {
           content: 'under14 valid consent',
         })
       )
-    );
-    expect(allowed.id).toBeTruthy();
+    )).rejects.toMatchObject({ code: 'GUARDIAN_CONSENT_REQUIRED' });
+    expect(await counts(fx.familyId)).toEqual(before);
 
     const validEvidence = JSON.stringify({
       channel: 'TEST',
@@ -506,7 +507,7 @@ describe('Internal Evidence writers (T027)', () => {
       [revoked[0].id, fx.under14PersonId]
     );
 
-    let before = await counts(fx.familyId);
+    before = await counts(fx.familyId);
     await expect(
       runWrite((tx) =>
         recordObservation(

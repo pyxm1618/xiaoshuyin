@@ -26,7 +26,7 @@ describe('confirmer reject', () => {
   });
 
   it('rejects without binding, Account or Person increment; invitation stays VALID', async () => {
-    const target = await createTarget(h, 'conf_rej', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_rej', { ageBand: 'MINOR_14_17' });
     const code = `conf_rej_${Date.now()}`;
     const { attemptId } = await startBinding(h, target, code);
 
@@ -58,7 +58,7 @@ describe('confirmer reject', () => {
   });
 
   it('rejects after an affirmative confirmation with 409 and no state change', async () => {
-    const target = await createTarget(h, 'conf_rej_after', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_rej_after', { ageBand: 'MINOR_14_17' });
     const code = `conf_rej_after_${Date.now()}`;
     const { attemptId } = await startBinding(h, target, code);
 
