@@ -1244,7 +1244,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '028_professional_knowledge_authority_boundary_remediation.sql',
       '029_staff_assignment_control_plane.sql',
       '030_digital_use_assessment_context.sql',
-      '032_common_core_goal_confirm_goal_package_dependency.sql',
+      '031_common_core_goal_confirm_goal_package_dependency.sql',
     ]);
   }, 180_000);
 });

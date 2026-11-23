@@ -6,14 +6,14 @@ import { getCurrentNoticeHash } from '@xiaoshuyin/compliance';
 const ROOT = new URL('../..', import.meta.url).pathname;
 const COMMAND_OWNER = 'apps/server/api/src/services/goals.ts';
 // Forward-only migration discipline: 026 remains the origin definition and
-// 032 is the single effective redefinition (Finding #1 PACKAGE dependency).
+// 031 is the single effective redefinition (Finding #1 PACKAGE dependency).
 // Exactly these two files may contain the privileged transition; any third
 // GOALS -> PLANNING writer is still a hard failure.
 const TRANSITION_ORIGIN =
   'db/migrations/026_common_core_goal_confirm_goal_runtime.sql';
 const TRANSITION_OWNER =
-  'db/migrations/032_common_core_goal_confirm_goal_package_dependency.sql';
-// 032 redefines the primitive with CREATE OR REPLACE; match the declaration
+  'db/migrations/031_common_core_goal_confirm_goal_package_dependency.sql';
+// 031 redefines the primitive with CREATE OR REPLACE; match the declaration
 // itself so the anchor works for both the origin and the effective owner.
 const TRANSITION_DECLARATION = 'FUNCTION app.confirm_goal_transition(';
 

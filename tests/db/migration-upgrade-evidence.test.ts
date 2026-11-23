@@ -226,7 +226,7 @@ expect(output).toContain('APPLY 005_case_participant_core.sql');
       '028_professional_knowledge_authority_boundary_remediation.sql',
       '029_staff_assignment_control_plane.sql',
       '030_digital_use_assessment_context.sql',
-      '032_common_core_goal_confirm_goal_package_dependency.sql',
+      '031_common_core_goal_confirm_goal_package_dependency.sql',
     ]);
 
     // New Evidence schema exists.
