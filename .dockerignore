@@ -1,0 +1,32 @@
+# Git repository metadata
+.git
+.gitignore
+
+# Package manager local dependencies & caches
+node_modules
+**/node_modules
+
+# Local build artifacts
+dist
+**/dist
+
+# Testing and coverage output
+tests
+coverage
+.nyc_output
+
+# Specification, governance, and documentation
+.specify
+Docs
+specs
+
+# Local environment secrets and overrides
+.env*
+!.env.example
+
+# Temporary files and logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
