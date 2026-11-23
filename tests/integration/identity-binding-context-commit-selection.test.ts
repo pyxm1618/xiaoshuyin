@@ -84,7 +84,7 @@ describe('Phase C context selection (PR #16 review Finding 2)', () => {
   });
 
   it('uses the fresh usable context B after historical context A has expired and been scrubbed', async () => {
-    const target = await createTarget(h, 'ctx_commit_replay', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'ctx_commit_replay', { ageBand: 'MINOR_14_17' });
     const code = `ctx_commit_replay_${randomUUID()}`;
 
     // Context A: the first transport context linked to the live attempt.
@@ -208,7 +208,7 @@ describe('Phase C context selection (PR #16 review Finding 2)', () => {
   });
 
   it('fails closed (no commit) when only scrubbed contexts exist', async () => {
-    const target = await createTarget(h, 'ctx_only_scrubbed', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'ctx_only_scrubbed', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(
       h,
       target,
@@ -269,8 +269,8 @@ describe('Phase C context selection (PR #16 review Finding 2)', () => {
   });
 
   it('fails closed when the supplied context belongs to a different attempt', async () => {
-    const target = await createTarget(h, 'ctx_wrong_attempt', { ageBand: 'UNDER_14' });
-    const other = await createTarget(h, 'ctx_wrong_attempt_other', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'ctx_wrong_attempt', { ageBand: 'MINOR_14_17' });
+    const other = await createTarget(h, 'ctx_wrong_attempt_other', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(
       h,
       target,

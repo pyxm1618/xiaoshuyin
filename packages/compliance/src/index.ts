@@ -1,6 +1,8 @@
 export * from './age-gate.js';
 export * from './notices.js';
 export * from './evidence.js';
+// Finding #40 — instance-level consent runtime dependencies (no ambient env).
+export * from './consent-runtime.js';
 export * from './repository.js';
 // Slice 1 Consent Owner — 01004 narrow post-merge remediation. Internal-only
 // purpose-scoped supplemental-assessment decision seam (no public API).

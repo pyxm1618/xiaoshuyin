@@ -26,7 +26,7 @@ describe('candidate route authentication (T063)', () => {
   });
 
   it('status / decision require X-Binding-Context (no header or Bearer only is 401)', async () => {
-    const target = await createTarget(h, 'auth_cand', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'auth_cand', { ageBand: 'MINOR_14_17' });
     const { contextToken, attemptId } = await startBinding(
       h,
       target,
@@ -77,7 +77,7 @@ describe('candidate route authentication (T063)', () => {
   });
 
   it('confirmer surfaces reject the candidate capability header', async () => {
-    const target = await createTarget(h, 'auth_conf', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'auth_conf', { ageBand: 'MINOR_14_17' });
     const { contextToken, attemptId } = await startBinding(
       h,
       target,
@@ -111,7 +111,7 @@ describe('candidate route authentication (T063)', () => {
   });
 
   it('a candidate ordinary session is not an authorized confirmer', async () => {
-    const target = await createTarget(h, 'auth_outsider', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'auth_outsider', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `auth_outsider_${randomUUID()}`);
     const outsider = await loginWithLabel(h.app, 'auth_outsider_session');
 

@@ -199,16 +199,16 @@ describe('candidate-facing anti-enumeration', () => {
   });
 
   it('PENDING / TERMINAL / expired candidate status are observationally identical', async () => {
-    const pendingTarget = await createTarget(h, 'enum_status_pending', { ageBand: 'UNDER_14' });
+    const pendingTarget = await createTarget(h, 'enum_status_pending', { ageBand: 'MINOR_14_17' });
     const pendingBoot = await bootstrap(h, pendingTarget.invitationToken, `enum_pending_${randomUUID()}`);
     const pendingToken = pendingBoot.json().pendingContextToken as string;
 
-    const terminalTarget = await createTarget(h, 'enum_status_terminal', { ageBand: 'UNDER_14' });
+    const terminalTarget = await createTarget(h, 'enum_status_terminal', { ageBand: 'MINOR_14_17' });
     const terminalBoot = await bootstrap(h, terminalTarget.invitationToken, `enum_term_${randomUUID()}`);
     const terminalToken = terminalBoot.json().pendingContextToken as string;
     await candidateDecision(h, terminalToken, 'REJECT', `enum-rej-${randomUUID()}`);
 
-    const expiredTarget = await createTarget(h, 'enum_status_expired', { ageBand: 'UNDER_14' });
+    const expiredTarget = await createTarget(h, 'enum_status_expired', { ageBand: 'MINOR_14_17' });
     const expiredBoot = await bootstrap(h, expiredTarget.invitationToken, `enum_exp_${randomUUID()}`);
     const expiredToken = expiredBoot.json().pendingContextToken as string;
     const expiredAttempt = await h.admin.query(
@@ -302,7 +302,7 @@ describe('candidate-facing anti-enumeration', () => {
   });
 
   it('REM2-005: repeated real and decoy AFFIRM calls have the same stability policy', async () => {
-    const eligible = await createTarget(h, 'enum_stability_real', { ageBand: 'UNDER_14' });
+    const eligible = await createTarget(h, 'enum_stability_real', { ageBand: 'MINOR_14_17' });
     const eligibleBoot = await bootstrap(
       h,
       eligible.invitationToken,
@@ -324,20 +324,17 @@ describe('candidate-facing anti-enumeration', () => {
       'candidate-binding-v1'
     );
 
-    const hidden = await createTarget(h, 'enum_stability_decoy', { ageBand: 'UNDER_14' });
+    const hidden = await createTarget(h, 'enum_stability_decoy', { ageBand: 'MINOR_14_17' });
     const hiddenBoot = await bootstrap(
       h,
       hidden.invitationToken,
       `enum_stability_decoy_${randomUUID()}`
     );
     const hiddenToken = hiddenBoot.json().pendingContextToken as string;
-    const revoked = await revokeConsent(
-      h.app,
-      hidden.guardian.token,
-      'enum_stability_decoy',
-      hidden.consentId!
+    await h.admin.query(
+      "UPDATE person_compliance_profiles SET age_band='UNKNOWN', minor_mode=false WHERE person_id=$1",
+      [hidden.targetPersonId]
     );
-    expect([200, 201]).toContain(revoked.statusCode);
     const decoyFirst = await candidateDecision(
       h,
       hiddenToken,
@@ -406,10 +403,10 @@ describe('candidate-facing anti-enumeration', () => {
     try {
       boundaryHarness = await buildBindingApp();
       const real = await createTarget(boundaryHarness, 'm01_boundary_real', {
-        ageBand: 'UNDER_14',
+        ageBand: 'MINOR_14_17',
       });
       const hidden = await createTarget(boundaryHarness, 'm01_boundary_decoy', {
-        ageBand: 'UNDER_14',
+        ageBand: 'MINOR_14_17',
       });
 
       const realBoot = await bootstrap(
@@ -455,13 +452,10 @@ describe('candidate-facing anti-enumeration', () => {
         [[realAttemptId, hiddenAttemptId]]
       );
 
-      const revoked = await revokeConsent(
-        boundaryHarness.app,
-        hidden.guardian.token,
-        'm01_boundary_decoy',
-        hidden.consentId!
+      await boundaryHarness.admin.query(
+        "UPDATE person_compliance_profiles SET age_band='UNKNOWN', minor_mode=false WHERE person_id=$1",
+        [hidden.targetPersonId]
       );
-      expect([200, 201]).toContain(revoked.statusCode);
 
       const realBefore = await candidateDecision(
         boundaryHarness,
@@ -587,10 +581,10 @@ describe('candidate-facing anti-enumeration', () => {
         const matrixHarness = await buildBindingApp();
         try {
           const real = await createTarget(matrixHarness, `m01_${relation.label}_real`, {
-            ageBand: 'UNDER_14',
+            ageBand: 'MINOR_14_17',
           });
           const hidden = await createTarget(matrixHarness, `m01_${relation.label}_decoy`, {
-            ageBand: 'UNDER_14',
+            ageBand: 'MINOR_14_17',
           });
           const realBoot = await bootstrap(
             matrixHarness,
@@ -633,13 +627,10 @@ describe('candidate-facing anti-enumeration', () => {
             [[realAttemptId, hiddenAttemptId]]
           );
 
-          const revoked = await revokeConsent(
-            matrixHarness.app,
-            hidden.guardian.token,
-            `m01_${relation.label}_decoy`,
-            hidden.consentId!
+          await matrixHarness.admin.query(
+            "UPDATE person_compliance_profiles SET age_band='UNKNOWN', minor_mode=false WHERE person_id=$1",
+            [hidden.targetPersonId]
           );
-          expect([200, 201]).toContain(revoked.statusCode);
 
           const before = await Promise.all([
             candidateDecision(

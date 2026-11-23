@@ -160,4 +160,28 @@ describe('buildConsentEvidence', () => {
     expect(getAcceptanceTextHash('v999')).toBeNull();
     expect(getRevocationTextHash('v999')).toBeNull();
   });
+
+  it('Finding #40: uses injected runtime pepper deterministically without process.env drift', () => {
+    const injectedPepperA = 'injected-runtime-pepper-AAAAAA';
+    const injectedPepperB = 'injected-runtime-pepper-BBBBBB';
+
+    const evidenceA = buildConsentEvidence({
+      channel: 'TEST',
+      acceptedTextHash,
+      clientIp: '10.0.0.1',
+      userAgent: 'agent-1',
+      pepper: injectedPepperA,
+    });
+    const evidenceB = buildConsentEvidence({
+      channel: 'TEST',
+      acceptedTextHash,
+      clientIp: '10.0.0.1',
+      userAgent: 'agent-1',
+      pepper: injectedPepperB,
+    });
+
+    expect(evidenceA.client_ip_hash).toBe(hmacSha256Hex(injectedPepperA, '10.0.0.1'));
+    expect(evidenceB.client_ip_hash).toBe(hmacSha256Hex(injectedPepperB, '10.0.0.1'));
+    expect(evidenceA.client_ip_hash).not.toBe(evidenceB.client_ip_hash);
+  });
 });

@@ -315,7 +315,7 @@ describe('S8-FINAL-01 current-main(009) → 008 → 010 upgrade', () => {
     expect(output).toContain('APPLY 008_problem_formulation_core.sql');
     expect(output).toContain('APPLY 010_problem_formulation_safety_vocabulary_reconcile.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
-    expect(output).toMatch(/Migration complete: 25 new, 9 previously applied\./);
+    expect(output).toMatch(/Migration complete: 26 new, 9 previously applied\./);
 
     const client = new Client({ connectionString: urlForDatabase(ADMIN_URL, database) });
     await client.connect();
@@ -388,7 +388,8 @@ async function assertUnionConstraints(
   includeSlice16 = includeAuth006,
   includeGoalRuntime = includeSlice16,
   includeSlice17 = includeGoalRuntime,
-  includeC3 = includeSlice17
+  includeC3 = includeSlice17,
+  includeDownstreamReviewMigration = includeC3
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -511,6 +512,10 @@ async function assertUnionConstraints(
     auditEventSet.add('STAFF_AUTHORITY_GRANTED');
     auditEventSet.add('STAFF_AUTHORITY_REVOKED');
   }
+  if (includeDownstreamReviewMigration) {
+    auditEventSet.add('GOAL_REVIEW_STATE_CHANGED');
+    auditEventSet.add('PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED');
+  }
   const auditLiterals = literalsOf(definitions.get('business_audit_events_event_type_check')!);
   expect(new Set(auditLiterals)).toEqual(auditEventSet);
 
@@ -528,6 +533,7 @@ async function assertUnionConstraints(
     ...(includeGoalRuntime ? ['GOAL'] : []),
     ...(includeSlice17 ? ['PROFESSIONAL_KNOWLEDGE'] : []),
     ...(includeC3 ? ['STAFF_ASSIGNMENT'] : []),
+    ...(includeDownstreamReviewMigration ? ['PHONE_USE_CONTRACT'] : []),
   ]);
   const resourceLiterals = literalsOf(
     definitions.get('business_audit_events_resource_type_check')!

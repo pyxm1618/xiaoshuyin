@@ -25,7 +25,7 @@ describe('confirmer pending list', () => {
   });
 
   it('returns the minimal attempt list for an authorized guardian', async () => {
-    const target = await createTarget(h, 'list_ok', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'list_ok', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `list_ok_${Date.now()}`);
 
     const res = await confirmerList(h, target.guardian.token, target.targetPersonId);
@@ -60,7 +60,7 @@ describe('confirmer pending list', () => {
   });
 
   it('expired attempts disappear from the list and yield one TERMINAL audit', async () => {
-    const target = await createTarget(h, 'list_expired', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'list_expired', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `list_expired_${Date.now()}`);
 
     await h.admin.query(

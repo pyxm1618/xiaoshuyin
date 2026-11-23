@@ -48,4 +48,24 @@ describe('Family Alliance product-authority content', () => {
     expect(() => resolveFamilyAllianceContent('A3023'))
       .toThrow('FAMILY_ALLIANCE_CONTENT_NOT_FOUND');
   });
+
+  describe('Finding #4: Family Alliance compliance gate binds to target child', () => {
+    it('requires target child resolution and fails closed when target is missing', async () => {
+      const { pinAndAssertFamilyAllianceGates } = await import(
+        '../../apps/server/api/src/services/digital-use-family-alliance.js'
+      );
+      const mockTx = {
+        query: async () => ({ rows: [] }),
+      } as any;
+
+      // When target is not supplied and readDigitalUseAssessmentTarget returns null
+      await expect(
+        pinAndAssertFamilyAllianceGates(
+          mockTx,
+          '00000000-0000-7000-8000-000000000001',
+          '00000000-0000-7000-8000-000000000002'
+        )
+      ).rejects.toThrow('TARGET_SCOPE_INVALID');
+    });
+  });
 });

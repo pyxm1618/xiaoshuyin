@@ -39,9 +39,11 @@ import {
 } from '@xiaoshuyin/domain';
 import {
   assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   getComplianceProfileForUpdate,
   getConsentRecordForGate,
   getCurrentNoticeHash,
+  getCurrentNoticeVersion,
   lockGuardianConsentChainHead,
   type AgeBand,
 } from '@xiaoshuyin/compliance';
@@ -143,8 +145,15 @@ async function authorizeGoal(
 const CONSENT_REASONS = new Set([
   'GUARDIAN_CONSENT_REQUIRED',
   'GUARDIAN_CONSENT_REVOKED',
+  'CONSENT_RECORD_MISMATCH',
+  'CONSENT_VERSION_MISMATCH',
+  'CONSENT_PURPOSE_MISMATCH',
+  'CONSENT_EVIDENCE_INVALID',
+  'CONSENT_NOT_CURRENT_CHAIN_HEAD',
   'CONSENT_SUBJECT_MISMATCH',
   'NOTICE_VERSION_MISMATCH',
+  'POLICY_VERSION_MISMATCH',
+  'CONSENT_SCOPE_NOT_COVERED',
 ]);
 
 async function assertGoalCompliance(
@@ -173,20 +182,28 @@ async function assertGoalCompliance(
     const consent = consentRow
       ? {
           id: consentRow.id as string,
+          version: consentRow.version as number,
           decision: consentRow.decision as 'GRANTED' | 'REVOKED',
           boundPersonId: consentRow.bound_person_id as string | null,
           noticeHash: consentRow.notice_hash as string,
+          noticeVersion: (consentRow.notice_version ?? null) as string | null,
+          policyVersion: (consentRow.policy_version ?? null) as string | null,
           guardianPersonId: consentRow.guardian_person_id as string,
+          purpose: consentRow.purpose as string,
+          isChainHead: consentRow.is_chain_head === true,
+          evidenceValid: consentRow.evidence_valid === true,
         }
       : null;
 
-    const result = assertMinorProcessingAllowed(personId, {
+    const result = assertMinorProcessingAllowed(personId, 'CASE', {
       getProfile: () => profile,
       getConsentRecord: (id: string) =>
         consent && id.toLowerCase() === consent.id.toLowerCase()
           ? consent
           : null,
       getCurrentNoticeHash,
+      getCurrentNoticeVersion,
+      getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
     });
 
     if (result.decision === 'BLOCK') {
@@ -371,8 +388,7 @@ async function assertStoredGoalCurrent(
 ): Promise<GoalContractInput> {
   if (
     input.goal.lifecycle_status !== 'ACTIVE' ||
-    input.goal.confirmation_state !== 'UNCONFIRMED' ||
-    input.goal.review_state !== 'CURRENT'
+    input.goal.confirmation_state !== 'UNCONFIRMED'
   ) {
     throw httpError('CASE_PHASE_CONFLICT', 'Goal version is stale');
   }
@@ -383,6 +399,11 @@ async function assertStoredGoalCurrent(
   await assertGoalEvidence(tx, input.caseId, contract);
   await assertGoalDependencyConsents(tx, contract.dependencyRefs);
   await assertGoalPackageDependencies(tx, input.caseId, contract.dependencyRefs);
+
+  if (input.goal.review_state !== 'CURRENT') {
+    throw httpError('CASE_PHASE_CONFLICT', 'Goal version is stale');
+  }
+
   return contract;
 }
 

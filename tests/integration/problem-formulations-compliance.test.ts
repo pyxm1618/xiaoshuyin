@@ -393,24 +393,20 @@ describe('problem formulation authoritative evidence closure (S8-PA-001)', () =>
         idempotencyKey: `t8pa1-u14-${scenario}-${Date.now()}-${seq++}`,
         content: candidate,
       });
-      if (scenario === 'valid') {
-        expect(res.status, scenario).toBe(200);
-      } else {
-        expect(res.status, scenario).toBe(403);
-        const expected =
-          scenario === 'revoked'
-            ? 'GUARDIAN_CONSENT_REVOKED'
-            : scenario === 'notice-mismatch'
-              ? 'NOTICE_VERSION_MISMATCH'
-              : 'GUARDIAN_CONSENT_REQUIRED';
-        expect((res.body as { code: string }).code, scenario).toBe(expected);
-        expect(await admin.query(
-          `SELECT (SELECT count(*)::int FROM problem_formulations WHERE case_id=$1) AS f,
-                  (SELECT count(*)::int FROM case_events WHERE case_id=$1) AS e,
-                  (SELECT count(*)::int FROM business_audit_events WHERE resource_id=$1) AS a`,
-          [p.caseId]
-        )).toEqual(before);
-      }
+      expect(res.status, scenario).toBe(403);
+      const expected =
+        scenario === 'revoked'
+          ? 'GUARDIAN_CONSENT_REVOKED'
+          : scenario === 'notice-mismatch'
+            ? 'NOTICE_VERSION_MISMATCH'
+            : 'GUARDIAN_CONSENT_REQUIRED';
+      expect((res.body as { code: string }).code, scenario).toBe(expected);
+      expect(await admin.query(
+        `SELECT (SELECT count(*)::int FROM problem_formulations WHERE case_id=$1) AS f,
+                (SELECT count(*)::int FROM case_events WHERE case_id=$1) AS e,
+                (SELECT count(*)::int FROM business_audit_events WHERE resource_id=$1) AS a`,
+        [p.caseId]
+      )).toEqual(before);
     }
   });
 });

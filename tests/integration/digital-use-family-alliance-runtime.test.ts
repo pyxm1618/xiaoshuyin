@@ -363,6 +363,39 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect(kase.rows[0]).toEqual({ status: 'OPEN', phase: 'GOALS' });
   });
 
+  it('authorizes the manager and independently gates the bound target before writing', async () => {
+    const allowed = await fixture('authorized-distinct-target');
+    expect(allowed.manager.personId).not.toBe(allowed.targetPersonId);
+    const actor = await admin.query(
+      `SELECT guardian_consent_record_id FROM person_compliance_profiles WHERE person_id=$1`,
+      [allowed.manager.personId]
+    );
+    expect(actor.rows[0]?.guardian_consent_record_id ?? null).toBeNull();
+    const success = await respond(allowed, 'A3000', selfAssessment());
+    expect(success.statusCode, success.body).toBe(200);
+    expect(success.json().nodes.find((node: any) => node.nodeCode === 'A3000')?.status)
+      .toBe('COMPLETED');
+
+    const blocked = await fixture('authorized-invalid-target');
+    await admin.query(
+      `UPDATE person_compliance_profiles SET age_band='UNKNOWN', minor_mode=false WHERE person_id=$1`,
+      [blocked.targetPersonId]
+    );
+    const snapshot = () => admin.query(
+      `SELECT
+         (SELECT to_jsonb(c) FROM cases c WHERE c.id=$1) AS case_row,
+         (SELECT jsonb_agg(to_jsonb(n) ORDER BY n.node_code) FROM scene_node_states n WHERE n.case_id=$1) AS nodes,
+         (SELECT count(*) FROM assertions WHERE case_id=$1) AS assertion_count,
+         (SELECT count(*) FROM consent_records WHERE case_id=$1) AS consent_count`,
+      [blocked.caseId]
+    );
+    const before = await snapshot();
+    const failure = await respond(blocked, 'A3000', selfAssessment());
+    expect(failure.statusCode, failure.body).toBe(409);
+    expect(failure.json().code).toBe('COMPLIANCE_BLOCKED');
+    expect((await snapshot()).rows).toEqual(before.rows);
+  });
+
   it('AS-01..AS-13 executes legal entry, parallel target management and all ten exact target families', async () => {
     const f = await fixture('canonical');
 
@@ -2197,7 +2230,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       [f.familyId, f.manager.personId, child.personId, noticeHash]
     );
     const evidence = buildConsentEvidence({
-      channel: runtimeConsentChannel(),
+      channel: runtimeConsentChannel(process.env),
       acceptedTextHash,
       clientIp: null,
       userAgent: null,
@@ -2285,10 +2318,10 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       revokeRequest,
     ]);
     expect(revoked.statusCode, revoked.body).toBe(200);
-    expect([200, 409]).toContain(familyResult.statusCode);
-    if (familyResult.statusCode === 409) {
-      expect(familyResult.json().code).toBe('CONSENT_BLOCKED');
-    }
+    expect([403, 409]).toContain(familyResult.statusCode);
+    expect(familyResult.json().code).toBe(
+      familyResult.statusCode === 403 ? 'GUARDIAN_CONSENT_REQUIRED' : 'CONSENT_BLOCKED'
+    );
 
     const final = await admin.query<{
       guardian_consent_version: number;
@@ -2312,7 +2345,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
       [f.caseId]
     );
     expect(currentArtifacts.rows[0]!.n)
-      .toBe(familyResult.statusCode === 200 ? 1 : 0);
+      .toBe(0);
   });
 
 
