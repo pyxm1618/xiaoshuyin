@@ -5,6 +5,7 @@
  */
 
 import pg from 'pg';
+import { isBrokenClientError } from './broken-client.js';
 
 type TxClient = pg.PoolClient;
 
@@ -35,6 +36,7 @@ export async function withTransactionClient<T>(
     await client.query('COMMIT');
     return result;
   } catch (originalError) {
+    broken = broken || isBrokenClientError(originalError);
     try {
       await client.query('ROLLBACK');
     } catch {
@@ -151,6 +153,13 @@ export async function withBindingContextTransaction<T>(
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
   const client = await pool.connect();
+  let broken = false;
+
+  const onClientError = (_err: Error) => {
+    broken = true;
+  };
+  client.on('error', onClientError);
+
   try {
     await client.query('BEGIN');
     await client.query('SELECT app.set_binding_context($1, $2)', [
@@ -161,19 +170,32 @@ export async function withBindingContextTransaction<T>(
     await client.query('COMMIT');
     return result;
   } catch (err) {
+    broken = broken || isBrokenClientError(err);
     // M-03: an expired pending context is scrubbed inside this transaction
     // before the error is raised. Rolling back would resurrect the decryptable
     // OpenID, so the scrub-only exit path commits the cleanup and nothing else.
     if (
       (err as { bindingContextScrubbed?: boolean }).bindingContextScrubbed === true
     ) {
-      await client.query('COMMIT');
+      try {
+        await client.query('COMMIT');
+      } catch {
+        broken = true;
+      }
     } else {
-      await client.query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch {
+        broken = true;
+      }
     }
     throw err;
   } finally {
-    client.release();
+    try {
+      client.release(broken);
+    } finally {
+      client.removeListener('error', onClientError);
+    }
   }
 }
 
@@ -187,9 +209,7 @@ export async function withBindingBootstrapTransaction<T>(
   opts: BindingBootstrapTxOptions,
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_binding_context($1, $2)', [
       opts.contextHash,
       'IDENTITY_BINDING_PENDING',
@@ -198,15 +218,8 @@ export async function withBindingBootstrapTransaction<T>(
       opts.identityDigest,
       'IDENTITY_BINDING_PENDING',
     ]);
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    return fn(client);
+  });
 }
 
 export interface BindingTargetTxOptions {
@@ -220,22 +233,13 @@ export async function withBindingTargetTransaction<T>(
   opts: BindingTargetTxOptions,
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_binding_target_context($1, $2)', [
       opts.targetPersonId,
       opts.actorAccountId ?? null,
     ]);
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    return fn(client);
+  });
 }
 
 /** Set attempt visibility inside an already-open binding transaction. */
@@ -273,9 +277,7 @@ export async function withBindingGateTransaction<T>(
   opts: BindingGateTxOptions,
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransactionClient(pool, async (client) => {
     if (opts.identityDigest) {
       await client.query('SELECT app.set_binding_identity_context($1, $2)', [
         opts.identityDigest,
@@ -298,15 +300,8 @@ export async function withBindingGateTransaction<T>(
       null,
       opts.actorAccountId ?? null,
     ]);
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    return fn(client);
+  });
 }
 
 export interface BindingCommitTxOptions {
@@ -323,9 +318,7 @@ export async function withBindingCommitTransaction<T>(
   opts: BindingCommitTxOptions,
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_binding_commit_context($1, $2, $3, $4, $5)', [
       opts.attemptId,
       opts.targetPersonId,
@@ -336,15 +329,8 @@ export async function withBindingCommitTransaction<T>(
     if (opts.commitAccountId) {
       await client.query('SELECT app.set_binding_commit_account_id($1)', [opts.commitAccountId]);
     }
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    return fn(client);
+  });
 }
 
 export interface BindingAttemptTxOptions {
@@ -361,9 +347,7 @@ export async function withBindingAttemptTransaction<T>(
   opts: BindingAttemptTxOptions,
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_binding_attempt_context($1, $2, $3, $4, $5, $6)', [
       opts.attemptId,
       opts.identityDigest,
@@ -375,15 +359,8 @@ export async function withBindingAttemptTransaction<T>(
     if (opts.actorAccountId) {
       await client.query(`SELECT set_config('app.account_id', $1, true)`, [opts.actorAccountId]);
     }
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+    return fn(client);
+  });
 }
 
 /** Resolve the target Family after reading P1's unique membership, same tx. */

@@ -954,8 +954,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   // Database pool
   const pool = new pg.Pool({
-    connectionString: env['DATABASE_URL'],
+    connectionString: runtime.databaseUrl,
     max: 10,
+  });
+
+  // Finding #35: Graceful resource lifecycle - close DB pool when Fastify server closes
+  app.addHook('onClose', async () => {
+    await pool.end();
   });
 
   // node-postgres emits idle-client failures on Pool. A listener is required
