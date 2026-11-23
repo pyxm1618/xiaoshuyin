@@ -342,8 +342,7 @@ async function assertStoredGoalCurrent(
 ): Promise<GoalContractInput> {
   if (
     input.goal.lifecycle_status !== 'ACTIVE' ||
-    input.goal.confirmation_state !== 'UNCONFIRMED' ||
-    input.goal.review_state !== 'CURRENT'
+    input.goal.confirmation_state !== 'UNCONFIRMED'
   ) {
     throw httpError('CASE_PHASE_CONFLICT', 'Goal version is stale');
   }
@@ -353,6 +352,11 @@ async function assertStoredGoalCurrent(
   assertExactFormulation(input.formulation, contract);
   await assertGoalEvidence(tx, input.caseId, contract);
   await assertGoalDependencyConsents(tx, contract.dependencyRefs);
+
+  if (input.goal.review_state !== 'CURRENT') {
+    throw httpError('CASE_PHASE_CONFLICT', 'Goal version is stale');
+  }
+
   return contract;
 }
 
