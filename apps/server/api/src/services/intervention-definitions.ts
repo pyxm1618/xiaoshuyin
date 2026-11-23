@@ -45,7 +45,7 @@ async function assertMutationAuthority(
   qualificationProvider: InterventionProfessionalQualificationProvider,
   approvalScope: string
 ): Promise<{ assignmentRef: string; qualificationRef: string }> {
-  // Finding #15: Acquire row-level lock on authoritative Account row and revalidate status === 'ACTIVE'.
+  // Finding #17: Acquire row-level lock on authoritative Account row and revalidate status === 'ACTIVE'.
   // Closes TOCTOU gap where an account becomes inactive between earlier authorization and mutation commit.
   const accountRes = await tx.query<{ status: string }>(
     'SELECT status FROM accounts WHERE id = $1 FOR KEY SHARE',
