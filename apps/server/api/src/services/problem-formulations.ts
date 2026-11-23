@@ -188,7 +188,7 @@ async function runComplianceGate(
         }
       : null;
 
-    const result = assertMinorProcessingAllowed(personId, {
+    const result = assertMinorProcessingAllowed(personId, 'CASE', {
       getProfile: () => profile,
       getConsentRecord: (id: string) =>
         consent && id.toLowerCase() === consent.id.toLowerCase() ? consent : null,

@@ -152,6 +152,7 @@ const CONSENT_REASONS = new Set([
   'CONSENT_SUBJECT_MISMATCH',
   'NOTICE_VERSION_MISMATCH',
   'POLICY_VERSION_MISMATCH',
+  'CONSENT_SCOPE_NOT_COVERED',
 ]);
 
 async function assertGoalCompliance(
@@ -193,7 +194,7 @@ async function assertGoalCompliance(
         }
       : null;
 
-    const result = assertMinorProcessingAllowed(personId, {
+    const result = assertMinorProcessingAllowed(personId, 'CASE', {
       getProfile: () => profile,
       getConsentRecord: (id: string) =>
         consent && id.toLowerCase() === consent.id.toLowerCase()

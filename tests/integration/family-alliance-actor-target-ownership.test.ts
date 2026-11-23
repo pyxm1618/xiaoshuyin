@@ -4,10 +4,8 @@
  *   ACTOR   → Authorization   (already decided by the caller's authorize step)
  *   TARGET  → Compliance / Consent
  *
- * The residual actor-side consent gate is gone: an actor who is themselves a
- * minor with a revoked/stale consent must not be able to block (or be required
- * for) a Family Alliance command whose target child holds a current consent.
- * The target-child gate and `assertBoundAssessmentCompliance` stay in force.
+ * A valid v1 grant establishes consent-administration authority. Family
+ * Alliance processing requires its own coverage.
  */
 
 import { readFileSync } from 'node:fs';
@@ -226,26 +224,12 @@ describe('Finding #4: Family Alliance actor authorization vs target consent', ()
     await app?.close();
   }, 120_000);
 
-  it('an actor minor whose own consent was revoked does not block a consented target child', async () => {
-    const actorPersonId = await createUnder14WithConsent(manager.personId, {
-      decision: 'REVOKED',
-    });
+  it('a valid v1 guardian consent cannot authorize Family Alliance processing', async () => {
     const targetPersonId = await createUnder14WithConsent(manager.personId);
 
     await expect(
-      runGates({ actorPersonId, targetPersonId })
-    ).resolves.toBeUndefined();
-  }, 120_000);
-
-  it('an actor minor with a stale-notice consent does not block a consented target child', async () => {
-    const actorPersonId = await createUnder14WithConsent(manager.personId, {
-      noticeHash: 'a'.repeat(64),
-    });
-    const targetPersonId = await createUnder14WithConsent(manager.personId);
-
-    await expect(
-      runGates({ actorPersonId, targetPersonId })
-    ).resolves.toBeUndefined();
+      runGates({ actorPersonId: manager.personId, targetPersonId })
+    ).rejects.toMatchObject({ code: 'CONSENT_BLOCKED' });
   }, 120_000);
 
   it('a target child without a current consent is blocked even when the actor is allowed', async () => {

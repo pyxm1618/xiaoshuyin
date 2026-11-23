@@ -711,7 +711,7 @@ async function assertEvidencePersonProcessingAllowedForPerson(
       : null;
   }
 
-  const result = assertMinorProcessingAllowed(personId, {
+  const result = assertMinorProcessingAllowed(personId, 'CASE', {
     getProfile: () => profile,
     getConsentRecord: () => consent,
     getCurrentNoticeHash,

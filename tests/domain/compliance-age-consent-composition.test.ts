@@ -150,10 +150,10 @@ describe('compliance composition with existing person/guardian/consent truth', (
     expect(result.reasonCode).not.toBe('COMPLIANCE_GUARDIAN_CONSENT_REQUIRED');
   });
 
-  it('UNDER_14 with current valid guardian consent is allowed through the existing gate', () => {
+  it('UNDER_14 with current valid guardian consent cannot authorize downstream processing', () => {
     const result = evaluateCompliance(snapshot(under14()));
-    expect(result.gate).toBe('ALLOW');
-    expect(result.obligations).toContain('REQUIRE_MINOR_MODE');
+    expect(result.gate).toBe('BLOCK');
+    expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
     expect(result.obligations).toContain('REQUIRE_GUARDIAN_CONSENT');
   });
 

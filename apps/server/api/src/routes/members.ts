@@ -138,7 +138,7 @@ async function runProcessingGate(
       : null;
   }
 
-  return assertMinorProcessingAllowed(personId, {
+  return assertMinorProcessingAllowed(personId, 'MEMBER_PROFILE', {
     getProfile: () => profile,
     getConsentRecord: () => consent,
     getCurrentNoticeHash,

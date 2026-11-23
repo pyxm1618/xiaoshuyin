@@ -88,7 +88,7 @@ async function readMinorGate(
     : null;
   const consent = toConsentRecord(rawConsent);
 
-  const result = assertMinorProcessingAllowed(targetPersonId, {
+  const result = assertMinorProcessingAllowed(targetPersonId, 'IDENTITY_BINDING', {
     getProfile: () => profile,
     getConsentRecord: (id) => (consent && consent.id === id ? consent : null),
     getCurrentNoticeHash: () => getCurrentNoticeHash(),

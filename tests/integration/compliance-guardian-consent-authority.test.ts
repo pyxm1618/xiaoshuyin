@@ -19,13 +19,16 @@ import { withDrizzleRlsTransaction } from '../../apps/server/api/src/db/drizzle-
 import { createAdminPool } from '../setup/db.js';
 import { createSafetyFixture, type SafetyFixture } from '../setup/safety.js';
 import {
+  assertMinorProcessingAllowed,
   createServerFeatureDescriptor,
   evaluateCompliance,
   getCurrentNoticeHash,
+  getCurrentNoticeVersion,
   loadCompliancePersonSnapshot,
   type ComplianceEvaluationSnapshot,
   type ComplianceFeaturePolicyRecord,
   type CompliancePersonSnapshot,
+  type MinorProcessingCategory,
 } from '@xiaoshuyin/compliance';
 
 const PREFIX = `S10F3_${Date.now()}_`;
@@ -291,7 +294,7 @@ describe('Finding #3: guardian consent authority is fail-closed end to end', () 
     await app?.close();
   }, 120_000);
 
-  it('a current GRANTED consent with the exact profile pointer is allowed', async () => {
+  it('a current GRANTED consent with the exact profile pointer cannot authorize downstream processing', async () => {
     const consent = await insertConsent();
     await pointProfileAt(consent.id, consent.version);
 
@@ -300,9 +303,44 @@ describe('Finding #3: guardian consent authority is fail-closed end to end', () 
     expect(person?.guardianConsentVersion).toBe(consent.version);
 
     const result = evaluateCompliance(snapshotOf(person));
-    expect(result.gate).toBe('ALLOW');
+    expect(result.gate).toBe('BLOCK');
+    expect(result.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
     expect(result.obligations).toContain('REQUIRE_GUARDIAN_CONSENT');
   }, 120_000);
+
+  it.each([
+    ['GUARDIAN_CONSENT_ADMINISTRATION', 'ALLOW'],
+    ['FAMILY_ALLIANCE', 'BLOCK'],
+    ['ASSESSMENT', 'BLOCK'],
+    ['UNRECOGNIZED_CATEGORY', 'BLOCK'],
+  ])('checks processing intent %s against a current persisted v1 grant', async (category, decision) => {
+    const consent = await insertConsent();
+    await pointProfileAt(consent.id, consent.version);
+    const person = await loadPerson();
+    expect(person?.guardianConsent?.id).toBe(consent.id);
+    const result = assertMinorProcessingAllowed(childPersonId, category as MinorProcessingCategory, {
+      getProfile: () => person,
+      getConsentRecord: () => person?.guardianConsent ?? null,
+      getCurrentNoticeHash,
+      getCurrentNoticeVersion,
+      getCurrentPolicyVersion: () => 'v1',
+    });
+
+    expect(result).toEqual(decision === 'ALLOW'
+      ? { decision: 'ALLOW', minorMode: true }
+      : { decision: 'BLOCK', reason: 'CONSENT_SCOPE_NOT_COVERED' });
+  });
+
+  it.each(['', 'v0'])('blocks downstream processing with persisted policy version %j', async (policyVersion) => {
+    const consent = await insertConsent({ policyVersion });
+    await pointProfileAt(consent.id, consent.version);
+    const person = await loadPerson();
+    expect(person?.guardianConsent?.policyVersion).toBe(policyVersion);
+    expect(evaluateCompliance(snapshotOf(person))).toMatchObject({
+      gate: 'BLOCK',
+      reasonCode: 'COMPLIANCE_GUARDIAN_CONSENT_INVALID',
+    });
+  });
 
   it('wrong-purpose consent (supplemental assessment) never satisfies the guardian gate', async () => {
     const kase = await fixture.createCase(owner, 'finding3');

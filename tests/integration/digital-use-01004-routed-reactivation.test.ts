@@ -7,9 +7,9 @@
  * a controlled CAS — without touching helpOrReentryRefs, without an
  * `entryMode = USER_INITIATED` widening and without a client direct reopen.
  *
- * The persisted scene is seeded exactly as the DECLINED → MAIN completion leaves
- * it (01004 COMPLETED at revision 1 plus a real DECLINED consent v1), and every
- * subsequent transition is driven through the real HTTP command surface.
+ * The first round runs through HTTP. The existing second-round regressions
+ * still seed the later predecessor, so they do not prove legal progression
+ * from MAIN to A2009.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -18,17 +18,13 @@ import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { casReactivateCompletedSceneNodeForRoutedEntry } from '@xiaoshuyin/domain';
 import {
-  APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY,
-  CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE,
   DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
-  recordPurposeScopedConsentDecision,
 } from '@xiaoshuyin/compliance';
 import { auth, commandHeaders, createFamily, createMember, loginWithLabel } from '../setup/api.js';
 import { createCase } from '../setup/participation.js';
 import { createAdminPool } from '../setup/db.js';
 
 const PREFIX = `S12F7_${Date.now()}_`;
-const PEPPER = 'finding7-evidence-pepper-32-chars';
 
 interface Fixture {
   manager: { token: string; accountId: string; personId: string };
@@ -57,7 +53,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     return row.rows[0]!.version;
   }
 
-  async function seedFixture(label: string): Promise<Fixture> {
+  async function seedFixture(label: string, seedLaterRoute = false): Promise<Fixture> {
     const manager = await loginWithLabel(app, `${PREFIX}${label}`);
     const family = await createFamily(app, manager.token, `${PREFIX}${label}`);
     expect(family.statusCode, family.body).toBe(201);
@@ -82,7 +78,6 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
       payload: { content: 'Digital use is causing a current family problem.' },
     });
     expect(message.statusCode, message.body).toBe(201);
-    const messageId = message.json().id as string;
 
     const start = await app.inject({
       method: 'POST',
@@ -92,47 +87,53 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     });
     expect(start.statusCode, start.body).toBe(200);
 
-    // Scene truth as left behind by an earlier A2002 → 01004 DECLINED → MAIN
-    // completion, with the Case already advanced to Problem Formulation so the
-    // later A2009 routed predecessor is legal.
-    await admin.query(`UPDATE cases SET phase='PROBLEM_FORMULATION' WHERE id=$1`, [caseId]);
-    await admin.query(
-      `UPDATE scene_node_states
-          SET status='COMPLETED', completed_at=now(), revision=revision+1
-        WHERE case_id=$1 AND node_code='A1001'`,
+    const f = { manager, familyId, caseId, caseVersion: start.json().caseVersion, targetPersonId };
+    let scene = start.json();
+    async function advance(nodeCode: string, payload: Record<string, unknown>) {
+      expect(scene.currentNode.nodeCode).toBe(nodeCode);
+      f.caseVersion = scene.caseVersion;
+      const result = await respond(f, nodeCode, payload, {
+        expectedNodeRevision: scene.currentNode.revision,
+        idempotencyKey: `${PREFIX}${label}-${nodeCode}`,
+      });
+      expect(result.statusCode, result.body).toBe(200);
+      scene = result.json();
+    }
+
+    await advance('A1001', {
+      devices: ['PHONE'],
+      purposeDurations: {
+        learningResearchHomework: { state: 'KNOWN', minutesPerDay: 30, certainty: 'ESTIMATE' },
+        necessaryContact: { state: 'KNOWN', minutesPerDay: 15, certainty: 'EXACT' },
+        entertainmentGamingVideoSocialNonLearning: { state: 'KNOWN', minutesPerDay: 90, certainty: 'ESTIMATE' },
+      },
+      functionalImpact: {
+        sleep: { state: 'KNOWN', impacted: false },
+        studyOrNecessaryAffairs: { state: 'KNOWN', impacted: false },
+        realWorldActivityDisplacement: { state: 'KNOWN', impacted: false },
+      },
+    });
+    await advance('01002', { state: 'KNOWN', selections: ['B'] });
+    await advance('01003', { state: 'KNOWN', selection: 'A' });
+    await advance('A2002', { choice: 'FURTHER_ASSESSMENT' });
+    expect(nodeOf(scene, '01004').branchReasonCodes).toContain('USER_ACCEPTS_FURTHER_ASSESSMENT');
+    await advance('01004', { decision: 'DECLINED', confirmationStatementHash: 'c'.repeat(64) });
+    expect(scene.routeReasonCode).toBe('CONSENT_DECLINED');
+    const route = await admin.query(
+      `SELECT metadata->>'terminalCode' AS terminal
+         FROM case_events
+        WHERE case_id=$1 AND event_type='CASE_DIGITAL_USE_NODE_COMPLETED'
+          AND metadata->>'nodeCode'='01004'`,
       [caseId]
     );
-    await admin.query(
-      `INSERT INTO problem_formulations
-         (family_id,case_id,version,status,primary_problem,key_factors,
-          evidence_refs,unknowns,conflicts,scene_fit,alternative_explanations,
-          reassessment_conditions,exit_conditions,user_response,
-          confirmed_by_person_id,confirmed_at,dependency_refs,supersedes_version)
-       VALUES
-         ($1,$2,1,'CONFIRMED',$3::jsonb,'[]'::jsonb,$4::jsonb,
-          '[]'::jsonb,'[]'::jsonb,'DIGITAL_USE','[]'::jsonb,'[]'::jsonb,
-          '[]'::jsonb,$5::jsonb,$6,now(),'[]'::jsonb,NULL)`,
-      [
-        familyId,
-        caseId,
-        JSON.stringify({ text: 'Current digital-use family problem' }),
-        JSON.stringify([{ type: 'DIALOGUE_MESSAGE', id: messageId }]),
-        JSON.stringify({
-          kind: 'CONFIRM',
-          actorPersonId: manager.personId,
-          respondedAt: new Date().toISOString(),
-        }),
-        manager.personId,
-      ]
-    );
-    await admin.query(
-      `INSERT INTO scene_node_states
-         (family_id,case_id,scene_package_version,node_code,source_node_code,
-          status,branch_reason_codes,input_refs,output_refs,revision,completed_at)
-       VALUES ($1,$2,'v1','01004','01004','COMPLETED',ARRAY['CONSENT_DECLINED'],
-               '[]'::jsonb,'[]'::jsonb,1,now())`,
-      [familyId, caseId]
-    );
+    expect(route.rows).toEqual([{ terminal: 'MAIN' }]);
+    expect(nodeOf(scene, '01004')).toMatchObject({ status: 'COMPLETED', revision: 2 });
+
+    if (!seedLaterRoute) return { ...f, caseVersion: scene.caseVersion };
+
+    // Repository/runtime regression fixture for the later route. The first
+    // consent round above is always executed through the public commands.
+    await admin.query(`UPDATE cases SET phase='PROBLEM_FORMULATION' WHERE id=$1`, [caseId]);
     await admin.query(
       `INSERT INTO scene_node_states
          (family_id,case_id,scene_package_version,node_code,source_node_code,
@@ -140,38 +141,6 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
        VALUES ($1,$2,'v1','A2009','A2009','AVAILABLE',ARRAY['ROUTED'],
                '[]'::jsonb,'[]'::jsonb,1,NULL)`,
       [familyId, caseId]
-    );
-
-    // Real Consent v1 = DECLINED for the supplemental-assessment purpose.
-    await withRlsTransaction(
-      appPool,
-      {
-        familyId,
-        accountId: manager.accountId,
-        personId: manager.personId,
-        purpose: 'FAMILY_MANAGEMENT',
-      },
-      (tx) =>
-        recordPurposeScopedConsentDecision(
-          tx,
-          {
-            familyId,
-            caseId,
-            actor: { accountId: manager.accountId, personId: manager.personId },
-            purpose: DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
-            decision: 'DECLINED',
-            expectedVersion: null,
-            disclosure: {
-              reference: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.reference,
-              version: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.version,
-              hash: CURRENT_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE.hash,
-            },
-            confirmationStatementHash: 'c'.repeat(64),
-            sceneAuthorization: { nodeCode: '01004', verified: true },
-            evidence: { clientIp: null, userAgent: null, pepper: PEPPER },
-          },
-          APPROVED_SUPPLEMENTAL_ASSESSMENT_DISCLOSURE_AUTHORITY
-        )
     );
 
     return {
@@ -280,7 +249,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
   }, 120_000);
 
   it('reactivates a COMPLETED 01004 for a legal routed predecessor and supersedes consent v1 with v2', async () => {
-    const f = await seedFixture('grant');
+    const f = await seedFixture('grant', true);
     const before = await consentRows(f);
     expect(before).toHaveLength(1);
     expect(before[0]).toMatchObject({ decision: 'DECLINED', version: 1 });
@@ -294,7 +263,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     const afterA2009 = a2009.json();
     const reactivated = nodeOf(afterA2009, '01004');
     expect(reactivated.status).toBe('AVAILABLE');
-    expect(reactivated.revision).toBe(2);
+    expect(reactivated.revision).toBe(3);
     expect(
       reactivated.branchReasonCodes.some((code: string) =>
         code.startsWith('REACTIVATED_')
@@ -320,7 +289,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
   }, 120_000);
 
   it('an idempotent replay of the reactivated 01004 decision never creates consent v3', async () => {
-    const f = await seedFixture('replay');
+    const f = await seedFixture('replay', true);
     const key = `${PREFIX}replay-01004-${f.caseId}`;
 
     const a2009 = await respond(f, 'A2009', { decision: 'AGREE' }, {
@@ -356,7 +325,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
       '01004',
       { decision: 'GRANTED', confirmationStatementHash: 'd'.repeat(64) },
       {
-        expectedNodeRevision: 1,
+        expectedNodeRevision: 2,
         idempotencyKey: `${PREFIX}direct-01004-${f.caseId}`,
       }
     );
@@ -367,8 +336,26 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
       `SELECT status, revision FROM scene_node_states WHERE case_id=$1 AND node_code='01004'`,
       [f.caseId]
     );
-    expect(row.rows[0]).toMatchObject({ status: 'COMPLETED', revision: 1 });
+    expect(row.rows[0]).toMatchObject({ status: 'COMPLETED', revision: 2 });
     expect(await consentRows(f)).toHaveLength(1);
+  }, 120_000);
+
+  it('assessment resume after declining leaves A2009 unreachable', async () => {
+    const f = await seedFixture('resume-after-decline');
+    const resumed = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/assessments`,
+      headers: commandHeaders(f.manager.token, `${PREFIX}resume-${f.caseId}`),
+      payload: { expectedCaseVersion: f.caseVersion, targetPersonId: f.targetPersonId },
+    });
+    expect(resumed.statusCode, resumed.body).toBe(200);
+    expect(nodeOf(resumed.json(), 'A2009')).toBeUndefined();
+    const a2009 = await respond(f, 'A2009', { decision: 'AGREE' }, {
+      expectedNodeRevision: 0,
+      idempotencyKey: `${PREFIX}unrouted-a2009-${f.caseId}`,
+    });
+    expect(a2009.statusCode, a2009.body).toBe(409);
+    expect(a2009.json().code).toBe('SCENE_NODE_UNREACHABLE');
   }, 120_000);
 
   it('stale and non-authorized reactivation CAS attempts fail closed', async () => {
@@ -380,7 +367,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     });
     expect(scene.statusCode, scene.body).toBe(200);
     const completed = nodeOf(scene.json(), '01004');
-    expect(completed).toMatchObject({ status: 'COMPLETED', revision: 1 });
+    expect(completed).toMatchObject({ status: 'COMPLETED', revision: 2 });
 
     const stale = await withRlsTransaction(
       appPool,
@@ -406,6 +393,51 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
       `SELECT status, revision FROM scene_node_states WHERE case_id=$1 AND node_code='01004'`,
       [f.caseId]
     );
-    expect(row.rows[0]).toMatchObject({ status: 'COMPLETED', revision: 1 });
+    expect(row.rows[0]).toMatchObject({ status: 'COMPLETED', revision: 2 });
   }, 120_000);
+  it('allows exactly one of two concurrent CAS attempts at the same revision', async () => {
+    const f = await seedFixture('concurrent-cas');
+    const initial = await admin.query<{ status: string; revision: number }>(
+      `SELECT status, revision FROM scene_node_states WHERE case_id=$1 AND node_code='01004'`,
+      [f.caseId]
+    );
+    const completed = initial.rows[0]!;
+    expect(completed.status).toBe('COMPLETED');
+
+    let arrivals = 0;
+    let start!: () => void;
+    const barrier = new Promise<void>((resolve) => { start = resolve; });
+    const attempt = () => withRlsTransaction(
+      appPool,
+      {
+        familyId: f.familyId,
+        accountId: f.manager.accountId,
+        personId: f.manager.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      async (tx) => {
+        arrivals += 1;
+        if (arrivals === 2) start();
+        await barrier;
+        return casReactivateCompletedSceneNodeForRoutedEntry(tx, {
+          caseId: f.caseId,
+          nodeCode: '01004',
+          scenePackageVersion: 'v1',
+          expectedRevision: completed.revision,
+          branchReasonCodes: ['ROUTED'],
+          inputRefs: [],
+        });
+      }
+    );
+
+    const results = await Promise.all([attempt(), attempt()]);
+    expect(results.filter((result) => result !== null)).toHaveLength(1);
+    expect(results.filter((result) => result === null)).toHaveLength(1);
+    const final = await admin.query(
+      `SELECT status, revision FROM scene_node_states WHERE case_id=$1 AND node_code='01004'`,
+      [f.caseId]
+    );
+    expect(final.rows).toEqual([{ status: 'AVAILABLE', revision: completed.revision + 1 }]);
+  }, 120_000);
+
 });

@@ -476,7 +476,7 @@ export async function isParticipationProcessingAllowed(
       : null;
   }
 
-  return assertMinorProcessingAllowed(personId, {
+  return assertMinorProcessingAllowed(personId, 'CASE', {
     getProfile: () => profile,
     getConsentRecord: () => consent,
     getCurrentNoticeHash,

@@ -423,7 +423,14 @@ export function evaluateCompliance(
     }
 
     const person = snapshot.person;
-    const ageGate = assertMinorProcessingAllowed(person.personId, {
+    const processingCategory = (() => {
+      switch (snapshot.feature.featureCode) {
+        case 'DIGITAL_USE_FAMILY_ALLIANCE_RUNTIME': return 'FAMILY_ALLIANCE';
+        case 'DIGITAL_USE_ASSESSMENT_RUNTIME': return 'ASSESSMENT';
+        default: return 'OTHER_FEATURE';
+      }
+    })();
+    const ageGate = assertMinorProcessingAllowed(person.personId, processingCategory, {
       getProfile: () => toAgeGateProfile(person),
       getConsentRecord: () => (person.guardianConsent ? toAgeGateConsent(person.guardianConsent) : null),
       getCurrentNoticeHash: () => snapshot.currentNoticeHash ?? '',

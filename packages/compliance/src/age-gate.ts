@@ -70,6 +70,7 @@ export const AGE_GATE_REASON_CODES = [
   'CONSENT_SUBJECT_MISMATCH',
   'NOTICE_VERSION_MISMATCH',
   'POLICY_VERSION_MISMATCH',
+  'CONSENT_SCOPE_NOT_COVERED',
 ] as const;
 export type AgeGateReason = (typeof AGE_GATE_REASON_CODES)[number];
 
@@ -91,11 +92,23 @@ export function ageGatePublicReasonCode(reason: AgeGateReason): string {
     case 'CONSENT_EVIDENCE_INVALID':
     case 'CONSENT_NOT_CURRENT_CHAIN_HEAD':
     case 'POLICY_VERSION_MISMATCH':
+    case 'CONSENT_SCOPE_NOT_COVERED':
       return 'GUARDIAN_CONSENT_REQUIRED';
     default:
       return reason;
   }
 }
+
+export type MinorProcessingCategory =
+  | 'GUARDIAN_CONSENT_ADMINISTRATION'
+  | 'ASSESSMENT'
+  | 'CASE'
+  | 'DIGITAL_USE'
+  | 'FAMILY_ALLIANCE'
+  | 'AI'
+  | 'IDENTITY_BINDING'
+  | 'MEMBER_PROFILE'
+  | 'OTHER_FEATURE';
 
 export interface AgeGateDeps {
   getProfile(personId: string): ComplianceProfile | null;
@@ -111,6 +124,7 @@ function isNonEmptyString(value: unknown): value is string {
 
 export function assertMinorProcessingAllowed(
   personId: string,
+  processingCategory: MinorProcessingCategory,
   deps: AgeGateDeps
 ): AgeGateResult {
   // 1. Profile missing → BLOCK
@@ -200,18 +214,26 @@ export function assertMinorProcessingAllowed(
     if (consent.noticeHash !== deps.getCurrentNoticeHash()) {
       return { decision: 'BLOCK', reason: 'NOTICE_VERSION_MISMATCH' };
     }
-    if (consent.noticeVersion !== deps.getCurrentNoticeVersion()) {
+    if (consent.noticeVersion !== 'v1' || consent.noticeVersion !== deps.getCurrentNoticeVersion()) {
       return { decision: 'BLOCK', reason: 'NOTICE_VERSION_MISMATCH' };
     }
 
     // Policy / scope: the row must be recorded under the current policy scope.
-    if (consent.policyVersion !== deps.getCurrentPolicyVersion()) {
+    if (
+      consent.policyVersion !== CURRENT_GUARDIAN_CONSENT_POLICY_VERSION ||
+      consent.policyVersion !== deps.getCurrentPolicyVersion()
+    ) {
       return { decision: 'BLOCK', reason: 'POLICY_VERSION_MISMATCH' };
     }
 
     // Guardian: the consent's guardian must be the profile's guardian.
     if (consent.guardianPersonId !== profile.guardianPersonId) {
       return { decision: 'BLOCK', reason: 'GUARDIAN_CONSENT_REQUIRED' };
+    }
+
+    // Frozen Product Authority §19A.2 (D5) bounds v1 to consent administration.
+    if (processingCategory !== 'GUARDIAN_CONSENT_ADMINISTRATION') {
+      return { decision: 'BLOCK', reason: 'CONSENT_SCOPE_NOT_COVERED' };
     }
 
     return { decision: 'ALLOW', minorMode: true };

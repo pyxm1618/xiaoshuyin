@@ -102,6 +102,7 @@ function minorGateBlocked(gate: MinorGateResult): BindingGateResult {
     reason === 'CONSENT_SUBJECT_MISMATCH' ||
     reason === 'NOTICE_VERSION_MISMATCH' ||
     reason === 'POLICY_VERSION_MISMATCH' ||
+    reason === 'CONSENT_SCOPE_NOT_COVERED' ||
     reason === 'GUARDIAN_MISMATCH'
   ) {
     return block('GUARDIAN_CONSENT_INVALID');

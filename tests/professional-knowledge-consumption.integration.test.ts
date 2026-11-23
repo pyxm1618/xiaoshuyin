@@ -78,6 +78,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
   let caseId = '';
   let targetPersonId = '';
   let consentId = '';
+  let under14PersonId = '';
   let knowledgeId = '';
   let versionId = '';
   let contentHash = '';
@@ -110,7 +111,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
       async resolveEligibilityFacts() {
         return {
           stage: 'ASSESSMENT',
-          ageBand: 'UNDER_14',
+          ageBand: 'MINOR_14_17',
           locale: 'zh-CN',
           applicabilityFacts: ['sleep-impact'],
           exclusionFacts: [],
@@ -154,7 +155,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
       sceneCode: 'DIGITAL_USE',
       scenePackageVersion: input.scenePackageVersion ?? 'v-test',
       stages: ['ASSESSMENT'],
-      ageBands: ['UNDER_14'],
+      ageBands: ['MINOR_14_17'],
       applicability: ['sleep-impact'],
       exclusions: ['acute-risk'],
       riskLevels: ['LOW'],
@@ -219,7 +220,14 @@ describe('family Professional Knowledge consumption full gate composition', () =
       guardianConsentId: consentId,
     });
     expect(member.statusCode).toBe(201);
-    targetPersonId = member.json().personId as string;
+    under14PersonId = member.json().personId as string;
+
+    const teen = await createMember(app, owner.token, familyId, 's17-teen', {
+      ageBand: 'MINOR_14_17',
+      ageBandSource: 'OTHER_MEMBER_RELAY',
+    });
+    expect(teen.statusCode, teen.body).toBe(201);
+    targetPersonId = teen.json().personId as string;
 
     await publishPolicy('NOT_APPLICABLE');
 
@@ -354,7 +362,7 @@ describe('family Professional Knowledge consumption full gate composition', () =
         actor: { accountId: owner.accountId, personId: owner.personId },
         familyId,
         caseId,
-        targetPersonId,
+        targetPersonId: under14PersonId,
         versionId,
         dependencies: deps(),
       })
