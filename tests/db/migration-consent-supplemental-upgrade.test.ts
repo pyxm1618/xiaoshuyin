@@ -61,7 +61,7 @@ const POST_CONSENT_APPROVED_MIGRATIONS = [
   '028_professional_knowledge_authority_boundary_remediation.sql',
   '029_staff_assignment_control_plane.sql',
   '030_digital_use_assessment_context.sql',
-  '031_downstream_dependency_review_state.sql',
+  '033_downstream_dependency_review_state.sql',
 ] as const;
 
 function urlForDatabase(baseUrl: string, database: string): string {

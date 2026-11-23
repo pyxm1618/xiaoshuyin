@@ -10,7 +10,7 @@
         "apps/server/api/src/routes/digital-use-phone-contract.ts",
         "apps/server/api/src/services/digital-use-phone-contract.ts",
         "apps/server/api/src/services/digital-use-roleplay.ts",
-        "db/migrations/031_downstream_dependency_review_state.sql",
+        "db/migrations/033_downstream_dependency_review_state.sql",
         "packages/domain/src/phone-use-contract-repository.ts"
       ]
     },

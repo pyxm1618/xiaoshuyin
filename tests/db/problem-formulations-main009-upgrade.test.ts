@@ -389,7 +389,7 @@ async function assertUnionConstraints(
   includeGoalRuntime = includeSlice16,
   includeSlice17 = includeGoalRuntime,
   includeC3 = includeSlice17,
-  include031 = includeC3
+  includeDownstreamReviewMigration = includeC3
 ): Promise<void> {
   const definitions = new Map<string, string>(
     (
@@ -512,7 +512,7 @@ async function assertUnionConstraints(
     auditEventSet.add('STAFF_AUTHORITY_GRANTED');
     auditEventSet.add('STAFF_AUTHORITY_REVOKED');
   }
-  if (include031) {
+  if (includeDownstreamReviewMigration) {
     auditEventSet.add('GOAL_REVIEW_STATE_CHANGED');
     auditEventSet.add('PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED');
   }
@@ -533,7 +533,7 @@ async function assertUnionConstraints(
     ...(includeGoalRuntime ? ['GOAL'] : []),
     ...(includeSlice17 ? ['PROFESSIONAL_KNOWLEDGE'] : []),
     ...(includeC3 ? ['STAFF_ASSIGNMENT'] : []),
-    ...(include031 ? ['PHONE_USE_CONTRACT'] : []),
+    ...(includeDownstreamReviewMigration ? ['PHONE_USE_CONTRACT'] : []),
   ]);
   const resourceLiterals = literalsOf(
     definitions.get('business_audit_events_resource_type_check')!
