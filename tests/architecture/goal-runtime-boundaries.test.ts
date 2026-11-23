@@ -5,8 +5,17 @@ import { getCurrentNoticeHash } from '@xiaoshuyin/compliance';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const COMMAND_OWNER = 'apps/server/api/src/services/goals.ts';
-const TRANSITION_OWNER =
+// Forward-only migration discipline: 026 remains the origin definition and
+// 031 is the single effective redefinition (Finding #1 PACKAGE dependency).
+// Exactly these two files may contain the privileged transition; any third
+// GOALS -> PLANNING writer is still a hard failure.
+const TRANSITION_ORIGIN =
   'db/migrations/026_common_core_goal_confirm_goal_runtime.sql';
+const TRANSITION_OWNER =
+  'db/migrations/031_common_core_goal_confirm_goal_package_dependency.sql';
+// 031 redefines the primitive with CREATE OR REPLACE; match the declaration
+// itself so the anchor works for both the origin and the effective owner.
+const TRANSITION_DECLARATION = 'FUNCTION app.confirm_goal_transition(';
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -33,7 +42,7 @@ describe('Common Core Goal authority boundaries', () => {
         ) writers.push(rel);
       }
     }
-    expect(writers).toEqual([TRANSITION_OWNER]);
+    expect(writers).toEqual([TRANSITION_ORIGIN, TRANSITION_OWNER]);
   });
 
   it('places the A2010 COMPLETED gate before the owned transition', () => {
@@ -44,7 +53,7 @@ describe('Common Core Goal authority boundaries', () => {
     expect(serviceTransition).toBeGreaterThan(serviceGate);
 
     const dbSource = readFileSync(join(ROOT, TRANSITION_OWNER), 'utf8');
-    const formalFunction = dbSource.indexOf('CREATE FUNCTION app.confirm_goal_transition');
+    const formalFunction = dbSource.indexOf(TRANSITION_DECLARATION);
     const dbGate = dbSource.indexOf("a2010.status='COMPLETED'", formalFunction);
     const dbTransition = dbSource.indexOf('UPDATE cases', formalFunction);
     expect(formalFunction).toBeGreaterThan(-1);
@@ -55,7 +64,7 @@ describe('Common Core Goal authority boundaries', () => {
   it('keeps the privileged transition behind the formal authoritative gates', () => {
     const dbSource = readFileSync(join(ROOT, TRANSITION_OWNER), 'utf8');
     const formalFunction = dbSource.indexOf(
-      'CREATE FUNCTION app.confirm_goal_transition'
+      TRANSITION_DECLARATION
     );
     const authoritativeWrite = dbSource.indexOf('UPDATE cases', formalFunction);
     expect(formalFunction).toBeGreaterThan(-1);

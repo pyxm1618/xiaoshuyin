@@ -28,7 +28,7 @@ describe('session exchange', () => {
   });
 
   it('is generic before commit and issues the ordinary session after commit', async () => {
-    const target = await createTarget(h, 'session', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'session', { ageBand: 'MINOR_14_17' });
     const { contextToken } = await startBinding(h, target, `session_${Date.now()}`);
 
     const before = await candidateSession(h, contextToken);

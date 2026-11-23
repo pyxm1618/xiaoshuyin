@@ -49,7 +49,7 @@ describe('identity binding error envelope (T095)', () => {
   });
 
   it('AFFIRM without confirmationVersion is 422 VALIDATION_ERROR', async () => {
-    const target = await createTarget(h, 'err_affirm', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'err_affirm', { ageBand: 'MINOR_14_17' });
     const { contextToken } = await startBinding(h, target, `err_affirm_${randomUUID()}`);
     const res = await h.app.inject({
       method: 'POST',
@@ -62,7 +62,7 @@ describe('identity binding error envelope (T095)', () => {
   });
 
   it('confirmer decision schema violations are 422, unknown target is 404 BINDING_NOT_FOUND', async () => {
-    const target = await createTarget(h, 'err_conf', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'err_conf', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `err_conf_${randomUUID()}`);
 
     const missing = await h.app.inject({

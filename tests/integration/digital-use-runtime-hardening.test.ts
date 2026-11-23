@@ -1634,10 +1634,20 @@ describe('T1218 Digital Use runtime hardening', () => {
         const inserted = await insertSceneArtifact(first, input);
         expect(inserted.revision).toBe(1);
 
-        const secondAttempt = insertSceneArtifact(second, input);
+        // The loser's rejection must be captured the moment it settles. Leaving
+        // the promise unobserved across the setTimeout/COMMIT awaits makes Node
+        // report an unhandled rejection (PromiseRejectionHandledWarning), which
+        // fails the canonical verify-all gate even though the assertion passes.
+        // The assertion itself is unchanged: exactly one 23505 loser.
+        const secondAttempt = insertSceneArtifact(second, input).then(
+          (value) => ({ settled: 'FULFILLED' as const, value }),
+          (error: unknown) => ({ settled: 'REJECTED' as const, error })
+        );
         await new Promise((resolve) => setTimeout(resolve, 30));
         await first.query('COMMIT');
-        await expect(secondAttempt).rejects.toMatchObject({ code: '23505' });
+        const secondOutcome = await secondAttempt;
+        expect(secondOutcome.settled).toBe('REJECTED');
+        expect(secondOutcome).toMatchObject({ error: { code: '23505' } });
         await second.query('ROLLBACK');
 
         const rows = await admin.query<{ n: number }>(

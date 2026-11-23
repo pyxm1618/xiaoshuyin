@@ -53,7 +53,7 @@ describe('integration idempotency matrix (T106)', () => {
   });
 
   it('same key + same payload is replay; different payload is 409', async () => {
-    const target = await createTarget(h, 'idem_cand', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_cand', { ageBand: 'MINOR_14_17' });
     const { contextToken, attemptId } = await startBinding(
       h,
       target,
@@ -89,7 +89,7 @@ describe('integration idempotency matrix (T106)', () => {
   });
 
   it('concurrent same-key candidate decisions produce one confirmation', async () => {
-    const target = await createTarget(h, 'idem_conc', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_conc', { ageBand: 'MINOR_14_17' });
     const { contextToken, attemptId } = await startBinding(
       h,
       target,
@@ -111,7 +111,7 @@ describe('integration idempotency matrix (T106)', () => {
   });
 
   it('different key + same semantic operation converges on the same live attempt', async () => {
-    const target = await createTarget(h, 'idem_semantic', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_semantic', { ageBand: 'MINOR_14_17' });
     const code = `idem_semantic_${randomUUID()}`;
     const first = await bootstrap(h, target.invitationToken, code, `k1-${randomUUID()}`);
     const second = await bootstrap(h, target.invitationToken, code, `k2-${randomUUID()}`);
@@ -128,7 +128,7 @@ describe('integration idempotency matrix (T106)', () => {
   });
 
   it('concurrent same-key bootstrap creates one attempt and one operation key', async () => {
-    const target = await createTarget(h, 'idem_boot_conc', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_boot_conc', { ageBand: 'MINOR_14_17' });
     const code = `idem_boot_conc_${randomUUID()}`;
     const key = `idem-boot-${randomUUID()}`;
 
@@ -151,7 +151,7 @@ describe('integration idempotency matrix (T106)', () => {
   });
 
   it('PENDING replay links a new transport context to the same attempt', async () => {
-    const target = await createTarget(h, 'idem_pending', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_pending', { ageBand: 'MINOR_14_17' });
     const code = `idem_pending_${randomUUID()}`;
     const key = `idem-pending-${randomUUID()}`;
 
@@ -179,7 +179,7 @@ describe('integration idempotency matrix (T106)', () => {
 
   // ── M-01 Case A: old TERMINAL operation key, later new attempt ──
   it('old TERMINAL key replay resolves its original attempt, never the later one', async () => {
-    const target = await createTarget(h, 'idem_old_terminal', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_old_terminal', { ageBand: 'MINOR_14_17' });
     const code = `idem_old_terminal_${randomUUID()}`;
     const oldKey = `old-${randomUUID()}`;
 
@@ -267,7 +267,7 @@ describe('integration idempotency matrix (T106)', () => {
 
   // ── M-01 Case B: COMMITTED operation key after invitation became terminal ──
   it('COMMITTED key still replays {binding:"COMMITTED"} after the invitation is terminal', async () => {
-    const target = await createTarget(h, 'idem_committed_terminal', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_committed_terminal', { ageBand: 'MINOR_14_17' });
     const code = `idem_committed_terminal_${randomUUID()}`;
     const key = `committed-${randomUUID()}`;
 
@@ -329,7 +329,7 @@ describe('integration idempotency matrix (T106)', () => {
   });
 
   it('TERMINAL key replay returns the historical outcome without side effects', async () => {
-    const target = await createTarget(h, 'idem_terminal_replay', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_terminal_replay', { ageBand: 'MINOR_14_17' });
     const code = `idem_terminal_replay_${randomUUID()}`;
     const key = `terminal-${randomUUID()}`;
 
@@ -371,7 +371,7 @@ describe('integration idempotency matrix (T106)', () => {
   });
 
   it('RETRYABLE retry / read-back converges to one commit; no frozen RETRYABLE result', async () => {
-    const target = await createTarget(h, 'idem_retryable', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'idem_retryable', { ageBand: 'MINOR_14_17' });
     const code = `idem_retryable_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
 

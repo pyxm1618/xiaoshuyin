@@ -20,11 +20,8 @@ import { registerGoalRoutes } from './routes/goals.js';
 import { registerDigitalUseAssessmentRoutes } from './routes/digital-use-assessment.js';
 import { registerDigitalUsePhoneContractRoutes } from './routes/digital-use-phone-contract.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
-import {
-  createWechatProvider,
-  loadRuntimeConfig,
-  type RuntimeConfig,
-} from './runtime-env.js';
+import { createWechatProvider, loadRuntimeConfig, type RuntimeConfig } from './runtime-env.js';
+import { requireConsentRuntimeDependencies } from '@xiaoshuyin/compliance';
 import type { WechatAuthProvider } from './auth/wechat-provider.js';
 import { Slice4InvitationPort } from './identity-binding/invitation-slice4-adapter.js';
 import type { InvitationResolutionPort } from './identity-binding/invitation-port.js';
@@ -923,6 +920,16 @@ export async function buildApp(options: BuildAppOptions = {}) {
   // Fail-fast runtime contract (F1). Throws before any route is registered.
   const runtime: RuntimeConfig = loadRuntimeConfig(env);
 
+  // Finding #40: instance-level DI. The validated evidence pepper and the
+  // server-decided consent channel are passed explicitly from this runtime
+  // contract into route registration. `process.env` is never mutated here and no
+  // route reads either value from ambient process state, so two apps built in one
+  // process stay fully isolated.
+  const consentRuntime = requireConsentRuntimeDependencies({
+    evidencePepper: runtime.evidencePepper,
+    consentChannel: runtime.consentChannel,
+  });
+
   const app = Fastify({ logger: buildLoggerOptions(env, options.loggerStream) });
 
   // Test-only: capture real route schemas before any route is registered.
@@ -990,8 +997,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerStaffAuthorityRoutes(app, pool, runtime.sessionSecret);
   registerFamilyRoutes(app, pool);
   registerMemberRoutes(app, pool);
-  registerComplianceRoutes(app, pool);
-  registerConsentRoutes(app, pool);
+  registerComplianceRoutes(app, pool, consentRuntime);
+  registerConsentRoutes(app, pool, consentRuntime);
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);

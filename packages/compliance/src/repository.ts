@@ -245,21 +245,29 @@ export async function getComplianceProfileForUpdate(tx: Tx, personId: string) {
 }
 
 /**
- * F6: the gate only sees a consent row whose evidence validates against the
- * frozen schema. Legacy `{accepted:true,timestamp}` rows are reported as
- * "no usable consent" → BLOCK, never silently repaired.
+ * F6 + Finding #3: the gate only sees a consent row that positively satisfies
+ * every authority-bearing column of the guardian-consent contract.
+ *
+ * Legacy `{accepted:true,timestamp}` evidence is reported as "no usable
+ * consent" → BLOCK, never silently repaired. The projected columns are the
+ * complete set the pure age gate evaluates (purpose, notice version, policy
+ * scope, chain-head, evidence validity), so no caller has to re-read truth.
  */
 export async function getConsentRecordForGate(tx: Tx, id: string) {
   const { rows } = await tx.query(
-    `SELECT id, version, decision, bound_person_id, notice_hash, guardian_person_id, evidence
-     FROM consent_records
+    `SELECT id, version, decision, bound_person_id, notice_hash, notice_version,
+            policy_version, guardian_person_id, purpose, evidence,
+            NOT EXISTS (
+              SELECT 1 FROM consent_records s WHERE s.supersedes_id = c.id
+            ) AS is_chain_head
+       FROM consent_records c
       WHERE id = $1 AND purpose = '${GUARDIAN_PURPOSE}'`,
     [id]
   );
   const row = rows[0];
   if (!row) return null;
   if (!evidenceIsValid(row.evidence)) return null;
-  return row;
+  return { ...row, evidence_valid: true as const };
 }
 
 export async function insertConsentRecord(

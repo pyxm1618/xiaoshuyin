@@ -12,7 +12,6 @@ import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { createAdminPool } from '../setup/db.js';
 import {
-  commandHeaders,
   createConsentRequest,
   createFamily,
   createMember,
@@ -81,7 +80,7 @@ describe('UNDER_14 Processing Gate (T059 / FR-010)', () => {
     await app.close();
   });
 
-  it('GRANTED → PATCH profile value succeeds', async () => {
+  it('GRANTED v1 → downstream PATCH fails closed', async () => {
     const { token, familyId } = await setupManagerAndFamily(app, 'grant');
     const consent = await grantConsentFor(app, token, 'grant');
     const childId = await createUnder14(app, token, familyId, consent.id, 'grant');
@@ -89,15 +88,14 @@ describe('UNDER_14 Processing Gate (T059 / FR-010)', () => {
     const res = await updateMember(app, token, familyId, childId, 'grant', [
       valueInput('小树-2', 'GUARDIAN_RELAY'),
     ]);
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(403);
 
     const { rows } = await queryDb(
       `SELECT value_text, status FROM person_profile_values
        WHERE person_id = $1 AND attribute = 'DISPLAY_NAME' AND status = 'RECORDED'`,
       [childId]
     );
-    expect(rows.length).toBe(1);
-    expect(rows[0].value_text).toBe('小树-2');
+    expect(rows).toEqual([{ value_text: '小树', status: 'RECORDED' }]);
   });
 
   it('revoke → PATCH same child blocked, no supersede / no insert / no audit', async () => {
@@ -139,7 +137,7 @@ describe('UNDER_14 Processing Gate (T059 / FR-010)', () => {
     expect(afterAudit.rows[0].cnt).toBe(beforeAudit.rows[0].cnt);
   });
 
-  it('re-consent v3 → processing restored', async () => {
+  it('re-consent v3 advances administration without authorizing downstream PATCH', async () => {
     const { token, familyId } = await setupManagerAndFamily(app, 'restore');
     const consent = await grantConsentFor(app, token, 'restore');
     const childId = await createUnder14(app, token, familyId, consent.id, 'restore');
@@ -159,7 +157,7 @@ describe('UNDER_14 Processing Gate (T059 / FR-010)', () => {
     const ok = await updateMember(app, token, familyId, childId, 'restore', [
       valueInput('小树-restored', 'GUARDIAN_RELAY'),
     ]);
-    expect(ok.statusCode).toBe(200);
+    expect(ok.statusCode).toBe(403);
   });
 });
 
@@ -211,66 +209,39 @@ describe('UNDER_14 Processing Gate — concurrency (T059)', () => {
     await app.close();
   });
 
-  it('Scenario A: revoke waits for an in-flight PATCH; PATCH write lands before revoke returns', async () => {
+  it('Scenario A: concurrent PATCH and revoke never write a downstream profile value', async () => {
     const { token, familyId } = await setupManagerAndFamily(app, 'scen-a');
     const consent = await grantConsentFor(app, token, 'scen-a');
     const childId = await createUnder14(app, token, familyId, consent.id, 'scen-a');
 
-    const seed = await updateMember(app, token, familyId, childId, 'scen-a-seed', [
-      valueInput('seed', 'GUARDIAN_RELAY'),
-    ]);
-    expect(seed.statusCode).toBe(200);
-    const { rows: seedRows } = await queryDb(
-      `SELECT id FROM person_profile_values
-       WHERE person_id = $1 AND status = 'RECORDED'`,
-      [childId]
-    );
-    expect(seedRows.length).toBe(1);
-    const parkedValueId = seedRows[0].id;
-
     const hold = await verifyPool.connect();
     await hold.query('BEGIN');
-    await hold.query('SELECT id FROM person_profile_values WHERE id = $1 FOR UPDATE', [parkedValueId]);
-
-    const patchTracked = track(
-      app.inject({
-        method: 'PATCH',
-        url: `/api/v1/families/${familyId}/members/${childId}`,
-        headers: commandHeaders(token, 'pgc-patch'),
-        payload: { values: [valueInput('stale-write', 'GUARDIAN_RELAY')] },
-      })
-    );
-
-    const revokeTracked = track(revokeConsent(app, token, 'pgc-revoke', consent.id));
-
+    await hold.query('SELECT person_id FROM person_compliance_profiles WHERE person_id=$1 FOR UPDATE', [childId]);
+    const patch = track(updateMember(app, token, familyId, childId, 'pgc-patch', [
+      valueInput('stale-write', 'GUARDIAN_RELAY'),
+    ]));
+    let revoke: ReturnType<typeof revokeConsent> | undefined;
     try {
-      expect(await waitForBlockedOn('person_profile_values')).toBe(true);
-      expect(patchTracked.settled).toBe(false);
-
-      expect(await waitForBlockedOn('UPDATE person_compliance_profiles')).toBe(true);
-      expect(revokeTracked.settled).toBe(false);
+      expect(await waitForBlockedOn('person_compliance_profiles')).toBe(true);
+      expect(patch.settled).toBe(false);
+      revoke = revokeConsent(app, token, 'pgc-revoke', consent.id);
     } finally {
       await hold.query('COMMIT');
       hold.release();
     }
 
-    const patchRes = await patchTracked.promise;
-    expect(patchRes.statusCode).toBe(200);
-    const revokeRes = await revokeTracked.promise;
-    expect(revokeRes.statusCode).toBe(200);
-
-    const { rows: afterValues } = await queryDb(
-      `SELECT value_text, status FROM person_profile_values
-       WHERE person_id = $1 ORDER BY status DESC`,
+    expect((await patch.promise).statusCode).toBe(403);
+    expect((await revoke!).statusCode).toBe(200);
+    const { rows } = await queryDb(
+      `SELECT value_text FROM person_profile_values WHERE person_id=$1 AND value_text='stale-write'`,
       [childId]
     );
-    expect(afterValues.some((r: any) => r.value_text === 'stale-write' && r.status === 'RECORDED')).toBe(true);
-
-    const { rows: ptr } = await queryDb(
-      'SELECT guardian_consent_version FROM person_compliance_profiles WHERE person_id = $1',
+    expect(rows).toEqual([]);
+    const { rows: profiles } = await queryDb(
+      'SELECT guardian_consent_version FROM person_compliance_profiles WHERE person_id=$1',
       [childId]
     );
-    expect(ptr[0].guardian_consent_version).toBe(2);
+    expect(profiles[0].guardian_consent_version).toBe(2);
   });
 
   it('Scenario B: revoke first → PATCH reads current pointer → 403 with no side effects', async () => {

@@ -471,8 +471,6 @@ export async function selectPhoneUseRoleplay(
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
    const {scene}=await authorizeRoleplay(tx,input,true);
-   if(scene.revision!==input.expectedNodeRevision) throw roleplayError('STALE_NODE_REVISION');
-   const correction=scene.status==='COMPLETED';
    await assertRoleplayCompliance(tx,input.actor.personId);
    const authorityAtRequest=await resolveCurrentRoleplayModelPromptAuthority(
      modelPromptAuthorityProvider
@@ -488,6 +486,8 @@ export async function selectPhoneUseRoleplay(
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_SELECT',idempotencyKey:input.idempotencyKey,requestHash,
    },async()=>{
+     if(scene.revision!==input.expectedNodeRevision) throw roleplayError('STALE_NODE_REVISION');
+     const correction=scene.status==='COMPLETED';
      const session=await getRoleplaySession(tx,input.sessionId,true);
      if(!session||session.case_id!==input.caseId||session.actor_person_id!==input.actor.personId) throw roleplayError('PHONE_USE_CONTRACT_NOT_FOUND');
      assertRoleplaySessionCurrent(session,professionalContentAuthority);

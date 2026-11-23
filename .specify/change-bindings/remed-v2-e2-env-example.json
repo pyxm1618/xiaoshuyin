@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "changeId": "remed-v2-e2-env-example",
+  "classification": "REPOSITORY_INFRASTRUCTURE",
+  "exemptionClass": "REPOSITORY_METADATA",
+  "paths": [
+    ".env.example"
+  ]
+}

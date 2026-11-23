@@ -373,7 +373,7 @@ describe('compliance consistent snapshot (Audit 2 HIGH-01)', () => {
     const result = await t1;
     expect(result.snapshot?.guardianConsent?.id).toBe(validConsentId);
     expect(result.snapshot?.guardianConsent?.decision).toBe('GRANTED');
-    expect(result.evaluated.gate).toBe('ALLOW');
-    expect(result.evaluated.reasonCode).toBeNull();
+    expect(result.evaluated.gate).toBe('BLOCK');
+    expect(result.evaluated.reasonCode).toBe('COMPLIANCE_GUARDIAN_CONSENT_INVALID');
   }, 120_000);
 });

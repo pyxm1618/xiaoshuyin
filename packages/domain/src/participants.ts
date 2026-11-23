@@ -9,9 +9,11 @@ import { createHash, createHmac } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import {
   assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   getComplianceProfileForUpdate,
   getConsentRecordForGate,
   getCurrentNoticeHash,
+  getCurrentNoticeVersion,
 } from '@xiaoshuyin/compliance';
 
 export const CASE_PARTICIPATION_STATES = [
@@ -443,10 +445,16 @@ export async function isParticipationProcessingAllowed(
 
   let consent: {
     id: string;
+    version: number;
     decision: 'GRANTED' | 'REVOKED';
     boundPersonId: string | null;
     noticeHash: string;
+    noticeVersion: string | null;
+    policyVersion: string | null;
     guardianPersonId: string;
+    purpose: string;
+    isChainHead: boolean;
+    evidenceValid: boolean;
   } | null = null;
 
   if (profile?.guardianConsentRecordId) {
@@ -454,18 +462,26 @@ export async function isParticipationProcessingAllowed(
     consent = c
       ? {
           id: c.id,
+          version: c.version,
           decision: c.decision,
           boundPersonId: c.bound_person_id,
           noticeHash: c.notice_hash,
+          noticeVersion: c.notice_version ?? null,
+          policyVersion: c.policy_version ?? null,
           guardianPersonId: c.guardian_person_id,
+          purpose: c.purpose,
+          isChainHead: c.is_chain_head === true,
+          evidenceValid: c.evidence_valid === true,
         }
       : null;
   }
 
-  return assertMinorProcessingAllowed(personId, {
+  return assertMinorProcessingAllowed(personId, 'CASE', {
     getProfile: () => profile,
     getConsentRecord: () => consent,
     getCurrentNoticeHash,
+    getCurrentNoticeVersion,
+    getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   }).decision === 'ALLOW';
 }
 

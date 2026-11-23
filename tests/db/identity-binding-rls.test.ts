@@ -68,7 +68,7 @@ describe('binding RLS isolation', () => {
   });
 
   it('wrong target / wrong family sees 0 binding rows', async () => {
-    const target = await createTarget(h, 'rls_wrong', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'rls_wrong', { ageBand: 'MINOR_14_17' });
     await startBinding(h, target, `rls_wrong_${Date.now()}`);
 
     const rows = await withBindingGateTransaction(

@@ -416,7 +416,7 @@
       "id": "common-core-goal-migration-032",
       "match": {
         "kind": "EXACT",
-        "path": "db/migrations/032_common_core_goal_confirm_goal_package_dependency.sql"
+        "path": "db/migrations/031_common_core_goal_confirm_goal_package_dependency.sql"
       },
       "ownership": {
         "kind": "FEATURE",
@@ -1078,6 +1078,72 @@
         "kind": "FEATURE",
         "features": [
           "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "professional-knowledge-migration-031",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/031_professional_knowledge_effective_window_remediation.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "phone-contract-json-error-handler",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/plugins/error-handler.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/digital-use-phone-contract.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract-repository",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/phone-use-contract-repository.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-dependency-review-migration-033",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/033_downstream_dependency_review_state.sql"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "common-core-goal-confirmgoal-runtime"
         ]
       }
     }

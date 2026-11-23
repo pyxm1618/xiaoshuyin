@@ -78,7 +78,7 @@ describe('bootstrap route contract (T057)', () => {
   });
 
   it('COMMITTED replay is the strict { binding: "COMMITTED" } body', async () => {
-    const target = await createTarget(h, 'route_committed', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'route_committed', { ageBand: 'MINOR_14_17' });
     const code = `route_committed_${randomUUID()}`;
     const key = `route-committed-${randomUUID()}`;
     const first = await bootstrap(h, target.invitationToken, code, key);

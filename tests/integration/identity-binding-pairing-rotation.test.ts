@@ -60,7 +60,7 @@ describe('H-01 pairing challenge direct proofs (MEDIUM-03)', () => {
   });
 
   it('H-01 rotation: a new issuance returns new challenge bytes', async () => {
-    const target = await createTarget(h, 'h01_rotation_new', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'h01_rotation_new', { ageBand: 'MINOR_14_17' });
     const code = `h01_rotation_new_${randomUUID()}`;
 
     const firstBoot = await bootstrap(h, target.invitationToken, code, `boot1-${randomUUID()}`);
@@ -91,7 +91,7 @@ describe('H-01 pairing challenge direct proofs (MEDIUM-03)', () => {
   });
 
   it('H-01 rotation: the old issuance is invalid after rotation', async () => {
-    const target = await createTarget(h, 'h01_rotation_old', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'h01_rotation_old', { ageBand: 'MINOR_14_17' });
     const code = `h01_rotation_old_${randomUUID()}`;
 
     const firstBoot = await bootstrap(h, target.invitationToken, code, `boot1-${randomUUID()}`);
@@ -125,7 +125,7 @@ describe('H-01 pairing challenge direct proofs (MEDIUM-03)', () => {
   });
 
   it('H-01 consumed challenge + NEW operation key is 404 with zero mutation', async () => {
-    const target = await createTarget(h, 'h01_consumed', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'h01_consumed', { ageBand: 'MINOR_14_17' });
     const { attemptId, pairingChallenge } = await startBinding(
       h,
       target,
@@ -189,7 +189,7 @@ describe('H-01 pairing challenge direct proofs (MEDIUM-03)', () => {
   });
 
   it('H-01 same operation key + rotated challenge is 409 IDEMPOTENCY_PAYLOAD_MISMATCH', async () => {
-    const target = await createTarget(h, 'h01_rotated_key', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'h01_rotated_key', { ageBand: 'MINOR_14_17' });
     const code = `h01_rotated_key_${randomUUID()}`;
 
     const boot = await bootstrap(h, target.invitationToken, code, `rot1-${randomUUID()}`);
@@ -236,7 +236,7 @@ describe('H-01 pairing challenge direct proofs (MEDIUM-03)', () => {
   });
 
   it('H-01 two-confirmer race writes exactly one SECOND_PARTY confirmation and commits once', async () => {
-    const target = await createTarget(h, 'h01_two_confirmer', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'h01_two_confirmer', { ageBand: 'MINOR_14_17' });
     const { attemptId, pairingChallenge } = await startBinding(
       h,
       target,

@@ -95,8 +95,8 @@ describe('binding commit concurrency', () => {
 
   it('two Persons claim the same candidate Account concurrently → at most one binding', async () => {
     const code = `conc_account_${randomUUID()}`;
-    const targetA = await createTarget(h, 'conc_account_a', { ageBand: 'UNDER_14' });
-    const targetB = await createTarget(h, 'conc_account_b', { ageBand: 'UNDER_14' });
+    const targetA = await createTarget(h, 'conc_account_a', { ageBand: 'MINOR_14_17' });
+    const targetB = await createTarget(h, 'conc_account_b', { ageBand: 'MINOR_14_17' });
 
     const bootA = await bootstrap(h, targetA.invitationToken, code);
     const bootB = await bootstrap(h, targetB.invitationToken, code);
@@ -161,7 +161,7 @@ describe('binding commit concurrency', () => {
   });
 
   it('double confirmation / commit-vs-retry converges to exactly one commit', async () => {
-    const target = await createTarget(h, 'conc_double', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conc_double', { ageBand: 'MINOR_14_17' });
     const code = `conc_double_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
 
@@ -208,7 +208,7 @@ describe('binding commit concurrency', () => {
   });
 
   it('all-failure concurrent commits produce zero commits and no Person increment', async () => {
-    const target = await createTarget(h, 'conc_all_fail', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conc_all_fail', { ageBand: 'MINOR_14_17' });
     const code = `conc_all_fail_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
     const personsBefore = await h.admin.query(

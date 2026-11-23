@@ -150,7 +150,7 @@ describe('bootstrap orchestration (T049)', () => {
   });
 
   it('TERMINAL replay stays generic and does not re-create the attempt', async () => {
-    const target = await createTarget(h, 'boot_terminal', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'boot_terminal', { ageBand: 'MINOR_14_17' });
     const code = `boot_terminal_${randomUUID()}`;
     const key = `boot-terminal-${randomUUID()}`;
 
