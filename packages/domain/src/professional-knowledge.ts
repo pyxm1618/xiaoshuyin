@@ -644,14 +644,13 @@ export function evaluateProfessionalKnowledgeEligibility(input: {
 
   // Version effective window enforcement (Finding #21)
   const currentTime = (input.now ?? new Date()).getTime();
-  if (v.effectiveFrom === null) {
-    return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_NOT_SET' };
+  if (v.effectiveFrom !== null && v.effectiveFrom !== undefined) {
+    const fromTime = new Date(v.effectiveFrom).getTime();
+    if (!Number.isNaN(fromTime) && fromTime > currentTime) {
+      return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_FUTURE' };
+    }
   }
-  const fromTime = new Date(v.effectiveFrom).getTime();
-  if (Number.isNaN(fromTime) || fromTime > currentTime) {
-    return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_FUTURE' };
-  }
-  if (v.effectiveTo !== null) {
+  if (v.effectiveTo !== null && v.effectiveTo !== undefined) {
     const toTime = new Date(v.effectiveTo).getTime();
     if (!Number.isNaN(toTime) && currentTime >= toTime) {
       return { status: 'INELIGIBLE', reason: 'EFFECTIVE_WINDOW_EXPIRED' };
