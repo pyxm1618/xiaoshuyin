@@ -195,13 +195,33 @@ GRANT EXECUTE ON FUNCTION app.commit_professional_knowledge_release(
 ) TO xiaoshuyin_app;
 
 -- ── 2. Backfill effective_to on existing versions from approval evidence ──
+-- Because FORCE ROW LEVEL SECURITY is enabled on professional_knowledge_versions
+-- and professional_knowledge_approval_evidence, temporary migration-only policies
+-- are required for the migrator role to execute this backfill across existing rows.
+
+CREATE POLICY professional_knowledge_versions_migration_effective_window_backfill
+  ON professional_knowledge_versions
+  FOR ALL TO xiaoshuyin_migrator
+  USING (true)
+  WITH CHECK (true);
+
+CREATE POLICY professional_knowledge_approval_evidence_migration_effective_window_backfill
+  ON professional_knowledge_approval_evidence
+  FOR SELECT TO xiaoshuyin_migrator
+  USING (true);
 
 UPDATE professional_knowledge_versions v
-   SET effective_to = e.effective_to
+   SET effective_to = e.effective_to,
+       revision = v.revision + 1
   FROM professional_knowledge_approval_evidence e
  WHERE e.knowledge_version_id = v.id
    AND v.effective_to IS NULL
    AND e.effective_to IS NOT NULL;
+
+DROP POLICY professional_knowledge_versions_migration_effective_window_backfill
+  ON professional_knowledge_versions;
+DROP POLICY professional_knowledge_approval_evidence_migration_effective_window_backfill
+  ON professional_knowledge_approval_evidence;
 
 -- ── 3. Update family read RLS policies to strictly enforce effective window ──
 
