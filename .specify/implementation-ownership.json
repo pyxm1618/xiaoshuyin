@@ -1041,6 +1041,45 @@
           "009-safety-hold-control-foundation"
         ]
       }
+    },
+    {
+      "id": "production-readiness-runtime-env",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/runtime-env.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "production-readiness-server",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/server.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "production-readiness-roles-init",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/init/01-roles.sh"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
     }
   ]
 }
