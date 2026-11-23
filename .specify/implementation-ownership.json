@@ -462,6 +462,10 @@
       "ownership": {
         "kind": "SHARED",
         "features": [
+          "001-family-identity-core",
+          "004-case-participant-core",
+          "006-identity-binding-runtime",
+          "009-safety-hold-control-foundation",
           "common-core-goal-confirmgoal-runtime",
           "017-professional-knowledge-foundation"
         ]
@@ -476,6 +480,7 @@
       "ownership": {
         "kind": "SHARED",
         "features": [
+          "001-family-identity-core",
           "017-professional-knowledge-foundation"
         ]
       }
@@ -919,6 +924,160 @@
           "001-family-identity-core",
           "003-evidence-core",
           "006-identity-binding-runtime"
+        ]
+      }
+    },
+    {
+      "id": "auth-session-token",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/auth/session-token.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "006-identity-binding-runtime"
+        ]
+      }
+    },
+    {
+      "id": "authz-adapter",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/authz.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "004-case-participant-core",
+          "009-safety-hold-control-foundation",
+          "common-core-goal-confirmgoal-runtime",
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "idempotency-runner",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/idempotency.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "004-case-participant-core",
+          "common-core-goal-confirmgoal-runtime",
+          "017-professional-knowledge-foundation"
+        ]
+      }
+    },
+    {
+      "id": "family-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/families.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "001-family-identity-core"
+        ]
+      }
+    },
+    {
+      "id": "safety-enter-hold-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/safety/enter-safety-hold.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "009-safety-hold-control-foundation"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-roleplay-service",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/services/digital-use-roleplay.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "workline-d-migration-032",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/032_workline_d_safety_identity_authz.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "006-identity-binding-runtime"
+        ]
+      }
+    },
+    {
+      "id": "shared-contracts-schemas",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/contracts/src/schemas.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "004-case-participant-core",
+          "008-problem-formulation-core",
+          "009-safety-hold-control-foundation"
+        ]
+      }
+    },
+    {
+      "id": "production-readiness-runtime-env",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/runtime-env.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "production-readiness-server",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/server.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
+        ]
+      }
+    },
+    {
+      "id": "production-readiness-roles-init",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/init/01-roles.sh"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "phase5-production-readiness-e"
         ]
       }
     },
