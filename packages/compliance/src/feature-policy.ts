@@ -425,7 +425,7 @@ export function evaluateCompliance(
     }
 
     const person = snapshot.person;
-    const category: MinorProcessingCategory | undefined = snapshot.processingCategory;
+    const category = snapshot.processingCategory as MinorProcessingCategory | undefined;
     const processingCategory = category === 'GUARDIAN_CONSENT_ADMINISTRATION' ? 'OTHER_FEATURE' : category;
     const ageGate = assertMinorProcessingAllowed(person.personId, processingCategory ?? 'OTHER_FEATURE', {
       getProfile: () => toAgeGateProfile(person),
