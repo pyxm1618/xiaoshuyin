@@ -1736,8 +1736,22 @@ export function buildOpenApiDocument() {
           },
           required: ['type', 'id'],
         },
+        PackageDependencyRef: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            type: { type: 'string', enum: ['PACKAGE'] },
+            key: { type: 'string', minLength: 1 },
+            version: { type: 'string', minLength: 1 },
+          },
+          required: ['type', 'key', 'version'],
+        },
         GoalDependencyRef: {
-          oneOf: [ref('EvidenceDependencyRef'), ref('ConsentDependencyRef')],
+          oneOf: [
+            ref('EvidenceDependencyRef'),
+            ref('ConsentDependencyRef'),
+            ref('PackageDependencyRef'),
+          ],
         },
         VersionedKeyDependencyRef: {
           type: 'object',

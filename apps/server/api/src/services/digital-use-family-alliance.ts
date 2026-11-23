@@ -324,6 +324,19 @@ async function targetInputBasis(
   if (current.revision !== input.expectedTargetRevision) {
     throw familyHttpError('STALE_TARGET_REVISION');
   }
+
+  // Layer 2 invariant (Finding #13 scope): TARGET -> FEASIBILITY -> PROGRESS.
+  // HELP deliberately keeps its frozen behaviour and is not gated on
+  // FEASIBILITY: the manifest prerequisites for every HELP node remain
+  // A3002_SELECTED_TARGET_<code>, exactly as for PROGRESS, and the HELP command
+  // only records content/version/history refs.
+  if (identity.role === 'FEASIBILITY' && !current.concrete_target_text) {
+    throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
+  }
+  if (identity.role === 'PROGRESS' && !current.feasibility_payload) {
+    throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
+  }
+
   return [{ type: 'TARGET_ITEM', id: current.id }];
 }
 
@@ -415,6 +428,19 @@ async function materializeSelectedTargetNodes(
     if (identity === null || !selected.has(identity.targetCode)) continue;
     const row = selectedRowByCode.get(identity.targetCode);
     if (!row) throw familyHttpError('TARGET_SELECTION_STATE_INVALID');
+
+    // Layer 1 invariant (Finding #13 scope): TARGET -> FEASIBILITY -> PROGRESS.
+    // FEASIBILITY needs the target definition produced by its TARGET node.
+    if (identity.role === 'FEASIBILITY' && !row.concrete_target_text) {
+      continue;
+    }
+    // PROGRESS needs the feasibility evaluation produced by its FEASIBILITY node.
+    // HELP is not gated here: its frozen manifest prerequisite is only
+    // A3002_SELECTED_TARGET_<code>, so the remediation must not tighten it.
+    if (identity.role === 'PROGRESS' && !row.feasibility_payload) {
+      continue;
+    }
+
     await ensureSceneNodeAvailable(tx, {
       familyId: input.familyId,
       caseId: input.caseId,
@@ -566,6 +592,9 @@ export async function executeFamilyAllianceNodeInTransaction(
     }
 
     const targetIdentity = familyAllianceTargetIdentity(node);
+    if (targetIdentity !== null) {
+      await materializeSelectedTargetNodes(tx, input, [targetIdentity.targetCode]);
+    }
     const selectionRevision = await getCurrentTargetSelectionRevision(
       tx,
       input.caseId

@@ -672,14 +672,31 @@ async function handleA2004(
   const parsed = A2004Response.safeParse(context.response);
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
   const ref = await recordAssessmentStatement(context, 'a2004.collaborative_duration', parsed.data);
-  const yes = parsed.data.decision === 'YES';
+  let conditions: Record<string, DigitalUseConditionState>;
+  if (parsed.data.decision === 'YES') {
+    conditions = {
+      COLLABORATIVE_DURATION_YES: true,
+      COLLABORATIVE_DURATION_NO: false,
+    };
+  } else if (
+    parsed.data.decision === 'NO' ||
+    parsed.data.decision === 'ASKED_WHY' ||
+    parsed.data.decision === 'TRIED_BEFORE_NOT_WORKED'
+  ) {
+    conditions = {
+      COLLABORATIVE_DURATION_YES: false,
+      COLLABORATIVE_DURATION_NO: true,
+    };
+  } else {
+    conditions = {
+      COLLABORATIVE_DURATION_YES: parsed.data.decision,
+      COLLABORATIVE_DURATION_NO: parsed.data.decision,
+    };
+  }
   return {
     inputRefs: context.currentInputRefs,
     outputRefs: [ref],
-    conditions: {
-      COLLABORATIVE_DURATION_YES: yes,
-      COLLABORATIVE_DURATION_NO: !yes,
-    },
+    conditions,
     progression: 'ROUTE',
     nextInputRefs: propagatedRefs(context, [ref]),
   };
@@ -691,14 +708,30 @@ async function handleA2005(
   const parsed = A2005Response.safeParse(context.response);
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
   const ref = await recordAssessmentStatement(context, 'a2005.solution_willingness', parsed.data);
-  const willing = parsed.data.decision === 'WILLING';
+  let conditions: Record<string, DigitalUseConditionState>;
+  if (parsed.data.decision === 'WILLING') {
+    conditions = {
+      SOLUTION_APPROACH_WILLING: true,
+      SOLUTION_APPROACH_UNWILLING: false,
+    };
+  } else if (
+    parsed.data.decision === 'UNWILLING' ||
+    parsed.data.decision === 'TRIED_BEFORE_NOT_WORKED'
+  ) {
+    conditions = {
+      SOLUTION_APPROACH_WILLING: false,
+      SOLUTION_APPROACH_UNWILLING: true,
+    };
+  } else {
+    conditions = {
+      SOLUTION_APPROACH_WILLING: parsed.data.decision,
+      SOLUTION_APPROACH_UNWILLING: parsed.data.decision,
+    };
+  }
   return {
     inputRefs: context.currentInputRefs,
     outputRefs: [ref],
-    conditions: {
-      SOLUTION_APPROACH_WILLING: willing,
-      SOLUTION_APPROACH_UNWILLING: !willing,
-    },
+    conditions,
     progression: 'ROUTE',
     nextInputRefs: propagatedRefs(context, [ref]),
   };
@@ -714,14 +747,27 @@ async function handleA2006(
   );
   if (!marker) semanticError('SCENE_RESPONSE_INVALID');
   const ref = await recordAssessmentStatement(context, 'a2006.motivation_reconsider', parsed.data);
-  const willing = parsed.data.decision === 'WILLING';
+  let conditions: Record<string, DigitalUseConditionState>;
+  if (parsed.data.decision === 'WILLING') {
+    conditions = {
+      MOTIVATION_RECONSIDER_WILLING: true,
+      MOTIVATION_RECONSIDER_UNWILLING: false,
+    };
+  } else if (parsed.data.decision === 'UNWILLING') {
+    conditions = {
+      MOTIVATION_RECONSIDER_WILLING: false,
+      MOTIVATION_RECONSIDER_UNWILLING: true,
+    };
+  } else {
+    conditions = {
+      MOTIVATION_RECONSIDER_WILLING: parsed.data.decision,
+      MOTIVATION_RECONSIDER_UNWILLING: parsed.data.decision,
+    };
+  }
   return {
     inputRefs: context.currentInputRefs,
     outputRefs: [ref],
-    conditions: {
-      MOTIVATION_RECONSIDER_WILLING: willing,
-      MOTIVATION_RECONSIDER_UNWILLING: !willing,
-    },
+    conditions,
     progression: 'ROUTE',
     nextInputRefs: propagatedRefs(context, [ref]),
   };
@@ -814,14 +860,27 @@ async function handleA2008(
   );
   if (!marker) semanticError('SCENE_RESPONSE_INVALID');
   const ref = await recordAssessmentStatement(context, 'a2008.family_alliance_agreement', parsed.data);
-  const agreed = parsed.data.decision === 'AGREE';
+  let conditions: Record<string, DigitalUseConditionState>;
+  if (parsed.data.decision === 'AGREE') {
+    conditions = {
+      FAMILY_ALLIANCE_AGREED: true,
+      FAMILY_ALLIANCE_DECLINED: false,
+    };
+  } else if (parsed.data.decision === 'DISAGREE') {
+    conditions = {
+      FAMILY_ALLIANCE_AGREED: false,
+      FAMILY_ALLIANCE_DECLINED: true,
+    };
+  } else {
+    conditions = {
+      FAMILY_ALLIANCE_AGREED: parsed.data.decision,
+      FAMILY_ALLIANCE_DECLINED: parsed.data.decision,
+    };
+  }
   return {
     inputRefs: context.currentInputRefs,
     outputRefs: [ref],
-    conditions: {
-      FAMILY_ALLIANCE_AGREED: agreed,
-      FAMILY_ALLIANCE_DECLINED: !agreed,
-    },
+    conditions,
     progression: 'ROUTE',
     nextInputRefs: propagatedRefs(context, [ref]),
   };
@@ -833,14 +892,27 @@ async function handleA2009(
   const parsed = AgreementResponse.safeParse(context.response);
   if (!parsed.success) semanticError('SCENE_RESPONSE_INVALID');
   const ref = await recordAssessmentStatement(context, 'a2009.relationship_assessment', parsed.data);
-  const agreed = parsed.data.decision === 'AGREE';
+  let conditions: Record<string, DigitalUseConditionState>;
+  if (parsed.data.decision === 'AGREE') {
+    conditions = {
+      RELATIONSHIP_ASSESSMENT_AGREED: true,
+      RELATIONSHIP_ASSESSMENT_DECLINED: false,
+    };
+  } else if (parsed.data.decision === 'DISAGREE') {
+    conditions = {
+      RELATIONSHIP_ASSESSMENT_AGREED: false,
+      RELATIONSHIP_ASSESSMENT_DECLINED: true,
+    };
+  } else {
+    conditions = {
+      RELATIONSHIP_ASSESSMENT_AGREED: parsed.data.decision,
+      RELATIONSHIP_ASSESSMENT_DECLINED: parsed.data.decision,
+    };
+  }
   return {
     inputRefs: context.currentInputRefs,
     outputRefs: [ref],
-    conditions: {
-      RELATIONSHIP_ASSESSMENT_AGREED: agreed,
-      RELATIONSHIP_ASSESSMENT_DECLINED: !agreed,
-    },
+    conditions,
     progression: 'ROUTE',
     nextInputRefs: propagatedRefs(context, [ref]),
   };
