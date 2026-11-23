@@ -3,7 +3,7 @@ import type pg from 'pg';
 import { createInterventionDefinitionCandidate } from '../../apps/server/api/src/services/intervention-definitions.js';
 import { interventionSemantic, TEST_ONLY_QUALIFICATION_PROVIDER } from '../support/intervention.js';
 
-describe('Finding #15: Sensitive Intervention Staff Writes Account ACTIVE Revalidation', () => {
+describe('Finding #17: Sensitive Intervention Staff Writes Account ACTIVE Revalidation', () => {
   it('rejects mutation with INTERVENTION_STAFF_AUTHORITY_INVALID if account status is INACTIVE', async () => {
     const mockTx = {
       query: vi.fn().mockImplementation((sql: string, params?: unknown[]) => {
