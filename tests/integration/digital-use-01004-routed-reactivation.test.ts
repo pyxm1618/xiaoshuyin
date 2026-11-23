@@ -355,7 +355,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
       idempotencyKey: `${PREFIX}unrouted-a2009-${f.caseId}`,
     });
     expect(a2009.statusCode, a2009.body).toBe(409);
-    expect(a2009.json().code).toBe('SCENE_NODE_UNREACHABLE');
+    expect(a2009.json().code).toBe('CASE_PHASE_CONFLICT');
   }, 120_000);
 
   it('stale and non-authorized reactivation CAS attempts fail closed', async () => {
