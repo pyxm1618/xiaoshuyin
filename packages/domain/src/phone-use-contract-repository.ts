@@ -86,11 +86,13 @@ export async function updatePhoneUseContractDraftCas(tx:Tx,input:{
  caseId:string;version:number;expectedDraftRevision:number;contractPurpose:ContractTermPayload;phoneUseRules:ContractTermPayload;
  executionPeriod:ContractTermPayload;parentSupportMeasures:ContractTermPayload;supervisionMeasures:ContractTermPayload;
  incentives:ContractTermPayload;breachResponsibilities:ContractTermPayload;dependencyRefs:readonly unknown[];
+ reviewState?: 'CURRENT';
 }):Promise<PhoneUseContractVersionRow|null>{
+ const reviewClause = input.reviewState === 'CURRENT' ? ",review_state='CURRENT'" : '';
  const {rows}=await tx.query<PhoneUseContractVersionRow>(
  `UPDATE digital_use_contract_versions SET contract_purpose=$4::jsonb,phone_use_rules=$5::jsonb,execution_period=$6::jsonb,
  parent_support_measures=$7::jsonb,supervision_measures=$8::jsonb,incentives=$9::jsonb,breach_responsibilities=$10::jsonb,
- dependency_refs=$11::jsonb,draft_revision=draft_revision+1,parent_confirmation=NULL,child_confirmation=NULL,status='DRAFT'
+ dependency_refs=$11::jsonb,draft_revision=draft_revision+1,parent_confirmation=NULL,child_confirmation=NULL,status='DRAFT'${reviewClause}
  WHERE case_id=$1 AND version=$2 AND draft_revision=$3 AND status IN('DRAFT','PENDING_CONFIRMATION') RETURNING ${CONTRACT_COLUMNS}`,
  [input.caseId,input.version,input.expectedDraftRevision,JSON.stringify(input.contractPurpose),JSON.stringify(input.phoneUseRules),
  JSON.stringify(input.executionPeriod),JSON.stringify(input.parentSupportMeasures),JSON.stringify(input.supervisionMeasures),
@@ -173,8 +175,15 @@ export async function selectRoleplayTurnCas(tx:Tx,input:{sessionId:string;expect
  return rows[0]??null;
 }
 export type PhoneUseBusinessAuditEvent=
- 'PHONE_USE_CONTRACT_DRAFT_SAVED'|'PHONE_USE_CONTRACT_CONFIRMED'|'PHONE_USE_CONTRACT_ACTIVATED'|'PHONE_USE_CONTRACT_SUPERSEDED'|'PHONE_USE_ROLEPLAY_RECORDED';
-export async function insertPhoneUseBusinessAudit(tx:Tx,input:{familyId:string;actorAccountId:string;caseId:string;eventType:PhoneUseBusinessAuditEvent;metadata:Record<string,unknown>}):Promise<void>{
+ 'PHONE_USE_CONTRACT_DRAFT_SAVED'|'PHONE_USE_CONTRACT_CONFIRMED'|'PHONE_USE_CONTRACT_ACTIVATED'|'PHONE_USE_CONTRACT_SUPERSEDED'|'PHONE_USE_ROLEPLAY_RECORDED'|'PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED';
+export async function insertPhoneUseBusinessAudit(tx:Tx,input:{familyId:string;actorAccountId:string;caseId:string;eventType:PhoneUseBusinessAuditEvent;resourceType?:string;resourceId?:string;metadata:Record<string,unknown>}):Promise<void>{
  await tx.query(`INSERT INTO business_audit_events(family_id,actor_account_id,event_type,resource_type,resource_id,metadata)
- VALUES($1,$2,$3,'CASE',$4,$5::jsonb)`,[input.familyId,input.actorAccountId,input.eventType,input.caseId,JSON.stringify(input.metadata)]);
+ VALUES($1,$2,$3,$4,$5,$6::jsonb)`,[
+   input.familyId,
+   input.actorAccountId,
+   input.eventType,
+   input.resourceType ?? 'CASE',
+   input.resourceId ?? input.caseId,
+   JSON.stringify(input.metadata),
+ ]);
 }

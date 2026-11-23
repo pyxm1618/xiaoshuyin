@@ -37,7 +37,7 @@ const defaultTerms = {
   breachResponsibilities: v('Reduce 15 mins next day'),
 };
 
-describe('Workline C Targeted Remediation (#8, #9, #10, #12, #24)', () => {
+describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
   let app: FastifyInstance;
   let admin: pg.Pool;
   let migrator: pg.Client;
@@ -49,21 +49,37 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #12, #24)', () => {
     migrator = new pg.Client({ connectionString: process.env['MIGRATION_DATABASE_URL'] });
     await migrator.connect();
 
-    await migrator.query(
-      `SELECT app.publish_compliance_feature_policy(
-         'DIGITAL_USE_ASSESSMENT_RUNTIME','v1',NULL,1,
-         'NOT_APPLICABLE','BASELINE','BASELINE','BASELINE','BASELINE',
-         'Slice 12 integration reviewed basis','evidence://slice12/integration',
-         now() - interval '1 minute','migration:slice12-integration'
-       )`
+    const ensurePolicy = async (featureCode: string, mode: string, basis: string, evidenceUri: string, bundle: string) => {
+      const existing = await migrator.query<{ id: string }>(
+        `SELECT id FROM compliance_feature_policies WHERE feature_code = $1 AND feature_contract_revision = 'v1' AND policy_version = 1`,
+        [featureCode]
+      );
+      if (existing.rows.length === 0) {
+        await migrator.query(
+          `SELECT app.publish_compliance_feature_policy(
+             $1,'v1',NULL,1,
+             'NOT_APPLICABLE',$2,'BASELINE','BASELINE','BASELINE',
+             $3,$4,
+             now() - interval '1 minute',$5
+           )`,
+          [featureCode, mode, basis, evidenceUri, bundle]
+        );
+      }
+    };
+
+    await ensurePolicy(
+      'DIGITAL_USE_ASSESSMENT_RUNTIME',
+      'BASELINE',
+      'Slice 12 integration reviewed basis',
+      'evidence://slice12/integration',
+      'migration:slice12-integration'
     );
-    await migrator.query(
-      `SELECT app.publish_compliance_feature_policy(
-         'DIGITAL_USE_ROLEPLAY_A4003','v1',NULL,1,
-         'NOT_APPLICABLE','MINORS_BLOCKED','BASELINE','BASELINE','BASELINE',
-         'Slice 14 roleplay integration reviewed basis','evidence://slice14/roleplay-integration',
-         now() - interval '1 minute','migration:slice14-roleplay-integration'
-       )`
+    await ensurePolicy(
+      'DIGITAL_USE_ROLEPLAY_A4003',
+      'MINORS_BLOCKED',
+      'Slice 14 roleplay integration reviewed basis',
+      'evidence://slice14/roleplay-integration',
+      'migration:slice14-roleplay-integration'
     );
   });
 
@@ -696,13 +712,115 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #12, #24)', () => {
       admin.query(`UPDATE digital_use_contract_versions SET review_state = 'NEEDS_REVIEW' WHERE id = $1`, [c1Id])
     ).rejects.toThrow('PHONE_USE_CONTRACT_REVIEW_STATE_RUNTIME_UNOWNED');
 
-    // 6. Trigger dependency invalidation by calling the dedicated propagation primitive
-    const propResult = await admin.query<{ propagate_downstream_dependency_review: { goalsAffected: number; contractsAffected: number } }>(
-      `SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`,
-      [f.familyId, f.caseId, JSON.stringify(a1Dependency)]
-    );
-    expect(propResult.rows[0]!.propagate_downstream_dependency_review.goalsAffected).toBe(1);
-    expect(propResult.rows[0]!.propagate_downstream_dependency_review.contractsAffected).toBe(1);
+    // 6a. Negative tests: BLOCKER C-01 & C-02 privilege boundary and strict dependency validation
+    // C-01: Unauthenticated caller fails closed
+    await expect(
+      admin.query(`SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`, [
+        f.familyId, f.caseId, JSON.stringify(a1Dependency),
+      ])
+    ).rejects.toThrow('PROPAGATE_DEPENDENCY_REVIEW_UNAUTHENTICATED');
+
+    const client = await admin.connect();
+    try {
+      // C-01: Supplied family_id does not match authenticated context fails closed
+      await client.query('BEGIN');
+      await client.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, f.manager.personId]
+      );
+      await expect(
+        client.query(`SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`, [
+          f2.familyId, f.caseId, JSON.stringify(a1Dependency),
+        ])
+      ).rejects.toThrow('PROPAGATE_DEPENDENCY_REVIEW_FAMILY_MISMATCH');
+      await client.query('ROLLBACK');
+
+      // C-01: Case scope invalid (case belongs to f2, not f) fails closed
+      await client.query('BEGIN');
+      await client.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, f.manager.personId]
+      );
+      await expect(
+        client.query(`SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`, [
+          f.familyId, f2.caseId, JSON.stringify(a1Dependency),
+        ])
+      ).rejects.toThrow('PROPAGATE_DEPENDENCY_REVIEW_CASE_SCOPE_INVALID');
+      await client.query('ROLLBACK');
+
+      // C-02: Empty object {} fails closed
+      await client.query('BEGIN');
+      await client.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, f.manager.personId]
+      );
+      await expect(
+        client.query(`SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`, [
+          f.familyId, f.caseId, '{}',
+        ])
+      ).rejects.toThrow('PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID');
+      await client.query('ROLLBACK');
+
+      // C-02: Unknown dependency type fails closed
+      await client.query('BEGIN');
+      await client.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, f.manager.personId]
+      );
+      await expect(
+        client.query(`SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`, [
+          f.familyId, f.caseId, JSON.stringify({ type: 'UNKNOWN_TYPE', id: a1Id }),
+        ])
+      ).rejects.toThrow('PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID');
+      await client.query('ROLLBACK');
+
+      // C-02: Malformed UUID fails closed
+      await client.query('BEGIN');
+      await client.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, f.manager.personId]
+      );
+      await expect(
+        client.query(`SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`, [
+          f.familyId, f.caseId, JSON.stringify({ type: 'ASSERTION', assertionId: 'not-a-valid-uuid' }),
+        ])
+      ).rejects.toThrow('PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID');
+      await client.query('ROLLBACK');
+
+      // 6b. Genuine propagation with authenticated actor and valid dependency
+      await client.query('BEGIN');
+      await client.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, f.manager.personId]
+      );
+      const propResult = await client.query<{ propagate_downstream_dependency_review: { goalsAffected: number; contractsAffected: number } }>(
+        `SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`,
+        [f.familyId, f.caseId, JSON.stringify(a1Dependency)]
+      );
+      await client.query('COMMIT');
+      expect(propResult.rows[0]!.propagate_downstream_dependency_review.goalsAffected).toBe(1);
+      expect(propResult.rows[0]!.propagate_downstream_dependency_review.contractsAffected).toBe(1);
+    } finally {
+      client.release();
+    }
 
     // 7. Verify propagated review state and untouched lifecycle/unrelated objects
     const g1After = await admin.query<{ review_state: string; lifecycle_status: string }>(
@@ -755,11 +873,235 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #12, #24)', () => {
 
     // 10. Verify idempotency of propagation:
     // Repeating propagation when already in NEEDS_REVIEW affects 0 rows and does not fail
-    const repeatResult = await admin.query<{ propagate_downstream_dependency_review: { goalsAffected: number; contractsAffected: number } }>(
-      `SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`,
-      [f.familyId, f.caseId, JSON.stringify(a1Dependency)]
+    const repeatClient = await admin.connect();
+    try {
+      await repeatClient.query('BEGIN');
+      await repeatClient.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, f.manager.personId]
+      );
+      const repeatResult = await repeatClient.query<{ propagate_downstream_dependency_review: { goalsAffected: number; contractsAffected: number } }>(
+        `SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`,
+        [f.familyId, f.caseId, JSON.stringify(a1Dependency)]
+      );
+      await repeatClient.query('COMMIT');
+      expect(repeatResult.rows[0]!.propagate_downstream_dependency_review.goalsAffected).toBe(0);
+      expect(repeatResult.rows[0]!.propagate_downstream_dependency_review.contractsAffected).toBe(0);
+    } finally {
+      repeatClient.release();
+    }
+  });
+
+  it('Finding #24 / Blocker C-04: Controlled recovery of open Contract Draft from NEEDS_REVIEW back to CURRENT', async () => {
+    // 1. Setup fixture and child
+    const child = await loginWithLabel(app, `s14-f24-rec-child-${crypto.randomUUID()}`);
+    const f = await createTestFixture('f24-recovery', child);
+
+    const childPart = await admin.query<{ id: string }>(
+      `INSERT INTO case_participants
+         (family_id, case_id, person_id, state, invite_token_hash, invite_expires_at, created_by_person_id, accepted_at)
+       VALUES ($1, $2, $3, 'ACTIVE', $4, now() + interval '1 day', $5, now())
+       RETURNING id`,
+      [f.familyId, f.caseId, child.personId, crypto.randomUUID().replaceAll('-', '').repeat(2), f.manager.personId]
     );
-    expect(repeatResult.rows[0]!.propagate_downstream_dependency_review.goalsAffected).toBe(0);
-    expect(repeatResult.rows[0]!.propagate_downstream_dependency_review.contractsAffected).toBe(0);
+
+    // 2. Create upstream assertions 1 and 2
+    const a1Res = await admin.query<{ id: string }>(
+      `INSERT INTO assertions
+         (family_id, case_id, subject_person_id, source_kind, source_person_id,
+          occurred_time_state, confirmation_status, kind, content)
+       VALUES ($1, $2, $4, 'SELF_STATEMENT', $3, 'UNKNOWN', 'UNCONFIRMED', 'STATEMENT', 'Needs better study routine')
+       RETURNING id`,
+      [f.familyId, f.caseId, f.manager.personId, child.personId]
+    );
+    const a1Id = a1Res.rows[0]!.id;
+
+    const a2Res = await admin.query<{ id: string }>(
+      `INSERT INTO assertions
+         (family_id, case_id, subject_person_id, source_kind, source_person_id,
+          occurred_time_state, confirmation_status, kind, content)
+       VALUES ($1, $2, $4, 'SELF_STATEMENT', $3, 'UNKNOWN', 'UNCONFIRMED', 'STATEMENT', 'Wants to reduce screen time')
+       RETURNING id`,
+      [f.familyId, f.caseId, f.manager.personId, child.personId]
+    );
+    const a2Id = a2Res.rows[0]!.id;
+
+    const a1Dep = {
+      type: 'ASSERTION' as const,
+      id: a1Id,
+    };
+    const a2Dep = {
+      type: 'ASSERTION' as const,
+      id: a2Id,
+    };
+
+    // Complete A4004
+    await admin.query(
+      `INSERT INTO scene_node_states
+         (family_id, case_id, scene_package_version, node_code, source_node_code,
+          status, revision, branch_reason_codes, input_refs, output_refs, completed_at)
+       VALUES ($1, $2, $3, 'A4004', 'A4001', 'COMPLETED', 1, ARRAY[]::text[], '[]'::jsonb, '[]'::jsonb, now())`,
+      [f.familyId, f.caseId, DIGITAL_USE_PACKAGE_VERSION]
+    );
+
+    // Link upstream dependencies into problem_formulations
+    await admin.query(
+      `UPDATE problem_formulations
+          SET dependency_refs = $1::jsonb
+        WHERE case_id = $2 AND version = 1`,
+      [JSON.stringify([a1Dep, a2Dep]), f.caseId]
+    );
+
+    // 3. Create open Contract Draft version 1 dependent on a1
+    const createRes = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `rec-init-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        adultPartyPersonId: f.manager.personId,
+        childPartyPersonId: child.personId,
+        childParticipationId: childPart.rows[0]!.id,
+        sourceTemplateVersion: PHONE_USE_CONTRACT_CONTENT_VERSION,
+        dependencyRefs: [a1Dep],
+        terms: defaultTerms,
+      },
+    });
+    expect(createRes.statusCode, createRes.body).toBe(201);
+    const draftV1 = createRes.json();
+    expect(draftV1.draftRevision).toBe(1);
+    const draftV1Db = await admin.query<{ review_state: string }>(
+      `SELECT review_state FROM digital_use_contract_versions WHERE case_id = $1 AND version = 1`,
+      [f.caseId]
+    );
+    expect(draftV1Db.rows[0]!.review_state).toBe('CURRENT');
+
+    // 4. Invalidate a1 via propagation primitive
+    const propClient = await admin.connect();
+    try {
+      await propClient.query('BEGIN');
+      await propClient.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, f.manager.personId]
+      );
+      const propResult = await propClient.query<{ propagate_downstream_dependency_review: { contractsAffected: number } }>(
+        `SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`,
+        [f.familyId, f.caseId, JSON.stringify(a1Dep)]
+      );
+      await propClient.query('COMMIT');
+      expect(propResult.rows[0]!.propagate_downstream_dependency_review.contractsAffected).toBe(1);
+    } finally {
+      propClient.release();
+    }
+
+    // 5. Verify Draft is now in NEEDS_REVIEW
+    const draftAfterProp = await admin.query<{ review_state: string; status: string; draft_revision: number }>(
+      `SELECT review_state, status, draft_revision FROM digital_use_contract_versions WHERE case_id = $1 AND version = 1`,
+      [f.caseId]
+    );
+    expect(draftAfterProp.rows[0]!.review_state).toBe('NEEDS_REVIEW');
+    expect(draftAfterProp.rows[0]!.status).toBe('DRAFT');
+
+    // 6. Confirm MUST be blocked while in NEEDS_REVIEW
+    const confirmBlocked = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `rec-conf-blocked-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedDraftRevision: 1,
+      },
+    });
+    expect(confirmBlocked.statusCode).toBe(409);
+    expect(confirmBlocked.json().code).toBe('PHONE_USE_CONTRACT_STALE_REVISION');
+    expect(confirmBlocked.json().message).toContain('Contract requires review');
+
+    // 7. Attempting to recover with invalidated dependency (a1 valid_until expired) fails dependency revalidation
+    await admin.query(`UPDATE assertions SET valid_until = now() - interval '1 second' WHERE id = $1`, [a1Id]);
+    const updateWithInvalidDep = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts/1`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `rec-fail-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedDraftRevision: 1,
+        dependencyRefs: [a1Dep],
+        terms: defaultTerms,
+      },
+    });
+    expect(updateWithInvalidDep.statusCode).toBe(422);
+    expect(updateWithInvalidDep.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+    expect(updateWithInvalidDep.json().message).toContain('Evidence dependency is no longer current-valid');
+
+    // 8. Controlled recovery: update draft with valid corrected dependency (a2Dep)
+    const updateRecovery = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts/1`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `rec-success-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedDraftRevision: 1,
+        dependencyRefs: [a2Dep],
+        terms: defaultTerms,
+      },
+    });
+    expect(updateRecovery.statusCode, updateRecovery.body).toBe(200);
+    const recoveredDraft = updateRecovery.json();
+    expect(recoveredDraft.draftRevision).toBe(2);
+    const recoveredDraftDb = await admin.query<{ review_state: string }>(
+      `SELECT review_state FROM digital_use_contract_versions WHERE case_id = $1 AND version = 1`,
+      [f.caseId]
+    );
+    expect(recoveredDraftDb.rows[0]!.review_state).toBe('CURRENT');
+
+    // 9. Verify database audit log for review state recovery
+    const recoveryAudit = await admin.query<{ event_type: string; metadata: any }>(
+      `SELECT event_type, metadata FROM business_audit_events
+        WHERE family_id = $1 AND event_type = 'PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED'
+        ORDER BY occurred_at DESC LIMIT 1`,
+      [f.familyId]
+    );
+    expect(recoveryAudit.rows.length).toBe(1);
+    expect(recoveryAudit.rows[0]!.metadata.fromReviewState).toBe('NEEDS_REVIEW');
+    expect(recoveryAudit.rows[0]!.metadata.toReviewState).toBe('CURRENT');
+    expect(recoveryAudit.rows[0]!.metadata.reason).toBe('DRAFT_CORRECTED_DEPENDENCIES_REVALIDATED');
+
+    // 10. Confirm is now unblocked and succeeds with recovered draft revision 2
+    const confirmAdult = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `rec-conf-adult-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedDraftRevision: 2,
+      },
+    });
+    expect(confirmAdult.statusCode, confirmAdult.body).toBe(200);
+    expect(confirmAdult.json().status).toBe('PENDING_CONFIRMATION');
+
+    const confirmChild = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers: { ...auth(child.token), 'idempotency-key': `rec-conf-child-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedDraftRevision: 2,
+      },
+    });
+    expect(confirmChild.statusCode, confirmChild.body).toBe(200);
+    expect(confirmChild.json().status).toBe('ACTIVE');
+
+    const finalContractDb = await admin.query<{ review_state: string; status: string }>(
+      `SELECT review_state, status FROM digital_use_contract_versions WHERE case_id = $1 AND version = 1`,
+      [f.caseId]
+    );
+    expect(finalContractDb.rows[0]!.status).toBe('ACTIVE');
+    expect(finalContractDb.rows[0]!.review_state).toBe('CURRENT');
   });
 });

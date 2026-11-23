@@ -20,6 +20,8 @@ BEGIN
   END IF;
 END $$;
 
+GRANT UPDATE (review_state) ON digital_use_contract_versions TO xiaoshuyin_app;
+
 -- 2. Update digital_use_contract_versions RLS policy to permit controlled dependency review propagation
 DROP POLICY IF EXISTS digital_use_contract_versions_scope ON digital_use_contract_versions;
 
@@ -93,6 +95,12 @@ BEGIN
     IF NULLIF(current_setting('app.dependency_review_propagation', true), '') = 'on'
        AND OLD.review_state = 'CURRENT' AND NEW.review_state = 'NEEDS_REVIEW' THEN
       -- Controlled narrow propagation path permitted
+    ELSIF NULLIF(current_setting('app.contract_draft_review_recovery', true), '') = 'on'
+       AND OLD.status IN ('DRAFT', 'PENDING_CONFIRMATION')
+       AND NEW.status = 'DRAFT'
+       AND OLD.review_state = 'NEEDS_REVIEW' AND NEW.review_state = 'CURRENT'
+       AND app_current_purpose() = 'FAMILY_MANAGEMENT' THEN
+      -- Controlled draft correction recovery permitted after dependencies revalidated
     ELSE
       RAISE EXCEPTION 'PHONE_USE_CONTRACT_REVIEW_STATE_RUNTIME_UNOWNED' USING ERRCODE = '23514';
     END IF;
@@ -289,54 +297,98 @@ CREATE OR REPLACE FUNCTION app.propagate_downstream_dependency_review(
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $function$
 DECLARE
-  v_effective_family_id uuid := p_family_id;
+  v_caller_family_id uuid;
   v_actor_account_id uuid;
   v_goals_count integer := 0;
   v_contracts_count integer := 0;
   v_goal record;
   v_contract record;
+  v_dep_type text;
+  v_dep_id text;
+  v_sub_type text;
+  v_sub_id text;
+  v_version_str text;
   v_evidence_obj jsonb;
 BEGIN
-  IF p_family_id IS NULL AND p_case_id IS NULL THEN
-    RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_SCOPE_REQUIRED' USING ERRCODE = '23514';
+  -- 1. Scope / Authentication Boundary Checks (BLOCKER C-01)
+  -- Must be authenticated and executed within an already-bound family session
+  v_caller_family_id := app_family_id();
+  v_actor_account_id := app_account_id();
+
+  IF v_caller_family_id IS NULL OR v_actor_account_id IS NULL THEN
+    RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_UNAUTHENTICATED' USING ERRCODE = '42501';
   END IF;
+
+  -- Caller cannot supply a foreign family_id to escape or override session scope
+  IF p_family_id IS NOT NULL AND p_family_id <> v_caller_family_id THEN
+    RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_FAMILY_MISMATCH' USING ERRCODE = '42501';
+  END IF;
+
+  -- If p_case_id is supplied, verify that it belongs to the authenticated family
+  IF p_case_id IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM cases WHERE id = p_case_id AND family_id = v_caller_family_id
+    ) THEN
+      RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_CASE_SCOPE_INVALID' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  -- 2. Strict Dependency Shape Validation (BLOCKER C-02)
+  -- Reject null, non-objects, empty objects '{}', or unknown/malformed shapes fail closed
   IF p_dependency IS NULL OR jsonb_typeof(p_dependency) <> 'object' THEN
     RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID' USING ERRCODE = '23514';
   END IF;
 
-  IF v_effective_family_id IS NULL AND p_case_id IS NOT NULL THEN
-    SELECT family_id INTO v_effective_family_id FROM cases WHERE id = p_case_id;
-  END IF;
-  IF v_effective_family_id IS NOT NULL THEN
-    PERFORM set_config('app.family_id', v_effective_family_id::text, true);
-  END IF;
-
-  v_actor_account_id := app_account_id();
-  IF v_actor_account_id IS NULL AND v_effective_family_id IS NOT NULL THEN
-    SELECT COALESCE(p.account_id, p.created_by_account_id)
-      INTO v_actor_account_id
-      FROM families f
-      JOIN persons p ON f.created_by_person_id = p.id
-     WHERE f.id = v_effective_family_id;
+  v_dep_type := p_dependency->>'type';
+  IF v_dep_type IS NULL OR v_dep_type NOT IN (
+    'ASSERTION', 'OBSERVATION', 'DIALOGUE_MESSAGE', 'CONSENT', 'SCENE_ARTIFACT', 'TARGET_ITEM', 'EVIDENCE'
+  ) THEN
+    RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID' USING ERRCODE = '23514';
   END IF;
 
-  -- Activate transaction-scoped propagation permission
-  PERFORM set_config('app.dependency_review_propagation', 'on', true);
-
-  IF p_dependency->>'type' = 'EVIDENCE' THEN
+  IF v_dep_type = 'EVIDENCE' THEN
+    IF p_dependency->'evidence' IS NULL OR jsonb_typeof(p_dependency->'evidence') <> 'object' THEN
+      RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID' USING ERRCODE = '23514';
+    END IF;
+    v_sub_type := p_dependency->'evidence'->>'type';
+    v_sub_id := p_dependency->'evidence'->>'id';
+    IF v_sub_type IS NULL OR v_sub_type NOT IN ('ASSERTION', 'OBSERVATION', 'DIALOGUE_MESSAGE') THEN
+      RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID' USING ERRCODE = '23514';
+    END IF;
+    IF v_sub_id IS NULL OR v_sub_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID' USING ERRCODE = '23514';
+    END IF;
     v_evidence_obj := p_dependency->'evidence';
+  ELSIF v_dep_type = 'CONSENT' THEN
+    v_dep_id := p_dependency->>'id';
+    v_version_str := p_dependency->>'version';
+    IF v_dep_id IS NULL OR v_dep_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID' USING ERRCODE = '23514';
+    END IF;
+    IF v_version_str IS NULL OR v_version_str !~ '^[1-9][0-9]*$' THEN
+      RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID' USING ERRCODE = '23514';
+    END IF;
+    v_evidence_obj := NULL;
   ELSE
+    -- Directly typed reference: ASSERTION, OBSERVATION, DIALOGUE_MESSAGE, SCENE_ARTIFACT, TARGET_ITEM
+    v_dep_id := p_dependency->>'id';
+    IF v_dep_id IS NULL OR v_dep_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_PAYLOAD_INVALID' USING ERRCODE = '23514';
+    END IF;
     v_evidence_obj := p_dependency;
   END IF;
 
-  -- 1. Scan and mark affected goals
+  -- 3. Privilege Elevation ONLY AFTER all checks succeed
+  PERFORM set_config('app.dependency_review_propagation', 'on', true);
+
+  -- 4. Scan and mark affected goals
   FOR v_goal IN
     SELECT g.id, g.goal_id, g.family_id, g.case_id, g.version
       FROM goals g
-     WHERE (p_family_id IS NULL OR g.family_id = p_family_id)
+     WHERE g.family_id = v_caller_family_id
        AND (p_case_id IS NULL OR g.case_id = p_case_id)
        AND g.lifecycle_status = 'ACTIVE'
        AND g.review_state = 'CURRENT'
@@ -374,18 +426,18 @@ BEGIN
     );
   END LOOP;
 
-  -- 2. Scan and mark affected phone contracts
+  -- 5. Scan and mark affected phone contracts
   FOR v_contract IN
     SELECT c.id, c.family_id, c.case_id, c.version, c.draft_revision
       FROM digital_use_contract_versions c
-     WHERE (p_family_id IS NULL OR c.family_id = p_family_id)
+     WHERE c.family_id = v_caller_family_id
        AND (p_case_id IS NULL OR c.case_id = p_case_id)
        AND c.status IN ('DRAFT', 'PENDING_CONFIRMATION', 'ACTIVE')
        AND c.review_state = 'CURRENT'
        AND (
          c.dependency_refs @> jsonb_build_array(p_dependency)
          OR (v_evidence_obj IS NOT NULL AND c.dependency_refs @> jsonb_build_array(v_evidence_obj))
-         OR (p_dependency->>'type' = 'CONSENT' AND EXISTS (
+         OR (v_dep_type = 'CONSENT' AND EXISTS (
            SELECT 1
              FROM jsonb_array_elements(c.dependency_refs) d
             WHERE d->>'type' = 'CONSENT'
@@ -425,4 +477,5 @@ BEGIN
 END;
 $function$;
 
+REVOKE ALL ON FUNCTION app.propagate_downstream_dependency_review(uuid, uuid, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.propagate_downstream_dependency_review(uuid, uuid, jsonb) TO xiaoshuyin_app;

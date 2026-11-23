@@ -451,14 +451,35 @@ export async function updatePhoneUseContractDraft(
    accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
    commandType:'PHONE_USE_CONTRACT_DRAFT_SAVE',idempotencyKey:input.idempotencyKey,requestHash,
   },async()=>{
+   const isRecovering = current.review_state === 'NEEDS_REVIEW';
+   if (isRecovering) {
+     await tx.query(`SELECT set_config('app.contract_draft_review_recovery', 'on', true)`);
+   }
    const row=await updatePhoneUseContractDraftCas(tx,{
     caseId:input.caseId,version:input.version,expectedDraftRevision:input.expectedDraftRevision,
     contractPurpose:term(input.terms.purpose),phoneUseRules:term(input.terms.phoneUseRules),executionPeriod:term(input.terms.executionPeriod),
     parentSupportMeasures:term(input.terms.parentSupportMeasures),supervisionMeasures:term(input.terms.supervisionMeasures),
     incentives:term(input.terms.incentives),breachResponsibilities:term(input.terms.breachResponsibilities),dependencyRefs:input.dependencyRefs,
+    ...(isRecovering ? { reviewState: 'CURRENT' as const } : {}),
    });
    if(!row) throw contractError('PHONE_USE_CONTRACT_STALE_REVISION');
    await insertPhoneUseBusinessAudit(tx,{familyId:input.familyId,actorAccountId:input.actor.accountId,caseId:input.caseId,eventType:'PHONE_USE_CONTRACT_DRAFT_SAVED',metadata:{contractVersionId:row.id,version:row.version,draftRevision:row.draft_revision,correction:true}});
+   if (isRecovering) {
+     await insertPhoneUseBusinessAudit(tx,{
+       familyId:input.familyId,actorAccountId:input.actor.accountId,caseId:input.caseId,
+       eventType:'PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED',
+       resourceType:'PHONE_USE_CONTRACT',
+       resourceId:row.id,
+       metadata:{
+         contractVersionId:row.id,
+         version:row.version,
+         draftRevision:row.draft_revision,
+         fromReviewState:'NEEDS_REVIEW',
+         toReviewState:'CURRENT',
+         reason:'DRAFT_CORRECTED_DEPENDENCIES_REVALIDATED',
+       },
+     });
+   }
    return {status:200,body:dto(row)};
   });
   if(outcome.action==='MISMATCH') throw contractError('IDEMPOTENCY_PAYLOAD_MISMATCH');
