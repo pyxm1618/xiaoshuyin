@@ -1108,6 +1108,46 @@
       }
     },
     {
+      "id": "digital-use-phone-contract-route",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/routes/digital-use-phone-contract.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract-repository",
+      "match": {
+        "kind": "EXACT",
+        "path": "packages/domain/src/phone-use-contract-repository.ts"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-dependency-review-migration-033",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/033_downstream_dependency_review_state.sql"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "012-digital-use-assessment-runtime",
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
       "id": "embedding-provider-adapter-020",
       "match": {
         "kind": "PREFIX",
