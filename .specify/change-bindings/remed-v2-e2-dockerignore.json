@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "changeId": "remed-v2-e2-dockerignore",
+  "classification": "REPOSITORY_INFRASTRUCTURE",
+  "exemptionClass": "BUILD_TOOLING",
+  "paths": [
+    ".dockerignore"
+  ]
+}
