@@ -1165,45 +1165,78 @@ async function markProblemFormulationsForDependencyReview(
   return result.rowCount ?? 0;
 }
 
+export async function propagateDownstreamDependencyReview(
+  tx: Tx,
+  input: {
+    familyId: string | null;
+    caseId: string | null;
+    dependency: DependencyRef;
+  }
+): Promise<{ goalsAffected: number; contractsAffected: number }> {
+  if (input.familyId === null && input.caseId === null) {
+    throw new Error('PROPAGATE_DEPENDENCY_REVIEW_SCOPE_REQUIRED');
+  }
+  const { rows } = await tx.query<{ propagate_downstream_dependency_review: { goalsAffected: number; contractsAffected: number } }>(
+    `SELECT app.propagate_downstream_dependency_review($1, $2, $3::jsonb)`,
+    [input.familyId, input.caseId, JSON.stringify(input.dependency)]
+  );
+  return rows[0]?.propagate_downstream_dependency_review ?? { goalsAffected: 0, contractsAffected: 0 };
+}
+
 /**
  * AUTH-006 foundation primitive: an authoritative Evidence correction marks
  * only currently reachable Problem Formulations that actually depend on the
  * superseded Evidence. Lifecycle is intentionally untouched.
+ * Downstream Goal and Phone Contract review_state are also propagated to NEEDS_REVIEW.
  */
 export async function markProblemFormulationsForEvidenceReview(
   tx: Tx,
   input: { caseId: string; evidence: EvidenceRef }
 ): Promise<number> {
-  return markProblemFormulationsForDependencyReview(tx, {
+  const dependency: DependencyRef = {
+    type: 'EVIDENCE',
+    evidence: {
+      type: input.evidence.type,
+      id: input.evidence.id.toLowerCase(),
+    },
+  };
+  const count = await markProblemFormulationsForDependencyReview(tx, {
     familyId: null,
     caseId: input.caseId,
-    dependency: {
-      type: 'EVIDENCE',
-      evidence: {
-        type: input.evidence.type,
-        id: input.evidence.id.toLowerCase(),
-      },
-    },
+    dependency,
   });
+  await propagateDownstreamDependencyReview(tx, {
+    familyId: null,
+    caseId: input.caseId,
+    dependency,
+  });
+  return count;
 }
 
 /**
  * AUTH-006 current-runtime Consent propagation seam. Revocation marks only
- * formulations that are pinned to the exact superseded Consent id + version.
+ * formulations and downstream Goal/Contract that are pinned to the exact superseded Consent id + version.
  */
 export async function markProblemFormulationsForConsentReview(
   tx: Tx,
   input: { familyId: string; consentId: string; version: number }
 ): Promise<number> {
-  return markProblemFormulationsForDependencyReview(tx, {
+  const dependency: DependencyRef = {
+    type: 'CONSENT',
+    id: input.consentId.toLowerCase(),
+    version: input.version,
+  };
+  const count = await markProblemFormulationsForDependencyReview(tx, {
     familyId: input.familyId,
     caseId: null,
-    dependency: {
-      type: 'CONSENT',
-      id: input.consentId.toLowerCase(),
-      version: input.version,
-    },
+    dependency,
   });
+  await propagateDownstreamDependencyReview(tx, {
+    familyId: input.familyId,
+    caseId: null,
+    dependency,
+  });
+  return count;
 }
 
 export interface InsertProblemFormulationInput {
