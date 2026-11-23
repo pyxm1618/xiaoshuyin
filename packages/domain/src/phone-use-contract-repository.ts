@@ -13,6 +13,7 @@ export interface PhoneUseContractConfirmation {
 }
 export interface PhoneUseContractVersionRow {
   id:string; family_id:string; case_id:string; version:number; draft_revision:number; status:PhoneUseContractStatus;
+  review_state:'CURRENT'|'NEEDS_REVIEW';
   adult_party_person_id:string; child_party_person_id:string; child_participation_id:string;
   contract_purpose:ContractTermPayload; phone_use_rules:ContractTermPayload; execution_period:ContractTermPayload;
   parent_support_measures:ContractTermPayload; supervision_measures:ContractTermPayload;
@@ -23,7 +24,7 @@ export interface PhoneUseContractVersionRow {
   created_by_person_id:string; created_at:Date; updated_at:Date; activated_at:Date|null; superseded_at:Date|null; paused_at:Date|null;
 }
 const CONTRACT_COLUMNS=`
- id,family_id,case_id,version,draft_revision,status,
+ id,family_id,case_id,version,draft_revision,status,review_state,
  adult_party_person_id,child_party_person_id,child_participation_id,
  contract_purpose,phone_use_rules,execution_period,parent_support_measures,supervision_measures,incentives,breach_responsibilities,
  source_template_version,dependency_refs,parent_confirmation,child_confirmation,

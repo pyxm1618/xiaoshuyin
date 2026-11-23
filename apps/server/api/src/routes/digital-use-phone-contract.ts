@@ -145,9 +145,14 @@ export function registerDigitalUsePhoneContractRoutes(
   schema:{operationId:'revisePhoneUseContractVersion',summary:'Create a new A4012 draft that supersedes an ACTIVE version only after reconfirmation',tags:TAGS,security:BEARER_SECURITY,params:VersionParams,body:RevisePhoneUseContractRequest,response:{201:PhoneUseContractDto,...Errors}},
  },async(req,reply)=>{
   const actor=actorOf(req),params=req.params as {id:string;version:number|string},caseId=caseIdOf(params.id),body=RevisePhoneUseContractRequest.parse(req.body),familyId=await resolveFamily(pool,actor.accountId,actor.personId);
-  const current=await getPhoneUseContractCurrent(pool,{actor,familyId,caseId});
-  if(current.version!==Number(params.version)||current.status!=='ACTIVE') throw httpError('PHONE_USE_CONTRACT_STALE_REVISION');
-  const result=await revisePhoneUseContract(pool,{actor,familyId,caseId,idempotencyKey:readIdempotencyKey(req),...body});
+  const result=await revisePhoneUseContract(pool,{
+    actor,
+    familyId,
+    caseId,
+    expectedActiveVersion:Number(params.version),
+    idempotencyKey:readIdempotencyKey(req),
+    ...body,
+  });
   return reply.status(201).send(result);
  });
 

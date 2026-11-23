@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "changeId": "remed-v2-c-contract-roleplay-review",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "012-digital-use-assessment-runtime",
+      "specPath": "specs/012-digital-use-assessment-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/routes/digital-use-phone-contract.ts",
+        "apps/server/api/src/services/digital-use-phone-contract.ts",
+        "apps/server/api/src/services/digital-use-roleplay.ts",
+        "db/migrations/031_downstream_dependency_review_state.sql",
+        "packages/domain/src/phone-use-contract-repository.ts"
+      ]
+    },
+    {
+      "feature": "008-problem-formulation-core",
+      "specPath": "specs/008-problem-formulation-core",
+      "implementationPaths": [
+        "packages/domain/src/problem-formulations.ts"
+      ]
+    }
+  ]
+}
