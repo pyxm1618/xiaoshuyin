@@ -28,7 +28,7 @@ describe('Account create / reuse at commit (T075)', () => {
   });
 
   it('creates exactly one Account and binds existing P1 when none exists', async () => {
-    const target = await createTarget(h, 'acct_create', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'acct_create', { ageBand: 'MINOR_14_17' });
     const code = `acct_create_${randomUUID()}`;
     const { attemptId } = await startBinding(h, target, code);
 
@@ -59,7 +59,7 @@ describe('Account create / reuse at commit (T075)', () => {
   });
 
   it('reuses an existing unbound Account for the same openid', async () => {
-    const target = await createTarget(h, 'acct_reuse', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'acct_reuse', { ageBand: 'MINOR_14_17' });
     const code = `acct_reuse_${randomUUID()}`;
     const existing = await h.admin.query(
       'INSERT INTO accounts (wechat_openid, session_epoch) VALUES ($1, 0) RETURNING id',

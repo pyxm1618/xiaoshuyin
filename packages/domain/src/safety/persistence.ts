@@ -17,6 +17,7 @@
  */
 
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+import { SafetyError } from './errors.js';
 import {
   businessAuditEvents,
   caseEvents,
@@ -132,12 +133,33 @@ export async function insertHoldEnteredRiskEvent(
   return row.id;
 }
 
+// The Staff exact-Case RLS policy rechecks wall-clock validity on the
+// actual resolution write. PostgreSQL can reject after the Case transition
+// was attempted but before the trace insert. Drizzle wraps the Pg error.
+// Translate only the exact RLS denial for this table, not arbitrary 42501
+// permission errors, connectivity failures or other constraints.
+function isRiskResolutionRlsDenial(error: unknown): boolean {
+  let current: unknown = error;
+  const seen = new Set<unknown>();
+  for (let depth = 0; depth < 5; depth++) {
+    if (typeof current !== 'object' || current === null || seen.has(current)) return false;
+    seen.add(current);
+    const e = current as { code?: unknown; message?: unknown; cause?: unknown };
+    if (e.code === '42501' && e.message === 'new row violates row-level security policy for table "risk_events"') {
+      return true;
+    }
+    current = e.cause;
+  }
+  return false;
+}
+
 /** Insert a RISK_RESOLVED trace linked to the hold trace and return its id. */
 export async function insertRiskResolvedRiskEvent(
   tx: SafetyWriteTx,
   input: RiskResolvedRiskEventInput
 ): Promise<string> {
-  const [row] = await tx
+  try {
+    const [row] = await tx
     .insert(riskEvents)
     .values({
       familyId: input.familyId,
@@ -150,8 +172,14 @@ export async function insertRiskResolvedRiskEvent(
       resolutionAuthorityRef: input.resolutionAuthorityRef,
     })
     .returning({ id: riskEvents.id });
-  if (!row) throw new Error('RISK_EVENT_INSERT_RETURNED_NO_ROW');
-  return row.id;
+    if (!row) throw new Error('RISK_EVENT_INSERT_RETURNED_NO_ROW');
+    return row.id;
+  } catch (error) {
+    if (isRiskResolutionRlsDenial(error)) {
+      throw new SafetyError('SAFETY_RESOLUTION_AUTHORITY_DENIED');
+    }
+    throw error;
+  }
 }
 
 /** Append the Safety Case Event with the exact frozen metadata shape. */

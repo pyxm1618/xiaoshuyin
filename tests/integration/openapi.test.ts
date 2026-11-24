@@ -81,6 +81,7 @@ const FROZEN_SCHEMAS = [
   'UserResponse',
   'EvidenceDependencyRef',
   'ConsentDependencyRef',
+  'PackageDependencyRef',
   'GoalDependencyRef',
   'VersionedKeyDependencyRef',
   'DependencyRef',

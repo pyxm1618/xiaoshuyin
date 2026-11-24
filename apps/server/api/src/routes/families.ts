@@ -8,7 +8,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { CreateFamilyRequest } from '@xiaoshuyin/contracts';
-import { withIdentityTransaction, setFamilyContext } from '../db/tx.js';
+import { withIdentityTransaction, setFamilyContext, assertIdentityContextMatches } from '../db/tx.js';
 import { readIdempotencyKey, runIdempotentCommand, sendCommandOutcome } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import {
@@ -63,6 +63,13 @@ export function registerFamilyRoutes(app: FastifyInstance, pool: pg.Pool) {
           requestHash,
         },
         async (tx) => {
+          // Finding #25: verify DB-derived identity context matches caller-asserted credentials
+          await assertIdentityContextMatches(tx, {
+            accountId,
+            personId,
+            purpose: 'FAMILY_MANAGEMENT',
+          });
+
           // UUIDv7 comes from PostgreSQL 18, never from crypto.randomUUID().
           const newFamilyId = await generateUuidv7(tx);
 

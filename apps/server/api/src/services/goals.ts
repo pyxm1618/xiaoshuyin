@@ -34,13 +34,16 @@ import {
   validateGoalContract,
   type DependencyRef,
   type GoalContractInput,
+  type GoalDependencyRef,
   type GoalRow,
 } from '@xiaoshuyin/domain';
 import {
   assertMinorProcessingAllowed,
+  CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
   getComplianceProfileForUpdate,
   getConsentRecordForGate,
   getCurrentNoticeHash,
+  getCurrentNoticeVersion,
   lockGuardianConsentChainHead,
   type AgeBand,
 } from '@xiaoshuyin/compliance';
@@ -142,8 +145,15 @@ async function authorizeGoal(
 const CONSENT_REASONS = new Set([
   'GUARDIAN_CONSENT_REQUIRED',
   'GUARDIAN_CONSENT_REVOKED',
+  'CONSENT_RECORD_MISMATCH',
+  'CONSENT_VERSION_MISMATCH',
+  'CONSENT_PURPOSE_MISMATCH',
+  'CONSENT_EVIDENCE_INVALID',
+  'CONSENT_NOT_CURRENT_CHAIN_HEAD',
   'CONSENT_SUBJECT_MISMATCH',
   'NOTICE_VERSION_MISMATCH',
+  'POLICY_VERSION_MISMATCH',
+  'CONSENT_SCOPE_NOT_COVERED',
 ]);
 
 async function assertGoalCompliance(
@@ -172,20 +182,28 @@ async function assertGoalCompliance(
     const consent = consentRow
       ? {
           id: consentRow.id as string,
+          version: consentRow.version as number,
           decision: consentRow.decision as 'GRANTED' | 'REVOKED',
           boundPersonId: consentRow.bound_person_id as string | null,
           noticeHash: consentRow.notice_hash as string,
+          noticeVersion: (consentRow.notice_version ?? null) as string | null,
+          policyVersion: (consentRow.policy_version ?? null) as string | null,
           guardianPersonId: consentRow.guardian_person_id as string,
+          purpose: consentRow.purpose as string,
+          isChainHead: consentRow.is_chain_head === true,
+          evidenceValid: consentRow.evidence_valid === true,
         }
       : null;
 
-    const result = assertMinorProcessingAllowed(personId, {
+    const result = assertMinorProcessingAllowed(personId, 'CASE', {
       getProfile: () => profile,
       getConsentRecord: (id: string) =>
         consent && id.toLowerCase() === consent.id.toLowerCase()
           ? consent
           : null,
       getCurrentNoticeHash,
+      getCurrentNoticeVersion,
+      getCurrentPolicyVersion: () => CURRENT_GUARDIAN_CONSENT_POLICY_VERSION,
     });
 
     if (result.decision === 'BLOCK') {
@@ -328,6 +346,34 @@ async function assertGoalEvidence(
   }
 }
 
+async function assertGoalPackageDependencies(
+  tx: pg.PoolClient,
+  caseId: string,
+  dependencyRefs: readonly GoalDependencyRef[]
+): Promise<void> {
+  const packageDeps = dependencyRefs.filter(
+    (dep): dep is Extract<GoalDependencyRef, { type: 'PACKAGE' }> =>
+      dep.type === 'PACKAGE'
+  );
+  if (packageDeps.length === 0) return;
+
+  const binding = await getScenePackageBinding(tx, caseId);
+  for (const dep of packageDeps) {
+    if (dep.key !== 'DIGITAL_USE') {
+      throw httpError(
+        'CASE_PHASE_CONFLICT',
+        `Unsupported package dependency key: ${dep.key}`
+      );
+    }
+    if (binding === null || binding !== dep.version) {
+      throw httpError(
+        'CASE_PHASE_CONFLICT',
+        `Package dependency version ${dep.version} does not match active Case binding ${binding ?? 'none'}`
+      );
+    }
+  }
+}
+
 async function assertStoredGoalCurrent(
   tx: pg.PoolClient,
   input: {
@@ -352,6 +398,7 @@ async function assertStoredGoalCurrent(
   assertExactFormulation(input.formulation, contract);
   await assertGoalEvidence(tx, input.caseId, contract);
   await assertGoalDependencyConsents(tx, contract.dependencyRefs);
+  await assertGoalPackageDependencies(tx, input.caseId, contract.dependencyRefs);
 
   if (input.goal.review_state !== 'CURRENT') {
     throw httpError('CASE_PHASE_CONFLICT', 'Goal version is stale');
@@ -441,6 +488,11 @@ export async function saveGoal(
             await assertGoalEvidence(tx, input.caseId, input.contract);
             await assertGoalDependencyConsents(
               tx,
+              input.contract.dependencyRefs
+            );
+            await assertGoalPackageDependencies(
+              tx,
+              input.caseId,
               input.contract.dependencyRefs
             );
 

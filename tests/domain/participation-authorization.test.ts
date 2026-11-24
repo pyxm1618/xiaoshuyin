@@ -72,7 +72,8 @@ describe('Slice 4 authorization', () => {
   it('manager read is manager authority, not ordinary membership or guardian authority', () => {
     const common={
       family:{ familyId:FAMILY },
-      participation:{ personId:OTHER, state:'ACTIVE' as const },
+      participation:{ participationId: 'part-123', familyId: FAMILY, personId:OTHER, state:'ACTIVE' as const },
+      resource:{ type: 'PARTICIPATION' as const, participationId: 'part-123' },
       action:'PARTICIPATION_READ_MANAGER' as const,
       purpose:'FAMILY_MANAGEMENT' as const,
       facts:{
@@ -89,6 +90,31 @@ describe('Slice 4 authorization', () => {
       ...common,
       facts:{ ...common.facts, familyCreatedByPersonId:OTHER },
     }))).toEqual({ decision:'DENY', reason:'NOT_FAMILY_MANAGER' });
+    expect(authorize(base({
+      ...common,
+      participation:{ ...common.participation, participationId: undefined },
+    }))).toEqual({ decision:'DENY', reason:'PARTICIPATION_CONTEXT_REQUIRED' });
+    expect(authorize(base({
+      ...common,
+      participation:{ ...common.participation, familyId: undefined },
+    }))).toEqual({ decision:'DENY', reason:'NOT_FAMILY_MEMBER' });
+    for (const invalid of [
+      { ...common.participation, personId: undefined },
+      { ...common.participation, personId: '' },
+      { ...common.participation, personId: 123 },
+      { ...common.participation, state: undefined },
+      { ...common.participation, state: 'INVALID' },
+    ]) {
+      expect(authorize(base({
+        ...common,
+        participation: invalid as unknown as NonNullable<AuthInput['participation']>,
+      }))).toEqual({ decision:'DENY', reason:'PARTICIPATION_CONTEXT_REQUIRED' });
+    }
+    for (const state of ['PENDING', 'ACTIVE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'] as const) {
+      expect(authorize(base({
+        ...common, participation: { ...common.participation, state },
+      })).decision).toBe('ALLOW');
+    }
   });
 
   it('unknown action/purpose still fail closed', () => {

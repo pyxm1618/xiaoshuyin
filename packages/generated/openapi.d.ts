@@ -2272,7 +2272,13 @@ export interface components {
             id: string;
             version?: number;
         };
-        GoalDependencyRef: components["schemas"]["EvidenceDependencyRef"] | components["schemas"]["ConsentDependencyRef"];
+        PackageDependencyRef: {
+            /** @enum {string} */
+            type: "PACKAGE";
+            key: string;
+            version: string;
+        };
+        GoalDependencyRef: components["schemas"]["EvidenceDependencyRef"] | components["schemas"]["ConsentDependencyRef"] | components["schemas"]["PackageDependencyRef"];
         VersionedKeyDependencyRef: {
             /** @enum {string} */
             type: "POLICY" | "PACKAGE" | "CONTENT_VERSION";

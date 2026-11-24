@@ -23,20 +23,20 @@ describe('Slice 4 participation route surface', () => {
     await app.close();
   });
 
-  it('registers exactly the six frozen participation operations', () => {
+  it('registers exactly the approved participation operations', () => {
     expect([...seen].sort()).toEqual([
       'GET /api/v1/participation-invites/:token',
       'GET /api/v1/participations/:id',
       'POST /api/v1/cases/:id/participation-invites',
       'POST /api/v1/participation-invites/:token/accept',
       'POST /api/v1/participations/:id/decline',
+      'POST /api/v1/participations/:id/responses',
       'POST /api/v1/participations/:id/withdraw',
     ]);
   });
 
-  it('does not expose generic participant management or response routes', () => {
+  it('does not expose generic unapproved participant management routes', () => {
     for (const forbidden of [
-      '/responses',
       '/participants',
       '/cancel',
       '/restore',

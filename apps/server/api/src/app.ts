@@ -20,11 +20,8 @@ import { registerGoalRoutes } from './routes/goals.js';
 import { registerDigitalUseAssessmentRoutes } from './routes/digital-use-assessment.js';
 import { registerDigitalUsePhoneContractRoutes } from './routes/digital-use-phone-contract.js';
 import { validatorCompiler, serializerCompiler } from 'fastify-type-provider-zod';
-import {
-  createWechatProvider,
-  loadRuntimeConfig,
-  type RuntimeConfig,
-} from './runtime-env.js';
+import { createWechatProvider, loadRuntimeConfig, type RuntimeConfig } from './runtime-env.js';
+import { requireConsentRuntimeDependencies } from '@xiaoshuyin/compliance';
 import type { WechatAuthProvider } from './auth/wechat-provider.js';
 import { Slice4InvitationPort } from './identity-binding/invitation-slice4-adapter.js';
 import type { InvitationResolutionPort } from './identity-binding/invitation-port.js';
@@ -253,7 +250,7 @@ function internalSafetyError(message: string): never {
  * A completed CASE_ENTER_SAFETY_HOLD operation must replay even when the Case
  * is now held or has subsequently been resolved. We read only the existing
  * command reservation; no second idempotency record or persistence owner is
- * introduced. Current Family visibility and the command's authorization action
+ * introduced. Current identity, Family membership and Case visibility
  * are rechecked before the stored response is returned.
  */
 async function readCompletedEnterSafetyHoldReplay(
@@ -297,19 +294,9 @@ async function readCompletedEnterSafetyHoldReplay(
       const caseRow = await getCaseById(tx, input.caseId);
       if (!caseRow || caseRow.family_id !== lookup.familyId) safetyCaseNotFound();
 
-      await requireFamilyAction(tx, {
-        accountId: input.actor.accountId,
-        personId: input.actor.personId,
-        familyId: lookup.familyId,
-        action: 'CASE_ENTER_SAFETY_HOLD',
-        purpose: 'FAMILY_MANAGEMENT',
-        resource: {
-          type: 'CASE',
-          familyId: lookup.familyId,
-          caseId: input.caseId,
-        },
-        caseId: input.caseId,
-      });
+      // Safety entry is a server-owned transition, not Manager CASE_READ.
+      // withRlsTransaction verifies Account/Person and current Family membership;
+      // the visible Case must still belong to that exact Family.
 
       const body = lookup.row.response_body;
       if (typeof body !== 'object' || body === null || Array.isArray(body)) {
@@ -617,16 +604,9 @@ async function readSafetyCaseSnapshot(
       purpose: 'FAMILY_MANAGEMENT',
     },
     async (tx) => {
-      await requireFamilyAction(tx, {
-        accountId: actor.accountId,
-        personId: actor.personId,
-        familyId,
-        action: 'CASE_ENTER_SAFETY_HOLD',
-        purpose: 'FAMILY_MANAGEMENT',
-        resource: { type: 'CASE', familyId, caseId },
-        caseId,
-      });
-
+      // Finding #14: Server-owned Safety snapshot reading must not depend on
+      // Family Manager business authority (CASE_READ). Safety evaluation is a system
+      // authority seam scoped by verified family membership.
       const row = await getCaseById(tx, caseId);
       if (!row || row.family_id !== familyId) safetyCaseNotFound();
       return {
@@ -930,6 +910,16 @@ export async function buildApp(options: BuildAppOptions = {}) {
   // Fail-fast runtime contract (F1). Throws before any route is registered.
   const runtime: RuntimeConfig = loadRuntimeConfig(env);
 
+  // Finding #40: instance-level DI. The validated evidence pepper and the
+  // server-decided consent channel are passed explicitly from this runtime
+  // contract into route registration. `process.env` is never mutated here and no
+  // route reads either value from ambient process state, so two apps built in one
+  // process stay fully isolated.
+  const consentRuntime = requireConsentRuntimeDependencies({
+    evidencePepper: runtime.evidencePepper,
+    consentChannel: runtime.consentChannel,
+  });
+
   const app = Fastify({ logger: buildLoggerOptions(env, options.loggerStream) });
 
   // Test-only: capture real route schemas before any route is registered.
@@ -954,8 +944,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   // Database pool
   const pool = new pg.Pool({
-    connectionString: env['DATABASE_URL'],
+    connectionString: runtime.databaseUrl,
     max: 10,
+  });
+
+  // Finding #35: Graceful resource lifecycle - close DB pool when Fastify server closes
+  app.addHook('onClose', async () => {
+    await pool.end();
   });
 
   // node-postgres emits idle-client failures on Pool. A listener is required
@@ -997,8 +992,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerStaffAuthorityRoutes(app, pool, runtime.sessionSecret);
   registerFamilyRoutes(app, pool);
   registerMemberRoutes(app, pool);
-  registerComplianceRoutes(app, pool);
-  registerConsentRoutes(app, pool);
+  registerComplianceRoutes(app, pool, consentRuntime);
+  registerConsentRoutes(app, pool, consentRuntime);
   registerCaseRoutes(app, pool);
   registerMessageRoutes(app, pool);
   registerProblemFormulationRoutes(app, pool);

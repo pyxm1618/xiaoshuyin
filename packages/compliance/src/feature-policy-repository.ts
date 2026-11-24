@@ -13,6 +13,7 @@
  */
 
 import { sql, type SQL } from 'drizzle-orm';
+import { ConsentEvidence } from '@xiaoshuyin/contracts';
 import type { AgeBand } from './age-gate.js';
 import type { ComplianceFeatureDescriptor } from './feature-identity.js';
 import {
@@ -158,13 +159,22 @@ export async function loadCompliancePersonSnapshot(
        pcp.age_band::text                 AS age_band,
        pcp.minor_mode                     AS minor_mode,
        pcp.guardian_person_id::text       AS guardian_person_id,
+       pcp.guardian_consent_record_id::text AS profile_guardian_consent_record_id,
+       pcp.guardian_consent_version       AS profile_guardian_consent_version,
        pcp.verified_source::text          AS verified_source,
        cr.id::text                        AS consent_id,
        cr.decision::text                  AS consent_decision,
        cr.bound_person_id::text           AS consent_bound_person_id,
        cr.notice_hash                     AS consent_notice_hash,
+       cr.notice_version                  AS consent_notice_version,
+       cr.policy_version                  AS consent_policy_version,
        cr.guardian_person_id::text        AS consent_guardian_person_id,
-       cr.version                         AS consent_version
+       cr.version                         AS consent_version,
+       cr.purpose::text                   AS consent_purpose,
+       cr.evidence                        AS consent_evidence,
+       NOT EXISTS (
+         SELECT 1 FROM consent_records s WHERE s.supersedes_id = cr.id
+       )                                  AS consent_is_chain_head
      FROM person_compliance_profiles pcp
      LEFT JOIN consent_records cr ON cr.id = pcp.guardian_consent_record_id
      WHERE pcp.person_id = $1`,
@@ -180,6 +190,7 @@ export async function loadCompliancePersonSnapshot(
     if (decision !== 'GRANTED' && decision !== 'REVOKED') {
       throw new TypeError('COMPLIANCE_CONSENT_ROW_INVALID');
     }
+    const evidenceValid = ConsentEvidence.safeParse(row['consent_evidence']).success;
     guardianConsent = {
       id: asString(row['consent_id']),
       decision,
@@ -188,8 +199,26 @@ export async function loadCompliancePersonSnapshot(
           ? null
           : asString(row['consent_bound_person_id']),
       noticeHash: asString(row['consent_notice_hash']),
-      guardianPersonId: asString(row['consent_guardian_person_id']),
+      // A wrong-purpose (e.g. supplemental) row legitimately has no guardian.
+      // It is projected as an empty identity instead of throwing, so the pure
+      // gate can fail closed on the purpose mismatch it actually is.
+      guardianPersonId:
+        row['consent_guardian_person_id'] === null ||
+        row['consent_guardian_person_id'] === undefined
+          ? ''
+          : asString(row['consent_guardian_person_id']),
       version: asNumber(row['consent_version']),
+      purpose: asString(row['consent_purpose'] ?? ''),
+      noticeVersion:
+        row['consent_notice_version'] === null || row['consent_notice_version'] === undefined
+          ? null
+          : asString(row['consent_notice_version']),
+      policyVersion:
+        row['consent_policy_version'] === null || row['consent_policy_version'] === undefined
+          ? null
+          : asString(row['consent_policy_version']),
+      isChainHead: row['consent_is_chain_head'] === true,
+      evidenceValid,
     };
   }
 
@@ -201,6 +230,16 @@ export async function loadCompliancePersonSnapshot(
       row['guardian_person_id'] === null || row['guardian_person_id'] === undefined
         ? null
         : asString(row['guardian_person_id']),
+    guardianConsentRecordId:
+      row['profile_guardian_consent_record_id'] === null ||
+      row['profile_guardian_consent_record_id'] === undefined
+        ? null
+        : asString(row['profile_guardian_consent_record_id']),
+    guardianConsentVersion:
+      row['profile_guardian_consent_version'] === null ||
+      row['profile_guardian_consent_version'] === undefined
+        ? null
+        : asNumber(row['profile_guardian_consent_version']),
     guardianConsent,
     verifiedSource: asString(row['verified_source']),
   };

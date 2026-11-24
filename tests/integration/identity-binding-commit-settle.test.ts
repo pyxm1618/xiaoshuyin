@@ -36,7 +36,7 @@ describe('attempt settle + audit (T079)', () => {
   }
 
   it('COMMITTED settles once and replay does not duplicate the business audit', async () => {
-    const target = await createTarget(h, 'settle_ok', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'settle_ok', { ageBand: 'MINOR_14_17' });
     const { attemptId, contextToken } = await startBinding(
       h,
       target,
@@ -85,7 +85,7 @@ describe('attempt settle + audit (T079)', () => {
   });
 
   it('candidate REJECT settles TERMINAL exactly once and clears ciphertext', async () => {
-    const target = await createTarget(h, 'settle_term', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'settle_term', { ageBand: 'MINOR_14_17' });
     const { attemptId, contextToken } = await startBinding(
       h,
       target,
@@ -121,7 +121,7 @@ describe('attempt settle + audit (T079)', () => {
   });
 
   it('M-04: Phase C expiry uses one settlement for state, audit and cleanup', async () => {
-    const target = await createTarget(h, 'settle_m04', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'settle_m04', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(h, target, `settle_m04_${randomUUID()}`);
 
     await h.admin.query(

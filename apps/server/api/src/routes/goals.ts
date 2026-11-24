@@ -34,6 +34,11 @@ const GoalDependencyRef = z.discriminatedUnion('type', [
     id: UUID,
     version: z.number().int().min(1).max(MAX_INT).optional(),
   }),
+  z.strictObject({
+    type: z.literal('PACKAGE'),
+    key: z.string().min(1).max(200),
+    version: z.string().min(1).max(50),
+  }),
 ]);
 
 const ParticipantResponsibility = z.strictObject({

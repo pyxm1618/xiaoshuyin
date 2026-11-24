@@ -58,9 +58,16 @@ function input(action: AuthInput['action'], over: Partial<AuthInput> = {}): Auth
 }
 
 describe('Safety authorization vocabulary (T906)', () => {
-  it('registers both Safety actions through the single authorization entry', () => {
-    expect(authorize(input('CASE_ENTER_SAFETY_HOLD')).decision).toBe('ALLOW');
+  it('denies direct business authorization for CASE_ENTER_SAFETY_HOLD (Finding #14)', () => {
+    // Hold entry is a system-level transition triggered by deterministic evaluation,
+    // not a user-initiated business action. Family Managers cannot directly request hold.
+    expect(authorize(input('CASE_ENTER_SAFETY_HOLD'))).toEqual({
+      decision: 'DENY',
+      reason: 'UNSUPPORTED_ACTION',
+    });
+  });
 
+  it('registers CASE_RESOLVE_RISK through the single authorization entry', () => {
     const decision = authorize(
       input('CASE_RESOLVE_RISK', {
         actor: { accountId: 'staff-account', personId: 'staff-person' },
@@ -81,13 +88,6 @@ describe('Safety authorization vocabulary (T906)', () => {
         authority: 'SAFETY_RESOLVER',
       },
     });
-  });
-
-  it('allows Enter for a family manager without any resolver capability', () => {
-    const decision = authorize(
-      input('CASE_ENTER_SAFETY_HOLD', { facts: facts({ safetyResolution: null }) })
-    );
-    expect(decision.decision).toBe('ALLOW');
   });
 
   it('denies Resolve for Family Manager / guardian / ordinary member / ordinary Account alone', () => {
@@ -204,38 +204,34 @@ describe('Safety authorization vocabulary (T906)', () => {
     ).toEqual({ decision: 'DENY', reason: 'NO_ACTOR' });
   });
 
-  it('requires Family/Case access for both actions (no shortcut around authorize)', () => {
-    for (const action of ['CASE_ENTER_SAFETY_HOLD', 'CASE_RESOLVE_RISK'] as const) {
-      const capability =
-        action === 'CASE_RESOLVE_RISK'
-          ? { verified: true, authorityRef: 'authority.ref' }
-          : null;
-      expect(
-        authorize(
-          input(action, {
-            family: null,
-            facts: facts({ safetyResolution: capability }),
-          })
-        )
-      ).toEqual({ decision: 'DENY', reason: 'FAMILY_CONTEXT_REQUIRED' });
+  it('requires Family/Case access for CASE_RESOLVE_RISK (no shortcut around authorize)', () => {
+    const action = 'CASE_RESOLVE_RISK' as const;
+    const capability = { verified: true, authorityRef: 'authority.ref' };
+    expect(
+      authorize(
+        input(action, {
+          family: null,
+          facts: facts({ safetyResolution: capability }),
+        })
+      )
+    ).toEqual({ decision: 'DENY', reason: 'FAMILY_CONTEXT_REQUIRED' });
 
-      expect(
-        authorize(
-          input(action, {
-            resource: { type: 'CASE', familyId: 'other-family', caseId: CASE_ID },
-            facts: facts({ safetyResolution: capability }),
-          })
-        ).decision
-      ).toBe('DENY');
+    expect(
+      authorize(
+        input(action, {
+          resource: { type: 'CASE', familyId: 'other-family', caseId: CASE_ID },
+          facts: facts({ safetyResolution: capability }),
+        })
+      ).decision
+    ).toBe('DENY');
 
-      expect(
-        authorize(
-          input(action, {
-            facts: facts({ membership: false, safetyResolution: capability }),
-          })
-        ).decision
-      ).toBe('DENY');
-    }
+    expect(
+      authorize(
+        input(action, {
+          facts: facts({ membership: false, safetyResolution: capability }),
+        })
+      ).decision
+    ).toBe('DENY');
   });
 
 });

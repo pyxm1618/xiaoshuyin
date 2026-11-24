@@ -24,7 +24,7 @@ describe('binding attempt repository', () => {
   });
 
   it('second bootstrap for the same candidate/invitation converges to one live attempt', async () => {
-    const target = await createTarget(h, 'att_conv', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'att_conv', { ageBand: 'MINOR_14_17' });
     const code = `att_conv_${Date.now()}`;
     const first = await bootstrap(h, target.invitationToken, code, `k1-${Date.now()}`);
     expect(first.statusCode).toBe(200);
@@ -40,7 +40,7 @@ describe('binding attempt repository', () => {
   });
 
   it('terminal attempt does not block a new attempt (new identity)', async () => {
-    const target = await createTarget(h, 'att_new', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'att_new', { ageBand: 'MINOR_14_17' });
     const code = `att_new_${Date.now()}`;
     const boot = await bootstrap(h, target.invitationToken, code, `kn1-${Date.now()}`);
     const token = boot.json().pendingContextToken as string;
@@ -64,7 +64,7 @@ describe('binding attempt repository', () => {
   });
 
   it('partial unique live index rejects a second PENDING triple', async () => {
-    const target = await createTarget(h, 'att_unique', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'att_unique', { ageBand: 'MINOR_14_17' });
     const code = `att_unique_${Date.now()}`;
     await bootstrap(h, target.invitationToken, code, `ku1-${Date.now()}`);
 
@@ -93,7 +93,7 @@ describe('binding attempt repository', () => {
   });
 
   it('expiration materializes TERMINAL / ATTEMPT_EXPIRED on access', async () => {
-    const target = await createTarget(h, 'att_exp', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'att_exp', { ageBand: 'MINOR_14_17' });
     const boot = await bootstrap(h, target.invitationToken, `exp_${Date.now()}`, `ke-${Date.now()}`);
     const token = boot.json().pendingContextToken as string;
     await h.admin.query(

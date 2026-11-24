@@ -16,7 +16,8 @@ import {
   getCatalog,
   buildConsentEvidence,
   getRevocationTextHash,
-  runtimeConsentChannel,
+  requireConsentRuntimeDependencies,
+  type ConsentRuntimeDependencies,
 } from '@xiaoshuyin/compliance';
 import {
   hashPayload,
@@ -25,7 +26,6 @@ import {
 } from '@xiaoshuyin/domain';
 import { resolveCurrentFamily, requireCurrentFamily } from '../family-context.js';
 import { requireFamilyAction, requireSelfAction } from '../authz.js';
-import { requireEvidencePepper } from '../evidence-pepper.js';
 import { consentRecordDto } from '../consent-dto.js';
 import {
   lockGuardianConsentChainHead,
@@ -36,7 +36,13 @@ import {
 } from '@xiaoshuyin/compliance';
 import type pg from 'pg';
 
-export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
+export function registerConsentRoutes(
+  app: FastifyInstance,
+  pool: pg.Pool,
+  dependencies: ConsentRuntimeDependencies
+) {
+  const runtime = requireConsentRuntimeDependencies(dependencies);
+
   // POST /api/v1/consents/:id/revoke
   app.post('/api/v1/consents/:id/revoke', async (req, reply) => {
     const actor = req.actor;
@@ -131,11 +137,11 @@ export function registerConsentRoutes(app: FastifyInstance, pool: pg.Pool) {
             throw Object.assign(new Error(err.message), err);
           }
           const evidence = buildConsentEvidence({
-            channel: runtimeConsentChannel(),
+            channel: runtime.consentChannel,
             acceptedTextHash: revocationTextHash,
             clientIp: req.ip,
             userAgent: req.headers['user-agent'] ?? null,
-            pepper: requireEvidencePepper(),
+            pepper: runtime.evidencePepper,
           });
           const newVersion = consent.version + 1;
           const newConsent = await insertConsentRecord(

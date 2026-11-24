@@ -54,6 +54,7 @@ import {
   assertBoundAssessmentCompliance,
   requireDigitalUseAssessmentTarget,
   currentSceneEnvelope,
+  materializeRoutedSceneNode,
   resolveRequestedDigitalUseNode,
   type DigitalUseActor,
 } from './digital-use-assessment.js';
@@ -683,13 +684,13 @@ async function executeProblemFormulationHandoffPath(
     });
   }
 
-  await ensureSceneNodeAvailable(tx, {
+  await materializeRoutedSceneNode(tx, {
     familyId: input.familyId,
     caseId: input.caseId,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     nodeCode: routedNext.nodeCode,
-    sourceNodeCode: routedNext.sourceNodeCode,
-    branchReasonCodes: [route.reasonCode],
+    sourceNodeCode: node.nodeCode,
+    reasonCode: route.reasonCode,
     inputRefs: nextInputRefs(semantic),
   });
 
@@ -1479,18 +1480,19 @@ export async function completeDigitalUseNodeResponse(
 
           if (route.kind === 'NODE') {
             const next = resolveDigitalUseRuntimeNode(route.nextNodeCode);
-            const existingNext = await getSceneNodeState(tx, input.caseId, next.nodeCode, true);
-            if (!existingNext) {
-              await ensureSceneNodeAvailable(tx, {
-                familyId: input.familyId,
-                caseId: input.caseId,
-                scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
-                nodeCode: next.nodeCode,
-                sourceNodeCode: next.sourceNodeCode,
-                branchReasonCodes: [route.reasonCode],
-                inputRefs: nextInputRefs(semantic),
-              });
-            }
+            // Finding #7: a Manifest-declared routed edge may land on a node
+            // that already COMPLETED (A2002/A2009 → 01004). The shared helper
+            // inserts when absent and performs the controlled CAS reactivation
+            // only when the exact `source → target` edge is authorized.
+            await materializeRoutedSceneNode(tx, {
+              familyId: input.familyId,
+              caseId: input.caseId,
+              scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
+              nodeCode: next.nodeCode,
+              sourceNodeCode: node.nodeCode,
+              reasonCode: route.reasonCode,
+              inputRefs: nextInputRefs(semantic),
+            });
 
             if (route.nextNodeCode === 'A3000') {
               const familyEntry = next;

@@ -25,7 +25,7 @@ describe('confirmer authorization ordering (H2)', () => {
   });
 
   it('authenticated outsider with P1 / attempt UUID gets generic 404 and no state change', async () => {
-    const target = await createTarget(h, 'conf_order', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'conf_order', { ageBand: 'MINOR_14_17' });
     const { attemptId } = await startBinding(
       h,
       target,

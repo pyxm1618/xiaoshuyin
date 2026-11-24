@@ -235,4 +235,53 @@ describe('T1212 01004 Consent / 01000 no-invention', () => {
     }))).rejects.toMatchObject({ code: 'SCENE_RESPONSE_INVALID' });
     expect(insertSceneArtifact).not.toHaveBeenCalled();
   });
+
+  describe('Finding #7: 01004 supplemental consent re-entry and version evolution', () => {
+    it('passes expectedVersion: null on first entry when no prior decision exists', async () => {
+      getCurrentPurposeScopedConsentDecision.mockResolvedValueOnce(null);
+      await applyDigitalUseNodeSemantics(
+        ctx('01004', { decision: 'DECLINED', confirmationStatementHash: CONFIRMATION_HASH })
+      );
+      expect(recordPurposeScopedConsentDecision).toHaveBeenCalledTimes(1);
+      const [_tx, input] = recordPurposeScopedConsentDecision.mock.calls[0]!;
+      expect(input.expectedVersion).toBeNull();
+    });
+
+    it('passes current version as expectedVersion on re-entry (DECLINED v1 -> GRANTED v2 evolution)', async () => {
+      // Prior decision exists: DECLINED version 1
+      getCurrentPurposeScopedConsentDecision.mockResolvedValueOnce({
+        consentRecordId: '00000000-0000-7000-8000-000000000051',
+        purpose: 'DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT',
+        caseId: '00000000-0000-7000-8000-000000000004',
+        decisionActorPersonId: '00000000-0000-7000-8000-000000000002',
+        decision: 'DECLINED',
+        version: 1,
+        decidedAt: '2026-11-13T00:00:00.000Z',
+        supersedesId: null,
+      });
+
+      // User re-enters 01004 and chooses GRANTED
+      await applyDigitalUseNodeSemantics(
+        ctx('01004', { decision: 'GRANTED', confirmationStatementHash: CONFIRMATION_HASH })
+      );
+
+      expect(recordPurposeScopedConsentDecision).toHaveBeenCalledTimes(1);
+      const [_tx, input] = recordPurposeScopedConsentDecision.mock.calls[0]!;
+      expect(input.expectedVersion).toBe(1);
+      expect(input.decision).toBe('GRANTED');
+    });
+
+    it('fails closed with SCENE_RESPONSE_INVALID on concurrent stale version conflict', async () => {
+      const { PurposeScopedConsentError } = await import('@xiaoshuyin/compliance');
+      recordPurposeScopedConsentDecision.mockRejectedValueOnce(
+        new PurposeScopedConsentError('CONSENT_STALE_VERSION', 'stale')
+      );
+
+      await expect(
+        applyDigitalUseNodeSemantics(
+          ctx('01004', { decision: 'GRANTED', confirmationStatementHash: CONFIRMATION_HASH })
+        )
+      ).rejects.toMatchObject({ code: 'SCENE_RESPONSE_INVALID' });
+    });
+  });
 });

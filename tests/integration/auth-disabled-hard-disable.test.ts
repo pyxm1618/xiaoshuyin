@@ -210,7 +210,7 @@ describe('AUTH-001 — DISABLED Account hard disable', () => {
 
   it('Case D: binding session exchange emits no session after committed Account becomes DISABLED', async () => {
     const target = await createTarget(h, `auth001_exchange_${randomUUID()}`, {
-      ageBand: 'UNDER_14',
+      ageBand: 'MINOR_14_17',
     });
     const code = `auth001_exchange_${randomUUID()}`;
     const { contextToken, attemptId } = await startBinding(h, target, code);

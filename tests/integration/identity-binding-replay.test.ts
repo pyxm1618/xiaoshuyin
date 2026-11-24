@@ -28,7 +28,7 @@ describe('bootstrap replay reads back the authoritative attempt (H3)', () => {
   });
 
   it('replays PENDING / COMMITTED without duplicate attempt / confirmation / audit', async () => {
-    const target = await createTarget(h, 'replay', { ageBand: 'UNDER_14' });
+    const target = await createTarget(h, 'replay', { ageBand: 'MINOR_14_17' });
     const code = `replay_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const key = `boot-replay-${Date.now()}`;
 

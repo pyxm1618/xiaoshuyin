@@ -261,7 +261,12 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     return f;
   }
 
-  async function seedRevokedConsentForActor(f: BaseFixture): Promise<void> {
+  /**
+   * Finding #4 ownership split: Compliance / Consent belongs to the TARGET
+   * CHILD. The ACTOR owns authorization only, so a revoked consent must be
+   * seeded on the target for this negative to remain meaningful.
+   */
+  async function seedRevokedConsentForTarget(f: BaseFixture): Promise<void> {
     const guardian = await loginWithLabel(app, `slice15-guardian-${crypto.randomUUID()}`);
     const guardianOwnFamily = await createFamily(
       app,
@@ -279,7 +284,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
     const acceptedTextHash = getAcceptanceTextHash('v1');
     if (!acceptedTextHash) throw new Error('missing v1 acceptance text');
     const evidence = buildConsentEvidence({
-      channel: runtimeConsentChannel(),
+      channel: runtimeConsentChannel(process.env),
       acceptedTextHash,
       clientIp: null,
       userAgent: null,
@@ -293,7 +298,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
        VALUES ($1,$2,$3,'UNDER_14','v1',$4,'GRANTED',
                now()+interval '24 hours',now())
        RETURNING id`,
-      [f.familyId, guardian.personId, f.manager.personId, noticeHash]
+      [f.familyId, guardian.personId, f.targetPersonId, noticeHash]
     );
     const granted = await admin.query<{ id: string }>(
       `INSERT INTO consent_records
@@ -308,7 +313,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         guardian.personId,
         guardian.accountId,
         request.rows[0]!.id,
-        f.manager.personId,
+        f.targetPersonId,
         noticeHash,
         JSON.stringify(evidence),
       ]
@@ -325,7 +330,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
         f.familyId,
         guardian.personId,
         guardian.accountId,
-        f.manager.personId,
+        f.targetPersonId,
         noticeHash,
         JSON.stringify(evidence),
         granted.rows[0]!.id,
@@ -346,7 +351,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
          guardian_consent_version=2,
          effective_at=now(),
          updated_at=now()`,
-      [f.manager.personId, guardian.personId, revoked.rows[0]!.id]
+      [f.targetPersonId, guardian.personId, revoked.rows[0]!.id]
     );
   }
 
@@ -1715,7 +1720,7 @@ describe('Slice 15 authority-reconciled A5001/A5002 runtime', () => {
   it('T1509 valid Professional package cannot override revoked Consent', async () => {
     provider.restore('FAMILY_ALLIANCE_REVIEW');
     const target = await prepareA5001(app, 'a5001-revoked-consent');
-    await seedRevokedConsentForActor(target.f);
+    await seedRevokedConsentForTarget(target.f);
 
     const result = await submitA5001(
       app,

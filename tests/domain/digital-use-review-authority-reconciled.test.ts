@@ -4,12 +4,17 @@ import {
   A5002PhoneUseContractReviewSubmission,
 } from '@xiaoshuyin/contracts';
 import { hashPayload } from '@xiaoshuyin/domain';
+import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import {
   a5001CanonicalRequestFingerprint,
 } from '../../apps/server/api/src/services/digital-use-family-alliance-review.js';
 import {
   a5002CanonicalRequestFingerprint,
 } from '../../apps/server/api/src/services/digital-use-phone-contract-review.js';
+import {
+  assertDigitalUseCaseLifecycle,
+  minimumDigitalUseCasePhase,
+} from '../../apps/server/api/src/services/digital-use-case-lifecycle.js';
 import {
   requireProfessionalReviewPackage,
   unavailableProductionProfessionalReviewContentProvider,
@@ -393,5 +398,73 @@ describe('Slice 15 authority-reconciled review contracts and fingerprints', () =
     await expect(
       requireProfessionalReviewPackage(providerFor(valid), input, 'RESOLVE')
     ).resolves.toEqual(valid);
+  });
+
+  it('Finding #33: maps Review streams to GOALS minimum Case phase and rejects ASSESSMENT/PROBLEM_FORMULATION', () => {
+    // The lifecycle authority must recognise the real Manifest stream
+    // identities. Passing a sibling stream (e.g. `{...node, stream:
+    // 'FAMILY_ALLIANCE'}`) is the caller-side spoof this finding removed.
+    const a5001Entry = resolveDigitalUseRuntimeNode('A5001');
+    const a5002Entry = resolveDigitalUseRuntimeNode('A5002');
+    expect(a5001Entry.stream).toBe('FAMILY_ALLIANCE_REVIEW');
+    expect(a5002Entry.stream).toBe('PHONE_USE_CONTRACT_REVIEW');
+
+    expect(minimumDigitalUseCasePhase(a5001Entry)).toBe('GOALS');
+    expect(minimumDigitalUseCasePhase(a5002Entry)).toBe('GOALS');
+
+    const baseCase = {
+      status: 'OPEN' as const,
+      is_primary: true,
+      version: 1,
+    };
+
+    // Fails in ASSESSMENT
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'ASSESSMENT' }, a5001Entry, 1)
+    ).toThrowError(/CASE_PHASE_CONFLICT/);
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'ASSESSMENT' }, a5002Entry, 1)
+    ).toThrowError(/CASE_PHASE_CONFLICT/);
+
+    // Fails in PROBLEM_FORMULATION
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'PROBLEM_FORMULATION' }, a5001Entry, 1)
+    ).toThrowError(/CASE_PHASE_CONFLICT/);
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'PROBLEM_FORMULATION' }, a5002Entry, 1)
+    ).toThrowError(/CASE_PHASE_CONFLICT/);
+
+    // Allowed in GOALS and REVIEW
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'GOALS' }, a5001Entry, 1)
+    ).not.toThrow();
+    expect(() =>
+      assertDigitalUseCaseLifecycle({ ...baseCase, phase: 'REVIEW' }, a5002Entry, 1)
+    ).not.toThrow();
+  });
+
+  it('Finding #33: minimumDigitalUseCasePhase keeps every other cohort unchanged', () => {
+    // Authoritative stream cohorts, resolved from the Manifest itself.
+    for (const nodeCode of ['A3010', 'A3011', 'A3012', 'A3013']) {
+      expect(minimumDigitalUseCasePhase(resolveDigitalUseRuntimeNode(nodeCode)))
+        .toBe('GOALS');
+    }
+    for (const nodeCode of ['A5001', 'A5002']) {
+      expect(minimumDigitalUseCasePhase(resolveDigitalUseRuntimeNode(nodeCode)))
+        .toBe('GOALS');
+    }
+
+    // Problem Formulation flow nodes are unchanged.
+    for (const nodeCode of ['A2003', 'A2004', 'A2005', 'A2006', 'A2007', 'A2008', 'A2009', 'A2010']) {
+      expect(minimumDigitalUseCasePhase(resolveDigitalUseRuntimeNode(nodeCode)))
+        .toBe('PROBLEM_FORMULATION');
+    }
+
+    // Assessment cohort (no stream) is unchanged.
+    for (const nodeCode of ['A1001', 'A2001', 'A2002']) {
+      const node = resolveDigitalUseRuntimeNode(nodeCode);
+      expect(node.stream).toBeUndefined();
+      expect(minimumDigitalUseCasePhase(node)).toBe('ASSESSMENT');
+    }
   });
 });
