@@ -305,7 +305,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       expect(rows.length).toBe(37);
 
       const version = (await client.query<{ version: string }>('SELECT version() AS version')).rows[0]!.version;
-      expect(version).toMatch(/^PostgreSQL 18\\./);
+      expect(version).toMatch(/^PostgreSQL 18\./);
       await assertFinding15SecurityDefinerPosture(client, getMigratorRole(dbUrl), finding15UnauthorizedRole);
 
       for (const [legacyName, expectedHash] of LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.entries()) {

@@ -10,7 +10,7 @@ describe('Finding #17: Sensitive Intervention Staff Writes Account ACTIVE Revali
         if (typeof sql === 'string' && sql.includes('SELECT status FROM accounts')) {
           return Promise.resolve({ rows: [{ status: 'SUSPENDED' }] });
         }
-        if (typeof sql === 'string' && sql.includes('SELECT id FROM staff_assignments')) {
+        if (typeof sql === 'string' && sql.includes('SELECT sa.id FROM staff_assignments sa') && sql.includes("JOIN accounts a ON a.id = sa.account_id") && sql.includes("a.status='ACTIVE'")) {
           return Promise.resolve({ rows: [{ id: 'staff-assign-1' }] });
         }
         return Promise.resolve({ rows: [] });
@@ -85,6 +85,7 @@ describe('Finding #17: Sensitive Intervention Staff Writes Account ACTIVE Revali
 
   it('catches status change between earlier authorization and final write to prevent TOCTOU', async () => {
     let callCount = 0;
+    let staffChecks = 0;
     const mockTx = {
       query: vi.fn().mockImplementation((sql: string) => {
         if (typeof sql === 'string' && sql.includes('SELECT status FROM accounts')) {
@@ -96,7 +97,8 @@ describe('Finding #17: Sensitive Intervention Staff Writes Account ACTIVE Revali
           }
           return Promise.resolve({ rows: [{ status: 'INACTIVE' }] });
         }
-        if (typeof sql === 'string' && sql.includes('SELECT id FROM staff_assignments')) {
+        if (typeof sql === 'string' && sql.includes('SELECT sa.id FROM staff_assignments sa') && sql.includes("JOIN accounts a ON a.id = sa.account_id") && sql.includes("a.status='ACTIVE'")) {
+          staffChecks++;
           return Promise.resolve({ rows: [{ id: 'staff-assign-1' }] });
         }
         if (typeof sql === 'string' && sql.includes('idempotency_keys')) {
@@ -132,6 +134,13 @@ describe('Finding #17: Sensitive Intervention Staff Writes Account ACTIVE Revali
 
     // Final revalidation must have checked the locked account row twice
     expect(callCount).toBe(2);
+    expect(staffChecks).toBe(1);
+    expect(mockTx.query.mock.calls.filter(([sql]) =>
+      sql === 'SELECT status FROM accounts WHERE id = $1 FOR SHARE'
+    )).toHaveLength(2);
+    // The first authority lookup must reach the actual joined Staff query;
+    // only the second Account revalidation rejects. The independent real
+    // PostgreSQL concurrency test continues to prove the row-lock boundary.
 
     // Mutation must not have been inserted
     const insertCalls = mockTx.query.mock.calls.filter(([sql]) =>
