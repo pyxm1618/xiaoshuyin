@@ -76,7 +76,7 @@ describe('Final bounded remediation 038 -> 039 upgrade', () => {
         `SELECT pg_get_functiondef('app.propagate_downstream_dependency_review(uuid,uuid,jsonb)'::regprocedure) AS definition`
       );
       expect(pre.rows[0]!.definition).toContain(
-        "set_config('app.dependency_review_propagation'::text, 'on'::text, true)"
+        "set_config('app.dependency_review_propagation', 'on', true)"
       );
       expect((await client.query(
         `SELECT to_regclass('app.dependency_review_propagation_authority') AS relation`
@@ -96,7 +96,7 @@ describe('Final bounded remediation 038 -> 039 upgrade', () => {
         `SELECT pg_get_functiondef('app.propagate_downstream_dependency_review(uuid,uuid,jsonb)'::regprocedure) AS definition`
       );
       expect(migrated.rows[0]!.definition).not.toContain(
-        "set_config('app.dependency_review_propagation'::text, 'on'::text, true)"
+        "set_config('app.dependency_review_propagation', 'on', true)"
       );
       expect(migrated.rows[0]!.definition).toContain(
         'dependency_review_propagation_authority'

@@ -1269,6 +1269,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '036_security_definer_search_path_hardening.sql',
       '037_goal_target_compliance_revalidation.sql',
       '038_phone_contract_child_participation_deferred_binding.sql',
+      '039_final_bounded_remediation.sql',
     ]);
   }, 180_000);
 });

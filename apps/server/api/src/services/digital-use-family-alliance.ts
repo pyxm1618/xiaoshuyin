@@ -22,6 +22,7 @@ import {
   casCompleteSceneNodeState,
   casRecompleteSceneNodeState,
   ensureSceneNodeAvailable,
+  getCaseById,
   getCurrentDigitalUseTargetItem,
   getCurrentTargetSelectionRevision,
   getSceneNodeState,
@@ -48,6 +49,7 @@ import {
 } from '@xiaoshuyin/scenes/digital-use';
 import { toHttpError } from '../plugins/error-handler.js';
 import { evaluateAuthorizedCompliance } from '../compliance/evaluate-compliance.js';
+import { withRlsTransaction } from '../db/tx.js';
 import {
   currentSceneEnvelope,
   assertBoundAssessmentCompliance,
@@ -105,6 +107,25 @@ export async function assertFamilyAllianceComplianceSnapshot(
     targetPersonId: string;
   }
 ): Promise<void> {
+  // Anti-enumeration boundary: prove the requested Case is visible in the
+  // authenticated Family context before reading target compliance truth.
+  // The policy/profile/consent decision remains one REPEATABLE READ snapshot.
+  await withRlsTransaction(
+    pool,
+    {
+      familyId: input.familyId,
+      accountId: input.actor.accountId,
+      personId: input.actor.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    },
+    async (tx) => {
+      const visibleCase = await getCaseById(tx, input.caseId);
+      if (!visibleCase || visibleCase.family_id !== input.familyId) {
+        throw familyHttpError('CASE_NOT_FOUND', 'Case not found');
+      }
+    }
+  );
+
   const decision = await evaluateAuthorizedCompliance(pool, {
     actor: input.actor,
     familyId: input.familyId,

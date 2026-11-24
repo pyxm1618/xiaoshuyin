@@ -2320,7 +2320,7 @@ describe('Slice 13 FAMILY_ALLIANCE canonical runtime', () => {
     expect(revoked.statusCode, revoked.body).toBe(200);
     expect([403, 409]).toContain(familyResult.statusCode);
     expect(familyResult.json().code).toBe(
-      familyResult.statusCode === 403 ? 'GUARDIAN_CONSENT_REQUIRED' : 'CONSENT_BLOCKED'
+      familyResult.statusCode === 403 ? 'GUARDIAN_CONSENT_REVOKED' : 'CONSENT_BLOCKED'
     );
 
     const final = await admin.query<{

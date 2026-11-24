@@ -691,6 +691,8 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       type: 'EVIDENCE',
       evidence: { type: 'ASSERTION', id: a2Id },
     };
+    const a1ContractDependency = { type: 'ASSERTION', id: a1Id };
+    const a2ContractDependency = { type: 'ASSERTION', id: a2Id };
 
     // 2. Link upstream dependency a1 into the fixture's Problem Formulation
     const pfRes = await admin.query<{ id: string }>(
@@ -782,7 +784,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       [
         f.familyId, f.caseId, f.manager.personId, child.personId, childParticipation.rows[0]!.id,
         JSON.stringify(v('rule')), PHONE_USE_CONTRACT_CONTENT_VERSION,
-        JSON.stringify([a1Dependency]),
+        JSON.stringify([a1ContractDependency]),
         c1ParentConf, c1ChildConf,
       ]
     );
@@ -816,7 +818,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       [
         f2.familyId, f2.caseId, f2.manager.personId, child2.personId, child2Part.rows[0]!.id,
         JSON.stringify(v('rule')), PHONE_USE_CONTRACT_CONTENT_VERSION,
-        JSON.stringify([a2Dependency]),
+        JSON.stringify([a2ContractDependency]),
         c2ParentConf, c2ChildConf,
       ]
     );
@@ -1075,7 +1077,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       payload: {
         expectedCaseVersion: f.caseVersion,
         expectedDraftRevision: 1,
-        dependencyRefs: [a2Dependency],
+        dependencyRefs: [a2ContractDependency],
         terms: defaultTerms,
       },
     });

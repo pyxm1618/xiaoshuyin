@@ -69,6 +69,7 @@ const POST_CONSENT_APPROVED_MIGRATIONS = [
   '036_security_definer_search_path_hardening.sql',
   '037_goal_target_compliance_revalidation.sql',
   '038_phone_contract_child_participation_deferred_binding.sql',
+  '039_final_bounded_remediation.sql',
 ] as const;
 
 function urlForDatabase(baseUrl: string, database: string): string {

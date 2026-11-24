@@ -302,7 +302,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
           FROM schema_migrations
          ORDER BY filename
       `);
-      expect(rows.length).toBe(41);
+      expect(rows.length).toBe(42);
 
       const version = (await client.query<{ version: string }>('SELECT version() AS version')).rows[0]!.version;
       expect(version).toMatch(/^PostgreSQL 18\./);
@@ -391,7 +391,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
            ORDER BY filename
         `)).rows;
 
-        expect(postRows.length).toBe(41);
+        expect(postRows.length).toBe(42);
         await assertFinding15SecurityDefinerPosture(clientAfter, getMigratorRole(dbUrl), finding15UnauthorizedRole);
 
         for (const pre of preRows) {

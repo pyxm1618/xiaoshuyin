@@ -28,6 +28,7 @@ describe('Common Core Goal DB guards', () => {
       [accountId]
     )).rows[0].id;
     familyId = (await admin.query('SELECT uuidv7() AS id')).rows[0].id;
+    await admin.query("SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')", [accountId]);
     await admin.query('SELECT app.create_family($1,$2,$3)', [
       familyId,
       personId,
