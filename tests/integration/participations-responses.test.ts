@@ -400,6 +400,89 @@ describe('Finding #32 Child-authored Participation Responses API', () => {
     expect(replayAfterWithdraw.json().currentState).toBe('WITHDRAWN');
   });
 
+  it('Finding #32 regression: replay waiting on command lock rechecks a committed processing-authority change', async () => {
+    const f = await createParticipationFixture(h, 'resp-authority-race', { target: 'manager' });
+    const target = await addBoundAdultNonManagerToFamily(h, f.familyId, 'resp-race-target');
+    await h.admin.query(
+      `UPDATE person_compliance_profiles SET age_band='MINOR_14_17',
+         minor_mode=true, verified_source='GUARDIAN_RELAY' WHERE person_id=$1`,
+      [target.personId]
+    );
+    const created = await invite(h.app, f.manager.token, f.caseId, target.personId, 'resp-race-invite');
+    expect(created.statusCode).toBe(201);
+    const participationId = created.json().participationId;
+    const accepted = await acceptInvite(h.app, target.token, created.json().inviteToken, 'resp-race-accept');
+    expect(accepted.statusCode).toBe(200);
+
+    const key = 'resp-authority-race-key';
+    const submit = async () => h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: { authorization: `Bearer ${target.token}`, 'idempotency-key': key },
+      payload: { content: '权限变更前的本人回复' },
+    });
+    expect((await submit()).statusCode).toBe(201);
+
+    const blocker = await h.admin.connect();
+    let replay: ReturnType<typeof submit> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      const pid = (await blocker.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      // Hold the exact repository command lock, not an arbitrary timer.
+      await blocker.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0::bigint))',
+        [`${target.accountId}:CASE_MESSAGE_CREATE:${key}`]);
+      let settled = false;
+      replay = submit().finally(() => { settled = true; });
+
+      // Observe the real waiting transaction before changing authority.
+      let waiting = false;
+      const deadline = Date.now() + 5000;
+      while (!settled && Date.now() < deadline) {
+        const rows = (await h.admin.query<{ waiting: boolean }>(
+          `SELECT EXISTS (
+             SELECT 1 FROM pg_stat_activity WHERE $1::int = ANY(pg_blocking_pids(pid))
+           ) AS waiting`, [pid]
+        )).rows;
+        if (rows[0]?.waiting === true) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(waiting, 'replay must wait on the transaction-scoped command lock').toBe(true);
+      expect(settled).toBe(false);
+
+      // Commit a newly uncovered age classification before releasing the lock.
+      // A replay must use the current profile, not a previously authorized body.
+      await blocker.query(
+        `UPDATE person_compliance_profiles SET age_band='UNKNOWN',
+           minor_mode=false, verified_source='SELF_STATEMENT' WHERE person_id=$1`,
+        [target.personId]
+      );
+      await blocker.query('COMMIT');
+      const denied = await replay;
+      expect(denied.statusCode).toBe(403);
+      expect(denied.json().code).toBe('FORBIDDEN');
+      expect(denied.json().message).toBe('PARTICIPATION_PROCESSING_DISALLOWED');
+    } finally {
+      try {
+        await blocker.query('ROLLBACK');
+      } finally {
+        blocker.release();
+        await replay?.catch(() => undefined);
+      }
+    }
+
+    expect((await h.admin.query(
+      'SELECT count(*)::int AS cnt FROM dialogue_messages WHERE case_id = $1',
+      [f.caseId]
+    )).rows[0].cnt).toBe(1);
+    expect((await h.admin.query(
+      `SELECT count(*)::int AS cnt FROM business_audit_events WHERE actor_account_id = $1 AND event_type = 'MESSAGE_RECORDED'`,
+      [target.accountId]
+    )).rows[0].cnt).toBe(1);
+  }, 20000);
+
   it('Finding #32 regression: same successful key after corrected UNDER_14 profile or consent revoke cannot replay 201', async () => {
     const f = await createParticipationFixture(h, 'resp-revoke-replay', { target: 'manager' });
     const target = await addBoundAdultNonManagerToFamily(h, f.familyId, 'resp-target-revoke-replay');
