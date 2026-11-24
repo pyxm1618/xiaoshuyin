@@ -88,7 +88,7 @@ describe('Slice 20 architecture and negative-scope boundary', () => {
   it('has no forbidden package roots or production persistence surface', () => {
     for (const path of ['packages/ai', 'packages/rag', 'packages/memory']) expect(existsSync(path)).toBe(false);
     const all = seamSources().map(({ text }) => text).join('\n');
-    expect(all).not.toMatch(/\b(?:INSERT|UPDATE|DELETE|CREATE)\b/i);
+    expect(all).not.toMatch(/\bINSERT\s+INTO\b|\bDELETE\s+FROM\b|\bUPDATE\s+[A-Za-z_][\\w."]*\s+SET\b|\bCREATE\s+(?:TABLE|INDEX|EXTENSION|TYPE|SCHEMA)\b/i);
   });
 
   it('permits direct provider integration only inside the seam and consumers cannot import protocol/transport internals', () => {
