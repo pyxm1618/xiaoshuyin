@@ -101,11 +101,12 @@ describe('T906 Safety authorization fail-closed composition', () => {
     personId: actor.personId,
   });
 
-  it('allows Enter for the manager without any resolver capability', async () => {
-    const decision = await withRlsTransaction(fixture.pool, rls(owner), (tx) =>
-      requireFamilyAction(tx, request(owner, 'CASE_ENTER_SAFETY_HOLD'))
-    );
-    expect(decision.decision).toBe('ALLOW');
+  it('denies direct business request for CASE_ENTER_SAFETY_HOLD even for the manager (Finding #14)', async () => {
+    await expect(
+      withRlsTransaction(fixture.pool, rls(owner), (tx) =>
+        requireFamilyAction(tx, request(owner, 'CASE_ENTER_SAFETY_HOLD'))
+      )
+    ).rejects.toMatchObject({ code: 'FORBIDDEN', statusCode: 403 });
   });
 
   it('denies Resolve without a verified capability fact', async () => {

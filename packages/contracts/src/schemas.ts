@@ -574,6 +574,24 @@ export const ParticipationStateConflictError = z.strictObject({
   message: z.string(),
   currentState: CaseParticipationState,
 });
+
+export const CreateParticipationResponseRequest = z.strictObject({
+  content: z.string().min(1).max(2000),
+  idempotencyKey: ParticipationIdempotencyKey.optional(),
+});
+export type CreateParticipationResponseRequestType =
+  z.infer<typeof CreateParticipationResponseRequest>;
+
+export const ParticipationResponseDto = z.strictObject({
+  id: z.string().uuid(),
+  caseId: z.string().uuid(),
+  participationId: z.string().uuid(),
+  authorPersonId: z.string().uuid(),
+  content: z.string().min(1),
+  createdAt: z.string().datetime(),
+});
+export type ParticipationResponseDtoType =
+  z.infer<typeof ParticipationResponseDto>;
 // ── Problem Formulation Core schemas (Slice 8) ─────────────
 // Frozen surface: specs/008-problem-formulation-core/contracts/problem-formulation-api.openapi.yaml.
 // Every DB-backed integer version is bounded to PostgreSQL `integer` (1..2147483647);

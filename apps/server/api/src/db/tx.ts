@@ -102,7 +102,7 @@ function identityContextMismatch(): never {
  * from account_id. Verify that authoritative result before set_family_context()
  * is allowed to overwrite app.person_id with a caller-supplied value.
  */
-async function assertIdentityContextMatches(
+export async function assertIdentityContextMatches(
   tx: TxClient,
   opts: { accountId: string; personId: string; purpose: string }
 ): Promise<void> {
@@ -265,6 +265,16 @@ export interface BindingTargetTxOptions {
 }
 
 /** Target-person-only Gate context (used to resolve P1's unique Family). */
+export async function setBindingTargetContext(
+  tx: TxClient,
+  opts: { targetPersonId: string; actorAccountId?: string | null }
+): Promise<void> {
+  await tx.query('SELECT app.set_binding_target_context($1, $2)', [
+    opts.targetPersonId,
+    opts.actorAccountId ?? null,
+  ]);
+}
+
 export async function withBindingTargetTransaction<T>(
   pool: pg.Pool,
   opts: BindingTargetTxOptions,
@@ -431,6 +441,16 @@ export async function setBindingCandidateAccountId(
   accountId: string
 ): Promise<void> {
   await tx.query('SELECT app.set_binding_candidate_account_id($1)', [accountId]);
+}
+
+export async function setBindingIdentityContext(
+  tx: TxClient,
+  opts: { identityDigest: string; purpose?: string }
+): Promise<void> {
+  await tx.query('SELECT app.set_binding_identity_context($1, $2)', [
+    opts.identityDigest,
+    opts.purpose ?? 'IDENTITY_BINDING_PENDING',
+  ]);
 }
 
 /**
