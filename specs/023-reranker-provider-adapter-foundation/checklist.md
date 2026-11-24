@@ -57,7 +57,7 @@ Every item is binary/mechanical. “Looks correct”, “reasonable”, “seems
 - [ ] C23-AS-06 — Invalid numeric score -> MALFORMED_RESPONSE. Expected no default score. Evidence owner: T005/T008.
 - [ ] C23-AS-07 — Missing/unpinned configuration. Expected CONFIG_IDENTITY remains UNKNOWN for production pinnability while official immutable qwen3-rerank revision is undocumented; never READY. Evidence owner: T003/T007/T010.
 - [ ] C23-AS-08 — Provider unavailable. Fake/live evidence maps missing credential/egress/service to CONFIGURATION/BLOCKED/PROVIDER_UNAVAILABLE as applicable and never switches provider/model. Evidence owner: T004/T010.
-- [ ] C23-AS-09 — Mock laundering prevention. State test proves CONTRACT_MECHANICS=PASS + LIVE_PROVIDER_CAPABILITY=NOT_EVALUATED => aggregate NOT_EVALUATED/UNKNOWN according to lower-state precedence, never PASS. Evidence owner: T007/T008.
+- [ ] C23-AS-09 — Mock laundering prevention. State test proves CONTRACT_MECHANICS=PASS + LIVE_PROVIDER_CAPABILITY=NOT_EVALUATED + CONFIG_IDENTITY=UNKNOWN + CLEANUP_SECRET_SAFETY=PASS => AGGREGATE_TECHNICAL_RESULT=UNKNOWN exactly, by the frozen precedence; never PASS. Evidence owner: T007/T008.
 - [ ] C23-AS-10 — Gold authority still missing does not block adapter mechanics but blocks quality/production claim. Handoff explicitly records Gold/Professional Authority gap. Evidence owner: T012.
 - [ ] C23-AS-11 — Professional truth laundering. Architecture/scope scan rejects professional correctness/approval/Gold label semantics. Evidence owner: T009/T011.
 - [ ] C23-AS-12 — Retrieval scope creep. Changed-file/static scan rejects dense retrieval, sparsevec, pg_jieba, RRF, fusion, hard-filter runtime and A/B/C evaluator code. Evidence owner: T009/T011.
