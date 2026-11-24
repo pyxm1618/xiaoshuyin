@@ -296,6 +296,7 @@ AS $function$
 DECLARE
   v_caller_family_id uuid;
   v_actor_account_id uuid;
+  v_actor_person_id uuid;
   v_goals_count integer := 0;
   v_contracts_count integer := 0;
   v_goal record;
@@ -311,9 +312,24 @@ BEGIN
   -- Must be authenticated and executed within an already-bound family session
   v_caller_family_id := app_family_id();
   v_actor_account_id := app_account_id();
+  v_actor_person_id := app_person_id();
 
-  IF v_caller_family_id IS NULL OR v_actor_account_id IS NULL THEN
+  IF v_caller_family_id IS NULL OR v_actor_account_id IS NULL OR v_actor_person_id IS NULL THEN
     RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_UNAUTHENTICATED' USING ERRCODE = '42501';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM persons p
+     WHERE p.id = v_actor_person_id
+       AND p.account_id = v_actor_account_id
+  ) OR NOT EXISTS (
+    SELECT 1
+      FROM family_members fm
+     WHERE fm.family_id = v_caller_family_id
+       AND fm.person_id = v_actor_person_id
+  ) THEN
+    RAISE EXCEPTION 'PROPAGATE_DEPENDENCY_REVIEW_IDENTITY_INVALID' USING ERRCODE = '42501';
   END IF;
 
   -- Caller cannot supply a foreign family_id to escape or override session scope
