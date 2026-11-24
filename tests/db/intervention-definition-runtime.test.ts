@@ -408,4 +408,47 @@ describe('Slice 16 InterventionDefinition DB runtime', () => {
       'INTERVENTION_DEFINITION_SUPERSEDE',
     ]) expect(constraint.rows[0]!.definition).toContain(command);
   });
+
+  it('Finding #17: disabled staff account is rejected by both application authority and DB RLS', async () => {
+    // 1. Disable the staff account
+    await admin.query("UPDATE accounts SET status = 'DISABLED' WHERE id = $1", [accountId]);
+
+    // 2. Application layer rejection: assertMutationAuthority fails because staff authority is invalid
+    await expect(
+      createInterventionDefinitionCandidate(
+        appPool,
+        {
+          actor: actor(),
+          sceneId: 'DIGITAL_USE',
+          interventionCode: 'C3_DISABLED_TEST',
+          semantic: interventionSemantic(),
+          approvalScope: 'DIGITAL_USE',
+          idempotencyKey: key('disabled-app'),
+        },
+        TEST_ONLY_QUALIFICATION_PROVIDER
+      )
+    ).rejects.toMatchObject({ code: 'INTERVENTION_STAFF_AUTHORITY_INVALID' });
+
+    // 3. PostgreSQL RLS rejection: direct INSERT via app role with disabled account fails RLS check
+    await expect(
+      withIdentityTransaction(
+        appPool,
+        { accountId, purpose: 'PROFESSIONAL_KNOWLEDGE_ADMIN' },
+        async (tx) => {
+          await tx.query(
+            "INSERT INTO intervention_definitions " +
+              "(id, scene_id, intervention_code, semantic, approval_scope, " +
+              "version, content_hash, created_by_person_id, definition_state, " +
+              "revision, created_by_staff_assignment_id) " +
+              "VALUES ($1, 'DIGITAL_USE', 'C3_RLS_FAIL', '{}'::jsonb, 'DIGITAL_USE', " +
+              "'1.0.0', 'hash123', $2, 'CANDIDATE', 1, $3)",
+            [crypto.randomUUID(), personId, crypto.randomUUID()]
+          );
+        }
+      )
+    ).rejects.toThrow();
+
+    // 4. Restore active state for cleanup
+    await admin.query("UPDATE accounts SET status = 'ACTIVE' WHERE id = $1", [accountId]);
+  });
 });

@@ -12,6 +12,38 @@ export interface TokenPayload {
   exp: number; // unix timestamp
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function parseTokenPayload(raw: unknown): TokenPayload | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return null;
+  }
+  const obj = raw as Record<string, unknown>;
+
+  if (typeof obj.accountId !== 'string' || !UUID_REGEX.test(obj.accountId)) {
+    return null;
+  }
+
+  if (typeof obj.epoch !== 'number' || !Number.isSafeInteger(obj.epoch) || obj.epoch < 0) {
+    return null;
+  }
+
+  if (typeof obj.exp !== 'number' || !Number.isFinite(obj.exp) || obj.exp <= 0) {
+    return null;
+  }
+
+  const allowedKeys = new Set(['accountId', 'epoch', 'exp']);
+  for (const key of Object.keys(obj)) {
+    if (!allowedKeys.has(key)) return null;
+  }
+
+  return {
+    accountId: obj.accountId,
+    epoch: obj.epoch,
+    exp: obj.exp,
+  };
+}
+
 export function signToken(payload: TokenPayload, secret: string): string {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = createHmac('sha256', secret).update(body).digest('base64url');
@@ -41,7 +73,9 @@ export function verifyToken(
   }
 
   try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString()) as TokenPayload;
+    const raw = JSON.parse(Buffer.from(body, 'base64url').toString());
+    const payload = parseTokenPayload(raw);
+    if (!payload) return null;
 
     // Check expiration
     if (Date.now() / 1000 > payload.exp) return null;

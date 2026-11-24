@@ -526,6 +526,12 @@ describe('AUTH-007/AUTH-008 production Safety resolver staff authority', () => {
       Math.max(...expiry.rows.map((row) => row.valid_until.getTime()))
     );
 
+    const counts = async () => [
+      await fixture.countRiskEvents(held.caseId),
+      await fixture.countCaseEvents(held.caseId),
+      await fixture.countAuditEvents(held.caseId),
+    ];
+    const beforeCounts = await counts();
     const barrier = await installCaseTransitionBarrier(held.caseId);
     let resolvePromise: ReturnType<typeof resolveAs> | null = null;
 
@@ -543,6 +549,7 @@ describe('AUTH-007/AUTH-008 production Safety resolver staff authority', () => {
       const after = await fixture.getCase(held.caseId);
       expect(after.status).toBe('SAFETY_HOLD');
       expect(after.version).toBe(held.heldVersion);
+      expect(await counts()).toEqual(beforeCounts);
     } finally {
       await barrier.release().catch(() => undefined);
       await resolvePromise?.catch(() => undefined);
