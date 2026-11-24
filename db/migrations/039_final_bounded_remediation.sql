@@ -392,12 +392,15 @@ BEGIN
          g.dependency_refs @> jsonb_build_array(p_dependency)
          OR (
            v_dep_type = 'CONSENT'
-           AND v_version_str IS NULL
            AND EXISTS (
              SELECT 1
                FROM jsonb_array_elements(g.dependency_refs) d
               WHERE d->>'type' = 'CONSENT'
                 AND (d->>'id')::uuid = v_dep_id::uuid
+                AND (
+                  v_version_str IS NULL
+                  OR NULLIF(d->>'version', '') IS NULL
+                )
            )
          )
          OR (v_evidence_obj IS NOT NULL AND g.baseline_refs @> jsonb_build_array(v_evidence_obj))
@@ -468,11 +471,15 @@ BEGIN
                 )
            )
          )
-         OR (v_dep_type = 'CONSENT' AND v_version_str IS NULL AND EXISTS (
+         OR (v_dep_type = 'CONSENT' AND EXISTS (
            SELECT 1
              FROM jsonb_array_elements(c.dependency_refs) d
             WHERE d->>'type' = 'CONSENT'
               AND (d->>'id')::uuid = v_dep_id::uuid
+              AND (
+                v_version_str IS NULL
+                OR NULLIF(d->>'version', '') IS NULL
+              )
          ))
        )
      FOR UPDATE
