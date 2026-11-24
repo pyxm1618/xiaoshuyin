@@ -311,4 +311,33 @@ describe('T907 EnterSafetyHold', () => {
     expect(routes).not.toContain('/safety');
     expect(routes).not.toContain('/resolve-risk');
   });
+
+  it('Finding #14: non-manager family member triggers EnterSafetyHold via deterministic decision', async () => {
+    const child = await fixture.login('child_member');
+    await admin.query(
+      'INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)',
+      [familyId, child.personId]
+    );
+
+    const created = await newCase();
+    const before = await fixture.getCase(created.id);
+    const decision = holdDecision(created.id, before.version);
+
+    const result = await enterSafetyHold(fixture.pool, {
+      accountId: child.accountId,
+      personId: child.personId,
+      caseId: created.id,
+      idempotencyKey: nextKey('enter_child'),
+      expectedCaseVersion: before.version,
+      decision,
+      trustedPolicyIdentity: IDENTITY,
+    });
+    expect(result.status).toBe(200);
+    const body = result.body as Record<string, unknown>;
+    expect(body.status).toBe('SAFETY_HOLD');
+    expect(body.version).toBe(before.version + 1);
+
+    const heldCase = await fixture.getCase(created.id);
+    expect(heldCase.status).toBe('SAFETY_HOLD');
+  });
 });

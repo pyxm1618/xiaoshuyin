@@ -1441,6 +1441,24 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(read.json().code).toBe('CASE_NOT_FOUND');
   });
 
+  it('Finding #27: roleplay endpoints fold authorization denials to 404 CASE_NOT_FOUND (anti-enumeration)', async () => {
+    const owner = await fixture('roleplay-anti-enum-owner');
+    const attacker = await fixture('roleplay-anti-enum-attacker');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${owner.caseId}/digital-use/roleplays`,
+      headers: commandHeaders(attacker.manager.token, 'roleplay-anti-enum'),
+      payload: {
+        expectedCaseVersion: owner.caseVersion,
+        professionalContentVersion: 'requested-professional-roleplay-v1',
+      },
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().code).toBe('CASE_NOT_FOUND');
+    expect(response.body).not.toContain(owner.familyId);
+  });
+
   it('Safety Hold preempts an ordinary node response without leaving Evidence', async () => {
     const f = await fixture('safety');
     await admin.query(
