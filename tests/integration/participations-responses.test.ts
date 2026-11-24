@@ -15,6 +15,9 @@ import {
 } from '../setup/api.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import crypto from 'node:crypto';
+import pg from 'pg';
+import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
+import { canonicalEvidenceKey, resolveEvidenceRefs } from '../../packages/domain/src/problem-formulations.js';
 
 describe('Finding #32 Child-authored Participation Responses API', () => {
   let h: Awaited<ReturnType<typeof buildParticipationApp>>;
@@ -526,6 +529,29 @@ describe('Finding #32 Child-authored Participation Responses API', () => {
     expect(replayBefore.statusCode).toBe(201);
     expect(replayBefore.json().id).toBe(res1.json().id);
 
+    // Read the real minor-authored message through the existing downstream
+    // Problem Formulation evidence resolver under the manager's real RLS context.
+    // Preserve the author identity, never synthesize an Assertion or Observation.
+    const appPool = new pg.Pool({ connectionString: process.env['DATABASE_URL']! });
+    try {
+      const ref = { type: 'DIALOGUE_MESSAGE' as const, id: res1.json().id as string };
+      const resolved = await withRlsTransaction(appPool, {
+        accountId: f.manager.accountId, personId: f.manager.personId,
+        familyId: f.familyId, purpose: 'FAMILY_MANAGEMENT',
+      }, tx => resolveEvidenceRefs(tx, f.caseId, [ref]));
+      expect(resolved.missing).toEqual([]);
+      expect(resolved.members.get(canonicalEvidenceKey(ref))).toMatchObject({
+        ref, kind: 'DIALOGUE_MESSAGE', caseId: f.caseId, familyId: f.familyId,
+        personIds: [target.personId], usable: true,
+        assertionKind: null, sourceKind: null,
+      });
+    } finally {
+      await appPool.end();
+    }
+
+    // Frozen Product Authority §19A.2 D5: v1 UNDER_14 consent only
+    // covers guardian consent administration, not CASE processing.
+    // An initially successful UNDER_14 CASE response is not a legal V1 state.
     // Setup UNDER_14 compliance profile + consent
     const reqRes = await createConsentRequest(h.app, f.manager.token, 'resp-rev-rep-req');
     expect(reqRes.statusCode).toBe(201);
