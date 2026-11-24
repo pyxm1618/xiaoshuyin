@@ -318,12 +318,17 @@ export async function runIdempotentCommand(
   cfg: IdempotentCommandConfig,
   fn: (tx: pg.PoolClient) => Promise<CommandResponse>
 ): Promise<CommandOutcome> {
-  const early = await peekIdempotency(pool, cfg);
-  if (early) return early;
+  // FAMILY_CREATE must establish authoritative Account/Person identity
+  // before even a historical replay or mismatch decision. Keep the other
+  // commands' existing fast path and business-state replay semantics.
+  if (cfg.commandType !== 'FAMILY_CREATE') {
+    const early = await peekIdempotency(pool, cfg);
+    if (early) return early;
+  }
 
   return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_identity_context($1, $2)', [cfg.accountId, cfg.purpose]);
-    if (cfg.personId) {
+    if (cfg.personId || cfg.commandType === 'FAMILY_CREATE') {
       await assertIdentityContextMatches(client, {
         accountId: cfg.accountId,
         personId: cfg.personId,
