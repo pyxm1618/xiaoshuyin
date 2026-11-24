@@ -390,11 +390,14 @@ export async function getPhoneUseContractCurrent(
  },async tx=>{
    const row=await getCurrentPhoneUseContract(tx,input.caseId);
    if(!row) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
-   const p=await assertPhoneUseContractChildParticipation(tx,{
-     familyId:input.familyId,caseId:input.caseId,childPersonId:row.child_party_person_id,participationId:row.child_participation_id,
+   const p=await resolvePhoneUseContractChildParticipationForConfirmation(tx,{
+     familyId:input.familyId,caseId:input.caseId,
+     childPersonId:row.child_party_person_id,boundParticipationId:row.child_participation_id,
    });
    await requirePhoneUseContractChildConfirmation(tx,{
-     accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,contract:row,participation:p,
+     accountId:input.actor.accountId,personId:input.actor.personId,
+     familyId:input.familyId,caseId:input.caseId,
+     contract:{...row,child_participation_id:p.id},participation:p,
    });
    await assertBoundAssessmentCompliance(tx, input);
    return dto(row);
@@ -405,7 +408,7 @@ export async function createPhoneUseContractDraft(
  pool:pg.Pool,
  input:{
   actor:DigitalUseActor;familyId:string;caseId:string;expectedCaseVersion:number;idempotencyKey:string;
-  adultPartyPersonId:string;childPartyPersonId:string;childParticipationId?:string;sourceTemplateVersion:string;
+  adultPartyPersonId:string;childPartyPersonId:string;childParticipationId?:string|undefined;sourceTemplateVersion:string;
   dependencyRefs:readonly unknown[];terms:PhoneUseContractTermsType;
  }
 ){
@@ -442,7 +445,7 @@ export async function createPhoneUseContractDraft(
    const version=await nextPhoneUseContractVersion(tx,input.caseId);
    const row=await insertPhoneUseContractDraft(tx,{
     familyId:input.familyId,caseId:input.caseId,version,
-    adultPartyPersonId:input.adultPartyPersonId,childPartyPersonId:input.childPartyPersonId,childParticipationId:input.childParticipationId,
+    adultPartyPersonId:input.adultPartyPersonId,childPartyPersonId:input.childPartyPersonId,childParticipationId:input.childParticipationId??null,
     contractPurpose:term(input.terms.purpose),phoneUseRules:term(input.terms.phoneUseRules),executionPeriod:term(input.terms.executionPeriod),
     parentSupportMeasures:term(input.terms.parentSupportMeasures),supervisionMeasures:term(input.terms.supervisionMeasures),
     incentives:term(input.terms.incentives),breachResponsibilities:term(input.terms.breachResponsibilities),

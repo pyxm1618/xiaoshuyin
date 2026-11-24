@@ -23,6 +23,9 @@ export interface PhoneUseContractVersionRow {
   supersedes_id:string|null; update_reason:string|null; update_trigger:PhoneUseContractUpdateTrigger|null;
   created_by_person_id:string; created_at:Date; updated_at:Date; activated_at:Date|null; superseded_at:Date|null; paused_at:Date|null;
 }
+export type BoundPhoneUseContractVersionRow = PhoneUseContractVersionRow & {
+  child_participation_id:string;
+};
 const CONTRACT_COLUMNS=`
  id,family_id,case_id,version,draft_revision,status,review_state,
  adult_party_person_id,child_party_person_id,child_participation_id,
@@ -41,9 +44,9 @@ export async function getPhoneUseContractById(tx:Tx,id:string,lock=false):Promis
   `SELECT ${CONTRACT_COLUMNS} FROM digital_use_contract_versions WHERE id=$1 ${lock?'FOR UPDATE':''}`,[id]);
  return rows[0]??null;
 }
-export async function getCurrentActivePhoneUseContract(tx:Tx,caseId:string,lock=false):Promise<PhoneUseContractVersionRow|null>{
- const {rows}=await tx.query<PhoneUseContractVersionRow>(
-  `SELECT ${CONTRACT_COLUMNS} FROM digital_use_contract_versions WHERE case_id=$1 AND status='ACTIVE' ${lock?'FOR UPDATE':''}`,[caseId]);
+export async function getCurrentActivePhoneUseContract(tx:Tx,caseId:string,lock=false):Promise<BoundPhoneUseContractVersionRow|null>{
+ const {rows}=await tx.query<BoundPhoneUseContractVersionRow>(
+  `SELECT ${CONTRACT_COLUMNS} FROM digital_use_contract_versions WHERE case_id=$1 AND status='ACTIVE' AND child_participation_id IS NOT NULL ${lock?'FOR UPDATE':''}`,[caseId]);
  return rows[0]??null;
 }
 export async function getCurrentPhoneUseContract(tx:Tx,caseId:string):Promise<PhoneUseContractVersionRow|null>{

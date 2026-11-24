@@ -22,7 +22,8 @@
         "db/schema/index.ts",
         "apps/server/api/src/services/digital-use-phone-contract.ts",
         "packages/contracts/src/digital-use-phone-use-contract-schemas.ts",
-        "packages/domain/src/phone-use-contract-repository.ts"
+        "packages/domain/src/phone-use-contract-repository.ts",
+        "apps/server/api/src/services/digital-use-phone-contract-review.ts"
       ]
     },
     {
@@ -46,6 +47,13 @@
       "implementationPaths": [
         "apps/server/api/src/services/goals.ts",
         "db/migrations/037_goal_target_compliance_revalidation.sql"
+      ]
+    },
+    {
+      "feature": "004-case-participant-core",
+      "specPath": "specs/004-case-participant-core",
+      "implementationPaths": [
+        "apps/server/api/src/authz.ts"
       ]
     }
   ],
