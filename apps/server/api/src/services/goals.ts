@@ -476,7 +476,6 @@ export async function saveGoal(
         accountId: input.actor.accountId,
         personId: input.actor.personId,
         purpose: 'FAMILY_MANAGEMENT',
-        isolationLevel: 'REPEATABLE READ',
       },
       async (tx) => {
         await authorizeGoal(tx, {
@@ -614,7 +613,6 @@ export async function confirmGoal(
         accountId: input.actor.accountId,
         personId: input.actor.personId,
         purpose: 'FAMILY_MANAGEMENT',
-        isolationLevel: 'REPEATABLE READ',
       },
       async (tx) => {
         await authorizeGoal(tx, {
