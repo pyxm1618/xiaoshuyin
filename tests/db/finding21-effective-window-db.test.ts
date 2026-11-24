@@ -250,7 +250,7 @@ describe('Finding #21: Real DB Verification for Professional Knowledge Effective
       });
 
       expect(upgradeOutput).toContain('APPLY 031_professional_knowledge_effective_window_remediation.sql');
-      expect(upgradeOutput).toContain('Migration complete: 1 new, 40 previously applied.');
+      expect(upgradeOutput).toContain('Migration complete: 2 new, 40 previously applied.');
 
       // Step 3: Verify effective_to has been backfilled by 031 automatically
       const clientAfter = new Client({ connectionString: adminDbUrl });
