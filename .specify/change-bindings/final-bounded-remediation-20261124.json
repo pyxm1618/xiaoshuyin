@@ -47,13 +47,6 @@
       ]
     },
     {
-      "feature": "common-core-goal-confirmgoal-runtime",
-      "specPath": "specs/common-core-goal-confirmgoal-runtime",
-      "implementationPaths": [
-        "apps/server/api/src/services/goals.ts"
-      ]
-    },
-    {
       "feature": "phase5-production-readiness-e",
       "specPath": "specs/phase5-production-readiness-e",
       "implementationPaths": [
