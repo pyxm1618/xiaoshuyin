@@ -37,7 +37,8 @@
       "specPath": "specs/009-safety-hold-control-foundation",
       "implementationPaths": [
         "apps/server/api/src/app.ts",
-        "apps/server/api/src/safety/enter-safety-hold.ts"
+        "apps/server/api/src/safety/enter-safety-hold.ts",
+        "packages/domain/src/safety/persistence.ts"
       ]
     },
     {
