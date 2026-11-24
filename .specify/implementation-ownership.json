@@ -1205,6 +1205,19 @@
           "016-psychological-behavioral-intervention-contract-authority-reconciliation"
         ]
       }
+    },
+    {
+      "id": "common-core-goal-target-compliance-migration-037",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/037_goal_target_compliance_revalidation.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
     }
   ]
 }
