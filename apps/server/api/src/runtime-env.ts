@@ -20,6 +20,7 @@ export const MIN_SECRET_LENGTH = 16;
 
 export interface RuntimeConfig {
   mode: RuntimeMode;
+  databaseUrl: string;
   sessionSecret: string;
   evidencePepper: string;
   wechatAppId: string;
@@ -67,10 +68,19 @@ function requiredBytes(env: NodeJS.ProcessEnv, key: string, minBytes: number): s
   return value;
 }
 
+function requiredNonBlank(env: NodeJS.ProcessEnv, key: string): string {
+  const value = env[key];
+  if (!value || value.trim().length === 0) {
+    fail('RUNTIME_ENV_INVALID', `${key} is missing or blank`);
+  }
+  return value;
+}
+
 export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const mode = runtimeMode(env);
 
   // Required in every mode: there is deliberately no fallback value.
+  const databaseUrl = requiredNonBlank(env, 'DATABASE_URL');
   const sessionSecret = required(env, 'SESSION_SECRET', MIN_SECRET_LENGTH);
   const evidencePepper = required(env, 'EVIDENCE_HASH_PEPPER', MIN_EVIDENCE_PEPPER_LENGTH);
   const wechatAppId = required(env, 'WECHAT_APP_ID');
@@ -84,6 +94,7 @@ export function loadRuntimeConfig(env: NodeJS.ProcessEnv = process.env): Runtime
 
   return {
     mode,
+    databaseUrl,
     sessionSecret,
     evidencePepper,
     wechatAppId,

@@ -26,10 +26,10 @@ jobs:
           # Full history is required for exact PR/base diff and ancestry evidence.
           fetch-depth: 0
 
-      - name: Setup Node.js 26
+      - name: Setup Node.js 26.13.0
         uses: actions/setup-node@v4
         with:
-          node-version: "26"
+          node-version: "26.13.0"
 
       - name: Validate implementation binding, authority convergence, and task evidence
         env:
