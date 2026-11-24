@@ -1284,7 +1284,8 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       [unversionedContract]
     )).rows[0]?.review_state).toBe('NEEDS_REVIEW');
 
-    // Versioned invalidation stays exact: version 2 matches version 2 only.
+    // Versioned invalidation remains exact for stored versioned dependencies,
+    // while stored unversioned dependencies follow the Consent identity.
     const childVersion = await loginWithLabel(app, `a3-child-version-${crypto.randomUUID()}`);
     const versionFixture = await createTestFixture('a3-consent-version', childVersion);
     const versionConsentId = crypto.randomUUID();
@@ -1308,25 +1309,37 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       childVersion,
       { type: 'CONSENT', id: versionConsentId, version: 2 }
     );
+    const idOnlyContract = await seedDraftContract(
+      versionFixture,
+      childVersion,
+      { type: 'CONSENT', id: versionConsentId }
+    );
 
     const versionResult = await propagate(
       versionFixture,
       { type: 'CONSENT', id: versionConsentId, version: 2 }
     );
-    expect(versionResult).toEqual({ goalsAffected: 1, contractsAffected: 1 });
+    expect(versionResult).toEqual({ goalsAffected: 2, contractsAffected: 2 });
 
     const versionStates = await admin.query<{ id: string; review_state: string }>(
       `SELECT id,review_state FROM goals WHERE id=ANY($1::uuid[]) ORDER BY id`,
       [[idOnlyGoal, v1Goal, v2Goal]]
     );
     const versionStateById = Object.fromEntries(versionStates.rows.map((row) => [row.id, row.review_state]));
-    expect(versionStateById[idOnlyGoal]).toBe('CURRENT');
+    expect(versionStateById[idOnlyGoal]).toBe('NEEDS_REVIEW');
     expect(versionStateById[v1Goal]).toBe('CURRENT');
     expect(versionStateById[v2Goal]).toBe('NEEDS_REVIEW');
-    expect((await admin.query<{ review_state: string }>(
-      `SELECT review_state FROM digital_use_contract_versions WHERE id=$1`,
-      [v2Contract]
-    )).rows[0]?.review_state).toBe('NEEDS_REVIEW');
+    const versionContractStates = await admin.query<{ id: string; review_state: string }>(
+      `SELECT id,review_state
+         FROM digital_use_contract_versions
+        WHERE id=ANY($1::uuid[])`,
+      [[v2Contract, idOnlyContract]]
+    );
+    const contractStateById = Object.fromEntries(
+      versionContractStates.rows.map((row) => [row.id, row.review_state])
+    );
+    expect(contractStateById[v2Contract]).toBe('NEEDS_REVIEW');
+    expect(contractStateById[idOnlyContract]).toBe('NEEDS_REVIEW');
   });
 
   it('Finding #24 / Blocker C-04: Controlled recovery of open Contract Draft from NEEDS_REVIEW back to CURRENT', async () => {
