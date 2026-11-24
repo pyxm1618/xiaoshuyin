@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 2,
+  "changeId": "remed-v2-e2-db-runtime-operations",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "016-psychological-behavioral-intervention-contract-authority-reconciliation",
+      "specPath": "specs/016-psychological-behavioral-intervention-contract-authority-reconciliation",
+      "implementationPaths": [
+        "apps/server/api/src/services/intervention-definitions.ts"
+      ]
+    },
+    {
+      "feature": "017-professional-knowledge-foundation",
+      "specPath": "specs/017-professional-knowledge-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/db/tx.ts"
+      ]
+    },
+    {
+      "feature": "phase5-production-readiness-e",
+      "specPath": "specs/phase5-production-readiness-e",
+      "implementationPaths": [
+        "apps/server/api/src/app.ts",
+        "apps/server/api/src/runtime-env.ts",
+        "apps/server/api/src/server.ts",
+        "db/init/01-roles.sh"
+      ]
+    }
+  ]
+}
