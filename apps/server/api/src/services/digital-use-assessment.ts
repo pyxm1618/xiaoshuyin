@@ -574,7 +574,6 @@ export async function startOrResumeDigitalUseAssessment(
       accountId: input.actor.accountId,
       personId: input.actor.personId,
       purpose: 'FAMILY_MANAGEMENT',
-      isolationLevel: 'REPEATABLE READ',
     },
     async (tx) => {
       try {
