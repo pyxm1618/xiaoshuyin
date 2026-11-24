@@ -1,0 +1,52 @@
+name: Stage A Remediation Validation
+
+on:
+  push:
+    branches:
+      - "validation/final-remediation-stage-a"
+
+jobs:
+  cold-boot:
+    runs-on: ubuntu-latest
+    env:
+      POSTGRES_SUPERUSER_PASSWORD: postgres
+      POSTGRES_MIGRATOR_PASSWORD: stage_a_migrator_pw
+      POSTGRES_APP_PASSWORD: stage_a_app_pw
+      SESSION_SECRET: stage-a-session-secret-fixture
+      EVIDENCE_HASH_PEPPER: stage-a-evidence-pepper-fixture-32bytes
+      WECHAT_APP_ID: stage-a-app-id
+      WECHAT_APP_SECRET: stage-a-app-secret
+      IDENTITY_BINDING_SECRET: stage-a-identity-binding-secret-fixture-32chars
+      IDENTITY_BINDING_CONTEXT_TTL_SECONDS: "600"
+      IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: "900"
+      IDENTITY_BINDING_PAIRING_TTL_SECONDS: "300"
+      PARTICIPATION_INVITE_TTL_SECONDS: "86400"
+      PARTICIPATION_INVITE_TOKEN_SECRET: stage-a-participation-token-secret-fixture-32chars
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fresh reset
+        run: docker compose -f docker-compose.stage-a.yml down -v --remove-orphans
+      - name: Render configuration
+        run: docker compose -f docker-compose.stage-a.yml config
+      - name: Cold boot current Stage A composition
+        run: docker compose -f docker-compose.stage-a.yml up --build -d
+      - name: Inspect current composition
+        if: always()
+        run: |
+          docker compose -f docker-compose.stage-a.yml ps -a
+          docker compose -f docker-compose.stage-a.yml logs --no-color postgres api || true
+      - name: Verify API stays running and healthz succeeds
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/healthz; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Verify migrations completed
+        run: |
+          docker compose -f docker-compose.stage-a.yml exec -T postgres             psql -U postgres -d xiaoshuyin -Atc             "SELECT CASE WHEN to_regclass('public.schema_migrations') IS NOT NULL
+                         AND EXISTS (SELECT 1 FROM schema_migrations WHERE filename='039_final_bounded_remediation.sql')
+                    THEN 'PASS' ELSE 'FAIL' END" | grep '^PASS$'
+      - name: Cleanup
+        if: always()
+        run: docker compose -f docker-compose.stage-a.yml down -v --remove-orphans
