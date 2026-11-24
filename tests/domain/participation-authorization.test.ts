@@ -98,6 +98,23 @@ describe('Slice 4 authorization', () => {
       ...common,
       participation:{ ...common.participation, familyId: undefined },
     }))).toEqual({ decision:'DENY', reason:'NOT_FAMILY_MEMBER' });
+    for (const invalid of [
+      { ...common.participation, personId: undefined },
+      { ...common.participation, personId: '' },
+      { ...common.participation, personId: 123 },
+      { ...common.participation, state: undefined },
+      { ...common.participation, state: 'INVALID' },
+    ]) {
+      expect(authorize(base({
+        ...common,
+        participation: invalid as unknown as NonNullable<AuthInput['participation']>,
+      }))).toEqual({ decision:'DENY', reason:'PARTICIPATION_CONTEXT_REQUIRED' });
+    }
+    for (const state of ['PENDING', 'ACTIVE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'] as const) {
+      expect(authorize(base({
+        ...common, participation: { ...common.participation, state },
+      })).decision).toBe('ALLOW');
+    }
   });
 
   it('unknown action/purpose still fail closed', () => {
