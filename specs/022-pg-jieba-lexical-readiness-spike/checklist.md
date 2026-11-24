@@ -113,6 +113,17 @@ Outcome-sensitive row rule, mechanically applied as part of each Required Result
 | C22-NEG-10 | real missing/invalid dictionary environment attempted | YES | runtime evidence |
 | C22-NEG-11 | injected negative mislabeled upstream incompatibility | NO | reason code |
 | C22-NEG-12 | inconclusive identity/output classification | UNKNOWN | classifier test |
+| C22-EVD-01 | raw ts_debug observations retained | YES when TOKENIZATION executed; otherwise short-circuit N/A rule | runtime evidence |
+| C22-EVD-02 | raw to_tsvector observations retained | YES when TOKENIZATION executed; otherwise short-circuit N/A rule | runtime evidence |
+| C22-EVD-03 | raw lexical matched doc IDs retained | YES when LEXICAL_QUERY executed; otherwise short-circuit N/A rule | runtime evidence |
+| C22-EVD-04 | PostgreSQL/pg_jieba/source/build identities retained | YES for every attempted compatibility run | runtime evidence |
+| C22-EVD-05 | five lower states and reason codes retained | YES | runtime evidence |
+| C22-EVD-06 | aggregate state is recomputable from lower predicates | YES | architecture test + artifact |
+| C22-EVD-07 | runtime evidence generated outside committed source tree | YES | artifact path/git status |
+| C22-EVD-08 | runtime evidence artifact SHA-256 recorded | YES | Developer handoff |
+| C22-EVD-09 | attempted failures/negative observations retained, not hidden | YES | artifact attempt list |
+| C22-EVD-10 | evidence contains no secret/private-family/unauthorized professional content | YES | evidence scan |
+| C22-EVD-11 | evidence binds one exact head/environment/lexicon/corpus/run family | YES | identity tuple validation |
 | C22-STATE-01 | lower predicates present | exactly 5 | evidence schema |
 | C22-STATE-02 | state vocabulary | PASS/FAIL/BLOCKED/UNKNOWN/NOT_EVALUATED only | architecture test |
 | C22-STATE-03 | cleanup FAIL precedence | aggregate FAIL | architecture test |

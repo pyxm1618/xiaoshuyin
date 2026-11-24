@@ -389,7 +389,7 @@ Prove the frozen custom lexicon is actually loaded and changes real pg_jieba beh
 10. Derive TOKENIZATION from actual pg_jieba output, repeated-run stability and the primary differential.
 
 **Verification**
-- C22-LEX-04..12 and C22-TOK-01..08.
+- C22-LEX-04..12 and C22-TOK-01..10.
 
 **Done Criteria**
 - both predicates are terminal and evidence contains raw baseline/loaded outputs.
@@ -486,7 +486,7 @@ Derive one truthful Slice22 result and prove it does not depend on residue.
 7. Record all attempts, including failures.
 
 **Verification**
-- C22-STATE-01..10, C22-CLN-08..10, C22-HEAD-01..08.
+- C22-EVD-01..11, C22-STATE-01..10, C22-CLN-08..10, C22-HEAD-01..08.
 
 **Done Criteria**
 - one truthful aggregate PASS/FAIL/BLOCKED/UNKNOWN/NOT_EVALUATED is mechanically derived;
@@ -595,7 +595,7 @@ Report:
 17. limitations and explicit statement that no production readiness/route selection is implied.
 
 **Verification**
-- C22-HO-01..05 and exact-head checklist all satisfied.
+- C22-EVD-01..11, C22-HO-01..05 and exact-head checklist all satisfied.
 
 **Done Criteria**
 - READY FOR INDEPENDENT AUDIT 2 for a complete PASS or reproducible FAIL execution;
