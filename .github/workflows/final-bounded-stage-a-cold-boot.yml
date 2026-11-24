@@ -1,0 +1,71 @@
+name: Final Bounded Remediation Stage A Cold Boot
+
+on:
+  push:
+    branches:
+      - 'test/final-bounded-stage-a-7738bf57'
+
+jobs:
+  stage-a-cold-boot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      POSTGRES_SUPERUSER_PASSWORD: stage-a-superuser-fixture
+      POSTGRES_MIGRATOR_PASSWORD: stage-a-migrator-fixture
+      POSTGRES_APP_PASSWORD: stage-a-app-fixture
+      SESSION_SECRET: stage-a-session-secret-fixture
+      EVIDENCE_HASH_PEPPER: stage-a-evidence-hash-pepper-fixture-0123456789abcdef
+      WECHAT_APP_ID: stage-a-wechat-app-id
+      WECHAT_APP_SECRET: stage-a-wechat-app-secret
+      IDENTITY_BINDING_SECRET: stage-a-identity-binding-secret-fixture-32chars
+      IDENTITY_BINDING_CONTEXT_TTL_SECONDS: '600'
+      IDENTITY_BINDING_ATTEMPT_TTL_SECONDS: '900'
+      IDENTITY_BINDING_PAIRING_TTL_SECONDS: '300'
+      PARTICIPATION_INVITE_TTL_SECONDS: '86400'
+      PARTICIPATION_INVITE_TOKEN_SECRET: stage-a-participation-invite-secret-32chars
+    steps:
+      - uses: actions/checkout@v4
+      - name: Docker / Compose environment
+        run: |
+          docker --version
+          docker compose version
+      - name: Render Stage A Compose
+        run: docker compose -f docker-compose.stage-a.yml config
+      - name: Fresh volume and build
+        run: |
+          docker compose -f docker-compose.stage-a.yml down -v --remove-orphans
+          docker compose -f docker-compose.stage-a.yml build api
+          docker compose -f docker-compose.stage-a.yml up -d postgres
+      - name: Wait for PostgreSQL health
+        run: |
+          for i in $(seq 1 30); do
+            status="$(docker inspect --format='{{.State.Health.Status}}' "$(docker compose -f docker-compose.stage-a.yml ps -q postgres)")"
+            if [ "$status" = "healthy" ]; then exit 0; fi
+            sleep 2
+          done
+          docker compose -f docker-compose.stage-a.yml ps
+          docker compose -f docker-compose.stage-a.yml logs postgres
+          exit 1
+      - name: Run production migration artifact
+        run: docker compose -f docker-compose.stage-a.yml run --rm api node dist/migrate.js
+      - name: Verify migration ledger
+        run: |
+          count="$(docker compose -f docker-compose.stage-a.yml exec -T postgres psql -U postgres -d xiaoshuyin -Atc 'SELECT count(*) FROM schema_migrations')"
+          test "$count" = "42"
+          docker compose -f docker-compose.stage-a.yml exec -T postgres psql -U postgres -d xiaoshuyin -Atc "SELECT filename FROM schema_migrations ORDER BY filename DESC LIMIT 3"
+      - name: Start API and verify health
+        run: |
+          docker compose -f docker-compose.stage-a.yml up -d api
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8787/healthz | grep -q '"status":"ok"'; then
+              docker compose -f docker-compose.stage-a.yml ps
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.stage-a.yml ps
+          docker compose -f docker-compose.stage-a.yml logs api
+          exit 1
+      - name: Cold-boot cleanup
+        if: always()
+        run: docker compose -f docker-compose.stage-a.yml down -v --remove-orphans
