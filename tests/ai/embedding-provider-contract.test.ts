@@ -67,12 +67,12 @@ describe('Slice 20 embedding provider contract', () => {
 
   it.each([
     [[1,2,3], 'DIMENSION_MISMATCH'], [[1,2,Number.NaN,4], 'DENSE_INVALID_VALUE'], [[1,2,Infinity,4], 'DENSE_INVALID_VALUE'], [[1,2,-Infinity,4], 'DENSE_INVALID_VALUE'],
-  ] as const)('rejects invalid dense vectors all-or-nothing', async ([dense, code]) => fail((await call(wrapped({ dense }))).o, code));
+  ] as const)('rejects invalid dense vectors all-or-nothing', async (dense, code) => fail((await call(wrapped({ dense }))).o, code));
 
   it.each([
     [[{index:-1,value:1}], 'SPARSE_INDEX_INVALID'], [[{index:3.5,value:1}], 'SPARSE_INDEX_INVALID'],
     [[{index:9,value:1},{index:9,value:2}], 'SPARSE_INDEX_DUPLICATE'], [[{index:9,value:NaN}], 'SPARSE_VALUE_INVALID'],
-  ] as const)('rejects invalid sparse vectors', async ([sparse, code]) => fail((await call(wrapped({ sparse }))).o, code));
+  ] as const)('rejects invalid sparse vectors', async (sparse, code) => fail((await call(wrapped({ sparse }))).o, code));
 
   it('enforces sparse element/vocabulary bounds only when configured', async () => {
     expect((await call(wrapped({ sparse:[{index:111290,value:1}] }))).o.kind).toBe('OK');
