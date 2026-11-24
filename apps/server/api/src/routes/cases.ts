@@ -307,7 +307,10 @@ export function registerCaseRoutes(app: FastifyInstance, pool: pg.Pool) {
 
         if (outcome.kind === 'MISMATCH') {
           const err = toHttpError('IDEMPOTENCY_PAYLOAD_MISMATCH');
-          return reply.status(err.statusCode).send(err);
+          return reply.status(err.statusCode).send({
+            code: err.code,
+            message: err.message,
+          });
         }
         return reply.status(outcome.status).send(outcome.body);
       } catch (err: any) {

@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "changeId": "remed-v2-f-profknowledge-schema-http",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "017-professional-knowledge-foundation",
+      "specPath": "specs/017-professional-knowledge-foundation",
+      "implementationPaths": [
+        "apps/server/api/src/services/professional-knowledge.ts",
+        "db/migrations/031_professional_knowledge_effective_window_remediation.sql",
+        "packages/domain/src/professional-knowledge-repository.ts",
+        "packages/domain/src/professional-knowledge.ts"
+      ]
+    },
+    {
+      "feature": "012-digital-use-assessment-runtime",
+      "specPath": "specs/012-digital-use-assessment-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/plugins/error-handler.ts",
+        "packages/domain/src/phone-use-contract-schema.ts",
+        "db/schema/index.ts",
+        "apps/server/api/src/services/digital-use-phone-contract.ts",
+        "packages/contracts/src/digital-use-phone-use-contract-schemas.ts",
+        "packages/domain/src/phone-use-contract-repository.ts",
+        "apps/server/api/src/services/digital-use-phone-contract-review.ts",
+        "packages/generated/openapi.json",
+        "packages/generated/openapi.d.ts",
+        "db/migrations/038_phone_contract_child_participation_deferred_binding.sql"
+      ]
+    },
+    {
+      "feature": "001-family-identity-core",
+      "specPath": "specs/001-family-identity-core",
+      "implementationPaths": [
+        "apps/server/api/src/routes/members.ts",
+        "apps/server/api/src/idempotency.ts"
+      ]
+    },
+    {
+      "feature": "002-case-core",
+      "specPath": "specs/002-case-core",
+      "implementationPaths": [
+        "apps/server/api/src/routes/cases.ts"
+      ]
+    },
+    {
+      "feature": "common-core-goal-confirmgoal-runtime",
+      "specPath": "specs/common-core-goal-confirmgoal-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/goals.ts",
+        "db/migrations/037_goal_target_compliance_revalidation.sql"
+      ]
+    },
+    {
+      "feature": "004-case-participant-core",
+      "specPath": "specs/004-case-participant-core",
+      "implementationPaths": [
+        "apps/server/api/src/authz.ts"
+      ]
+    }
+  ],
+  "findingVerificationPaths": {
+    "2": [
+      "tests/integration/goal-target-compliance-finding2.test.ts",
+      "tests/db/goal-runtime-schema.test.ts"
+    ],
+    "12": [
+      "tests/domain/digital-use-phone-contract-content.test.ts",
+      "tests/domain/phone-use-contract-authorization.test.ts",
+      "tests/db/digital-use-phone-contract-runtime-schema.test.ts",
+      "tests/integration/digital-use-runtime-hardening.test.ts"
+    ],
+    "15": [
+      "tests/db/migration-atomicity.test.ts"
+    ],
+    "21": [
+      "tests/unit/professional-knowledge-effective-window-finding21.test.ts",
+      "tests/db/finding21-effective-window-db.test.ts",
+      "tests/professional-knowledge-consumption.integration.test.ts"
+    ],
+    "23": [
+      "tests/unit/intervention-resolver-finding23.test.ts",
+      "tests/professional-knowledge-audit2-remediation.integration.test.ts"
+    ],
+    "28": [
+      "tests/db/digital-use-phone-contract-runtime-schema.test.ts"
+    ],
+    "34": [
+      "tests/integration/members.test.ts"
+    ],
+    "36": [
+      "tests/unit/phone-contract-patch-malformed-json-finding36.test.ts"
+    ],
+    "37": [
+      "tests/unit/idempotency-mismatch-response-finding37.test.ts"
+    ],
+    "38": [
+      "tests/unit/members-uuid-validation-finding38.test.ts"
+    ]
+  }
+}

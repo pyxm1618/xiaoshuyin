@@ -1562,8 +1562,7 @@ export interface components {
             adultPartyPersonId: string;
             /** Format: uuid */
             childPartyPersonId: string;
-            /** Format: uuid */
-            childParticipationId: string;
+            childParticipationId: string | null;
             terms: {
                 purpose: {
                     /** @constant */
@@ -1751,7 +1750,7 @@ export interface components {
             /** Format: uuid */
             childPartyPersonId: string;
             /** Format: uuid */
-            childParticipationId: string;
+            childParticipationId?: string;
             sourceTemplateVersion: string;
             dependencyRefs: ({
                 /** @constant */

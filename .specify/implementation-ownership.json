@@ -1207,6 +1207,32 @@
       }
     },
     {
+      "id": "common-core-goal-target-compliance-migration-037",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/037_goal_target_compliance_revalidation.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
+    },
+    {
+      "id": "digital-use-phone-contract-child-participation-deferred-binding-038",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/038_phone_contract_child_participation_deferred_binding.sql"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
       "id": "embedding-provider-adapter-020",
       "match": {
         "kind": "PREFIX",

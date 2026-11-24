@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "changeId": "remed-v2-c-post-merge-dependency-propagation",
+  "classification": "FEATURE_IMPLEMENTATION",
+  "featureBindings": [
+    {
+      "feature": "012-digital-use-assessment-runtime",
+      "specPath": "specs/012-digital-use-assessment-runtime",
+      "implementationPaths": [
+        "apps/server/api/src/services/digital-use-roleplay.ts",
+        "db/migrations/035_workline_c_post_merge_dependency_propagation.sql"
+      ]
+    }
+  ]
+}
