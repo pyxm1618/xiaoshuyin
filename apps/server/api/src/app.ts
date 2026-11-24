@@ -250,7 +250,7 @@ function internalSafetyError(message: string): never {
  * A completed CASE_ENTER_SAFETY_HOLD operation must replay even when the Case
  * is now held or has subsequently been resolved. We read only the existing
  * command reservation; no second idempotency record or persistence owner is
- * introduced. Current Family visibility and the command's authorization action
+ * introduced. Current identity, Family membership and Case visibility
  * are rechecked before the stored response is returned.
  */
 async function readCompletedEnterSafetyHoldReplay(
@@ -294,19 +294,9 @@ async function readCompletedEnterSafetyHoldReplay(
       const caseRow = await getCaseById(tx, input.caseId);
       if (!caseRow || caseRow.family_id !== lookup.familyId) safetyCaseNotFound();
 
-      await requireFamilyAction(tx, {
-        accountId: input.actor.accountId,
-        personId: input.actor.personId,
-        familyId: lookup.familyId,
-        action: 'CASE_READ',
-        purpose: 'FAMILY_MANAGEMENT',
-        resource: {
-          type: 'CASE',
-          familyId: lookup.familyId,
-          caseId: input.caseId,
-        },
-        caseId: input.caseId,
-      });
+      // Safety entry is a server-owned transition, not Manager CASE_READ.
+      // withRlsTransaction verifies Account/Person and current Family membership;
+      // the visible Case must still belong to that exact Family.
 
       const body = lookup.row.response_body;
       if (typeof body !== 'object' || body === null || Array.isArray(body)) {
