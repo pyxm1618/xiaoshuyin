@@ -5,16 +5,16 @@ import { getCurrentNoticeHash } from '@xiaoshuyin/compliance';
 
 const ROOT = new URL('../..', import.meta.url).pathname;
 const COMMAND_OWNER = 'apps/server/api/src/services/goals.ts';
-// Forward-only migration discipline: 026 remains the origin definition and
-// 031 is the single effective redefinition (Finding #1 PACKAGE dependency).
-// Exactly these two files may contain the privileged transition; any third
-// GOALS -> PLANNING writer is still a hard failure.
+// Forward-only migration discipline: 026 is the origin definition, 031 is the
+// Finding #1 PACKAGE supersession, and 037 is the current effective definition
+// after A/#2 target-compliance revalidation. These are historical lineage, not
+// three simultaneous runtime authorities: only the last definition is effective.
 const TRANSITION_ORIGIN =
   'db/migrations/026_common_core_goal_confirm_goal_runtime.sql';
-const TRANSITION_OWNER =
+const TRANSITION_PACKAGE_SUPERSESSION =
   'db/migrations/031_common_core_goal_confirm_goal_package_dependency.sql';
-// 031 redefines the primitive with CREATE OR REPLACE; match the declaration
-// itself so the anchor works for both the origin and the effective owner.
+const TRANSITION_OWNER =
+  'db/migrations/037_goal_target_compliance_revalidation.sql';
 const TRANSITION_DECLARATION = 'FUNCTION app.confirm_goal_transition(';
 
 function walk(dir: string): string[] {
@@ -42,7 +42,11 @@ describe('Common Core Goal authority boundaries', () => {
         ) writers.push(rel);
       }
     }
-    expect(writers).toEqual([TRANSITION_ORIGIN, TRANSITION_OWNER]);
+    expect(writers).toEqual([
+      TRANSITION_ORIGIN,
+      TRANSITION_PACKAGE_SUPERSESSION,
+      TRANSITION_OWNER,
+    ]);
   });
 
   it('places the A2010 COMPLETED gate before the owned transition', () => {

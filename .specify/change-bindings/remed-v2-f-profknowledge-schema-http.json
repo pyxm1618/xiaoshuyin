@@ -51,6 +51,9 @@
       "tests/integration/goal-target-compliance-finding2.test.ts",
       "tests/db/goal-runtime-schema.test.ts"
     ],
+    "15": [
+      "tests/db/migration-atomicity.test.ts"
+    ],
     "21": [
       "tests/unit/professional-knowledge-effective-window-finding21.test.ts",
       "tests/db/finding21-effective-window-db.test.ts",
