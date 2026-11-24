@@ -135,6 +135,11 @@ export async function assertAssessmentCompliance(
   actorPersonId: string,
   targetPersonId: string
 ): Promise<void> {
+  // Reused by Assessment, Phone Contract and other Digital Use consumers:
+  // pin the mutable person + feature-policy authority before the multi-read
+  // compliance evaluation instead of widening the whole business transaction.
+  await getComplianceProfileForUpdate(tx, targetPersonId);
+  await lockComplianceFeatureEvaluationBasis(tx, DIGITAL_USE_ASSESSMENT_FEATURE);
   const snapshot = await loadComplianceEvaluationSnapshot(drizzle(tx), tx, {
     descriptor: DIGITAL_USE_ASSESSMENT_FEATURE,
     processingCategory: 'ASSESSMENT',
