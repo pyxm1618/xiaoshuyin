@@ -1244,6 +1244,36 @@
           "020-embedding-provider-adapter-foundation"
         ]
       }
+    },
+    {
+      "id": "shared-api-drizzle-transaction-context",
+      "match": {
+        "kind": "EXACT",
+        "path": "apps/server/api/src/db/drizzle-tx.ts"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "009-safety-hold-control-foundation",
+          "010-compliance-feature-policy-foundation",
+          "012-digital-use-assessment-runtime"
+        ]
+      }
+    },
+    {
+      "id": "final-bounded-remediation-migration-039",
+      "match": {
+        "kind": "EXACT",
+        "path": "db/migrations/039_final_bounded_remediation.sql"
+      },
+      "ownership": {
+        "kind": "SHARED",
+        "features": [
+          "001-family-identity-core",
+          "012-digital-use-assessment-runtime",
+          "common-core-goal-confirmgoal-runtime"
+        ]
+      }
     }
   ]
 }
