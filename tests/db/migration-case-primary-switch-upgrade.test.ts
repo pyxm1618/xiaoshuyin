@@ -1002,7 +1002,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     expect(output).toContain('APPLY 009_safety_hold_control_foundation.sql');
     expect(output).not.toContain('APPLY 001_initial_schema.sql');
     expect(output).not.toContain('APPLY 006_case_status_paused_removal.sql');
-    expect(output).toMatch(/Migration complete: 29 new, 7 previously applied\./);
+    expect(output).toMatch(/Migration complete: 31 new, 7 previously applied\./);
 
     // Rows preserved verbatim, table by table.
     expect(await rowSnapshot(seed)).toEqual(beforeRows);
@@ -1122,6 +1122,8 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...SLICE16_NEW_CONSTRAINTS,
         ...GOAL_RUNTIME_NEW_CONSTRAINTS,
         ...SLICE17_NEW_CONSTRAINTS,
+        'binding_operation_keys_reused_account_id_fkey',
+        'binding_operation_keys_reused_person_id_fkey',
         'business_audit_staff_event_pair_check',
         'digital_use_assessment_contex_family_id_created_by_person__fkey',
         'digital_use_assessment_context_case_id_family_id_fkey',
@@ -1209,7 +1211,7 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     const beforeReplayObjects = await objectFingerprint(seed);
 
     const output = runMigrator(upgradeUrl);
-    expect(output).toMatch(/Migration complete: 0 new, 36 previously applied\./);
+    expect(output).toMatch(/Migration complete: 0 new, 38 previously applied\./);
     expect(output).not.toContain('APPLY 007_case_primary_switch.sql');
     expect(output).not.toContain('APPLY 009_safety_hold_control_foundation.sql');
 
@@ -1249,8 +1251,10 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
       '029_staff_assignment_control_plane.sql',
       '030_digital_use_assessment_context.sql',
       '031_common_core_goal_confirm_goal_package_dependency.sql',
+      '032_workline_d_safety_identity_authz.sql',
       '033_downstream_dependency_review_state.sql',
       '035_workline_c_post_merge_dependency_propagation.sql',
+      '036_security_definer_search_path_hardening.sql',
     ]);
   }, 180_000);
 });
