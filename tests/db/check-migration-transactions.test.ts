@@ -33,7 +33,7 @@ describe('Check Migration Transactions Guard & Adversarial Fixtures', () => {
       cwd: ROOT,
       encoding: 'utf8',
     });
-    expect(output).toContain('check-migration-transactions: PASS (40 migrations validated, 8 legacy stripped)');
+    expect(output).toContain('check-migration-transactions: PASS (41 migrations validated, 8 legacy stripped)');
   });
 
   it('exactly 8 migrations are stripped and match the authoritative whitelist', () => {

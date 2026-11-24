@@ -48,6 +48,11 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
       not_null:column.notNull,
     }));
     expect(rows).toEqual(projected);
+    expect(projected.find((column)=>column.name==='child_participation_id')).toEqual({
+      name:'child_participation_id',
+      sql_type:'uuid',
+      not_null:false,
+    });
     expect(projected.at(-1)).toEqual({
       name:'review_state',
       sql_type:'text',
@@ -104,6 +109,23 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
     expect(triggers.rows.map((r:any)=>r.tgname)).toEqual([
       'digital_use_contract_versions_guard',
     ]);
+    const provenance=await db.query(
+      `SELECT pg_get_constraintdef(oid,true) AS def
+         FROM pg_constraint
+        WHERE conrelid='digital_use_contract_versions'::regclass
+          AND conname='digital_use_contract_versions_confirmation_provenance_check'`
+    );
+    expect(provenance.rows[0].def).toContain('child_participation_id IS NOT NULL');
+    const guard=await db.query(
+      `SELECT pg_get_functiondef(p.oid) AS def
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname='public'
+          AND p.proname='digital_use_contract_versions_guard'`
+    );
+    expect(guard.rows[0].def).toContain('OLD.child_participation_id IS NULL');
+    expect(guard.rows[0].def).toContain("cp.state = 'ACTIVE'");
+    expect(guard.rows[0].def).toContain("app_current_purpose() = 'PHONE_USE_CONTRACT'");
   });
 
   it('uses least-privilege table grants and has no DELETE grant', async () => {
@@ -127,6 +149,7 @@ describe('Slice 14 phone-use Contract runtime schema', () => {
           AND table_name IN ('digital_use_contract_versions','roleplay_sessions','roleplay_turns')`
     );
     expect(columns.rows.some((r:any)=>r.table_name==='digital_use_contract_versions'&&r.column_name==='child_confirmation'&&r.privilege_type==='UPDATE')).toBe(true);
+    expect(columns.rows.some((r:any)=>r.table_name==='digital_use_contract_versions'&&r.column_name==='child_participation_id'&&r.privilege_type==='UPDATE')).toBe(true);
     expect(columns.rows.some((r:any)=>r.table_name==='roleplay_turns'&&r.column_name==='user_rating'&&r.privilege_type==='UPDATE')).toBe(true);
 
     const sceneGrants=await db.query(

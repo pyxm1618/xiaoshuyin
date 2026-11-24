@@ -3390,6 +3390,71 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(contractRows.rows[0].n).toBe(0);
   });
 
+  it('Finding #12 lets a parent reach PENDING_CONFIRMATION for an unregistered child without fabricating participation', async () => {
+    const f = await fixture('f12-unregistered-child');
+    const account = await admin.query('SELECT account_id FROM persons WHERE id=$1',[f.targetPersonId]);
+    expect(account.rows[0].account_id).toBeNull();
+    const participationBefore = await admin.query(
+      'SELECT count(*)::int AS n FROM case_participants WHERE case_id=$1 AND person_id=$2',
+      [f.caseId,f.targetPersonId]
+    );
+    expect(participationBefore.rows[0].n).toBe(0);
+
+    await forceSceneNode(f, 'A4004');
+    await admin.query(
+      `UPDATE scene_node_states SET status='COMPLETED',completed_at=now(),revision=revision+1
+        WHERE case_id=$1 AND node_code='A4004'`,
+      [f.caseId]
+    );
+    const term = (value: string) => ({ state: 'VALUE', value });
+    const terms = {
+      purpose: term('共同减少无目的刷手机'),
+      phoneUseRules: term('晚饭后使用 30 分钟'),
+      executionPeriod: term('两周'),
+      parentSupportMeasures: term('家长同步减少无目的使用'),
+      supervisionMeasures: term('共同查看屏幕时间'),
+      incentives: term('周末共同活动'),
+      breachResponsibilities: term('复盘原因并调整'),
+    };
+    const draft = await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/drafts`,
+      headers:commandHeaders(f.manager.token,`f12-unregistered-draft-${crypto.randomUUID()}`),
+      payload:{
+        expectedCaseVersion:f.caseVersion,
+        adultPartyPersonId:f.manager.personId,
+        childPartyPersonId:f.targetPersonId,
+        sourceTemplateVersion:'phone-use-contract-v1',
+        dependencyRefs:[],
+        terms,
+      },
+    });
+    expect(draft.statusCode,draft.body).toBe(201);
+    expect(draft.json()).toMatchObject({
+      status:'DRAFT',childPartyPersonId:f.targetPersonId,
+      childParticipationId:null,childConfirmation:null,
+    });
+
+    const adult = await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(f.manager.token,`f12-unregistered-parent-${crypto.randomUUID()}`),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(adult.statusCode,adult.body).toBe(200);
+    expect(adult.json()).toMatchObject({
+      status:'PENDING_CONFIRMATION',childParticipationId:null,childConfirmation:null,
+    });
+    const persisted = await admin.query(
+      `SELECT status,child_participation_id,child_confirmation
+         FROM digital_use_contract_versions WHERE case_id=$1 AND version=1`,
+      [f.caseId]
+    );
+    expect(persisted.rows[0]).toEqual({
+      status:'PENDING_CONFIRMATION',child_participation_id:null,child_confirmation:null,
+    });
+  });
+
   it('Slice 14 formal Contract requires independent party confirmations and activates atomically', async () => {
     const child = await loginWithLabel(app, `s14-contract-child-${crypto.randomUUID()}`);
     const f = await fixture('s14-contract', app, child);
@@ -3397,14 +3462,6 @@ describe('T1218 Digital Use runtime hardening', () => {
       `INSERT INTO family_members(family_id,person_id) VALUES($1,$2) ON CONFLICT DO NOTHING`,
       [f.familyId,child.personId]
     );
-    const participation = await admin.query<{ id: string }>(
-      `INSERT INTO case_participants
-         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
-       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())
-       RETURNING id`,
-      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
-    );
-
     await forceSceneNode(f, 'A4004');
     await admin.query(
       `UPDATE scene_node_states SET status='COMPLETED',completed_at=now(),revision=revision+1
@@ -3430,14 +3487,15 @@ describe('T1218 Digital Use runtime hardening', () => {
         expectedCaseVersion:f.caseVersion,
         adultPartyPersonId:f.manager.personId,
         childPartyPersonId:child.personId,
-        childParticipationId:participation.rows[0]!.id,
         sourceTemplateVersion:'phone-use-contract-v1',
         dependencyRefs:[],
         terms,
       },
     });
     expect(draft.statusCode,draft.body).toBe(201);
-    expect(draft.json()).toMatchObject({version:1,draftRevision:1,status:'DRAFT'});
+    expect(draft.json()).toMatchObject({
+      version:1,draftRevision:1,status:'DRAFT',childParticipationId:null,
+    });
 
     const adultKey=`s14-adult-confirm-${crypto.randomUUID()}`;
     const adult = await app.inject({
@@ -3473,6 +3531,32 @@ describe('T1218 Digital Use runtime hardening', () => {
     );
     expect(beforeChild.rows[0].n).toBe(1);
 
+    const childBeforeParticipation = await app.inject({
+      method:'POST',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
+      headers:commandHeaders(child.token,`f12-child-before-participation-${crypto.randomUUID()}`),
+      payload:{expectedCaseVersion:f.caseVersion,expectedDraftRevision:1},
+    });
+    expect(childBeforeParticipation.statusCode,childBeforeParticipation.body).toBe(422);
+    expect(childBeforeParticipation.json().code).toBe('PHONE_USE_CONTRACT_INVALID_PAYLOAD');
+
+    const participation = await admin.query<{ id: string }>(
+      `INSERT INTO case_participants
+         (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+       VALUES($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now())
+       RETURNING id`,
+      [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+    );
+    const childReadBeforeConfirm = await app.inject({
+      method:'GET',
+      url:`/api/v1/cases/${f.caseId}/digital-use/contract/current`,
+      headers:auth(child.token),
+    });
+    expect(childReadBeforeConfirm.statusCode,childReadBeforeConfirm.body).toBe(200);
+    expect(childReadBeforeConfirm.json()).toMatchObject({
+      status:'PENDING_CONFIRMATION',childParticipationId:null,childConfirmation:null,
+    });
+
     const childConfirm = await app.inject({
       method:'POST',
       url:`/api/v1/cases/${f.caseId}/digital-use/contract/1/confirm`,
@@ -3481,6 +3565,7 @@ describe('T1218 Digital Use runtime hardening', () => {
     });
     expect(childConfirm.statusCode,childConfirm.body).toBe(200);
     expect(childConfirm.json().status).toBe('ACTIVE');
+    expect(childConfirm.json().childParticipationId).toBe(participation.rows[0]!.id);
     expect(childConfirm.json().childConfirmation).toMatchObject({
       kind:'CHILD',
       personId:child.personId,

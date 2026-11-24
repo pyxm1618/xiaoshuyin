@@ -13,7 +13,7 @@ export const digitalUseContractVersions = pgTable('digital_use_contract_versions
   status: text('status').notNull(),
   adultPartyPersonId: uuid('adult_party_person_id').notNull(),
   childPartyPersonId: uuid('child_party_person_id').notNull(),
-  childParticipationId: uuid('child_participation_id').notNull(),
+  childParticipationId: uuid('child_participation_id'),
   contractPurpose: jsonb('contract_purpose').notNull(),
   phoneUseRules: jsonb('phone_use_rules').notNull(),
   executionPeriod: jsonb('execution_period').notNull(),

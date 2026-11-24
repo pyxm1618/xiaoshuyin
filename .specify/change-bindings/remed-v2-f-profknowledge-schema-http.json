@@ -25,7 +25,8 @@
         "packages/domain/src/phone-use-contract-repository.ts",
         "apps/server/api/src/services/digital-use-phone-contract-review.ts",
         "packages/generated/openapi.json",
-        "packages/generated/openapi.d.ts"
+        "packages/generated/openapi.d.ts",
+        "db/migrations/038_phone_contract_child_participation_deferred_binding.sql"
       ]
     },
     {
@@ -65,7 +66,10 @@
       "tests/db/goal-runtime-schema.test.ts"
     ],
     "12": [
-      "tests/domain/digital-use-phone-contract-content.test.ts"
+      "tests/domain/digital-use-phone-contract-content.test.ts",
+      "tests/domain/phone-use-contract-authorization.test.ts",
+      "tests/db/digital-use-phone-contract-runtime-schema.test.ts",
+      "tests/integration/digital-use-runtime-hardening.test.ts"
     ],
     "15": [
       "tests/db/migration-atomicity.test.ts"
