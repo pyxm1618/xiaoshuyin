@@ -49,6 +49,16 @@ At the planning snapshot this task would STOP because Slice 20 implementation is
 
 ## T002 — Governance Classification Recheck
 
+**Forbidden paths**
+- all repository mutations; this task is classification/read-only.
+
+**Verification**
+- re-run/read the current change-governance classification for the frozen test-only paths and confirm no product path is present;
+- confirm no ownership/change-binding prerequisite is required.
+
+**Evidence ownership**
+- Developer implementation-gate report: current validator identity, changed-path classification, governance-mode result.
+
 **Prerequisite**
 - T001 PASS.
 
@@ -76,6 +86,15 @@ NO production ownership delta
 ---
 
 ## T003 — Test Harness Foundation + Chinese Manifest Freeze
+
+**Forbidden paths**
+- any live provider call before manifest freeze;
+- any production path;
+- private/family/minor/patient data;
+- post-hoc expected-match edits after provider execution.
+
+**Evidence ownership**
+- frozen Chinese sample manifest commit + architecture manifest-validation output.
 
 **Prerequisites**
 - T002 PASS.
@@ -118,6 +137,12 @@ tests/architecture/sparsevec-readiness-evidence.test.ts
 
 ## T004 — Sparse Mapping / Numeric Contract
 
+**Forbidden paths**
+- raw provider parsing, DB access, token hashing/reindexing, truncation, collision merging, per-vector D.
+
+**Evidence ownership**
+- architecture mapping/numeric test output and mechanically derived mapping status.
+
 **Prerequisites**
 - T003 harness foundation exists.
 
@@ -157,6 +182,12 @@ Add state-machine tests proving only the complete mapping suite derives `MAPPING
 ---
 
 ## T005 — Real DB Sparsevec Storage / Readback / Metric
+
+**Forbidden paths**
+- permanent tables/indexes, migrations, production/business rows, elevated role/grants, provider calls.
+
+**Evidence ownership**
+- real DB test output: server/extension/role identity, readback, analytical distance/reference, cleanup evidence.
 
 **Prerequisites**
 - T004 PASS.
@@ -198,6 +229,12 @@ tests/helpers/sparsevec-readiness.ts
 
 ## T006 — Synthetic DB Boundaries + HNSW Behavior
 
+**Forbidden paths**
+- provider-generated boundary fixtures, payload truncation/remapping, permanent indexes, session-level planner drift.
+
+**Evidence ownership**
+- real DB boundary matrix + EXPLAIN JSON/index-path observation + planner/cleanup proof.
+
 **Prerequisites**
 - T005 base DB harness PASS.
 
@@ -235,6 +272,9 @@ tests/helpers/sparsevec-readiness.ts
 ---
 
 ## T007 — Actual Slice 20 Provider -> Actual DB Linked Run
+
+**Evidence ownership**
+- sanitized linked provider-to-DB evidence artifact plus live verification test output; Slice 20 retains provider transport/normalization ownership.
 
 **Prerequisites**
 - T001..T006 PASS.
@@ -285,6 +325,15 @@ tests/evidence/sparsevec-readiness-stage-a.json
 
 ## T008 — Real Chinese Retrieval Technical Correctness
 
+**Forbidden paths**
+- manifest expectation edits after live execution, production paths, provider internals/raw HTTP, clinical/professional relabeling.
+
+**Verification**
+- for each frozen query, prove exactly six linked candidate IDs with both DB-derived channels, unchanged manifest identity, expected target/distractor identities, and recorded ranking inputs.
+
+**Evidence ownership**
+- Chinese-sample section of the linked Stage A evidence artifact + live test output.
+
 **Prerequisites**
 - T007 linked actual scores available.
 - Manifest identity exactly matches T003 frozen commit.
@@ -318,6 +367,17 @@ For each of the three queries:
 ---
 
 ## T009 — Fixed Fusion Reference
+
+**Forbidden paths**
+- weight search/tuning, RRF, reranker, Gold Dataset optimization, missing-channel fallback, post-hoc label changes.
+
+**Verification**
+- independent recomputation matches normalized/fused values within 1e-12;
+- each expected target is strict fused #1 and strictly above all declared unrelated distractors;
+- constant-channel/missing/duplicate/nonfinite/tie fixtures behave exactly as frozen.
+
+**Evidence ownership**
+- fusion architecture tests + raw/normalized/fused score rows in the linked evidence artifact.
 
 **Prerequisites**
 - T008 paired raw DB scores.
@@ -354,6 +414,23 @@ tests/evidence/sparsevec-readiness-stage-a.json
 
 ## T010 — Evidence Aggregation + Cleanup Truth
 
+**Forbidden paths**
+- manually setting a readiness flag, hiding attempted failures, storing secret/raw provider body/unapproved raw text, leaving DB/planner residue.
+
+**Verification**
+- evidence schema validation passes;
+- lower-level statuses and aggregate state recompute from evidence predicates;
+- DB absence/planner-restoration checks pass after success and injected failure;
+- secret/privacy scan passes.
+
+**STOP**
+- cleanup or planner restoration fails;
+- provider->mapping->DB->score->fusion lineage is incomplete;
+- any final state requires manual override or unsupported inference.
+
+**Evidence ownership**
+- final sanitized evidence artifact + architecture state-machine tests + cleanup proofs.
+
 **Prerequisites**
 - T004..T009 have terminal evidence states.
 
@@ -382,6 +459,23 @@ tests/evidence/sparsevec-readiness-stage-a.json
 ---
 
 ## T011 — Exact-Head Regression / Governance / Scope Convergence
+
+**Forbidden paths**
+- weakening tests/guards/governance to obtain green status, mixing evidence from different heads, adding any path outside the frozen six-file surface.
+
+**Verification**
+- every command/gate in Actions 4-10 completes on one exact head;
+- changed-file set and spec blob are re-read from remote;
+- evidence repo_head equals that exact head.
+
+**STOP**
+- any regression/governance/guard gate fails;
+- head drifts after evidence;
+- changed-file scope widens;
+- evidence and exact head cannot be bound mechanically.
+
+**Evidence ownership**
+- exact-head validation matrix, remote topology read-back, canonical test/governance/guard outputs, final artifact identity.
 
 **Prerequisites**
 - T010 artifact produced.
@@ -417,6 +511,25 @@ A Candidate A `FAIL` may still satisfy T011 if the failure is the correctly obse
 ---
 
 ## T012 — Evidence Freeze / Audit 2 Handoff / STOP
+
+**Allowed paths**
+- no repository mutation; handoff/report only.
+
+**Forbidden paths**
+- production or test changes, Audit 2, merge, implementation PR expansion, next-slice development.
+
+**Verification**
+- remote re-read confirms exact implementation head, frozen spec blob, changed files and evidence identity;
+- handoff contains every field listed below and truthfully reflects PASS/FAIL/BLOCKED/UNKNOWN/NOT_EVALUATED.
+
+**Done**
+- a zero-guess independent Audit 2 handoff exists and Developer has stopped; no later code change exists on the audited head.
+
+**Evidence ownership**
+- final Developer report + exact-head Stage A evidence artifact; independent Audit 2 owns the later audit verdict.
+
+**Coverage**
+- FR-005,FR-007,FR-008; AS-07,AS-08; NS-08.
 
 **Prerequisites**
 - T011 exact-head convergence complete.
