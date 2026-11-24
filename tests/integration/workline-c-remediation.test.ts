@@ -1190,8 +1190,7 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
             supervision_measures,incentives,breach_responsibilities,source_template_version,
             dependency_refs,created_by_person_id)
          VALUES
-           ($1,$2,(SELECT COALESCE(MAX(version),0)+1 FROM digital_use_contract_versions WHERE case_id=$2),
-            1,'DRAFT','CURRENT',$3,$4,
+           ($1,$2,1,1,'DRAFT','CURRENT',$3,$4,
             $5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$6,$7::jsonb,$3)
          RETURNING id`,
         [
@@ -1239,108 +1238,79 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       }
     }
 
-    // Versionless invalidation is identity-wide: same Consent id matches both
-    // id-only and versioned dependencies, but never a different Consent id.
-    const childIdentity = await loginWithLabel(app, `a3-child-id-${crypto.randomUUID()}`);
-    const identityFixture = await createTestFixture('a3-consent-id', childIdentity);
-    const consentId = crypto.randomUUID();
+    const targetConsentId = crypto.randomUUID();
     const otherConsentId = crypto.randomUUID();
-    const unversionedGoal = await seedGoal(
-      identityFixture,
-      { type: 'CONSENT', id: consentId },
-      'unversioned'
-    );
-    const versionedSameGoal = await seedGoal(
-      identityFixture,
-      { type: 'CONSENT', id: consentId, version: 3 },
-      'same-id-versioned'
-    );
-    const unrelatedGoal = await seedGoal(
-      identityFixture,
-      { type: 'CONSENT', id: otherConsentId },
-      'unrelated'
-    );
-    const unversionedContract = await seedDraftContract(
-      identityFixture,
-      childIdentity,
-      { type: 'CONSENT', id: consentId }
-    );
+    const scenarios: Array<{
+      label: string;
+      stored: Record<string, unknown>;
+      invalidated: Record<string, unknown>;
+      affected: boolean;
+    }> = [
+      {
+        label: 'identity-to-identity',
+        stored: { type: 'CONSENT', id: targetConsentId },
+        invalidated: { type: 'CONSENT', id: targetConsentId },
+        affected: true,
+      },
+      {
+        label: 'identity-invalidation-to-versioned-storage',
+        stored: { type: 'CONSENT', id: targetConsentId, version: 3 },
+        invalidated: { type: 'CONSENT', id: targetConsentId },
+        affected: true,
+      },
+      {
+        label: 'versioned-invalidation-to-identity-storage',
+        stored: { type: 'CONSENT', id: targetConsentId },
+        invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
+        affected: true,
+      },
+      {
+        label: 'exact-version',
+        stored: { type: 'CONSENT', id: targetConsentId, version: 2 },
+        invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
+        affected: true,
+      },
+      {
+        label: 'different-version',
+        stored: { type: 'CONSENT', id: targetConsentId, version: 1 },
+        invalidated: { type: 'CONSENT', id: targetConsentId, version: 2 },
+        affected: false,
+      },
+      {
+        label: 'different-consent',
+        stored: { type: 'CONSENT', id: otherConsentId },
+        invalidated: { type: 'CONSENT', id: targetConsentId },
+        affected: false,
+      },
+    ];
 
-    const identityResult = await propagate(
-      identityFixture,
-      { type: 'CONSENT', id: consentId }
-    );
-    expect(identityResult).toEqual({ goalsAffected: 2, contractsAffected: 1 });
+    for (const scenario of scenarios) {
+      const child = await loginWithLabel(
+        app,
+        `a3-child-${scenario.label}-${crypto.randomUUID()}`
+      );
+      const fixture = await createTestFixture(`a3-${scenario.label}`, child);
+      const goalId = await seedGoal(fixture, scenario.stored, scenario.label);
+      const contractId = await seedDraftContract(fixture, child, scenario.stored);
 
-    const identityStates = await admin.query<{ id: string; review_state: string }>(
-      `SELECT id,review_state FROM goals WHERE id=ANY($1::uuid[]) ORDER BY id`,
-      [[unversionedGoal, versionedSameGoal, unrelatedGoal]]
-    );
-    const stateById = Object.fromEntries(identityStates.rows.map((row) => [row.id, row.review_state]));
-    expect(stateById[unversionedGoal]).toBe('NEEDS_REVIEW');
-    expect(stateById[versionedSameGoal]).toBe('NEEDS_REVIEW');
-    expect(stateById[unrelatedGoal]).toBe('CURRENT');
-    expect((await admin.query<{ review_state: string }>(
-      `SELECT review_state FROM digital_use_contract_versions WHERE id=$1`,
-      [unversionedContract]
-    )).rows[0]?.review_state).toBe('NEEDS_REVIEW');
+      const result = await propagate(fixture, scenario.invalidated);
+      expect(result, scenario.label).toEqual({
+        goalsAffected: scenario.affected ? 1 : 0,
+        contractsAffected: scenario.affected ? 1 : 0,
+      });
 
-    // Versioned invalidation remains exact for stored versioned dependencies,
-    // while stored unversioned dependencies follow the Consent identity.
-    const childVersion = await loginWithLabel(app, `a3-child-version-${crypto.randomUUID()}`);
-    const versionFixture = await createTestFixture('a3-consent-version', childVersion);
-    const versionConsentId = crypto.randomUUID();
-    const idOnlyGoal = await seedGoal(
-      versionFixture,
-      { type: 'CONSENT', id: versionConsentId },
-      'id-only'
-    );
-    const v1Goal = await seedGoal(
-      versionFixture,
-      { type: 'CONSENT', id: versionConsentId, version: 1 },
-      'v1'
-    );
-    const v2Goal = await seedGoal(
-      versionFixture,
-      { type: 'CONSENT', id: versionConsentId, version: 2 },
-      'v2'
-    );
-    const v2Contract = await seedDraftContract(
-      versionFixture,
-      childVersion,
-      { type: 'CONSENT', id: versionConsentId, version: 2 }
-    );
-    const idOnlyContract = await seedDraftContract(
-      versionFixture,
-      childVersion,
-      { type: 'CONSENT', id: versionConsentId }
-    );
-
-    const versionResult = await propagate(
-      versionFixture,
-      { type: 'CONSENT', id: versionConsentId, version: 2 }
-    );
-    expect(versionResult).toEqual({ goalsAffected: 2, contractsAffected: 2 });
-
-    const versionStates = await admin.query<{ id: string; review_state: string }>(
-      `SELECT id,review_state FROM goals WHERE id=ANY($1::uuid[]) ORDER BY id`,
-      [[idOnlyGoal, v1Goal, v2Goal]]
-    );
-    const versionStateById = Object.fromEntries(versionStates.rows.map((row) => [row.id, row.review_state]));
-    expect(versionStateById[idOnlyGoal]).toBe('NEEDS_REVIEW');
-    expect(versionStateById[v1Goal]).toBe('CURRENT');
-    expect(versionStateById[v2Goal]).toBe('NEEDS_REVIEW');
-    const versionContractStates = await admin.query<{ id: string; review_state: string }>(
-      `SELECT id,review_state
-         FROM digital_use_contract_versions
-        WHERE id=ANY($1::uuid[])`,
-      [[v2Contract, idOnlyContract]]
-    );
-    const contractStateById = Object.fromEntries(
-      versionContractStates.rows.map((row) => [row.id, row.review_state])
-    );
-    expect(contractStateById[v2Contract]).toBe('NEEDS_REVIEW');
-    expect(contractStateById[idOnlyContract]).toBe('NEEDS_REVIEW');
+      const goal = await admin.query<{ review_state: string }>(
+        `SELECT review_state FROM goals WHERE id=$1`,
+        [goalId]
+      );
+      const contract = await admin.query<{ review_state: string }>(
+        `SELECT review_state FROM digital_use_contract_versions WHERE id=$1`,
+        [contractId]
+      );
+      const expectedState = scenario.affected ? 'NEEDS_REVIEW' : 'CURRENT';
+      expect(goal.rows[0]?.review_state, scenario.label).toBe(expectedState);
+      expect(contract.rows[0]?.review_state, scenario.label).toBe(expectedState);
+    }
   });
 
   it('Finding #24 / Blocker C-04: Controlled recovery of open Contract Draft from NEEDS_REVIEW back to CURRENT', async () => {
