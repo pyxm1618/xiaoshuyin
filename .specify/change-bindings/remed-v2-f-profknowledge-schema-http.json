@@ -23,7 +23,9 @@
         "apps/server/api/src/services/digital-use-phone-contract.ts",
         "packages/contracts/src/digital-use-phone-use-contract-schemas.ts",
         "packages/domain/src/phone-use-contract-repository.ts",
-        "apps/server/api/src/services/digital-use-phone-contract-review.ts"
+        "apps/server/api/src/services/digital-use-phone-contract-review.ts",
+        "packages/generated/openapi.json",
+        "packages/generated/openapi.d.ts"
       ]
     },
     {
