@@ -58,10 +58,12 @@ describe('case primary switch RLS (T723)', () => {
     ).rows[0].id;
     familyA = (await admin.query('SELECT uuidv7() AS id')).rows[0].id;
     familyB = (await admin.query('SELECT uuidv7() AS id')).rows[0].id;
+    await admin.query('BEGIN');
     await admin.query("SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')", [accountA]);
     await admin.query('SELECT app.create_family($1, $2, $3)', [familyA, personA, 'T723-A']);
     await admin.query("SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')", [accountB]);
     await admin.query('SELECT app.create_family($1, $2, $3)', [familyB, personB, 'T723-B']);
+    await admin.query('COMMIT');
     await admin.query('INSERT INTO family_members (family_id, person_id) VALUES ($1, $2)', [
       familyA,
       personA,

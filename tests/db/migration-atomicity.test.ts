@@ -101,6 +101,10 @@ const FINDING15_EXPECTED_DEFINERS: Record<
     searchPath: 'pg_catalog, public, pg_temp',
     appExecute: true,
   },
+  'app.dependency_review_propagation_authorized': {
+    searchPath: 'pg_catalog, app, pg_temp',
+    appExecute: true,
+  },
   'app.commit_professional_knowledge_review': {
     searchPath: 'pg_catalog, public, app, pg_temp',
     appExecute: true,

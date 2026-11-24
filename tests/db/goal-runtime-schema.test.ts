@@ -28,12 +28,14 @@ describe('Common Core Goal DB guards', () => {
       [accountId]
     )).rows[0].id;
     familyId = (await admin.query('SELECT uuidv7() AS id')).rows[0].id;
+    await admin.query('BEGIN');
     await admin.query("SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')", [accountId]);
     await admin.query('SELECT app.create_family($1,$2,$3)', [
       familyId,
       personId,
       'GOAL-DB',
     ]);
+    await admin.query('COMMIT');
     await admin.query(
       'INSERT INTO family_members (family_id, person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [familyId, personId]
