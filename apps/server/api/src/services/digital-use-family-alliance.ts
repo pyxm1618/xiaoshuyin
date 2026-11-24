@@ -47,6 +47,7 @@ import {
   type DigitalUseNodeManifestEntry,
 } from '@xiaoshuyin/scenes/digital-use';
 import { toHttpError } from '../plugins/error-handler.js';
+import { evaluateAuthorizedCompliance } from '../compliance/evaluate-compliance.js';
 import {
   currentSceneEnvelope,
   assertBoundAssessmentCompliance,
@@ -93,6 +94,50 @@ function rethrowFamilyBusinessError(error: unknown): never {
     }
   }
   throw error;
+}
+
+export async function assertFamilyAllianceComplianceSnapshot(
+  pool: pg.Pool,
+  input: {
+    actor: DigitalUseActor;
+    familyId: string;
+    caseId: string;
+    targetPersonId: string;
+  }
+): Promise<void> {
+  const decision = await evaluateAuthorizedCompliance(pool, {
+    actor: input.actor,
+    familyId: input.familyId,
+    authorization: {
+      action: 'CASE_RESPOND_ASSESSMENT_SCENE',
+      purpose: 'FAMILY_MANAGEMENT',
+      resource: {
+        type: 'CASE',
+        familyId: input.familyId,
+        caseId: input.caseId,
+      },
+      caseId: input.caseId,
+    },
+    descriptor: FAMILY_ALLIANCE_FEATURE,
+    targetPersonId: input.targetPersonId,
+    supportedObligations: SUPPORTED_FAMILY_ALLIANCE_OBLIGATIONS,
+  });
+  if (decision.decision === 'AUTHORIZATION_DENIED') {
+    throw familyHttpError('CASE_NOT_FOUND', 'Case not found');
+  }
+  const result = decision.compliance;
+  if (result.gate !== 'ALLOW') {
+    if (
+      result.reasonCode === 'COMPLIANCE_GUARDIAN_CONSENT_REQUIRED' ||
+      result.reasonCode === 'COMPLIANCE_GUARDIAN_CONSENT_INVALID'
+    ) {
+      throw familyHttpError('CONSENT_BLOCKED', result.reasonCode);
+    }
+    throw familyHttpError(
+      'COMPLIANCE_BLOCKED',
+      result.reasonCode ?? 'COMPLIANCE_BLOCKED'
+    );
+  }
 }
 
 async function evaluateFamilyAllianceCompliance(
