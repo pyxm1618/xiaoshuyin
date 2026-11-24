@@ -383,9 +383,10 @@ Prove the frozen custom lexicon is actually loaded and changes real pg_jieba beh
 4. Verify in-container custom dictionary SHA-256 equals frozen manifest.
 5. Run identical probes across three fresh connections.
 6. Prove per-environment repeat stability.
-7. Compare only the predeclared three differential candidates.
-8. Require >=1 frozen candidate absent as one baseline lexeme and present as one loaded lexeme.
-9. Derive LEXICON_LOAD and TOKENIZATION independently.
+7. Derive LEXICON_LOAD only from provenance, exact dictionary fingerprint/tsearch_data presence, successful startup and exact user_dict identity.
+8. Compare the one predeclared primary differential term 手机使用合约 in D02: require it absent as one BASELINE lexeme and present as one LEXICON_LOADED lexeme.
+9. Do not substitute 家庭联盟 or 小树荫 if the primary differential fails.
+10. Derive TOKENIZATION from actual pg_jieba output, repeated-run stability and the primary differential.
 
 **Verification**
 - C22-LEX-04..12 and C22-TOK-01..08.
@@ -479,16 +480,17 @@ Derive one truthful Slice22 result and prove it does not depend on residue.
 1. Populate the five lower predicate states and reason codes.
 2. Derive aggregate with readiness-state.ts only.
 3. Produce sanitized evidence artifact outside the committed tree; compute SHA-256.
-4. For a positive fully executable path, remove all first-run state and execute a second complete run with a fresh run_family_id, same exact head/image build/fixtures, fresh volumes.
-5. Compare the declared technical outputs/states between runs.
-6. Record all attempts, including failures.
+4. If the terminal result is aggregate PASS or an observed technical FAIL, remove all first-run state and execute a second clean attempt with a fresh run_family_id, same exact head/source/fixtures and fresh volumes. A compatibility FAIL must be reproduced through the same failing build/load stage; a later FAIL must be reproduced through the same failing stage from a clean environment.
+5. BLOCKED/UNKNOWN may stop without a second technical run only because the recorded unavailable/inconclusive dependency prevents such a result.
+6. Compare the declared technical outputs/states between applicable runs.
+7. Record all attempts, including failures.
 
 **Verification**
 - C22-STATE-01..10, C22-CLN-08..10, C22-HEAD-01..08.
 
 **Done Criteria**
 - one truthful aggregate PASS/FAIL/BLOCKED/UNKNOWN/NOT_EVALUATED is mechanically derived;
-- if a positive path was possible, rerun proof is complete.
+- any final PASS or observed technical FAIL has clean rerun/reproduction proof; BLOCKED/UNKNOWN retains the explicit reason a reproducible technical result could not be obtained.
 
 **STOP Conditions**
 - evidence requires mixing run families;

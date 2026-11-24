@@ -195,6 +195,9 @@ Observed upstream behavior:
 - custom dictionaries are files in PostgreSQL tsearch_data.
 - pg_jieba.user_dict is a postmaster-level GUC available when the library is loaded through shared_preload_libraries and requires restart to change reliably.
 - jieba_reload_dict() is backend-process-local in practical behavior; it is not suitable as the positive multi-backend evidence mechanism.
+- PostgreSQL 18 full-text search does not require an index for correctness; GIN/GiST are acceleration choices. Slice 22 therefore uses bounded non-indexed lexical matching and makes no index-readiness claim.
+- pg_jieba.control does not mark the extension trusted. PostgreSQL 18 therefore treats CREATE EXTENSION as privileged setup by default; installation occurs only in the disposable environment and never as xiaoshuyin_app.
+- the extension is installed into public only after confirming the runtime app role has no CREATE privilege there; queries use an explicit regconfig and never mutate default_text_search_config.
 
 Therefore the positive path uses fresh postmaster startup with frozen dictionary configuration, not mutable post-hoc dictionary edits or jieba_reload_dict().
 
@@ -246,7 +249,7 @@ lexicon-manifest.json shall record for every term:
 - source blob;
 - source reference;
 - authority class;
-- test-use permission = FORMAL_AUTHORITY_DOC_PRODUCT_TERM;
+- test-use permission = FROZEN_SPEC_OPTION_A_FORMAL_TERM;
 - no_new_professional_judgment = true;
 - dictionary filename;
 - dictionary SHA-256;
@@ -267,6 +270,8 @@ LEXICON_LOADED:
 - pg_jieba.user_dict = jieba_user,xiaoshuyin_022_test
 
 The same pg_jieba build, PostgreSQL image and corpus are used for both.
+
+LEXICON_LOAD is intentionally identity/load-only. It is PASS only when provenance is valid, the exact frozen dictionary hash is present in tsearch_data, postmaster startup succeeds with the exact loaded user_dict value, and the observed config/file identity matches the frozen manifest. Tokenization behavior is not used to manufacture LEXICON_LOAD PASS; behavior is evaluated separately under TOKENIZATION.
 
 ## 10. Corpus / Query Fixture Contract
 
@@ -304,7 +309,7 @@ Frozen technical queries:
 
 These are literal-string technical expectations, not clinical relevance or Professional Gold labels.
 
-corpus-manifest.json must record IDs, exact text, source path/blob/reference, SHA-256 of exact UTF-8 text, privacy classification NON_PERSONAL_FORMAL_PRODUCT_DOC, permission FORMAL_AUTHORITY_DOC_TEST_USE, query IDs, expected literal match IDs and distractor IDs.
+corpus-manifest.json must record IDs, exact text, source path/blob/reference, SHA-256 of exact UTF-8 text, privacy classification NON_PERSONAL_FORMAL_PRODUCT_DOC, permission FROZEN_SPEC_PERMITTED_FORMAL_DOC_FIXTURE, query IDs, expected literal match IDs and distractor IDs.
 
 Freeze order:
 1. commit lexicon and corpus fixtures;
@@ -332,26 +337,28 @@ A crash, parser error or reproducibly unstable result on the exact identity maps
 
 ## 12. Lexicon-Sensitive Verification
 
-The frozen differential candidate set is fixed before runtime:
-- 家庭联盟 in D01
-- 手机使用合约 in D02
-- 小树荫 in D04
+The one required predeclared differential term is fixed before runtime:
 
-No term may be swapped after observation.
+- PRIMARY_DIFFERENTIAL_TERM = 手机使用合约
+- probe document = D02
+- required loaded lexeme = 手机使用合约
 
-Lexicon-sensitive behavior is proven only if:
+家庭联盟 and 小树荫 remain authorized dictionary entries and may be observed, but they are not fallback alternatives for the required differential proof. Developer may not switch the primary term after seeing results.
+
+The differential portion of TOKENIZATION is PASS only if:
 1. BASELINE uses exactly jieba_user;
 2. LEXICON_LOADED uses exactly jieba_user,xiaoshuyin_022_test;
-3. the loaded dictionary bytes inside the container hash to the frozen lexicon fingerprint;
-4. for at least one member of the frozen differential set, the loaded output contains that exact term as one searchable lexeme/token and the baseline output for the same frozen text does not contain that exact term as one searchable lexeme/token;
-5. repeated loaded outputs remain stable across three fresh connections.
+3. LEXICON_LOAD is already independently PASS from file/config/postmaster identity;
+4. BASELINE D02 does not contain 手机使用合约 as one searchable lexeme;
+5. LEXICON_LOADED D02 contains 手机使用合约 as one searchable lexeme;
+6. the loaded D02 result is identical across three fresh connections.
 
-If all three frozen terms are already single lexemes in baseline or none becomes the exact loaded lexeme, LEXICON-sensitive technical behavior is not proven and the applicable predicate FAILS. Do not replace terms.
+If baseline already emits 手机使用合约 as one lexeme, or the loaded environment does not emit it as one lexeme, the predeclared differential is not proven and TOKENIZATION = FAIL with reason PRIMARY_DIFFERENTIAL_NOT_OBSERVED. Do not select 家庭联盟 or 小树荫 as a rescue term.
 
-LEXICON_LOAD remains a separate predicate from TOKENIZATION:
-- LEXICON_LOAD proves file/config/postmaster identity and successful use of the frozen dictionary identity.
-- TOKENIZATION proves real deterministic tokenizer output.
-- the differential observation is required for LEXICON_LOAD PASS because merely placing a file is not sufficient behavioral proof.
+The predicates remain orthogonal:
+- LEXICON_LOAD = provenance + frozen file fingerprint + tsearch_data presence + exact postmaster user_dict configuration + successful environment load.
+- TOKENIZATION = actual pg_jieba output + repeated-run determinism + the one predeclared baseline/loaded differential above.
+- LEXICAL_QUERY = independent bounded FTS match behavior over the frozen corpus.
 
 ## 13. Lexical Retrieval Verification
 
@@ -441,7 +448,7 @@ Reason codes must identify at least:
 - LEXICON_PROVENANCE_INVALID
 - LEXICON_FINGERPRINT_MISMATCH
 - LEXICON_LOAD_FAILED
-- LEXICON_DIFFERENTIAL_NOT_OBSERVED
+- PRIMARY_DIFFERENTIAL_NOT_OBSERVED
 - TOKENIZATION_FAILED
 - TOKENIZATION_NON_REPRODUCIBLE
 - LEXICAL_QUERY_MISMATCH
@@ -476,9 +483,11 @@ Unexpected-failure cleanup:
 - if cleanup cannot be proven, CLEANUP = FAIL.
 
 Rerun:
-- a second full run with the same exact implementation head + fixture blobs creates a new run_family_id and fresh containers/volumes;
-- it must not reuse prior PostgreSQL data;
-- evidence must prove no residue is required for success.
+- any final aggregate PASS or observed technical FAIL must be reproduced by a second clean attempt on the same exact implementation head + fixture blobs, with a new run_family_id and fresh containers/volumes;
+- a compatibility FAIL is rerun through the same build/load failing stage; a later token/query FAIL is rerun from a fresh environment through that same failing stage;
+- BLOCKED/UNKNOWN may terminate without a second positive execution because the missing/inconclusive dependency is itself the reason no reproducible technical result exists;
+- no rerun may reuse prior PostgreSQL data;
+- evidence must prove no residue is required for PASS or for a claimed reproducible FAIL.
 
 The committed xiaoshuyin_022_test.dict is an authorized test fixture, not an installed production dictionary. No host/production dictionary install is permitted.
 

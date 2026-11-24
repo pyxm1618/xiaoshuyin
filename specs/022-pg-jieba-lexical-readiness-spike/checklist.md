@@ -1,7 +1,13 @@
 # Slice 22 — Mechanical Acceptance Checklist
 
 Feature: 022-pg-jieba-lexical-readiness-spike  
-Semantics: every applicable item is PASS or FAIL; NOT APPLICABLE is allowed only where the Required Result explicitly permits it. Subjective judgment is not an acceptance result.
+Semantics: checklist PASS means the execution obeyed the frozen evidence contract; it does not mean the Spike itself must return aggregate PASS. A correctly observed and reproducible technical FAIL, or a correctly classified BLOCKED/UNKNOWN, can satisfy this checklist.
+
+Outcome-sensitive row rule, mechanically applied as part of each Required Result:
+- when a row states a positive technical value, checklist PASS is either (a) that value is observed and its lower predicate may PASS, or (b) a different raw value is observed and the specified lower predicate is truthfully non-PASS with the required reason; silently claiming the positive value is forbidden;
+- downstream LEX/TOK/QRY execution rows are NOT APPLICABLE only when an upstream mandatory predicate is already terminal FAIL/BLOCKED/UNKNOWN and the evidence records the short-circuit;
+- resource-removal rows are NOT APPLICABLE only for a resource that was never created, with an explicit absence inventory; CLEANUP itself still requires a terminal state;
+- rerun rows are mandatory for aggregate PASS and for any observed technical FAIL claimed as final; they are NOT APPLICABLE for BLOCKED/UNKNOWN where execution cannot reach a reproducible technical result.
 
 | ID | Mechanical Check | Required Result | Evidence |
 |---|---|---|---|
@@ -50,7 +56,7 @@ Semantics: every applicable item is PASS or FAIL; NOT APPLICABLE is allowed only
 | C22-AUTH-03 | each term has source identity | YES | manifest |
 | C22-AUTH-04 | each term has source blob/version | YES | manifest |
 | C22-AUTH-05 | each term has source reference | YES | manifest |
-| C22-AUTH-06 | each term has test-use permission | FORMAL_AUTHORITY_DOC_PRODUCT_TERM | manifest |
+| C22-AUTH-06 | each term has test-use permission | FROZEN_SPEC_OPTION_A_FORMAL_TERM | manifest |
 | C22-AUTH-07 | professional/clinical judgment added | NO | manifest/content audit |
 | C22-AUTH-08 | frequency/POS invented | NO | dictionary bytes |
 | C22-AUTH-09 | professional synonym/label/score created | NO | diff/content audit |
@@ -63,10 +69,10 @@ Semantics: every applicable item is PASS or FAIL; NOT APPLICABLE is allowed only
 | C22-LEX-06 | installed custom dict hash matches fixture | YES | container sha256sum |
 | C22-LEX-07 | positive path uses postmaster startup/restart semantics | YES | startup command + SHOW |
 | C22-LEX-08 | jieba_reload_dict used as positive multi-backend proof | NO | implementation/runtime scan |
-| C22-LEX-09 | differential candidate set frozen before observation | exactly 3 planned terms | manifest |
-| C22-LEX-10 | at least one frozen term absent as single baseline lexeme and present as single loaded lexeme | YES for LEXICON_LOAD PASS | raw outputs |
+| C22-LEX-09 | required differential term frozen before observation | 手机使用合约 in D02 only | manifest |
+| C22-LEX-10 | LEXICON_LOAD depends only on valid provenance + exact dictionary fingerprint + tsearch_data presence + exact user_dict startup identity | YES | manifest/config/file evidence |
 | C22-LEX-11 | post-observation term replacement | NO | git history/fingerprint |
-| C22-LEX-12 | lexicon identity/provenance incomplete but predicate PASS | NO | state artifact |
+| C22-LEX-12 | lexicon identity/provenance incomplete but LEXICON_LOAD PASS | NO | state artifact |
 | C22-CORP-01 | corpus document count | exactly 4 | corpus manifest |
 | C22-CORP-02 | query count | exactly 2 | corpus manifest |
 | C22-CORP-03 | document IDs | D01,D02,D03,D04 | manifest |
@@ -85,6 +91,8 @@ Semantics: every applicable item is PASS or FAIL; NOT APPLICABLE is allowed only
 | C22-TOK-06 | loaded repetitions | 3 fresh connections | run evidence |
 | C22-TOK-07 | repeated normalized outputs stable per environment | YES | equality assertion |
 | C22-TOK-08 | mock/fallback output accepted | NO | architecture/runtime tests |
+| C22-TOK-09 | baseline D02 contains 手机使用合约 as one lexeme while TOKENIZATION PASS | NO | raw baseline output |
+| C22-TOK-10 | loaded D02 contains 手机使用合约 as one lexeme and three runs agree for TOKENIZATION PASS | YES; otherwise TOKENIZATION FAIL with PRIMARY_DIFFERENTIAL_NOT_OBSERVED | raw loaded output |
 | C22-QRY-01 | query uses PostgreSQL lexical FTS + pg_jieba | YES | SQL/test |
 | C22-QRY-02 | corpus is disposable in-memory/transaction-local | YES | SQL/catalog |
 | C22-QRY-03 | permanent lexical table/index created | NO | catalog/diff |
@@ -96,7 +104,7 @@ Semantics: every applicable item is PASS or FAIL; NOT APPLICABLE is allowed only
 | C22-NEG-01 | unavailable source/base/Docker classification | BLOCKED | classifier test |
 | C22-NEG-02 | observed exact PG18 build/load incompatibility classification | FAIL | classifier + runtime reason |
 | C22-NEG-03 | unavailable classified as FAIL | NO | classifier test |
-| C22-NEG-04 | unauthorized lexicon provenance classification | BLOCKED/FAIL-CLOSED, never PASS | classifier test |
+| C22-NEG-04 | unauthorized lexicon provenance classification | LEXICON_LOAD=BLOCKED with LEXICON_PROVENANCE_INVALID; never PASS | classifier test |
 | C22-NEG-05 | fixture fingerprint drift classification | evidence invalid; never PASS | classifier test |
 | C22-NEG-06 | post-hoc expected-match edit classification | evidence invalid; never PASS | classifier test |
 | C22-NEG-07 | fallback/mock classification | never PASS | classifier test |
@@ -122,8 +130,8 @@ Semantics: every applicable item is PASS or FAIL; NOT APPLICABLE is allowed only
 | C22-CLN-05 | unexpected-failure cleanup executed in finally | YES | test path + injected failure |
 | C22-CLN-06 | host PostgreSQL config/tsearch_data modified | NO | path/environment proof |
 | C22-CLN-07 | production retrieval objects/business rows created | NO | catalog/diff |
-| C22-CLN-08 | second run uses fresh volumes/run_family_id | YES | rerun evidence |
-| C22-CLN-09 | second run depends on first-run residue | NO | remove/inspect + rerun |
+| C22-CLN-08 | final PASS or observed technical FAIL has second clean attempt with fresh run_family_id/volumes | YES; N/A only for BLOCKED/UNKNOWN | rerun evidence |
+| C22-CLN-09 | second clean attempt depends on first-run residue | NO; N/A only for BLOCKED/UNKNOWN | remove/inspect + rerun |
 | C22-CLN-10 | cleanup unproven while aggregate PASS | NO | classifier test |
 | C22-PRIV-01 | production DB contacted | NO | connection target evidence |
 | C22-PRIV-02 | real user/family/minor/patient data used | NO | fixture audit |
