@@ -45,6 +45,19 @@ async function assertMutationAuthority(
   qualificationProvider: InterventionProfessionalQualificationProvider,
   approvalScope: string
 ): Promise<{ assignmentRef: string; qualificationRef: string }> {
+  // Finding #17: Acquire row-level lock on authoritative Account row and revalidate status === 'ACTIVE'.
+  // FOR SHARE blocks non-key UPDATEs to accounts.status until this mutation commits.
+  // FOR KEY SHARE would permit a concurrent status change and leave a TOCTOU gap.
+  const accountRes = await tx.query<{ status: string }>(
+    'SELECT status FROM accounts WHERE id = $1 FOR SHARE',
+    [actor.accountId]
+  );
+  if (accountRes.rows.length === 0 || accountRes.rows[0]?.status !== 'ACTIVE') {
+    throw Object.assign(new Error('INTERVENTION_STAFF_AUTHORITY_INVALID'), {
+      code: 'INTERVENTION_STAFF_AUTHORITY_INVALID',
+    });
+  }
+
   const staff = await getCurrentProfessionalReviewStaffAssignment(tx, actor);
   if (staff === null) {
     throw Object.assign(new Error('INTERVENTION_STAFF_AUTHORITY_INVALID'), {
