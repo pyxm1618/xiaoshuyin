@@ -862,6 +862,23 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
         )
       ).rejects.toThrow('PHONE_USE_CONTRACT_REVIEW_STATE_RUNTIME_UNOWNED');
       await appAttack.query('ROLLBACK');
+
+      // The formal primitive itself also rejects forged account/person context.
+      await appAttack.query('BEGIN');
+      await appAttack.query(
+        `SELECT set_config('app.family_id', $1, true),
+                set_config('app.account_id', $2, true),
+                set_config('app.person_id', $3, true),
+                set_config('app.purpose', 'FAMILY_MANAGEMENT', true)`,
+        [f.familyId, f.manager.accountId, child.personId]
+      );
+      await expect(
+        appAttack.query(
+          `SELECT app.propagate_downstream_dependency_review($1,$2,$3::jsonb)`,
+          [f.familyId, f.caseId, JSON.stringify(a1Dependency)]
+        )
+      ).rejects.toThrow('PROPAGATE_DEPENDENCY_REVIEW_IDENTITY_INVALID');
+      await appAttack.query('ROLLBACK');
     } finally {
       await appAttack.end();
     }
