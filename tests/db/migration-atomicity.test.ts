@@ -15,6 +15,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
@@ -85,6 +86,7 @@ type SecurityDefinerRow = {
   proconfig: string[] | null;
   public_execute: boolean;
   app_execute: boolean;
+  unauthorized_execute: boolean;
 };
 
 const FINDING15_EXPECTED_DEFINERS: Record<
@@ -136,7 +138,8 @@ function finding15SearchPath(row: SecurityDefinerRow): string | undefined {
 
 async function assertFinding15SecurityDefinerPosture(
   client: Client,
-  migratorRole: string
+  migratorRole: string,
+  unauthorizedRole: string
 ): Promise<void> {
   const { rows } = await client.query<SecurityDefinerRow>(`
     SELECT n.nspname AS schema_name,
@@ -149,14 +152,15 @@ async function assertFinding15SecurityDefinerPosture(
               WHERE acl.grantee = 0
                 AND acl.privilege_type = 'EXECUTE'
            ) AS public_execute,
-           has_function_privilege('xiaoshuyin_app', p.oid, 'EXECUTE') AS app_execute
+           has_function_privilege('xiaoshuyin_app', p.oid, 'EXECUTE') AS app_execute,
+           has_function_privilege($1::name, p.oid, 'EXECUTE') AS unauthorized_execute
       FROM pg_proc p
       JOIN pg_namespace n ON n.oid = p.pronamespace
       JOIN pg_roles owner_role ON owner_role.oid = p.proowner
      WHERE p.prosecdef = true
        AND n.nspname IN ('app', 'public')
      ORDER BY n.nspname, p.proname
-  `);
+  `, [unauthorizedRole]);
 
   const actualKeys = rows
     .map((row) => `${row.schema_name}.${row.proname}`)
@@ -170,6 +174,7 @@ async function assertFinding15SecurityDefinerPosture(
     expect(finding15SearchPath(row), `${key} search_path`).toBe(expected.searchPath);
     expect(row.public_execute, `${key} PUBLIC EXECUTE`).toBe(false);
     expect(row.app_execute, `${key} xiaoshuyin_app EXECUTE`).toBe(expected.appExecute);
+    expect(row.unauthorized_execute, `${key} unauthorized EXECUTE`).toBe(false);
   }
 
   const schemaAcl = await client.query<{
@@ -196,23 +201,33 @@ async function assertFinding15SecurityDefinerPosture(
     app_public_create: boolean;
     app_app_create: boolean;
     app_temp: boolean;
+    unauthorized_public_create: boolean;
+    unauthorized_app_create: boolean;
+    unauthorized_temp: boolean;
   }>(`
     SELECT has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') AS app_public_create,
            has_schema_privilege('xiaoshuyin_app', 'app', 'CREATE') AS app_app_create,
-           has_database_privilege('xiaoshuyin_app', current_database(), 'TEMP') AS app_temp
-  `)).rows[0]!;
+           has_database_privilege('xiaoshuyin_app', current_database(), 'TEMP') AS app_temp,
+           has_schema_privilege($1::name, 'public', 'CREATE') AS unauthorized_public_create,
+           has_schema_privilege($1::name, 'app', 'CREATE') AS unauthorized_app_create,
+           has_database_privilege($1::name, current_database(), 'TEMP') AS unauthorized_temp
+  `, [unauthorizedRole])).rows[0]!;
   expect(rolePrivileges.app_public_create).toBe(false);
   expect(rolePrivileges.app_app_create).toBe(false);
+  expect(rolePrivileges.unauthorized_public_create).toBe(false);
+  expect(rolePrivileges.unauthorized_app_create).toBe(false);
 
   // TEMP remains available to the runtime role, so pg_temp must be explicit
   // and last; safety must not depend on assuming temporary objects are absent.
   expect(rolePrivileges.app_temp).toBe(true);
+  expect(rolePrivileges.unauthorized_temp).toBe(true);
 }
 
 describe('Migration Execution Atomicity (E1 Finding #16)', () => {
   let adminClient: Client;
   const createdDbs: string[] = [];
   const tempDirs: string[] = [];
+  let finding15UnauthorizedRole = '';
 
   beforeAll(async () => {
     if (!TEST_ADMIN_URL || !BASE_MIGRATION_URL) {
@@ -220,6 +235,10 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
     }
     adminClient = new Client({ connectionString: TEST_ADMIN_URL });
     await adminClient.connect();
+    finding15UnauthorizedRole = `finding15_probe_${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    await adminClient.query(
+      `CREATE ROLE ${quoteIdent(finding15UnauthorizedRole)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`
+    );
   });
 
   afterAll(async () => {
@@ -227,6 +246,13 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       for (const db of createdDbs) {
         try {
           await adminClient.query(`DROP DATABASE IF EXISTS ${quoteIdent(db)} WITH (FORCE)`);
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      if (finding15UnauthorizedRole) {
+        try {
+          await adminClient.query(`DROP ROLE IF EXISTS ${quoteIdent(finding15UnauthorizedRole)}`);
         } catch {
           // ignore cleanup errors
         }
@@ -280,7 +306,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
 
       const version = (await client.query<{ version: string }>('SELECT version() AS version')).rows[0]!.version;
       expect(version).toMatch(/^PostgreSQL 18\\./);
-      await assertFinding15SecurityDefinerPosture(client, getMigratorRole(dbUrl));
+      await assertFinding15SecurityDefinerPosture(client, getMigratorRole(dbUrl), finding15UnauthorizedRole);
 
       for (const [legacyName, expectedHash] of LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.entries()) {
         const row = rows.find((r: any) => r.filename === legacyName);
@@ -366,7 +392,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
         `)).rows;
 
         expect(postRows.length).toBe(37);
-        await assertFinding15SecurityDefinerPosture(clientAfter, getMigratorRole(dbUrl));
+        await assertFinding15SecurityDefinerPosture(clientAfter, getMigratorRole(dbUrl), finding15UnauthorizedRole);
 
         for (const pre of preRows) {
           const post = postRows.find((r: any) => r.filename === pre.filename);
