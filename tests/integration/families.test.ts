@@ -204,4 +204,48 @@ describe('Families Integration (T045)', () => {
     );
     expect(fams.rows[0].cnt).toBe(0);
   });
+
+  it('Finding #25: a completed Family creation cannot replay or mismatch under a forged Person context', async () => {
+    const a = await loginWithLabel(app, 'fam_f25_replay_a');
+    const b = await loginWithLabel(app, 'fam_f25_replay_b');
+    const headers = commandHeaders(a.token, 'f25-replay');
+    const payload = {
+      displayName: 'Identity replay regression',
+      creator: { ageBand: 'ADULT', ageBandSource: 'SELF_STATEMENT' },
+    };
+    const req = { method: 'POST' as const, url: '/api/v1/families', headers, payload };
+    const first = await app.inject(req);
+    expect(first.statusCode).toBe(201);
+    const replay = await app.inject(req);
+    expect(replay.statusCode).toBe(201);
+    expect(replay.json()).toEqual(first.json());
+
+    const key = headers['idempotency-key']!;
+    const stored = await verifyPool.query<{ request_hash: string }>(
+      "SELECT request_hash FROM idempotency_keys WHERE actor_account_id=$1 AND command_type='FAMILY_CREATE' AND idempotency_key=$2",
+      [a.accountId, key]
+    );
+    expect(stored.rows).toHaveLength(1);
+    const appPool = new pg.Pool({ connectionString: process.env['DATABASE_URL']! });
+    try {
+      const cfg = {
+        accountId: a.accountId, personId: b.personId,
+        purpose: 'FAMILY_MANAGEMENT', commandType: 'FAMILY_CREATE' as const,
+        idempotencyKey: key, requestHash: stored.rows[0]!.request_hash,
+      };
+      let writes = 0;
+      const mutate = async () => { writes++; return { status: 201, body: {} }; };
+      await expect(runIdempotentCommand(appPool, cfg, mutate)).rejects.toMatchObject({ code: '42501' });
+      await expect(runIdempotentCommand(appPool, { ...cfg, requestHash: 'f'.repeat(64) }, mutate))
+        .rejects.toMatchObject({ code: '42501' });
+      expect(writes).toBe(0);
+    } finally {
+      await appPool.end();
+    }
+    const families = await verifyPool.query(
+      'SELECT id FROM families WHERE created_by_person_id=$1 OR created_by_person_id=$2',
+      [a.personId, b.personId]
+    );
+    expect(families.rows).toEqual([{ id: first.json().id }]);
+  });
 });
