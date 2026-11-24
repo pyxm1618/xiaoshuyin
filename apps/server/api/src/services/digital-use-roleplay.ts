@@ -71,10 +71,9 @@ function roleplayError(code:string,message?:string):Error & {statusCode:number;c
   const mapped=toHttpError(code,message);
   return Object.assign(new Error(mapped.message),{statusCode:mapped.statusCode,code:mapped.code});
 }
-async function authorizeRoleplay(
+async function lockRoleplayAuthority(
   tx:pg.PoolClient,
-  input:{actor:DigitalUseActor;familyId:string;caseId:string;expectedCaseVersion:number},
-  allowCompleted=false
+  input:{actor:DigitalUseActor;familyId:string;caseId:string}
 ){
   await requireFamilyAction(tx,{
     accountId:input.actor.accountId,personId:input.actor.personId,familyId:input.familyId,caseId:input.caseId,
@@ -84,6 +83,14 @@ async function authorizeRoleplay(
   if(!(await lockFamilyForPrimaryDecision(tx,input.familyId))) throw roleplayError('CASE_NOT_FOUND');
   const caseRow=await lockSceneCase(tx,input.caseId);
   if(!caseRow) throw roleplayError('CASE_NOT_FOUND');
+  return caseRow;
+}
+async function resolveRoleplayExecution(
+  tx:pg.PoolClient,
+  input:{caseId:string;expectedCaseVersion:number},
+  caseRow:NonNullable<Awaited<ReturnType<typeof lockSceneCase>>>,
+  allowCompleted=false
+){
   const node=resolveDigitalUseRuntimeNode('A4003');
   assertNodeCasePreconditions(caseRow,node,input.expectedCaseVersion);
   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
@@ -100,6 +107,14 @@ async function authorizeRoleplay(
     && !(allowCompleted&&scene.status==='COMPLETED')
   ) throw roleplayError('SCENE_NODE_UNREACHABLE');
   return {caseRow,node,scene};
+}
+async function authorizeRoleplay(
+  tx:pg.PoolClient,
+  input:{actor:DigitalUseActor;familyId:string;caseId:string;expectedCaseVersion:number},
+  allowCompleted=false
+){
+  const caseRow=await lockRoleplayAuthority(tx,input);
+  return resolveRoleplayExecution(tx,input,caseRow,allowCompleted);
 }
 async function assertRoleplayCompliance(tx:pg.PoolClient,personId:string){
   const result=await evaluateComplianceAtTransactionTime(drizzle(tx),tx,{
@@ -463,12 +478,18 @@ export async function selectPhoneUseRoleplay(
  return withRlsTransaction(pool,{
   familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
-   const {scene}=await authorizeRoleplay(tx,input,true);
+   // Current identity, tenant, authorization, Safety and compliance remain
+   // mandatory on replay. Mutable execution preconditions belong below the
+   // idempotency decision; preserve family/case lock order.
+   const caseRow=await lockRoleplayAuthority(tx,input);
+   await assertOrdinaryProgressionAllowedRaw(tx,{caseId:input.caseId});
    await assertRoleplayCompliance(tx,input.actor.personId);
    const authorityAtRequest=await resolveCurrentRoleplayModelPromptAuthority(
      modelPromptAuthorityProvider
    );
    const requestHash=hashPayload({
+     caseId:input.caseId,
+     expectedCaseVersion:input.expectedCaseVersion,
      sessionId:input.sessionId,
      turnId:input.turnId,
      expectedSessionRevision:input.expectedSessionRevision,
@@ -479,6 +500,7 @@ export async function selectPhoneUseRoleplay(
      accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',
      commandType:'PHONE_USE_ROLEPLAY_SELECT',idempotencyKey:input.idempotencyKey,requestHash,
    },async()=>{
+     const {scene}=await resolveRoleplayExecution(tx,input,caseRow,true);
      if(scene.revision!==input.expectedNodeRevision) throw roleplayError('STALE_NODE_REVISION');
      const correction=scene.status==='COMPLETED';
      const session=await getRoleplaySession(tx,input.sessionId,true);

@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import pg from 'pg';
 import crypto from 'node:crypto';
 import { buildApp } from '../../apps/server/api/src/app.js';
+import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { createAdminPool } from '../setup/db.js';
 import {
   auth,
@@ -503,7 +504,33 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       });
       expect(firstSelect.statusCode, firstSelect.body).toBe(200);
 
-      // 2. Retry exact same select
+      // Advance the Case through the actual Common Core primary-switch command,
+      // then restore the original Case as primary. Do not fake the version.
+      const other = await createCase(roleplayApp, f.manager.token, 'f10-version-advance');
+      expect(other.statusCode, other.body).toBe(201);
+      const switchTo = await roleplayApp.inject({
+        method: 'POST', url: `/api/v1/cases/${other.json().id}/switch-primary`,
+        headers: commandHeaders(f.manager.token, 'f10-switch-away'),
+        payload: { reason: 'version advance', expectedPrimaryCaseId: f.caseId, expectedPrimaryVersion: f.caseVersion },
+      });
+      expect(switchTo.statusCode, switchTo.body).toBe(200);
+      const switchBack = await roleplayApp.inject({
+        method: 'POST', url: `/api/v1/cases/${f.caseId}/switch-primary`,
+        headers: commandHeaders(f.manager.token, 'f10-switch-back'),
+        payload: { reason: 'restore primary', expectedPrimaryCaseId: other.json().id, expectedPrimaryVersion: switchTo.json().primary.version },
+      });
+      expect(switchBack.statusCode, switchBack.body).toBe(200);
+      const newVersion = switchBack.json().primary.version as number;
+      expect(newVersion).toBeGreaterThan(f.caseVersion);
+      const mutations = async () => (await admin.query(
+        `SELECT (SELECT count(*)::int FROM scene_artifacts WHERE case_id=$1 AND artifact_type='PHONE_USE_ROLEPLAY_SELECTION') AS artifacts,
+                (SELECT count(*)::int FROM case_events WHERE case_id=$1) AS events,
+                (SELECT count(*)::int FROM business_audit_events WHERE family_id=$2) AS audits`,
+        [f.caseId, f.familyId]
+      )).rows[0];
+      const beforeReplay = await mutations();
+
+      // 2. Retry exact same select with its original Case revision
       const retrySelect = await roleplayApp.inject({
         method: 'POST',
         url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
@@ -525,6 +552,22 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       });
       expect(mismatchSelect.statusCode).toBe(409);
       expect(mismatchSelect.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+
+      const versionMismatch = await roleplayApp.inject({
+        method: 'POST', url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+        headers: { ...auth(f.manager.token), 'idempotency-key': selectKey },
+        payload: { ...selectPayload, expectedCaseVersion: newVersion },
+      });
+      expect(versionMismatch.statusCode, versionMismatch.body).toBe(409);
+      expect(versionMismatch.json().code).toBe('IDEMPOTENCY_PAYLOAD_MISMATCH');
+      const outsider = await loginWithLabel(roleplayApp, 'f10-outsider');
+      const denied = await roleplayApp.inject({
+        method: 'POST', url: `/api/v1/cases/${f.caseId}/digital-use/roleplays/${sessionId}/select`,
+        headers: { ...auth(outsider.token), 'idempotency-key': selectKey },
+        payload: selectPayload,
+      });
+      expect(denied.statusCode).toBe(404);
+      expect(await mutations()).toEqual(beforeReplay);
     } finally {
       await roleplayApp.close();
     }
@@ -1104,4 +1147,70 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     expect(finalContractDb.rows[0]!.status).toBe('ACTIVE');
     expect(finalContractDb.rows[0]!.review_state).toBe('CURRENT');
   });
+
+  it('C-A2-02: exact nested RECORD_MARKER evidence invalidates once through runtime-role RLS', async () => {
+    const appPool = new pg.Pool({ connectionString: process.env['DATABASE_URL']! });
+    try {
+      for (const variant of ['ASSERTION', 'OBSERVATION', 'DIALOGUE_MESSAGE', 'unrelated', 'wrong-marker', 'empty', 'malformed'] as const) {
+        const child = await loginWithLabel(app, `f24-nested-${variant}`);
+        const f = await createTestFixture(`f24-nested-${variant}`, child);
+        const part = await admin.query<{ id: string }>(
+          `INSERT INTO case_participants
+             (family_id,case_id,person_id,state,invite_token_hash,invite_expires_at,created_by_person_id,accepted_at)
+           VALUES ($1,$2,$3,'ACTIVE',$4,now()+interval '1 day',$5,now()) RETURNING id`,
+          [f.familyId,f.caseId,child.personId,crypto.randomUUID().replaceAll('-','').repeat(2),f.manager.personId]
+        );
+        // Stored reference fixtures exercise the actual propagation matcher,
+        // including malformed legacy JSON that public commands must reject.
+        const positive = variant === 'ASSERTION' || variant === 'OBSERVATION' || variant === 'DIALOGUE_MESSAGE';
+        const type = positive ? variant : 'ASSERTION';
+        const id = crypto.randomUUID();
+        const reference = { type, id };
+        const nested = variant === 'unrelated' ? { type, id: crypto.randomUUID() } : reference;
+        const marker = {
+          type: 'RECORD_MARKER',
+          markerCode: variant === 'wrong-marker' ? 'A200499' : 'A200401',
+          evidenceRefs: variant === 'empty' ? [] : variant === 'malformed' ? [nested, {}] : [nested],
+        };
+        const c = await admin.query<{ id: string }>(
+          `INSERT INTO digital_use_contract_versions
+             (family_id,case_id,version,draft_revision,status,review_state,
+              adult_party_person_id,child_party_person_id,child_participation_id,
+              contract_purpose,phone_use_rules,execution_period,parent_support_measures,
+              supervision_measures,incentives,breach_responsibilities,source_template_version,
+              dependency_refs,created_by_person_id)
+           VALUES ($1,$2,1,1,'DRAFT','CURRENT',$3,$4,$5,
+              $6::jsonb,$6::jsonb,$6::jsonb,$6::jsonb,$6::jsonb,$6::jsonb,$6::jsonb,$7,$8::jsonb,$3)
+           RETURNING id`,
+          [f.familyId,f.caseId,f.manager.personId,child.personId,part.rows[0]!.id,
+           JSON.stringify(v('rule')),PHONE_USE_CONTRACT_CONTENT_VERSION,JSON.stringify([marker])]
+        );
+        const ctx = { familyId:f.familyId, accountId:f.manager.accountId, personId:f.manager.personId, purpose:'FAMILY_MANAGEMENT' };
+        const propagate = (familyId:string,caseId:string,dependency:unknown) => withRlsTransaction(appPool,ctx,async tx=>{
+          const role = await tx.query("SELECT current_user AS role, rolbypassrls, rolsuper FROM pg_roles WHERE rolname=current_user");
+          expect(role.rows[0]).toMatchObject({role:'xiaoshuyin_app',rolbypassrls:false,rolsuper:false});
+          return (await tx.query(
+            'SELECT app.propagate_downstream_dependency_review($1,$2,$3::jsonb) AS result',
+            [familyId,caseId,JSON.stringify(dependency)]
+          )).rows[0].result;
+        });
+        await expect(propagate(crypto.randomUUID(),f.caseId,reference)).rejects.toMatchObject({code:'42501'});
+        await expect(propagate(f.familyId,crypto.randomUUID(),reference)).rejects.toMatchObject({code:'42501'});
+        // Exercise both direct and typed EVIDENCE input forms.
+        const dep = variant === 'OBSERVATION' ? {type:'EVIDENCE',evidence:reference} : reference;
+        expect(await propagate(f.familyId,f.caseId,dep)).toEqual({goalsAffected:0,contractsAffected:positive?1:0});
+        expect(await propagate(f.familyId,f.caseId,dep)).toEqual({goalsAffected:0,contractsAffected:0});
+        const row = await admin.query('SELECT review_state,status,draft_revision,dependency_refs FROM digital_use_contract_versions WHERE id=$1',[c.rows[0]!.id]);
+        expect(row.rows[0]).toMatchObject({review_state:positive?'NEEDS_REVIEW':'CURRENT',status:'DRAFT',draft_revision:1,dependency_refs:[marker]});
+        const audit = await admin.query(
+          "SELECT count(*)::int AS n FROM business_audit_events WHERE resource_id=$1 AND event_type='PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED'",
+          [c.rows[0]!.id]
+        );
+        expect(audit.rows[0].n).toBe(positive?1:0);
+      }
+    } finally {
+      await appPool.end();
+    }
+  }, 30000);
+
 });
