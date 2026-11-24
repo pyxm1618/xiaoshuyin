@@ -1,6 +1,7 @@
 import {
   acceptInvite,
   addBoundAdultTargetToFamily,
+  addBoundAdultNonManagerToFamily,
   buildParticipationApp,
   createCase,
   createParticipationFixture,
@@ -10,10 +11,8 @@ import {
 import {
   createConsentRequest,
   grantConsent,
-  loginWithLabel,
   revokeConsent,
 } from '../setup/api.js';
-import { getCurrentNoticeHash } from '../../packages/compliance/src/notices.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import crypto from 'node:crypto';
 
@@ -186,16 +185,43 @@ describe('Finding #32 Child-authored Participation Responses API', () => {
     expect(postWithdraw.json().currentState).toBe('WITHDRAWN');
   });
 
-  it('enforces current processing authority for UNDER_14 and blocks on revoked or invalid consent with zero side effects', async () => {
-    // 1. Setup manager, family, and case
+  it('allows MINOR_14_17 responses then blocks UNDER_14 administration-only, revoked and uncovered authority with zero side effects', async () => {
     const f = await createParticipationFixture(h, 'resp-u14', { target: 'manager' });
-    const target = await loginWithLabel(h.app, 's4-u14-target');
+    const target = await addBoundAdultNonManagerToFamily(h, f.familyId, 'resp-u14-target');
+    // Establish a legitimate active MINOR_14_17 participant first. The later
+    // UNDER_14 profile change simulates a corrected classification.
     await h.admin.query(
-      `INSERT INTO family_members (family_id, person_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-      [f.familyId, target.personId]
+      `UPDATE person_compliance_profiles SET age_band='MINOR_14_17',
+         minor_mode=true, verified_source='GUARDIAN_RELAY' WHERE person_id=$1`,
+      [target.personId]
     );
 
-    // 2. Setup initial valid UNDER_14 profile + GRANTED consent via standard compliance flow
+    // Invite and accept
+    const created = await invite(h.app, f.manager.token, f.caseId, target.personId, 'resp-u14-invite');
+    expect(created.statusCode).toBe(201);
+    const participationId = created.json().participationId;
+    const accepted = await acceptInvite(h.app, target.token, created.json().inviteToken, 'resp-u14-accept');
+    expect(accepted.statusCode).toBe(200);
+
+    // 3. ACTIVE + MINOR_14_17 processing authority -> 201
+    const res1 = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: {
+        authorization: `Bearer ${target.token}`,
+        'idempotency-key': 'resp-u14-key-1',
+      },
+      payload: { content: '儿童首次合法回复' },
+    });
+    expect(res1.statusCode).toBe(201);
+    expect(res1.json().id).toBeDefined();
+
+    const baselineMsgCount = (await h.admin.query(
+      'SELECT count(*)::int AS cnt FROM dialogue_messages WHERE case_id = $1',
+      [f.caseId]
+    )).rows[0].cnt;
+
+    // Correct the age classification and attach valid administration-only guardian consent.
     const reqRes = await createConsentRequest(h.app, f.manager.token, 'resp-u14-req');
     expect(reqRes.statusCode).toBe(201);
     const grantRes = await grantConsent(h.app, f.manager.token, 'resp-u14-grant', reqRes.json().requestId);
@@ -217,30 +243,28 @@ describe('Finding #32 Child-authored Participation Responses API', () => {
       [target.personId, f.manager.personId, consent.id]
     );
 
-    // Invite and accept
-    const created = await invite(h.app, f.manager.token, f.caseId, target.personId, 'resp-u14-invite');
-    expect(created.statusCode).toBe(201);
-    const participationId = created.json().participationId;
-    const accepted = await acceptInvite(h.app, target.token, created.json().inviteToken, 'resp-u14-accept');
-    expect(accepted.statusCode).toBe(200);
-
-    // 3. ACTIVE + current processing authority (GRANTED) -> 201
-    const res1 = await h.app.inject({
+    // A current v1 guardian consent covers consent administration ONLY (V1
+    // Product Authority §19A.2). It must not authorize Case message processing.
+    const blockedGranted = await h.app.inject({
       method: 'POST',
       url: `/api/v1/participations/${participationId}/responses`,
       headers: {
         authorization: `Bearer ${target.token}`,
-        'idempotency-key': 'resp-u14-key-1',
+        'idempotency-key': 'resp-u14-key-granted-blocked',
       },
-      payload: { content: '儿童首次合法回复' },
+      payload: { content: '不在同意处理范围内的回复' },
     });
-    expect(res1.statusCode).toBe(201);
-    expect(res1.json().id).toBeDefined();
-
-    const baselineMsgCount = (await h.admin.query(
+    expect(blockedGranted.statusCode).toBe(403);
+    expect(blockedGranted.json().code).toBe('FORBIDDEN');
+    expect(blockedGranted.json().message).toBe('PARTICIPATION_PROCESSING_DISALLOWED');
+    expect((await h.admin.query(
       'SELECT count(*)::int AS cnt FROM dialogue_messages WHERE case_id = $1',
       [f.caseId]
-    )).rows[0].cnt;
+    )).rows[0].cnt).toBe(baselineMsgCount);
+    expect((await h.admin.query(
+      `SELECT count(*)::int AS cnt FROM business_audit_events WHERE actor_account_id = $1 AND event_type = 'MESSAGE_RECORDED'`,
+      [target.accountId]
+    )).rows[0].cnt).toBe(1);
 
     // 4. Revoke guardian consent via revoke API -> decision becomes 'REVOKED'
     const revokeRes = await revokeConsent(h.app, f.manager.token, 'resp-u14-revoke', consent.id, {
@@ -376,34 +400,13 @@ describe('Finding #32 Child-authored Participation Responses API', () => {
     expect(replayAfterWithdraw.json().currentState).toBe('WITHDRAWN');
   });
 
-  it('Finding #32 regression: same successful key after consent revoke is blocked by preflight with 403 and does not replay 201', async () => {
+  it('Finding #32 regression: same successful key after corrected UNDER_14 profile or consent revoke cannot replay 201', async () => {
     const f = await createParticipationFixture(h, 'resp-revoke-replay', { target: 'manager' });
-    const target = await loginWithLabel(h.app, 's4-target-revoke-replay');
+    const target = await addBoundAdultNonManagerToFamily(h, f.familyId, 'resp-target-revoke-replay');
     await h.admin.query(
-      `INSERT INTO family_members (family_id, person_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-      [f.familyId, target.personId]
-    );
-
-    // Setup UNDER_14 compliance profile + consent
-    const reqRes = await createConsentRequest(h.app, f.manager.token, 'resp-rev-rep-req');
-    expect(reqRes.statusCode).toBe(201);
-    const grantRes = await grantConsent(h.app, f.manager.token, 'resp-rev-rep-grant', reqRes.json().requestId);
-    expect(grantRes.statusCode).toBe(201);
-    const consent = grantRes.json();
-
-    await h.admin.query(
-      `UPDATE consent_records SET bound_person_id = $1, bound_at = now() WHERE id = $2`,
-      [target.personId, consent.id]
-    );
-
-    await h.admin.query(
-      `INSERT INTO person_compliance_profiles
-         (person_id, age_band, minor_mode, guardian_person_id, guardian_consent_record_id, guardian_consent_version, verified_source)
-       VALUES ($1, 'UNDER_14', true, $2, $3, 1, 'GUARDIAN_RELAY')
-       ON CONFLICT (person_id) DO UPDATE
-         SET age_band='UNDER_14', minor_mode=true, guardian_person_id=$2,
-             guardian_consent_record_id=$3, guardian_consent_version=1, verified_source='GUARDIAN_RELAY'`,
-      [target.personId, f.manager.personId, consent.id]
+      `UPDATE person_compliance_profiles SET age_band='MINOR_14_17',
+         minor_mode=true, verified_source='GUARDIAN_RELAY' WHERE person_id=$1`,
+      [target.personId]
     );
 
     const created = await invite(h.app, f.manager.token, f.caseId, target.personId, 'resp-rev-rep-invite');
@@ -440,6 +443,42 @@ describe('Finding #32 Child-authored Participation Responses API', () => {
     expect(replayBefore.statusCode).toBe(201);
     expect(replayBefore.json().id).toBe(res1.json().id);
 
+    // Setup UNDER_14 compliance profile + consent
+    const reqRes = await createConsentRequest(h.app, f.manager.token, 'resp-rev-rep-req');
+    expect(reqRes.statusCode).toBe(201);
+    const grantRes = await grantConsent(h.app, f.manager.token, 'resp-rev-rep-grant', reqRes.json().requestId);
+    expect(grantRes.statusCode).toBe(201);
+    const consent = grantRes.json();
+
+    await h.admin.query(
+      `UPDATE consent_records SET bound_person_id = $1, bound_at = now() WHERE id = $2`,
+      [target.personId, consent.id]
+    );
+
+    await h.admin.query(
+      `INSERT INTO person_compliance_profiles
+         (person_id, age_band, minor_mode, guardian_person_id, guardian_consent_record_id, guardian_consent_version, verified_source)
+       VALUES ($1, 'UNDER_14', true, $2, $3, 1, 'GUARDIAN_RELAY')
+       ON CONFLICT (person_id) DO UPDATE
+         SET age_band='UNDER_14', minor_mode=true, guardian_person_id=$2,
+             guardian_consent_record_id=$3, guardian_consent_version=1, verified_source='GUARDIAN_RELAY'`,
+      [target.personId, f.manager.personId, consent.id]
+    );
+
+    // Even a GRANTED v1 consent does not cover Case processing.
+    const replayAfterCorrection = await h.app.inject({
+      method: 'POST',
+      url: `/api/v1/participations/${participationId}/responses`,
+      headers: {
+        authorization: `Bearer ${target.token}`,
+        'idempotency-key': successfulKey,
+      },
+      payload,
+    });
+    expect(replayAfterCorrection.statusCode).toBe(403);
+    expect(replayAfterCorrection.json().code).toBe('FORBIDDEN');
+    expect(replayAfterCorrection.json().message).toBe('PARTICIPATION_PROCESSING_DISALLOWED');
+
     // 3. Revoke consent
     const revokeRes = await revokeConsent(h.app, f.manager.token, 'resp-rev-rep-revoke-cmd', consent.id, {
       reason: 'testing revocation replay',
@@ -459,5 +498,13 @@ describe('Finding #32 Child-authored Participation Responses API', () => {
     expect(replayAfterRevoke.statusCode).toBe(403);
     expect(replayAfterRevoke.json().code).toBe('FORBIDDEN');
     expect(replayAfterRevoke.json().message).toBe('PARTICIPATION_PROCESSING_DISALLOWED');
+    expect((await h.admin.query(
+      'SELECT count(*)::int AS cnt FROM dialogue_messages WHERE case_id = $1',
+      [f.caseId]
+    )).rows[0].cnt).toBe(1);
+    expect((await h.admin.query(
+      `SELECT count(*)::int AS cnt FROM business_audit_events WHERE actor_account_id = $1 AND event_type = 'MESSAGE_RECORDED'`,
+      [target.accountId]
+    )).rows[0].cnt).toBe(1);
   });
 });
