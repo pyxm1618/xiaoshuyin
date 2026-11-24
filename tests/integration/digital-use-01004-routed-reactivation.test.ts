@@ -158,7 +158,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     const a2006 = nodeOf(a2004.json(), 'A2006');
     expect(a2006).toMatchObject({
       status: 'AVAILABLE',
-      sourceNodeCode: 'A2004',
+      sourceNodeCode: resolveDigitalUseRuntimeNode('A2006').sourceNodeCode,
       branchReasonCodes: ['COLLABORATIVE_DURATION_NO'],
     });
     expect(nodeOf(a2004.json(), 'A2009')).toBeUndefined();
@@ -170,7 +170,7 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     expect(reconsidered.statusCode, reconsidered.body).toBe(200);
     expect(nodeOf(reconsidered.json(), 'A2009')).toMatchObject({
       status: 'AVAILABLE',
-      sourceNodeCode: 'A2006',
+      sourceNodeCode: resolveDigitalUseRuntimeNode('A2009').sourceNodeCode,
       branchReasonCodes: ['MOTIVATION_RECONSIDER_UNWILLING'],
     });
     return { ...f, caseVersion: reconsidered.json().caseVersion };
