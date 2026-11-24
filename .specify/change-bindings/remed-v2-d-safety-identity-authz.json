@@ -45,7 +45,8 @@
       "feature": "012-digital-use-assessment-runtime",
       "specPath": "specs/012-digital-use-assessment-runtime",
       "implementationPaths": [
-        "apps/server/api/src/services/digital-use-roleplay.ts"
+        "apps/server/api/src/services/digital-use-roleplay.ts",
+        "db/migrations/036_security_definer_search_path_hardening.sql"
       ]
     },
     {

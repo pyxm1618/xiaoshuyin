@@ -4,7 +4,7 @@
  * Comprehensive end-to-end and unit verification of migration execution atomicity (Finding #16 remediation).
  *
  * Verifies:
- * 1. Fresh database rebuild: all 36 migrations applied in a single clean run, checksums recorded, replay is a no-op.
+ * 1. Fresh database rebuild: all 37 migrations applied in a single clean run, checksums recorded, replay is a no-op.
  * 2. Existing database upgrade: legacy 001-003 state upgrades cleanly without rewriting historical timestamps.
  * 3. Migration SQL failure rollback through REAL PRODUCTION RUNNER: when a migration statement fails,
  *    the runner rolls back the transaction, DDL is absent, schema_migrations row is absent, and later migrations are skipped.
@@ -78,6 +78,137 @@ function buildDbUrl(baseUrl: string, dbName: string): string {
   return u.toString();
 }
 
+type SecurityDefinerRow = {
+  schema_name: string;
+  proname: string;
+  owner_name: string;
+  proconfig: string[] | null;
+  public_execute: boolean;
+  app_execute: boolean;
+};
+
+const FINDING15_EXPECTED_DEFINERS: Record<
+  string,
+  { searchPath: string; appExecute: boolean }
+> = {
+  'public.scene_artifacts_insert_guard': {
+    searchPath: 'pg_catalog, public, pg_temp',
+    appExecute: false,
+  },
+  'app.confirm_goal_transition': {
+    searchPath: 'pg_catalog, public, pg_temp',
+    appExecute: true,
+  },
+  'app.commit_professional_knowledge_review': {
+    searchPath: 'pg_catalog, public, app, pg_temp',
+    appExecute: true,
+  },
+  'app.commit_professional_knowledge_release': {
+    searchPath: 'pg_catalog, public, app, pg_temp',
+    appExecute: true,
+  },
+  'app.require_staff_authority_control': {
+    searchPath: 'pg_catalog, public, pg_temp',
+    appExecute: true,
+  },
+  'app.grant_staff_authority': {
+    searchPath: 'pg_catalog, public, pg_temp',
+    appExecute: true,
+  },
+  'app.revoke_staff_authority': {
+    searchPath: 'pg_catalog, public, pg_temp',
+    appExecute: true,
+  },
+  'app.read_staff_authority': {
+    searchPath: 'pg_catalog, public, pg_temp',
+    appExecute: true,
+  },
+  'app.propagate_downstream_dependency_review': {
+    searchPath: 'pg_catalog, public, pg_temp',
+    appExecute: true,
+  },
+};
+
+function finding15SearchPath(row: SecurityDefinerRow): string | undefined {
+  const entry = (row.proconfig ?? []).find((value) => value.startsWith('search_path='));
+  return entry?.slice('search_path='.length).replace(/\s+/g, ' ').trim();
+}
+
+async function assertFinding15SecurityDefinerPosture(
+  client: Client,
+  migratorRole: string
+): Promise<void> {
+  const { rows } = await client.query<SecurityDefinerRow>(`
+    SELECT n.nspname AS schema_name,
+           p.proname,
+           owner_role.rolname AS owner_name,
+           p.proconfig,
+           EXISTS (
+             SELECT 1
+               FROM aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) acl
+              WHERE acl.grantee = 0
+                AND acl.privilege_type = 'EXECUTE'
+           ) AS public_execute,
+           has_function_privilege('xiaoshuyin_app', p.oid, 'EXECUTE') AS app_execute
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      JOIN pg_roles owner_role ON owner_role.oid = p.proowner
+     WHERE p.prosecdef = true
+       AND n.nspname IN ('app', 'public')
+     ORDER BY n.nspname, p.proname
+  `);
+
+  const actualKeys = rows
+    .map((row) => `${row.schema_name}.${row.proname}`)
+    .sort();
+  expect(actualKeys).toEqual(Object.keys(FINDING15_EXPECTED_DEFINERS).sort());
+
+  for (const row of rows) {
+    const key = `${row.schema_name}.${row.proname}`;
+    const expected = FINDING15_EXPECTED_DEFINERS[key]!;
+    expect(row.owner_name, `${key} owner`).toBe(migratorRole);
+    expect(finding15SearchPath(row), `${key} search_path`).toBe(expected.searchPath);
+    expect(row.public_execute, `${key} PUBLIC EXECUTE`).toBe(false);
+    expect(row.app_execute, `${key} xiaoshuyin_app EXECUTE`).toBe(expected.appExecute);
+  }
+
+  const schemaAcl = await client.query<{
+    nspname: string;
+    public_create: boolean;
+  }>(`
+    SELECT n.nspname,
+           EXISTS (
+             SELECT 1
+               FROM aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) acl
+              WHERE acl.grantee = 0
+                AND acl.privilege_type = 'CREATE'
+           ) AS public_create
+      FROM pg_namespace n
+     WHERE n.nspname IN ('app', 'public')
+     ORDER BY n.nspname
+  `);
+  expect(schemaAcl.rows).toEqual([
+    { nspname: 'app', public_create: false },
+    { nspname: 'public', public_create: false },
+  ]);
+
+  const rolePrivileges = (await client.query<{
+    app_public_create: boolean;
+    app_app_create: boolean;
+    app_temp: boolean;
+  }>(`
+    SELECT has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') AS app_public_create,
+           has_schema_privilege('xiaoshuyin_app', 'app', 'CREATE') AS app_app_create,
+           has_database_privilege('xiaoshuyin_app', current_database(), 'TEMP') AS app_temp
+  `)).rows[0]!;
+  expect(rolePrivileges.app_public_create).toBe(false);
+  expect(rolePrivileges.app_app_create).toBe(false);
+
+  // TEMP remains available to the runtime role, so pg_temp must be explicit
+  // and last; safety must not depend on assuming temporary objects are absent.
+  expect(rolePrivileges.app_temp).toBe(true);
+}
+
 describe('Migration Execution Atomicity (E1 Finding #16)', () => {
   let adminClient: Client;
   const createdDbs: string[] = [];
@@ -126,7 +257,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
   }
 
   // ─── 1. Fresh Database Rebuild ───
-  it('fresh database rebuild applies all 36 migrations with correct checksums, and replay is 0 new', async () => {
+  it('fresh database rebuild applies all 37 migrations with correct checksums, and replay is 0 new', async () => {
     const { dbName, dbUrl } = await createTempDatabase('xsy_atom_fresh');
 
     const firstRun = execFileSync('node', ['scripts/db-migrate.mjs'], {
@@ -135,7 +266,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       env: { ...process.env, MIGRATION_DATABASE_URL: dbUrl },
     });
 
-    expect(firstRun).toContain('Migration complete: 36 new, 0 previously applied.');
+    expect(firstRun).toContain('Migration complete: 37 new, 0 previously applied.');
 
     const client = new Client({ connectionString: dbUrl });
     await client.connect();
@@ -145,7 +276,11 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
           FROM schema_migrations
          ORDER BY filename
       `);
-      expect(rows.length).toBe(36);
+      expect(rows.length).toBe(37);
+
+      const version = (await client.query<{ version: string }>('SELECT version() AS version')).rows[0]!.version;
+      expect(version).toMatch(/^PostgreSQL 18\\./);
+      await assertFinding15SecurityDefinerPosture(client, getMigratorRole(dbUrl));
 
       for (const [legacyName, expectedHash] of LEGACY_TRANSACTION_WRAPPED_MIGRATIONS.entries()) {
         const row = rows.find((r: any) => r.filename === legacyName);
@@ -160,7 +295,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
         encoding: 'utf8',
         env: { ...process.env, MIGRATION_DATABASE_URL: dbUrl },
       });
-      expect(secondRun).toContain('Migration complete: 0 new, 36 previously applied.');
+      expect(secondRun).toContain('Migration complete: 0 new, 37 previously applied.');
     } finally {
       await client.end();
     }
@@ -190,6 +325,23 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
         await client.query('COMMIT');
       }
 
+      // Finding #15 upgrade fixture: reproduce legacy schema CREATE grants.
+      // Migration 036 must remove both PUBLIC and direct runtime-role CREATE.
+      await client.query(`
+        GRANT CREATE ON SCHEMA public TO PUBLIC;
+        GRANT CREATE ON SCHEMA app TO PUBLIC;
+        GRANT CREATE ON SCHEMA public, app TO xiaoshuyin_app;
+      `);
+      const preFinding15Privileges = (await client.query<{
+        app_public_create: boolean;
+        app_app_create: boolean;
+      }>(`
+        SELECT has_schema_privilege('xiaoshuyin_app', 'public', 'CREATE') AS app_public_create,
+               has_schema_privilege('xiaoshuyin_app', 'app', 'CREATE') AS app_app_create
+      `)).rows[0]!;
+      expect(preFinding15Privileges.app_public_create).toBe(true);
+      expect(preFinding15Privileges.app_app_create).toBe(true);
+
       const preRows = (await client.query('SELECT filename, applied_at FROM schema_migrations ORDER BY filename')).rows;
       await client.end();
 
@@ -202,7 +354,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       expect(upgradeRun).toContain('SKIP 001_initial_schema.sql');
       expect(upgradeRun).toContain('SKIP 002_case_core.sql');
       expect(upgradeRun).toContain('SKIP 003_case_idempotency_key_bytes.sql');
-      expect(upgradeRun).toContain('Migration complete: 33 new, 3 previously applied.');
+      expect(upgradeRun).toContain('Migration complete: 34 new, 3 previously applied.');
 
       const clientAfter = new Client({ connectionString: dbUrl });
       await clientAfter.connect();
@@ -213,7 +365,8 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
            ORDER BY filename
         `)).rows;
 
-        expect(postRows.length).toBe(36);
+        expect(postRows.length).toBe(37);
+        await assertFinding15SecurityDefinerPosture(clientAfter, getMigratorRole(dbUrl));
 
         for (const pre of preRows) {
           const post = postRows.find((r: any) => r.filename === pre.filename);
