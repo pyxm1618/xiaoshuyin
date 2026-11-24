@@ -4,7 +4,7 @@
  * Comprehensive end-to-end and unit verification of migration execution atomicity (Finding #16 remediation).
  *
  * Verifies:
- * 1. Fresh database rebuild: all 41 migrations applied in a single clean run, checksums recorded, replay is a no-op.
+ * 1. Fresh database rebuild: all 42 migrations applied in a single clean run, checksums recorded, replay is a no-op.
  * 2. Existing database upgrade: legacy 001-003 state upgrades cleanly without rewriting historical timestamps.
  * 3. Migration SQL failure rollback through REAL PRODUCTION RUNNER: when a migration statement fails,
  *    the runner rolls back the transaction, DDL is absent, schema_migrations row is absent, and later migrations are skipped.
@@ -283,7 +283,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
   }
 
   // ─── 1. Fresh Database Rebuild ───
-  it('fresh database rebuild applies all 41 migrations with correct checksums, and replay is 0 new', async () => {
+  it('fresh database rebuild applies all 42 migrations with correct checksums, and replay is 0 new', async () => {
     const { dbName, dbUrl } = await createTempDatabase('xsy_atom_fresh');
 
     const firstRun = execFileSync('node', ['scripts/db-migrate.mjs'], {
@@ -292,7 +292,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       env: { ...process.env, MIGRATION_DATABASE_URL: dbUrl },
     });
 
-    expect(firstRun).toContain('Migration complete: 41 new, 0 previously applied.');
+    expect(firstRun).toContain('Migration complete: 42 new, 0 previously applied.');
 
     const client = new Client({ connectionString: dbUrl });
     await client.connect();
@@ -321,7 +321,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
         encoding: 'utf8',
         env: { ...process.env, MIGRATION_DATABASE_URL: dbUrl },
       });
-      expect(secondRun).toContain('Migration complete: 0 new, 41 previously applied.');
+      expect(secondRun).toContain('Migration complete: 0 new, 42 previously applied.');
     } finally {
       await client.end();
     }
@@ -380,7 +380,7 @@ describe('Migration Execution Atomicity (E1 Finding #16)', () => {
       expect(upgradeRun).toContain('SKIP 001_initial_schema.sql');
       expect(upgradeRun).toContain('SKIP 002_case_core.sql');
       expect(upgradeRun).toContain('SKIP 003_case_idempotency_key_bytes.sql');
-      expect(upgradeRun).toContain('Migration complete: 38 new, 3 previously applied.');
+      expect(upgradeRun).toContain('Migration complete: 39 new, 3 previously applied.');
 
       const clientAfter = new Client({ connectionString: dbUrl });
       await clientAfter.connect();
