@@ -92,10 +92,20 @@ suite('Finding #17: actual Intervention transaction / Account deactivation', () 
       let blocked = false;
       const deadline = Date.now() + 5000;
       while (!settled && Date.now() < deadline) {
-        const wait = await admin.query<{ blocked: boolean }>(
-          'SELECT $1::int = ANY(pg_blocking_pids($2::int)) AS blocked', [session.pid, pid]
+        const wait = await admin.query<{ blocked: boolean; wait_event_type: string; wait_event: string }>(
+          'SELECT $1::int = ANY(pg_blocking_pids(pid)) AS blocked, wait_event_type, wait_event FROM pg_stat_activity WHERE pid=$2::int',
+          [session.pid, pid]
         );
-        if (wait.rows[0]?.blocked) { blocked = true; break; }
+        const observed = wait.rows[0];
+        if (observed?.blocked) {
+          // An advisory-lock wait alone would also occur with FOR KEY SHARE
+          // because the Account UPDATE trigger acquires AUTH_ACCOUNT. Require
+          // the real tuple/transaction lock conflict caused by FOR SHARE.
+          expect(observed.wait_event_type).toBe('Lock');
+          expect(['transactionid', 'tuple']).toContain(observed.wait_event);
+          blocked = true;
+          break;
+        }
         await new Promise(done => setTimeout(done, 20));
       }
       expect(blocked, 'Account UPDATE must wait on service PID').toBe(true);
