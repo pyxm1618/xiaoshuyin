@@ -98,6 +98,7 @@ jobs:
         env:
           E2_ACCOUNT_LOCK_CONCURRENCY_TEST: '1'
           TEST_ADMIN_DATABASE_URL: postgres://postgres:postgres@localhost:5432/xiaoshuyin_test
+          DATABASE_URL: postgres://xiaoshuyin_app:ci_app_pw@localhost:5432/xiaoshuyin_test
       - name: Verify roles bootstrap and repair (Finding #29)
         run: bunx vitest run tests/db/roles-bootstrap-repair.test.ts
         env:
