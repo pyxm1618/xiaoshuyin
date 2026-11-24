@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 const root = process.cwd();
@@ -96,6 +97,181 @@ function isAllowedVerificationPath(rel) {
   return /^(tests\/|scripts\/|\.github\/workflows\/|\.specify\/scripts\/)/.test(rel);
 }
 
+// POST_MERGE_CLOSEOUT is deliberately finite: consumers select pre-authorized files.
+function closeoutPath(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/.test(value) &&
+    !value.split("/").some((part) => part === "." || part === "..");
+}
+function closeoutSet(values, label, errors) {
+  if (!Array.isArray(values) || new Set(values).size !== values.length) {
+    errors.push(label + ": expected array without duplicates.");
+    return [];
+  }
+  return values;
+}
+function validateCloseoutRegistry(registry, errors) {
+  if (registry.postMergeCloseouts === undefined) return;
+  if (!Array.isArray(registry.postMergeCloseouts)) { errors.push("postMergeCloseouts must be an array."); return; }
+  const ids = new Set((registry.sharedRemediations ?? []).map((b) => b.id));
+  const features = new Set();
+  for (const binding of registry.postMergeCloseouts) {
+    if (!/^[a-z0-9-]+$/.test(binding?.id ?? "") || ids.has(binding.id)) errors.push("Invalid/duplicate closeout binding id.");
+    ids.add(binding?.id);
+    if (!/^[a-z0-9-]+$/.test(binding?.featureId ?? "") || features.has(binding.featureId)) errors.push("Invalid/duplicate closeout featureId.");
+    features.add(binding?.featureId);
+    const sources = Array.isArray(binding?.sources) ? binding.sources : [];
+    const sourceIds = new Set();
+    const prs = new Set();
+    for (const source of sources) {
+      if (!/^[a-z0-9-]+$/.test(source?.id ?? "") || sourceIds.has(source.id)) errors.push("Invalid/duplicate closeout source id.");
+      sourceIds.add(source?.id);
+      if (!["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].includes(source?.role)) errors.push("Invalid closeout source role.");
+      if (!Number.isInteger(source?.pr) || source.pr <= 0 || prs.has(source.pr)) errors.push("Invalid/duplicate closeout source PR.");
+      prs.add(source?.pr);
+      for (const field of ["headSha", "mergeCommitSha"]) if (!/^[0-9a-f]{40}$/.test(source?.[field] ?? "")) errors.push("Invalid closeout source " + field);
+      if ((source?.baseBranch ?? "main") !== "main") errors.push("Closeout source baseBranch must be main.");
+    }
+    for (const role of ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"]) if (sources.filter((s) => s.role === role).length !== 1) errors.push("Closeout requires exactly one " + role + " source.");
+    const paths = new Set();
+    if (!Array.isArray(binding?.files) || !binding.files.length) errors.push("Closeout files must be finite/non-empty.");
+    for (const file of binding?.files ?? []) {
+      if (!closeoutPath(file?.path) || paths.has(file.path)) errors.push("Invalid/duplicate closeout file path.");
+      paths.add(file?.path);
+      if (!sourceIds.has(file?.sourceId)) errors.push("Unknown closeout file source.");
+      if (!["DELTA", "TREE"].includes(file?.identity)) errors.push("Invalid closeout file identity.");
+      if (typeof file?.verification !== "boolean") errors.push("Closeout file verification flag required.");
+      if (file?.verification && !isAllowedVerificationPath(file.path)) errors.push("Invalid closeout verification root.");
+      if (file?.identity === "TREE" && (!file.verification || !/^[0-9a-f]{40}$/.test(file.blobSha ?? ""))) errors.push("TREE requires pre-authorized verification path and blob SHA.");
+      if (file?.identity === "DELTA" && file.blobSha !== undefined) errors.push("DELTA cannot declare TREE blob.");
+    }
+  }
+}
+function validateCloseoutConsumer(evidence, records, binding, rel, errors) {
+  const allowedFields = new Set(["schemaVersion", "provenanceKind", "featureId", "taskFile", "closeoutBindingId", "taskIds", "taskVerifications", "ciRuns"]);
+  for (const field of Object.keys(evidence)) if (!allowedFields.has(field)) errors.push(rel + ": unknown closeout consumer field: " + field);
+  if (evidence.schemaVersion !== 4) errors.push(rel + ": POST_MERGE_CLOSEOUT requires schemaVersion=4.");
+  if (!binding) { errors.push(rel + ": missing trusted-base closeout binding."); return; }
+  if (evidence.featureId !== binding.featureId) errors.push(rel + ": closeout feature mismatch.");
+  for (const forbidden of ["implementationPr", "implementationHeadSha", "mergeCommitSha", "sources", "files"]) {
+    if (evidence[forbidden] !== undefined) errors.push(rel + ": consumer cannot supply " + forbidden);
+  }
+  const taskIds = closeoutSet(evidence.taskIds, rel + " taskIds", errors);
+  const mappings = closeoutSet(evidence.taskVerifications, rel + " taskVerifications", errors);
+  const actualIds = mappings.map((m) => m?.taskId);
+  const checked = records.map((r) => r.id);
+  if (new Set(actualIds).size !== actualIds.length || taskIds.length !== checked.length || actualIds.length !== checked.length || checked.some((id) => !taskIds.includes(id) || !actualIds.includes(id))) errors.push(rel + ": checked tasks must exactly match taskIds and taskVerifications.");
+  const usedPaths = new Set();
+  const usedSources = new Set();
+  for (const record of records) {
+    const mapping = mappings.find((m) => m?.taskId === record.id);
+    if (!record.req || !record.verify || !mapping || mapping.reqContract !== record.req || mapping.verifyContract !== record.verify) { errors.push(rel + ": missing/mismatched REQ/VERIFY mapping " + record.id); continue; }
+    const paths = closeoutSet(mapping.verificationPaths, rel + " verificationPaths", errors);
+    if (!paths.length) errors.push(rel + ": missing task-specific verification " + record.id);
+    const patterns = verificationPatternsCloseout(record.verify);
+    for (const verificationPath of paths) {
+      const file = binding.files?.find((f) => f.path === verificationPath && f.verification);
+      if (!closeoutPath(verificationPath) || !file) errors.push(rel + ": verification path not pre-authorized: " + verificationPath);
+      if (!patterns.some((p) => globMatches(p, verificationPath))) errors.push(rel + ": verification path does not match task VERIFY: " + verificationPath);
+      usedPaths.add(verificationPath);
+      if (file) usedSources.add(file.sourceId);
+    }
+  }
+  const runs = closeoutSet(evidence.ciRuns, rel + " ciRuns", errors);
+  const runIds = new Set();
+  for (const run of runs) {
+    const source = binding.sources?.find((s) => s.id === run?.sourceId);
+    if (!source || !usedSources.has(source.id) || !Number.isInteger(run?.runId) || run.runId <= 0 || runIds.has(run.runId) || typeof run.name !== "string" || !run.name || run.headSha !== source.headSha || run.conclusion !== "success") errors.push(rel + ": invalid/orphan/non-exact-source-head CI run.");
+    runIds.add(run?.runId);
+  }
+  for (const sourceId of usedSources) if (!runs.some((r) => r.sourceId === sourceId)) errors.push(rel + ": verification source has no CI run: " + sourceId);
+  if (!usedPaths.size) errors.push(rel + ": closeout requires task-specific verification.");
+}
+function verificationPatternsCloseout(verify) {
+  return [...new Set(verify.match(/(?:tests|scripts|\.github\/workflows|\.specify\/scripts)\/[A-Za-z0-9_.*?\/-]+/g) ?? [])];
+}
+
+async function closeoutDeltaFeature(pr, rel, feature) {
+  for (let page = 1; page <= 30; page += 1) {
+    const batch = await github("/pulls/" + pr + "/files?per_page=100&page=" + page);
+    if (!Array.isArray(batch)) throw new Error("Invalid feature delta response.");
+    const file = batch.find((item) => item.filename === rel);
+    if (file) return typeof file.patch === "string" && file.patch.split("\n").some((line) => line.startsWith("+") && !line.startsWith("+++") && line.includes('"' + feature + '"'));
+    if (batch.length < 100) return false;
+  }
+  throw new Error("Feature delta exceeds bounded pagination.");
+}
+
+async function closeoutContent(source, rel) {
+  const item = await github("/contents/" + rel.split("/").map(encodeURIComponent).join("/") + "?ref=" + source.headSha);
+  if (item.type !== "file" || !/^[0-9a-f]{40}$/.test(item.sha ?? "")) throw new Error("Expected exact-head file: " + rel);
+  return item;
+}
+async function closeoutJson(source, rel) {
+  const item = await closeoutContent(source, rel);
+  if (item.encoding !== "base64" || typeof item.content !== "string") throw new Error("Missing exact-head JSON content: " + rel);
+  return JSON.parse(Buffer.from(item.content, "base64").toString("utf8"));
+}
+async function validateCloseoutGraph(binding, errors) {
+  const label = "Closeout " + binding.id;
+  try {
+    const deltas = new Map();
+    for (const source of binding.sources) {
+      const pr = await github("/pulls/" + source.pr);
+      if (pr.number !== source.pr || pr.base?.repo?.full_name !== repository || pr.head?.repo?.full_name !== repository || !pr.merged_at || pr.base?.ref !== (source.baseBranch ?? "main") || pr.head?.sha !== source.headSha || pr.merge_commit_sha !== source.mergeCommitSha) errors.push(label + ": source PR truth mismatch: " + source.id);
+      deltas.set(source.id, await prChangedFiles(source.pr));
+    }
+    const planning = binding.sources.find((s) => s.role === "PLANNING");
+    for (const name of ["spec.md", "tasks.md"]) if (!deltas.get(planning.id).has("specs/" + binding.featureId + "/" + name)) errors.push(label + ": planning identity missing from delta.");
+    const governance = binding.sources.find((s) => s.role === "GOVERNANCE");
+    const ownershipPath = ".specify/implementation-ownership.json";
+    if (!deltas.get(governance.id).has(ownershipPath)) errors.push(label + ": governance ownership missing from delta.");
+    if (!await closeoutDeltaFeature(governance.pr, ownershipPath, binding.featureId)) errors.push(label + ": governance delta does not establish feature ownership.");
+    const ownership = await closeoutJson(governance, ownershipPath);
+    const rules = (ownership.rules ?? []).filter((rule) => rule.ownership?.features?.includes(binding.featureId));
+    if (!rules.length) errors.push(label + ": governance has no feature ownership.");
+    const implementation = binding.sources.find((s) => s.role === "IMPLEMENTATION");
+    const changePath = ".specify/change-bindings/" + binding.featureId + ".json";
+    if (!deltas.get(implementation.id).has(changePath)) errors.push(label + ": implementation change-binding missing from delta.");
+    if (!await closeoutDeltaFeature(implementation.pr, changePath, binding.featureId)) errors.push(label + ": implementation delta does not establish feature binding.");
+    const change = await closeoutJson(implementation, changePath);
+    const featureBinding = change.featureBindings?.find((b) => b.feature === binding.featureId && b.specPath === "specs/" + binding.featureId);
+    if (!featureBinding?.implementationPaths?.length) errors.push(label + ": implementation has no feature binding.");
+    for (const rel of featureBinding?.implementationPaths ?? []) {
+      if (!closeoutPath(rel) || !deltas.get(implementation.id).has(rel) || !rules.some((r) => r.match?.kind === "EXACT" ? rel === r.match.path : r.match?.kind === "PREFIX" && rel.startsWith(r.match.path))) errors.push(label + ": implementation ownership/delta mismatch: " + rel);
+    }
+    for (const file of binding.files) {
+      const source = binding.sources.find((s) => s.id === file.sourceId);
+      if (!source || !closeoutPath(file.path)) continue;
+      if (file.identity === "DELTA") {
+        if (!deltas.get(source.id).has(file.path)) errors.push(label + ": DELTA path absent: " + file.path);
+      } else if (file.identity === "TREE") {
+        const item = await closeoutContent(source, file.path);
+        if (item.sha !== file.blobSha) errors.push(label + ": TREE blob mismatch: " + file.path);
+      }
+    }
+  } catch (error) { errors.push(label + ": cannot verify source graph: " + error.message); }
+}
+async function validateRemoteCloseout(evidence, tasks, registry, rel, errors) {
+  let trusted;
+  try {
+    trusted = JSON.parse(execFileSync("git", ["show", (process.env.GOVERNANCE_BASE || "origin/main") + ":.specify/task-provenance-registry.json"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
+  } catch (error) { errors.push(rel + ": cannot read trusted-base registry: " + error.message); return; }
+  validateCloseoutRegistry(trusted, errors);
+  const binding = trusted.postMergeCloseouts?.find((b) => b.id === evidence.closeoutBindingId);
+  const current = registry.postMergeCloseouts?.find((b) => b.id === evidence.closeoutBindingId);
+  if (JSON.stringify(binding) !== JSON.stringify(current)) errors.push(rel + ": same-change closeout self authorization forbidden.");
+  validateCloseoutConsumer(evidence, tasks, binding, rel, errors);
+  if (!binding) return;
+  for (const run of evidence.ciRuns ?? []) {
+    const source = binding.sources?.find((s) => s.id === run?.sourceId);
+    if (!source) continue;
+    try {
+      const remote = await github("/actions/runs/" + run.runId);
+      if (remote.name !== run.name || remote.head_sha !== source.headSha || remote.head_sha !== run.headSha || remote.event !== "pull_request" || remote.status !== "completed" || remote.conclusion !== "success" || run.conclusion !== "success") errors.push(rel + ": CI run must be successful/completed pull_request at exact source head.");
+    } catch (error) { errors.push(rel + ": cannot verify CI run: " + error.message); }
+  }
+}
+
 const errors = [];
 let registry = null;
 try {
@@ -107,6 +283,8 @@ try {
 if (registry.schemaVersion !== 2 || !Array.isArray(registry.sharedRemediations)) {
   errors.push("Task provenance registry must have schemaVersion=2 and sharedRemediations[].");
 }
+validateCloseoutRegistry(registry, errors);
+if (!errors.length) for (const binding of registry.postMergeCloseouts ?? []) await validateCloseoutGraph(binding, errors);
 const bindingIds = new Set();
 for (const [index, binding] of (registry.sharedRemediations ?? []).entries()) {
   const label = "Task provenance sharedRemediations[" + index + "]";
@@ -140,7 +318,7 @@ for (const name of files) {
   }
 
   const fileFeature = name.replace(/\.json$/, "");
-  if (evidence.schemaVersion !== 3) errors.push(rel + ": schemaVersion must be 3.");
+  if (evidence.provenanceKind !== "POST_MERGE_CLOSEOUT" && evidence.schemaVersion !== 3) errors.push(rel + ": schemaVersion must be 3.");
   if (evidence.featureId !== fileFeature) {
     errors.push(rel + ": task feature identity mismatch; featureId " + String(evidence.featureId) + " does not match manifest filename " + fileFeature + ".");
   }
@@ -155,6 +333,10 @@ for (const name of files) {
     errors.push(rel + ": cannot read taskFile " + String(evidence.taskFile) + ".");
   }
   const tasks = parseCompletedTasks(taskContent);
+  if (evidence.provenanceKind === "POST_MERGE_CLOSEOUT") {
+    await validateRemoteCloseout(evidence, tasks, registry, rel, errors);
+    continue;
+  }
   const taskIds = tasks.map((task) => task.id);
   if (!Array.isArray(evidence.taskIds) || !exactSet(evidence.taskIds, taskIds)) {
     errors.push(rel + ": taskIds do not exactly match completed tasks.");

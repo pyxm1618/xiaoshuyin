@@ -812,6 +812,56 @@ for (const rel of ["db/init/unknown.sh", "db/migrations/999_slice19_forbidden.sq
   cleanup(root);
 }
 
+// Schema 4 integration: trusted-base registry and exact checked-task mapping.
+{
+  const feature = "fixture-post-merge";
+  const verification = "scripts/fixture-check.mjs";
+  const cases = [
+    ["valid pre-authorized closeout", null],
+    ["missing binding", (e) => { e.closeoutBindingId = "missing"; }],
+    ["wrong feature", (e) => { e.featureId = "other"; }],
+    ["arbitrary PR", (e) => { e.implementationPr = 999; }],
+    ["arbitrary SHA", (e) => { e.implementationHeadSha = "f".repeat(40); }],
+    ["unchecked/extra task", (e) => { e.taskIds.push("T011"); }],
+    ["duplicate task", (e) => { e.taskIds.push("T001"); }],
+    ["missing verification", (e) => { e.taskVerifications[0].verificationPaths = []; }],
+    ["wrong VERIFY path", (e) => { e.taskVerifications[0].verificationPaths = ["scripts/other.mjs"]; }],
+    ["path traversal", (e) => { e.taskVerifications[0].verificationPaths = ["scripts/../secret"]; }],
+    ["wildcard path", (e) => { e.taskVerifications[0].verificationPaths = ["scripts/*.mjs"]; }],
+    ["wrong source CI head", (e) => { e.ciRuns[0].headSha = "f".repeat(40); }],
+    ["orphan CI source", (e) => { e.ciRuns[0].sourceId = "unknown"; }],
+    ["missing REQ", (e) => { e.taskVerifications[0].reqContract = ""; }],
+    ["wrong schema", (e) => { e.schemaVersion = 3; }],
+    ["same PR self authorization", null, true],
+    ["legacy baseline cannot bypass closeout", (e) => { e.taskIds.push("T011"); }],
+    ["orphan manifest", (e) => { e.featureId = "nonexistent-feature"; e.taskFile = "specs/nonexistent-feature/tasks.md"; }],
+  ];
+  for (const [name, mutate, selfAuthorize] of cases) {
+    const root = project();
+    addFeature(root, feature);
+    const taskFile = "specs/" + feature + "/tasks.md";
+    write(root, taskFile, "- [ ] T001 test [REQ:FR-001] [VERIFY: scripts/fixture-check.mjs]\n- [ ] T011 optional [REQ:FR-001] [VERIFY: scripts/other.mjs]\n");
+    write(root, verification, "// fixture\n");
+    const binding = { id: "fixture-closeout", featureId: feature, sources: ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].map((role, i) => ({ id: role.toLowerCase(), role, pr: i + 1, headSha: String(i + 1).repeat(40), mergeCommitSha: String(i + 4).repeat(40) })), files: [{ sourceId: "implementation", path: verification, identity: "TREE", verification: true, blobSha: "a".repeat(40) }] };
+    const registry = { schemaVersion: 2, sharedRemediations: [], postMergeCloseouts: selfAuthorize ? [] : [binding] };
+    write(root, ".specify/task-provenance-registry.json", JSON.stringify(registry));
+    if (name === "legacy baseline cannot bypass closeout") {
+      const content = "- [x] T001 test [REQ:FR-001] [VERIFY: scripts/fixture-check.mjs]\n- [ ] T011 optional [REQ:FR-001] [VERIFY: scripts/other.mjs]\n";
+      write(root, taskFile, content);
+      write(root, ".specify/legacy-task-completion-baseline.json", JSON.stringify({ schemaVersion: 1, files: [{ path: taskFile, blobSha: blobSha(content) }] }));
+    }
+    const base = commit(root, "pre-authorize fixture");
+    if (selfAuthorize) { registry.postMergeCloseouts.push(binding); write(root, ".specify/task-provenance-registry.json", JSON.stringify(registry)); }
+    write(root, taskFile, "- [x] T001 test [REQ:FR-001] [VERIFY: scripts/fixture-check.mjs]\n- [ ] T011 optional [REQ:FR-001] [VERIFY: scripts/other.mjs]\n");
+    const evidence = { schemaVersion: 4, provenanceKind: "POST_MERGE_CLOSEOUT", featureId: feature, taskFile, closeoutBindingId: binding.id, taskIds: ["T001"], taskVerifications: [{ taskId: "T001", reqContract: "FR-001", verifyContract: "scripts/fixture-check.mjs", verificationPaths: [verification] }], ciRuns: [{ runId: 1, sourceId: "implementation", name: "CI", headSha: "3".repeat(40), conclusion: "success" }] };
+    mutate?.(evidence);
+    write(root, ".specify/task-evidence/" + (name === "orphan manifest" ? "nonexistent-feature" : feature) + ".json", JSON.stringify(evidence));
+    commit(root, "consume fixture");
+    record("PMC " + name, mutate || selfAuthorize ? 1 : 0, run(root, base));
+    cleanup(root);
+  }
+}
+
 let failed = 0;
 for (const item of results) {
   if (!item.pass) failed += 1;

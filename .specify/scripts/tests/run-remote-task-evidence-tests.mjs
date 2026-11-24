@@ -223,6 +223,71 @@ const cases = [];
   });
 }
 
+// Deterministic remote-boundary tests use an explicit fake API, never fallback data.
+{
+  const sourceText = fs.readFileSync(validator, "utf8");
+  const functions = sourceText.slice(sourceText.indexOf("// POST_MERGE_CLOSEOUT"), sourceText.indexOf("const errors = [];"));
+  const feature = "fixture-post-merge";
+  const check = "scripts/check.mjs";
+  const baseBinding = { id: "fixture-closeout", featureId: feature, sources: ["PLANNING", "GOVERNANCE", "IMPLEMENTATION"].map((role, i) => ({ id: role.toLowerCase(), role, pr: i + 1, headSha: String(i + 1).repeat(40), mergeCommitSha: String(i + 4).repeat(40) })), files: [{ sourceId: "implementation", path: check, identity: "TREE", verification: true, blobSha: "a".repeat(40) }, { sourceId: "implementation", path: "tests/check.test.ts", identity: "DELTA", verification: true }] };
+  const baseEvidence = { schemaVersion: 4, provenanceKind: "POST_MERGE_CLOSEOUT", featureId: feature, taskFile: "specs/" + feature + "/tasks.md", closeoutBindingId: baseBinding.id, taskIds: ["T001"], taskVerifications: [{ taskId: "T001", reqContract: "FR-001", verifyContract: check, verificationPaths: [check] }], ciRuns: [{ sourceId: "implementation", runId: 1, name: "CI", headSha: "3".repeat(40), conclusion: "success" }] };
+  const variants = [
+    ["valid multi-PR DELTA + TREE + CI", null],
+    ["unmerged PR", (v) => { v.unmerged = true; }],
+    ["wrong head", (v) => { v.wrongHead = true; }],
+    ["wrong merge", (v) => { v.wrongMerge = true; }],
+    ["wrong repository", (v) => { v.wrongRepo = true; }],
+    ["wrong base", (v) => { v.wrongBase = true; }],
+    ["DELTA absent", (v) => { v.missingDelta = true; }],
+    ["TREE blob mismatch", (v) => { v.wrongBlob = true; }],
+    ["missing planning identity", (v) => { v.missingPlanning = true; }],
+    ["ownership content mismatch", (v) => { v.noOwnership = true; }],
+    ["change binding mismatch", (v) => { v.noChangeBinding = true; }],
+    ["missing trusted binding", (v) => { v.trusted.postMergeCloseouts = []; }],
+    ["self authorization", (v) => { v.binding.sources[0].pr = 99; }],
+    ["TREE not pre-authorized", (v) => { v.evidence.taskVerifications[0].verificationPaths = ["scripts/other.mjs"]; }],
+    ["wrong CI head", (v) => { v.run.head_sha = "f".repeat(40); }],
+    ["wrong CI event", (v) => { v.run.event = "push"; }],
+    ["failed CI", (v) => { v.run.conclusion = "failure"; }],
+    ["skipped CI", (v) => { v.run.conclusion = "skipped"; }],
+    ["incomplete CI", (v) => { v.run.status = "in_progress"; }],
+    ["wildcard authorization", (v) => { v.binding.files[0].path = "scripts/*"; }],
+    ["traversal authorization", (v) => { v.binding.files[0].path = "scripts/../secret"; }],
+    ["unknown source ref", (v) => { v.binding.files[0].sourceId = "unknown"; }],
+    ["duplicate source", (v) => { v.binding.sources.push(v.binding.sources[0]); }],
+  ];
+  for (const [name, mutate] of variants) {
+    const binding = structuredClone(baseBinding);
+    const registry = { schemaVersion: 2, sharedRemediations: [], postMergeCloseouts: [binding] };
+    const state = { binding, trusted: structuredClone(registry), evidence: structuredClone(baseEvidence), run: { name: "CI", head_sha: "3".repeat(40), event: "pull_request", status: "completed", conclusion: "success" } };
+    mutate?.(state);
+    const api = async (endpoint) => {
+      if (endpoint === "/actions/runs/1") return state.run;
+      if (/^\/pulls\/\d+\/files/.test(endpoint)) return [{ filename: ".specify/implementation-ownership.json", patch: '+ "' + feature + '"' }, { filename: ".specify/change-bindings/" + feature + ".json", patch: '+ "' + feature + '"' }];
+      const prNumber = Number(endpoint.match(/^\/pulls\/(\d+)$/)?.[1]);
+      if (prNumber) {
+        const source = binding.sources.find((s) => s.pr === prNumber);
+        return { number: prNumber, merged_at: state.unmerged ? null : "2026-01-01", base: { ref: state.wrongBase ? "other" : "main", repo: { full_name: state.wrongRepo ? "other/repo" : "fixture/repo" } }, head: { sha: state.wrongHead ? "f".repeat(40) : source.headSha, repo: { full_name: "fixture/repo" } }, merge_commit_sha: state.wrongMerge ? "f".repeat(40) : source.mergeCommitSha };
+      }
+      if (endpoint.startsWith("/contents/")) {
+        let value = {};
+        if (endpoint.includes("implementation-ownership.json")) value = { rules: state.noOwnership ? [] : [{ match: { kind: "EXACT", path: "apps/fixture.ts" }, ownership: { features: [feature] } }] };
+        if (endpoint.includes("change-bindings/")) value = { featureBindings: state.noChangeBinding ? [] : [{ feature, specPath: "specs/" + feature, implementationPaths: ["apps/fixture.ts"] }] };
+        return { type: "file", sha: (state.wrongBlob ? "b" : "a").repeat(40), encoding: "base64", content: Buffer.from(JSON.stringify(value)).toString("base64") };
+      }
+      throw new Error("Unexpected fixture API request " + endpoint);
+    };
+    const delta = async (pr) => new Set(pr === 1 ? (state.missingPlanning ? [] : ["specs/" + feature + "/spec.md", "specs/" + feature + "/tasks.md"]) : pr === 2 ? [".specify/implementation-ownership.json"] : [".specify/change-bindings/" + feature + ".json", "apps/fixture.ts", ...(state.missingDelta ? [] : ["tests/check.test.ts"])]);
+    const factory = new Function("github", "prChangedFiles", "execFileSync", "repository", "root", "isAllowedVerificationPath", "globMatches", functions + "\nreturn {validateCloseoutRegistry,validateCloseoutGraph,validateRemoteCloseout};");
+    const functionsUnderTest = factory(api, delta, () => JSON.stringify(state.trusted), "fixture/repo", root, (p) => /^(tests\/|scripts\/|\.github\/workflows\/|\.specify\/scripts\/)/.test(p), globMatches);
+    const errors = [];
+    functionsUnderTest.validateCloseoutRegistry(registry, errors);
+    if (!errors.length) await functionsUnderTest.validateCloseoutGraph(binding, errors);
+    await functionsUnderTest.validateRemoteCloseout(state.evidence, [{ id: "T001", req: "FR-001", verify: check }], registry, "fixture", errors);
+    cases.push({ name: "PMC remote " + name, expected: mutate ? 1 : 0, marker: "", actual: { code: errors.length ? 1 : 0, out: errors.join("\n") } });
+  }
+}
+
 let failed = 0;
 for (const item of cases) {
   const pass = item.actual.code === item.expected && item.actual.out.includes(item.marker);

@@ -1,5 +1,178 @@
 {
   "schemaVersion": 2,
   "policy": "SHARED_REMEDIATION bindings are repository-owned and must land separately from consuming task evidence.",
-  "sharedRemediations": []
+  "sharedRemediations": [],
+  "postMergeCloseouts": [
+    {
+      "id": "s20-post-merge-closeout",
+      "featureId": "020-embedding-provider-adapter-foundation",
+      "sources": [
+        {
+          "id": "planning",
+          "role": "PLANNING",
+          "pr": 112,
+          "headSha": "8a0a16bad93bb0862999dae650d2c022d7d7e8a7",
+          "mergeCommitSha": "9e816337b22c0a44fae3940a4c72c75cb9dbf71f"
+        },
+        {
+          "id": "governance",
+          "role": "GOVERNANCE",
+          "pr": 118,
+          "headSha": "bc57af6c8960c92799e50a83c743ac82664ce220",
+          "mergeCommitSha": "008f4ba74af9a1389d0d5df48f7de6e7995970a9"
+        },
+        {
+          "id": "implementation",
+          "role": "IMPLEMENTATION",
+          "pr": 142,
+          "headSha": "27a0ac5761b16ff7837a28936438f30aca1d68e0",
+          "mergeCommitSha": "db07babd42976e5e13dbe08bc3e5f1a9b1c8cbaf"
+        }
+      ],
+      "files": [
+        {
+          "sourceId": "planning",
+          "identity": "DELTA",
+          "path": "specs/020-embedding-provider-adapter-foundation/spec.md",
+          "verification": false
+        },
+        {
+          "sourceId": "planning",
+          "identity": "DELTA",
+          "path": "specs/020-embedding-provider-adapter-foundation/tasks.md",
+          "verification": false
+        },
+        {
+          "sourceId": "governance",
+          "identity": "DELTA",
+          "path": ".specify/implementation-ownership.json",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": ".specify/change-bindings/020-embedding-provider-adapter-foundation.json",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/config.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/contracts.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/cost.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/dashscope-protocol.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/errors.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/evidence.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/index.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/port.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/telemetry.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "apps/server/api/src/ai/embedding/transport.ts",
+          "verification": false
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "tests/ai/embedding-dashscope-adapter.test.ts",
+          "verification": true
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "tests/ai/embedding-provider-contract.test.ts",
+          "verification": true
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "tests/ai/embedding-provider-verification.test.ts",
+          "verification": true
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "tests/architecture/embedding-provider-boundary.test.ts",
+          "verification": true
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "DELTA",
+          "path": "tests/integration/embedding-provider-no-persistence.test.ts",
+          "verification": true
+        },
+        {
+          "sourceId": "governance",
+          "identity": "TREE",
+          "path": ".specify/scripts/validate-change-governance.mjs",
+          "verification": true,
+          "blobSha": "130de0cde6a004c268c3f9535a7f96043839ed1b"
+        },
+        {
+          "sourceId": "governance",
+          "identity": "TREE",
+          "path": ".specify/scripts/tests/run-change-governance-tests.mjs",
+          "verification": true,
+          "blobSha": "efd33421b1c20cb876e126e2fb35177642de6ec5"
+        },
+        {
+          "sourceId": "governance",
+          "identity": "TREE",
+          "path": "scripts/guard-static.mjs",
+          "verification": true,
+          "blobSha": "50c6864fc9337b2ca5a996bc98dc5e7647be798c"
+        },
+        {
+          "sourceId": "implementation",
+          "identity": "TREE",
+          "path": "scripts/verify-all.mjs",
+          "verification": true,
+          "blobSha": "2de9b5dc50836236a56c7bd89d886566047ac5c5"
+        }
+      ]
+    }
+  ]
 }
