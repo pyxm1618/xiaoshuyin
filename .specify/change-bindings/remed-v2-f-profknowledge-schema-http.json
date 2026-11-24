@@ -41,13 +41,15 @@
       "feature": "common-core-goal-confirmgoal-runtime",
       "specPath": "specs/common-core-goal-confirmgoal-runtime",
       "implementationPaths": [
-        "apps/server/api/src/services/goals.ts"
+        "apps/server/api/src/services/goals.ts",
+        "db/migrations/037_goal_target_compliance_revalidation.sql"
       ]
     }
   ],
   "findingVerificationPaths": {
     "2": [
-      "tests/integration/goal-target-compliance-finding2.test.ts"
+      "tests/integration/goal-target-compliance-finding2.test.ts",
+      "tests/db/goal-runtime-schema.test.ts"
     ],
     "21": [
       "tests/unit/professional-knowledge-effective-window-finding21.test.ts",
