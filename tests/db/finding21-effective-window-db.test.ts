@@ -135,16 +135,19 @@ describe('Finding #21: Real DB Verification for Professional Knowledge Effective
   it('2. Upgrade DB: backfills effective_to from approval evidence when 031 is applied', async () => {
     const { dbUrl, adminDbUrl } = await createTempDatabase('xsy_f21_upgrade');
 
-    // Prepare temp migrations dir without 031 to simulate pre-031 state
+    // Prepare the current migration set, excluding only the pending F migration.
     const tempMigrationsDir = mkdtempSync(join(tmpdir(), 'xsy_test_migrations_'));
     try {
       const allMigrations = readdirSync(join(ROOT, 'db', 'migrations')).filter((f) => f.endsWith('.sql'));
+      const file031 = '031_professional_knowledge_effective_window_remediation.sql';
+      expect(allMigrations).toContain(file031);
+      expect(allMigrations).toContain('031_common_core_goal_confirm_goal_package_dependency.sql');
       for (const file of allMigrations) {
-        if (file.startsWith('031_')) continue;
+        if (file === file031) continue;
         copyFileSync(join(ROOT, 'db', 'migrations', file), join(tempMigrationsDir, file));
       }
 
-      // Step 1: Run migrations up to 030
+      // Step 1: Apply the complete existing main baseline, without F's migration.
       execFileSync('node', ['scripts/db-migrate.mjs'], {
         cwd: ROOT,
         encoding: 'utf8',
@@ -162,6 +165,11 @@ describe('Finding #21: Real DB Verification for Professional Knowledge Effective
       let versionId: string;
 
       try {
+        const beforeLedger = await client.query('SELECT filename FROM schema_migrations WHERE filename = $1', [file031]);
+        expect(beforeLedger.rows).toEqual([]);
+        const mainLedger = await client.query('SELECT filename FROM schema_migrations WHERE filename = $1', ['031_common_core_goal_confirm_goal_package_dependency.sql']);
+        expect(mainLedger.rows).toHaveLength(1);
+
         // Create test account and person
         const accRes = await client.query(`
           INSERT INTO accounts (wechat_openid, status) VALUES ('openid_test_upgrade_1', 'ACTIVE') RETURNING id
@@ -229,7 +237,6 @@ describe('Finding #21: Real DB Verification for Professional Knowledge Effective
       }
 
       // Step 2: Now copy 031 into tempMigrationsDir and apply forward upgrade migration
-      const file031 = allMigrations.find((f) => f.startsWith('031_'))!;
       copyFileSync(join(ROOT, 'db', 'migrations', file031), join(tempMigrationsDir, file031));
 
       const upgradeOutput = execFileSync('node', ['scripts/db-migrate.mjs'], {
@@ -243,12 +250,15 @@ describe('Finding #21: Real DB Verification for Professional Knowledge Effective
       });
 
       expect(upgradeOutput).toContain('APPLY 031_professional_knowledge_effective_window_remediation.sql');
-      expect(upgradeOutput).toContain('Migration complete:');
+      expect(upgradeOutput).toContain('Migration complete: 1 new, 35 previously applied.');
 
       // Step 3: Verify effective_to has been backfilled by 031 automatically
       const clientAfter = new Client({ connectionString: adminDbUrl });
       await clientAfter.connect();
       try {
+        const afterLedger = await clientAfter.query('SELECT filename, content_checksum FROM schema_migrations WHERE filename = $1', [file031]);
+        expect(afterLedger.rows).toHaveLength(1);
+        expect(afterLedger.rows[0].content_checksum).toBeDefined();
         const after = await clientAfter.query('SELECT effective_to FROM professional_knowledge_versions WHERE id = $1', [versionId]);
         expect(new Date(after.rows[0].effective_to).toISOString()).toBe(expectedEffectiveTo.toISOString());
       } finally {
