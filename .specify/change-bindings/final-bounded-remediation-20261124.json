@@ -22,14 +22,14 @@
       "feature": "009-safety-hold-control-foundation",
       "specPath": "specs/009-safety-hold-control-foundation",
       "implementationPaths": [
-        "packages/domain/src/safety/schema.ts"
+        "packages/domain/src/safety/schema.ts",
+        "apps/server/api/src/db/drizzle-tx.ts"
       ]
     },
     {
       "feature": "012-digital-use-assessment-runtime",
       "specPath": "specs/012-digital-use-assessment-runtime",
       "implementationPaths": [
-        "apps/server/api/src/db/drizzle-tx.ts",
         "apps/server/api/src/services/digital-use-assessment.ts",
         "apps/server/api/src/services/digital-use-node-response.ts",
         "apps/server/api/src/services/digital-use-phone-contract.ts",
