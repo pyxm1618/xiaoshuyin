@@ -9,7 +9,9 @@ import type pg from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import {
   createServerFeatureDescriptor,
+  getComplianceProfileForUpdate,
   loadComplianceEvaluationSnapshot,
+  lockComplianceFeatureEvaluationBasis,
   evaluateCompliance,
   assertComplianceObligationsSupported,
   type ComplianceObligation,
