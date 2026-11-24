@@ -1231,6 +1231,19 @@
           "012-digital-use-assessment-runtime"
         ]
       }
+    },
+    {
+      "id": "embedding-provider-adapter-020",
+      "match": {
+        "kind": "PREFIX",
+        "path": "apps/server/api/src/ai/embedding/"
+      },
+      "ownership": {
+        "kind": "FEATURE",
+        "features": [
+          "020-embedding-provider-adapter-foundation"
+        ]
+      }
     }
   ]
 }
