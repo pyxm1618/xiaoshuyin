@@ -271,6 +271,12 @@ const SLICE17_REMOVED_CONSTRAINTS = [
   'business_audit_events_family_id_not_null',
 ].sort();
 
+const FINDING12_REMOVED_CONSTRAINTS = [
+  // Migration 038 intentionally allows the Phone Contract child participation
+  // to remain unbound until a genuine child-authored confirmation binds it.
+  'digital_use_contract_versions_child_participation_id_not_null',
+].sort();
+
 const SLICE17_NEW_CONSTRAINTS = [
   'professional_knowledge_approval_e_knowledge_version_id_not_null',
   'professional_knowledge_approval_e_staff_assignment_ref_not_null',
@@ -1094,7 +1100,10 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
     for (const name of CONSENT_OWNER_REPLACED_CONSTRAINTS.slice(0, 2)) {
       expect(afterConstraintNames).not.toContain(name);
     }
-    for (const name of SLICE17_REMOVED_CONSTRAINTS) {
+    for (const name of [
+      ...SLICE17_REMOVED_CONSTRAINTS,
+      ...FINDING12_REMOVED_CONSTRAINTS,
+    ]) {
       expect(afterConstraintNames).not.toContain(name);
     }
     expect(afterConstraintNames).toContain('consent_purpose_field_binding');
@@ -1115,7 +1124,9 @@ describe('current-main 001–006 -> Slice 7 007 populated upgrade (S7-III-M03)',
         ...CONSENT_OWNER_NEW_CONSTRAINTS,
         ...SLICE12_NEW_CONSTRAINTS,
         ...SLICE13_NEW_CONSTRAINTS,
-        ...SLICE14_NEW_CONSTRAINTS,
+        ...SLICE14_NEW_CONSTRAINTS.filter(
+          (name) => !FINDING12_REMOVED_CONSTRAINTS.includes(name)
+        ),
         ...FOUNDATION_REM1_NEW_CONSTRAINTS,
         ...AUTH006_NEW_CONSTRAINTS,
         ...AUTH008_NEW_CONSTRAINTS,

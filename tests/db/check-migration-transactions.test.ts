@@ -38,7 +38,7 @@ describe('Check Migration Transactions Guard & Adversarial Fixtures', () => {
 
   it('exactly 8 migrations are stripped and match the authoritative whitelist', () => {
     const results = scanAndValidateMigrations(DEFAULT_MIGRATIONS_DIR);
-    expect(results.length).toBe(40);
+    expect(results.length).toBe(41);
 
     const stripped = results.filter((r) => r.stripped).map((r) => r.filename);
     expect(stripped.length).toBe(8);
