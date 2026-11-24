@@ -1164,7 +1164,21 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
         // including malformed legacy JSON that public commands must reject.
         const positive = variant === 'ASSERTION' || variant === 'OBSERVATION' || variant === 'DIALOGUE_MESSAGE';
         const type = positive ? variant : 'ASSERTION';
-        const id = crypto.randomUUID();
+        // The invalidated reference is a real carrier in this Case.
+        const evidence = type === 'DIALOGUE_MESSAGE'
+          ? await admin.query<{id:string}>(
+              "INSERT INTO dialogue_messages (family_id,case_id,actor_account_id,source_person_id,content) VALUES ($1,$2,$3,$4,'nested evidence') RETURNING id",
+              [f.familyId,f.caseId,f.manager.accountId,f.manager.personId])
+          : type === 'OBSERVATION'
+          ? await admin.query<{id:string}>(
+              `INSERT INTO observations (family_id,case_id,subject_person_id,source_kind,source_person_id,occurred_time_state,confirmation_status,observation_code,value_state,value_type,value_text)
+               VALUES ($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN','UNCONFIRMED','test.nested','KNOWN','TEXT','nested evidence') RETURNING id`,
+              [f.familyId,f.caseId,child.personId,f.manager.personId])
+          : await admin.query<{id:string}>(
+              `INSERT INTO assertions (family_id,case_id,subject_person_id,source_kind,source_person_id,occurred_time_state,confirmation_status,kind,content)
+               VALUES ($1,$2,$3,'SELF_STATEMENT',$4,'UNKNOWN','UNCONFIRMED','STATEMENT','nested evidence') RETURNING id`,
+              [f.familyId,f.caseId,child.personId,f.manager.personId]);
+        const id = evidence.rows[0]!.id;
         const reference = { type, id };
         const nested = variant === 'unrelated' ? { type, id: crypto.randomUUID() } : reference;
         const marker = {

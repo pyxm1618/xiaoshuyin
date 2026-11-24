@@ -147,13 +147,12 @@ BEGIN
        AND (
          c.dependency_refs @> jsonb_build_array(p_dependency)
          OR (v_evidence_obj IS NOT NULL AND c.dependency_refs @> jsonb_build_array(v_evidence_obj))
-         -- Only the frozen A200401 RECORD_MARKER shape may carry nested evidence.
-         -- Malformed containers and malformed member refs are never wildcards.
+         -- Only frozen A200401 RECORD_MARKERs with well-formed evidence refs.
          OR (
            v_evidence_obj->>'type' IN ('ASSERTION', 'OBSERVATION', 'DIALOGUE_MESSAGE')
            AND EXISTS (
              SELECT 1
-               FROM jsonb_array_elements(c.dependency_refs) marker
+               FROM jsonb_array_elements(c.dependency_refs) AS markers(marker)
               WHERE marker->>'type' = 'RECORD_MARKER'
                 AND marker->>'markerCode' = 'A200401'
                 AND jsonb_typeof(marker->'evidenceRefs') = 'array'
@@ -169,49 +168,7 @@ BEGIN
                    WHERE jsonb_typeof(ref) IS DISTINCT FROM 'object'
                       OR COALESCE(ref->>'type', '') NOT IN ('ASSERTION', 'OBSERVATION', 'DIALOGUE_MESSAGE')
                       OR jsonb_typeof(ref->'id') IS DISTINCT FROM 'string'
-                      OR COALESCE(ref->>'id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}
-           SELECT 1
-             FROM jsonb_array_elements(c.dependency_refs) d
-            WHERE d->>'type' = 'CONSENT'
-              AND (d->>'id')::uuid = (p_dependency->>'id')::uuid
-         ))
-       )
-     FOR UPDATE
-  LOOP
-    UPDATE digital_use_contract_versions
-       SET review_state = 'NEEDS_REVIEW',
-           updated_at = now()
-     WHERE id = v_contract.id;
-
-    v_contracts_count := v_contracts_count + 1;
-
-    INSERT INTO business_audit_events (
-      family_id, actor_account_id, event_type, resource_type, resource_id, metadata
-    ) VALUES (
-      v_contract.family_id, v_actor_account_id, 'PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED', 'PHONE_USE_CONTRACT', v_contract.id,
-      jsonb_build_object(
-        'contractVersionId', v_contract.id,
-        'version', v_contract.version,
-        'draftRevision', v_contract.draft_revision,
-        'caseId', v_contract.case_id,
-        'fromReviewState', 'CURRENT',
-        'toReviewState', 'NEEDS_REVIEW',
-        'reason', 'DEPENDENCY_INVALIDATED',
-        'dependency', p_dependency
-      )
-    );
-  END LOOP;
-
-  RETURN jsonb_build_object(
-    'goalsAffected', v_goals_count,
-    'contractsAffected', v_contracts_count
-  );
-END;
-$function$;
-
-REVOKE ALL ON FUNCTION app.propagate_downstream_dependency_review(uuid, uuid, jsonb) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app.propagate_downstream_dependency_review(uuid, uuid, jsonb) TO xiaoshuyin_app;
-
+                      OR COALESCE(ref->>'id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
                 )
            )
          )
