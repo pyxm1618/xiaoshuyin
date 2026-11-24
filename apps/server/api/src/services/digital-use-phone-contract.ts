@@ -386,7 +386,7 @@ export async function getPhoneUseContractCurrent(
   });
  }
  return withRlsTransaction(pool,{
-  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'PHONE_USE_CONTRACT',isolationLevel:'REPEATABLE READ'
+  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'PHONE_USE_CONTRACT'
  },async tx=>{
    const row=await getCurrentPhoneUseContract(tx,input.caseId);
    if(!row) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
@@ -413,7 +413,7 @@ export async function createPhoneUseContractDraft(
  }
 ){
  return withRlsTransaction(pool,{
-  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',isolationLevel:'REPEATABLE READ'
+  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
   await authorizeManager(tx,input,'CASE_RESPOND_ASSESSMENT_SCENE');
   if(input.adultPartyPersonId!==input.actor.personId||input.childPartyPersonId===input.actor.personId) throw contractError('PHONE_USE_CONTRACT_UNAUTHORIZED');
@@ -467,7 +467,7 @@ export async function updatePhoneUseContractDraft(
  }
 ){
  return withRlsTransaction(pool,{
-  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',isolationLevel:'REPEATABLE READ'
+  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
  },async tx=>{
   await lockManagerContractCase(tx,input,input.version===1?'A4010':'A4012');
   const current=await getPhoneUseContractVersion(tx,input.caseId,input.version,true);
@@ -596,7 +596,7 @@ async function activateConfirmedContract(
 async function managerConfirm(
  pool:pg.Pool,input:{actor:DigitalUseActor;familyId:string;caseId:string;version:number;expectedCaseVersion:number;expectedDraftRevision:number;idempotencyKey:string}
 ){
- return withRlsTransaction(pool,{familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',isolationLevel:'REPEATABLE READ'},async tx=>{
+ return withRlsTransaction(pool,{familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'},async tx=>{
   // Immutable identity preview only; authoritative lock follows Family -> Case.
   const preview=await getPhoneUseContractVersion(tx,input.caseId,input.version,false);
   if(!preview) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
@@ -654,7 +654,7 @@ async function managerConfirm(
 async function childConfirm(
  pool:pg.Pool,input:{actor:DigitalUseActor;familyId:string;caseId:string;version:number;expectedCaseVersion:number;expectedDraftRevision:number;idempotencyKey:string}
 ){
- return withRlsTransaction(pool,{familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'PHONE_USE_CONTRACT',isolationLevel:'REPEATABLE READ'},async tx=>{
+ return withRlsTransaction(pool,{familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'PHONE_USE_CONTRACT'},async tx=>{
   if(!(await lockFamilyForPrimaryDecision(tx,input.familyId))) throw contractError('PHONE_USE_CONTRACT_NOT_FOUND');
   const caseRow=await lockSceneCase(tx,input.caseId);
   if(!caseRow||caseRow.version!==input.expectedCaseVersion) throw contractError(!caseRow?'PHONE_USE_CONTRACT_NOT_FOUND':'STALE_CASE_VERSION');
@@ -727,7 +727,7 @@ export async function revisePhoneUseContract(
  pool:pg.Pool,
  input:{actor:DigitalUseActor;familyId:string;caseId:string;expectedActiveVersion:number;expectedCaseVersion:number;expectedActiveDraftRevision:number;updateTrigger:'PERIOD_COMPLETE'|'NEW_PROBLEM';updateReason:string;idempotencyKey:string}
 ){
- return withRlsTransaction(pool,{familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',isolationLevel:'REPEATABLE READ'},async tx=>{
+ return withRlsTransaction(pool,{familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'},async tx=>{
   await authorizeManager(tx,input,'CASE_RESPOND_ASSESSMENT_SCENE');
   const requestHash=hashPayload({
    caseId:input.caseId,
@@ -796,7 +796,6 @@ async function readProfessionalAssetGate(
     accountId: input.actor.accountId,
     personId: input.actor.personId,
     purpose: 'FAMILY_MANAGEMENT',
-    isolationLevel: 'REPEATABLE READ',
   }, async (tx) => {
     await authorizeManager(tx, input, 'CASE_READ_ASSESSMENT_SCENE');
     const caseRow = await getCaseById(tx, input.caseId);
