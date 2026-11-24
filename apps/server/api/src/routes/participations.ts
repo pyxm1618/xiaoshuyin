@@ -55,6 +55,7 @@ import {
 } from '@xiaoshuyin/domain';
 import { authorize } from '@xiaoshuyin/authorization';
 import {
+  assertIdentityContextMatches,
   setFamilyContext,
   withIdentityTransaction,
   setInviteTokenContext,
@@ -67,12 +68,16 @@ import {
   requireFamilyAction,
 } from '../authz.js';
 import {
+  lockIdempotentCommandInTransaction,
+  runLockedIdempotentCommandInTransaction,
   participationInviteSnapshot,
   rehydrateParticipationInviteReplay,
   runIdempotentCommand,
   runIdempotentCommandInTransaction,
   sendCommandOutcome,
   type CommandResponse,
+  type CommandOutcome,
+  type IdempotentCommandConfig,
 } from '../idempotency.js';
 import { toHttpError } from '../plugins/error-handler.js';
 import { recordDialogueMessage } from '../../../../../packages/domain/src/internal/message-writer.js';
@@ -956,139 +961,93 @@ export function registerParticipationRoutes(
       }
       const requestHash = hashPayload({ participationId, content });
 
-      // Finding #32: Preflight before idempotency replay fast path:
-      // Verify current participation / self / ACTIVE / processing authority
-      // so that replays cannot bypass withdrawal or consent revocation.
-      const preflight = await withIdentityTransaction(
+      // Finding #32: current authorization and idempotency replay must share
+      // one transaction. The generic fast path would otherwise allow a stale
+      // result after withdrawal or a change of processing authority.
+      const cfg: IdempotentCommandConfig = {
+        accountId: actorAccountId,
+        personId: actorPersonId,
+        purpose: 'PARTICIPATION',
+        commandType: 'CASE_MESSAGE_CREATE',
+        idempotencyKey,
+        requestHash,
+      };
+      const checkResponse = (row: ParticipationRow): CommandResponse | null => {
+        const decision = authorize({
+          actor: { accountId: actorAccountId, personId: actorPersonId },
+          product: 'V1',
+          family: null,
+          case: null,
+          participation: {
+            participationId: row.id,
+            familyId: row.family_id,
+            caseId: row.case_id,
+            personId: row.person_id,
+            state: row.state,
+          },
+          resource: { type: 'PARTICIPATION', participationId },
+          action: 'PARTICIPATION_RESPOND_SELF',
+          purpose: 'PARTICIPATION',
+        });
+
+        if (decision.decision === 'DENY') {
+          if (decision.reason === 'NOT_PARTICIPANT') throw participationNotFound();
+          if (decision.reason === 'PARTICIPATION_NOT_ACTIVE') return stateConflict(row.state);
+          throw typedError('FORBIDDEN', decision.reason);
+        }
+        return null;
+      };
+
+      const outcome = await withIdentityTransaction(
         pool,
         { accountId: actorAccountId, purpose: 'PARTICIPATION' },
-        async (tx) => {
+        async (tx): Promise<CommandOutcome> => {
+          await assertIdentityContextMatches(tx, cfg);
           const visible = await getParticipationById(tx, participationId);
           if (!visible) throw participationNotFound();
+          const initialConflict = checkResponse(visible);
+          if (initialConflict) return { action: 'EXECUTED', ...initialConflict };
 
-          const decision = authorize({
-            actor: { accountId: actorAccountId, personId: actorPersonId },
-            product: 'V1',
-            family: null,
-            case: null,
-            participation: {
-              participationId: visible.id,
-              familyId: visible.family_id,
-              caseId: visible.case_id,
-              personId: visible.person_id,
-              state: visible.state,
-            },
-            resource: { type: 'PARTICIPATION', participationId: visible.id },
-            action: 'PARTICIPATION_RESPOND_SELF',
-            purpose: 'PARTICIPATION',
-          });
+          await setFamilyContext(tx, visible.family_id, actorPersonId, 'PARTICIPATION');
 
-          if (decision.decision === 'DENY') {
-            if (decision.reason === 'NOT_PARTICIPANT') {
-              throw participationNotFound();
-            }
-            if (decision.reason === 'PARTICIPATION_NOT_ACTIVE') {
-              return stateConflict(visible.state);
-            }
-            throw typedError('FORBIDDEN', decision.reason);
-          }
+          // Preserve the command lock-before-business-lock order used by
+          // accept/withdraw. No cached body is read before current authority.
+          await lockIdempotentCommandInTransaction(tx, cfg);
+          const locked = await lockParticipationById(tx, participationId);
+          if (!locked) throw participationNotFound();
+          const currentConflict = checkResponse(locked);
+          if (currentConflict) return { action: 'EXECUTED', ...currentConflict };
 
-          await setFamilyContext(
-            tx,
-            visible.family_id,
-            actorPersonId,
-            'PARTICIPATION'
-          );
-
-          const allowed = await isParticipationProcessingAllowed(tx, visible.person_id);
-          if (!allowed) {
+          // The participation row and the compliance profile remain locked
+          // through both the replay decision and any new message commit.
+          if (!(await isParticipationProcessingAllowed(tx, locked.person_id))) {
             throw typedError('FORBIDDEN', 'PARTICIPATION_PROCESSING_DISALLOWED');
           }
 
-          return null;
-        }
-      );
-
-      if (preflight !== null) {
-        return reply.status(preflight.status as 409).send(preflight.body);
-      }
-
-      const outcome = await runIdempotentCommand(
-        pool,
-        {
-          accountId: actorAccountId,
-          personId: actorPersonId,
-          purpose: 'PARTICIPATION',
-          commandType: 'CASE_MESSAGE_CREATE',
-          idempotencyKey,
-          requestHash,
-        },
-        async (tx) => {
-          const visible = await getParticipationById(tx, participationId);
-          if (!visible) throw participationNotFound();
-
-          const decision = authorize({
-            actor: { accountId: actorAccountId, personId: actorPersonId },
-            product: 'V1',
-            family: null,
-            case: null,
-            participation: {
-              participationId: visible.id,
-              familyId: visible.family_id,
-              caseId: visible.case_id,
-              personId: visible.person_id,
-              state: visible.state,
-            },
-            resource: { type: 'PARTICIPATION', participationId: visible.id },
-            action: 'PARTICIPATION_RESPOND_SELF',
-            purpose: 'PARTICIPATION',
+          return runLockedIdempotentCommandInTransaction(tx, cfg, async (tx) => {
+            const message = await recordDialogueMessage(
+              tx,
+              {
+                familyId: locked.family_id,
+                caseId: locked.case_id,
+                actorAccountId,
+                actorPersonId,
+                purpose: 'PARTICIPATION',
+              },
+              content
+            );
+            return {
+              status: 201,
+              body: {
+                id: message.id,
+                caseId: locked.case_id,
+                participationId: locked.id,
+                authorPersonId: actorPersonId,
+                content,
+                createdAt: message.recordedAt.toISOString(),
+              },
+            };
           });
-
-          if (decision.decision === 'DENY') {
-            if (decision.reason === 'NOT_PARTICIPANT') {
-              throw participationNotFound();
-            }
-            if (decision.reason === 'PARTICIPATION_NOT_ACTIVE') {
-              return stateConflict(visible.state);
-            }
-            throw typedError('FORBIDDEN', decision.reason);
-          }
-
-          await setFamilyContext(
-            tx,
-            visible.family_id,
-            actorPersonId,
-            'PARTICIPATION'
-          );
-
-          const allowed = await isParticipationProcessingAllowed(tx, visible.person_id);
-          if (!allowed) {
-            throw typedError('FORBIDDEN', 'PARTICIPATION_PROCESSING_DISALLOWED');
-          }
-
-          const message = await recordDialogueMessage(
-            tx,
-            {
-              familyId: visible.family_id,
-              caseId: visible.case_id,
-              actorAccountId,
-              actorPersonId,
-              purpose: 'PARTICIPATION',
-            },
-            content
-          );
-
-          return {
-            status: 201,
-            body: {
-              id: message.id,
-              caseId: visible.case_id,
-              participationId: visible.id,
-              authorPersonId: actorPersonId,
-              content,
-              createdAt: message.recordedAt.toISOString(),
-            },
-          };
         }
       );
 
