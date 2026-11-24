@@ -1401,6 +1401,29 @@ describe('T1218 Digital Use runtime hardening', () => {
     expect(marker.json().code).toBe('SCENE_NODE_NOT_FOUND');
   });
 
+  it('C4 anti-enumerates cross-Family Assessment start authorization as CASE_NOT_FOUND', async () => {
+    const owner = await fixture('assessment-start-owner');
+    const attacker = await fixture('assessment-start-attacker');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${owner.caseId}/assessments`,
+      headers: commandHeaders(
+        attacker.manager.token,
+        `c4-assessment-${crypto.randomUUID()}`
+      ),
+      payload: {
+        expectedCaseVersion: owner.caseVersion,
+        targetPersonId: owner.targetPersonId,
+      },
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().code).toBe('CASE_NOT_FOUND');
+    expect(response.body).not.toContain(owner.familyId);
+    expect(response.body).not.toContain(owner.targetPersonId);
+  });
+
   it('does not grant Assessment visibility to an ACTIVE Case Participant', async () => {
     const owner = await fixture('participant-owner');
     const participant = await loginWithLabel(app, 'du-hard-participant');

@@ -832,6 +832,40 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
       admin.query(`UPDATE digital_use_contract_versions SET review_state = 'NEEDS_REVIEW' WHERE id = $1`, [c1Id])
     ).rejects.toThrow('PHONE_USE_CONTRACT_REVIEW_STATE_RUNTIME_UNOWNED');
 
+    // A1: a normal runtime session cannot forge propagation authority by
+    // manually setting the historical custom GUC.
+    const appAttack = new pg.Client({ connectionString: process.env['DATABASE_URL']! });
+    await appAttack.connect();
+    try {
+      await appAttack.query('BEGIN');
+      await appAttack.query(
+        `SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')`,
+        [f.manager.accountId]
+      );
+      await appAttack.query(
+        `SELECT app.set_family_context($1, $2, 'FAMILY_MANAGEMENT')`,
+        [f.familyId, f.manager.personId]
+      );
+      await appAttack.query(
+        `SELECT set_config('app.dependency_review_propagation', 'on', true)`
+      );
+      const authority = await appAttack.query<{ authorized: boolean }>(
+        `SELECT app.dependency_review_propagation_authorized() AS authorized`
+      );
+      expect(authority.rows[0]?.authorized).toBe(false);
+      await expect(
+        appAttack.query(
+          `UPDATE digital_use_contract_versions
+              SET review_state='NEEDS_REVIEW'
+            WHERE id=$1`,
+          [c1Id]
+        )
+      ).rejects.toThrow('PHONE_USE_CONTRACT_REVIEW_STATE_RUNTIME_UNOWNED');
+      await appAttack.query('ROLLBACK');
+    } finally {
+      await appAttack.end();
+    }
+
     // 6a. Negative tests: BLOCKER C-01 & C-02 privilege boundary and strict dependency validation
     // C-01: Unauthenticated caller fails closed
     await expect(
@@ -974,22 +1008,112 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     expect(audits.rows.map(r => r.event_type)).toContain('GOAL_REVIEW_STATE_CHANGED');
     expect(audits.rows.map(r => r.event_type)).toContain('PHONE_USE_CONTRACT_REVIEW_STATE_CHANGED');
 
-    // 9. Verify Execution Gate:
-    // Future execution (e.g. revise contract c1) MUST be blocked because review_state is NEEDS_REVIEW
-    const reviseBlocked = await app.inject({
+    // 9. A2: ACTIVE + NEEDS_REVIEW must recover through a NEW revision.
+    // The predecessor remains immutable and cannot resume execution directly.
+    const recoveryRevision = await app.inject({
       method: 'POST',
       url: `/api/v1/cases/${f.caseId}/digital-use/contract/1/revise`,
-      headers: { ...auth(f.manager.token), 'idempotency-key': `f24-blocked-${crypto.randomUUID()}` },
+      headers: { ...auth(f.manager.token), 'idempotency-key': `f24-active-recovery-${crypto.randomUUID()}` },
       payload: {
         expectedCaseVersion: f.caseVersion,
         expectedActiveDraftRevision: 1,
-        updateTrigger: 'PERIOD_COMPLETE',
-        updateReason: 'Attempting revision with invalid dependency',
+        updateTrigger: 'NEW_PROBLEM',
+        updateReason: 'Upstream dependency changed; create a reviewed successor',
       },
     });
-    expect(reviseBlocked.statusCode).toBe(409);
-    expect(reviseBlocked.json().code).toBe('PHONE_USE_CONTRACT_STALE_REVISION');
-    expect(reviseBlocked.json().message).toContain('Contract requires review');
+    expect(recoveryRevision.statusCode, recoveryRevision.body).toBe(201);
+    expect(recoveryRevision.json()).toMatchObject({ version: 2, status: 'DRAFT' });
+
+    const beforeCorrection = await admin.query<{
+      version: number;
+      status: string;
+      review_state: string;
+      supersedes_id: string | null;
+    }>(
+      `SELECT version,status,review_state,supersedes_id
+         FROM digital_use_contract_versions
+        WHERE case_id=$1
+        ORDER BY version`,
+      [f.caseId]
+    );
+    expect(beforeCorrection.rows).toEqual([
+      expect.objectContaining({
+        version: 1,
+        status: 'ACTIVE',
+        review_state: 'NEEDS_REVIEW',
+        supersedes_id: null,
+      }),
+      expect.objectContaining({
+        version: 2,
+        status: 'DRAFT',
+        review_state: 'NEEDS_REVIEW',
+        supersedes_id: c1Id,
+      }),
+    ]);
+
+    const corrected = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/drafts/2`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `f24-active-correct-${crypto.randomUUID()}` },
+      payload: {
+        expectedCaseVersion: f.caseVersion,
+        expectedDraftRevision: 1,
+        dependencyRefs: [a2Dependency],
+        terms: defaultTerms,
+      },
+    });
+    expect(corrected.statusCode, corrected.body).toBe(200);
+    expect(corrected.json()).toMatchObject({ version: 2, status: 'DRAFT', draftRevision: 2 });
+
+    const correctedDb = await admin.query<{ review_state: string }>(
+      `SELECT review_state FROM digital_use_contract_versions WHERE case_id=$1 AND version=2`,
+      [f.caseId]
+    );
+    expect(correctedDb.rows[0]?.review_state).toBe('CURRENT');
+
+    const adultConfirm = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/2/confirm`,
+      headers: { ...auth(f.manager.token), 'idempotency-key': `f24-active-adult-${crypto.randomUUID()}` },
+      payload: { expectedCaseVersion: f.caseVersion, expectedDraftRevision: 2 },
+    });
+    expect(adultConfirm.statusCode, adultConfirm.body).toBe(200);
+
+    const childConfirm = await app.inject({
+      method: 'POST',
+      url: `/api/v1/cases/${f.caseId}/digital-use/contract/2/confirm`,
+      headers: { ...auth(child.token), 'idempotency-key': `f24-active-child-${crypto.randomUUID()}` },
+      payload: { expectedCaseVersion: f.caseVersion, expectedDraftRevision: 2 },
+    });
+    expect(childConfirm.statusCode, childConfirm.body).toBe(200);
+
+    const recoveredChain = await admin.query<{
+      id: string;
+      version: number;
+      status: string;
+      review_state: string;
+      supersedes_id: string | null;
+      superseded_at: Date | null;
+    }>(
+      `SELECT id,version,status,review_state,supersedes_id,superseded_at
+         FROM digital_use_contract_versions
+        WHERE case_id=$1
+        ORDER BY version`,
+      [f.caseId]
+    );
+    expect(recoveredChain.rows[0]).toMatchObject({
+      id: c1Id,
+      version: 1,
+      status: 'SUPERSEDED',
+      review_state: 'NEEDS_REVIEW',
+    });
+    expect(recoveredChain.rows[0]?.superseded_at).not.toBeNull();
+    expect(recoveredChain.rows[1]).toMatchObject({
+      version: 2,
+      status: 'ACTIVE',
+      review_state: 'CURRENT',
+      supersedes_id: c1Id,
+    });
 
     // 10. Verify idempotency of propagation:
     // Repeating propagation when already in NEEDS_REVIEW affects 0 rows and does not fail
@@ -1013,6 +1137,196 @@ describe('Workline C Targeted Remediation (#8, #9, #10, #24; #12 gap)', () => {
     } finally {
       repeatClient.release();
     }
+  });
+
+  it('A3: Consent propagation supports identity-only and exact-version Goal/Contract dependencies', async () => {
+    async function seedGoal(
+      fixture: Fixture,
+      dependency: Record<string, unknown>,
+      suffix: string
+    ): Promise<string> {
+      const formulation = await admin.query<{ id: string }>(
+        `SELECT id FROM problem_formulations WHERE case_id=$1 AND version=1`,
+        [fixture.caseId]
+      );
+      const evidence = await admin.query<{ id: string }>(
+        `SELECT id FROM dialogue_messages WHERE case_id=$1 ORDER BY id LIMIT 1`,
+        [fixture.caseId]
+      );
+      const row = await admin.query<{ id: string }>(
+        `INSERT INTO goals
+           (family_id,case_id,version,lifecycle_status,confirmation_state,review_state,
+            problem_formulation_id,problem_formulation_version,baseline_refs,target_description,
+            observation_method,observation_window,protective_conditions,parent_actions,
+            review_point,dependency_refs,participant_responsibilities,saved_by_person_id)
+         VALUES
+           ($1,$2,1,'ACTIVE','UNCONFIRMED','CURRENT',$3,1,$4::jsonb,$5,
+            'Direct check','7 days','["No harm"]'::jsonb,'["Support"]'::jsonb,
+            'Weekly review',$6::jsonb,'[]'::jsonb,$7)
+         RETURNING id`,
+        [
+          fixture.familyId,
+          fixture.caseId,
+          formulation.rows[0]!.id,
+          JSON.stringify([{ type: 'DIALOGUE_MESSAGE', id: evidence.rows[0]!.id }]),
+          `Consent propagation ${suffix}`,
+          JSON.stringify([dependency]),
+          fixture.manager.personId,
+        ]
+      );
+      return row.rows[0]!.id;
+    }
+
+    async function seedDraftContract(
+      fixture: Fixture,
+      child: LoginResult,
+      dependency: Record<string, unknown>
+    ): Promise<string> {
+      const row = await admin.query<{ id: string }>(
+        `INSERT INTO digital_use_contract_versions
+           (family_id,case_id,version,draft_revision,status,review_state,
+            adult_party_person_id,child_party_person_id,
+            contract_purpose,phone_use_rules,execution_period,parent_support_measures,
+            supervision_measures,incentives,breach_responsibilities,source_template_version,
+            dependency_refs,created_by_person_id)
+         VALUES
+           ($1,$2,1,1,'DRAFT','CURRENT',$3,$4,
+            $5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$5::jsonb,$6,$7::jsonb,$3)
+         RETURNING id`,
+        [
+          fixture.familyId,
+          fixture.caseId,
+          fixture.manager.personId,
+          child.personId,
+          JSON.stringify(v('rule')),
+          PHONE_USE_CONTRACT_CONTENT_VERSION,
+          JSON.stringify([dependency]),
+        ]
+      );
+      return row.rows[0]!.id;
+    }
+
+    async function propagate(
+      fixture: Fixture,
+      dependency: Record<string, unknown>
+    ): Promise<{ goalsAffected: number; contractsAffected: number }> {
+      const client = new pg.Client({ connectionString: process.env['DATABASE_URL']! });
+      await client.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          `SELECT app.set_identity_context($1, 'FAMILY_MANAGEMENT')`,
+          [fixture.manager.accountId]
+        );
+        await client.query(
+          `SELECT app.set_family_context($1, $2, 'FAMILY_MANAGEMENT')`,
+          [fixture.familyId, fixture.manager.personId]
+        );
+        const result = await client.query<{
+          propagate_downstream_dependency_review: {
+            goalsAffected: number;
+            contractsAffected: number;
+          };
+        }>(
+          `SELECT app.propagate_downstream_dependency_review($1,$2,$3::jsonb)`,
+          [fixture.familyId, fixture.caseId, JSON.stringify(dependency)]
+        );
+        await client.query('COMMIT');
+        return result.rows[0]!.propagate_downstream_dependency_review;
+      } finally {
+        await client.end();
+      }
+    }
+
+    // Versionless invalidation is identity-wide: same Consent id matches both
+    // id-only and versioned dependencies, but never a different Consent id.
+    const childIdentity = await loginWithLabel(app, `a3-child-id-${crypto.randomUUID()}`);
+    const identityFixture = await createTestFixture('a3-consent-id', childIdentity);
+    const consentId = crypto.randomUUID();
+    const otherConsentId = crypto.randomUUID();
+    const unversionedGoal = await seedGoal(
+      identityFixture,
+      { type: 'CONSENT', id: consentId },
+      'unversioned'
+    );
+    const versionedSameGoal = await seedGoal(
+      identityFixture,
+      { type: 'CONSENT', id: consentId, version: 3 },
+      'same-id-versioned'
+    );
+    const unrelatedGoal = await seedGoal(
+      identityFixture,
+      { type: 'CONSENT', id: otherConsentId },
+      'unrelated'
+    );
+    const unversionedContract = await seedDraftContract(
+      identityFixture,
+      childIdentity,
+      { type: 'CONSENT', id: consentId }
+    );
+
+    const identityResult = await propagate(
+      identityFixture,
+      { type: 'CONSENT', id: consentId }
+    );
+    expect(identityResult).toEqual({ goalsAffected: 2, contractsAffected: 1 });
+
+    const identityStates = await admin.query<{ id: string; review_state: string }>(
+      `SELECT id,review_state FROM goals WHERE id=ANY($1::uuid[]) ORDER BY id`,
+      [[unversionedGoal, versionedSameGoal, unrelatedGoal]]
+    );
+    const stateById = Object.fromEntries(identityStates.rows.map((row) => [row.id, row.review_state]));
+    expect(stateById[unversionedGoal]).toBe('NEEDS_REVIEW');
+    expect(stateById[versionedSameGoal]).toBe('NEEDS_REVIEW');
+    expect(stateById[unrelatedGoal]).toBe('CURRENT');
+    expect((await admin.query<{ review_state: string }>(
+      `SELECT review_state FROM digital_use_contract_versions WHERE id=$1`,
+      [unversionedContract]
+    )).rows[0]?.review_state).toBe('NEEDS_REVIEW');
+
+    // Versioned invalidation stays exact: version 2 matches version 2 only.
+    const childVersion = await loginWithLabel(app, `a3-child-version-${crypto.randomUUID()}`);
+    const versionFixture = await createTestFixture('a3-consent-version', childVersion);
+    const versionConsentId = crypto.randomUUID();
+    const idOnlyGoal = await seedGoal(
+      versionFixture,
+      { type: 'CONSENT', id: versionConsentId },
+      'id-only'
+    );
+    const v1Goal = await seedGoal(
+      versionFixture,
+      { type: 'CONSENT', id: versionConsentId, version: 1 },
+      'v1'
+    );
+    const v2Goal = await seedGoal(
+      versionFixture,
+      { type: 'CONSENT', id: versionConsentId, version: 2 },
+      'v2'
+    );
+    const v2Contract = await seedDraftContract(
+      versionFixture,
+      childVersion,
+      { type: 'CONSENT', id: versionConsentId, version: 2 }
+    );
+
+    const versionResult = await propagate(
+      versionFixture,
+      { type: 'CONSENT', id: versionConsentId, version: 2 }
+    );
+    expect(versionResult).toEqual({ goalsAffected: 1, contractsAffected: 1 });
+
+    const versionStates = await admin.query<{ id: string; review_state: string }>(
+      `SELECT id,review_state FROM goals WHERE id=ANY($1::uuid[]) ORDER BY id`,
+      [[idOnlyGoal, v1Goal, v2Goal]]
+    );
+    const versionStateById = Object.fromEntries(versionStates.rows.map((row) => [row.id, row.review_state]));
+    expect(versionStateById[idOnlyGoal]).toBe('CURRENT');
+    expect(versionStateById[v1Goal]).toBe('CURRENT');
+    expect(versionStateById[v2Goal]).toBe('NEEDS_REVIEW');
+    expect((await admin.query<{ review_state: string }>(
+      `SELECT review_state FROM digital_use_contract_versions WHERE id=$1`,
+      [v2Contract]
+    )).rows[0]?.review_state).toBe('NEEDS_REVIEW');
   });
 
   it('Finding #24 / Blocker C-04: Controlled recovery of open Contract Draft from NEEDS_REVIEW back to CURRENT', async () => {

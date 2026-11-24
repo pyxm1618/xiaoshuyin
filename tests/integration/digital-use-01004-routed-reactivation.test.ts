@@ -16,6 +16,8 @@ import pg from 'pg';
 import { buildApp } from '../../apps/server/api/src/app.js';
 import { withRlsTransaction } from '../../apps/server/api/src/db/tx.js';
 import { casReactivateCompletedSceneNodeForRoutedEntry } from '@xiaoshuyin/domain';
+import { materializeRoutedSceneNode } from '../../apps/server/api/src/services/digital-use-assessment.js';
+import { resolveDigitalUseRuntimeNode } from '@xiaoshuyin/scenes/digital-use';
 import {
   DIGITAL_USE_SUPPLEMENTAL_ASSESSMENT,
 } from '@xiaoshuyin/compliance';
@@ -480,4 +482,51 @@ describe('Finding #7: authorized routed reactivation of 01004', () => {
     expect(final.rows).toEqual([{ status: 'AVAILABLE', revision: completed.revision + 1 }]);
   }, 120_000);
 
+
+
+  it('B3 persists target Manifest source metadata while authorizing with the routed predecessor', async () => {
+    const f = await seedFixture('source-metadata');
+
+    const consentTarget = resolveDigitalUseRuntimeNode('01004');
+    const existingRouted = await admin.query<{ source_node_code: string }>(
+      `SELECT source_node_code
+         FROM scene_node_states
+        WHERE case_id=$1 AND node_code='01004'`,
+      [f.caseId]
+    );
+    expect(existingRouted.rows[0]?.source_node_code).toBe(consentTarget.sourceNodeCode);
+    expect(existingRouted.rows[0]?.source_node_code).not.toBe('A2002');
+
+    const target = resolveDigitalUseRuntimeNode('A2010');
+    expect(target.sourceNodeCode).toBe('A 2010');
+
+    await withRlsTransaction(
+      appPool,
+      {
+        familyId: f.familyId,
+        accountId: f.manager.accountId,
+        personId: f.manager.personId,
+        purpose: 'FAMILY_MANAGEMENT',
+      },
+      (tx) => materializeRoutedSceneNode(tx, {
+        familyId: f.familyId,
+        caseId: f.caseId,
+        scenePackageVersion: 'v1',
+        nodeCode: 'A2010',
+        predecessorNodeCode: 'A2007',
+        targetSourceNodeCode: target.sourceNodeCode,
+        reasonCode: 'TIMELINE_SET',
+        inputRefs: [],
+      })
+    );
+
+    const persisted = await admin.query<{ source_node_code: string }>(
+      `SELECT source_node_code
+         FROM scene_node_states
+        WHERE case_id=$1 AND node_code='A2010'`,
+      [f.caseId]
+    );
+    expect(persisted.rows).toEqual([{ source_node_code: target.sourceNodeCode }]);
+    expect(persisted.rows[0]?.source_node_code).not.toBe('A2007');
+  }, 120_000);
 });

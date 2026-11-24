@@ -689,7 +689,8 @@ async function executeProblemFormulationHandoffPath(
     caseId: input.caseId,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     nodeCode: routedNext.nodeCode,
-    sourceNodeCode: node.nodeCode,
+    predecessorNodeCode: node.nodeCode,
+    targetSourceNodeCode: routedNext.sourceNodeCode,
     reasonCode: route.reasonCode,
     inputRefs: nextInputRefs(semantic),
   });
@@ -982,6 +983,7 @@ export async function completeDigitalUseNodeResponse(
       accountId: input.actor.accountId,
       personId: input.actor.personId,
       purpose: 'FAMILY_MANAGEMENT',
+      isolationLevel: 'REPEATABLE READ',
     },
     async (tx) => {
       try {
@@ -1489,7 +1491,8 @@ export async function completeDigitalUseNodeResponse(
               caseId: input.caseId,
               scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
               nodeCode: next.nodeCode,
-              sourceNodeCode: node.nodeCode,
+              predecessorNodeCode: node.nodeCode,
+              targetSourceNodeCode: next.sourceNodeCode,
               reasonCode: route.reasonCode,
               inputRefs: nextInputRefs(semantic),
             });

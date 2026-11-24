@@ -273,7 +273,7 @@ export async function createPhoneUseRoleplay(
  modelPromptAuthorityProvider?:RoleplayModelPromptAuthorityProvider
 ){
  return withRlsTransaction(pool,{
-  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
+  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',isolationLevel:'REPEATABLE READ'
  },async tx=>{
    const {scene}=await authorizeRoleplay(tx,input);
    const compliance=await assertRoleplayCompliance(tx,input.actor.personId);
@@ -357,7 +357,7 @@ export async function addPhoneUseRoleplayTurn(
  modelPromptAuthorityProvider?:RoleplayModelPromptAuthorityProvider
 ){
  return withRlsTransaction(pool,{
-  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
+  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',isolationLevel:'REPEATABLE READ'
  },async tx=>{
    const {scene}=await authorizeRoleplay(tx,input);
    await assertRoleplayCompliance(tx,input.actor.personId);
@@ -456,7 +456,7 @@ export async function ratePhoneUseRoleplay(
  professionalContentAuthority?:RoleplayProfessionalContentAuthority
 ){
  return withRlsTransaction(pool,{
-  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
+  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',isolationLevel:'REPEATABLE READ'
  },async tx=>{
    await authorizeRoleplay(tx,input);
    await assertRoleplayCompliance(tx,input.actor.personId);
@@ -484,7 +484,7 @@ export async function selectPhoneUseRoleplay(
  modelPromptAuthorityProvider?:RoleplayModelPromptAuthorityProvider
 ){
  return withRlsTransaction(pool,{
-  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT'
+  familyId:input.familyId,accountId:input.actor.accountId,personId:input.actor.personId,purpose:'FAMILY_MANAGEMENT',isolationLevel:'REPEATABLE READ'
  },async tx=>{
    // Current identity, tenant, authorization, Safety and compliance remain
    // mandatory on replay. Mutable execution preconditions belong below the

@@ -388,7 +388,8 @@ async function materializeParallelNodes(
     caseId: input.caseId,
     scenePackageVersion: DIGITAL_USE_PACKAGE_VERSION,
     nodeCode: routedNode.nodeCode,
-    sourceNodeCode,
+    predecessorNodeCode: sourceNodeCode,
+    targetSourceNodeCode: routedNode.sourceNodeCode,
     reasonCode,
     inputRefs,
   });

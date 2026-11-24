@@ -25,6 +25,7 @@ import pg from 'pg';
 import { sql } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { safetySchema } from '@xiaoshuyin/domain';
+import { isBrokenClientError } from './tx.js';
 
 /** The typed Drizzle database bound to the Slice 9 schema projection. */
 export type SafetyDrizzleDb = NodePgDatabase<typeof safetySchema>;
@@ -150,15 +151,6 @@ export async function withDrizzleIdentityTransaction<T>(
 }
 
 /** A lost/failed rollback means this connection must never rejoin the pool. */
-function isBrokenClientError(error: unknown): boolean {
-  const code = (error as { code?: unknown } | null)?.code;
-  if (typeof code !== 'string') return false;
-  // Connection exceptions (08xxx), admin shutdown (57P01), and "current
-  // transaction is aborted" (25P02 — a failed ROLLBACK leaves the session
-  // unusable for further work).
-  return /^08/.test(code) || code === '57P01' || code === '25P02';
-}
-
 /**
  * Run `fn` inside one Drizzle-owned RLS transaction on one checked-out client.
  *

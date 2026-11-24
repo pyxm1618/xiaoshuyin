@@ -57,7 +57,8 @@ export function isBrokenClientError(error: unknown): boolean {
  */
 export async function withTransactionClient<T>(
   pool: pg.Pool,
-  fn: (tx: TxClient) => Promise<T>
+  fn: (tx: TxClient) => Promise<T>,
+  options: { isolationLevel?: 'REPEATABLE READ' } = {}
 ): Promise<T> {
   const client = await pool.connect();
   let broken = false;
@@ -68,7 +69,11 @@ export async function withTransactionClient<T>(
   client.on('error', onClientError);
 
   try {
-    await client.query('BEGIN');
+    await client.query(
+      options.isolationLevel === 'REPEATABLE READ'
+        ? 'BEGIN ISOLATION LEVEL REPEATABLE READ'
+        : 'BEGIN'
+    );
     const result = await fn(client);
     await client.query('COMMIT');
     return result;
@@ -151,6 +156,11 @@ export async function withFamilyCreationTransaction<T>(
 ): Promise<T> {
   return withTransactionClient(pool, async (client) => {
     await client.query('SELECT app.set_identity_context($1, $2)', [opts.accountId, 'FAMILY_MANAGEMENT']);
+    await assertIdentityContextMatches(client, {
+      accountId: opts.accountId,
+      personId: opts.personId,
+      purpose: 'FAMILY_MANAGEMENT',
+    });
     await client.query('SELECT app.create_family($1, $2, $3)', [
       opts.newFamilyId,
       opts.personId,
@@ -162,7 +172,13 @@ export async function withFamilyCreationTransaction<T>(
 
 export async function withRlsTransaction<T>(
   pool: pg.Pool,
-  opts: { familyId: string; accountId: string; personId: string; purpose: string },
+  opts: {
+    familyId: string;
+    accountId: string;
+    personId: string;
+    purpose: string;
+    isolationLevel?: 'REPEATABLE READ';
+  },
   fn: (tx: TxClient) => Promise<T>
 ): Promise<T> {
   return withTransactionClient(pool, async (client) => {
@@ -174,7 +190,7 @@ export async function withRlsTransaction<T>(
       opts.purpose,
     ]);
     return fn(client);
-  });
+  }, opts.isolationLevel ? { isolationLevel: opts.isolationLevel } : {});
 }
 // ── Slice 006 identity-binding wrappers ─────────────────────
 // Five thin wrappers reusing the same BEGIN/COMMIT/ROLLBACK + transaction-bound
