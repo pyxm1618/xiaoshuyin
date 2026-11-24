@@ -14,7 +14,7 @@ export interface PhoneUseContractConfirmation {
 export interface PhoneUseContractVersionRow {
   id:string; family_id:string; case_id:string; version:number; draft_revision:number; status:PhoneUseContractStatus;
   review_state:'CURRENT'|'NEEDS_REVIEW';
-  adult_party_person_id:string; child_party_person_id:string; child_participation_id:string;
+  adult_party_person_id:string; child_party_person_id:string; child_participation_id:string|null;
   contract_purpose:ContractTermPayload; phone_use_rules:ContractTermPayload; execution_period:ContractTermPayload;
   parent_support_measures:ContractTermPayload; supervision_measures:ContractTermPayload;
   incentives:ContractTermPayload; breach_responsibilities:ContractTermPayload;
@@ -52,6 +52,23 @@ export async function getCurrentPhoneUseContract(tx:Tx,caseId:string):Promise<Ph
     ORDER BY CASE status WHEN 'DRAFT' THEN 0 WHEN 'PENDING_CONFIRMATION' THEN 1 WHEN 'ACTIVE' THEN 2 WHEN 'PAUSED' THEN 3 ELSE 4 END,version DESC LIMIT 1`,
   [caseId]); return rows[0]??null;
 }
+
+export interface PhoneUseContractChildParticipationRow {
+ id:string;family_id:string;case_id:string;person_id:string;state:'ACTIVE';
+}
+export async function lockActivePhoneUseContractChildParticipation(
+ tx:Tx,input:{familyId:string;caseId:string;childPersonId:string}
+):Promise<PhoneUseContractChildParticipationRow|null>{
+ const {rows}=await tx.query<PhoneUseContractChildParticipationRow>(
+  `SELECT id,family_id,case_id,person_id,state
+     FROM case_participants
+    WHERE family_id=$1 AND case_id=$2 AND person_id=$3 AND state='ACTIVE'
+    FOR UPDATE`,
+  [input.familyId,input.caseId,input.childPersonId]
+ );
+ if(rows.length>1) throw new Error('MULTIPLE_ACTIVE_PHONE_USE_CONTRACT_CHILD_PARTICIPATIONS');
+ return rows[0]??null;
+}
 export async function listPhoneUseContractVersions(tx:Tx,caseId:string,lock=false):Promise<PhoneUseContractVersionRow[]>{
  const {rows}=await tx.query<PhoneUseContractVersionRow>(
   `SELECT ${CONTRACT_COLUMNS} FROM digital_use_contract_versions WHERE case_id=$1 ORDER BY version ASC ${lock?'FOR UPDATE':''}`,
@@ -63,7 +80,7 @@ export async function nextPhoneUseContractVersion(tx:Tx,caseId:string):Promise<n
  return rows[0]?.next_version??1;
 }
 export async function insertPhoneUseContractDraft(tx:Tx,input:{
- familyId:string;caseId:string;version:number;adultPartyPersonId:string;childPartyPersonId:string;childParticipationId:string;
+ familyId:string;caseId:string;version:number;adultPartyPersonId:string;childPartyPersonId:string;childParticipationId?:string|null;
  contractPurpose:ContractTermPayload;phoneUseRules:ContractTermPayload;executionPeriod:ContractTermPayload;
  parentSupportMeasures:ContractTermPayload;supervisionMeasures:ContractTermPayload;incentives:ContractTermPayload;breachResponsibilities:ContractTermPayload;
  sourceTemplateVersion:string;dependencyRefs:readonly unknown[];supersedesId?:string|null;updateReason?:string|null;
@@ -76,7 +93,7 @@ export async function insertPhoneUseContractDraft(tx:Tx,input:{
  source_template_version,dependency_refs,supersedes_id,update_reason,update_trigger,created_by_person_id)
  VALUES($1,$2,$3,1,'DRAFT',$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10::jsonb,$11::jsonb,$12::jsonb,$13::jsonb,$14,$15::jsonb,$16,$17,$18,$19)
  RETURNING ${CONTRACT_COLUMNS}`,
- [input.familyId,input.caseId,input.version,input.adultPartyPersonId,input.childPartyPersonId,input.childParticipationId,
+ [input.familyId,input.caseId,input.version,input.adultPartyPersonId,input.childPartyPersonId,input.childParticipationId??null,
  JSON.stringify(input.contractPurpose),JSON.stringify(input.phoneUseRules),JSON.stringify(input.executionPeriod),
  JSON.stringify(input.parentSupportMeasures),JSON.stringify(input.supervisionMeasures),JSON.stringify(input.incentives),JSON.stringify(input.breachResponsibilities),
  input.sourceTemplateVersion,JSON.stringify(input.dependencyRefs),input.supersedesId??null,input.updateReason??null,input.updateTrigger??null,input.createdByPersonId]);
@@ -112,14 +129,28 @@ async function recordConfirmation(tx:Tx,input:{caseId:string;version:number;expe
 export function recordAdultContractConfirmationCas(tx:Tx,input:{caseId:string;version:number;expectedDraftRevision:number;confirmation:PhoneUseContractConfirmation}){
  return recordConfirmation(tx,input,'parent_confirmation');
 }
-export function recordChildContractConfirmationCas(tx:Tx,input:{caseId:string;version:number;expectedDraftRevision:number;confirmation:PhoneUseContractConfirmation}){
- return recordConfirmation(tx,input,'child_confirmation');
+export async function recordChildContractConfirmationCas(tx:Tx,input:{
+ caseId:string;version:number;expectedDraftRevision:number;confirmation:PhoneUseContractConfirmation;participationId:string
+}):Promise<PhoneUseContractVersionRow|null>{
+ const {rows}=await tx.query<PhoneUseContractVersionRow>(
+  `UPDATE digital_use_contract_versions
+      SET child_participation_id=COALESCE(child_participation_id,$5),
+          child_confirmation=$4::jsonb,
+          status='PENDING_CONFIRMATION'
+    WHERE case_id=$1 AND version=$2 AND draft_revision=$3
+      AND status IN('DRAFT','PENDING_CONFIRMATION')
+      AND child_confirmation IS NULL
+      AND (child_participation_id IS NULL OR child_participation_id=$5)
+    RETURNING ${CONTRACT_COLUMNS}`,
+  [input.caseId,input.version,input.expectedDraftRevision,JSON.stringify(input.confirmation),input.participationId]
+ );
+ return rows[0]??null;
 }
 export async function activatePhoneUseContractCas(tx:Tx,input:{caseId:string;version:number;expectedDraftRevision:number}):Promise<PhoneUseContractVersionRow|null>{
  const {rows}=await tx.query<PhoneUseContractVersionRow>(
  `UPDATE digital_use_contract_versions SET status='ACTIVE',activated_at=now()
  WHERE case_id=$1 AND version=$2 AND draft_revision=$3 AND status IN('DRAFT','PENDING_CONFIRMATION')
- AND parent_confirmation IS NOT NULL AND child_confirmation IS NOT NULL RETURNING ${CONTRACT_COLUMNS}`,
+ AND parent_confirmation IS NOT NULL AND child_confirmation IS NOT NULL AND child_participation_id IS NOT NULL RETURNING ${CONTRACT_COLUMNS}`,
  [input.caseId,input.version,input.expectedDraftRevision]); return rows[0]??null;
 }
 export async function supersedePhoneUseContractCas(tx:Tx,input:{caseId:string;version:number}):Promise<PhoneUseContractVersionRow|null>{

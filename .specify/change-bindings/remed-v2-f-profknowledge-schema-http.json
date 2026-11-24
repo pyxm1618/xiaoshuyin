@@ -19,7 +19,10 @@
       "implementationPaths": [
         "apps/server/api/src/plugins/error-handler.ts",
         "packages/domain/src/phone-use-contract-schema.ts",
-        "db/schema/index.ts"
+        "db/schema/index.ts",
+        "apps/server/api/src/services/digital-use-phone-contract.ts",
+        "packages/contracts/src/digital-use-phone-use-contract-schemas.ts",
+        "packages/domain/src/phone-use-contract-repository.ts"
       ]
     },
     {
@@ -50,6 +53,9 @@
     "2": [
       "tests/integration/goal-target-compliance-finding2.test.ts",
       "tests/db/goal-runtime-schema.test.ts"
+    ],
+    "12": [
+      "tests/domain/digital-use-phone-contract-content.test.ts"
     ],
     "15": [
       "tests/db/migration-atomicity.test.ts"
