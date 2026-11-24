@@ -224,8 +224,8 @@ export async function requirePhoneUseContractChildConfirmation(
     caseId: string;
     contract: Pick<
       PhoneUseContractVersionRow,
-      'id' | 'family_id' | 'case_id' | 'child_party_person_id' | 'child_participation_id'
-    >;
+      'id' | 'family_id' | 'case_id' | 'child_party_person_id'
+    > & { child_participation_id: string };
     participation: Pick<
       ParticipationRow,
       'id' | 'family_id' | 'case_id' | 'person_id' | 'state'
