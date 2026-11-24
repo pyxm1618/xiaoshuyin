@@ -933,19 +933,35 @@ describe('Phase 5 / C2 Safety production entry / resolve', () => {
     );
 
     const created = await newCase();
-    const result = await runSafetyProductionEntry(
-      fixture.pool,
-      {
-        actor: member,
-        caseId: created.id,
-        operationKey: operationKey('non-manager-enter'),
-      },
-      authority()
-    );
-
+    const input = {
+      actor: member,
+      caseId: created.id,
+      operationKey: operationKey('non-manager-enter'),
+    };
+    const result = await runSafetyProductionEntry(fixture.pool, input, authority());
     expect(result.kind).toBe('ENTER_HOLD');
     const held = await fixture.getCase(created.id);
     expect(held.status).toBe('SAFETY_HOLD');
+    const counts = async () => [
+      await fixture.countRiskEvents(created.id),
+      await fixture.countCaseEvents(created.id),
+      await fixture.countAuditEvents(created.id),
+    ];
+    const before = await counts();
+    expect(before[0]).toBe(1);
+    // A completed non-manager system transition replays without re-evaluation.
+    expect(await runSafetyProductionEntry(fixture.pool, input)).toEqual(result);
+    expect(await counts()).toEqual(before);
+    expect((await fixture.getCase(created.id)).version).toBe(held.version);
+
+    // Real membership removal must still deny access to the stored result.
+    await admin.query('DELETE FROM family_members WHERE family_id=$1 AND person_id=$2',
+      [familyId, member.personId]);
+    await expect(runSafetyProductionEntry(fixture.pool, input)).rejects.toMatchObject({
+      code: 'CURRENT_FAMILY_NOT_FOUND',
+    });
+    expect(await counts()).toEqual(before);
+    expect((await fixture.getCase(created.id)).version).toBe(held.version);
   });
 
   it('registers no public or generic Safety mutation route', () => {
