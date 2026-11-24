@@ -678,6 +678,15 @@ function decideParticipationAction(
     ) {
       return deny('NOT_FAMILY_MEMBER');
     }
+    // Runtime facts must be complete; a TS interface alone does not validate
+    // a caller's authoritative snapshot. All existing lifecycle states remain readable.
+    if (
+      typeof participation.personId !== 'string' ||
+      participation.personId.trim().length === 0 ||
+      !['PENDING', 'ACTIVE', 'DECLINED', 'EXPIRED', 'WITHDRAWN'].includes(participation.state)
+    ) {
+      return deny('PARTICIPATION_CONTEXT_REQUIRED');
+    }
     return allow(true, input.purpose);
   }
 
